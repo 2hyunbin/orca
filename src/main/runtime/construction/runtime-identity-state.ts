@@ -178,6 +178,7 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
   protected readonly terminalCreateIdempotency = new RemoteRuntimeTerminalCreateIdempotency()
 
   // Why: concurrent clients sleeping one host workspace must share one physical teardown.
+  // Both sleep maps key on hostWorktreeSleepKey (host + workspace), never the bare id.
   protected terminalSleepByWorktreeId = new Map<
     string,
     Promise<RuntimeWorktreeTerminalSleepResult>

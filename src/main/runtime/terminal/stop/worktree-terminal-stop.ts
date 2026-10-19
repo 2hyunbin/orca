@@ -22,8 +22,10 @@ import { worktreePtyBelongsToHost, type WorktreePtyHostFence } from '../../workt
 import { summarizeWorktreePtyStopVerdict } from '../../worktree-pty-stop-verdict'
 import { describeMobileSessionTabCloseRefusal } from '../../mobile-session-tab-close-refusal-message'
 import { clearClosedWorktreeResumeRecords } from './worktree-sleep-resume-records'
+import { hostWorktreeSleepKey, sleepKeysNameWorktree } from './worktree-terminal-sleep-key'
 
 export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
+  protected abstract getWorktreeTerminalSleepKey(worktree: ResolvedWorktree): string
   protected abstract sleepResolvedWorktreeTerminals(
     worktree: ResolvedWorktree,
     soleLivePtyId?: string
@@ -56,7 +58,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     return ptyIds
   }
 
-  private getWorktreeHostFence(
+  protected getWorktreeHostFence(
     worktree: { id: string; repoId?: string } & Parameters<typeof getWorktreeExecutionHostId>[0]
   ): WorktreePtyHostFence {
     const repo = worktree.repoId ? this.store?.getRepo?.(worktree.repoId) : undefined
@@ -253,7 +255,8 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     options: { soleLivePtyId?: string } = {}
   ): Promise<RuntimeWorktreeTerminalSleepResult> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    const existing = this.terminalSleepByWorktreeId.get(worktree.id)
+    const sleepKey = this.getWorktreeTerminalSleepKey(worktree)
+    const existing = this.terminalSleepByWorktreeId.get(sleepKey)
     if (existing) {
       return await existing
     }
@@ -263,12 +266,12 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
 
     const sleeping = this.sleepResolvedWorktreeTerminals(worktree)
-    this.terminalSleepByWorktreeId.set(worktree.id, sleeping)
+    this.terminalSleepByWorktreeId.set(sleepKey, sleeping)
     try {
       return await sleeping
     } finally {
-      if (this.terminalSleepByWorktreeId.get(worktree.id) === sleeping) {
-        this.terminalSleepByWorktreeId.delete(worktree.id)
+      if (this.terminalSleepByWorktreeId.get(sleepKey) === sleeping) {
+        this.terminalSleepByWorktreeId.delete(sleepKey)
       }
     }
   }
@@ -283,7 +286,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
     const worktreeId = target.id
     const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'shared')
-    const key = worktreeIdentityKey(worktreeId)
+    const key = hostWorktreeSleepKey(target.hostId, worktreeId)
     const sleepState = this.terminalSleepStateByWorktreeId.get(key)
     // Why: re-checked under the lock, since a sleep can commit while an automatic spawn waits for it.
     if (sleepState && opts.refuseSleptWorktree) {
@@ -306,7 +309,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
 
   /** Whether the host itself has put (or is putting) this worktree's terminals to sleep. */
   protected isWorktreeTerminalSleepHeld(worktreeId: string): boolean {
-    return this.terminalSleepStateByWorktreeId.has(worktreeIdentityKey(worktreeId))
+    return sleepKeysNameWorktree(this.terminalSleepStateByWorktreeId.keys(), worktreeId)
   }
 
   protected async runWorktreeTerminalMutation<T>(

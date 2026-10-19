@@ -1,0 +1,68 @@
+// A same-id SSH twin is a different workspace: its spawn must not wake or be refused by this computer's sleep.
+import { describe, expect, it } from 'vitest'
+import { spawnWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
+import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
+import { WORKTREE_TERMINALS_SLEEPING_ERROR } from './worktree-terminals-sleeping-error'
+
+// Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
+const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
+await import('./orca-runtime-test-lifecycle.spec')
+const { TEST_WORKTREE_ID, TEST_WORKTREE_PATH, store } =
+  await import('./orca-runtime-test-fixtures.spec')
+
+async function sleepLocalCopy() {
+  const runtime = new OrcaRuntimeService(store)
+  const events: RuntimeClientEvent[] = []
+  runtime.onClientEvent((event) => events.push(event))
+  const processLists = [[{ id: 'pty-local', cwd: TEST_WORKTREE_PATH, title: 'Shell' }], []]
+  runtime.setPtyController({
+    write: () => true,
+    kill: () => false,
+    stopAndWait: async (ptyId) => {
+      runtime.onPtyExit(ptyId, -1)
+      return true
+    },
+    getForegroundProcess: async () => null,
+    listProcesses: async () => processLists.shift() ?? []
+  })
+  await expect(runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`)).resolves.toMatchObject({
+    stopped: 1,
+    postStopVerified: true
+  })
+  const phases = (): string[] =>
+    events.flatMap((event) => (event.type === 'worktreeTerminalSleepState' ? [event.phase] : []))
+  return { runtime, phases }
+}
+
+describe('worktree terminal sleep across same-id host twins', () => {
+  it("a spawn on the SSH twin neither wakes nor is refused by this computer's sleep", async () => {
+    const { runtime, phases } = await sleepLocalCopy()
+    const twin = spawnWorktreeTarget(TEST_WORKTREE_ID, 'ssh-twin')
+
+    const releaseRefusable = await runtime.acquireWorktreeTerminalSpawn(twin, {
+      refuseSleptWorktree: true
+    })
+    releaseRefusable()
+    const releaseTwin = await runtime.acquireWorktreeTerminalSpawn(twin)
+    releaseTwin()
+
+    expect(phases()).not.toContain('woken')
+    expect(runtime.getTerminalSleepClientEventSnapshot()).toEqual([
+      expect.objectContaining({ worktreeId: TEST_WORKTREE_ID, phase: 'committed' })
+    ])
+  })
+
+  it("this computer's own spawn still refuses or wakes its sleep", async () => {
+    const { runtime, phases } = await sleepLocalCopy()
+    const local = spawnWorktreeTarget(TEST_WORKTREE_ID, null)
+
+    await expect(
+      runtime.acquireWorktreeTerminalSpawn(local, { refuseSleptWorktree: true })
+    ).rejects.toThrow(WORKTREE_TERMINALS_SLEEPING_ERROR)
+    const release = await runtime.acquireWorktreeTerminalSpawn(local)
+    release()
+
+    expect(phases()).toContain('woken')
+    expect(runtime.getTerminalSleepClientEventSnapshot()).toEqual([])
+  })
+})

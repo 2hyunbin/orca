@@ -3,13 +3,20 @@ import {
   includeTargetResolvedWorktree,
   type ResolvedWorktree
 } from '../../runtime-worktree-path-identity'
-import { worktreeIdentityKey } from '../../../../shared/worktree/id'
 import type { RuntimeWorktreeTerminalSleepResult } from '../../../../shared/runtime-types'
 import { WORKTREE_TERMINAL_SLEEP_TIMEOUT_MS } from '../../orca-runtime-postlude'
 import { teardownRpcDeadline } from '../../worktree-teardown-deadline'
 import { sleptNothing } from './worktree-terminal-sleep-result'
+import { hostWorktreeSleepKey } from './worktree-terminal-sleep-key'
+import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
 
 export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends OrcaRuntimeWithWorktreeSleepResumeRecording {
+  /** Same host as a spawn's `spawnWorktreeTarget`: a `runtime:` stamp runs here, like local. */
+  protected getWorktreeTerminalSleepKey(worktree: ResolvedWorktree): string {
+    const { resolvedConnectionId } = this.getWorktreeHostFence(worktree)
+    return hostWorktreeSleepKey(getConnectionExecutionHostId(resolvedConnectionId), worktree.id)
+  }
+
   protected async sleepResolvedWorktreeTerminals(
     worktree: ResolvedWorktree,
     soleLivePtyId?: string
@@ -20,7 +27,7 @@ export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends Orca
       'exclusive',
       sleepDeadline
     )
-    const key = worktreeIdentityKey(worktree.id)
+    const key = this.getWorktreeTerminalSleepKey(worktree)
     const existingSleepState = this.terminalSleepStateByWorktreeId.get(key)
     if (existingSleepState?.phase === 'sleeping') {
       try {
