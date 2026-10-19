@@ -57,7 +57,7 @@ contextBridge.exposeInMainWorld('probeApi', {
   writeFileSync(
     join(root, 'bootstrap.ts'),
     `
-import { installBrowserLinkMaterializationProbe } from ${JSON.stringify(join(process.cwd(), 'src/renderer/src/hooks/ipc-events/browser-link-materialization-probe.tsx'))}
+import { installBrowserLinkMaterializationProbe } from ${JSON.stringify(join(process.cwd(), 'src/renderer/src/hooks/ipc-events/browser-link-materialization.test-fixture.tsx'))}
 try { window.linkProbe = installBrowserLinkMaterializationProbe() } catch (error) { window.linkProbeError = String(error.stack || error) }
 `
   )
