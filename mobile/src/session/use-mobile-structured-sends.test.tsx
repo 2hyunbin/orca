@@ -22,8 +22,6 @@ import {
 } from './use-mobile-structured-agent-session-queued.test-fixture'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import { useMobileStructuredSends } from './use-mobile-structured-sends'
-import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
-import { AGENT_SESSION_MESSAGE_CHOICES_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
 
 const asyncStorage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }))
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: asyncStorage }))
@@ -83,7 +81,7 @@ describe('a structured send in the open chat', () => {
     close: () => {}
   }
 
-  function Harness(props: { messageChoices?: boolean }): null {
+  function Harness(): null {
     hook = useMobileStructuredAgentSession({
       client,
       sessionId: 'session-1',
@@ -91,17 +89,15 @@ describe('a structured send in the open chat', () => {
       enabled: true,
       connected: true,
       agent: 'codex',
-      hostSupport: props.messageChoices
-        ? structuredAgentSessionHostSupport([AGENT_SESSION_MESSAGE_CHOICES_RUNTIME_CAPABILITY])
-        : null,
+      hostSupport: null,
       onSendError
     })
     return null
   }
 
-  async function mount(messageChoices = false): Promise<void> {
+  async function mount(): Promise<void> {
     act(() => {
-      renderer = create(createElement(Harness, { messageChoices }))
+      renderer = create(createElement(Harness))
     })
     await vi.waitFor(() => expect(listener).toEqual(expect.any(Function)))
     act(() => listener?.(snapshotEvent()))
@@ -172,12 +168,37 @@ describe('a structured send in the open chat', () => {
     expect(onSendError).not.toHaveBeenCalled()
   })
 
-  it('omits choices when Send precedes the picker’s model answer', async () => {
-    await mount(true)
-    await send('before picker answer')
-    const call = sendRequest.mock.calls.find(([method]) => method === 'agentSession.send')
-    expect(call?.[1]).not.toHaveProperty('executionOptions')
-  })
+  it.each([false, true])(
+    'forgets an acknowledged off-page echo after reconnect (snapshot beats reply: %s)',
+    async (snapshotFirst) => {
+      await mount()
+      const snapshot = journal([userRow('newest', 'newest reply', 401)], [])
+      if (snapshot.type !== 'snapshot') {
+        throw new Error('Expected snapshot')
+      }
+      snapshot.page.liveCursor = { epoch: 'epoch-1', sequence: 401 }
+      snapshot.page.window.nextCursor = snapshot.page.liveCursor
+      snapshot.page.hasOlder = true
+      if (snapshotFirst) {
+        answer = (id) => {
+          listener?.(snapshot)
+          return { clientMessageId: id, submission: recorded(id) }
+        }
+      }
+      const id = await send('sent before background streaming')
+      if (!snapshotFirst) {
+        expect(shown()).toEqual([
+          [agentJournalSubmissionKey(id), 'sent before background streaming']
+        ])
+        act(() => listener?.(snapshot))
+      }
+      expect(shown()).toEqual([[agentJournalSubmissionKey('newest'), 'newest reply']])
+      // A later page must not resurrect the echo that the authoritative read superseded.
+      act(() => listener?.(journal([], [])))
+      expect(shown()).toEqual([])
+      expect(onSendError).not.toHaveBeenCalled()
+    }
+  )
 
   // Same words as a not-sent row: once recorded, the resend is one bubble and hides the earlier copy.
   it('resends the words of a not-sent row as one bubble, with no stray copy', async () => {

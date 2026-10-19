@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalCursor,
+  AgentJournalSubmission
+} from '../../../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionAttachment } from '../../../../shared/structured-agent-session-send-mutation'
-import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
-import { agentSessionExecutionOptionsFromSnapshot } from '../../../../shared/agent-session-execution-option-snapshot'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   structuredAgentSessionQueueRequest,
@@ -28,6 +29,7 @@ export function useStructuredAgentSessionSends(args: {
   sessionId: string
   target: RuntimeClientTarget
   fence: number | null
+  cursor?: AgentJournalCursor | null
   submissions: readonly AgentJournalSubmission[]
   queuedMessageIds: readonly string[]
   queue: StructuredAgentSessionQueueDelivery
@@ -37,19 +39,21 @@ export function useStructuredAgentSessionSends(args: {
   isWorking?: boolean
   /** The chat reads Stopping: a send made now is drawn after the turn being stopped. */
   stopping?: boolean
-  executionOptionSnapshot?: readonly SessionOptionDescriptor[]
+  /** The composer's model and effort each send carries; undefined to a host that takes none. */
+  sendOptions?: () => Readonly<Record<string, string>> | undefined
 }) {
   const {
+    cursor,
     fence,
     historyLoaded,
     isWorking = false,
     queue,
     queuedMessageIds,
+    sendOptions,
     sessionId,
     stopping,
     submissions,
-    target,
-    executionOptionSnapshot
+    target
   } = args
   const subscribe = useCallback(
     (listener: () => void) => subscribeToStructuredAgentSessionPendingSends(sessionId, listener),
@@ -68,8 +72,8 @@ export function useStructuredAgentSessionSends(args: {
   }, [fence, sessionId])
 
   useEffect(() => {
-    settleStructuredAgentSessionSendsFromJournal(sessionId, submissions, queuedMessageIds)
-  }, [pending, queuedMessageIds, sessionId, submissions])
+    settleStructuredAgentSessionSendsFromJournal(sessionId, submissions, queuedMessageIds, cursor)
+  }, [cursor, pending, queuedMessageIds, sessionId, submissions])
 
   const recoverLegacy = historyLoaded && fence !== null
   useEffect(() => {
@@ -94,17 +98,15 @@ export function useStructuredAgentSessionSends(args: {
       if (!text.trim() && attachments.length === 0) {
         return false
       }
-      const delivery = structuredAgentSessionQueueRequest(queue, attachments)
-      const executionOptions = executionOptionSnapshot
-        ? agentSessionExecutionOptionsFromSnapshot(executionOptionSnapshot)
-        : undefined
+      const delivery = structuredAgentSessionQueueRequest(queue)
+      const options = sendOptions?.()
       const sent = sendStructuredAgentSessionMessage({
         sessionId,
         target,
         text,
         attachments,
         ...(delivery ? { delivery } : {}),
-        ...(executionOptions ? { executionOptions } : {}),
+        ...(options ? { options } : {}),
         ...(stopping ? { sentWhileStopping: true as const } : {})
       })
       // Refused while the chat's send is out: the text stays in the box.
@@ -120,7 +122,7 @@ export function useStructuredAgentSessionSends(args: {
         ? 'queued'
         : true
     },
-    [executionOptionSnapshot, isWorking, queue, queuedMessageIds, sessionId, stopping, target]
+    [isWorking, queue, queuedMessageIds, sendOptions, sessionId, stopping, target]
   )
 
   return {

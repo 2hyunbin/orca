@@ -1,6 +1,6 @@
 import { Duplex } from 'node:stream'
 import type { PipedChildProcess } from '@orca/process-host/process-spec'
-import type { RemoteCommandChannel } from '../ssh/remote-install-transport'
+import type { RemoteCommandChannel } from '../managed-server/install/remote-install-transport'
 
 /**
  * A `wsl.exe` child shaped like an SSH exec channel: reads are its stdout, writes its stdin.
@@ -57,7 +57,7 @@ export function wrapWslCommandProcess(child: PipedChildProcess): RemoteCommandCh
   child.on('exit', onExit)
   child.on('close', onClose)
   child.on('error', onError)
-  Object.assign(duplex, {
+  const channel: RemoteCommandChannel = Object.assign(duplex, {
     stdin: child.stdin,
     stderr: child.stderr,
     close: () => {
@@ -66,6 +66,5 @@ export function wrapWslCommandProcess(child: PipedChildProcess): RemoteCommandCh
       }
     }
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `stdin`, `stderr` and `close` were assigned above and `exit`/`close` are emitted by the listeners.
-  return duplex as unknown as RemoteCommandChannel
+  return channel
 }

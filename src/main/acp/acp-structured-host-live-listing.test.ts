@@ -15,6 +15,7 @@ describe('a live Grok listing', () => {
   it('is saved through the host catalog when the chat reads its options', async () => {
     const modelCatalog: AgentModelCatalogService = {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
+      retainedLiveModelIds: vi.fn(async () => []),
       recordLiveListing: vi.fn(),
       prewarm: vi.fn(async () => {}),
       stop: vi.fn(),
@@ -38,7 +39,8 @@ describe('a live Grok listing', () => {
   it('starts the chat even when saving its start listing throws', async () => {
     const modelCatalog: AgentModelCatalogService = {
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
-      recordLiveListing: vi.fn(() => {
+      retainedLiveModelIds: vi.fn(async () => []),
+      recordLiveListing: vi.fn().mockImplementationOnce(() => {
         throw new Error('catalog unavailable')
       }),
       prewarm: vi.fn(async () => {}),
@@ -51,6 +53,7 @@ describe('a live Grok listing', () => {
     expect(store.getRecord(SESSION)?.lease.ownerProcess).not.toBeNull()
     // The rest of the start still lands, and live options remain readable.
     await expect(host.readOptions(SESSION)).resolves.toMatchObject({ current: expect.any(Object) })
+    expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(2)
     expect(
       (await rig.adapter.readOptions({ sessionId: SESSION, fence: fence() })).current
     ).toMatchObject({

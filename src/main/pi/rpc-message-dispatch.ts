@@ -6,7 +6,6 @@ import {
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import { ClaudeDispatchContentError } from '../claude/claude-structured-dispatch-content'
 import { JsonlRpcResponseError } from '../jsonl-rpc/peer'
-import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type {
   AgentSessionDispatchOutcome,
   StructuredAgentSessionAdapter
@@ -69,24 +68,25 @@ export async function dispatchPiRpcMessage(
       (key === 'model' || model === session.initialOptions.model
         ? session.initialOptions[key]
         : undefined)
-    if (value === undefined && session.selected.has(key)) {
+    if (value === undefined && session.optionProof.writes.has(key)) {
       throw new AgentSessionOptionRejectedError(
         new Error(`The default ${key} for this model is unknown`)
       )
     }
-    if (
-      value === undefined ||
-      session.selected.get(key) === value ||
-      (!session.selected.has(key) && session.initialOptions[key] === value)
-    ) {
+    if (value === undefined || session.optionProof.current.get(key) === value) {
       continue
     }
     try {
-      await waitForPromiseWithSignal(
-        applyPiRpcSessionOption(session.connection, session.selected, key, value),
-        input.signal
+      await applyPiRpcSessionOption(
+        session.connection,
+        session.selected,
+        key,
+        value,
+        { signal: input.signal },
+        session.optionProof
       )
     } catch (error) {
+      input.signal?.throwIfAborted()
       if (session.connection.closed) {
         return exited()
       }
@@ -96,7 +96,7 @@ export async function dispatchPiRpcMessage(
           providerDiagnostic(error.message, 'person')
         )
       }
-      throw error
+      throw new AgentSessionOptionRejectedError(error)
     }
   }
   input.signal?.throwIfAborted()

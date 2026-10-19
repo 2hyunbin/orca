@@ -3,7 +3,6 @@
 
 import type { UnreadAgentSessionFailureFact } from './agent-session-failure'
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
-import type { AgentSessionExecutionOptions } from './agent-session-execution-options'
 
 /** The draft could not be converted into a send; an explicit Send retries it. */
 export const QUEUED_MESSAGE_PAUSED_SEND_FAILED = 'send_failed' as const
@@ -33,10 +32,10 @@ export type AgentSessionQueuedMessagesResumeResult = {
 }
 
 /** One draft the host holds for this conversation, published whole-list on the
- *  subscribe stream and on history pages. Text-only v1. */
+ *  subscribe stream and on history pages. A card holding an image goes only to a reader that
+ *  advertises `agent-session.queued-image-cards.v1`. */
 export type AgentSessionQueuedMessage = {
   messageId: string
-  executionOptions?: AgentSessionExecutionOptions
   position: number
   body: AgentJournalMessageItem
   state: 'waiting' | 'returned'

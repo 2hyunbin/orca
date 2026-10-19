@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StructuredAgentSessionAdapter } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter'
 import { StructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
+import { emptyAgentSessionBatch } from '../../../src/main/native-chat/agent-session-wire/agent-session-empty-batch'
 import { startsWhenPublished } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-instant-start.test-support'
 import { setStructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import type { AgentSessionRecordStore } from '../../../src/main/runtime/agent-session-record-store'
@@ -703,7 +704,7 @@ describe('cross-version structured agent sessions', () => {
             starts += 1
             await startGate
             return {
-              providerChildPhase: 'starting' as const,
+              acquisitionGeneration: `cursor-${fence}`,
               process: {
                 hostId: 'local',
                 pid: 4242,
@@ -742,7 +743,7 @@ describe('cross-version structured agent sessions', () => {
 
     /** Reopens the store from disk and installs a fresh host over the same journal
      *  root — what a process restart actually leaves behind. */
-    async function bootHost(generation: string, startupLimits?: { silenceMs: number }) {
+    async function bootHost(generation: string, startupLimits?: { ceilingMs: number }) {
       store = await openTestAgentSessionRecordStore(root)
       const host: StructuredAgentSessionHost = new StructuredAgentSessionHost({
         agents: NO_STRUCTURED_AGENTS,
@@ -852,14 +853,16 @@ describe('cross-version structured agent sessions', () => {
           cursor: held
         })
       ).map((reply) => reply.result as AgentSessionSubscribeEvent)
-      expect(events.map((event) => event.type)).toEqual(['batch'])
-      const batch = events[0]?.type === 'batch' ? events[0].batch : null
-      const rendered = JSON.stringify(batch?.items ?? [])
+      expect(events.map((event) => event.type)).toEqual(['batch', 'batch'])
+      const batches = events.filter((event) => event.type === 'batch')
+      const batch = batches[0]?.batch
+      const rendered = JSON.stringify(batches.flatMap((event) => event.batch.items))
       expect(rendered).toContain('after restart')
       // Everything the client already had stays out of the resume.
       expect(rendered).not.toContain('before restart')
       expect(batch?.cursor.epoch).toBe(held.epoch)
       expect(batch?.cursor.sequence).toBeGreaterThan(held.sequence)
+      expect(batches[1]?.batch).toEqual(emptyAgentSessionBatch(batch?.cursor ?? held))
     })
 
     // Every released client still sends the fence it last saw; this host names a write by its
@@ -940,7 +943,9 @@ describe('cross-version structured agent sessions', () => {
         (capability) => capability !== AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY
       )
       const created = await answer('agentSession.create', createIntentParams())
-      await bootHost('b', { silenceMs: 200 })
+      // The ceiling counts from the start's registration, so a short one ends a start whose
+      // handshake never answers without waiting out the real ten minutes.
+      await bootHost('b', { ceilingMs: 200 })
       handshake = new Promise(() => undefined)
 
       const params = sendParams('never started', created.fence)

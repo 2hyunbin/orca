@@ -171,7 +171,7 @@ export async function setup(
   const started = await adapter.open({
     sessionId,
     fence: 7,
-    acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+    acquisitionGeneration: acquired.acquisitionGeneration,
     signal: new AbortController().signal
   })
   lifecycle.mockClear()

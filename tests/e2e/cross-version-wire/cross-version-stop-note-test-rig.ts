@@ -15,6 +15,7 @@ import { agentSessionFailureFact } from '../../../src/shared/agent-session-failu
 import { agentSessionFailureWords } from '../../../src/shared/agent-session-failure-words'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalCursor,
   type AgentJournalItemBody,
   type AgentJournalTurnLifecycle
 } from '../../../src/shared/agent-session-journal-types'
@@ -96,6 +97,7 @@ export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
         {
           supportsCreate: () => true,
           acquire: async ({ fence, spawnToken }) => ({
+            acquisitionGeneration: `stop-note-${fence}`,
             process: {
               hostId: 'local',
               pid: 4242,
@@ -156,8 +158,10 @@ export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
       items: result.page.items.map((item) => client.AgentJournalRenderItemSchema.parse(item))
     }
   }
-  async function subscribe(cursor = journal.cursor()): Promise<RpcReply[]> {
-    return call('agentSession.subscribe', { sessionId: SESSION, cursor })
+  async function subscribe(
+    cursor: AgentJournalCursor | null = journal.cursor()
+  ): Promise<RpcReply[]> {
+    return call('agentSession.subscribe', { sessionId: SESSION, ...(cursor ? { cursor } : {}) })
   }
   function events(replies: RpcReply[]): AgentSessionSubscribeEvent[] {
     return replies.map((reply) => {

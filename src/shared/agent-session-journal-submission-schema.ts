@@ -11,7 +11,6 @@ import { AgentSessionExecutionOptionsSchema } from './agent-session-execution-op
 // Every persisted field is listed, or a parse strips it: this schema drops unknown keys.
 export const AgentJournalSubmissionSchema = z.object({
   clientMessageId: z.string().min(1),
-  executionOptions: AgentSessionExecutionOptionsSchema.optional(),
   fence: z.number().int(),
   payloadFingerprint: z.string(),
   dispatchState: z.string().min(1),
@@ -28,7 +27,8 @@ export const AgentJournalSubmissionSchema = z.object({
   queuedMessageId: z.string().min(1).optional(),
   // The kind only; an object's other keys (a sender) are stripped, never published.
   source: z.object({ kind: z.string() }).optional(),
-  keptAsQueuedMessageId: z.string().min(1).optional()
+  keptAsQueuedMessageId: z.string().min(1).optional(),
+  options: AgentSessionExecutionOptionsSchema.optional()
 })
 
 export function isAdmissibleAgentJournalSubmission(

@@ -3,13 +3,14 @@ export { FakeAcpChild, PID } from './acp-scripted-connection.test-fixture'
 // A scripted ACP agent behind the real adapter: a fake connection over in-memory stdio, the real
 // protocol runtime, translator and assembler, and a real on-disk journal to read back.
 
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { vi } from 'vitest'
 import { z } from 'zod'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
-import type {
-  StructuredAgentSessionLifecycleEvent,
-  StructuredAgentSessionStartedEvent
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
+import type { StructuredAgentSessionLifecycleEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
   openProviderTimelineRig,
   SESSION,
@@ -22,6 +23,7 @@ import { AcpStructuredSessionAdapter } from './acp-structured-session-adapter'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 
 export const GROK = acpLaunchSpecFor('grok')!
+const RIG_ENV = { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' }
 export const PROVIDER_SESSION = 'acp-session-1'
 
 export const GROK_CONFIG_OPTIONS = [
@@ -56,7 +58,7 @@ export type AcpAdapterRig = {
   spawned: string[]
   lifecycle: StructuredAgentSessionLifecycleEvent[]
   readonly ended: Extract<StructuredAgentSessionLifecycleEvent, { type: 'ended' }>[]
-  started(): StructuredAgentSessionStartedEvent
+  started(): StructuredAgentSessionProviderOpenResult
   openFailure(): unknown
   settled: Parameters<NonNullable<AcpStructuredSessionAdapterDeps['onDispatchSettledLate']>>[0][]
   acquire(options?: {
@@ -65,6 +67,7 @@ export type AcpAdapterRig = {
     signal?: AbortSignal
     waitForStart?: boolean
     options?: Readonly<Record<string, string>>
+    permissionMode?: AgentChatPermissionMode
   }): ReturnType<AcpStructuredSessionAdapter['acquire']>
   /** Frames Orca wrote to the agent with this method. */
   sent(method: string): FakeFrame[]
@@ -89,8 +92,13 @@ export async function openAcpAdapterRig(
   const lifecycle: StructuredAgentSessionLifecycleEvent[] = []
   const settled: AcpAdapterRig['settled'] = []
   let openFailure: unknown
+  let opened: StructuredAgentSessionProviderOpenResult | null = null
   const startListeners = new Set<() => void>()
   const spec = options.spec ?? GROK
+  // A start readies the account folder its row pins; here a scratch one.
+  const { prepare, resolve, environment } = spec.account
+  const scratch = { launchEnv: {}, stateDirectory: tmpdir() }
+  const account = prepare ? environment(await resolve(scratch), {}) : {}
   const resolveLaunch: AcpStructuredSessionAdapterDeps['resolveLaunch'] =
     options.deps?.resolveLaunch ??
     (async () => ({
@@ -98,7 +106,7 @@ export async function openAcpAdapterRig(
       command: `/opt/bin/${spec.command}`,
       args: spec.args({ fullAccess: false, pluginDir: null }),
       cwd: '/workspace/project',
-      env: { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' },
+      env: { ...RIG_ENV, ...account },
       envToDelete: [],
       fullAccess: false,
       resume: null,
@@ -141,10 +149,14 @@ export async function openAcpAdapterRig(
         )
         agent.reply(frame, { configOptions })
       })
+      if (spec.permissionModeConfig) {
+        agent.confirmConfigOptions(GROK_CONFIG_OPTIONS)
+      }
       options.script?.(agent)
       return child
     },
     readProcessStartTime: async () => 1_700_000_000_000,
+    dataDirectory: join(tmpdir(), 'orca-acp-adapter-rig'),
     onDispatchSettledLate: (settlement) => settled.push(settlement),
     mintGeneration: () => 'gen-acp',
     now: () => 5_000,
@@ -173,16 +185,16 @@ export async function openAcpAdapterRig(
       return lifecycle.filter((event) => event.type === 'ended')
     },
     started: () => {
-      const event = lifecycle.findLast((entry) => entry.type === 'started')
-      if (event?.type !== 'started') {
+      if (!opened) {
         throw new Error('ACP session has not started')
       }
-      return event
+      return opened
     },
     openFailure: () => openFailure,
     settled,
     acquire: async (acquireOptions = {}) => {
       openFailure = undefined
+      opened = null
       const acquisition = await adapter.acquire({
         identity: {
           sessionId: SESSION,
@@ -196,6 +208,7 @@ export async function openAcpAdapterRig(
         events: rig.eventSink,
         ...(acquireOptions.options ? { options: acquireOptions.options } : {}),
         ...(acquireOptions.signal ? { signal: acquireOptions.signal } : {}),
+        ...(acquireOptions.permissionMode ? { permissionMode: acquireOptions.permissionMode } : {}),
         onSpawned: async () => {
           spawned.push('onSpawned')
           await acquireOptions.onSpawned?.()
@@ -203,18 +216,11 @@ export async function openAcpAdapterRig(
       })
       if (acquireOptions.waitForStart !== false) {
         try {
-          const opened = await adapter.open({
+          opened = await adapter.open({
             sessionId: SESSION,
             fence: acquireOptions.fence ?? 1,
-            acquisitionGeneration: acquisition.acquisitionGeneration ?? null,
+            acquisitionGeneration: acquisition.acquisitionGeneration,
             signal: acquireOptions.signal ?? new AbortController().signal
-          })
-          lifecycle.push({
-            ...opened,
-            type: 'started',
-            sessionId: SESSION,
-            fence: acquireOptions.fence ?? 1,
-            acquisitionGeneration: acquisition.acquisitionGeneration ?? ''
           })
         } catch (error) {
           openFailure = error

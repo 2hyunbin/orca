@@ -18,8 +18,7 @@ import { CodexStructuredSessionTeardown } from './codex-structured-session-teard
 import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
-  readLiveCodexSessionOptions,
-  readCodexAcquisitionOptions
+  readLiveCodexSessionOptions
 } from './codex-structured-session-options'
 import { resolvedCodexMessageOptions } from './codex-structured-message-options'
 import {
@@ -136,9 +135,6 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     session: CodexSession,
     event: CodexStructuredSessionEvent
   ): CodexJournalTranslationAdmission {
-    if (event.type === 'notification' && !session.backgroundTasks.canObserve(event)) {
-      return { accepted: false, reason: 'failed' }
-    }
     if (event.type === 'notification') {
       noteCodexTurnOpened(session, event.method, event.params)
     }
@@ -186,6 +182,9 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
    *  owner of "what runs", and this stays only so tests can hold the two rule sets side by side. */
   backgroundTaskState = (sessionId: string): AgentSessionBackgroundTaskState | null | undefined =>
     this.sessions.get(sessionId)?.backgroundTasks.state
+
+  heldSends = (sessionId: string): ReadonlySet<string> | undefined =>
+    this.sessions.get(sessionId)?.dispatchEchoes.heldSends()
 
   // `ended` is set in the same turn as the connection's own exit report.
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
@@ -297,7 +296,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       this.session(input.sessionId),
       input.change,
       input.replacesGoal,
-      this.deps.requestTimeoutMs
+      this.deps.requestTimeoutMs,
+      input.signal
     )
 
   answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = (request) =>
@@ -319,12 +319,6 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   prepareReadOptions = (input: { sessionId: string; fence: number }) =>
     prepareLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
 
-  readAcquisitionOptions = (input: {
-    sessionId: string
-    fence: number
-    priorOptions?: Readonly<Record<string, string>>
-  }) => readCodexAcquisitionOptions(this.session(input.sessionId), input.priorOptions)
-
   closeSession: NonNullable<StructuredAgentSessionAdapter['closeSession']> = (sessionId) =>
     this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)
@@ -333,6 +327,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   closeAll = (): Promise<void> => this.teardown.closeAll()
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.teardown.close(input.sessionId)
+  hasOwnedAcquisition = (sessionId: string): boolean =>
+    this.acquisitions.get(sessionId) !== undefined || this.sessions.has(sessionId)
 
   private session(sessionId: string): CodexSession {
     return requireLiveCodexSession(this.sessions, sessionId)

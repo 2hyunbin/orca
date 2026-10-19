@@ -8,7 +8,6 @@
 
 import { randomUUID } from 'node:crypto'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   QUEUED_MESSAGE_PAUSED_SEND_FAILED,
   type AgentSessionSendResult,
@@ -20,8 +19,11 @@ import { queuedSendAnswer } from './structured-agent-session-queued-send-answer'
 import { structuredAgentSessionSendBlock } from './structured-agent-session-send-preparation'
 import { queuedMessagesPublishedBytesRefusal } from './structured-agent-session-queued-published-bytes'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/structured-agent-session-main-agent-working'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import {
+  contextStructuredAgentSessionCurrentWork,
+  type StructuredAgentSessionCurrentWork
+} from './structured-agent-session-current-work'
 import type { AgentSessionTurnContext } from './structured-agent-session-turns'
 import { QueuedMessageNotConsumableError } from '../agent-session-journal/queued-message-consume-error'
 import type { QueuedMessageRow } from '../agent-session-journal/queued-message-table'
@@ -35,27 +37,6 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import { agentSessionAttachmentExpiredRefusal } from './structured-agent-session-turns'
 import { isAgentSessionAttachmentExpiredError } from '../agent-session-attachments/agent-session-attachment-claims'
 import { captureStructuredExecutionOptions } from './structured-agent-session-execution-options'
-
-/** Text-only v1: any image block routes to the immediate path. */
-export function queuedMessageBodyIsTextOnly(body: AgentJournalMessageItem): boolean {
-  return body.blocks.every((block) => block.type === 'text')
-}
-
-/** Walks the reduced items in place: the gate runs on every admission and
- *  drain step, so it must not render a snapshot of the whole journal. */
-export function pendingPromptExists(journal: Pick<AgentSessionJournal, 'visitItems'>): boolean {
-  let pending = false
-  journal.visitItems((_itemId, _sequence, body) => {
-    if (
-      !pending &&
-      (body.kind === 'approval' || body.kind === 'question') &&
-      body.resolution.state === 'pending'
-    ) {
-      pending = true
-    }
-  })
-  return pending
-}
 
 /** Waiting, not held on its own, and not positioned behind a returned card or a
  *  card the queue's pause holds: the queue never reorders. The admission rule
@@ -84,7 +65,8 @@ function oldestActionableQueuedMessage(
  *   drain step: any hold returns early; whatever clears it publishes or
  *     commits, which re-derives.
  *   Send-now: overrides only `working` (plus FIFO order and the stored hold),
- *     never for a command card; `blocked` and `prompt` refuse readably.
+ *     never for a command card while a turn runs; `blocked` and `prompt` refuse
+ *     readably.
  *
  * `blocked` is whatever refuses any send (an uncertain rewind, a cleared source);
  * the rest are waits. A /compact is a queued message and then a turn,
@@ -94,50 +76,37 @@ function oldestActionableQueuedMessage(
  */
 export type StructuredQueueHold = 'blocked' | 'working' | 'prompt'
 
-export function structuredQueueHold(input: {
-  journal: AgentSessionJournal
+/** What the queue's gate reads: the record, and the host's projection of current work
+ *  (`structuredAgentSessionCurrentWork`), so an ended generation's leftovers hold nothing. */
+export type StructuredQueueGateInput = {
   record: AgentSessionRecord | null
-  fence: number
-}): StructuredQueueHold | null {
+  work: StructuredAgentSessionCurrentWork
+}
+
+export function structuredQueueHold(input: StructuredQueueGateInput): StructuredQueueHold | null {
   // Whatever refuses any send refuses the queue too: an uncertain rewind or a source a
   // clear superseded. One rule, the immediate path's own.
   if (structuredAgentSessionSendBlock(input.record)) {
     return 'blocked'
   }
-  const { journal } = input
   // `prompt` outranks `working`: it is the one wait Send-now may not override,
   // so a prompt raised mid-turn must not read as merely `working`.
-  if (pendingPromptExists(journal)) {
+  if (input.work.hasActionablePrompt()) {
     return 'prompt'
   }
-  if (
-    isStructuredAgentSessionMainAgentWorking(
-      journal.activeTurnId(),
-      journal.submissions(),
-      input.fence
-    )
-  ) {
-    return 'working'
-  }
-  return null
+  return input.work.working() ? 'working' : null
 }
 
 /** The card the drain sends next, or null while anything holds the queue: the drain's own pick
  *  through the one gate, so a client told this reads what the drain acts on. Live facts only; the
  *  backlog is never a gate, so a lone draft drains. */
-export function nextStructuredQueuedMessage(input: {
-  journal: AgentSessionJournal
-  record: AgentSessionRecord | null
-  fence: number
-}): QueuedMessageRow | null {
+export function nextStructuredQueuedMessage(
+  input: StructuredQueueGateInput & { journal: AgentSessionJournal }
+): QueuedMessageRow | null {
   const next = oldestActionableQueuedMessage(input.journal, true)
-  const { journal, fence } = input
   // The gate's cheap `working` first: publication asks on every streamed frame, and the gate's
   // prompt check walks the whole fold.
-  if (
-    next === null ||
-    isStructuredAgentSessionMainAgentWorking(journal.activeTurnId(), journal.submissions(), fence)
-  ) {
+  if (next === null || input.work.working()) {
     return null
   }
   return structuredQueueHold(input) === null ? next : null
@@ -151,11 +120,9 @@ export function nextStructuredQueuedMessage(input: {
  * turn starting is what lifts the pause — Orca's own queue policy, a stated
  * deviation from held-head backlog counting.
  */
-export function shouldQueueStructuredAgentSessionSend(input: {
-  journal: AgentSessionJournal
-  record: AgentSessionRecord | null
-  fence: number
-}): boolean {
+export function shouldQueueStructuredAgentSessionSend(
+  input: StructuredQueueGateInput & { journal: AgentSessionJournal }
+): boolean {
   const hold = structuredQueueHold(input)
   if (hold === 'blocked') {
     // The immediate path's own refusal (`structuredAgentSessionSendBlock`)
@@ -171,8 +138,8 @@ export function shouldQueueStructuredAgentSessionSend(input: {
 /**
  * The accept branch: a capable send while the session is working (or behind an
  * actionable backlog) becomes a draft instead of a submission. Returns null for
- * the immediate path — an incapable client, an image body (text-only v1), a
- * replayed id the journal already answers, or an idle session.
+ * the immediate path — an incapable client, a replayed id the journal already
+ * answers, or an idle session.
  */
 export async function maybeQueueStructuredAgentSessionSend(
   context: {
@@ -180,13 +147,21 @@ export async function maybeQueueStructuredAgentSessionSend(
   },
   ctx: Pick<
     AgentSessionTurnContext,
-    'sessionId' | 'journal' | 'fence' | 'operationReceipt' | 'agents' | 'agent' | 'persistedOptions'
+    | 'sessionId'
+    | 'journal'
+    | 'fence'
+    | 'operationReceipt'
+    | 'currentWork'
+    | 'agents'
+    | 'agent'
+    | 'persistedOptions'
   >,
   params: {
     envelope: { clientOperationId: string }
     body: AgentJournalMessageItem
     delivery?: 'queue-if-active'
-    executionOptions?: AgentSessionExecutionOptions
+    queuedImageCards?: boolean
+    options?: Readonly<Record<string, string>>
     /** A person's send at a chat surface: every attachment it names must still be stored. */
     userSend?: true
     /** A person's message the host sends for them. */
@@ -198,7 +173,11 @@ export async function maybeQueueStructuredAgentSessionSend(
   | null
 > {
   const clientMessageId = params.envelope.clientOperationId
-  if (params.delivery !== 'queue-if-active' || !queuedMessageBodyIsTextOnly(params.body)) {
+  if (
+    params.delivery !== 'queue-if-active' ||
+    (params.queuedImageCards === false &&
+      params.body.blocks.some((block) => block.type === 'image-ref'))
+  ) {
     return null
   }
   // Asked again with no ledger answer: a send this host queued answers as its replay would —
@@ -215,7 +194,7 @@ export async function maybeQueueStructuredAgentSessionSend(
     !shouldQueueStructuredAgentSessionSend({
       journal: ctx.journal,
       record: context.deps.store.getRecord(ctx.sessionId),
-      fence: ctx.fence
+      work: contextStructuredAgentSessionCurrentWork(ctx)
     })
   ) {
     return null
@@ -228,7 +207,7 @@ export async function maybeQueueStructuredAgentSessionSend(
   if (refusal) {
     return { ok: false, refusal }
   }
-  const captured = captureStructuredExecutionOptions(ctx, params.executionOptions)
+  const captured = captureStructuredExecutionOptions(ctx, params.options)
   if ('refusal' in captured) {
     return { ok: false, refusal: captured.refusal }
   }
@@ -240,10 +219,11 @@ export async function maybeQueueStructuredAgentSessionSend(
       {
         messageId: clientMessageId,
         body: params.body,
-        executionOptions: captured.options,
         // In the session that will send it: the reducer aliases the provider's echo by exactly this.
         fingerprint: agentSessionSendBodyFingerprint(ctx.sessionId, params.body),
         hostInstance: structuredAgentSessionHostInstance(),
+        // Applied when the card goes out, to the turn it starts.
+        options: captured.options,
         ...(params.userSend ? { requireAttachments: true } : {})
       },
       ctx.operationReceipt
@@ -268,6 +248,8 @@ export type QueuedMessageDrainDeps = {
   getRecord: (sessionId: string) => AgentSessionRecord | null
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   conversationFence: (sessionId: string) => number
+  /** The host's projection of the chat's current work (`structuredAgentSessionCurrentWork`). */
+  currentWork: (sessionId: string) => StructuredAgentSessionCurrentWork | null
   /** The consumed submission is ordinary #22821 work from here on. */
   wakeDelivery: (sessionId: string) => void
   logger: StructuredAgentSessionLogger
@@ -275,9 +257,11 @@ export type QueuedMessageDrainDeps = {
 
 /**
  * The serialized drain. Woken by every journal commit (turn, submission, prompt,
- * command and Stop settlements are all commits), by draft mutations, and by the
- * conversation opening; each step re-derives everything and consumes at most one
- * draft — the consumed submission then owes work, which gates the next.
+ * command and Stop settlements are all commits), by draft mutations, by the
+ * conversation opening, and by a generation ending, which may write nothing
+ * (`StructuredAgentSessionClientDelivery.publishGenerationEnded`); each step
+ * re-derives everything and consumes at most one draft — the consumed submission
+ * then owes work, which gates the next.
  */
 export class StructuredAgentSessionQueuedMessageDrain {
   private readonly scheduled = new Set<string>()
@@ -298,17 +282,13 @@ export class StructuredAgentSessionQueuedMessageDrain {
       return
     }
     // Cheap pre-check so token streams do not pay a serialized step per delta.
-    // Skipping while working is safe: whatever ends the work is itself a commit
-    // that schedules again, and the step re-reads every gate from the fold.
+    // Skipping while working is safe: whatever ends the work is a commit or a generation's end,
+    // and each schedules again; the step re-reads every gate.
     try {
       if (
         !journal.queuedMessages.settlementOwed() &&
         (oldestActionableQueuedMessage(journal, true) === null ||
-          isStructuredAgentSessionMainAgentWorking(
-            journal.activeTurnId(),
-            journal.submissions(),
-            this.deps.conversationFence(sessionId)
-          ))
+          this.deps.currentWork(sessionId)?.working() !== false)
       ) {
         return
       }
@@ -354,7 +334,8 @@ export class StructuredAgentSessionQueuedMessageDrain {
     const fence = this.deps.conversationFence(sessionId)
     // Whatever clears a hold publishes or commits, which re-derives this step.
     const record = this.deps.getRecord(sessionId)
-    const next = nextStructuredQueuedMessage({ journal, record, fence })
+    const work = this.deps.currentWork(sessionId)
+    const next = work ? nextStructuredQueuedMessage({ journal, record, work }) : null
     if (this.disposed || !next) {
       return
     }
@@ -368,7 +349,7 @@ export class StructuredAgentSessionQueuedMessageDrain {
           origin: 'host',
           payloadFingerprint: next.fingerprint,
           body: next.body,
-          ...(next.executionOptions ? { executionOptions: next.executionOptions } : {}),
+          ...(next.options ? { options: next.options } : {}),
           fence,
           handoverRecorded: true
         },

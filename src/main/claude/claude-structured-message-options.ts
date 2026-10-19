@@ -4,7 +4,6 @@ import type { AgentSessionExecutionOptions } from '../../shared/agent-session-ex
 import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import { listedModels } from './claude-structured-model-catalog'
 import { setClaudeStructuredOption } from './claude-structured-options'
-import { readClaudeCurrentModel } from './claude-structured-session-options'
 import type { ClaudeSession } from './claude-structured-session-state'
 import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 
@@ -17,7 +16,7 @@ export async function applyClaudeMessageOptions(
 ): Promise<void> {
   throwIfSignalAborted(signal)
   const model = options.model ?? (await defaultModelForMessage(session, timeoutMs, signal))
-  if (model && readClaudeCurrentModel(session).id !== model) {
+  if (model && session.reusableOptions.get('model') !== model) {
     await waitForPromiseWithSignal(
       setClaudeStructuredOption(session, { key: 'model', value: model }, timeoutMs),
       signal
@@ -26,41 +25,26 @@ export async function applyClaudeMessageOptions(
 
   throwIfSignalAborted(signal)
   const effort = options.effort ?? session.configuredDefaults?.effort
-  if (
-    effort &&
-    (session.options.get('effort') !== effort || !session.confirmedOptions.has('effort'))
-  ) {
+  if (effort && session.reusableOptions.get('effort') !== effort) {
     await waitForPromiseWithSignal(
       setClaudeStructuredOption(session, { key: 'effort', value: effort }, timeoutMs),
       signal
     )
-    if (
-      effort !== 'max' &&
-      !session.confirmedOptions.has('effort') &&
-      session.reportedOptions.effort !== undefined &&
-      session.reportedOptions.effort !== effort
-    ) {
-      throw new AgentSessionOptionRejectedError(
-        `Claude reported effort ${session.reportedOptions.effort} instead of ${effort}`
-      )
-    }
   } else if (!effort && session.options.has('effort')) {
     throw new AgentSessionOptionRejectedError('Claude did not report its configured effort')
   }
 
   throwIfSignalAborted(signal)
-  const fastMode = options.fastMode ?? 'false'
-  if (
-    (session.options.get('fastMode') !== fastMode ||
-      (session.fastModeAtStart && !session.confirmedOptions.has('fastMode'))) &&
-    (options.fastMode || session.options.has('fastMode'))
-  ) {
+  const fastMode = options.fastMode
+  if (fastMode !== undefined && session.reusableOptions.get('fastMode') !== fastMode) {
     await waitForPromiseWithSignal(
       setClaudeStructuredOption(session, { key: 'fastMode', value: fastMode }, timeoutMs),
       signal
     )
-    if (session.options.get('fastMode') !== fastMode) {
-      throw new AgentSessionOptionRejectedError(`Claude did not apply Fast mode ${fastMode}`)
+  }
+  for (const [key, value] of Object.entries({ model, effort, fastMode })) {
+    if (value !== undefined && session.reusableOptions.get(key) !== value) {
+      throw new AgentSessionOptionRejectedError(`Claude did not apply ${key} ${value}`)
     }
   }
   throwIfSignalAborted(signal)

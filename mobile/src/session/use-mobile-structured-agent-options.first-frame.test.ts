@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionModelCatalogResult } from '../../../src/shared/agent-session-wire'
 import type { SessionOptionDescriptor } from '../../../src/shared/native-chat-session-options'
 import type { RpcClient } from '../transport/rpc-client'
@@ -9,10 +9,7 @@ import { useMobileStructuredAgentOptions } from './use-mobile-structured-agent-o
 
 const HOST_LIST: AgentSessionModelCatalogResult = {
   origin: 'probe',
-  models: [
-    { id: 'gpt-host', label: 'GPT Host', isDefault: true, efforts: [] },
-    { id: 'gpt-alt', label: 'GPT Alt', isDefault: false, efforts: [] }
-  ],
+  models: [{ id: 'gpt-host', label: 'GPT Host', isDefault: true, efforts: [] }],
   fetchedAt: 1_000
 }
 
@@ -39,14 +36,11 @@ function modelChoices(snapshot: readonly SessionOptionDescriptor[]): string[] {
   return model?.kind.type === 'select' ? model.kind.choices.map((choice) => choice.value) : []
 }
 
-type Props = { rpc: RpcClient; fence: number; hostSelection?: Readonly<Record<string, string>> }
+type Props = { rpc: RpcClient; fence: number }
 
 async function mount(initial: Props) {
   const frames: string[][] = []
-  const snapshots: SessionOptionDescriptor[][] = []
-  const mutate: StructuredAgentSessionMutate = async () => new Promise(() => {})
-  let pick: ReturnType<typeof useMobileStructuredAgentOptions>['setStructuredOption'] = async () =>
-    false
+  const mutate: StructuredAgentSessionMutate = vi.fn()
   function Probe(props: Props): null {
     const options = useMobileStructuredAgentOptions({
       agent: 'codex',
@@ -54,12 +48,10 @@ async function mount(initial: Props) {
       sessionId: 'session-1',
       enabled: true,
       fence: props.fence,
-      hostSelection: props.hostSelection,
-      mutate
+      mutate,
+      hostSupport: { permissionModes: true }
     })
     frames.push(modelChoices(options.optionSnapshot))
-    snapshots.push(options.optionSnapshot)
-    pick = options.setStructuredOption
     return null
   }
   let renderer: ReactTestRenderer | null = null
@@ -68,8 +60,6 @@ async function mount(initial: Props) {
   })
   return {
     frames,
-    snapshots,
-    pick: (id: string, value: string) => pick(id, value),
     update: (next: Props) =>
       act(async () => {
         renderer?.update(createElement(Probe, next))
@@ -85,10 +75,10 @@ describe('the phone picker’s first frame', () => {
     const harness = await mount({ rpc, fence: 1 })
     expect(harness.frames.every((choices) => choices.length === 0)).toBe(true)
     await act(async () => answer(HOST_LIST))
-    expect(harness.frames.at(-1)).toEqual(['gpt-host', 'gpt-alt'])
+    expect(harness.frames.at(-1)).toEqual(['gpt-host'])
     // Only the host's list was ever offered.
     expect(harness.frames.filter((choices) => choices.length > 0)).toEqual(
-      harness.frames.filter((choices) => choices.length > 0).map(() => ['gpt-host', 'gpt-alt'])
+      harness.frames.filter((choices) => choices.length > 0).map(() => ['gpt-host'])
     )
     await harness.unmount()
   })
@@ -97,7 +87,7 @@ describe('the phone picker’s first frame', () => {
     let reads = 0
     const rpc = client(() => (reads++ === 0 ? Promise.resolve(HOST_LIST) : new Promise(() => {})))
     const harness = await mount({ rpc, fence: 1 })
-    expect(harness.frames.at(-1)).toEqual(['gpt-host', 'gpt-alt'])
+    expect(harness.frames.at(-1)).toEqual(['gpt-host'])
     const before = harness.frames.length
     await harness.update({ rpc, fence: 2 })
     expect(harness.frames.slice(before).every((choices) => choices[0] === 'gpt-host')).toBe(true)
@@ -108,25 +98,6 @@ describe('the phone picker’s first frame', () => {
     const rpc = client(() => Promise.reject(new Error('method_not_found')))
     const harness = await mount({ rpc, fence: 1 })
     expect(harness.frames.at(-1)?.length).toBeGreaterThan(0)
-    await harness.unmount()
-  })
-
-  it('uses the host’s live selection when the options read has not answered', async () => {
-    const rpc = client(() => Promise.resolve(HOST_LIST))
-    const harness = await mount({ rpc, fence: 1, hostSelection: { model: 'gpt-host' } })
-    const model = harness.snapshots.at(-1)?.find((entry) => entry.id === 'model')
-    expect(model?.kind.currentValue).toBe('gpt-host')
-    await harness.unmount()
-  })
-
-  it('includes a pick still waiting for the host in the next message snapshot', async () => {
-    const rpc = client(() => Promise.resolve(HOST_LIST))
-    const harness = await mount({ rpc, fence: 1, hostSelection: { model: 'gpt-host' } })
-    await act(async () => {
-      void harness.pick('model', 'gpt-alt')
-    })
-    const model = harness.snapshots.at(-1)?.find((entry) => entry.id === 'model')
-    expect(model?.kind.currentValue).toBe('gpt-alt')
     await harness.unmount()
   })
 })

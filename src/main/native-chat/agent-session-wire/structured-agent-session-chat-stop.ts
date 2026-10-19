@@ -6,8 +6,6 @@
 // reachable only through `mutateWithChatStop`, which queues that step in the same synchronous call
 // as the mutation. Once saved, a failure is answered from the Stop's receipt and noted on the chat.
 
-import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
-import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import type {
   AgentSessionCancelResult,
   AgentSessionMutationEnvelope,
@@ -39,6 +37,7 @@ import {
   type StructuredAgentSessionStopWindDown
 } from './structured-agent-session-stop-wind-down'
 import { performCancel } from './structured-agent-session-turns-cancel'
+import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 
 type ChatStopOutcome = TurnOutcome<AgentSessionCancelResult>
@@ -63,6 +62,7 @@ export function mutateWithChatStop<TValue>(
   let windDown:
     | { owed: StructuredAgentSessionStopWindDown; ctx: AgentSessionTurnContext }
     | undefined
+  let reached = params.stoppedPrePrompt === true
   const named = turnId !== undefined ? { turnId } : {}
   // Its own step wrote the Stop's event first.
   const stopChild = () => context.stopAgent(sessionId, { recorded: 'user-stop' })
@@ -87,16 +87,13 @@ export function mutateWithChatStop<TValue>(
         caller: caller.callerKey,
         ...(target.eventTurnId !== null ? { turnId: target.eventTurnId } : {})
       },
-      fence: ctx.fence,
-      withdrawal: agentSessionFailureWords(agentSessionFailureFact('cancelled'), {
-        surface: 'rejection'
-      })
+      fence: ctx.fence
     })
     return accepted.ok
       ? {
           ok: true,
           value: {
-            settled: target.queued || params.stoppedPrePrompt === true,
+            settled: target.queued || reached,
             turnId: accepted.value.turnId
           }
         }
@@ -141,17 +138,20 @@ export function mutateWithChatStop<TValue>(
           windDown = { owed, ctx }
         },
         withdrewQueued: Promise.resolve(settled),
+        noteFence: () => context.deps.store.getRecord(sessionId)?.lease.runtimeFence ?? ctx.fence,
         // This Stop's own event, or the one in force it repeats: its settle binds.
         opensSettle: true
       }
     )
   }
   const stop = async (ctx: AgentSessionTurnContext): Promise<ChatStopOutcome> => {
+    const operations = context.acquireAborts.captureOperations(sessionId)
+    const flight = context.startFlights.get(sessionId)
     const target = captureChatStopTarget(ctx, {
       child: context.sessions.get(ctx.sessionId)?.child ?? null,
       ...named,
       endsSession: true,
-      stoppedPrePrompt: params.stoppedPrePrompt
+      stoppedPrePrompt: reached || operations.length > 0 || flight !== undefined
     })
     if (!target) {
       // Late, or nothing to stop: answered as a no-op, its receipt committed before the answer.
@@ -161,24 +161,35 @@ export function mutateWithChatStop<TValue>(
     if (!accepted.ok) {
       return accepted
     }
+    for (const abort of operations) {
+      abort()
+      reached = true
+    }
+    // Invalidation belongs to the accepted Stop, including a claim made after its early abort.
+    if (flight && (target.queued || target.reach === 'withdraw' || target.reach === 'starting')) {
+      flight.abort()
+    }
     if (
       target.reach === 'starting' ||
-      (target.reach === 'withdraw' && (target.queued || params.stoppedPrePrompt))
+      (target.reach === 'withdraw' && (target.queued || reached))
     ) {
       await writeStructuredAgentSessionStopNote(
         ctx,
         accepted.value.turnId ?? envelope.clientOperationId,
         { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED },
-        ctx.journal.liveTurnScope()
+        contextStructuredAgentSessionCurrentWork(ctx).turnScope()
       )
     }
     try {
-      return await act(ctx, target, accepted.value.settled)
+      return await act(ctx, target, accepted.value.settled || reached || flight !== undefined)
     } catch (error) {
       // Saved, then failed: noted on the chat, then thrown so the answer is the Stop's receipt.
       // On the turn its event named, else the one it named, else the one live now.
       const stoppedTurnId =
-        accepted.value.turnId ?? (target.named ? target.turnId : ctx.journal.activeTurnId())
+        accepted.value.turnId ??
+        (target.named
+          ? target.turnId
+          : contextStructuredAgentSessionCurrentWork(ctx).activeTurnId())
       await noteStructuredAgentSessionStopUnconfirmed(
         ctx,
         { turnId: stoppedTurnId, operationId: envelope.clientOperationId },

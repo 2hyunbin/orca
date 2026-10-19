@@ -104,8 +104,11 @@ beforeEach(async () => {
     store,
     adapter: startsWhenPublished(
       {
+        open: async () => ({
+          reportedOptions: { model: '' }
+        }),
         acquire: vi.fn(async ({ fence }) => ({
-          providerChildPhase: 'starting' as const,
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
             pid: 4242,
@@ -167,7 +170,14 @@ describe('settling a send the provider proves it received after the ack window',
         clientMessageId: params.envelope.clientOperationId,
         providerIdentity: { provider: 'claude', sessionId: THREAD, uuid: 'early-echo' }
       })
-      expect(events.at(-1)).toMatchObject({
+      const accepted = events.findLast(
+        (event) =>
+          event.type === 'batch' &&
+          event.batch.submissions.some(
+            (entry) => entry.clientMessageId === params.envelope.clientOperationId
+          )
+      )
+      expect(accepted).toMatchObject({
         type: 'batch',
         batch: {
           submissions: [

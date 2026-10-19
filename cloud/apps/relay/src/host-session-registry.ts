@@ -35,13 +35,23 @@ import type { CellAdmitMode, CellReserveBook } from './cell-reserve-book.js'
 import type { DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
 import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
 import { isRelayDatabaseTransientError } from './database.js'
+import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
 import { RelayCredentialStore, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
+import { MemoryResumeConfirmations } from './memory-resume-confirmations.js'
+import { PhoneAcceptLog } from './phone-accept-log.js'
+import {
+  postProofCloseCause,
+  PostProofCloseLog,
+  type PostProofCloseCause
+} from './post-proof-close-log.js'
 import { relayHostLogDigest } from './relay-host-log-digest.js'
 import type { RelayTokenClaims } from './relay-token-verifier.js'
 import {
   percentile,
+  type HostPreAuthOutcome,
+  type HostPreAuthPath,
   type RelayClientAcceptStage,
   type RelayClientAcceptTimedStage,
   type RelayRuntimeObserver
@@ -49,14 +59,6 @@ import {
 import type { PendingHostDataReservation } from './relay-connection-ledger.js'
 import { closeRelayWebSocket } from './relay-websocket-close.js'
 import { ProcessQueuedByteBudget, wireSplice } from './splice-forwarder.js'
-
-// Peer-supplied close reasons are logged; keep them printable and short.
-function printableCloseReason(reason: Buffer | string): string {
-  return reason
-    .toString()
-    .replace(/[^\x20-\x7e]/g, '')
-    .slice(0, 80)
-}
 
 type VerifyRelayToken = (token: string) => Promise<RelayTokenClaims | null>
 type HostState = 'proving' | 'active' | 'orphaned' | 'drain-only' | 'closed'
@@ -132,6 +134,8 @@ type PendingConnection = {
   client: WebSocket
   attachTimer: ReturnType<typeof setTimeout>
   credentialActivityId: string | null
+  // `memory`: a resume admitted from the seat, which writes no activity leases.
+  phonePath: 'db' | 'memory'
   capacityReservation?: PendingHostDataReservation
   timing: ClientAcceptTiming
 }
@@ -186,25 +190,43 @@ function readControlFrame(
   socket: WebSocket,
   timeoutMs: number,
   timeoutReason: string,
-  receive: (raw: RawData, isBinary: boolean) => void
+  receive: (raw: RawData, isBinary: boolean) => void,
+  ended?: (how: 'timeout' | 'closed') => void
 ): void {
-  if (socket.readyState !== socket.OPEN) return
+  if (socket.readyState !== socket.OPEN) {
+    ended?.('closed')
+    return
+  }
   const timer = setTimeout(() => {
     finish()
+    ended?.('timeout')
     socket.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, timeoutReason)
   }, timeoutMs)
   function finish(): void {
     clearTimeout(timer)
     socket.off('message', onMessage)
-    socket.off('close', finish)
+    socket.off('close', onClose)
+  }
+  function onClose(): void {
+    finish()
+    ended?.('closed')
   }
   function onMessage(raw: RawData, isBinary: boolean): void {
     finish()
     receive(raw, isBinary)
   }
   socket.once('message', onMessage)
-  socket.once('close', finish)
+  socket.once('close', onClose)
 }
+
+// Records one host control's pre-auth time, from the cell accepting the WebSocket to the
+// hello's admission and proof being decided, exactly once.
+type SettlePreAuth = (outcome: HostPreAuthOutcome, path: HostPreAuthPath) => void
+
+const preAuthEnded =
+  (settle: SettlePreAuth, path: HostPreAuthPath) =>
+  (how: 'timeout' | 'closed'): void =>
+    settle(how === 'timeout' ? 'refused' : 'abandoned', path)
 
 // Hosts abandon connects after 15s; waiting much longer than that behind a
 // stalled predecessor only accumulates doomed sockets.
@@ -229,6 +251,8 @@ export type CellReserveAdmission = {
   directorContact?: () => void
   // The switch file's flip-back pace, when set.
   reregisterInFlight?: () => number | undefined
+  // The switch file's phone path; it acts only while the cell is in reserve mode.
+  phonePath?: () => 'db' | 'memory'
   // The pool-pressure shed's condition: a hello memory cannot admit is shed, not queued.
   databaseShedding: () => boolean
   book: CellReserveBook
@@ -279,6 +303,9 @@ export class HostSessionRegistry {
   // draining" is not the same question as "this host has been told to leave".
   private readonly drainSentHosts = new Set<string>()
   private readonly seatLog: CellSeatLog
+  private readonly postProofCloses: PostProofCloseLog
+  private readonly phoneAccepts: PhoneAcceptLog
+  private readonly memoryConfirmations: MemoryResumeConfirmations
   // Seat key -> the demoted control socket. Its own set, not drainSentHosts: it ends with
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
   private readonly demotedSeats = new Map<string, WebSocket>()
@@ -422,6 +449,11 @@ export class HostSessionRegistry {
     private readonly reserveAdmission?: CellReserveAdmission
   ) {
     this.seatLog = new CellSeatLog(undefined, now)
+    this.postProofCloses = new PostProofCloseLog(observer)
+    this.phoneAccepts = new PhoneAcceptLog(config.cellId)
+    this.memoryConfirmations = new MemoryResumeConfirmations(store, now, (error) =>
+      this.phoneAccepts.renewalFailed(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
+    )
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.
@@ -431,6 +463,12 @@ export class HostSessionRegistry {
 
   inReserveMode(): boolean {
     return this.reserveMode()
+  }
+
+  // Step 6: the seat is authoritative only in reserve mode, so a dead-man trip or admitMode=db
+  // turns the memory phone path off for new phones too.
+  phonePathEffective(): 'db' | 'memory' {
+    return this.reserveMode() && this.reserveAdmission?.phonePath?.() === 'memory' ? 'memory' : 'db'
   }
 
   // Leaving reserve mode: every control admitted from memory gets the database lease it never
@@ -699,7 +737,7 @@ export class HostSessionRegistry {
 
   // A director names this seat the loser of a duplicate: stop taking phones for it now, and
   // close it once its splices have had time to finish. Repeats are one demotion.
-  demote(request: DemoteRequest): 'demoted' | 'already-demoted' | 'not-seated' | 'off' {
+  demote(request: DemoteRequest): 'demoted' | 'already-demoted' | 'draining' | 'not-seated' | 'off' {
     // Only a reserve-mode cell takes demotions, so flipping admitMode back reverts the route.
     if (!this.reserveMode()) return 'off'
     const session = this.get(request)
@@ -715,6 +753,8 @@ export class HostSessionRegistry {
     ) {
       return 'not-seated'
     }
+    // A drain already told this host to go: its own grace stands, never cut to the demotion's.
+    if (this.drainSentHosts.has(session.relayHostId) || session.regionalDrainAttemptId) return 'draining'
     const socket = session.socket
     if (this.demotedSeats.get(key) === socket) return 'already-demoted'
     this.demotedSeats.set(key, socket)
@@ -811,34 +851,48 @@ export class HostSessionRegistry {
       stageMs[stage] = at - stageCursor
       stageCursor = at
     }
-    if (this.config.role === 'cell') {
-      // Each lookup is its own pooled round trip; stop between them once the phone
-      // has left instead of running the rest of the chain for nobody.
-      let outerIdentity = await this.store.resolveResume(hostId, credential)
-      if (abandonedByClient('assignment')) return
-      if (!outerIdentity) {
-        outerIdentity = await this.store.resolveInviteForMove(hostId, credential)
-        if (abandonedByClient('assignment')) return
-      }
-      const assignment = outerIdentity
-        ? await this.assignments.resolve({ userId: outerIdentity.userId, relayHostId: hostId })
-        : null
-      if (!assignment || assignment.cellId !== this.config.cellId) {
+    // Step 6: a resume is admitted from one device read and the seat, writing no leases.
+    let memoryReservation: CredentialReservation | null = null
+    let memoryMissedDevice = false
+    if (this.config.role === 'cell' && this.phonePathEffective() === 'memory') {
+      markStage('assignment')
+      let found: Awaited<ReturnType<RelayCredentialStore['lookupResume']>>
+      try {
+        found = await this.store.lookupResume(hostId, credential)
+      } catch (error) {
+        // Never the invite path: an unread device is not a missing one.
         capacityReservation?.release()
-        this.observer.recordAuth(false)
-        this.rejectClient(socket, RELAY_CLOSE_CODE.WRONG_CELL)
+        this.phoneAccepts.databaseError(
+          isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
+        )
+        this.rejectClient(socket, RELAY_CLOSE_CODE.DRAINING)
         return
       }
-      if (abandonedByClient('assignment')) return
+      if (abandonedByClient('credential')) return
+      // The switch turned off during the read: today's whole path, never a lease-less memory phone.
+      if (this.phonePathEffective() === 'memory') {
+        if (found.outcome === 'refused') {
+          capacityReservation?.release()
+          this.observer.recordAuth(false)
+          this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+          return
+        }
+        if (found.outcome === 'resume') memoryReservation = found.reservation
+        else memoryMissedDevice = true
+      }
     }
-    markStage('assignment')
-    const reservation = await this.store.reserveCredential(hostId, credential)
-    if (!reservation) {
-      capacityReservation?.release()
-      this.observer.recordAuth(false)
-      this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
-      return
-    }
+    const reservation =
+      memoryReservation ??
+      (await this.reserveCredentialFromDatabase(
+        socket,
+        hostId,
+        credential,
+        memoryMissedDevice,
+        capacityReservation,
+        abandonedByClient,
+        markStage
+      ))
+    if (!reservation) return
     this.observer.recordAuth(true)
     if (abandonedByClient('credential', () => this.failReservationBestEffort(reservation))) return
     markStage('credential')
@@ -857,6 +911,10 @@ export class HostSessionRegistry {
       session.socket.readyState !== session.socket.OPEN
     ) {
       capacityReservation?.release()
+      if (memoryReservation) {
+        await this.rejectMissedSeat(socket, reservation, sessionKey)
+        return
+      }
       await this.store.failReservation(reservation)
       // The only rejection that can name a cause: the host is genuinely absent.
       // The attach-deadline 4404 below fires while control is still connected.
@@ -878,7 +936,7 @@ export class HostSessionRegistry {
     const connTicket = randomBytes(32).toString('base64url')
     const identity = { userId: reservation.userId, relayHostId: hostId }
     const credentialActivityId =
-      this.config.role === 'cell'
+      this.config.role === 'cell' && !memoryReservation
         ? `${reservation.credentialKind === 'invite' ? 'invite' : 'confirmation'}:${connId}`
         : null
     if (credentialActivityId) {
@@ -932,6 +990,7 @@ export class HostSessionRegistry {
       client: socket,
       attachTimer,
       credentialActivityId,
+      phonePath: memoryReservation ? 'memory' : 'db',
       capacityReservation,
       // Attach starts where the activity stage ended, so the conn-open send is
       // charged to it and no wall-clock gap goes unattributed.
@@ -958,6 +1017,74 @@ export class HostSessionRegistry {
         }
       }
     })
+  }
+
+  // Today's credential path: invites, and every resume while the phone path is db. `deviceMissed`:
+  // the memory path already found no device row, so only the invite lookup is left.
+  private async reserveCredentialFromDatabase(
+    socket: WebSocket,
+    hostId: string,
+    credential: string,
+    deviceMissed: boolean,
+    capacityReservation: PendingHostDataReservation | undefined,
+    abandonedByClient: (stage: RelayClientAcceptStage, cleanup?: () => void) => boolean,
+    markStage: (stage: RelayClientAcceptStage) => void
+  ): Promise<CredentialReservation | null> {
+    if (this.config.role === 'cell') {
+      // Each lookup is its own pooled round trip; stop between them once the phone
+      // has left instead of running the rest of the chain for nobody.
+      let outerIdentity = deviceMissed ? null : await this.store.resolveResume(hostId, credential)
+      if (abandonedByClient('assignment')) return null
+      if (!outerIdentity) {
+        outerIdentity = await this.store.resolveInviteForMove(hostId, credential)
+        if (abandonedByClient('assignment')) return null
+      }
+      const assignment = outerIdentity
+        ? await this.assignments.resolve({ userId: outerIdentity.userId, relayHostId: hostId })
+        : null
+      if (!assignment || assignment.cellId !== this.config.cellId) {
+        capacityReservation?.release()
+        this.observer.recordAuth(false)
+        this.rejectClient(socket, RELAY_CLOSE_CODE.WRONG_CELL)
+        return null
+      }
+      if (abandonedByClient('assignment')) return null
+    }
+    markStage('assignment')
+    const reservation = await this.store.reserveCredential(hostId, credential)
+    if (!reservation) {
+      capacityReservation?.release()
+      this.observer.recordAuth(false)
+      this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+      return null
+    }
+    return reservation
+  }
+
+  // No seat for a memory resume: one assignment read tells "moved" from "offline". A row that
+  // names this cell may be a lost ledger write (stale up to the 10 min reconcile), so it is logged.
+  private async rejectMissedSeat(
+    socket: WebSocket,
+    reservation: CredentialReservation,
+    sessionKey: string
+  ): Promise<void> {
+    let elsewhere: boolean
+    try {
+      const row = await this.assignments.resolve({
+        userId: reservation.userId,
+        relayHostId: reservation.relayHostId
+      })
+      elsewhere = row !== null && row.cellId !== this.config.cellId
+      if (row?.cellId === this.config.cellId) this.phoneAccepts.missRowNamesHere(reservation.relayHostId)
+    } catch (error) {
+      this.phoneAccepts.missReadError(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
+      elsewhere = true
+    }
+    if (elsewhere) {
+      this.rejectClient(socket, RELAY_CLOSE_CODE.WRONG_CELL)
+      return
+    }
+    this.rejectClient(socket, RELAY_CLOSE_CODE.HOST_OFFLINE, this.hostCloseReasons.read(sessionKey))
   }
 
   async acceptHostData(
@@ -1019,7 +1146,8 @@ export class HostSessionRegistry {
       userId: pending.reservation.userId,
       relayHostId: pending.reservation.relayHostId
     }
-    const spliceActivityId = this.config.role === 'cell' ? `splice:${connId}` : null
+    const spliceActivityId =
+      this.config.role === 'cell' && pending.phonePath === 'db' ? `splice:${connId}` : null
     try {
       if (spliceActivityId) {
         await this.assignments.acquireActivity(identity, {
@@ -1028,12 +1156,16 @@ export class HostSessionRegistry {
           cellId: this.config.cellId
         })
       }
-      await this.store.recordConnectionBasis({
-        ...pending.reservation,
-        basisConnId: connId,
-        owningControlGeneration: session.generation,
-        deadline: basisDeadline
-      })
+      if (pending.phonePath === 'memory') {
+        this.openMemoryBasis(pending, connId, session.generation, basisDeadline)
+      } else {
+        await this.store.recordConnectionBasis({
+          ...pending.reservation,
+          basisConnId: connId,
+          owningControlGeneration: session.generation,
+          deadline: basisDeadline
+        })
+      }
     } catch {
       session.activeConnIds.delete(connId)
       await this.store.failReservation(pending.reservation)
@@ -1056,7 +1188,7 @@ export class HostSessionRegistry {
     ) {
       session.activeConnIds.delete(connId)
       pending.capacityReservation?.release()
-      this.deactivateBasisBestEffort(connId)
+      this.closeBasis(pending, connId)
       this.failReservationBestEffort(pending.reservation)
       if (spliceActivityId) this.releaseActivityBestEffort(identity, spliceActivityId)
       if (pending.credentialActivityId) {
@@ -1073,7 +1205,7 @@ export class HostSessionRegistry {
       onClose: () => {
         session.activeConnIds.delete(connId)
         session.activeSplices.delete(connId)
-        this.deactivateBasisBestEffort(connId)
+        this.closeBasis(pending, connId)
         if (spliceActivityId) this.releaseActivityBestEffort(identity, spliceActivityId)
         if (pending.credentialActivityId) {
           this.releaseActivityBestEffort(identity, pending.credentialActivityId)
@@ -1212,35 +1344,64 @@ export class HostSessionRegistry {
     hostCapabilities?: ReadonlySet<string>,
     assignmentLease?: string
   ): void {
+    const settlePreAuth = this.startPreAuth(socket)
+    const refuse = (code: number, reason: string): void => {
+      settlePreAuth('refused', 'beforeCheck')
+      socket.close(code, reason)
+    }
     if (this.idleAttempts.has(identity.relayHostId)) {
-      socket.close(RELAY_CLOSE_CODE.WRONG_CELL, 'idle cutover in progress')
+      refuse(RELAY_CLOSE_CODE.WRONG_CELL, 'idle cutover in progress')
       return
     }
     // Keyed by socket, not session: a rebind swaps the session's socket, and the
     // successor's own advertisement is the only one that describes its decoder.
     if (hostCapabilities?.size) this.hostCapabilities.set(socket, hostCapabilities)
     if (this.draining) {
-      socket.close(RELAY_CLOSE_CODE.DRAINING, 'relay draining')
+      refuse(RELAY_CLOSE_CODE.DRAINING, 'relay draining')
       return
     }
-    readControlFrame(socket, 2_000, 'host hello timeout', (raw, isBinary) => {
-      if (isBinary) {
-        socket.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'host hello must be text')
-        return
-      }
-      this.guardSessionTask(
-        () =>
-          this.beginProof(
-            socket,
-            identity,
-            payload(raw, 'host-hello'),
-            connectionInclusionWatermark,
-            assignmentLease
-          ),
-        socket,
-        'host hello proof'
-      )
-    })
+    readControlFrame(
+      socket,
+      2_000,
+      'host hello timeout',
+      (raw, isBinary) => {
+        if (isBinary) {
+          refuse(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'host hello must be text')
+          return
+        }
+        this.guardSessionTask(
+          () =>
+            this.beginProof(
+              socket,
+              identity,
+              payload(raw, 'host-hello'),
+              settlePreAuth,
+              connectionInclusionWatermark,
+              assignmentLease
+            ).catch((error: unknown) => {
+              // guardSessionTask closes the socket, so any throw refuses the hello as beforeCheck,
+              // including one after the database answered (e.g. in send or the session lookup).
+              settlePreAuth('refused', 'beforeCheck')
+              throw error
+            }),
+          socket,
+          'host hello proof'
+        )
+      },
+      preAuthEnded(settlePreAuth, 'beforeCheck')
+    )
+  }
+
+  private startPreAuth(socket: WebSocket): SettlePreAuth {
+    const startedAt = this.now()
+    let settled = false
+    return (outcome, path) => {
+      if (settled) return
+      settled = true
+      // A decision made after the host hung up never reached it, so it counts as abandoned.
+      const recorded = socket.readyState === socket.OPEN ? outcome : 'abandoned'
+      this.observer.recordHostPreAuth?.(path, recorded, nonNegativeMs(this.now() - startedAt))
+    }
   }
 
   // A dependency failure (e.g. a database connect timeout) must cost one
@@ -1379,29 +1540,34 @@ export class HostSessionRegistry {
     socket: WebSocket,
     identity: RelayTokenClaims,
     candidate: unknown,
+    settlePreAuth: SettlePreAuth,
     connectionInclusionWatermark?: number,
     assignmentLease?: string
   ): Promise<void> {
+    // Which check decided the hello; refusals before one answers stay 'beforeCheck'.
+    let path: HostPreAuthPath = 'beforeCheck'
+    const refuse = (code: number, reason: string): void => {
+      settlePreAuth('refused', path)
+      this.observer.recordAuth(false)
+      socket.close(code, reason)
+    }
     const hello = HostHelloSchema.safeParse(candidate)
     const hostPublicKey = hello.success
       ? decodeCanonicalBase64(hello.data.hostPublicKeyB64, 32)
       : null
     if (!hello.success) {
-      this.observer.recordAuth(false)
-      socket.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'invalid host hello')
+      refuse(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'invalid host hello')
       return
     }
     if (!hostPublicKey) {
-      this.observer.recordAuth(false)
-      socket.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'invalid host public key')
+      refuse(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'invalid host public key')
       return
     }
     if (
       hello.data.relayHostId !== identity.relayHostId ||
       relayHostId(hostPublicKey) !== identity.relayHostId
     ) {
-      this.observer.recordAuth(false)
-      socket.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'host key binding mismatch')
+      refuse(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'host key binding mismatch')
       return
     }
     const leaseShadow = this.config.role === 'cell' ? this.assignmentLeaseShadow : undefined
@@ -1434,12 +1600,12 @@ export class HostSessionRegistry {
             relayHostId: identity.relayHostId,
             helloEpoch: hello.data.assignmentEpoch
           })) === 'valid')
+      if (admittedFromMemory) path = 'reserve'
     }
     if (reserveMode && !admittedFromMemory && this.reserveAdmission!.databaseShedding()) {
       // Memory cannot admit it (e.g. seated here, but at another epoch), and the wedged pool
       // would only time out its database check: shed it now, as the upgrade shed does.
-      this.observer.recordAuth(false)
-      socket.close(RELAY_CLOSE_CODE.LIMIT_EXCEEDED, 'relay temporarily unavailable')
+      refuse(RELAY_CLOSE_CODE.LIMIT_EXCEEDED, 'relay temporarily unavailable')
       return
     }
     const assignmentReadStartedAt = performance.now()
@@ -1462,12 +1628,16 @@ export class HostSessionRegistry {
         performance.now() - assignmentReadStartedAt
       )
     }
+    // The `combined` role compares the epoch without querying but is still labelled db.
+    if (!admittedFromMemory) path = 'db'
     if (!assignmentValid) {
-      this.observer.recordAuth(false)
-      socket.close(RELAY_CLOSE_CODE.WRONG_CELL, 'wrong assignment epoch')
+      refuse(RELAY_CLOSE_CODE.WRONG_CELL, 'wrong assignment epoch')
       return
     }
-    if (socket.readyState !== socket.OPEN) return
+    if (socket.readyState !== socket.OPEN) {
+      settlePreAuth('abandoned', path)
+      return
+    }
 
     const key = this.key(identity.sub, identity.relayHostId)
     const existing = this.sessions.get(key)
@@ -1513,40 +1683,46 @@ export class HostSessionRegistry {
       ciphertextB64: Buffer.from(ciphertext).toString('base64'),
       expiresAt
     })
-    readControlFrame(socket, 10_000, 'host proof timeout', (raw, isBinary) => {
-      const ack = isBinary
-        ? null
-        : HostChallengeAckSchema.safeParse(payload(raw, 'host-challenge-ack'))
-      const proof = ack?.success ? decodeCanonicalBase64(ack.data.proofB64, 32) : null
-      if (
-        !ack?.success ||
-        ack.data.challengeId !== challengeId ||
-        !proof ||
-        this.now() > expiresAt ||
-        !timingSafeEqual(proof, expectedProof)
-      ) {
-        this.observer.recordAuth(false)
-        socket.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'invalid host proof')
-        return
-      }
-      this.observer.recordAuth(true)
-      this.guardSessionTask(
-        () =>
-          this.activate(
-            socket,
-            identity,
-            existing ?? null,
-            generation,
-            rebind,
-            hello.data.assignmentEpoch,
-            hello.data.appVersion,
-            connectionInclusionWatermark,
-            admittedFromMemory ? { reservedBy } : undefined
-          ),
-        socket,
-        'host activation'
-      )
-    })
+    readControlFrame(
+      socket,
+      10_000,
+      'host proof timeout',
+      (raw, isBinary) => {
+        const ack = isBinary
+          ? null
+          : HostChallengeAckSchema.safeParse(payload(raw, 'host-challenge-ack'))
+        const proof = ack?.success ? decodeCanonicalBase64(ack.data.proofB64, 32) : null
+        if (
+          !ack?.success ||
+          ack.data.challengeId !== challengeId ||
+          !proof ||
+          this.now() > expiresAt ||
+          !timingSafeEqual(proof, expectedProof)
+        ) {
+          refuse(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'invalid host proof')
+          return
+        }
+        settlePreAuth('admitted', path)
+        this.observer.recordAuth(true)
+        this.guardSessionTask(
+          () =>
+            this.activate(
+              socket,
+              identity,
+              existing ?? null,
+              generation,
+              rebind,
+              hello.data.assignmentEpoch,
+              hello.data.appVersion,
+              connectionInclusionWatermark,
+              admittedFromMemory ? { reservedBy } : undefined
+            ),
+          socket,
+          'host activation'
+        )
+      },
+      preAuthEnded(settlePreAuth, path)
+    )
   }
 
   private activate(
@@ -1561,9 +1737,15 @@ export class HostSessionRegistry {
     // Present when the hello was admitted from memory: no database registration.
     reserved?: { reservedBy?: string }
   ): Promise<void> {
+    const refused = { relayHostId: identity.relayHostId, generation, appVersion }
     const release = this.beginIdleWork(identity.relayHostId)
     if (!release) {
-      socket.close(RELAY_CLOSE_CODE.WRONG_CELL, 'idle cutover in progress')
+      this.refuseProvenControl(
+        socket,
+        refused,
+        RELAY_CLOSE_CODE.WRONG_CELL,
+        'idle cutover in progress'
+      )
       return Promise.resolve()
     }
     const key = this.key(identity.sub, identity.relayHostId)
@@ -1573,16 +1755,36 @@ export class HostSessionRegistry {
     let queueWaitExpired = false
     const queueWaitTimer = setTimeout(() => {
       queueWaitExpired = true
-      socket.close(RELAY_CLOSE_CODE.LIMIT_EXCEEDED, 'control activation queue stalled')
+      this.refuseProvenControl(
+        socket,
+        refused,
+        RELAY_CLOSE_CODE.LIMIT_EXCEEDED,
+        'control activation queue stalled',
+        undefined,
+        'host closed while queued'
+      )
     }, ACTIVATION_QUEUE_WAIT_MS)
     queueWaitTimer.unref?.()
     const activation = previous
       .catch(() => undefined)
       .then(async () => {
         clearTimeout(queueWaitTimer)
-        if (queueWaitExpired || socket.readyState !== socket.OPEN) return
+        if (queueWaitExpired) return
+        if (socket.readyState !== socket.OPEN) {
+          this.postProofCloses.record({
+            ...refused,
+            code: null,
+            reason: 'host closed while queued'
+          })
+          return
+        }
         if ((this.sessions.get(key) ?? null) !== existing) {
-          socket.close(RELAY_CLOSE_CODE.PEER_DROPPED, 'control activation superseded')
+          this.refuseProvenControl(
+            socket,
+            refused,
+            RELAY_CLOSE_CODE.PEER_DROPPED,
+            'control activation superseded'
+          )
           return
         }
         await this.activateCurrent(
@@ -1617,6 +1819,7 @@ export class HostSessionRegistry {
     connectionInclusionWatermark?: number,
     reserved?: { reservedBy?: string }
   ): Promise<void> {
+    const refused = { relayHostId: identity.relayHostId, generation, appVersion }
     let controlActivityId: string | null = null
     // Admitted from memory, but the cell left reserve mode before the proof landed: lease now.
     if (this.config.role === 'cell' && !(reserved && this.reserveMode())) {
@@ -1638,7 +1841,7 @@ export class HostSessionRegistry {
           { userId: identity.sub, relayHostId: identity.relayHostId },
           { cellId: this.config.cellId, assignmentEpoch }
         )
-      } catch {
+      } catch (error) {
         // A failure after activateControl succeeded must not strand the
         // acquired control activity until lease expiry.
         if (controlActivityId) {
@@ -1647,7 +1850,13 @@ export class HostSessionRegistry {
             controlActivityId
           )
         }
-        socket.close(RELAY_CLOSE_CODE.WRONG_CELL, 'assignment changed during host proof')
+        this.refuseProvenControl(
+          socket,
+          refused,
+          RELAY_CLOSE_CODE.WRONG_CELL,
+          'assignment changed during host proof',
+          postProofCloseCause(error, isRelayDatabaseTransientError)
+        )
         return
       }
     }
@@ -1659,7 +1868,13 @@ export class HostSessionRegistry {
         )
       }
       if (socket.readyState === socket.OPEN) {
-        socket.close(RELAY_CLOSE_CODE.DRAINING, 'relay draining')
+        this.refuseProvenControl(socket, refused, RELAY_CLOSE_CODE.DRAINING, 'relay draining')
+      } else {
+        this.postProofCloses.record({
+          ...refused,
+          code: null,
+          reason: 'host closed during activation'
+        })
       }
       return
     }
@@ -1760,6 +1975,22 @@ export class HostSessionRegistry {
     this.wireActiveControl(session)
     this.sendHelloAck(session)
     this.appendSeatChange(session, 'join', undefined, reserved?.reservedBy)
+  }
+
+  private refuseProvenControl(
+    socket: WebSocket,
+    refused: { relayHostId: string; generation: number; appVersion: string },
+    code: number,
+    reason: string,
+    cause?: PostProofCloseCause,
+    hungUpReason = 'host closed during activation'
+  ): void {
+    // A host that already hung up got no close frame from us; log what happened instead.
+    const open = socket.readyState === socket.OPEN
+    socket.close(code, reason)
+    this.postProofCloses.record(
+      open ? { ...refused, code, reason, cause } : { ...refused, code: null, reason: hungUpReason }
+    )
   }
 
   seatFeed(sinceSeq: number | null): CellSeatFeedPage {
@@ -2256,11 +2487,12 @@ export class HostSessionRegistry {
       }
       if (type === 'device-resume-confirm') {
         const request = DeviceResumeConfirmSchema.parse(payload(raw, type))
-        const result = await this.store.confirmResume({
-          ...identity,
-          ...request,
-          owningControlGeneration: session.generation
-        })
+        const confirm = { ...identity, ...request, owningControlGeneration: session.generation }
+        if (this.memoryConfirmations.owns(confirm)) {
+          send(session.socket, 'device-resume-confirmed', await this.memoryConfirmations.confirm(confirm))
+          return
+        }
+        const result = await this.store.confirmResume(confirm)
         await this.assignments.releaseActivity(identity, `confirmation:${request.basisConnId}`)
         send(session.socket, 'device-resume-confirmed', result)
         return
@@ -2325,6 +2557,34 @@ export class HostSessionRegistry {
     void this.store.failReservation(reservation).catch(() => {
       console.warn('[orca-relay] reservation release deferred to credential cleanup')
     })
+  }
+
+  // A memory resume's basis is the cell's own record; every other basis is a Postgres row.
+  private openMemoryBasis(
+    pending: PendingConnection,
+    connId: string,
+    owningControlGeneration: number,
+    deadline: number
+  ): void {
+    const { reservation } = pending
+    if (reservation.acceptedCredentialVersion === undefined || reservation.acceptedAs === undefined) {
+      throw new Error('memory basis needs an accepted resume credential')
+    }
+    this.memoryConfirmations.open({
+      basisConnId: connId,
+      userId: reservation.userId,
+      relayHostId: reservation.relayHostId,
+      relayDeviceId: reservation.relayDeviceId,
+      acceptedCredentialVersion: reservation.acceptedCredentialVersion,
+      acceptedAs: reservation.acceptedAs,
+      owningControlGeneration,
+      deadline
+    })
+  }
+
+  private closeBasis(pending: PendingConnection, connId: string): void {
+    if (pending.phonePath === 'memory') this.memoryConfirmations.close(connId)
+    else this.deactivateBasisBestEffort(connId)
   }
 
   private deactivateBasisBestEffort(connId: string): void {

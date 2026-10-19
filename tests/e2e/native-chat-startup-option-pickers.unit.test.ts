@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../src/shared/agent-session-mutation-envelope'
@@ -152,12 +152,9 @@ it('picks model then effort through the menus during startup and uses both in th
         })
       )
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Model opus' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Model opus, Reasoning effort High' }))
     fireEvent.click(await screen.findByRole('option', { name: 'sonnet' }))
-    const options = await screen.findByRole('button', { name: /effort High/i })
-    await waitFor(() => expect(options.getAttribute('disabled')).toBeNull())
-    fireEvent.pointerDown(options, { button: 0, ctrlKey: false, pointerType: 'mouse' })
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Low' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Low' }))
     const body = hostTestMessage('reply using these choices')
     await expect(
       host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })

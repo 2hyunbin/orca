@@ -125,7 +125,8 @@ export class AcpStructuredChildren {
     }
     closeAcpSessionJournal(
       session,
-      `${session.spec.agent} ACP connection closed: ${error.message || error.name}`
+      `${session.spec.agent} ACP connection closed: ${error.message || error.name}`,
+      error
     )
     void this.stop(session.sessionId, false)
   }

@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  ORCAD_MIGRATION_MANIFEST_VERSION,
-  type OrcadMigrationManifest
-} from '../../shared/orcad-migration-manifest'
-import { ORCAD_MIGRATION_SOURCE_KIND_UNKNOWN } from '../../shared/orcad-migration-source-kind'
+import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../shared/orcad-migration/orcad-migration-manifest-validation'
+import type { OrcadMigrationManifest } from '../../shared/orcad-migration/orcad-migration-manifest'
+import { ORCAD_MIGRATION_SOURCE_KIND_UNKNOWN } from '../../shared/orcad-migration/orcad-migration-source-kind'
 import {
   ORCAD_MIGRATION_CATALOG_RUNTIME_CAPABILITY,
   ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY
@@ -56,11 +54,17 @@ function sshManifest(): OrcadMigrationManifest {
   return { ...unsigned, manifestSha256: computeOrcadMigrationManifestSha256(unsigned) }
 }
 
-/** A future kind as the wire carries it; this build's types know only the SSH source. */
+/** A WSL source, or any other `kind` as a newer or confused peer could put on the wire. */
 function manifestOfKind(kind: string): OrcadMigrationManifest {
-  const base = sshManifest()
-  const source = { ...base.source, kind }
-  return { ...base, source }
+  const source: OrcadMigrationManifest['source'] = {
+    kind: 'local-wsl',
+    distro: 'Ubuntu',
+    scopeRepoIds: [],
+    scopeFolderWorkspaceIds: [],
+    generation: 1
+  }
+  Object.assign(source, { kind })
+  return { ...sshManifest(), source }
 }
 
 const pairingCode = encodePairingOffer({

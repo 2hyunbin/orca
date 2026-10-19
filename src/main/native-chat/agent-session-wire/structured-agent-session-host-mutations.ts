@@ -8,17 +8,18 @@
 // an operation only the provider can perform starts it before admission.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type {
   AgentSessionCancelResult,
   AgentSessionMutationEnvelope,
   AgentSessionMutationResult,
   AgentSessionOptionResult,
   AgentSessionPromptResult,
-  AgentSessionSendResult,
+  AgentSessionSendResult
+} from '../../../shared/agent-session-wire'
+import type {
   AgentSessionThreadGoalChange,
   AgentSessionThreadGoalResult
-} from '../../../shared/agent-session-wire'
+} from '../../../shared/agent-session-thread-goal-wire'
 import type { AgentSessionPromptRequest } from './structured-agent-session-turns-prompt'
 import { refuseThreadGoalUnsupported, threadGoalPlan } from './structured-agent-session-thread-goal'
 import {
@@ -56,6 +57,8 @@ import {
   recordStructuredAgentSessionOptionIntent,
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
+import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
+import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -65,7 +68,9 @@ export function sendStructuredAgentSessionTurn(
     body: AgentJournalMessageItem
     retryUnknown?: true
     delivery?: 'queue-if-active'
-    executionOptions?: AgentSessionExecutionOptions
+    /** Host-local: whether the sending client can manage an image card. */
+    queuedImageCards?: boolean
+    options?: Readonly<Record<string, string>>
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
      *  origin, so a restart or a close keeps it as a card if it never reached the
@@ -123,6 +128,11 @@ export function cancelStructuredAgentSessionTurn(
         ...params,
         childWork: () => context.readChildWork(sessionId),
         acknowledgeStops: (evidence) => context.publishChildWork(sessionId, evidence),
+        captureStops: (targets) =>
+          context.captureChildWorkStops(
+            sessionId,
+            targets.map((target) => target.providerId)
+          ),
         // Untargeted, with work no record lists: the idle sweep's stop ends it with the agent.
         ...(params.taskId === undefined
           ? {
@@ -140,7 +150,7 @@ export function cancelStructuredAgentSessionTurn(
   const { prompt } = params
   const stoppedPrePrompt =
     !prompt && params.turnId === undefined
-      ? abortAcquireForStop(context, caller, params.envelope, plan)
+      ? abortProviderWaitForStop(context, caller, params.envelope, plan)
       : false
   // A card's Cancel stops whatever the chat has in flight, as the Stop button does; it reaches the
   // Stop only for a card the live turn raised (`cancelStructuredAgentSessionPrompt`).
@@ -160,7 +170,7 @@ export function cancelStructuredAgentSessionTurn(
  *  queue is waiting on stops now, as a close's does, and the Stop's own step then finds no child.
  *  Only a Stop admission would run now; one naming a turn is about a child already gone, so it
  *  leaves a newer start alone. */
-function abortAcquireForStop(
+function abortProviderWaitForStop(
   context: StructuredAgentSessionMutationContext,
   caller: StructuredAgentSessionCaller,
   envelope: AgentSessionMutationEnvelope,
@@ -230,10 +240,11 @@ export async function changeStructuredAgentSessionThreadGoal(
         context,
         caller,
         params.envelope,
-        plan,
+        threadGoalPlan({ ...params, signal: selection.signal }),
         openWithReadyStructuredAgentSessionChild(context, params.envelope, selection)
       ),
     {
+      goal: true,
       beforeAgent: (record) =>
         refuseThreadGoalUnsupported(context.deps.adapter, context.deps.agents, record?.provider)
     }
@@ -266,6 +277,11 @@ export function structuredAgentSessionMutationDelegates(
     readOptions: (
       sessionId: string,
       reader: StructuredAgentSessionOptionsReader = IN_PROCESS_OPTIONS_READER
-    ) => readStructuredAgentSessionOptions(context(), sessionId, reader)
+    ) => readStructuredAgentSessionOptions(context(), sessionId, reader),
+    settleLateDispatch: (input: Parameters<typeof settleStructuredAgentSessionLateDispatch>[1]) =>
+      settleStructuredAgentSessionLateDispatch(context(), input),
+    releaseUnansweredDispatches: (
+      input: Parameters<typeof releaseStructuredAgentSessionUnansweredDispatches>[1]
+    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input)
   }
 }

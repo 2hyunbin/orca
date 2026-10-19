@@ -8,6 +8,7 @@ import type {
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import type { JournalHostDatabase } from './journal-host-database'
+import { JournalContextController } from './journal-context-controller'
 import { JournalEpochController } from './journal-epoch-controller'
 import { JournalItemAppender } from './journal-item-appender'
 import { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
@@ -26,6 +27,7 @@ import type { AgentSessionJournal } from './journal-store'
 import type { JournalWriteBody } from './journal-write-queue'
 import type { JournalAttachmentClaim } from './journal-submission-hook'
 import { claimAgentSessionAttachmentsInTransaction } from '../agent-session-attachments/agent-session-attachment-claims'
+import { isJournalStreamedTextRevision } from './journal-streamed-text-revision'
 
 export type JournalStoreHost = {
   /** Fires the journal's commit listener for a durable change that appended no
@@ -58,6 +60,7 @@ export type JournalStoreCollaborators = {
   stepWriter: JournalStepWriter
   queuedMessages: JournalQueuedMessages
   stopMarks: JournalStopMarks
+  context: JournalContextController
   stops: JournalStopAcceptor
   /** Restores the store's state from disk. Owned here because it needs the same
    *  collaborators the constructor just built. */
@@ -115,7 +118,8 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     // Every rejection is a dispatch row through this one writer; the draft
     // returned-transition rides it so no path can bypass the hook.
     inTransaction: (db, row) => queuedMessages.onRowInTransaction(db, row),
-    rolledBack: () => queuedMessages.invalidate()
+    rolledBack: () => queuedMessages.invalidate(),
+    streamedTextRevision: (row) => isJournalStreamedTextRevision(host.state(), row)
   })
   const lifecycleBatchAppender = new JournalLifecycleBatchAppender({
     state: host.state,
@@ -126,11 +130,12 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     epochController,
     queuedMessages,
     stopMarks: new JournalStopMarks({ state: host.state }),
-    stops: new JournalStopAcceptor({
-      writer: rowWriter,
+    context: new JournalContextController({
       state: host.state,
-      liveTurnId: () => host.journal().activeTurnId()
+      writer: rowWriter,
+      cards: queuedMessages
     }),
+    stops: new JournalStopAcceptor({ writer: rowWriter, state: host.state }),
     // Behind the stored fact: settles drafts whose consumed submission the loaded journal shows
     // refused (a downgrade wrote no hook), then prunes. Bookkeeping, never failing the open.
     restore: () =>

@@ -70,25 +70,46 @@ describe('Codex captured message choices', () => {
       const turnOptions = await resolvedCodexMessageOptions(session, { model, effort })
       await startCodexTurn(session, { clientMessageId: id, body, turnOptions })
     }
+    session.activeTurnIds = new Set(['turn-1'])
+    await startCodexTurn(session, {
+      clientMessageId: 'steer',
+      body,
+      turnOptions: { personality: 'friendly', serviceTier: 'priority' }
+    })
+    expect(request.mock.calls.at(-1)?.[0]).toBe('turn/steer')
+    expect(request.mock.calls.at(-1)?.[1]).not.toHaveProperty('personality')
+    expect(request.mock.calls.at(-1)?.[1]).not.toHaveProperty('serviceTier')
+    expect(session.appliedTurnOptions).toEqual({ model: 'model-b', effort: 'low' })
+    session.activeTurnIds = new Set()
+    await startCodexTurn(session, {
+      clientMessageId: 'next',
+      body,
+      turnOptions: { personality: 'friendly', serviceTier: 'priority' }
+    })
+    expect(request.mock.calls.at(-1)?.[1]).toMatchObject({
+      personality: 'friendly',
+      serviceTier: 'priority'
+    })
     expect(
       request.mock.calls
         .filter(([method]) => method === 'turn/start')
         .map(([, params]) => [params?.model, params?.effort])
     ).toEqual([
       ['model-a', 'high'],
-      ['model-b', 'low']
+      ['model-b', 'low'],
+      [undefined, undefined]
     ])
     expect(Object.fromEntries(session.options)).toEqual({
-      model: 'model-b',
-      effort: 'low',
-      personality: 'none',
-      serviceTier: 'default'
+      personality: 'friendly',
+      serviceTier: 'priority'
     })
   })
 
   it('resets an explicit empty choice after a thread launch and earlier turn override', async () => {
     const request = vi.fn(async (method: string, _params?: Record<string, unknown>) =>
-      method === 'turn/start' ? { turn: { id: 'opened' } } : {}
+      method === 'turn/start'
+        ? { turn: { id: 'opened' } }
+        : { config: { personality: 'pragmatic', service_tier: 'flex' } }
     )
     const session = optionSession(request)
     session.reportedOptions = { model: 'model-a', effort: 'high' }
@@ -121,20 +142,30 @@ describe('Codex captured message choices', () => {
       request.mock.calls.filter(([method]) => method === 'turn/start').map(([, params]) => params)
     ).toMatchObject([
       { model: 'model-a', effort: 'high', personality: 'friendly', serviceTier: 'priority' },
-      { model: 'model-b', effort: 'medium', personality: 'none', serviceTier: 'default' },
-      { model: 'model-a', effort: 'low', personality: 'none', serviceTier: 'default' }
+      { model: 'model-b', effort: 'medium', personality: 'pragmatic', serviceTier: 'flex' },
+      { model: 'model-a', effort: 'low' }
     ])
     expect(request.mock.calls.map(([method]) => method)).toEqual([
+      'config/read',
       'turn/start',
       'turn/start',
       'turn/start'
     ])
     expect(Object.fromEntries(session.options)).toEqual({
       model: 'model-a',
-      effort: 'low',
-      personality: 'none',
-      serviceTier: 'default'
+      effort: 'low'
     })
+  })
+
+  it('inherits untouched native tier and personality without a configuration probe', async () => {
+    const request = vi.fn(async (_method: string) => ({ turn: { id: 'native' } }))
+    const session = optionSession(request)
+    session.reportedOptions = { model: 'model-a', serviceTier: 'flex', serviceTierKnown: true }
+    const turnOptions = await resolvedCodexMessageOptions(session, {})
+    await startCodexTurn(session, { clientMessageId: 'native', body: USER_MESSAGE, turnOptions })
+    expect(request).toHaveBeenCalledOnce()
+    expect(request.mock.calls[0]?.[0]).toBe('turn/start')
+    expect(turnOptions).toEqual({})
   })
 
   it('opens from the first captured model even when launch resolution saw a newer saved pick', async () => {

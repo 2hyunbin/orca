@@ -35,7 +35,7 @@ function beforeAttachEnds(host: StructuredAgentSessionHost, atEnd: () => void): 
   aborts.begin = (sessionId) => {
     const started = begin(sessionId)
     return {
-      signal: started.signal,
+      ...started,
       end: () => {
         if (!fired) {
           fired = true

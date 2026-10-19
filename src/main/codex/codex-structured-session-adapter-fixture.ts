@@ -50,7 +50,7 @@ export async function acquireReadyCodexForTest(
   const result = await adapter.open({
     sessionId: input.identity.sessionId,
     fence: input.fence,
-    acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+    acquisitionGeneration: acquired.acquisitionGeneration,
     signal: new AbortController().signal
   })
   startReports.get(adapter)?.set(input.identity.sessionId, result)

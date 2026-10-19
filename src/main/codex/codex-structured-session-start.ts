@@ -15,6 +15,7 @@ import type { CodexJournalTranslator } from './codex-structured-journal-translat
 import { codexProviderHandleLink } from './codex-structured-owner-identity'
 import { openCodexThread } from './codex-structured-thread-open'
 import { withCodexVisualsThreadConfig } from './codex-structured-visuals'
+import { NATIVE_CHAT_SCRATCH_DIR_ENV } from '../native-chat/native-chat-visuals-delivery'
 import {
   restoredCodexSessionOptions,
   reportedCodexSessionOptions
@@ -32,7 +33,6 @@ import {
   type CodexStructuredSessionAdapterDeps
 } from './codex-structured-session-state'
 import type { CodexStructuredSessionTeardown } from './codex-structured-session-teardown'
-import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 
 type CodexOpenContext = {
   input: StructuredAgentSessionAcquireInput
@@ -76,10 +76,7 @@ export async function openCodexStructuredSession(
     assertCodexConnectionOpen(connection, sessionId)
   }
   current()
-  await waitForPromiseWithSignal(
-    initializeCodexAppServerConnection(connection, STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS),
-    openInput.signal
-  )
+  await waitForPromiseWithSignal(initializeCodexAppServerConnection(connection), openInput.signal)
   current()
   const threadLaunch = await waitForPromiseWithSignal(
     withCodexVisualsThreadConfig(connection, launch, {
@@ -89,11 +86,15 @@ export async function openCodexStructuredSession(
     openInput.signal
   )
   current()
+  const commandEnv = {
+    ...launch.commandEnv,
+    ...(launch.visuals ? { [NATIVE_CHAT_SCRATCH_DIR_ENV]: launch.visuals.folder } : {})
+  }
   const opened = await waitForPromiseWithSignal(
     openCodexThread(
       connection,
-      threadLaunch,
-      STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS,
+      { ...threadLaunch, commandEnv },
+      deps.requestTimeoutMs,
       openInput.signal
     ),
     openInput.signal
@@ -132,11 +133,14 @@ export async function openCodexStructuredSession(
     backgroundTasks: new CodexBackgroundTaskTracker(
       opened.threadId,
       start.subagentExecutions,
-      codexChildWorkSink(sessionId, deps)
+      codexChildWorkSink(sessionId, deps, input.events)
     ),
     forceCloseUnexpected: (reason) =>
       start.forceCloseUnexpected(sessionId, input.fence, generation, reason),
     ...(start.unbindReadingControl ? { unbindReadingControl: start.unbindReadingControl } : {})
+  }
+  if (opened.serviceTier) {
+    session.nativeDefaults = { ...session.nativeDefaults, serviceTier: opened.serviceTier }
   }
   current()
   sessions.set(sessionId, session)

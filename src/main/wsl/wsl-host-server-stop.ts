@@ -6,16 +6,17 @@
  * left, the decommission addressed the very orcad the bridge was serving, and the daemon retired.
  */
 import { z } from 'zod'
+import { errorMessage } from '../../shared/error-message'
 import type { OrcadDecommissionResult } from '../../shared/orcad-decommission'
 import { ORCAD_MANAGED_REMOTE_PORT } from '../../shared/orcad-managed-runtime'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { RuntimeTerminalListResult } from '../../shared/runtime-terminal-contracts'
 import type { WslHostServerStop } from '../../shared/wsl-host-types'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
-import { readRemoteOrcadManagedStopTarget } from '../ssh/orcad-managed-remote-stop'
-import { managedOrcadSlot } from '../ssh/orcad-managed-runtime-context'
-import { resolveOrcadRemoteContext } from '../ssh/orcad-remote-context'
-import { decommissionRemoteOrcad } from '../ssh/orcad-remote-decommission'
+import { readRemoteOrcadManagedStopTarget } from '../managed-server/lifecycle/orcad-managed-remote-stop'
+import { managedOrcadSlot } from '../managed-server/lifecycle/orcad-managed-runtime-context'
+import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
+import { decommissionRemoteOrcad } from '../managed-server/install/orcad-remote-decommission'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 
 const CENSUS_ATTEMPTS = 20
@@ -156,8 +157,4 @@ export function decommissionWslHostOrcad(
     }
     return decommissionRemoteOrcad({ ...slot, record: context.activationRecord, census })
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

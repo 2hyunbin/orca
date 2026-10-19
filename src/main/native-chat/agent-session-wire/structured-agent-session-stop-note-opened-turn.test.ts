@@ -51,6 +51,9 @@ async function stopWhileTheTurnOpens(
     agents: NO_STRUCTURED_AGENTS,
     agent: 'codex',
     adapter: {
+      open: async () => ({
+        reportedOptions: { model: '' }
+      }),
       acquire: vi.fn(),
       dispatch: vi.fn(),
       closeSession: vi.fn(),

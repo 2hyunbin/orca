@@ -13,6 +13,7 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
+import { acpPrivateTempConnect } from './acp-private-temp'
 import {
   assertAcpStartingSession,
   isAcpReadySession,
@@ -23,7 +24,7 @@ import type { AcpStructuredConnection } from './acp-structured-connection'
 import { acpAgentName } from './acp-structured-agent-definitions'
 import { AcpStructuredLane, acpLaneChildWorkDelivery } from './acp-structured-lane'
 import { NO_ACP_CHILD_STOPS } from './acp-structured-child-stop'
-import type { AcpStructuredLaunch } from './acp-structured-launch-resolution'
+import { prepareAcpStructuredLaunch } from './acp-structured-launch-preparation'
 import { AcpStructuredOptions } from './acp-structured-options'
 import { AcpStructuredPrompts } from './acp-structured-prompts'
 import { asReattachHistory, routeAcpSessionEvent } from './acp-structured-session'
@@ -39,7 +40,7 @@ export async function acquireAcpStructuredSession(input: {
   acquire: StructuredAgentSessionAcquireInput
   deps: AcpStructuredSessionAdapterDeps
   generation: string
-  /** The acquire was aborted; checked until the spawn, after which `track` hands it the connection. */
+  /** The spawn was aborted; checked until the spawn, after which `track` hands it the connection. */
   abandoned: () => boolean
   /** Registers the connection so a close during the acquire can stop it. */
   track: (connection: AcpStructuredConnection) => void
@@ -56,6 +57,7 @@ export async function acquireAcpStructuredSession(input: {
 }> {
   const { acquire, deps, generation } = input
   const { spec } = deps
+  const agentName = acpAgentName(spec.agent)
   const sessionId = acquire.identity.sessionId
   const now = deps.now ?? Date.now
   const events = acquire.events
@@ -65,18 +67,11 @@ export async function acquireAcpStructuredSession(input: {
   }
   const closedBeforeSpawn = () => {
     if (input.abandoned()) {
-      throw new AgentSessionPreSpawnError(
-        new Error(`${acpAgentName(spec.agent)} was closed before it started`)
-      )
+      throw new AgentSessionPreSpawnError(new Error(`${agentName} was closed before it started`))
     }
   }
   closedBeforeSpawn()
-  const launch: AcpStructuredLaunch = await deps
-    .resolveLaunch({ identity: acquire.identity, spawnToken: acquire.spawnToken })
-    .catch((error: unknown) => {
-      throw new AgentSessionPreSpawnError(error)
-    })
-  closedBeforeSpawn()
+  const launch = await prepareAcpStructuredLaunch(deps, acquire, closedBeforeSpawn)
   let session: AcpStructuredChild | null = null
   // A slot rather than a `let`: closures read it, and control-flow narrowing cannot see them write.
   const slot: { lane: AcpStructuredLane | null; reattaching: boolean } = {
@@ -102,7 +97,11 @@ export async function acquireAcpStructuredSession(input: {
       early.push(deliver)
     }
   }
-  const connection = deps.connect(
+  // No await for an agent without the flag: nothing may come between the last abort check and spawn.
+  const connect = spec.privateTempDirectory
+    ? await acpPrivateTempConnect(deps, closedBeforeSpawn)
+    : deps.connect
+  const connection = connect(
     {
       command: launch.command,
       args: launch.args,
@@ -112,14 +111,16 @@ export async function acquireAcpStructuredSession(input: {
     },
     {
       clientInfo: { name: 'orca', version: '1' },
-      ...(acquire.onOutput ? { onOutput: acquire.onOutput } : {}),
+      ...(spec.signIn ? { signIn: spec.signIn } : {}),
       onPermission: (request, context) => {
         if (!isAcpReadySession(session) || !session.turns?.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
           // is cutting it short: nobody is there to ask.
           return { outcome: { outcome: 'cancelled' } }
         }
-        if (launch.fullAccess) {
+        // Full access never answers a dialect's question, nor an agent that enforces the mode itself.
+        const claimed = spec.dialect.request?.('session/request_permission', request)
+        if (launch.fullAccess && !spec.permissionModeConfig && !claimed) {
           // Full access: Orca answers yes for the person, as the agent's own bypass flag would.
           const allow = request.options.find((option) => option.kind === 'allow_once')
           if (allow) {
@@ -190,13 +191,13 @@ export async function acquireAcpStructuredSession(input: {
       sink,
       sessionId,
       agent: spec.agent,
-      agentName: acpAgentName(spec.agent),
+      agentName,
       generation,
       providerSessionId,
       dialect: spec.dialect,
       now,
       childStops: () => session?.childStops ?? NO_ACP_CHILD_STOPS,
-      ...acpLaneChildWorkDelivery(deps, sessionId),
+      ...acpLaneChildWorkDelivery(deps, sessionId, events),
       logger: deps.logger ?? createStructuredAgentSessionLogger(),
       onInputAccepted: (clientMessageId) => {
         if (isAcpReadySession(session)) {
@@ -269,7 +270,7 @@ export async function acquireAcpStructuredSession(input: {
   session = child
   assertAcpStartingSession(child, input.abandoned)
   return {
-    acquisition: { process, acquisitionGeneration: generation, providerChildPhase: 'starting' },
+    acquisition: { process, acquisitionGeneration: generation },
     session: child
   }
 }

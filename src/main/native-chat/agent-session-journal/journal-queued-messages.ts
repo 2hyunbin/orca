@@ -108,11 +108,11 @@ export class JournalQueuedMessages {
     input: {
       messageId: string
       body: AgentJournalMessageItem
-      executionOptions?: AgentSessionExecutionOptions
       fingerprint: string
       hostInstance: string
       requireAttachments?: true
       holdReason?: QueuedMessageHoldReason
+      options?: AgentSessionExecutionOptions
     },
     receipt?: JournalOperationReceipt
   ): Promise<QueuedMessageRow> {

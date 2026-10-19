@@ -15,6 +15,7 @@ import {
   type ReadyOperationSelection
 } from './structured-agent-session-ready-operation'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
+import { hostStructuredAgentSessionCurrentWork } from './structured-agent-session-host-current-work'
 import { conversationCommandBlocked } from './structured-conversation-command-admission'
 import type { AgentSessionFailureFact } from '../../../shared/agent-session-failure'
 import {
@@ -89,6 +90,8 @@ async function clearUnderSerialize(
     // Starts the agent only to settle a rewind in doubt, as a send does; a /clear itself starts nothing.
     prepareSession: sendPreparation(context, envelope, { refusesInRun: true }, selection),
     journal: () => context.sessions.get(sessionId)?.journal,
+    currentWork: () =>
+      hostStructuredAgentSessionCurrentWork({ store, sessions: context.sessions }, sessionId),
     publish: (journal) => context.publish(sessionId, journal),
     now: context.now,
     plan: {
@@ -122,7 +125,7 @@ async function clearUnderSerialize(
         const blocked = conversationCommandBlocked(
           ctx,
           record,
-          context.readChildWork(sessionId),
+          { views: context.readChildWork(sessionId), open: context.childWorkOpen(sessionId) },
           context.sessions.get(sessionId)?.child ? undefined : 'at-rest'
         )
         if (blocked) {
@@ -134,7 +137,7 @@ async function clearUnderSerialize(
         const rechecked = conversationCommandBlocked(
           { ...ctx, fence },
           stopped,
-          context.readChildWork(sessionId),
+          { views: context.readChildWork(sessionId), open: context.childWorkOpen(sessionId) },
           'at-rest'
         )
         if (rechecked) {

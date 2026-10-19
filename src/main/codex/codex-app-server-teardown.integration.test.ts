@@ -87,7 +87,7 @@ async function openServer(
       command: process.execPath,
       args: ['-e', FORCE_KILL_APP_SERVER],
       env: {
-        [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: `teardown-test-${process.pid}-${iteration}`,
+        [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: `teardown-test-${process.pid}-${exitMode ?? 'forced'}-${iteration}`,
         ...(exitMode ? { ORCA_TEST_PROVIDER_EXIT_MODE: exitMode } : {})
       }
     },
@@ -163,7 +163,9 @@ describe.runIf(process.platform !== 'win32')('Codex app-server process teardown'
     }
   }, 30_000)
 
-  it('does not settle a stdin-close/root-exit race before the descendant is reaped', async () => {
+  it.concurrent('does not settle a stdin-close/root-exit race before the descendant is reaped', async ({
+    expect
+  }) => {
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const server = await openServer(iteration, 'stdin-race')
       try {

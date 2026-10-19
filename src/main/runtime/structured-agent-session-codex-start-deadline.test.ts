@@ -1,5 +1,6 @@
-// A Codex start has one deadline, the host's startup attempt (60 s without a word, 10 min at most):
-// its own request bounds no longer end a slow `initialize` first.
+// Each step of a Codex start has its own bound: an `initialize` that never answers fails the start
+// at 15 s with the startup-failure words, and the host ends the child; one that answers in time
+// starts as usual.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -14,6 +15,7 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { recordAgentSessionStartup } from '../observability/agent-session-instrumentation'
+import { readWholeAgentSessionFailureFact } from '../../shared/agent-session-failure'
 import type { ScriptedAgentChild } from './structured-agent-scripted-child.test-fixture'
 import {
   ensureStructuredAgentSessionHost,
@@ -90,14 +92,30 @@ function startupOutcomes(): string[] {
   return vi.mocked(recordAgentSessionStartup).mock.calls.map(([startup]) => startup.outcome)
 }
 
-it('delivers the held message to a Codex that answers initialize after 20 s', async () => {
+it('delivers the held message to a Codex that answers initialize within its bound', async () => {
   const child = codexScriptedChild()
   await chatHoldingAMessage(child)
-  await vi.advanceTimersByTimeAsync(20_000)
+  await vi.advanceTimersByTimeAsync(14_000)
   expect(child.closes()).toBe(0)
 
   child.releaseHandshake()
   await vi.waitFor(() => expect(child.prompts()).toEqual(['held through a slow Codex start']))
   expect(child.spawns()).toBe(1)
   expect(startupOutcomes()).toEqual(['ready'])
+})
+
+it('fails the held message with the startup-failure words when initialize passes its bound', async () => {
+  const child = codexScriptedChild()
+  const host = await chatHoldingAMessage(child)
+  await vi.advanceTimersByTimeAsync(15_000)
+
+  await vi.waitFor(async () => {
+    await host.flushStreamedEvents(HOST_TEST_SESSION)
+    const [held] = (await host.journalSnapshot(HOST_TEST_SESSION)).submissions
+    expect(held?.dispatchState).toBe('rejected')
+    expect(readWholeAgentSessionFailureFact(held?.rejection)).toMatchObject({ kind: 'startFailed' })
+  })
+  await vi.waitFor(() => expect(child.closes()).toBe(1))
+  expect(child.prompts()).toEqual([])
+  expect(child.spawns()).toBe(1)
 })

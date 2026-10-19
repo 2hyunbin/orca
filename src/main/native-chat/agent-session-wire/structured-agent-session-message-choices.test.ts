@@ -34,7 +34,7 @@ async function pickModel(model: string): Promise<void> {
 it('keeps the first accepted choice through opening and saves a later pick for the next send', async () => {
   await rig.dispose()
   rig = await createQueuedMessageTestRig({ starting: true, restartable: true })
-  const first = rig.send('first', undefined, { executionOptions: { model: 'model-a' } })
+  const first = rig.send('first', undefined, { carried: { model: 'model-a' } })
   expect(await first.result).toMatchObject({ ok: true })
   await pickModel('model-b')
   const second = rig.send('second')
@@ -57,7 +57,7 @@ it('rejects a refused choice before prompt input and leaves the next pick saved'
       providerDiagnostic('model-a is unavailable', 'person')
     )
   )
-  const first = rig.send('first', undefined, { executionOptions: { model: 'model-a' } })
+  const first = rig.send('first', undefined, { carried: { model: 'model-a' } })
   expect(await first.result).toMatchObject({ ok: true })
   await eventually(async () =>
     expect(await rig.submission(first.id)).toMatchObject({
@@ -72,10 +72,10 @@ it('rejects a refused choice before prompt input and leaves the next pick saved'
 it('uses each send’s captured choices when two messages arrive during startup', async () => {
   const releaseStart = rig.holdNextStart()
   const first = rig.send('first', undefined, {
-    executionOptions: { model: 'model-a', effort: 'high' }
+    carried: { model: 'model-a', effort: 'high' }
   })
   const second = rig.send('second', undefined, {
-    executionOptions: { model: 'model-b', effort: 'low' }
+    carried: { model: 'model-b', effort: 'low' }
   })
   expect(await first.result).toMatchObject({ ok: true })
   expect(await second.result).toMatchObject({ ok: true })
@@ -95,23 +95,26 @@ it('keeps a draft’s accepted choices through a host restart and Send now', asy
   const working = await rig.workingSend()
   const choices = { model: 'model-b', effort: 'low' }
   const queued = await rig.send('use these choices', 'queue-if-active', {
-    executionOptions: choices
+    carried: choices
   }).result
   if (!queued.ok || !('queued' in queued.value)) {
     throw new Error('expected a queued receipt')
   }
   const draftId = queued.value.queued.messageId
   await rig.restartHostProcess()
-  const page = await rig.host.history({ sessionId: SESSION, direction: 'tail' })
-  expect(page.ok && page.page.queuedMessages?.[0]?.executionOptions).toEqual(choices)
+  expect(await rig.host.history({ sessionId: SESSION, direction: 'tail' })).toMatchObject({
+    ok: true
+  })
+  const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)?.journal
+  expect(journal?.queuedMessages.get(draftId)?.options).toEqual(choices)
   await rig.settleAccepted(working, 'a')
   expect(await rig.sendNow(draftId)).toMatchObject({ ok: true })
-  expect((await rig.handoff(draftId))?.executionOptions).toEqual(choices)
+  expect((await rig.handoff(draftId))?.options).toEqual(choices)
 })
 
 it('steers a matching choice but holds an empty default choice for a new turn', async () => {
   const choices = { model: 'model-a', effort: 'high' }
-  const first = rig.send('first', undefined, { executionOptions: choices })
+  const first = rig.send('first', undefined, { carried: choices })
   await first.result
   await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(1))
   await rig.settleAccepted(first.id, 'a')
@@ -124,15 +127,18 @@ it('steers a matching choice but holds an empty default choice for a new turn', 
     )
   await rig.host.flushStreamedEvents(SESSION)
 
-  const matching = rig.send('same choices', undefined, { executionOptions: choices })
+  const extras = { ...choices, personality: 'friendly', serviceTier: 'priority', fastMode: 'true' }
+  const matching = rig.send('same choices', undefined, { carried: extras })
+
   await matching.result
   await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
+  expect(rig.dispatch.mock.calls[1]?.[0].executionOptions).toEqual(extras)
   await rig.host.settleLateDispatch({
     sessionId: SESSION,
     clientMessageId: matching.id,
     providerIdentity: { provider: 'codex', threadId: THREAD, turnId: 'turn-a', ordinal: 1 }
   })
-  const defaults = rig.send('default choices', undefined, { executionOptions: {} })
+  const defaults = rig.send('default choices', undefined, { carried: {} })
   await defaults.result
   expect(rig.dispatch).toHaveBeenCalledTimes(2)
 

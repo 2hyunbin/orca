@@ -794,9 +794,9 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     })
   })
 
-  // Its turn/start answer lost, the send is in doubt rather than pending; the child's end takes it
-  // back all the same, while the accepted request remains visible.
-  it('keeps the Stop request after taking back a send whose answer was lost', async () => {
+  // Its turn/start answer lost while Codex is idle, the send is in doubt and no longer Codex's
+  // work: the chat stops Working, so no Stop is needed to end a child, and no row is written.
+  it('stops being work when its answer was lost while Codex is idle, leaving no Stop row', async () => {
     const warmUp = await send('warm up')
     await vi.waitFor(() => expect(answers).toBe(1))
     turns.start()
@@ -813,11 +813,9 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
       expect(verdictOf((await settled()).submissions, sent)).toBe('unknown')
     )
 
-    expect(await settledWithin(stop(), CODEX_TURN_OPEN_WAIT_MS + 2_000)).not.toBe('held')
-
-    expect(childCloses).toBe(1)
-    expect(verdictOf((await settled()).submissions, sent)).toBe('withdrawn')
-    expect(await statusRows()).toEqual(['Cancellation requested.'])
+    expect(host.currentWork(SESSION)?.working()).toBe(false)
+    expect(childCloses).toBe(0)
+    expect(await statusRows()).toEqual([])
   })
 
   it('withdraws it too when the child end fails and a later retry lands it', async () => {

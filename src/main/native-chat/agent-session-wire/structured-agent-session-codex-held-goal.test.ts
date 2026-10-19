@@ -58,7 +58,7 @@ it.each([
       rig.host.collaboratorsForTests().sessions.get(SESSION)?.journal.newestTurn()
     ).toMatchObject({ state: 'running', userItemId: agentJournalSubmissionKey(first) })
     const held = rig.send('Use a different model', undefined, {
-      executionOptions: { model: 'model-b' }
+      carried: { model: 'model-b' }
     })
     expect(await held.result).toMatchObject({ ok: true })
     await rig.host.collaboratorsForTests().serialize(SESSION, async () => {})
@@ -81,8 +81,8 @@ it('releases a startup goal when a second message parks while the first turn ope
   rig = await createQueuedMessageTestRig({ starting: true, restartable: true })
   const changeGoal = vi.fn(async () => ({ ok: true as const }))
   rig.host.deps.adapter.changeThreadGoal = changeGoal
-  const first = rig.send('First model', undefined, { executionOptions: { model: 'model-a' } })
-  const second = rig.send('Second model', undefined, { executionOptions: { model: 'model-b' } })
+  const first = rig.send('First model', undefined, { carried: { model: 'model-a' } })
+  const second = rig.send('Second model', undefined, { carried: { model: 'model-b' } })
   await first.result
   await second.result
   const change = { kind: 'set' as const, objective: 'A startup objective' }

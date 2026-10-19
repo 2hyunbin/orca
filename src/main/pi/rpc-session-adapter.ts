@@ -94,8 +94,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
       }
       return {
         process,
-        acquisitionGeneration: session.generation,
-        providerChildPhase: 'starting'
+        acquisitionGeneration: session.generation
       }
     } catch (error) {
       if (!session) {
@@ -208,7 +207,14 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
     )
   setOption: StructuredAgentSessionAdapter['setOption'] = (input) => {
     const session = this.session(input.sessionId, input.fence)
-    return applyPiRpcSessionOption(session.connection, session.selected, input.key, input.value)
+    return applyPiRpcSessionOption(
+      session.connection,
+      session.selected,
+      input.key,
+      input.value,
+      { signal: input.signal },
+      session.optionProof
+    )
   }
   readOptions: NonNullable<StructuredAgentSessionAdapter['readOptions']> = async (input) =>
     this.session(input.sessionId, input.fence).readOptions()
@@ -237,6 +243,9 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
   }
   releaseAcquisition(input: { sessionId: string }): Promise<boolean> {
     return this.closeSession(input.sessionId)
+  }
+  hasOwnedAcquisition(sessionId: string): boolean {
+    return this.sessions.has(sessionId)
   }
   forceCloseSession(id: string): Promise<boolean> {
     this.sessions.get(id)?.fail(new Error('Pi event sink failed'))

@@ -63,6 +63,7 @@ export class PiRpcSession {
   readonly turns: PiRpcTurns
   readonly dialogs: PiRpcDialogCallbacks
   readonly selected = new Map<string, string>()
+  readonly optionProof = { current: new Map<string, string>(), writes: new Map<string, symbol>() }
   readonly startup: PiRpcSessionStartup
   initialOptions: Readonly<Record<string, string>> = {}
   openedLink: AgentSessionProviderHandleLink | null = null
@@ -126,7 +127,6 @@ export class PiRpcSession {
     this.connection = (
       deps.openConnection ?? ((spec, handlers) => new JsonlRpcAgentConnection(spec, handlers))
     )(launch, {
-      ...(input.onOutput ? { onOutput: input.onOutput } : {}),
       onRecord: (frame) =>
         frame.type === 'extension_ui_request'
           ? this.dialogs.receive(frame)
@@ -165,6 +165,16 @@ export class PiRpcSession {
       ...(result.reportedOptions.effort ? { effort: result.reportedOptions.effort } : {})
     }
     this.openedLink = result.link ?? null
+    this.optionProof.current = new Map(Object.entries(this.initialOptions))
+    void this.startup
+      .readAfterOpen(this.generation, result.reportedOptions)
+      .catch((error: unknown) =>
+        this.deps.logger.warn('Pi startup reports failed', {
+          scope: 'pi-startup-reports',
+          sessionId: this.input.identity.sessionId,
+          error
+        })
+      )
     return result
   }
 

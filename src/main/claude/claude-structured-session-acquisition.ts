@@ -5,6 +5,7 @@ import type {
 import { openClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import { buildClaudePermissionCallbacks } from './claude-structured-inbound-control'
 import { resolveClaudeReplayTurn } from './claude-replay-turn-resolution'
+import { claudeStartedUnechoedSend } from './claude-command-lifecycle'
 import { claudeSessionStateEndsTurn } from './claude-session-state-turn-over'
 import { settleClaudeTurnEndWaiters } from './claude-request-end-wait'
 import {
@@ -65,12 +66,20 @@ export async function acquireClaudeSession({
   // Frames are admitted only after launch resolution proves the provider session
   // this acquisition owns. Keep the check ahead of every stateful consumer.
   const initProof = createClaudeInitProof()
-  const translator = createClaudeSessionJournalTranslator(input.events, String(input.fence), {
-    attempt,
-    initProof,
-    callbacks,
-    sessionId
-  })
+  const translator = createClaudeSessionJournalTranslator(
+    input.events,
+    String(input.fence),
+    {
+      attempt,
+      initProof,
+      callbacks,
+      sessionId
+    },
+    () =>
+      liveSession && sessions.get(sessionId) === liveSession
+        ? liveSession.backgroundTasks.goalBackgroundWork
+        : 'unverifiable'
+  )
 
   const onMessage = (message: Record<string, unknown>): void => {
     const init = readClaudeInit(message)
@@ -88,6 +97,14 @@ export async function acquireClaudeSession({
       // running; set_model answers success for a model it never resolves, so this
       // report is the session's only adoption evidence.
       if (liveSession && init.model) {
+        if (liveSession.reusableOptions.get('model') !== init.model) {
+          liveSession.reusableOptions.delete('model')
+          liveSession.reusableOptions.delete('effort')
+          liveSession.reusableOptions.delete('fastMode')
+        }
+        if (liveSession.optionMutationSequence === 0) {
+          liveSession.reusableOptions.set('model', init.model)
+        }
         liveSession.reportedOptions.model = init.model
         liveSession.reportedModelMutation = liveSession.optionMutationSequence
       }
@@ -122,6 +139,7 @@ export async function acquireClaudeSession({
     const observedAt =
       startsTurn || message.type === 'result' ? { observedAt: deps.now?.() ?? Date.now() } : {}
     const requestedAt = turnOrigin?.requestedAt
+    const startedSend = !startsTurn && liveSession ? claudeStartedUnechoedSend(liveSession) : null
     callbacks.deliver(attempt, sessionId, () =>
       callbacks.emit(liveSession, input.events, {
         type: 'message',
@@ -130,6 +148,7 @@ export async function acquireClaudeSession({
         ...(startsTurn ? { startsTurn: true } : {}),
         ...(requestedAt === null || requestedAt === undefined ? {} : { requestedAt }),
         ...(turnOrigin?.clientMessageId ? { clientMessageId: turnOrigin.clientMessageId } : {}),
+        ...(startedSend ? { startedSend } : {}),
         ...observedAt
       })
     )
@@ -178,7 +197,6 @@ export async function acquireClaudeSession({
           onMessage,
           canUseTool,
           onUserDialog,
-          ...(input.onOutput ? { onOutput: input.onOutput } : {}),
           onFault: (error) => {
             childEnded ??= error
             initProof.reject(error)
@@ -266,7 +284,7 @@ export async function acquireClaudeSession({
       )
     }
     // The host calls open after publication and holds input until it settles.
-    return { ...publication.acquisition, providerChildPhase: 'starting' }
+    return publication.acquisition
   } catch (error) {
     unbindReadingControl?.()
     const acquisitionError = await resolveClaudeAcquisitionError({
@@ -275,9 +293,9 @@ export async function acquireClaudeSession({
       sessions,
       attempt,
       translator,
-      prompts
+      prompts,
+      releaseAcquisition: () => acquisitions.deleteIfCurrent(sessionId, attempt)
     })
-    acquisitions.deleteIfCurrent(sessionId, attempt)
     throw acquisitionError
   } finally {
     attempt.finish()

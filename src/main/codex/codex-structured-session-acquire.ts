@@ -67,7 +67,7 @@ export async function acquireCodexStructuredSession(input: {
       ? provenHandle.nativeId
       : null
   const subagentExecutions = new CodexSubagentExecutions()
-  const dispatchEchoes = createCodexDispatchEchoes()
+  const dispatchEchoes = createCodexDispatchEchoes(() => deps.onHeldSendsChanged?.({ sessionId }))
   let account: AgentSessionAccountKind | undefined
   // Minted before the translator, which names this connection's frame rows with it.
   const acquisitionGeneration = mintCodexAcquisitionGeneration(deps)
@@ -135,6 +135,7 @@ export async function acquireCodexStructuredSession(input: {
           acquisition,
           sessionId,
           dispatchEchoes,
+          primaryThreadId: () => primaryThreadId,
           notificationRetries,
           deliver: input.deliver,
           now: deps.now ?? Date.now
@@ -154,7 +155,6 @@ export async function acquireCodexStructuredSession(input: {
             Buffer.byteLength(JSON.stringify(payload ?? null), 'utf8')
           ),
         onSpawned: spawnIdentity.onSpawned,
-        ...(acquireInput.onOutput ? { onOutput: acquireInput.onOutput } : {}),
         onExit: (error, exit) => {
           try {
             if (attempt.acquisitionGeneration && !sessions.has(sessionId)) {
@@ -249,7 +249,7 @@ export async function acquireCodexStructuredSession(input: {
         },
         openInput
       )
-    return { process, acquisitionGeneration, providerChildPhase: 'starting' }
+    return { process, acquisitionGeneration }
   } catch (error) {
     if (sessions.get(sessionId)?.connection !== acquisition.connection) {
       return closeFailedCodexAcquisition({

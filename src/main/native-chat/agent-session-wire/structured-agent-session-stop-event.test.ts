@@ -2,7 +2,7 @@
 // accepted, before the interrupt and before anything that ends the child, naming the turn and who
 // asked; never by a Stop that stopped nothing.
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type { JournalStopEvent } from '../agent-session-journal/journal-row-schema'
@@ -14,9 +14,15 @@ import {
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
 
-let rig: QueuedMessageTestRig
+import { createStructuredSessionObservationClock } from './structured-agent-session-observation-clock.test-fixture'
 
-afterEach(() => rig.dispose())
+let rig: QueuedMessageTestRig
+const observationClock = createStructuredSessionObservationClock(() => rig.host, HOST_TEST_SESSION)
+beforeEach(() => observationClock.start())
+
+afterEach(async () => {
+  await observationClock.restoreBeforeCleanup(() => rig.dispose())
+})
 
 function journal() {
   const open = rig.host.collaboratorsForTests().sessions.get(HOST_TEST_SESSION)?.journal

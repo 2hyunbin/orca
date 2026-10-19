@@ -155,7 +155,7 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   ): void {
     const evidence = drainClaudeChildWork(session, message, this.deps.now?.() ?? Date.now())
     if (evidence.length > 0) {
-      this.deps.onChildWorkEvidence?.(sessionId, evidence)
+      this.deps.onChildWorkEvidence?.(sessionId, evidence, session?.events)
     }
   }
 
@@ -253,9 +253,17 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   }
   readOptions = (input: { sessionId: string; fence: number }) =>
     readClaudeStructuredSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
+  readOptionRestoreFailures = (sessionId: string): readonly string[] => {
+    const session = this.sessions.get(sessionId)
+    return session?.retiredModel !== undefined && !session.options.has('model') ? ['model'] : []
+  }
 
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.afterClose(input.sessionId, () => this.releaseProviderSession(input.sessionId))
+  hasOwnedAcquisition = (sessionId: string): boolean =>
+    this.acquisitions.get(sessionId) !== undefined ||
+    this.sessions.has(sessionId) ||
+    this.exits.has(sessionId)
 
   /** A close clears the session's tasks outside `emit`; its ending still reaches the host. */
   private async afterClose(sessionId: string, close: () => Promise<boolean>): Promise<boolean> {

@@ -35,8 +35,12 @@ export async function runTargetedCancel(
   const { clientOperationId, prompt } = params
   if (params.scope) {
     // Resolved once, here: a retry is answered from the receipt and never reaches a newer task.
-    const targets = agentChildWorkStopTargets(params.childWork?.(), params.taskId)
-    if (targets.length === 0 && !(params.unlisted?.present() && atRest(ctx))) {
+    const children = params.childWork?.()
+    const targets = agentChildWorkStopTargets(children, params.taskId)
+    const capturedStops = params.captureStops?.(targets)
+    const unreadable = params.childWork !== undefined && children === undefined
+    const initialUnlisted = params.unlisted?.present() ?? false
+    if (targets.length === 0 && !unreadable && !(initialUnlisted && atRest(ctx))) {
       return { ok: true, value: { ...named, cancelled: false } }
     }
     const accepted = await acceptStopTarget(ctx)
@@ -47,8 +51,13 @@ export async function runTargetedCancel(
       operationId: clientOperationId,
       work: {
         targets,
-        ...(params.acknowledgeStops ? { acknowledgeStops: params.acknowledgeStops } : {}),
-        ...(params.unlisted ? { unlisted: params.unlisted } : {})
+        ...(capturedStops ? { targetCurrent: capturedStops.current } : {}),
+        ...(unreadable ? { unreadable: true as const } : {}),
+        acknowledgeStops: (evidence) => {
+          capturedStops?.acknowledge(evidence)
+          params.acknowledgeStops?.(evidence)
+        },
+        ...(initialUnlisted && params.unlisted ? { unlisted: { stop: params.unlisted.stop } } : {})
       },
       backgroundStop: params.taskId ? 'task' : 'all'
     })
@@ -83,9 +92,9 @@ export async function runTargetedCancel(
   }
 }
 
-/** No turn runs, so ending the agent ends only the work no record lists. */
+/** A whole-agent Stop waits until the lead has no running turn. */
 function atRest(ctx: AgentSessionTurnContext): boolean {
-  return ctx.journal.activeTurnId() === null && !isMainAgentWorking(ctx)
+  return !isMainAgentWorking(ctx)
 }
 
 /** Stops the tasks the Stop captured. Tasks outlive the turn they began in, so its note is the

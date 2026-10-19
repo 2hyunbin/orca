@@ -9,7 +9,8 @@ export async function applyAcpMessageOptions(
   session: AcpStructuredSession,
   options: AgentSessionExecutionOptions | undefined,
   setOption: (key: 'model' | 'effort', value: string) => Promise<unknown>,
-  isCurrent: () => boolean
+  isCurrent: () => boolean,
+  signal?: AbortSignal
 ): Promise<boolean> {
   if (!options) {
     return true
@@ -23,26 +24,30 @@ export async function applyAcpMessageOptions(
   for (const key of ['model', 'effort'] as const) {
     const value = options?.[key] ?? (key === 'model' ? initial.model : defaultEffort)
     if (value === undefined) {
-      if (session.options.reported()[key] !== undefined) {
+      if (session.options.picked.has(key) || session.options.reported()[key] !== undefined) {
         throw new AgentSessionOptionRejectedError(
           new Error(`The default ${key} for this model is unknown`)
         )
       }
       continue
     }
-    if (session.options.reported()[key] === value) {
+    if (session.options.currentProof.has(key) && session.options.reported()[key] === value) {
       continue
     }
     try {
       await setOption(key, value)
     } catch (error) {
+      signal?.throwIfAborted()
+      if (!isCurrent()) {
+        return false
+      }
       if (error instanceof AcpAgentError) {
         throw withProviderDiagnostic(
           new AgentSessionOptionRejectedError(error),
           providerDiagnostic(acpPromptErrorDetail(session.spec.dialect, error), 'person')
         )
       }
-      throw error
+      throw new AgentSessionOptionRejectedError(error)
     }
     if (!isCurrent()) {
       return false

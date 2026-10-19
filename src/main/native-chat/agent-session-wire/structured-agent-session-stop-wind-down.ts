@@ -11,6 +11,7 @@ import {
   type AgentJournalTurnScope
 } from '../../../shared/agent-session-journal-types'
 import { isMainAgentWorking } from './structured-agent-session-turns-cancel'
+import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import type { AgentSessionTurnContext } from './structured-agent-session-turns'
 import type { JournalStopFailedOn } from '../agent-session-journal/queued-message-pause'
 import { structuredAgentSessionFailedStopMark } from './structured-agent-session-stopping'
@@ -39,7 +40,7 @@ export type StructuredAgentSessionStopWindDown = {
  * keeps the child on record, and the next operation that reaches the agent joins that close.
  */
 export async function endStoppedStructuredAgentSession(
-  ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'adapter' | 'journal' | 'fence'>,
+  ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'adapter' | 'journal' | 'fence' | 'currentWork'>,
   windDown: StructuredAgentSessionStopWindDown,
   stopChild: () => Promise<void>,
   onError: (error: unknown) => void
@@ -53,7 +54,10 @@ export async function endStoppedStructuredAgentSession(
     await windDown.stopNoteWrite?.catch(onError)
   } catch (error) {
     onError(error)
-    failedOn = structuredAgentSessionFailedStopMark(ctx.journal)
+    failedOn = structuredAgentSessionFailedStopMark(
+      contextStructuredAgentSessionCurrentWork(ctx),
+      ctx.journal
+    )
     await windDown.stopNoteWrite?.catch(onError)
     await reviseStopNoteUnconfirmed(ctx, windDown.stopNote).catch(onError)
   } finally {
@@ -64,7 +68,7 @@ export async function endStoppedStructuredAgentSession(
 /** While the work it stopped runs on, the Stop's own note, if it wrote one, says what a lost
  *  interrupt's says. Work that ended took the Stop, whatever became of the child. */
 async function reviseStopNoteUnconfirmed(
-  ctx: Pick<AgentSessionTurnContext, 'journal' | 'fence'>,
+  ctx: Pick<AgentSessionTurnContext, 'journal' | 'fence' | 'currentWork'>,
   identity: AgentJournalItemIdentity
 ): Promise<void> {
   if (!isMainAgentWorking(ctx)) {
@@ -88,7 +92,7 @@ async function reviseStopNoteUnconfirmed(
   // Stop of that turn writes it: its proven end finds it there. A row keeps the scope it was created
   // with, so a note a Stop wrote before the turn showed is re-keyed, in one batch. Known limit: with
   // no turn open yet, the note keeps its key and scope, and no turn's end revises it.
-  const running = ctx.journal.activeTurnId()
+  const running = contextStructuredAgentSessionCurrentWork(ctx).activeTurnId()
   const turnScope =
     running !== null ? structuredAgentSessionNamedTurnScope(ctx.journal, running) : null
   const onTurn = running !== null ? structuredAgentSessionStopNoteIdentity(running) : identity

@@ -63,15 +63,17 @@ describe('send', () => {
     await attach()
     const first = hostTestMessage('first')
     const second = hostTestMessage('second')
+    const aOptions = { model: 'model-a', effort: 'high' }
+    const bOptions = { model: 'model-b', effort: 'low' }
     const a = {
-      envelope: envelope('agentSession.send', { body: first }),
+      envelope: envelope('agentSession.send', { body: first, options: aOptions }),
       body: first,
-      executionOptions: { model: 'model-a', effort: 'high' }
+      options: aOptions
     }
     const b = {
-      envelope: envelope('agentSession.send', { body: second }),
+      envelope: envelope('agentSession.send', { body: second, options: bOptions }),
       body: second,
-      executionOptions: { model: 'model-b', effort: 'low' }
+      options: bOptions
     }
     await host.send(CALLER, a)
     await delivered(a.envelope.clientOperationId)
@@ -79,21 +81,16 @@ describe('send', () => {
     await delivered(b.envelope.clientOperationId)
 
     expect(dispatch.mock.calls.map(([input]) => input.executionOptions)).toEqual([
-      a.executionOptions,
-      b.executionOptions
+      aOptions,
+      bOptions
     ])
     expect(dispatch).toHaveBeenCalledTimes(2)
     expect(
       hostJournal()
         .submissions()
-        .map((submission) => submission.executionOptions)
-    ).toEqual([a.executionOptions, b.executionOptions])
-    await expect(
-      host.send(CALLER, { ...a, executionOptions: b.executionOptions })
-    ).resolves.toMatchObject({
-      ok: true,
-      replayed: true
-    })
+        .map((submission) => submission.options)
+    ).toEqual([aOptions, bOptions])
+    await expect(host.send(CALLER, a)).resolves.toMatchObject({ ok: true, replayed: true })
     expect(dispatch).toHaveBeenCalledTimes(2)
     expect(setOption).not.toHaveBeenCalled()
   })
@@ -102,10 +99,11 @@ describe('send', () => {
     await attach()
     dispatch.mockRejectedValueOnce(new AgentSessionOptionRejectedError('model unavailable'))
     const body = hostTestMessage('do not send')
+    const options = { model: 'model-unavailable' }
     const params = {
-      envelope: envelope('agentSession.send', { body }),
+      envelope: envelope('agentSession.send', { body, options }),
       body,
-      executionOptions: { model: 'model-unavailable' }
+      options
     }
     const result = await host.send(CALLER, params)
     expect(result).toMatchObject({ ok: true })

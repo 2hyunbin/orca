@@ -35,9 +35,6 @@ import { codexThreadWaitsOnUser, readCodexTurnId } from './codex-structured-thre
 import { CODEX_TOKEN_USAGE_METHOD, readCodexThreadTokenTotal } from './codex-subagent-activity'
 import type { CodexExecutionChild, CodexSubagentExecutions } from './codex-subagent-executions'
 
-/** Facts kept for settled children; a working child always has its own. */
-const MAX_CHILD_FACTS = 128
-const MAX_OPEN_CALLS_PER_CHILD = 16
 const CHILD_FRAME_METHODS: ReadonlySet<string> = new Set([
   'item/started',
   'item/completed',
@@ -213,9 +210,6 @@ export class CodexChildWorkEvidence {
     const call = codexChildToolCall(item)
     if (call && !facts.openCalls.has(item.id)) {
       facts.openCalls.set(item.id, { ...call, turnId })
-      for (const stale of [...facts.openCalls.keys()].slice(0, -MAX_OPEN_CALLS_PER_CHILD)) {
-        facts.openCalls.delete(stale)
-      }
     }
   }
 
@@ -320,15 +314,6 @@ export class CodexChildWorkEvidence {
     const existing = this.facts.get(threadId)
     if (existing) {
       return existing
-    }
-    if (this.facts.size >= MAX_CHILD_FACTS) {
-      // Refusing a working child its facts would drop its every edge; the host's limits bound them.
-      const idle = [...this.facts.keys()].find(
-        (id) => this.executions.find(id)?.execution?.state !== 'working'
-      )
-      if (idle !== undefined) {
-        this.facts.delete(idle)
-      }
     }
     const facts: ChildFacts = { openCalls: new Map(), waiting: false }
     this.facts.set(threadId, facts)

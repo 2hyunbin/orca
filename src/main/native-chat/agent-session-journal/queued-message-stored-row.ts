@@ -28,7 +28,7 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
     carried_from: string | null
     queued_epoch: string | null
     queued_sequence: number | null
-    execution_options_json: string | null
+    options_json: string | null
   }
   let body: AgentJournalMessageItem
   try {
@@ -48,10 +48,8 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
   ) {
     return null
   }
-  const executionOptions = storedExecutionOptions(record.execution_options_json)
   return {
     sessionId: record.session_id,
-    ...(executionOptions ? { executionOptions } : {}),
     messageId: record.message_id,
     position: record.position,
     body,
@@ -69,18 +67,21 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
     queuedAt:
       record.queued_epoch !== null && typeof record.queued_sequence === 'number'
         ? { epoch: record.queued_epoch, sequence: record.queued_sequence }
-        : null
+        : null,
+    ...storedOptions(record.options_json)
   }
 }
 
-function storedExecutionOptions(json: string | null): QueuedMessageRow['executionOptions'] | null {
+/** A bad value only loses the choices the send carried, never the card. */
+function storedOptions(json: string | null): Pick<QueuedMessageRow, 'options'> {
   if (json === null) {
-    return null
+    return {}
   }
   try {
-    return readAgentSessionExecutionOptions(JSON.parse(json))
+    const options = readAgentSessionExecutionOptions(JSON.parse(json))
+    return options ? { options } : {}
   } catch {
-    return null
+    return {}
   }
 }
 

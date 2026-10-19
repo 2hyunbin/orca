@@ -16,10 +16,7 @@ import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permiss
 
 /** What the check reads of a conversation; every read skips building a snapshot. */
 type OutgrownChildReading = Pick<StructuredAgentSessionHostSession, 'child'> & {
-  journal: Pick<
-    AgentSessionJournal,
-    'visitItems' | 'visitItemsWithLinkage' | 'itemFence' | 'activeTurnId' | 'newestTurn'
-  > & {
+  journal: Pick<AgentSessionJournal, 'visitItemsWithLinkage' | 'itemFence' | 'newestTurn'> & {
     submissions(): readonly Pick<AgentJournalSubmission, 'dispatchState' | 'fence' | 'rejection'>[]
   }
 }
@@ -92,7 +89,10 @@ export async function retireOutgrownStructuredAgentSessionChild(
   sessionId: string,
   session: OutgrownChildReading | undefined,
   deps: {
-    work: StructuredAgentSessionChildWorkReads
+    /** `childWork`: the records, read only for endings the lead has yet to answer. */
+    work: StructuredAgentSessionChildWorkReads & {
+      childWork: () => readonly AgentChildWorkView[] | undefined
+    }
     /** The mode a start of the chat would launch with now. */
     launchPermission?: () => Promise<AgentChatPermissionMode | null>
     stopAgent: (sessionId: string) => Promise<void>
@@ -105,7 +105,7 @@ export async function retireOutgrownStructuredAgentSessionChild(
       structuredAgentSessionChildReportedSignedOut(session) ||
       (await launchedWithOtherPermissionMode(session.child, deps.launchPermission))
     ) ||
-    structuredAgentSessionChildHasOpenWork(session.journal, deps.work) ||
+    structuredAgentSessionChildHasOpenWork(deps.work) ||
     owesWakeUp(session.journal, deps.work.childWork())
   ) {
     return

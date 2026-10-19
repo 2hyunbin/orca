@@ -10,6 +10,8 @@ import { hasSpawnObserver, notifySpawnObserver } from './spawn-observer'
 import { createOutputSink } from './bounded-output-sink'
 import { createChildTerminationReporter } from './child-termination-reporter'
 
+export { WindowsCmdLineBreakError } from './windows-command-line'
+
 import type {
   PipedChildProcess,
   PipedProcessSpec,
@@ -119,6 +121,7 @@ export function runProcess(
     })
     child.stderr?.on('data', (chunk: Buffer | string) => {
       stderr.write(chunk)
+      spec.onStderr?.(chunk)
       if (spec.killOnOutputLimit && stderr.truncated()) {
         stopAndSettle()
       }
@@ -357,7 +360,8 @@ function runResolvedProcessSync(spec: ProcessSpec, resolved: ResolvedSpawn): Pro
     input: spec.input,
     timeout: spec.timeoutMs === null ? undefined : (spec.timeoutMs ?? DEFAULT_PROCESS_TIMEOUT_MS),
     maxBuffer: spec.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-    encoding: 'buffer'
+    // Keep raw output without applying the nonexistent 'buffer' encoding to string stdin.
+    encoding: null
   })
   const timedOut = result.error
     ? 'code' in result.error && result.error.code === 'ETIMEDOUT'

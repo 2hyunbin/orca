@@ -12,23 +12,15 @@ import {
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
   unpickedSessionConfiguredChoice,
-  withLiveCatalogListing,
-  type AgentModelCatalogLiveListing
+  withLiveCatalogListing
 } from '../native-chat/agent-model-catalog/agent-model-catalog-entry'
 import { piRpcProviderLink, type PiRpcResolvedLaunch } from './rpc-launch-resolution'
 import { piModelOptionId, readPiRpcCommands, readPiRpcSessionOptions } from './rpc-options'
 import { piRpcStateSchema, type PiRpcState } from './rpc-protocol'
 import type { PiRpcConnection, PiRpcSessionDeps } from './rpc-session'
-import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
-
-/** What the start cannot go on without waits as long as the host's startup attempt does, its only
- *  deadline; the optional reads keep their own bound and never fail the start. */
-const START_REQUEST = { timeoutMs: STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS }
 
 export class PiRpcSessionStartup {
   commands?: AgentSessionSlashCommand[]
-  /** What the start listed; a signed-out Pi lists no model. */
-  options?: AgentSessionOptionsResult
 
   constructor(
     private readonly input: StructuredAgentSessionAcquireInput,
@@ -40,11 +32,12 @@ export class PiRpcSessionStartup {
     private readonly failedCause: () => Error | undefined
   ) {}
 
+  /** Ready once Pi reports its state: only an unknown provider fails the start. */
   async run(
     launch: PiRpcResolvedLaunch,
     signal: AbortSignal
   ): Promise<StructuredAgentSessionProviderOpenResult> {
-    const answer = await this.wait(this.connection.request('get_state', {}, START_REQUEST), signal)
+    const answer = await this.wait(this.connection.request('get_state', {}), signal)
     this.assertLive(signal)
     const state = piRpcStateSchema.parse(answer)
     if (state.model?.provider === 'unknown') {
@@ -64,51 +57,56 @@ export class PiRpcSessionStartup {
     }
     this.assertLive(signal)
     current.confirmed = [...(current.model ? ['model'] : []), ...(current.effort ? ['effort'] : [])]
-    // Part of the start, as other agents' handshakes answer with theirs: a Pi that lists no model
-    // is signed out, and what it started on names its config's default.
-    const options = await this.readListing(signal)
-    this.assertLive(signal)
-    if (options && options.models.length === 0) {
-      throw this.notSignedIn()
-    }
-    // What it started on names its config's default once; a later switch teaches nothing.
-    let catalogListing: AgentModelCatalogLiveListing | undefined
-    if (options) {
-      this.options = options
-      catalogListing = withLiveCatalogListing(
+    return { link, reportedOptions: current }
+  }
+
+  /** After the open: the listing and the `/` commands reach the host as later reports, and a read
+   *  that fails only leaves the chat without them. */
+  async readAfterOpen(
+    generation: string,
+    opening: AgentSessionOptionsResult['current']
+  ): Promise<void> {
+    const options = await this.readListing()
+    if (options && !this.failedCause() && !this.connection.closed) {
+      // What it started on names its config's default once; a later switch teaches nothing.
+      const { catalogListing } = withLiveCatalogListing(
         options,
         unpickedSessionConfiguredChoice({
           resolvesConfig: this.resolvesConfig,
-          ...options
+          picked: new Set(Object.keys(this.input.options ?? {})),
+          models: options.models,
+          current: opening
         })
-      ).catalogListing
+      )
+      this.deps.onLifecycle({
+        type: 'options-reported',
+        sessionId: this.input.identity.sessionId,
+        fence: this.input.fence,
+        acquisitionGeneration: generation,
+        reportedOptions: options.current,
+        ...(catalogListing ? { catalogListing } : {})
+      })
     }
-    await this.readCommands(signal)
-    this.assertLive(signal)
-    return {
-      link,
-      reportedOptions: options?.current ?? current,
-      ...(catalogListing ? { catalogListing } : {})
-    }
+    await this.readCommands()
   }
 
-  /** Never fails the start: without it the chat only lacks the listing and the sign-in verdict. */
-  private async readListing(signal: AbortSignal): Promise<AgentSessionOptionsResult | undefined> {
+  private async readListing(): Promise<AgentSessionOptionsResult | undefined> {
     try {
-      return await this.wait(readPiRpcSessionOptions(this.connection), signal)
+      return await readPiRpcSessionOptions(this.connection)
     } catch (error) {
-      this.assertLive(signal)
       this.warn('Pi options could not be read', 'pi-options', error)
       return undefined
     }
   }
 
-  private async readCommands(signal: AbortSignal): Promise<void> {
+  private async readCommands(): Promise<void> {
     try {
-      this.assertLive(signal)
-      const result = await this.wait(readPiRpcCommands(this.connection), signal)
-      this.assertLive(signal)
+      const result = await readPiRpcCommands(this.connection)
+      if (this.failedCause() || this.connection.closed) {
+        return
+      }
       this.commands = result.commands
+      this.input.events?.publish()
     } catch (error) {
       this.warn('Pi commands could not be read', 'pi-commands', error)
     }

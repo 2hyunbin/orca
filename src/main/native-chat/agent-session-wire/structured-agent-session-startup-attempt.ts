@@ -26,11 +26,13 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
   events?: StructuredAgentSessionEventSink
   signal?: AbortSignal
   startupOptions?: Readonly<Record<string, string>>
+  /** The id the host registered the start under, before any of its waits. */
+  attemptId?: string
 }): StructuredAgentSessionStartupAttempt {
   const { record } = input
   const options = input.startupOptions ?? record.options
   return {
-    attemptId: randomUUID(),
+    attemptId: input.attemptId ?? randomUUID(),
     identity: input.identity,
     fence: record.lease.runtimeFence,
     spawnToken: input.spawnToken,
@@ -46,50 +48,39 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
   }
 }
 
-/** The startup limit's own reason, so an expired start is told from a close, Stop or quit. */
-export class StructuredAgentSessionStartupExpiredError extends Error {
-  constructor() {
-    super('the agent stopped making progress before it finished starting')
-    this.name = 'StructuredAgentSessionStartupExpiredError'
-  }
-}
-
-export function isStructuredAgentSessionStartupExpired(reason: unknown): boolean {
-  return reason instanceof Error && reason.name === 'StructuredAgentSessionStartupExpiredError'
-}
-
-/** Where an expired attempt stood: still inside its acquire, or published as a starting child. */
+/** Where an expired attempt stood: still spawning, or published as a starting child. */
 export type StructuredAgentSessionExpiredStartup = {
   sessionId: string
   attemptId: string
-  /** Null while the acquire has not returned. */
+  /** Null while spawn has not returned. */
   child: StructuredAgentSessionProviderChildIdentity | null
 }
 
 /** How one spawned start ended, for tuning the limits from what agents really take. */
 export type StructuredAgentSessionStartupSettled = {
   agent: AgentSessionJournalIdentity['agent']
-  outcome: 'ready' | 'silent' | 'ceiling' | 'ended'
+  outcome: 'ready' | 'ceiling' | 'ended'
   /** From spawn to the outcome. */
   durationMs: number
 }
 
-/** What the host learns about a start while its acquire runs. */
+/** What the host learns about a start while spawn runs. */
 export type StructuredAgentSessionStartupProgress = {
-  /** The process exists: the clock starts. */
+  /** The process exists: its start is measured from here. */
   spawned: () => void
-  /** Any output; output before a spawn report also starts the clock. */
-  output: () => void
 }
 
 type Tracked = {
-  attempt: StructuredAgentSessionStartupAttempt
+  attemptId: string
+  /** Null until the start reaches its acquire. */
+  attempt: StructuredAgentSessionStartupAttempt | null
   child: StructuredAgentSessionProviderChildIdentity | null
+  /** The ceiling counts from here: the start's registration, before any of its waits. */
+  registeredAt: number
   spawnedAt: number | null
-  lastOutputAt: number
   timer: ReturnType<typeof setTimeout> | null
   expired: boolean
-  /** The limit's measure, held until an acquire it aborted settles: one that is ready anyway
+  /** The limit's measure, held until an aborted spawn settles: one that is ready anyway
    *  reports that instead. */
   expiry: StructuredAgentSessionStartupSettled | null
   readiness: PromiseWithResolvers<'ready' | 'ended'>
@@ -105,7 +96,7 @@ export class StructuredAgentSessionStartupAttempts {
 
   constructor(
     private readonly deps: {
-      /** Runs outside the session's queue: an acquire may hold it for the whole handshake. */
+      /** Runs outside the session's queue: spawn or open may hold it through the handshake. */
       expire: (expired: StructuredAgentSessionExpiredStartup) => void
       /** Never throws back into the clock. */
       settled?: (settled: StructuredAgentSessionStartupSettled) => void
@@ -118,39 +109,47 @@ export class StructuredAgentSessionStartupAttempts {
     this.now = deps.now ?? Date.now
   }
 
-  track(
-    sessionId: string,
-    attempt: StructuredAgentSessionStartupAttempt
-  ): StructuredAgentSessionStartupProgress {
+  /** A start registered before its first wait: its ceiling runs from now. */
+  begin(sessionId: string, attemptId: string): void {
+    this.register(sessionId, attemptId)
+  }
+
+  private register(sessionId: string, attemptId: string): Tracked {
     this.end(sessionId)
     const tracked: Tracked = {
-      attempt,
+      attemptId,
+      attempt: null,
       child: null,
+      registeredAt: this.now(),
       spawnedAt: null,
-      lastOutputAt: 0,
       timer: null,
       expired: false,
       expiry: null,
       readiness: Promise.withResolvers()
     }
     this.open.set(sessionId, tracked)
+    if (!this.disposed) {
+      this.schedule(sessionId, tracked)
+    }
+    return tracked
+  }
+
+  track(
+    sessionId: string,
+    attempt: StructuredAgentSessionStartupAttempt
+  ): StructuredAgentSessionStartupProgress {
+    const begun = this.open.get(sessionId)
+    const tracked =
+      begun?.attemptId === attempt.attemptId && !begun.attempt
+        ? begun
+        : this.register(sessionId, attempt.attemptId)
+    tracked.attempt = attempt
     const current = (): boolean => this.open.get(sessionId) === tracked && !this.disposed
     return {
       spawned: () => {
         if (current()) {
-          this.startClock(sessionId, tracked)
+          this.markSpawned(tracked)
         }
-      },
-      output: () => {
-        if (!current()) {
-          return
-        }
-        if (tracked.spawnedAt === null) {
-          this.startClock(sessionId, tracked)
-          return
-        }
-        // Read when the timer fires, so a chatty child costs no timer churn.
-        tracked.lastOutputAt = this.now()
       }
     }
   }
@@ -177,7 +176,7 @@ export class StructuredAgentSessionStartupAttempts {
     child: StructuredAgentSessionProviderChildIdentity & { phase?: 'starting' | 'ready' }
   ): void {
     const tracked = this.open.get(sessionId)
-    if (tracked?.attempt.attemptId !== attemptId) {
+    if (tracked?.attemptId !== attemptId) {
       return
     }
     if (child.phase === 'ready') {
@@ -190,9 +189,7 @@ export class StructuredAgentSessionStartupAttempts {
       return
     }
     // A child published without a spawn report has existed since at least now.
-    if (tracked.spawnedAt === null && !this.disposed) {
-      this.startClock(sessionId, tracked)
-    }
+    this.markSpawned(tracked)
   }
 
   /** Whether `child`'s start is still on its clock: false once its limit passed, so a `started`
@@ -223,10 +220,11 @@ export class StructuredAgentSessionStartupAttempts {
     }
   }
 
-  /** The attempt failed, or its attach did: nothing it started is left to time out. */
+  /** The attempt failed, or its attach did: nothing it started is left to time out. A published
+   *  child stays on its clock until it proves its start or ends. */
   abandon(sessionId: string, attemptId: string): void {
     const tracked = this.open.get(sessionId)
-    if (tracked?.attempt.attemptId === attemptId) {
+    if (tracked?.attemptId === attemptId && !tracked.child) {
       this.settle(sessionId, tracked, 'ended')
     }
   }
@@ -248,23 +246,12 @@ export class StructuredAgentSessionStartupAttempts {
     this.open.clear()
   }
 
-  private startClock(sessionId: string, tracked: Tracked): void {
-    if (tracked.spawnedAt !== null) {
-      return
-    }
-    tracked.spawnedAt = this.now()
-    tracked.lastOutputAt = tracked.spawnedAt
-    this.schedule(sessionId, tracked)
+  private markSpawned(tracked: Tracked): void {
+    tracked.spawnedAt ??= this.now()
   }
 
   private schedule(sessionId: string, tracked: Tracked): void {
-    if (tracked.spawnedAt === null) {
-      return
-    }
-    const due = Math.min(
-      tracked.lastOutputAt + this.limits.silenceMs,
-      tracked.spawnedAt + this.limits.ceilingMs
-    )
+    const due = tracked.registeredAt + this.limits.ceilingMs
     tracked.timer = setTimeout(() => this.check(sessionId, tracked), Math.max(0, due - this.now()))
     // A start's clock must never be the reason a process stays alive at quit.
     tracked.timer.unref?.()
@@ -272,21 +259,18 @@ export class StructuredAgentSessionStartupAttempts {
 
   private check(sessionId: string, tracked: Tracked): void {
     tracked.timer = null
-    if (this.open.get(sessionId) !== tracked || this.disposed || tracked.spawnedAt === null) {
+    if (this.open.get(sessionId) !== tracked || this.disposed) {
       return
     }
-    const now = this.now()
-    if (now - tracked.spawnedAt >= this.limits.ceilingMs) {
+    if (this.now() - tracked.registeredAt >= this.limits.ceilingMs) {
       this.expire(sessionId, tracked, 'ceiling')
-    } else if (now - tracked.lastOutputAt >= this.limits.silenceMs) {
-      this.expire(sessionId, tracked, 'silent')
     } else {
       this.schedule(sessionId, tracked)
     }
   }
 
-  /** `reason` null: a start whose limit already passed inside its acquire was published now. */
-  private expire(sessionId: string, tracked: Tracked, reason: 'silent' | 'ceiling' | null): void {
+  /** `reason` null: a start whose limit already passed inside spawn was published now. */
+  private expire(sessionId: string, tracked: Tracked, reason: 'ceiling' | null): void {
     if (this.open.get(sessionId) !== tracked || this.disposed) {
       return
     }
@@ -295,12 +279,12 @@ export class StructuredAgentSessionStartupAttempts {
     }
     tracked.expired = true
     // A published child's stop is under way and ends nothing a newer attempt owns; one still
-    // acquiring stays tracked until its aborted acquire is abandoned or published.
+    // spawning stays tracked until its aborted spawn is abandoned or published.
     if (tracked.child) {
       this.report(tracked.expiry)
       this.end(sessionId)
     }
-    this.deps.expire({ sessionId, attemptId: tracked.attempt.attemptId, child: tracked.child })
+    this.deps.expire({ sessionId, attemptId: tracked.attemptId, child: tracked.child })
   }
 
   private settle(sessionId: string, tracked: Tracked, outcome: 'ready' | 'ended'): void {
@@ -315,7 +299,7 @@ export class StructuredAgentSessionStartupAttempts {
     tracked: Tracked,
     outcome: StructuredAgentSessionStartupSettled['outcome']
   ): StructuredAgentSessionStartupSettled | null {
-    return tracked.spawnedAt === null
+    return tracked.spawnedAt === null || !tracked.attempt
       ? null
       : {
           agent: tracked.attempt.identity.agent,

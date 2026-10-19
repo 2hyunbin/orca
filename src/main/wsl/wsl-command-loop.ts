@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { Duplex, PassThrough, Writable } from 'node:stream'
 import type { PipedChildProcess } from '@orca/process-host/process-spec'
-import type { RemoteCommandChannel } from '../ssh/remote-install-transport'
+import type { RemoteCommandChannel } from '../managed-server/install/remote-install-transport'
 
 // Why setsid: a `wsl.exe --exec` command leads its own session; without it every command
 // would share the loop's process group. Why fresh files per command: a backgrounded writer
@@ -202,7 +202,7 @@ export function startWslCommandLoop(child: PipedChildProcess, marker: string): W
         settled: false
       }
       pending = entry
-      Object.assign(channel, {
+      const commandChannel: RemoteCommandChannel = Object.assign(channel, {
         stdin: new Writable({ write: refuseStdin }),
         stderr,
         close: () => {
@@ -213,8 +213,7 @@ export function startWslCommandLoop(child: PipedChildProcess, marker: string): W
         }
       })
       child.stdin.write(`${Buffer.from(command, 'utf8').toString('base64')}\n`)
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `stdin`, `stderr` and `close` were assigned above and `exit`/`close` are emitted by `settle`.
-      return channel as unknown as RemoteCommandChannel
+      return commandChannel
     },
     end() {
       if (alive) {

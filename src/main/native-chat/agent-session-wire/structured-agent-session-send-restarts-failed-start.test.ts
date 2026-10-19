@@ -32,6 +32,7 @@ import { openTestJournalHostDatabase } from '../agent-session-journal/journal-ho
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { structuredAgentSessionHeldStarts } from './structured-agent-session-held-start.test-support'
 
 const CALLER = { callerKey: 'client-1' }
 
@@ -44,6 +45,7 @@ const EXIT_REASON = 'Claude Code is not signed in. Sign in with the Claude CLI'
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
+const starts = structuredAgentSessionHeldStarts(() => host)
 let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let generation = 0
@@ -98,11 +100,7 @@ function currentChild() {
 }
 
 function proveStarted(): Promise<void> {
-  return host.handleAdapterEvent({
-    type: 'started',
-    ...currentChild(),
-    reportedOptions: { model: 'sonnet' }
-  })
+  return starts.prove(currentChild())
 }
 
 function exitBeforeProof(): Promise<void> {
@@ -137,7 +135,6 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   generation = 0
   acquire = vi.fn(async ({ fence, spawnToken }) => ({
-    providerChildPhase: 'starting' as const,
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -155,15 +152,18 @@ beforeEach(async () => {
     agents: NO_STRUCTURED_AGENTS,
     logger: createStructuredAgentSessionLogger(),
     store,
-    adapter: {
-      acquire,
+    adapter: starts.wrap({
+      acquire: starts.held(acquire),
       releaseAcquisition: vi.fn(async () => true),
       closeSession: vi.fn(async () => true),
       dispatch,
       cancelTurn: vi.fn(async () => ({ cancelled: true })),
       answerPrompt: vi.fn(async () => undefined),
-      setOption: vi.fn(async () => undefined)
-    },
+      setOption: vi.fn(async () => undefined),
+      open: async () => ({
+        reportedOptions: { model: '' }
+      })
+    }),
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
     mintSpawnToken: () => `spawn-${generation + 1}`,
@@ -175,6 +175,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  starts.clear()
   await host.flushAllStreamedEvents()
   await rm(root, { recursive: true, force: true })
 })

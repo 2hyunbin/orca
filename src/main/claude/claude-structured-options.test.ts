@@ -38,6 +38,7 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
     reportedOptions: {},
     reportedModelMutation: 0,
     confirmedOptions: new Set(),
+    reusableOptions: new Map(),
     launchedModel: null,
     fastModeAtStart: false,
     capabilities: [],
@@ -345,6 +346,8 @@ describe('Claude structured Fast mode', () => {
     ).resolves.toMatchObject({ model: 'haiku', fastMode: 'false' })
     expect(session.reportedOptions.fastMode).toBe(true)
     expect(session.confirmedOptions.has('fastMode')).toBe(false)
+    expect(session.reusableOptions.get('model')).toBe('haiku')
+    expect(session.reusableOptions.has('fastMode')).toBe(false)
   })
 
   it('treats an unrecognized provider disabled reason as unavailable', async () => {
