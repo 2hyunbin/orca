@@ -1,5 +1,6 @@
 'use client'
 
+import { SECURITY_SURFACE_CLASS } from './security-surface'
 import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Minus, XIcon } from 'lucide-react'
@@ -56,7 +57,7 @@ const dialogContentSurfaceVariants = cva('', {
       /** Edge to edge, for an embedded panel that brings its own header and padding. */
       panel: 'gap-0 p-0',
       /** Trust, consent and provenance decisions: host-owned tokens a plugin theme cannot restyle. */
-      security: 'plugin-security-chrome'
+      security: SECURITY_SURFACE_CLASS
     }
   },
   defaultVariants: { surface: 'default' }

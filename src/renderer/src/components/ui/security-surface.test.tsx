@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './dialog'
+import { SecuritySurface } from './security-surface'
 
 // Every dialog that asks the user to trust, approve, run or remove code. A new one belongs here.
 const TRUST_DIALOGS = [
@@ -17,9 +18,15 @@ const TRUST_DIALOGS = [
   'settings/PluginRollbackDialog.tsx'
 ]
 
+// Trust decisions made outside a dialog: agent command approvals and certificate overrides.
+const INLINE_TRUST_SURFACES = [
+  'native-chat/NativeChatApprovalCard.tsx',
+  'browser-pane/navigate/browser-load-failure-overlay.tsx'
+]
+
 afterEach(cleanup)
 
-describe('security dialog surface', () => {
+describe('security surfaces', () => {
   it('applies the host-owned token set', () => {
     render(
       <Dialog open>
@@ -36,5 +43,19 @@ describe('security dialog surface', () => {
     const source = readFileSync(join(import.meta.dirname, '..', file), 'utf8')
     expect(source).toMatch(/<DialogContent\s[^>]*surface="security"/)
     expect(source).not.toContain('plugin-security-chrome')
+  })
+
+  it('applies the host-owned token set outside dialogs', () => {
+    const { container } = render(
+      <SecuritySurface>
+        <div>Allow</div>
+      </SecuritySurface>
+    )
+    expect(container.firstElementChild?.classList).toContain('plugin-security-chrome')
+  })
+
+  it.each(INLINE_TRUST_SURFACES)('%s renders inside a security surface', (file) => {
+    const source = readFileSync(join(import.meta.dirname, '..', file), 'utf8')
+    expect(source).toMatch(/<SecuritySurface[\s>]/)
   })
 })
