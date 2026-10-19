@@ -12,7 +12,7 @@ on:
   # Why main pushes: two PRs that each passed against an older main can break it together, and
   # nothing else re-checks main. merge_group stays dormant until the repository enables a queue.
   push:
-    branches: [main]
+    branches: [main, brennanb2025/ci-main-post-merge]
   merge_group:
 
 # Why main never cancels in progress: merges land faster than a full run finishes, so cancelling
