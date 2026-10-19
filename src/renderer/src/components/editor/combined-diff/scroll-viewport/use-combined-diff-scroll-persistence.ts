@@ -5,7 +5,8 @@ import type { ProgrammaticScrollMarks } from '@/hooks/programmatic-scroll-marks'
 import type { DiffSection } from '../../diff-section-types'
 import {
   readCombinedDiffViewMemory,
-  updateCombinedDiffViewMemory
+  rememberCombinedDiffView,
+  type CombinedDiffViewLease
 } from '../remember-view/combined-diff-view-cache'
 import type { CombinedDiffScrollAnchors } from './use-combined-diff-scroll-anchors'
 
@@ -14,6 +15,7 @@ export function useCombinedDiffScrollPersistence({
   entrySignature,
   hasDirectScrollInput,
   latestDomScrollAnchorRef,
+  memoryLeaseRef,
   programmaticScrollMarks,
   scrollAnchorRef,
   scrollContainerRef,
@@ -29,6 +31,7 @@ export function useCombinedDiffScrollPersistence({
   entrySignature: string
   hasDirectScrollInput: () => boolean
   latestDomScrollAnchorRef: React.RefObject<VirtualizedScrollAnchor>
+  memoryLeaseRef: React.RefObject<CombinedDiffViewLease | null>
   programmaticScrollMarks: ProgrammaticScrollMarks
   scrollAnchorRef: React.RefObject<VirtualizedScrollAnchor>
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
@@ -50,7 +53,7 @@ export function useCombinedDiffScrollPersistence({
 
     const memory = readCombinedDiffViewMemory(viewStateKey)
     if (memory?.view && memory.view.entrySignature === entrySignature) {
-      scrollOffsetRef.current = memory.scrollTop ?? memory.view.scrollTop
+      scrollOffsetRef.current = memory.scrollTop ?? 0
     }
 
     let anchorIdleTimerId: number | null = null
@@ -104,11 +107,7 @@ export function useCombinedDiffScrollPersistence({
         scheduleSettledAnchorPersist()
       }
       updateScrollbar()
-      const view = readCombinedDiffViewMemory(viewStateKey)?.view
-      updateCombinedDiffViewMemory(viewStateKey, {
-        scrollTop,
-        view: view?.entrySignature === entrySignature ? { ...view, scrollTop } : view
-      })
+      rememberCombinedDiffView(memoryLeaseRef.current, { scrollTop })
     }
     let lastScrollHeight = container.scrollHeight
     const handleScroll = (event: Event): void => {
@@ -160,6 +159,7 @@ export function useCombinedDiffScrollPersistence({
     entrySignature,
     hasDirectScrollInput,
     latestDomScrollAnchorRef,
+    memoryLeaseRef,
     persistScrollAnchor,
     programmaticScrollMarks,
     recordVirtualScrollAnchor,

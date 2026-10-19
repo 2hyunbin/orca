@@ -14,7 +14,7 @@ type PromiseSettlementWaiter<T> = {
 
 export type PromiseSettlementWaitOptions<T> = {
   signal?: AbortSignal
-  /** Preserve each caller's microtask order when observing a shared promise. */
+  /** Settle no sooner than this caller's own `promise.then` would, so an abort queued first still wins. */
   deferSettled?: boolean
   /** Preserve Promise.race ordering when raw settlement and abort share a turn. */
   abortInMicrotask?: boolean

@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { hostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
-  claimCombinedDiffViewMemory,
+  claimCombinedDiffView,
   clearCombinedDiffViewMemory,
   readCombinedDiffViewMemory,
-  updateCombinedDiffViewMemory
+  releaseCombinedDiffView,
+  rememberCombinedDiffView,
+  type CombinedDiffViewLease
 } from '@/components/editor/combined-diff/remember-view/combined-diff-view-cache'
 import { createTestStore, makeWorktree } from './store-test-helpers'
 import { buildWorktreePurgeState } from './worktrees/teardown/worktree-purge-state'
@@ -15,10 +17,10 @@ import { buildWorktreeRenameState } from './worktrees/session/worktree-identity-
 const removed = 'repo::/workspace/deleted'
 const kept = 'repo::/workspace/kept'
 
-function seedDiff(worktreeId: string): string {
+function mountDiff(worktreeId: string): { key: string; lease: CombinedDiffViewLease } {
   const key = `${worktreeId}::all-diffs::uncommitted::pane`
-  claimCombinedDiffViewMemory(key, worktreeId)
-  updateCombinedDiffViewMemory(key, {
+  const lease = claimCombinedDiffView(key, worktreeId)
+  rememberCombinedDiffView(lease, {
     view: {
       entrySignature: 'entries',
       gitStatusSignature: '',
@@ -38,12 +40,17 @@ function seedDiff(worktreeId: string): string {
       ],
       sectionHeights: {},
       loadedIndices: [0],
-      scrollTop: 42,
       sideBySide: true
     },
     scrollTop: 42,
     scrollAnchor: { key: 'source', offset: 0 }
   })
+  return { key, lease }
+}
+
+function seedDiff(worktreeId: string): string {
+  const { key, lease } = mountDiff(worktreeId)
+  releaseCombinedDiffView(lease)
   return key
 }
 
@@ -91,15 +98,25 @@ describe('removed workspace diff memory', () => {
   )
 
   it('ignores the unmount write of a viewer whose workspace was already removed', () => {
-    const key = seedDiff(removed)
+    const { key, lease } = mountDiff(removed)
     const store = createTestStore()
     applyRemoveWorktreeSuccessState(store.setState, removed, new Set())
-    updateCombinedDiffViewMemory(key, { scrollTop: 7, scrollAnchor: { key: 'source', offset: 3 } })
+    releaseCombinedDiffView(lease)
+    rememberCombinedDiffView(lease, { scrollTop: 7, scrollAnchor: { key: 'source', offset: 3 } })
     expect(readCombinedDiffViewMemory(key)).toBeUndefined()
     // A workspace recreated under the same id starts fresh once its viewer mounts.
-    claimCombinedDiffViewMemory(key, removed)
-    updateCombinedDiffViewMemory(key, { scrollTop: 7 })
+    rememberCombinedDiffView(claimCombinedDiffView(key, removed), { scrollTop: 7 })
     expect(readCombinedDiffViewMemory(key)).toEqual({ worktreeId: removed, scrollTop: 7 })
+  })
+
+  it('lets a mounted viewer re-create its entry after LRU eviction', () => {
+    const { key, lease } = mountDiff(kept)
+    for (let index = 0; index < 20; index += 1) {
+      seedDiff(`repo::/workspace/other-${index}`)
+    }
+    expect(readCombinedDiffViewMemory(key)).toBeUndefined()
+    rememberCombinedDiffView(lease, { scrollTop: 9 })
+    expect(readCombinedDiffViewMemory(key)).toEqual({ worktreeId: kept, scrollTop: 9 })
   })
 
   it('keeps cached views when a different host still owns the same workspace id', () => {

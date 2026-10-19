@@ -1,5 +1,5 @@
 import { RelayHttpError } from './relay-http-client'
-import { sharedPromiseSettlementWaiters } from '../../../shared/promise-settlement-waiters'
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 
 // Why the last reconcile could not produce a live broker. Every value is a
 // lowercase token so `relay_<reason>` stays a valid mint failure code.
@@ -105,11 +105,7 @@ export class RelayReadinessWaiters {
     const timer = setTimeout(release, Math.max(0, deadline - Date.now()))
     this.releases.add(release)
     try {
-      await sharedPromiseSettlementWaiters(work).wait({
-        signal: controller.signal,
-        deferSettled: true,
-        createAbortError: () => released
-      })
+      await waitForPromiseWithSignal(work, controller.signal)
       return true
     } catch (error) {
       if (error === released) {

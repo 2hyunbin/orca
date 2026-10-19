@@ -8,51 +8,61 @@ export type CachedCombinedDiffViewState = {
   sections: DiffSection[]
   sectionHeights: Record<number, number>
   loadedIndices: number[]
-  scrollTop: number
   sideBySide: boolean
 }
 
-export type CombinedDiffViewMemory = {
+type CombinedDiffViewMemory = {
   worktreeId: string
   view?: CachedCombinedDiffViewState
   scrollTop?: number
   scrollAnchor?: NonNullable<VirtualizedScrollAnchor>
 }
 
-type CombinedDiffViewMemoryPatch = Partial<Omit<CombinedDiffViewMemory, 'worktreeId'>>
+/** A mounted viewer's write access to its key; revoked only when its workspace is forgotten. */
+export type CombinedDiffViewLease = {
+  readonly viewKey: string
+  worktreeId: string
+  revoked: boolean
+}
 
 const memoryByViewKey = new Map<string, CombinedDiffViewMemory>()
+const mountedLeases = new Set<CombinedDiffViewLease>()
 
-export function readCombinedDiffViewMemory(viewKey: string): CombinedDiffViewMemory | undefined {
+export function readCombinedDiffViewMemory(
+  viewKey: string
+): Readonly<CombinedDiffViewMemory> | undefined {
   return memoryByViewKey.get(viewKey)
 }
 
-/** A mounted viewer claims its key; only claimed keys accept writes. */
-export function claimCombinedDiffViewMemory(viewKey: string, worktreeId: string): void {
-  const memory = memoryByViewKey.get(viewKey)
-  setWithLRU(memoryByViewKey, viewKey, memory?.worktreeId === worktreeId ? memory : { worktreeId })
-}
-
-// Why update-only: a viewer whose workspace was just forgotten unmounts afterwards and must not resurrect its entry.
-export function updateCombinedDiffViewMemory(
-  viewKey: string,
-  patch: CombinedDiffViewMemoryPatch
-): void {
-  const memory = memoryByViewKey.get(viewKey)
-  if (memory) {
-    setWithLRU(memoryByViewKey, viewKey, { ...memory, ...patch })
+export function claimCombinedDiffView(viewKey: string, worktreeId: string): CombinedDiffViewLease {
+  if (memoryByViewKey.get(viewKey)?.worktreeId !== worktreeId) {
+    memoryByViewKey.delete(viewKey)
   }
+  const lease = { viewKey, worktreeId, revoked: false }
+  mountedLeases.add(lease)
+  return lease
 }
 
-export function forgetCombinedDiffViewState(viewKey: string): void {
-  updateCombinedDiffViewMemory(viewKey, { view: undefined })
+// Why: release only stops tracking — the viewer's unmount snapshot still writes through the lease afterwards.
+export function releaseCombinedDiffView(lease: CombinedDiffViewLease): void {
+  mountedLeases.delete(lease)
 }
 
-export function forgetCombinedDiffViewStatesMatching(
-  predicate: (view: CachedCombinedDiffViewState) => boolean
+export function rememberCombinedDiffView(
+  lease: CombinedDiffViewLease | null,
+  patch: Partial<Omit<CombinedDiffViewMemory, 'worktreeId'>>
 ): void {
+  if (!lease || lease.revoked) {
+    return
+  }
+  const memory = memoryByViewKey.get(lease.viewKey)
+  const owned = memory?.worktreeId === lease.worktreeId ? memory : { worktreeId: lease.worktreeId }
+  setWithLRU(memoryByViewKey, lease.viewKey, { ...owned, ...patch })
+}
+
+export function forgetCombinedDiffViewsShowingPath(relativePath: string): void {
   for (const [viewKey, memory] of memoryByViewKey) {
-    if (memory.view && predicate(memory.view)) {
+    if (memory.view?.sections.some((section) => section.path === relativePath)) {
       memoryByViewKey.set(viewKey, { ...memory, view: undefined })
     }
   }
@@ -62,6 +72,11 @@ export function renameCombinedDiffViewOwner(oldWorktreeId: string, newWorktreeId
   for (const [viewKey, memory] of memoryByViewKey) {
     if (memory.worktreeId === oldWorktreeId) {
       memoryByViewKey.set(viewKey, { ...memory, worktreeId: newWorktreeId })
+    }
+  }
+  for (const lease of mountedLeases) {
+    if (lease.worktreeId === oldWorktreeId) {
+      lease.worktreeId = newWorktreeId
     }
   }
 }
@@ -74,8 +89,15 @@ export function forgetCombinedDiffViewsForWorktrees(worktreeIds: Iterable<string
       memoryByViewKey.delete(viewKey)
     }
   }
+  for (const lease of mountedLeases) {
+    if (removed.has(lease.worktreeId)) {
+      lease.revoked = true
+      mountedLeases.delete(lease)
+    }
+  }
 }
 
 export function clearCombinedDiffViewMemory(): void {
   memoryByViewKey.clear()
+  mountedLeases.clear()
 }

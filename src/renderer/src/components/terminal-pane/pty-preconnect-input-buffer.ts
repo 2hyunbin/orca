@@ -273,12 +273,13 @@ export function createPtyPreconnectInputBuffer(
           resolve(false)
           return
         }
-        const input = createInput(data, 'accepted', inputKind, resolve, signal)
         const onAbort = (): void => withdraw(input)
-        input.resolve = (accepted) => {
+        // Why: a long-lived caller signal would otherwise pin every settled input through its listener.
+        const settle = (accepted: boolean): void => {
           signal?.removeEventListener('abort', onAbort)
           resolve(accepted)
         }
+        const input = createInput(data, 'accepted', inputKind, settle, signal)
         if (!retain(input)) {
           resolve(false)
           return

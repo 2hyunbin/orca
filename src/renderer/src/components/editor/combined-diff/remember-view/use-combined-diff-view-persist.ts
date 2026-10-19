@@ -3,13 +3,15 @@ import type React from 'react'
 import type { DiffSection } from '../../diff-section-types'
 import {
   readCombinedDiffViewMemory,
-  updateCombinedDiffViewMemory
+  rememberCombinedDiffView,
+  type CombinedDiffViewLease
 } from './combined-diff-view-cache'
 
 export function useCombinedDiffViewPersist({
   combinedGitStatusSignature,
   entryCount,
   entrySignature,
+  memoryLeaseRef,
   scrollContainerRef,
   sectionHeights,
   sections,
@@ -20,6 +22,7 @@ export function useCombinedDiffViewPersist({
   combinedGitStatusSignature: string
   entryCount: number
   entrySignature: string
+  memoryLeaseRef: React.RefObject<CombinedDiffViewLease | null>
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
   sectionHeights: Record<number, number>
   sections: DiffSection[]
@@ -31,11 +34,11 @@ export function useCombinedDiffViewPersist({
     if (sections.length === 0 && entryCount > 0) {
       return
     }
-    const preservedScrollTop =
-      readCombinedDiffViewMemory(viewStateKey)?.scrollTop ??
-      scrollContainerRef.current?.scrollTop ??
-      0
-    updateCombinedDiffViewMemory(viewStateKey, {
+    rememberCombinedDiffView(memoryLeaseRef.current, {
+      scrollTop:
+        readCombinedDiffViewMemory(viewStateKey)?.scrollTop ??
+        scrollContainerRef.current?.scrollTop ??
+        0,
       view: {
         entrySignature,
         gitStatusSignature: combinedGitStatusSignature,
@@ -44,7 +47,6 @@ export function useCombinedDiffViewPersist({
         loadedIndices: Array.from(loadedIndicesRef.current).filter(
           (index) => !sections[index]?.loading
         ),
-        scrollTop: preservedScrollTop,
         sideBySide
       }
     })
@@ -53,6 +55,7 @@ export function useCombinedDiffViewPersist({
     entryCount,
     entrySignature,
     loadedIndicesRef,
+    memoryLeaseRef,
     scrollContainerRef,
     sectionHeights,
     sections,

@@ -8,9 +8,10 @@ import type { DiffSection } from '../../diff-section-types'
 import { useCombinedDiffSectionLoadRegistry } from '../load-sections/combined-diff-section-load-registry'
 import type { CombinedDiffEntrySet } from '../resolve-changes/use-combined-diff-entry-set'
 import {
-  claimCombinedDiffViewMemory,
+  claimCombinedDiffView,
   clearCombinedDiffViewMemory,
-  updateCombinedDiffViewMemory
+  releaseCombinedDiffView,
+  rememberCombinedDiffView
 } from './combined-diff-view-cache'
 import { useCombinedDiffViewRestore } from './use-combined-diff-view-restore'
 import { createStore } from 'zustand/vanilla'
@@ -110,18 +111,18 @@ describe('useCombinedDiffViewRestore deferral', () => {
         largeDiffRenderLimit: null
       }
     ]
-    claimCombinedDiffViewMemory(viewStateKey, 'wt-1')
-    updateCombinedDiffViewMemory(viewStateKey, {
+    const lease = claimCombinedDiffView(viewStateKey, 'wt-1')
+    rememberCombinedDiffView(lease, {
       view: {
         entrySignature: entrySet.entrySignature,
         gitStatusSignature: '',
         sections: loadedSections,
         sectionHeights: {},
         loadedIndices: [0],
-        scrollTop: 0,
         sideBySide: false
       }
     })
+    releaseCombinedDiffView(lease)
     cleanup()
 
     const closedTab: OpenFile = {

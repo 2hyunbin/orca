@@ -2,7 +2,7 @@ import {
   ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
   type EditorPathMutationTarget
 } from '../../editor-autosave'
-import { forgetCombinedDiffViewStatesMatching } from './combined-diff-view-cache'
+import { forgetCombinedDiffViewsShowingPath } from './combined-diff-view-cache'
 
 // Why: session-scoped toolbar choices outlive the unmount, so they are module state rather than component state.
 export const combinedDiffViewPreferences: {
@@ -15,9 +15,7 @@ function handleCombinedDiffExternalFileChange(event: Event): void {
   const detail = (event as CustomEvent<EditorPathMutationTarget>).detail
   if (detail?.relativePath) {
     // Why: inactive combined-diff tabs are unmounted, so only a module-level cache bust stops a remount replaying stale bodies.
-    forgetCombinedDiffViewStatesMatching((view) =>
-      view.sections.some((section) => section.path === detail.relativePath)
-    )
+    forgetCombinedDiffViewsShowingPath(detail.relativePath)
   }
 }
 

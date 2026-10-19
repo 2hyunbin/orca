@@ -164,7 +164,7 @@ export function createBinaryStreamFrameReader(
 
   const ownPendingHead = (): void => {
     const head = chunks[0]
-    // Copy only at a chunk boundary; copying after every frame makes batched output quadratic.
+    // Why: a leftover subarray pins its whole socket chunk; copying once per feed, not per frame, avoids quadratic batches.
     if (
       head &&
       head.buffer.byteLength > Buffer.poolSize &&
@@ -207,8 +207,7 @@ export function createBinaryStreamFrameReader(
         }
         const frameBytes = FRAME_HEADER_BYTES + bodyBytes
         if (bufferedBytes < frameBytes) {
-          ownPendingHead()
-          return
+          break
         }
         const head = contiguousHead(frameBytes)
         const body = head.subarray(FRAME_HEADER_BYTES, frameBytes)

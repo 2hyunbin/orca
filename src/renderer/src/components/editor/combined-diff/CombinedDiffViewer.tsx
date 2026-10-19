@@ -158,7 +158,7 @@ export default function CombinedDiffViewer({
     sideBySide: preferences.sideBySide,
     structureRevision: sectionRowKeys.structureRevision,
     totalSize: virtualizer.getTotalSize(),
-    viewStateKey,
+    memoryLeaseRef: restore.memoryLeaseRef,
     virtualizer
   })
 
@@ -217,6 +217,7 @@ export default function CombinedDiffViewer({
     entryCount: entrySet.entries.length,
     entrySignature: entrySet.entrySignature,
     loadedIndicesRef: registry.loadedIndicesRef,
+    memoryLeaseRef: restore.memoryLeaseRef,
     scrollContainerRef,
     sectionHeights,
     sections,
@@ -228,6 +229,7 @@ export default function CombinedDiffViewer({
     entrySignature: entrySet.entrySignature,
     hasDirectScrollInput,
     latestDomScrollAnchorRef: restore.latestDomScrollAnchorRef,
+    memoryLeaseRef: restore.memoryLeaseRef,
     programmaticScrollMarks,
     scrollAnchorRef: restore.scrollAnchorRef,
     scrollContainerRef,

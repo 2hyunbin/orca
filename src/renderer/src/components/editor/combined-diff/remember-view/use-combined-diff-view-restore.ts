@@ -17,14 +17,17 @@ import type { CombinedDiffSectionLoadRegistry } from '../load-sections/combined-
 import { clearPendingSectionReloadTimers } from '../load-sections/combined-diff-section-load-registry'
 import { combinedDiffViewPreferences } from './combined-diff-view-memory'
 import {
-  claimCombinedDiffViewMemory,
-  forgetCombinedDiffViewState,
-  readCombinedDiffViewMemory
+  claimCombinedDiffView,
+  readCombinedDiffViewMemory,
+  releaseCombinedDiffView,
+  rememberCombinedDiffView,
+  type CombinedDiffViewLease
 } from './combined-diff-view-cache'
 
 export type CombinedDiffViewRestore = {
   invalidateViewStateCache: () => void
   latestDomScrollAnchorRef: React.RefObject<VirtualizedScrollAnchor>
+  memoryLeaseRef: React.RefObject<CombinedDiffViewLease | null>
   scrollAnchorRef: React.RefObject<VirtualizedScrollAnchor>
   scrollOffsetRef: React.RefObject<number>
 }
@@ -79,9 +82,12 @@ export function useCombinedDiffViewRestore({
   const scrollAnchorRef = useRef<VirtualizedScrollAnchor>(restoreSeed.anchor)
   const latestDomScrollAnchorRef = useRef<VirtualizedScrollAnchor>(restoreSeed.anchor)
 
-  // Why: declared before every writer so this layout effect claims the key ahead of their effects.
+  // Why: keep above CombinedDiffViewer's persist/scroll hooks so the lease exists before their effects write.
+  const memoryLeaseRef = useRef<CombinedDiffViewLease | null>(null)
   useLayoutEffect(() => {
-    claimCombinedDiffViewMemory(viewStateKey, worktreeId)
+    const lease = claimCombinedDiffView(viewStateKey, worktreeId)
+    memoryLeaseRef.current = lease
+    return () => releaseCombinedDiffView(lease)
   }, [viewStateKey, worktreeId])
 
   // Why: tab/worktree switches unmount this viewer; cache by pane key so remount restores sections+scroll before repaint.
@@ -141,7 +147,7 @@ export function useCombinedDiffViewRestore({
         })
       )
       loadingIndicesRef.current.clear()
-      scrollOffsetRef.current = memory.scrollTop ?? cached.scrollTop
+      scrollOffsetRef.current = memory.scrollTop ?? 0
       scrollAnchorRef.current = memory.scrollAnchor ?? null
       latestDomScrollAnchorRef.current = scrollAnchorRef.current
       return
@@ -217,12 +223,13 @@ export function useCombinedDiffViewRestore({
   ])
 
   const invalidateViewStateCache = useCallback((): void => {
-    forgetCombinedDiffViewState(viewStateKey)
-  }, [viewStateKey])
+    rememberCombinedDiffView(memoryLeaseRef.current, { view: undefined })
+  }, [])
 
   return {
     invalidateViewStateCache,
     latestDomScrollAnchorRef,
+    memoryLeaseRef,
     scrollAnchorRef,
     scrollOffsetRef
   }
