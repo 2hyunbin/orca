@@ -16,7 +16,12 @@ import { useAppStore } from '@/store'
 import { resetHostStructuredAgentsForTests } from '@/runtime/host-structured-agents'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
 import { acquireAgentLaunchChoices, holdChatProgramFacts } from './host-chat-program-acquisition'
-import { agentChoicePending, agentChoiceOpensAsChat, readChatProgram } from './host-chat-program'
+import {
+  agentChoicePending,
+  agentChoiceOpensAsChat,
+  readChatProgram,
+  resolveChatProgramContext
+} from './host-chat-program'
 import { resolveQuickWorkspaceAgentSelection } from './quick-workspace-agent-selection'
 import { resolveChecksActionAgent, startFixChecksAgent } from './fix-checks-agent-launch'
 const launch = vi.hoisted(() => ({ direct: vi.fn() }))
@@ -70,12 +75,8 @@ afterEach(() => {
 })
 
 it('acquires inactive B independently of detection, preserves unknown truth and selected catalog intent', async () => {
-  let catalogReply: (reply: unknown) => void = () => {}
-  rpc.call.mockReturnValue(
-    new Promise((resolve) => {
-      catalogReply = resolve
-    })
-  )
+  const catalogReply = Promise.withResolvers<unknown>()
+  rpc.call.mockReturnValue(catalogReply.promise)
   const action = acquireAgentLaunchChoices(workspace, async () => [])
   await flush()
   expect(rpc.subscribe.mock.calls[0][0]).toEqual({ kind: 'environment', environmentId: 'B' })
@@ -89,10 +90,10 @@ it('acquires inactive B independently of detection, preserves unknown truth and 
     }).quickAgentOverride
   ).toBe('antigravity')
   rpc.subscribe.mock.calls[0][3].onEvent(frame('grok', 'available'))
-  catalogReply(catalog)
+  catalogReply.resolve(catalog)
   expect((await action).offered).toEqual(['grok'])
   expect(rpc.call).toHaveBeenCalled()
-  const lease = holdChatProgramFacts(workspace)
+  const lease = holdChatProgramFacts(resolveChatProgramContext(useAppStore.getState(), workspace))
   rpc.subscribe.mock.calls.at(-1)![3].onEvent(frame('grok', 'future-program'))
   expect(readChatProgram(useAppStore.getState(), 'grok', host, ['grok'])).toBe('unknown')
   expect(agentChoiceOpensAsChat(useAppStore.getState(), 'grok', workspace, ['grok'])).toBe(true)
@@ -101,20 +102,10 @@ it('acquires inactive B independently of detection, preserves unknown truth and 
 
 it('releases a pending stream at the chat deadline while slow ordinary detection keeps waiting', async () => {
   vi.useFakeTimers()
-  let handle: (value: { unsubscribe: () => void }) => void = () => {}
-  let detect: (ids: []) => void = () => {}
-  rpc.subscribe.mockReturnValue(
-    new Promise((resolve) => {
-      handle = resolve
-    })
-  )
-  const action = acquireAgentLaunchChoices(
-    workspace,
-    () =>
-      new Promise<[]>((resolve) => {
-        detect = resolve
-      })
-  )
+  const handle = Promise.withResolvers<{ unsubscribe: () => void }>()
+  const detect = Promise.withResolvers<[]>()
+  rpc.subscribe.mockReturnValue(handle.promise)
+  const action = acquireAgentLaunchChoices(workspace, () => detect.promise)
   let done = false
   void action.then(() => {
     done = true
@@ -122,33 +113,40 @@ it('releases a pending stream at the chat deadline while slow ordinary detection
   await flush()
   await vi.advanceTimersByTimeAsync(5000)
   expect(done).toBe(false)
+  useAppStore.setState({
+    runtimeStatusByEnvironmentId: new Map([['B', { ...status(), connectionGeneration: 1 }]])
+  })
+  expect(rpc.subscribe).toHaveBeenCalledOnce()
   const unsubscribe = vi.fn()
-  handle({ unsubscribe })
+  handle.resolve({ unsubscribe })
   await flush()
   expect(unsubscribe).toHaveBeenCalledOnce()
-  detect([])
+  detect.resolve([])
   await action
   expect(done).toBe(true)
 })
 
-it('waits for each reopened first frame and cancels genuine runtime replacement, not cold learning', async () => {
+it('keeps one still-detecting action on the current open through learning/reconnect, cancelling replacement', async () => {
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
-  const abort = new AbortController()
-  const action = acquireAgentLaunchChoices(workspace, async () => [], abort.signal)
+  const detect = Promise.withResolvers<[]>()
+  let done = false
+  const action = acquireAgentLaunchChoices(workspace, () => detect.promise).then(() => {
+    done = true
+  })
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status()]]) })
   await flush()
   const handlers = rpc.subscribe.mock.calls.at(-1)![3]
   handlers.onEvent(frame('grok', 'available'))
-  await action
-  await flush()
-  let done = false
-  const reopened = acquireAgentLaunchChoices(workspace, async () => []).then(() => {
-    done = true
+  handlers.onClose()
+  useAppStore.setState({
+    runtimeStatusByEnvironmentId: new Map([['B', { ...status(), connectionGeneration: 1 }]])
   })
+  detect.resolve([])
   await flush()
+  expect(rpc.subscribe).toHaveBeenCalledTimes(2)
   expect(done).toBe(false)
   rpc.subscribe.mock.calls.at(-1)![3].onClose()
-  await reopened
+  await action
   const replaced = acquireAgentLaunchChoices(workspace, () => new Promise<[]>(() => {}))
   const rejected = expect(replaced).rejects.toThrow('owner changed')
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status('r2')]]) })

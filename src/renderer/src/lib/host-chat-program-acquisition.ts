@@ -8,7 +8,7 @@ import {
   readChatProgramFactsVersion
 } from './host-chat-program'
 import { ensureLocalRuntimeCapabilities } from '@/runtime/local-runtime-capabilities'
-import { relearnHostStructuredAgents } from '@/runtime/host-structured-agents'
+import { loadHostStructuredAgents } from '@/runtime/host-structured-agents'
 import {
   acquireHostStructuredAgentAvailability,
   firstHostStructuredAgentAvailability
@@ -30,60 +30,32 @@ export function useChatProgramFactsVersion(): number {
   )
 }
 
-/** The lease owns listeners and stream holds, even while a shared RPC never settles. */
-export function holdChatProgramFacts(workspace: ProspectiveWorkspace) {
-  let current = ''
+/** A hold owns one resolved resource; its consumer owns reconciliation. */
+export function holdChatProgramFacts(context: ReturnType<typeof resolveChatProgramContext>) {
   let release = (): void => {}
-  let finish = (): void => {}
-  let retired = false
-  const ready = new Promise<void>((resolve) => {
-    finish = resolve
-  })
-  const reconcile = (): void => {
-    const state = useAppStore.getState()
-    const context = resolveChatProgramContext(state, workspace)
-    if (current === context.revision || retired) {
-      return
-    }
-    current = context.revision
-    release()
-    release = (): void => {}
-    if (!context.target || context.runtimeId === undefined || !context.hostCapabilities) {
-      // A resolved host without a chat runtime (SSH) has nothing to acquire, and a failed local
-      // probe is an answer: capabilities stay unknown and the launch rechecks.
-      if (!context.target && context.executionHostId) {
-        finish()
-      } else if (context.target && context.runtimeId === null) {
-        void ensureLocalRuntimeCapabilities().then((known) => known || finish())
-      }
-      return
-    }
-    const catalog = relearnHostStructuredAgents(
-      context.executionHostId,
-      context.hostCapabilities,
-      state.runtimeStatusByEnvironmentId
-    )
-    let health = Promise.resolve()
-    if (context.hostCapabilities.includes(AVAILABILITY)) {
-      const owner = { ...context, target: context.target, runtimeId: context.runtimeId }
-      release = acquireHostStructuredAgentAvailability(owner)
-      health = firstHostStructuredAgentAvailability(owner)
-    }
-    const revision = current
-    void Promise.all([catalog, health]).then(() => !retired && revision === current && finish())
+  if (!context.target || context.runtimeId === undefined || !context.hostCapabilities) {
+    const catalog =
+      !context.target && context.executionHostId
+        ? Promise.resolve()
+        : context.runtimeId === null
+          ? ensureLocalRuntimeCapabilities()
+          : new Promise<void>(() => {})
+    return { catalog, first: () => catalog, release }
   }
-  const stopStore = useAppStore.subscribe(reconcile)
-  const stopFacts = subscribeChatProgramFacts(reconcile)
-  reconcile()
+  const owner = { ...context, target: context.target, runtimeId: context.runtimeId }
+  const catalog = loadHostStructuredAgents(
+    context.executionHostId,
+    context.hostCapabilities,
+    context.runtimeId
+  )
+  const health = context.hostCapabilities.includes(AVAILABILITY)
+  if (health) {
+    release = acquireHostStructuredAgentAvailability(owner)
+  }
   return {
-    ready,
-    release: () => {
-      retired = true
-      stopStore()
-      stopFacts()
-      release()
-      finish()
-    }
+    catalog,
+    first: () => (health ? firstHostStructuredAgentAvailability(owner) : catalog),
+    release
   }
 }
 
@@ -91,7 +63,9 @@ export function useChatProgramFacts(workspace: ProspectiveWorkspace, active = tr
   useChatProgramFactsVersion()
   const key = useAppStore((state) => resolveChatProgramContext(state, workspace).revision)
   useEffect(() => {
-    return active ? holdChatProgramFacts(workspace).release : undefined
+    return active
+      ? holdChatProgramFacts(resolveChatProgramContext(useAppStore.getState(), workspace)).release
+      : undefined
     // The descriptor covers all owner inputs; resource notifications do not reopen a live lease.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, active])
@@ -122,6 +96,9 @@ export async function acquireAgentLaunchChoices(
   let target = workspace.worktreeId
     ? getDetectionTargetIdentityForWorktree(useAppStore.getState(), workspace.worktreeId)
     : null
+  let ended = false
+  let lease = holdChatProgramFacts(bound)
+  let changed = Promise.withResolvers<void>()
   let cancel = (): void => {}
   const cancelled = new Promise<never>((_, reject) => {
     cancel = () =>
@@ -140,8 +117,16 @@ export async function acquireAgentLaunchChoices(
     ) {
       cancel()
     } else {
+      const replace = bound.revision !== next.revision && !ended
       bound = next
       target = nextTarget
+      if (replace) {
+        const retired = lease
+        lease = holdChatProgramFacts(bound)
+        retired.release()
+        changed.resolve()
+        changed = Promise.withResolvers<void>()
+      }
     }
   }
   const stopStore = useAppStore.subscribe(check)
@@ -149,11 +134,12 @@ export async function acquireAgentLaunchChoices(
   const stopRetirement = onRuntimeEnvironmentsRetired(
     (ids) => bound.environmentId && ids.includes(bound.environmentId) && cancel()
   )
-  const lease = holdChatProgramFacts(workspace)
   let expire = (): void => {}
   const expired = new Promise<null>((resolve) => {
     expire = () => {
+      ended = true
       lease.release()
+      changed.resolve()
       resolve(null)
     }
   })
@@ -168,7 +154,16 @@ export async function acquireAgentLaunchChoices(
       totalDeadline ? Promise.race([detection, expired]) : detection,
       cancelled
     ])
-    await Promise.race([lease.ready, cancelled])
+    while (!ended) {
+      check()
+      const observed = lease
+      const first = observed.first()
+      await Promise.race([Promise.all([observed.catalog, first]), changed.promise, cancelled])
+      check()
+      if (observed === lease && first === lease.first()) {
+        break
+      }
+    }
     check()
     // A settled rejection queues first, so an owner change seen by check() wins.
     await Promise.race([cancelled, Promise.resolve()])
@@ -185,6 +180,7 @@ export async function acquireAgentLaunchChoices(
       offered: agentsOfferedForLaunch(useAppStore.getState(), workspace, trustworthy)
     }
   } finally {
+    ended = true
     clearTimeout(timer)
     signal?.removeEventListener('abort', cancel)
     stopStore()

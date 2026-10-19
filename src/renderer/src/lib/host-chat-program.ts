@@ -31,6 +31,7 @@ import {
   onRuntimeEnvironmentsRetired
 } from '@/runtime/runtime-environment-revision'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
+import { getResolvedExecutionHostIdForWorktree } from './resolved-worktree-execution-host'
 
 export type ChatProgramObservation =
   | 'available'
@@ -72,7 +73,13 @@ export function resolveChatProgramContext(
   workspace: ProspectiveWorkspace
 ) {
   const { owner, ...host } = resolveAgentLaunchHost(store, workspace)
-  return hostContext(store, owner === null ? { ...host, executionHostId: '' } : host)
+  const proven = workspace.worktreeId
+    ? getResolvedExecutionHostIdForWorktree(store, workspace.worktreeId)
+    : null
+  return hostContext(
+    store,
+    owner === null ? { ...host, executionHostId: proven?.startsWith('ssh:') ? proven : '' } : host
+  )
 }
 
 /** Only absent publication uses older-host inference; present unknown wins. */

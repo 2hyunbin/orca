@@ -172,44 +172,20 @@ function QuickTabBody({
   const [quickAgentOverride, setQuickAgentOverride] = useState<TuiAgent | null | undefined>(
     undefined
   )
-  const launchWorkspace = useMemo(
-    () =>
-      composerLaunchWorkspace({
-        repoId: cardProps.repoId,
-        selectedRepoIsGit: cardProps.selectedRepoIsGit,
-        selectedRepoExecutionHostId: cardProps.selectedRepoExecutionHostId
-      }),
-    [cardProps.repoId, cardProps.selectedRepoIsGit, cardProps.selectedRepoExecutionHostId]
-  )
+  const launchWorkspace = composerLaunchWorkspace(cardProps)
   const offeredAgentIds = useAgentsOfferedForLaunch(launchWorkspace, cardProps.detectedAgentIds)
-  const choicePending = useCallback(
-    (agent: TuiAgent) =>
-      agentChoicePending(
-        useAppStore.getState(),
-        agent,
-        launchWorkspace,
-        cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
-      ),
-    [cardProps.detectedAgentIds, launchWorkspace]
-  )
-  const preferredQuickAgent = useMemo<TuiAgent | null>(() => {
-    const pref = settings?.defaultTuiAgent
-    // Why: detection can still be pending when quick-create submits; keep the
-    // prior catalog fallback while filtering disabled agents out of that choice.
-    return pickQuickWorkspaceAgent(
-      pref,
-      cardProps.detectedAgentIds,
-      settings?.disabledTuiAgents,
-      offeredAgentIds,
-      choicePending
-    )
-  }, [
-    cardProps.detectedAgentIds,
-    choicePending,
-    offeredAgentIds,
+  const launchState = useAppStore.getState()
+  const detected = cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
+  const choicePending = (agent: TuiAgent): boolean =>
+    agentChoicePending(launchState, agent, launchWorkspace, detected)
+  // Pending discovery preserves the existing catalog fallback; current facts settle the default.
+  const preferredQuickAgent = pickQuickWorkspaceAgent(
     settings?.defaultTuiAgent,
-    settings?.disabledTuiAgents
-  ])
+    cardProps.detectedAgentIds,
+    settings?.disabledTuiAgents,
+    offeredAgentIds,
+    choicePending
+  )
   // An explicit pick stays valid where it opens as a chat without its CLI.
   const resolvedQuickAgentSelection = resolveQuickWorkspaceAgentSelection({
     quickAgentOverride,

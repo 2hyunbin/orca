@@ -16,12 +16,13 @@ export function createDashboardChatProgramHolds() {
         DASHBOARD_MAX_LAUNCH_WORKTREES
       )) {
         const workspace = { kind: workspaceKindForWorktreeId(worktree.id), worktreeId: worktree.id }
-        const key = resolveChatProgramContext(state, workspace).revision
+        const context = resolveChatProgramContext(state, workspace)
+        const key = context.revision
         next.add(key)
         if (!held.has(key)) {
           // A new hold can notify synchronously and re-enter this reconcile: reserve its key first.
           held.set(key, () => {})
-          held.set(key, holdChatProgramFacts(workspace).release)
+          held.set(key, holdChatProgramFacts(context).release)
         }
       }
       for (const [key, release] of held) {
