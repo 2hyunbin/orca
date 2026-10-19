@@ -23,6 +23,7 @@ import {
   listedLeasesByRelayId,
   type LegacyRelayPty,
   PROVEN_EXITED,
+  relistedPane,
   servedBridgedPanes,
   toPane,
   type Pane
@@ -200,7 +201,7 @@ export class LegacyRelayTargetBridge {
     if (this.disposed) {
       return
     }
-    const listedBy = new Map<string, LegacyRelayPty & { endpoint: string }>()
+    const listedRows: (LegacyRelayPty & { endpoint: string })[] = []
     let complete = listing.kind === 'listed' && listing.exhaustive
     for (const endpoint of listing.kind === 'listed' ? listing.endpoints : []) {
       const listed = await this.listEndpoint(endpoint)
@@ -211,26 +212,20 @@ export class LegacyRelayTargetBridge {
         complete = false
         continue
       }
-      for (const row of listed) {
-        listedBy.set(row.relayPtyId, { ...row, endpoint: endpoint.endpoint })
-      }
+      listedRows.push(...listed.map((row) => ({ ...row, endpoint: endpoint.endpoint })))
     }
     const next = new Map<string, Pane>()
     // Why re-read: a lease retired while the relays were asked (an exit) must not come back live.
     const current = [...listedLeasesByRelayId(this.deps.leases())].filter(([id]) => leases.has(id))
     for (const [relayPtyId, lease] of current) {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      const listed = listedBy.get(relayPtyId)
-      if (listed) {
-        next.set(ptyId, toPane(lease, relayPtyId, listed.endpoint, 'live', listed))
-      } else if (complete) {
-        // Every relay this target could have left answered, and none holds it.
-        const wasLive = this.panes.get(ptyId)?.endpoint
-        this.deps.retireLease(relayPtyId, 'absent')
-        this.emitExit(ptyId, -1, Boolean(wasLive))
+      const prior = this.panes.get(ptyId)
+      const pane = relistedPane(lease, relayPtyId, listedRows, prior, complete)
+      if (pane !== 'absent') {
+        next.set(ptyId, pane)
       } else {
-        // Unreachable: loss of contact is never exit, so the pane waits.
-        next.set(ptyId, toPane(lease, relayPtyId, null, 'unverifiable'))
+        this.deps.retireLease(relayPtyId, 'absent')
+        this.emitExit(ptyId, -1, Boolean(prior?.endpoint))
       }
     }
     this.closeIdleClients(new Set([...next.values()].map((pane) => pane.endpoint ?? '')))
@@ -274,14 +269,14 @@ export class LegacyRelayTargetBridge {
   private wireClient(endpoint: string, client: LegacyRelayClient): void {
     client.onData((relayPtyId, data) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      if (this.attached.has(ptyId)) {
+      if (this.attached.has(ptyId) && this.panes.get(ptyId)?.ownerEndpoint === endpoint) {
         this.deps.onData(ptyId, data)
       }
     })
     client.onExit((relayPtyId, code) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
       const pane = this.panes.get(ptyId)
-      if (pane) {
+      if (pane?.ownerEndpoint === endpoint) {
         this.retire(ptyId, pane, code)
       }
     })

@@ -719,6 +719,64 @@ describe('one target’s legacy relay bridge', () => {
     expect(events.data).toEqual(['still viewed'])
   })
 
+  describe('two relays that list the same relay id', () => {
+    const OTHER: LegacyRelayEndpoint = { ...ENDPOINT, endpoint: '/home/me/.orca-remote/b.sock' }
+    let other: FakeRelay
+    const clientOf = (endpoint: LegacyRelayEndpoint) =>
+      (endpoint.endpoint === OTHER.endpoint ? other : relay).clients.at(-1)!
+    const twoRelays = (): LegacyRelayTargetBridge =>
+      bridge({
+        openClient: async (endpoint) => {
+          const owner = endpoint.endpoint === OTHER.endpoint ? other : relay
+          const client = fakeClient(owner)
+          owner.clients.push(client)
+          return client
+        }
+      })
+
+    beforeEach(() => {
+      other = { ...relay, ptys: new Set(), clients: [], shutdowns: [], incarnations: new Map() }
+    })
+
+    it('keeps the attached relay when a second one later lists the same id', async () => {
+      const subject = twoRelays()
+      await subject.refresh()
+      await expect(subject.attach(PTY)).resolves.toMatchObject({ status: 'attached' })
+      other.ptys.add('pty-1')
+      listing = { kind: 'listed', endpoints: [ENDPOINT, OTHER], exhaustive: true }
+      await subject.refresh()
+      subject.write(PTY, 'ls\r')
+      expect(clientOf(ENDPOINT).writes).toEqual(['ls\r'])
+      expect(clientOf(OTHER).writes).toEqual([])
+      // Only the owning relay speaks for the pane.
+      clientOf(OTHER).emitData('pty-1', 'foreign')
+      clientOf(OTHER).emitExit('pty-1', 0)
+      expect(events.data).toEqual([])
+      expect(events.exits).toEqual([])
+      expect(leases[0].state).toBe('detached')
+    })
+
+    it('retires the pane when its own relay answers without it, never moving it to the other', async () => {
+      const subject = twoRelays()
+      await subject.refresh()
+      relay.ptys.delete('pty-1')
+      other.ptys.add('pty-1')
+      listing = { kind: 'listed', endpoints: [ENDPOINT, OTHER], exhaustive: true }
+      await subject.refresh()
+      expect(leases[0].state).toBe('terminated')
+      expect(subject.snapshot()).toEqual([])
+    })
+
+    it('serves neither relay when both list the id and neither held it', async () => {
+      other.ptys.add('pty-1')
+      listing = { kind: 'listed', endpoints: [ENDPOINT, OTHER], exhaustive: true }
+      const subject = twoRelays()
+      await subject.refresh()
+      expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
+      expect(leases[0].state).toBe('detached')
+    })
+  })
+
   it('hangs up every connection on dispose and leaves the relays to their own grace', async () => {
     const subject = bridge()
     await subject.refresh()
