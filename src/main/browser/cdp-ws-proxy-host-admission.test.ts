@@ -92,6 +92,8 @@ describe('CdpWsProxy under a host command', () => {
   })
 
   function holdPage(): { revoke: () => void; release: () => Promise<void> } {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the release path calls.
+    const page = { ...mock.webContents, id: PAGE_ID } as never
     let revoked = false
     let finish = (): void => {}
     const held = runWithRemoteCliPageAdmission(
@@ -102,11 +104,7 @@ describe('CdpWsProxy under a host command', () => {
         }
       },
       () => new Promise<void>((resolve) => (finish = resolve)),
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the release path calls.
-      (release) =>
-        releaseHeldPageInput({ ...mock.webContents, id: PAGE_ID } as never, release, () =>
-          guardFocus()
-        )
+      (release) => releaseHeldPageInput(page, release, () => guardFocus())
     )
     return {
       revoke: () => (revoked = true),
