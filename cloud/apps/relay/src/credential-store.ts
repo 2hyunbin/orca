@@ -687,25 +687,9 @@ export class RelayCredentialStore {
     relayHostId: string,
     token: string
   ): Promise<{ userId: string; relayDeviceId: string } | null> {
-    const tokenHash = hashCredential(token)
-    const rows = await this.database.query(
-      `SELECT * FROM relay_devices
-       WHERE relay_host_id = ? AND (current_hash = ? OR grace_hash = ?)`,
-      [relayHostId, tokenHash, tokenHash]
-    )
-    const device = rows[0]
-    if (!device || optionalNumber(device, 'revoked_at') !== undefined) return null
-    const now = this.now()
-    const currentValid =
-      equalHash(string(device, 'current_hash'), tokenHash) &&
-      number(device, 'current_expires_at') > now
-    const graceHash = device.grace_hash
-    const graceValid =
-      typeof graceHash === 'string' &&
-      equalHash(graceHash, tokenHash) &&
-      (optionalNumber(device, 'grace_expires_at') ?? 0) > now
-    return currentValid || graceValid
-      ? { userId: string(device, 'user_id'), relayDeviceId: string(device, 'relay_device_id') }
+    const found = await this.lookupResume(relayHostId, token)
+    return found.outcome === 'resume'
+      ? { userId: found.reservation.userId, relayDeviceId: found.reservation.relayDeviceId }
       : null
   }
 

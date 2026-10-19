@@ -867,14 +867,17 @@ export class HostSessionRegistry {
         return
       }
       if (abandonedByClient('credential')) return
-      if (found.outcome === 'refused') {
-        capacityReservation?.release()
-        this.observer.recordAuth(false)
-        this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
-        return
+      // The switch turned off during the read: today's whole path, never a lease-less memory phone.
+      if (this.phonePathEffective() === 'memory') {
+        if (found.outcome === 'refused') {
+          capacityReservation?.release()
+          this.observer.recordAuth(false)
+          this.rejectClient(socket, RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL)
+          return
+        }
+        if (found.outcome === 'resume') memoryReservation = found.reservation
+        else memoryMissedDevice = true
       }
-      if (found.outcome === 'resume') memoryReservation = found.reservation
-      else memoryMissedDevice = true
     }
     const reservation =
       memoryReservation ??
@@ -1071,7 +1074,8 @@ export class HostSessionRegistry {
       })
       elsewhere = row !== null && row.cellId !== this.config.cellId
       if (row?.cellId === this.config.cellId) this.phoneAccepts.missRowNamesHere(reservation.relayHostId)
-    } catch {
+    } catch (error) {
+      this.phoneAccepts.missReadError(isRelayDatabaseTransientError(error) ? 'database_transient' : 'error')
       elsewhere = true
     }
     if (elsewhere) {
