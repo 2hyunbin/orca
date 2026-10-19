@@ -25,12 +25,18 @@ export function MobileSessionTitleBlock({
     <Pressable
       style={[styles.sessionTitleBlock, details.besideTabs && styles.sessionTitleBlockBesideTabs]}
       ref={details.openerRef}
+      onLayout={details.onAnchorLayout}
       onPress={details.toggle}
       accessibilityState={{ expanded: details.present }}
       accessibilityRole="button"
       accessibilityHint="Shows the full workspace name and where it is"
     >
-      <Text ref={details.titleRef} style={styles.sessionTitle} numberOfLines={1}>
+      <Text
+        ref={details.titleRef}
+        onLayout={details.onAnchorLayout}
+        style={styles.sessionTitle}
+        numberOfLines={1}
+      >
         {title}
       </Text>
       <Pressable

@@ -20,13 +20,18 @@ export function useDetailCardScope({
     const title = element(titleRef.current)
     const layer = element(layerRef.current)
     const content = element(contentRef.current)
-    const root = layer?.parentElement
+    let ancestor = layer?.parentElement
+    while (ancestor && opener && !ancestor.contains(opener)) {
+      ancestor = ancestor.parentElement
+    }
+    const root = ancestor
     if (obscured) {
       savedFocus.current = null
       return
     }
     if (!present) {
       if (
+        savedFocus.current &&
         root?.isConnected &&
         (document.activeElement === document.body || root.contains(document.activeElement))
       ) {
@@ -52,15 +57,19 @@ export function useDetailCardScope({
         }
       })
     }
-    // Keep the real opener's ancestry and the whole floating layer; mask the other branches.
+    // Observe only the kept ancestry, so later header controls are excluded without watching terminal output.
+    const masked = new WeakSet<HTMLElement>()
+    const observer = new MutationObserver(() => mask(root))
     const mask = (parent: HTMLElement) => {
+      observer.observe(parent, { childList: true })
       for (const child of parent.children) {
         if (!(child instanceof HTMLElement) || child === title || child === layer) {
           continue
         }
         if (child.contains(title) || child.contains(layer)) {
           mask(child)
-        } else {
+        } else if (!masked.has(child)) {
+          masked.add(child)
           const inert = child.inert
           child.inert = true
           attribute(child, 'aria-hidden', 'true')
@@ -95,9 +104,9 @@ export function useDetailCardScope({
         event.preventDefault()
         event.stopImmediatePropagation()
         const nodes = focusable()
-        const index = nodes.findIndex((node) => node === document.activeElement)
+        const index = nodes.indexOf(element(document.activeElement) ?? content)
         const next =
-          index < 0
+          index === -1
             ? event.shiftKey
               ? nodes.length - 1
               : 0
@@ -135,7 +144,8 @@ export function useDetailCardScope({
       document.removeEventListener('keydown', isolate)
       document.removeEventListener('keyup', isolate)
       document.removeEventListener('focusin', focusin, true)
-      for (const undo of restore.reverse()) {
+      observer.disconnect()
+      for (const undo of restore.toReversed()) {
         undo()
       }
     }

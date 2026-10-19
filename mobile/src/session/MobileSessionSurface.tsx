@@ -5,6 +5,7 @@ import type { MobileSessionController } from './use-mobile-session-controller'
 import { MobileSessionContentRow } from './MobileSessionContentRow'
 import { MobileSessionHeader } from './MobileSessionHeader'
 import { MobileSessionSheets } from './MobileSessionSheets'
+import { DetailCardLayer } from '../components/detail-card-host'
 import { AnchoredDetailCard } from '../components/AnchoredDetailCard'
 import { StatusDot } from '../components/StatusDot'
 import { useResponsiveLayout } from '../layout/responsive-layout'
@@ -46,35 +47,37 @@ export function MobileSessionSurface({ controller }: { controller: MobileSession
         {/* Content-row host (KTD2): on wide, content shares this row with the docked panel as the flex-1 left child. */}
         <MobileSessionContentRow controller={controller} />
       </View>
-      <View
-        ref={details.layerRef}
-        collapsable={false}
-        pointerEvents="box-none"
-        onLayout={details.onLayout}
-        style={detailLayer}
-      >
-        {details.anchor ? (
-          <AnchoredDetailCard
-            anchor={details.anchor}
-            bounds={details.bounds}
-            viewport={details.viewport}
-            contentRef={details.contentRef}
-            open={details.open}
-            onDismiss={details.dismiss}
-            onClosed={details.onClosed}
-            title={controller.worktreeName || 'Terminal'}
-            detail={controller.worktreePath}
-            footer={
-              hostName ? (
-                <>
-                  <StatusDot state={controller.connState} />
-                  <Text style={styles.sessionMetaText}>{hostName}</Text>
-                </>
-              ) : null
-            }
-          />
-        ) : null}
-      </View>
+      <DetailCardLayer>
+        <View
+          ref={details.layerRef}
+          collapsable={false}
+          pointerEvents="box-none"
+          onLayout={details.onLayout}
+          style={detailLayer}
+        >
+          {details.anchor ? (
+            <AnchoredDetailCard
+              anchor={details.anchor}
+              bounds={details.bounds}
+              viewport={details.viewport}
+              contentRef={details.contentRef}
+              open={details.open}
+              onDismiss={details.dismiss}
+              onClosed={details.onClosed}
+              title={controller.worktreeName || 'Terminal'}
+              detail={controller.worktreePath}
+              footer={
+                hostName ? (
+                  <>
+                    <StatusDot state={controller.connState} />
+                    <Text style={styles.sessionMetaText}>{hostName}</Text>
+                  </>
+                ) : null
+              }
+            />
+          ) : null}
+        </View>
+      </DetailCardLayer>
       <MobileSessionSheets controller={controller} />
     </View>
   )

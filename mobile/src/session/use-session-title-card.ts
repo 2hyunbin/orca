@@ -25,6 +25,10 @@ export function useSessionTitleCard(besideTabs: boolean, obscured: boolean) {
   ].join(':')
   const dismiss = useCallback(() => setOpen(false), [])
   const onClosed = useCallback(() => setAnchor(null), [])
+  const onAnchorLayout = useCallback(() => {
+    generation.current += 1
+    dismiss()
+  }, [dismiss])
   useLayoutEffect(() => {
     dismiss()
     return () => {
@@ -70,6 +74,7 @@ export function useSessionTitleCard(besideTabs: boolean, obscured: boolean) {
     dismiss,
     onClosed,
     onLayout,
+    onAnchorLayout,
     toggle: open ? dismiss : show,
     viewport: { x: -origin.x, y: -origin.y, width: window.width, height: window.height },
     bounds: {

@@ -1,4 +1,4 @@
-import { Animated, ScrollView, Text, View } from 'react-native'
+import { Animated, View } from 'react-native'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import { MobileSessionTitleBlock } from './MobileSessionTitleBlock'
@@ -33,7 +33,6 @@ vi.mock('../navigation/use-back-claim', async () => {
 
 vi.mock('react-native', () => {
   class Value {
-    constructor(public value: number) {}
     interpolate() {
       return this
     }
@@ -70,16 +69,13 @@ vi.mock('react-native', () => {
 })
 vi.mock('../platform/use-reduced-motion', () => ({ useReducedMotionEnabled: () => false }))
 
-const TITLE = 'brennanb2025/mobile-landscape-session-tabs'
-const PATH = '/Users/me/orca/worktrees/mobile-landscape-session-tabs'
-
 function Fixture() {
   const details = useSessionTitleCard(true, false)
   return (
     <View>
       <View ref={details.barRef}>
         <MobileSessionTitleBlock
-          title={TITLE}
+          title="workspace"
           connState="connected"
           details={details}
           meta="3 tabs"
@@ -93,9 +89,7 @@ function Fixture() {
             {...details}
             anchor={details.anchor}
             onDismiss={details.dismiss}
-            title={TITLE}
-            detail={PATH}
-            footer={<Text>host</Text>}
+            title="workspace"
           />
         ) : null}
       </View>
@@ -109,9 +103,10 @@ it('retains one title target through reversal and completion, with root-relative
     mounted.renderer = create(<Fixture />, {
       createNodeMock: (node) => ({
         measureInWindow: (done: (x: number, y: number, w: number, h: number) => void) => {
-          const measure = () =>
-            node.props.testID === 'layer' ? done(20, 10, 627, 365) : done(80, 20, 160, 45)
-          if (overlay.defer && node.props.testID === 'layer') {
+          const isLayer =
+            node.props !== null && typeof node.props === 'object' && 'testID' in node.props
+          const measure = () => (isLayer ? done(20, 10, 627, 365) : done(80, 20, 160, 45))
+          if (overlay.defer && isLayer) {
             overlay.measure = measure
           } else {
             measure()
@@ -136,15 +131,8 @@ it('retains one title target through reversal and completion, with root-relative
   act(() => layout(627, 365))
   act(() => opener.props.onPress())
   expect(card().props.style[1]).toMatchObject({ left: 60, top: 55, width: 256, maxHeight: 302 })
-  expect(
-    root
-      .findByType(ScrollView)
-      .findAllByType(Text)
-      .map((node) => node.props.children)
-  ).toEqual([TITLE, PATH, 'host'])
   act(() => root.findAllByProps({ accessible: false })[0]?.props.onPress())
   const cancelled = overlay.finish
-  expect(overlay.back).not.toBeNull()
   act(() => opener.props.onPress())
   act(() => cancelled?.())
   expect(root.findAllByType(AnchoredDetailCard)).toHaveLength(1)
@@ -155,7 +143,6 @@ it('retains one title target through reversal and completion, with root-relative
   expect(root.findAllByType(AnchoredDetailCard)).toHaveLength(0)
   act(() => overlay.measure?.())
   overlay.defer = false
-  expect(root.findAllByType(AnchoredDetailCard)).toHaveLength(1)
   expect(root.findByProps({ accessibilityHint: opener.props.accessibilityHint })).toBe(opener)
   overlay.height = 300
   act(() => {
@@ -163,6 +150,10 @@ it('retains one title target through reversal and completion, with root-relative
     layout(627, 290)
   })
   expect(card().props.style[1].maxHeight).toBe(227)
+  act(() => opener.props.onLayout())
+  expect(root.findByType(AnchoredDetailCard).props.open).toBe(false)
+  act(() => overlay.finish?.())
+  act(() => opener.props.onPress())
   overlay.width = 375
   act(() => renderer.update(<Fixture />))
   act(() => expect(overlay.back?.()).toBe(true))

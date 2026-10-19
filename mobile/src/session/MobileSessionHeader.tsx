@@ -40,7 +40,7 @@ export function MobileSessionHeader({
   ) : null
   return (
     <SafeAreaView style={styles.sessionChrome} edges={['top']}>
-      <View ref={details.barRef} style={styles.sessionTopBar}>
+      <View ref={details.barRef} onLayout={details.onAnchorLayout} style={styles.sessionTopBar}>
         {revealSidebar ? (
           <MobileSessionHeaderIconButton
             accessibilityLabel="Show sidebar"
