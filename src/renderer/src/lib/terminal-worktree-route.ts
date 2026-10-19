@@ -115,7 +115,7 @@ export function resolveTerminalHostOwnership(
     state.repos === undefined
   ) {
     // Why: narrow unit/legacy adapters can omit all owner catalogs; production stores always provide
-    // them and still fail closed above. Teardown never takes this fail-open — it would kill on a guess.
+    // them and still fail closed above. The `teardown` purpose never takes this fail-open.
     return ownershipForRuntimeEnvironmentId(getSingleFocusedRuntimeEnvironmentId(state))
   }
   return UNRESOLVED_TERMINAL_HOST

@@ -88,4 +88,22 @@ describe('the contested-target rule for a selected ssh: host', () => {
     expect(resolveTerminalHostOwnership(proxiedTwice, 'repo::wt', 'spawn').kind).toBe('unresolved')
     expect(resolveTerminalPtyOwner(proxiedTwice, 'repo::wt')).toEqual({ kind: 'ambiguous' })
   })
+
+  it('still dials a proven direct listing when two servers proxy the same target id', () => {
+    const directAndTwoProxies: WorktreeRuntimeOwnerState = {
+      ...directAndProxied,
+      repos: [
+        { id: 'repo', connectionId: 'box', executionHostId: 'ssh:box' },
+        { id: 'repo', connectionId: 'box', executionHostId: 'runtime:hub-a' },
+        { id: 'repo', connectionId: 'box', executionHostId: 'runtime:hub-b' }
+      ]
+    }
+    expect(resolveOwner(directAndTwoProxies, { workspaceId: 'repo::wt' })).toEqual({
+      kind: 'resolved',
+      owner: { endpoint: { kind: 'self' }, at: 'ssh:box' }
+    })
+    expect(resolveTerminalPtyOwner(directAndTwoProxies, 'repo::wt')).toEqual({
+      kind: 'non-runtime'
+    })
+  })
 })
