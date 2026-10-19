@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { SourceControlAiSettings } from '../../../../shared/source-control-ai-types'
 import {
@@ -21,8 +23,10 @@ import {
 import { getCommitMessageAiPaneSearchEntries } from './commit-message-ai-search'
 import { TooltipProvider } from '../ui/tooltip'
 
-function renderPane(settings: GlobalSettings): string {
-  return renderToStaticMarkup(
+const originalState = useAppStore.getState()
+
+function renderPane(settings: GlobalSettings, renderer = renderToStaticMarkup): string {
+  return renderer(
     React.createElement(
       TooltipProvider,
       null,
@@ -51,6 +55,11 @@ function buildSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings 
 describe('CommitMessageAiPane', () => {
   beforeEach(() => {
     useAppStore.setState({ settingsSearchQuery: '' })
+  })
+
+  afterEach(() => {
+    cleanup()
+    useAppStore.setState(originalState, true)
   })
 
   it('renders only the opt-in control before the feature is enabled', () => {
@@ -119,7 +128,11 @@ describe('CommitMessageAiPane', () => {
           prCreationDefaults: {},
           launchActionDefaults: {}
         }
-      })
+      }),
+      (element) => {
+        useAppStore.setState({ localDetectedAgentIdsByContext: { host: ['codex'] } })
+        return render(element).container.innerHTML
+      }
     )
 
     expect(markup).toContain('placeholder="--model gpt-5.4-mini"')
