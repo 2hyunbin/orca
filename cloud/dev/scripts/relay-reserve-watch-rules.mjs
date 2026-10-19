@@ -33,6 +33,55 @@ export const RESERVE_WATCH_RULES = {
 // sample line's `rules` keys follow this order too.
 export const RULE_NAMES = ['deadMan', 'overrun', 'director503', 'duplicateSeat', 'hostDrop', 'ledgerDrift']
 
+// Step 6 design §7: judged only while the cell's switch file says phonePath=memory, against the
+// cell's own runtime metrics for the 10 minutes before the flip. A trip writes phonePath=db only.
+export const PHONE_WATCH_RULES = {
+  // Each rate rule trips on three complete minutes in a row over its line.
+  consecutiveMinutes: 3,
+  readMinutes: 10,
+  credentialRefusals: { multiple: 1.5, marginPerMinute: 5 },
+  confirmFailures: { multiple: 1.5, marginPerMinute: 5 },
+  attachDeadlines: { multiple: 1.5, marginPerMinute: 0 },
+  acceptDatabaseErrors: { multiple: 1, marginPerMinute: 5 },
+  // Over the last 10 published minutes against the 10 before the flip; a quieter cell is not judged.
+  completedAccepts: { share: 0.5, minBackground: 10 },
+  // Page only: the confirms still work, only their audit rows are lost.
+  auditDropPageAfterMs: 5 * MINUTE_MS
+}
+export const PHONE_RULE_NAMES = [
+  'phoneCredentialRefusals',
+  'phoneConfirmFailures',
+  'phoneCompletedAccepts',
+  'phoneAttachDeadlines',
+  'phoneAcceptDatabaseErrors'
+]
+// Signal per rule in the per-minute read, and the rate rule's thresholds.
+const PHONE_RATE_RULES = {
+  phoneCredentialRefusals: ['credentialRefusals', PHONE_WATCH_RULES.credentialRefusals],
+  phoneConfirmFailures: ['confirmFailures', PHONE_WATCH_RULES.confirmFailures],
+  phoneAttachDeadlines: ['attachDeadlines', PHONE_WATCH_RULES.attachDeadlines],
+  phoneAcceptDatabaseErrors: ['acceptDatabaseErrors', PHONE_WATCH_RULES.acceptDatabaseErrors]
+}
+
+const median = (values) => {
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length === 0) return 0
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+// The 10 minutes before the phone flip, from `readCellPhoneMinutes`: a median per minute for each
+// rate, and the accepts' total. Null until every minute is metered.
+export function measuredPhoneBackground(read) {
+  if (!read.ok || read.unmetered.length > 0 || read.minutes.length === 0) return null
+  const signals = Object.keys(read.series)
+  return {
+    perMinute: Object.fromEntries(signals.map((signal) => [signal, median(read.series[signal])])),
+    completedAccepts: read.series.completedAccepts.reduce((sum, count) => sum + count, 0),
+    minutes: read.minutes.length
+  }
+}
+
 export function initialWatchState({ cellId, startedAt, durationMinutes, background503PerMinute, flippedAt }) {
   return {
     v: 1,
@@ -50,7 +99,13 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
     hosts: [],
     reserveSeenAt: null,
     ledgerAboveSince: null,
-    seatBehindRowFirstSeen: {}
+    seatBehindRowFirstSeen: {},
+    // Step 6: what a trip writes back, and the phone rules' state.
+    flip: null,
+    phoneBackground: null,
+    auditDropsBaseline: null,
+    auditDropsSince: null,
+    auditDropsPaged: false
   }
 }
 
@@ -71,6 +126,8 @@ const trip = (reason, detail = {}) => ({ status: 'trip', reason, ...detail })
 const unverifiable = (reason) => ({ status: 'unverifiable', reason })
 // Not readable yet by design, so it does not count toward the unverifiable streak.
 const pending = (reason) => ({ status: 'pending', reason })
+const failedPhoneRead = { ok: false, error: 'no cell phone metrics read' }
+const minuteFloor = (at) => Math.floor(at / MINUTE_MS) * MINUTE_MS
 
 function judgeDeadMan(cell) {
   if (!cell.ok) return unverifiable(cell.error)
@@ -186,6 +243,63 @@ function judgeLedgerDrift(cell, ledger, aboveSince, at) {
   return { verdict: pass({ ...detail, aboveForMs: at - since }), aboveSince: since }
 }
 
+function judgeAuditDrops(cell, state, at) {
+  if (!cell.ok || !Number.isInteger(cell.resumeAuditDropped)) {
+    return { since: state.auditDropsSince ?? null, page: false }
+  }
+  const baseline = state.auditDropsBaseline ?? cell.resumeAuditDropped
+  const since = cell.resumeAuditDropped > baseline ? (state.auditDropsSince ?? at) : null
+  return {
+    baseline,
+    since,
+    page: since !== null && !state.auditDropsPaged && at - since >= PHONE_WATCH_RULES.auditDropPageAfterMs
+  }
+}
+
+// The phone rules for one sample, or none while the switch file does not say phonePath=memory.
+function judgePhoneRules(cell, phone, state, at) {
+  if (!cell.ok || cell.phonePathConfigured !== 'memory') return {}
+  const background = state.phoneBackground
+  if (!background) {
+    const verdict =
+      state.flippedAt === null
+        ? unverifiable('the phone rules need --flipped-at: their background is the 10 minutes before it')
+        : at < minuteFloor(state.flippedAt) + RESERVE_WATCH_RULES.director503.publishDelayMs
+          ? pending('the phone background before the flip is not published yet')
+          : unverifiable('no phone background yet')
+    return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, verdict]))
+  }
+  if (!phone.ok) return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, unverifiable(phone.error)]))
+  if (phone.unmetered.length > 0) {
+    const gap = unverifiable(`no cell runtime metrics for ${phone.unmetered.join(', ')}`)
+    return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, gap]))
+  }
+  const { consecutiveMinutes, completedAccepts } = PHONE_WATCH_RULES
+  const rules = {}
+  for (const [name, [signal, { multiple, marginPerMinute }]] of Object.entries(PHONE_RATE_RULES)) {
+    const perMinute = background.perMinute[signal]
+    const above = Math.max(perMinute * multiple, perMinute + marginPerMinute)
+    const recent = phone.series[signal].slice(-consecutiveMinutes)
+    const detail = { backgroundPerMinute: perMinute, above, recent }
+    rules[name] =
+      recent.length === consecutiveMinutes && recent.every((count) => count > above)
+        ? trip(`${signal} above ${above}/min for ${consecutiveMinutes} min (${recent.join(', ')})`, detail)
+        : pass(detail)
+  }
+  const accepted = phone.series.completedAccepts.reduce((sum, count) => sum + count, 0)
+  const floor = background.completedAccepts * completedAccepts.share
+  const acceptDetail = { background: background.completedAccepts, recent: accepted }
+  rules.phoneCompletedAccepts =
+    background.completedAccepts >= completedAccepts.minBackground && accepted < floor
+      ? trip(
+          `completed phone accepts ${accepted} in ${phone.minutes.length} min, ` +
+            `under half of ${background.completedAccepts} before the flip`,
+          acceptDetail
+        )
+      : pass(acceptDetail)
+  return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, rules[name]]))
+}
+
 /**
  * One sample. `sample.cell` is the cell's runtime-status, `director503` the complete minutes of
  * non-drain director 503s with the request series' publishing front (`publishedThrough`) and the
@@ -220,26 +334,35 @@ export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
   next.seatBehindRowFirstSeen = duplicate.firstSeen
   const ledger = judgeLedgerDrift(cell, sample.ledger, state.ledgerAboveSince, at)
   next.ledgerAboveSince = ledger.aboveSince
+  const auditDrops = judgeAuditDrops(cell, state, at)
+  next.auditDropsBaseline = auditDrops.baseline ?? state.auditDropsBaseline ?? null
+  next.auditDropsSince = auditDrops.since
+  next.auditDropsPaged = Boolean(state.auditDropsPaged || auditDrops.page)
   const rules = {
     deadMan: judgeDeadMan(cell),
     overrun: judgeOverrun(cell),
     director503: judgeDirector503(sample.director503, state, at),
     duplicateSeat: duplicate.verdict,
     hostDrop: cell.ok ? judgeHostDrop(next.hosts) : unverifiable(cell.error),
-    ledgerDrift: ledger.verdict
+    ledgerDrift: ledger.verdict,
+    ...judgePhoneRules(cell, sample.phone ?? failedPhoneRead, state, at)
   }
-  const tripped = RULE_NAMES.find((name) => rules[name].status === 'trip')
+  const names = [...RULE_NAMES, ...PHONE_RULE_NAMES].filter((name) => name in rules)
+  const tripped = names.find((name) => rules[name].status === 'trip')
   if (tripped) {
     next.state = 'tripped'
+    // A phone rule turns only the phone path off; the reserve rules flip the whole cell back.
+    next.flip = PHONE_RULE_NAMES.includes(tripped) ? 'phonePath' : 'admitMode'
     next.verdict = `flip back ${state.cellId}: ${tripped}: ${rules[tripped].reason}`
-    return { state: next, rules, line: sampleLine(next, sample, rules) }
+    return { state: next, rules, line: sampleLine(next, sample, rules), pageAuditDrops: auditDrops.page }
   }
-  const missing = RULE_NAMES.filter((name) => rules[name].status === 'unverifiable')
-  const waiting = RULE_NAMES.some((name) => rules[name].status === 'pending')
+  const missing = names.filter((name) => rules[name].status === 'unverifiable')
+  const waiting = names.some((name) => rules[name].status === 'pending')
   // A pending rule holds the streak where it was: neither evidence of health nor a gap.
   next.unverifiableStreak = missing.length > 0 ? state.unverifiableStreak + 1 : waiting ? state.unverifiableStreak : 0
   if (next.unverifiableStreak >= unverifiableLimit) {
     next.state = 'tripped'
+    next.flip = missing.every((name) => PHONE_RULE_NAMES.includes(name)) ? 'phonePath' : 'admitMode'
     next.verdict =
       `flip back ${state.cellId}: unverifiable: ${next.unverifiableStreak} samples in a row could not ` +
       `read ${missing.join(', ')}`
@@ -247,7 +370,7 @@ export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
     next.state = 'completed'
     next.verdict = `${state.cellId} stayed healthy in reserve mode for the whole watch`
   }
-  return { state: next, rules, line: sampleLine(next, sample, rules) }
+  return { state: next, rules, line: sampleLine(next, sample, rules), pageAuditDrops: auditDrops.page }
 }
 
 function sampleLine(state, sample, rules) {

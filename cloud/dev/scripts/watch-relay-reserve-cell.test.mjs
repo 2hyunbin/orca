@@ -7,7 +7,9 @@ import { test } from 'node:test'
 import {
   evaluateWatchSample,
   initialWatchState,
-  measuredBackground
+  measuredBackground,
+  measuredPhoneBackground,
+  PHONE_RULE_NAMES
 } from './relay-reserve-watch-rules.mjs'
 import {
   ALARM_EVENT,
@@ -18,6 +20,7 @@ import {
   parseWatchArguments,
   parseWatchSegment,
   raiseAlarm,
+  readCellPhoneMinutes,
   readDirector503Minutes,
   readSeatBehindRowSample,
   recordOutcome,
@@ -493,7 +496,7 @@ test('a segment samples once a minute, carries state to the next segment, and st
     assert.equal(first.state, 'watching')
     assert.equal(lines.length, 3)
     assert.equal(first.background.source, 'measured')
-    assert.equal(await readFile(join(directory, 'out'), 'utf8'), 'state=watching\nverdict=\n')
+    assert.equal(await readFile(join(directory, 'out'), 'utf8'), 'state=watching\nverdict=\nflip=admitMode\n')
     const second = await watchSegment(config, dependencies)
     assert.equal(second.state, 'tripped')
     assert.equal(second.samples, 5)
@@ -537,7 +540,7 @@ test('a watch that ended without a verdict records failed, which the workflow fl
     assert.equal((await recordOutcome(join(directory, 'watching.json'), output)).state, 'failed')
     await writeFile(join(directory, 'tripped.json'), JSON.stringify(freshState({ state: 'tripped', verdict: 'flip back x:\ny' })))
     assert.equal((await recordOutcome(join(directory, 'tripped.json'), output)).state, 'tripped')
-    assert.match(await readFile(output, 'utf8'), /state=tripped\nverdict=flip back x: y\n$/)
+    assert.match(await readFile(output, 'utf8'), /state=tripped\nverdict=flip back x: y\nflip=admitMode\n$/)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -545,10 +548,15 @@ test('a watch that ended without a verdict records failed, which the workflow fl
 
 // Google Storage and the director, as far as the flag tool's flip back reaches them. `onUpload`
 // returns 'conflict' to play another writer landing first, optionally with its own admitMode.
-function fakeFlipBack({ generation = '7', onUpload = () => 'ok', cellAnswers = true } = {}) {
+function fakeFlipBack({
+  generation = '7',
+  onUpload = () => 'ok',
+  cellAnswers = true,
+  flags = { admitMode: 'reserve', readinessLocal: true }
+} = {}) {
   const calls = []
   let uploads = 0
-  let object = { generation: Number(generation), flags: { admitMode: 'reserve', readinessLocal: true } }
+  let object = { generation: Number(generation), flags }
   let applied = object
   const fetchImpl = async (url, init = {}) => {
     const text = String(url)
@@ -579,7 +587,8 @@ function fakeFlipBack({ generation = '7', onUpload = () => 'ok', cellAnswers = t
           flagsApplied: applied,
           supportedFlags: {
             admitMode: { type: 'enum', values: ['db', 'reserve'] },
-            readinessLocal: { type: 'boolean' }
+            readinessLocal: { type: 'boolean' },
+            phonePath: { type: 'enum', values: ['db', 'memory'] }
           },
           admitModeEffective: applied.flags.admitMode,
           runtime: { controls: 10 }
@@ -1054,3 +1063,146 @@ test('an alarm is an escaped error annotation everywhere, and in write mode a pa
   assert.match(lines.at(-2), /^::error title=Reserve watch refused for /)
   assert.match(lines.at(-1), /nothing pages: --project-id is not a GCP project id/)
 })
+
+// Step 6 phone rules. A quiet window, minute by minute: ordinary 4401s from phones whose pairing
+// was removed, an occasional failed confirm or half-open control, accepts at a steady clip.
+// Synthetic: replaying a recorded production window needs read access this suite does not have.
+const QUIET_PHONE_MINUTE = (index) => ({
+  credentialRefusals: [0, 1, 0, 2, 1][index % 5],
+  confirmFailures: [0, 0, 1, 0][index % 4],
+  completedAccepts: 40 + ((index * 7) % 13),
+  attachDeadlines: [1, 0, 2, 0, 1, 3][index % 6],
+  acceptDatabaseErrors: 0
+})
+const phoneRead = (minuteCount, perMinute) => {
+  const minutes = Array.from({ length: minuteCount }, (_, index) => `2026-10-19T12:${String(index).padStart(2, '0')}`)
+  const rows = minutes.map((_, index) => perMinute(index))
+  const series = Object.fromEntries(Object.keys(rows[0]).map((signal) => [signal, rows.map((row) => row[signal])]))
+  return { ok: true, minutes, series, unmetered: [] }
+}
+const memoryCell = (overrides = {}) => healthyCell({ phonePathConfigured: 'memory', resumeAuditDropped: 0, ...overrides })
+const phoneState = () =>
+  freshState({ flippedAt: START - 10 * MINUTE, phoneBackground: measuredPhoneBackground(phoneRead(10, QUIET_PHONE_MINUTE)) })
+// The last 10 minutes as of watch minute `offset`, the newest minutes shaped by `spike`.
+const phoneSampleAt = (offset, spike = () => ({})) =>
+  sampleAt(START + offset * MINUTE, {
+    cell: memoryCell(),
+    phone: phoneRead(10, (index) => ({ ...QUIET_PHONE_MINUTE(offset + index), ...spike(index) }))
+  })
+
+test('phone rules: a quiet hour replays without a trip', () => {
+  const results = run(Array.from({ length: 60 }, (_, offset) => phoneSampleAt(offset)), {
+    ...phoneState(),
+    deadlineAt: START + 120 * MINUTE
+  })
+  assert.equal(results.length, 60)
+  assert.ok(results.every((result) => result.state.state === 'watching'))
+  assert.deepEqual(Object.keys(results[0].rules).filter((name) => name.startsWith('phone')), PHONE_RULE_NAMES)
+})
+
+test('phone rules: each fires on its own spike and turns off only the phone path', () => {
+  const spikes = {
+    phoneCredentialRefusals: (index) => (index >= 7 ? { credentialRefusals: 12 } : {}),
+    phoneConfirmFailures: (index) => (index >= 7 ? { confirmFailures: 9 } : {}),
+    phoneCompletedAccepts: () => ({ completedAccepts: 15 }),
+    phoneAttachDeadlines: (index) => (index >= 7 ? { attachDeadlines: 4 } : {}),
+    phoneAcceptDatabaseErrors: (index) => (index >= 7 ? { acceptDatabaseErrors: 6 } : {})
+  }
+  for (const [rule, spike] of Object.entries(spikes)) {
+    const [result] = run([phoneSampleAt(0, spike)], phoneState())
+    assert.equal(result.state.state, 'tripped', rule)
+    assert.match(result.state.verdict, new RegExp(`: ${rule}: `), rule)
+    assert.equal(result.state.flip, 'phonePath', rule)
+  }
+  // Two minutes over the line is not three.
+  const [twoMinutes] = run([phoneSampleAt(0, (index) => (index >= 8 ? { credentialRefusals: 12 } : {}))], phoneState())
+  assert.equal(twoMinutes.state.state, 'watching')
+})
+
+test('phone rules: judged only while the switch file says memory; reserve rules still flip the cell back', () => {
+  const [off] = run([sampleAt(START, { cell: healthyCell({ phonePathConfigured: 'db' }) })], freshState())
+  assert.deepEqual(Object.keys(off.rules).filter((name) => name.startsWith('phone')), [])
+  const [overrun] = run([phoneSampleAt(0)].map((sample) => ({ ...sample, cell: memoryCell({ enforcedUnits: 2_001 }) })), phoneState())
+  assert.equal(overrun.state.flip, 'admitMode')
+})
+
+test('phone rules: missing phone data trips the phone path only, and needs a flipped-at background', () => {
+  const gap = (offset) => ({ ...phoneSampleAt(offset), phone: { ...phoneSampleAt(offset).phone, unmetered: ['2026-10-19T12:09'] } })
+  const results = run([gap(0), gap(1), gap(2)], phoneState())
+  assert.equal(results.at(-1).state.state, 'tripped')
+  assert.equal(results.at(-1).state.flip, 'phonePath')
+  const [noBackground] = run([phoneSampleAt(0)], freshState({ flippedAt: null }))
+  assert.match(noBackground.rules.phoneCredentialRefusals.reason, /--flipped-at/)
+})
+
+test('phone rules: resume audit drops page once after 5 minutes and never flip anything', () => {
+  const dropping = (offset, dropped) => ({ ...phoneSampleAt(offset), cell: memoryCell({ resumeAuditDropped: dropped }) })
+  const results = run([dropping(0, 4), dropping(1, 9), dropping(4, 30), dropping(6, 40), dropping(7, 50)], phoneState())
+  assert.deepEqual(results.map((result) => Boolean(result.pageAuditDrops)), [false, false, false, true, false])
+  assert.ok(results.every((result) => result.state.state === 'watching'))
+})
+
+test('the cell phone read sums each minute from the cell runtime metrics lines, and refuses an old image', async () => {
+  const endedAt = Date.parse('2026-10-19T12:03:00Z')
+  const line = (at, payload) => ({
+    timestamp: new Date(at).toISOString(),
+    jsonPayload: {
+      phoneRejectionsByCodeDelta: {},
+      resumeConfirmFailuresByCodeDelta: {},
+      clientAcceptCompletedDelta: 0,
+      phoneAttachDeadlinesDelta: 0,
+      phoneAcceptDatabaseErrorsDelta: 0,
+      ...payload
+    }
+  })
+  let filter
+  const read = await readCellPhoneMinutes(
+    fakeReader({
+      runGcloud: async (args) => {
+        filter = args[2]
+        return {
+          stdout: JSON.stringify([
+            line(endedAt - 150_000, { phoneRejectionsByCodeDelta: { 4401: 2, 4404: 9 }, clientAcceptCompletedDelta: 5 }),
+            line(endedAt - 120_000, { resumeConfirmFailuresByCodeDelta: { 'reject-revoked': 1, error: 2 } }),
+            line(endedAt - 90_000, { phoneAttachDeadlinesDelta: 3, phoneAcceptDatabaseErrorsDelta: 1 })
+          ])
+        }
+      }
+    }),
+    { cellId: CELL, endedAt, minutes: 3 }
+  )
+  assert.match(filter, /resource\.type="gce_instance"/)
+  assert.match(filter, new RegExp(`jsonPayload\\.cellId="${CELL}"`))
+  assert.deepEqual(read.series, {
+    credentialRefusals: [2, 0, 0],
+    confirmFailures: [3, 0, 0],
+    completedAccepts: [5, 0, 0],
+    attachDeadlines: [0, 3, 0],
+    acceptDatabaseErrors: [0, 1, 0]
+  })
+  assert.deepEqual(read.unmetered, ['2026-10-19T12:02'])
+  const old = await readCellPhoneMinutes(
+    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([{ timestamp: new Date(endedAt - 1).toISOString(), jsonPayload: {} }]) }) }),
+    { cellId: CELL, endedAt, minutes: 3 }
+  )
+  assert.match(old.error, /no phone counters/)
+})
+
+test('a phone-rule flip back writes phonePath=db alone, and does nothing once the file says db', async () => {
+  const { fetchImpl, calls } = fakeFlipBack({ flags: { admitMode: 'reserve', readinessLocal: true, phonePath: 'memory' } })
+  const result = await flipBack(flipValues({ flip: 'phonePath' }), flipDependencies(fetchImpl, []))
+  assert.equal(result.written, true)
+  const upload = calls.find((call) => call.url.includes('/upload/storage/v1/'))
+  assert.match(upload.body, /"flags":\{"admitMode":"reserve","readinessLocal":true,"phonePath":"db"\}/)
+  assert.ok(!calls.some((call) => call.url.endsWith('/v1/admin/cell-admit-mode') && JSON.parse(call.body).admitMode))
+  const done = await flipBack(flipValues({ flip: 'phonePath' }), flipDependencies(fakeFlipBack().fetchImpl, []))
+  assert.equal(done.alreadyDb, true)
+})
+
+test('workflow: the flip back writes what the watch says tripped, and the whole cell when it says nothing', () => {
+  const workflow = watchWorkflow
+  assert.match(workflow, /flip: \$\{\{ steps\.outcome\.outputs\.flip \}\}/)
+  assert.match(workflow, /FLIP: \$\{\{ needs\.watch\.outputs\.flip \|\| 'admitMode' \}\}/)
+  assert.match(workflow, /--flip "\$\{FLIP\}"/)
+})
+

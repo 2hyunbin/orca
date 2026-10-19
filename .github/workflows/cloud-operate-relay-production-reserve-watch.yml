@@ -25,8 +25,9 @@ on:
         type: string
       flipped-at:
         description: >-
-          When the reserve write applied, ISO with a zone, e.g. 2026-10-14T12:00:00Z. The non-drain
-          503 background is the median of the 10 minutes before it
+          When the reserve (or phonePath=memory) write applied, ISO with a zone, e.g.
+          2026-10-14T12:00:00Z. The non-drain 503 background and the phone rules' background are
+          the 10 minutes before it
         required: false
         default: ''
         type: string
@@ -79,6 +80,8 @@ jobs:
     outputs:
       state: ${{ steps.outcome.outputs.state }}
       verdict: ${{ steps.outcome.outputs.verdict }}
+      # phonePath when a step-6 phone rule tripped; anything else flips the cell back whole.
+      flip: ${{ steps.outcome.outputs.flip }}
     env:
       DURATION_MINUTES: ${{ inputs.duration-minutes }}
       FLIPPED_AT: ${{ inputs.flipped-at }}
@@ -258,6 +261,7 @@ jobs:
     # lease wait can still kill the process before Postgres records db: the file says db, Postgres reserve.
     env:
       VERDICT: ${{ needs.watch.outputs.verdict || format('the watch ended {0} without a verdict', needs.watch.result) }}
+      FLIP: ${{ needs.watch.outputs.flip || 'admitMode' }}
     steps:
       - uses: actions/checkout@v4
         if: ${{ always() }}
@@ -297,7 +301,7 @@ jobs:
             --mode "${MODE}" --cell-id "${CELL_ID}" \
             --cell-origin "https://${CELL_ID#production-gce-}.relay.onorca.dev" \
             --project-id "${GCP_PROJECT_ID}" --director-origin "https://relay.onorca.dev" \
-            --confirmation "${CONFIRMATION}" --verdict "${VERDICT}" \
+            --confirmation "${CONFIRMATION}" --verdict "${VERDICT}" --flip "${FLIP}" \
             | tee "${RUNNER_TEMP}/relay-reserve-flip-back.jsonl"
 
       # The flip-back line is logged only once the write (or its dry-run plan) finished; without
