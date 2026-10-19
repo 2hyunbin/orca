@@ -20,6 +20,7 @@ import type { SleepingAgentSessionRecord } from '../../../../shared/agent-sessio
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
 export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRuntimeWithStopTerminalsForWorktree {
@@ -41,11 +42,14 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
         capturedAt: Date.now()
       }),
     persist: async (worktreeId, capture, stoppedPtyIds) => {
-      try {
-        await this.commitWorkspaceSessionEdit(
+      const commit = (): Promise<void> =>
+        this.commitWorkspaceSessionEdit(
           this.getWorkspaceSessionHostIdForWorktree(worktreeId),
           (session) => applyWorktreeSleepResumeRecords(session, capture, stoppedPtyIds)
         )
+      try {
+        // Switch point: a status accepted before the sleep is saved is written before it, as in the window.
+        await (ORCA_LAYOUT_OWNER_IS_MAIN ? this.inResumeRecordOrder(commit) : commit())
       } catch (error) {
         // Why: the PTYs already stopped; a lost record costs the resume, not the sleep.
         console.error('[runtime] could not record slept agent sessions', { worktreeId, error })
@@ -77,9 +81,19 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
       return
     }
     this.previousHookStatusByPaneKey.set(row.paneKey, status)
-    this.hookStatusResumeWrites = this.hookStatusResumeWrites
-      .then(() => this.writeHookStatusResume(status))
-      .catch((error) => console.warn('[runtime] could not record an agent resume record', error))
+    this.inResumeRecordOrder(() => this.writeHookStatusResume(status)).catch((error) =>
+      console.warn('[runtime] could not record an agent resume record', error)
+    )
+  }
+
+  /** Runs `write` after every resume record write queued before it. */
+  protected inResumeRecordOrder<T>(write: () => Promise<T>): Promise<T> {
+    const written = this.hookStatusResumeWrites.then(write)
+    this.hookStatusResumeWrites = written.then(
+      () => {},
+      () => {}
+    )
+    return written
   }
 
   /** A cleared status leaves the record alone (lost contact is no evidence), as in the window. */
@@ -113,6 +127,7 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
       launchConfigOf: this.paneLaunchConfigOf
     })
     if (command) {
+      // Not this.applyLayoutCommand: this runs inside the resume-record queue, which that would await.
       await applyWindowLayoutCommand(this.store, hostIdsFor, command)
     }
   }

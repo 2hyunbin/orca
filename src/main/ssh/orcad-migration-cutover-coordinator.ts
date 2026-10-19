@@ -11,15 +11,15 @@ import type {
   OrcadMigrationCatalogAbortResult,
   OrcadMigrationCatalogState,
   OrcadMigrationManifest
-} from '../../shared/orcad-migration-manifest'
+} from '../../shared/orcad-migration/orcad-migration-manifest'
 import type {
   OrcadMigrationSnapshotChunkRequest,
   OrcadMigrationSnapshotChunkResult
-} from '../../shared/orcad-migration-scrollback'
+} from '../../shared/orcad-migration/orcad-migration-scrollback'
 import type {
   OrcadMigrationSourceCutover,
   OrcadMigrationSourceCutoverPhase
-} from '../../shared/orcad-migration-source-cutover'
+} from '../../shared/orcad-migration/orcad-migration-source-cutover'
 import { resolveDurableOrcadCatalogMutation } from './orcad-catalog-durable-mutation'
 import { ORCAD_MIGRATION_DESTINATION_UNSUPPORTED } from './orcad-migration-catalog-client'
 import {

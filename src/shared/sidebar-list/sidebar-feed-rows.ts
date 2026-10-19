@@ -8,7 +8,7 @@ import {
 } from '../execution-host'
 import type { ProjectGroup } from '../project-group-types'
 import { getLogicalRepoOrderRankById } from '../project-section-order'
-import type { ProjectGroupingModel } from '../project-section-grouping'
+import type { ProjectSectionModel } from '../project-section-grouping'
 import type { Repo } from '../repo-types'
 import type { ProjectOrderBy } from '../ui-chrome-types'
 import {
@@ -70,6 +70,8 @@ export type SidebarFeedView = {
   /** The host the desktop has focused (its settings' active runtime), where unowned rows land. */
   defaultHostId: ExecutionHostId
   hostLabelOverrides: ReadonlyMap<ExecutionHostId, string>
+  /** The listed host's name for itself when the user has not renamed it. */
+  localHostLabel: string
   /** The desktop window's own saved host order, which it writes; a phone reads the host's. */
   workspaceHostOrder?: readonly ExecutionHostId[]
 }
@@ -78,7 +80,7 @@ export type SidebarFeedView = {
 export type SidebarFeedCatalog = {
   repos: readonly Repo[]
   projectGroups: readonly ProjectGroup[]
-  projectGrouping: ProjectGroupingModel
+  projectGrouping: ProjectSectionModel
 }
 
 export type SidebarFeedRows = {
@@ -276,6 +278,7 @@ export function renderSidebarFeedRows(
     workspaceHostScope: view.workspaceHostScope,
     visibleWorkspaceHostIds: view.visibleWorkspaceHostIds,
     defaultHostId: view.defaultHostId,
+    localHostLabel: view.localHostLabel,
     collapsedHostKeys: collapsed,
     forceCollapseHosts,
     preferProjectGrouping: true

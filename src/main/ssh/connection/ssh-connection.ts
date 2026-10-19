@@ -34,20 +34,22 @@ import {
   RECONNECT_BACKOFF_MS,
   CONNECT_TIMEOUT_MS,
   SSH_CREDENTIAL_TIMEOUT_MS,
+  sleep
+} from './ssh-connection-timing'
+import {
   isTransientError,
   isAuthError,
   isAgentFallbackError,
   isSystemSshFallbackError,
   isGssapiSystemSshFallbackCandidate,
   isPassphraseError,
-  sleep,
-  buildConnectConfig,
-  wrapRemoteCommandForPosixShell,
-  createSshOperationAbortError,
-  type SshExecOptions,
-  type SshConnectionCallbacks,
-  type SshCredentialKind
-} from '../ssh-connection-utils'
+  isDefiniteSystemSshHostFailure,
+  isTransientReconnectError
+} from '../ssh-reconnect-error-classification'
+import { buildConnectConfig } from './ssh-connect-config'
+import { wrapRemoteCommandForPosixShell } from '../ssh-posix-command-wrapper'
+import { createSshOperationAbortError, type SshExecOptions } from './ssh-exec-options'
+import type { SshConnectionCallbacks, SshCredentialKind } from './ssh-connection-callbacks'
 import { collectKeyboardInteractiveResponses } from '../ssh-keyboard-interactive'
 import { resolveEffectiveProxy, spawnProxyCommand } from '../ssh-proxy-command'
 import {
@@ -55,7 +57,11 @@ import {
   DEFAULT_SERVER_HOST_KEY_ALGORITHMS,
   orderServerHostKeyAlgorithms
 } from '../ssh-host-key-verifier'
-import { HostKeyVerificationError, isHostKeyVerificationError } from '../ssh-host-key-decision'
+import {
+  HostKeyVerificationError,
+  hostKeyPolicyForOwner,
+  isHostKeyVerificationError
+} from '../ssh-host-key-decision'
 import {
   resolveWithSshG,
   siteConfigMayRestrictHostKeys,
@@ -78,10 +84,6 @@ import {
   createCancelledConnectAttemptError,
   isCancelledConnectAttemptError
 } from '../ssh-connect-attempt-cancellation'
-import {
-  isDefiniteSystemSshHostFailure,
-  isTransientReconnectError
-} from '../ssh-reconnect-error-classification'
 import { SshReconnectLadder } from '../ssh-reconnect-ladder'
 import { mayUserSshConfigClaimAlias } from '../config/ssh-config-alias-claim'
 import {
@@ -97,7 +99,6 @@ import type { FileUploadSession } from '../../providers/filesystem-provider-cont
 import { openSshSessionChannelWithRetry, waitForSshChannelOpen } from '../ssh-channel-open'
 import { tagSftpHandshakeCorruption } from '../sftp-handshake-corruption'
 import { withTimeout } from '../../../shared/promise-timeout-fallback'
-import { isEphemeralRuntimeSshOwner } from '../../../shared/managed-orcad-ssh-owner'
 import { isSshUserDisconnected } from '../ssh-user-disconnect'
 
 /** The sign-in a connection holds in memory, handed to the connection that replaces it. */
@@ -321,7 +322,10 @@ export class SshConnection {
       throw new Error('Not connected')
     }
     const client = this.client
-    const remoteCommand = options?.wrapCommand === false ? cmd : wrapRemoteCommandForPosixShell(cmd)
+    const remoteCommand =
+      options?.wrapCommand === false
+        ? cmd
+        : wrapRemoteCommandForPosixShell(cmd, { compress: options?.compressCommand === true })
     return openSshSessionChannelWithRetry(() => {
       this.assertNotDisposed()
       return waitForSshChannelOpen(
@@ -1229,7 +1233,7 @@ export class SshConnection {
         hostKeyStoreFile: boundSshHostKeyStoreFile() ?? undefined,
         strictHostKeyChecking: hostKeyResolved?.strictHostKeyChecking ?? 'ask',
         isHostKeyAlias,
-        isEphemeralRuntimeTarget: isEphemeralRuntimeSshOwner(this.target.owner),
+        policy: hostKeyPolicyForOwner(this.target.owner),
         siteConfigSuppressed,
         // A file that EXISTS and will not open is the absence of evidence, not evidence of a new
         // host — the entry that would have said "this key changed" may be in it. An ABSENT file is
