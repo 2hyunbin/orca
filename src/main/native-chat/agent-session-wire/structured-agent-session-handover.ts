@@ -35,8 +35,8 @@ export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverC
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
   deliveryOrder?: StructuredAgentSessionDeliveryOrder
   workChanged?: () => void
-  /** A message the agent took: a chat with no saved model keeps the model it ran. */
-  recordRanModel?: (messageModel: string | undefined) => Promise<void>
+  /** A message the agent took: a chat with no saved model keeps the options it ran. */
+  recordRanOptions?: (message: AgentSessionExecutionOptions | undefined) => Promise<void>
 }
 
 /** A handover whose pending row and abort handle are committed: the provider call runs outside the
@@ -135,7 +135,7 @@ export async function beginSubmissionHandover(
       return async () => {
         await resolveHandover(ctx, clientMessageId, outcome)
         if (outcome?.state === 'accepted' || outcome?.state === 'admitted') {
-          await ctx.recordRanModel?.(submission.options?.model)
+          await ctx.recordRanOptions?.(submission.options)
         }
       }
     }

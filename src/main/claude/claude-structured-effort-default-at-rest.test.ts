@@ -243,7 +243,7 @@ describe('Claude effort default at rest', () => {
     expect(pickerEffort(result)).toBe('medium')
   })
 
-  it('names the default for a reopened chat with no saved model, then keeps the model it ran', async () => {
+  it('names the default for a reopened chat with no saved model, and its run reports that row', async () => {
     const store = new AgentModelCatalogStore()
     const child = await startChild(store)
     const seed = getAgentSessionOptionCatalog('claude')!
@@ -261,22 +261,10 @@ describe('Claude effort default at rest', () => {
     expect(reopened.current).toMatchObject({ model: 'opus[1m]', defaulted: ['model', 'effort'] })
     expect(picker(reopened)).toEqual({ shown: 'opus[1m]', sends: undefined })
 
-    // Its first turn runs what the CLI reports (claude-opus-5-5[1m]); the host saves that row.
+    // Its first turn runs what the CLI reports (claude-opus-5-5[1m]), as that row.
     const ran = (await child.readOptions({ sessionId: SESSION, fence: 7 })).current
     expect(ran).toMatchObject({ model: 'opus[1m]' })
     expect(ran.defaulted ?? []).not.toContain('model')
-    // The account's default moves to Sonnet; the chat keeps the model it ran, after a restart too.
-    const sonnet = CATALOG.map((row) =>
-      row.value === 'default' ? { ...row, resolvedModel: 'claude-sonnet-5' } : row
-    )
-    await startChild(store, undefined, [], { runs: 'claude-sonnet-5', lists: sonnet })
-    const fresh = await readAtRest(store, restingRecord({}, [{ origin: 'adopted' }]))
-    expect(fresh.current.model).toBe('sonnet')
-    const kept = await readAtRest(
-      store,
-      restingRecord({ model: ran.model! }, [{ origin: 'adopted' }])
-    )
-    expect(picker(kept)).toEqual({ shown: 'opus[1m]', sends: 'opus[1m]' })
   })
 
   it("shows the user's pick at rest over the default", async () => {

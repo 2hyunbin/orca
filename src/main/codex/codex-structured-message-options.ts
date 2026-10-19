@@ -15,21 +15,22 @@ export async function resolvedCodexMessageOptions(
     return undefined
   }
   const listing = codexAcquireCatalogListing(session.catalogAccess)
-  const listedDefault = listing?.models.find((entry) => entry.isDefault)
   const priorModel = session.options.get('model')
   const priorEffort = session.options.get('effort')
+  // An unchosen key keeps what the thread runs; another model brings its own default effort.
+  const thread = session.reportedOptions
   const model =
-    choices.model ??
-    listedDefault?.id ??
-    session.nativeDefaults?.model ??
-    (priorModel || priorEffort ? undefined : session.reportedOptions.model)
+    choices.model ?? thread.model ?? listing?.models.find((entry) => entry.isDefault)?.id
   if (!model && (choices.effort || priorModel || priorEffort)) {
     throw new AgentSessionOptionRejectedError(new Error('codex default model is unavailable'))
   }
   const listedModel = listing?.models.find((entry) => entry.id === model)
+  const threadEffort = model === thread.model ? thread.effort : undefined
   const defaultEffort =
-    listedModel?.defaultEffort ??
-    (model === session.nativeDefaults?.model ? session.nativeDefaults?.effort : undefined)
+    threadEffort &&
+    (!listedModel || listedModel.efforts.some((entry) => entry.value === threadEffort))
+      ? threadEffort
+      : listedModel?.defaultEffort
   if (choices.effort === undefined && priorEffort && !defaultEffort) {
     throw new AgentSessionOptionRejectedError(new Error('codex default effort is unavailable'))
   }
@@ -82,12 +83,11 @@ export async function resolvedCodexMessageOptions(
       (choices.serviceTier && choices.serviceTier !== CODEX_DEFAULT_SERVICE_TIER))
   ) {
     await applyCodexStructuredSessionOption(selected, 'model', model)
-    if (!defaultEffort && choices.effort === undefined) {
+    if (choices.effort === undefined && defaultEffort) {
+      await applyCodexStructuredSessionOption(selected, 'effort', defaultEffort)
+    } else if (choices.effort === undefined) {
       selected.options.delete('effort')
     }
-  }
-  if (choices.effort === undefined && defaultEffort && (priorEffort || choices.model)) {
-    await applyCodexStructuredSessionOption(selected, 'effort', defaultEffort)
   }
   for (const key of ['effort', 'personality', 'fastMode', 'serviceTier'] as const) {
     const value = choices[key]

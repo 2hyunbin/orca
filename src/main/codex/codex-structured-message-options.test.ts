@@ -112,7 +112,12 @@ describe('Codex captured message choices', () => {
         : { config: { personality: 'pragmatic', service_tier: 'flex' } }
     )
     const session = optionSession(request)
-    session.reportedOptions = { model: 'model-a', effort: 'high' }
+    session.reportedOptions = {
+      model: 'model-a',
+      effort: 'high',
+      serviceTier: 'flex',
+      serviceTierKnown: true
+    }
     session.options = new Map([
       ['model', 'model-a'],
       ['effort', 'high'],
@@ -132,7 +137,8 @@ describe('Codex captured message choices', () => {
         { model: 'model-a', effort: 'high', personality: 'friendly', serviceTier: 'priority' }
       ],
       ['second', {}],
-      ['third', { model: 'model-a' }]
+      ['third', { model: 'model-a' }],
+      ['fourth', { effort: 'low' }]
     ] as const) {
       const turnOptions = await resolvedCodexMessageOptions(session, choices)
       await startCodexTurn(session, { clientMessageId: id, body, turnOptions })
@@ -142,11 +148,14 @@ describe('Codex captured message choices', () => {
       request.mock.calls.filter(([method]) => method === 'turn/start').map(([, params]) => params)
     ).toMatchObject([
       { model: 'model-a', effort: 'high', personality: 'friendly', serviceTier: 'priority' },
-      { model: 'model-b', effort: 'medium', personality: 'pragmatic', serviceTier: 'flex' },
+      // Unchosen keys keep the thread's own model and effort, not the listing's defaults.
+      { model: 'model-a', effort: 'high', personality: 'pragmatic', serviceTier: 'flex' },
+      { model: 'model-a', effort: 'high' },
       { model: 'model-a', effort: 'low' }
     ])
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       'config/read',
+      'turn/start',
       'turn/start',
       'turn/start',
       'turn/start'
@@ -211,6 +220,7 @@ describe('Codex captured message choices', () => {
   it('refuses a default reset with no trustworthy default before prompt input', async () => {
     const request = vi.fn(async () => ({ turn: { id: 'unexpected' } }))
     const session = optionSession(request)
+    session.reportedOptions = {}
     session.options.set('model', 'old-override')
     session.options.set('effort', 'high')
     await expect(resolvedCodexMessageOptions(session, {})).rejects.toThrow(

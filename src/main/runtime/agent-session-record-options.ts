@@ -19,15 +19,23 @@ export function replaceAgentSessionRecordOptions(
     : { ...record, permissionMode: replacement.permissionMode, updatedAt: replacement.now }
 }
 
-/** A model a turn ran, recorded as the chat's own only while it has none: never over a pick, even
- *  one made since, and no other option moves. */
-export type AgentSessionRanModel = { sessionId: string; fence: number; model: string; now: number }
+/** The options a turn ran, recorded only while the chat has no model: each one only where the chat
+ *  has none, so a pick, even one made since, always wins. */
+export type AgentSessionRanOptions = {
+  sessionId: string
+  fence: number
+  options: Readonly<Record<string, string>>
+  now: number
+}
 
-export function recordAgentSessionRanModel(
+export function recordAgentSessionRanOptions(
   record: AgentSessionRecord,
-  { model, ...at }: AgentSessionRanModel
+  { options, ...at }: AgentSessionRanOptions
 ): AgentSessionRecord {
   return record.options?.model !== undefined
     ? record
-    : replaceAgentSessionRecordOptions(record, { ...at, options: { ...record.options, model } })
+    : replaceAgentSessionRecordOptions(record, {
+        ...at,
+        options: { ...options, ...record.options }
+      })
 }

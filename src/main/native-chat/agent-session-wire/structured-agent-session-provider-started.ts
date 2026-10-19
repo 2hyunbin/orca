@@ -17,7 +17,7 @@ import {
   saveStructuredAgentSessionStartReadbackListing
 } from './structured-agent-session-start-listing'
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
-import { noteStructuredAgentSessionReportedModel } from './structured-agent-session-ran-model'
+import { noteStructuredAgentSessionReportedOptions } from './structured-agent-session-ran-options'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import { recordAgentSessionProviderHandle } from '../../runtime/agent-session-provider-handle-transition'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -88,7 +88,7 @@ export async function settleStructuredAgentSessionProviderStarted(
       return null
     }
     context.runtimeState.startupAttempts.ready(event.sessionId, child)
-    await noteStructuredAgentSessionReportedModel(
+    await noteStructuredAgentSessionReportedOptions(
       context,
       event.sessionId,
       child.fence,
@@ -242,7 +242,7 @@ export async function settleStructuredAgentSessionOptionsReported(
       return
     }
   }
-  await noteStructuredAgentSessionReportedModel(
+  await noteStructuredAgentSessionReportedOptions(
     context,
     event.sessionId,
     event.fence,
