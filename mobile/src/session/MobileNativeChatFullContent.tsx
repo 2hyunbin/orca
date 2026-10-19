@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from 'react'
-import { Pressable, ScrollView, Text, View, type TextStyle } from 'react-native'
+import { Pressable, Text, View, type TextStyle } from 'react-native'
 import {
   truncateToolDetail,
   MAX_TOOL_DETAIL_LENGTH
@@ -15,6 +15,7 @@ import type {
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
 import { styles } from './mobile-native-chat-message-styles'
 import { toolStyles } from './mobile-native-chat-tool-styles'
+import { MobileNativeChatOwnedScrollView } from './MobileNativeChatOwnedScrollView'
 import {
   MobileNativeChatItemSourceContext,
   readMobileNativeChatItem
@@ -59,10 +60,14 @@ function outputOf(body: AgentJournalItemBody | null): AgentJournalBoundedPayload
 /** A tool's output in an opened line: its head, and the whole of it on request. */
 export function MobileNativeChatToolOutput({
   body,
-  type
+  type,
+  rootIdentity,
+  positionKey
 }: {
   body: NativeChatToolResultBlock
   type: TextStyle
+  rootIdentity: string
+  positionKey: string
 }): React.JSX.Element {
   const source = useContext(MobileNativeChatItemSourceContext)
   const { output, isError, fullOutputItemId } = body
@@ -112,7 +117,9 @@ export function MobileNativeChatToolOutput({
   }
   return (
     <View>
-      <ScrollView
+      <MobileNativeChatOwnedScrollView
+        rootIdentity={rootIdentity}
+        positionKey={positionKey}
         style={[toolStyles.codeBox, toolStyles.codeScroll]}
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
@@ -123,7 +130,7 @@ export function MobileNativeChatToolOutput({
         >
           {full ? full.head : expanded ? output : truncateToolDetail(output)}
         </Text>
-      </ScrollView>
+      </MobileNativeChatOwnedScrollView>
       {full?.truncated ? (
         <Text style={styles.showFullText}>
           Showing {new TextEncoder().encode(full.head).length} of {full.byteLength} bytes.

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { MobileNativeChatView, type MobileNativeChatInputLockReason } from './MobileNativeChatView'
 import { foldMobileNativeChatMessages } from './mobile-native-chat-render-data'
+import { useMobileNativeChatFoldReuse } from './mobile-native-chat-fold-reuse'
 import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
 import type { MobileNativeChatStructuredComposer } from './MobileNativeChatComposer'
@@ -75,9 +76,12 @@ export function MobileNativeChatOverlay({
     session.messages,
     controller.nativeChatItemSource
   )
-  const folded = useMemo(
-    () => foldMobileNativeChatMessages(fullContent.messages, agent),
-    [fullContent.messages, agent]
+  const folded = useMobileNativeChatFoldReuse(
+    useMemo(
+      () => foldMobileNativeChatMessages(fullContent.messages, agent),
+      [fullContent.messages, agent]
+    ),
+    sendSurfaceId
   )
   const streaming = useMobileNativeChatStreamingBubble(
     folded,
@@ -154,7 +158,7 @@ export function MobileNativeChatOverlay({
                 composerTray={composerTray}
                 onOpenFile={onOpenFile}
                 hasMore={session.hasMore}
-                loadingEarlier={session.loadingEarlier}
+                olderPages={session.olderPages}
                 onLoadEarlier={session.loadEarlier}
                 onSend={images.sendNativeChat}
                 sendSurfaceId={sendSurfaceId}
