@@ -189,6 +189,16 @@ function retryLine(): SshHostServerStatusLine {
   }
 }
 
+function contactLostLine(): SshHostServerStatusLine {
+  return {
+    tone: 'warning',
+    text: translate(
+      'auto.components.settings.sshHostServer.setupContactLost',
+      'Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
+    )
+  }
+}
+
 function heldMoveLine(): SshHostServerStatusLine {
   return {
     tone: 'warning',
@@ -295,6 +305,9 @@ function unservedLine(
       }
     case 'deferred':
     case 'failed':
-      return { ...(status.held ? heldMoveLine() : retryLine()), ...withDetail(status.detail) }
+      return {
+        ...(status.held ? heldMoveLine() : status.contactLost ? contactLostLine() : retryLine()),
+        ...withDetail(status.detail)
+      }
   }
 }
