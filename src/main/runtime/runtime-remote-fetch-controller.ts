@@ -54,9 +54,9 @@ export class RuntimeRemoteFetchController {
   }
 
   /**
-   * Orca strips git's auto-maintenance off these fetches, so every one of them
-   * adds to a loose-ref backlog nothing else will ever pack. Arm the idle sweep
-   * that pays it back; each fetch pushes the attempt a further quiet period out.
+   * Exact-base refreshes skip git's auto-maintenance (full fetches keep it as
+   * git's housekeeping outlet), so their loose refs are never packed. Arm the idle
+   * sweep that pays it back; each fetch pushes the attempt a further quiet period out.
    */
   private armRefMaintenance(repoPath: string, gitOptions: GitOptions): void {
     void this.getCanonicalRepoKey(repoPath, gitOptions)

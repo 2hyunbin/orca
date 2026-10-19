@@ -28,6 +28,7 @@ vi.mock('./github-api-repository', async (importOriginal) =>
   )
 )
 
+import { GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS } from '../../shared/git-fetch-auto-maintenance'
 import { getPRForBranch } from './client/lookup/get-pr-for-branch'
 import { resetPRForBranchMocks } from './client-test-harness'
 
@@ -61,6 +62,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -95,6 +97,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -117,12 +120,19 @@ describe('getPRForBranch', () => {
       })
     )
     expect(gitExecFileAsyncMock).toHaveBeenNthCalledWith(
-      1,
-      ['fetch', '--quiet', 'origin', 'main'],
+      2,
+      [
+        ...GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS,
+        'fetch',
+        '--no-tags',
+        'origin',
+        '+refs/heads/main:refs/remotes/origin/main'
+      ],
       {
         cwd: '/repo-root',
-        timeout: 10_000,
-        wslDistro: 'Ubuntu'
+        wslDistro: 'Ubuntu',
+        useConfiguredSshCommandForNetwork: true,
+        timeout: 60_000
       }
     )
     expect(gitExecFileAsyncMock).toHaveBeenLastCalledWith(
@@ -168,6 +178,7 @@ describe('getPRForBranch', () => {
         stdout: JSON.stringify({ data: { repository: { mergeQueue: null } } })
       })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -223,6 +234,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -254,6 +266,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -334,6 +347,7 @@ describe('getPRForBranch', () => {
       .mockResolvedValueOnce({ stdout: JSON.stringify([pushedBranchLookup]) })
       .mockResolvedValueOnce({ stdout: JSON.stringify(pushedExactLookup) })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -377,6 +391,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -387,7 +402,7 @@ describe('getPRForBranch', () => {
 
     const pr = await getPRForBranch('/repo-root', 'feature/test')
 
-    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(5)
+    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(6)
     expect(gitExecFileAsyncMock).toHaveBeenLastCalledWith(
       [
         'merge-tree',
@@ -424,6 +439,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockResolvedValueOnce({ stdout: '' })
       .mockResolvedValueOnce({ stdout: 'latest-base-oid\n' })
       .mockResolvedValueOnce({ stdout: 'merge-base-oid\n' })
@@ -460,6 +476,7 @@ describe('getPRForBranch', () => {
       ])
     })
     gitExecFileAsyncMock
+      .mockResolvedValueOnce({ stdout: '/repo-root/.git\n' })
       .mockRejectedValueOnce(new Error('fetch failed'))
       .mockRejectedValueOnce(new Error('missing refs/remotes/origin/main'))
       .mockRejectedValueOnce(new Error('missing origin/main'))

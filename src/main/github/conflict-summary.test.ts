@@ -38,7 +38,8 @@ import { __resetPRConflictSummaryCachesForTests, getPRConflictSummary } from './
 type GitResult = { stdout: string }
 type GitHandler = (argv: string[]) => Promise<GitResult>
 
-// Why its own key: once merge-tree is known to work, its quarantine reads the common dir per derivation.
+// Why its own key: the fetch controller names the repo by its common dir once, and once
+// merge-tree is known to work its quarantine reads it per derivation.
 const COMMON_DIR_COMMAND = 'rev-parse --git-common-dir'
 
 const defaultHandlers: Record<string, GitHandler> = {
@@ -51,7 +52,20 @@ const defaultHandlers: Record<string, GitHandler> = {
 }
 
 function commandKey(argv: string[]): string {
-  return argv[0] === 'rev-parse' && argv.includes('--git-common-dir') ? COMMON_DIR_COMMAND : argv[0]
+  // Why: the base refresh puts `-c key=value` pairs before the subcommand.
+  let index = 0
+  while (argv[index] === '-c') {
+    index += 2
+  }
+  const subcommand = argv[index]
+  return subcommand === 'rev-parse' && argv.includes('--git-common-dir')
+    ? COMMON_DIR_COMMAND
+    : subcommand
+}
+
+// Why: the controller resolves the repo key before it spawns the fetch.
+async function untilFetchStarted(): Promise<void> {
+  await vi.waitFor(() => expect(spawnCount('fetch')).toBe(1))
 }
 
 function mockGitDispatch(overrides: Record<string, GitHandler> = {}): void {
@@ -109,13 +123,13 @@ describe('getPRConflictSummary caching', () => {
     const first = await deriveSummary()
     expect(first).toEqual(expectedSummary)
     expect(spawnCount('fetch')).toBe(1)
-    expect(spawnCount()).toBe(5)
+    expect(spawnCount()).toBe(6)
 
     const second = await deriveSummary()
     const third = await deriveSummary()
     expect(second).toEqual(expectedSummary)
     expect(third).toEqual(expectedSummary)
-    expect(spawnCount()).toBe(5)
+    expect(spawnCount()).toBe(6)
   })
 
   it('re-derives when headRefOid changes without re-fetching inside the throttle window', async () => {
@@ -177,12 +191,13 @@ describe('getPRConflictSummary caching', () => {
 
     const firstCall = deriveSummary()
     const secondCall = deriveSummary()
+    await untilFetchStarted()
     releaseFetch?.({ stdout: '' })
     const [first, second] = await Promise.all([firstCall, secondCall])
 
     expect(first).toEqual(expectedSummary)
     expect(second).toEqual(expectedSummary)
-    expect(spawnCount()).toBe(5)
+    expect(spawnCount()).toBe(6)
   })
 
   it('dedupes overlapping derivations after resolving the same live base tip', async () => {
@@ -208,6 +223,7 @@ describe('getPRConflictSummary caching', () => {
       'head-oid-1',
       {}
     )
+    await untilFetchStarted()
     releaseFetch?.({ stdout: '' })
     const [backgroundSummary, manualSummary] = await Promise.all([backgroundRefresh, manualRefresh])
 
@@ -231,6 +247,7 @@ describe('getPRConflictSummary caching', () => {
 
     const prA = deriveSummary('head-oid-a')
     const prB = deriveSummary('head-oid-b')
+    await untilFetchStarted()
     releaseFetch?.({ stdout: '' })
     const [summaryA, summaryB] = await Promise.all([prA, prB])
 
@@ -261,6 +278,7 @@ describe('getPRConflictSummary caching', () => {
 
     const prA = getPRConflictSummary('/repo-root', 'main', 'aaaa1111-base', 'head-oid-a', {})
     const prB = getPRConflictSummary('/repo-root', 'main', 'bbbb2222-base', 'head-oid-b', {})
+    await untilFetchStarted()
     releaseFetch?.({ stdout: '' })
     const [summaryA, summaryB] = await Promise.all([prA, prB])
 
@@ -295,7 +313,17 @@ describe('getPRConflictSummary caching', () => {
     const repeat = await deriveSummary()
     expect(repeat).toEqual(expectedSummary)
     expect(spawnCount('fetch')).toBe(1)
-    expect(spawnCount()).toBe(5)
+    expect(spawnCount()).toBe(6)
+  })
+
+  it('stops waiting on a hung base fetch after 10 s and uses the local tracking ref', async () => {
+    mockGitDispatch({ fetch: () => new Promise<GitResult>(() => {}) })
+
+    const summary = deriveSummary()
+    await untilFetchStarted()
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    await expect(summary).resolves.toEqual(expectedSummary)
   })
 
   it("falls back to GitHub's baseRefOid when fetch and remote-tracking refs are unavailable", async () => {
@@ -324,7 +352,8 @@ describe('getPRConflictSummary caching', () => {
     expect(
       gitExecFileAsyncMock.mock.calls.filter(
         ([argv, options]) =>
-          argv[0] === 'fetch' && (options as { wslDistro?: string })?.wslDistro === 'Ubuntu'
+          commandKey(argv) === 'fetch' &&
+          (options as { wslDistro?: string })?.wslDistro === 'Ubuntu'
       )
     ).toHaveLength(1)
   })
@@ -339,8 +368,8 @@ describe('getPRConflictSummary caching', () => {
       admissionTier: 'background'
     })
 
-    expect(spawnCount(COMMON_DIR_COMMAND)).toBe(1)
-    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(6)
+    expect(spawnCount(COMMON_DIR_COMMAND)).toBe(2)
+    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(7)
     for (const [, options] of gitExecFileAsyncMock.mock.calls) {
       expect(options).toEqual(
         expect.objectContaining({
@@ -414,7 +443,8 @@ describe('getPRConflictSummary caching', () => {
     await expect(deriveSummary('head-oid-2')).resolves.toBeUndefined()
 
     expect(spawnCount('merge-tree')).toBe(2)
-    expect(spawnCount(COMMON_DIR_COMMAND)).toBe(0)
+    // Only the fetch controller's repo key; the quarantine never read it.
+    expect(spawnCount(COMMON_DIR_COMMAND)).toBe(1)
     expect(scratchFolderPrefixes).toEqual([])
     expect(gitExecFileAsyncMock.mock.calls.filter(([, options]) => options?.env)).toEqual([])
   })

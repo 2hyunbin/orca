@@ -24,6 +24,7 @@ vi.mock('../git/runner', async (importOriginal) => {
 // normally — none of them trigger IO until a runtime method is called.
 import { OrcaRuntimeService } from './orca-runtime'
 import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
+import { getPRConflictSummary } from '../github/conflict-summary'
 
 function isFetchArgs(argv: unknown): argv is string[] {
   if (!Array.isArray(argv)) {
@@ -363,6 +364,42 @@ describe('OrcaRuntimeService.fetchRemoteWithCache', () => {
     await Promise.all([first, second])
     await runtime.getOrStartRemoteTrackingBaseRefresh('/repo/g', base)
 
+    expect(fetchCallCount()).toBe(1)
+  })
+
+  it('shares one base fetch between a PR conflict preview and a create refresh', async () => {
+    let resolveFetch!: () => void
+    const pending = new Promise<{ stdout: string; stderr: string }>((resolve) => {
+      resolveFetch = () => resolve({ stdout: '', stderr: '' })
+    })
+    const outputs: Record<string, string> = {
+      'rev-parse': 'live-base-tip\n',
+      'merge-base': 'merge-base-oid\n',
+      'rev-list': '2\n',
+      'merge-tree': 'tree-oid\u0000src/conflict.ts\u0000'
+    }
+    gitExecFileAsyncMock.mockImplementation((argv: string[]) =>
+      isFetchArgs(argv) ? pending : Promise.resolve({ stdout: outputs[argv[0]] ?? '', stderr: '' })
+    )
+    const runtime = new OrcaRuntimeService(null)
+    const base = {
+      remote: 'origin',
+      branch: 'main',
+      ref: 'refs/remotes/origin/main',
+      base: 'origin/main'
+    }
+
+    const create = runtime.getOrStartRemoteTrackingBaseRefresh('/repo/pr', base)
+    const preview = getPRConflictSummary('/repo/pr', 'main', 'github-base-oid', 'head-oid')
+    await vi.waitFor(() => expect(fetchCallCount()).toBe(1))
+    expect(gitExecFileAsyncMock.mock.calls.some(([argv]) => argv[0] === 'merge-base')).toBe(false)
+    resolveFetch()
+
+    await expect(create).resolves.toEqual({ ok: true })
+    await expect(preview).resolves.toMatchObject({
+      baseCommit: 'live-ba',
+      files: ['src/conflict.ts']
+    })
     expect(fetchCallCount()).toBe(1)
   })
 
