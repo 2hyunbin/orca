@@ -23,6 +23,10 @@ const mockWaitForAgentReady = vi.fn()
 
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 
+const initialProjects: Pick<Project, 'id' | 'localWindowsRuntimePreference'>[] = [
+  { id: 'repo-1', localWindowsRuntimePreference: { kind: 'inherit-global' } }
+]
+
 const store = {
   activeRepoId: 'repo-1',
   activeWorktreeId: 'wt-1',
@@ -43,12 +47,7 @@ const store = {
       { model?: string; valuesByModel?: Record<string, Record<string, string | boolean>> }
     >
   },
-  projects: [
-    {
-      id: 'repo-1',
-      localWindowsRuntimePreference: { kind: 'inherit-global' as const }
-    }
-  ] as Pick<Project, 'id' | 'localWindowsRuntimePreference'>[],
+  projects: initialProjects,
   repos: [{ id: 'repo-1', connectionId: null as string | null, path: '/repo' }],
   sshConnectionStates: new Map([
     ['ssh-a', { status: 'connected', remotePlatform: 'linux' }],
