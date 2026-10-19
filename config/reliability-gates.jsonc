@@ -1296,21 +1296,9 @@
         "session diagnostic inventory",
         "scrollback settings draft"
       ],
-      "platforms": [
-        "macos",
-        "linux",
-        "windows"
-      ],
-      "providers": [
-        "local",
-        "daemon",
-        "ssh",
-        "wsl",
-        "remote-runtime"
-      ],
-      "coveredPlatforms": [
-        "macos"
-      ],
+      "platforms": ["macos", "linux", "windows"],
+      "providers": ["local", "daemon", "ssh", "wsl", "remote-runtime"],
+      "coveredPlatforms": ["macos"],
       "coveredProviders": [],
       "coverageNotes": "Actual TerminalPane, ManageSessionsSection, health listener and scrollback form with mocked store/provider and display/action boundaries. Unix/Windows and Mac-client/Windows-host flags simulated; no physical provider, process-stop or native input coverage.",
       "motivatingLinks": [
