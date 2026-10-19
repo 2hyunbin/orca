@@ -791,9 +791,11 @@ describe('orca cli worktree awareness', () => {
   })
 
   it.each([
-    { flags: [], force: false },
-    { flags: ['--force'], force: true }
-  ])('deletes project host setup metadata with force=$force', async ({ flags, force }) => {
+    { flags: [], force: false, hostId: undefined },
+    { flags: ['--force'], force: true, hostId: undefined },
+    // Why: a project on two hosts has two setups with one id; --host names the twin.
+    { flags: ['--host', 'local'], force: false, hostId: 'local' }
+  ])('deletes project host setup metadata with $flags', async ({ flags, force, hostId }) => {
     queueFixtures(
       callMock,
       okFixture('req_project_setup_delete', {
@@ -827,6 +829,7 @@ describe('orca cli worktree awareness', () => {
 
     expect(callMock).toHaveBeenCalledWith('projectHostSetup.delete', {
       setupId: 'setup-gpu',
+      hostId,
       force
     })
   })

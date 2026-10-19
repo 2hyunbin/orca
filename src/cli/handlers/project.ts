@@ -92,6 +92,14 @@ async function getRequiredHostId(
   return resolved.id
 }
 
+// Why: a project on two hosts has two setups with the same id; `--host` picks one.
+async function getOptionalSetupHostId(
+  flags: Map<string, string | boolean>,
+  client: HandlerContext['client']
+): Promise<ExecutionHostId | undefined> {
+  return flags.has('host') ? await getResolvedHostId(flags, client) : undefined
+}
+
 function getOptionalRepoKind(flags: Map<string, string | boolean>): RepoKind | undefined {
   const kind = getOptionalStringFlag(flags, 'kind')
   if (kind === undefined) {
@@ -199,6 +207,7 @@ export const PROJECT_HANDLERS: Record<string, CommandHandler> = {
     const path = getOptionalStringFlag(flags, 'path')
     const args: ProjectHostSetupUpdateArgs = {
       setupId: getRequiredStringFlag(flags, 'setup'),
+      hostId: await getOptionalSetupHostId(flags, client),
       updates: {
         displayName: getOptionalStringFlag(flags, 'display-name'),
         path:
@@ -225,6 +234,7 @@ export const PROJECT_HANDLERS: Record<string, CommandHandler> = {
       'projectHostSetup.delete',
       {
         setupId: getRequiredStringFlag(flags, 'setup'),
+        hostId: await getOptionalSetupHostId(flags, client),
         force: flags.get('force') === true
       }
     )

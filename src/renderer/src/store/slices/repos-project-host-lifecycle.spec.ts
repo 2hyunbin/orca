@@ -143,6 +143,7 @@ export function registerReposProjectHostLifecycleTests(): void {
         method: 'projectHostSetup.update',
         params: {
           setupId: runtimeSetup.id,
+          hostId: 'runtime:env-1',
           updates: { displayName: 'GPU VM renamed' }
         },
         timeoutMs: 15_000
@@ -176,12 +177,12 @@ export function registerReposProjectHostLifecycleTests(): void {
       expect(runtimeEnvironmentCall).toHaveBeenCalledWith({
         selector: 'env-1',
         method: 'projectHostSetup.delete',
-        params: { setupId: runtimeSetup.id },
+        params: { setupId: runtimeSetup.id, hostId: 'runtime:env-1' },
         timeoutMs: 15_000
       })
     })
 
-    it('routes duplicate setup IDs through the first row and replaces every collision', async () => {
+    it('routes a duplicate setup ID by its host and replaces only that twin', async () => {
       const localSetup: ProjectHostSetup = {
         ...runtimeSetup,
         hostId: 'local',
@@ -205,14 +206,14 @@ export function registerReposProjectHostLifecycleTests(): void {
 
       expect(projectsUpdateHostSetup).toHaveBeenCalledWith({
         setupId: localSetup.id,
+        hostId: 'local',
         updates: { displayName: 'Local renamed' }
       })
       expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
-      // Current contract: setup mutations are keyed by bare setup ID after the first row selects routing.
-      expect(store.getState().projectHostSetups).toEqual([updatedLocalSetup, updatedLocalSetup])
+      expect(store.getState().projectHostSetups).toEqual([updatedLocalSetup, runtimeSetup])
     })
 
-    it('routes duplicate setup-ID deletion through the first row and removes every collision', async () => {
+    it('routes a duplicate setup-ID deletion by its host and removes only that twin', async () => {
       const localSetup: ProjectHostSetup = {
         ...runtimeSetup,
         hostId: 'local',
@@ -228,10 +229,50 @@ export function registerReposProjectHostLifecycleTests(): void {
 
       await store.getState().deleteProjectHostSetup({ setupId: localSetup.id })
 
-      expect(projectsDeleteHostSetup).toHaveBeenCalledWith({ setupId: localSetup.id })
+      expect(projectsDeleteHostSetup).toHaveBeenCalledWith({
+        setupId: localSetup.id,
+        hostId: 'local'
+      })
       expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
-      // Current contract: delete filters the full catalog by bare setup ID.
-      expect(store.getState().projectHostSetups).toEqual([])
+      expect(store.getState().projectHostSetups).toEqual([runtimeSetup])
+    })
+
+    it("names a paired server's SSH twin by its execution host and removes only that twin", async () => {
+      // Both twins carry the server's runtime hostId; only executionHostId tells them apart.
+      const serverLocal: ProjectHostSetup = {
+        ...runtimeSetup,
+        executionHostId: 'runtime:env-1',
+        runtimeOwnerEnvironmentId: 'env-1',
+        connectionId: null
+      }
+      const serverSsh: ProjectHostSetup = {
+        ...serverLocal,
+        executionHostId: 'ssh:box'
+      }
+      runtimeEnvironmentCall.mockResolvedValue({
+        id: 'rpc-delete-twin',
+        ok: true,
+        result: {
+          result: { project, setup: { ...runtimeSetup, hostId: 'ssh:box' } }
+        },
+        _meta: { runtimeId: 'runtime-remote' }
+      })
+      const store = createTestStore()
+      store.setState({
+        projects: [project],
+        projectHostSetups: [serverLocal, serverSsh],
+        settings: { activeRuntimeEnvironmentId: null } as never
+      })
+
+      await store.getState().deleteProjectHostSetup({ setupId: serverSsh.id, hostId: 'ssh:box' })
+
+      expect(runtimeEnvironmentCall).toHaveBeenCalledWith({
+        selector: 'env-1',
+        method: 'projectHostSetup.delete',
+        params: { setupId: serverSsh.id, hostId: 'ssh:box' },
+        timeoutMs: 15_000
+      })
+      expect(store.getState().projectHostSetups).toEqual([serverLocal])
     })
 
     it('preserves runtime-fetched setup-only states during repo hydration', async () => {

@@ -19,6 +19,10 @@ import {
 } from '../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { adoptEndpointProjectCatalog } from '../../../../shared/endpoint-catalog-adoption'
+import {
+  getProjectHostSetupExecutionHostId,
+  type ProjectHostSetupTarget
+} from '../../../../shared/project-host-setup-target'
 
 export function getProjectSetupRuntimeTarget(
   hostId: ProjectHostSetupExistingFolderArgs['hostId']
@@ -93,4 +97,43 @@ export async function assertProjectHostSetupMutationRuntimeCapabilities(
     'The selected Orca server does not support explicit workspace run hosts yet. Update Orca on the server and try again.',
     15_000
   )
+}
+
+// Why: twins share `id`; a paired server's setups also share its `runtime:` hostId.
+export function isSameProjectHostSetup(a: ProjectHostSetup, b: ProjectHostSetup): boolean {
+  return (
+    a.id === b.id &&
+    a.hostId === b.hostId &&
+    getProjectHostSetupExecutionHostId(a) === getProjectHostSetupExecutionHostId(b)
+  )
+}
+
+export function upsertProjectHostSetup(
+  setups: readonly ProjectHostSetup[],
+  setup: ProjectHostSetup
+): ProjectHostSetup[] {
+  return setups.some((entry) => isSameProjectHostSetup(entry, setup))
+    ? setups.map((entry) => (isSameProjectHostSetup(entry, setup) ? setup : entry))
+    : [...setups, setup]
+}
+
+/**
+ * Where a setup edit or removal goes, with the host that runs the setup named on the wire.
+ * A caller's `hostId` is that execution host: the only field telling a server's twins apart.
+ */
+export function routeProjectHostSetupMutation<T extends ProjectHostSetupTarget>(
+  setups: readonly ProjectHostSetup[],
+  args: T
+): { target: RuntimeClientTarget; hostArgs: T } {
+  const setup = setups.find(
+    (entry) =>
+      entry.id === args.setupId &&
+      (args.hostId === undefined || getProjectHostSetupExecutionHostId(entry) === args.hostId)
+  )
+  return setup
+    ? {
+        target: getProjectSetupRuntimeTarget(setup.hostId),
+        hostArgs: { ...args, hostId: getProjectHostSetupExecutionHostId(setup) }
+      }
+    : { target: { kind: 'local' }, hostArgs: args }
 }

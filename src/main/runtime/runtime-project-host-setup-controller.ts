@@ -40,6 +40,10 @@ import {
   assertWslMoveHostSetupWritable,
   assertWslMoveReposWritable
 } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import {
+  findProjectHostSetup,
+  type ProjectHostSetupTarget
+} from '../../shared/project-host-setup-target'
 
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
@@ -156,7 +160,7 @@ export class RuntimeProjectHostSetupController {
     if (!store || !updateProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
-    assertWslMoveHostSetupIdWritable(store, args.setupId)
+    assertWslMoveHostSetupIdWritable(store, args)
     return this.finishSetupUpdate(store, updateProjectHostSetup, args)
   }
 
@@ -168,7 +172,7 @@ export class RuntimeProjectHostSetupController {
     const result = await updateProjectHostSetupWithProvenKind(
       store,
       (setupArgs) => {
-        assertWslMoveHostSetupIdWritable(store, setupArgs.setupId)
+        assertWslMoveHostSetupIdWritable(store, setupArgs)
         return updateProjectHostSetup(setupArgs)
       },
       args,
@@ -194,9 +198,9 @@ export class RuntimeProjectHostSetupController {
     if (!store?.deleteProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
-    assertWslMoveHostSetupIdWritable(store, args.setupId)
+    assertWslMoveHostSetupIdWritable(store, args)
     if (args.force === false) {
-      this.assertSetupRemovalIsUnused(store, args.setupId)
+      this.assertSetupRemovalIsUnused(store, args)
     }
     const result = store.deleteProjectHostSetup(args)
     if (!result) {
@@ -217,8 +221,8 @@ export class RuntimeProjectHostSetupController {
   }
 
   // Why only for an explicit `force: false`: older clients omit it and must keep their delete.
-  private assertSetupRemovalIsUnused(store: RuntimeStore, setupId: string): void {
-    const setup = this.listSetups().find((entry) => entry.id === setupId)
+  private assertSetupRemovalIsUnused(store: RuntimeStore, target: ProjectHostSetupTarget): void {
+    const setup = findProjectHostSetup(this.listSetups(), target)
     // Same exact-host match the store's delete uses, so a sibling host's row is never measured.
     const repo = setup?.repoId
       ? this.deps
