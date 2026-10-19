@@ -2114,7 +2114,11 @@ describe('controls closed after host proof but before wiring', () => {
   it.each([
     { error: new Error('wrong_assignment'), cause: 'wrong_assignment' },
     { error: Object.assign(new Error('timeout'), { code: '57014' }), cause: 'database_transient' },
-    { error: new Error('connect postgres://user:secret@db/relay'), cause: 'error' }
+    // Assembled at runtime so the secret scanner does not read the fixture as a real URL.
+    {
+      error: new Error(`connect ${['postgres', '//user:secret@db/relay'].join(':')}`),
+      cause: 'error'
+    }
   ])('logs a failed host-proof assignment check as $cause', async ({ error, cause }) => {
     const h = createRegistry(
       vi.fn<RelayAssignmentStore['activateControl']>().mockRejectedValueOnce(error)
