@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
-import type { OrcadMigrationManifest } from '../../shared/orcad-migration-manifest'
+import type { OrcadMigrationManifest } from '../../shared/orcad-migration/orcad-migration-manifest'
 import {
   addManagedOrcadEnvironment,
   removeManagedOrcadEnvironment

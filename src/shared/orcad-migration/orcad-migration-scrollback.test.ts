@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getDefaultWorkspaceSession } from './constants'
+import { getDefaultWorkspaceSession } from '../constants'
 import {
   assertOrcadMigrationScrollbackReferences,
   MAX_ORCAD_MIGRATION_SCROLLBACK_SNAPSHOTS,
@@ -9,7 +9,7 @@ import {
   type OrcadMigrationSnapshotChunkRequest,
   type OrcadMigrationTerminalScrollbackSnapshot
 } from './orcad-migration-scrollback'
-import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from './terminal-scrollback-limits'
+import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../terminal-scrollback-limits'
 
 const DIGEST = 'a'.repeat(64)
 

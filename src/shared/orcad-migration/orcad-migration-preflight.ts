@@ -1,6 +1,6 @@
-import type { FolderWorkspace } from './folder-workspace-types'
-import type { Repo } from './repo-types'
-import type { SavedPortForward, SshRemotePtyLease } from './ssh-types'
+import type { FolderWorkspace } from '../folder-workspace-types'
+import type { Repo } from '../repo-types'
+import type { SavedPortForward, SshRemotePtyLease } from '../ssh-types'
 
 export type OrcadMigrationBlockerCategory =
   | 'registration'

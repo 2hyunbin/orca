@@ -4,9 +4,9 @@
  * migration; a later format is a new capability, never a silent reinterpretation of this one.
  */
 import { z } from 'zod'
-import { MAX_PANE_KEY_LEN } from './agent-hook-listener/listener-limits'
+import { MAX_PANE_KEY_LEN } from '../agent-hook-listener/listener-limits'
 import { ORCAD_MIGRATION_BLOB_KIND_CONTRACTS } from './orcad-migration-blob-transfer'
-import { parsePaneKey } from './stable-pane-id'
+import { parsePaneKey } from '../stable-pane-id'
 
 export const ORCAD_MIGRATION_TERMINAL_RESTORE_HINTS_VERSION = 1
 export const ORCAD_MIGRATION_TERMINAL_RESTORE_HINTS_KEY = 'migration'

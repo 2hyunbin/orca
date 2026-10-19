@@ -3,12 +3,12 @@
  * read as committed for as long as a client could ask, and an abandoned stage must not hold the
  * server awake or take a staging slot forever.
  */
-import { MAX_ORCAD_MIGRATION_IMPORT_RECEIPTS } from '../../../shared/orcad-migration-manifest-validation'
+import { MAX_ORCAD_MIGRATION_IMPORT_RECEIPTS } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
 import type {
   OrcadMigrationImportReceipt,
   OrcadMigrationManifest
-} from '../../../shared/orcad-migration-manifest'
-import { MAX_ORCAD_MIGRATION_EVICTED_RECEIPTS } from '../../../shared/orcad-migration-evicted-receipts'
+} from '../../../shared/orcad-migration/orcad-migration-manifest'
+import { MAX_ORCAD_MIGRATION_EVICTED_RECEIPTS } from '../../../shared/orcad-migration/orcad-migration-evicted-receipts'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 
 // A client resumes a stage within minutes; a week only covers a host left offline meanwhile.

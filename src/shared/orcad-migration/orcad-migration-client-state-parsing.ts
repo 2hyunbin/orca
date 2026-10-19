@@ -1,15 +1,15 @@
-import { parseHostStableKey } from './automation-owner-key'
+import { parseHostStableKey } from '../automation-owner-key'
 import {
   MAX_CLIENT_HOSTED_BROWSER_CLOSE_INTENTS,
   type ClientHostedBrowserCloseIntent
-} from './client-hosted-browser-close-intent'
+} from '../client-hosted-browser-close-intent'
 import type {
   OrcadMigrationClientHostedBrowserCloseIntent,
   OrcadMigrationUiRoutingState
 } from './orcad-migration-client-state'
-import type { PersistedMobileClientTabSelections } from './persisted-state-types'
-import type { ManualRepoOrderEntry, WorkspaceHostOrder } from './ui-chrome-types'
-import type { SavedPortForward } from './ssh-types'
+import type { PersistedMobileClientTabSelections } from '../persisted-state-types'
+import type { ManualRepoOrderEntry, WorkspaceHostOrder } from '../ui-chrome-types'
+import type { SavedPortForward } from '../ssh-types'
 import { isRecord } from './orcad-migration-manifest-fields'
 import {
   isWorkspaceHostId,

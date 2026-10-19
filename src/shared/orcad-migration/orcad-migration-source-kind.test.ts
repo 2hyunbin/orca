@@ -13,7 +13,7 @@ import {
 import {
   ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY,
   ORCAD_RUNTIME_CAPABILITIES
-} from './orcad-runtime-capabilities'
+} from '../orcad-runtime-capabilities'
 
 const SSH_SOURCE = { sshTargetId: 'ssh-1', sshTargetGeneration: 2, targetLabel: 'Prod' }
 const WSL_SOURCE = {

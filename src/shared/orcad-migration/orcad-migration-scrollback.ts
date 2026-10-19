@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from './terminal-scrollback-limits'
-import type { WorkspaceSessionState } from './workspace-session-state-types'
+import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../terminal-scrollback-limits'
+import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import {
   assertUnique,
   boundedArray,
