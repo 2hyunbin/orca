@@ -115,7 +115,7 @@ beforeAll(async () => {
     join(process.cwd(), 'src/main/browser/popup-origin-chrome-electron-fixture.ts'),
     'main.cjs'
   )
-  probe = await launchPopupIdentityProbe(root)
+  probe = await launchPopupIdentityProbe(root, ['--js-flags=--expose-gc'])
   await vi.waitFor(
     () =>
       expect(
@@ -222,10 +222,17 @@ describe('committed popup origin chrome under Electron', () => {
   )
 
   it.each(['adopted', 'native'])(
-    'initializes a %s presenter from an already committed frame',
+    'retains a %s presenter attached to an already committed frame through garbage collection',
     async (kind) => {
-      await command('attach', { kind, url: `${origin}/already-committed` })
-      await expectOrigin(origin, kind)
+      const url = `${origin}/already-committed`
+      await command('attach', { kind, url })
+      await command('collect-garbage')
+      const attached = await expectOrigin(origin, kind)
+      expect(attached.committedUrl).toBe(url)
+      const nextUrl = `${origin.replace('127.0.0.1', 'localhost')}/after-collection`
+      await command('navigate', { url: nextUrl })
+      const navigated = await expectOrigin(new URL(nextUrl).origin, kind)
+      expect(navigated.committedUrl).toBe(nextUrl)
       await command('close')
     }
   )

@@ -48,7 +48,7 @@ export async function buildPopupIdentityProbe(
   })
 }
 
-export async function launchPopupIdentityProbe(root: string) {
+export async function launchPopupIdentityProbe(root: string, electronArgs: readonly string[] = []) {
   const portServer = createServer()
   await new Promise<void>((resolve) => portServer.listen(0, '127.0.0.1', resolve))
   const address = portServer.address()
@@ -65,6 +65,7 @@ export async function launchPopupIdentityProbe(root: string) {
   const { executable, args } = resolveElectronProbeLaunch({
     electronBinary,
     electronArgs: [
+      ...electronArgs,
       join(root, 'main.cjs'),
       `--user-data-dir=${join(root, 'profile')}`,
       `--remote-debugging-port=${port}`

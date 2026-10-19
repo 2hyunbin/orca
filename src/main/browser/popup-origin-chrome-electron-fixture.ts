@@ -18,6 +18,7 @@ if (!root) {
   throw new Error('Missing probe root')
 }
 const statusPath = join(root, 'status.json')
+const attachedSourceViews = new Set<WebContentsView>()
 let active: Electron.WebContents | undefined
 let presenter: BaseWindow | undefined
 let parent: BrowserWindow
@@ -38,6 +39,15 @@ async function command(input: {
   action: string
   stage?: string
 }) {
+  if (input.action === 'collect-garbage') {
+    if (typeof globalThis.gc !== 'function') {
+      throw new Error('Popup lifetime checks require --js-flags=--expose-gc')
+    }
+    globalThis.gc()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    globalThis.gc()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
   if (input.action === 'kind') {
     kind = input.kind ?? 'adopted'
   }
@@ -52,9 +62,13 @@ async function command(input: {
       active = window.webContents
       presenter = window
     } else {
-      const contents = new WebContentsView({
+      const sourceView = new WebContentsView({
         webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
-      }).webContents
+      })
+      // Collecting the source view would destroy its contents even after adoption.
+      attachedSourceViews.add(sourceView)
+      const contents = sourceView.webContents
+      contents.once('destroyed', () => attachedSourceViews.delete(sourceView))
       await contents.loadURL(input.url ?? 'about:blank')
       openPopupWithOriginBar(
         {
