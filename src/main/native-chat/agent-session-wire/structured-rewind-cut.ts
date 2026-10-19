@@ -43,7 +43,7 @@ export function structuredRewindCut(
   const items = floor
     ? snapshot.items.filter((item) => item.sequence > floor.sequence)
     : snapshot.items
-  const { providerKey, queued } = submissionKeys(snapshot.submissions)
+  const { providerKey, queued, rejected } = submissionKeys(snapshot.submissions)
   const selected = items.find((item) => item.itemId === target.itemId)
   const key = selected ? parseAgentJournalItemKey(providerKey(selected.itemId)) : null
   if (key?.provider === 'claude' && target.provider === 'claude') {
@@ -78,6 +78,7 @@ export function structuredRewindCut(
     // A kept turn's row can land after the cut, as a late provider item does.
     return (
       !queued.has(item.itemId) &&
+      !rejected.has(item.itemId) &&
       (index < boundary || (turnId !== undefined && keptTurns.has(turnId)))
     )
   })
@@ -133,18 +134,22 @@ export function providerItemIdOf(journal: AgentSessionJournal, itemId: string): 
 function submissionKeys(submissions: readonly AgentJournalSubmission[]): {
   providerKey: (itemId: string) => string
   queued: ReadonlySet<string>
+  rejected: ReadonlySet<string>
 } {
   const providerKeys = new Map<string, string>()
   const queued = new Set<string>()
+  const rejected = new Set<string>()
   for (const submission of submissions) {
     const key = agentJournalSubmissionKey(submission.clientMessageId)
     if (isQueuedAgentJournalSubmission(submission)) {
       queued.add(key)
+    } else if (submission.dispatchState === 'rejected') {
+      rejected.add(key)
     } else if (submission.dispatchState === 'accepted' && submission.providerItemId) {
       providerKeys.set(key, submission.providerItemId)
     }
   }
-  return { providerKey: (itemId) => providerKeys.get(itemId) ?? itemId, queued }
+  return { providerKey: (itemId) => providerKeys.get(itemId) ?? itemId, queued, rejected }
 }
 
 /** The main conversation turn a row belongs to: its own Codex key on the main thread, else the turn
