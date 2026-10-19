@@ -84,10 +84,7 @@ export async function withdrawAdmittedPane(
     tabId: admission.tabId,
     leafId
   }
-  // The shipped take-back keeps its two-argument call.
-  return unboundOnly
-    ? store?.withdrawTerminalPane?.(pane, hostId, true)
-    : store?.withdrawTerminalPane?.(pane, hostId)
+  return store?.withdrawTerminalPane?.(pane, hostId, unboundOnly)
 }
 
 /** Writes a pane the runtime asks for into main's copy; what fills it is the caller's. */
