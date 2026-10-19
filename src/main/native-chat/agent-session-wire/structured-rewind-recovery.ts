@@ -71,7 +71,7 @@ type RecoveredRewind = Awaited<
  *  caller can read it outside the session's serialize and apply it inside. Null: none in doubt. */
 export type StructuredRewindRecoveryEvidence = {
   rewind: AgentSessionRewindRecord
-  turns?: Pick<StructuredRewindCut, 'beforeTurnId' | 'keptTurnId'>
+  turns?: { beforeTurnId: string; keptTurnId: string | null }
   recovered?: RecoveredRewind
 } | null
 
@@ -138,7 +138,12 @@ export async function readStructuredRewindRecovery(
   }
   const target = parseAgentJournalItemKey(rewind.providerItemId ?? rewind.itemId)
   const { cut } = rewindJournalCut(record, journal, rewind)
-  if (target?.provider === 'claude' || rewind.phase !== 'prepared' || !cut) {
+  if (
+    target?.provider === 'claude' ||
+    rewind.phase !== 'prepared' ||
+    !cut ||
+    !('beforeTurnId' in cut)
+  ) {
     return { rewind }
   }
   const turns = { beforeTurnId: cut.beforeTurnId, keptTurnId: cut.keptTurnId }
