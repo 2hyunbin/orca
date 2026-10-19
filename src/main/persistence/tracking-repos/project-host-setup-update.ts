@@ -56,7 +56,7 @@ export class ProjectHostSetupPersistenceOperations {
       repoUpdates.projectHostSetupMethod = updates.setupMethod
     }
     const updatedRepo =
-      Object.keys(repoUpdates).length > 0 ? this.updateRepo(repo.id, repoUpdates) : repo
+      Object.keys(repoUpdates).length > 0 ? this.updateRepo(repo, repoUpdates) : repo
     if (!updatedRepo) {
       return null
     }

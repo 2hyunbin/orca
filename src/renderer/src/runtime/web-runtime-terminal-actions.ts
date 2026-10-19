@@ -200,6 +200,7 @@ export async function updateWebRuntimePaneLayout(args: {
   expandedLeafId: string | null
   chatLeafId?: string | null
   titlesByLeafId?: Record<string, string>
+  renamedLeafIds?: string[]
   intent?: PaneLayoutEditIntent
 }): Promise<boolean> {
   // Why: a twin's edit must not reach either host on a guess; it stays local until one is chosen.
@@ -225,6 +226,7 @@ export async function updateWebRuntimePaneLayout(args: {
         expandedLeafId: args.expandedLeafId,
         ...(args.chatLeafId !== undefined ? { chatLeafId: args.chatLeafId } : {}),
         ...(args.titlesByLeafId ? { titlesByLeafId: args.titlesByLeafId } : {}),
+        ...(args.renamedLeafIds ? { renamedLeafIds: args.renamedLeafIds } : {}),
         ...(args.intent ? { intent: args.intent } : {})
       },
       timeoutMs: 15_000
