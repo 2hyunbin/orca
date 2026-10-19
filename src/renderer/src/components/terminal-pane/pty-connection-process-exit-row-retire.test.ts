@@ -6,6 +6,7 @@ import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type * as CoordinatorModule from './agent-completion-coordinator'
 import type { AgentCompletionCoordinatorOptions } from './agent-completion-coordinator-types'
+import { ambiguousLocalProcessResult } from './agent-completion-coordinator-test-harness'
 import { createDeferred, flushAsyncTicks } from './pty-connection-test-async'
 import {
   createMockTransport,
@@ -252,40 +253,50 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))
   })
 
-  it('releases foreground through suspension and restores Chat eligibility after fg', async () => {
-    let foreground = 'codex'
+  it('releases suspended input, recognizes live/null root exec and retires only real exit', async () => {
+    let foreground = 'opencode'
     let children = true
     vi.mocked(window.api.pty.getForegroundProcess).mockImplementation(async () => foreground)
     vi.mocked(window.api.pty.hasChildProcesses).mockImplementation(async () => children)
+    vi.mocked(window.api.pty.confirmForegroundProcess).mockImplementation(async () => foreground)
     const { paneKey, onAgentExited } = await connectAgentPane({
       ptyId: 'pty-job-control',
       visible: true
     })
-    const row = await seedHookRow(paneKey, 'codex', 'working')
+    const row = await seedHookRow(paneKey, 'opencode', 'working')
     mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
       launchConfig: { agentArgs: '', agentEnv: {} },
-      identity: { agentType: 'codex' }
+      identity: { agentType: 'opencode' }
     }
     await vi.advanceTimersByTimeAsync(3_000)
+    vi.mocked(window.api.pty.inspectProcess).mockResolvedValue(ambiguousLocalProcessResult())
     foreground = 'zsh'
     await vi.advanceTimersByTimeAsync(3_000)
     expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))
     expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(row)
     expect(mockStoreState.agentLaunchConfigByPaneKey[paneKey]).toBeDefined()
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).toBe(true)
-    foreground = 'codex'
+    const releases = onAgentExited.mock.calls.length
     await vi.advanceTimersByTimeAsync(3_000)
-    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('codex')
+    expect(onAgentExited).toHaveBeenCalledTimes(releases)
+    foreground = 'opencode'
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('opencode')
     expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(row)
+    vi.mocked(window.api.pty.inspectProcess).mockImplementation(async () => ({
+      foregroundProcess: foreground,
+      hasChildProcesses: children,
+      childProcessEvidence: children ? 'children' : 'no-children'
+    }))
     foreground = 'zsh'
     children = false
     await vi.advanceTimersByTimeAsync(10_000)
     expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(paneKey)
     expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.shellForeground).toBe(true)
-    foreground = 'codex'
+    foreground = 'opencode'
     children = true
     await vi.advanceTimersByTimeAsync(5_000)
-    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('codex')
+    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('opencode')
   })
 
   it('keeps registered launch intent through reveal before exec, then observes a real departure', async () => {

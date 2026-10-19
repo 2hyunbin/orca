@@ -141,7 +141,8 @@ export function handleAgentCompletionInspectionResult(args: {
   }
   if (
     state.lastForegroundAgent &&
-    localShellIsForeground(result, requestStartedAtMonotonic, state)
+    result.foregroundProcess !== null &&
+    isShellProcess(result.foregroundProcess)
   ) {
     options.onForegroundShellObserved?.(state.lastForegroundAgent)
   }
@@ -206,22 +207,4 @@ export function handleAgentCompletionInspectionResult(args: {
     clearAgentRunEvidence()
   }
   return false
-}
-
-/** Local only: a shell name, or a daemon's live read naming nothing in front, from a snapshot
- *  taken after the agent was last seen there. */
-function localShellIsForeground(
-  result: RuntimeTerminalProcessInspection,
-  requestStartedAtMonotonic: number,
-  state: { lastForegroundAgentSeenAtMonotonic: number }
-): boolean {
-  if (result.foregroundProcess !== null) {
-    return isShellProcess(result.foregroundProcess)
-  }
-  const evidence = result.foregroundProcessEvidence
-  return (
-    evidence?.verdict === 'live' &&
-    evidence.processName === null &&
-    requestStartedAtMonotonic - evidence.capturedAgeMs > state.lastForegroundAgentSeenAtMonotonic
-  )
 }

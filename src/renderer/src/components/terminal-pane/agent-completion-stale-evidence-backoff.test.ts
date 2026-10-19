@@ -68,8 +68,7 @@ function inspect(
   callbacks: Pick<
     AgentCompletionCoordinatorOptions,
     'onForegroundShellObserved' | 'onForegroundAgentExited'
-  > = {},
-  local?: { agentSeenAgoMs: number }
+  > = {}
 ): ProcessMonitorState {
   const state: ProcessMonitorState = {
     disposed: false,
@@ -83,7 +82,6 @@ function inspect(
     hasAgentRunEvidence: true,
     pendingProcessExit: null,
     lastForegroundAgent: { agent: 'claude', processName: 'claude' },
-    lastForegroundAgentSeenAtMonotonic: 0,
     processSession: 1
   }
   const remoteInspection: RemoteInspectionState = {
@@ -93,9 +91,6 @@ function inspect(
     knownAuthorityGenerations: new Set<string>()
   }
   const started = performance.now()
-  if (local) {
-    state.lastForegroundAgentSeenAtMonotonic = started - local.agentSeenAgoMs
-  }
   vi.spyOn(performance, 'now').mockReturnValue(started + roundTripMs)
   handleAgentCompletionInspectionResult({
     result,
@@ -103,7 +98,7 @@ function inspect(
     options: {
       paneKey: 'tab-1:leaf-1',
       getPtyId: () => SSH_PTY_ID,
-      isRemotePtyId: () => !local,
+      isRemotePtyId: () => true,
       getExpectedIncarnationId: () => INCARNATION,
       isLive: () => true,
       inspectProcess: vi.fn(),
@@ -148,31 +143,6 @@ describe('agent completion polling under a host capture it cannot use', () => {
       expect(onForegroundShellObserved).not.toHaveBeenCalled()
       expect(onForegroundAgentExited).toHaveBeenCalledTimes(verdict === 'exited' ? 1 : 0)
       expect(result.lastForegroundAgent?.agent ?? null).toBe(verdict === 'live' ? 'claude' : null)
-    }
-  )
-
-  it.each([
-    ['captured after the agent was last seen', 100, 1],
-    ['captured before the agent was last seen', 600, 0]
-  ])(
-    'reads a local daemon live read naming nothing as the shell, %s',
-    (_label, capturedAgeMs, calls) => {
-      const live = liveRecord(capturedAgeMs).foregroundProcessEvidence
-      if (live?.verdict !== 'live') {
-        throw new Error('Expected live fixture')
-      }
-      const onForegroundShellObserved = vi.fn()
-      inspect(
-        {
-          hasChildProcesses: true,
-          foregroundProcess: null,
-          foregroundProcessEvidence: { ...live, processName: null }
-        },
-        0,
-        { onForegroundShellObserved },
-        { agentSeenAgoMs: 500 }
-      )
-      expect(onForegroundShellObserved).toHaveBeenCalledTimes(calls)
     }
   )
 

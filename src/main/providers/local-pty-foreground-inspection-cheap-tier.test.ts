@@ -12,13 +12,20 @@ vi.mock('../../shared/cheap-process-table-snapshot-reader', () => ({
 }))
 vi.mock('../../shared/process-table-snapshot-reader', async (importOriginal) => ({
   ...(await importOriginal<typeof ProcessTableSnapshotReader>()),
-  getProcessTableSnapshot: fullSnapshotMock
+  getProcessTableSnapshot: fullSnapshotMock,
+  getStrictProcessTableSnapshotWithAge: async () => ({
+    rows: await fullSnapshotMock(),
+    capturedAgeMs: 0
+  })
 }))
 vi.mock('./agent-foreground-process', () => ({
   resolveAgentForegroundProcessWithAvailability: resolveMock,
   confirmShellForegroundProcess: vi.fn()
 }))
 
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/pr-30804-cheap-tier' } }))
+import { LocalPtyProvider } from './local-pty-provider'
+import { ptyIncarnations } from './local-pty-provider-state'
 import { getLocalPtyForegroundProcess } from './local-pty-foreground-inspection'
 import { ptyLastRecognizedForeground, ptyProcesses, ptyShellPath } from './local-pty-provider-state'
 
@@ -26,7 +33,7 @@ const SHELL_PID = 4242
 const AGENT_PID = 4300
 const ID = 'pty-1'
 
-type Table = 'agent' | 'shell-only'
+type Table = 'agent' | 'stopped' | 'shell-only'
 let table: Table = 'agent'
 
 function rows(): Record<string, unknown>[] {
@@ -43,13 +50,13 @@ function rows(): Record<string, unknown>[] {
       command: '-zsh'
     }
   ]
-  if (table === 'agent') {
+  if (table !== 'shell-only') {
     out.push({
       pid: AGENT_PID,
       ppid: SHELL_PID,
       pgid: AGENT_PID,
       tpgid,
-      stat: 'S+',
+      stat: table === 'stopped' ? 'T' : 'S+',
       tty: 'ttys004',
       startTime: 'Thu Sep  3 16:02:05 2026',
       command: 'node /usr/local/bin/claude'
@@ -78,11 +85,13 @@ describe('local POSIX provider cheap-tier revalidation', () => {
     }))
     ptyProcesses.set(ID, proc as never)
     ptyShellPath.set(ID, '/bin/zsh')
+    ptyIncarnations.set(ID, 'inc-1')
     ptyLastRecognizedForeground.delete(ID)
   })
 
   afterEach(() => {
     ptyProcesses.delete(ID)
+    ptyIncarnations.delete(ID)
     ptyShellPath.delete(ID)
     ptyLastRecognizedForeground.delete(ID)
     if (platform) {
@@ -101,15 +110,40 @@ describe('local POSIX provider cheap-tier revalidation', () => {
     expect(ptyLastRecognizedForeground.get(ID)).toBeUndefined()
   })
 
-  it('once recognized, an unchanged pane re-proves the agent from the cheap tier without a full scan', async () => {
-    expect(await getLocalPtyForegroundProcess(ID)).toBe('claude')
-    expect(resolveMock).toHaveBeenCalledTimes(1)
-    expect(ptyLastRecognizedForeground.get(ID)?.steady?.fingerprint).toEqual(expect.any(String))
+  it('keeps combined steady-state inspection cheap, but measures stopped work, close and exit', async () => {
+    const provider = new LocalPtyProvider()
+    const recognized = { foregroundProcess: 'claude', hasChildProcesses: true }
+    expect(await provider.inspectProcess(ID, { steadyState: true })).toEqual(recognized)
     for (let i = 0; i < 3; i += 1) {
-      expect(await getLocalPtyForegroundProcess(ID)).toBe('claude')
+      expect(await provider.inspectProcess(ID, { steadyState: true })).toEqual(recognized)
     }
     expect(cheapSnapshotMock).toHaveBeenCalledTimes(3)
     expect(resolveMock).toHaveBeenCalledTimes(1)
+    expect(fullSnapshotMock).toHaveBeenCalledTimes(1)
+    await expect(provider.inspectProcess(ID)).resolves.toMatchObject({
+      childProcessEvidence: 'children'
+    })
+    expect(fullSnapshotMock).toHaveBeenCalledTimes(2)
+    table = 'stopped'
+    await expect(provider.inspectProcess(ID, { steadyState: true })).resolves.toMatchObject({
+      foregroundProcess: 'zsh',
+      childProcessEvidence: 'children'
+    })
+    expect(resolveMock).toHaveBeenCalledTimes(2)
+    table = 'shell-only'
+    await expect(provider.inspectProcess(ID)).resolves.toMatchObject({
+      childProcessEvidence: 'no-children'
+    })
+    table = 'agent'
+    await provider.inspectProcess(ID, { steadyState: true })
+    cheapSnapshotMock.mockImplementationOnce(async () => {
+      ptyIncarnations.set(ID, 'replacement')
+      return rows()
+    })
+    await expect(provider.inspectProcess(ID, { steadyState: true })).resolves.toMatchObject({
+      foregroundProcess: null,
+      childProcessEvidence: 'unverifiable'
+    })
   })
 
   it('an agent exit changes the fingerprint, escalates to the full scan, and clears the anchor', async () => {

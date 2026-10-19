@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as SnapshotReader from '../../shared/process-table-snapshot-reader'
 import type * as MacosTccLoginShell from './macos-tcc-login-shell'
 
 const {
@@ -41,6 +42,19 @@ vi.mock('fs', () => ({
   renameSync: vi.fn(),
   rmSync: vi.fn(),
   constants: { X_OK: 1 }
+}))
+
+vi.mock('../../shared/process-table-snapshot-reader', async (importOriginal) => ({
+  ...(await importOriginal<typeof SnapshotReader>()),
+  getStrictProcessTableSnapshotWithAge: async () => ({
+    capturedAgeMs: 0,
+    rows: [
+      { pid: 12345, ppid: 1, stat: 'Ss+', tty: 'ttys004', command: '-zsh' },
+      ...(mockProc.process === 'zsh'
+        ? []
+        : [{ pid: 12346, ppid: 12345, stat: 'S+', tty: 'ttys004', command: mockProc.process }])
+    ]
+  })
 }))
 
 vi.mock('electron', () => ({
@@ -122,9 +136,10 @@ import {
   type LocalPtyMockProcess
 } from './local-pty-provider-test-harness'
 
+let mockProc: LocalPtyMockProcess
+
 describe('LocalPtyProvider', () => {
   let provider: LocalPtyProvider
-  let mockProc: LocalPtyMockProcess
   let exitCb: ((info: { exitCode: number }) => void) | undefined
 
   installLocalPtyProviderEnvSandbox()
@@ -160,9 +175,15 @@ describe('LocalPtyProvider', () => {
   describe('hasChildProcesses', () => {
     it('fences full inspection with the original PTY incarnation across awaits', async () => {
       const { id, incarnationId } = await provider.spawn({ cols: 80, rows: 24 })
-      await expect(provider.inspectProcess(id, { expectedIncarnationId: 'replacement' })).resolves.toMatchObject({ childProcessEvidence: 'unverifiable' })
+      await expect(
+        provider.inspectProcess(id, { expectedIncarnationId: 'replacement' })
+      ).resolves.toMatchObject({ childProcessEvidence: 'unverifiable' })
       let resolveScan!: (resolution: { available: boolean; processName: string }) => void
-      resolveAgentForegroundProcessMock.mockReturnValue(new Promise((resolve) => { resolveScan = resolve }))
+      resolveAgentForegroundProcessMock.mockReturnValue(
+        new Promise((resolve) => {
+          resolveScan = resolve
+        })
+      )
       const inspection = provider.inspectProcess(id, { expectedIncarnationId: incarnationId })
       exitCb?.({ exitCode: 0 })
       resolveScan({ available: true, processName: 'zsh' })

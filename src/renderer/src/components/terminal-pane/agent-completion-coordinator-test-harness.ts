@@ -44,3 +44,27 @@ export function useAgentCompletionCoordinatorLifecycle(): void {
     vi.restoreAllMocks()
   })
 }
+
+export function ambiguousLocalProcessResult(): RuntimeTerminalProcessInspection {
+  return {
+    foregroundProcess: null,
+    hasChildProcesses: true,
+    childProcessEvidence: 'children',
+    foregroundProcessEvidence: {
+      verdict: 'live',
+      processName: null,
+      authorityGeneration: 'gen-1',
+      observationEpoch: 1,
+      capturedAgeMs: 0,
+      ptyId: 'pty-1',
+      ptyIncarnationId: 'inc-1',
+      fence: {
+        platform: 'posix',
+        shellPid: 100,
+        shellStartTime: '100',
+        tty: 'ttys004',
+        foregroundPgid: 100
+      }
+    }
+  }
+}

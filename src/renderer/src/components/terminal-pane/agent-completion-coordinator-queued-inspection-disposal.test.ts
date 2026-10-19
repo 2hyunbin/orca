@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createAgentCompletionCoordinator } from './agent-completion-coordinator'
 import {
+  ambiguousLocalProcessResult,
   createDeferred,
   flushAsyncTicks,
   processResult,
@@ -11,36 +12,53 @@ import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-termina
 describe('agent completion coordinator queued inspections', () => {
   useAgentCompletionCoordinatorLifecycle()
 
-  it.each(['command', 'binding', 'owner'])(
-    'rejects shell observations superseded by a new %s',
+  it.each(['command', 'binding', 'owner', 'incarnation', 'disposed'] as const)(
+    'rejects observations superseded by a new %s during either read',
     async (change) => {
-      const read = createDeferred<RuntimeTerminalProcessInspection>()
-      let ptyId = 'pty-1'
-      let owner = 'codex'
-      const onForegroundShellObserved = vi.fn()
-      const coordinator = createAgentCompletionCoordinator({
-        paneKey: 'tab-1:leaf-1',
-        getPtyId: () => ptyId,
-        getObservationOwner: () => owner,
-        inspectProcess: () => read.promise,
-        dispatchCompletion: vi.fn(),
-        onForegroundShellObserved,
-        isLive: () => true
-      })
-      coordinator.observeForegroundAgentProcess({ agent: 'codex', processName: 'codex' })
-      coordinator.startProcessTracking()
-      await vi.advanceTimersByTimeAsync(1_000)
-      if (change === 'command') {
-        coordinator.invalidateProcessInspection()
-      } else if (change === 'binding') {
-        ptyId = 'replacement'
-      } else {
-        owner = 'claude'
+      for (const phase of ['inspection', 'confirmation']) {
+        const read = createDeferred<RuntimeTerminalProcessInspection>()
+        const confirmation = createDeferred<string | null>()
+        const getPtyId = vi.fn(() => 'pty-1')
+        const getObservationOwner = vi.fn(() => 'codex')
+        const getExpectedIncarnationId = vi.fn(() => 'inc-1')
+        const onForegroundShellObserved = vi.fn()
+        const inspectProcess = vi.fn(() => read.promise)
+        const confirmForegroundProcess = vi.fn(() => confirmation.promise)
+        const coordinator = createAgentCompletionCoordinator({
+          paneKey: 'tab-1:leaf-1',
+          getPtyId,
+          getObservationOwner,
+          getExpectedIncarnationId,
+          inspectProcess,
+          confirmForegroundProcess,
+          dispatchCompletion: vi.fn(),
+          onForegroundShellObserved,
+          isLive: () => true
+        })
+        coordinator.observeForegroundAgentProcess({ agent: 'codex', processName: 'codex' })
+        coordinator.startProcessTracking()
+        await vi.advanceTimersByTimeAsync(1_000)
+        if (phase === 'confirmation') {
+          read.resolve(ambiguousLocalProcessResult())
+          await flushAsyncTicks()
+          await vi.advanceTimersByTimeAsync(3_000)
+          expect(inspectProcess).toHaveBeenCalledTimes(1)
+          expect(confirmForegroundProcess).toHaveBeenCalledTimes(1)
+        }
+        const supersede = {
+          command: coordinator.invalidateProcessInspection,
+          binding: () => getPtyId.mockReturnValue('replacement'),
+          owner: () => getObservationOwner.mockReturnValue('claude'),
+          incarnation: () => getExpectedIncarnationId.mockReturnValue('inc-2'),
+          disposed: coordinator.dispose
+        }
+        supersede[change]()
+        read.resolve(processResult('zsh', false))
+        confirmation.resolve('zsh')
+        await flushAsyncTicks()
+        expect(onForegroundShellObserved).not.toHaveBeenCalled()
+        coordinator.dispose()
       }
-      read.resolve(processResult('zsh', false))
-      await flushAsyncTicks()
-      expect(onForegroundShellObserved).not.toHaveBeenCalled()
-      coordinator.dispose()
     }
   )
 

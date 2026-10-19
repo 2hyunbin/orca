@@ -29,8 +29,6 @@ export type ProcessMonitorState = {
   hasAgentRunEvidence: boolean
   pendingProcessExit: PendingProcessExit | null
   lastForegroundAgent: RecognizedAgentProcess | null
-  /** When a read last showed the agent in front; an older shared snapshot cannot prove the shell. */
-  lastForegroundAgentSeenAtMonotonic: number
   processSession: number
 }
 export type ProcessMonitorOptions = {

@@ -16,6 +16,8 @@ import {
 } from '../native-chat/native-chat-leaf-routing'
 import type { TerminalPaneTitleController } from './use-terminal-pane-title-state'
 
+const EMPTY_PANE_TITLES = {}
+
 export function useTerminalPaneChatState(controller: TerminalPaneTitleController) {
   const {
     chatLeafId,
@@ -47,9 +49,6 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     )
   )
   const effectiveChatViewMode = isChatViewMode
-  const runtimePaneTitlesByPaneId = useAppStore(
-    useShallow((store) => store.runtimePaneTitlesByTabId[tabId] ?? {})
-  )
   const tabAgentTypeByLeaf = useAppStore((store) =>
     selectTerminalTabAgentTypesByLeaf(
       store.agentStatusByPaneKey,
@@ -74,14 +73,16 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     return [...new Set([...expectedLayoutLeafIds, ...mountedLeafIds])]
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
   }, [expectedLayoutLeafIds])
-  const shellForegroundByLeaf = useAppStore(
-    useShallow((store) =>
-      Object.fromEntries(
-        getNativeChatLeafIds().map((leafId) => [
-          leafId,
-          store.paneForegroundAgentByPaneKey[`${tabId}:${leafId}`]?.shellForeground === true
-        ])
-      )
+  const [runtimePaneTitlesByPaneId, ...shellForegroundByLeaf] = useAppStore(
+    useShallow(
+      (store) =>
+        [
+          store.runtimePaneTitlesByTabId[tabId] ?? EMPTY_PANE_TITLES,
+          ...getNativeChatLeafIds().map(
+            (leafId) =>
+              store.paneForegroundAgentByPaneKey[`${tabId}:${leafId}`]?.shellForeground === true
+          )
+        ] as const
     )
   )
   const getTabWideAgentHintLeafId = useCallback((): string | null => {

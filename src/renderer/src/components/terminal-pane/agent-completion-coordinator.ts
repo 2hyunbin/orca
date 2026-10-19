@@ -58,7 +58,6 @@ export function createAgentCompletionCoordinator(
     hasAgentRunEvidence: false,
     pendingProcessExit: null,
     lastForegroundAgent: null as RecognizedAgentProcess | null,
-    lastForegroundAgentSeenAtMonotonic: 0,
     processSession: 0
   }
   let processMonitor!: ReturnType<typeof createAgentCompletionProcessMonitor>
