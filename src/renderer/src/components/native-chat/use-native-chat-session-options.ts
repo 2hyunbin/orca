@@ -19,7 +19,8 @@ import {
 } from './native-chat-session-option-enrichment'
 import {
   discoverNativeChatCatalogModels,
-  resolveNativeChatModelDiscoveryContext
+  resolveNativeChatModelDiscoveryContext,
+  type NativeChatModelDiscoveryContext
 } from './native-chat-session-option-discovery'
 import { readClaudeSessionOptionsFromTerminalScreen } from './claude-terminal-session-options'
 
@@ -30,6 +31,14 @@ const subscribeEmpty = (): (() => void) => () => {}
 const getEmptySnapshot = (): SessionOptionDescriptor[] => EMPTY_SNAPSHOT
 
 const CLIENT_SETTINGS_TARGET = { kind: 'local' } as const
+
+function ensureHostModels(agent: AgentType, context: NativeChatModelDiscoveryContext): void {
+  ensureNativeChatModelEnrichment({
+    agent,
+    hostKey: context.hostKey,
+    discover: () => discoverNativeChatCatalogModels(agent, context.runtime, context.hostKey)
+  })
+}
 
 /**
  * Why: the picker drops a retired model, but the persisted default is what launches
@@ -118,7 +127,7 @@ export function useNativeChatSessionOptions(args: {
       scopeKey,
       ...(targetPtyId ? { fallbackScopeKey: terminalTabId } : {}),
       // Why: the catalog seed carries version-neutral family labels, so it is
-      // safe on every host while the once-per-host probe runs or after it fails
+      // safe on every host while the host probe runs or after it fails
       // — without it the whole picker would pop in late or never appear.
       ...(discoveryContext ? { initialModels: discoveredModels ?? undefined } : {}),
       mode: targetPtyId ? 'live' : 'draft',
@@ -126,6 +135,9 @@ export function useNativeChatSessionOptions(args: {
       dispatchCommand,
       canSwitchOmpModel,
       onAgentPicker,
+      ...(discoveryContext
+        ? { refreshModels: () => ensureHostModels(agent, discoveryContext) }
+        : {}),
       persistSelection: ({ modelId, optionId, value, adoptModelAsLaunchDefault }) =>
         // Paired PTY launches still assemble their launch preferences from client settings.
         enqueueSessionOptionSettingsWrite(CLIENT_SETTINGS_TARGET, {
@@ -250,12 +262,7 @@ export function useNativeChatSessionOptions(args: {
     if (cached) {
       void retirePersistedModelMissingFromDiscovery(agent, cached).catch(() => undefined)
     }
-    ensureNativeChatModelEnrichment({
-      agent,
-      hostKey: discoveryContext.hostKey,
-      discover: () =>
-        discoverNativeChatCatalogModels(agent, discoveryContext.runtime, discoveryContext.hostKey)
-    })
+    ensureHostModels(agent, discoveryContext)
     return unsubscribe
   }, [agent, discoveryContext, surface])
 

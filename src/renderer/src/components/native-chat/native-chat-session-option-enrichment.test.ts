@@ -9,6 +9,7 @@ import {
   ensureNativeChatModelEnrichment,
   getNativeChatModelEnrichmentEntryCountForTests,
   NATIVE_CHAT_MODEL_ENRICHMENT_MAX_ENTRIES,
+  NATIVE_CHAT_MODEL_LIST_STALE_MS,
   readNativeChatEnrichedModels,
   resolveNativeChatLaunchSessionOptions,
   subscribeNativeChatEnrichedModels
@@ -130,15 +131,43 @@ describe('native chat session option enrichment', () => {
     expect(readNativeChatEnrichedModels('cursor', 'ssh:two')).toBeNull()
   })
 
-  it('falls back permanently to the seed after a failed once-per-host probe', async () => {
-    const discover = vi.fn().mockRejectedValue(new Error('offline'))
-    ensureNativeChatModelEnrichment({ agent: 'cursor', hostKey: 'local', discover })
-    await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce())
-    await Promise.resolve()
+  it('asks again once the list is stale, keeping the last good list through a failure', async () => {
+    vi.useFakeTimers()
+    try {
+      const first = [{ id: 'model-a', label: 'A', options: [] }]
+      const discover = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(first)
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(first)
+        .mockResolvedValueOnce([...first, { id: 'model-b', label: 'B', options: [] }])
+      const listener = vi.fn()
+      subscribeNativeChatEnrichedModels('cursor', 'local', listener)
+      const ensureAfter = async (ms: number): Promise<void> => {
+        vi.advanceTimersByTime(ms)
+        ensureNativeChatModelEnrichment({ agent: 'cursor', hostKey: 'local', discover })
+        await vi.runAllTimersAsync()
+      }
+      const ids = (): string[] | undefined =>
+        readNativeChatEnrichedModels('cursor', 'local')?.map(({ id }) => id)
 
-    ensureNativeChatModelEnrichment({ agent: 'cursor', hostKey: 'local', discover })
-    expect(discover).toHaveBeenCalledOnce()
-    expect(readNativeChatEnrichedModels('cursor', 'local')).toBeNull()
+      await ensureAfter(0)
+      await ensureAfter(1)
+      expect(discover).toHaveBeenCalledOnce()
+      // A failed probe is retried, not latched.
+      await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
+      expect(ids()).toContain('model-a')
+      await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
+      await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
+      expect(ids()).toContain('model-a')
+      expect(listener).toHaveBeenCalledOnce()
+      await ensureAfter(NATIVE_CHAT_MODEL_LIST_STALE_MS)
+      expect(ids()).toContain('model-b')
+      expect(listener).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not probe agents whose catalogs have no discovery command', () => {

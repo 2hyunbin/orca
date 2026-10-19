@@ -135,6 +135,7 @@ function SessionOptionPopover(props: {
   request: NativeChatOptionPickerRequest | null
   onSet: (descriptor: SessionOptionDescriptor, value: SessionOptionValue) => void
   onAction: (descriptor: SessionOptionDescriptor) => void
+  onOpen: () => void
   focusComposer?: () => void
 }): React.JSX.Element {
   const { model, options, pendingIds } = props
@@ -189,7 +190,15 @@ function SessionOptionPopover(props: {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          props.onOpen()
+        }
+        setOpen(next)
+      }}
+    >
       <PickerTrigger
         modelLabel={modelLabel}
         optionsLabel={optionsLabel}
@@ -337,6 +346,7 @@ function NativeChatSessionOptionPickersInner({
             surface.invokeAction(descriptor.id)
           )
         }
+        onOpen={() => surface.refreshModels?.()}
         focusComposer={focusComposer}
       />
     </div>

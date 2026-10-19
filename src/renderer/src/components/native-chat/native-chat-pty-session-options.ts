@@ -54,6 +54,7 @@ export type CreateNativeChatPtySessionOptionsArgs = {
   reportedValues?: Record<string, SessionOptionValue> | null
   dispatchCommand: NativeChatSessionOptionDispatchCommand
   onAgentPicker?: () => void
+  refreshModels?: () => void
   persistSelection?: PersistSelection
   onDraftValuesChanged?: (values: Record<string, SessionOptionValue>) => void
 }
@@ -198,6 +199,7 @@ export function createNativeChatPtySessionOptions(
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
+    refreshModels: () => args.refreshModels?.(),
     recordOutgoingCommand: (command) => {
       const result = recordNativeChatSessionOptionCommand({
         catalog,
