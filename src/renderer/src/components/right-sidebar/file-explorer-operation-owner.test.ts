@@ -77,4 +77,31 @@ describe('getFileExplorerOperationOwnerFromState', () => {
 
     expect(owner).toEqual({ kind: 'local' })
   })
+
+  it('writes a server-owned folder through that server, and an unstamped one never through focus', () => {
+    const state = (folderWorkspaces: FolderWorkspace[], projectGroups: ProjectGroup[]) => ({
+      settings: { activeRuntimeEnvironmentId: 'focused-env' },
+      runtimeEnvironments: [{ id: 'focused-env' }, { id: 'env-a' }],
+      runtimeEnvironmentCatalogHydrated: true,
+      repos: [],
+      worktreesByRepo: {},
+      detectedWorktreesByRepo: {},
+      restoredRuntimeHostIdByWorkspaceSessionKey: {},
+      folderWorkspaces,
+      projectGroups
+    })
+    expect(
+      getFileExplorerOperationOwnerFromState(
+        state(
+          [folder('remote-group', 'runtime:env-a', null)],
+          [group('remote-group', 'runtime:env-a', null)]
+        ),
+        'folder:same-folder'
+      )
+    ).toEqual({ kind: 'runtime', environmentId: 'env-a', executionHostId: 'runtime:env-a' })
+    const unstamped = { ...folder('no-group', 'local', null), executionHostId: undefined }
+    expect(
+      getFileExplorerOperationOwnerFromState(state([unstamped], []), 'folder:same-folder')
+    ).toEqual({ kind: 'local' })
+  })
 })

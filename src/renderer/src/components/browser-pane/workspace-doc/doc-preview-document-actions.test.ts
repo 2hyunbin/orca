@@ -25,7 +25,7 @@ vi.mock('@/lib/connection-owner-resolution', () => ({
   getConnectionIdForFileFromState: () => mocks.connectionIdForFile
 }))
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getRuntimeEnvironmentIdForWorktree: () => mocks.worktreeRuntimeOwnerId
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: () => mocks.worktreeRuntimeOwnerId
 }))
 vi.mock('@/lib/file-owner-runtime-target', () => {
   const getRuntimeTargetForFileOwner = (
