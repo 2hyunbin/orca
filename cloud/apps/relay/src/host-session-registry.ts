@@ -58,7 +58,7 @@ import { closeRelayWebSocket } from './relay-websocket-close.js'
 import { ProcessQueuedByteBudget, wireSplice } from './splice-forwarder.js'
 
 // Peer-supplied close reasons are logged; keep them printable and short.
-function printableCloseReason(reason: Buffer | string): string {
+export function printableCloseReason(reason: Buffer | string): string {
   return reason
     .toString()
     .replace(/[^\x20-\x7e]/g, '')
@@ -1656,7 +1656,9 @@ export class HostSessionRegistry {
         socket,
         refused,
         RELAY_CLOSE_CODE.LIMIT_EXCEEDED,
-        'control activation queue stalled'
+        'control activation queue stalled',
+        undefined,
+        'host closed while queued'
       )
     }, ACTIVATION_QUEUE_WAIT_MS)
     queueWaitTimer.unref?.()
@@ -1877,10 +1879,15 @@ export class HostSessionRegistry {
     refused: { relayHostId: string; generation: number; appVersion: string },
     code: number,
     reason: string,
-    cause?: PostProofCloseCause
+    cause?: PostProofCloseCause,
+    hungUpReason = 'host closed during activation'
   ): void {
+    // A host that already hung up got no close frame from us; log what happened instead.
+    const open = socket.readyState === socket.OPEN
     socket.close(code, reason)
-    this.postProofCloses.record({ ...refused, code, reason, cause })
+    this.postProofCloses.record(
+      open ? { ...refused, code, reason, cause } : { ...refused, code: null, reason: hungUpReason }
+    )
   }
 
   seatFeed(sinceSeq: number | null): CellSeatFeedPage {

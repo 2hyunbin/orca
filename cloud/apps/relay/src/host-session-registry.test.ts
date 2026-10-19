@@ -2167,6 +2167,27 @@ describe('controls closed after host proof but before wiring', () => {
     expectRefusal(h.observer, null, 'host closed while queued')
   })
 
+  it('logs the hang-up, not a stall, when the queued host left before the deadline', async () => {
+    const stalled = deferred<string>()
+    const h = createRegistry(
+      vi.fn<RelayAssignmentStore['activateControl']>().mockReturnValueOnce(stalled.promise)
+    )
+    const first = h.activate(new FakeSocket() as unknown as WebSocket, identity, null, 1, false, 1)
+    const queued = new FakeSocket()
+    const second = h.activate(queued as unknown as WebSocket, identity, null, 1, false, 1)
+    await Promise.resolve()
+    await Promise.resolve()
+    queued.readyState = queued.CLOSED
+    vi.advanceTimersByTime(30_000)
+    expect(queued.close).toHaveBeenCalledWith(
+      RELAY_CLOSE_CODE.LIMIT_EXCEEDED,
+      'control activation queue stalled'
+    )
+    expectRefusal(h.observer, null, 'host closed while queued')
+    stalled.resolve('control:production-gce-c3:1')
+    await Promise.all([first, second])
+  })
+
   it('does not log a control that was wired', async () => {
     const h = createRegistry(vi.fn().mockResolvedValue('control:production-gce-c3:1'))
     await h.activate(new FakeSocket() as unknown as WebSocket, identity, null, 1, false, 1)

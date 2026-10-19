@@ -1,4 +1,5 @@
 import { AssignmentRejectionLogWindow } from './assignment-rejection-log-window.js'
+import { printableCloseReason } from './host-session-registry.js'
 import { relayHostLogDigest } from './relay-host-log-digest.js'
 import type { RelayRuntimeObserver } from './relay-observability.js'
 
@@ -55,7 +56,7 @@ function formatLine(close: PostProofClose, suppressed: number): string {
   return (
     `[orca-relay] control refused after proof host=${relayHostLogDigest(close.relayHostId)}` +
     ` gen=${close.generation}` +
-    ` app=${JSON.stringify(close.appVersion.replace(/[^\x20-\x7e]/g, '').slice(0, 80))}` +
+    ` app=${JSON.stringify(printableCloseReason(close.appVersion))}` +
     ` code=${close.code ?? 'none'} reason=${JSON.stringify(close.reason)}` +
     (close.cause ? ` cause=${close.cause}` : '') +
     // Closing line only: how many more closes the window held back; the fields name the latest.
