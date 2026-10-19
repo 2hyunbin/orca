@@ -523,7 +523,8 @@ describe('the memory phone path', () => {
     await reserve.relay.store.resumeAudit.flush()
     reserve.database.failing = null
     const written = await reserve.raw.query(`SELECT id FROM relay_audit_events WHERE type = 'resume-confirmed'`)
-    expect((reserve.relay.runtimeCounts().resumeAuditDropped ?? 0) + written.length).toBe(2)
+    expect(written).toEqual([])
+    expect(reserve.relay.runtimeCounts().resumeAuditDropped).toBe(2)
   })
 })
 
