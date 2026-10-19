@@ -2516,7 +2516,12 @@ export function createRemoteRuntimePtyTransport(
     } else if (tabId && leafId && worktreeId) {
       const resolution = await resolvePersistedHostPane()
       const resolved = resolution.kind === 'resolved' ? resolution.terminal : null
-      if (destroyed || !connected || handle !== previousHandle) {
+      if (
+        destroyed ||
+        !connected ||
+        handle !== previousHandle ||
+        !recovery.isCurrent(recoveryEpoch)
+      ) {
         return
       }
       const effectivePolicy = stricterReplacementPolicy(

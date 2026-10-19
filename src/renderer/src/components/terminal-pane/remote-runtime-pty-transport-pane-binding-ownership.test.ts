@@ -67,6 +67,7 @@ describe('remote runtime pane binding ownership', () => {
   ])(
     'retains one refresh through %s delayed acceptance (%s, %s)',
     async (replacement, nextIncarnation, interruption) => {
+      if (interruption === 'close') vi.useFakeTimers()
       composedStore = true
       vi.doMock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
       vi.doMock('@/lib/codex-stale-pane-sweep', () => ({
@@ -95,9 +96,15 @@ describe('remote runtime pane binding ownership', () => {
       appStore.getState.mockImplementation(store.getState)
       let incarnationId = 'old-incarnation'
       let refused = false
+      let delayResolution = false
+      const delayed = Promise.withResolvers<void>()
       const defaultCall = runtimeCall.getMockImplementation()
       runtimeCall.mockImplementation(async (args: { method: string }) => {
         if (args.method !== 'terminal.resolvePane') return defaultCall?.(args)
+        if (delayResolution) {
+          delayResolution = false
+          await delayed.promise
+        }
         if (!refused) {
           refused = true
           return {
@@ -242,11 +249,36 @@ describe('remote runtime pane binding ownership', () => {
         }
         setDriverForPty(next, { kind: 'idle' })
         setFitOverride(next, 'desktop-fit', 80, 24)
+        if (interruption === 'close') {
+          delayResolution = true
+          subscriptionCallbacks?.onClose?.()
+          await vi.waitFor(() => expect(delayResolution).toBe(false))
+          await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+          const frameCount = subscribeFrameCount()
+          expect(transport.getRecoveryState?.().phase).toBe('disconnected')
+          expect(transport.retryRecovery?.()).toBe(true)
+          await vi.waitFor(() => expect(subscribeFrameCount()).toBeGreaterThan(frameCount))
+          emitSnapshot(latestSubscribePayload().streamId, 'successor$ ')
+          await vi.advanceTimersByTimeAsync(20)
+          expect(transport.getRecoveryState?.().phase).toBe('connected')
+          const rebinds = onPtyRebind.mock.calls.length
+          resolvedPaneHandle = 'late-owner'
+          delayed.resolve()
+          await vi.advanceTimersByTimeAsync(20)
+          expect(onPtyRebind).toHaveBeenCalledTimes(rebinds)
+          expect(transport.getPtyId()).toBe(next)
+          expect(store.getState().terminalLayoutsByTabId['tab-1'].ptyIdsByLeafId?.[LEAF_1]).toBe(
+            next
+          )
+          expect(transport.getRecoveryState?.().phase).toBe('connected')
+          expect(subscribeFrameCount()).toBe(frameCount + 1)
+        }
         expect(runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.create')).toHaveLength(
           0
         )
       } finally {
         transport.destroy?.()
+        vi.useRealTimers()
       }
     }
   )
