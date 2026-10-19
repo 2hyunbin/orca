@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Writable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
-import type { SFTPWrapper } from 'ssh2'
+import type { SFTPWrapper, WriteStreamOptions } from 'ssh2'
 import { SFTP } from 'ssh2/lib/protocol/SFTP.js'
 import {
   removeDirectorySftp,
@@ -331,7 +331,7 @@ describe('uploadFile over a high-latency link', () => {
       close: (_h: Buffer, cb: (e: null) => void) => later(() => cb(null))
     })
     const sftp = Object.assign(session, {
-      createWriteStream: (path: string, options: object) =>
+      createWriteStream: (path: string, options: WriteStreamOptions) =>
         SFTP.prototype.createWriteStream.call(session, path, options)
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: uploadFile only calls createWriteStream, which drives open/fchmod/write/close above.
