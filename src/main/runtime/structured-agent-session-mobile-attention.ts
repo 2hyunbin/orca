@@ -50,7 +50,7 @@ export type StructuredAttentionMobileDelivery = {
 /** The labels the desktop shows for a workspace, from the host's persisted metadata alone. */
 export function readStructuredAttentionWorkspaceLabels(
   store: Pick<RuntimeStore, 'getRepo' | 'getWorktreeMeta' | 'getFolderWorkspaces'>,
-  scope: AgentSessionExecutionLocation
+  scope: Pick<AgentSessionExecutionLocation, 'workspaceId'>
 ): StructuredAttentionWorkspaceLabels {
   const folderScope = parseWorkspaceKey(scope.workspaceId)
   if (folderScope?.type === 'folder') {

@@ -39,6 +39,10 @@ export type MobileNotificationDispatchEvent = {
   /** See `NotificationDispatchRequest.attentionKey`: cooldowns key on it instead of the workspace. */
   attentionKey?: string
   structuredOrigin?: StructuredAttentionOrigin
+  /** See `NotificationDispatchRequest.executionHostAnnounces`. */
+  executionHostAnnounces?: boolean
+  /** This host's main announced it from the hook rows, for phones that take host agent alerts. */
+  hostAgentAlert?: boolean
 }
 
 export type MobileNotificationDismissEvent = {

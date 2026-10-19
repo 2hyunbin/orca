@@ -145,8 +145,11 @@ function dispatchStructuredAttention(
           notificationId: attentionKey,
           attentionKey,
           structuredOrigin: origin,
-          // A local session's host is this app's own main, which already pushed its phones.
-          ...(subscriptionTarget?.kind === 'local' ? { mobileDeliveredByHost: true } : {}),
+          // A local session's host is this app's own main, which already pushed its phones; a paired
+          // server's main pushes its own phones too.
+          ...(subscriptionTarget?.kind === 'local'
+            ? { mobileDeliveredByHost: true }
+            : { executionHostAnnounces: true }),
           worktreeId: request.workspaceId,
           ...(executionHost ? { executionHost } : {}),
           paneKey: request.subjectKey ?? undefined,

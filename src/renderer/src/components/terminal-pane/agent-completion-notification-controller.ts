@@ -210,6 +210,9 @@ export function createAgentCompletionNotificationController({
         quietedHookDone: false,
         agentStatus: optionsOverride.agentStatus
       })
+    } else if (source === 'hook') {
+      // The source tells delivery that the execution host's main also announces this turn.
+      options.dispatchCompletion(title, { source, quietedHookDone: false })
     } else {
       options.dispatchCompletion(title)
     }

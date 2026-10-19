@@ -71,6 +71,9 @@ export type NotificationDispatchRequest = {
   structuredOrigin?: StructuredAttentionOrigin
   /** The execution host already pushed this to its paired phones, so main must not fan it out again. */
   mobileDeliveredByHost?: boolean
+  /** The execution host's main announces this news itself to phones that take host agent alerts: this
+   *  host's own such phones, or a paired server's phones that say they hear from it directly. */
+  executionHostAnnounces?: boolean
 }
 
 export type NotificationDispatchResult = {

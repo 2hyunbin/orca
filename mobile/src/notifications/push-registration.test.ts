@@ -16,6 +16,8 @@ import {
   type RemotePushHostRegistrations
 } from '../storage/preferences'
 import { addPushTokenListener, getDevicePushToken, type MobilePushToken } from './push-token'
+import { deriveHostFingerprint } from './push-host-fingerprint'
+import { NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
 import {
   NOTIFICATIONS_REMOTE_PUSH_CAPABILITY,
   attachPushRegistration,
@@ -123,6 +125,51 @@ describe('push registration capability gating', () => {
       filter: { onlyWhenDesktopAway: true, sound: true }
     })
     expect(stored.registeredHostIds).toEqual(['host-1'])
+  })
+
+  it('takes host agent alerts only when every host it registered with announces its own', async () => {
+    const desktopKey = Buffer.alloc(32, 1).toString('base64')
+    const serverKey = Buffer.alloc(32, 2).toString('base64')
+    const announcing = [
+      NOTIFICATIONS_REMOTE_PUSH_CAPABILITY,
+      NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY
+    ]
+    const desktop = makeClient(announcing)
+    const server = makeClient(announcing)
+    await setRemotePushEnabled(true)
+
+    attachPushRegistration('desktop', desktop.client, desktopKey)
+    await flush()
+    attachPushRegistration('server', server.client, serverKey)
+    await flush()
+
+    const lastRegister = (sent: SentRequest[]): unknown =>
+      sent.findLast((request) => request.method === 'notifications.registerPush')?.params
+    const named = (key: string) => ({
+      fingerprint: deriveHostFingerprint(key),
+      until: expect.any(Number)
+    })
+    // Each host pushes its own agents' alerts here, and is told the other does too, so neither forwards.
+    expect(lastRegister(desktop.sent)).toMatchObject({
+      filter: { hostAgentAlerts: true, directAgentAlertHosts: [named(serverKey)] }
+    })
+    expect(lastRegister(server.sent)).toMatchObject({
+      filter: { hostAgentAlerts: true, directAgentAlertHosts: [named(desktopKey)] }
+    })
+
+    // A host from before this change still forwards, so every host falls back to today's path.
+    attachPushRegistration(
+      'older-desktop',
+      makeClient([NOTIFICATIONS_REMOTE_PUSH_CAPABILITY]).client
+    )
+    await flush()
+    for (const sent of [desktop.sent, server.sent]) {
+      expect(lastRegister(sent)).toMatchObject({ filter: { onlyWhenDesktopAway: true } })
+      expect(lastRegister(sent)).not.toMatchObject({ filter: { hostAgentAlerts: true } })
+      expect(lastRegister(sent)).not.toMatchObject({
+        filter: { directAgentAlertHosts: expect.anything() }
+      })
+    }
   })
 
   it('never calls registerPush on a host without the capability', async () => {

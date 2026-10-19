@@ -3,10 +3,11 @@
 // alongside DesktopRelayService but deliberately not gated on cloud sign-in: the
 // gateway authenticates with the host keypair, so accountless hosts push too.
 import { randomUUID } from 'node:crypto'
-import type {
-  MobilePushTestResult,
-  MobilePushRegisterInput,
-  MobilePushRegisterResult
+import {
+  MOBILE_PUSH_LEASE_MS,
+  type MobilePushTestResult,
+  type MobilePushRegisterInput,
+  type MobilePushRegisterResult
 } from '../../../shared/mobile-push-contract'
 import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
 import type { DeviceRegistry } from '../device-registry'
@@ -263,7 +264,7 @@ export class DesktopPushService {
       const stored = this.registry.setPushRegistration(input.deviceId, {
         registrationId,
         filter: input.filter,
-        expiresAt: Date.now() + 7 * 24 * 60 * 60_000
+        expiresAt: Date.now() + MOBILE_PUSH_LEASE_MS
       })
       // False means the device was removed or left mobile scope while the gateway
       // call was in flight.

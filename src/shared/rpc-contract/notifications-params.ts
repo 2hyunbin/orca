@@ -35,9 +35,20 @@ export const NotificationGetMissedSinceParams = z.object({
     .optional()
 })
 
+// Why not strict: an older desktop must drop a newer phone's keys, not refuse its registration.
 export const NotificationPushFilterParams = z.object({
   onlyWhenDesktopAway: z.boolean().optional(),
-  sound: z.boolean().optional()
+  sound: z.boolean().optional(),
+  hostAgentAlerts: z.boolean().optional(),
+  directAgentAlertHosts: z
+    .array(
+      z.object({
+        fingerprint: z.string().min(1).max(64),
+        until: z.number().int().nonnegative()
+      })
+    )
+    .max(64)
+    .optional()
 })
 
 export const NotificationRegisterPushParams = z

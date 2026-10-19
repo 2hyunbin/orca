@@ -117,9 +117,10 @@ export async function openHostClientEntry(
       return state.store.get(hostId) ?? null
     }
     let detachPushRegistration: (() => void) | null = null
+    const hostPublicKeyB64 = host.publicKeyB64
     const syncPushRegistration = (next: ConnectionState): void => {
       if (next === 'connected') {
-        detachPushRegistration ??= attachPushRegistration(hostId, client)
+        detachPushRegistration ??= attachPushRegistration(hostId, client, hostPublicKeyB64)
       } else {
         detachPushRegistration?.()
         detachPushRegistration = null

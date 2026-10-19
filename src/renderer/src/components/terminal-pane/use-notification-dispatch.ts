@@ -168,6 +168,10 @@ export function dispatchTerminalNotification(
         })
       : null
 
+  // Hook-lane news is announced to phones by the execution host's main from the same hook rows;
+  // title, process-exit and bell alerts are known only here.
+  const hostAnnounces = event.agentCompletionSource === 'hook'
+
   const requestDelivery = (request: AgentAttentionDeliveryRequest): void => {
     const owner = resolveTerminalNotificationOwner(state, worktreeId, event)
     const executionHost = notificationExecutionHostForOwner(owner)
@@ -177,6 +181,7 @@ export function dispatchTerminalNotification(
         ...(notificationId ? { notificationId } : {}),
         worktreeId: request.workspaceId,
         ...(executionHost ? { executionHost } : {}),
+        ...(hostAnnounces ? { executionHostAnnounces: true } : {}),
         paneKey: request.subjectKey ?? undefined,
         ...getNotificationWorkspaceLabels(state, request.workspaceId, event.terminalTitle),
         notificationSourceId: notificationSourceForOwner(owner, state),

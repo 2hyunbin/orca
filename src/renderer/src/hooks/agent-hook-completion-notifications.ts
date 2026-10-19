@@ -249,6 +249,7 @@ function createCoordinator(paneKey: string, worktreeId: string): AgentCompletion
         source: 'agent-task-complete',
         terminalTitle: title,
         paneKey,
+        ...(meta?.source ? { agentCompletionSource: meta.source } : {}),
         ...(meta?.agentStatus ? { agentStatusSnapshot: meta.agentStatus } : {})
       })
     },
@@ -262,6 +263,7 @@ function createCoordinator(paneKey: string, worktreeId: string): AgentCompletion
         source: 'agent-task-complete',
         terminalTitle: title,
         paneKey,
+        agentCompletionSource: 'hook',
         agentStatusSnapshot: meta.agentStatus
       })
     },
