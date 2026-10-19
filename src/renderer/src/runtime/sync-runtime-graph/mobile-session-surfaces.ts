@@ -5,7 +5,6 @@ import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id
 import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
 import type { Tab } from '../../../../shared/tab-types'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   isNativeChatTabWideFallbackSafe,
   nativeChatLaunchAgentForLeaf,
@@ -37,16 +36,6 @@ export function getRuntimeLeafIdsForTerminal(
   savedLayout: AppState['terminalLayoutsByTabId'][string] | undefined
 ): readonly string[] {
   const liveLeafIds = capture?.paneLeafIds ?? []
-  // Switch point: the window draws main's tree before it mounts a new pane; listing only mounted
-  // panes would drop the one main holds, and with it main's own listing of its terminal.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN && liveLeafIds.length > 0) {
-    const unmounted = collectLeafIdsInOrder(savedLayout?.root).filter(
-      (leafId) => isTerminalLeafId(leafId) && !liveLeafIds.includes(leafId)
-    )
-    if (unmounted.length > 0) {
-      return [...liveLeafIds, ...unmounted]
-    }
-  }
   if (liveLeafIds.length > 0) {
     return liveLeafIds
   }
