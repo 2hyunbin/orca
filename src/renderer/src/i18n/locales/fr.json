@@ -18527,7 +18527,7 @@
         "stopping": "Arrêt en cours…",
         "queueAfterStop": "Mettez un message en file d'attente pour l'exécuter après l'arrêt",
         "sendAfterStop": "Envoyez un message pour l'exécuter après l'arrêt",
-        "thinking": "Réflexion",
+        "thinking": "Réflexion en cours",
         "workingFor": "En cours depuis {{value0}}",
         "workedFor": "A travaillé pendant {{value0}}",
         "interruptedAfter": "Interrompu après {{value0}}",

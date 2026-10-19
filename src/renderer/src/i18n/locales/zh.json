@@ -15003,7 +15003,7 @@
             "61ffda7601": "创建工作区"
           },
           "WorkbenchAnimatedVisual": {
-            "633a91e358": "思维…",
+            "633a91e358": "思考中…",
             "932c4b3a97": ">",
             "ca2cfbf188": "向下拆分终端",
             "e370fa8c2b": "向右拆分终端",
@@ -18423,7 +18423,7 @@
         "stopping": "正在停止…",
         "queueAfterStop": "将消息加入队列，在停止后运行",
         "sendAfterStop": "发送消息，在停止后运行",
-        "thinking": "思维",
+        "thinking": "思考中",
         "workingFor": "已工作 {{value0}}",
         "workedFor": "工作了 {{value0}}",
         "interruptedAfter": "{{value0}} 后中断",
