@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitPushTarget } from '../../shared/worktree/types'
 import type { Repo } from '../../shared/repo-types'
 import type { Store } from '../persistence'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const { materializeLocalMock, getLocalProjectWorktreeGitOptionsMock } = vi.hoisted(() => ({
   materializeLocalMock: vi.fn(),
@@ -92,7 +93,7 @@ describe('triggerTerminalSpawnPushTargetMaterialization', () => {
       STORE,
       REPO_ID,
       { wslDistro: 'Ubuntu' },
-      'worktree-1'
+      hostWorktreeTarget({ id: 'worktree-1', hostId: 'local' })
     )
   })
 

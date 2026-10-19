@@ -78,6 +78,7 @@ import { mergeWorktree } from './worktree-metadata-merge'
 import { resolveCreatedWorktree } from './created-worktree-reconciliation'
 import { notifyLineageRepos } from '../worktree-lineage-change-notification'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import { getConnectionExecutionHostId } from '../../shared/execution-host'
 import type { BranchPrefixSettings } from '../../shared/branch-prefix'
 import { parseWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { sharesWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
@@ -145,9 +146,12 @@ import { createRetiredNameLookup } from '../../shared/worktree/retired-name-regi
 import { findPendingWorktreeRemovalConflict } from '../worktree-removal-table'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
+  hostWorktreeTarget,
+  type HostWorktreeTarget
+} from '../../shared/worktree/host-qualified-identity'
+import {
   hostWorktreeTargetForRepo,
   readWorktreeMetaForHost,
-  resolveWorktreeMetaOwner,
   worktreeRowTarget
 } from '../persistence/host-qualified-worktree-meta'
 // Why: bound the fallback `git fetch origin` so a Windows credential-manager GUI hang (STA-1292) can't wedge worktree creation forever.
@@ -663,13 +667,27 @@ export async function prepareWorktreePushTarget(
 // first one down to a handful of extra subprocesses (probe, refspec-widen,
 // upstream-restore) instead of repeating the O(remotes) scan
 // `prepareWorktreePushTargetWithExec` does when it must add.
+/** The copy an IPC git handler ran on: the route it already required names the host. */
+export function ipcGitWorktreeTarget(args: {
+  worktreeId?: string
+  connectionId?: string
+}): HostWorktreeTarget | undefined {
+  return args.worktreeId
+    ? hostWorktreeTarget({
+        id: args.worktreeId,
+        hostId: getConnectionExecutionHostId(args.connectionId)
+      })
+    : undefined
+}
+
 export async function materializeWorktreePushTargetRemote(
   repoPath: string,
   target: GitPushTarget,
   store?: WorktreePushTargetStore | null,
   repoId?: string,
   gitOptions: { wslDistro?: string } = {},
-  worktreeId?: string
+  // The copy whose git ran here: an id alone cannot name one of two hosts' twins.
+  worktree?: HostWorktreeTarget
 ): Promise<GitPushTarget> {
   if (!target.remoteUrl || target.remoteCreated) {
     return target
@@ -684,7 +702,7 @@ export async function materializeWorktreePushTargetRemote(
         gitOptions,
         store,
         repoId,
-        worktreeId
+        worktree
       )
     )
   }
@@ -709,14 +727,14 @@ export async function materializeWorktreePushTargetRemote(
         gitOptions,
         store,
         repoId,
-        worktreeId
+        worktree
       )
     )
   }
   const promise = prepareWorktreePushTarget(repoPath, target, store, repoId, gitOptions)
     .then((prepared) => restoreUpstreamAfterMaterialize(execGit, repoPath, prepared))
     .then((prepared) => {
-      persistMaterializedPushTargetIfCreated(store, worktreeId, prepared)
+      persistMaterializedPushTargetIfCreated(store, worktree, prepared)
       return prepared
     })
     .finally(() => {
@@ -739,7 +757,7 @@ async function adoptExistingForkRemoteForBranch(
   gitOptions: { wslDistro?: string },
   store: WorktreePushTargetStore | null | undefined,
   repoId: string | undefined,
-  worktreeId: string | undefined
+  worktree: HostWorktreeTarget | undefined
 ): Promise<GitPushTarget> {
   await ensureRemoteTracksBranchNarrowly(execGit, repoPath, target.remoteName, target.branchName)
   // Why: widening only rewrites config -- it never imports anything. For a sibling worktree's
@@ -767,14 +785,14 @@ async function adoptExistingForkRemoteForBranch(
   // #17842's sweep -- which gates solely on `remoteCreated` -- can never reclaim the remote.
   // Why derive: no caller supplies both -- IPC handlers pass a store with no repo id, runtime
   // commands pass a repo id with no store -- so requiring both made this branch unreachable.
-  const ownerRepoId = repoId ?? (worktreeId ? getRepoIdFromWorktreeId(worktreeId) : undefined)
+  const ownerRepoId = repoId ?? (worktree ? getRepoIdFromWorktreeId(worktree.id) : undefined)
   const owned =
     store !== undefined &&
     ownerRepoId !== undefined &&
     // SAFETY: Legacy null keeps this branch's original failure rather than introducing a fallback.
     isPushTargetRemoteCreatedByKnownWorktree(store!, restored, ownerRepoId)
   const adopted = owned ? { ...restored, remoteCreated: true } : restored
-  persistMaterializedPushTargetIfCreated(store, worktreeId, adopted)
+  persistMaterializedPushTargetIfCreated(store, worktree, adopted)
   return adopted
 }
 
@@ -813,24 +831,17 @@ function runForkRemoteAdoption<T>(
 // optional on `WorktreePushTargetStore` so narrow test/reconciliation stores keep compiling.
 function persistMaterializedPushTargetIfCreated(
   store: WorktreePushTargetStore | null | undefined,
-  worktreeId: string | undefined,
+  worktree: HostWorktreeTarget | undefined,
   target: GitPushTarget
 ): void {
-  if (!target.remoteCreated || !worktreeId || !store?.setWorktreeMeta) {
+  if (!target.remoteCreated || !worktree || !store?.setWorktreeMeta) {
     return
   }
-  const owner = resolveWorktreeMetaOwner(
-    {
-      getWorktreeMeta: (id) => store.getAllWorktreeMeta()[id],
-      getRepos: () => store.getRepos?.() ?? []
-    },
-    worktreeId
-  )
   // Bookkeeping incidental to the push: a project a WSL move is taking skips it, not the push.
-  if (!owner || isWslMoveWorktreeBlocked(worktreeId, owner.hostId)) {
+  if (isWslMoveWorktreeBlocked(worktree.id, worktree.hostId)) {
     return
   }
-  store.setWorktreeMeta(owner, { pushTarget: target })
+  store.setWorktreeMeta(worktree, { pushTarget: target })
 }
 
 function isPushTargetRemoteCreatedByKnownWorktree(

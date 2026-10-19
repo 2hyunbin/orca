@@ -212,4 +212,28 @@ describe('worktree meta and lineage writes for same-id twins', () => {
     expect(result).toEqual({ updated: 1 })
     expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'ssh:ssh-1')?.sortOrder).toBe(10)
   })
+
+  it('a host-qualified sort order lands on the named twin only', async () => {
+    const solo = hostWorktreeTarget({ id: 'solo::/a', hostId: 'local' })
+    const store = await createTwinStore({
+      repos: [...twinRepos, { ...twinRepos[0], id: 'solo', path: '/a' }]
+    })
+    store.setWorktreeMeta(LOCAL, { displayName: 'local copy', sortOrder: 100 })
+    store.setWorktreeMeta(SSH, { displayName: 'ssh copy', sortOrder: 1 })
+    store.setWorktreeMeta(solo, { sortOrder: 5 })
+
+    const result = persistRuntimeManagedWorktreeSortOrder({
+      orderedIds: [WORKTREE_ID, solo.id],
+      hostIds: ['ssh:ssh-1', 'local'],
+      store,
+      invalidateResolved: vi.fn(),
+      notifyChanged: vi.fn()
+    })
+
+    expect(result).toEqual({ updated: 2 })
+    expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'local')?.sortOrder).toBe(100)
+    expect(store.getWorktreeMetaForHost(WORKTREE_ID, 'ssh:ssh-1')?.sortOrder).toBeGreaterThan(
+      store.getWorktreeMetaForHost(solo.id, 'local')?.sortOrder ?? Infinity
+    )
+  })
 })

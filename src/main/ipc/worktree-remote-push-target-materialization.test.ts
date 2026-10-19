@@ -5,7 +5,7 @@ import type { WorktreePushTargetStore } from './worktree-push-target-cleanup'
 const { gitExecFileAsyncMock } = vi.hoisted(() => ({ gitExecFileAsyncMock: vi.fn() }))
 vi.mock('../git/runner', () => ({ gitExecFileAsync: gitExecFileAsyncMock }))
 
-import { materializeWorktreePushTargetRemote } from './worktree-remote'
+import { ipcGitWorktreeTarget, materializeWorktreePushTargetRemote } from './worktree-remote'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const REPO_PATH = '/repo-root'
@@ -358,7 +358,7 @@ describe('materializeWorktreePushTargetRemote', () => {
       store,
       undefined,
       {},
-      'worktree-1'
+      ipcGitWorktreeTarget({ worktreeId: 'worktree-1' })
     )
 
     expect(result).toEqual({ ...target, remoteCreated: true })
@@ -367,6 +367,46 @@ describe('materializeWorktreePushTargetRemote', () => {
       {
         pushTarget: { ...target, remoteCreated: true }
       }
+    )
+  })
+
+  it('records the mint on the copy whose git ran, even when the repo has a twin on another host', async () => {
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        throw new Error('No such remote')
+      }
+      return { stdout: '', stderr: '' }
+    })
+    const target = forkTarget()
+    const setWorktreeMeta = vi.fn()
+    const repo = {
+      id: 'worktree-1',
+      path: REPO_PATH,
+      displayName: 'r',
+      badgeColor: '#000',
+      addedAt: 1
+    }
+    const store: WorktreePushTargetStore = {
+      getAllWorktreeMeta: () => ({}),
+      getRepos: () => [
+        { ...repo, executionHostId: 'local' },
+        { ...repo, connectionId: 'box', executionHostId: 'ssh:box' }
+      ],
+      setWorktreeMeta
+    }
+
+    await materializeWorktreePushTargetRemote(
+      REPO_PATH,
+      target,
+      store,
+      undefined,
+      {},
+      ipcGitWorktreeTarget({ worktreeId: 'worktree-1' })
+    )
+
+    expect(setWorktreeMeta).toHaveBeenCalledWith(
+      hostWorktreeTarget({ id: 'worktree-1', hostId: 'local' }),
+      { pushTarget: { ...target, remoteCreated: true } }
     )
   })
 

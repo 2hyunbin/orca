@@ -2,6 +2,8 @@ import { materializeWorktreePushTargetRemote } from '../ipc/worktree-remote'
 import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-options'
 import type { GitPushTarget } from '../../shared/worktree/types'
 import type { Repo } from '../../shared/repo-types'
+import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import type { WorktreePushTargetStore } from '../ipc/worktree-push-target-cleanup'
 import type { ProjectRuntimeResolutionStore } from '../local-project-runtime-resolution'
 
@@ -31,6 +33,11 @@ export function triggerTerminalSpawnPushTargetMaterialization(
     repoId,
     localGitOptionsForTerminalSpawn(store, repo),
     worktreeId
+      ? hostWorktreeTarget({
+          id: worktreeId,
+          hostId: repo ? getRepoExecutionHostId(repo) : LOCAL_EXECUTION_HOST_ID
+        })
+      : undefined
   ).catch((error: unknown) => {
     console.warn(
       `[terminal-spawn] failed to materialize push target remote for ${worktreePath}:`,

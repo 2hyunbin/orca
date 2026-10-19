@@ -67,7 +67,7 @@ describe('push-target bookkeeping under a WSL move', () => {
       store,
       undefined,
       {},
-      worktreeId
+      hostWorktreeTarget({ id: worktreeId, hostId: hostId ?? 'local' })
     )
     return { result, setWorktreeMeta }
   }
