@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
-import { withDurableRuntimeStore, withRuntimePaneAdmission } from '../runtime-durable-store-fixture'
-import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import {
+  withDurableRuntimeStore,
+  withRuntimePaneAdmission
+} from '../../runtime-durable-store-fixture'
+import { getDefaultWorkspaceSession } from '../../../../shared/constants'
 import type {
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
-} from '../../../shared/runtime-types'
-import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
-import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import { OrcaRuntimeService } from '../orca-runtime'
-import { withMainPaneTerminals } from './layout-owner-pane-terminal-fill'
+} from '../../../../shared/runtime-types'
+import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import { OrcaRuntimeService } from '../../orca-runtime'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
 const REPO_ID = 'repo-1'
 const WORKTREE_ID = `${REPO_ID}::/workspace`
@@ -108,7 +110,10 @@ function windowGraph(
   }
 }
 
-function setup() {
+/** What the window's list holds for main's new pane when it lands, after main's own. */
+type WindowListing = 'pane-without-terminal' | 'no-new-pane'
+
+function setup(listing: WindowListing) {
   let session = persistedSession()
   const repo = {
     id: REPO_ID,
@@ -160,8 +165,8 @@ function setup() {
     kill: () => true,
     getForegroundProcess: async () => null
   })
-  // The window lists main's new pane from main's first frame, which names the pane but not yet
-  // its terminal, and that listing lands after main's own.
+  // The window's list lags main: built before main's first frame (no new pane), or from it (the
+  // pane, but not yet its terminal). Either lands after main's own listing.
   const revealTerminalSession = vi.fn(async (_worktreeId: string, args: { leafId?: string }) => {
     const newLeafId = args.leafId!
     const twoPanes = {
@@ -177,10 +182,12 @@ function setup() {
       1,
       windowGraph(
         [{ leafId: SOURCE_LEAF_ID, ptyId: SOURCE_PTY_ID }],
-        windowSnapshot(2, [
-          surface(SOURCE_LEAF_ID, SOURCE_PTY_ID, twoPanes),
-          surface(newLeafId, null, twoPanes)
-        ])
+        windowSnapshot(
+          2,
+          listing === 'no-new-pane'
+            ? [surface(SOURCE_LEAF_ID, SOURCE_PTY_ID, sourceLayout())]
+            : [surface(SOURCE_LEAF_ID, SOURCE_PTY_ID, twoPanes), surface(newLeafId, null, twoPanes)]
+        )
       )
     )
     return { tabId: TAB_ID }
@@ -207,27 +214,42 @@ function setup() {
   }
   // A terminal listing can name the source by its terminal, so the split runs main-side.
   const handle = internals.issuePtyHandle(internals.ptysById.get(SOURCE_PTY_ID))
-  return { runtime, handle, revealTerminalSession }
+  // Main's layout drops the pane, as a close of it would.
+  const dropPane = (leafId: string): void => {
+    const layout = session.terminalLayoutsByTabId[TAB_ID]!
+    const { [leafId]: _dropped, ...ptyIdsByLeafId } = layout.ptyIdsByLeafId ?? {}
+    session = {
+      ...session,
+      terminalLayoutsByTabId: {
+        ...session.terminalLayoutsByTabId,
+        [TAB_ID]: { ...layout, root: sourceLayout().root, ptyIdsByLeafId }
+      }
+    }
+  }
+  return { runtime, handle, dropPane }
 }
 
-describe('a pane the window lists before main binds its terminal there, in a layout-owner build', () => {
-  it("keeps main's terminal on the pane, so a tab close by the split's handle finds it", async () => {
-    const { runtime, handle, revealTerminalSession } = setup()
+describe("a tab close by a main-side split's handle while the window's list lags, in a layout-owner build", () => {
+  it.each<WindowListing>(['pane-without-terminal', 'no-new-pane'])(
+    "closes the tab on main's own record of the pane (%s)",
+    async (listing) => {
+      const { runtime, handle } = setup(listing)
+
+      const split = await runtime.splitTerminal(handle, { direction: 'vertical' })
+
+      await expect(runtime.closeTerminalTab(split.handle)).resolves.toMatchObject({
+        tabId: TAB_ID,
+        closeMode: 'tab'
+      })
+    }
+  )
+
+  it('still refuses once main no longer holds the pane', async () => {
+    const { runtime, handle, dropPane } = setup('no-new-pane')
 
     const split = await runtime.splitTerminal(handle, { direction: 'vertical' })
-    expect(revealTerminalSession).toHaveBeenCalledOnce()
+    dropPane(split.leafId!)
 
-    await expect(runtime.closeTerminalTab(split.handle)).resolves.toMatchObject({
-      tabId: TAB_ID,
-      closeMode: 'tab'
-    })
-  })
-
-  it('never replaces a terminal the window names, and leaves a pane main has not bound', () => {
-    const named = windowSnapshot(1, [surface(SOURCE_LEAF_ID, SOURCE_PTY_ID, sourceLayout())])
-    expect(withMainPaneTerminals(named, () => 'other')).toBe(named)
-
-    const unbound = windowSnapshot(1, [surface(SOURCE_LEAF_ID, null, sourceLayout())])
-    expect(withMainPaneTerminals(unbound, () => null)).toBe(unbound)
+    await expect(runtime.closeTerminalTab(split.handle)).rejects.toThrow('terminal_handle_stale')
   })
 })

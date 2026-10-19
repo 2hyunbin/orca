@@ -1,4 +1,6 @@
 /* eslint-disable unicorn/no-useless-spread */
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { relistPaneMainBinds } from './layout-owner-close-relisting'
 import { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal } from '../launch/mobile-terminal-owned-create'
 import type { OrcaRuntimeWithResolveTerminalSplitSourceAuthority } from '../launch/terminal-split-source-authority'
 import type {
@@ -135,6 +137,18 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
     ) {
       console.warn(`[e26] authority: live mismatch ${JSON.stringify({ authority, live: live ? { ptyId: live.pty.ptyId, wt: live.pty.worktreeId, inc: live.pty.incarnationId, rwt: live.record.worktreeId } : null })} t=${Date.now()}`)
       return null
+    }
+    // Switch point: main binds the pane, so its own record stands while the window's list lags.
+    if (
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      !this.findMobileTerminalSurfaceForPty(authority.worktreeId, authority.ptyId)
+    ) {
+      relistPaneMainBinds(authority, live.pty, {
+        hostId: (tabId) => this.getWorkspaceSessionHostIdsForTab(authority.worktreeId, tabId)[0],
+        session: (hostId) => this.store?.getWorkspaceSession?.(hostId),
+        relist: (pty, pane) =>
+          this.publishPtyBackedMobileSessionTerminal(authority.worktreeId, pty, pane)
+      })
     }
     const surface = this.findMobileTerminalSurfaceForPty(authority.worktreeId, authority.ptyId)
     if (!surface) {
