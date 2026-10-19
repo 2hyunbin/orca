@@ -281,7 +281,7 @@ describe('settling a send the provider proves it received after the ack window',
     ])
   })
 
-  it('keeps a send Stop withdrew before its write rejected when a receipt names it', async () => {
+  it('a receipt after Stop withdrew an unwritten send keeps it cancelled', async () => {
     dispatch.mockImplementationOnce(
       (input) =>
         new Promise((_resolve, reject) => {
@@ -311,11 +311,15 @@ describe('settling a send the provider proves it received after the ack window',
     await vi.waitFor(async () =>
       expect(await submissions()).toMatchObject([{ dispatchState: 'rejected' }])
     )
+    const before = journal().cursor()
     await host.settleLateDispatch({
       sessionId: SESSION,
       clientMessageId: params.envelope.clientOperationId,
       providerIdentity: { provider: 'codex', threadId: THREAD, turnId: 'turn-1', ordinal: 1 }
     })
+
+    const after = journal().readSince(before)
+    expect(after.ok && after.rows.filter((row) => row.kind === 'dispatch')).toEqual([])
 
     expect(await submissions()).toMatchObject([
       {
