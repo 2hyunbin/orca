@@ -327,6 +327,28 @@ describe('writeRuntimeFile disk precondition', () => {
     expect(result).toEqual({ ok: true })
   })
 
+  it('does not take a re-paired host holding the text as proof a lost write landed', async () => {
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 1 }])
+    serveHost({ enforcesPrecondition: true, diskContent: 'edited' })
+    runtimeEnvironmentCall.mockImplementation(async () => {
+      // The reply is lost, and the environment id is re-paired to another machine meanwhile.
+      replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 2 }])
+      return {
+        id: 'rpc',
+        ok: false,
+        error: {
+          code: 'runtime_timeout',
+          message: 'Timed out waiting for the remote Orca runtime'
+        },
+        _meta: { runtimeId: 'remote-runtime' }
+      }
+    })
+
+    await expect(
+      writeRuntimeFile(remoteContext, '/remote/repo/file.ts', 'edited', undefined, precondition)
+    ).rejects.toThrow('Timed out')
+  })
+
   it('still fails a timed-out guarded write whose content is not on disk', async () => {
     serveHost({ enforcesPrecondition: true, diskContent: 'original' })
     runtimeEnvironmentCall.mockResolvedValue({

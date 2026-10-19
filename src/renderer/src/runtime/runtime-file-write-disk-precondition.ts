@@ -61,11 +61,19 @@ function readRemoteFile(
 async function diskHoldsWrittenContent(
   context: RemoteFileContext,
   filePath: string,
-  content: string
+  content: string,
+  pairingRevision: number | undefined
 ): Promise<boolean> {
+  // Why the save's pairing: a host the environment was re-paired to proves nothing about this write.
+  const samePairing = (): boolean =>
+    getRuntimeEnvironmentRevision(context.target.environmentId) === pairingRevision
   try {
+    if (!samePairing()) {
+      return false
+    }
     const current = await readRemoteFile(context, filePath)
     return (
+      samePairing() &&
       !current.isBinary &&
       getDiskBaselineSignature(current.content) === getWrittenContentDiskSignature(content)
     )
@@ -123,7 +131,7 @@ export async function writeRemoteFileIfUnchanged(
     // Why: a reply lost to the transport may follow a write that landed; keeping it avoids refusing the next save.
     if (
       isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error)) &&
-      (await diskHoldsWrittenContent(context, filePath, content))
+      (await diskHoldsWrittenContent(context, filePath, content, pairingRevision))
     ) {
       return FILE_WRITE_OK
     }

@@ -13,9 +13,10 @@ import type * as LocalRegularFileRead from './local-regular-file-read'
 import type * as NodeFsPromises from 'node:fs/promises'
 
 const fileRead = vi.hoisted(() => {
-  const state: { understateSizeBy: number; hangPath: string | null } = {
+  const state: { understateSizeBy: number; hangPath: string | null; openError: Error | null } = {
     understateSizeBy: 0,
-    hangPath: null
+    hangPath: null,
+    openError: null
   }
   return state
 })
@@ -66,6 +67,9 @@ vi.mock('./local-regular-file-read', async (importOriginal) => {
     ...actual,
     // Why: reports the size from before a concurrent append, as a stat racing the writer would.
     openLocalRegularFile: async (filePath: string) => {
+      if (fileRead.openError) {
+        throw fileRead.openError
+      }
       if (filePath === fileRead.hangPath) {
         // A read stuck on a dead network or WSL mount.
         await new Promise(() => undefined)
@@ -86,6 +90,7 @@ beforeEach(async () => {
 afterEach(async () => {
   fileRead.understateSizeBy = 0
   fileRead.hangPath = null
+  fileRead.openError = null
   realpathFailure.path = null
   writeGates.clear()
   zeroInodes.enabled = false
@@ -323,6 +328,47 @@ describe('local provider guarded write', () => {
   )
 
   it.skipIf(process.platform === 'win32')(
+    'lets only one save create a missing file at the end of a 20-link dangling chain',
+    async () => {
+      const target = join(base, 'target.ts')
+      let previous = target
+      for (let index = 0; index < 20; index += 1) {
+        const link = join(base, `link-${index}.ts`)
+        await symlink(previous, link)
+        previous = link
+      }
+      const createIfMissing = {
+        expectedSignature: getDiskBaselineSignature('original'),
+        allowMissing: true
+      }
+
+      const results = await Promise.all([
+        provider().writeFileWithDiskPrecondition(target, 'through target', createIfMissing),
+        provider().writeFileWithDiskPrecondition(previous, 'through chain', createIfMissing)
+      ])
+
+      expect(results.filter((result) => result.ok)).toHaveLength(1)
+    }
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'refuses a guarded save through a symlink loop instead of failing',
+    async () => {
+      const a = join(base, 'a.ts')
+      const b = join(base, 'b.ts')
+      await symlink(b, a)
+      await symlink(a, b)
+
+      await expect(
+        provider().writeFileWithDiskPrecondition(a, 'edited', {
+          expectedSignature: getDiskBaselineSignature('original'),
+          allowMissing: true
+        })
+      ).resolves.toEqual({ ok: false, diskConflict: 'changed' })
+    }
+  )
+
+  it.skipIf(process.platform === 'win32')(
     'resolves a relative dangling link from its real folder, not the symlinked path to it',
     async () => {
       // base/alias -> base/real/sub, and sub/link.ts -> ../target.ts, so the target is base/real/target.ts.
@@ -385,6 +431,21 @@ describe('local provider guarded write', () => {
 
     expect(outcome).toEqual({ ok: true })
     expect(await readFile(filePath, 'utf-8')).toBe('plain')
+  })
+
+  it('does not read a permission error whose path names ENOENT as a missing file', async () => {
+    const filePath = join(base, 'locked.ts')
+    fileRead.openError = Object.assign(
+      new Error(`EACCES: permission denied, open '${base}/ENOENT: no such file or directory.ts'`),
+      { code: 'EACCES' }
+    )
+
+    await expect(
+      checkLocalDiskWritePrecondition(filePath, {
+        expectedSignature: getDiskBaselineSignature('original'),
+        allowMissing: true
+      })
+    ).rejects.toThrow('EACCES')
   })
 
   it('does not resurrect a deleted file without allowMissing', async () => {

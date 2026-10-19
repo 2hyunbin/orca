@@ -12,7 +12,6 @@ import {
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../../shared/file-write-disk-precondition'
-import { isENOENT } from '../filesystem-path-containment'
 import { readlink, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, normalize, resolve } from 'node:path'
 import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
@@ -48,7 +47,8 @@ export async function checkLocalDiskWritePrecondition(
   try {
     opened = await openLocalRegularFile(filePath)
   } catch (error) {
-    if (isENOENT(error)) {
+    // Why the code alone: the message quotes the path, which can spell any error.
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
       return compareDiskWritePrecondition(precondition, null)
     }
     throw error
@@ -79,12 +79,16 @@ export async function checkLocalDiskWritePrecondition(
 const editorWritesByPath = new Map<string, Promise<void>>()
 const editorWritesByInode = new Map<string, Promise<void>>()
 
-const MAX_SYMLINK_HOPS = 16
+// Why 40: Linux's own limit, so any chain the OS can open resolves here too.
+const MAX_SYMLINK_HOPS = 40
 
-/** Follows a symlink chain by hand, since realpath fails once its final target is missing. */
-async function followSymlinks(filePath: string): Promise<string> {
+/**
+ * Follows a symlink chain by hand, since realpath fails once its final target is missing. Null
+ * for a chain that never ends (a loop), whose writes could not share one lock.
+ */
+async function followSymlinks(filePath: string): Promise<string | null> {
   let current = filePath
-  for (let hop = 0; hop < MAX_SYMLINK_HOPS; hop += 1) {
+  for (let hop = 0; hop <= MAX_SYMLINK_HOPS; hop += 1) {
     let target: string
     try {
       target = await readlink(current)
@@ -95,15 +99,18 @@ async function followSymlinks(filePath: string): Promise<string> {
     const linkFolder = await realpath(dirname(current)).catch(() => dirname(current))
     current = resolve(linkFolder, target)
   }
-  return current
+  return null
 }
 
 /**
  * A file's canonical path: real parent plus a case- and Unicode-folded name (folding only
  * over-serializes). Symlinks are followed first, so a dangling link and its future target share it.
  */
-async function editorWritePathKey(requestedPath: string): Promise<string> {
+async function editorWritePathKey(requestedPath: string): Promise<string | null> {
   const filePath = await followSymlinks(requestedPath)
+  if (filePath === null) {
+    return null
+  }
   let parentKey: string
   try {
     parentKey = await serializedParentDirectoryKey(filePath)
@@ -151,14 +158,15 @@ export async function writeLocalTextFileWithDiskPrecondition(
     await writeFile(filePath, content, 'utf-8')
     return FILE_WRITE_OK
   }
-  return runKeyedSerializedOperation(
-    editorWritesByPath,
-    await editorWritePathKey(filePath),
-    async () => {
-      const inodeKey = await editorWriteInodeKey(filePath)
-      return inodeKey === null
-        ? compareAndWrite()
-        : runKeyedSerializedOperation(editorWritesByInode, inodeKey, compareAndWrite)
-    }
-  )
+  const pathKey = await editorWritePathKey(filePath)
+  if (pathKey === null) {
+    // Why refuse: a link loop can't be compared or locked, and disk can't hold the baseline there.
+    return { ok: false, diskConflict: 'changed' }
+  }
+  return runKeyedSerializedOperation(editorWritesByPath, pathKey, async () => {
+    const inodeKey = await editorWriteInodeKey(filePath)
+    return inodeKey === null
+      ? compareAndWrite()
+      : runKeyedSerializedOperation(editorWritesByInode, inodeKey, compareAndWrite)
+  })
 }
