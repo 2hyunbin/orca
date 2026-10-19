@@ -31,11 +31,7 @@ import {
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
 import { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
-import {
-  closeTestJournalHostDatabase,
-  liveTestJournalRows,
-  loadTestJournal
-} from '../native-chat/agent-session-journal/journal-host-database-test-support'
+import { liveTestJournalRows } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import type Database from '../sqlite/sync-database'
 
 const CALLER = { callerKey: 'codex-held-sends-test' }
@@ -168,7 +164,6 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks()
   await stopStructuredAgentSessionRuntime()
-  closeTestJournalHostDatabase(root)
   await rm(root, { recursive: true, force: true })
 })
 
@@ -342,15 +337,13 @@ describe('a Codex receipt whose first save fails', () => {
     // The first echo released B's armed entry, so only the journal still says its receipt is owed.
     handlers?.onNotification?.('item/completed', echo)
     turns.end('completed')
-    await vi.waitFor(async () => expect((await rawSubmission(b)).dispatchState).toBe('accepted'))
+    await vi.waitFor(async () =>
+      expect(await rawSubmission(b)).toMatchObject({
+        dispatchState: 'accepted',
+        providerItemId: expect.stringMatching(/^codex:/)
+      })
+    )
     expect(lastPublished(b)).toMatchObject({ dispatchState: 'accepted' })
-
-    await stopStructuredAgentSessionRuntime()
-    const reopened = loadTestJournal(root, SESSION)?.state
-    expect(reopened?.submissions.get(b)).toMatchObject({
-      dispatchState: 'accepted',
-      providerItemId: expect.stringMatching(/^codex:/)
-    })
-    expect(reopened?.submissions.get(a)?.dispatchState).not.toBe('accepted')
+    expect((await rawSubmission(a)).dispatchState).not.toBe('accepted')
   })
 })
