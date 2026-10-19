@@ -227,3 +227,35 @@ it.each(
     }
   }
 )
+
+it.each(['ipc', 'runtime'])(
+  'leaves no ownership for a %s spawn that exited before its commit began',
+  async (controller) => {
+    const { store } = await fixture()
+    const runtime = new OrcaRuntimeService(store)
+    runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
+    // The provider's exit listener ran before the commit recorded ownership.
+    await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
+    const deps = createPtySpawnCommitDependencies(runtime, store)
+    let commit: () => Promise<unknown>
+    if (controller === 'ipc') {
+      const ctx = createPtyIpcSpawnState(deps, { ...binding, cols: 80, rows: 24 })
+      ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
+      ctx.metadataLeafId = binding.leafId
+      ctx.validatedLeafId = binding.leafId
+      commit = () => commitPtyIpcSpawn(ctx)
+    } else {
+      const ctx = createRuntimePtySpawnState(deps, { ...binding, cols: 80, rows: 24 })
+      ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
+      ctx.metadataLeafId = binding.leafId
+      await admitRuntimeSpawnPane(store, binding)
+      ctx.hostSessionBinding = { store, ...binding }
+      commit = () => commitRuntimePtySpawn(ctx)
+    }
+
+    await commit().catch(() => undefined)
+
+    expect(ptyOwnership.has(binding.ptyId)).toBe(false)
+    expect(ptyIncarnationById.has(binding.ptyId)).toBe(false)
+  }
+)

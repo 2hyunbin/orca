@@ -13,6 +13,26 @@ function providerWhoseShutdown(shutdown: () => Promise<void>): IPtyProvider {
 }
 
 // The commit records ownership at its start, before the save whose failure leads here.
+describe('admitting a new spawn', () => {
+  afterEach(() => {
+    ptyOwnership.delete(PTY_ID)
+    ptyIncarnationById.delete(PTY_ID)
+  })
+
+  it('tracks a same-id respawn even when a predecessor exit verdict lingers', () => {
+    // Daemon spawns do not reset the id-keyed verdict a predecessor left behind.
+    const runtime = { getPtyLivenessVerdict: () => ({ status: 'exited' as const }) }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: admission reads only the verdict.
+    admitPtySpawnOwnership(
+      runtime as unknown as Parameters<typeof admitPtySpawnOwnership>[0],
+      result
+    )
+
+    expect(ptyOwnership.get(PTY_ID)).toBe(LOCAL_EXECUTION_HOST_ID)
+    expect(ptyIncarnationById.get(PTY_ID)).toBe('inc-1')
+  })
+})
+
 describe('discarding a spawn whose binding failed to save', () => {
   afterEach(() => {
     ptyOwnership.delete(PTY_ID)
