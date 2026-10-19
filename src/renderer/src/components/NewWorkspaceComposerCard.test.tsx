@@ -38,8 +38,7 @@ vi.mock('@/store', () => ({
     {
       getState: () => ({
         setRuntimeEnvironmentStatus: storeMocks.setRuntimeEnvironmentStatus
-      }),
-      subscribe: () => () => {}
+      })
     }
   )
 }))

@@ -23,6 +23,7 @@ vi.mock('@/store', () => ({
       unifiedTabsByWorktree: {},
       activeGroupIdByWorktree: {},
       createUnifiedTab: mocks.createUnifiedTab,
+      readLocalAgentInventory: () => ({ ids: null, state: 'pending' }),
       setActiveTabType: vi.fn()
     })
   })

@@ -225,6 +225,9 @@ function QuickTabBody({
     setQuickAgentOverride(resolvedQuickAgentSelection.quickAgentOverride)
   }
   const quickAgent = resolvedQuickAgentSelection.quickAgent
+  const chipAgentIds =
+    offeredAgentIds &&
+    new Set([...offeredAgentIds, ...(quickAgent && choicePending(quickAgent) ? [quickAgent] : [])])
   const [quickSelectionCleared, setQuickSelectionCleared] = useState(false)
   const quickSetupOnly = quickAgent === null && quickSelectionCleared
 
@@ -357,6 +360,8 @@ function QuickTabBody({
         quickSetupOnly={quickSetupOnly}
         onQuickSetupOnlySelect={handleQuickSetupOnlySelect}
         {...cardProps}
+        // Chips list offered agents, keeping a pick whose chat is still being learned.
+        detectedAgentIds={chipAgentIds}
         primaryActionLabel={primaryActionLabel}
         onOpenAgentSettings={() => setAgentSettingsOpen(true)}
         onCreate={() => void handleCreate()}

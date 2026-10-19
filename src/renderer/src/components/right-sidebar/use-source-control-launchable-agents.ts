@@ -27,13 +27,16 @@ export function useSourceControlLaunchableAgents({
   const [detecting, setDetecting] = useState(false)
   const workspace = sourceControlLaunchWorkspace(target)
   useChatProgramFacts(workspace, active && !connectionUnavailable)
+  // Source Control renders with the dialog closed; only an open dialog lists agents.
   const detected = useAppStore((state) =>
-    worktreeId
-      ? readAgentInventoryForWorktree(state, worktreeId).ids
-      : readAgentInventoryForTarget(
-          state,
-          typeof connectionId === 'string' ? { kind: 'ssh', connectionId } : { kind: 'local' }
-        ).ids
+    !active
+      ? null
+      : worktreeId
+        ? readAgentInventoryForWorktree(state, worktreeId).ids
+        : readAgentInventoryForTarget(
+            state,
+            typeof connectionId === 'string' ? { kind: 'ssh', connectionId } : { kind: 'local' }
+          ).ids
   )
   const refreshAgents = useCallback(async () => {
     if (connectionUnavailable) {
@@ -65,6 +68,8 @@ export function useSourceControlLaunchableAgents({
     detecting,
     refreshAgents,
     refreshLaunchableAgents,
-    launchableAgents: agentsOfferedForLaunch(useAppStore.getState(), workspace, detected)
+    launchableAgents: active
+      ? agentsOfferedForLaunch(useAppStore.getState(), workspace, detected)
+      : []
   }
 }

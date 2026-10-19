@@ -61,17 +61,22 @@ export async function resolveDirectWorkItemAgent(args: {
     kind: workspaceKindForWorktreeId(args.worktreeId),
     worktreeId: args.worktreeId
   }
-  const choices = await acquireAgentLaunchChoices(workspace, async () => {
-    const ids =
-      args.agentOverride === undefined &&
-      args.detectedAgentsPromise &&
-      args.launchConnectionId === args.repoConnectionId
-        ? await args.detectedAgentsPromise
-        : await ensureDetectedAgentsForNewWorktree(args.latestStore, args.worktreeId, args.repoHost)
-    return ids.filter(isTuiAgent)
-  })
+  const ids = (
+    args.agentOverride === undefined &&
+    args.detectedAgentsPromise &&
+    args.launchConnectionId === args.repoConnectionId
+      ? await args.detectedAgentsPromise
+      : await ensureDetectedAgentsForNewWorktree(args.latestStore, args.worktreeId, args.repoHost)
+  ).filter(isTuiAgent)
+  const wanted = args.agentOverride ?? useAppStore.getState().settings?.defaultTuiAgent
+  // Chat facts can only change the pick when the wanted agent's CLI is not detected.
+  const choices =
+    wanted && wanted !== 'blank' && !ids.includes(wanted)
+      ? await acquireAgentLaunchChoices(workspace, async () => ids)
+      : null
   const store = useAppStore.getState()
-  const detected = [...(choices.detected ?? [])]
+  // A new workspace may not be in the store yet; its own detection answers then.
+  const detected = [...(choices?.detected ?? ids)]
   // A chosen agent may open as a chat without its CLI; the automatic pick stays on detected ones.
   if (args.agentOverride !== undefined) {
     return {

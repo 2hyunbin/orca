@@ -64,7 +64,6 @@ const mocks = vi.hoisted(() => {
 vi.mock('./host-chat-program-acquisition', () => ({
   acquireAgentLaunchChoices: async (_: unknown, run: () => unknown) => ({ detected: await run() })
 }))
-
 vi.mock('@/store', () => ({
   useAppStore: {
     getState: () => mocks.store
