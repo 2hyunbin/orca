@@ -1582,12 +1582,11 @@ jobs:
   # specs fail with it on until that work lands. It reports a red X without blocking the merge.
   layout_owner_switch_on:
     name: layout owner (switch on)
-    needs: [code_paths, preflight]
+    needs: [code_paths]
     if: >-
       !cancelled() &&
       needs.code_paths.result == 'success' &&
-      needs.code_paths.outputs.layout_owner_switch_on == 'true' &&
-      needs.preflight.result == 'success'
+      needs.code_paths.outputs.layout_owner_switch_on == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/e2e.yml
