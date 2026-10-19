@@ -6,6 +6,7 @@ import {
   type RuntimeEnvironmentCallRequest
 } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
+import { PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY } from '../../../../shared/runtime-capability-constants'
 import { createTestStore } from './store-test-helpers'
 
 export function registerReposProjectHostLifecycleTests(): void {
@@ -273,6 +274,33 @@ export function registerReposProjectHostLifecycleTests(): void {
         timeoutMs: 15_000
       })
       expect(store.getState().projectHostSetups).toEqual([serverLocal])
+    })
+
+    it('refuses to remove a paired-server twin when the server cannot tell twins apart', async () => {
+      const serverLocal: ProjectHostSetup = { ...runtimeSetup, executionHostId: 'runtime:env-1' }
+      const serverSsh: ProjectHostSetup = { ...serverLocal, executionHostId: 'ssh:box' }
+      runtimeEnvironmentTransportCall.mockImplementation((args: RuntimeEnvironmentCallRequest) => {
+        const status = createCompatibleRuntimeStatusResponseIfNeeded(args)
+        if (status?.ok) {
+          status.result.capabilities = (status.result.capabilities ?? []).filter(
+            (capability) => capability !== PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY
+          )
+        }
+        return status ?? runtimeEnvironmentCall(args)
+      })
+      const store = createTestStore()
+      store.setState({
+        projects: [project],
+        projectHostSetups: [serverLocal, serverSsh],
+        settings: { activeRuntimeEnvironmentId: null } as never
+      })
+
+      await expect(
+        store.getState().deleteProjectHostSetup({ setupId: serverSsh.id, hostId: 'ssh:box' })
+      ).resolves.toBeNull()
+
+      expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+      expect(store.getState().projectHostSetups).toEqual([serverLocal, serverSsh])
     })
 
     it('preserves runtime-fetched setup-only states during repo hydration', async () => {

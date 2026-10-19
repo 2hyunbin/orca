@@ -23,15 +23,15 @@ export function findProjectHostSetup<T extends SetupIdentity>(
   if (exact) {
     return exact
   }
-  // Why: an independent setup's id is minted unique, and older servers stored the calling
-  // client's own `runtime:` id for themselves, which the RPC schema now reads as `local`.
-  const [only] = candidates
-  return candidates.length === 1 &&
-    !only.repoId &&
-    target.hostId === 'local' &&
-    parseExecutionHostId(only.hostId)?.kind === 'runtime'
-    ? only
-    : undefined
+  // Why: older servers stamped their own rows with the calling client's `runtime:` id, which the
+  // RPC schema now reads as `local`; accept that stamp only when exactly one row carries it.
+  if (target.hostId !== 'local') {
+    return undefined
+  }
+  const legacy = candidates.filter(
+    (setup) => parseExecutionHostId(setup.hostId)?.kind === 'runtime'
+  )
+  return legacy.length === 1 ? legacy[0] : undefined
 }
 
 /** The host that runs a setup: a paired server's setups all carry its `runtime:` id as `hostId`. */

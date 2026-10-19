@@ -21,7 +21,7 @@ import {
   assertProjectHostSetupMutationRuntimeCapabilities,
   getProjectSetupRuntimeTarget,
   isSameProjectHostSetup,
-  routeProjectHostSetupMutation,
+  prepareProjectHostSetupMutation,
   upsertProjectHostSetup
 } from './project-host-routing'
 
@@ -142,8 +142,10 @@ export function createProjectHostSetupActions(
 
     updateProjectHostSetup: async (args) => {
       try {
-        const { target, hostArgs } = routeProjectHostSetupMutation(get().projectHostSetups, args)
-        await assertProjectHostSetupMutationRuntimeCapabilities(target)
+        const { target, hostArgs } = await prepareProjectHostSetupMutation(
+          get().projectHostSetups,
+          args
+        )
         const result =
           target.kind === 'local'
             ? await window.api.projects.updateHostSetup(hostArgs)
@@ -191,8 +193,10 @@ export function createProjectHostSetupActions(
 
     deleteProjectHostSetup: async (args) => {
       try {
-        const { target, hostArgs } = routeProjectHostSetupMutation(get().projectHostSetups, args)
-        await assertProjectHostSetupMutationRuntimeCapabilities(target)
+        const { target, hostArgs } = await prepareProjectHostSetupMutation(
+          get().projectHostSetups,
+          args
+        )
         const result =
           target.kind === 'local'
             ? await window.api.projects.deleteHostSetup(hostArgs)

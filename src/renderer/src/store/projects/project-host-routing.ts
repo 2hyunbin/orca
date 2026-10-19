@@ -9,6 +9,7 @@ import {
   type ProjectHostSetupProjection
 } from '../../../../shared/project-host-setup-projection'
 import {
+  PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY,
   PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
   WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY
 } from '../../../../shared/protocol-version'
@@ -121,19 +122,30 @@ export function upsertProjectHostSetup(
  * Where a setup edit or removal goes, with the host that runs the setup named on the wire.
  * A caller's `hostId` is that execution host: the only field telling a server's twins apart.
  */
-export function routeProjectHostSetupMutation<T extends ProjectHostSetupTarget>(
+export async function prepareProjectHostSetupMutation<T extends ProjectHostSetupTarget>(
   setups: readonly ProjectHostSetup[],
   args: T
-): { target: RuntimeClientTarget; hostArgs: T } {
+): Promise<{ target: RuntimeClientTarget; hostArgs: T }> {
   const setup = setups.find(
     (entry) =>
       entry.id === args.setupId &&
       (args.hostId === undefined || getProjectHostSetupExecutionHostId(entry) === args.hostId)
   )
-  return setup
-    ? {
-        target: getProjectSetupRuntimeTarget(setup.hostId),
-        hostArgs: { ...args, hostId: getProjectHostSetupExecutionHostId(setup) }
-      }
-    : { target: { kind: 'local' }, hostArgs: args }
+  const target = setup ? getProjectSetupRuntimeTarget(setup.hostId) : { kind: 'local' as const }
+  await assertProjectHostSetupMutationRuntimeCapabilities(target)
+  const twinned =
+    setup &&
+    setups.filter((entry) => entry.id === setup.id && entry.hostId === setup.hostId).length > 1
+  if (twinned && target.kind === 'environment') {
+    await assertRuntimeEnvironmentCapability(
+      target.environmentId,
+      PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY,
+      'This project is set up on more than one host of the selected Orca server, and that server cannot tell them apart yet. Update Orca on the server and try again.',
+      15_000
+    )
+  }
+  return {
+    target,
+    hostArgs: setup ? { ...args, hostId: getProjectHostSetupExecutionHostId(setup) } : args
+  }
 }
