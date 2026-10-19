@@ -9,6 +9,7 @@ import {
 import { buildHydratedTabState } from '../tabs-hydration'
 import { projectWorktreeTabModelReconciliation } from './tabs-reconciliation'
 import { createWorktreeTabModelReconciliationBatch } from './tabs-reconciliation-batch'
+import { hydratedDesktopTabChoices } from './desktop-tab-choice'
 import type { AppState } from '../../types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
@@ -92,12 +93,18 @@ export function createTabsSessionActions(
       }
       addAdditionalValidWorkspaceKeys(validWorktreeIds, options)
       const hydrated = buildHydratedTabState(session, validWorktreeIds)
+      const desktopTabChoices = hydratedDesktopTabChoices(session.tabGroups)
       if (!options?.replaceWorkspaceKeys) {
-        set(hydrated)
+        set({ ...hydrated, desktopTabChoices })
         return
       }
       const replaceWorkspaceKeys = new Set(options.replaceWorkspaceKeys)
       set((current) => ({
+        desktopTabChoices: replaceWorkspaceRecordKeys(
+          current.desktopTabChoices,
+          desktopTabChoices,
+          replaceWorkspaceKeys
+        ),
         unifiedTabsByWorktree: replaceWorkspaceRecordKeys(
           current.unifiedTabsByWorktree,
           hydrated.unifiedTabsByWorktree,

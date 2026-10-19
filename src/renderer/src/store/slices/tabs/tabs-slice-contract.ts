@@ -8,6 +8,7 @@ import type {
 } from '../../../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../../../shared/workspace-session-state-types'
 import type { WorkspaceSessionHydrationOptions } from '@/lib/workspace-session-hydration-keys'
+import type { DesktopTabChoices } from './desktop-tab-choice'
 
 export type TabSplitDirection = 'left' | 'right' | 'up' | 'down'
 
@@ -29,6 +30,9 @@ export type TabsSlice = {
   groupsByWorktree: Record<string, TabGroup[]>
   activeGroupIdByWorktree: Record<string, string>
   layoutByWorktree: Record<string, TabGroupLayoutNode>
+  desktopTabChoices: DesktopTabChoices
+  /** A click, key or explicit open chose a tab here; creates and display projection never do. */
+  recordDesktopTabChoice: (worktreeId: string) => void
   createUnifiedTab: (
     worktreeId: string,
     contentType: TabContentType,

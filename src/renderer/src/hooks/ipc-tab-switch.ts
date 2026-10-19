@@ -60,6 +60,9 @@ function resolveCycleContext(): CycleContext | null {
  */
 export function activateCyclableTab(store: AppStoreState, next: TypeCyclableTab): void {
   const worktreeId = store.activeWorktreeId
+  if (worktreeId) {
+    store.recordDesktopTabChoice?.(worktreeId)
+  }
   if (next.type === 'terminal') {
     store.setActiveTab(next.id)
     // Terminal entities can be open in multiple split groups. setActiveTab uses the legacy

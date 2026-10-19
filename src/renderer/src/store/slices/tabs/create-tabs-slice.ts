@@ -18,6 +18,13 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
   groupsByWorktree: {},
   activeGroupIdByWorktree: {},
   layoutByWorktree: {},
+  desktopTabChoices: {},
+  recordDesktopTabChoice: (worktreeId) =>
+    set((state) =>
+      state.desktopTabChoices[worktreeId]
+        ? {}
+        : { desktopTabChoices: { ...state.desktopTabChoices, [worktreeId]: true } }
+    ),
   ...createTabsCreateActions(set, get),
   ...createTabsFocusActions(set, get),
   ...createTabsCloseActions(set, get),

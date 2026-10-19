@@ -30,6 +30,7 @@ import { buildWorkspaceTerminalLayoutPlan } from './terminals/workspace-terminal
 import { buildWorkspaceTerminalRowPlan } from './terminals/workspace-terminal-row-plan'
 import type { AppState } from './types'
 import type { WorkspaceLayoutCache } from './workspace-layout-cache'
+import { desktopCreationDefaultTab } from './slices/tabs/desktop-tab-choice'
 
 export type LayoutFrameSliceInput = {
   /** Workspace key → its layout as the last frame published it. */
@@ -38,6 +39,8 @@ export type LayoutFrameSliceInput = {
   view: DesktopLayoutView
   /** Whether this window holds an editor file's record: frames carry only edit-mode files'. */
   holdsEditorFile?: (worktreeId: string, fileId: string) => boolean
+  /** This window's tab choices: a workspace saved without one opens on its creation tab. */
+  choices?: Pick<AppState, 'desktopTabChoices' | 'worktreesByRepo' | 'folderWorkspaces'>
 }
 
 export type LayoutFrameSlices = Pick<
@@ -121,19 +124,36 @@ function stampExecutionHosts(
   )
 }
 
-/** A group shows the view's tab, else its first, as the startup reconcile picks today. */
+/** A group shows the view's tab, else its creation tab or first, as the startup reconcile picks. */
 function withShownTabs(
-  groupsByWorktree: AppState['groupsByWorktree']
+  tabs: Pick<AppState, 'groupsByWorktree' | 'unifiedTabsByWorktree' | 'tabsByWorktree'>,
+  choices: LayoutFrameSliceInput['choices']
 ): AppState['groupsByWorktree'] {
   return Object.fromEntries(
-    Object.entries(groupsByWorktree).map(([key, groups]) => [
-      key,
-      groups.map((group) =>
-        group.activeTabId === null && group.tabOrder.length > 0
-          ? { ...group, activeTabId: group.tabOrder[0]! }
-          : group
-      )
-    ])
+    Object.entries(tabs.groupsByWorktree).map(([key, groups]) => {
+      const byId = new Map((tabs.unifiedTabsByWorktree[key] ?? []).map((tab) => [tab.id, tab]))
+      const creationTab = choices
+        ? desktopCreationDefaultTab(
+            { ...choices, tabsByWorktree: tabs.tabsByWorktree },
+            key,
+            groups.flatMap((group) => group.tabOrder.flatMap((id) => byId.get(id) ?? []))
+          )
+        : undefined
+      return [
+        key,
+        groups.map((group) =>
+          group.activeTabId === null && group.tabOrder.length > 0
+            ? {
+                ...group,
+                activeTabId:
+                  creationTab && group.tabOrder.includes(creationTab.id)
+                    ? creationTab.id
+                    : group.tabOrder[0]!
+              }
+            : group
+        )
+      ]
+    })
   )
 }
 
@@ -141,7 +161,8 @@ export function buildLayoutFrameSlices({
   layouts,
   facts,
   view,
-  holdsEditorFile
+  holdsEditorFile,
+  choices
 }: LayoutFrameSliceInput): LayoutFrameSlices {
   const liveTitles = liveTitlesByTabId(layouts, view)
   const saved = saveWorkspaceLayout({
@@ -201,7 +222,10 @@ export function buildLayoutFrameSlices({
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
     ...editorTabs,
-    groupsByWorktree: withShownTabs(editorTabs.groupsByWorktree),
+    groupsByWorktree: withShownTabs(
+      { ...editorTabs, tabsByWorktree: rows.tabsByWorktree },
+      choices
+    ),
     openFiles: editor.state.openFiles,
     editorDrafts: editor.state.editorDrafts,
     markdownFrontmatterVisible: editor.state.markdownFrontmatterVisible,

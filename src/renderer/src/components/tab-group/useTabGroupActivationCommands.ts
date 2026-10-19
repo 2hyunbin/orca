@@ -21,7 +21,16 @@ export function useTabGroupActivationCommands({
   groupTabs: Tab[]
   worktreeState: TabGroupWorktreeSnapshot
 }) {
-  const focusGroup = useAppStore((state) => state.focusGroup)
+  const focusGroupForWorktree = useAppStore((state) => state.focusGroup)
+  const recordDesktopTabChoice = useAppStore((state) => state.recordDesktopTabChoice)
+  // Every tab-strip click is this window's choice, including one on the tab already shown.
+  const focusGroup = useCallback(
+    (targetWorktreeId: string, targetGroupId: string) => {
+      recordDesktopTabChoice(targetWorktreeId)
+      focusGroupForWorktree(targetWorktreeId, targetGroupId)
+    },
+    [focusGroupForWorktree, recordDesktopTabChoice]
+  )
   const activateTab = useAppStore((state) => state.activateTab)
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const setActiveTabType = useAppStore((state) => state.setActiveTabType)
@@ -139,9 +148,10 @@ export function useTabGroupActivationCommands({
 
   const activateAgentSession = useCallback(
     (tabId: string) => {
+      recordDesktopTabChoice(worktreeId)
       activateStructuredAgentSessionTab({ worktreeId, tabId })
     },
-    [worktreeId]
+    [recordDesktopTabChoice, worktreeId]
   )
 
   return {

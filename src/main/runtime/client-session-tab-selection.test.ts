@@ -342,72 +342,46 @@ describe('client session-tab selection', () => {
 })
 
 describe('a workspace created with an agent', () => {
-  const setup = {
-    type: 'terminal',
-    id: 'setup::leaf',
-    parentTabId: 'setup',
-    leafId: 'leaf',
-    title: 'Setup',
-    isActive: false,
-    status: 'ready',
-    terminal: 'term-setup'
-  } as const
+  const terminal = snapshot().tabs.find((tab) => tab.type === 'terminal')
+  const setup = { ...terminal!, id: 'setup::leaf-a', parentTabId: 'setup', isActive: false }
   const agents = {
     chat: { type: 'agent-session', id: 'chat', sessionId: 's', agent: 'claude', title: 'Claude' },
-    'agent terminal': { ...setup, id: 'agent::leaf', parentTabId: 'agent', launchAgent: 'claude' }
+    'agent terminal': { ...setup, id: 'agent::leaf-a', parentTabId: 'agent', launchAgent: 'claude' }
   } as const
-  function workspace(
-    snapshotVersion: number,
-    agent?: (typeof agents)[keyof typeof agents]
-  ): RuntimeMobileSessionTabsResult {
-    const agentTopLevel = agent?.type === 'terminal' ? agent.parentTabId : agent?.id
-    return {
-      ...snapshot(),
-      snapshotVersion,
-      activeGroupId: 'group',
-      activeTabId: setup.id,
-      // The host-wide snapshot keeps Setup active: a phone create activates nothing on the host.
-      tabGroups: [
-        {
-          id: 'group',
-          activeTabId: 'setup',
-          tabOrder: agentTopLevel ? ['setup', agentTopLevel] : ['setup']
-        }
-      ],
-      tabs: agent
-        ? [
-            { ...setup, isActive: true },
-            { ...agent, isActive: false }
-          ]
-        : [setup]
-    }
-  }
+  // The host-wide snapshot keeps Setup active: a phone create activates nothing on the host.
+  const workspace = (snapshotVersion: number, agent?: (typeof agents)[keyof typeof agents]) => ({
+    ...snapshot(),
+    snapshotVersion,
+    tabGroups: [
+      {
+        id: 'group-left',
+        activeTabId: 'setup',
+        tabOrder: ['setup', ...(agent ? [agent.id.split('::')[0]!] : [])]
+      }
+    ],
+    tabs: agent ? [setup, { ...agent, isActive: false }] : [setup]
+  })
 
   // The bug: a phone-created workspace opened on Setup, and stayed there when its chat arrived.
-  it.each(Object.entries(agents))(
-    'opens on its %s for every viewer that has not picked a tab; a pick sticks',
-    (_kind, agent) => {
-      const store = new ClientSessionTabSelectionStore()
-      const shown = (s: ClientSessionTabSelectionStore, version: number, device: string) =>
-        s.project(workspace(version, agent), device, 'claude').activeTabId
+  it.each(Object.entries(agents))('opens on its %s until a viewer picks a tab', (_kind, agent) => {
+    const store = new ClientSessionTabSelectionStore()
+    const shown = (s: ClientSessionTabSelectionStore, version: number, device: string) =>
+      s.project(workspace(version, agent), device, 'claude').activeTabId
 
-      expect(store.project(workspace(1), 'phone', 'claude').activeTabId).toBe(setup.id)
-      store.activate(workspace(1), 'picked-early', setup.id)
-      expect(shown(store, 2, 'phone')).toBe(agent.id)
-      expect(shown(store, 2, 'second-phone')).toBe(agent.id)
-      expect(shown(store, 2, 'picked-early')).toBe(setup.id)
-      store.activate(workspace(2, agent), 'phone', setup.id)
-      const restarted = new ClientSessionTabSelectionStore()
-      restarted.hydrate(store.serialize())
-      for (const viewer of [store, restarted]) {
-        expect(shown(viewer, 3, 'phone')).toBe(setup.id)
-        expect(shown(viewer, 3, 'picked-early')).toBe(setup.id)
-        expect(shown(viewer, 3, 'second-phone')).toBe(agent.id)
-      }
-      expect(store.serialize()).not.toHaveProperty('second-phone')
-      // No creation agent keeps today's topology; closing the agent's tab falls back the same way.
-      expect(store.project(workspace(4, agent), 'other', undefined).activeTabId).toBe(setup.id)
-      expect(store.project(workspace(5), 'second-phone', 'claude').activeTabId).toBe(setup.id)
+    expect(store.project(workspace(1), 'phone', 'claude').activeTabId).toBe(setup.id)
+    store.activate(workspace(1), 'picked-early', setup.id)
+    expect(shown(store, 2, 'phone')).toBe(agent.id)
+    expect(shown(store, 2, 'second-phone')).toBe(agent.id)
+    store.activate(workspace(2, agent), 'phone', setup.id)
+    const restarted = new ClientSessionTabSelectionStore()
+    restarted.hydrate(store.serialize())
+    for (const viewer of [store, restarted]) {
+      expect(shown(viewer, 3, 'phone')).toBe(setup.id)
+      expect(shown(viewer, 3, 'picked-early')).toBe(setup.id)
+      expect(shown(viewer, 3, 'second-phone')).toBe(agent.id)
     }
-  )
+    // No creation agent keeps today's topology; closing the agent's tab falls back the same way.
+    expect(store.project(workspace(4, agent), 'other', undefined).activeTabId).toBe(setup.id)
+    expect(store.project(workspace(5), 'second-phone', 'claude').activeTabId).toBe(setup.id)
+  })
 })

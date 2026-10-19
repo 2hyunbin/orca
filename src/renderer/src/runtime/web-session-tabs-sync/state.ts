@@ -237,6 +237,10 @@ export type WebSessionTabsSyncState = Pick<
       | 'activityClearedAtByPaneKey'
       | 'agentLaunchConfigByPaneKey'
       | 'automaticAgentResumeClaimsByTabId'
+      // Why: an unchosen workspace's creation chat arrives as its default (desktop-tab-choice).
+      | 'desktopTabChoices'
+      | 'folderWorkspaces'
+      | 'worktreesByRepo'
       // Why: a client draft is the evidence that a mirrored file's dirty flag is the client's
       // own and must survive a host republish (#21392); absent here, the host flag wins.
       | 'editorDrafts'
