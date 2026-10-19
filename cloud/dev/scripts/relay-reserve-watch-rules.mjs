@@ -37,23 +37,22 @@ export const RULE_NAMES = ['deadMan', 'overrun', 'director503', 'duplicateSeat',
 // cell's own runtime metrics for the 10 minutes before phonePath went memory. A trip turns the
 // phone path off (phonePath=db) and the watch goes on with the reserve rules.
 export const PHONE_WATCH_RULES = {
-  // Each rate rule trips on three complete minutes in a row over its line.
+  // Each rule trips on three complete minutes in a row over its line.
   consecutiveMinutes: 3,
   readMinutes: 10,
-  // Line = mean + max(margin, share x mean, 4 sqrt(mean)): the design's 1.5x / +N as floors, and
-  // 4 Poisson deviations so a busy cell's ordinary noise stays under it (c7 lesson, 10-19).
-  credentialRefusals: { margin: 5, share: 0.5 },
-  confirmFailures: { margin: 5, share: 0.5 },
-  // 3 was enough for Poisson noise, but replayed on c29's bursty auth failures it false-tripped
-  // 29% of 300-minute watches (10-18/19); 5 tripped none.
-  attachDeadlines: { margin: 5, share: 0.5 },
-  acceptDatabaseErrors: { margin: 5, share: 0 },
-  noiseDeviations: 4,
+  // Judged as a share of the minute's phone attempts (the signal plus completed accepts), not a
+  // count: a count line false-tripped 30/119 5-hour watches on busy c28 (10-18/19), where bursts
+  // of refusals arrive with the evening rise in accepts. A minute with fewer attempts is not judged.
+  minAttemptsPerMinute: 4,
+  // Over half of the minute's attempts, and 0.25 above the share before the flip, capped so two
+  // failures per accept always trips. Exactly half is not enough: c28 (04:08Z) and c7 (09:13Z)
+  // both show 3 minutes at 50% of host-and-phone auth failures.
+  shareFloor: 0.5,
+  shareOverBackground: 0.25,
+  shareCeiling: 0.6,
   // Page only: confirms still work, only their audit rows or renewals are lost.
   pageAfterMs: 5 * MINUTE_MS
 }
-// Completed accepts are not judged: real traffic (c7, ~2/min) swings too far for any 10-minute
-// line, and a broken path already shows as 4401s, confirm failures, attach deadlines or errors.
 export const PHONE_RULE_NAMES = [
   'phoneCredentialRefusals',
   'phoneConfirmFailures',
@@ -67,20 +66,32 @@ const PHONE_RULE_SIGNALS = {
   phoneAcceptDatabaseErrors: 'acceptDatabaseErrors'
 }
 
-export function phoneRuleLine(signal, meanPerMinute) {
-  const { margin, share } = PHONE_WATCH_RULES[signal]
-  const noise = PHONE_WATCH_RULES.noiseDeviations * Math.sqrt(meanPerMinute)
-  return meanPerMinute + Math.max(margin, share * meanPerMinute, noise)
+const sum = (values) => values.reduce((total, value) => total + value, 0)
+
+// The share line for a signal whose share of attempts before the flip was `backgroundShare`.
+export function phoneShareLine(backgroundShare) {
+  const { shareFloor, shareOverBackground, shareCeiling } = PHONE_WATCH_RULES
+  return Math.min(shareCeiling, Math.max(shareFloor, backgroundShare + shareOverBackground))
 }
 
-const mean = (values) => (values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length)
+// Over the line: enough attempts that minute, and strictly more than the line refused or failed.
+export function phoneMinuteOver(count, completedAccepts, line) {
+  const attempts = count + completedAccepts
+  return attempts >= PHONE_WATCH_RULES.minAttemptsPerMinute && count / attempts > line
+}
 
-// The 10 minutes before phonePath went memory, from `readCellPhoneMinutes`: a mean per minute for
-// each signal. Null until every minute is metered.
+// The 10 minutes before phonePath went memory, from `readCellPhoneMinutes`: each signal's share of
+// attempts. Null until every minute is metered.
 export function measuredPhoneBackground(read) {
   if (!read.ok || read.unmetered.length > 0 || read.minutes.length === 0) return null
+  const accepted = sum(read.series.completedAccepts)
   return {
-    perMinute: Object.fromEntries(Object.entries(read.series).map(([signal, series]) => [signal, mean(series)])),
+    share: Object.fromEntries(
+      Object.values(PHONE_RULE_SIGNALS).map((signal) => {
+        const count = sum(read.series[signal])
+        return [signal, count + accepted === 0 ? 0 : count / (count + accepted)]
+      })
+    ),
     minutes: read.minutes.length
   }
 }
@@ -112,6 +123,7 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
     phoneBackground: null,
     phoneOffAt: null,
     phoneTrip: null,
+    phoneOffFailures: 0,
     phoneUnverifiableStreak: 0,
     auditDropsLast: null,
     auditDropsSince: null,
@@ -280,22 +292,26 @@ function judgePhoneRules(cell, phone, state, at) {
     return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, verdict]))
   }
   if (!phone.ok) return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, unverifiable(phone.error)]))
-  if (phone.unmetered.length > 0) {
-    const gap = unverifiable(`no cell runtime metrics for ${phone.unmetered.join(', ')}`)
+  const { consecutiveMinutes } = PHONE_WATCH_RULES
+  // Only the judged minutes need metrics; a gap earlier in the read changes nothing.
+  const judged = phone.minutes.slice(-consecutiveMinutes)
+  const gaps = phone.unmetered.filter((minute) => judged.includes(minute))
+  if (gaps.length > 0) {
+    const gap = unverifiable(`no cell runtime metrics for ${gaps.join(', ')}`)
     return Object.fromEntries(PHONE_RULE_NAMES.map((name) => [name, gap]))
   }
-  const { consecutiveMinutes } = PHONE_WATCH_RULES
+  const accepts = phone.series.completedAccepts.slice(-consecutiveMinutes)
   return Object.fromEntries(
     PHONE_RULE_NAMES.map((name) => {
       const signal = PHONE_RULE_SIGNALS[name]
-      const perMinute = background.perMinute[signal]
-      const above = phoneRuleLine(signal, perMinute)
+      const line = phoneShareLine(background.share[signal])
       const recent = phone.series[signal].slice(-consecutiveMinutes)
-      const detail = { backgroundPerMinute: perMinute, above, recent }
-      const over = recent.length === consecutiveMinutes && recent.every((count) => count > above)
+      const detail = { backgroundShare: background.share[signal], line, recent, accepts }
+      const over =
+        recent.length === consecutiveMinutes && recent.every((count, index) => phoneMinuteOver(count, accepts[index], line))
       return [
         name,
-        over ? trip(`${signal} above ${above.toFixed(1)}/min for ${consecutiveMinutes} min (${recent.join(', ')})`, detail) : pass(detail)
+        over ? trip(`${signal} over ${Math.round(line * 100)}% of attempts for ${consecutiveMinutes} min (${recent.join(', ')} against ${accepts.join(', ')} accepts)`, detail) : pass(detail)
       ]
     })
   )
@@ -399,6 +415,11 @@ export function evaluateWatchSample(state, sample, { unverifiableLimit }) {
     next.verdict =
       `flip back ${state.cellId}: unverifiable: ${next.unverifiableStreak} samples in a row could not ` +
       `read ${missing.join(', ')}`
+  } else if (at >= state.deadlineAt && next.phoneTrip) {
+    // Still unwritten at the end: the workflow's flip back writes it, and pages if that fails too.
+    next.state = 'tripped'
+    next.flip = 'phonePath'
+    next.verdict = `${next.phoneTrip}; phonePath=db did not land before the watch ended`
   } else if (at >= state.deadlineAt) {
     next.state = 'completed'
     next.verdict = `${state.cellId} stayed healthy in reserve mode for the whole watch`

@@ -9,8 +9,10 @@ import {
   initialWatchState,
   measuredBackground,
   measuredPhoneBackground,
+  phoneMinuteOver,
+  phoneShareLine,
   PHONE_RULE_NAMES,
-  phoneRuleLine
+  PHONE_WATCH_RULES
 } from './relay-reserve-watch-rules.mjs'
 import {
   ALARM_EVENT,
@@ -1074,7 +1076,8 @@ const QUIET_PHONE_MINUTE = (index) => ({
   confirmFailures: [0, 0, 1, 0][index % 4],
   attachDeadlines: [1, 0, 2, 0, 1, 3][index % 6],
   acceptDatabaseErrors: 0,
-  renewalFailures: 0
+  renewalFailures: 0,
+  completedAccepts: [10, 12, 8][index % 3]
 })
 const phoneRead = (minuteCount, perMinute) => {
   const minutes = Array.from({ length: minuteCount }, (_, index) => `2026-10-19T12:${String(index).padStart(2, '0')}`)
@@ -1097,17 +1100,6 @@ const phoneSampleAt = (offset, spike = () => ({}), cell = memoryCell()) =>
     phone: phoneRead(10, (index) => ({ ...QUIET_PHONE_MINUTE(offset + index), ...spike(index) }))
   })
 
-// P(X > line) for a Poisson count with this mean.
-function poissonAbove(meanPerMinute, line) {
-  let term = Math.exp(-meanPerMinute)
-  let atOrBelow = 0
-  for (let count = 0; count <= Math.floor(line); count += 1) {
-    atOrBelow += term
-    term *= meanPerMinute / (count + 1)
-  }
-  return Math.max(0, 1 - atOrBelow)
-}
-
 test('phone rules: a quiet hour replays without a trip', () => {
   const results = run(Array.from({ length: 60 }, (_, offset) => phoneSampleAt(offset)), phoneState({ deadlineAt: START + 120 * MINUTE }))
   assert.equal(results.length, 60)
@@ -1115,24 +1107,26 @@ test('phone rules: a quiet hour replays without a trip', () => {
   assert.deepEqual(Object.keys(results[0].rules).filter((name) => name.startsWith('phone')), PHONE_RULE_NAMES)
 })
 
-test('phone rules: Poisson noise at any background trips under 1% of 300-minute watches', () => {
-  for (const signal of ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors']) {
-    for (const meanPerMinute of [0, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]) {
-      const perWindow = poissonAbove(meanPerMinute, phoneRuleLine(signal, meanPerMinute)) ** 3
-      assert.ok(perWindow * 300 < 0.01, `${signal} at ${meanPerMinute}/min: ${perWindow * 300}`)
-    }
-  }
-  // The floors: 1 a minute over a zero background is not a trip.
-  assert.equal(phoneRuleLine('attachDeadlines', 0), 5)
-  assert.equal(phoneRuleLine('credentialRefusals', 0), 5)
+test('phone rules: judged as a share of attempts, over half and over the background', () => {
+  assert.equal(phoneShareLine(0), 0.5)
+  assert.equal(phoneShareLine(0.3), 0.55)
+  assert.equal(phoneShareLine(0.5), 0.6)
+  // Exactly half is not over; nor is a minute with under 4 attempts.
+  assert.equal(phoneMinuteOver(9, 9, 0.5), false)
+  assert.equal(phoneMinuteOver(11, 10, 0.5), true)
+  assert.equal(phoneMinuteOver(3, 0, 0.5), false)
+  assert.equal(phoneMinuteOver(4, 0, 0.5), true)
+  const background = measuredPhoneBackground(phoneRead(10, () => ({ ...QUIET_PHONE_MINUTE(0), credentialRefusals: 1, completedAccepts: 9 })))
+  assert.equal(background.share.credentialRefusals, 0.1)
+  assert.equal(measuredPhoneBackground({ ...phoneRead(10, QUIET_PHONE_MINUTE), unmetered: ['2026-10-19T12:03'] }), null)
 })
 
 test('phone rules: each fires on its own spike, and the watch goes on with the reserve rules', () => {
   const spikes = {
-    phoneCredentialRefusals: { credentialRefusals: 12 },
-    phoneConfirmFailures: { confirmFailures: 9 },
-    phoneAttachDeadlines: { attachDeadlines: 8 },
-    phoneAcceptDatabaseErrors: { acceptDatabaseErrors: 6 }
+    phoneCredentialRefusals: { credentialRefusals: 25 },
+    phoneConfirmFailures: { confirmFailures: 25 },
+    phoneAttachDeadlines: { attachDeadlines: 25 },
+    phoneAcceptDatabaseErrors: { acceptDatabaseErrors: 25 }
   }
   for (const [rule, counts] of Object.entries(spikes)) {
     const [result] = run([phoneSampleAt(0, (index) => (index >= 7 ? counts : {}))], phoneState())
@@ -1140,7 +1134,7 @@ test('phone rules: each fires on its own spike, and the watch goes on with the r
     assert.match(result.state.phoneTrip, new RegExp(`turn off the phone path on ${CELL}: ${rule}: `), rule)
   }
   // Two minutes over the line is not three.
-  const [twoMinutes] = run([phoneSampleAt(0, (index) => (index >= 8 ? { credentialRefusals: 12 } : {}))], phoneState())
+  const [twoMinutes] = run([phoneSampleAt(0, (index) => (index >= 8 ? { credentialRefusals: 25 } : {}))], phoneState())
   assert.equal(twoMinutes.state.phoneTrip, null)
   // Once the watch turned the phone path off, the phone rules stand down.
   const [off] = run([phoneSampleAt(0, () => ({ credentialRefusals: 50 }))], phoneState({ phoneOffAt: START }))
@@ -1163,6 +1157,10 @@ test('phone rules: missing phone data turns off only the phone path, and needs a
   assert.match(results.at(-1).state.phoneTrip, /unverifiable: 3 samples/)
   const [noBackground] = run([phoneSampleAt(0)], freshState({ flippedAt: null }))
   assert.match(noBackground.rules.phoneCredentialRefusals.reason, /--flipped-at/)
+  // A gap before the judged 3 minutes changes nothing.
+  const early = { ...phoneSampleAt(0), phone: { ...phoneSampleAt(0).phone, unmetered: ['2026-10-19T12:02'] } }
+  const [earlyGap] = run([early], phoneState())
+  assert.equal(earlyGap.rules.phoneCredentialRefusals.status, 'pass')
 })
 
 test('phone rules: memory set partway through a watch measures from then, not from the reserve flip', () => {
@@ -1195,6 +1193,7 @@ test('the cell phone read sums each minute from the cell runtime metrics lines, 
       phoneAttachDeadlinesDelta: 0,
       phoneAcceptDatabaseErrorsDelta: 0,
       resumeRenewalFailuresDelta: 0,
+      clientAcceptCompletedDelta: 0,
       ...payload
     }
   })
@@ -1207,7 +1206,7 @@ test('the cell phone read sums each minute from the cell runtime metrics lines, 
           stdout: JSON.stringify([
             line(endedAt - 150_000, { phoneRejectionsByCodeDelta: { 4401: 2, 4404: 9 } }),
             line(endedAt - 120_000, { resumeConfirmFailuresByCodeDelta: { 'reject-revoked': 1, error: 2 } }),
-            line(endedAt - 90_000, { phoneAttachDeadlinesDelta: 3, phoneAcceptDatabaseErrorsDelta: 1, resumeRenewalFailuresDelta: 4 })
+            line(endedAt - 90_000, { phoneAttachDeadlinesDelta: 3, phoneAcceptDatabaseErrorsDelta: 1, resumeRenewalFailuresDelta: 4, clientAcceptCompletedDelta: 7 })
           ])
         }
       }
@@ -1221,7 +1220,8 @@ test('the cell phone read sums each minute from the cell runtime metrics lines, 
     confirmFailures: [3, 0, 0],
     attachDeadlines: [0, 3, 0],
     acceptDatabaseErrors: [0, 1, 0],
-    renewalFailures: [0, 4, 0]
+    renewalFailures: [0, 4, 0],
+    completedAccepts: [0, 7, 0]
   })
   assert.deepEqual(read.unmetered, ['2026-10-19T12:02'])
   const old = await readCellPhoneMinutes(
@@ -1266,15 +1266,28 @@ const phoneCounters = (overrides = {}) => ({
   phoneAttachDeadlinesDelta: 0,
   phoneAcceptDatabaseErrorsDelta: 0,
   resumeRenewalFailuresDelta: 0,
+  clientAcceptCompletedDelta: 5,
   ...overrides
 })
 
-test('a phone trip writes phonePath=db mid-watch; one that does not land ends the watch for the flip back', async () => {
-  // No bucket here, so the write fails and the workflow's flip back (with --flip phonePath) retries it.
-  const { state } = await phoneWatch((at) => phoneCounters(at > START ? { phoneAttachDeadlinesDelta: 10 } : {}), 10)
-  assert.equal(state.state, 'tripped')
-  assert.equal(state.flip, 'phonePath')
-  assert.match(state.verdict, /phoneAttachDeadlines: .*phonePath=db did not land/)
+test('a phone trip whose phonePath=db write fails keeps watching, retries each sample, and pages after 3 failures', async () => {
+  // No bucket here, so every write fails.
+  const { state, lines } = await phoneWatch((at) => phoneCounters(at > START ? { phoneAttachDeadlinesDelta: 20 } : {}), 15)
+  assert.equal(state.state, 'watching')
+  assert.equal(state.phoneOffAt, null)
+  assert.match(state.phoneTrip, /phoneAttachDeadlines: /)
+  const failures = lines.filter((line) => line.includes('orca_relay_reserve_watch_phone_path_off_failed'))
+  assert.ok(failures.length > 3, `${failures.length} failed writes`)
+  assert.equal(state.phoneOffFailures, failures.length)
+  const alarms = lines.filter((line) => line.includes('may still have phonePath=memory'))
+  assert.equal(alarms.length, 1)
+})
+
+test('a phone trip still unwritten when the watch ends leaves it to the flip back', () => {
+  const [last] = run([phoneSampleAt(0)], phoneState({ deadlineAt: START, phoneTrip: 'turn off the phone path on x: phoneAttachDeadlines: y' }))
+  assert.equal(last.state.state, 'tripped')
+  assert.equal(last.state.flip, 'phonePath')
+  assert.match(last.state.verdict, /phoneAttachDeadlines: y; phonePath=db did not land before the watch ended/)
 })
 
 test('a phone background broken by a restart or roll refuses the watch instead of turning phones off for certain', async () => {
@@ -1326,25 +1339,52 @@ test('a failed phone flip back and the phone pages say what is still on', async 
   assert.match(lines[1], /cannot renew phone credentials/)
 })
 
-// Recorded, not synthetic: 26 h of c7 and c29 runtime metrics (read-only, 10-18/19). The phone
-// counters are not on those images yet, so the burstiest counters they do carry stand in.
-test('phone rules: 26 recorded hours of c7 and c29 trip no rule in any 60- or 300-minute watch', () => {
-  const recorded = JSON.parse(readFileSync(new URL('./relay-phone-watch-recorded-quiet-minutes.json', import.meta.url), 'utf8'))
-  for (const [cell, signals] of Object.entries(recorded.cells)) {
-    for (const [proxy, values] of Object.entries(signals)) {
-      for (const signal of ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors']) {
-        for (const watchMinutes of [60, 300]) {
-          for (let start = 10; start + watchMinutes <= values.length; start += 5) {
-            const background = values.slice(start - 10, start)
-            const line = phoneRuleLine(signal, background.reduce((sum, count) => sum + count, 0) / background.length)
-            let run = 0
-            for (const count of values.slice(start, start + watchMinutes)) {
-              run = count > line ? run + 1 : 0
-              assert.ok(run < 3, `${cell} ${proxy} as ${signal}: a ${watchMinutes}-min watch from minute ${start} trips`)
-            }
-          }
-        }
+// Recorded, not synthetic: 26 h of c7, c28 and c29 runtime metrics (read-only, 10-18/19). The phone
+// counters are not on those images yet, so auth failures (host and phone 4401s, an over-count)
+// stand in for each phone signal, against completed accepts.
+const PHONE_RULE_SIGNAL_NAMES = ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors']
+const recordedPhoneMinutes = JSON.parse(readFileSync(new URL('./relay-phone-watch-recorded-quiet-minutes.json', import.meta.url), 'utf8')).cells
+// The minute index each recorded watch from `start` trips at, or null; `minute(i)` may rewrite a minute.
+function recordedTrip({ authFailuresPerMinute: failures, completedAcceptsPerMinute: accepts }, start, watchMinutes, minute = (i) => [failures[i], accepts[i]]) {
+  const { readMinutes, consecutiveMinutes } = PHONE_WATCH_RULES
+  const refused = failures.slice(start - readMinutes, start)
+  const background = measuredPhoneBackground({
+    ok: true,
+    minutes: refused,
+    unmetered: [],
+    series: { ...Object.fromEntries(PHONE_RULE_SIGNAL_NAMES.map((signal) => [signal, refused])), completedAccepts: accepts.slice(start - readMinutes, start) }
+  })
+  const line = phoneShareLine(background.share.credentialRefusals)
+  let run = 0
+  for (let index = start; index < start + watchMinutes; index += 1) {
+    run = phoneMinuteOver(...minute(index), line) ? run + 1 : 0
+    if (run >= consecutiveMinutes) return index
+  }
+  return null
+}
+
+test('phone rules: 26 recorded hours of c7, c28 and c29 trip no rule in any 60- or 300-minute watch', () => {
+  assert.deepEqual(Object.keys(recordedPhoneMinutes), ['production-gce-c7', 'production-gce-c28', 'production-gce-c29'])
+  for (const [cell, minutes] of Object.entries(recordedPhoneMinutes)) {
+    for (const watchMinutes of [60, 300]) {
+      for (let start = 10; start + watchMinutes <= minutes.authFailuresPerMinute.length; start += 5) {
+        assert.equal(recordedTrip(minutes, start, watchMinutes), null, `${cell}: a ${watchMinutes}-min watch from minute ${start} trips`)
       }
+    }
+  }
+})
+
+test('phone rules: the same recorded hours trip within 3 minutes once refusals are twice the accepts', () => {
+  for (const [cell, minutes] of Object.entries(recordedPhoneMinutes)) {
+    for (let start = 10; start + 60 <= minutes.authFailuresPerMinute.length; start += 5) {
+      // From minute 30: two refusals per accept (2/3 of attempts), and at least 4 attempts.
+      const broken = (index) => {
+        const accepted = minutes.completedAcceptsPerMinute[index]
+        return index >= start + 30 ? [Math.max(2 * accepted, 4), accepted] : [minutes.authFailuresPerMinute[index], accepted]
+      }
+      // By its third minute; sooner when the minute before it was already over.
+      const at = recordedTrip(minutes, start, 60, broken)
+      assert.ok(at !== null && at >= start + 30 && at <= start + 32, `${cell}: a broken path from minute ${start + 30} trips at ${at}`)
     }
   }
 })

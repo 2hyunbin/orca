@@ -195,7 +195,7 @@ export async function readDirector503Minutes(reader, { projectId, directorServic
 }
 
 const CELL_METRICS_EVENT = 'orca_relay_runtime_metrics'
-const PHONE_SIGNALS = ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors', 'renewalFailures']
+const PHONE_SIGNALS = ['credentialRefusals', 'confirmFailures', 'attachDeadlines', 'acceptDatabaseErrors', 'renewalFailures', 'completedAccepts']
 const sumOf = (counts) => Object.values(counts ?? {}).reduce((sum, count) => sum + Number(count), 0)
 
 // The cell's own runtime metrics lines (one per 30 s) for the `minutes` whole minutes ending at
@@ -213,7 +213,8 @@ export async function readCellPhoneMinutes(reader, { cellId, endedAt, minutes })
     ].join(' AND '),
     projection:
       'json(timestamp,jsonPayload.phoneRejectionsByCodeDelta,jsonPayload.resumeConfirmFailuresByCodeDelta,' +
-      'jsonPayload.phoneAttachDeadlinesDelta,jsonPayload.phoneAcceptDatabaseErrorsDelta,jsonPayload.resumeRenewalFailuresDelta)',
+      'jsonPayload.phoneAttachDeadlinesDelta,jsonPayload.phoneAcceptDatabaseErrorsDelta,jsonPayload.resumeRenewalFailuresDelta,' +
+      'jsonPayload.clientAcceptCompletedDelta)',
     limit: LOG_ENTRY_LIMIT
   })
   if (read.failed) return failedRead(read.error)
@@ -236,6 +237,7 @@ export async function readCellPhoneMinutes(reader, { cellId, endedAt, minutes })
     series.attachDeadlines[index] += Number(payload.phoneAttachDeadlinesDelta)
     series.acceptDatabaseErrors[index] += Number(payload.phoneAcceptDatabaseErrorsDelta ?? 0)
     series.renewalFailures[index] += Number(payload.resumeRenewalFailuresDelta ?? 0)
+    series.completedAccepts[index] += Number(payload.clientAcceptCompletedDelta ?? 0)
   }
   return { ok: true, minutes: keys, series, unmetered: keys.filter((minute) => !metered.has(minute)) }
 }
@@ -498,15 +500,32 @@ export async function watchSegment(config, dependencies) {
 }
 
 // Writes phonePath=db (the flag tool's CAS write, a plan in dry-run) and keeps watching the
-// reserve rules. If the write fails the watch ends tripped, and the workflow's flip back retries it.
+// reserve rules. A write that fails keeps the trip, so the next sample retries it, and pages once
+// after PHONE_OFF_PAGE_AFTER_FAILURES in a row: the cell stays watched either way.
+export const PHONE_OFF_PAGE_AFTER_FAILURES = 3
 async function turnPhonePathOff(config, state, at, dependencies) {
   try {
     const result = await flipBack({ ...config.flipValues, flip: 'phonePath' }, dependencies)
     dependencies.log(JSON.stringify({ event: 'orca_relay_reserve_watch_phone_path_off', cellId: state.cellId, verdict: state.phoneTrip, written: result.written }))
-    return { ...state, phoneOffAt: at, phoneTrip: null }
+    return { ...state, phoneOffAt: at, phoneTrip: null, phoneOffFailures: 0 }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    return { ...state, state: 'tripped', flip: 'phonePath', verdict: `${state.phoneTrip} (phonePath=db did not land: ${reason})` }
+    const failures = (state.phoneOffFailures ?? 0) + 1
+    dependencies.log(JSON.stringify({ event: 'orca_relay_reserve_watch_phone_path_off_failed', cellId: state.cellId, failures, reason }))
+    if (failures === PHONE_OFF_PAGE_AFTER_FAILURES) {
+      await raiseAlarm(
+        {
+          mode: config.request.mode,
+          cellId: state.cellId,
+          projectId: config.request.projectId,
+          kind: 'flip-back-failed',
+          flip: 'phonePath',
+          reason: `${state.phoneTrip}; phonePath=db failed ${failures} times: ${reason}`
+        },
+        { runGcloud: dependencies.runGcloud, log: dependencies.log }
+      )
+    }
+    return { ...state, phoneOffFailures: failures }
   }
 }
 
