@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
@@ -105,10 +105,12 @@ type Props = {
 }
 
 function Harness(props: Props): React.JSX.Element {
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   // The chat's own composer error, as NativeChatStructuredSession holds it.
   const [composerError, setComposerError] = useState<string | null>(null)
   const continuation = useNativeChatInterruptedContinuation({
     reportComposerError: setComposerError,
+    focusComposer: () => { composerRef.current?.focus() },
     target: props.target ?? PAIRED,
     agent: 'codex',
     sessionId: 'session-1',
@@ -120,6 +122,7 @@ function Harness(props: Props): React.JSX.Element {
   })
   return (
     <TooltipProvider delayDuration={0}>
+      <textarea aria-label="Composer" ref={composerRef} />
       <span data-testid="offered">{continuation.view.offeredTurnItemId ?? 'none'}</span>
       <span data-testid="available">{String(continuation.view.continueAvailable)}</span>
       <span data-testid="remote">{String(continuation.view.remoteHost)}</span>
@@ -350,7 +353,9 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   rerender(<LiveHarness />)
   fireEvent.click(screen.getByRole('button', { name: 'compose' }))
   act(() => setStructuredAgentSessionSendNotice('session-1', 'Previous send failed'))
+  continueButton()!.focus()
   fireEvent.click(continueButton()!)
+  expect(screen.getByRole('textbox', { name: 'Composer' })).toHaveFocus()
   expect(getStructuredAgentSessionSendNotice('session-1')).toBeNull()
   expect(screen.getByTestId('error')).toHaveTextContent('none')
   expect(continueButton()).toBeNull()
@@ -404,7 +409,7 @@ it('keeps the notice view stable while Continue invokes the latest committed tra
     optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
   }
   const input = { target: PAIRED, agent: 'codex' as const, sessionId: 'session-1', journalItems: items,
-    submissions: [], isWorking: false, pending: [], reportComposerError: vi.fn(), transport }
+    submissions: [], isWorking: false, pending: [], reportComposerError: vi.fn(), focusComposer: vi.fn(), transport }
   const { result, rerender } = renderHook((props) => useNativeChatInterruptedContinuation(props), { initialProps: input })
   const view = result.current.view
   rerender({ ...input, transport: { ...transport, send: latest } })

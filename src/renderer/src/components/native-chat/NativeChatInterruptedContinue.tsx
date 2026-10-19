@@ -58,11 +58,13 @@ export function useNativeChatInterruptedContinuation(input: {
   isWorking: boolean
   /** Stable; a Continue click is the user's newer action, so it clears the composer's error. */
   reportComposerError: (text: null) => void
+  /** Returns keyboard focus when the admitted control leaves the transcript. */
+  focusComposer: () => void
   /** The composer's send; false when the chat took nothing. */
   transport: NativeChatStructuredComposerTransport
   pending: readonly Pick<StructuredAgentSessionPendingSend, 'phase'>[]
 }): NativeChatInterruptedContinuation {
-  const { target, sessionId, reportComposerError, transport, agent } = input
+  const { target, sessionId, reportComposerError, focusComposer, transport, agent } = input
   const latestTransport = useRef(transport)
   useLayoutEffect(() => {
     latestTransport.current = transport
@@ -112,7 +114,7 @@ export function useNativeChatInterruptedContinuation(input: {
     transport.sendBlockedReason === undefined
       ? usageLimitCut.turnItemId
       : null
-  const continueUsageLimit = useCallback((): void => {
+  const continueUsageLimit = useCallback((hadFocus = false): void => {
     if (
       usageLimitTurnItemId === null ||
       usageCapability === 'unknown' ||
@@ -139,8 +141,9 @@ export function useNativeChatInterruptedContinuation(input: {
       setUsageFailure({ turnItemId, unconfirmed: false })
     } else {
       completeNativeChatStructuredUserAction(agent, transport, admission === true)
+      if (hadFocus) { focusComposer() }
     }
-  }, [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, agent])
+  }, [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, focusComposer, agent])
   const continueNow = useCallback((): void => {
     if (offered === null) {
       return
@@ -221,7 +224,7 @@ export function NativeChatInterruptedContinueButton({
   disabled,
   explanation: shownExplanation
 }: {
-  onContinue: () => void
+  onContinue: (hadFocus?: boolean) => void
   disabled?: boolean
   /** What Continue does here, when it is not picking up a reply Orca's stop cut off. */
   explanation?: string
@@ -241,7 +244,7 @@ export function NativeChatInterruptedContinueButton({
             type="button"
             size="xs"
             aria-describedby={explanationId}
-            onClick={onContinue}
+            onClick={(event) => onContinue(event.currentTarget === event.currentTarget.ownerDocument.activeElement)}
             disabled={disabled}
           >
             <Play />

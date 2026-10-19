@@ -260,11 +260,11 @@ afterEach(cleanup)
         }, { surface: 'row' }) }), turnScope: { kind: 'turn', turnItemId: 'item-2' } }
     ]
     const continueUsageLimit = vi.fn()
+    const view = { hostLabel: null, remoteHost: false, continueAvailable: false,
+      offeredTurnItemId: null, continueNow: vi.fn(), usageLimitTurnItemId: 'item-2', continueUsageLimit }
     render(
       <TooltipProvider>
-        <NativeChatOrcaStopContext.Provider value={{ hostLabel: null, remoteHost: false,
-          continueAvailable: false, offeredTurnItemId: null, continueNow: vi.fn(),
-          usageLimitTurnItemId: 'item-2', continueUsageLimit }}>
+        <NativeChatOrcaStopContext.Provider value={view}>
           <NativeChatMessageList
             session={{ ...session, agent, status: 'ready', messages: projectStructuredAgentSessionMessages(items, [], []) }}
             journalItems={items}
