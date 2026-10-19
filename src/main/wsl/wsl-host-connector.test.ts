@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import { createWslHostConnector } from './wsl-host-connector'
 import type { WslRunningDistrosRead } from '../wsl-background-distro-gate'
+import type * as TunnelIdentity from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
 
 const mocks = vi.hoisted(() => ({
   readRunning: vi.fn<() => Promise<WslRunningDistrosRead>>(),
@@ -12,7 +13,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../wsl-background-distro-gate', () => ({
   readConfirmedRunningWslDistros: mocks.readRunning
 }))
-vi.mock('../managed-server/lifecycle/orcad-managed-tunnel-identity', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel-identity', async (importOriginal) => ({
+  ...(await importOriginal<typeof TunnelIdentity>()),
   verifyOrcadPairingIdentity: mocks.verify
 }))
 vi.mock('./wsl-orcad-liveness-wiring', () => ({
