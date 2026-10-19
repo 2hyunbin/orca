@@ -89,6 +89,19 @@ describe('DaemonPtyRouter legacy socket that can never answer', () => {
     }
   )
 
+  it('keeps a reattach unverifiable while the legacy socket answers, even with its pid gone', async () => {
+    const current = adapter('current')
+    const silent = adapter('silent', [], EXITED_PID)
+    vi.mocked(silent.listProcesses).mockRejectedValue(new Error('wedged'))
+    const router = new DaemonPtyRouter({ current, legacy: [silent] })
+
+    await expect(
+      router.spawn({ cols: 80, rows: 24, sessionId: 'session', attachOnly: true })
+    ).rejects.toBeInstanceOf(TerminalSessionOwnerUnverifiedError)
+    expect(router.getLegacyAdapters()).toEqual([silent])
+    expect(silent.disconnectOnly).not.toHaveBeenCalled()
+  })
+
   it('judges a replacement legacy daemon by its own pid, not its predecessor', async () => {
     const current = adapter('current')
     // Recorded at construction with the exited predecessor's pid.
