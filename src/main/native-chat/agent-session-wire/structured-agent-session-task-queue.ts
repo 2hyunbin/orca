@@ -23,6 +23,8 @@ export class StructuredAgentSessionTaskQueue {
     operation: Promise<T>,
     pending?: { sessionId: string; location: AgentSessionExecutionLocation }
   ): Promise<T> {
+    // Restart work is the operation itself: a start keeps counting after its conversation is evicted.
+    void orcadRestartWorkAdmission.track(() => operation)
     this.attaching.add(operation)
     if (pending) {
       this.pendingLocations.set(operation, pending)

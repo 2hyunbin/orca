@@ -22,6 +22,7 @@ import {
   type RestTestRig
 } from './structured-agent-session-rest-test-rig'
 import { StructuredAgentSessionIdleSweep } from './structured-agent-session-idle-sweep'
+import { startStructuredAgentSessionAgent } from './structured-agent-session-agent-start'
 
 let rig: RestTestRig
 
@@ -91,6 +92,39 @@ describe('the idle sweep', () => {
     expect(sent.ok).toBe(true)
     expect(orcadRestartWorkAdmission.reserved).toBe(false)
     await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
+  })
+
+  it('keeps an update waiting on a start whose conversation the sweep closed', async () => {
+    await foundRestTestChat(rig)
+    rig.host.collaboratorsForTests().lifetime.idleSweep.dispose()
+    await rig.host.drainForRestart()
+    expect(rig.host.hasLoadedProviders()).toBe(false)
+    const acquire = rig.adapter.acquire.getMockImplementation()
+    if (!acquire) {
+      throw new Error('the rig acquire has no implementation')
+    }
+    const spawn = Promise.withResolvers<void>()
+    rig.adapter.acquire.mockImplementationOnce(async (...args) => {
+      await spawn.promise
+      return acquire(...args)
+    })
+    // An operation's start: unlike a send, it leaves nothing queued that keeps the conversation open.
+    const started = startStructuredAgentSessionAgent(rig.host['attachContext'](), SESSION)
+    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
+    rig.clock.now += IDLE_MS + 1
+    await sweepOnce(rig.host)
+    expect(rig.host.collaboratorsForTests().sessions.has(SESSION)).toBe(false)
+
+    expect(orcadRestartWorkAdmission.pending).toBeGreaterThan(0)
+    expect(orcadRestartWorkAdmission.reserve()).toBeNull()
+    spawn.resolve()
+    await Promise.allSettled([started])
+    await vi.waitFor(() => expect(orcadRestartWorkAdmission.pending).toBe(0))
+    const reservation = orcadRestartWorkAdmission.reserve()
+    expect(reservation).not.toBeNull()
+    if (reservation) {
+      orcadRestartWorkAdmission.release(reservation)
+    }
   })
 
   it('stops an idle agent and keeps the conversation, its status row and its reader (P2-07)', async () => {
