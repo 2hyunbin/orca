@@ -3,6 +3,7 @@ import { getAllWorktreesFromState } from '@/store/selectors'
 import { getProjectHostSetupProjectionFromState } from '@/store/project-host-setup-selector'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import {
+  getLocalExecutionHostLabel,
   getRepoExecutionHostId,
   getSettingsFocusedExecutionHostId
 } from '../../../../shared/execution-host'
@@ -275,7 +276,8 @@ export function phoneInputsFromWindowState(state: AppState): {
       workspaceStatuses: state.workspaceStatuses,
       pinnedDisplayPolicy: getPinnedWorktreeDisplayPolicy(state.settings),
       defaultHostId: getSettingsFocusedExecutionHostId(state.settings),
-      hostLabelOverrides: getHostDisplayLabelOverrides(state.settings)
+      hostLabelOverrides: getHostDisplayLabelOverrides(state.settings),
+      localHostLabel: getLocalExecutionHostLabel()
     }
   }
 }
