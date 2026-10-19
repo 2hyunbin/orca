@@ -5,8 +5,10 @@ import {
   isCurrentPtyExit,
   ptyIncarnationById,
   ptyOwnership,
-  setAdoptedPtyOwnership
+  setAdoptedPtyOwnership,
+  setPtyOwnership
 } from '../provider/ownership-state'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { finishPtyShutdown, isPtyAlreadyGoneError } from '../provider/liveness'
 import { PtyExitProof } from '../../../pty-exit-proof'
 import { errorMessage } from '../../../../shared/error-message'
@@ -30,7 +32,8 @@ export function admitPtyReattachOwnership(
 export async function discardUnpersistedPtySpawn(
   provider: IPtyProvider,
   result: PtySpawnResult,
-  runtime: Pick<OrcaRuntimeService, 'markPtyLivenessUnverifiable'> | undefined
+  runtime: Pick<OrcaRuntimeService, 'markPtyLivenessUnverifiable'> | undefined,
+  ownerHostId: ExecutionHostId
 ): Promise<void> {
   if (
     result.isReattach ||
@@ -38,6 +41,12 @@ export async function discardUnpersistedPtySpawn(
     !isCurrentPtyExit(result)
   ) {
     return
+  }
+  // Track it as publish would have before stopping it: a failed stop must leave a handle, and an
+  // exit or replacement meanwhile overwrites this.
+  setPtyOwnership(result.id, ownerHostId)
+  if (result.incarnationId) {
+    ptyIncarnationById.set(result.id, result.incarnationId)
   }
   let proof: PtyExitProof
   try {

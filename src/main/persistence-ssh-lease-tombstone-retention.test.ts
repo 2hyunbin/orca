@@ -80,7 +80,7 @@ describe('operator-closed SSH lease tombstones', () => {
     store.markSshRemotePtyLease(
       'ssh-1',
       'ssh:ssh-1@@remote-pty',
-      PtyExitProof.from('exit-observed')
+      PtyExitProof.from('exit-observed', undefined)
     )
 
     // `isRestorablePtyBinding` still consults this row to refuse replaying that binding.
@@ -101,7 +101,7 @@ describe('operator-closed SSH lease tombstones', () => {
     store.markSshRemotePtyLease(
       'ssh-1',
       'ssh:ssh-1@@remote-pty',
-      PtyExitProof.from('exit-observed')
+      PtyExitProof.from('exit-observed', undefined)
     )
 
     expect(store.getSshRemotePtyLeases('ssh-1')).toEqual([
@@ -136,7 +136,7 @@ describe('operator-closed SSH lease tombstones', () => {
     store.markSshRemotePtyLease(
       'ssh-1',
       'ssh:ssh-1@@remote-pty-3',
-      PtyExitProof.from('exit-observed')
+      PtyExitProof.from('exit-observed', undefined)
     )
 
     expect(store.getSshRemotePtyLeases('ssh-1')).toEqual([
@@ -163,7 +163,7 @@ describe('operator-closed SSH lease tombstones', () => {
     store.markSshRemotePtyLease(
       'ssh-1',
       'ssh:ssh-1@@remote-pty-1',
-      PtyExitProof.from('exit-observed')
+      PtyExitProof.from('exit-observed', undefined)
     )
 
     // Other targets are untouched: the pass is scoped to the one whose bindings were just scrubbed.

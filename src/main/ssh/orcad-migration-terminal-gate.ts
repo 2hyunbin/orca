@@ -118,7 +118,7 @@ export function retireProvenExitedLeases(
     return
   }
   const proven = new Set(proof.provenPtyIds)
-  const census = PtyExitProof.from('host-census')
+  const census = PtyExitProof.from('host-census', undefined)
   for (const lease of store.getSshRemotePtyLeases(targetId)) {
     if (lease.state !== 'terminated' && proven.has(lease.ptyId)) {
       store.markSshRemotePtyLease(targetId, lease.ptyId, census)

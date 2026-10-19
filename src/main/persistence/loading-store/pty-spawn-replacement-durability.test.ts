@@ -1,5 +1,6 @@
 import { isTerminalSessionStorageCapacityFailure } from '../../../shared/terminal-session-state-save-failure'
 import { afterEach, expect, it, vi } from 'vitest'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { deferred, fixture, admitRuntimeSpawnPane } from './profile-state-delayed-authority-fixture'
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { commitPtyIpcSpawn } from '../../ipc/pty/ipc/spawn-commit'
@@ -172,3 +173,38 @@ it('does not label an IPC binding ownership refusal as a storage failure', async
   vi.spyOn(store, 'persistPtyBinding').mockResolvedValue(false)
   await expect(commitPtyIpcSpawn(ctx)).rejects.toThrow('terminal_pane_owner_changed')
 })
+
+it.each(['ipc', 'runtime'])(
+  'keeps tracking a %s spawn whose save failed and whose discard shutdown failed',
+  async (controller) => {
+    const { store } = await fixture()
+    const runtime = new OrcaRuntimeService(store)
+    runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
+    const deps = createPtySpawnCommitDependencies(runtime, store)
+    vi.spyOn(store, 'persistPtyBinding').mockRejectedValue(new Error('disk full'))
+    let commit: () => Promise<unknown>
+    let provider: { shutdown: (...args: never[]) => Promise<void> }
+    if (controller === 'ipc') {
+      const ctx = createPtyIpcSpawnState(deps, { ...binding, cols: 80, rows: 24 })
+      ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
+      ctx.validatedLeafId = binding.leafId
+      provider = ctx.provider
+      commit = () => commitPtyIpcSpawn(ctx)
+    } else {
+      const ctx = createRuntimePtySpawnState(deps, { ...binding, cols: 80, rows: 24 })
+      ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
+      ctx.metadataLeafId = binding.leafId
+      await admitRuntimeSpawnPane(store, binding)
+      ctx.hostSessionBinding = { store, ...binding }
+      provider = ctx.provider
+      commit = () => commitRuntimePtySpawn(ctx)
+    }
+    vi.spyOn(provider, 'shutdown').mockRejectedValue(new Error('shutdown timed out'))
+
+    await expect(commit()).rejects.toThrow()
+
+    expect(ptyOwnership.get(binding.ptyId)).toBe(LOCAL_EXECUTION_HOST_ID)
+    expect(ptyIncarnationById.get(binding.ptyId)).toBe(binding.incarnationId)
+    expect(runtime.getPtyLivenessVerdict(binding.ptyId)?.status).toBe('unverifiable')
+  }
+)

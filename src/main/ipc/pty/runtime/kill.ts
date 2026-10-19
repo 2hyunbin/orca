@@ -85,13 +85,13 @@ export function killPtyFromRuntimeController(
   }
   // Why: close runtime tails without clearing provider ownership, so
   // a retry can still target a PTY that survived the failed shutdown.
-  const reportStopFailure = (err: unknown): void => {
+  const reportStopFailure = (err: unknown, incarnationId: string | undefined): void => {
     const msg = errorMessage(err)
     console.warn(`[pty] Failed to stop PTY ${ptyId}: ${msg}`)
     if (retiredRejectedPtyIds.has(ptyId)) {
       return
     }
-    runtime?.onPtyExit(ptyId, -1, ptyIncarnationById.get(ptyId))
+    runtime?.onPtyExit(ptyId, -1, incarnationId)
   }
   const killWithCurrentProvider = (): boolean => {
     let provider: IPtyProvider
@@ -132,14 +132,16 @@ export function killPtyFromRuntimeController(
           }
           return
         }
-        reportStopFailure(err)
+        reportStopFailure(err, stoppingIncarnationId)
       })
     return true
   }
   const startupPromise = getLocalPtyProviderStartupPromise(resolvePtyExecutionHost(ptyId))
   if (startupPromise) {
     // Why: select the provider after the daemon swap; the fallback first can report success while orphaning a daemon PTY.
-    void startupPromise.then(killWithCurrentProvider).catch(reportStopFailure)
+    void startupPromise
+      .then(killWithCurrentProvider)
+      .catch((err) => reportStopFailure(err, ptyIncarnationById.get(ptyId)))
     return true
   }
   return killWithCurrentProvider()

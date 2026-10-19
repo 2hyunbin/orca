@@ -119,7 +119,7 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
     targetId,
     leases: () => installed.leases(targetId),
     retireLease: (relayPtyId, proof) =>
-      installed.retireLease(targetId, relayPtyId, PtyExitProof.from(proof)),
+      installed.retireLease(targetId, relayPtyId, PtyExitProof.from(proof, undefined)),
     listEndpoints: async (signal) => {
       const conn = installed.connection(targetId)
       return conn ? listLegacyRelayEndpoints(conn, targetId, signal) : { kind: 'unverifiable' }
