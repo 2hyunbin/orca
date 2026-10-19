@@ -142,6 +142,14 @@ export function registerQueuedMessageDeliveredEchoTests(): void {
       expect(journal.queuedMessages.get('draft-2')?.state).toBe('withdrawn')
     })
 
+    it('withdraws only one of two identical drafts for one echo: it proves one delivery', async () => {
+      const journal = await withdrawnDraft('same text')
+      await handOffAndReject(journal, 'same text', { handedOver: true }, 'draft-2')
+      await echo(journal, 'echo-1', 'same text')
+      expect(journal.queuedMessages.get('draft-1')?.state).toBe('withdrawn')
+      expect(journal.queuedMessages.get('draft-2')?.state).toBe('waiting')
+    })
+
     it('stays waiting when the rejected hand-off never reached the agent: the echo is some other message', async () => {
       const journal = await withdrawnDraft('did it land?', { handedOver: false })
       await echo(journal, 'echo-1', 'did it land?')

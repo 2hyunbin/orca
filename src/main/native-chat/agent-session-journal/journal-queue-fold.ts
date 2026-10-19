@@ -16,20 +16,19 @@ import { rejectedDraftSettlement } from './journal-dispatch-settlement'
 import type { JournalQueueRow, JournalQueuedChange } from './journal-queue-events'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
-import {
-  draftsDeliveredByAppliedEcho,
-  draftsDeliveredByEcho
-} from './queued-message-delivered-echo'
+import { appliedEchoDelivering, draftsDeliveredByEcho } from './queued-message-delivered-echo'
 import type { QueuedMessageRow } from './queued-message-table'
 
 export type JournalQueueState = {
   cards: Map<string, QueuedMessageRow>
   /** Moves with every card change, so a reader's memo recomputes only when it must. */
   revision: number
+  /** Echoes that already proved a card delivered: each proves one delivery, never a second. */
+  pairedEchoes: Set<string>
 }
 
 export function createJournalQueueState(): JournalQueueState {
-  return { cards: new Map(), revision: 0 }
+  return { cards: new Map(), revision: 0, pairedEchoes: new Set() }
 }
 
 /**
@@ -68,12 +67,14 @@ function commandTurnReported(state: JournalReducerState, clientMessageId: string
  * THE classification of a `queued` change, for the fold, the import and the read of a card not yet
  * imported, so each reads a card exactly as the others do. Its hand-off still in this epoch settles
  * it as that hand-off's answer does; gone, the saved refusal returns it, and with none it is a
- * hand-off nothing can answer: hidden, never resent and never shown as refused.
+ * hand-off nothing can answer: hidden, never resent and never shown as refused. An echo it pairs
+ * with joins `pairedEchoes`: the fold's own set, or a reader's copy of it.
  */
 export function queuedCardFromChange(
   state: JournalReducerState,
   messageId: string,
-  change: JournalQueuedChange
+  change: JournalQueuedChange,
+  pairedEchoes: Set<string>
 ): QueuedMessageRow {
   const card: QueuedMessageRow = {
     messageId,
@@ -98,7 +99,7 @@ export function queuedCardFromChange(
       holdReason: null,
       consumedAs: attempt
     }
-    return settledHandOff(state, handedOff, submission)
+    return settledHandOff(state, handedOff, submission, pairedEchoes)
   }
   const { returned } = change
   if (typeof returned === 'object' && returned !== null) {
@@ -114,7 +115,7 @@ export function queuedCardFromChange(
   if (attempt !== null) {
     return { ...card, state: 'dispatched', holdReason: null, consumedAs: attempt }
   }
-  return deliveredWaitingCard(state, card)
+  return deliveredWaitingCard(state, card, pairedEchoes)
 }
 
 /** Before an item or batch applies: each provider echo proving a waiting card's earlier hand-off
@@ -124,7 +125,12 @@ export function foldJournalQueueEcho(state: JournalReducerState, row: JournalRow
   if (cards.size === 0 || (row.kind !== 'item' && row.kind !== 'lifecycle-batch')) {
     return
   }
-  for (const delivered of draftsDeliveredByEcho(state, () => [...cards.values()], row)) {
+  for (const delivered of draftsDeliveredByEcho(
+    state,
+    () => [...cards.values()],
+    row,
+    state.queue.pairedEchoes
+  )) {
     const card = cards.get(delivered)
     if (card) {
       setCard(state, { ...card, state: 'withdrawn', holdReason: null })
@@ -155,7 +161,7 @@ export function foldJournalQueueRow(state: JournalReducerState, row: JournalRow)
     const submission = state.submissions.get(row.clientMessageId)
     const card = cardHandedOffAs(state, submission)
     if (card && submission) {
-      setCard(state, settledHandOff(state, card, submission))
+      setCard(state, settledHandOff(state, card, submission, state.queue.pairedEchoes))
     }
   } else if (row.kind === 'item' || row.kind === 'lifecycle-batch') {
     spendReportedCommandCards(state)
@@ -165,7 +171,7 @@ export function foldJournalQueueRow(state: JournalReducerState, row: JournalRow)
 function applyQueueRow(state: JournalReducerState, row: JournalQueueRow): void {
   const { change } = row
   if (change.op === 'queued') {
-    setCard(state, queuedCardFromChange(state, row.messageId, change))
+    setCard(state, queuedCardFromChange(state, row.messageId, change, state.queue.pairedEchoes))
     return
   }
   const card = state.queue.cards.get(row.messageId)
@@ -202,24 +208,32 @@ function cardHandedOffAs(
 function settledHandOff(
   state: JournalReducerState,
   card: QueuedMessageRow,
-  submission: AgentJournalSubmission
+  submission: AgentJournalSubmission,
+  pairedEchoes: Set<string>
 ): QueuedMessageRow {
   if (submission.dispatchState !== 'rejected') {
     return card
   }
   const reported = commandTurnReported(state, submission.clientMessageId)
-  return deliveredWaitingCard(state, rejectedCardTransition(card, submission, reported))
+  return deliveredWaitingCard(
+    state,
+    rejectedCardTransition(card, submission, reported),
+    pairedEchoes
+  )
 }
 
 /** A card that waits again is checked against the echoes already applied, so one whose earlier
  *  hand-off reached the agent after all is spent rather than resent. */
 function deliveredWaitingCard(
   state: JournalReducerState,
-  card: QueuedMessageRow
+  card: QueuedMessageRow,
+  pairedEchoes: Set<string>
 ): QueuedMessageRow {
-  if (card.state !== 'waiting' || draftsDeliveredByAppliedEcho(state, [card]).length === 0) {
+  const echo = card.state === 'waiting' ? appliedEchoDelivering(state, card, pairedEchoes) : null
+  if (echo === null) {
     return card
   }
+  pairedEchoes.add(echo)
   return { ...card, state: 'withdrawn', holdReason: null }
 }
 

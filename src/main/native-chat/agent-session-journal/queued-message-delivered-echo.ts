@@ -13,13 +13,15 @@ import {
 import type { JournalRow } from './journal-row-schema'
 import type { QueuedMessageRow } from './queued-message-table'
 
-/** The waiting drafts this appended row proves were delivered. The fold calls it before the row
- *  applies, for every item row, so a row that is no new provider echo of a user message returns
- *  before anything else is read. */
+/** The waiting drafts this appended row proves were delivered, one per echo: each echo proves one
+ *  delivery, so it takes the earliest-positioned match no other echo took, and joins `pairedEchoes`.
+ *  The fold calls it before the row applies, for every item row, so a row that is no new provider
+ *  echo of a user message returns before anything else is read. */
 export function draftsDeliveredByEcho(
   state: JournalReducerState,
   drafts: () => readonly QueuedMessageRow[],
-  row: JournalRow
+  row: JournalRow,
+  pairedEchoes: Set<string>
 ): string[] {
   const echoes = appendedItems(row).filter(
     (item) =>
@@ -31,38 +33,52 @@ export function draftsDeliveredByEcho(
   if (echoes.length === 0) {
     return []
   }
-  return spentWaitingDrafts(state, drafts())
-    .filter((spent) => echoes.some((item) => echoProvesDelivered(state, spent, item.body, row.seq)))
-    .map((spent) => spent.draft.messageId)
+  const candidates = spentWaitingDrafts(state, drafts()).sort(
+    (a, b) => a.draft.position - b.draft.position
+  )
+  const delivered: string[] = []
+  for (const item of echoes) {
+    const match = candidates.find(
+      (candidate) =>
+        !delivered.includes(candidate.draft.messageId) &&
+        echoProvesDelivered(state, candidate, item.body, row.seq)
+    )
+    if (match) {
+      delivered.push(match.draft.messageId)
+      pairedEchoes.add(item.itemId)
+    }
+  }
+  return delivered
 }
 
 /**
- * The same proof for a card that comes to wait again: waiting drafts an echo
- * ALREADY in the journal proves delivered. An unclaimed echo is the item still
- * stored under its provider id — a claimed one was folded into its submission's
- * item. Reads every item, but only once some hand-off of the card was refused
- * after hand-over, so a card that never left costs nothing.
+ * The same proof for a card that comes to wait again: the earliest echo ALREADY in the journal
+ * that proves it delivered and no other card took, or null. An unclaimed echo is the item still
+ * stored under its provider id — a claimed one was folded into its submission's item. Reads every
+ * item, but only once some hand-off of the card was refused after hand-over, so a card that never
+ * left costs nothing.
  */
-export function draftsDeliveredByAppliedEcho(
+export function appliedEchoDelivering(
   state: JournalReducerState,
-  drafts: readonly QueuedMessageRow[]
-): string[] {
-  const spent = spentWaitingDrafts(state, drafts)
-  if (spent.length === 0) {
-    return []
+  draft: QueuedMessageRow,
+  pairedEchoes: ReadonlySet<string>
+): string | null {
+  const [candidate] = spentWaitingDrafts(state, [draft])
+  if (!candidate) {
+    return null
   }
-  const delivered = new Set<string>()
+  let earliest: { itemId: string; sequence: number } | null = null
   for (const item of state.items.values()) {
-    if (!isProviderUserMessageEcho(item.itemId, item.body)) {
-      continue
-    }
-    for (const candidate of spent) {
-      if (echoProvesDelivered(state, candidate, item.body, item.sequence)) {
-        delivered.add(candidate.draft.messageId)
-      }
+    if (
+      isProviderUserMessageEcho(item.itemId, item.body) &&
+      !pairedEchoes.has(item.itemId) &&
+      (earliest === null || item.sequence < earliest.sequence) &&
+      echoProvesDelivered(state, candidate, item.body, item.sequence)
+    ) {
+      earliest = item
     }
   }
-  return [...delivered]
+  return earliest?.itemId ?? null
 }
 
 type SpentDraft = { draft: QueuedMessageRow; since: number }

@@ -47,7 +47,8 @@ export function legacyQueuedChange(
         }
       : {})
   }
-  const card = queuedCardFromChange(state, row.messageId, change)
+  // A reader's copy: only the fold, folding the imported row, pairs an echo for good.
+  const card = queuedCardFromChange(state, row.messageId, change, new Set(state.queue.pairedEchoes))
   return unanswered(card, state.submissions) ? change : null
 }
 
@@ -92,7 +93,9 @@ export class LegacyQueuedCards {
       const state = this.deps.state()
       const cards = this.rows().flatMap((row) => {
         const change = legacyQueuedChange(state, row)
-        return change ? [queuedCardFromChange(state, row.messageId, change)] : []
+        return change
+          ? [queuedCardFromChange(state, row.messageId, change, new Set(state.queue.pairedEchoes))]
+          : []
       })
       this.viewed = { key, cards }
     }
