@@ -2,7 +2,7 @@
 // beside it so the card file stays about layout and apply wiring.
 
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
-import { Check, ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react-native'
+import { Check, ChevronRight, ShieldAlert, type LucideIcon } from 'lucide-react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import {
   sessionOptionValueMarker,
@@ -16,57 +16,48 @@ export function SessionOptionCaption({ children }: { children: string }): React.
   return <Text style={styles.caption}>{children}</Text>
 }
 
-/** A label pill truncates to fit the row; an icon-only pill keeps its size. */
-export function Pill({
-  label,
+/** The composer's model pill: the model, then its options muted, with a shield for full access. */
+export function ModelPill({
+  primary,
+  secondary,
+  warning,
   icon: Icon,
   accessibleName,
   disabled,
-  onPress,
-  labelColor
+  onPress
 }: {
-  label?: string
+  primary: string
+  secondary: string | null
+  warning: boolean
   icon?: LucideIcon
   accessibleName: string
   disabled: boolean
   onPress: () => void
-  labelColor?: string
 }): React.JSX.Element {
+  const PillIcon = Icon ?? (warning ? ShieldAlert : undefined)
   return (
     <Pressable
       accessibilityLabel={accessibleName}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      style={({ pressed }) => [
-        styles.pill,
-        label === undefined && styles.pillFixed,
-        pressed && !disabled && styles.pressed
-      ]}
+      style={({ pressed }) => [styles.pill, pressed && !disabled && styles.pressed]}
       onPress={onPress}
       disabled={disabled}
       hitSlop={6}
     >
-      {Icon ? (
-        <Icon
-          size={14}
-          color={disabled ? colors.textMuted : (labelColor ?? colors.textSecondary)}
+      {PillIcon ? (
+        <PillIcon
+          size={15}
+          color={warning ? colors.statusAmber : disabled ? colors.textMuted : colors.textSecondary}
           strokeWidth={2.2}
         />
       ) : null}
-      {label !== undefined ? (
-        <Text
-          style={[
-            styles.pillText,
-            labelColor ? { color: labelColor } : null,
-            disabled && styles.pillTextDisabled
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          {label}
+      {!Icon ? (
+        <Text style={styles.pillText} numberOfLines={1} ellipsizeMode="tail">
+          <Text style={[styles.pillPrimary, disabled && styles.pillTextDisabled]}>{primary}</Text>
+          {secondary ? <Text style={styles.pillSecondary}>{`  ${secondary}`}</Text> : null}
         </Text>
       ) : null}
-      <ChevronDown size={12} color={disabled ? colors.textMuted : colors.textSecondary} />
     </Pressable>
   )
 }
@@ -104,9 +95,6 @@ function ChoiceRow({
       onPress={onPress}
       disabled={disabled}
     >
-      <View style={[styles.radio, selected && styles.radioOn]}>
-        {selected ? <Check size={12} color={colors.bgBase} strokeWidth={3} /> : null}
-      </View>
       <View style={styles.rowBody}>
         <Text style={[styles.rowLabel, labelColor ? { color: labelColor } : null]}>{label}</Text>
         {description ? (
@@ -115,6 +103,7 @@ function ChoiceRow({
           </Text>
         ) : null}
       </View>
+      {selected ? <Check size={18} color={colors.textPrimary} strokeWidth={2.4} /> : null}
     </Pressable>
   )
 }
@@ -184,16 +173,33 @@ function ActionRow({
 export function SessionOptionSummaryRow({
   label,
   value,
+  valueColor,
   disabled,
   divided,
   onPress
 }: {
   label: string
   value: string
+  valueColor?: string
   disabled: boolean
   divided: boolean
-  onPress: () => void
+  /** Absent for a value with no choice to make: the row reads as text, with no page behind it. */
+  onPress?: () => void
 }): React.JSX.Element {
+  if (!onPress) {
+    return (
+      <View
+        accessible
+        accessibilityLabel={`${label}, ${value}`}
+        style={[styles.summaryRow, divided && styles.rowDivided]}
+      >
+        <Text style={styles.summaryLabel}>{label}</Text>
+        <Text style={styles.summaryValue} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+    )
+  }
   return (
     <Pressable
       accessibilityLabel={`${label}, ${value}`}
@@ -209,7 +215,10 @@ export function SessionOptionSummaryRow({
       disabled={disabled}
     >
       <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue} numberOfLines={1}>
+      <Text
+        style={[styles.summaryValue, valueColor ? { color: valueColor } : null]}
+        numberOfLines={1}
+      >
         {value}
       </Text>
       <ChevronRight size={16} color={colors.textMuted} strokeWidth={2.2} />
@@ -295,28 +304,22 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    maxWidth: 180,
-    // RN items default to flexShrink 0, so without this the label never truncates
-    // and the pill slides under Mic and Send.
-    flexShrink: 1,
-    minWidth: 0,
-    minHeight: 28,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.button,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.bgRaised
-  },
-  pillFixed: {
-    flexShrink: 0
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    backgroundColor: colors.composerControl
   },
   pillText: {
-    color: colors.textSecondary,
-    fontSize: typography.metaSize,
-    fontWeight: '600',
-    flexShrink: 1
+    flexShrink: 1,
+    fontSize: typography.bodySize
+  },
+  pillPrimary: {
+    color: colors.textPrimary,
+    fontWeight: '500'
+  },
+  pillSecondary: {
+    color: colors.textMuted
   },
   pillTextDisabled: {
     color: colors.textMuted
@@ -337,8 +340,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
-    padding: spacing.sm,
-    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: spacing.sm,
+    minHeight: 50,
     alignItems: 'center',
     borderRadius: radii.card,
     backgroundColor: colors.bgRaised,
@@ -347,7 +351,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs
   },
   rowSelected: {
-    borderColor: colors.statusGreen
+    borderColor: colors.textSecondary
   },
   rowGrouped: {
     marginBottom: 0,
@@ -357,23 +361,10 @@ const styles = StyleSheet.create({
   },
   rowDivided: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle
+    borderBottomColor: colors.composerBorder
   },
   rowDisabled: {
     opacity: 0.5
-  },
-  radio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  radioOn: {
-    backgroundColor: colors.statusGreen,
-    borderColor: colors.statusGreen
   },
   rowBody: {
     flex: 1,
@@ -389,11 +380,11 @@ const styles = StyleSheet.create({
     fontSize: typography.metaSize
   },
   summaryRow: {
-    minHeight: 48,
+    minHeight: 50,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
     paddingVertical: spacing.sm
   },
   summaryLabel: {

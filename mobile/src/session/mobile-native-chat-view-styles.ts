@@ -1,23 +1,13 @@
 import { StyleSheet } from 'react-native'
 import { colors, spacing, typography } from '../theme/mobile-theme'
 
+const FLOATING_CONTROLS_BOTTOM = spacing.md
+const TOOLS_PILL_HEIGHT = 32
+
 export const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bgBase
-  },
-  chromeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 28,
-    paddingHorizontal: spacing.md
-  },
-  chromeLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm
   },
   sendError: {
     alignItems: 'center',
@@ -29,15 +19,27 @@ export const styles = StyleSheet.create({
     fontSize: typography.metaSize,
     fontWeight: '600'
   },
-  chromeToggle: {
+  floatingControls: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: FLOATING_CONTROLS_BOTTOM,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.xs
+    gap: spacing.sm
   },
-  chromeToggleLabel: {
-    color: colors.textMuted,
+  toolsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    height: TOOLS_PILL_HEIGHT,
+    paddingHorizontal: spacing.md,
+    borderRadius: TOOLS_PILL_HEIGHT / 2,
+    backgroundColor: colors.bgRaised,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle
+  },
+  toolsPillLabel: {
+    color: colors.textSecondary,
     fontSize: typography.metaSize,
     fontWeight: '600'
   },
@@ -50,6 +52,12 @@ export const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: spacing.sm,
+    flexGrow: 1
+  },
+  // The last row can scroll clear of the floating status and Tools pills.
+  listContentUnderFloatingControls: {
+    paddingTop: spacing.sm,
+    paddingBottom: FLOATING_CONTROLS_BOTTOM + TOOLS_PILL_HEIGHT + spacing.sm,
     flexGrow: 1
   },
   center: {
@@ -71,8 +79,6 @@ export const styles = StyleSheet.create({
     textAlign: 'center'
   },
   fab: {
-    position: 'absolute',
-    right: spacing.md,
     width: 38,
     height: 38,
     borderRadius: 19,
@@ -81,9 +87,6 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.bgRaised,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.borderSubtle
-  },
-  fabBottom: {
-    bottom: spacing.md
   },
   loadEarlier: {
     alignItems: 'center',

@@ -35,9 +35,6 @@ vi.mock('./MobileNativeChatAsk', () => ({ MobileNativeChatAsk: 'ChatAsk' }))
 vi.mock('./MobileNativeChatPermission', () => ({ MobileNativeChatPermission: 'ChatPermission' }))
 vi.mock('./MobileNativeChatQuestion', () => ({ MobileNativeChatQuestion: 'ChatQuestion' }))
 vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
-vi.mock('./MobileAgentWorkingIndicator', () => ({
-  MobileAgentWorkingIndicator: 'WorkingIndicator'
-}))
 vi.mock('./MobileNativeChatComposer', async () => {
   const { composerStub } = await import('./MobileNativeChatView.render-stubs.test-fixture')
   return composerStub()
@@ -70,6 +67,7 @@ describe('MobileNativeChatView: send and read failure banners', () => {
     expect(composers()).toHaveLength(0)
     expect(lists()).toHaveLength(0)
     expect(banners()).toHaveLength(0)
+    expect(root().findAllByProps({ accessibilityLabel: 'Stop the agent' })).toHaveLength(0)
 
     // A failure that can clear keeps the transcript and the composer.
     await update({ ...failure, error: "Orca couldn't open this chat's history right now." })

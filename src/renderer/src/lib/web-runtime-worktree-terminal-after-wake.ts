@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store'
-import { tabHasLivePty } from '@/lib/tab-has-live-pty'
+import { tabHasLivePty } from '../../../shared/tab-has-live-pty'
 import { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { isWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
@@ -8,7 +8,7 @@ import {
   beginWebRuntimeWakeTerminalRespawn,
   endWebRuntimeWakeTerminalRespawn
 } from '@/runtime/web-runtime-wake-terminal-respawn'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import type { WorktreeStartupPayload } from '@/lib/worktree-startup-payload'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { toast } from 'sonner'
@@ -35,7 +35,7 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
   const runtimeEnvironmentId =
     opts && 'runtimeEnvironmentId' in opts
       ? (opts.runtimeEnvironmentId ?? null)
-      : getRuntimeEnvironmentIdForWorktree(state, worktreeId)
+      : runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)
   if (!runtimeEnvironmentId || !isWebRuntimeSessionActive(runtimeEnvironmentId)) {
     return
   }

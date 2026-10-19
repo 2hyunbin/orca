@@ -36,10 +36,7 @@ import {
 
 export {
   invalidateSessionParseCacheEntry,
-  resetSessionParseCacheForTests,
-  seedSessionParseCache,
-  snapshotSessionParseCacheForPersistence,
-  type PersistedSessionParseCacheEntry
+  resetSessionParseCacheForTests
 } from './session-parse-cache-store'
 
 // Incremental append-parsing applies only to transcripts that are append-only
@@ -192,13 +189,14 @@ async function parseCachedInLane(
   signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
   const { file } = candidate
-  if (
+  const forceWholeRead =
     requireRead === 'whole' ||
     (requireRead === 'any' && sessionParseCacheCoversTranscript(candidate, platform))
-  ) {
+  if (forceWholeRead) {
     requestWholeTranscriptRead(file.path)
   }
-  const entry = getSessionParseCacheEntry(file.path)
+  // Not looked up again after a forced read: a failed database delete would hand the row back.
+  const entry = forceWholeRead ? undefined : getSessionParseCacheEntry(file.path)
 
   if (entry !== undefined && sessionParseCacheCoversTranscript(candidate, platform)) {
     if (sidecarUnchanged(entry.sidecar, file.sidecar)) {
