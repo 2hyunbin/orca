@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   ready: vi.fn(() => false)
 }))
 vi.mock('../wsl-background-distro-gate', () => ({
-  readConfirmedRunningWslDistros: mocks.readRunning
+  readConfirmedRunningWslDistros: mocks.readRunning,
+  listConfirmedRunningWslDistros: vi.fn(async () => [])
 }))
 vi.mock('../managed-server/lifecycle/orcad-managed-tunnel-identity', async (importOriginal) => ({
   ...(await importOriginal<typeof TunnelIdentity>()),
