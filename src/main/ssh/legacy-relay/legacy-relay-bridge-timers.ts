@@ -64,3 +64,33 @@ export class LegacyRelayWaiters {
     }
   }
 }
+
+/** Stops awaiting the relay's exit proof (its report, or a complete listing without the pane). */
+export class LegacyRelayExitProofs {
+  private readonly awaiting = new Map<string, boolean>()
+  private readonly waiters = new LegacyRelayWaiters()
+  private disposed = false
+
+  async wait(ptyId: string, timeoutMs: number): Promise<boolean> {
+    this.awaiting.set(ptyId, false)
+    await this.waiters.waitUntil(
+      () => this.disposed || this.awaiting.get(ptyId) === true,
+      timeoutMs
+    )
+    const exited = this.awaiting.get(ptyId) === true
+    this.awaiting.delete(ptyId)
+    return exited && !this.disposed
+  }
+
+  observe(ptyId: string): void {
+    if (this.awaiting.has(ptyId)) {
+      this.awaiting.set(ptyId, true)
+      this.waiters.wake()
+    }
+  }
+
+  dispose(): void {
+    this.disposed = true
+    this.waiters.wake()
+  }
+}

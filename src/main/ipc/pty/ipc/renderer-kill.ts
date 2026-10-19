@@ -91,7 +91,7 @@ async function stopRendererOwnedPtyProcess(
   } = deps
   runtime?.markPtyStopRequested?.(args.id)
   const connectionId = getPtySshConnectionId(args.id)
-  const bridgedStop = stopLegacyRelayBridgedPty(args.id, connectionId)
+  const bridgedStop = stopLegacyRelayBridgedPty(args.id, connectionId, args.keepHistory === true)
   if (bridgedStop) {
     await bridgedStop
     return

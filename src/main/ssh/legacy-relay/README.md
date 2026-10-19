@@ -23,6 +23,8 @@ nobody is prompted.
   can't take yet is kept on the lease as `pendingKill`, so it survives a restart; that lease is
   listed for the stop but never served as a pane again. A stop no later run could fence to the same
   process (a legacy `pty-N` id with no incarnation) gets one try, then the lease ends.
+- Sleeping a bridged pane is refused (the pane stays live): its stop would be durable, so it would
+  outlive the sleep. A stop-and-wait caller succeeds only on the relay's exit proof.
 
 **Touches** `ipc/ssh.ts`, `ipc/ssh-connect-flow.ts`, `ipc/ssh-host-server-on-connect-wiring.ts`,
 `ipc/ssh-session-teardown.ts`, the conversion gate's `bridged` verdict

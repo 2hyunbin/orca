@@ -13,12 +13,10 @@ import type { SshPendingPtyKill } from '../../../shared/ssh-pending-pty-kill'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { SshConnection } from '../connection/ssh-connection'
 import { waitForSentinel } from './ssh-relay-sentinel'
-import { probeRelayEndpointIncumbent } from './ssh-relay-endpoint-incumbent'
-import { isWindowsRemoteHost } from '../ssh-remote-platform'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { LegacyRelayClient } from './legacy-relay-client'
 import { createLegacyRelayCliServer } from './legacy-relay-cli-server'
-import { listLegacyRelayEndpoints, type LegacyRelayEndpoint } from './legacy-relay-endpoints'
+import { listLegacyRelayEndpoints, posixEndpointExited } from './legacy-relay-endpoints'
 import { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
 import { LegacyRelayHiddenOutput } from './legacy-relay-hidden-output'
 import { LegacyRelayPaneStops } from './legacy-relay-pane-stops'
@@ -35,7 +33,6 @@ const START_BUDGET_MS = 20_000
 /** How long an attach waits for a target whose connection is still coming up. */
 const CONNECTION_WAIT_MS = 20_000
 
-type TerminalsBucket = EventProps<'ssh_host_server_legacy_relay_bridge'>['terminals']
 type ReportPhase = EventProps<'ssh_host_server_legacy_relay_bridge'>['phase']
 
 export type LegacyRelayBridgeHost = {
@@ -87,19 +84,6 @@ export function installLegacyRelayBridge(next: LegacyRelayBridgeHost | null): vo
         reread: rereadLegacyRelayScreen
       })
     : null
-}
-
-export function terminalsBucket(count: number): TerminalsBucket {
-  if (count <= 0) {
-    return 'none'
-  }
-  if (count === 1) {
-    return '1'
-  }
-  if (count < 5) {
-    return '2_4'
-  }
-  return count < 10 ? '5_9' : '10_plus'
 }
 
 /** Panes it serves, or closed tabs' stops it still owes. */
@@ -163,6 +147,7 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
     onData: (ptyId, data) => hiddenOutput?.onData(ptyId, data),
     onExit: (ptyId, code) => {
       hiddenOutput?.forget(ptyId)
+      stopsFor(targetId).exited(ptyId)
       installed.onExit(ptyId, code)
     },
     onTerminalExited: () => installed.report(targetId, 'terminal_exited', 0)
@@ -179,23 +164,6 @@ function stopsFor(targetId: string): LegacyRelayPaneStops {
   const created = new LegacyRelayPaneStops(targetId, () => host)
   paneStops.set(targetId, created)
   return created
-}
-
-/** A dead socket is the one failed open that proves its relay gone; Windows pipes never are. */
-async function posixEndpointExited(
-  conn: SshConnection,
-  endpoint: LegacyRelayEndpoint
-): Promise<boolean> {
-  if (isWindowsRemoteHost(endpoint.host) || !endpoint.nodePath) {
-    return false
-  }
-  const incumbent = await probeRelayEndpointIncumbent(
-    conn,
-    endpoint.host,
-    endpoint.nodePath,
-    endpoint.endpoint
-  )
-  return incumbent.verdict === 'exited'
 }
 
 /**
@@ -352,6 +320,16 @@ export async function closeLegacyRelayPane(ptyId: string): Promise<LegacyRelayBr
   }
   // Disconnected: recorded now, and the target's next connect lists the relay and sends the stop.
   return stopsFor(targetId).stop(ptyId, host.connection(targetId) ? bridgeFor(targetId) : null)
+}
+
+/** A close that settles only on the relay's exit proof, by the deadline. */
+export async function stopLegacyRelayPaneAndWait(
+  ptyId: string,
+  deadlineMs: number
+): Promise<boolean> {
+  const targetId = parseAppSshPtyId(ptyId)?.connectionId
+  const bridge = targetId && host?.connection(targetId) ? bridgeFor(targetId) : null
+  return targetId && host ? stopsFor(targetId).stopAndWait(ptyId, bridge, deadlineMs) : false
 }
 
 export function detachLegacyRelayPane(ptyId: string, acquisitionId: number): void {

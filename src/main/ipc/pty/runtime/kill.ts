@@ -11,7 +11,8 @@ import type { PtyRuntimeControllerDeps } from './controller-deps'
 import { errorMessage } from '../../../../shared/error-message'
 import {
   closeLegacyRelayPane,
-  isLegacyRelayBridgedPty
+  isLegacyRelayBridgedPty,
+  stopLegacyRelayPaneAndWait
 } from '../../../ssh/legacy-relay/legacy-relay-bridge-registry'
 
 // Bounds the wait for an observed exit to reach the runtime record when the caller set no deadline.
@@ -31,13 +32,20 @@ function publishSyntheticExit(
 /**
  * COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay's shell stops through the
  * bridge, which retires its lease only on the relay's proof; tombstoning it here would orphan it.
- * Every stop route checks this first, before reading the (absent) SSH provider.
+ * Every stop route checks this first, before reading the (absent) SSH provider. A reversible stop
+ * is refused: the bridge's recorded stop would outlive it and kill a shell the pane wakes back to.
  */
 export function stopLegacyRelayBridgedPty(
   ptyId: string,
-  connectionId: string | null
+  connectionId: string | null,
+  reversible = false
 ): Promise<unknown> | null {
-  return connectionId && isLegacyRelayBridgedPty(ptyId) ? closeLegacyRelayPane(ptyId) : null
+  if (!connectionId || !isLegacyRelayBridgedPty(ptyId)) {
+    return null
+  }
+  return reversible
+    ? Promise.reject(new Error('legacy_relay_bridged_pty_cannot_sleep'))
+    : closeLegacyRelayPane(ptyId)
 }
 
 export function killPtyFromRuntimeController(
@@ -170,13 +178,11 @@ export async function stopAndWaitPtyFromRuntimeController(
     if (opts?.keepHistory) {
       return false
     }
-    const closed = closeLegacyRelayPane(ptyId).then((result) => result.status === 'exited')
-    return opts?.deadlineMs === undefined
-      ? await closed
-      : await Promise.race([
-          closed,
-          delay(Math.max(1, opts.deadlineMs - Date.now())).then(() => false)
-        ])
+    const deadline = opts?.deadlineMs ?? Date.now() + OBSERVED_EXIT_RECORD_WAIT_MS
+    return await Promise.race([
+      stopLegacyRelayPaneAndWait(ptyId, deadline),
+      delay(Math.max(1, deadline - Date.now())).then(() => false)
+    ])
   }
   // Why: destructive teardown threads one absolute deadline through every await
   // below; each RPC leaf converts it to the remaining time when it issues, so

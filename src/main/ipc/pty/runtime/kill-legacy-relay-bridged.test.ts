@@ -96,6 +96,39 @@ describe('a tab close of a terminal an older relay still runs', () => {
     await expect(closeLegacyRelayPane(ptyId)).resolves.toEqual({ status: 'unverifiable' })
     installLegacyRelayBridge(null)
   })
+
+  it('refuses a hibernation stop without recording a stop that would outlive it', async () => {
+    const recordStop = vi.fn()
+    const store = { markSshRemotePtyLease: vi.fn() }
+    installLegacyRelayBridge({
+      leases: () => [lease],
+      retireLease: vi.fn(),
+      recordStop,
+      connection: () => null,
+      onPanesChanged: () => {},
+      onData: () => {},
+      onReplay: () => {},
+      onExit: () => {},
+      report: () => {}
+    })
+    const deps = {
+      store,
+      getLocalPtyProviderStartupPromise: () => undefined,
+      shutdownProviderAndDetectExit: vi.fn(),
+      rememberSyntheticKillExit: vi.fn(),
+      sendPtyExitToRenderer: vi.fn()
+    }
+    await expect(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the bridged branch reads only these deps.
+      stopRendererOwnedPty(deps as unknown as PtyKillIpcDeps, {
+        id: toAppSshPtyId(TARGET, lease.ptyId),
+        keepHistory: true
+      })
+    ).rejects.toThrow('legacy_relay_bridged_pty_cannot_sleep')
+    expect(recordStop).not.toHaveBeenCalled()
+    expect(store.markSshRemotePtyLease).not.toHaveBeenCalled()
+    installLegacyRelayBridge(null)
+  })
 })
 
 describe('a stop-and-wait of a terminal an older relay still runs', () => {

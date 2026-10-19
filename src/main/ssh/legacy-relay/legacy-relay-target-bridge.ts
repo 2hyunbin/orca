@@ -76,10 +76,6 @@ export class LegacyRelayTargetBridge {
 
   constructor(private readonly deps: LegacyRelayTargetBridgeDeps) {}
 
-  get targetId(): string {
-    return this.deps.targetId
-  }
-
   livePaneCount(): number {
     return this.snapshot().filter((pane) => pane.state === 'live').length
   }
@@ -109,9 +105,13 @@ export class LegacyRelayTargetBridge {
       )
       pane = this.panes.get(ptyId)
     }
+    const leased = leasedAppPtyIds(this.deps.targetId, this.deps.leases()).has(ptyId)
     if (!pane) {
-      const leased = leasedAppPtyIds(this.deps.targetId, this.deps.leases()).has(ptyId)
       return leased ? { status: 'unverifiable' } : { status: 'exited' }
+    }
+    // A close recorded while this attach waited: its stop is owed, so the pane is never served.
+    if (!leased) {
+      return { status: 'not-bridged' }
     }
     const client = pane.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
     if (pane.state !== 'live' || !client) {

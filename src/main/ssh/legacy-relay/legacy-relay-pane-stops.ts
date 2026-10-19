@@ -15,7 +15,7 @@ import type { SshPendingPtyKill } from '../../../shared/ssh-pending-pty-kill'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { LegacyRelayBridgeCloseResult } from '../../../shared/legacy-relay-bridge-contract'
 import { isStoppingLease, listedAppPtyIds } from './legacy-relay-bridge-leases'
-import { LegacyRelayRetry } from './legacy-relay-bridge-timers'
+import { LegacyRelayExitProofs, LegacyRelayRetry } from './legacy-relay-bridge-timers'
 import type { LegacyRelayClient } from './legacy-relay-client'
 import type { LegacyRelayBridgeHost } from './legacy-relay-bridge-registry'
 import type { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
@@ -35,6 +35,7 @@ export class LegacyRelayPaneStops {
   private readonly closing = new Map<string, PendingStop>()
   private bridge: StopTarget | null = null
   private readonly relist = new LegacyRelayRetry(() => void this.bridge?.refresh())
+  private readonly exits = new LegacyRelayExitProofs()
 
   constructor(
     private readonly targetId: string,
@@ -82,6 +83,23 @@ export class LegacyRelayPaneStops {
     return sent ? { status: 'requested' } : { status: 'unverifiable' }
   }
 
+  /** True only once the relay proves the exit (its report, or a complete listing without it). */
+  async stopAndWait(
+    ptyId: string,
+    bridge: StopTarget | null,
+    deadlineMs: number
+  ): Promise<boolean> {
+    // Armed before the stop is sent, so an exit that races its reply still counts.
+    const exited = this.exits.wait(ptyId, Math.max(1, deadlineMs - Date.now()))
+    const result = await this.stop(ptyId, bridge)
+    return result.status === 'exited' || (result.status === 'requested' && (await exited))
+  }
+
+  /** The bridge saw the pane exit. */
+  exited(ptyId: string): void {
+    this.exits.observe(ptyId)
+  }
+
   /** Runs after each listing: re-sends pending stops, re-listing on backoff while one still runs. */
   flush(bridge: StopTarget): void {
     this.bridge = bridge
@@ -111,6 +129,7 @@ export class LegacyRelayPaneStops {
 
   dispose(): void {
     this.relist.cancel()
+    this.exits.dispose()
     this.closing.clear()
   }
 

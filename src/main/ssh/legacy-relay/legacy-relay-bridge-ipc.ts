@@ -20,9 +20,9 @@ import {
   legacyRelayBridgedPanes,
   resizeLegacyRelayPane,
   setLegacyRelayPaneOutputPaused,
-  terminalsBucket,
   writeLegacyRelayPane
 } from './legacy-relay-bridge-registry'
+import { terminalsBucket } from './legacy-relay-daily-activity'
 
 const PtyIdSchema = z.string().min(1).max(4096)
 const SizeSchema = z.number().int().positive().max(10_000)

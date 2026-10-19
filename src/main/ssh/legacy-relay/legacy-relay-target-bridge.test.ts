@@ -165,7 +165,11 @@ function bridge(overrides: Partial<LegacyRelayTargetBridgeDeps> = {}): LegacyRel
       stops.flush(subject)
     },
     onData: (_id, chunk) => events.data.push(chunk),
-    onExit: (id) => events.exits.push(id),
+    onExit: (id) => {
+      events.exits.push(id)
+      // As the registry wires it.
+      stops.exited(id)
+    },
     onTerminalExited: () => {
       events.exitedTelemetry += 1
     },
@@ -453,6 +457,47 @@ describe('one target’s legacy relay bridge', () => {
     await stops.stop(PTY, recycled as unknown as LegacyRelayTargetBridge)
     expect(relay.shutdowns).toEqual([])
     expect(leases[0].state).toBe('terminated')
+  })
+
+  it('proves a stop only by the relay’s exit report, never by the stop’s reply', async () => {
+    const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
+    leases = [lease({ ptyId: 'pty2:epoch:1' })]
+    relay.ptys = new Set(['pty2:epoch:1'])
+    const subject = bridge()
+    await subject.refresh()
+    await expect(stops.stopAndWait(epochPty, subject, Date.now() + 5_000)).resolves.toBe(true)
+  })
+
+  it('leaves a taken stop unproven while no exit report or complete listing confirms it', async () => {
+    const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
+    leases = [lease({ ptyId: 'pty2:epoch:1' })]
+    relay.ptys = new Set(['pty2:epoch:1'])
+    relay.exitOnShutdown = false
+    // A relay may run that no endpoint accounts for, so absence from the listing is not exit.
+    listing = { kind: 'listed', endpoints: [ENDPOINT], exhaustive: false }
+    const subject = bridge()
+    await subject.refresh()
+    const settled = stops.stopAndWait(epochPty, subject, Date.now() + 1_000)
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(settled).resolves.toBe(false)
+    expect(relay.shutdowns).toEqual(['pty2:epoch:1'])
+  })
+
+  it('never attaches a pane whose tab closed while the attach waited for its relay', async () => {
+    const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
+    leases = [lease({ ptyId: 'pty2:epoch:1' })]
+    relay.ptys = new Set(['pty2:epoch:1'])
+    relay.openError = new Error('ssh down')
+    const subject = bridge()
+    await subject.refresh()
+    const attach = subject.attach(epochPty)
+    // The tab closes while the attach waits for the unreachable relay.
+    await stops.stop(epochPty, null)
+    relay.openError = null
+    relay.shutdownError = new Error('timed out')
+    await subject.refresh()
+    await expect(attach).resolves.toEqual({ status: 'not-bridged' })
+    expect(relay.clients.every((client) => client.writes.length === 0)).toBe(true)
   })
 
   it('sends a close recorded while disconnected once the next bridge lists the pane', async () => {
