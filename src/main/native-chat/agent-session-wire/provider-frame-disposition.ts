@@ -229,7 +229,7 @@ const PROVIDER_FRAME_CATALOGS: ReadonlyMap<
         return subtype === 'success' ? 'status-chrome' : 'error-surface'
       }
       if (kind === 'message:system:hook_response') {
-        // A prompt hook's exit 2 is its block, which the halting warning already reports.
+        // Exit 2 is the block the halting warning shows, or a missing plugin script (left unshown).
         const promptBlock =
           isProviderRecord(payload) &&
           payload.hook_event === 'UserPromptSubmit' &&
