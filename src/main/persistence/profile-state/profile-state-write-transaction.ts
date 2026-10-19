@@ -28,7 +28,8 @@ export function withProfileStateWriteTransaction<T>(db: Database.Database, write
   } catch (error) {
     if (!db.isTransaction) {
       // SQLite can roll back a failed statement itself; a failed COMMIT is ambiguous, except
-      // SQLITE_FULL: a frame that couldn't be written precedes the commit point, so nothing landed.
+      // SQLITE_FULL: with powersafe overwrite (the default VFS) the WAL commit frame is the last
+      // write, so a write that ran out of room means no commit frame landed.
       if (committing && storageCapacityErrorCode(error) !== 'SQLITE_FULL') {
         throw new ProfileStateIndeterminateWriteError(error, undefined)
       }
