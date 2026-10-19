@@ -4,6 +4,7 @@ import type { AgentSessionExecutionOptions } from '../../../shared/agent-session
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { structuredAgentSessionChildRan } from './structured-agent-session-ran-options'
+import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
 
 const OPTION_ORDER = ['model', 'effort'] as const
 
@@ -24,7 +25,7 @@ export function waitsForCodexTurnOptions(
   record: Pick<AgentSessionRecord, 'provider'> | null,
   journal: Pick<AgentSessionJournal, 'newestTurn' | 'submissions' | 'itemBody'>,
   next: AgentJournalSubmission,
-  child: object
+  child: StructuredAgentSessionProviderChild
 ): boolean {
   if (record?.provider !== 'codex') {
     return false

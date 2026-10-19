@@ -5,7 +5,8 @@ import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wi
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type {
   StructuredAgentSessionHostDeps,
-  StructuredAgentSessionHostSession
+  StructuredAgentSessionHostSession,
+  StructuredAgentSessionProviderChild
 } from './structured-agent-session-host-types'
 import { structuredAgentSessionOptionOverridesRefusal } from './structured-agent-session-option-intent'
 
@@ -19,7 +20,10 @@ type RanOptions = Partial<Record<'model' | 'effort' | 'serviceTier' | 'fastMode'
 
 /** In memory per child: what it last reported running, and whether a turn it was handed still
  *  owes a record because nothing had reported a model yet. */
-const childRuns = new WeakMap<object, { reported?: RanOptions; owed?: true }>()
+const childRuns = new WeakMap<
+  StructuredAgentSessionProviderChild,
+  { reported?: RanOptions; owed?: true }
+>()
 
 function currentChild(context: RanOptionsContext, sessionId: string, fence: number) {
   const child = context.sessions.get(sessionId)?.child
@@ -27,7 +31,9 @@ function currentChild(context: RanOptionsContext, sessionId: string, fence: numb
 }
 
 /** What a child last reported running, which a turn handed over with no choices of its own runs. */
-export function structuredAgentSessionChildRan(child: object): RanOptions | undefined {
+export function structuredAgentSessionChildRan(
+  child: StructuredAgentSessionProviderChild
+): RanOptions | undefined {
   return childRuns.get(child)?.reported
 }
 
