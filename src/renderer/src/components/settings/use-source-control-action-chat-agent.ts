@@ -7,7 +7,8 @@ import type { SourceControlActionRecipe } from '../../../../shared/source-contro
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
 import { useAppStore } from '@/store'
-import { useLocalChatAgents } from './NativeChatProvidersSetting'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { chatProviderAgents, useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
 
 type ActionChatAgent =
   | { status: 'pending' }
@@ -28,7 +29,8 @@ export function useSourceControlActionChatAgent(
 ): ActionChatAgent & { resolve: (agent: SourceControlActionRecipe['agentId']) => ActionChatAgent } {
   const settings = useAppStore((state) => state.settings)
   const detected = useAppStore(readNativeDetectedAgents)
-  const providers = useLocalChatAgents()
+  useHostStructuredAgentsVersion()
+  const providers = chatProviderAgents(LOCAL_EXECUTION_HOST_ID, undefined)
   const resolve = (selected: SourceControlActionRecipe['agentId']): ActionChatAgent => {
     if (detected === null) {
       return { status: 'pending' }

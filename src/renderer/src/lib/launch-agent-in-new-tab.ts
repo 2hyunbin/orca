@@ -1,3 +1,4 @@
+import type { AgentSessionLaunchRequest } from '@/lib/agent-session-launch-plan'
 import { useAppStore } from '@/store'
 import { validateActionTerminalArgs } from './launch-work-item-direct-messages'
 import { planLaunchAgentStartupPrompt } from '@/lib/launch-agent-startup-prompt-plan'
@@ -9,7 +10,7 @@ import {
   launchNewTabPromptThroughHost,
   newTabPromptLaunchesThroughHost
 } from '@/lib/launch-agent-new-tab-host-route'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { launchAgentInWebHostTab } from '@/lib/launch-agent-web-host-tab'
 import {
@@ -23,27 +24,18 @@ import { resolveAgentLaunchExecutionContext } from '@/lib/launch-agent-execution
 import { launchStructuredAgentFromNewTab } from '@/lib/launch-agent-in-new-tab-structured-route'
 import type { StructuredLaunchTerminal } from '@/lib/structured-agent-session-launch-admission'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
-import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
 import {
   launchOnceHostAnswered,
   routeNewTabLaunch,
+  type LaunchAgentInNewTabRequest,
   type AgentTabLaunchOutcome,
   type LaunchAgentInNewTabResult
 } from '@/lib/launch-agent-in-new-tab-host-agents'
-import type { AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import type { NativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 
-/** The user action this launch serves: minted where that action is handled, or carried by the
- *  route the caller already planned for it. */
-type LaunchAgentInNewTabRequest =
-  | { requestId: AgentLaunchRequestId; agentSessionLaunchPlan?: undefined }
-  | {
-      /** Keeps a preflighted route authoritative across workspace creation. */
-      agentSessionLaunchPlan: AgentSessionLaunchPlan
-      requestId?: undefined
-    }
-
 export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
+  requestedSurface?: AgentSessionLaunchRequest['requestedSurface']
+  selectedExecutionHostId?: AgentSessionLaunchRequest['selectedExecutionHostId']
   agent: TuiAgent
   worktreeId: string
   /** Captured at a new-chat action before the host can delay route selection. */
@@ -150,6 +142,8 @@ export function launchAgentInNewTabWithOutcome(
   // server included, so only a non-structured route falls through to the host-published terminal.
   const route = routeNewTabLaunch(store, args, {
     agent,
+    requestedSurface: args.requestedSurface,
+    selectedExecutionHostId: args.selectedExecutionHostId,
     workspace: { kind: workspaceKind, worktreeId },
     prompt: trimmedPrompt,
     promptDelivery: routePromptDelivery,
@@ -220,7 +214,7 @@ export function launchAgentInNewTabWithOutcome(
   }
 
   args.focusIntent?.cancel()
-  const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(store, worktreeId)
+  const runtimeEnvironmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(store, worktreeId)
   if (isWebRuntimeSessionActive(runtimeEnvironmentId)) {
     if (beforeSurfaceOpen?.({ kind: 'host-published' }) === false) {
       return null

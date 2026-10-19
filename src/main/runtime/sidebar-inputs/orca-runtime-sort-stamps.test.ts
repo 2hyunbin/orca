@@ -91,14 +91,20 @@ describe('host sort stamps on a headless runtime', () => {
     try {
       const { runtime, meta } = createHeadlessRuntime()
       const server = new AgentHookServer()
-      runtime.sidebarFacts?.attachSidebarAgentStatusStore(server)
+      runtime.attachAgentStatusStore(server)
       server.ingestTerminalStatus({
         paneKey: 'tab-1:11111111-1111-4111-8111-111111111111',
         tabId: 'tab-1',
         worktreeId: WT,
         payload: { state: 'waiting', prompt: 'task', agentType: 'claude' }
       })
-      expect(meta[WT]).toEqual({ lastActivityAt: 70_000, smartTier: 'needs-you', smartAt: 70_000 })
+      // No client is looking, so the request for input also raises the unread flag.
+      expect(meta[WT]).toEqual({
+        lastActivityAt: 70_000,
+        smartTier: 'needs-you',
+        smartAt: 70_000,
+        isUnread: true
+      })
     } finally {
       vi.useRealTimers()
     }
@@ -106,12 +112,12 @@ describe('host sort stamps on a headless runtime', () => {
 
   it('reconciles stored tiers once the provider can answer for the workspace’s terminals', async () => {
     const live = createHeadlessRuntime({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
-    live.runtime.sidebarFacts?.attachSidebarAgentStatusStore(new AgentHookServer())
+    live.runtime.attachAgentStatusStore(new AgentHookServer())
     await live.runtime.sidebarFacts?.reconcileSortStampTiers({ probePtyLiveness: async () => true })
     expect(live.meta[WT]).toEqual({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
 
     const gone = createHeadlessRuntime({ lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
-    gone.runtime.sidebarFacts?.attachSidebarAgentStatusStore(new AgentHookServer())
+    gone.runtime.attachAgentStatusStore(new AgentHookServer())
     await gone.runtime.sidebarFacts?.reconcileSortStampTiers({
       probePtyLiveness: async () => false
     })

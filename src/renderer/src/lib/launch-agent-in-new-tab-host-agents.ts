@@ -1,3 +1,4 @@
+import type { AgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import type { AgentStartupPlan } from '@/lib/tui-agent-startup'
 import { useAppStore } from '@/store'
 import {
@@ -9,6 +10,16 @@ import {
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
 import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-session-launch-prompt'
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
+
+/** The user action this launch serves: minted where that action is handled, or carried by the
+ *  route the caller already planned for it. */
+export type LaunchAgentInNewTabRequest =
+  | { requestId: AgentLaunchRequestId; agentSessionLaunchPlan?: undefined }
+  | {
+      /** Keeps a preflighted route authoritative across workspace creation. */
+      agentSessionLaunchPlan: AgentSessionLaunchPlan
+      requestId?: undefined
+    }
 
 /** `host-published`: the surface opens once its host answers, a structured chat's included. */
 export type AgentLaunchSurface =
@@ -55,7 +66,9 @@ export function routeNewTabLaunch(
   if (requestId === undefined) {
     return { plan: args.agentSessionLaunchPlan }
   }
-  const awaited = awaitStructuredRouteHostAnswer(store, request, HOST_ANSWER_WAIT_MS)
+  const awaited = request.requestedSurface
+    ? null
+    : awaitStructuredRouteHostAnswer(store, request, HOST_ANSWER_WAIT_MS)
   return awaited
     ? {
         awaited,

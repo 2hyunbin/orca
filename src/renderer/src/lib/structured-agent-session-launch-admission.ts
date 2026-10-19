@@ -50,6 +50,37 @@ type AdmittedLaunch = {
 
 const DELIVERED: StructuredPromptDeliveryResult = { delivered: true, failureNotified: false }
 const NOT_DELIVERED: StructuredPromptDeliveryResult = { delivered: false, failureNotified: false }
+const NOT_DELIVERED_NOTIFIED: StructuredPromptDeliveryResult = {
+  delivered: false,
+  failureNotified: true
+}
+
+function notifyExplicitChatFailure(agent: TuiAgent, reason?: string): void {
+  toast.error(
+    translate(
+      'auto.components.tab.bar.QuickLaunchButton.chatUnavailableAfterSelection',
+      "Couldn't start a {{value0}} chat.",
+      { value0: structuredAgentLabel(agent) }
+    ),
+    {
+      description:
+        reason === 'wsl'
+          ? translate(
+              'components.native-chat.explicitChatWsl',
+              'Chat is not available in WSL. Open the agent in a terminal instead.'
+            )
+          : reason === 'remote'
+            ? translate(
+                'components.native-chat.explicitChatSsh',
+                'Chat is not available over SSH. Open the agent in a terminal instead.'
+              )
+            : translate(
+                'components.native-chat.explicitChatUnavailable',
+                'This workspace cannot run the chat. Check the agent installation or open it in a terminal.'
+              )
+    }
+  )
+}
 
 function notifyHostDeclined(agent: TuiAgent): void {
   const agentLabel = structuredAgentLabel(agent)
@@ -162,6 +193,15 @@ export function beginHostAdmittedStructuredLaunch(args: {
         resolveDelivery = resolve
       })
     : undefined
+  const failBeforeSurface = (error: unknown, reason?: string): StructuredAgentLaunchSettlement => {
+    if (plan.requestedSurface === 'chat' && !admitted) {
+      notifyExplicitChatFailure(plan.agent, reason)
+      resolveDelivery(NOT_DELIVERED_NOTIFIED)
+      return { kind: 'failed', error, notified: true }
+    }
+    resolveDelivery(NOT_DELIVERED)
+    return { kind: 'failed', error }
+  }
   // Released once the surface that answers the launch has opened, or nothing will.
   const releaseHold = holdEmptyWorkspaceDefaultSurfaceForLaunch(args.worktreeId)
   const settlement = (async (): Promise<StructuredAgentLaunchSettlement> => {
@@ -193,16 +233,12 @@ export function beginHostAdmittedStructuredLaunch(args: {
         }
       }
       if (admission.kind === 'declined') {
-        if (plan.resumeFrom) {
-          resolveDelivery(NOT_DELIVERED)
-          return {
-            kind: 'failed',
-            error: new StructuredAgentSessionCreateRefusalError(
-              'structured_agent_session_unsupported'
-            )
-          }
+        if (plan.resumeFrom || plan.requestedSurface === 'chat') {
+          return failBeforeSurface(
+            new StructuredAgentSessionCreateRefusalError('structured_agent_session_unsupported'),
+            admission.reason
+          )
         }
-        // The notice explains a server's refusal; on this machine the terminal opening is the answer.
         const terminal = await args.onHostDeclined(args.target)
         if (paired && terminal.opened) {
           notifyHostDeclined(plan.agent)
@@ -245,10 +281,7 @@ export function beginHostAdmittedStructuredLaunch(args: {
     } finally {
       releaseHold()
     }
-  })().catch((error: unknown): StructuredAgentLaunchSettlement => {
-    resolveDelivery(NOT_DELIVERED)
-    return { kind: 'failed', error }
-  })
+  })().catch(failBeforeSurface)
   return {
     sessionId: null,
     tab: null,

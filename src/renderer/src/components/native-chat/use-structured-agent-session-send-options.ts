@@ -30,7 +30,7 @@ export function useStructuredAgentSessionSendOptions(
     if (requested) {
       return requested
     }
-    // A pick on its way resolves as the picker shows it, so a gone model it names is replaced too.
+    // A pick on its way resolves as the picker shows it, keeping the model it names.
     const view = optionView(optionStateRef.current, selection?.seed ?? launch?.seedOptions, {
       ...(selection?.held ?? launch?.heldOptions),
       ...pendingOptionsRef.current

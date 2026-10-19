@@ -17,7 +17,10 @@ import type {
   ForceDeleteWorktreeBranchResult,
   RemoveWorktreeResult
 } from '../../../shared/worktree/create-types'
-import type { RuntimeTerminalRename } from '../../../shared/runtime-types'
+import type {
+  RuntimeTerminalRename,
+  RuntimeTerminalSetPaneTitle
+} from '../../../shared/runtime-types'
 import type { TerminalWorkspaceLaunchScope } from '../runtime-legacy-worker-terminal-recovery-types'
 import type { TerminalCreateOptions } from '../runtime-terminal-contracts'
 import {
@@ -261,6 +264,19 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
     const { leaf } = this.getLiveLeafForHandle(handle)
     this.notifier?.renameTerminal(leaf.tabId, title)
     return { handle, tabId: leaf.tabId, title }
+  }
+
+  /** Names one pane of a split; the tab's own name is untouched. */
+  async setPaneTitle(handle: string, title: string | null): Promise<RuntimeTerminalSetPaneTitle> {
+    const { leaf } = this.getLiveLeafForHandle(handle)
+    if (!this.getAvailableAuthoritativeWindow() || !this.notifier?.setPaneTitle) {
+      throw new Error('Pane titles require a running Orca desktop with set-pane-title support')
+    }
+    const normalizedTitle = title?.trim() || null
+    if (!this.notifier.setPaneTitle(leaf.tabId, leaf.leafId, normalizedTitle)) {
+      throw new Error('runtime_unavailable')
+    }
+    return { handle, tabId: leaf.tabId, leafId: leaf.leafId, title: normalizedTitle }
   }
 
   async resolveAgentTerminalCreateOptions(
