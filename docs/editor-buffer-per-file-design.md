@@ -58,10 +58,11 @@ The **text model URI** is separate. It can't change for the life of a model, and
 - **Owner resolves late**: when the owner isn't known yet, `editor-model-owner.ts` falls back to `unresolved` + worktree + file id. Once the owner resolves, that provisional record joins the real one:
   - If the real record doesn't exist, the provisional record is re-keyed to it.
   - If both exist and only one is dirty, the dirty one wins.
-  - If both are dirty, the other draft becomes a recoverable copy (see Restore). Until the recovery UI ships in 1d, the two stay as separate, unshared records.
+  - If both are dirty, the other draft becomes a recoverable copy (see Restore).
 - **Rename**:
   - The record is re-keyed. The URI can't change, so a new model is built from the old model's text, dirty state and baseline, and the old model is disposed. Undo history doesn't survive the rename, which matches today's behaviour.
   - If the target path already has a record, the rename counts as an external change to it. If that record is clean, its views attach to the moved record. If it is dirty, its draft becomes a recoverable copy.
+- **Dirty and dirty joins before 1d**: until the recovery UI exists, any join where both sides are dirty keeps both records separate and unshared. That covers owner resolution, restored legacy drafts that differ (in one workspace or two), and a rename onto a dirty record.
 
 ### Fields
 
@@ -135,7 +136,10 @@ Version ids restart when a model is recreated, for example after a dispose and r
 
 - `record.applyText(text, source)` replaces the model's text as one edit.
   - Because these edits never undo through the model, dirty for them can't come from version ids. If the applied text's signature equals `baseline`, `savedAltVersion` is set to the current id, so undoing to clean in the view reads clean.
-- `record.pending`: views that publish on a delay (rich markdown waits 300 ms) register pending text on the record. The record flushes pending text before any dirty decision, close prompt, autosave or session capture, so exiting before the timer fires keeps the edit.
+- `record.pending`: views that publish on a delay (rich markdown waits 300 ms) register pending text on the record.
+  - When a view's pending edit starts, the record captures the model's alternative version as that edit's base.
+  - The record flushes pending text before any dirty decision, close prompt, autosave or session capture, and before another view on the same record writes. Another view's first edit forces the flush, so exiting before the timer fires keeps the edit.
+  - `applyText` replaces the text only if the model is still at the captured base. Otherwise the stale commit is not applied. It is kept as a recoverable copy and shown to the user.
 - Disk loads go through `record.loadFromDisk(text, signature)`:
   - Until 1d, the callers are the panel `fileContents` loader and the buffer content sync.
   - From 1d until Phase 2, the callers are the file loader on open and the existing watcher reload.
@@ -150,24 +154,26 @@ Phase 1 ships as four PRs. After each one, behaviour matches main except for the
 
 - **1a. Record as state only (small).**
   - **Change**:
-    - Move the per-tab fields (draft, dirty, disk signature, changed-on-disk mark, autosave pauses) into a buffer slice, still keyed per workspace and read through selectors.
+    - Move the per-tab fields (draft, dirty, disk signature, changed-on-disk mark, autosave pauses) into a buffer slice, read through selectors.
+    - The slice is keyed by the existing `OpenFile.id`, which makes the move purely mechanical. On main one path can already have several records in one workspace: unstaged diff tabs with their own id, draft and model; diverging duplicate siblings (`editor-close-document-siblings.test.ts`); and siblings that differ in read-only state, mode or owner generation. 1a keeps all of them.
     - Writers update the record instead of the tab.
     - Text models are untouched. They stay one per URI, shared as on main, and are written only by today's paths, at today's times.
     - Dirty stays main's content compare (including the markdown trailing-whitespace leniency).
   - **Tests**: existing suites pass unchanged; each writer lands in the record.
 - **1b. Sharing across workspaces.**
   - **Change**: these land together, because sharing without the queue or the close rule would let one workspace's Discard or autosave clobber the other's edits, and model writes without one record per model reopen the stale-text path:
-    - Drop the workspace from the key, so there is one record per text model.
+    - Collapse ids: only edit-mode views of one text model share a record, across workspaces. Diff, read-only, preview and stale-owner records stay separate until Phase 3.
     - One save queue and one autosave timer per record.
     - Only closing the last view asks to save.
     - The interim adapter's `applyText`, `pending` and `loadFromDisk`.
-    - Owner-resolution merge, with two dirty records kept unshared.
+    - Owner-resolution merge, using the rule for joins where both sides are dirty.
     - The identity rules.
   - **Tests**:
     - Two workspaces on one record, and a view opened later.
     - Discard on a view that isn't the last; one autosave.
     - A rich edit in A while B's editor is mounted.
     - Owner-resolution merging.
+    - Joins where both sides are dirty: owner resolution, divergent legacy drafts restored in one workspace or two, and a rename onto a dirty record.
     - Key rules: exact case, mixed case sensitivity, WSL aliases, `(runtimeEnvironmentId, targetId)`.
   - **From #30714**: keep the URI shape, the close behaviour and their tests. Drop the per-tab fan-out (`getSameBufferFileIds`).
 - **1c. Dirty from alternative version ids.**
@@ -176,6 +182,7 @@ Phase 1 ships as four PRs. After each one, behaviour matches main except for the
     - Undo back to clean in the code editor and in rich, notebook and CSV views.
     - Dispose and reopen while dirty.
     - Exit before the rich-markdown publish timer fires.
+    - Two panes edit within the delay window. The flush is forced, and a stale commit becomes a recoverable copy rather than being applied.
 - **1d. Delete caches and stored drafts.**
   - **Change**: delete the panel `fileContents` cache for editable tabs and `use-editor-buffer-content-sync`. Drafts are derived at session save, after flushing pending text. Add the recoverable-copy UI, used for old-format drafts that differ and for dirty owner merges.
   - **Tests**: legacy drafts that differ; a session read by an older build.
