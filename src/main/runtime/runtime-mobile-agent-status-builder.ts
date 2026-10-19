@@ -35,12 +35,53 @@ export function buildRuntimeMobileAgentStatus(
   getHookRowsForPane: (paneKey: string) => AgentStatusIpcPayload[],
   host: RuntimeMobileAgentStatusHost
 ): { agentStatus: AgentStatusEntry } | Record<string, never> {
+  const hookRows = getHookRowsForPane(host.getPaneKey(tab))
+  const projected = buildProjectedAgentStatus(pty, tab, terminalHandle, retained, hookRows, host)
+  // Why: title-derived and restored rows are rebuilt without hook payload fields, and a newer
+  // title can hide the hook row entirely; the stamp is the pane's own fact, so it always rides.
+  return 'agentStatus' in projected
+    ? {
+        agentStatus: withLatestFileActivity(projected.agentStatus, [retained?.payload, ...hookRows])
+      }
+    : projected
+}
+
+function withLatestFileActivity(
+  status: AgentStatusEntry,
+  sources: readonly (Pick<AgentStatusEntry, 'fileActivityAt' | 'fileActivityKind'> | undefined)[]
+): AgentStatusEntry {
+  let latest: Pick<AgentStatusEntry, 'fileActivityAt' | 'fileActivityKind'> = status
+  for (const source of sources) {
+    if (
+      source?.fileActivityAt !== undefined &&
+      source.fileActivityAt > (latest.fileActivityAt ?? 0)
+    ) {
+      latest = source
+    }
+  }
+  return latest === status || latest.fileActivityAt === undefined
+    ? status
+    : {
+        ...status,
+        fileActivityAt: latest.fileActivityAt,
+        ...(latest.fileActivityKind ? { fileActivityKind: latest.fileActivityKind } : {})
+      }
+}
+
+function buildProjectedAgentStatus(
+  pty: RuntimePtyWorktreeRecord | null,
+  tab: RuntimeMobileSessionTerminalTab,
+  terminalHandle: string | null,
+  retained: RuntimeAgentRowSnapshot | null,
+  hookRows: AgentStatusIpcPayload[],
+  host: RuntimeMobileAgentStatusHost
+): { agentStatus: AgentStatusEntry } | Record<string, never> {
   const paneKey = host.getPaneKey(tab)
   // Why: neither the live-status projection nor a title-derived status carries a
   // provider session — only the full hook payload does, and headless serve has no
   // renderer to publish `tab.agentStatus`. Without it mobile native chat has no
   // transcript to address and sits on the empty state forever.
-  const hookRow = selectRuntimeHookAgentRowForPane(getHookRowsForPane(paneKey))
+  const hookRow = selectRuntimeHookAgentRowForPane(hookRows)
   // Why: the hook row is evidence in its own right. Returning early on a missing
   // PTY status/projected row put this check ahead of the only headless carrier, so
   // an agent that reported its session but never emitted a recognized title got no
