@@ -60,8 +60,8 @@ export function orcadDeltaSourceStore(
   const linked = moved.flatMap((cutover) => cutover.linkedRepositoryIds ?? [])
   const linkedGroups = moved.flatMap((cutover) => cutover.linkedProjectGroupIds ?? [])
   const linkedFolders = moved.flatMap((cutover) => cutover.linkedFolderWorkspaceIds ?? [])
-  // Why linked groups subtract like moved ones: a group a new row needs still moves, since the
-  // server may have deleted it; an unused one never reappears as this desktop's addition.
+  // The server's record of a linked group wins, as at the relink: a new row in it references the
+  // server's group, since this desktop's retained copy may be stale and would conflict.
   return orcadSourceStoreWithout(
     store,
     target,
@@ -71,7 +71,8 @@ export function orcadDeltaSourceStore(
       folderWorkspaceIds: new Set([...ids.folderWorkspaceIds, ...linkedFolders]),
       projectGroupIds: new Set([...ids.projectGroupIds, ...linkedGroups])
     },
-    moved.at(-1)?.destinationEnvironmentId
+    moved.at(-1)?.destinationEnvironmentId,
+    new Set(linkedGroups)
   )
 }
 
