@@ -25,15 +25,16 @@ on:
         type: string
       flipped-at:
         description: >-
-          When the reserve write applied, ISO with a zone, e.g. 2026-10-14T12:00:00Z. The 503
-          background is the median of the 10 minutes before it
+          When the reserve write applied, ISO with a zone, e.g. 2026-10-14T12:00:00Z. The non-drain
+          503 background is the median of the 10 minutes before it
         required: false
         default: ''
         type: string
       background-503-per-minute:
         description: >-
-          Director 503s per minute before the flip; overrides the one measured before flipped-at.
-          One of the two is required
+          Director non-drain 503s per minute before the flip (all 503s less drain-return deferrals
+          and a host's own early or duplicate re-dials, from the director's runtime metrics);
+          overrides the one measured before flipped-at. One of the two is required
         required: false
         default: ''
         type: string

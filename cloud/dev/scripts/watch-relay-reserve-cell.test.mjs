@@ -47,7 +47,7 @@ const minutesBefore = (at, count) =>
   )
 const quiet503 = (at, perMinute = 10) => {
   const minutes = minutesBefore(at, 3)
-  return { ok: true, minutes, perMinute: Object.fromEntries(minutes.map((minute) => [minute, perMinute])), publishedThrough: minutes.at(-1) }
+  return { ok: true, minutes, perMinute: Object.fromEntries(minutes.map((minute) => [minute, perMinute])), publishedThrough: minutes.at(-1), unmetered: [] }
 }
 const sampleAt = (at, overrides = {}) => ({
   at,
@@ -93,7 +93,8 @@ test('503s trip only after three complete minutes over max(1.5x background, back
       ok: true,
       minutes,
       perMinute: Object.fromEntries(minutes.map((minute, index) => [minute, counts[index]])),
-      publishedThrough: minutes.at(-1)
+      publishedThrough: minutes.at(-1),
+      unmetered: []
     }
   }
   const twoOver = evaluateWatchSample(state, sampleAt(START, { director503: series([151, 140, 200]) }), LIMIT)
@@ -115,12 +116,12 @@ test('503s trip only after three complete minutes over max(1.5x background, back
 
 test('a quiet fleet with no 503 series at all reads zero, not unverifiable', () => {
   const minutes = minutesBefore(START, 10)
-  const quiet = { ok: true, minutes, perMinute: {}, publishedThrough: minutes.at(-1) }
+  const quiet = { ok: true, minutes, perMinute: {}, publishedThrough: minutes.at(-1), unmetered: [] }
   const [result] = run([sampleAt(START, { director503: quiet })], freshState({ background: { medianPerMinute: 0, source: 'measured' } }))
   assert.equal(result.rules.director503.status, 'pass')
   assert.deepEqual(Object.values(result.rules.director503.recent), [0, 0, 0])
   assert.equal(result.state.unverifiableStreak, 0)
-  assert.deepEqual(measuredBackground({}, minutes, minutes.at(-1)), { medianPerMinute: 0, minutes: 10, source: 'measured' })
+  assert.deepEqual(measuredBackground({ perMinute: {}, minutes, publishedThrough: minutes.at(-1), unmetered: [] }), { medianPerMinute: 0, minutes: 10, source: 'measured' })
 })
 
 test('503 minutes past the publishing front are left out, and only no front at all is unverifiable', () => {
@@ -129,20 +130,20 @@ test('503 minutes past the publishing front are left out, and only no front at a
   const judge = (director503) => evaluateWatchSample(state, sampleAt(START, { director503 }), LIMIT)
   // The front is two minutes behind: the three minutes before it are judged, the two after are not.
   const over = Object.fromEntries(minutes.map((minute) => [minute, 500]))
-  const behind = judge({ ok: true, minutes, perMinute: over, publishedThrough: minutes[7] })
+  const behind = judge({ ok: true, minutes, perMinute: over, publishedThrough: minutes[7], unmetered: [] })
   assert.equal(behind.rules.director503.status, 'trip')
   assert.deepEqual(Object.keys(behind.rules.director503.recent), minutes.slice(5, 8))
   // A sparse 503 series: minutes after its last point but within the front are zero, not late.
-  const sparse = judge({ ok: true, minutes, perMinute: { [minutes[2]]: 500 }, publishedThrough: minutes.at(-1) })
+  const sparse = judge({ ok: true, minutes, perMinute: { [minutes[2]]: 500 }, publishedThrough: minutes.at(-1), unmetered: [] })
   assert.equal(sparse.rules.director503.status, 'pass')
   assert.equal(sparse.state.unverifiableStreak, 0)
   // No request series at all.
-  const empty = judge({ ok: true, minutes, perMinute: {}, publishedThrough: null })
+  const empty = judge({ ok: true, minutes, perMinute: {}, publishedThrough: null, unmetered: [] })
   assert.equal(empty.rules.director503.status, 'unverifiable')
   assert.match(empty.rules.director503.reason, /request series is empty/)
   assert.equal(empty.state.unverifiableStreak, 1)
   // A front too far behind to leave three published minutes in the read.
-  const stale = judge({ ok: true, minutes, perMinute: {}, publishedThrough: minutes[1] })
+  const stale = judge({ ok: true, minutes, perMinute: {}, publishedThrough: minutes[1], unmetered: [] })
   assert.equal(stale.rules.director503.status, 'unverifiable')
   assert.match(stale.rules.director503.reason, new RegExp(`published only through ${minutes[1]}`))
 })
@@ -215,16 +216,21 @@ test('the duplicate read carries a positive control: no fresh ledger summary in 
   assert.equal(gap.state.unverifiableStreak, 1)
 })
 
-test('the measured background is the median of the minutes before the flip, published gaps as zero', () => {
+test('the measured background is the median of the metered minutes before the flip, published gaps as zero', () => {
   const minutes = ['2026-10-14T11:47', '2026-10-14T11:48', '2026-10-14T11:49']
   const front = minutes[2]
-  assert.equal(measuredBackground({ '2026-10-14T11:48': 30 }, minutes, front).medianPerMinute, 0)
-  assert.equal(measuredBackground({ [minutes[0]]: 10, [minutes[1]]: 30, [minutes[2]]: 20 }, minutes, front).medianPerMinute, 20)
-  assert.equal(measuredBackground({}, minutes, '2026-10-14T11:52').medianPerMinute, 0)
+  const background = (perMinute, publishedThrough, readMinutes = minutes, unmetered = []) =>
+    measuredBackground({ perMinute, minutes: readMinutes, publishedThrough, unmetered })
+  assert.equal(background({ '2026-10-14T11:48': 30 }, front).medianPerMinute, 0)
+  assert.equal(background({ [minutes[0]]: 10, [minutes[1]]: 30, [minutes[2]]: 20 }, front).medianPerMinute, 20)
+  assert.equal(background({}, '2026-10-14T11:52').medianPerMinute, 0)
   // Not published through the last minute yet, or no request series: no background yet.
-  assert.equal(measuredBackground({ [minutes[0]]: 10 }, minutes, minutes[1]), null)
-  assert.equal(measuredBackground({}, minutes, null), null)
-  assert.equal(measuredBackground({}, [], front), null)
+  assert.equal(background({ [minutes[0]]: 10 }, minutes[1]), null)
+  assert.equal(background({}, null), null)
+  assert.equal(background({}, front, []), null)
+  // An unmetered minute is left out, not read as zero; under half metered is no background.
+  assert.deepEqual(background({ [minutes[0]]: 10, [minutes[1]]: 30, [minutes[2]]: 20 }, front, minutes, [minutes[0]]), { medianPerMinute: 25, minutes: 2, source: 'measured' })
+  assert.equal(background({}, front, minutes, minutes.slice(1)), null)
 })
 
 test('any overrun trips at once', () => {
@@ -391,6 +397,17 @@ test('the 503 background needs flipped-at or an explicit value; flipped-at must 
 })
 
 // A cell, Cloud Monitoring and Cloud Logging, answering from `script` per sample.
+const METRICS_EVENT = 'orca_relay_runtime_metrics'
+// Each instance's line every 30 s inside the read's timestamp bounds, newest first.
+function metricsLines(filter, metrics) {
+  const [, from, to] = filter.match(/timestamp>="([^"]+)" AND timestamp<"([^"]+)"/)
+  const lines = []
+  for (let at = Math.ceil(Date.parse(from) / 30_000) * 30_000; at < Date.parse(to); at += 30_000) {
+    for (const deltas of metrics(at)) lines.push({ timestamp: new Date(at).toISOString(), jsonPayload: deltas })
+  }
+  return lines.reverse()
+}
+
 function fakeSources({
   cell = () => ({}),
   // Logged at each sample's minute, so it stays fresh for the positive control.
@@ -399,7 +416,9 @@ function fakeSources({
   // Requests of every other code per minute; zero is a minute with no traffic at all.
   perOther = () => 1_000,
   seatControl = true,
-  rolloutLease = null
+  rolloutLease = null,
+  // Each director instance's runtime-metrics deltas for the 30 s ending at `endedAt`.
+  metrics = () => [{}]
 } = {}) {
   let samples = 0
   const monitoringSpans = []
@@ -447,6 +466,7 @@ function fakeSources({
     const summaries = ledger(samples).map((entry) => ({ ...entry, jsonPayload: { ...entry.jsonPayload, event: SUMMARY_EVENT } }))
     if (filter.includes(SEAT_EVENT)) return { stdout: JSON.stringify(seatControl ? summaries : []) }
     if (filter.includes(SUMMARY_EVENT)) return { stdout: JSON.stringify(ledger(samples)) }
+    if (filter.includes(METRICS_EVENT)) return { stdout: JSON.stringify(metricsLines(filter, metrics)) }
     return { stdout: '[]' }
   }
   return { fetchImpl, runGcloud, monitoringSpans, readRolloutLease: async () => rolloutLease }
@@ -753,6 +773,84 @@ test('a quiet fleet with zero director 503s watches on and never trips', async (
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+// 2026-10-18's false trips: 503s tripled with traffic, nearly all a host re-dialling early.
+const rateLimited = (perLine) => ({ placementRejectionsByReasonDelta: { 'host-rate-limited': perLine }, assign503sByCauseDelta: { 'placement-lane': perLine } })
+
+async function watchFor(minutes, sources, flippedAt = START - 2 * MINUTE) {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    let clock = START
+    const config = parseAt(
+      watchValues({ 'state-file': join(directory, 'state.json'), 'segment-minutes': String(minutes), 'flipped-at': new Date(flippedAt).toISOString() })
+    )
+    const lines = []
+    const state = await watchSegment(config, {
+      ...sources,
+      idToken: 'id',
+      retryDelayMs: 0,
+      now: () => clock,
+      sleep: async (ms) => { clock += ms },
+      log: (line) => lines.push(JSON.parse(line))
+    })
+    return { state, lines }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
+test('a host re-dialling inside its own interval never trips the 503 rule, however much it grows', async () => {
+  // Background 20/min, all re-dials; then 50/min, 48 of them re-dials. All 503s would trip at 40.
+  const flippedAt = START - 2 * MINUTE
+  const { state, lines } = await watchFor(20, fakeSources({
+    per503: (minute) => (minute < flippedAt ? 20 : 50),
+    metrics: (at) => [rateLimited(at <= flippedAt ? 10 : 24)]
+  }), flippedAt)
+  assert.equal(state.state, 'watching')
+  assert.deepEqual(state.background, { medianPerMinute: 0, minutes: 10, source: 'measured' })
+  assert.ok(lines.slice(1).every((line) => line.rules.director503.status === 'pass'))
+  assert.ok(lines.slice(1).every((line) => Object.values(line.rules.director503.recent).every((count) => count <= 2)))
+})
+
+test('503s the director could not serve trip after three minutes over the line, beside the re-dials', async () => {
+  const flippedAt = START - 2 * MINUTE
+  const { state } = await watchFor(10, fakeSources({
+    per503: (minute) => (minute < flippedAt ? 20 : 60),
+    // 10 re-dials a minute throughout; the 40 more after the flip are queue waits that timed out.
+    metrics: (at) => [{
+      ...rateLimited(5),
+      stickyRejectionsByReasonDelta: at <= flippedAt ? {} : { 'wait-timeout': 20 }
+    }]
+  }), flippedAt)
+  assert.equal(state.state, 'tripped')
+  assert.deepEqual(state.background, { medianPerMinute: 10, minutes: 10, source: 'measured' })
+  assert.match(state.verdict, /director503: director 503s above 30\/min for 3 min \(50, 50, 50\)/)
+})
+
+test('a minute no director instance logged runtime metrics for is unverifiable, not zero', async () => {
+  // Two instances, both silent for three minutes in the middle of the read.
+  const endedAt = START + 2 * MINUTE
+  const silent = (at) => at > endedAt - 5 * MINUTE && at <= endedAt - 2 * MINUTE
+  const reader = fakeSources({ per503: () => 50, metrics: (at) => (silent(at) ? [] : [rateLimited(12), rateLimited(12)]) })
+  const read = await readDirector503Minutes(
+    { ...fakeReader(), fetch: reader.fetchImpl, runGcloud: reader.runGcloud },
+    { projectId: 'onorca-cloud', directorService: 'orca-cloud-relay', endedAt, minutes: 10 }
+  )
+  assert.equal(read.ok, true)
+  assert.deepEqual(read.unmetered, read.minutes.slice(5, 8))
+  assert.equal(read.perMinute[read.minutes[0]], 2)
+  const judged = evaluateWatchSample(freshState({ background: { medianPerMinute: 0, source: 'measured' } }), sampleAt(START, { director503: read }), LIMIT)
+  assert.equal(judged.rules.director503.status, 'unverifiable')
+  assert.match(judged.rules.director503.reason, /no director runtime metrics for/)
+  // No line at all in the read is short, not a quiet fleet.
+  const unlogged = fakeSources({ per503: () => 50, metrics: () => [] })
+  const none = await readDirector503Minutes(
+    { ...fakeReader(), fetch: unlogged.fetchImpl, runGcloud: unlogged.runGcloud },
+    { projectId: 'onorca-cloud', directorService: 'orca-cloud-relay', endedAt, minutes: 10 }
+  )
+  assert.equal(none.ok, false)
+  assert.match(none.error, /runtime metrics read failed, truncated, or short/)
 })
 
 test('no request series at all is unverifiable and trips at the limit', async () => {

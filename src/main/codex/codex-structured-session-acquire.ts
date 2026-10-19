@@ -227,7 +227,6 @@ export async function acquireCodexStructuredSession(input: {
     // Where this session's child work goes: the host's records, after each frame is journaled.
     const sink = codexChildWorkSink(sessionId, deps, acquireInput.events)
     const session: CodexSession = {
-      events: acquireInput.events,
       account,
       connection,
       ...codexSessionLifecycle(acquireInput.fence, acquired.acquisitionGeneration as string),

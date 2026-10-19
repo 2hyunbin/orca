@@ -31,8 +31,8 @@ import {
 } from '../mobile-relay-credential-contract'
 import { MobileRelayHostWorktreesParamsSchema } from '../mobile-relay-hosts-contract'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
-import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration-blob-transfer'
-import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration-scrollback'
+import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-migration-blob-transfer'
+import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
 import {
@@ -145,6 +145,7 @@ import {
   SettingsUpdate
 } from './client-settings-params'
 import { FeatureInteractionIdParam, UiUpdate } from './client-ui-params'
+import { ClientWorkspaceViewParams } from './client-workspace-view-params'
 import {
   AbortImageUpload,
   AppendImageUploadChunk,
@@ -585,6 +586,7 @@ import {
   TerminalResolvePane,
   TerminalReveal,
   TerminalSend,
+  TerminalSetPaneTitle,
   TerminalSetViewerColors,
   TerminalSplit,
   TerminalStopExact,
@@ -1264,6 +1266,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.pairedServerRows': null,
   'sidebarInputs.read': SidebarInputsReadParams,
   'sidebarInputs.repoIcons': RepoIconDataUrlsParams,
+  'sidebarInputs.reportView': ClientWorkspaceViewParams,
   'sidebarInputs.reviewFacts': null,
   'sidebarInputs.temporal': null,
   'sidebarInputs.workspaceCreations': null,
@@ -1334,6 +1337,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.send': TerminalSend,
   'terminal.setAutoRestoreFit': TerminalSetAutoRestoreFit,
   'terminal.setDisplayMode': TerminalSetDisplayMode,
+  'terminal.setPaneTitle': TerminalSetPaneTitle,
   'terminal.setViewerColors': TerminalSetViewerColors,
   'terminal.show': TerminalHandle,
   'terminal.sleep': TerminalCloseAll,

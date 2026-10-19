@@ -1,4 +1,7 @@
-import { getRegisteredSshState, listRegisteredSshTargets } from '../../ssh/ssh-target-registry'
+import {
+  getRegisteredSshState,
+  listRegisteredSshTargets
+} from '../../ssh/targets/ssh-target-registry'
 import { getWslHostService } from '../../wsl/wsl-host-service-instance'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { DesktopSidebarFacts } from '../../../shared/sidebar-list/desktop-sidebar-facts'
@@ -7,8 +10,10 @@ import type { OrcaRuntimeWithSidebarTemporal } from './orca-runtime-sidebar-temp
 import type { PairedServerRowsProducer } from './paired-server-rows-producer'
 import type { WorkspaceCreationRegistry } from './workspace-creation-registry'
 import type { WorkspaceRowsProducer } from './workspace-rows-producer'
+import type { RepoIconDataUrls } from './repo-icon-data-urls'
 import type { SidebarInputsFeedDomain } from './sidebar-inputs-feed'
 import { readDesktopSidebarFacts } from './desktop-sidebar-facts'
+import { buildPairedServerReviewFacts } from '../../../shared/sidebar-list/workspace-review-facts'
 
 /** This host's store and connection registries, read the way sidebarInputs.desktopFacts reads them. */
 export function readRuntimeDesktopSidebarFacts(store: RuntimeStore): DesktopSidebarFacts {
@@ -33,6 +38,7 @@ export type SidebarInputsFeedSources = {
   pairedServerRows: PairedServerRowsProducer
   workspaceCreations: WorkspaceCreationRegistry
   workspaceRows: WorkspaceRowsProducer
+  repoIcons: Pick<RepoIconDataUrls, 'idsByRepo'>
   store: () => RuntimeStore | null
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,
@@ -70,8 +76,8 @@ export function sidebarInputsFeedDomains(
     {
       name: 'temporal',
       read: () => {
-        const { sessionId, sortSnapshot, retention } = facts.getSidebarTemporalSnapshot()
-        return { sessionId, sortSnapshot, retention }
+        const { sessionId, retention } = facts.getSidebarTemporalSnapshot()
+        return { sessionId, retention }
       },
       watch: (changed) => facts.onSidebarTemporalChange(changed)
     },
@@ -114,15 +120,29 @@ export function sidebarInputsFeedDomains(
         const detaches = [
           watchCatalog(changed),
           store?.onUIChanged?.(changed),
-          store?.onWorkspaceSessionWritten?.(changed)
+          store?.onWorkspaceSessionWritten?.(changed),
+          store?.onSettingsChanged?.(changed)
         ]
         return () => detaches.forEach((detach) => detach?.())
       },
       rereadOnRead: true
     },
     {
+      // Ids only: a reader fetches the images through sidebarInputs.repoIcons.
+      name: 'repoIcons',
+      read: () => sources.repoIcons.idsByRepo(),
+      watch: watchCatalog
+    },
+    {
       name: 'review',
-      read: async () => (await facts.getWorkspaceReviewFacts()).facts,
+      read: async () => ({
+        // A paired server's rows by the window's cache too; this host's own rows win an id both list.
+        ...buildPairedServerReviewFacts(
+          pairedServerRows.snapshot().servers,
+          requireStore().getGitHubCache().pr
+        ),
+        ...(await facts.getWorkspaceReviewFacts()).facts
+      }),
       // The window's PR cache saves announce no change.
       watch: watchCatalog,
       rereadOnRead: true

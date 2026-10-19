@@ -130,7 +130,16 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
         (ptyId) => typeof ptyId === 'string' && isRemoteRuntimePtyId(ptyId)
       )
       if (hasRemotePane) {
-        remotePaneLayoutPusherRef.current?.push({ worktreeId, tabId, layout, intent })
+        // Why: a host keeps its titles when the field is absent, so clearing the last one sends {}.
+        const clearedEveryTitle =
+          !layout.titlesByLeafId &&
+          [...currentLeafIds].some((leafId) => removedTitleLeafIds.has(leafId))
+        remotePaneLayoutPusherRef.current?.push({
+          worktreeId,
+          tabId,
+          layout: clearedEveryTitle ? { ...layout, titlesByLeafId: {} } : layout,
+          intent
+        })
       }
       for (const leafId of currentLeafIds) {
         clearedScrollbackLeafIds.delete(leafId)
@@ -197,11 +206,16 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Refs are stable.
     [persistLayoutSnapshot]
   )
+  /** Shows a title main already holds, without asking main again. */
+  const showPaneTitle = useCallback(
+    (paneId: number, title: string | null): void =>
+      title === null ? removePaneTitleLocally(paneId) : setPaneTitleLocally(paneId, title),
+    [removePaneTitleLocally, setPaneTitleLocally]
+  )
   /** A user's title for a pane, trimmed and non-empty; null clears it. */
   const changePaneTitle = useCallback(
     (paneId: number, title: string | null) => {
-      const showTitle = (): void =>
-        title === null ? removePaneTitleLocally(paneId) : setPaneTitleLocally(paneId, title)
+      const showTitle = (): void => showPaneTitle(paneId, title)
       const leafId = managerRef.current?.getPanes().find((pane) => pane.id === paneId)?.leafId
       // Switch point: main renames the pane first; the window then shows the title.
       if (
@@ -218,7 +232,7 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
       showTitle()
     },
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Refs are stable.
-    [removePaneTitleLocally, setPaneTitleLocally, tabId, worktreeId]
+    [showPaneTitle, tabId, worktreeId]
   )
   const removePaneTitle = useCallback(
     (paneId: number) => changePaneTitle(paneId, null),
@@ -281,6 +295,7 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
     persistLayoutSnapshot,
     clearPaneScrollback,
     changePaneTitle,
+    showPaneTitle,
     removePaneTitle,
     handleClearPaneTitleShortcut
   }

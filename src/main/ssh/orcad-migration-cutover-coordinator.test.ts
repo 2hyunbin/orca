@@ -15,7 +15,7 @@ import {
 import { ORCAD_MIGRATION_DESTINATION_UNSUPPORTED } from './orcad-migration-catalog-client'
 import { listOrcadMigrationSourceCutovers } from './orcad-migration-cutover-journal'
 import { fenceOrcadMigrationSource } from './orcad-migration-source-fence'
-import { SshTargetOrcadClaims } from './ssh-target-orcad-claims'
+import { SshTargetOrcadClaims } from './targets/ssh-target-orcad-claims'
 import { fakeOrcadMigrationDestination as fakeDestination } from './orcad-migration-destination-fake'
 
 const TARGET: SshTarget = {

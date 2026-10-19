@@ -14,8 +14,9 @@ import { searchRuntimeFiles } from '@/runtime/runtime-file-search-client'
 import { useAppStore } from '@/store'
 import {
   getExecutionHostIdForWorktree,
-  getRuntimeEnvironmentIdForWorktree
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin
 } from '@/lib/worktree-runtime-owner'
+import { resolveOwner } from '@/lib/resolve-owner'
 import type { SearchResult } from '../../../../shared/code-search-types'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 
@@ -44,10 +45,16 @@ export function useFileSearchRunner({
   cancelPendingSearch: () => void
 } {
   const runtimeEnvironmentId = useAppStore((state) =>
-    getRuntimeEnvironmentIdForWorktree(state, activeWorktreeId)
+    runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, activeWorktreeId)
   )
   const executionHostId = useAppStore((state) =>
     getExecutionHostIdForWorktree(state, activeWorktreeId)
+  )
+  // Why: a workspace two hosts publish names no owner, so either host's results would mislead.
+  const ownerIsTwin = useAppStore(
+    (state) =>
+      !!activeWorktreeId &&
+      resolveOwner(state, { workspaceId: activeWorktreeId }).kind === 'ambiguous'
   )
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Why: runtime searches can finish out of order; ids keep stale results
@@ -83,7 +90,7 @@ export function useFileSearchRunner({
         searchTimerRef.current = null
       }
 
-      if (!worktreePath || !activeWorktreeId) {
+      if (!worktreePath || !activeWorktreeId || ownerIsTwin) {
         updateActiveSearchState({ results: null, resultOwner: null, loading: false })
         return
       }
@@ -188,7 +195,14 @@ export function useFileSearchRunner({
         }
       }, SEARCH_DEBOUNCE_MS)
     },
-    [activeWorktreeId, updateActiveSearchState, worktreePath, executionHostId, runtimeEnvironmentId]
+    [
+      activeWorktreeId,
+      updateActiveSearchState,
+      worktreePath,
+      executionHostId,
+      runtimeEnvironmentId,
+      ownerIsTwin
+    ]
   )
 
   useEffect(

@@ -4,7 +4,7 @@ import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../shared/terminal-tab-types'
 import { parseRemoteRuntimePtyId } from '@/runtime/runtime-terminal-stream'
 import { lastInputBlocksHibernation } from './agent-hibernation-input-guard'
-import { isLiveResumeAnchorForCompletedAgent } from './live-resume-anchor-record'
+import { isLiveResumeAnchorForCompletedAgent } from '../../../shared/live-resume-anchor-record'
 import { agentTurnEndedUncleanly } from '../../../shared/agent-main-agent-verdict'
 import type { AgentHibernationPlannerSnapshot } from './agent-hibernation-planner-snapshot'
 
