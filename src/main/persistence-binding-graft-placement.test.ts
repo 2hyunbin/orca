@@ -34,7 +34,7 @@ const SIDE_BY_SIDE: TerminalPaneLayoutNode = {
 type TestStore = ReturnType<typeof createStore>
 
 /** Two panes side by side that the window saved; main has seen neither split command. */
-function seedTwoPaneTab(store: TestStore): void {
+function seedTwoPaneTab(store: TestStore, ratio?: number): void {
   store.setWorkspaceSession({
     activeRepoId: 'repo1',
     activeWorktreeId: WORKTREE,
@@ -42,7 +42,7 @@ function seedTwoPaneTab(store: TestStore): void {
     tabsByWorktree: { [WORKTREE]: [makeTerminalTab({ id: TAB, worktreeId: WORKTREE })] },
     terminalLayoutsByTabId: {
       [TAB]: {
-        root: SIDE_BY_SIDE,
+        root: ratio === undefined ? SIDE_BY_SIDE : { ...SIDE_BY_SIDE, ratio },
         activeLeafId: TEST_LEAF_2,
         expandedLeafId: null,
         ptyIdsByLeafId: { [TEST_LEAF_1]: 'pty-1', [TEST_LEAF_2]: 'pty-2' }
@@ -176,6 +176,72 @@ describe('a pane main first hears of at its terminal binding goes where the wind
           second: leaf(TEST_LEAF_1)
         },
         second: leaf(NEW_LEAF)
+      }
+    })
+
+    expect(root(store)).toEqual({
+      type: 'split',
+      direction: 'vertical',
+      first: leaf(TEST_LEAF_1),
+      second: {
+        type: 'split',
+        direction: 'horizontal',
+        first: leaf(TEST_LEAF_2),
+        second: leaf(NEW_LEAF)
+      }
+    })
+  })
+
+  it("takes the window's split of a group of panes, keeping main's divider inside the group", async () => {
+    const store = createStore()
+    seedTwoPaneTab(store, 0.7)
+
+    await bindNewPane(store, {
+      kind: 'split',
+      parentLeafId: TEST_LEAF_2,
+      direction: 'horizontal',
+      ratio: 0.6,
+      proposedRoot: {
+        type: 'split',
+        direction: 'horizontal',
+        first: { ...SIDE_BY_SIDE, ratio: 0.5 },
+        second: leaf(NEW_LEAF),
+        ratio: 0.6
+      }
+    })
+
+    expect(root(store)).toEqual({
+      type: 'split',
+      direction: 'horizontal',
+      first: { ...SIDE_BY_SIDE, ratio: 0.7 },
+      second: leaf(NEW_LEAF),
+      ratio: 0.6
+    })
+  })
+
+  it('ignores a window tree holding the new pane twice', async () => {
+    const store = createStore()
+    seedTwoPaneTab(store)
+
+    await bindNewPane(store, {
+      kind: 'split',
+      parentLeafId: TEST_LEAF_2,
+      direction: 'horizontal',
+      proposedRoot: {
+        type: 'split',
+        direction: 'vertical',
+        first: {
+          type: 'split',
+          direction: 'horizontal',
+          first: leaf(TEST_LEAF_1),
+          second: leaf(NEW_LEAF)
+        },
+        second: {
+          type: 'split',
+          direction: 'horizontal',
+          first: leaf(TEST_LEAF_2),
+          second: leaf(NEW_LEAF)
+        }
       }
     })
 
