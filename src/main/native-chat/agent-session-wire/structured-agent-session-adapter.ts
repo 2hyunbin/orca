@@ -375,6 +375,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     sessionId: string
     fence: number
   }): Promise<StructuredAgentSessionLiveOptions>
+  /** Saved option keys the running child could not take (a model its provider retired). */
+  readOptionRestoreFailures?(sessionId: string): readonly string[]
   /** Provider history for restart reconciliation, bounded to what the provider
    *  recorded after the journal's last committed item. Only the adapter can say
    *  whether the read has a proven start and whether a turn is still running, so

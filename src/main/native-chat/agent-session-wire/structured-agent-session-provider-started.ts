@@ -19,6 +19,7 @@ import {
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import { recordAgentSessionProviderHandle } from '../../runtime/agent-session-provider-handle-transition'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
   applyStructuredRewindRecovery,
   readStructuredRewindRecovery,
@@ -54,7 +55,7 @@ export async function settleStructuredAgentSessionProviderStarted(
   signal?: AbortSignal
 ): Promise<void> {
   // The provider read runs before the commit, so no send waits behind it.
-  const rewind = await readRewindAtStart(context, event.sessionId, signal)
+  const rewind = await readRewindAtStart(context, event, signal)
   // Serialized behind the attach that published this child, so the lease it proved is committed.
   await context.serialize(event.sessionId, async () => {
     signal?.throwIfAborted()
@@ -101,9 +102,10 @@ export async function settleStructuredAgentSessionProviderStarted(
  *  rewind would move. One that stays in doubt fails the start, as it would refuse every send. */
 async function readRewindAtStart(
   context: StructuredAgentSessionProviderStartedContext,
-  sessionId: string,
+  event: OpenedProvider,
   signal?: AbortSignal
 ): Promise<StructuredRewindRecoveryEvidence | 'failed'> {
+  const { sessionId } = event
   const journal = context.sessions.get(sessionId)?.journal
   if (!journal) {
     return null
@@ -115,10 +117,27 @@ async function readRewindAtStart(
       journal,
       structuredAgentSessionConversationFence(context.deps.store, sessionId),
       context.deps.adapter,
-      signal
+      signal,
+      recordWithStartedHandle(context, event)
     )
   } catch (error) {
     return rewindRecoveryFailed(context, sessionId, error, signal)
+  }
+}
+
+/** The record as the commit leaves it once it records the handle this start answered with, which
+ *  is what the rewind's apply cuts against; a record that refuses it is read as it stands. */
+function recordWithStartedHandle(
+  context: StructuredAgentSessionProviderStartedContext,
+  { sessionId, fence, link }: OpenedProvider
+): AgentSessionRecord | undefined {
+  const record = context.deps.store.getRecord(sessionId)
+  try {
+    return record && link
+      ? recordAgentSessionProviderHandle({ record, fence, link, now: context.now() })
+      : record
+  } catch {
+    return record
   }
 }
 

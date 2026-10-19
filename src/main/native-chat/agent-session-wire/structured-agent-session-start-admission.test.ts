@@ -10,12 +10,15 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { DISPATCH_REJECTED_CANCELLED } from '../../../shared/structured-agent-session-dispatch-rejection'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
+import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
@@ -68,6 +71,7 @@ let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']
 let releaseAcquisition: Mock<NonNullable<StructuredAgentSessionAdapter['releaseAcquisition']>>
 let probeOwner: Mock<(record: unknown) => Promise<AgentSessionOwnerProbe>>
 let delivered: string[]
+let events: StructuredAgentSessionEventSink | undefined
 let initialAttach: ReturnType<typeof hostTestAttachParams>
 let idleSweep: { intervalMs: number; idleMs: number }
 
@@ -163,15 +167,19 @@ const SETUP: Record<Point, () => Promise<void>> = {
   drain: () => restart(),
   open: () => restart(),
   recovery: async () => {
+    // A rewind in doubt over a turn the chat holds, so the start asks the provider about it.
+    const turn = { provider: 'codex' as const, threadId: THREAD, turnId: 'turn-1', ordinal: 0 }
+    events!.appendItem(turn, hostTestMessage('rewound'), { turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+    await host.flushStreamedEvents(SESSION)
+    const expectedEpoch = (await host.journalSnapshot(SESSION)).cursor.epoch
     await restart()
     await persistRewindRecord(store, SESSION, store.getRecord(SESSION)!.lease.runtimeFence, {
       operationId: 'rewind-op',
       callerKey: 'client-1',
-      itemId: 'orca:rewound',
-      providerItemId: `codex:${THREAD}:turn-1:0`,
-      expectedEpoch: 'epoch-before',
-      phase: 'prepared',
-      retained: []
+      itemId: agentJournalItemKey(turn),
+      providerItemId: agentJournalItemKey(turn),
+      expectedEpoch,
+      phase: 'prepared'
     })
   },
   'pending-row': async () => {
@@ -221,6 +229,7 @@ beforeEach(async () => {
   delivered = []
   idleSweep = { intervalMs: 60 * 60_000, idleMs: 60 * 60_000 }
   acquire = vi.fn(async (input) => {
+    events = input.events
     await at('spawn')
     return {
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1, spawnToken: input.spawnToken },

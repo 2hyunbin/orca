@@ -99,11 +99,13 @@ it('ends a running turn signed out when the connection closes for sign-in', asyn
 
 it('starts signed out without Orca words when the connection closes for sign-in', async () => {
   const rig = await openAcpAdapterRig({ script: (agent) => agent.on('session/new', () => {}) })
-  const acquired = rig.acquire().catch((failure: unknown) => failure)
+  // Session setup runs in the start's open, which the rig awaits after the acquire.
+  const starting = rig.acquire()
   await rig.frame('session/new')
   const internal = 'The agent asked to sign in in a browser'
   AcpSessionRuntime.prototype.close.call(rig.child(), new AcpSignInPromptError(internal))
-  const error = await acquired
+  await starting
+  const error = rig.openFailure()
   // Session setup re-types sign-in answers; this close must stay Orca's, words and all.
   expect(error).toMatchObject({ reason: 'notSignedIn' })
   expect(providerDiagnosticOf(error)).toBeUndefined()

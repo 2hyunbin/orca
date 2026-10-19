@@ -180,6 +180,8 @@ export type ClaudeSession = {
   reusableOptions: Map<string, string>
   /** The model the child was launched with, as `--model`; null when it runs the CLI's own. */
   launchedModel: string | null
+  /** A launched model the CLI answered `model_not_found` for; reported until a new pick. */
+  retiredModel?: string
   /** Fast was omitted from launch settings and needs confirmation at message input. */
   fastModeAtStart: boolean
   /** CLI-advertised protocol capabilities from init; gates interrupt-receipt handling. */
