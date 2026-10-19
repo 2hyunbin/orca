@@ -148,11 +148,10 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
         relist: (pty, pane, layout) => {
           this.publishPtyBackedMobileSessionTerminal(authority.worktreeId, pty, pane)
           const relisted = this.mobileSessionTabsByWorktree.get(authority.worktreeId)
-          if (relisted) {
-            this.storeMobileSessionSnapshot(
-              authority.worktreeId,
-              withMainTabLayout(relisted, { tabId: pane.tabId, ptyId: pty.ptyId }, layout)
-            )
+          const withLayout =
+            relisted && withMainTabLayout(relisted, { tabId: pane.tabId, ptyId: pty.ptyId }, layout)
+          if (withLayout && withLayout !== relisted) {
+            this.storeMobileSessionSnapshot(authority.worktreeId, withLayout)
           }
         }
       })

@@ -78,7 +78,8 @@ export function relistPaneMainBinds(
 
 /**
  * Every row of the relisted pane's tab takes main's layout. A row built for the pane alone holds
- * only that pane, and a close reading it would take the pane for the tab's last.
+ * only that pane, and a close reading it would take the pane for the tab's last. Under the switch
+ * main writes a split before the window does, so its layout is the tab's newest.
  */
 export function withMainTabLayout(
   snapshot: RuntimeMobileSessionTabsSnapshot,

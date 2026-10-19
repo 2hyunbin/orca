@@ -139,12 +139,6 @@ function arrange(entry: Entry, condition: Condition): CloseContinuityHarness {
   }
   if (condition === 'pane-unlisted') {
     // The renderer's list lags main: a sibling row with no layout yet, and none for the closed pane.
-    const siblingLayout = {
-      root: { type: 'leaf' as const, leafId: SIBLING_LEAF_ID },
-      activeLeafId: SIBLING_LEAF_ID,
-      expandedLeafId: null,
-      ptyIdsByLeafId: { [SIBLING_LEAF_ID]: SIBLING_PTY_ID }
-    }
     harness.runtime.syncWindowGraph(1, {
       tabs: [
         {
@@ -152,7 +146,7 @@ function arrange(entry: Entry, condition: Condition): CloseContinuityHarness {
           worktreeId: WORKTREE_ID,
           title: 'Fixture shell',
           activeLeafId: SIBLING_LEAF_ID,
-          layout: siblingLayout.root
+          layout: { type: 'leaf' as const, leafId: SIBLING_LEAF_ID }
         }
       ],
       leaves: [],
