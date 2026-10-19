@@ -46,7 +46,8 @@ administrator rights or Developer Mode. Things to know:
 
 - Keep `~/node_modules` (and any other `node_modules` above the store) out of your home
   directory. Node resolves upward from the store slot, so a stray one there supplies
-  dependencies the package never declared and hides missing-dependency bugs.
+  dependencies the package never declared and hides missing-dependency bugs; `pnpm install` warns
+  when it finds one.
 - Native addons are never rebuilt in place in a shared slot: each CPU gets its own build
   beside it (see [`native-build-entry.cjs`](../config/scripts/native-build-entry.cjs)), so
   cross-arch packaging is safe for other worktrees.

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 const {
+  FORCE_IN_CI_ENV,
   GLOBAL_VIRTUAL_STORE_ENV: STORE_ENV,
   usesGlobalVirtualStore,
   hooks
@@ -22,6 +23,9 @@ describe('usesGlobalVirtualStore', () => {
     [{ CI: '1' }, 'linux', false],
     [{ GITHUB_ACTIONS: 'true' }, 'linux', false],
     [{ CI: 'true', [STORE_ENV]: '1' }, 'win32', false],
+    [{ CI: 'true', [FORCE_IN_CI_ENV]: '1' }, 'linux', true],
+    [{ GITHUB_ACTIONS: 'true', [FORCE_IN_CI_ENV]: '1' }, 'win32', true],
+    [{ [FORCE_IN_CI_ENV]: '1', [STORE_ENV]: '0' }, 'darwin', false],
     [{ CI: 'false' }, 'darwin', true],
     [{ CI: '0' }, 'linux', true]
   ]

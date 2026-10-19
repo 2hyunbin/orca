@@ -31,6 +31,7 @@ import {
   windowsProcessTreeAddonPath
 } from './windows-process-tree-gyp-rebuild.mjs'
 import { disableMsbuildFileTrackingOnWindows } from './msbuild-file-tracking.mjs'
+import { warnAboutNodeModulesAboveSharedStore } from './store-ancestor-node-modules.mjs'
 import {
   isSharedNativePackage,
   nodePtyBuildArtifactPaths,
@@ -105,6 +106,7 @@ const forceRebuild =
   process.env.ORCA_FORCE_NATIVE_REBUILD === '1' || cliOptions.force || isCrossHostRebuild
 let modulesToRebuild = onlyModules
 
+warnAboutNodeModulesAboveSharedStore(projectDir)
 ensureElectronPackageInstalled()
 restoreNodePtyWindowsConptyRuntime()
 
