@@ -387,6 +387,14 @@ describe('moving the host again after its server was stopped', () => {
     )
   })
 
+  const targetGroup = (name: string, parentGroupId?: string) =>
+    store.createProjectGroup({
+      name,
+      parentPath: '/root',
+      ...(parentGroupId ? { parentGroupId } : {}),
+      connectionId: TARGET.id,
+      createdFrom: 'manual'
+    })
   function groupDesktopRepo(): string {
     const group = store.createProjectGroup({
       name: 'Before',
@@ -511,12 +519,7 @@ describe('moving the host again after its server was stopped', () => {
 
   // Review repro: a folder the server edited while managed must link on reconnect.
   it('links a folder workspace the server edited while managed', async () => {
-    const group = store.createProjectGroup({
-      name: 'Notes',
-      parentPath: '/root',
-      connectionId: TARGET.id,
-      createdFrom: 'manual'
-    })
+    const group = targetGroup('Notes')
     const folder = store.createFolderWorkspace({
       projectGroupId: group.id,
       folderPath: '/root/notes'
@@ -531,12 +534,7 @@ describe('moving the host again after its server was stopped', () => {
 
   // Review repro: an empty group no server row sits in was re-imported over the server's.
   it('keeps the server’s empty project group when it was renamed while managed', async () => {
-    const group = store.createProjectGroup({
-      name: 'Empty',
-      parentPath: '/root',
-      connectionId: TARGET.id,
-      createdFrom: 'manual'
-    })
+    const group = targetGroup('Empty')
     await expect(convert()).resolves.toMatchObject({ outcome: 'converted' })
     server.updateProjectGroup(group.id, { name: 'Renamed on the server' })
     stopServer()
@@ -551,19 +549,8 @@ describe('moving the host again after its server was stopped', () => {
   })
 
   it('keeps the server’s empty nested groups when their parent was renamed while managed', async () => {
-    const parent = store.createProjectGroup({
-      name: 'Parent',
-      parentPath: '/root',
-      connectionId: TARGET.id,
-      createdFrom: 'manual'
-    })
-    const child = store.createProjectGroup({
-      name: 'Child',
-      parentPath: '/root',
-      parentGroupId: parent.id,
-      connectionId: TARGET.id,
-      createdFrom: 'manual'
-    })
+    const parent = targetGroup('Parent')
+    const child = targetGroup('Child', parent.id)
     await convert()
     server.updateProjectGroup(parent.id, { name: 'Parent renamed on the server' })
     stopServer()
@@ -574,12 +561,7 @@ describe('moving the host again after its server was stopped', () => {
   })
 
   it('does not link a same-id group the server keeps for another host', async () => {
-    const group = store.createProjectGroup({
-      name: 'Empty',
-      parentPath: '/root',
-      connectionId: TARGET.id,
-      createdFrom: 'manual'
-    })
+    const group = targetGroup('Empty')
     await convert()
     server.updateProjectGroup(group.id, { name: 'Renamed on the server' })
     stopServer()
@@ -630,23 +612,31 @@ describe('moving the host again after its server was stopped', () => {
   })
 
   // The server's deletion stands: the move is refused whole and the host stays marked changed.
-  it('refuses, without resurrecting it, a later row in a group the server deleted', async () => {
-    const groupId = groupDesktopRepo()
-    await convert()
-    stopServer()
-    await convert()
-    server.moveProjectToGroup('desktop-repo', null)
-    server.deleteProjectGroup(groupId)
-    store.addRepo(repo('added-later', '/root/later'))
-    store.moveProjectToGroup('added-later', groupId)
-    await expect(runDelta()).resolves.toMatchObject({
-      outcome: 'refused',
-      code: 'orcad_delta_refused_by_server'
-    })
-    expect(server.getRepo('added-later')).toBeUndefined()
-    expect(groupName(server, groupId)).toBeUndefined()
-    expect(store.getSshTarget(TARGET.id)?.orcadFence?.sourceChangedAt).toBeDefined()
-  })
+  it.each([
+    ['linked', true],
+    ['moved', false]
+  ])(
+    'refuses, without resurrecting it, a later row in a %s group the server deleted',
+    async (_kind, relink) => {
+      const groupId = groupDesktopRepo()
+      await convert()
+      if (relink) {
+        stopServer()
+        await convert()
+      }
+      server.moveProjectToGroup('desktop-repo', null)
+      server.deleteProjectGroup(groupId)
+      store.addRepo(repo('added-later', '/root/later'))
+      store.moveProjectToGroup('added-later', groupId)
+      await expect(runDelta()).resolves.toMatchObject({
+        outcome: 'refused',
+        code: 'orcad_delta_refused_by_server'
+      })
+      expect(server.getRepo('added-later')).toBeUndefined()
+      expect(groupName(server, groupId)).toBeUndefined()
+      expect(store.getSshTarget(TARGET.id)?.orcadFence?.sourceChangedAt).toBeDefined()
+    }
+  )
 
   it('resumes, not relinks, a move the server committed before the reply was lost', async () => {
     const commit = destination.commit
