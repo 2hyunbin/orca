@@ -4,6 +4,7 @@ import { MobileE2EEAuthenticationError } from './mobile-e2ee-v2-physical-channel
 import { MOBILE_RELAY_PHONE_CLOSE_REASON } from '../../../src/shared/mobile-relay-close-codes'
 import { RelayOuterError } from './mobile-relay-e2ee-link'
 import { RelayReconnectController } from './mobile-relay-reconnect-controller'
+import { FakeLogicalClient } from './mobile-endpoint-supervisor-test-fakes'
 import { RelayDirectorHttpError } from './mobile-relay-resume-director'
 import { relayFailureAllowsGraceRetry } from './relay-credential-eligibility'
 import type { StableLogicalRpcClient } from './stable-logical-rpc-client'
@@ -384,17 +385,17 @@ describe('relay reconnect controller', () => {
   it('probes a retained relay once on a real background return, not on a foreground nudge', () => {
     const reconnect = createController(vi.fn())
     const session = { getFailure: () => null, probeAfterBackground: vi.fn() }
-    const logical = { getActivePath: () => 'relay', getState: () => 'connected' }
+    const logical = new FakeLogicalClient('connected', 'relay')
     reconnect.setActiveSession(session)
 
-    reconnect.handleForeground(logical as unknown as StableLogicalRpcClient, true)
+    reconnect.handleForeground(logical, true)
     expect(session.probeAfterBackground).not.toHaveBeenCalled()
-    reconnect.handleForeground(logical as unknown as StableLogicalRpcClient, false)
+    reconnect.handleForeground(logical, false)
     expect(session.probeAfterBackground).toHaveBeenCalledOnce()
 
     // A relay the grace dropped (or never kept) is not probed.
     reconnect.clear()
-    reconnect.handleForeground(logical as unknown as StableLogicalRpcClient, false)
+    reconnect.handleForeground(logical, false)
     expect(session.probeAfterBackground).toHaveBeenCalledOnce()
   })
 

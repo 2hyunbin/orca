@@ -288,6 +288,7 @@ function openLink(socket: ThrowingSocket, onError: (error: Error) => void): Mobi
     onText: vi.fn(),
     onBinary: vi.fn(),
     onError,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the link only calls send/close and assigns handlers on this stub.
     createSocket: () => socket as unknown as WebSocket
   })
 }
