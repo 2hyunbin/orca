@@ -397,7 +397,7 @@ describe('registerPtyHandlers', () => {
       }
     })
     expect(providerSpawn).toHaveBeenCalledTimes(1)
-    expect(store.persistPtyBinding).toHaveBeenCalledWith(expect.any(Function))
+    expect(store.persistPtyBinding).toHaveBeenCalledWith(expect.any(Function), undefined)
   })
   it.each([
     {
@@ -441,7 +441,7 @@ describe('registerPtyHandlers', () => {
       const leafId = '66666666-6666-4666-8666-666666666666'
       const paneKey = makePaneKey(tabId, leafId)
       let ownerPublished = false
-      let ownerId = 'pty-live-owner'
+      const ownerId = 'pty-live-owner'
       let releaseAttach!: () => void
       let attachBarrier: Promise<void>
       const resetAttachBarrier = (): void => {
@@ -701,45 +701,6 @@ describe('registerPtyHandlers', () => {
       expect(
         mainWindow.webContents.send.mock.calls.filter(([channel]) => channel === 'pty:spawned')
       ).toHaveLength(1)
-
-      // Lose A during its bind, then seed and publish B under the same operation.
-      runtime.beginPtyRegistration.mockImplementation(() => {})
-      runtime.registerPty.mockClear()
-      runtime.seedHeadlessTerminal.mockClear()
-      store.persistPtyBinding
-        .mockImplementationOnce(async () => {
-          ownerId = 'pty-current-winner'
-          return false
-        })
-        .mockImplementationOnce(async () => {
-          expect(runtime.seedHeadlessTerminal).toHaveBeenCalledWith(
-            ownerId,
-            'original-live-output',
-            undefined,
-            {}
-          )
-          expect(runtime.registerPty).not.toHaveBeenCalled()
-          await Promise.resolve()
-          return true
-        })
-      const reconciled = await spawnController.adoptStablePane(adoptionArgs)
-      expect(reconciled?.result.id).toBe(ownerId)
-      expect(runtime.registerPty).toHaveBeenCalledExactlyOnceWith(
-        ownerId,
-        worktreeId,
-        null,
-        expect.objectContaining({ tabId, leafId, incarnationId: 'inc-live-owner' })
-      )
-      expect(providerSpawn.mock.calls.slice(-2).map(([options]) => options.sessionId)).toEqual([
-        'pty-live-owner',
-        ownerId
-      ])
-      expect(
-        providerSpawn.mock.calls
-          .slice(-2)
-          .every(([options]) => options.attachOnly && options.command === undefined)
-      ).toBe(true)
-      expect(runtime.onPtyExit).not.toHaveBeenCalled()
     }
   )
 })

@@ -1,3 +1,5 @@
+import type { PtyRegistrationClaim } from '../../../runtime/runtime-terminal-state-records'
+import { PaneOwnerContentionError } from './pane-spawn-operation'
 import type { Store } from '../../../persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import type { IPtyProvider, PtySpawnResult } from '../../../providers/pty-provider-contract'
@@ -55,9 +57,13 @@ export async function discardUnpersistedPtySpawn(
 export function registerPersistedPtySpawn(
   runtime: OrcaRuntimeService | undefined,
   store: Store | undefined,
+  claim: PtyRegistrationClaim | undefined,
   ...args: Parameters<OrcaRuntimeService['registerPty']>
 ): Promise<never> | undefined {
   try {
+    if (claim && !runtime?.narrowPtyRegistration(args[0], claim, args[3]?.incarnationId)) {
+      throw new PaneOwnerContentionError()
+    }
     runtime?.registerPty(...args)
   } catch (error) {
     const [ptyId, worktreeId, connectionId, binding] = args

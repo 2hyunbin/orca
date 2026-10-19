@@ -117,6 +117,7 @@ export async function completePaneAdoption(
     const rejected = registerPersistedPtySpawn(
       runtime,
       args.store,
+      claim,
       result.id,
       args.worktreeId,
       args.connectionId ?? null,

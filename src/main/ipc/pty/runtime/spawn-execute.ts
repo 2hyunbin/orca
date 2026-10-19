@@ -57,7 +57,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       markRuntimeSpawnHiddenBeforeSpawn(ctx)
     }
     if (expectedPtyId) {
-      ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
+      ctx.pendingRegistrationClaim = ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
       ctx.pendingRegistrationPtyId = expectedPtyId
     }
     if (ctx.isDaemonHostSpawn && expectedPtyId) {
@@ -82,9 +82,13 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       const recoveredOwner = agentSessionOwners.find(args.agentSessionEnsure.claim)
       if (recoveredOwner && ctx.pendingRegistrationPtyId !== recoveredOwner.ptyId) {
         if (ctx.pendingRegistrationPtyId) {
-          ctx.deps.runtime?.cancelPendingPtyRegistration?.(ctx.pendingRegistrationPtyId)
+          ctx.deps.runtime?.cancelPendingPtyRegistration?.(
+            ctx.pendingRegistrationPtyId,
+            undefined,
+            ctx.pendingRegistrationClaim
+          )
         }
-        ctx.deps.runtime?.beginPtyRegistration?.(
+        ctx.pendingRegistrationClaim = ctx.deps.runtime?.beginPtyRegistration?.(
           recoveredOwner.ptyId,
           ptyIncarnationById.get(recoveredOwner.ptyId)
         )
@@ -153,12 +157,29 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
     ctx.rejectedRegistrationCandidate ??= ctx.result
     if (ctx.pendingRegistrationPtyId !== ctx.result.id) {
       if (ctx.pendingRegistrationPtyId) {
-        ctx.deps.runtime?.cancelPendingPtyRegistration?.(ctx.pendingRegistrationPtyId)
+        ctx.deps.runtime?.cancelPendingPtyRegistration?.(
+          ctx.pendingRegistrationPtyId,
+          undefined,
+          ctx.pendingRegistrationClaim
+        )
       }
-      ctx.deps.runtime?.beginPtyRegistration?.(ctx.result.id, ctx.result.incarnationId)
+      ctx.pendingRegistrationClaim = ctx.deps.runtime?.beginPtyRegistration?.(
+        ctx.result.id,
+        ctx.result.incarnationId
+      )
       ctx.pendingRegistrationPtyId = ctx.result.id
     }
     // Why: admission precedes sequence/context state and every durable publication below.
+    if (
+      ctx.pendingRegistrationClaim &&
+      !ctx.deps.runtime?.narrowPtyRegistration(
+        ctx.result.id,
+        ctx.pendingRegistrationClaim,
+        ctx.result.incarnationId
+      )
+    ) {
+      throw new PaneOwnerContentionError()
+    }
     ctx.deps.runtime?.assertPtyRegistrationAllowed?.(ctx.result.id, ctx.result.incarnationId)
     if (ctx.result.providerSequence) {
       const runtimeSequenceBeforeReconcile =

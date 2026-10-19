@@ -86,7 +86,8 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
         if (ctx.pendingRegistrationPtyId) {
           deps.runtime?.cancelPendingPtyRegistration?.(
             ctx.pendingRegistrationPtyId,
-            ctx.rejectedRegistrationCandidate?.incarnationId
+            ctx.rejectedRegistrationCandidate?.incarnationId,
+            ctx.pendingRegistrationClaim
           )
           ctx.pendingRegistrationPtyId = null
         }
@@ -180,7 +181,8 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(
         ctx.pendingRegistrationPtyId,
-        ctx.rejectedRegistrationCandidate?.incarnationId
+        ctx.rejectedRegistrationCandidate?.incarnationId,
+        ctx.pendingRegistrationClaim
       )
       ctx.pendingRegistrationPtyId = null
     }

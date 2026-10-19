@@ -1582,6 +1582,12 @@ export function createRemoteRuntimePtyTransport(
         }
         if (runtimeTerminalErrorMessage(error).includes(ownerChanged)) {
           exhaustOwnerRecovery(attempt)
+        } else if (isRecoverablePaneBindingError(error)) {
+          // Unbound resolution cannot use the connected-handle resubscriber.
+          recovery.parkRetryForExternalTrigger(epoch, attempt.retry)
+          finishOwnerRecovery(attempt)
+          connecting = false
+          emitRecoveryState(true)
         } else {
           finishOwnerRecovery(attempt)
           handleRemoteTerminalError(error)
@@ -2271,8 +2277,10 @@ export function createRemoteRuntimePtyTransport(
     setAttachmentReady(false)
     // Why: host handle rotation preserves the pane generation; only the store identity changes, not spawn/exit semantics.
     if (replacedPtyId && (changed || nextIncarnationId !== null)) {
-      replaceFitOverridePtyId(replacedPtyId, remotePtyId)
-      replaceDriverPtyId(replacedPtyId, remotePtyId)
+      if (replacedPtyId !== remotePtyId) {
+        replaceFitOverridePtyId(replacedPtyId, remotePtyId)
+        replaceDriverPtyId(replacedPtyId, remotePtyId)
+      }
       if (nextIncarnationId) {
         onPtyRebind?.(remotePtyId, replacedPtyId, nextIncarnationId)
       } else {

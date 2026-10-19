@@ -1,3 +1,4 @@
+import type { PtyRegistrationClaim } from '../../../runtime/runtime-terminal-state-records'
 import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
 import type {
   IPtyProvider,
@@ -40,6 +41,7 @@ export type PtyIpcSpawnState = {
   stablePaneBindingPersisted: boolean
   rejectedRegistrationCandidate: PtySpawnResult | null
   pendingRegistrationPtyId: string | null
+  pendingRegistrationClaim?: PtyRegistrationClaim
   reconciledSnapshotSeq: number | null
   snapshotKittyFlagsCoverReconciledSeq: boolean
   preparedProvisionalExecutionContext: boolean

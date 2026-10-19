@@ -289,6 +289,51 @@ describe('launch facts outside the tables', () => {
   const suite = setupPtyIpcSuite()
   afterEach(() => restoreMainPlatform())
 
+  it.each(['ipc', 'runtime'] as const)(
+    '%s adopts the saved winner without launching again',
+    async (lane) => {
+      const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
+      const pane = {
+        worktreeId: launchWorkspaceId(POSIX_REPO),
+        tabId: HOST_TAB_ID,
+        leafId: HOST_LEAF_ID
+      }
+      await lanes.store.persistPtyBinding({ ...pane, ptyId: 'old' })
+      lanes.provider
+        .mockImplementationOnce(async () => {
+          await lanes.store.persistPtyBinding({
+            ...pane,
+            ptyId: 'winner',
+            incarnationId: 'winner-inc'
+          })
+          throw new SessionNotFoundError('old')
+        })
+        .mockResolvedValueOnce({ id: 'winner', incarnationId: 'winner-inc', isReattach: true })
+      if (lane === 'ipc') {
+        await expect(lanes.spawnWindow({ ...pane, cols: 80, rows: 24 })).resolves.toMatchObject({
+          id: 'winner'
+        })
+      } else {
+        await lanes.runtime.createTerminal(`id:${pane.worktreeId}`, {
+          tabId: pane.tabId,
+          leafId: pane.leafId
+        })
+      }
+      expect(
+        lanes.runtime.resolveTerminalPane(`${pane.tabId}:${pane.leafId}`, pane.worktreeId)
+      ).toMatchObject({ ptyId: 'winner', connected: true })
+      expect(lanes.provider.mock.calls.map(([args]) => args.sessionId)).toEqual(['old', 'winner'])
+      expect(
+        lanes.provider.mock.calls.every(([args]) => args.attachOnly && args.command === undefined)
+      ).toBe(true)
+      expect(
+        lanes.store.getWorkspaceSession().terminalLayoutsByTabId[pane.tabId].ptyIdsByLeafId[
+          pane.leafId
+        ]
+      ).toBe('winner')
+    }
+  )
+
   it('does not readmit a recovered pane closed during lazy launch preparation', async () => {
     const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
     const binding = {

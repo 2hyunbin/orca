@@ -1,4 +1,9 @@
-import { persistFreshPaneBinding, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import type { Store } from '../../../persistence'
+import type { PersistPtyBindingArgs } from '../../../persistence/loading-store/pty-binding-persistence'
+import { ptyBindingIsRefused } from '../../../persistence/loading-store/pty-binding-refusals'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { toSshExecutionHostId } from '../../../../shared/execution-host'
+import { PaneOwnerContentionError } from '../pane/pane-spawn-operation'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
   ptyOwnership,
@@ -69,6 +74,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     const rejectedRegistration = registerPersistedPtySpawn(
       ctx.deps.runtime,
       ctx.hostSessionBinding?.store ?? ctx.deps.store,
+      ctx.pendingRegistrationClaim,
       ctx.result.id,
       owner.surface.worktreeId,
       null,
@@ -158,6 +164,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     const rejectedRegistration = registerPersistedPtySpawn(
       ctx.deps.runtime,
       ctx.hostSessionBinding?.store ?? ctx.deps.store,
+      ctx.pendingRegistrationClaim,
       ctx.result.id,
       args.worktreeId,
       null,
@@ -181,7 +188,11 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     }
   } else {
     // Why: non-worktree PTYs have no later surface-registration phase to clear admission intent.
-    ctx.deps.runtime?.cancelPendingPtyRegistration?.(ctx.result.id, ctx.result.incarnationId)
+    ctx.deps.runtime?.cancelPendingPtyRegistration?.(
+      ctx.result.id,
+      ctx.result.incarnationId,
+      ctx.pendingRegistrationClaim
+    )
   }
   // Why after registration: a spawn discarded for a failed save or rejected for exiting during
   // start must not record facts or end a stop.
@@ -293,4 +304,32 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     isReattach: true
   })
   return { ...ctx.result, ...response, wslDistro: ctx.result.wslDistro ?? undefined }
+}
+
+/** Runs inside the existing durable mutation, after source/topology checks and before any bind. */
+export async function persistFreshPaneBinding(
+  store: Store,
+  binding: PersistPtyBindingArgs,
+  connectionId?: string | null
+): Promise<boolean> {
+  let targetChanged = false
+  const hostId = connectionId ? toSshExecutionHostId(connectionId) : undefined
+  const persisted = await store.persistPtyBinding(() => {
+    const session = store.getWorkspaceSession(hostId)
+    const paneKey = makePaneKey(binding.tabId, binding.leafId)
+    if (ptyBindingIsRefused(binding, session, binding.worktreeId, paneKey, [])) {
+      return binding
+    }
+    const bound = session.terminalLayoutsByTabId[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
+    const stamp = session.terminalPtyIncarnationsByPaneKey?.[paneKey]
+    if (bound && (bound !== binding.ptyId || stamp !== binding.incarnationId)) {
+      targetChanged = true
+      return null
+    }
+    return binding
+  }, hostId)
+  if (targetChanged) {
+    throw new PaneOwnerContentionError()
+  }
+  return persisted
 }

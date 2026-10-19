@@ -1,3 +1,4 @@
+import type { PtyRegistrationClaim } from '../../../runtime/runtime-terminal-state-records'
 import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
@@ -82,6 +83,7 @@ export type RuntimePtySpawnState = {
   stablePaneBindingPersisted: boolean
   rejectedRegistrationCandidate: PtySpawnResult | null
   pendingRegistrationPtyId: string | null
+  pendingRegistrationClaim?: PtyRegistrationClaim
   reconciledSnapshotSeq: number | null
   snapshotKittyFlagsCoverReconciledSeq: boolean
   preparedProvisionalExecutionContext: boolean

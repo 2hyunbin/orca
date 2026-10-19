@@ -41,7 +41,7 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
     }
     const expectedPtyId = ctx.effectiveSessionAppId ?? ctx.effectiveSessionId
     if (expectedPtyId) {
-      ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
+      ctx.pendingRegistrationClaim = ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
       ctx.pendingRegistrationPtyId = expectedPtyId
     }
     if (ctx.isDaemonHostSpawn && expectedPtyId) {
@@ -62,12 +62,29 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
     ctx.rejectedRegistrationCandidate = ctx.result
     if (ctx.pendingRegistrationPtyId !== ctx.result.id) {
       if (ctx.pendingRegistrationPtyId) {
-        ctx.deps.runtime?.cancelPendingPtyRegistration?.(ctx.pendingRegistrationPtyId)
+        ctx.deps.runtime?.cancelPendingPtyRegistration?.(
+          ctx.pendingRegistrationPtyId,
+          undefined,
+          ctx.pendingRegistrationClaim
+        )
       }
-      ctx.deps.runtime?.beginPtyRegistration?.(ctx.result.id, ctx.result.incarnationId)
+      ctx.pendingRegistrationClaim = ctx.deps.runtime?.beginPtyRegistration?.(
+        ctx.result.id,
+        ctx.result.incarnationId
+      )
       ctx.pendingRegistrationPtyId = ctx.result.id
     }
     assertSpawnReplyWasLive(ctx.result)
+    if (
+      ctx.pendingRegistrationClaim &&
+      !ctx.deps.runtime?.narrowPtyRegistration(
+        ctx.result.id,
+        ctx.pendingRegistrationClaim,
+        ctx.result.incarnationId
+      )
+    ) {
+      throw new PaneOwnerContentionError()
+    }
     ctx.deps.runtime?.assertPtyRegistrationAllowed?.(ctx.result.id, ctx.result.incarnationId)
     if (ctx.result.providerSequence) {
       const runtimeSequenceBeforeReconcile =

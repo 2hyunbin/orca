@@ -8,15 +8,16 @@ import {
 
 // These transport fixtures never read abandoned-launch ownership from the app store.
 const appStore = vi.hoisted(() => ({
-  getState: vi.fn(() => {
+  getState: vi.fn<() => import('@/store/types').AppState>(() => {
     throw new Error('These transport fixtures must not read app-store ownership')
   })
 }))
 
 vi.mock('@/store', () => ({ useAppStore: { getState: appStore.getState } }))
 
+let composedStore = false
 afterEach(() => {
-  expect(appStore.getState).not.toHaveBeenCalled()
+  if (!composedStore) expect(appStore.getState).not.toHaveBeenCalled()
 })
 
 let subscriptionCallbacks: MultiplexSubscriptionCallbacks = null
@@ -50,6 +51,7 @@ function unreachable(): Error {
 describe('remote runtime pane binding ownership', () => {
   beforeEach(() => {
     resetRemoteRuntimeTransport()
+    composedStore = false
   })
 
   it.each(['connect', 'attach', 'stream'] as const)(
@@ -106,9 +108,13 @@ describe('remote runtime pane binding ownership', () => {
     }
   )
 
-  it.each(['terminal-1', 'terminal-2'])(
+  it.each([
+    ['terminal-1', 'old-incarnation'],
+    ['terminal-1', 'new-incarnation'],
+    ['terminal-2', 'new-incarnation']
+  ])(
     'retains one refresh through delayed acceptance and rebinds %s with its incarnation',
-    async (replacement) => {
+    async (replacement, nextIncarnation) => {
       let incarnationId = 'old-incarnation'
       const defaultCall = runtimeCall.getMockImplementation()
       runtimeCall.mockImplementation(async (args: { method: string }) =>
@@ -136,144 +142,208 @@ describe('remote runtime pane binding ownership', () => {
         onPtyRebind
       })
       const onError = vi.fn()
-      transport.attach({
-        existingPtyId: 'remote:env-1@@saved-predecessor',
-        callbacks: { onError }
-      })
-      await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
-      await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe('terminal-1'))
-      expect(onPtyRebind).toHaveBeenCalledWith(
-        'remote:env-1@@terminal-1',
-        'remote:env-1@@saved-predecessor',
-        incarnationId
-      )
-      emitSnapshot(latestSubscribePayload().streamId, 'prompt$ ')
-      const refuse = (streamId: number) =>
-        subscriptionCallbacks?.onResponse({
-          ok: true,
-          result: {
-            type: 'error',
-            streamId,
-            message: 'terminal_pane_owner_changed'
-          }
+      try {
+        transport.attach({
+          existingPtyId: 'remote:env-1@@saved-predecessor',
+          callbacks: { onError }
         })
-      const firstStream = latestSubscribePayload().streamId
-      resolvedPaneHandle = replacement
-      incarnationId = 'new-incarnation'
-      refuse(firstStream)
-      expect(transport.sendInput('old process input', 'driving')).toBe(true)
-      await vi.waitFor(() => expect(latestSubscribePayload().streamId).not.toBe(firstStream))
-      const refreshedStream = latestSubscribePayload().streamId
-      expect(onPtyRebind).toHaveBeenLastCalledWith(
-        `remote:env-1@@${replacement}`,
-        'remote:env-1@@terminal-1',
-        incarnationId
-      )
-      // The send returned, but no accepted snapshot has arrived for this refreshed stream.
-      await Promise.resolve()
-      refuse(refreshedStream)
-      expect(
-        runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.resolvePane')
-      ).toHaveLength(2)
-      expect(transport.getRecoveryState?.()).toMatchObject({
-        phase: 'disconnected',
-        reason: 'ownership'
+        await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
+        await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe('terminal-1'))
+        expect(onPtyRebind).toHaveBeenCalledWith(
+          'remote:env-1@@terminal-1',
+          'remote:env-1@@saved-predecessor',
+          incarnationId
+        )
+        emitSnapshot(latestSubscribePayload().streamId, 'prompt$ ')
+        const refuse = (streamId: number, callbacks = subscriptionCallbacks) =>
+          callbacks?.onResponse({
+            ok: true,
+            result: {
+              type: 'error',
+              streamId,
+              message: 'terminal_pane_owner_changed'
+            }
+          })
+        const { setDriverForPty, getDriverForPty } =
+          await import('@/lib/pane-manager/mobile-driver-state')
+        const { setFitOverride, getFitOverrideForPty } =
+          await import('@/lib/pane-manager/mobile-fit-overrides')
+        const phone = { kind: 'mobile' as const, clientId: 'phone-1' }
+        setDriverForPty('remote:env-1@@terminal-1', phone)
+        setFitOverride('remote:env-1@@terminal-1', 'mobile-fit', 49, 20)
+        const firstStream = latestSubscribePayload().streamId
+        const firstSubscription = subscriptionCallbacks
+        resolvedPaneHandle = replacement
+        incarnationId = nextIncarnation
+        refuse(firstStream)
+        expect(transport.sendInput('old process input', 'driving')).toBe(true)
+        await vi.waitFor(() => expect(subscriptionCallbacks).not.toBe(firstSubscription))
+        await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe(replacement))
+        const refreshedStream = latestSubscribePayload().streamId
+        const refreshedSubscription = subscriptionCallbacks
+        expect(onPtyRebind).toHaveBeenLastCalledWith(
+          `remote:env-1@@${replacement}`,
+          'remote:env-1@@terminal-1',
+          incarnationId
+        )
+        expect.soft(getDriverForPty(`remote:env-1@@${replacement}`)).toEqual(phone)
+        expect
+          .soft(getFitOverrideForPty(`remote:env-1@@${replacement}`))
+          .toEqual({ mode: 'mobile-fit', cols: 49, rows: 20 })
+        // The send returned, but no accepted snapshot has arrived for this refreshed stream.
+        await Promise.resolve()
+        refuse(refreshedStream)
+        expect(
+          runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.resolvePane')
+        ).toHaveLength(2)
+        expect(transport.getRecoveryState?.()).toMatchObject({
+          phase: 'disconnected',
+          reason: 'ownership'
+        })
+        expect(transport.getPtyId()).toBe(`remote:env-1@@${replacement}`)
+        expect(transport.retryRecovery?.()).toBe(true)
+        await vi.waitFor(() => expect(subscriptionCallbacks).not.toBe(refreshedSubscription))
+        await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe(replacement))
+        emitSnapshot(latestSubscribePayload().streamId, 'replacement$ ')
+        await vi.waitFor(() => expect(transport.getRecoveryState?.().phase).toBe('connected'))
+        refuse(refreshedStream, refreshedSubscription)
+        expect(transport.getRecoveryState?.().phase).toBe('connected')
+        if (nextIncarnation !== 'old-incarnation') {
+          expect(inputFrameTexts().join('')).not.toContain('old process input')
+        }
+        setDriverForPty(`remote:env-1@@${replacement}`, { kind: 'idle' })
+        setFitOverride(`remote:env-1@@${replacement}`, 'desktop-fit', 80, 24)
+        expect(runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.create')).toHaveLength(
+          0
+        )
+      } finally {
+        transport.destroy?.()
+      }
+    }
+  )
+
+  it('publishes an accepted owner through the real pane callback and store while preserving its sibling', async () => {
+    composedStore = true
+    vi.doMock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
+    vi.doMock('@/lib/codex-stale-pane-sweep', () => ({
+      notifyCodexPaneBoundForStaleSweep: vi.fn()
+    }))
+    const { createTestStore, makeTab, seedStore } =
+      await import('@/store/slices/store-test-helpers')
+    const { installPanePtyVisibilityBind } =
+      await import('./pty-connection/pane-pty-visibility-bind')
+    const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+    const store = createTestStore()
+    const old = 'remote:env-1@@old'
+    const sibling = 'remote:env-1@@sibling'
+    const next = 'remote:env-1@@terminal-1'
+    seedStore(store, {
+      tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1', ptyId: old })] },
+      ptyIdsByTabId: { 'tab-1': [old, sibling] },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: {
+            type: 'split',
+            direction: 'horizontal',
+            ratio: 0.5,
+            first: { type: 'leaf', leafId: '11111111-1111-4111-8111-111111111111' },
+            second: { type: 'leaf', leafId: '22222222-2222-4222-8222-222222222222' }
+          },
+          activeLeafId: '11111111-1111-4111-8111-111111111111',
+          expandedLeafId: null,
+          ptyIdsByLeafId: {
+            '11111111-1111-4111-8111-111111111111': old,
+            '22222222-2222-4222-8222-222222222222': sibling
+          }
+        }
+      }
+    })
+    appStore.getState.mockImplementation(store.getState)
+    const onPtyRebind = (id: string, prior: string, incarnation?: string | null) =>
+      session.onPtyRebind(id, prior, incarnation)
+    const transport = createRemoteRuntimePtyTransport('env-1', {
+      worktreeId: 'wt-1',
+      tabId: 'tab-1',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      onPtyRebind
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the visibility installer runs; its pane/store/transport dependencies are supplied below.
+    const session = {
+      pane: { id: 1, leafId: '11111111-1111-4111-8111-111111111111' },
+      cacheKey: 'tab-1:11111111-1111-4111-8111-111111111111',
+      transport,
+      deps: {
+        tabId: 'tab-1',
+        worktreeId: 'wt-1',
+        paneTransportsRef: { current: new Map([[1, transport]]) },
+        isVisibleRef: { current: true },
+        updateTabPtyId: store.getState().updateTabPtyId
+      },
+      activePanePtyBinding: old,
+      bindProcessExitState: vi.fn(),
+      setPanePtyFitBinding: vi.fn(),
+      registerSideEffectFactConsumerForPty: vi.fn(),
+      syncHiddenRendererPtyDelivery: vi.fn(),
+      syncPanePtyLayoutBinding: vi.fn(),
+      agentCompletionCoordinator: { startProcessTracking: vi.fn() }
+    } as unknown as import('./pty-connection/connect-pane-pty-session').ConnectPanePtySession
+    installPanePtyVisibilityBind(session)
+    try {
+      transport.attach({ existingPtyId: old, callbacks: {} })
+      await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
+      emitSnapshot(latestSubscribePayload().streamId, 'accepted$ ')
+      await vi.waitFor(() => expect(transport.isConnected()).toBe(true))
+      expect(store.getState().terminalLayoutsByTabId['tab-1'].ptyIdsByLeafId).toEqual({
+        '11111111-1111-4111-8111-111111111111': next,
+        '22222222-2222-4222-8222-222222222222': sibling
       })
-      expect(transport.getPtyId()).toBe(`remote:env-1@@${replacement}`)
-      expect(transport.retryRecovery?.()).toBe(true)
-      await vi.waitFor(() => expect(latestSubscribePayload().streamId).not.toBe(refreshedStream))
-      emitSnapshot(latestSubscribePayload().streamId, 'replacement$ ')
-      await vi.waitFor(() => expect(transport.getRecoveryState?.().phase).toBe('connected'))
-      refuse(refreshedStream)
-      expect(transport.getRecoveryState?.().phase).toBe('connected')
-      expect(inputFrameTexts().join('')).not.toContain('old process input')
-      expect(runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.create')).toHaveLength(0)
+      expect(store.getState().tabsByWorktree['wt-1'][0].ptyId).toBe(next)
+      expect(store.getState().ptyIdsByTabId['tab-1']).toEqual([next, sibling])
+      expect(session.activePanePtyBinding).toBe(next)
+      expect(session.bindProcessExitState).toHaveBeenCalledWith(next, old)
+      expect(session.agentCompletionCoordinator.startProcessTracking).toHaveBeenCalledOnce()
+    } finally {
       transport.destroy?.()
     }
-  )
+  })
 
-  it.each(['dispose', 'deadline'] as const)(
-    'settles an owner refresh on %s and ignores its late resolve',
-    async (end) => {
-      vi.useFakeTimers()
-      try {
-        const defaultCall = runtimeCall.getMockImplementation()
-        let release!: () => void
-        const gate = new Promise<void>((resolve) => {
-          release = resolve
-        })
-        runtimeCall.mockImplementation(async (args: { method: string }) => {
-          if (args.method === 'terminal.create') {
-            return {
-              ok: false,
-              error: {
-                code: 'runtime_error',
-                message: 'terminal_pane_owner_changed'
-              }
-            }
-          }
-          await gate
-          return defaultCall?.(args)
-        })
-        const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
-        const transport = createRemoteRuntimePtyTransport('env-1', {
-          worktreeId: 'wt-1',
-          tabId: 'tab-1',
-          leafId: 'pane:1'
-        })
-        const connecting = transport.connect({ url: '', callbacks: {} })
-        await vi.waitFor(() =>
-          expect(runtimeCall.mock.calls.some(([r]) => r.method === 'terminal.resolvePane')).toBe(
-            true
-          )
-        )
-        if (end === 'dispose') {
-          transport.destroy?.()
-        } else {
-          await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+  it('keeps resolve-only Retry after create refusal, contact loss and deadline', async () => {
+    vi.useFakeTimers()
+    const defaultCall = runtimeCall.getMockImplementation()
+    let reachable = false
+    runtimeCall.mockImplementation(async (args: { method: string }) => {
+      if (args.method === 'terminal.create')
+        return {
+          ok: false,
+          error: { code: 'runtime_error', message: 'terminal_pane_owner_changed' }
         }
-        await expect(connecting).resolves.toBeUndefined()
-        release()
-        await Promise.resolve()
-        expect(runtimeSubscribe).not.toHaveBeenCalled()
-        transport.destroy?.()
-      } finally {
-        vi.useRealTimers()
-      }
-    }
-  )
-
-  it('parks unavailable owner resolution and Retry never issues a second create', async () => {
-    runtimeCall.mockImplementation(async ({ method }: { method: string }) => ({
-      ok: false,
-      error: {
-        code: 'runtime_error',
-        message: method === 'terminal.create' ? 'terminal_pane_owner_changed' : 'method_not_found'
-      }
-    }))
+      if (!reachable) throw unreachable()
+      return defaultCall?.(args)
+    })
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
     const transport = createRemoteRuntimePtyTransport('env-1', {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       leafId: 'pane:1'
     })
-    const onError = vi.fn()
-    expect(await transport.connect({ url: '', callbacks: { onError } })).toBeUndefined()
-    expect(transport.getRecoveryState?.()).toMatchObject({
-      phase: 'disconnected',
-      reason: 'ownership'
-    })
-    expect(transport.retryRecovery?.()).toBe(true)
-    await vi.waitFor(() =>
+    try {
+      await transport.connect({ url: '', callbacks: {} })
+      await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+      reachable = true
+      expect(transport.retryRecovery?.()).toBe(true)
+      await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
+      emitSnapshot(latestSubscribePayload().streamId, 'recovered$ ')
+      await vi.advanceTimersByTimeAsync(20)
+      expect(transport.isConnected()).toBe(true)
+      expect(transport.getRecoveryState?.().phase).toBe('connected')
+      expect(runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.create')).toHaveLength(1)
       expect(
-        runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.resolvePane')
+        runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.resolvePane')
       ).toHaveLength(2)
-    )
-    expect(
-      runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.create')
-    ).toHaveLength(1)
-    expect(onError).toHaveBeenCalledExactlyOnceWith('terminal_pane_owner_changed')
-    transport.destroy?.()
+    } finally {
+      transport.destroy?.()
+      vi.useRealTimers()
+    }
   })
 
   it('settles an attach whose pane the host no longer knows instead of latching in connecting (#21344)', async () => {

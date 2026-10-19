@@ -108,27 +108,3 @@ export async function reconcilePaneOwner<T>(args: {
     }
   }
 }
-
-export async function spawnForStablePane(
-  args: StablePaneSpawnContext
-): Promise<{ result: PtySpawnResult; owner: StablePaneOwner | null }> {
-  return reconcilePaneOwner<{ result: PtySpawnResult; owner: StablePaneOwner | null }>({
-    owner: args.owner,
-    resolveOwner: () => args.resolveOwner?.() ?? null,
-    attach: async (owner) => {
-      if (owner !== args.owner) {
-        args.onOwnerReresolved?.(owner)
-      }
-      const attempt = await attemptStablePaneAttach({ ...args, owner })
-      if ('lostTo' in attempt) {
-        throw new PaneOwnerContentionError()
-      }
-      return 'attached' in attempt ? attempt.attached : null
-    },
-    fresh: async () => {
-      const result = await args.provider.spawn(args.spawnOptions)
-      args.onFreshSpawn?.(result)
-      return { result, owner: null }
-    }
-  })
-}

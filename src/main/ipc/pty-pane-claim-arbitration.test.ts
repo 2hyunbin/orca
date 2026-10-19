@@ -323,14 +323,14 @@ describe('registerPtyHandlers', () => {
       ptyOutputSequenceById: Map<string, number>
       ptysById: Map<string, { connected: boolean }>
       wslDistroByPtyId: Map<string, string>
-      earlyExitedPtyIncarnations: Map<string, string | null>
+      pendingPtyRegistrationIncarnations: Map<string, string | null>
     }
     expect(internals.handleByPtyId.has('pty-early-exit')).toBe(false)
     expect(internals.providerSequenceInitializedPtys.has('pty-early-exit')).toBe(false)
     expect(internals.ptyOutputSequenceById.has('pty-early-exit')).toBe(false)
     expect(internals.ptysById.get('pty-early-exit')?.connected).not.toBe(true)
     expect(internals.wslDistroByPtyId.has('pty-early-exit')).toBe(false)
-    expect(internals.earlyExitedPtyIncarnations.has('pty-early-exit')).toBe(false)
+    expect(internals.pendingPtyRegistrationIncarnations.has('pty-early-exit')).toBe(false)
     clearProviderPtyState('pty-early-exit')
   })
   it('does not retain a claimed owner when its PTY exits before controller admission', async () => {

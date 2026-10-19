@@ -168,7 +168,8 @@ export abstract class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRunt
         pending.incarnationId = incarnationId ?? null
       } else {
         this.pendingPtyRegistrationIncarnations.set(ptyId, {
-          incarnationId: incarnationId ?? null
+          incarnationId: incarnationId ?? null,
+          exitedIncarnations: new Set()
         })
       }
     }

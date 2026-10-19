@@ -145,7 +145,8 @@ async function spawnFreshPtyFromRuntimeController(
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(
         ctx.pendingRegistrationPtyId,
-        ctx.rejectedRegistrationCandidate?.incarnationId
+        ctx.rejectedRegistrationCandidate?.incarnationId,
+        ctx.pendingRegistrationClaim
       )
       ctx.pendingRegistrationPtyId = null
     }

@@ -5,7 +5,10 @@ import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
-import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
+import type {
+  PtyRegistrationClaim,
+  RuntimePtyWorktreeRecord
+} from '../../runtime-terminal-state-records'
 import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
 
@@ -184,30 +187,24 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     ptyId: string,
     candidateIncarnation?: PtyIncarnationId
   ): void {
-    if (!this.earlyExitedPtyIncarnations.has(ptyId)) {
-      return
-    }
-    const exitedIncarnation = this.earlyExitedPtyIncarnations.get(ptyId) ?? null
-    if (
-      exitedIncarnation === null ||
-      candidateIncarnation === undefined ||
-      exitedIncarnation === candidateIncarnation
-    ) {
-      // Why: the rejected spawn call was the fence's sole late publisher; retaining it leaks fresh PTY ids.
-      this.earlyExitedPtyIncarnations.delete(ptyId)
-      this.pendingPtyRegistrationIncarnations.delete(ptyId)
+    const pending = this.pendingPtyRegistrationIncarnations.get(ptyId)
+    if (pending?.exitedIncarnations.size) {
+      this.cancelPendingPtyRegistration(ptyId, candidateIncarnation, pending)
     }
   }
 
   beginPtyRegistration(ptyId: string, incarnationId?: PtyIncarnationId) {
-    const claim = { incarnationId: incarnationId ?? null }
+    const claim: PtyRegistrationClaim = {
+      incarnationId: incarnationId ?? null,
+      exitedIncarnations: new Set()
+    }
     this.pendingPtyRegistrationIncarnations.set(ptyId, claim)
     return claim
   }
 
   narrowPtyRegistration(
     ptyId: string,
-    claim: { incarnationId: PtyIncarnationId | null },
+    claim: PtyRegistrationClaim,
     incarnationId?: PtyIncarnationId
   ): boolean {
     if (this.pendingPtyRegistrationIncarnations.get(ptyId) !== claim) {
@@ -228,7 +225,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
   cancelPendingPtyRegistration(
     ptyId: string,
     incarnationId?: PtyIncarnationId,
-    claim?: { incarnationId: PtyIncarnationId | null }
+    claim?: PtyRegistrationClaim
   ): void {
     const pending = this.pendingPtyRegistrationIncarnations.get(ptyId)
     if (
@@ -241,32 +238,18 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       return
     }
     this.pendingPtyRegistrationIncarnations.delete(ptyId)
-    const exited = this.earlyExitedPtyIncarnations.get(ptyId)
-    if (
-      exited === null ||
-      exited === undefined ||
-      incarnationId === undefined ||
-      exited === incarnationId
-    ) {
-      this.earlyExitedPtyIncarnations.delete(ptyId)
-    }
   }
 
   protected assertPtyDidNotExitBeforeRegistration(
     ptyId: string,
     candidateIncarnation?: PtyIncarnationId
   ): void {
-    if (this.earlyExitedPtyIncarnations.has(ptyId)) {
-      const exitedIncarnation = this.earlyExitedPtyIncarnations.get(ptyId) ?? null
-      const nextIncarnation = candidateIncarnation ?? null
-      if (
-        exitedIncarnation === null ||
-        nextIncarnation === null ||
-        exitedIncarnation === nextIncarnation
-      ) {
-        throw new Error('agent_session_exited_during_start')
-      }
-      this.earlyExitedPtyIncarnations.delete(ptyId)
+    const exits = this.pendingPtyRegistrationIncarnations.get(ptyId)?.exitedIncarnations
+    if (
+      exits?.size &&
+      (candidateIncarnation === undefined || exits.has(null) || exits.has(candidateIncarnation))
+    ) {
+      throw new Error('agent_session_exited_during_start')
     }
   }
 }

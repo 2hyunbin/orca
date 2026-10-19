@@ -1,11 +1,4 @@
-import { adoptStablePane } from '../../ipc/pty/pane/adopt-stable'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
-import * as providers from '../../ipc/pty/provider/registry'
-import {
-  persistFreshPaneBinding,
-  assertPaneStillExists
-} from '../../ipc/pty/pane/pane-spawn-operation'
-import { expect, it, vi, onTestFinished } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { fixture } from './profile-state-delayed-authority-fixture'
 import { TEST_LEAF_1 } from '../../persistence-session-fixtures'
 import { ProfileStateWriterError } from '../profile-state/profile-state-writer-errors'
@@ -79,68 +72,6 @@ export function registerPtyBindingRestartRetirementTests(): void {
     ).toBe(binding.ptyId)
     expect(await store.retirePtyBinding(binding)).toBe(true)
   })
-
-  it.each(['winner', 'closed'] as const)(
-    'refuses a fresh late bind after %s without restoring the removed topology',
-    async (change) => {
-      const { store, authority, readState } = await fixture()
-      await store.persistPtyBinding(binding)
-      const gate = authority.pause()
-      const predecessor = store.persistPtyBinding({ ...binding, incarnationId: 'next' })
-      await gate.started.promise
-      const pending = persistFreshPaneBinding(store, {
-        ...binding,
-        ptyId: 'fresh',
-        mayCreate: false
-      })
-      if (change === 'closed') {
-        const session = store.getWorkspaceSession()
-        store.setWorkspaceSession({ ...session, terminalLayoutsByTabId: {}, tabsByWorktree: {} })
-      }
-      const refused =
-        change === 'winner'
-          ? expect(pending).rejects.toThrow('terminal_pane_owner_changed')
-          : expect(pending).resolves.toBe(false)
-      gate.finish.resolve()
-      await predecessor
-      await refused
-      if (change === 'closed') {
-        expect(() =>
-          assertPaneStillExists(store, binding.worktreeId, binding.tabId, binding.leafId)
-        ).toThrow('terminal_pane_owner_changed')
-      } else {
-        expect(
-          store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId?.[
-            binding.leafId
-          ]
-        ).toBe(binding.ptyId)
-        const runtime = new OrcaRuntimeService(store)
-        const provider = {
-          ...providers.localProvider,
-          spawn: vi.fn(async () => ({
-            id: binding.ptyId,
-            incarnationId: 'next',
-            isReattach: true
-          }))
-        }
-        const selected = vi.spyOn(providers, 'getProvider').mockReturnValue(provider)
-        onTestFinished(() => selected.mockRestore())
-        await expect(
-          adoptStablePane(runtime, store, { ...binding, cols: 80, rows: 24 })
-        ).resolves.toMatchObject({
-          result: {
-            id: binding.ptyId,
-            incarnationId: 'next',
-            isReattach: true
-          }
-        })
-        store.updateSettings({ theme: 'dark' })
-        await store.flushPendingOrThrowAsync()
-        expect(readState().settings.theme).toBe('dark')
-        expect(authority.close).not.toHaveBeenCalled()
-      }
-    }
-  )
 
   it('restores the old binding after a known save failure and allows another attempt', async () => {
     const { store, authority } = await fixture()

@@ -3,7 +3,8 @@ import { closeStartupQueryAuthorityForPty } from '../provider/registry'
 import { createTerminalSessionStateSaveFailureMessage } from '../../../../shared/terminal-session-state-save-failure'
 import { recordCodexPaneAccountForSpawn } from '../host-env/codex-home'
 import { swapReplacedPaneBinding } from '../pane/pane-owner-replacement'
-import { persistFreshPaneBinding, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import { PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import { persistFreshPaneBinding } from '../runtime/spawn-commit'
 import {
   pendingByPaneKey,
   pendingPtyIdBySerializerGeneration,
