@@ -24,6 +24,7 @@ import {
   testState,
   writeDataFile
 } from './persistence-test-harness'
+import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 
 const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
   trackMock: vi.fn(),
@@ -267,7 +268,7 @@ describe('orcad migration catalog persistence', () => {
 
   it('rejects dormant-state conflicts before publishing any catalog row', () => {
     const store = createStore()
-    store.setWorktreeMeta(DORMANT_WORKTREE_ID, {
+    store.setWorktreeMeta(hostWorktreeTarget({ id: DORMANT_WORKTREE_ID, hostId: 'local' }), {
       ...dormantState().worktreeMeta[0].meta,
       comment: 'Different owner'
     })
