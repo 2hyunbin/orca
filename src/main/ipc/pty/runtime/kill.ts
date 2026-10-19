@@ -28,6 +28,18 @@ function publishSyntheticExit(
   deps.sendPtyExitToRenderer({ id: ptyId, code, ...(incarnationId ? { incarnationId } : {}) })
 }
 
+/**
+ * COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay's shell stops through the
+ * bridge, which retires its lease only on the relay's proof; tombstoning it here would orphan it.
+ * Every stop route checks this first, before reading the (absent) SSH provider.
+ */
+export function stopLegacyRelayBridgedPty(
+  ptyId: string,
+  connectionId: string | null
+): Promise<unknown> | null {
+  return connectionId && isLegacyRelayBridgedPty(ptyId) ? closeLegacyRelayPane(ptyId) : null
+}
+
 export function killPtyFromRuntimeController(
   deps: PtyRuntimeControllerDeps,
   ptyId: string
@@ -42,10 +54,7 @@ export function killPtyFromRuntimeController(
   } = deps
   runtime?.markPtyStopRequested?.(ptyId)
   const connectionId = getPtySshConnectionId(ptyId)
-  // COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay's shell stops through the
-  // bridge, which retires its lease only on the relay's proof; tombstoning it here would orphan it.
-  if (connectionId && isLegacyRelayBridgedPty(ptyId)) {
-    void closeLegacyRelayPane(ptyId)
+  if (stopLegacyRelayBridgedPty(ptyId, connectionId)) {
     return true
   }
   // Why: close runtime tails without clearing provider ownership, so
