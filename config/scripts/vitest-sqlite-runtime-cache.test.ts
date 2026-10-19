@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type * as FileSystem from 'node:fs'
 import { readFileSync } from 'node:fs'
 import { expect, it, vi } from 'vitest'
 
@@ -8,10 +9,10 @@ it('re-derives SQLite assignments from malformed disposable cache data', async (
     .digest('hex')
   for (const files of [null, { 'fixture.test.ts': [1, 2, 'false'] }]) {
     vi.doMock('node:fs', async (original) => ({
-      ...(await original()),
+      ...(await original<typeof FileSystem>()),
       globSync: () => ['fixture.test.ts'],
       statSync: () => ({ mtimeMs: 1, size: 2 }),
-      readFileSync: (path) =>
+      readFileSync: (path: Parameters<typeof readFileSync>[0]) =>
         String(path).endsWith('.json')
           ? JSON.stringify({ version, files })
           : String(path).endsWith('fixture.test.ts')
