@@ -1,6 +1,7 @@
 import { hasWorkspaceFileDragType } from '@/lib/workspace-file-drag'
 import { hasNativeFileDragTypes } from '../../../../shared/native-file-drop'
 import { OS_FILE_DROP_OWNER_ATTRIBUTE } from '../../../../shared/native-file-drop-preparation'
+import type { NativeChatResolvedPathSink } from './use-native-chat-workspace-file-drop'
 
 /** What a drag hovering the chat pane is carrying.
  *  `workspace`: an in-app file drag, attached by the composer's own handlers.
@@ -21,7 +22,26 @@ export type NativeChatPaneDropClaim = {
   /** A guarded composer refuses the drop, so the pane must not invite one. */
   disabled: boolean
   onDragOverCapture: (event: React.DragEvent<HTMLDivElement>) => void
-  onDropCapture: (event: React.DragEvent<HTMLDivElement>) => void
+  onDropCapture: (
+    event: React.DragEvent<HTMLDivElement>,
+    attachTo?: NativeChatResolvedPathSink
+  ) => void
+}
+
+const nestedWorkspaceDropSinks = new WeakMap<Element, NativeChatResolvedPathSink>()
+
+/** A nested drop owner's destination for in-app files, which the composer's claim checks and
+ *  routes by the chat's owner, then hands to it. */
+export function registerNestedWorkspaceDropSink(
+  owner: Element,
+  sink: NativeChatResolvedPathSink
+): () => void {
+  nestedWorkspaceDropSinks.set(owner, sink)
+  return () => {
+    if (nestedWorkspaceDropSinks.get(owner) === sink) {
+      nestedWorkspaceDropSinks.delete(owner)
+    }
+  }
 }
 
 export function nativeChatPaneDragKind(
@@ -43,17 +63,21 @@ export function movedWithinDropSurface(event: NativeChatPaneDragEvent): boolean 
   return enteredNode instanceof Node && event.currentTarget.contains(enteredNode)
 }
 
-/** A drop owner inside the pane (a queued card being edited) takes OS and in-app drops over it. */
-function overNestedOwner(event: NativeChatPaneDragEvent): boolean {
+/** A drop owner inside the pane (a queued card being edited), which takes drops over it. */
+function nestedOwner(event: NativeChatPaneDragEvent): Element | null {
   const owner =
     event.target instanceof Element
       ? event.target.closest(`[${OS_FILE_DROP_OWNER_ATTRIBUTE}]`)
       : null
-  return owner !== null && owner !== event.currentTarget
+  return owner !== event.currentTarget ? owner : null
 }
 
-/** Workspace files keep their provenance-checked lane; OS files use the native owner. A nested
- *  owner handles both kinds itself. */
+function overNestedOwner(event: NativeChatPaneDragEvent): boolean {
+  return nestedOwner(event) !== null
+}
+
+/** Workspace files keep their provenance-checked lane, landing in a nested owner's sink when
+ *  dropped on it; OS files use the native owner, the nearest one. */
 export function makeNativeChatPaneFileDropHandlers(host: {
   getClaim: () => NativeChatPaneDropClaim | null
   setDragActive: (active: boolean) => void
@@ -84,7 +108,7 @@ export function makeNativeChatPaneFileDropHandlers(host: {
       } else if (overNestedOwner(event)) {
         host.setDragActive(false)
       }
-      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace' && !overNestedOwner(event)) {
+      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace') {
         host.getClaim()?.onDragOverCapture(event)
       }
     },
@@ -96,8 +120,11 @@ export function makeNativeChatPaneFileDropHandlers(host: {
     },
     onDropCapture(event) {
       host.setDragActive(false)
-      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace' && !overNestedOwner(event)) {
-        host.getClaim()?.onDropCapture(event)
+      if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace') {
+        const owner = nestedOwner(event)
+        host
+          .getClaim()
+          ?.onDropCapture(event, owner ? nestedWorkspaceDropSinks.get(owner) : undefined)
       }
     }
   }

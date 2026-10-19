@@ -164,7 +164,7 @@ function queuedEditImageIntake(
       const kept = current.kept.filter((entry) => entry.id !== id)
       if (kept.length !== current.kept.length) {
         // The field shows what the agent will read: the image's markers go, later ones renumber.
-        const ids = (entries: typeof kept) => entries.map((entry) => entry.id)
+        const ids = (entries: QueuedEditImageState['kept']) => entries.map((entry) => entry.id)
         current.text = queuedEditTextForKeptImages(current.text, ids(current.kept), ids(kept))
         current.kept = kept
       }

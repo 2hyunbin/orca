@@ -56,7 +56,6 @@ export function NativeChatQueuedMessageEditor({
       data-queued-message-editor
       className="px-2.5 py-1.5"
       onPasteCapture={intake.onPasteCapture}
-      {...intake.workspaceDrop}
     >
       <div className="flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground">
         <Pencil className="size-3.5 shrink-0" aria-hidden />

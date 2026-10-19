@@ -7,7 +7,10 @@ import {
   NativeChatPaneFileDropSurface,
   useNativeChatPaneFileDropClaim
 } from './NativeChatPaneFileDropSurface'
-import { nativeChatPaneDragKind } from './native-chat-pane-file-drop'
+import {
+  nativeChatPaneDragKind,
+  registerNestedWorkspaceDropSink
+} from './native-chat-pane-file-drop'
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 
@@ -116,23 +119,24 @@ describe('NativeChatPaneFileDropSurface', () => {
     expect(container.querySelector(OVERLAY)).toBeNull()
   })
 
-  it('leaves an in-app drop on an editing queued card to that card', () => {
+  it('hands an in-app drop on an editing queued card to that card, through the claim', () => {
     const composerDrop = vi.fn()
-    const cardDrop = vi.fn()
+    const sink = vi.fn()
     const { container } = renderPane(
       <>
         <ClaimingComposer onDropCapture={composerDrop} />
-        <div data-os-file-drop-owner="" onDropCapture={cardDrop}>
+        <div data-os-file-drop-owner="" data-testid="owner">
           <span data-testid="card">card</span>
         </div>
       </>
     )
+    const unregister = registerNestedWorkspaceDropSink(screen.getByTestId('owner'), sink)
     const card = screen.getByTestId('card')
     fireDrag(card, 'dragover', workspaceDrag())
     expect(container.querySelector(OVERLAY)).toBeNull()
     fireDrag(card, 'drop', workspaceDrag())
-    expect(composerDrop).not.toHaveBeenCalled()
-    expect(cardDrop).toHaveBeenCalledTimes(1)
+    expect(composerDrop).toHaveBeenCalledWith(expect.anything(), sink)
+    unregister()
   })
 
   it('owns OS drops without publishing a scope marker', () => {

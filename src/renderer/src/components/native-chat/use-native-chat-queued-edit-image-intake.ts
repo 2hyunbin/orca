@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
-  type DragEventHandler,
   type RefObject
 } from 'react'
 import { toast } from 'sonner'
@@ -21,7 +20,7 @@ import type { NativeChatPendingAttachmentChips } from './native-chat-session-att
 import { useNativeChatComposerPaste } from './use-native-chat-composer-paste'
 import { useNativeChatExternalAttachments } from './use-native-chat-external-attachments'
 import { useNativeChatFileAttachmentActions } from './use-native-chat-file-attachment-actions'
-import { useNativeChatWorkspaceFileDrop } from './use-native-chat-workspace-file-drop'
+import { registerNestedWorkspaceDropSink } from './native-chat-pane-file-drop'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
 
 /** The chat a queued list sits in, which its edits attach files to as its chat box does. */
@@ -45,13 +44,6 @@ export function useNativeChatQueuedEditImageIntake(
   attach: () => void
   /** On the whole card, so a paste with focus on its buttons lands in the edit too. */
   onPasteCapture: (event: ClipboardEvent<HTMLDivElement>) => void
-  /** A file dragged from Orca's own tree onto the card, which the pane leaves to it. */
-  workspaceDrop:
-    | {
-        onDragOverCapture: DragEventHandler<HTMLDivElement>
-        onDropCapture: DragEventHandler<HTMLDivElement>
-      }
-    | undefined
   hostEnvironmentId: string | undefined
 } {
   const intake = editor.images?.intake
@@ -168,13 +160,6 @@ export function useNativeChatQueuedEditImageIntake(
     },
     [editable, handlePaste]
   )
-  const workspaceDrop = useNativeChatWorkspaceFileDrop({
-    attachResolvedPaths,
-    disabled,
-    setNotice,
-    structuredWorktreeId: transport?.worktreeId,
-    terminalTabId: attachTo?.terminalTabId ?? ''
-  })
   // The editing card is the nearest drop owner, so a drop on it never reaches the chat box's.
   const ownerRef = useRef<HTMLElement | null>(null)
   const [sequence] = useState(createOsFileDropSequence)
@@ -193,15 +178,20 @@ export function useNativeChatQueuedEditImageIntake(
   })
   useLayoutEffect(() => {
     const card = field.current?.closest('[data-queued-message-editor]')
-    attachOwner(editable && card instanceof HTMLElement ? card : null)
-    return () => attachOwner(null)
-  }, [attachOwner, editable, field])
+    const owner = editable && card instanceof HTMLElement ? card : null
+    attachOwner(owner)
+    // A file dragged from Orca's own tree: the chat box's claim checks it, then hands it here.
+    const unregister = owner ? registerNestedWorkspaceDropSink(owner, attachResolvedPaths) : null
+    return () => {
+      attachOwner(null)
+      unregister?.()
+    }
+  }, [attachOwner, attachResolvedPaths, editable, field])
   const { pickAttachments } = useNativeChatFileAttachmentActions(external.attachExternalPaths)
   return {
     editable,
     attach: pickAttachments,
     onPasteCapture,
-    workspaceDrop: editable ? workspaceDrop : undefined,
     hostEnvironmentId: transport?.runtimeEnvironmentId ?? undefined
   }
 }

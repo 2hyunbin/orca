@@ -72,7 +72,8 @@ export function queuedEditTextForKeptImages(
   to: readonly string[]
 ): string {
   let chips = promptMarkersToImageReferences(text, from)
-  for (const id of from.filter((entry) => !to.includes(entry))) {
+  const staying = new Set(to)
+  for (const id of from.filter((entry) => !staying.has(entry))) {
     const token = imageReferenceToken(id)
     chips = chips.replaceAll(`${token} `, '').replaceAll(token, '')
   }
