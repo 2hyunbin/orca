@@ -140,9 +140,9 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
       }
     )
 
-  it("never names or sends a default as a resumed chat's own, only its picks", () => {
+  it("names a resumed chat's defaults but never sends them, only its picks", () => {
     const state = resumed(['model', 'effort'])
-    expect(shown(state, undefined, {})).toEqual({ model: undefined, effort: 'low' })
+    expect(shown(state, undefined, {})).toEqual({ model: 'opus', effort: 'low' })
     expect(carried(state)).toBeUndefined()
     const effort = commitStructuredAgentSessionOption(state, 'effort', 'xhigh')
     expect(carried(effort)).toEqual({ effort: 'xhigh' })

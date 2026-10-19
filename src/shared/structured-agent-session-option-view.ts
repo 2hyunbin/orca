@@ -85,9 +85,8 @@ function modelOptionView(
 }
 
 /** The Claude model and effort a send carries: the chat's own and the picks over them in `view`.
- *  A picker that names its defaults (a new chat, or an older host's answer) sends what it shows,
- *  so a new chat's first send pins them and a later CLI default never moves it; a resumed chat's
- *  defaults are never named, so never sent. */
+ *  A new chat (or an older host's answer) sends the defaults it shows, so a new chat's first send
+ *  pins them; a resumed chat shows its host's defaults but never sends them. */
 export function structuredAgentSessionSendSelection(
   view: StructuredAgentSessionOptionState
 ): Record<string, string> | undefined {
@@ -95,7 +94,7 @@ export function structuredAgentSessionSendSelection(
     return undefined
   }
   const snapshot =
-    view.catalog?.defaultModelIsCliDefault === true
+    view.catalog?.defaultModelIsCliDefault === true && !view.defaultsUnsent
       ? structuredAgentSessionOptionSnapshot(view)
       : []
   const shown = (id: string): string | undefined => {

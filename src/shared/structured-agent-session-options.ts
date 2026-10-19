@@ -32,8 +32,7 @@ export {
 
 export function structuredAgentSessionOptionCatalog(
   seed: AgentSessionOptionCatalog,
-  result: AgentSessionOptionsResult,
-  newLaunch: boolean
+  result: AgentSessionOptionsResult
 ): AgentSessionOptionCatalog {
   const models: CatalogModel[] = result.models.map((model) =>
     discoveredModel(model, result.fastModeSupport?.supported === true)
@@ -45,11 +44,7 @@ export function structuredAgentSessionOptionCatalog(
       options: seed.unknownModelOptions ?? []
     })
   }
-  // A new chat names the default it runs until its first send pins it; a resumed chat names only
-  // its own model. An older answer marks no defaults, so its model was always named.
-  return result.current.defaulted === undefined || newLaunch
-    ? { ...seed, models, defaultModelIsCliDefault: true }
-    : { ...seed, models }
+  return { ...seed, models, defaultModelIsCliDefault: true }
 }
 
 export type StructuredAgentSessionOptionState = {
@@ -64,6 +59,9 @@ export type StructuredAgentSessionOptionState = {
   record: StructuredAgentSessionOptionRecord
   /** The last answer came from a host that marks no defaults, whose own tier rule it shows. */
   olderHost?: true
+  /** A resumed chat names the default its host marks but never sends it: its next start runs the
+   *  agent's own. A new chat sends the default it shows, so its first send pins it. */
+  defaultsUnsent?: true
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
   pendingId: string | null
@@ -184,9 +182,10 @@ export function applyStructuredAgentSessionOptions(
   )
   return {
     ...state,
-    catalog: structuredAgentSessionOptionCatalog(seed, result, launch.newLaunch),
+    catalog: structuredAgentSessionOptionCatalog(seed, result),
     catalogSource: 'live',
     olderHost: current.defaulted === undefined ? true : undefined,
+    defaultsUnsent: current.defaulted !== undefined && !launch.newLaunch ? true : undefined,
     verifiedModelIds: result.listedModelIds?.length ? result.listedModelIds : undefined,
     permissionMode: result.current.permissionMode ?? null
   }
