@@ -9,6 +9,7 @@ import type {
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
 import { parseLegacyNumericPaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import { isWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { isPaneSpawnDeferred } from './pane-spawn-deferral-registry'
 
 type AppStoreState = ReturnType<typeof useAppStore.getState>
@@ -205,14 +206,18 @@ export function recordPaneIsOwnedByPreservedPane(
     }
     // Why: active sessions rely on pane-level cold restore. A preserved leaf
     // without a PTY/session id can repaint scrollback but cannot resume.
+    // Switch point: main retires a gone terminal's binding before the pane starts afresh, and that
+    // start resumes the pane's record, so on main's layout the pane alone owns it.
     return (
-      hasRestorableStablePanePty(
-        tab,
-        tabId,
-        stable.leafId,
-        state.ptyIdsByTabId,
-        state.terminalLayoutsByTabId
-      ) && paneWillConnectOnActivation(owner.worktreeId, tabId, state)
+      (ORCA_LAYOUT_OWNER_IS_MAIN ||
+        hasRestorableStablePanePty(
+          tab,
+          tabId,
+          stable.leafId,
+          state.ptyIdsByTabId,
+          state.terminalLayoutsByTabId
+        )) &&
+      paneWillConnectOnActivation(owner.worktreeId, tabId, state)
     )
   }
 
