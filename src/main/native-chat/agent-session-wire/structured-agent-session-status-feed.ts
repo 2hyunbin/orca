@@ -23,7 +23,10 @@ import type {
   StatusFeedSession,
   StructuredAgentSessionStatusFeedDeps
 } from './structured-agent-session-status-feed-deps'
-import { structuredAgentSessionStatusSummary } from './structured-agent-session-status-summary'
+import {
+  renamedStructuredStatusSummary,
+  structuredAgentSessionStatusSummary
+} from './structured-agent-session-status-summary'
 import { structuredStatusChildWork } from './structured-agent-session-status-child-work'
 import {
   StructuredAgentSessionJournalProjections,
@@ -46,19 +49,18 @@ export type StructuredAgentSessionStatusSubscriber = {
   emit: (event: AgentSessionStatusEvent) => void
 }
 
+type StatusPublication = {
+  summary: AgentSessionStatusSummary
+  firstInputSubmissionKey: string | null
+}
+
 export class StructuredAgentSessionStatusFeed {
   private readonly ownership = new StructuredAgentSessionStatusOwnership(() =>
     this.deps.statusSink?.()
   )
   private readonly subscribers = new Map<string, StructuredAgentSessionStatusSubscriber>()
   // Never evicted: chats are named only while in here, and AI Vault reads closed ones' names here.
-  private readonly published = new Map<
-    string,
-    {
-      summary: AgentSessionStatusSummary
-      firstInputSubmissionKey: string | null
-    }
-  >()
+  private readonly published = new Map<string, StatusPublication>()
   /** The user's newest accepted send each session was last projected with; a new one retires
    *  settled children. */
   private readonly acceptedSends = new Map<string, string>()
@@ -158,22 +160,20 @@ export class StructuredAgentSessionStatusFeed {
     })
   }
 
-  /** The record's name changed outside the journal. A closed chat's retained row follows it too,
-   *  so every list still showing that conversation learns the name without a tab. */
+  /** The record's name, or its naming failure, changed outside the journal. A closed chat's
+   *  retained row follows it too, so every list still showing it learns the name without a tab. */
   publishConversationName(sessionId: string): void {
     if (this.deps.sessions.has(sessionId)) {
       this.publish(sessionId)
       return
     }
     const publication = this.published.get(sessionId)
-    const name = this.deps.getRecord(sessionId)?.conversationName
-    if (!publication || publication.summary.conversationName === name) {
-      return
+    const summary =
+      publication && renamedStructuredStatusSummary(publication.summary, this.deps, sessionId)
+    if (publication && summary) {
+      this.published.set(sessionId, { ...publication, summary })
+      this.broadcast({ type: 'status', session: summary })
     }
-    const { conversationName: _previous, ...rest } = publication.summary
-    const summary = name ? { ...rest, conversationName: name } : rest
-    this.published.set(sessionId, { ...publication, summary })
-    this.broadcast({ type: 'status', session: summary })
   }
 
   /** The summary last published for the session, as every status subscriber last saw it. */
@@ -210,6 +210,7 @@ export class StructuredAgentSessionStatusFeed {
       state: projection.state,
       stopping: projection.stopping,
       childWork: this.childWorkFields(sessionId, session.params.provider),
+      namingFailure: this.deps.namingFailure?.(sessionId),
       now: this.deps.now
     })
     const publication = this.published.get(sessionId)

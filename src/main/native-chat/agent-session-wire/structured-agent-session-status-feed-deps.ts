@@ -4,6 +4,7 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type {
+  StructuredChatNamingFailure,
   StructuredAgentSessionEndedChild,
   StructuredAgentSessionProviderChild
 } from './structured-agent-session-host-types'
@@ -45,6 +46,8 @@ export type StructuredAgentSessionStatusFeedDeps = {
     sessionId: string,
     producer?: StructuredAgentSessionChildWorkProducer
   ) => void
+  /** The chat's last failed naming run, if any; the summary decides whether it still applies. */
+  namingFailure?: (sessionId: string) => StructuredChatNamingFailure | undefined
   /** The session's agent proved a start: its row's phase became `ready`. */
   onAgentStarted?: (sessionId: string) => void
 }

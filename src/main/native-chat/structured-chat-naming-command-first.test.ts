@@ -46,12 +46,13 @@ describe.each(['claude', 'codex'] as const)('%s command-first naming', (provider
       const readFirstPrompt = vi.fn(async (sessionId: string, startedAt: number) =>
         firstStructuredChatNamingPrompt(await host.journalSnapshot(sessionId), startedAt)
       )
-      const generate = vi.fn(async () => 'Saved first input')
+      const generate = vi.fn(async () => ({ name: 'Saved first input' }))
       const naming = createStructuredChatNamingHandler({
         getStore: () => store,
         getSettings: () => ({}),
         workerTaskTitle: () => null,
         readFirstPrompt,
+        readJournalFirstPrompt: vi.fn(async () => ''),
         generate,
         onNamed: vi.fn(),
         logger: log.logger

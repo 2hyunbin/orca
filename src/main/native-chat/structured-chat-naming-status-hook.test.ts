@@ -58,10 +58,10 @@ describe.each(['claude', 'codex'] as const)('%s first-message naming status hook
                   : { provider: 'codex', threadId: HOST_TEST_THREAD, turnId: 'turn-1', ordinal: 1 }
             }
       )
-      let finish: (value: string | null) => void = () => {
+      let finish: (value: { name: string } | null) => void = () => {
         throw new Error('Not initialized')
       }
-      const generation = new Promise<string | null>((resolve) => {
+      const generation = new Promise<{ name: string } | null>((resolve) => {
         finish = resolve
       })
       const journalRead = Promise.withResolvers<void>()
@@ -75,6 +75,7 @@ describe.each(['claude', 'codex'] as const)('%s first-message naming status hook
         getSettings: () => ({}),
         workerTaskTitle: () => null,
         readFirstPrompt,
+        readJournalFirstPrompt: vi.fn(async () => ''),
         generate,
         onNamed: vi.fn(),
         logger: log.logger
@@ -151,7 +152,7 @@ describe.each(['claude', 'codex'] as const)('%s first-message naming status hook
       expect(store.getRecord(HOST_TEST_SESSION)?.conversationName).toBe(
         'Please repair the login flow'
       )
-      finish('auth/login')
+      finish({ name: 'auth/login' })
       await vi.waitFor(() =>
         expect(store.getRecord(HOST_TEST_SESSION)?.conversationName).toBe('auth/login')
       )

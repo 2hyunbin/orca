@@ -6,6 +6,7 @@ import { STRUCTURED_CHAT_NAME_PROMPT_LIMIT } from '../../shared/structured-agent
 import { setAgentSessionRecordConversationName } from '../runtime/agent-session-record-conversation-name'
 import {
   createStructuredChatNamingHandler,
+  type StructuredChatNameGeneration,
   type StructuredChatNamingDeps
 } from './structured-chat-naming'
 
@@ -46,7 +47,8 @@ function rig(provider: 'claude' | 'codex') {
     now: () => 100,
     workerTaskTitle: vi.fn(() => null),
     readFirstPrompt: vi.fn(async () => 'Please repair the login flow'),
-    generate: vi.fn(async () => 'auth/login'),
+    readJournalFirstPrompt: vi.fn(async () => 'Please repair the login flow'),
+    generate: vi.fn(async (): Promise<StructuredChatNameGeneration> => ({ name: 'auth/login' })),
     onNamed: vi.fn(),
     logger: { warn: vi.fn(), error: vi.fn() },
     wait: vi.fn(async () => {})
@@ -75,14 +77,14 @@ function rig(provider: 'claude' | 'codex') {
 describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provider) => {
   it('names the chat from its first prompt at once, then takes the generated name', async () => {
     const state = rig(provider)
-    const generation = deferred<string | null>()
+    const generation = deferred<StructuredChatNameGeneration>()
     state.deps.generate = vi.fn(() => generation.promise)
     expect(state.handle(state.summary, { replay: false })).toBeUndefined()
     await settle()
     expect(state.read()?.conversationName).toBe('Please repair the login flow')
     expect(state.deps.onNamed).toHaveBeenCalledTimes(1)
     expect(state.deps.readFirstPrompt).toHaveBeenCalledWith(state.summary.sessionId, 100)
-    generation.resolve('auth/login')
+    generation.resolve({ name: 'auth/login' })
     await settle()
     expect(state.read()?.conversationName).toBe('auth/login')
     expect(state.deps.onNamed).toHaveBeenCalledTimes(2)
@@ -90,7 +92,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
 
   it('clips a long first prompt into a short name', async () => {
     const state = rig(provider)
-    const generation = deferred<string | null>()
+    const generation = deferred<StructuredChatNameGeneration>()
     state.deps.generate = vi.fn(() => generation.promise)
     state.deps.readFirstPrompt = async () =>
       'use /agent-slack to search the thread and bring indexed search to cmd + j'
@@ -171,15 +173,15 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     expect(state.deps.generate).not.toHaveBeenCalled()
   })
 
-  it.each(['rejected', 'declined', 'empty'] as const)(
-    'retries %s generation twice, then keeps the first-prompt name',
+  it.each(['rejected', 'failed', 'empty'] as const)(
+    'retries %s generation twice, then keeps the first-prompt name and the failure',
     async (outcome) => {
       const state = rig(provider)
       state.deps.generate = vi.fn(async () => {
         if (outcome === 'rejected') {
           throw new Error('Agent failed')
         }
-        return outcome === 'empty' ? '' : null
+        return outcome === 'empty' ? { name: '' } : { error: 'Invalid API key' }
       })
       state.handle(state.summary, { replay: false })
       await settle()
@@ -191,15 +193,58 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
       expect(state.deps.wait).toHaveBeenNthCalledWith(1, 2000)
       expect(state.deps.wait).toHaveBeenNthCalledWith(2, 4000)
       expect(state.setConversationName).toHaveBeenCalledTimes(1)
+      expect(state.handle.failure(state.summary.sessionId)).toMatchObject({
+        forName: 'Please repair the login flow',
+        ...(outcome === 'failed' ? { message: 'Invalid API key' } : {})
+      })
+      expect(state.deps.onNamed).toHaveBeenCalledTimes(2)
     }
   )
+
+  it('keeps the first-prompt name without retries or a failure where naming cannot run', async () => {
+    const state = rig(provider)
+    state.deps.generate = vi.fn(async () => null)
+    state.handle(state.summary, { replay: false })
+    await settle()
+    expect(state.read()?.conversationName).toBe('Please repair the login flow')
+    expect(state.deps.generate).toHaveBeenCalledTimes(1)
+    expect(state.deps.wait).not.toHaveBeenCalled()
+    expect(state.handle.failure(state.summary.sessionId)).toBeUndefined()
+  })
+
+  it('regenerates a failed name with one try each, replacing the current name', async () => {
+    const state = rig(provider)
+    state.deps.generate = vi.fn(async () => ({ error: 'Invalid API key' }))
+    state.handle(state.summary, { replay: false })
+    await settle()
+    const first = state.handle.failure(state.summary.sessionId)
+    state.deps.generate = vi.fn(async () => ({ error: 'Still invalid' }))
+    expect(state.handle.regenerate(state.summary.sessionId)).toBe(true)
+    await settle()
+    expect(state.deps.generate).toHaveBeenCalledTimes(1)
+    expect(state.deps.wait).toHaveBeenCalledTimes(2)
+    expect(state.handle.failure(state.summary.sessionId)).toMatchObject({
+      message: 'Still invalid'
+    })
+    expect(state.handle.failure(state.summary.sessionId)).not.toBe(first)
+    state.deps.generate = vi.fn(async () => ({ name: 'auth/login' }))
+    state.handle.regenerate(state.summary.sessionId)
+    await settle()
+    expect(state.read()?.conversationName).toBe('auth/login')
+    expect(state.setConversationName).toHaveBeenLastCalledWith(
+      state.summary.sessionId,
+      'auth/login',
+      'Please repair the login flow'
+    )
+    expect(state.handle.failure(state.summary.sessionId)).toBeUndefined()
+  })
 
   it('takes the generated name from a retry after a failed first try', async () => {
     const state = rig(provider)
     state.deps.generate = vi
       .fn<StructuredChatNamingDeps['generate']>()
       .mockRejectedValueOnce(new Error('Agent failed'))
-      .mockResolvedValueOnce('auth/login')
+      .mockResolvedValueOnce({ name: 'auth/login' })
     state.handle(state.summary, { replay: false })
     await settle()
     expect(state.read()?.conversationName).toBe('auth/login')
@@ -208,7 +253,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
 
   it('protects a name changed while generation runs', async () => {
     const state = rig(provider)
-    const generation = deferred<string | null>()
+    const generation = deferred<StructuredChatNameGeneration>()
     state.deps.generate = vi.fn(() => generation.promise)
     state.handle(state.summary, { replay: false })
     await settle()
@@ -217,7 +262,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
       throw new Error('Missing fixture')
     }
     state.replace({ ...current, conversationName: 'User name' })
-    generation.resolve('Late agent name')
+    generation.resolve({ name: 'Late agent name' })
     await settle()
     expect(state.read()?.conversationName).toBe('User name')
     expect(state.deps.onNamed).toHaveBeenCalledTimes(1)
@@ -263,14 +308,14 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
   it('generates from a URL-only first message', async () => {
     const state = rig(provider)
     const prompt = 'https://example.test/issues/123'
-    const generation = deferred<string | null>()
+    const generation = deferred<StructuredChatNameGeneration>()
     state.deps.readFirstPrompt = async () => prompt
     state.deps.generate = vi.fn(() => generation.promise)
     state.handle(state.summary, { replay: false })
     await settle()
     expect(state.read()?.conversationName).toBe(prompt)
     expect(state.deps.generate).toHaveBeenCalledWith(expect.anything(), prompt)
-    generation.resolve('auth/login')
+    generation.resolve({ name: 'auth/login' })
     await settle()
     expect(state.read()?.conversationName).toBe('auth/login')
   })
