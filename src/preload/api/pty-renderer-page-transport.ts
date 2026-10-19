@@ -32,7 +32,7 @@ ipcRenderer.on(
 // The listener must exist before main can return the document's endpoint.
 ipcRenderer.send('pty:openRendererPage', { correlation })
 
-export async function dispatchRendererPage<T>(dispatch: (page: string) => T): Promise<T> {
+export async function dispatchRendererPage<T>(dispatch: (page: string) => T): Promise<Awaited<T>> {
   const page = await ready
   if (closed || !page) {
     throw new Error('Terminal connection ended with its document')
