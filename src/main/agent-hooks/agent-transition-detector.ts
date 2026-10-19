@@ -31,7 +31,7 @@ export type AgentPaneChange =
       phase: AgentPhase
       at: number
     }
-  /** Every live look at the pane's hook rows, changed or not; null: no row or no workspace. */
+  /** Every look not reported as seeded, changed or not; null: no row or no workspace. */
   | {
       kind: 'observed'
       paneKey: string

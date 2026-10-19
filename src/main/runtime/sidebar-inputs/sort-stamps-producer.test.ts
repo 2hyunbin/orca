@@ -404,6 +404,7 @@ describe('SortStampsProducer: terminal events', () => {
     hook(h.server, 'working')
     const writes = h.writes.length
     h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
     advance(20_000)
     h.sideEffects([title('Codex')], { pane: PANE })
     expect(h.writes).toHaveLength(writes)
@@ -425,6 +426,7 @@ describe('SortStampsProducer: terminal events', () => {
     const h = createHarness()
     h.attach(h.server)
     h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
     advance(20_000)
     ingestRow(h.server, { state: 'done', interrupted: true })
     expect(h.meta.get(WT)?.smartTier).toBeUndefined()
@@ -434,6 +436,7 @@ describe('SortStampsProducer: terminal events', () => {
     const h = createHarness()
     h.attach(h.server)
     h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
     advance(20_000)
     h.server.ingestTerminalStatus({
       paneKey: PANE,
@@ -443,10 +446,24 @@ describe('SortStampsProducer: terminal events', () => {
     expect(h.meta.get(WT)?.smartTier).toBeUndefined()
   })
 
+  it('hands a title-tracked pane to a row present at attach with no workspace: it rests', () => {
+    const h = createHarness()
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    h.attach(h.server)
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
   it('keeps a pane its first hook row finished in step: a later stop clears Done', () => {
     const h = createHarness()
     h.attach(h.server)
     h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
     advance(20_000)
     hook(h.server, 'done')
     advance(20_000)

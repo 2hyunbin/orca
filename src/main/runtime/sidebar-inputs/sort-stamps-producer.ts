@@ -141,7 +141,7 @@ export class SortStampsProducer {
     return false
   }
 
-  // Every observation, not only the detector's transitions: a pane its title tracked may differ.
+  // Observations, not transitions: the detector cannot see a title-tracked pane's phase.
   private applyHookPaneChange(change: AgentPaneChange): void {
     if (change.kind === 'seeded') {
       this.seed(change.paneKey, change.workspace, change.phase, change.at)
