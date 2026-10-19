@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { getTestPaneKey, sendTestAttachment } from './pty-ipc-test-pane-attachments'
+import {
+  getTestPaneKey,
+  sendTestAttachment,
+  type TestAttachmentArgs
+} from './pty-ipc-test-pane-attachments'
 import { registerPtyHandlers } from './pty/register-handlers'
 
 // STA-4869 — main's hidden-delivery drop latch retires on the renderer's
@@ -189,7 +193,7 @@ describe('registerPtyHandlers hidden-output restore ack', () => {
     vi.useFakeTimers()
     try {
       const { id, restoreMarkers, daemon } = await armDropLatch()
-      const send = (channel: string, args: object) =>
+      const send = (channel: string, args: TestAttachmentArgs) =>
         sendTestAttachment(mainWindowIpcEvent, channel, args)
 
       // The replacement opens while the old view's hidden connection still lives.

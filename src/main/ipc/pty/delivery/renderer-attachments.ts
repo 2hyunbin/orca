@@ -118,7 +118,7 @@ export function closeRendererAttachment(page: string, key: string): void {
 
 /** A retired page's connections all end with it; the caller wraps this in one change. */
 export function deleteRendererAttachmentsForPage(page: string): void {
-  for (const record of [...attachmentsById.values()]) {
+  for (const record of attachmentsById.values()) {
     if (record.page === page) {
       deleteRecord(record)
     }
@@ -127,7 +127,7 @@ export function deleteRendererAttachmentsForPage(page: string): void {
 
 /** PTY teardown keeps the connection so a dead-owner replacement can bind it again. */
 export function unbindRendererAttachmentsForPty(ptyId: string): void {
-  for (const record of [...(attachmentsByPty.get(ptyId) ?? [])]) {
+  for (const record of attachmentsByPty.get(ptyId) ?? []) {
     setBinding(record, null)
   }
 }

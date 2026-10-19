@@ -24,8 +24,14 @@ function listenerFor(channel: string): Listener {
   return call[1] as Listener
 }
 
+export type TestAttachmentArgs = Readonly<Record<string, unknown>>
+
 /** One attachment message from the current test page, as the preload sends it. */
-export function sendTestAttachment(event: unknown, channel: string, args: object): void {
+export function sendTestAttachment(
+  event: unknown,
+  channel: string,
+  args: TestAttachmentArgs
+): void {
   listenerFor(channel)(event, { page, ...args })
 }
 

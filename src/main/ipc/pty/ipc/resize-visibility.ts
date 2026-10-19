@@ -10,7 +10,7 @@ import {
   setRendererPtyDeliveryInterest,
   shouldDropRendererPtyData
 } from '../../pty-hidden-delivery-gate'
-import { tryGetProviderForPty, closeStartupQueryAuthorityForPty } from '../provider/registry'
+import { tryGetProviderForPty } from '../provider/registry'
 import {
   activeRendererPtys,
   invalidatePendingPtyDrainPolicy,
