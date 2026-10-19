@@ -19,6 +19,7 @@ export type UseRepoHeaderDragArgs = {
   orderedRepoIds: string[]
   sidebarRepoHeaderIdsByBucket: ReadonlyMap<ProjectHeaderDragBucketKey, readonly string[]>
   repoById: ReadonlyMap<string, Repo>
+  getLiveRepos: () => readonly Repo[]
   usesProjectGroupOrdering: boolean
   onCommitRepoOrder: (orderedIds: string[]) => void
   onCommitProjectGroupOrder: (project: Repo, projectGroupId: string | null, order: number) => void

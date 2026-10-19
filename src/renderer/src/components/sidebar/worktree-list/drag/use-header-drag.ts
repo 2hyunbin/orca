@@ -182,6 +182,7 @@ export function useWorktreeSidebarHeaderDrag(args: {
     orderedRepoIds: allRepoIds,
     sidebarRepoHeaderIdsByBucket,
     repoById: repoMap,
+    getLiveRepos: () => useAppStore.getState().repos,
     usesProjectGroupOrdering: hasProjectGroups,
     onCommitRepoOrder: commitRepoReorder,
     onCommitProjectGroupOrder: commitProjectGroupOrder,

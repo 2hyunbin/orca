@@ -28,6 +28,7 @@ export function useRepoHeaderDrag({
   orderedRepoIds,
   sidebarRepoHeaderIdsByBucket,
   repoById,
+  getLiveRepos,
   usesProjectGroupOrdering,
   onCommitRepoOrder,
   onCommitProjectGroupOrder,
@@ -47,6 +48,8 @@ export function useRepoHeaderDrag({
   usesProjectGroupOrderingRef.current = usesProjectGroupOrdering
   const onCommitRepoOrderRef = useRef(onCommitRepoOrder)
   onCommitRepoOrderRef.current = onCommitRepoOrder
+  const getLiveReposRef = useRef(getLiveRepos)
+  getLiveReposRef.current = getLiveRepos
   const onCommitProjectGroupOrderRef = useRef(onCommitProjectGroupOrder)
   onCommitProjectGroupOrderRef.current = onCommitProjectGroupOrder
   const getContainerRef = useRef(getScrollContainer)
@@ -145,6 +148,7 @@ export function useRepoHeaderDrag({
         sidebarDropIndex,
         orderedRepoIds: orderedIdsRef.current,
         repoById: repoByIdRef.current,
+        liveRepos: getLiveReposRef.current(),
         usesProjectGroupOrdering: usesProjectGroupOrderingRef.current,
         onCommitRepoOrder: onCommitRepoOrderRef.current,
         onCommitProjectGroupOrder: onCommitProjectGroupOrderRef.current

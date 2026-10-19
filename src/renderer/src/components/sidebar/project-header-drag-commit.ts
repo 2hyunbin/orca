@@ -1,23 +1,30 @@
 import { getLogicalRepoOrderRankById } from '../../../../shared/project-section-order'
 import {
   applyAllRepoInsertAt,
+  getProjectHeaderDragBucketKey,
   getProjectGroupOrderForSidebarDrop,
   mapSidebarProjectHeaderDropIndexToSiblingInsertIndex,
   mapSidebarRepoDropIndexToAllRepoInsertAt
 } from './project-header-drop'
 import type { ProjectHeaderDragSession } from './project-header-drag-contract'
 import type { Repo } from '../../../../shared/repo-types'
+import { isSameRepoRow } from '@/store/slices/repo-host-identity'
 
 export function commitProjectHeaderDragDrop(args: {
   session: ProjectHeaderDragSession
   sidebarDropIndex: number
   orderedRepoIds: readonly string[]
   repoById: ReadonlyMap<string, Repo>
+  liveRepos: readonly Repo[]
   usesProjectGroupOrdering: boolean
   onCommitRepoOrder: (orderedIds: string[]) => void
   onCommitProjectGroupOrder: (project: Repo, projectGroupId: string | null, order: number) => void
 }): void {
-  const draggedRepo = args.session.repo
+  const draggedRepo = args.liveRepos.find((repo) => isSameRepoRow(repo, args.session.repo))
+  // Why: a group change mid-drag (another window or client) moved the row out of this bucket.
+  if (!draggedRepo || getProjectHeaderDragBucketKey(draggedRepo) !== args.session.bucketKey) {
+    return
+  }
 
   const sidebarRepoHeaderIds = args.session.sidebarRepoHeaderIds
   const sourceIndex = sidebarRepoHeaderIds.indexOf(draggedRepo.id)
