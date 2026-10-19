@@ -67,6 +67,14 @@ it('uses the shared Bun pin for every current-toolchain workflow', () => {
   }
 })
 
+it('checks formatting over the same tree the local format script writes', () => {
+  const check = steps.find((step) => step.name === 'Check formatting')
+  const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+  expect(check.run.replace('node node_modules/oxfmt/bin/oxfmt', 'oxfmt')).toBe(
+    manifest.scripts.format.replace('--write', '--check')
+  )
+})
+
 it('keeps the Bun anti-slop scan aligned with the local audit', () => {
   const audit = steps.find((step) => step.name === 'Reject low-evidence patterns')
   const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
@@ -226,6 +234,7 @@ it('pins every foreground and background step to its selected phase', () => {
     (step) => !step.background && /outputs\.(static_analysis|typecheck)/.test(step.if ?? '')
   )
   expect(foreground.map((step) => [step.name ?? step.run ?? step.uses, step.if])).toEqual([
+    ['Check formatting', staticPhase],
     ['Reject low-evidence patterns', staticPhase],
     ['Enforce type-aware code-quality baseline', staticPhase],
     [

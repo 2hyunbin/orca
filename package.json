@@ -356,7 +356,7 @@
       "oxlint --config config/oxlint-react-doctor.json",
       "oxfmt --write"
     ],
-    "{*.{json,css},!(cloud)/**/*.{json,css}}": [
+    "{*.{json,css,md,mdx,yml,yaml},!(cloud)/**/*.{json,css,md,mdx,yml,yaml}}": [
       "oxfmt --write"
     ]
   },
