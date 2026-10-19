@@ -11,7 +11,7 @@ import {
   applyStructuredAgentSessionOptions,
   canSetStructuredAgentSessionOption,
   commitStructuredAgentSessionOption,
-  commitStructuredAgentSessionOptionReply,
+  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionPicks,
   type StructuredAgentSessionOptionState
@@ -238,7 +238,7 @@ export function useMobileStructuredAgentOptions(args: {
           const committed = result.value.options ?? { [id]: encoded }
           updateOptionState((current) =>
             current.record === targetRecord && result.sameFence
-              ? commitStructuredAgentSessionOptionReply(current, id, encoded, result.value.options)
+              ? commitStructuredAgentSessionOptionValues(current, committed)
               : current
           )
           // Only an accepted pick: an `unknown` outcome commits optimistically to the

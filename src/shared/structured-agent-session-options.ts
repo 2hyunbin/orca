@@ -216,26 +216,9 @@ export function commitStructuredAgentSessionOption(
   return { ...state, pendingId: null }
 }
 
-/** A pick's reply. One carrying the host's full value set (`options`) speaks for each of the
- *  chat's own values, as a read does: a value it reconciled away is gone. */
-export function commitStructuredAgentSessionOptionReply(
-  state: StructuredAgentSessionOptionState,
-  id: string,
-  encoded: string,
-  options: Readonly<Record<string, string>> | undefined
-): StructuredAgentSessionOptionState {
-  const next = commitStructuredAgentSessionOptionValues(state, options ?? { [id]: encoded })
-  for (const key of options ? (['effort', 'fastMode', 'serviceTier'] as const) : []) {
-    if (options?.[key] === undefined && next.record.values[key]?.source !== 'default') {
-      delete next.record.values[key]
-    }
-  }
-  return next
-}
-
-/** Whether a held pick of `modelId`, before any host can reconcile it, keeps the chat's `id` value
- *  (decoded or encoded): the model's controls offer it. A model the list does not describe keeps
- *  every value, since nothing says what it takes. */
+/** Whether a pick of `modelId` held before launch keeps another held value (decoded or encoded):
+ *  no host exists yet to reconcile it, so only what the model's controls offer stays. A model the
+ *  list does not describe keeps every value, since nothing says what it takes. */
 export function structuredAgentSessionModelOffers(
   state: Pick<StructuredAgentSessionOptionState, 'catalog' | 'verifiedModelIds'>,
   modelId: string,

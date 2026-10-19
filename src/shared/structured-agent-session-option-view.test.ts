@@ -5,7 +5,6 @@ import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
   commitStructuredAgentSessionOption,
-  commitStructuredAgentSessionOptionReply,
   createStructuredAgentSessionOptionState,
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
@@ -169,13 +168,9 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
     expect(carried(state)).toBeUndefined()
     const effort = commitStructuredAgentSessionOption(state, 'effort', 'xhigh')
     expect(carried(effort)).toEqual({ effort: 'xhigh' })
-    // A model pick leaves the effort for the host to reconcile; its full reply speaks for it.
+    // A model pick leaves the effort for the host to reconcile.
     const model = commitStructuredAgentSessionOption(effort, 'model', 'sonnet')
     expect(carried(model)).toEqual({ model: 'sonnet', effort: 'xhigh' })
-    const reconciled = commitStructuredAgentSessionOptionReply(model, 'model', 'sonnet', {
-      model: 'sonnet'
-    })
-    expect(carried(reconciled)).toEqual({ model: 'sonnet' })
     const restarted = applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, {
       models: CLI302,
       listedModelIds: listed,
