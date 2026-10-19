@@ -22,9 +22,10 @@ type ServerRow = {
 }
 
 /**
- * Source groups the server holds or its projects sit in, and their ancestors, renamed there
- * perhaps since: re-importing this desktop's retained copy would conflict with the server's. An
- * ancestor the server may lack still moves while a moving row needs it.
+ * Source groups whose record the server's wins over this desktop's retained, perhaps stale, copy.
+ * With the server's group list that is exactly the groups it holds: any other moves, so it is never
+ * recorded as the server's. Without it, the groups the server's rows sit in and their ancestors,
+ * less an ancestor a moving row needs, since the server may lack it.
  */
 export function serverHeldProjectGroups(
   payload: Pick<
@@ -33,20 +34,16 @@ export function serverHeldProjectGroups(
   >,
   linked: { repositoryIds: ReadonlySet<string>; folderWorkspaceIds: ReadonlySet<string> },
   server: readonly ServerRow[],
-  serverGroups: Pick<OrcadServerFolderCatalog, 'projectGroups'>
+  serverGroups: Pick<OrcadServerFolderCatalog, 'projectGroups'> | undefined
 ): string[] {
+  if (serverGroups) {
+    return projectGroupsHeldByServer(payload.projectGroups, serverGroups)
+  }
   const parentById = new Map(payload.projectGroups.map((group) => [group.id, group.parentGroupId]))
-  // A row or group the server keeps for one of its own hosts is no evidence for this machine's group.
-  const foreign = new Set(
-    serverGroups.projectGroups.filter((group) => !isRepoOnCatalogHost(group)).map((g) => g.id)
-  )
   const held = new Set(
-    [
-      ...projectGroupsHeldByServer(payload.projectGroups, serverGroups),
-      ...server
-        .filter(isRepoOnCatalogHost)
-        .flatMap((row) => (row.projectGroupId ? [row.projectGroupId] : []))
-    ].filter((id) => !foreign.has(id))
+    server
+      .filter(isRepoOnCatalogHost)
+      .flatMap((row) => (row.projectGroupId ? [row.projectGroupId] : []))
   )
   const withAncestors = (ids: (string | null | undefined)[], stopAt: ReadonlySet<string>) => {
     const out = new Set<string>()

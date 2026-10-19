@@ -243,10 +243,11 @@ export async function linkServerHeldRepositories(args: {
   }
   const serverRepositories = await args.serverRepositories()
   const { folderWorkspaces, projectGroups } = cutover.manifest.payload
-  const serverFolders =
+  const serverCatalog =
     folderWorkspaces.length > 0 || projectGroups.length > 0
-      ? ((await args.serverFolderCatalog?.()) ?? NO_SERVER_FOLDERS)
-      : NO_SERVER_FOLDERS
+      ? await args.serverFolderCatalog?.()
+      : undefined
+  const serverFolders = serverCatalog ?? NO_SERVER_FOLDERS
   const {
     repositoryIds: linked,
     folderWorkspaceIds: folders,
@@ -273,7 +274,7 @@ export async function linkServerHeldRepositories(args: {
           folderWorkspaceIds: new Set(linkedFolderWorkspaceIds)
         },
         [...serverRepositories, ...serverFolders.folderWorkspaces],
-        serverFolders
+        serverCatalog
       )
     ])
   ]

@@ -69,11 +69,44 @@ describe('which project groups the server already holds', () => {
     expect(held).toEqual(['mine'])
   })
 
-  it('still links the group a local server row sits in', () => {
+  it('keeps a same-id group stamped with another execution host apart', () => {
     expect(
-      serverHeldProjectGroups(payload([group('g')]), NOTHING_LINKED, [{ projectGroupId: 'g' }], {
-        projectGroups: []
+      projectGroupsHeldByServer([group('empty')], {
+        projectGroups: [{ ...serverGroup('empty'), executionHostId: 'ssh:server-ssh-host' }]
       })
+    ).toEqual([])
+  })
+
+  // Codex repro: the ancestor walk took a foreign same-id parent as this machine's.
+  it('does not link a parent the server keeps for another host', () => {
+    const held = serverHeldProjectGroups(
+      payload([group('parent'), group('child', 'parent')]),
+      NOTHING_LINKED,
+      [],
+      { projectGroups: [serverGroup('parent', 'server-ssh-host'), serverGroup('child')] }
+    )
+    expect(held).toEqual(['child'])
+  })
+
+  // Opus repro: a new parent the server lacks was linked, so a later row in it was refused.
+  it('does not link a parent the server lacks', () => {
+    const held = serverHeldProjectGroups(
+      payload([group('new-parent'), group('child', 'new-parent')]),
+      NOTHING_LINKED,
+      [{ projectGroupId: 'child' }],
+      { projectGroups: [serverGroup('child')] }
+    )
+    expect(held).toEqual(['child'])
+  })
+
+  it('without the server’s group list, links the group a local server row sits in', () => {
+    expect(
+      serverHeldProjectGroups(
+        payload([group('g')]),
+        NOTHING_LINKED,
+        [{ projectGroupId: 'g' }],
+        undefined
+      )
     ).toEqual(['g'])
   })
 })
