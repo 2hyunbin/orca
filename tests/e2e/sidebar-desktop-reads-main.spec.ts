@@ -25,7 +25,7 @@ function renderedOrder(page: Page): Promise<string[]> {
   )
 }
 
-/** `sinceInput`: ms since the first pointerup or click after the log started. */
+/** `sinceInput`: ms since the first pointerup, click or drop after the log started. */
 type Frame = { ids: string[]; shows: boolean; sinceInput: number | null }
 
 type FrameLog = { stop: () => Promise<Frame[]> }
@@ -40,9 +40,11 @@ async function startFrameLog(page: Page, text = ''): Promise<FrameLog> {
       const onInput = (): void => {
         inputAt ??= performance.now()
       }
-      window.addEventListener('pointerup', onInput, true)
-      window.addEventListener('mouseup', onInput, true)
-      window.addEventListener('click', onInput, true)
+      // Why drop: a native drag ends in drop, with no mouseup on Linux.
+      const events = ['pointerup', 'mouseup', 'click', 'drop']
+      for (const type of events) {
+        window.addEventListener(type, onInput, true)
+      }
       const sample = (): void => {
         if (!running) {
           return
@@ -60,9 +62,9 @@ async function startFrameLog(page: Page, text = ''): Promise<FrameLog> {
       requestAnimationFrame(sample)
       return () => {
         running = false
-        window.removeEventListener('pointerup', onInput, true)
-        window.removeEventListener('mouseup', onInput, true)
-        window.removeEventListener('click', onInput, true)
+        for (const type of events) {
+          window.removeEventListener(type, onInput, true)
+        }
         return frames
       }
     },
