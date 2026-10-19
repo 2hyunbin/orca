@@ -8,6 +8,9 @@ import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 import { useEditorPanelExternalContentEvents } from './useEditorPanelExternalContentEvents'
 
+const markChangedOnDisk = vi.hoisted(() => vi.fn())
+vi.mock('./editor-changed-on-disk-mark', () => ({ markFileChangedOnDisk: markChangedOnDisk }))
+
 type ProbeCalls = {
   invalidate: ReturnType<typeof vi.fn>
   invalidateDiff: ReturnType<typeof vi.fn>
@@ -294,7 +297,7 @@ describe('useEditorPanelExternalContentEvents', () => {
   it.each([
     ['became dirty', (file: OpenFile) => [{ ...file, isDirty: true }]],
     ['was closed', () => []]
-  ])('skips the follow-up read when the tab %s meanwhile', async (_label, nextFiles) => {
+  ])('skips the follow-up read when the tab %s meanwhile', async (label, nextFiles) => {
     const changedFile = makeFile('changed')
     const calls = makeCalls()
     const settles: (() => void)[] = []
@@ -314,9 +317,21 @@ describe('useEditorPanelExternalContentEvents', () => {
     renderProbe([changedFile])
     dispatchExternalChange(changedFile.relativePath)
     dispatchExternalChange(changedFile.relativePath)
+    markChangedOnDisk.mockClear()
     renderProbe(nextFiles(changedFile))
     await act(async () => settles[0]())
     expect(calls.loadFile).toHaveBeenCalledTimes(1)
+    if (label === 'became dirty') {
+      // The draft stays, but the queued disk change is recorded and the cache marked stale.
+      expect(markChangedOnDisk).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: changedFile.id, isDirty: true }),
+        expect.objectContaining({ origin: 'live' })
+      )
+      expect(calls.invalidate).toHaveBeenCalledWith([changedFile.id])
+    } else {
+      expect(markChangedOnDisk).not.toHaveBeenCalled()
+    }
   })
 
   it.each([

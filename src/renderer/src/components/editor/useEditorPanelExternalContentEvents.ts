@@ -1,5 +1,6 @@
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
-import type { useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { getConnectionIdForFile } from '@/lib/connection-context'
 import type { OpenFile } from '@/store/slices/editor'
 import {
   getOpenFilesForExternalFileChange,
@@ -11,6 +12,8 @@ import {
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 import { isReloadableSingleFileDiffTab } from './editor-panel-diff-reload'
 import { createEditorWatcherReloadCoalescer } from './editor-watcher-reload-coalescer'
+import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
+import { hasRecentSelfWrite } from './editor-self-write-registry'
 
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
 
@@ -65,12 +68,22 @@ export function useEditorPanelExternalContentEvents({
 }: UseEditorPanelExternalContentEventsParams): void {
   useEffect(() => {
     const reloads = createEditorWatcherReloadCoalescer()
-    // Why: a coalesced follow-up starts later; re-check the tab. A closed or edited tab is skipped;
-    // one that left the screen is marked stale so its queued change reloads on reveal.
+    // Why: a coalesced follow-up starts later; re-check the tab. A closed tab is skipped; one that
+    // left the screen is marked stale so its queued change reloads on reveal; one edited meanwhile
+    // keeps its draft but records that disk moved, so autosave can't silently overwrite it.
     const resolveReloadTarget = (fileId: string): OpenFile | 'stale' | null => {
       const file = openFilesRef.current.find((candidate) => candidate.id === fileId)
-      if (!file || file.isDirty) {
+      if (!file) {
         return null
+      }
+      if (file.isDirty) {
+        if (!hasRecentSelfWrite(file.filePath, file.runtimeEnvironmentId)) {
+          markFileChangedOnDisk(useAppStore.getState(), file, {
+            connectionId: getConnectionIdForFile(file.worktreeId, file.filePath) ?? undefined,
+            origin: 'live'
+          })
+        }
+        return 'stale'
       }
       return isVisibleRef.current && file.id === activeContentFileIdRef.current ? file : 'stale'
     }

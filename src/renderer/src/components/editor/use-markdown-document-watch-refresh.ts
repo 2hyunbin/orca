@@ -6,6 +6,7 @@ import {
 } from '../../../../shared/cross-platform-path'
 import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
 import { hasMarkdownExtension } from './markdown-internal-links'
+import { MARKDOWN_DOCUMENT_LIST_JOIN_WINDOW_MS } from './markdown-document-list-request'
 
 const DOCUMENT_WATCH_DEBOUNCE_MS = 125
 
@@ -70,9 +71,21 @@ export function useMarkdownDocumentWatchRefresh({
     }
     let timer: ReturnType<typeof setTimeout> | undefined
     let latestChangeAt = 0
-    let scanInFlight = false
+    let activeScan: object | null = null
+    let scanWatchdog: ReturnType<typeof setTimeout> | undefined
     let changedDuringScan = false
     let disposed = false
+    const endScan = (scan: object): void => {
+      if (activeScan !== scan) {
+        return
+      }
+      activeScan = null
+      clearTimeout(scanWatchdog)
+      // Why: one scan at a time — overlapping scans supersede each other and publish nothing.
+      if (changedDuringScan && !disposed) {
+        scheduleScan()
+      }
+    }
     const scheduleScan = (): void => {
       // Why: never push an armed scan back; watch batches arrive faster than the debounce under sustained writes.
       if (timer !== undefined) {
@@ -80,16 +93,14 @@ export function useMarkdownDocumentWatchRefresh({
       }
       timer = setTimeout(() => {
         timer = undefined
-        scanInFlight = true
+        const scan = {}
+        activeScan = scan
         changedDuringScan = false
+        // Why: local and UNC listings have no timeout; stop waiting for a hung scan after the
+        // shared-request join window so later changes can scan again.
+        scanWatchdog = setTimeout(() => endScan(scan), MARKDOWN_DOCUMENT_LIST_JOIN_WINDOW_MS)
         // Each pane can join a scan begun after the latest change, while bypassing an older snapshot.
-        void refresh(false, latestChangeAt).finally(() => {
-          scanInFlight = false
-          // Why: one scan at a time — overlapping scans supersede each other and publish nothing.
-          if (changedDuringScan && !disposed) {
-            scheduleScan()
-          }
-        })
+        void refresh(false, latestChangeAt).finally(() => endScan(scan))
       }, DOCUMENT_WATCH_DEBOUNCE_MS)
     }
     const handleChange = (event: WindowEventMap[typeof ORCA_WORKTREE_FILE_CHANGE_EVENT]): void => {
@@ -99,7 +110,7 @@ export function useMarkdownDocumentWatchRefresh({
       }
       latestChangeAt = performance.now()
       latestMembershipChangeAt.set(membershipChangeKey(owner, worktreePath), latestChangeAt)
-      if (scanInFlight) {
+      if (activeScan) {
         changedDuringScan = true
         return
       }
@@ -108,9 +119,8 @@ export function useMarkdownDocumentWatchRefresh({
     window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleChange)
     return () => {
       disposed = true
-      if (timer !== undefined) {
-        clearTimeout(timer)
-      }
+      clearTimeout(timer)
+      clearTimeout(scanWatchdog)
       window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handleChange)
     }
   }, [enabled, owner, worktreePath, refresh])

@@ -90,4 +90,18 @@ describe('useMarkdownDocumentWatchRefresh', () => {
     expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(2)
     expect(refresh.mock.calls.length).toBeLessThanOrEqual(4)
   })
+
+  it('recovers from a scan that never settles', async () => {
+    const refresh = vi
+      .fn<(requireFresh: boolean, freshAfter: number) => Promise<void>>()
+      .mockImplementationOnce(() => new Promise<void>(() => {}))
+      .mockResolvedValue(undefined)
+    await act(async () => root.render(createElement(Harness, { refresh })))
+    // Local and UNC listings have no timeout; later changes must not stay frozen behind one.
+    for (let i = 0; i < 20; i++) {
+      change([{ kind: 'create', absolutePath: `/repo/h${i}.md` }])
+      await advance(5_000)
+    }
+    expect(refresh.mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
 })
