@@ -1,7 +1,6 @@
 import type { CodexAppServerNotificationMethod } from '../../codex/codex-app-server-notification-schema'
 import { CODEX_SUBAGENT_ITEM_TYPE } from '../../codex/codex-subagent-activity'
 import { isProviderRecord } from '../../provider-process/provider-json-record'
-import type { AgentSessionHookOutcome } from '../../../shared/agent-session-hook-outcome'
 import type { ClaudeStreamJsonFrameKind } from './claude-stream-json-frame-schema'
 
 export type ProviderFrameClassification =
@@ -38,6 +37,7 @@ export const PROVIDER_FRAME_CLASSIFICATIONS = {
     'turn/started': 'status-chrome',
     'hook/started': 'suppressed-benign',
     'turn/completed': 'status-chrome',
+    // A failed hook surfaces (catalog below); a refused prompt writes its own row before this.
     'hook/completed': 'suppressed-benign',
     'turn/diff/updated': 'suppressed-benign',
     'turn/plan/updated': 'timeline-substantive',
@@ -136,7 +136,7 @@ export const PROVIDER_FRAME_CLASSIFICATIONS = {
     'message:system:permission_denied': 'error-surface',
     'message:prompt_suggestion': 'status-chrome',
     'message:system:mirror_error': 'error-surface',
-    // Written by its own row (`claude-informational-row`): a warning in its words, else nothing.
+    // Written by its own row (`claude-informational-row`): a warning, a halting one as a hook's outcome.
     'message:system:informational': 'status-chrome',
     'message:conversation_reset': 'status-chrome',
     // A `started`/`completed`/`cancelled` state for one queued command uuid and
@@ -193,17 +193,6 @@ const CODEX_NOTIFICATION_CLASSIFICATIONS: Readonly<Record<string, ProviderFrameC
 const CLAUDE_FRAME_CLASSIFICATIONS: Readonly<Record<string, ProviderFrameClassification>> =
   PROVIDER_FRAME_CLASSIFICATIONS.claude
 
-/** A Codex prompt hook that refused the message, with its entries. Other hooks' blocks reach the
- *  model as their tool's result, so they write no row of their own. */
-export function codexPromptHookOutcome(
-  payload: unknown
-): { status: AgentSessionHookOutcome; entries: unknown[] } | null {
-  const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
-  const status = run?.eventName === 'userPromptSubmit' ? run.status : null
-  const entries: unknown[] = Array.isArray(run?.entries) ? run.entries : []
-  return status === 'blocked' || status === 'stopped' ? { status, entries } : null
-}
-
 /** Each provider's own table, by provider id: an unlisted provider has none, so every frame it
  *  sends that no rule above claims stays a visible row.
  *
@@ -227,9 +216,7 @@ const PROVIDER_FRAME_CATALOGS: ReadonlyMap<
       const method = notificationKind(kind)
       if (method === 'hook/completed') {
         const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
-        return run?.status === 'failed' || codexPromptHookOutcome(payload)
-          ? 'error-surface'
-          : 'suppressed-benign'
+        return run?.status === 'failed' ? 'error-surface' : 'suppressed-benign'
       }
       return CODEX_NOTIFICATION_CLASSIFICATIONS[method]
     }

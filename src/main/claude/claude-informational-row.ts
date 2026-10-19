@@ -1,5 +1,5 @@
-// Only a `warning` frame (a UserPromptSubmit hook that blocked the prompt, say) earns a row, in its
-// own words; `info`, `notice` (a hook's systemMessage) and `suggestion` are session chrome, not chat rows.
+// Only a `warning` frame earns a row: a prompt hook's outcome when it halts the prompt, else its own
+// words; `info`, `notice` (a hook's systemMessage) and `suggestion` are session chrome, not chat rows.
 
 import {
   AGENT_SESSION_HOOK_OUTCOME_PRESENTATION,
@@ -15,11 +15,14 @@ import { claudeRecord, claudeText } from './claude-structured-item-translation'
 
 export const CLAUDE_INFORMATIONAL_FRAME_KIND = 'message:system:informational'
 
+// `no_verdict` is Claude ending the prompt itself, not a hook's refusal, so it keeps its own words.
 const STRUCTURED_OUTCOMES = new Map<unknown, AgentSessionHookOutcome>([
   ['blocked_by_hook', 'blocked'],
+  ['dropped_by_hook', 'blocked'],
+  ['not_passed_on', 'blocked'],
   ['stopped_by_hook', 'stopped']
 ])
-// Older Claude sends only its sentence: the reason, then the hook's path and a copy of the prompt.
+// Older Claude sends only its sentence: each hook's `[label]: ` and reason, then a copy of the prompt.
 const SENTENCE_OUTCOMES: [RegExp, AgentSessionHookOutcome][] = [
   [/^\S+ operation blocked by hook:\s*/, 'blocked'],
   [/^Operation stopped by hook:?\s*/, 'stopped']
@@ -35,8 +38,12 @@ function hookOutcomeOf(message: Record<string, unknown>, text: string) {
   if (!sentence) {
     return null
   }
-  const reason = text.replace(sentence[0], '').split(/\n+Original prompt:/)[0] ?? ''
-  return hookOutcomeRowBody(sentence[1], [reason.replace(/^\[[^\]\n]+\]: /, '')])
+  // A label that is a hook's path goes; a hook's own `[TAG]: ` stays.
+  const [sentenceText = ''] = text.split(/\n+Original prompt:/)
+  const reason = sentenceText
+    .replace(sentence[0], '')
+    .replace(/^\[[^\]\n]*[/\\][^\]\n]*\]:[ \t]*/gm, '')
+  return hookOutcomeRowBody(sentence[1], [reason])
 }
 
 /** The row a warning-level note writes; null for every other level and for a warning with no words. */

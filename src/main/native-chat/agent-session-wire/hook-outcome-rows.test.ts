@@ -95,20 +95,37 @@ describe('a prompt hook that blocked the message', () => {
     expect(settledRows(items)).toEqual(rows)
   })
 
+  // Older Claude sends only its sentence: each hook's path goes, a hook's own tag stays.
+  const TWO_HOOKS = '[/a.sh]: [SEC-1]: Deploys are frozen\n[C:\\h\\b.ps1]: Ask first'
   it.each([
-    ['2.1.302, with its structured outcome', false],
-    ['older, with only its sentence', true]
-  ])('Claude %s', async (_, sentenceOnly) => {
+    ['2.1.302', { kind: 'blocked_by_hook', reason: 'Deploys are frozen' }, null, DEPLOYS_FROZEN],
+    [
+      '2.1.302, a plugin module refused it',
+      { kind: 'not_passed_on' },
+      null,
+      row('Blocked by hook.')
+    ],
+    ['older', undefined, null, DEPLOYS_FROZEN],
+    [
+      'older, two hooks',
+      undefined,
+      TWO_HOOKS,
+      row('Blocked by hook: [SEC-1]: Deploys are frozen\nAsk first')
+    ],
+    ['older, no reason', undefined, '', row('Blocked by hook.')]
+  ])('Claude %s', async (_, outcome, hooks, expected) => {
     const frames = await captured<Captured>('claude', 'blocked-prompt')
     const items = await blockedChat(CLAUDE_CHAT, (rig) => {
       const lane = createClaudeJournalTranslator({ sink: rig.eventSink, fallbackIdPrefix: '1' })
       for (const { frame } of frames) {
-        const { prompt_submit_outcome: outcome, ...older } = frame
-        const message = sentenceOnly ? older : { ...older, prompt_submit_outcome: outcome }
+        const message = { ...frame, prompt_submit_outcome: outcome }
+        if (hooks !== null && typeof frame.content === 'string') {
+          message.content = frame.content.replace(/\[.*\]: .*/, hooks)
+        }
         lane.handle({ type: 'message', sessionId: 's', message })
       }
     })
-    expect(settledRows(items)).toEqual([DEPLOYS_FROZEN])
+    expect(settledRows(items)).toEqual([expected])
   })
 
   it.each([
