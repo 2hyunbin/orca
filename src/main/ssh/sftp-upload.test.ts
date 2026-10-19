@@ -24,6 +24,7 @@ function createWritable(): Writable {
 }
 
 function createSftpMock(): SFTPWrapper {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these tests call only the methods stubbed here and the session's events.
   return Object.assign(new EventEmitter(), {
     mkdir: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null)),
     createWriteStream: vi.fn(() => createWritable()),
@@ -32,7 +33,6 @@ function createSftpMock(): SFTPWrapper {
     ),
     unlink: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null)),
     rmdir: vi.fn((_path: string, cb: (err?: Error | null) => void) => cb(null))
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these tests call only the methods stubbed here and the session's events.
   }) as unknown as SFTPWrapper
 }
 
