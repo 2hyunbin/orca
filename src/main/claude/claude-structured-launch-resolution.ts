@@ -112,9 +112,6 @@ export type ClaudeStructuredLaunchPartDeps = {
   /** The host's chat attachment store: files a client attached live there, outside the workspace,
    *  and the agent reads them without asking. */
   attachmentDirectory?: string
-  /** This machine's composer paste folder: a long text paste is saved there as a file the agent
-   *  reads, outside the workspace, so it is granted like the store. */
-  pasteDirectory?: string
   /** Which version-gated flags this CLI takes. Absent ⇒ none is ever passed. */
   cliFlags?: Pick<ClaudeCliFlagSupport, 'supports'>
   /** Whether Claude wrote a transcript for this id; defaults to the transcript resolver. */
@@ -203,7 +200,6 @@ export function claudeStructuredLaunchPart(
     const additionalDirectories = [
       ...configured.additionalDirectories,
       ...(deps.attachmentDirectory ? [deps.attachmentDirectory] : []),
-      ...(deps.pasteDirectory ? [deps.pasteDirectory] : []),
       ...(visuals ? [visuals.visuals.folder] : [])
     ]
     const permission = claudeStructuredPermissionOptions(basis.permissionMode ?? 'ask')

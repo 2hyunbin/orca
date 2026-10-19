@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, existsSync, utimesSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +12,7 @@ vi.mock('../ipc/agent-session-attachment-upload', () => ({
 }))
 
 import { savePastedTextAsFile } from './native-chat-pasted-text-file'
-import { NATIVE_CHAT_PASTE_TTL_MS, sweepExpiredNativeChatPastes } from './native-chat-paste-files'
+import { AgentSessionAttachmentStore } from '../native-chat/agent-session-attachments/agent-session-attachment-store'
 
 describe('a long paste saved as a file', () => {
   let root: string
@@ -25,15 +25,13 @@ describe('a long paste saved as a file', () => {
     rmSync(root, { recursive: true, force: true })
   })
 
-  it('lands in the paste folder here as UTF-8 text, and expires with the other pastes', async () => {
-    const saved = await savePastedTextAsFile({ text: 'log line ✓\n' })
-    expect(path.dirname(saved)).toBe(path.join(root, 'native-chat-pastes'))
-    expect(path.basename(saved)).toMatch(/^orca-paste-\d+-.+\.txt$/)
+  it('writes UTF-8 through the ordinary unclaimed store', async () => {
+    const store = new AgentSessionAttachmentStore(path.join(root, 'agent-session-attachments'), {
+      hasSession: () => true
+    })
+    const saved = await savePastedTextAsFile({ text: 'log line ✓\n' }, async () => store)
+    expect(path.dirname(path.dirname(saved))).toBe(store.rootDir)
     expect(readFileSync(saved, 'utf8')).toBe('log line ✓\n')
-    const old = (Date.now() - NATIVE_CHAT_PASTE_TTL_MS - 1000) / 1000
-    utimesSync(saved, old, old)
-    await sweepExpiredNativeChatPastes()
-    expect(existsSync(saved)).toBe(false)
   })
 
   it("goes to the chat's store on its paired server, under a text paste's name", async () => {

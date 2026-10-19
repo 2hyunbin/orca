@@ -4,8 +4,6 @@ import {
   nativeChatPastedTextOperations,
   nativeChatPastedTextToken
 } from './native-chat-pasted-text-reference'
-// A long text paste into a structured chat attaches as a file the agent reads, as a dropped file
-// does, so the message's size bound never meets a pasted log or diff.
 
 import { useCallback } from 'react'
 import { translate } from '@/i18n/i18n'
@@ -29,7 +27,6 @@ import {
   settleNativeChatPastedText
 } from './native-chat-composer-pasted-text-references'
 
-/** Pastes this large attach as a file, measured in characters or UTF-8 bytes. */
 export const NATIVE_CHAT_PASTED_TEXT_FILE_THRESHOLD = 32 * 1024
 
 function pastedTextTooLargeNotice(): string {
@@ -39,7 +36,6 @@ function pastedTextTooLargeNotice(): string {
   )
 }
 
-/** Whether the scope's draft as `text` is over the bound, measured on the body Send builds. */
 function nativeChatDraftTooLarge(scopeKey: string, text: string): boolean {
   const prompt = imageReferencesToPromptMarkers(
     resolveNativeChatPastedText(scopeKey, text),
@@ -53,11 +49,6 @@ function nativeChatDraftTooLarge(scopeKey: string, text: string): boolean {
   return structuredAgentSessionBlocksTooLarge(body.blocks)
 }
 
-/**
- * Returns the composer's text insertion for a paste: a long paste into a structured chat whose host
- * takes files becomes a pending pill where it went, which lands as an `@path` reference. Elsewhere
- * text goes in as typed, unless it could never be sent.
- */
 export function useNativeChatPastedTextFile(args: {
   scopeKey: string
   pastesInline?: () => boolean

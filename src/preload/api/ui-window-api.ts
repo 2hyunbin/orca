@@ -15,6 +15,8 @@ export type UiWindowApi = {
     agentSessionAttachment?: AgentSessionAttachmentClipboardTarget
     /** A native-chat composer paste, kept where its draft can bring it back. */
     forNativeChatDraft?: boolean
+    /** With `forNativeChatDraft`: a structured chat on this machine, whose sends claim its pastes. */
+    forStructuredChat?: boolean
   }) => Promise<string | null>
   /** A long text paste saved as a file the chat's agent reads: here, or in its paired server's store. */
   savePastedTextAsFile: (args: {
@@ -29,6 +31,8 @@ export type UiWindowApi = {
   restoreNativeChatPastes: (
     paths: string[]
   ) => Promise<{ path: string; kept: boolean; exists: boolean }[]>
+  /** A sweep tried to remove this chat-attachment upload folder; drafts naming it check again. */
+  onAgentSessionUploadRemoved: (callback: (uploadDir: string) => void) => () => void
   readClipboardImageThumbnail: () => Promise<ClipboardImageThumbnail | null>
   writeClipboardText: (text: string) => Promise<void>
   writeTerminalClipboardText: (text: string) => Promise<void>

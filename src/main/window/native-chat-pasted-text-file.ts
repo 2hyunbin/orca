@@ -1,8 +1,4 @@
-// A long text paste into a structured chat is saved as a file the agent reads, as a dropped file
-// is: in Orca's paste folder here, or in the chat's attachment store on its paired server.
-
-import fs from 'node:fs/promises'
-import path from 'node:path'
+// Pasted text uses the execution host's ordinary attachment store so sends claim it with the chat.
 import { randomUUID } from 'node:crypto'
 import { app } from 'electron'
 import {
@@ -11,7 +7,7 @@ import {
 } from '../../shared/agent-session-attachments'
 import { assertClipboardTextWithinLimit } from '../../shared/clipboard-text'
 import { uploadPasteToAgentSessionAttachments } from '../ipc/agent-session-attachment-upload'
-import { nativeChatPasteFolder } from './native-chat-paste-files'
+import type { AgentSessionAttachmentStore } from '../native-chat/agent-session-attachments/agent-session-attachment-store'
 
 export type SavePastedTextAsFileArgs = {
   text: string
@@ -20,7 +16,10 @@ export type SavePastedTextAsFileArgs = {
   agentSessionAttachment?: AgentSessionAttachmentClipboardTarget
 }
 
-export async function savePastedTextAsFile(args: SavePastedTextAsFileArgs): Promise<string> {
+export async function savePastedTextAsFile(
+  args: SavePastedTextAsFileArgs,
+  localStore?: () => Promise<AgentSessionAttachmentStore | null>
+): Promise<string> {
   if (typeof args?.text !== 'string') {
     throw new Error('Pasted text is missing.')
   }
@@ -37,9 +36,9 @@ export async function savePastedTextAsFile(args: SavePastedTextAsFileArgs): Prom
       name
     )
   }
-  const folder = nativeChatPasteFolder()
-  await fs.mkdir(folder, { recursive: true })
-  const filePath = path.join(folder, name)
-  await fs.writeFile(filePath, buffer)
-  return filePath
+  const store = await localStore?.()
+  if (!store) {
+    throw new Error('The chat attachment store is not ready.')
+  }
+  return store.storeFile(name, buffer)
 }

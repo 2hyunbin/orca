@@ -9,11 +9,12 @@ type Outcome<Result> =
 let nextKey = 0
 
 /** page.evaluate whose outcome is polled: awaiting a preload promise across CDP can be garbage-collected.
- *  `args` cross as JSON. */
+ *  `args` cross as JSON; bulk work passes a `timeout` that grows with its size. */
 export async function evaluatePolled<Args, Result>(
   page: Page,
   run: (args: Args) => Promise<Result>,
-  args: Args
+  args: Args,
+  options: { timeout?: number } = {}
 ): Promise<Result> {
   nextKey += 1
   const key = JSON.stringify(`__e2eEvaluatePolled${nextKey}`)
@@ -29,7 +30,10 @@ export async function evaluatePolled<Args, Result>(
   })()`)
   const read = () => page.evaluate<Outcome<Result>>(`globalThis[${key}]`)
   await expect
-    .poll(async () => (await read()).state, { message: 'page work never settled' })
+    .poll(async () => (await read()).state, {
+      message: 'page work never settled',
+      timeout: options.timeout
+    })
     .not.toBe('pending')
   const outcome = await read()
   if (outcome.state !== 'done') {
