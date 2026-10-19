@@ -207,6 +207,19 @@ describe('Markdown metadata from the existing worktree watcher', () => {
     ])
   })
 
+  it('keeps refreshing while membership changes never stop', async () => {
+    await render()
+    const initialCalls = runtime.list.mock.calls.length
+    // Watch batches arrive every 100 ms under sustained writes, faster than the 125 ms debounce.
+    for (let i = 0; i < 10; i++) {
+      change([{ kind: 'create', absolutePath: `/repo/n${i}.md` }])
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+    }
+    expect(runtime.list.mock.calls.length).toBeGreaterThan(initialCalls)
+  })
+
   it.each(['unmount', 'owner change'])('cancels scheduled scans on %s', async (reason) => {
     await render()
     change([{ kind: 'create', absolutePath: target.filePath }])

@@ -59,8 +59,9 @@ export function useMarkdownDocumentWatchRefresh({
       if (eventOwner !== owner || !changesDocumentMembership(payload, worktreePath)) {
         return
       }
+      // Why: never push an armed refresh back; watch batches arrive faster than the debounce under sustained writes.
       if (timer !== undefined) {
-        clearTimeout(timer)
+        return
       }
       const changedAt = performance.now()
       // Each pane can join a scan begun after this burst, while bypassing an older snapshot.

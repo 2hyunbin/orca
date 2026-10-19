@@ -32,8 +32,8 @@ import {
 import { WATCH_BATCH_INTERVAL_MS } from '../../../shared/filesystem-watch-batch-window'
 
 // Why: macOS atomic writes split delete→create across payloads; debounce deletion so a same-path create cancels the tombstone before it paints.
-// Under sustained writes the halves land one watch batch interval apart, plus stat time.
-const EXTERNAL_MUTATION_DEBOUNCE_MS = WATCH_BATCH_INTERVAL_MS + 50
+// Under sustained writes the halves land one batch interval apart plus stat jitter (WSL/9P, AV scans), so allow two intervals.
+export const EXTERNAL_MUTATION_DEBOUNCE_MS = WATCH_BATCH_INTERVAL_MS * 2 + 50
 
 type PendingDeleteTimer = {
   fileId: string

@@ -21,7 +21,8 @@ vi.mock('@/components/editor/editor-autosave', async (importOriginal) => {
 
 import {
   buildEditorExternalWatchEventHandler as createExternalWatchEventHandler,
-  collectOverflowEditorExternalReloadTargets as getOverflowExternalReloadTargets
+  collectOverflowEditorExternalReloadTargets as getOverflowExternalReloadTargets,
+  EXTERNAL_MUTATION_DEBOUNCE_MS
 } from './editor-external-watch-event-reconciliation'
 import { getEditorExternalWatchTargetKey as getWatchedTargetKey } from './editor-external-watch-targets'
 import { useAppStore } from '@/store'
@@ -257,7 +258,7 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     handleFsChanged(payload([{ kind: 'delete', absolutePath: '/repo/notes.md' }]))
 
     expect(setExternalMutation).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(200)
+    vi.advanceTimersByTime(EXTERNAL_MUTATION_DEBOUNCE_MS)
     expect(setExternalMutation).toHaveBeenCalledWith('file-notes', 'deleted')
 
     dispose()
@@ -538,7 +539,7 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     const { handleFsChanged, dispose } = createExternalWatchEventHandler(findTarget)
 
     handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
-    vi.advanceTimersByTime(200)
+    vi.advanceTimersByTime(EXTERNAL_MUTATION_DEBOUNCE_MS)
 
     expect(setExternalMutation).toHaveBeenCalledWith('file-notes', 'changed')
     expect(notifyEditorExternalFileChange).not.toHaveBeenCalled()
@@ -568,7 +569,7 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     const { handleFsChanged, dispose } = createExternalWatchEventHandler(findTarget)
 
     handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
-    vi.advanceTimersByTime(200)
+    vi.advanceTimersByTime(EXTERNAL_MUTATION_DEBOUNCE_MS)
 
     expect(setExternalMutation).toHaveBeenCalledWith('file-notes', 'changed')
     expect(notifyEditorExternalFileChange).toHaveBeenCalledWith({
@@ -671,7 +672,7 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     const { handleFsChanged, dispose } = createExternalWatchEventHandler(findTarget)
 
     handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
-    vi.advanceTimersByTime(200)
+    vi.advanceTimersByTime(EXTERNAL_MUTATION_DEBOUNCE_MS)
 
     expect(setExternalMutation).toHaveBeenCalledWith('diff-notes', 'changed')
     expect(notifyEditorExternalFileChange).not.toHaveBeenCalled()
@@ -692,7 +693,7 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     const { handleFsChanged, dispose } = createExternalWatchEventHandler(findTarget)
 
     handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
-    vi.advanceTimersByTime(200)
+    vi.advanceTimersByTime(EXTERNAL_MUTATION_DEBOUNCE_MS)
 
     expect(setExternalMutation).not.toHaveBeenCalledWith('file-notes', null)
     dispose()
@@ -737,7 +738,7 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     const { handleFsChanged, dispose } = createExternalWatchEventHandler(findTarget)
 
     handleFsChanged(payload([{ kind: 'delete', absolutePath: '/repo/notes.md' }]), 'env-1')
-    vi.advanceTimersByTime(200)
+    vi.advanceTimersByTime(EXTERNAL_MUTATION_DEBOUNCE_MS)
 
     expect(setExternalMutation).toHaveBeenCalledWith('runtime-notes', 'deleted')
     expect(setExternalMutation).not.toHaveBeenCalledWith('file-notes', 'deleted')
