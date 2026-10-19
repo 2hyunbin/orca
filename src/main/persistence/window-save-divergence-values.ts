@@ -29,7 +29,7 @@ const ID_KEYS = new Set([
  */
 const OPAQUE_RECORDS = new Set(['file', 'editor view'])
 const OPAQUE_FIELDS = new Set(['sleeping', 'value'])
-const MAX_ID_LENGTH = 80
+const MAX_SHOWN_ID_LENGTH = 80
 const MAX_ITEMS = 8
 const MAX_DEPTH = 6
 /** Changed fields one report line carries values for. */
@@ -60,7 +60,7 @@ function compact(
     return value
   }
   if (typeof value === 'string') {
-    return !opaque && key && ID_KEYS.has(key) && value.length <= MAX_ID_LENGTH
+    return !opaque && key && ID_KEYS.has(key) && value.length <= MAX_SHOWN_ID_LENGTH
       ? value
       : `<text ${value.length}>`
   }
