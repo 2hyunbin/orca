@@ -9,8 +9,10 @@ import { resolveRuntimeWorktreeRemovalTarget } from '../runtime-worktree-removal
 import type { RuntimeStore } from '../runtime-store-contract'
 import { splitWorktreeId, worktreeIdsEqual } from '../../../shared/worktree/id'
 import { hasWorktreeRemovalRepoOwnerOnOtherHost } from '../../worktree-removal-repo-owner'
-import { advertisedUrlWatcher } from '../../ports/advertised-url-watcher'
-import { deleteWorktreeHistoryDir } from '../../terminal-history-deletion'
+import {
+  dropRemovedWorktreeProcessState,
+  pruneRemovedWorktreeSnapshots
+} from '../../worktree-removal-process-cleanup'
 import { forgetFailedAgentLaunches } from '../../agent-launch/agent-launch-pane-attachment'
 import { closeClientHostedBrowserPagesForWorktree } from '../worktree-browser-client-page-close'
 import { teardownStops } from '../owned-session-teardown-policy'
@@ -185,9 +187,12 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
       this.acceptedRendererMobileSnapshotByWorktree.delete(worktreeId)
       this.cancelScheduledMobileSessionTabsChanged(worktreeId)
       this.notifyMobileSessionTabsRemoved(worktreeId)
-      advertisedUrlWatcher.forgetWorktree(worktreeId)
-      deleteWorktreeHistoryDir(worktreeId)
+      dropRemovedWorktreeProcessState(worktreeId)
       this.releaseRemovedWorktreeHostSessions(worktreeId, 'worktree-removal')
+    }
+    const snapshotDirectory = store.getProfileStorageDirectory?.()
+    if (snapshotDirectory) {
+      pruneRemovedWorktreeSnapshots(snapshotDirectory, worktreeId, hostId)
     }
   }
 
