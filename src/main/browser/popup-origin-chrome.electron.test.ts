@@ -10,6 +10,8 @@ import {
 } from './popup-identity-electron-probe'
 import { startHiddenRendererFrameCapture } from './hidden-renderer-frame-capture-fixture'
 
+type OriginProbeWindow = Window & { originProbeChild?: Window }
+
 type Snapshot = {
   id: number
   error?: string
@@ -164,12 +166,11 @@ describe('committed popup origin chrome under Electron', () => {
       await command('kind', { kind })
       await page.evaluate((url) => {
         const child = window.open('about:blank', '', 'width=600,height=400')
-        if (child) {
-          Reflect.set(window, 'originProbeChild', child)
-        }
         if (!child) {
           throw new Error('No child handle')
         }
+        const probeWindow: OriginProbeWindow = window
+        probeWindow.originProbeChild = child
         child.document.write('<title>https://requested.invalid</title><p>Written by opener</p>')
         child.location.href = url
       }, `${origin}/hold-initial`)
@@ -183,7 +184,12 @@ describe('committed popup origin chrome under Electron', () => {
       await expectOrigin('about:blank', kind)
       await command('block')
       await page.evaluate((url) => {
-        Reflect.get(window, 'originProbeChild').location.href = url
+        const probeWindow: OriginProbeWindow = window
+        const child = probeWindow.originProbeChild
+        if (!child) {
+          throw new Error('No child handle')
+        }
+        child.location.href = url
       }, `${origin}/blocked`)
       await expectOrigin('about:blank', kind)
       expect(requestedPaths).not.toContain('/blocked')
