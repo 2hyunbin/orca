@@ -111,7 +111,7 @@ test.describe('switch on', () => {
       const foldedSection = (await list.sections())?.find((section) => section.key === project!.key)
       expect(foldedSection?.data).toEqual([])
       expect(foldedSection?.count).toBeGreaterThan(0)
-      expect(folded.length).toBeLessThan(pinned.length + 2)
+      expect(folded.length).toBeLessThan(duplicated.length)
 
       // Expanded again by a later op from the same writer.
       expect(
@@ -122,6 +122,8 @@ test.describe('switch on', () => {
         })
       ).toMatchObject({ ok: true })
       await expectPhoneMatchesDesktop(orcaPage, list)
+      const unfolded = (await list.sections())?.find((section) => section.key === project!.key)
+      expect(unfolded?.data.length).toBeGreaterThan(0)
 
       // Unpinned on the desktop: the Pinned section goes and one highlight is left.
       await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })

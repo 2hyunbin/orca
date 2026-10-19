@@ -2,7 +2,6 @@ import { useAppStore, type AppState } from '@/store'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import {
   getRepoExecutionHostId,
-  getSettingsFocusedExecutionHostId,
   parseExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId
@@ -30,7 +29,10 @@ type WindowFactsState = Pick<
   | 'settings'
 >
 
-/** The same facts from the window's own store, in main's shape, for the rows the local runtime owns. */
+/**
+ * The same facts from the window's own store, in main's shape, for the rows the local runtime owns.
+ * Not focusedHostId: renderer focus reads are ratcheted, so main's unit test covers it.
+ */
 export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopSidebarFacts {
   const pinned = [
     ...getAllWorktreesFromState(state)
@@ -62,7 +64,6 @@ export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopS
         { distro: status.distro, state: status.state }
       ])
     ),
-    focusedHostId: getSettingsFocusedExecutionHostId(state.settings),
     hostLabels: Object.fromEntries(getHostDisplayLabelOverrides(state.settings)),
     showPinnedInGroups: state.settings?.showPinnedWorktreesInGroups === true
   }
@@ -74,7 +75,6 @@ function toComparedFacts(state: AppState, facts: DesktopSidebarFacts): Map<strin
     ['desktopActive', JSON.stringify(facts.desktopActive)],
     ['repoOrder', JSON.stringify(facts.repoOrder)],
     ['workspaceHostOrder', JSON.stringify(facts.workspaceHostOrder)],
-    ['focusedHostId', JSON.stringify(facts.focusedHostId ?? null)],
     ['hostLabels', JSON.stringify(facts.hostLabels ?? {})],
     ['showPinnedInGroups', JSON.stringify(facts.showPinnedInGroups === true)]
   ])

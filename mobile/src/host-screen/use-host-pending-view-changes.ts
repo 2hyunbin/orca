@@ -88,7 +88,8 @@ function useHostPendingViewChanges(client: RpcClient | null): HostPendingViewCha
       } catch {
         return 'waiting'
       }
-      if (ownedRef.current.client !== client) {
+      // A change a later one superseded is no longer the user's to hear about.
+      if (!current().some((candidate) => candidate.opId === change.opId)) {
         return 'waiting'
       }
       write(current().filter((candidate) => candidate.opId !== change.opId))

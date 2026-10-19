@@ -190,12 +190,17 @@ export function useHostWorktreeCatalog(args: {
         fetchWorktreesInFlightRef.current = false
         if (fetchWorktreesQueuedRef.current) {
           fetchWorktreesQueuedRef.current = false
-          void fetchWorktrees(options)
+          // The latest render's fetch, without this flight's modal override: the client may have changed.
+          void fetchWorktreesRef.current({ queueIfInFlight: true })
         }
       }
     },
     [client, connState, hostId, fetchServerRows]
   )
+  const fetchWorktreesRef = useRef(fetchWorktrees)
+  useEffect(() => {
+    fetchWorktreesRef.current = fetchWorktrees
+  }, [fetchWorktrees])
 
   useFocusEffect(
     useCallback(() => {

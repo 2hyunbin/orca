@@ -88,6 +88,20 @@ describe('the phone’s own option changes', () => {
     expect(screen.current().status.pending).toEqual([])
   })
 
+  it('stay quiet about a refusal of a change a later one replaced', async () => {
+    const answers: Array<(reply: RpcResponse) => void> = []
+    const screen = mount(() => new Promise((resolve) => answers.push(resolve)))
+    let first: Promise<PendingViewOutcome> | null = null
+    act(() => {
+      first = screen.current().controls.sendView({ sortBy: 'name' }, { sortBy: 'name' })
+    })
+    act(() => void screen.current().controls.sendView({ sortBy: 'recent' }, { sortBy: 'recent' }))
+    answers[0](refused('invalid_params'))
+    await flush()
+    expect(await first).toBe('waiting')
+    expect(screen.current().status.pending).toHaveLength(1)
+  })
+
   it('keep a change the desktop has not answered, saying so after ten seconds', () => {
     vi.useFakeTimers()
     const screen = mount(() => new Promise(() => {}))
