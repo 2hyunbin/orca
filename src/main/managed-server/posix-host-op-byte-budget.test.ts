@@ -34,11 +34,11 @@ import {
   captureOrcadStateSnapshotCommand,
   clearOrcadStateSnapshotMembersCommand,
   compareOrcadStateSnapshotCommand,
-  newestStateMtimeCommand,
   probeOrcadStateSnapshotCommand,
   restoreOrcadStateSnapshotCommand,
   serializedStateMutationCommand
 } from './host-state/orcad-state-snapshot'
+import { newestStateMtimeCommand } from './host-state/orcad-state-newest-mtime'
 import { posixProcessGroupCommand } from './host-state/orcad-state-mutation-owner-record'
 import { orcadMachineClaimCommand } from './host-state/orcad-machine-claim-command'
 import { orcadMachineHomeProbeCommand } from './host-state/orcad-machine-home'
