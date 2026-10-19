@@ -9,7 +9,7 @@ import { waitForSessionReady, waitForStartupWorktreeRefresh } from './store'
 
 export type SeededSshWorkspaces = {
   targetId: string
-  hostId: string
+  hostId: `ssh:${string}`
   repoId: string
   /** Each seeded workspace's id, by its name. */
   worktreeIds: Record<string, string>

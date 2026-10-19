@@ -8,7 +8,7 @@ import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import { attachRepoAndOpenTerminal } from './helpers/orca-restart'
 import { launchWithUnreachableSshWorkspaces } from './helpers/seeded-ssh-workspaces'
 import { waitForSessionReady, waitForStartupWorktreeRefresh } from './helpers/store'
-import { toRuntimeExecutionHostId } from '../../src/shared/execution-host'
+import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../src/shared/execution-host'
 
 const sections = [
   { groupBy: 'none', key: 'pinned', label: 'Pinned', pinned: true },
@@ -27,7 +27,7 @@ type RevealTopology = {
   page: Page
   local: string
   remote: string
-  remoteHostId: string
+  remoteHostId: ExecutionHostId
   setRemotePinned: (pinned: boolean) => Promise<void>
 }
 
