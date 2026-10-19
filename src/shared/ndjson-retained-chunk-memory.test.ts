@@ -52,6 +52,7 @@ describe('NDJSON retained chunk memory', () => {
             if (mode === 'paused') {
               paused = false
               framer.resume()
+              // Delivering the queued record pauses again before the unfinished tail.
               paused = false
               framer.resume()
             }

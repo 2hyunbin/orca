@@ -16,6 +16,14 @@ export const combinedDiffViewStateCache = new Map<string, CachedCombinedDiffView
 export const combinedDiffScrollTopCache = new Map<string, number>()
 export const combinedDiffScrollAnchorCache = new Map<string, VirtualizedScrollAnchor>()
 
+export function renameCombinedDiffViewOwner(oldWorktreeId: string, newWorktreeId: string): void {
+  for (const [key, view] of combinedDiffViewStateCache) {
+    if (view.worktreeId === oldWorktreeId) {
+      combinedDiffViewStateCache.set(key, { ...view, worktreeId: newWorktreeId })
+    }
+  }
+}
+
 /** A deleted workspace cannot restore its cached file bodies. Ordinary tab closes keep them. */
 export function forgetCombinedDiffViewsForWorktrees(worktreeIds: Iterable<string>): void {
   const removed = new Set(worktreeIds)

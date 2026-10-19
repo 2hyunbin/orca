@@ -9,6 +9,7 @@ import {
 import { createTestStore, makeWorktree } from './store-test-helpers'
 import { buildWorktreePurgeState } from './worktrees/teardown/worktree-purge-state'
 import { applyRemoveWorktreeSuccessState } from './worktrees/teardown/remove-worktree-store-cleanup'
+import { buildWorktreeRenameState } from './worktrees/session/worktree-identity-rename-state'
 
 const removed = 'repo::/workspace/deleted'
 const kept = 'repo::/workspace/kept'
@@ -50,6 +51,25 @@ afterEach(() => {
 })
 
 describe('removed workspace diff memory', () => {
+  it('preserves cached bodies and scroll through rename, then releases them on deletion', () => {
+    const key = seedDiff(removed)
+    const keptKey = seedDiff(kept)
+    const renamed = 'repo::/workspace/renamed'
+    const store = createTestStore()
+    const sections = combinedDiffViewStateCache.get(key)?.sections
+    store.setState(buildWorktreeRenameState(store.getState(), removed, renamed))
+    expect(combinedDiffViewStateCache.get(key)?.sections).toBe(sections)
+    expect(combinedDiffScrollTopCache.get(key)).toBe(42)
+    expect(combinedDiffScrollAnchorCache.get(key)).toEqual({ key: 'source', offset: 0 })
+    buildWorktreePurgeState(store.getState(), [removed])
+    expect(combinedDiffViewStateCache.has(key)).toBe(true)
+    buildWorktreePurgeState(store.getState(), [renamed])
+    expect(combinedDiffViewStateCache.has(key)).toBe(false)
+    expect(combinedDiffScrollTopCache.has(key)).toBe(false)
+    expect(combinedDiffScrollAnchorCache.has(key)).toBe(false)
+    expect(combinedDiffViewStateCache.has(keptKey)).toBe(true)
+  })
+
   it.each(['listing', 'explicit'] as const)(
     'releases cached file bodies on %s removal and preserves another workspace',
     (path) => {
