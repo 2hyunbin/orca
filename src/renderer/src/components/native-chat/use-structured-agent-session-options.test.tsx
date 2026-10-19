@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
   enqueue: vi.fn(),
-  hold: vi.fn<(sessionId: string, id: string, encoded: string) => Promise<unknown> | null>(),
+  hold: vi.fn<
+    (sessionId: string, id: string, encoded: string, picker?: unknown) => Promise<unknown> | null
+  >(),
   toastError: vi.fn<(message: string) => void>()
 }))
 
@@ -307,7 +309,12 @@ describe('useStructuredAgentSessionOptions', () => {
         accepted = await result.current.setStructuredOption('model', 'gpt-5.6-luna')
       })
       expect(accepted).toBe(true)
-      expect(mocks.hold).toHaveBeenCalledWith('session-1', 'model', 'gpt-5.6-luna')
+      expect(mocks.hold).toHaveBeenCalledWith(
+        'session-1',
+        'model',
+        'gpt-5.6-luna',
+        expect.anything()
+      )
       // The launch owns the pick; the view renders what it holds.
       rerender({ ...PROVISIONAL, launchSeedOptions: SEED, heldOptions: { model: 'gpt-5.6-luna' } })
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.6-luna')
@@ -619,7 +626,7 @@ describe('useStructuredAgentSessionOptions', () => {
       await act(async () => {
         await result.current.setStructuredOption('model', 'gpt-hosted')
       })
-      expect(mocks.hold).toHaveBeenCalledWith('session-1', 'model', 'gpt-hosted')
+      expect(mocks.hold).toHaveBeenCalledWith('session-1', 'model', 'gpt-hosted', expect.anything())
       unmount()
     })
 

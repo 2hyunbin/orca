@@ -27,6 +27,10 @@ import {
   type AgentSessionWriteFailure
 } from '../../../shared/agent-session-write-failure'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import {
+  structuredAgentSessionModelOffers,
+  type StructuredAgentSessionOptionState
+} from '../../../shared/structured-agent-session-options'
 
 /** The options a launch starts with, replaced whole so readers can compare by identity. */
 export type StructuredLaunchSelection = {
@@ -61,17 +65,28 @@ function repliesFor(state: StructuredLaunchState): Map<string, OptionReply> {
 export function holdStructuredAgentSessionLaunchOption(
   sessionId: string,
   id: string,
-  encoded: string
+  encoded: string,
+  /** The picker's list, under which a model pick keeps only the held values the model offers. */
+  picker?: Pick<StructuredAgentSessionOptionState, 'catalog' | 'verifiedModelIds'>
 ): Promise<StructuredLaunchOptionOutcome> | null {
   const state = getStructuredLaunchStateBySessionId(sessionId)
   if (!state || state.cancelled || state.callers.outcome === 'published') {
     return null
   }
   const replies = repliesFor(state)
-  // Each held value is the chat's own: a pick supersedes only an earlier pick of the same option.
-  replies.get(id)?.({ kind: 'superseded' })
-  replies.delete(id)
-  state.selection = { ...state.selection, held: { ...state.selection.held, [id]: encoded } }
+  const held: Record<string, string> = {}
+  // Each held value is the chat's own: a pick supersedes an earlier pick of the same option.
+  for (const [key, value] of Object.entries(state.selection.held)) {
+    const offered =
+      id !== 'model' || !picker || structuredAgentSessionModelOffers(picker, encoded, key, value)
+    if (key !== id && offered) {
+      held[key] = value
+    } else {
+      replies.get(key)?.({ kind: 'superseded' })
+      replies.delete(key)
+    }
+  }
+  state.selection = { ...state.selection, held: { ...held, [id]: encoded } }
   notifyStructuredLaunchListeners()
   return new Promise((resolve) => replies.set(id, resolve))
 }

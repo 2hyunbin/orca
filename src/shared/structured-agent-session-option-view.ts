@@ -10,7 +10,6 @@ import {
   structuredAgentSessionOwnValue
 } from './structured-agent-session-option-state'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
-import { structuredAgentSessionShownModel } from './structured-agent-session-option-snapshot'
 
 function catalogListsSeedModel(
   state: StructuredAgentSessionOptionState,
@@ -85,30 +84,26 @@ function modelOptionView(
   return { ...commitStructuredAgentSessionOptionValues(view, held), pendingId: state.pendingId }
 }
 
-/** The default model a new chat's pill names: its first send pins it, so a later CLI default
- *  never moves the chat. A resumed chat's defaulted model is never named, so never sent. */
-function shownDefaultModel(view: StructuredAgentSessionOptionState): string | undefined {
-  if (!view.catalog || view.catalogSource === 'seed') {
-    return undefined
-  }
-  const { shown, isCliDefault } = structuredAgentSessionShownModel(
-    view.catalog,
-    view.catalog.models,
-    view.record
-  )
-  return isCliDefault ? (shown.currentId ?? undefined) : undefined
-}
-
-/** The Claude model and effort a send carries: the chat's own and the picks over them in `view`,
- *  else the default model a new chat shows. */
+/** The Claude model and effort a send carries: the chat's own and the picks over them in `view`.
+ *  A picker that names its defaults (a new chat, or an older host's answer) sends what it shows,
+ *  so a new chat's first send pins them and a later CLI default never moves it; a resumed chat's
+ *  defaults are never named, so never sent. */
 export function structuredAgentSessionSendSelection(
   view: StructuredAgentSessionOptionState
 ): Record<string, string> | undefined {
   if (view.record.agent !== 'claude') {
     return undefined
   }
-  const model = structuredAgentSessionOwnValue(view.record, 'model') ?? shownDefaultModel(view)
-  const effort = structuredAgentSessionOwnValue(view.record, 'effort')
+  const snapshot =
+    view.catalog?.defaultModelIsCliDefault === true
+      ? structuredAgentSessionOptionSnapshot(view)
+      : []
+  const shown = (id: string): string | undefined => {
+    const kind = snapshot.find((descriptor) => descriptor.id === id)?.kind
+    return kind?.type === 'select' ? kind.currentValue : undefined
+  }
+  const model = structuredAgentSessionOwnValue(view.record, 'model') ?? shown('model')
+  const effort = structuredAgentSessionOwnValue(view.record, 'effort') ?? shown('effort')
   return model || effort
     ? { ...(model ? { model } : {}), ...(effort ? { effort } : {}) }
     : undefined

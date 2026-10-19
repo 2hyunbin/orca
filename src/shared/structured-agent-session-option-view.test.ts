@@ -168,9 +168,13 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
     expect(carried(state)).toBeUndefined()
     const effort = commitStructuredAgentSessionOption(state, 'effort', 'xhigh')
     expect(carried(effort)).toEqual({ effort: 'xhigh' })
-    // A model pick leaves the effort for the host to reconcile.
+    // A model pick keeps an effort the new model offers, and drops one it does not.
+    expect(carried(commitStructuredAgentSessionOption(effort, 'model', 'opus'))).toEqual({
+      model: 'opus',
+      effort: 'xhigh'
+    })
     const model = commitStructuredAgentSessionOption(effort, 'model', 'sonnet')
-    expect(carried(model)).toEqual({ model: 'sonnet', effort: 'xhigh' })
+    expect(carried(model)).toEqual({ model: 'sonnet' })
     const restarted = applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, {
       models: CLI302,
       listedModelIds: listed,
@@ -178,6 +182,31 @@ describe("a chat's model and effort, apart from the defaults filling them in", (
     })
     expect(shown(restarted, undefined, {})).toEqual({ model: 'sonnet', effort: 'high' })
     expect(carried(restarted)).toEqual({ model: 'sonnet', effort: 'high' })
+  })
+
+  it("names a new chat's default and pins it with the shown effort, whichever answer lands first", () => {
+    // No Claude settings learned yet: the host's list does not say this launch runs its default.
+    const listing = { ...LISTED, models: CLI302, listingNamesConfiguredModel: false }
+    const answer = {
+      models: CLI302,
+      listedModelIds: listed,
+      current: { model: 'opus', effort: 'xhigh', defaulted: ['model', 'effort'] as const }
+    }
+    const newChat = { newLaunch: true }
+    const listFirst = applyStructuredAgentSessionOptions(
+      withHostList(fresh(), listing),
+      CLAUDE_SESSION_OPTION_CATALOG,
+      answer,
+      newChat
+    )
+    const answerFirst = withHostList(
+      applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, answer, newChat),
+      listing
+    )
+    for (const state of [listFirst, answerFirst]) {
+      expect(shown(state, undefined, {})).toEqual({ model: 'opus', effort: 'xhigh' })
+      expect(carried(state)).toEqual({ model: 'opus', effort: 'xhigh' })
+    }
   })
 
   it("reads an older host's answer, which marks no default, as it always has", () => {

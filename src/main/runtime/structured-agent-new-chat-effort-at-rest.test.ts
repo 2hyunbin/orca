@@ -246,7 +246,7 @@ async function newChatFrames(
   const atRest = await readStructuredAgentSessionOptions(context, record.sessionId, {
     readsWithoutModel: chat.readsWithoutModel ?? true
   })
-  const settled = applyStructuredAgentSessionOptions(first, seed, atRest)
+  const settled = applyStructuredAgentSessionOptions(first, seed, atRest, { newLaunch: true })
   return { atRest, first: firstPills, settled: pills(settled) }
 }
 

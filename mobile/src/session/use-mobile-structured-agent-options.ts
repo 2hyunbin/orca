@@ -152,7 +152,9 @@ export function useMobileStructuredAgentOptions(args: {
           setConversationSupport({ sessionId, commands: result.conversationCommands ?? [] })
           updateOptionState((current) =>
             current.record === activeOptionRecordRef.current
-              ? applyStructuredAgentSessionOptions(current, optionCatalog, result)
+              ? applyStructuredAgentSessionOptions(current, optionCatalog, result, {
+                  newLaunch: createdHere !== undefined
+                })
               : current
           )
         }
@@ -163,6 +165,7 @@ export function useMobileStructuredAgentOptions(args: {
     }
   }, [
     client,
+    createdHere,
     enabled,
     optionCatalog,
     optionStamp,
@@ -270,7 +273,9 @@ export function useMobileStructuredAgentOptions(args: {
               if (isCurrent()) {
                 updateOptionState((latest) =>
                   latest.record === targetRecord
-                    ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
+                    ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed, {
+                        newLaunch: createdHere !== undefined
+                      })
                     : latest
                 )
               }
@@ -287,7 +292,7 @@ export function useMobileStructuredAgentOptions(args: {
         }
       }
     },
-    [agent, client, mutate, optionCatalog, sessionId, updateOptionState]
+    [agent, client, createdHere, mutate, optionCatalog, sessionId, updateOptionState]
   )
 
   // Read, not rendered: what the chat holds when the send goes out.

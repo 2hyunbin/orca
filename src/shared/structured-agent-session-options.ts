@@ -30,8 +30,7 @@ export {
 export function structuredAgentSessionOptionCatalog(
   seed: AgentSessionOptionCatalog,
   result: AgentSessionOptionsResult,
-  /** Whether the host already said this launch runs its listed default. */
-  namesDefault = false
+  newLaunch: boolean
 ): AgentSessionOptionCatalog {
   const models: CatalogModel[] = result.models.map((model) =>
     discoveredModel(model, result.fastModeSupport?.supported === true)
@@ -43,9 +42,9 @@ export function structuredAgentSessionOptionCatalog(
       options: seed.unknownModelOptions ?? []
     })
   }
-  // An answer that marks its defaults names one only where the host's list says this launch runs
-  // it; an older answer's model was always named.
-  return result.current.defaulted === undefined || namesDefault
+  // A new chat names the default it runs until its first send pins it; a resumed chat names only
+  // its own model. An older answer marks no defaults, so its model was always named.
+  return result.current.defaulted === undefined || newLaunch
     ? { ...seed, models, defaultModelIsCliDefault: true }
     : { ...seed, models }
 }
@@ -123,28 +122,23 @@ export function applyStructuredAgentSessionModelCatalog(
   catalog: AgentSessionModelCatalogResult,
   options: { newLaunch: boolean }
 ): StructuredAgentSessionOptionState {
+  if (state.catalogSource === 'live') {
+    return state
+  }
   const models =
     catalog.origin === 'unknown'
       ? []
       : catalog.models.map((model) =>
           discoveredModel(model, catalog.fastModeSupport?.supported === true)
         )
+  if (catalog.origin === 'unknown' || models.length === 0) {
+    return settleStructuredAgentSessionBuiltinCatalog(state)
+  }
   // The host says whether its listed default is what this launch runs; an older host never says,
   // so the client's own knowledge of the agent stands in. A reopened chat may keep its own model.
   const namesDefault =
-    catalog.origin !== 'unknown' &&
-    models.length > 0 &&
     options.newLaunch &&
     (catalog.listingNamesConfiguredModel ?? seed.hostListingNamesConfiguredModel === true)
-  if (state.catalogSource === 'live') {
-    // The session's list stands; only the host's word on its default joins it, in either order.
-    return namesDefault && state.catalog && !state.catalog.defaultModelIsCliDefault
-      ? { ...state, catalog: { ...state.catalog, defaultModelIsCliDefault: true } }
-      : state
-  }
-  if (models.length === 0) {
-    return settleStructuredAgentSessionBuiltinCatalog(state)
-  }
   return {
     ...state,
     // `isDefault` came from a real listing, so a launch's CLI default is nameable —
@@ -161,7 +155,10 @@ export function applyStructuredAgentSessionModelCatalog(
 export function applyStructuredAgentSessionOptions(
   state: StructuredAgentSessionOptionState,
   seed: AgentSessionOptionCatalog,
-  result: AgentSessionOptionsResult
+  result: AgentSessionOptionsResult,
+  /** Whether this view started the chat, which runs the default it shows until its first send.
+   *  Absent reads as a chat it did not start, which never names a default as its own. */
+  launch: { newLaunch: boolean } = { newLaunch: false }
 ): StructuredAgentSessionOptionState {
   const { current } = result
   // A value the host supplied from a catalog default is context for the picker, not the chat's own.
@@ -182,11 +179,7 @@ export function applyStructuredAgentSessionOptions(
   )
   return {
     ...state,
-    catalog: structuredAgentSessionOptionCatalog(
-      seed,
-      result,
-      state.catalog?.defaultModelIsCliDefault === true
-    ),
+    catalog: structuredAgentSessionOptionCatalog(seed, result, launch.newLaunch),
     catalogSource: 'live',
     verifiedModelIds: result.listedModelIds?.length ? result.listedModelIds : undefined,
     permissionMode: result.current.permissionMode ?? null
@@ -218,9 +211,40 @@ export function commitStructuredAgentSessionOption(
   if (decoded === null) {
     return { ...state, pendingId: null }
   }
-  // Each value is the chat's own: a model pick leaves the others for the host to reconcile.
   state.record.values[id] = { value: decoded, source: 'dispatched' }
+  // Each value is the chat's own; a model pick keeps those the new model offers.
+  if (id === 'model' && typeof decoded === 'string') {
+    for (const [other, tracked] of Object.entries(state.record.values)) {
+      if (!structuredAgentSessionModelOffers(state, decoded, other, tracked.value)) {
+        delete state.record.values[other]
+      }
+    }
+  }
   return { ...state, pendingId: null }
+}
+
+/** Whether a pick of `modelId` keeps the chat's `id` value (decoded or encoded): the model's
+ *  controls offer it. A model the list does not describe keeps every value, since nothing says
+ *  what it takes. */
+export function structuredAgentSessionModelOffers(
+  state: Pick<StructuredAgentSessionOptionState, 'catalog' | 'verifiedModelIds'>,
+  modelId: string,
+  id: string,
+  value: SessionOptionValue
+): boolean {
+  const model = state.catalog?.models.find((entry) => entry.id === modelId)
+  if (
+    id === 'model' ||
+    id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID ||
+    !model ||
+    (state.verifiedModelIds !== undefined && !state.verifiedModelIds.includes(modelId))
+  ) {
+    return true
+  }
+  const option = model.options.find((entry) => entry.id === id)
+  return option?.kind.type === 'select'
+    ? option.kind.choices.some((choice) => choice.value === value)
+    : option !== undefined
 }
 
 export function commitStructuredAgentSessionOptionValues(

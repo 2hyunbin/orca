@@ -364,10 +364,11 @@ describe('structured agent session options', () => {
         applyStructuredAgentSessionOptions(
           applyStructuredAgentSessionModelCatalog(cold(), seed, listing, { newLaunch }),
           seed,
-          answer
+          answer,
+          { newLaunch }
         ),
         applyStructuredAgentSessionModelCatalog(
-          applyStructuredAgentSessionOptions(cold(), seed, answer),
+          applyStructuredAgentSessionOptions(cold(), seed, answer, { newLaunch }),
           seed,
           listing,
           { newLaunch }
