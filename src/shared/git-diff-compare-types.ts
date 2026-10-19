@@ -17,6 +17,7 @@ export type GitBranchCompareSummary = {
   baseOid: string | null
   compareRef: string
   headOid: string | null
+  // Pinned left revision: selected base tip for direct requests, common ancestor for older clients.
   mergeBase: string | null
   changedFiles: number
   commitsAhead?: number

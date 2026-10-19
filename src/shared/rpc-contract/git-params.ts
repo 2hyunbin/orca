@@ -53,6 +53,8 @@ export const GitDiff = GitFilePath.extend({
 
 export const GitBranchCompare = WorktreeSelector.extend({
   admissionTier: OptionalGitAdmissionTier,
+  // Older clients omit this and retain their common-ancestor comparison.
+  compareBaseTip: z.boolean().optional(),
   baseRef: z
     .unknown()
     .transform((v) => (typeof v === 'string' ? v : ''))
