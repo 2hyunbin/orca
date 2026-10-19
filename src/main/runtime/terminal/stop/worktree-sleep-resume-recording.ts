@@ -127,6 +127,7 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
       launchConfigOf: this.paneLaunchConfigOf
     })
     if (command) {
+      // Not this.applyLayoutCommand: this runs inside the resume-record queue, which that would await.
       await applyWindowLayoutCommand(this.store, hostIdsFor, command)
     }
   }
