@@ -1,3 +1,8 @@
+import { createUuidV4 } from '../../../../shared/uuid-v4'
+import {
+  nativeChatPastedTextOperations,
+  nativeChatPastedTextToken
+} from './native-chat-pasted-text-reference'
 // A long text paste into a structured chat attaches as a file the agent reads, as a dropped file
 // does, so the message's size bound never meets a pasted log or diff.
 
@@ -11,7 +16,7 @@ import { imageReferencesToPromptMarkers } from '../../../../shared/native-chat-i
 import {
   nativeChatAttachFailedNotice,
   nativeChatAttachmentOwnerChangedNotice,
-  prepareNativeChatSessionAttachmentUpload,
+  cachedNativeChatPasteUploadTarget,
   type NativeChatAttachmentOwner
 } from './native-chat-attachment-upload'
 import { nativeChatAttachmentOwnerUnchanged } from './native-chat-resolved-path-ownership'
@@ -19,14 +24,10 @@ import type { NativeChatComposerInput } from './native-chat-composer-input'
 import { readNativeChatComposerDraft } from './native-chat-composer-draft-store'
 import { nativeChatImageRowIds } from './native-chat-composer-image-references'
 import {
-  beginNativeChatPastedText,
-  settleNativeChatPastedText,
-  type NativeChatPastedTextOutcome
+  resolveNativeChatPastedText,
+  settleNativeChatPastedText
 } from './native-chat-composer-pasted-text-references'
-import {
-  nativeChatPastedTextLabel,
-  nativeChatPastedTextToken
-} from './native-chat-pasted-text-reference'
+import { nativeChatPastedTextLabel } from './native-chat-pasted-text-reference'
 
 /** Pastes this large attach as a file, measured in characters or UTF-8 bytes. */
 export const NATIVE_CHAT_PASTED_TEXT_FILE_THRESHOLD = 32 * 1024
@@ -40,36 +41,16 @@ function pastedTextTooLargeNotice(): string {
 
 /** Whether the scope's draft as `text` is over the bound, measured on the body Send builds. */
 function nativeChatDraftTooLarge(scopeKey: string, text: string): boolean {
-  const prompt = imageReferencesToPromptMarkers(text, nativeChatImageRowIds(scopeKey))
+  const prompt = imageReferencesToPromptMarkers(
+    resolveNativeChatPastedText(scopeKey, text),
+    nativeChatImageRowIds(scopeKey)
+  )
   const images = readNativeChatComposerDraft(scopeKey).images
   const body = structuredAgentSessionSendBody(
     prompt,
     images.map(({ path }) => ({ path, previewUri: '' }))
   )
   return structuredAgentSessionBlocksTooLarge(body.blocks)
-}
-
-type PastedTextFileOwner = Extract<NativeChatAttachmentOwner, { kind: 'local' | 'runtime-session' }>
-
-async function savePastedTextFile(
-  owner: PastedTextFileOwner,
-  text: string
-): Promise<{ path: string } | { notice: string; unsupported?: true }> {
-  if (owner.kind === 'local') {
-    return { path: await window.api.ui.savePastedTextAsFile({ text }) }
-  }
-  const prepared = await prepareNativeChatSessionAttachmentUpload(owner)
-  if (!prepared.ok) {
-    return prepared
-  }
-  const { environmentId, ...agentSessionAttachment } = prepared.target
-  return {
-    path: await window.api.ui.savePastedTextAsFile({
-      text,
-      runtimeEnvironmentId: environmentId,
-      agentSessionAttachment
-    })
-  }
 }
 
 /**
@@ -104,48 +85,48 @@ export function useNativeChatPastedTextFile(args: {
         measureUtf8ByteLength(text, { stopAfterBytes: NATIVE_CHAT_PASTED_TEXT_FILE_THRESHOLD - 1 })
           .exceededLimit
       const owner = resolveAttachmentOwner()
-      if (!tooLarge && (!long || (owner.kind !== 'local' && owner.kind !== 'runtime-session'))) {
+      const target =
+        owner.kind === 'runtime-session' ? cachedNativeChatPasteUploadTarget(owner) : null
+      const canAttach = owner.kind === 'local' || target !== null
+      if (!tooLarge && (!long || !canAttach)) {
         return insertTypedText(text)
       }
-      if (owner.kind !== 'local' && owner.kind !== 'runtime-session') {
+      if (!canAttach) {
         setNotice(pastedTextTooLargeNotice())
         return true
       }
       input.focus()
-      const id = beginNativeChatPastedText(scopeKey, input.stagePastedText, text)
-      const settle = (outcome: NativeChatPastedTextOutcome, notice?: string, cause?: string) =>
-        settleNativeChatPastedText(
-          id,
-          scopeEditor,
-          outcome,
-          () => notice && setNotice(notice, cause)
-        )
-      void savePastedTextFile(owner, text).then(
-        (saved) => {
-          if ('path' in saved) {
-            if (nativeChatAttachmentOwnerUnchanged(owner, resolveAttachmentOwner())) {
-              settle(saved)
-            } else {
-              settle('restore', nativeChatAttachmentOwnerChangedNotice())
-            }
-            return
-          }
-          // A server that keeps no files takes the paste inline wherever it still fits.
-          const inline = readNativeChatComposerDraft(scopeKey).text.replaceAll(
-            nativeChatPastedTextToken(id),
-            () => text
-          )
-          if (saved.unsupported && !nativeChatDraftTooLarge(scopeKey, inline)) {
-            settle('inline')
-          } else {
-            settle('restore', saved.unsupported ? pastedTextTooLargeNotice() : saved.notice)
-          }
-        },
-        (error) => {
-          const cause = extractIpcErrorMessage(error, '')
-          settle('restore', nativeChatAttachFailedNotice([nativeChatPastedTextLabel()], cause))
+      const id = createUuidV4()
+      nativeChatPastedTextOperations.set(id, { scopeKey, text })
+      input.stagePastedText(nativeChatPastedTextToken(id))
+      const fail = (notice: string) => {
+        if (settleNativeChatPastedText(id)) {
+          setNotice(notice)
         }
-      )
+      }
+      void window.api.ui
+        .savePastedTextAsFile({
+          text,
+          ...(target
+            ? { runtimeEnvironmentId: target.environmentId, agentSessionAttachment: target }
+            : {})
+        })
+        .then(
+          (path) => {
+            if (nativeChatAttachmentOwnerUnchanged(owner, resolveAttachmentOwner())) {
+              settleNativeChatPastedText(id, path)
+            } else {
+              fail(nativeChatAttachmentOwnerChangedNotice())
+            }
+          },
+          (error) =>
+            fail(
+              nativeChatAttachFailedNotice(
+                [nativeChatPastedTextLabel()],
+                extractIpcErrorMessage(error, '')
+              )
+            )
+        )
       return true
     },
     [insertTypedText, pastesInline, resolveAttachmentOwner, scopeEditor, scopeKey, setNotice]

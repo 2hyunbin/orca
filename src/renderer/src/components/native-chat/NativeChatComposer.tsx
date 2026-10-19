@@ -1,3 +1,4 @@
+import { useNativeChatPastedTextAdmission } from './native-chat-pasted-text-state'
 import { useNativeChatComposerNotice } from './use-native-chat-composer-notice'
 import { useNativeChatMobileHoldNotice } from './use-native-chat-mobile-hold-notice'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
@@ -11,7 +12,7 @@ import { useNativeChatLaunchDraftAdoption } from './use-native-chat-launch-draft
 import { NativeChatComposerField } from './NativeChatComposerField'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
 import { useNativeChatComposerAttachments } from './use-native-chat-composer-attachments'
-import { nativeChatComposerSendBlock } from './native-chat-composer-pasted-text-references'
+import { nativeChatImageSendBlock } from './native-chat-image-reattach'
 import { useNativeChatComposerHandle } from './use-native-chat-composer-handle'
 import { useNativeChatFileDrops } from './use-native-chat-file-drops'
 import { useNativeChatComposerKeyDown } from './use-native-chat-composer-keydown'
@@ -170,12 +171,14 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     })
     const { imageAttachments, attachResolvedPaths, clearImageAttachments, removeImageAttachment } =
       attachments
-    const sendBlock = nativeChatComposerSendBlock(imageAttachments, draftScopeKey)
+    const textPasteAdmission = useNativeChatPastedTextAdmission(draftScopeKey)
+    const sendBlock = nativeChatImageSendBlock(imageAttachments)
     const sendBlockedReason = sendBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
     const sendHeld =
       disabled ||
       structuredTransport?.sendOut === true ||
       sendBlock.holdsSend ||
+      textPasteAdmission === 'saving' ||
       structuredTransport?.sendBlockedReason !== undefined
     const sendButtonDisabled = isWorking
       ? !hasPty || !onStop
@@ -280,6 +283,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       setNotice
     }
     const sendPty = useNativeChatPtyComposerSend({
+      draftScopeKey,
       ...ptyCommandRouting,
       draft,
       imageAttachments,

@@ -16,7 +16,10 @@ import {
   structuredAgentSessionGoalObjective
 } from '../../../../shared/structured-agent-session-composer'
 
-import { admitNativeChatPastedText } from './native-chat-composer-pasted-text-references'
+import {
+  admitNativeChatPastedText,
+  resolveNativeChatPastedText
+} from './native-chat-composer-pasted-text-references'
 
 const GOAL_COMMAND = 'goal'
 
@@ -77,7 +80,9 @@ export function useNativeChatComposerSubmit(args: {
   // In-flight changes are serialized by the session's goal controller, which
   // answers false to a second submit while the first is unsettled.
   const setGoal = useCallback(() => {
-    const objective = structuredAgentSessionGoalObjective(draft)
+    const objective = structuredAgentSessionGoalObjective(
+      resolveNativeChatPastedText(draftScopeKey, draft)
+    )
     if (!threadGoal || !structuredTransport || objective === '') {
       return
     }

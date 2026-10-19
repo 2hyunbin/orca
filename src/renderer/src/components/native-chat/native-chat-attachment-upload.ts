@@ -1,3 +1,8 @@
+import {
+  lastVerifiedRuntimeStatus,
+  isRuntimeHostContactRevoked
+} from '../../../../shared/runtime-host-status'
+import { useAppStore } from '@/store'
 // Host-aware resolution for composer attachments (STA-1465). The composer's
 // attach surfaces (file drop, file picker, image paste) receive client-local
 // paths. A structured chat on a paired server uploads into that server's
@@ -202,9 +207,7 @@ export { nativeChatLocalAttachmentUnsupportedNotice } from './native-chat-compos
 export async function prepareNativeChatSessionAttachmentUpload(
   owner: NativeChatRuntimeSessionAttachmentOwner
 ): Promise<
-  | { ok: true; target: AgentSessionAttachmentUploadTarget }
-  /** `unsupported`: the server answered that it keeps no attachments. */
-  | { ok: false; notice: string; unsupported?: true }
+  { ok: true; target: AgentSessionAttachmentUploadTarget } | { ok: false; notice: string }
 > {
   const status = await callRuntimeRpc<RuntimeStatus>(
     { kind: 'environment', environmentId: owner.environmentId },
@@ -216,7 +219,6 @@ export async function prepareNativeChatSessionAttachmentUpload(
     // The same words as any write a server too old for it refuses.
     return {
       ok: false,
-      unsupported: true,
       notice: translate(
         'components.native-chat.writeNotice.unsupported',
         AGENT_SESSION_WRITE_NOTICE_COPY.unsupported
@@ -243,4 +245,21 @@ export function uploadNativeChatSessionAttachmentPaths(
   target: AgentSessionAttachmentUploadTarget
 ): Promise<AgentSessionAttachmentPathUploadResult> {
   return window.api.fs.uploadPathsToAgentSessionAttachments({ ...target, paths })
+}
+
+/** The runtime status slice evicts replaced peers and accepts only current pairing snapshots. */
+export function cachedNativeChatPasteUploadTarget(
+  owner: NativeChatRuntimeSessionAttachmentOwner
+): AgentSessionAttachmentUploadTarget | null {
+  const entry = useAppStore.getState().runtimeStatusByEnvironmentId.get(owner.environmentId)
+  const status = isRuntimeHostContactRevoked(entry) ? null : lastVerifiedRuntimeStatus(entry)
+  if (!status?.capabilities?.includes(AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY)) {
+    return null
+  }
+  return {
+    environmentId: owner.environmentId,
+    sessionId: owner.sessionId,
+    expectedEnvironmentPairingRevision: owner.pairingRevision,
+    expectedEnvironmentRuntimeId: status.runtimeId
+  }
 }

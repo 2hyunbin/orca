@@ -1,118 +1,97 @@
-// A paste saving as a file, from the pill put where it went to the result that replaces the pill in
-// its own scope's draft, and the Send hold while it saves.
-import { Fragment, Slice } from '@tiptap/pm/model'
-import { Transform } from '@tiptap/pm/transform'
-import { createUuidV4 } from '../../../../shared/uuid-v4'
-import type { NativeChatComposerInput } from './native-chat-composer-input'
-import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
+import { translate } from '@/i18n/i18n'
+import { formatNativeChatFileReference } from '../../../../shared/agent-image-paste'
 import {
   readNativeChatComposerDraft,
   updateNativeChatComposerDraft
 } from './native-chat-composer-draft-store'
-import { nativeChatImageSendBlock } from './native-chat-image-reattach'
-import { fileReferenceContent, promptText, promptTextContent } from './native-chat-prompt-document'
+import { notifyScope } from './native-chat-composer-draft-memory'
 import {
   NATIVE_CHAT_PASTED_TEXT_TOKEN,
   nativeChatPastedTextOperations as operations,
   nativeChatPastedTextId,
   nativeChatPastedTextToken,
-  replaceNativeChatPastedTextNodes,
   nativeChatPasteNotSavedNotice
 } from './native-chat-pasted-text-reference'
 
-/** Both the candidate and the draft must be free of provisional paste identities. */
+export function nativeChatPastedTextState(scope: string, token: string): string | null {
+  const id = nativeChatPastedTextId(token)
+  if (!id) {
+    return null
+  }
+  return (
+    readNativeChatComposerDraft(scope).pastedTextFiles?.[id] ??
+    (operations.get(id)?.scopeKey === scope ? 'saving' : 'unsaved')
+  )
+}
+
+export function resolveNativeChatPastedText(scope: string, text: string): string {
+  return text
+    .split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
+    .map((part, index) => {
+      const state = index % 2 === 1 ? nativeChatPastedTextState(scope, part) : null
+      return state && state !== 'saving' && state !== 'unsaved'
+        ? formatNativeChatFileReference(state)
+        : part
+    })
+    .join('')
+}
+
+/** Both the actual candidate and its original scope must be free of unavailable identities. */
 export function nativeChatPastedTextAdmission(
-  scopeKey: string,
+  scope: string,
   candidate = ''
 ): 'saving' | 'unsaved' | null {
-  const tokens = [readNativeChatComposerDraft(scopeKey).text, candidate]
+  const states = [readNativeChatComposerDraft(scope).text, candidate]
     .join('\n')
     .split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
-  const ids = tokens.filter((_, index) => index % 2 === 1).map(nativeChatPastedTextId)
-  if (ids.some((id) => id !== null && operations.get(id)?.scopeKey === scopeKey)) {
-    return 'saving'
-  }
-  return ids.length > 0 ? 'unsaved' : null
+    .filter((_, index) => index % 2 === 1)
+    .map((token) => nativeChatPastedTextState(scope, token))
+  return states.includes('saving') ? 'saving' : states.includes('unsaved') ? 'unsaved' : null
 }
 
 export function admitNativeChatPastedText(
-  scopeKey: string,
+  scope: string,
   candidate: string,
   onError: (notice: string) => void
 ): boolean {
-  const admission = nativeChatPastedTextAdmission(scopeKey, candidate)
-  if (admission === 'unsaved') {
+  const state = nativeChatPastedTextAdmission(scope, candidate)
+  if (state === 'unsaved') {
     onError(nativeChatPasteNotSavedNotice())
   }
-  return admission === null
+  return state === null
 }
 
-/** Send waits for the composer's images and for any paste in its draft still saving. */
-export function nativeChatComposerSendBlock(
-  attachments: readonly NativeChatComposerImageAttachment[],
-  scopeKey: string
-): ReturnType<typeof nativeChatImageSendBlock> {
-  const block = nativeChatImageSendBlock(attachments)
-  const saving = nativeChatPastedTextAdmission(scopeKey) === 'saving'
-  return { ...block, holdsSend: block.holdsSend || saving }
-}
-
-export function beginNativeChatPastedText(
-  scopeKey: string,
-  stage: NonNullable<NativeChatComposerInput['stagePastedText']>,
-  text: string
-): string {
-  const id = createUuidV4()
-  stage(nativeChatPastedTextToken(id), (replaced, schema) =>
-    operations.set(id, { scopeKey, text, replaced, schema })
-  )
-  return id
-}
-
-export type NativeChatPastedTextOutcome = { path: string } | 'inline' | 'restore'
-
-/** Replaces a paste's pill in its own scope's draft: in the editor while it shows that scope, else
- *  in the stored draft. A pill already gone stays gone; `onReplaced` runs only if one was there. */
-export function settleNativeChatPastedText(
-  id: string,
-  scopeEditor: () => NativeChatComposerInput | null,
-  outcome: NativeChatPastedTextOutcome,
-  onReplaced: () => void
-): void {
+/** Success records one durable fact; every failure ends I/O without editing the draft. */
+export function settleNativeChatPastedText(id: string, path?: string): boolean {
   const operation = operations.get(id)
   if (!operation) {
-    return
-  }
-  const { schema, scopeKey } = operation
-  const token = nativeChatPastedTextToken(id)
-  const content =
-    outcome === 'restore'
-      ? operation.replaced
-      : outcome === 'inline'
-        ? new Slice(schema.nodeFromJSON(promptTextContent(operation.text)).content, 1, 1)
-        : new Slice(Fragment.from(schema.nodeFromJSON(fileReferenceContent(outcome.path))), 0, 0)
-  const editor = scopeEditor()
-  const { text, document } = readNativeChatComposerDraft(scopeKey)
-  let replaced = false
-  if (editor?.replacePastedText) {
-    const result = editor.replacePastedText(token, content)
-    if (result === 'composing') {
-      // An IME composition owns the field until it ends.
-      const retry = (): void => settleNativeChatPastedText(id, scopeEditor, outcome, onReplaced)
-      window.addEventListener('compositionend', () => setTimeout(retry), { once: true })
-      return
-    }
-    replaced = result
-  } else if (text.includes(token)) {
-    const tr = new Transform(schema.nodeFromJSON(document ?? promptTextContent(text)))
-    replaced = replaceNativeChatPastedTextNodes(tr, token, content)
-    if (replaced) {
-      const settled = { text: promptText(tr.doc), document: tr.doc.toJSON() }
-      updateNativeChatComposerDraft(scopeKey, settled, 'immediate')
-    }
+    return false
   }
   operations.delete(id)
-  if (replaced) {
-    onReplaced()
+  const { scopeKey } = operation
+  const draft = readNativeChatComposerDraft(scopeKey)
+  const present = draft.text.includes(nativeChatPastedTextToken(id))
+  if (present && path) {
+    updateNativeChatComposerDraft(
+      scopeKey,
+      { pastedTextFiles: { ...draft.pastedTextFiles, [id]: path } },
+      'immediate'
+    )
+  } else {
+    notifyScope(scopeKey)
   }
+  return present
+}
+
+export function nativeChatPastedTextClipboardText(scope: string, token: string): string {
+  const state = nativeChatPastedTextState(scope, token)
+  if (state === null) {
+    return token
+  }
+  if (state === 'saving') {
+    return operations.get(nativeChatPastedTextId(token) ?? '')?.text ?? ''
+  }
+  return state === 'unsaved'
+    ? translate('components.native-chat.composer.pasteNotSavedLabel', 'Paste not saved')
+    : formatNativeChatFileReference(state)
 }

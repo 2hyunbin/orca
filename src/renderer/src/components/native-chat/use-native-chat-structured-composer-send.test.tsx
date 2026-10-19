@@ -176,3 +176,25 @@ describe("says a failed send in Orca's words, with the error it hit apart", () =
     )
   })
 })
+
+import {
+  clearNativeChatComposerDraftsForTests,
+  updateNativeChatComposerDraft
+} from './native-chat-composer-draft-store'
+it('checks both the picked command and its draft, and projects completed paths', async () => {
+  const { send, structuredTransport } = harness('claude')
+  const id = '00000000-0000-4000-8000-000000000000'
+  const token = `[Pasted text](orca-paste:${id})`
+  await send(token, [])
+  updateNativeChatComposerDraft('tab-1:pane', { text: token }, 'immediate')
+  await send('/review', [])
+  expect(structuredTransport.send).not.toHaveBeenCalled()
+  updateNativeChatComposerDraft(
+    'tab-1:pane',
+    { pastedTextFiles: { [id]: '/p/saved.txt' } },
+    'immediate'
+  )
+  await send(token, [])
+  expect(structuredTransport.send).toHaveBeenCalledWith('@/p/saved.txt', [])
+  clearNativeChatComposerDraftsForTests()
+})
