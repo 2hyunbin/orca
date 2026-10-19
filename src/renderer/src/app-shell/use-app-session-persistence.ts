@@ -20,8 +20,6 @@ import {
   createShutdownCheckpointGuard
 } from '../lib/shutdown-checkpoint-guard'
 import { createShutdownCheckpointPersist } from './shutdown-checkpoint-persist'
-import { changedSleepingRecords } from '../store/terminals/terminal-sleep-layout-owner'
-import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { shutdownBufferCaptures } from '../components/terminal-pane/shutdown-buffer-captures'
 import {
   dispatchWindowCloseRequest,
@@ -35,14 +33,6 @@ import {
   ORCA_RENDERER_SHUTDOWN_CHECKPOINT_ABORTED_EVENT,
   ORCA_RENDERER_UNLOAD_PREVENTED_EVENT
 } from '../../../shared/renderer-shutdown-events'
-
-/** The quit capture, returning the resume records it changed of tabs the window holds. */
-function captureQuitSleepRecordsForMain(): SleepingAgentSessionRecord[] {
-  const previous = useAppStore.getState().sleepingAgentSessionsByPaneKey
-  useAppStore.getState().captureAllSleepingAgentSessions('quit')
-  const state = useAppStore.getState()
-  return changedSleepingRecords(state, previous, state.sleepingAgentSessionsByPaneKey).recorded
-}
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
 const SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS = 60_000
@@ -92,9 +82,9 @@ export function useAppSessionPersistence(): void {
       // which is in-memory. Capture them into the persisted sleeping-session
       // map so a daemon/session death while the app is closed can still
       // cold-restore via the agent's resume command (#5232).
-      // Switch point: the stage writes only the capture's changes into main's records.
+      // Switch point: main captures its panes' agents itself as it stages the quit.
       captureSleepingAgentSessions: ORCA_LAYOUT_OWNER_IS_MAIN
-        ? captureQuitSleepRecordsForMain
+        ? () => {}
         : () => useAppStore.getState().captureAllSleepingAgentSessions('quit'),
       // Why: re-read state after capture() calls populated scrollback buffers
       // into the store via Zustand setters. The shouldCaptureSession read is

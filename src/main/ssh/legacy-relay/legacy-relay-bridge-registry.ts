@@ -10,7 +10,7 @@ import type {
 } from '../../../shared/legacy-relay-bridge-contract'
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
-import type { SshConnection } from '../ssh-connection'
+import type { SshConnection } from '../connection/ssh-connection'
 import { waitForSentinel } from './ssh-relay-sentinel'
 import { probeRelayEndpointIncumbent } from './ssh-relay-endpoint-incumbent'
 import { isWindowsRemoteHost } from '../ssh-remote-platform'

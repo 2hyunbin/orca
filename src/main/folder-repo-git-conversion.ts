@@ -141,7 +141,7 @@ export async function updateProjectHostSetupWithProvenKind(
       if (!result?.repo || !proven.folderUpgradeGitRootPath) {
         return result
       }
-      const stamped = store.updateRepo(result.repo.id, proven, getRepoExecutionHostId(result.repo))
+      const stamped = store.updateRepo(result.repo, proven)
       return stamped ? { ...result, repo: stamped } : result
     },
     allowRuntimeHost
