@@ -111,11 +111,12 @@ function bindHeadlessRunTerminalRetention(
         const sleep = await runtime.sleepTerminalsForWorktree(`id:${run.workspaceId}`, {
           soleLivePtyId: ptyId
         })
-        // Why not "stopped": retrying a sleep that stopped the PTY and then threw finds it not live.
-        const stillLive =
-          sleep.remainingLivePtyIds?.includes(ptyId) ??
-          (sleep.livePtyIds.includes(ptyId) && !sleep.stoppedPtyIds.includes(ptyId))
-        if (stillLive) {
+        // Why "nothing live" too: retrying a sleep that stopped the PTY and then threw finds none;
+        // a decline always reports the other live terminal.
+        const slept =
+          sleep.livePtyIds.length === 0 ||
+          (sleep.stoppedPtyIds.includes(ptyId) && !sleep.remainingLivePtyIds?.includes(ptyId))
+        if (!slept) {
           return false
         }
       } catch (error) {

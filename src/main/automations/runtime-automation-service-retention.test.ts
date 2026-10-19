@@ -177,7 +177,20 @@ describe('headless automation service run terminal retention', () => {
       'another terminal there is live',
       async () => ({ livePtyIds: ['pty-0', 'pty-user'], stoppedPtyIds: [] })
     ],
-    ['the sleep throws', () => Promise.reject(new Error('terminal_worktree_sleep_failed'))]
+    ['the sleep throws', () => Promise.reject(new Error('terminal_worktree_sleep_failed'))],
+    // The run's PTY exited after the alive check; only the user's terminal is live.
+    [
+      'its PTY is gone but another terminal is live',
+      async () => ({ livePtyIds: ['pty-user'], stoppedPtyIds: [] })
+    ],
+    [
+      'the stop left its PTY live',
+      async () => ({
+        livePtyIds: ['pty-0'],
+        stoppedPtyIds: ['pty-0'],
+        remainingLivePtyIds: ['pty-0']
+      })
+    ]
   ])('keeps a run in its own workspace, ids and all, when %s', async (_case, sleep) => {
     const { runtime, service, store } = build(true)
     store.getWorktreeMeta.mockImplementation(firstRunOwnsWorkspace)
