@@ -56,7 +56,10 @@ import {
   collectAgentSessionRestartProbes,
   type AgentSessionRestartProbeArgs
 } from './agent-session-restart-reconciliation'
-import { replaceAgentSessionRecordOptions } from './agent-session-record-options'
+import {
+  recordAgentSessionRanModel,
+  replaceAgentSessionRecordOptions
+} from './agent-session-record-options'
 import {
   commitAgentSessionReservation,
   type AgentSessionReserveRequest,
@@ -319,6 +322,9 @@ export class AgentSessionRecordStore {
 
   replaceSessionOptions = (args: AgentSessionOptionsReplacement): Promise<AgentSessionRecord> =>
     this.mutate(args.sessionId, (record) => replaceAgentSessionRecordOptions(record, args))
+
+  recordRanModel = (ran: Parameters<typeof recordAgentSessionRanModel>[1]) =>
+    this.mutate(ran.sessionId, (record) => recordAgentSessionRanModel(record, ran))
 
   async retireClaimKey(keyId: string, now: number): Promise<void> {
     await this.transact((draft) => retireAgentSessionClaimKey(draft, keyId, now))

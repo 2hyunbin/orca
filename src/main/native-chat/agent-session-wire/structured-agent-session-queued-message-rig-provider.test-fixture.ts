@@ -27,6 +27,8 @@ export type QueuedRigProviderOptions = {
   stopEndsSession?: true
   /** Its child never answers its start, so it runs nothing it is handed. */
   startUnanswered?: true
+  /** The model its child reports running; otherwise the agent's own `default`. */
+  reportsModel?: string
 }
 
 export function createQueuedRigProvider(
@@ -64,11 +66,11 @@ export function createQueuedRigProvider(
         ? new Promise((resolve) => {
             proveOpen = () =>
               resolve({
-                reportedOptions: { model: 'default' }
+                reportedOptions: { model: options.reportsModel ?? 'default' }
               })
           })
         : Promise.resolve({
-            reportedOptions: { model: 'default' }
+            reportedOptions: { model: options.reportsModel ?? 'default' }
           }),
     acquire: async ({ identity, fence, spawnToken, events: sink }) => {
       starts()

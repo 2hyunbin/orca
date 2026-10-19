@@ -49,6 +49,20 @@ it('keeps the first accepted choice through opening and saves a later pick for t
   expect(rig.store.getRecord(SESSION)?.options?.model).toBe('model-b')
 })
 
+it('keeps the model a chat with none saved first ran, and later sends carry it', async () => {
+  await rig.dispose()
+  rig = await createQueuedMessageTestRig({ restartable: true, reportsModel: 'gpt-ran' })
+  const first = rig.send('first')
+  expect(await first.result).toMatchObject({ ok: true })
+  await eventually(() => expect(rig.store.getRecord(SESSION)?.options?.model).toBe('gpt-ran'))
+  await rig.settleAccepted(first.id, 'a')
+  await rig.restartHostProcess()
+  const second = rig.send('second')
+  expect(await second.result).toMatchObject({ ok: true })
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
+  expect(rig.dispatch.mock.calls[1]?.[0].executionOptions).toMatchObject({ model: 'gpt-ran' })
+})
+
 it('rejects a refused choice before prompt input and leaves the next pick saved', async () => {
   await pickModel('model-b')
   rig.dispatch.mockRejectedValueOnce(
@@ -151,5 +165,6 @@ it('steers a matching choice but holds an empty default choice for a new turn', 
     )
   await rig.host.flushStreamedEvents(SESSION)
   await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(3))
-  expect(rig.dispatch.mock.calls[2]?.[0].executionOptions).toEqual({})
+  // It names no choice of its own: it runs the model the chat first ran, which the chat kept.
+  expect(rig.dispatch.mock.calls[2]?.[0].executionOptions).toEqual({ model: 'model-a' })
 })

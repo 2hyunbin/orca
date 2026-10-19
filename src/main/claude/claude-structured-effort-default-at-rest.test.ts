@@ -15,6 +15,7 @@ import { agentModelCatalogFingerprintForRecord } from '../native-chat/agent-mode
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import type { StructuredAgentSessionMutationContext } from '../native-chat/agent-session-wire/structured-agent-session-host-mutations'
 import { readStructuredAgentSessionOptions } from '../native-chat/agent-session-wire/structured-agent-session-options-read'
+import { structuredAgentSessionSendSelection } from '../../shared/structured-agent-session-option-view'
 import { claudeAndCodexAgents } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import { composeCodexSessionOptionCatalog } from '../codex/codex-structured-model-catalog'
 import {
@@ -139,12 +140,15 @@ async function startChild(
   return adapter
 }
 
-function restingRecord(options: Record<string, string>): AgentSessionRecord {
+function restingRecord(
+  options: Record<string, string>,
+  providerHandleChain: { origin: string }[] = []
+): AgentSessionRecord {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resting read and the catalog key touch only these fields.
   return {
     provider: 'claude',
     accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: ACCOUNT_HOME },
-    providerHandleChain: [],
+    providerHandleChain,
     location: { executionHostId: 'local', wslDistro: null },
     // Why released: a chat at rest has no live claim, so its next start reads the current account.
     lease: { claimStatus: 'released' },
@@ -237,6 +241,42 @@ describe('Claude effort default at rest', () => {
 
     expect(result.current).toMatchObject({ model: 'opus[1m]', effort: 'medium' })
     expect(pickerEffort(result)).toBe('medium')
+  })
+
+  it('names the default for a reopened chat with no saved model, then keeps the model it ran', async () => {
+    const store = new AgentModelCatalogStore()
+    const child = await startChild(store)
+    const seed = getAgentSessionOptionCatalog('claude')!
+    const picker = (answer: Awaited<ReturnType<typeof readAtRest>>) => {
+      const state = applyStructuredAgentSessionOptions(
+        createStructuredAgentSessionOptionState('claude', seed),
+        seed,
+        answer
+      )
+      const row = structuredAgentSessionOptionSnapshot(state).find((entry) => entry.id === 'model')
+      const shown = row?.kind.type === 'select' ? row.kind.currentValue : undefined
+      return { shown, sends: structuredAgentSessionSendSelection(state)?.model }
+    }
+    const reopened = await readAtRest(store, restingRecord({}, [{ origin: 'adopted' }]))
+    expect(reopened.current).toMatchObject({ model: 'opus[1m]', defaulted: ['model', 'effort'] })
+    expect(picker(reopened)).toEqual({ shown: 'opus[1m]', sends: undefined })
+
+    // Its first turn runs what the CLI reports (claude-opus-5-5[1m]); the host saves that row.
+    const ran = (await child.readOptions({ sessionId: SESSION, fence: 7 })).current
+    expect(ran).toMatchObject({ model: 'opus[1m]' })
+    expect(ran.defaulted ?? []).not.toContain('model')
+    // The account's default moves to Sonnet; the chat keeps the model it ran, after a restart too.
+    const sonnet = CATALOG.map((row) =>
+      row.value === 'default' ? { ...row, resolvedModel: 'claude-sonnet-5' } : row
+    )
+    await startChild(store, undefined, [], { runs: 'claude-sonnet-5', lists: sonnet })
+    const fresh = await readAtRest(store, restingRecord({}, [{ origin: 'adopted' }]))
+    expect(fresh.current.model).toBe('sonnet')
+    const kept = await readAtRest(
+      store,
+      restingRecord({ model: ran.model! }, [{ origin: 'adopted' }])
+    )
+    expect(picker(kept)).toEqual({ shown: 'opus[1m]', sends: 'opus[1m]' })
   })
 
   it("shows the user's pick at rest over the default", async () => {

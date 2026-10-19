@@ -86,6 +86,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   stopping: (sessionId: string) => boolean
   now: () => number
   acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
+  recordRanModel?: (sessionId: string, fence: number, model?: string) => Promise<void>
 }
 
 type Prepared =
@@ -332,7 +333,8 @@ export class StructuredAgentSessionDeliveryLoop {
         now: this.deps.now,
         acquireAborts: this.deps.acquireAborts,
         deliveryOrder: this.deps.deliveryOrder,
-        workChanged: () => this.deps.workChanged?.(sessionId)
+        workChanged: () => this.deps.workChanged?.(sessionId),
+        recordRanModel: (model) => this.deps.recordRanModel?.(sessionId, awaitedChild.fence, model)
       },
       next,
       // Re-read right before the provider call, which runs outside the serialize.
