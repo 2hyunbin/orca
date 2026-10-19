@@ -24,8 +24,8 @@ export function structuredAgentSessionHostKey(target: RuntimeClientTarget): stri
  *  evidence about the host. */
 export type StructuredAgentSessionHostCapabilityState = 'unknown' | 'supported' | 'unsupported'
 
-/** Whether the session's host advertises `capability`. A failed probe stays `unknown` and a remote
- *  host is asked again each time this client regains contact with it. */
+/** Whether the session's host advertises `capability`. A failed probe keeps this host's last answer
+ *  (`unknown` if none) and a remote host is asked again each time this client regains contact. */
 export function useStructuredAgentSessionHostCapabilityState(
   target: RuntimeClientTarget,
   capability: RuntimeCapability
@@ -56,7 +56,9 @@ export function useStructuredAgentSessionHostCapabilityState(
       .then((state) => {
         if (!cancelled) {
           setAnswer((current) =>
-            current.key === key && current.state === state ? current : { key, state }
+            current.key === key && (current.state === state || state === 'unknown')
+              ? current
+              : { key, state }
           )
         }
       })

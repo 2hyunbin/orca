@@ -90,6 +90,25 @@ describe('the queued-messages capability, three-state', () => {
     )
   })
 
+  it('keeps a known answer when a re-check after regained contact fails', async () => {
+    mocks.supports.mockResolvedValueOnce(true)
+    const { result } = renderHook(() =>
+      useStructuredAgentSessionHostQueuesMessagesState({
+        kind: 'environment',
+        environmentId: 'env-1'
+      })
+    )
+    await waitFor(() => expect(result.current).toBe('supported'))
+
+    mocks.supports.mockRejectedValueOnce(new Error('unreachable'))
+    act(() => {
+      mocks.contactRegained.get('env-1')?.()
+    })
+    await waitFor(() => expect(mocks.supports).toHaveBeenCalledTimes(2))
+    await act(async () => {})
+    expect(result.current).toBe('supported')
+  })
+
   it('reads a local runtime that has not answered as unknown', () => {
     setLocalRuntimeCapabilitiesForTests(null)
     const { result } = renderHook(() =>
