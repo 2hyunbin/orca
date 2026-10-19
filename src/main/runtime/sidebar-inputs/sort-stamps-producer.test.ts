@@ -5,7 +5,15 @@ import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wi
 import { makeStructuredAgentStatusSubject } from '../../../shared/agent-status-subject'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { TerminalSideEffectFact } from '../../../shared/terminal-side-effect-facts'
-import type { SmartStampFields } from '../../../shared/sidebar-list/sort-stamps'
+import {
+  RECENT_STAMP_THROTTLE_MS,
+  type SmartStampFields
+} from '../../../shared/sidebar-list/sort-stamps'
+import {
+  AGENT_TRANSITION_SCENARIOS,
+  type AgentTransitionStep
+} from '../../../shared/agent-transitions.test-fixture'
+import { AgentTransitionDetector } from '../../agent-hooks/agent-transition-detector'
 import {
   SortStampsProducer,
   type SortStampsStore,
@@ -38,6 +46,7 @@ function createHarness() {
   let listener: (event: RuntimeClientEvent) => void = () => {}
   // Stamping tests watch every workspace, so no unread flag is raised; the unread tests unwatch.
   const viewing = { isViewing: (_id: string, _pane: string | null): boolean => true }
+  const muted = new Set<string>()
   const store: SortStampsStore = {
     getWorktreeMeta: (id) => meta.get(id),
     setWorktreeMeta: (id, updates) => {
@@ -57,10 +66,13 @@ function createHarness() {
     getAllWorktreeMeta: () => Object.fromEntries(meta),
     getFolderWorkspaces: () => [...folders].map(([id, folder]) => ({ id, ...folder }))
   }
+  const detector = new AgentTransitionDetector({
+    resolveTabWorktreeId: (tabId) => (tabId === 'tab-t' ? WT : undefined),
+    now: () => Date.now()
+  })
   const producer = new SortStampsProducer({
     store: () => store,
     isWriteFenced: (id) => fenced.has(id),
-    resolveTabWorktreeId: (tabId) => (tabId === 'tab-t' ? WT : undefined),
     subscribeToPtyExit: (ptyId, onExit) => {
       exits.set(ptyId, onExit)
       return () => exits.delete(ptyId)
@@ -71,12 +83,16 @@ function createHarness() {
       return () => {}
     },
     isViewing: (id, pane) => viewing.isViewing(id, pane),
+    isNotificationMuted: (id) => muted.has(id),
     onStampsWritten: (id) => notified.push(id),
     now: () => Date.now()
   })
+  producer.attachAgentTransitions(detector)
   const server = new AgentHookServer()
   return {
     producer,
+    detector,
+    attach: (view: AgentStatusStoreView) => detector.attach(view),
     server,
     meta,
     sshMeta,
@@ -86,6 +102,7 @@ function createHarness() {
     fenced,
     notified,
     viewing,
+    muted,
     sideEffects: (
       facts: TerminalSideEffectFact[],
       extra: { pane?: string; ptyId?: string; connectionId?: string } = {}
@@ -122,6 +139,15 @@ function hook(
   })
 }
 
+function ingestRow(server: AgentHookServer, row: AgentTransitionStep['row']): void {
+  server.ingestTerminalStatus({
+    paneKey: PANE,
+    tabId: 'tab-a',
+    worktreeId: WT,
+    payload: { ...row, prompt: 'task', agentType: 'codex' }
+  })
+}
+
 function title(rawTitle: string): Extract<TerminalSideEffectFact, { kind: 'title' }> {
   return { kind: 'title', normalizedTitle: rawTitle, rawTitle }
 }
@@ -137,7 +163,7 @@ afterEach(() => {
 describe('SortStampsProducer: hook agents', () => {
   it('stamps prompt, finish and needs-input, and holds Done until the next prompt', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
 
     hook(h.server, 'working')
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: T0, smartTier: 'working', smartAt: T0 })
@@ -175,7 +201,7 @@ describe('SortStampsProducer: hook agents', () => {
 
   it('never stamps running to running, and throttles Recent while tiers apply at once', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     hook(h.server, 'working')
     const writes = h.writes.length
     advance(1_000)
@@ -190,11 +216,11 @@ describe('SortStampsProducer: hook agents', () => {
   it('seeds a status present at attach: the tier is reconciled, Recent is not stamped', () => {
     const h = createHarness()
     hook(h.server, 'working')
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: 0, smartTier: 'working', smartAt: T0 })
     // Re-attaching after a restart finds the tier it stamped and writes nothing.
     const writes = h.writes.length
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     expect(h.writes).toHaveLength(writes)
 
     // The seeded pane is known, so its finish is a transition.
@@ -205,7 +231,7 @@ describe('SortStampsProducer: hook agents', () => {
 
   it('drops to Rest without a Recent stamp when the agent’s row goes', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     hook(h.server, 'working')
     advance(20_000)
     hook(h.server, 'done')
@@ -217,7 +243,7 @@ describe('SortStampsProducer: hook agents', () => {
 
   it('stamps a structured chat session through the same store', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     const subject = makeStructuredAgentStatusSubject(
       { executionHostId: 'local', wslDistro: null, workspaceId: FOLDER, workspaceKind: 'folder' },
       'structured-session-one'
@@ -251,7 +277,7 @@ describe('SortStampsProducer: hook agents', () => {
 
   it('stamps an SSH workspace’s record on its own host', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     h.server.ingestTerminalStatus({
       paneKey: PANE,
       tabId: 'tab-a',
@@ -268,7 +294,7 @@ describe('SortStampsProducer: hook agents', () => {
   it('drops stamps while a WSL move freezes the project', () => {
     const h = createHarness()
     h.fenced.add(WT)
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     hook(h.server, 'working')
     h.sideEffects([{ kind: 'bell' }])
     expect(h.writes).toEqual([])
@@ -276,9 +302,25 @@ describe('SortStampsProducer: hook agents', () => {
 
   it('writes nothing for a workspace with no record', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     hook(h.server, 'working', 'repo-1::/tmp/gone')
     expect(h.writes).toEqual([])
+  })
+})
+
+describe('SortStampsProducer: the agent transitions', () => {
+  it.each(AGENT_TRANSITION_SCENARIOS)('$name', ({ steps }) => {
+    const h = createHarness()
+    h.viewing.isViewing = () => false
+    h.attach(h.server)
+    for (const { row, transition } of steps) {
+      const at = advance(RECENT_STAMP_THROTTLE_MS)
+      h.meta.set(WT, { ...h.meta.get(WT)!, isUnread: false })
+      ingestRow(h.server, row)
+      const stamps = h.meta.get(WT)
+      expect(stamps?.lastActivityAt === at).toBe(transition !== null)
+      expect(stamps?.isUnread).toBe(transition !== null && transition !== 'prompt-submitted')
+    }
   })
 })
 
@@ -297,7 +339,7 @@ describe('SortStampsProducer: terminal events', () => {
 
   it('turns a hookless agent’s titles into the same transitions', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     // The first title seeds the tier without a Recent stamp: it may be a terminal reattached.
     h.sideEffects([title('⠋ Codex working')])
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: 0, smartTier: 'working', smartAt: T0 })
@@ -361,14 +403,75 @@ describe('SortStampsProducer: terminal events', () => {
 
   it('leaves a pane with hook rows to its hooks', () => {
     const h = createHarness()
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     hook(h.server, 'working')
     const writes = h.writes.length
     h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
     advance(20_000)
     h.sideEffects([title('Codex')], { pane: PANE })
     expect(h.writes).toHaveLength(writes)
     expect(h.meta.get(WT)?.smartTier).toBe('working')
+  })
+
+  // A pane its title tracked is handed to hooks by their first row, whatever that row says.
+  it('hands a title-tracked pane to its first hook row: a finish stamps Done', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    const doneAt = advance(20_000)
+    hook(h.server, 'done')
+    expect(h.meta.get(WT)).toEqual({ lastActivityAt: doneAt, smartTier: 'done', smartAt: doneAt })
+  })
+
+  it('hands a title-tracked pane to its first hook row: a stopped turn rests it', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    advance(20_000)
+    ingestRow(h.server, { state: 'done', interrupted: true })
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('hands a title-tracked pane to its first hook row: no workspace rests it where it was', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    advance(20_000)
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('hands a title-tracked pane to a row present at attach with no workspace: it rests', () => {
+    const h = createHarness()
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    h.attach(h.server)
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('keeps a pane its first hook row finished in step: a later stop clears Done', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    advance(20_000)
+    hook(h.server, 'done')
+    advance(20_000)
+    ingestRow(h.server, { state: 'done', interrupted: true })
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
   })
 })
 
@@ -386,7 +489,7 @@ describe('SortStampsProducer: startup reconcile', () => {
     const h = createHarness()
     h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4 })
     h.folders.set(FOLDER_ID, { lastActivityAt: 6, smartTier: 'done', smartAt: 3 })
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     await h.producer.reconcileStoredTiers(evidence({ terminalPtyIds: () => ['pty-dead'] }))
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: 5, smartTier: undefined, smartAt: undefined })
     expect(h.folders.get(FOLDER_ID)).toEqual({
@@ -406,7 +509,7 @@ describe('SortStampsProducer: startup reconcile', () => {
       worktreeId: FOLDER,
       payload: { state: 'working', prompt: 'task', agentType: 'codex' }
     })
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     const writes = h.writes.length
     await h.producer.reconcileStoredTiers(
       evidence({
@@ -437,8 +540,10 @@ describe('SortStampsProducer: startup reconcile', () => {
       subscribeStatusRowMutations: () => () => {},
       subscribeStatusFreshness: () => () => {}
     }
-    h.producer.attachAgentStatusStore(view)
+    h.attach(view)
     hydrated = true
+    // Startup seeds them before the reconcile.
+    h.detector.seedRestoredRows()
     await h.producer.reconcileStoredTiers(evidence())
     expect(h.meta.get(WT)).toEqual({ lastActivityAt: 0, smartTier: 'working', smartAt: T0 })
   })
@@ -446,7 +551,7 @@ describe('SortStampsProducer: startup reconcile', () => {
   it('keeps a tier when no terminal is on record: that proves nothing', async () => {
     const h = createHarness()
     h.meta.set(WT, { lastActivityAt: 5, smartTier: 'done', smartAt: 4 })
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     await h.producer.reconcileStoredTiers(evidence())
     expect(h.writes).toEqual([])
   })
@@ -454,7 +559,7 @@ describe('SortStampsProducer: startup reconcile', () => {
   it('leaves another host’s tiers alone: a host not reached yet is not one whose agents died', async () => {
     const h = createHarness()
     h.meta.set(WT, { lastActivityAt: 5, smartTier: 'working', smartAt: 4 })
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     await h.producer.reconcileStoredTiers(evidence({ isLocalWorkspace: () => false }))
     expect(h.writes).toEqual([])
   })
@@ -464,7 +569,7 @@ describe('SortStampsProducer: unread flag', () => {
   function unwatched() {
     const h = createHarness()
     h.viewing.isViewing = () => false
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     return h
   }
 
@@ -527,11 +632,35 @@ describe('SortStampsProducer: unread flag', () => {
     expect(h.folders.get(FOLDER_ID)?.isUnread).toBe(true)
   })
 
+  it('raises no flag for a muted workspace, but still stamps it', () => {
+    const h = unwatched()
+    h.muted.add(WT)
+    h.muted.add(FOLDER)
+    hook(h.server, 'working')
+    advance(20_000)
+    hook(h.server, 'done')
+    h.sideEffects([{ kind: 'bell' }])
+    expect(h.meta.get(WT)?.isUnread).toBeUndefined()
+    expect(h.meta.get(WT)?.lastActivityAt).toBeGreaterThan(0)
+
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: FOLDER,
+      payload: { state: 'waiting', prompt: 'task', agentType: 'codex' }
+    })
+    expect(h.folders.get(FOLDER_ID)?.isUnread).toBeUndefined()
+
+    h.muted.delete(WT)
+    h.sideEffects([{ kind: 'bell' }])
+    expect(h.meta.get(WT)?.isUnread).toBe(true)
+  })
+
   it('raises nothing for a restored status, a frozen project or a workspace with no record', () => {
     const h = createHarness()
     h.viewing.isViewing = () => false
     hook(h.server, 'blocked')
-    h.producer.attachAgentStatusStore(h.server)
+    h.attach(h.server)
     expect(h.meta.get(WT)?.isUnread).toBeUndefined()
 
     h.fenced.add(WT)
