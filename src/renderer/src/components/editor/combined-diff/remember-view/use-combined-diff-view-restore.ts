@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type React from 'react'
 import type { VirtualizedScrollAnchor } from '@/hooks/useVirtualizedScrollAnchor'
 import type { GitStatusEntry } from '../../../../../../shared/git-status-types'
@@ -19,7 +19,8 @@ import {
   combinedDiffScrollAnchorCache,
   combinedDiffScrollTopCache,
   combinedDiffViewPreferences,
-  combinedDiffViewStateCache
+  combinedDiffViewStateCache,
+  getCombinedDiffAgentActivitySeq
 } from './combined-diff-view-memory'
 
 export type CombinedDiffViewRestore = {
@@ -37,7 +38,8 @@ export function useCombinedDiffViewRestore({
   setSectionHeights,
   setSections,
   setSideBySide,
-  viewStateKey
+  viewStateKey,
+  worktreeId
 }: {
   entrySet: CombinedDiffEntrySet
   gitStatusEntries: GitStatusEntry[]
@@ -47,6 +49,8 @@ export function useCombinedDiffViewRestore({
   setSections: React.Dispatch<React.SetStateAction<DiffSection[]>>
   setSideBySide: React.Dispatch<React.SetStateAction<boolean>>
   viewStateKey: string
+  /** Lets a restore notice agent activity it missed while unmounted. */
+  worktreeId?: string
 }): CombinedDiffViewRestore {
   const {
     entries,
@@ -61,9 +65,13 @@ export function useCombinedDiffViewRestore({
     loadSchedulerRef,
     loadedIndicesRef,
     loadingIndicesRef,
+    followUpReloadIndicesRef,
     reloadTimersRef,
-    sectionLoadTokensRef
+    requestSectionReloadRef,
+    sectionLoadTokensRef,
+    sectionsRef
   } = registry
+  const missedActivityReloadsRef = useRef<number[]>([])
 
   // Why useState and not `useRef(expr)`: the latter re-reads all three caches on every render and
   // throws the result away, and an anchor seeds legitimately to null so a nullish guard would keep
@@ -132,6 +140,15 @@ export function useCombinedDiffViewRestore({
         })
       )
       loadingIndicesRef.current.clear()
+      followUpReloadIndicesRef.current.clear()
+      if (
+        worktreeId &&
+        cached.agentActivitySeq !== undefined &&
+        cached.agentActivitySeq !== getCombinedDiffAgentActivitySeq(worktreeId)
+      ) {
+        // Why: re-read once restored sections render; requestSectionReload keeps dirty ones.
+        missedActivityReloadsRef.current = Array.from(loadedIndicesRef.current)
+      }
       scrollOffsetRef.current = combinedDiffScrollTopCache.get(viewStateKey) ?? cached.scrollTop
       scrollAnchorRef.current = combinedDiffScrollAnchorCache.get(viewStateKey) ?? null
       latestDomScrollAnchorRef.current = scrollAnchorRef.current
@@ -179,6 +196,8 @@ export function useCombinedDiffViewRestore({
     setSectionHeights({})
     loadedIndicesRef.current.clear()
     loadingIndicesRef.current.clear()
+    followUpReloadIndicesRef.current.clear()
+    missedActivityReloadsRef.current = []
     sectionLoadTokensRef.current.clear()
     clearPendingSectionReloadTimers(reloadTimersRef.current)
     loadSchedulerRef.current.reset()
@@ -202,8 +221,22 @@ export function useCombinedDiffViewRestore({
     setSideBySide,
     shouldAutoReloadFromGitStatus,
     treeMode,
-    viewStateKey
+    viewStateKey,
+    worktreeId,
+    followUpReloadIndicesRef
   ])
+
+  // No deps: waits for the commit that renders the restored sections.
+  useEffect(() => {
+    const indices = missedActivityReloadsRef.current
+    if (indices.length === 0 || sectionsRef.current.length === 0) {
+      return
+    }
+    missedActivityReloadsRef.current = []
+    for (const index of indices) {
+      requestSectionReloadRef.current(index)
+    }
+  })
 
   const invalidateViewStateCache = useCallback((): void => {
     combinedDiffViewStateCache.delete(viewStateKey)

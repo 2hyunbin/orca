@@ -46,7 +46,9 @@ function referenceProjection(map: AppState['agentStatusByPaneKey']): string {
         lastAssistantMessage: entry.lastAssistantMessage ?? null,
         lastAssistantMessageIsToolOutput: entry.lastAssistantMessageIsToolOutput ?? null,
         interrupted: entry.interrupted ?? null,
-        mainAgent: mainAgentKey(entry.mainAgent)
+        mainAgent: mainAgentKey(entry.mainAgent),
+        fileActivityAt: entry.fileActivityAt ?? null,
+        fileActivityKind: entry.fileActivityKind ?? null
       }))
   )
 }
@@ -80,6 +82,9 @@ describe('mobile agent-status projection equivalence', () => {
     statusMaps.push({ 'tab-0:leaf-0': makeEntry(0) })
     statusMaps.push({ 'tab-0:leaf-0': makeEntry(0, { workingMode: 'monitoring' }) })
     statusMaps.push({ 'tab-0:leaf-0': makeEntry(0, { turnStartedAt: 1740000000500 }) })
+    statusMaps.push({
+      'tab-0:leaf-0': makeEntry(0, { fileActivityAt: 1740000000700, fileActivityKind: 'edit' })
+    })
     const many: AppState['agentStatusByPaneKey'] = {}
     for (let index = 0; index < 12; index += 1) {
       many[`tab-${index}:leaf-0`] = makeEntry(index)
@@ -188,5 +193,21 @@ describe('mobile agent-status projection equivalence', () => {
     expect(project('failure')).not.toBe(project())
     // The main agent's own clock dates the failure on mobile, so moving it republishes too.
     expect(project('failure', 1740000001000)).not.toBe(project('failure'))
+  })
+
+  it('republishes when only the host file-activity stamp changes', () => {
+    resetRuntimeMobileAgentStatusProjectionCacheForTests()
+    const before = buildRuntimeMobileAgentStatusProjectionForTests({
+      'tab-0:leaf-0': makeEntry(0, { fileActivityAt: 100, fileActivityKind: 'command' })
+    })
+    // Same 30s updatedAt bucket: the stamp is the only change a finished edit makes.
+    const after = buildRuntimeMobileAgentStatusProjectionForTests({
+      'tab-0:leaf-0': makeEntry(0, {
+        updatedAt: 1740000000001,
+        fileActivityAt: 200,
+        fileActivityKind: 'edit'
+      })
+    })
+    expect(after).not.toBe(before)
   })
 })

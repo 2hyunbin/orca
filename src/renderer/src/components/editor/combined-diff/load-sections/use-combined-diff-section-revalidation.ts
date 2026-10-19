@@ -36,7 +36,7 @@ export function useCombinedDiffSectionRevalidation({
   shouldAutoReloadFromGitStatus: boolean
   treeMode: CombinedDiffFileTreeMode
 }): string {
-  const { loadedIndicesRef } = registry
+  const { followUpReloadIndicesRef, loadedIndicesRef, loadingIndicesRef } = registry
   const combinedGitStatusSignature = React.useMemo(() => {
     if (!shouldAutoReloadFromGitStatus) {
       return ''
@@ -124,10 +124,21 @@ export function useCombinedDiffSectionRevalidation({
       for (const index of Array.from(loadedIndicesRef.current)) {
         requestSectionReload(index)
       }
+      // Why: superseding a read on every burst would starve it; it commits, then reads once more.
+      for (const index of loadingIndicesRef.current) {
+        followUpReloadIndicesRef.current.add(index)
+      }
     }
     window.addEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handler)
     return () => window.removeEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handler)
-  }, [file.worktreeId, loadedIndicesRef, requestSectionReload, treeMode])
+  }, [
+    file.worktreeId,
+    followUpReloadIndicesRef,
+    loadedIndicesRef,
+    loadingIndicesRef,
+    requestSectionReload,
+    treeMode
+  ])
 
   return combinedGitStatusSignature
 }

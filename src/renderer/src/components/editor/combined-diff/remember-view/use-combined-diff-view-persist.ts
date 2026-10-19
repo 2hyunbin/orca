@@ -2,7 +2,11 @@ import { useEffect } from 'react'
 import type React from 'react'
 import { setWithLRU } from '@/lib/scroll-cache'
 import type { DiffSection } from '../../diff-section-types'
-import { combinedDiffScrollTopCache, combinedDiffViewStateCache } from './combined-diff-view-memory'
+import {
+  combinedDiffScrollTopCache,
+  combinedDiffViewStateCache,
+  getCombinedDiffAgentActivitySeq
+} from './combined-diff-view-memory'
 
 export function useCombinedDiffViewPersist({
   combinedGitStatusSignature,
@@ -13,7 +17,8 @@ export function useCombinedDiffViewPersist({
   sections,
   loadedIndicesRef,
   sideBySide,
-  viewStateKey
+  viewStateKey,
+  worktreeId
 }: {
   combinedGitStatusSignature: string
   entryCount: number
@@ -24,6 +29,7 @@ export function useCombinedDiffViewPersist({
   loadedIndicesRef: React.RefObject<Set<number>>
   sideBySide: boolean
   viewStateKey: string
+  worktreeId?: string
 }): void {
   useEffect(() => {
     if (sections.length === 0 && entryCount > 0) {
@@ -40,7 +46,8 @@ export function useCombinedDiffViewPersist({
         (index) => !sections[index]?.loading
       ),
       scrollTop: preservedScrollTop,
-      sideBySide
+      sideBySide,
+      ...(worktreeId ? { agentActivitySeq: getCombinedDiffAgentActivitySeq(worktreeId) } : {})
     })
   }, [
     combinedGitStatusSignature,
@@ -51,6 +58,7 @@ export function useCombinedDiffViewPersist({
     sectionHeights,
     sections,
     sideBySide,
-    viewStateKey
+    viewStateKey,
+    worktreeId
   ])
 }

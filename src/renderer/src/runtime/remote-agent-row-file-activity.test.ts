@@ -140,4 +140,14 @@ describe('paired client adopts the host file-activity stamp on panes it owns', (
     applyHostSnapshot(store, hostSnapshot(3, T0 + 3_000), T0 + 4_000)
     expect(store.getState().agentStatusByPaneKey[PANE]?.fileActivityAt).toBe(200)
   })
+
+  it('adopts a host frame that changes nothing but the stamp on a pane the host owns', () => {
+    const store = seedClient()
+    applyHostSnapshot(store, hostSnapshot(1, T0 - 1_000, { at: 100, kind: 'command' }), T0)
+    applyHostSnapshot(store, hostSnapshot(2, T0 - 1_000, { at: 200, kind: 'edit' }), T0 + 1_000)
+    expect(store.getState().agentStatusByPaneKey[PANE]).toMatchObject({
+      fileActivityAt: 200,
+      fileActivityKind: 'edit'
+    })
+  })
 })

@@ -4,6 +4,7 @@ import {
   ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
   type EditorPathMutationTarget
 } from '../../editor-autosave'
+import { ORCA_AGENT_FILE_ACTIVITY_EVENT } from '@/hooks/agent-file-activity-event'
 
 export type CachedCombinedDiffViewState = {
   entrySignature: string
@@ -13,6 +14,9 @@ export type CachedCombinedDiffViewState = {
   loadedIndices: number[]
   scrollTop: number
   sideBySide: boolean
+  /** The worktree's agent-activity count when remembered; a different count on restore means
+   *  an agent may have changed files while this view was unmounted. */
+  agentActivitySeq?: number
 }
 
 export const combinedDiffViewStateCache = new Map<string, CachedCombinedDiffViewState>()
@@ -34,6 +38,22 @@ function invalidateCombinedDiffCachesForRelativePath(relativePath: string): void
   }
 }
 
+// Why module state: unmounted views have no listener, so activity is counted per worktree here.
+const agentActivitySeqByWorktreeId = new Map<string, number>()
+
+export function getCombinedDiffAgentActivitySeq(worktreeId: string): number {
+  return agentActivitySeqByWorktreeId.get(worktreeId) ?? 0
+}
+
+function handleCombinedDiffAgentActivity(
+  event: WindowEventMap[typeof ORCA_AGENT_FILE_ACTIVITY_EVENT]
+): void {
+  const worktreeId = event.detail?.worktreeId
+  if (worktreeId) {
+    agentActivitySeqByWorktreeId.set(worktreeId, getCombinedDiffAgentActivitySeq(worktreeId) + 1)
+  }
+}
+
 function handleCombinedDiffExternalFileChange(event: Event): void {
   const detail = (event as CustomEvent<EditorPathMutationTarget>).detail
   if (detail?.relativePath && !detail.fileIds) {
@@ -48,6 +68,7 @@ export function disposeCombinedDiffViewMemory(): void {
       ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
       handleCombinedDiffExternalFileChange
     )
+    window.removeEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handleCombinedDiffAgentActivity)
   }
 }
 
@@ -56,6 +77,7 @@ if (typeof window !== 'undefined') {
     ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
     handleCombinedDiffExternalFileChange
   )
+  window.addEventListener(ORCA_AGENT_FILE_ACTIVITY_EVENT, handleCombinedDiffAgentActivity)
 }
 
 if (import.meta !== undefined && import.meta.hot) {

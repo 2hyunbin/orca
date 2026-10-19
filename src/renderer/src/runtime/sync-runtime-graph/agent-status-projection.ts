@@ -49,7 +49,10 @@ function serializeAgentStatusEntry(
     lastAssistantMessageIsToolOutput: entry.lastAssistantMessageIsToolOutput ?? null,
     interrupted: entry.interrupted ?? null,
     // A failure changes the verdict and leaves `interrupted` as it was.
-    mainAgent: mainAgentKey(entry.mainAgent)
+    mainAgent: mainAgentKey(entry.mainAgent),
+    // A finished edit changes only the stamp; paired clients refresh from it.
+    fileActivityAt: entry.fileActivityAt ?? null,
+    fileActivityKind: entry.fileActivityKind ?? null
   })
 }
 

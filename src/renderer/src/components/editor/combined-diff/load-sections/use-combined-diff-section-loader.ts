@@ -54,6 +54,7 @@ export function useCombinedDiffSectionLoader({
     loadSectionRef,
     loadedIndicesRef,
     loadingIndicesRef,
+    followUpReloadIndicesRef,
     requestSectionReloadRef,
     sectionLoadTokensRef,
     sectionsRef
@@ -120,6 +121,15 @@ export function useCombinedDiffSectionLoader({
         requestSectionReloadRef.current(index)
         return
       }
+      if (followUpReloadIndicesRef.current.delete(index)) {
+        // Why: activity landed mid-read; this result still commits, then one more read follows.
+        queueMicrotask(() => requestSectionReloadRef.current(index))
+      }
+      // Why: a section the user started editing keeps its draft; never commit disk content over it.
+      if (sectionsRef.current[index]?.dirty) {
+        loadedIndicesRef.current.add(index)
+        return
+      }
       const largeDiffRenderLimit =
         !error && result.kind === 'text'
           ? (result.largeDiffRenderLimit ??
@@ -153,7 +163,7 @@ export function useCombinedDiffSectionLoader({
       }
       setSections((prev) => {
         return prev.map((s, i) =>
-          i === index
+          i === index && !s.dirty
             ? {
                 ...s,
                 diffResult: storedResult,

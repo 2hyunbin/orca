@@ -12,8 +12,6 @@ import {
   createAgentFileActivityPacer,
   ORCA_AGENT_FILE_ACTIVITY_EVENT
 } from '@/hooks/agent-file-activity-event'
-
-const REMOTE_AGENT_REFRESH_GAP_MS = 3000
 import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
 import {
   getFileExplorerOperationOwner,
@@ -23,6 +21,8 @@ import {
 import { fileExplorerRefreshConcurrency } from './file-explorer-refresh-concurrency'
 import { createFileExplorerWatchRefreshScheduler } from './file-explorer-watch-refresh-scheduler'
 import { processFileExplorerFsPayload } from './file-explorer-watch-reconcile'
+
+const REMOTE_AGENT_REFRESH_GAP_MS = 3000
 
 export {
   canonicalizeFileExplorerWatchPath,
