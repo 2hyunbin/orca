@@ -11,6 +11,7 @@ import {
   type NativeChatShownModel
 } from './native-chat-session-option-snapshot'
 import type { SessionOptionDescriptor, SessionOptionValue } from './native-chat-session-options'
+import type { TrackedNativeChatSessionOption } from './native-chat-session-option-state'
 import { serviceTierOption } from './structured-agent-session-discovered-model'
 import {
   structuredAgentSessionModelId,
@@ -62,6 +63,47 @@ export function structuredAgentSessionShownModel(
   }
 }
 
+/** The row the list describes `modelId` by; none for a model it lacks, or one outside the rows the
+ *  chat's own listing names, which says nothing about what it takes. */
+export function structuredAgentSessionDescribedModel(
+  state: Pick<StructuredAgentSessionOptionState, 'catalog' | 'verifiedModelIds'>,
+  modelId: string
+): CatalogModel | undefined {
+  const model = state.catalog?.models.find((entry) => entry.id === modelId)
+  return model && (!state.verifiedModelIds || state.verifiedModelIds.includes(modelId))
+    ? model
+    : undefined
+}
+
+/** What the named model's controls draw. A select value another listed model offers but this one
+ *  doesn't is what the host replaces with the default, so the row draws that; the record keeps the
+ *  host's value. Effort (the host keeps and runs it) and a value no listed model offers stay as
+ *  held. A send that ever carries one of these values must read it through here. */
+function valuesUnderControls(
+  catalog: AgentSessionOptionCatalog,
+  controls: readonly CatalogOption[],
+  values: Readonly<Record<string, TrackedNativeChatSessionOption>>
+): Readonly<Record<string, TrackedNativeChatSessionOption>> {
+  let drawn = values
+  for (const option of controls) {
+    const tracked = values[option.id]
+    const offers = (entry: CatalogOption): boolean =>
+      entry.id === option.id &&
+      entry.kind.type === 'select' &&
+      entry.kind.choices.some((choice) => choice.value === tracked?.value)
+    if (
+      option.kind.type === 'select' &&
+      option.id !== 'effort' &&
+      tracked &&
+      !offers(option) &&
+      catalog.models.some((model) => model.options.some(offers))
+    ) {
+      drawn = { ...drawn, [option.id]: { value: option.kind.defaultValue, source: 'default' } }
+    }
+  }
+  return drawn
+}
+
 /** With no model known, a saved speed other than Standard still shows, and Standard turns it off. */
 function modellessControls(
   catalog: AgentSessionOptionCatalog,
@@ -96,6 +138,13 @@ function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionO
     models,
     record
   )
+  const controls = controlsModelId
+    ? (models.find((model) => model.id === controlsModelId)?.options ?? [])
+    : modellessControls(catalog, record)
+  // Only the named model's listed controls speak for its values; a stand-in's or an unlisted
+  // model's draw what the host holds.
+  const normalises =
+    shown.currentId !== null && structuredAgentSessionDescribedModel(state, shown.currentId)
   const snapshot =
     models.length === 0
       ? []
@@ -106,10 +155,10 @@ function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionO
           modelLabel: 'Model',
           liveTransport: 'agent-session',
           model: shown,
-          controls: controlsModelId
-            ? (models.find((model) => model.id === controlsModelId)?.options ?? [])
-            : modellessControls(catalog, record),
-          values: record.values,
+          controls,
+          values: normalises
+            ? valuesUnderControls(catalog, controls, record.values)
+            : record.values,
           modelIsCliDefault: isCliDefault
         })
   return snapshot.length > 0 || state.catalogSource === 'live'

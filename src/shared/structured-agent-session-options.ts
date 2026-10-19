@@ -10,7 +10,10 @@ import {
   STRUCTURED_LAUNCH_SEED_OPTION_IDS
 } from './native-chat-session-option-defaults'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
-import { structuredAgentSessionShownModel } from './structured-agent-session-option-snapshot'
+import {
+  structuredAgentSessionDescribedModel,
+  structuredAgentSessionShownModel
+} from './structured-agent-session-option-snapshot'
 import type { SessionOptionValue } from './native-chat-session-options'
 import type {
   AgentSessionModelCatalogResult,
@@ -225,13 +228,8 @@ export function structuredAgentSessionModelOffers(
   id: string,
   value: SessionOptionValue
 ): boolean {
-  const model = state.catalog?.models.find((entry) => entry.id === modelId)
-  if (
-    id === 'model' ||
-    id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID ||
-    !model ||
-    (state.verifiedModelIds !== undefined && !state.verifiedModelIds.includes(modelId))
-  ) {
+  const model = structuredAgentSessionDescribedModel(state, modelId)
+  if (id === 'model' || id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID || !model) {
     return true
   }
   const option = model.options.find((entry) => entry.id === id)

@@ -714,9 +714,25 @@ describe('useStructuredAgentSessionOptions', () => {
       current: { model: 'opus', serviceTier: 'priority' },
       reply: { model: 'second', serviceTier: 'default' },
       shown: ['serviceTier', 'default']
+    },
+    // Codex's reply leaves out a tier both models offer, which it keeps.
+    {
+      agent: 'codex' as const,
+      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'priority', label: 'Fast' }]],
+      current: { model: 'opus', serviceTier: 'priority' },
+      reply: { model: 'second' },
+      shown: ['serviceTier', 'priority']
+    },
+    // A configured tier no model lists (Flex) still runs, so it shows as held.
+    {
+      agent: 'codex' as const,
+      tiers: [[{ value: 'priority', label: 'Fast' }], [{ value: 'priority', label: 'Fast' }]],
+      current: { model: 'opus', serviceTier: 'flex' },
+      reply: { model: 'second' },
+      shown: ['serviceTier', 'flex']
     }
   ])(
-    'a $agent model pick shows what its reply names and keeps what it leaves out',
+    'a $agent model pick shows what its reply names and keeps what it leaves out, $shown',
     async (pick) => {
       const efforts = ['low', 'high'].map((value) => ({ value, label: value }))
       const live = {
@@ -744,6 +760,10 @@ describe('useStructuredAgentSessionOptions', () => {
       })
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('second')
       expect(currentValue(result.current.optionSnapshot, pick.shown[0]!)).toBe(pick.shown[1])
+      // The reply's or the host's value, never one the picker filled in.
+      expect(descriptor(result.current.optionSnapshot, pick.shown[0]!)?.valueSource).toBe(
+        'dispatched'
+      )
       unmount()
     }
   )
