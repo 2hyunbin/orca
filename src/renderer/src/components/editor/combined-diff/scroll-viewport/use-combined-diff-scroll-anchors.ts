@@ -8,9 +8,8 @@ import {
 } from '@/hooks/useVirtualizedScrollAnchor'
 import { getVirtualizedScrollAnchorForOffset } from '@/hooks/virtualized-scroll-anchor-recording'
 import type { ProgrammaticScrollMarks } from '@/hooks/programmatic-scroll-marks'
-import { setWithLRU } from '@/lib/scroll-cache'
 import type { DiffSection } from '../../diff-section-types'
-import { combinedDiffScrollAnchorCache } from '../remember-view/combined-diff-view-memory'
+import { updateCombinedDiffViewMemory } from '../remember-view/combined-diff-view-cache'
 
 export type CombinedDiffScrollAnchors = {
   persistScrollAnchor: (refreshDomAnchor?: boolean) => void
@@ -120,12 +119,9 @@ export function useCombinedDiffScrollAnchors({
     return true
   }, [latestDomScrollAnchorRef, scrollAnchorRef, scrollContainerRef])
   const writeScrollAnchor = useCallback((): void => {
-    const anchor = scrollAnchorRef.current
-    if (anchor) {
-      setWithLRU(combinedDiffScrollAnchorCache, viewStateKey, anchor)
-    } else {
-      combinedDiffScrollAnchorCache.delete(viewStateKey)
-    }
+    updateCombinedDiffViewMemory(viewStateKey, {
+      scrollAnchor: scrollAnchorRef.current ?? undefined
+    })
   }, [scrollAnchorRef, viewStateKey])
   const persistScrollAnchor = useCallback(
     (refreshDomAnchor = true): void => {

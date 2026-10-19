@@ -2,12 +2,11 @@ import { useLayoutEffect } from 'react'
 import type React from 'react'
 import type { VirtualizedScrollAnchor } from '@/hooks/useVirtualizedScrollAnchor'
 import type { ProgrammaticScrollMarks } from '@/hooks/programmatic-scroll-marks'
-import { setWithLRU } from '@/lib/scroll-cache'
 import type { DiffSection } from '../../diff-section-types'
 import {
-  combinedDiffScrollTopCache,
-  combinedDiffViewStateCache
-} from '../remember-view/combined-diff-view-memory'
+  readCombinedDiffViewMemory,
+  updateCombinedDiffViewMemory
+} from '../remember-view/combined-diff-view-cache'
 import type { CombinedDiffScrollAnchors } from './use-combined-diff-scroll-anchors'
 
 export function useCombinedDiffScrollPersistence({
@@ -49,9 +48,9 @@ export function useCombinedDiffScrollPersistence({
       return
     }
 
-    const cached = combinedDiffViewStateCache.get(viewStateKey)
-    if (cached && cached.entrySignature === entrySignature) {
-      scrollOffsetRef.current = combinedDiffScrollTopCache.get(viewStateKey) ?? cached.scrollTop
+    const memory = readCombinedDiffViewMemory(viewStateKey)
+    if (memory?.view && memory.view.entrySignature === entrySignature) {
+      scrollOffsetRef.current = memory.scrollTop ?? memory.view.scrollTop
     }
 
     let anchorIdleTimerId: number | null = null
@@ -93,9 +92,7 @@ export function useCombinedDiffScrollPersistence({
       scrollTop: number
       writeAnchor: boolean
     }): void => {
-      const existing = combinedDiffViewStateCache.get(viewStateKey)
       scrollOffsetRef.current = scrollTop
-      setWithLRU(combinedDiffScrollTopCache, viewStateKey, scrollTop)
       if (writeAnchor) {
         if (recordDomAnchor) {
           persistScrollAnchor()
@@ -107,12 +104,10 @@ export function useCombinedDiffScrollPersistence({
         scheduleSettledAnchorPersist()
       }
       updateScrollbar()
-      if (!existing || existing.entrySignature !== entrySignature) {
-        return
-      }
-      setWithLRU(combinedDiffViewStateCache, viewStateKey, {
-        ...existing,
-        scrollTop
+      const view = readCombinedDiffViewMemory(viewStateKey)?.view
+      updateCombinedDiffViewMemory(viewStateKey, {
+        scrollTop,
+        view: view?.entrySignature === entrySignature ? { ...view, scrollTop } : view
       })
     }
     let lastScrollHeight = container.scrollHeight

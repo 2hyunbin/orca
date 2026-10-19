@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import type React from 'react'
-import { setWithLRU } from '@/lib/scroll-cache'
 import type { DiffSection } from '../../diff-section-types'
-import { combinedDiffScrollTopCache, combinedDiffViewStateCache } from './combined-diff-view-memory'
+import {
+  readCombinedDiffViewMemory,
+  updateCombinedDiffViewMemory
+} from './combined-diff-view-cache'
 
 export function useCombinedDiffViewPersist({
   combinedGitStatusSignature,
@@ -13,8 +15,7 @@ export function useCombinedDiffViewPersist({
   sections,
   loadedIndicesRef,
   sideBySide,
-  viewStateKey,
-  worktreeId
+  viewStateKey
 }: {
   combinedGitStatusSignature: string
   entryCount: number
@@ -25,25 +26,27 @@ export function useCombinedDiffViewPersist({
   loadedIndicesRef: React.RefObject<Set<number>>
   sideBySide: boolean
   viewStateKey: string
-  worktreeId: string
 }): void {
   useEffect(() => {
     if (sections.length === 0 && entryCount > 0) {
       return
     }
     const preservedScrollTop =
-      combinedDiffScrollTopCache.get(viewStateKey) ?? scrollContainerRef.current?.scrollTop ?? 0
-    setWithLRU(combinedDiffViewStateCache, viewStateKey, {
-      worktreeId,
-      entrySignature,
-      gitStatusSignature: combinedGitStatusSignature,
-      sections,
-      sectionHeights,
-      loadedIndices: Array.from(loadedIndicesRef.current).filter(
-        (index) => !sections[index]?.loading
-      ),
-      scrollTop: preservedScrollTop,
-      sideBySide
+      readCombinedDiffViewMemory(viewStateKey)?.scrollTop ??
+      scrollContainerRef.current?.scrollTop ??
+      0
+    updateCombinedDiffViewMemory(viewStateKey, {
+      view: {
+        entrySignature,
+        gitStatusSignature: combinedGitStatusSignature,
+        sections,
+        sectionHeights,
+        loadedIndices: Array.from(loadedIndicesRef.current).filter(
+          (index) => !sections[index]?.loading
+        ),
+        scrollTop: preservedScrollTop,
+        sideBySide
+      }
     })
   }, [
     combinedGitStatusSignature,
@@ -54,7 +57,6 @@ export function useCombinedDiffViewPersist({
     sectionHeights,
     sections,
     sideBySide,
-    viewStateKey,
-    worktreeId
+    viewStateKey
   ])
 }

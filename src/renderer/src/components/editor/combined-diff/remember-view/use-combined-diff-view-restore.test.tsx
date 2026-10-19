@@ -7,7 +7,11 @@ import type { GitStatusEntry } from '../../../../../../shared/git-status-types'
 import type { DiffSection } from '../../diff-section-types'
 import { useCombinedDiffSectionLoadRegistry } from '../load-sections/combined-diff-section-load-registry'
 import type { CombinedDiffEntrySet } from '../resolve-changes/use-combined-diff-entry-set'
-import { combinedDiffViewStateCache } from './combined-diff-view-memory'
+import {
+  claimCombinedDiffViewMemory,
+  clearCombinedDiffViewMemory,
+  updateCombinedDiffViewMemory
+} from './combined-diff-view-cache'
 import { useCombinedDiffViewRestore } from './use-combined-diff-view-restore'
 import { createStore } from 'zustand/vanilla'
 import { createEditorModelRegistry } from '@/lib/editor-model-registry'
@@ -51,7 +55,8 @@ function restoreSections(entrySet: CombinedDiffEntrySet, viewStateKey: string): 
         sections = typeof value === 'function' ? value(sections) : value
       },
       setSideBySide: () => {},
-      viewStateKey
+      viewStateKey,
+      worktreeId: 'wt-1'
     })
   })
   return sections
@@ -60,7 +65,7 @@ function restoreSections(entrySet: CombinedDiffEntrySet, viewStateKey: string): 
 describe('useCombinedDiffViewRestore deferral', () => {
   afterEach(() => {
     cleanup()
-    combinedDiffViewStateCache.clear()
+    clearCombinedDiffViewMemory()
   })
 
   it('keeps uncommitted rows deferred when only the branch pass counted', () => {
@@ -105,15 +110,17 @@ describe('useCombinedDiffViewRestore deferral', () => {
         largeDiffRenderLimit: null
       }
     ]
-    combinedDiffViewStateCache.set(viewStateKey, {
-      worktreeId: 'wt-1',
-      entrySignature: entrySet.entrySignature,
-      gitStatusSignature: '',
-      sections: loadedSections,
-      sectionHeights: {},
-      loadedIndices: [0],
-      scrollTop: 0,
-      sideBySide: false
+    claimCombinedDiffViewMemory(viewStateKey, 'wt-1')
+    updateCombinedDiffViewMemory(viewStateKey, {
+      view: {
+        entrySignature: entrySet.entrySignature,
+        gitStatusSignature: '',
+        sections: loadedSections,
+        sectionHeights: {},
+        loadedIndices: [0],
+        scrollTop: 0,
+        sideBySide: false
+      }
     })
     cleanup()
 
