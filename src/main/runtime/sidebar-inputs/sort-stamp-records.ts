@@ -1,5 +1,10 @@
 import type { AgentPaneWorkspace } from '../../agent-hooks/agent-transition-detector'
-import type { ExecutionHostId } from '../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import type {
   SmartStampFields,
   SmartTier,
@@ -48,11 +53,31 @@ export function readWorkspaceRecord<TRecord>(
   { worktreeId, sshHostId }: AgentPaneWorkspace
 ): TRecord | undefined {
   const scope = parseWorkspaceKey(worktreeId)
-  return scope?.type === 'folder'
-    ? store?.getFolderWorkspace?.(scope.folderWorkspaceId)
-    : sshHostId
-      ? store?.getWorktreeMetaForHost?.(worktreeId, sshHostId)
-      : store?.getWorktreeMeta(worktreeId)
+  if (scope?.type === 'folder') {
+    return store?.getFolderWorkspace?.(scope.folderWorkspaceId)
+  }
+  const hostId = sshHostId ?? (store && localTwinHostId(store, worktreeId))
+  return hostId
+    ? store?.getWorktreeMetaForHost?.(worktreeId, hostId)
+    : store?.getWorktreeMeta(worktreeId)
+}
+
+/**
+ * A pane with no SSH host runs on this machine. With same-id twins the raw-id row may be the other
+ * twin's, so such a pane reads and writes the local copy by name.
+ */
+function localTwinHostId(
+  store: Pick<WorkspaceRecordStore<unknown, never>, 'getRepos'>,
+  worktreeId: string
+): ExecutionHostId | null {
+  const repoId = getRepoIdFromWorktreeId(worktreeId)
+  const hosts = new Set(
+    store
+      .getRepos()
+      .filter((repo) => repo.id === repoId)
+      .map(getRepoExecutionHostId)
+  )
+  return hosts.size > 1 && hosts.has(LOCAL_EXECUTION_HOST_ID) ? LOCAL_EXECUTION_HOST_ID : null
 }
 
 export function writeWorkspaceRecord<TUpdates>(
@@ -65,9 +90,10 @@ export function writeWorkspaceRecord<TUpdates>(
     store?.updateFolderWorkspace?.(scope.folderWorkspaceId, updates)
     return
   }
-  // No SSH host: the row the read above found, by its own stamp.
-  const target = sshHostId
-    ? hostWorktreeTarget({ id: worktreeId, hostId: sshHostId })
+  // No SSH host and no twin: the row the read above found, by its own stamp.
+  const hostId = sshHostId ?? (store && localTwinHostId(store, worktreeId))
+  const target = hostId
+    ? hostWorktreeTarget({ id: worktreeId, hostId })
     : store && resolveWorktreeMetaOwner(store, worktreeId)
   if (target) {
     store?.setWorktreeMeta(target, updates)
