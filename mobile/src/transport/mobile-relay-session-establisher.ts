@@ -97,6 +97,7 @@ export class MobileRelaySessionEstablisher {
       resumeToken: credential.token,
       relay: () => this.relay,
       dial: () => this.establish(credential),
+      claimAttachTimeoutRetry: () => this.args.controller.claimAttachTimeoutRetry(),
       resolveRelay: this.args.resolveRelay,
       persistResolvedRelay: (resolved) => this.adoptRelay(resolved)
     })

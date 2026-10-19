@@ -212,6 +212,8 @@ export class RelayReconnectController {
 
   recordRejectedCredential = (version: number): void => this.credentials.recordRejected(version)
 
+  claimAttachTimeoutRetry = (): boolean => this.failureCount.claimAttachTimeoutRetry()
+
   registerActiveFailure(logical: StableLogicalRpcClient): Error | null {
     if (logical.getActivePath() !== 'relay') {
       return null

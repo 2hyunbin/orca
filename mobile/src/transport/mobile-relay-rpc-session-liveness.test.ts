@@ -215,4 +215,38 @@ describe('mobile relay RPC session liveness', () => {
     expect(session.getState()).toBe('disconnected')
     expect(fakes.close).toHaveBeenCalledOnce()
   })
+
+  it('redials after one short miss when the app returns to the foreground', async () => {
+    const onLog = vi.fn<ConnectionLogSink>()
+    const session = await authenticateSession(onLog)
+
+    session.notifyForeground('app-resume')
+    expect(sentRequests().map(({ method }) => method)).toEqual(['status.get'])
+    await vi.advanceTimersByTimeAsync(2_999)
+    expect(session.getState()).toBe('connected')
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(session.getState()).toBe('disconnected')
+    expect(fakes.sendText).toHaveBeenCalledOnce()
+    expect(onLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'liveness-timeout',
+        detail: expect.stringMatching(/^probe-timeout; 1\/1 probes missed;/)
+      })
+    )
+  })
+
+  it('keeps a relay that answers the foreground probe', async () => {
+    const session = await authenticateSession()
+
+    session.notifyForeground('app-resume')
+    const probe = sentRequests()[0]!
+    fakes.linkOptions!.onText(
+      JSON.stringify({ id: probe.id, ok: true, result: {}, _meta: { runtimeId: 'r1' } })
+    )
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    expect(session.getState()).toBe('connected')
+    session.close()
+  })
 })

@@ -379,6 +379,24 @@ describe('relay reconnect controller', () => {
     expect(relayFailureAllowsGraceRetry(new RelayOuterError(4408))).toBe(false)
     expect(relayFailureAllowsGraceRetry(new RelayOuterError(4429))).toBe(false)
   })
+
+  it('grants one attach-timeout re-resolve per failure streak', () => {
+    const reconnect = createController(vi.fn())
+
+    expect(reconnect.claimAttachTimeoutRetry()).toBe(true)
+    expect(reconnect.claimAttachTimeoutRetry()).toBe(false)
+    reconnect.reset()
+    expect(reconnect.claimAttachTimeoutRetry()).toBe(true)
+
+    // A brief connection continues the streak; only a stable one ends it.
+    reconnect.setActiveSession({ getFailure: () => null })
+    reconnect.registerFailure(new RelayOuterError(4408), false)
+    expect(reconnect.claimAttachTimeoutRetry()).toBe(false)
+    reconnect.setActiveSession({ getFailure: () => null })
+    vi.advanceTimersByTime(30_000)
+    reconnect.registerFailure(new RelayOuterError(4408), false)
+    expect(reconnect.claimAttachTimeoutRetry()).toBe(true)
+  })
 })
 
 function createController(

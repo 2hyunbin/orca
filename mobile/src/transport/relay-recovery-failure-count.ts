@@ -1,5 +1,6 @@
 export class RelayRecoveryFailureCount {
   private count = 0
+  private attachTimeoutRetrySpent = false
   private reporter: ((count: number) => void) | null = null
 
   constructor(private readonly stableConnectionMs: number) {}
@@ -14,8 +15,19 @@ export class RelayRecoveryFailureCount {
   }
 
   record(resetFirst: boolean): number {
+    if (resetFirst) {
+      this.attachTimeoutRetrySpent = false
+    }
     this.update((resetFirst ? 0 : this.count) + 1)
     return this.count
+  }
+
+  // Why: one quick re-resolve per streak; a desktop whose data link keeps missing
+  // the attach deadline falls back to the known-offline wait.
+  claimAttachTimeoutRetry(): boolean {
+    const claimed = !this.attachTimeoutRetrySpent
+    this.attachTimeoutRetrySpent = true
+    return claimed
   }
 
   recordAfterConnection(connectedAt: number | null, now: number): number {
@@ -23,6 +35,7 @@ export class RelayRecoveryFailureCount {
   }
 
   reset(): void {
+    this.attachTimeoutRetrySpent = false
     this.update(0)
   }
 

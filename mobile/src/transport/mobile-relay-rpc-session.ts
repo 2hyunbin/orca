@@ -25,6 +25,9 @@ import type { ConnectionLogSink, ConnectionState, RpcResponse } from './types'
 const RELAY_PROBE_TIMEOUT_MS = 4_000
 const RELAY_MISSED_PROBE_LIMIT = 2
 const RELAY_FOREGROUND_PROBE_MIN_INTERVAL_MS = 10_000
+// Why: a relay kept through the background grace may have died while the app was
+// suspended; one short miss redials instead of waiting out two full probes.
+const RELAY_RESUME_PROBE_TIMEOUT_MS = 3_000
 let relayRpcSessionSequence = 0
 
 export type MobileRelayRpcSession = RpcClient &
@@ -131,7 +134,10 @@ export function connectMobileRelayRpcSession(args: {
     },
     notifyForeground: (reason) => {
       if (state === 'connected' && reason !== 'network-change') {
-        livenessWatchdog.probeNow(livenessIdentity)
+        livenessWatchdog.probeNow(
+          livenessIdentity,
+          reason === 'app-resume' ? RELAY_RESUME_PROBE_TIMEOUT_MS : null
+        )
       }
     },
     close() {
