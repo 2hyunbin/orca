@@ -171,17 +171,15 @@ describe.skipIf(!enabled)(
         getSystemSshBuildArgsOptions: buildOptions
       } satisfies Pick<SshConnection, 'getTarget' | 'getSystemSshBuildArgsOptions'>
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the system SSH provider's start reads only getTarget and getSystemSshBuildArgsOptions.
-      const started = await new SystemSshPortForwardProvider().start(
-        conn as unknown as SshConnection,
-        {
-          id: 'pf-real',
-          connectionId: target.id,
-          localHost: '127.0.0.1',
-          localPort: 0,
-          remoteHost: '127.0.0.1',
-          remotePort: prohibitedPort
-        }
-      )
+      const connection = conn as unknown as SshConnection
+      const started = await new SystemSshPortForwardProvider().start(connection, {
+        id: 'pf-real',
+        connectionId: target.id,
+        localHost: '127.0.0.1',
+        localPort: 0,
+        remoteHost: '127.0.0.1',
+        remotePort: prohibitedPort
+      })
       try {
         expect(await checkForwardChannel(started)).toBe('refused')
       } finally {
