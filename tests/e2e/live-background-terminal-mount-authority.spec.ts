@@ -132,7 +132,7 @@ function createSourceRepo(): string {
   return repoPath
 }
 
-// Null while first-mount adoption has the host refusing to answer; every caller polls past it.
+// Undefined while first-mount adoption has the host refusing to answer; every caller polls past it.
 async function readWorktreeTerminals(client: RuntimeClient, worktreeId: string) {
   const params = { worktree: `id:${worktreeId}`, limit: 20, requireFreshPtyLiveness: true }
   const listed = await readFreshTerminalInventory(
