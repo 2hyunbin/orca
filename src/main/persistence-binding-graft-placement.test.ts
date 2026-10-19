@@ -24,7 +24,7 @@ const NEW_LEAF = '55555555-5555-4555-8555-555555555555'
 const UNKNOWN_LEAF = '66666666-6666-4666-8666-666666666666'
 
 const leaf = (leafId: string): TerminalPaneLayoutNode => ({ type: 'leaf', leafId })
-const SIDE_BY_SIDE: TerminalPaneLayoutNode = {
+const SIDE_BY_SIDE: Extract<TerminalPaneLayoutNode, { type: 'split' }> = {
   type: 'split',
   direction: 'vertical',
   first: leaf(TEST_LEAF_1),
