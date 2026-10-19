@@ -22,7 +22,8 @@ import { trackExternalChangeConflictAction } from './editor-external-change-tele
 import { editorTabFileAccess } from '@/lib/local-file-access'
 import {
   getEditorBufferKey,
-  getSameBufferFileIds
+  getSameBufferFileIds,
+  getSameBufferFiles
 } from '@/store/slices/editor/file-ids/editor-file-buffer'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
@@ -38,6 +39,11 @@ export type EditorSaveQueue = {
   bumpSaveGeneration: (fileId: string) => void
   syncAutoSave: () => void
   dispose: () => void
+}
+
+// Why: one tab's restore or owner move pauses autosave for the whole shared buffer.
+function isAutosaveSuspendedForBuffer(state: AppState, fileId: string): boolean {
+  return getSameBufferFiles(state, fileId).some(isAutosaveSuspendedForFile)
 }
 
 // Why: keeping the save queue, quiesce coordination, and the debounce timers that feed it together avoids split-brain saves.
@@ -113,7 +119,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         }
 
         // Why: only autosave is blocked while suspended; explicit user saves proceed (the banner warned).
-        if (trigger === 'autosave' && isAutosaveSuspendedForFile(liveFile)) {
+        if (trigger === 'autosave' && isAutosaveSuspendedForBuffer(state, liveFile.id)) {
           return
         }
 
@@ -215,7 +221,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         file.isDirty &&
         canAutoSaveOpenFile(file) &&
         // Why: suspension holds until the user picks a side via the banner (or saves manually).
-        !isAutosaveSuspendedForFile(file) &&
+        !isAutosaveSuspendedForBuffer(state, fileId) &&
         draft !== undefined
       if (!shouldKeepTimer) {
         clearTabAutoSaveTimer(fileId)
@@ -233,7 +239,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         !file.isDirty ||
         draft === undefined ||
         !canAutoSaveOpenFile(file) ||
-        isAutosaveSuspendedForFile(file)
+        isAutosaveSuspendedForBuffer(state, file.id)
       ) {
         clearTabAutoSaveTimer(file.id)
         continue

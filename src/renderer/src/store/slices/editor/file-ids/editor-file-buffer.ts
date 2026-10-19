@@ -49,6 +49,19 @@ export function getSameBufferFileIds(state: AppState, fileId: string): string[] 
   ]
 }
 
+/** Every open tab sharing `fileId`'s buffer, `fileId` first. */
+export function getSameBufferFiles(state: AppState, fileId: string): OpenFile[] {
+  return getSameBufferFileIds(state, fileId).flatMap(
+    (id) => state.openFiles.find((file) => file.id === id) ?? []
+  )
+}
+
+/** Closing a tab only prompts to save when no other tab still shows its buffer. */
+export function needsSavePromptOnClose(state: AppState, fileId: string): boolean {
+  const file = state.openFiles.find((candidate) => candidate.id === fileId)
+  return file?.isDirty === true && getSameBufferFileIds(state, fileId).length === 1
+}
+
 /** A new tab joins an already-open buffer: adopt its unsaved draft and disk state. */
 export function adoptOpenEditorBuffer(state: AppState, fileId: string): Partial<AppState> | null {
   const [, peerId] = getSameBufferFileIds(state, fileId)
@@ -64,7 +77,10 @@ export function adoptOpenEditorBuffer(state: AppState, fileId: string): Partial<
             ...file,
             isDirty: peer.isDirty,
             lastKnownDiskSignature: peer.lastKnownDiskSignature,
-            externalMutation: peer.externalMutation
+            externalMutation: peer.externalMutation,
+            pendingDiskBaselineVerification: peer.pendingDiskBaselineVerification,
+            pendingLiveDiskVerification: peer.pendingLiveDiskVerification,
+            pendingOwnerMigration: file.pendingOwnerMigration || peer.pendingOwnerMigration
           }
         : file
     ),

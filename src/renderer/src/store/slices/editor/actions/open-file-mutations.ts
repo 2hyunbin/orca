@@ -140,44 +140,30 @@ export function createOpenFileMutations(
       ),
 
     clearPendingDiskBaselineVerification: (fileId) =>
-      set((s) => {
-        const file = s.openFiles.find((f) => f.id === fileId)
-        if (!file?.pendingDiskBaselineVerification) {
-          return s
-        }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, pendingDiskBaselineVerification: undefined } : f
-          )
-        }
-      }),
+      set((s) =>
+        setOnSameBuffer(s, fileId, (f) =>
+          f.pendingDiskBaselineVerification
+            ? { ...f, pendingDiskBaselineVerification: undefined }
+            : f
+        )
+      ),
 
     setPendingDiskBaselineVerification: (fileId, value) =>
       set((s) => {
-        const file = s.openFiles.find((f) => f.id === fileId)
         const next = value || undefined
-        if (!file || file.pendingDiskBaselineVerification === next) {
-          return s
-        }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, pendingDiskBaselineVerification: next } : f
-          )
-        }
+        return setOnSameBuffer(s, fileId, (f) =>
+          f.pendingDiskBaselineVerification === next
+            ? f
+            : { ...f, pendingDiskBaselineVerification: next }
+        )
       }),
 
     setPendingLiveDiskVerification: (fileId, value) =>
       set((s) => {
-        const file = s.openFiles.find((f) => f.id === fileId)
         const next = value || undefined
-        if (!file || file.pendingLiveDiskVerification === next) {
-          return s
-        }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, pendingLiveDiskVerification: next } : f
-          )
-        }
+        return setOnSameBuffer(s, fileId, (f) =>
+          f.pendingLiveDiskVerification === next ? f : { ...f, pendingLiveDiskVerification: next }
+        )
       }),
 
     clearSelfMoveEcho: (fileId) =>

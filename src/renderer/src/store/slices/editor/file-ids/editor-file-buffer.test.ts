@@ -11,7 +11,11 @@ import {
 import { createEditorSaveQueue } from '@/components/editor/editor-save-queue'
 import { __clearSelfWriteRegistryForTests } from '@/components/editor/editor-self-write-registry'
 import { buildEditorSessionData } from '@/lib/workspace-session'
-import { getEditorBufferKey, getSameBufferFileIds } from './editor-file-buffer'
+import {
+  getEditorBufferKey,
+  getSameBufferFileIds,
+  needsSavePromptOnClose
+} from './editor-file-buffer'
 
 const FILE = '/repo/a.ts'
 
@@ -38,10 +42,15 @@ describe('one editor buffer per physical file', () => {
     disk = stubEditorWindowWithDisk()
     store = createEditorStore()
     store.setState({
+      browserTabsByWorktree: {},
+      tabsByWorktree: {},
+      activeBrowserTabIdByWorktree: {},
+      unifiedTabsByWorktree: {},
       worktreesByRepo: {
         'repo-1': [
           makeWorktree({ id: 'wt-1', repoId: 'repo-1', path: '/repo', hostId: 'local' }),
-          makeWorktree({ id: 'wt-2', repoId: 'repo-1', path: '/repo', hostId: 'local' })
+          makeWorktree({ id: 'wt-2', repoId: 'repo-1', path: '/repo', hostId: 'local' }),
+          makeWorktree({ id: 'wt-3', repoId: 'repo-1', path: '/repo', hostId: 'local' })
         ],
         'repo-ssh': [
           makeWorktree({ id: 'wt-ssh', repoId: 'repo-ssh', path: '/repo', hostId: 'ssh:target' })
@@ -122,6 +131,37 @@ describe('one editor buffer per physical file', () => {
     expect(session.openFilesByWorktree?.['wt-1']?.[0]?.dirtyDraftContent).toBe('typed in A')
     expect(session.openFilesByWorktree?.['wt-2']?.[0]?.dirtyDraftContent).toBe('typed in A')
     expect(getSameBufferFileIds(state, b)).toEqual([b, a])
+  })
+
+  it('prompts to save only when the last tab of a dirty buffer closes', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    store.getState().setEditorDraft(a, 'typed in A')
+    store.getState().markFileDirty(a, true)
+
+    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
+    store.getState().closeFile(a)
+
+    expect(store.getState().editorDrafts[b]).toBe('typed in A')
+    expect(needsSavePromptOnClose(store.getState(), b)).toBe(true)
+  })
+
+  it('shares autosave pauses, including with a tab that joins later', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    store.getState().setPendingLiveDiskVerification(b, true)
+    store.getState().setPendingDiskBaselineVerification(a, true)
+
+    const c = openTab(store, 'wt-3')
+
+    for (const id of [a, b, c]) {
+      expect(tab(store, id)).toMatchObject({
+        pendingLiveDiskVerification: true,
+        pendingDiskBaselineVerification: true
+      })
+    }
+    store.getState().clearPendingDiskBaselineVerification(c)
+    expect(tab(store, a)?.pendingDiskBaselineVerification).toBeUndefined()
   })
 
   it('keeps one tab (shown in split panes) on its own buffer', () => {

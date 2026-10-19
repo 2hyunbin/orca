@@ -14,7 +14,6 @@ import { isReloadableSingleFileDiffTab } from './editor-panel-diff-reload'
 import { createEditorWatcherReloadCoalescer } from './editor-watcher-reload-coalescer'
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
 import { hasRecentSelfWrite } from './editor-self-write-registry'
-import { getSameBufferFileIds } from '@/store/slices/editor/file-ids/editor-file-buffer'
 
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
 
@@ -173,15 +172,10 @@ export function useEditorPanelExternalContentEvents({
         return
       }
       if (file.mode === 'edit' || file.mode === 'markdown-preview') {
-        // Every tab of this file shares one buffer, so all of them now match disk.
-        const ids = getSameBufferFileIds(useAppStore.getState(), file.id)
-        setFileContents((prev) => {
-          const next = { ...prev }
-          for (const id of ids) {
-            next[id] = { content: detail.content, isBinary: false }
-          }
-          return next
-        })
+        setFileContents((prev) => ({
+          ...prev,
+          [file.id]: { content: detail.content, isBinary: false }
+        }))
       }
       updateSavedPreviewTabs(openFilesRef.current, detail, setFileContents)
       if (file.mode === 'edit' || file.mode === 'markdown-preview') {
