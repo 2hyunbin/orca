@@ -3,8 +3,10 @@ import { SET_TERMINAL_PANE_TITLE_EVENT } from '@/constants/terminal'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 
 const { fakeStore } = vi.hoisted(() => {
+  const layouts: Record<string, TerminalLayoutSnapshot> = {}
   const state = {
-    terminalLayoutsByTabId: {} as Record<string, TerminalLayoutSnapshot>,
+    tabsByWorktree: {},
+    terminalLayoutsByTabId: layouts,
     setTabLayout: (tabId: string, layout: TerminalLayoutSnapshot) => {
       state.terminalLayoutsByTabId = { ...state.terminalLayoutsByTabId, [tabId]: layout }
     }
