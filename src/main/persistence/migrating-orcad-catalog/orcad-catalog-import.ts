@@ -1,20 +1,20 @@
-import { MAX_ORCAD_MIGRATION_STAGED_CATALOGS } from '../../../shared/orcad-migration-staged-catalog-validation'
-import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../../shared/orcad-migration-manifest-validation'
+import { MAX_ORCAD_MIGRATION_STAGED_CATALOGS } from '../../../shared/orcad-migration/orcad-migration-staged-catalog-validation'
+import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
 import type {
   OrcadMigrationCatalogAbortResult,
   OrcadMigrationCatalogState,
   OrcadMigrationImportReceipt,
   OrcadMigrationManifest
-} from '../../../shared/orcad-migration-manifest'
+} from '../../../shared/orcad-migration/orcad-migration-manifest'
 import type {
   OrcadMigrationSnapshotChunkRequest,
   OrcadMigrationSnapshotChunkResult
-} from '../../../shared/orcad-migration-scrollback'
+} from '../../../shared/orcad-migration/orcad-migration-scrollback'
 import type {
   OrcadMigrationBlobChunkRequest,
   OrcadMigrationBlobChunkResult,
   OrcadMigrationBlobDescriptor
-} from '../../../shared/orcad-migration-blob-transfer'
+} from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
 import type { RepoLifecycleOperations } from '../loading-store/repo-lifecycle-operations'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import type { WriteSchedulingOperations } from '../loading-store/write-scheduling'

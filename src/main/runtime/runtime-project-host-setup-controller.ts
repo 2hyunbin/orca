@@ -21,7 +21,7 @@ import {
 } from '../../shared/execution-host'
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
-import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
+import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import {
   SshHostNotServedError,
   sshTargetNotConnectedMessage
@@ -286,7 +286,7 @@ export class RuntimeProjectHostSetupController {
       if (!identity || getProjectIdForProviderIdentity(identity) !== args.projectId) {
         throw new Error('Imported folder does not match the selected project identity.')
       }
-      const updated = store.updateRepo(repo.id, {
+      const updated = store.updateRepo(repo, {
         upstream: {
           owner: identity.owner,
           repo: identity.repo,
@@ -300,7 +300,7 @@ export class RuntimeProjectHostSetupController {
       setup = getProjectHostSetupForRepo(this.listSetups(), repo)
     }
     const setupMethod = args.setupMethod ?? 'imported-existing-folder'
-    const updated = store.updateRepo(repo.id, { projectHostSetupMethod: setupMethod })
+    const updated = store.updateRepo(repo, { projectHostSetupMethod: setupMethod })
     if (!updated) {
       throw new Error(
         `Project setup repo disappeared before setup metadata could be linked: ${repo.id}`

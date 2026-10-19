@@ -1,5 +1,5 @@
-import { ORCAD_MIGRATION_BLOB_KIND_CONTRACTS } from '../../../shared/orcad-migration-blob-transfer'
-import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
+import { ORCAD_MIGRATION_BLOB_KIND_CONTRACTS } from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
+import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orcad-migration-manifest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { getHistoryRoot } from '../../terminal-history-paths'

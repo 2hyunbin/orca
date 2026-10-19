@@ -1,5 +1,6 @@
 import { AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY } from './agent-session-current-requests-capability'
 import { AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY } from './ai-vault-resume-preparation'
+import { PROGRAM_STATUS_RUNTIME_CAPABILITY } from './program-status/protocol'
 import { JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY } from './jira-agent-capability'
 import { JIRA_STATUS_FILTER_RUNTIME_CAPABILITY } from './jira-quick-filters'
 import { JIRA_SAVED_FILTER_RUNTIME_CAPABILITY } from './jira-saved-filter-capability'
@@ -26,7 +27,8 @@ export {
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
   PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY
+  STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY
 } from './structured-agent-session-surface-capabilities'
 import { AGENT_SESSION_ATTENTION_RUNTIME_CAPABILITIES } from './agent-session-attention-capabilities'
 export {
@@ -58,6 +60,7 @@ import { AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY } from './agent-sessi
 import { ORCAD_RUNTIME_CAPABILITIES } from './orcad-runtime-capabilities'
 import { DEVICE_KEY_RUNTIME_CAPABILITIES } from './device-key-capability'
 import { TERMINAL_QUICK_COMMAND_RUNTIME_CAPABILITIES } from './terminal-quick-command-capabilities'
+import { FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY } from './file-write-disk-precondition'
 // Why a star: every resume capability is part of the runtime contract this module re-exports.
 export * from './agent-session-resume-runtime-capabilities'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from './agent-session-background-task-child-views-capability'
@@ -75,6 +78,7 @@ import * as agentLaunchCapabilities from './agent-launch-runtime-capability'
 import {
   AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY,
   AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_PHONE_ATTACHMENTS_RUNTIME_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY,
   AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
@@ -188,6 +192,7 @@ export const RUNTIME_CAPABILITIES = [
   ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY,
   'files.pathsExist',
   'files.resolve-terminal-path.cross-workspace.v1',
+  FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   'runtime.status.compat.v1',
   'runtime.environments.v1',
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,
@@ -201,6 +206,7 @@ export const RUNTIME_CAPABILITIES = [
   BROWSER_NETWORK_TUNNEL_RUNTIME_CAPABILITY,
   BROWSER_NETWORK_EXECUTION_HOSTS_RUNTIME_CAPABILITY,
   'terminal.binary-stream.v1',
+  PROGRAM_STATUS_RUNTIME_CAPABILITY,
   'terminal.multiplex.v1',
   'workspace-ports.v1',
   'mobile.tasks.v1',
@@ -259,6 +265,7 @@ export const RUNTIME_CAPABILITIES = [
   AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY,
   AGENT_SESSION_QUESTION_ANSWERS_RUNTIME_CAPABILITY,
   AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_PHONE_ATTACHMENTS_RUNTIME_CAPABILITY,
   AGENT_SESSION_TURN_ITEM_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY,

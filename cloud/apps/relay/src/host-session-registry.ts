@@ -35,9 +35,15 @@ import type { CellAdmitMode, CellReserveBook } from './cell-reserve-book.js'
 import type { DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
 import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
 import { isRelayDatabaseTransientError } from './database.js'
+import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
 import { RelayCredentialStore, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
+import {
+  postProofCloseCause,
+  PostProofCloseLog,
+  type PostProofCloseCause
+} from './post-proof-close-log.js'
 import { relayHostLogDigest } from './relay-host-log-digest.js'
 import type { RelayTokenClaims } from './relay-token-verifier.js'
 import {
@@ -51,14 +57,6 @@ import {
 import type { PendingHostDataReservation } from './relay-connection-ledger.js'
 import { closeRelayWebSocket } from './relay-websocket-close.js'
 import { ProcessQueuedByteBudget, wireSplice } from './splice-forwarder.js'
-
-// Peer-supplied close reasons are logged; keep them printable and short.
-function printableCloseReason(reason: Buffer | string): string {
-  return reason
-    .toString()
-    .replace(/[^\x20-\x7e]/g, '')
-    .slice(0, 80)
-}
 
 type VerifyRelayToken = (token: string) => Promise<RelayTokenClaims | null>
 type HostState = 'proving' | 'active' | 'orphaned' | 'drain-only' | 'closed'
@@ -249,6 +247,8 @@ export type CellReserveAdmission = {
   directorContact?: () => void
   // The switch file's flip-back pace, when set.
   reregisterInFlight?: () => number | undefined
+  // The switch file's phone path; it acts only while the cell is in reserve mode.
+  phonePath?: () => 'db' | 'memory'
   // The pool-pressure shed's condition: a hello memory cannot admit is shed, not queued.
   databaseShedding: () => boolean
   book: CellReserveBook
@@ -299,6 +299,7 @@ export class HostSessionRegistry {
   // draining" is not the same question as "this host has been told to leave".
   private readonly drainSentHosts = new Set<string>()
   private readonly seatLog: CellSeatLog
+  private readonly postProofCloses: PostProofCloseLog
   // Seat key -> the demoted control socket. Its own set, not drainSentHosts: it ends with
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
   private readonly demotedSeats = new Map<string, WebSocket>()
@@ -442,6 +443,7 @@ export class HostSessionRegistry {
     private readonly reserveAdmission?: CellReserveAdmission
   ) {
     this.seatLog = new CellSeatLog(undefined, now)
+    this.postProofCloses = new PostProofCloseLog(observer)
   }
 
   // Reserve mode is only ever a cell's, and only while its applied switch says so.
@@ -451,6 +453,12 @@ export class HostSessionRegistry {
 
   inReserveMode(): boolean {
     return this.reserveMode()
+  }
+
+  // Step 6: the seat is authoritative only in reserve mode, so a dead-man trip or admitMode=db
+  // turns the memory phone path off for new phones too.
+  phonePathEffective(): 'db' | 'memory' {
+    return this.reserveMode() && this.reserveAdmission?.phonePath?.() === 'memory' ? 'memory' : 'db'
   }
 
   // Leaving reserve mode: every control admitted from memory gets the database lease it never
@@ -1627,9 +1635,15 @@ export class HostSessionRegistry {
     // Present when the hello was admitted from memory: no database registration.
     reserved?: { reservedBy?: string }
   ): Promise<void> {
+    const refused = { relayHostId: identity.relayHostId, generation, appVersion }
     const release = this.beginIdleWork(identity.relayHostId)
     if (!release) {
-      socket.close(RELAY_CLOSE_CODE.WRONG_CELL, 'idle cutover in progress')
+      this.refuseProvenControl(
+        socket,
+        refused,
+        RELAY_CLOSE_CODE.WRONG_CELL,
+        'idle cutover in progress'
+      )
       return Promise.resolve()
     }
     const key = this.key(identity.sub, identity.relayHostId)
@@ -1639,16 +1653,36 @@ export class HostSessionRegistry {
     let queueWaitExpired = false
     const queueWaitTimer = setTimeout(() => {
       queueWaitExpired = true
-      socket.close(RELAY_CLOSE_CODE.LIMIT_EXCEEDED, 'control activation queue stalled')
+      this.refuseProvenControl(
+        socket,
+        refused,
+        RELAY_CLOSE_CODE.LIMIT_EXCEEDED,
+        'control activation queue stalled',
+        undefined,
+        'host closed while queued'
+      )
     }, ACTIVATION_QUEUE_WAIT_MS)
     queueWaitTimer.unref?.()
     const activation = previous
       .catch(() => undefined)
       .then(async () => {
         clearTimeout(queueWaitTimer)
-        if (queueWaitExpired || socket.readyState !== socket.OPEN) return
+        if (queueWaitExpired) return
+        if (socket.readyState !== socket.OPEN) {
+          this.postProofCloses.record({
+            ...refused,
+            code: null,
+            reason: 'host closed while queued'
+          })
+          return
+        }
         if ((this.sessions.get(key) ?? null) !== existing) {
-          socket.close(RELAY_CLOSE_CODE.PEER_DROPPED, 'control activation superseded')
+          this.refuseProvenControl(
+            socket,
+            refused,
+            RELAY_CLOSE_CODE.PEER_DROPPED,
+            'control activation superseded'
+          )
           return
         }
         await this.activateCurrent(
@@ -1683,6 +1717,7 @@ export class HostSessionRegistry {
     connectionInclusionWatermark?: number,
     reserved?: { reservedBy?: string }
   ): Promise<void> {
+    const refused = { relayHostId: identity.relayHostId, generation, appVersion }
     let controlActivityId: string | null = null
     // Admitted from memory, but the cell left reserve mode before the proof landed: lease now.
     if (this.config.role === 'cell' && !(reserved && this.reserveMode())) {
@@ -1704,7 +1739,7 @@ export class HostSessionRegistry {
           { userId: identity.sub, relayHostId: identity.relayHostId },
           { cellId: this.config.cellId, assignmentEpoch }
         )
-      } catch {
+      } catch (error) {
         // A failure after activateControl succeeded must not strand the
         // acquired control activity until lease expiry.
         if (controlActivityId) {
@@ -1713,7 +1748,13 @@ export class HostSessionRegistry {
             controlActivityId
           )
         }
-        socket.close(RELAY_CLOSE_CODE.WRONG_CELL, 'assignment changed during host proof')
+        this.refuseProvenControl(
+          socket,
+          refused,
+          RELAY_CLOSE_CODE.WRONG_CELL,
+          'assignment changed during host proof',
+          postProofCloseCause(error, isRelayDatabaseTransientError)
+        )
         return
       }
     }
@@ -1725,7 +1766,13 @@ export class HostSessionRegistry {
         )
       }
       if (socket.readyState === socket.OPEN) {
-        socket.close(RELAY_CLOSE_CODE.DRAINING, 'relay draining')
+        this.refuseProvenControl(socket, refused, RELAY_CLOSE_CODE.DRAINING, 'relay draining')
+      } else {
+        this.postProofCloses.record({
+          ...refused,
+          code: null,
+          reason: 'host closed during activation'
+        })
       }
       return
     }
@@ -1826,6 +1873,22 @@ export class HostSessionRegistry {
     this.wireActiveControl(session)
     this.sendHelloAck(session)
     this.appendSeatChange(session, 'join', undefined, reserved?.reservedBy)
+  }
+
+  private refuseProvenControl(
+    socket: WebSocket,
+    refused: { relayHostId: string; generation: number; appVersion: string },
+    code: number,
+    reason: string,
+    cause?: PostProofCloseCause,
+    hungUpReason = 'host closed during activation'
+  ): void {
+    // A host that already hung up got no close frame from us; log what happened instead.
+    const open = socket.readyState === socket.OPEN
+    socket.close(code, reason)
+    this.postProofCloses.record(
+      open ? { ...refused, code, reason, cause } : { ...refused, code: null, reason: hungUpReason }
+    )
   }
 
   seatFeed(sinceSeq: number | null): CellSeatFeedPage {

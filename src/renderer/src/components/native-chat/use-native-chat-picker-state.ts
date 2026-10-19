@@ -13,7 +13,10 @@ import {
 } from 'react'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { getNativeChatAgentProfile } from '../../../../shared/native-chat-agent-profiles'
-import type { SlashCommandSuggestion } from '../../../../shared/native-chat-slash-commands'
+import type {
+  NativeChatSessionSkill,
+  SlashCommandSuggestion
+} from '../../../../shared/native-chat-slash-commands'
 import { isStructuredAgentSessionComposerCommand } from '../../../../shared/structured-agent-session-composer'
 import {
   applyMentionSuggestion,
@@ -26,7 +29,7 @@ import {
   type NativeChatPickerItem,
   type NativeChatSendClassification
 } from './native-chat-composer-state'
-import { classifyPickerCommands } from './native-chat-picker-items'
+import { classifyPickerCommands } from '../../../../shared/native-chat-picker-items'
 import { useNativeChatSkills } from './use-native-chat-skills'
 import {
   emitNativeChatPickerItemAccepted,
@@ -40,6 +43,8 @@ export type NativeChatPickerState = {
   retrySkills: () => void
   classifySend: (draft: string) => NativeChatSendClassification
   clearSkillOrigin: () => void
+  /** The draft still leads with the skill the user picked from the menu. */
+  isPickedSkill: (draft: string) => boolean
   completeItem: (item: NativeChatPickerItem) => void
   completeMention: (path: string) => void
   dismiss: (triggerKey: string) => void
@@ -57,7 +62,7 @@ export function useNativeChatPickerState(args: {
   recalledFromHistory: boolean
   disabled: boolean
   /** Skill names the running session reports; undefined keeps the host disk scan. */
-  sessionSkillNames?: readonly string[]
+  sessionSkills?: readonly NativeChatSessionSkill[]
   textareaRef: RefObject<NativeChatComposerInput | null>
   setDraft: (value: string) => void
   setCaret: Dispatch<SetStateAction<number>>
@@ -72,7 +77,7 @@ export function useNativeChatPickerState(args: {
     agentCommands,
     recalledFromHistory,
     disabled,
-    sessionSkillNames,
+    sessionSkills,
     textareaRef,
     setDraft,
     setCaret,
@@ -111,7 +116,7 @@ export function useNativeChatPickerState(args: {
             profile,
             discovery,
             dismissed?.context === dismissalContext ? dismissed.triggerKey : null,
-            sessionSkillNames
+            sessionSkills
           ),
     [
       caret,
@@ -123,7 +128,7 @@ export function useNativeChatPickerState(args: {
       pickerCommands,
       profile,
       recalledFromHistory,
-      sessionSkillNames
+      sessionSkills
     ]
   )
 
@@ -211,13 +216,13 @@ export function useNativeChatPickerState(args: {
         profile,
         discovery,
         null,
-        sessionSkillNames
+        sessionSkills
       )
       if (next.mode === 'none' || next.triggerKey !== dismissed.triggerKey) {
         setDismissed(null)
       }
     },
-    [dismissalContext, dismissed, discovery, draft, pickerCommands, profile, sessionSkillNames]
+    [dismissalContext, dismissed, discovery, draft, pickerCommands, profile, sessionSkills]
   )
 
   const classifySend = useCallback(
@@ -236,6 +241,10 @@ export function useNativeChatPickerState(args: {
   const clearSkillOrigin = useCallback(() => {
     skillOriginRef.current = null
   }, [])
+  const isPickedSkill = useCallback(
+    (value: string) => skillOriginRef.current === (value.split(/\s/, 1)[0] ?? ''),
+    []
+  )
   const dismiss = useCallback(
     (triggerKey: string) => setDismissed({ context: dismissalContext, triggerKey }),
     [dismissalContext]
@@ -247,6 +256,7 @@ export function useNativeChatPickerState(args: {
     retrySkills: discovery.retry,
     classifySend,
     clearSkillOrigin,
+    isPickedSkill,
     completeItem,
     completeMention,
     dismiss,

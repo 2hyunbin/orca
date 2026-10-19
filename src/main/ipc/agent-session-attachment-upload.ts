@@ -163,7 +163,9 @@ export async function uploadExternalPathsToAgentSessionAttachments(
       result.skipped.push({ sourcePath, reason: 'unsupported' })
       continue
     }
-    const staged = await stageOneSourceForRuntimeUpload(sourcePath)
+    const staged = await stageOneSourceForRuntimeUpload(sourcePath, 0, {
+      nameExtensionlessImages: true
+    })
     if (staged.status === 'skipped') {
       result.skipped.push({ sourcePath, reason: staged.reason })
       continue
@@ -189,7 +191,7 @@ export async function uploadExternalPathsToAgentSessionAttachments(
     try {
       const stored = await uploadAttachment(
         context,
-        { name: basename(sourcePath), byteLength: entry.byteLength },
+        { name: staged.name, byteLength: entry.byteLength },
         async (appendSlice) => {
           await streamExternalFileSlices({
             sourceRootPath: sourcePath,
