@@ -11,6 +11,8 @@ import { expect, test } from './helpers/orca-app'
 import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
 import { ensureTerminalVisible, switchToWorktree, waitForSessionReady } from './helpers/store'
 import { splitActiveTerminalPane, waitForActiveTerminalManager } from './helpers/terminal'
+import { leafIdsInOrder } from './helpers/workspace-layout-oracle-model'
+import { readWorkspaceLayoutStreamFrame } from '../../src/shared/workspace-layout/workspace-layout-stream-frames'
 
 const LAYOUT_OWNER_BUILD = existsSync(
   path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
@@ -20,18 +22,6 @@ const LAYOUT_OWNER_BUILD = existsSync(
 type TerminalLayout = [tabId: string, paneIds: string[]][]
 
 type Launched = Awaited<ReturnType<ReturnType<typeof createRestartSession>['launch']>>
-
-function leafIds(root: unknown): string[] {
-  if (!root || typeof root !== 'object') {
-    return []
-  }
-  if ('leafId' in root && typeof root.leafId === 'string') {
-    return [root.leafId]
-  }
-  const first = 'first' in root ? root.first : null
-  const second = 'second' in root ? root.second : null
-  return [...leafIds(first), ...leafIds(second)]
-}
 
 /** What the window draws for the workspace's terminal tabs. */
 async function readWindowLayout(page: Page, worktreeId: string): Promise<TerminalLayout> {
@@ -55,40 +45,28 @@ async function readWindowLayout(page: Page, worktreeId: string): Promise<Termina
       ['tabBar', drawn.tabBar]
     ]
   }
-  return drawn.tabBar.map((tabId) => [tabId, leafIds(drawn.roots[tabId])])
+  return drawn.tabBar.map((tabId) => [tabId, leafIdsInOrder(drawn.roots[tabId])])
 }
 
 /** What main holds for the workspace, read from a stream of the test's own. */
 async function readMainLayout(page: Page, worktreeId: string): Promise<TerminalLayout> {
-  const tabs = await page.evaluate(
+  const raw = await page.evaluate(
     (id) =>
-      new Promise<{ entityId: string; root: unknown }[]>((resolve, reject) => {
+      new Promise<unknown>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('main sent no layout snapshot')), 10_000)
         let handle: { unsubscribe: () => void } | null = null
-        let answer: { entityId: string; root: unknown }[] | null = null
+        let snapshot: unknown
         const finish = (): void => {
-          if (handle && answer) {
+          if (handle && snapshot !== undefined) {
             clearTimeout(timer)
             handle.unsubscribe()
-            resolve(answer)
+            resolve(snapshot)
           }
         }
         void window.api.runtime
           .subscribe({ method: 'layout.subscribe', params: { workspaces: [id] } }, (response) => {
-            const frame = response.ok ? response.result : null
-            if (!frame || typeof frame !== 'object' || !('type' in frame)) {
-              return
-            }
-            if (frame.type === 'snapshot' && 'workspaces' in frame && !answer) {
-              // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: main's published snapshot shape; a mismatch fails the comparison below.
-              const entries = frame.workspaces as {
-                key: string
-                layout: { tabs: { kind: string; entityId: string; terminal?: { root: unknown } }[] }
-              }[]
-              const layout = entries.find((entry) => entry.key === id)?.layout
-              answer = (layout?.tabs ?? [])
-                .filter((tab) => tab.kind === 'terminal')
-                .map((tab) => ({ entityId: tab.entityId, root: tab.terminal?.root ?? null }))
+            if (snapshot === undefined && response.ok) {
+              snapshot = response.result
               finish()
             }
           })
@@ -99,17 +77,28 @@ async function readMainLayout(page: Page, worktreeId: string): Promise<TerminalL
       }),
     worktreeId
   )
-  return tabs.map((tab) => [tab.entityId, leafIds(tab.root)])
+  const frame = readWorkspaceLayoutStreamFrame(raw)
+  if (frame?.type !== 'snapshot') {
+    throw new Error(
+      `layout.subscribe opened with no snapshot: ${JSON.stringify(raw).slice(0, 300)}`
+    )
+  }
+  const layout = frame.workspaces.find((entry) => entry.key === worktreeId)?.layout
+  return (layout?.tabs ?? [])
+    .filter((tab) => tab.kind === 'terminal')
+    .map((tab) => [tab.entityId, leafIdsInOrder(tab.terminal?.root)])
 }
 
-/** Polls until the window and main agree on `expected` three reads in a row: a late duplicate fails. */
-async function expectSettled(
-  page: Page,
-  worktreeId: string,
-  expected: (layout: TerminalLayout) => void
-): Promise<TerminalLayout> {
+/** Tab ids in tab-bar order and each tab's pane count: what a lost or doubled tab or pane changes. */
+type Summary = { tabs: string[]; panes: number[] }
+
+function summarize(layout: TerminalLayout): Summary {
+  return { tabs: layout.map(([tabId]) => tabId), panes: layout.map(([, panes]) => panes.length) }
+}
+
+/** Polls until the window and main both show `want` three reads in a row: a late duplicate fails. */
+async function expectSettled(page: Page, worktreeId: string, want: Summary): Promise<void> {
   let streak = 0
-  let settled: TerminalLayout = []
   await expect
     .poll(
       async () => {
@@ -117,46 +106,21 @@ async function expectSettled(
           readWindowLayout(page, worktreeId),
           readMainLayout(page, worktreeId)
         ])
-        const same = JSON.stringify(windowLayout) === JSON.stringify(mainLayout)
-        streak = same ? streak + 1 : 0
-        settled = windowLayout
-        return streak >= 3 ? 'settled' : { windowLayout, mainLayout }
+        const shown = { window: summarize(windowLayout), main: summarize(mainLayout) }
+        const match =
+          JSON.stringify(windowLayout) === JSON.stringify(mainLayout) &&
+          JSON.stringify(shown.window) === JSON.stringify(want)
+        streak = match ? streak + 1 : 0
+        return streak >= 3 ? want : { ...shown, windowLayout, mainLayout }
       },
       { timeout: 30_000, intervals: [500] }
     )
-    .toBe('settled')
-  expected(settled)
-  return settled
+    .toEqual(want)
 }
 
-function tabIds(layout: TerminalLayout): string[] {
-  return layout.map(([tabId]) => tabId)
-}
-
-function paneCount(layout: TerminalLayout, tabId: string): number {
-  return layout.find(([id]) => id === tabId)?.[1].length ?? 0
-}
-
-/** A terminal main starts itself, as the CLI's create does: only the stream shows it. */
-async function createMainTerminal(
-  page: Page,
-  worktreeId: string
-): Promise<{ tabId: string; handle: string }> {
-  const reply = await page.evaluate(
-    (id) =>
-      window.api.runtime.call({
-        method: 'terminal.create',
-        params: {
-          worktree: `id:${id}`,
-          command: 'sleep 600',
-          focus: false,
-          activate: false,
-          presentation: 'background'
-        }
-      }),
-    worktreeId
-  )
-  const result = reply.ok ? reply.result : null
+/** The tab and handle of a terminal main started itself, as the CLI's create does. */
+function readCreatedTerminal(reply: unknown): { tabId: string; handle: string } {
+  const result = reply && typeof reply === 'object' && 'result' in reply ? reply.result : null
   const terminal =
     result && typeof result === 'object' && 'terminal' in result ? result.terminal : null
   const tabId =
@@ -175,7 +139,7 @@ async function splitMainTerminal(page: Page, handle: string): Promise<void> {
     (terminal) =>
       window.api.runtime.call({
         method: 'terminal.split',
-        params: { terminal, direction: 'vertical', command: 'sleep 600' }
+        params: { terminal, direction: 'vertical' }
       }),
     handle
   )
@@ -210,41 +174,52 @@ async function openWorkspace(first: Launched, repoPath: string): Promise<string>
   await expect
     .poll(() => first.page.evaluate(() => typeof window.__endLocalLayoutStreamE2E), {
       timeout: 15_000,
-      message: 'the window never opened its layout stream'
+      message: 'no layout stream, or a build without --mode e2e (the end hook is e2e-mode only)'
     })
     .toBe('function')
   return worktreeId
 }
 
 /**
- * Ends the stream, opens a tab while it is down, then has main start a split terminal of its own,
- * which shows only once the stream is back. Returns the tab ids in the order made.
+ * Ends the stream; while it is down the window opens a tab and main starts a terminal of its own,
+ * which shows only once the stream is back. After the reopen, main splits its terminal.
  */
 async function loseStreamAndChange(
   page: Page,
   worktreeId: string,
   stops: string[]
 ): Promise<{ firstTab: string; duringLoss: string; mainTab: string }> {
-  const before = await expectSettled(page, worktreeId, (layout) => expect(layout).toHaveLength(1))
-  const firstTab = before[0]![0]
-  const duringLoss = await page.evaluate(async (id) => {
-    const ended = await window.__endLocalLayoutStreamE2E!()
-    // In the same task as the end, so the tab opens before any reopen.
+  const firstTab = await page.evaluate(
+    (id) => window.__store!.getState().tabsByWorktree[id]?.[0]?.id ?? '',
+    worktreeId
+  )
+  await expectSettled(page, worktreeId, { tabs: [firstTab], panes: [1] })
+  const gap = await page.evaluate(async (id) => {
+    const end = window.__endLocalLayoutStreamE2E!
+    await end()
     const state = window.__store!.getState()
     const tab = state.createTab(id)
     state.setActiveTab(tab.id)
-    return { ended, tabId: tab.id }
+    const created = await window.api.runtime.call({
+      method: 'terminal.create',
+      params: { worktree: `id:${id}`, focus: false, activate: false, presentation: 'background' }
+    })
+    // A reopened stream's snapshot re-arms the hook with a new function.
+    return { tabId: tab.id, created, beforeReopen: window.__endLocalLayoutStreamE2E === end }
   }, worktreeId)
-  expect(duringLoss.ended).toMatchObject({ ok: true })
   await expect.poll(() => stops.length, { message: 'the stream never stopped' }).toBe(1)
-
-  const mainTerminal = await createMainTerminal(page, worktreeId)
-  await splitMainTerminal(page, mainTerminal.handle)
-  await expectSettled(page, worktreeId, (layout) => {
-    expect(tabIds(layout)).toEqual([firstTab, duringLoss.tabId, mainTerminal.tabId])
-    expect(paneCount(layout, mainTerminal.tabId)).toBe(2)
+  expect(gap.beforeReopen, "main's terminal must start before the 1 s reopen").toBe(true)
+  const mainTerminal = readCreatedTerminal(gap.created)
+  await expectSettled(page, worktreeId, {
+    tabs: [firstTab, gap.tabId, mainTerminal.tabId],
+    panes: [1, 1, 1]
   })
-  return { firstTab, duringLoss: duringLoss.tabId, mainTab: mainTerminal.tabId }
+  await splitMainTerminal(page, mainTerminal.handle)
+  await expectSettled(page, worktreeId, {
+    tabs: [firstTab, gap.tabId, mainTerminal.tabId],
+    panes: [1, 1, 2]
+  })
+  return { firstTab, duringLoss: gap.tabId, mainTab: mainTerminal.tabId }
 }
 
 test.describe('the window layout stream ends mid-session', () => {
@@ -278,10 +253,9 @@ test.describe('the window layout stream ends mid-session', () => {
       }, worktreeId)
       await waitForActiveTerminalManager(first.page, 30_000)
       await splitActiveTerminalPane(first.page, 'vertical')
-      await expectSettled(first.page, worktreeId, (layout) => {
-        expect(tabIds(layout)).toEqual([firstTab, mainTab, afterReopen])
-        expect(paneCount(layout, afterReopen)).toBe(2)
-        expect(paneCount(layout, mainTab)).toBe(2)
+      await expectSettled(first.page, worktreeId, {
+        tabs: [firstTab, mainTab, afterReopen],
+        panes: [1, 2, 2]
       })
       expect(stops).toHaveLength(1)
       expect(refusals).toEqual([])
@@ -316,10 +290,8 @@ test.describe('the window layout stream ends mid-session', () => {
       )
       await waitForActiveTerminalManager(first.page, 30_000)
       await splitActiveTerminalPane(first.page, 'vertical')
-      const beforeQuit = await expectSettled(first.page, worktreeId, (layout) => {
-        expect(tabIds(layout)).toEqual([duringLoss, mainTab])
-        expect(paneCount(layout, duringLoss)).toBe(2)
-      })
+      const beforeQuit = { tabs: [duringLoss, mainTab], panes: [2, 2] }
+      await expectSettled(first.page, worktreeId, beforeQuit)
       // Long enough for the window's debounced save to land.
       await first.page.waitForTimeout(2_000)
       await session.close(app)
@@ -330,11 +302,7 @@ test.describe('the window layout stream ends mid-session', () => {
       watchRefusals(second.page, refusals)
       await waitForSessionReady(second.page)
       await switchToWorktree(second.page, worktreeId)
-      await expectSettled(second.page, worktreeId, (layout) => {
-        expect(tabIds(layout)).toEqual(tabIds(beforeQuit))
-        expect(paneCount(layout, duringLoss)).toBe(2)
-        expect(paneCount(layout, mainTab)).toBe(2)
-      })
+      await expectSettled(second.page, worktreeId, beforeQuit)
       expect(refusals).toEqual([])
     } finally {
       await session.dispose(app)
