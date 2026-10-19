@@ -30,6 +30,7 @@ const SLIDE_FROM = -6
  *  closes it. The caller keeps it mounted until `onClosed` so the exit can animate. */
 export function AnchoredDetailCard({
   anchor,
+  trigger,
   open,
   bounds,
   viewport,
@@ -41,6 +42,7 @@ export function AnchoredDetailCard({
   footer
 }: {
   anchor: DetailCardAnchor
+  trigger: LayoutRectangle
   open: boolean
   bounds: { left: number; top: number; right: number; bottom: number }
   viewport: LayoutRectangle
@@ -82,10 +84,10 @@ export function AnchoredDetailCard({
   const maxHeight = Math.max(0, bounds.bottom - top - EDGE_INSET)
   const right = viewport.x + viewport.width
   const bottom = viewport.y + viewport.height
-  const x = Math.max(viewport.x, Math.min(anchor.trigger.x, right))
-  const y = Math.max(viewport.y, Math.min(anchor.trigger.y, bottom))
-  const endX = Math.max(x, Math.min(anchor.trigger.x + anchor.trigger.width, right))
-  const endY = Math.max(y, Math.min(anchor.trigger.y + anchor.trigger.height, bottom))
+  const x = Math.max(viewport.x, Math.min(trigger.x, right))
+  const y = Math.max(viewport.y, Math.min(trigger.y, bottom))
+  const endX = Math.max(x, Math.min(trigger.x + trigger.width, right))
+  const endY = Math.max(y, Math.min(trigger.y + trigger.height, bottom))
   // Leave the real title target uncovered for the whole pointer sequence, including exit.
   const bands = [
     {

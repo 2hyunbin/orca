@@ -1,5 +1,11 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ComponentRef } from 'react'
-import { Text, useWindowDimensions, type LayoutChangeEvent, type View } from 'react-native'
+import {
+  Text,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type LayoutRectangle,
+  type View
+} from 'react-native'
 import type { DetailCardAnchor } from '../components/AnchoredDetailCard'
 import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 
@@ -10,6 +16,12 @@ export function useSessionTitleCard(besideTabs: boolean, obscured: boolean) {
   const openerRef = useRef<View>(null)
   const contentRef = useRef<View>(null)
   const [anchor, setAnchor] = useState<DetailCardAnchor | null>(null)
+  const [titleBounds, setTitleBounds] = useState<LayoutRectangle>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+  })
   const [open, setOpen] = useState(false)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const window = useWindowDimensions()
@@ -26,8 +38,13 @@ export function useSessionTitleCard(besideTabs: boolean, obscured: boolean) {
   const dismiss = useCallback(() => setOpen(false), [])
   const onClosed = useCallback(() => setAnchor(null), [])
   const onAnchorLayout = useCallback(() => {
-    generation.current += 1
+    const current = ++generation.current
     dismiss()
+    titleRef.current?.measureInWindow((x, y, width, height) => {
+      if (current === generation.current) {
+        setTitleBounds({ x, y, width, height })
+      }
+    })
   }, [dismiss])
   useLayoutEffect(() => {
     dismiss()
@@ -51,6 +68,7 @@ export function useSessionTitleCard(besideTabs: boolean, obscured: boolean) {
             top: barY + barHeight - rootY,
             origin: { x: rootX, y: rootY }
           })
+          setTitleBounds({ x, y, width, height })
           setOpen(true)
         })
       })
@@ -68,6 +86,7 @@ export function useSessionTitleCard(besideTabs: boolean, obscured: boolean) {
     openerRef,
     contentRef,
     anchor,
+    trigger: { ...titleBounds, x: titleBounds.x - origin.x, y: titleBounds.y - origin.y },
     open,
     present: anchor !== null,
     besideTabs,

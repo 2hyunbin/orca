@@ -59,15 +59,14 @@ export function useDetailCardScope({
     }
     // Observe only the kept ancestry, so later header controls are excluded without watching terminal output.
     const masked = new WeakSet<HTMLElement>()
-    const observer = new MutationObserver(() => mask(root))
-    const mask = (parent: HTMLElement) => {
-      observer.observe(parent, { childList: true })
+    const mask = (parent: HTMLElement): HTMLElement[] => {
+      const nodes = [parent]
       for (const child of parent.children) {
         if (!(child instanceof HTMLElement) || child === title || child === layer) {
           continue
         }
         if (child.contains(title) || child.contains(layer)) {
-          mask(child)
+          nodes.push(...mask(child))
         } else if (!masked.has(child)) {
           masked.add(child)
           const inert = child.inert
@@ -78,8 +77,16 @@ export function useDetailCardScope({
           })
         }
       }
+      return nodes
     }
-    mask(root)
+    const observer = new MutationObserver(() => {
+      for (const node of mask(root)) {
+        observer.observe(node, { childList: true })
+      }
+    })
+    for (const node of mask(root)) {
+      observer.observe(node, { childList: true })
+    }
     attribute(root, 'role', 'dialog')
     attribute(root, 'aria-modal', 'true')
     attribute(root, 'aria-label', title.textContent ?? '')

@@ -1,6 +1,6 @@
 import { Animated, View } from 'react-native'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
-import { expect, it, vi } from 'vitest'
+import { assert, expect, it, vi } from 'vitest'
 import { MobileSessionTitleBlock } from './MobileSessionTitleBlock'
 import { useSessionTitleCard } from './use-session-title-card'
 import { AnchoredDetailCard } from '../components/AnchoredDetailCard'
@@ -78,7 +78,7 @@ function Fixture() {
           title="workspace"
           connState="connected"
           details={details}
-          meta="3 tabs"
+          meta=""
           showConnectionRetry={false}
           onRetry={() => {}}
         />
@@ -98,6 +98,7 @@ function Fixture() {
 }
 
 it('retains one title target through reversal and completion, with root-relative geometry and Back', () => {
+  let titleWidth = 40
   const mounted: { renderer?: ReactTestRenderer } = {}
   act(() => {
     mounted.renderer = create(<Fixture />, {
@@ -105,7 +106,7 @@ it('retains one title target through reversal and completion, with root-relative
         measureInWindow: (done: (x: number, y: number, w: number, h: number) => void) => {
           const isLayer =
             node.props !== null && typeof node.props === 'object' && 'testID' in node.props
-          const measure = () => (isLayer ? done(20, 10, 627, 365) : done(80, 20, 160, 45))
+          const measure = () => (isLayer ? done(20, 10, 627, 365) : done(80, 20, titleWidth, 45))
           if (overlay.defer && isLayer) {
             overlay.measure = measure
           } else {
@@ -116,9 +117,7 @@ it('retains one title target through reversal and completion, with root-relative
     })
   })
   const renderer = mounted.renderer
-  if (!renderer) {
-    throw new Error('not mounted')
-  }
+  assert(renderer)
   const root = renderer.root
   const layout = (width: number, height: number) =>
     root
@@ -150,10 +149,11 @@ it('retains one title target through reversal and completion, with root-relative
     layout(627, 290)
   })
   expect(card().props.style[1].maxHeight).toBe(227)
+  titleWidth = 160
   act(() => opener.props.onLayout())
-  expect(root.findByType(AnchoredDetailCard).props.open).toBe(false)
-  act(() => overlay.finish?.())
+  expect(root.findAllByProps({ accessible: false })[3]?.props.style.left).toBe(220)
   act(() => opener.props.onPress())
+  expect(root.findByType(AnchoredDetailCard).props.open).toBe(true)
   overlay.width = 375
   act(() => renderer.update(<Fixture />))
   act(() => expect(overlay.back?.()).toBe(true))

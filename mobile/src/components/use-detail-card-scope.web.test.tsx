@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
-import { expect, it, vi } from 'vitest'
+import { assert, expect, it, vi } from 'vitest'
 import { useDetailCardScope } from './use-detail-card-scope.web'
 
 it('owns keys, reading and focus through exit, then yields to a higher sheet', async () => {
@@ -39,9 +39,7 @@ it('owns keys, reading and focus through exit, then yields to a higher sheet', a
     mounted.renderer = create(<Scope present={false} />)
   })
   const renderer = mounted.renderer
-  if (!renderer) {
-    throw new Error('not mounted')
-  }
+  assert(renderer)
   try {
     expect(document.activeElement).toBe(node('terminal'))
     act(() => renderer.update(<Scope present />))

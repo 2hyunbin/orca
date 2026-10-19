@@ -58,6 +58,7 @@ export function MobileSessionSurface({ controller }: { controller: MobileSession
           {details.anchor ? (
             <AnchoredDetailCard
               anchor={details.anchor}
+              trigger={details.trigger}
               bounds={details.bounds}
               viewport={details.viewport}
               contentRef={details.contentRef}
