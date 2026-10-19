@@ -201,7 +201,7 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
       } catch (err) {
         // Why: an import that cannot be linked must not leave a new repo registration or authorization root behind.
         if (!result.alreadyExisted) {
-          store.removeProjectForHost(result.repo.id, getRepoExecutionHostId(result.repo))
+          store.removeProjectForHost(result.repo)
           invalidateAuthorizedRootsCache()
         }
         throw err

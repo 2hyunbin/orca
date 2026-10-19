@@ -248,6 +248,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Enforce e2e typecheck ratchet', staticPhase],
     ['Enforce legacy relay fence ratchet', staticPhase],
     ['Enforce unproven PTY retirement ratchet', staticPhase],
+    ['Enforce id-only store write ratchet', staticPhase],
     ['Check Node runtime pin', staticPhase],
     ['Decide whether the orcad terminal smoke runs', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],

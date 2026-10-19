@@ -34,6 +34,8 @@ export const LAYOUT_OWNER_SWITCH_ON_E2E_SPECS = [
   'tests/e2e/layout-stream-loss-reopen.spec.ts',
   // A tab close by the handle a split returned.
   'tests/e2e/terminal-tab-close-restart-persistence.spec.ts',
+  // A split main first sees at its terminal binding keeps its direction (fails only at CI's window size).
+  'tests/e2e/artificial-opencode-terminal-load.spec.ts',
   // Every managed-SSH spec, in e2e.yml's Docker lane; its orcad template stays switch-off.
   MANAGED_SSH_E2E_SPEC_PREFIX
 ]

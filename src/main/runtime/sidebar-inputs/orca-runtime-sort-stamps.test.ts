@@ -5,6 +5,7 @@ import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { AgentHookServer } from '../../agent-hooks/server'
 import { OrcaRuntimeService } from '../orca-runtime'
 import type { RuntimeStore } from '../runtime-store-contract'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
@@ -17,12 +18,13 @@ function createHeadlessRuntime(
     [WT]: stored
   }
   const store = {
-    getRepos: () => [],
+    // An unstamped row's writes resolve their host from its repo's only registration.
+    getRepos: () => [{ id: 'repo-1', connectionId: null }],
     getRepo: (id: string) => (id === 'repo-1' ? { id, connectionId: null } : undefined),
     getSettings: () => ({}),
     getWorktreeMeta: (id: string) => meta[id],
     getAllWorktreeMeta: () => meta,
-    setWorktreeMeta: (id: string, updates: Partial<WorktreeMeta>) => {
+    setWorktreeMeta: ({ id }: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => {
       meta[id] = { ...meta[id], ...updates }
       return meta[id]
     }

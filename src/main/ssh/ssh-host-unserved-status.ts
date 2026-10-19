@@ -16,6 +16,7 @@ export function unservedServerStatus(
     ...(decision.terminalsElsewhere ? { terminalsElsewhere: true } : {}),
     ...(decision.canLeaveBehind ? { canLeaveBehind: true } : {}),
     ...(decision.held ? { held: true } : {}),
+    ...(decision.contactLost ? { contactLost: true } : {}),
     ...(decision.bridged ? { bridged: true } : {})
   }
 }
@@ -25,6 +26,9 @@ const HELD_MOVE_MESSAGE =
 
 const NOEXEC_MESSAGE =
   'This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
+
+const CONTACT_LOST_MESSAGE =
+  'Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
 
 /** Untranslated twin of the renderer's status line, for logs and callers without the catalog. */
 export function unservedHostServerMessage(decision: UnservedDecision): string {
@@ -45,6 +49,8 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
       return 'An older version of Orca changed this host’s projects. Move those changes to its managed server in SSH Hosts settings to continue.'
     case 'deferred':
     case 'failed':
-      return 'Orca couldn’t start its server on this host. Try connecting again.'
+      return decision.contactLost
+        ? CONTACT_LOST_MESSAGE
+        : 'Orca couldn’t start its server on this host. Try connecting again.'
   }
 }
