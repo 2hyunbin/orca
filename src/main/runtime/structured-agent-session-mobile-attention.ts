@@ -33,8 +33,8 @@ export type StructuredAttentionMobileDeliveryDeps = {
   readNotificationSettings: () => NotificationSettings | undefined
   /** In-memory metadata only: a lookup that could wait would let the alert outlive its prompt. */
   readWorkspaceLabels: (scope: AgentSessionExecutionLocation) => StructuredAttentionWorkspaceLabels
-  /** In-memory only, like the labels: whether the desktop's Filters switches hide this workspace. */
-  isWorkspaceHidden: (scope: AgentSessionExecutionLocation) => boolean
+  /** In-memory only, like the labels: "Notify About Hidden Workspaces" is off and the Filters hide it. */
+  isWorkspaceMuted: (scope: AgentSessionExecutionLocation) => boolean
   dispatch: (event: MobileNotificationDispatchEvent) => void
   /** Withdraws a notification this host delivered; a no-op for one it never sent. */
   reconcile: (state: StructuredAttentionState) => void
@@ -85,10 +85,10 @@ export function createStructuredAttentionMobileDelivery(
         return
       }
       const scope = edge.type === 'prompt' ? edge.prompt.scope : edge.completion.scope
-      const settings = deps.readNotificationSettings()!
-      if (!settings.notifyHiddenWorkspaces && deps.isWorkspaceHidden(scope)) {
+      if (deps.isWorkspaceMuted(scope)) {
         return
       }
+      const settings = deps.readNotificationSettings()!
       const attentionKey = agentSessionAttentionKey(edge)
       const request: NotificationDispatchRequest = {
         source: 'agent-task-complete',
