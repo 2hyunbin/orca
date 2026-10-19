@@ -8,7 +8,8 @@ import { basename, getRelativePathInsideRoot } from '@/lib/path'
 import { getConnectionIdForFile } from '@/lib/connection-context'
 import { getConnectionIdForFileFromState } from '@/lib/connection-owner-resolution'
 import { activateBrowserWorkspaceTab } from '@/lib/browser-workspace-tab-activation'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { resolveOwner } from '@/lib/resolve-owner'
 import { selectWorkspaceSurface } from '@/lib/workspace-surface-reveal'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -26,6 +27,8 @@ export type PreviewableLanguage = 'html'
 /** Still the answer for flows that need a real `file://` URL (e.g. dropping a file on a browser pane). */
 export const REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE =
   'Open in Orca Browser is only available for local files.'
+export const TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE =
+  'Open in Orca Browser is unavailable because this project is on more than one host, so Orca cannot tell which copy to open.'
 
 /** Localized lazily: a module constant would freeze the language at import time. */
 function pairedOutsideWorktreeMessage(): string {
@@ -69,7 +72,7 @@ export function getWorkspaceFilePreviewPlan(
   }
   // Why: the doc preview needs no browser at all, so a paired runtime without the
   // screencast capability still previews documents.
-  if (getRuntimeEnvironmentIdForWorktree(state, worktreeId)) {
+  if (runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)) {
     const worktreeRoot = state.getKnownWorktreeById(worktreeId)?.path ?? null
     const outsideWorktree = worktreeRoot && !getRelativePathInsideRoot(filePath, worktreeRoot)
     // Why: the host's files.read is worktree-scoped (plus chat scratch folders, served by path), so
@@ -118,7 +121,7 @@ export function useWorkspaceFileBrowserActionPredicate(
         ? getClientCreationActionPolicy(state, worktreeId)['managed-browser'].state
         : null,
       runtimeEnvironmentId: worktreeId
-        ? (getRuntimeEnvironmentIdForWorktree(state, worktreeId) ?? null)
+        ? runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)
         : null,
       folderWorkspaces: state.folderWorkspaces,
       projectGroups: state.projectGroups,
@@ -152,9 +155,18 @@ export function getWorkspaceFileBrowserOpenTarget(params: {
   filePath: string
   worktreeId: string
 }): WorkspaceFileBrowserOpenTarget {
+  const state = useAppStore.getState()
+  // Why: a twin reads as "no server", which must not let a file:// URL open this machine's copy.
+  if (resolveOwner(state, { workspaceId: params.worktreeId }).kind === 'ambiguous') {
+    return {
+      status: 'unsupported',
+      reason: 'remote-worktree',
+      message: TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE
+    }
+  }
   if (
     getConnectionIdForFile(params.worktreeId, params.filePath) !== null ||
-    getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), params.worktreeId)
+    runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, params.worktreeId)
   ) {
     // Why: Chromium resolves file:// URLs on the local machine. Remote files
     // need an Orca-served URL before the browser can render them correctly.
@@ -360,7 +372,7 @@ export function openFilePreviewToSide(params: {
 
   // Why the unfocused split on a paired workspace: the preview opens in the background, and a host
   // snapshot reads an activated empty group as a terminal pane.
-  const activate = !getRuntimeEnvironmentIdForWorktree(state, worktreeId)
+  const activate = !runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)
   const placement = existingSibling
     ? { targetGroupId: existingSibling }
     : { split: { sourceGroupId, splitDirection: 'right' as const, activate } }

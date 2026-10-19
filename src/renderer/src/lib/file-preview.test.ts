@@ -4,6 +4,7 @@ import {
   canShowWorkspaceFileBrowserAction,
   convertBrowserPageToWorkspaceDoc,
   getWorkspaceFileBrowserOpenTarget,
+  TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE,
   openFileInBrowserTab,
   openFilePreviewToSide
 } from './file-preview'
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   convertBrowserPage: vi.fn(),
   environmentId: null as string | null,
   connectionId: null as string | null,
+  twin: false,
   layoutByWorktree: {} as Record<string, unknown>,
   toastError: vi.fn()
 }))
@@ -49,7 +51,7 @@ vi.mock('@/lib/client-creation-action-policy', () => ({
 }))
 
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getRuntimeEnvironmentIdForWorktree: () => mocks.environmentId
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: () => mocks.environmentId
 }))
 
 vi.mock('@/store', () => ({
@@ -70,9 +72,15 @@ vi.mock('@/store', () => ({
       getKnownWorktreeById: () => ({ id: 'wt-1', path: '/srv/repo' }),
       groupsByWorktree: {},
       layoutByWorktree: mocks.layoutByWorktree,
-      repos: [{ id: 'repo-1', connectionId: mocks.connectionId }],
+      repos: [
+        { id: 'repo-1', connectionId: mocks.connectionId },
+        ...(mocks.twin ? [{ id: 'repo-1', connectionId: 'box', executionHostId: 'ssh:box' }] : [])
+      ],
       worktreesByRepo: {
-        'repo-1': [{ id: 'wt-1', repoId: 'repo-1' }]
+        'repo-1': [
+          { id: 'wt-1', repoId: 'repo-1', ...(mocks.twin ? { hostId: 'local' } : {}) },
+          ...(mocks.twin ? [{ id: 'wt-1', repoId: 'repo-1', hostId: 'ssh:box' }] : [])
+        ]
       }
     })
   }
@@ -499,6 +507,18 @@ describe('getWorkspaceFileBrowserOpenTarget', () => {
       reason: 'remote-worktree',
       message: REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE
     })
+  })
+
+  it('refuses a file:// URL for a project two hosts publish, naming why', () => {
+    mocks.twin = true
+    expect(
+      getWorkspaceFileBrowserOpenTarget({ filePath: '/srv/repo/report.html', worktreeId: 'wt-1' })
+    ).toEqual({
+      status: 'unsupported',
+      reason: 'remote-worktree',
+      message: TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE
+    })
+    mocks.twin = false
   })
 
   it('refuses paired files even when their connection ID is null', () => {
