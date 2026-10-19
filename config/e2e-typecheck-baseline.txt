@@ -27,8 +27,6 @@
 1 tests/e2e/cross-version-wire/structured-agent-session-host-fixture.ts
 1 tests/e2e/cross-version-wire/submission-positions-downgrade.unit.test.ts
 1 tests/e2e/cross-version-wire/versioned-agent-session-wire.ts
-1 tests/e2e/daemon-generation-legacy-close-safety.spec.ts
-1 tests/e2e/daemon-generation-reconnect-safety.spec.ts
 1 tests/e2e/editable-context-paste-ownership.spec.ts
 1 tests/e2e/file-explorer-linked-watch-refresh.spec.ts
 5 tests/e2e/fixtures/daemon-generation-legacy-close-client.ts
@@ -38,7 +36,6 @@
 1 tests/e2e/github-created-issue-start-prefill.spec.ts
 1 tests/e2e/headless-paired-remote-terminal-reveal-grid.spec.ts
 1 tests/e2e/headless-serve-desktop-activation.spec.ts
-1 tests/e2e/helpers/daemon-generation-safety-fixtures.ts
 5 tests/e2e/helpers/headless-paired-runtime-host.ts
 1 tests/e2e/helpers/native-chat-view.ts
 2 tests/e2e/helpers/nested-runtime-ssh-client-route.ts

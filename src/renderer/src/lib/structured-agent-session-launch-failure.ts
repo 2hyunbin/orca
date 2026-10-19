@@ -17,6 +17,7 @@ export type StructuredLaunchFailure = AgentSessionWriteRefusal & {
   /** Words that replace the refusal's generic cause: the host's sign-in guidance, or why this
    *  workspace can't run the chat. */
   causeText?: string
+  owner?: AgentSessionConversationOwner
 }
 
 /** Why a host said it can't run a chat in this workspace, and what to do instead. */
@@ -50,7 +51,14 @@ export function structuredLaunchFailure(error: unknown): StructuredLaunchFailure
   if (!refusal) {
     return undefined
   }
-  const failure = agentSessionRefusalFailure(refusal)
+  const owner =
+    refusal.code === 'agent_session_conflict' || refusal.code === 'agent_session_ownership_unknown'
+      ? refusal.details?.owner
+      : undefined
+  const failure = {
+    ...agentSessionRefusalFailure(refusal),
+    ...(owner ? { owner } : {})
+  }
   const message = error instanceof Error ? error.message : undefined
   return failure.code === 'agent_session_operation_invalid' &&
     failure.details?.reason === 'notSignedIn' &&
