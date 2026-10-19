@@ -86,10 +86,15 @@ export function registerLegacyRelayBridgeIpc(args: {
     // Every bridge exit is the relay's proof; no provider listener reports these to the runtime.
     onExit: (ptyId, code) => {
       send(CHANNELS.exit, { ptyId, code })
+      // A negative code is a proven absence with no reported status, not an unconfirmed stop.
+      const options = {
+        hostExitConfirmed: true,
+        ...(code < 0 ? { cause: { kind: 'unknown', reason: 'cause_unreported' } as const } : {})
+      }
       try {
-        void Promise.resolve(
-          args.runtime?.()?.onPtyExit(ptyId, code, undefined, { hostExitConfirmed: true })
-        ).catch((error: unknown) => console.warn('[legacy-relay] runtime exit failed:', error))
+        void Promise.resolve(args.runtime?.()?.onPtyExit(ptyId, code, undefined, options)).catch(
+          (error: unknown) => console.warn('[legacy-relay] runtime exit failed:', error)
+        )
       } catch (error) {
         // The bridge still retires the pane and re-lists.
         console.warn('[legacy-relay] runtime exit failed:', error)
@@ -125,9 +130,15 @@ export function registerLegacyRelayBridgeIpc(args: {
       ? attachLegacyRelayPane(args.data.ptyId, args.data.replayInStream === true)
       : { status: 'not-bridged' }
   })
+  const runtime = args.runtime
   ipcMain.handle(CHANNELS.close, async (_event, payload: unknown) => {
     const args = PaneArgsSchema.safeParse(payload)
-    return args.success ? closeLegacyRelayPane(args.data.ptyId) : { status: 'not-bridged' }
+    if (!args.success) {
+      return { status: 'not-bridged' }
+    }
+    // A deliberate close, as the kill routes record, so its exit reads as an operator close.
+    runtime?.()?.markPtyStopRequested(args.data.ptyId)
+    return closeLegacyRelayPane(args.data.ptyId)
   })
   ipcMain.on(CHANNELS.write, (_event, payload: unknown) => {
     const args = WriteArgsSchema.safeParse(payload)

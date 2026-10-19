@@ -3,7 +3,7 @@ import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
 import { PtyExitProof } from '../../../pty-exit-proof'
 
-const bridge = vi.hoisted(() => ({ proven: 'gone' as 'gone' | 'reported' | null }))
+const bridge = vi.hoisted((): { proven: 'gone' | 'reported' | null } => ({ proven: 'gone' }))
 
 vi.mock('../../../ssh/legacy-relay/legacy-relay-bridge-registry', () => ({
   closeLegacyRelayPane: vi.fn(),

@@ -9,6 +9,7 @@ import type { SshConnection } from '../connection/ssh-connection'
 import { getRemoteHostPlatform } from '../ssh-remote-platform'
 import type { PtyRuntimeControllerDeps } from '../../ipc/pty/runtime/controller-deps'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { LEGACY_RELAY_BRIDGE_CHANNELS } from '../../../shared/legacy-relay-bridge-contract'
 
 const TARGET = 'ssh-box'
 const RELAY_PTY = 'pty2:epoch:1'
@@ -19,8 +20,18 @@ const relay = vi.hoisted(() => ({
   exits: new Set<(id: string, code: number) => void>()
 }))
 
+const ipc = vi.hoisted(() => ({
+  handlers: new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>()
+}))
+
 vi.mock('electron', () => ({
-  ipcMain: { handle: vi.fn(), removeHandler: vi.fn(), on: vi.fn(), removeAllListeners: vi.fn() }
+  ipcMain: {
+    handle: (channel: string, handler: (event: unknown, payload: unknown) => Promise<unknown>) =>
+      ipc.handlers.set(channel, handler),
+    removeHandler: vi.fn(),
+    on: vi.fn(),
+    removeAllListeners: vi.fn()
+  }
 }))
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('./legacy-relay-endpoints', () => ({
@@ -170,5 +181,29 @@ describe('a bridged terminal the old relay proves exited', () => {
     ).resolves.toBe(true)
 
     expect(runtime.onPtyExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a renderer bridge close as a deliberate stop before sending it', async () => {
+    await startBridge()
+
+    await ipc.handlers.get(LEGACY_RELAY_BRIDGE_CHANNELS.close)?.({}, { ptyId: PTY })
+
+    expect(runtime.markPtyStopRequested).toHaveBeenCalledWith(PTY)
+    expect(runtime.markPtyStopRequested.mock.invocationCallOrder[0]).toBeLessThan(
+      runtime.onPtyExit.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('reports a proven absence as an exit with no status, never an unconfirmed stop', async () => {
+    await startBridge()
+
+    // Every relay answers and none holds it: proof, though no exit code was reported.
+    relay.ptys.delete(RELAY_PTY)
+    await registry.startLegacyRelayBridge(TARGET)
+
+    expect(runtime.onPtyExit).toHaveBeenCalledWith(PTY, -1, undefined, {
+      hostExitConfirmed: true,
+      cause: { kind: 'unknown', reason: 'cause_unreported' }
+    })
   })
 })
