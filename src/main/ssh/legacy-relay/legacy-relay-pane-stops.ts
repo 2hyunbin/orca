@@ -66,7 +66,13 @@ export class LegacyRelayPaneStops {
       ...(incarnationId ? { incarnationId } : {}),
       ...(client ? { client } : {})
     })
-    this.record(ptyId, incarnationId)
+    if (!this.record(ptyId, incarnationId)) {
+      // Unfenced: only this connection can prove the process, and a restart would forget the close,
+      // so it gets one try now and the lease ends as any closed tab's does.
+      const sent = bridge && state === 'live' ? await this.send(ptyId, bridge) : false
+      this.abandon(ptyId)
+      return sent ? { status: 'requested' } : { status: 'unverifiable' }
+    }
     if (!bridge || state !== 'live') {
       return { status: 'unverifiable' }
     }
@@ -133,16 +139,22 @@ export class LegacyRelayPaneStops {
     return stops
   }
 
-  /** Persists only a stop a later run can fence: a `pty2:` id or a listed incarnation. */
-  private record(ptyId: string, incarnationId: string | undefined): void {
+  /** Persists a stop a later run can fence (a `pty2:` id or a listed incarnation); false if none. */
+  private record(ptyId: string, incarnationId: string | undefined): boolean {
     const relayPtyId = parseAppSshPtyId(ptyId)?.relayPtyId
-    if (relayPtyId && (incarnationId || relayPtyId.startsWith('pty2:'))) {
+    if (!relayPtyId || (!incarnationId && !relayPtyId.startsWith('pty2:'))) {
+      return false
+    }
+    const earlier = this.leases().find((lease) => lease.ptyId === relayPtyId)?.pendingKill
+    // A repeated close keeps the first one's age, which a downgraded build's expiry reads.
+    if (!earlier || earlier.incarnationId !== incarnationId) {
       this.persist(relayPtyId, {
         requestedAt: Date.now(),
         ...(incarnationId ? { incarnationId } : {}),
         attempts: 0
       })
     }
+    return true
   }
 
   /**

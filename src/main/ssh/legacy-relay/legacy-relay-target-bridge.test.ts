@@ -375,6 +375,7 @@ describe('one target’s legacy relay bridge', () => {
 
   it('retires a stopped shell once a listing proves it gone, without an exit report', async () => {
     relay.exitOnShutdown = false
+    relay.incarnations.set('pty-1', 'inc-1')
     const subject = bridge()
     await subject.refresh()
     await stops.stop(PTY, subject)
@@ -459,6 +460,16 @@ describe('one target’s legacy relay bridge', () => {
     expect(leases[0].pendingKill).toBeUndefined()
   })
 
+  it('keeps the first close’s record when the tab’s close repeats', async () => {
+    const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
+    leases = [lease({ ptyId: 'pty2:epoch:1' })]
+    await stops.stop(epochPty, null)
+    const first = leases[0].pendingKill
+    await vi.advanceTimersByTimeAsync(5_000)
+    await stops.stop(epochPty, null)
+    expect(leases[0].pendingKill).toBe(first)
+  })
+
   it('restores a fenced stop across a restart and sends it only to the same process', async () => {
     relay.incarnations.set('pty-1', 'inc-1')
     const subject = bridge()
@@ -493,6 +504,15 @@ describe('one target’s legacy relay bridge', () => {
     expect(next.snapshot()).toEqual([])
   })
 
+  it('never serves an unfenced legacy pane again after its tab closed and Orca restarted', async () => {
+    await expect(stops.stop(PTY, null)).resolves.toEqual({ status: 'unverifiable' })
+    stops = paneStops()
+    const subject = bridge()
+    await subject.refresh()
+    expect(subject.snapshot()).toEqual([])
+    expect(relay.shutdowns).toEqual([])
+  })
+
   it('never replays a blind close for a legacy id that could name another shell', async () => {
     await stops.stop(PTY, null)
     await bridge().refresh()
@@ -523,8 +543,10 @@ describe('one target’s legacy relay bridge', () => {
     relay.shutdownError = null
     relay.clients[0].drop()
     await vi.advanceTimersByTimeAsync(10_000)
-    expect(relay.clients.length).toBeGreaterThan(1)
     expect(relay.shutdowns).toEqual([])
+    // One try only: the lease ends as any closed tab's does, so no later relay is ever asked.
+    expect(leases[0].state).toBe('terminated')
+    expect(subject.snapshot()).toEqual([])
   })
 
   it('never republishes a pane that exited while a refresh was asking its relay', async () => {
