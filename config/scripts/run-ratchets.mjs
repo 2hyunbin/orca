@@ -4,7 +4,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
-// Every config/scripts/check-*-ratchet(s).mjs runs here, so a new ratchet needs no CI step or lint entry.
+// Discover CI ratchets by filename; local lint keeps its separate explicit check list.
 const RATCHET_SCRIPT = /^check-.+-ratchets?\.mjs$/
 const RUN_ELSEWHERE = new Set([
   // Needs the PR diff base; the cross-version-wire job runs it.
