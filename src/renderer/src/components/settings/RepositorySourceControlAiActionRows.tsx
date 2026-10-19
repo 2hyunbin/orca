@@ -42,7 +42,11 @@ import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import { useSourceControlActionChatAgent } from './use-source-control-action-chat-agent'
+import { SourceControlActionOptionsPlaceholder } from './SourceControlActionOptionsPlaceholder'
+import {
+  useSourceControlActionAgentInventory,
+  useSourceControlActionChatAgent
+} from './use-source-control-action-chat-agent'
 import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 
 type RepositorySourceControlAiActionRowsProps = {
@@ -82,6 +86,7 @@ export function RepositorySourceControlAiActionRows({
   onActionDiscard,
   onActionSave
 }: RepositorySourceControlAiActionRowsProps): React.JSX.Element {
+  useSourceControlActionAgentInventory()
   const resolveChatAgent = useSourceControlActionChatAgent(null, defaultTuiAgent).resolve
   return (
     <div className="space-y-3">
@@ -145,7 +150,7 @@ export function RepositorySourceControlAiActionRows({
                   <span>
                     {commandTemplateStateLabel({ hasOverride, inheritedTemplate, actionId })}
                   </span>
-                  {!(isLaunchAction && actual.chat) ? (
+                  {!isLaunchAction || (actual.status === 'ready' && !actual.chat) ? (
                     <span>
                       {agentArgsStateLabel({
                         hasOverride,
@@ -179,7 +184,7 @@ export function RepositorySourceControlAiActionRows({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+            <div className="grid items-start gap-3 sm:grid-cols-[180px_1fr]">
               <div className="space-y-2">
                 <Label className="text-[11px] text-muted-foreground">
                   {translate(
@@ -231,15 +236,17 @@ export function RepositorySourceControlAiActionRows({
                 ) : agentSupportText ? (
                   <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
                 ) : null}
-                {isLaunchAction && actual.chat ? (
+                {isLaunchAction && actual.status === 'pending' ? (
+                  <SourceControlActionOptionsPlaceholder value={recipe.launchPreferences} />
+                ) : isLaunchAction && actual.status === 'ready' && actual.chat ? (
                   <SourceControlActionModelPicker
                     agent={actual.agent}
                     value={recipe.launchPreferences}
-                    disabled={!hasOverride || actual.loading}
+                    disabled={!hasOverride}
                     onChange={(value) => onActionLaunchPreferencesChange(actionId, value)}
                   />
                 ) : null}
-                {!(isLaunchAction && actual.chat) ? (
+                {!isLaunchAction || (actual.status === 'ready' && !actual.chat) ? (
                   <>
                     <Label className="text-[11px] text-muted-foreground">
                       {translate(

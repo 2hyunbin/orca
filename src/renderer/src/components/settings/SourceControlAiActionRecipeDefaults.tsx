@@ -31,6 +31,7 @@ import { SourceControlActionRecipeRow } from './SourceControlActionRecipeRow'
 import { SourceControlActionRepoOverrideNote } from './SourceControlActionRepoOverrideNote'
 import { useSourceControlActionRecipeDraftState } from './source-control-action-recipe-draft-state'
 import { translate } from '@/i18n/i18n'
+import { useSourceControlActionAgentInventory } from './use-source-control-action-chat-agent'
 
 type SourceControlAiActionRecipeDefaultsProps = {
   config: SourceControlAiSettings
@@ -97,6 +98,9 @@ export function SourceControlAiActionRecipeDefaults({
   searchQuery,
   writeConfig
 }: SourceControlAiActionRecipeDefaultsProps): React.JSX.Element | null {
+  useSourceControlActionAgentInventory(
+    config.enabled && matchesSettingsSearch(searchQuery, ACTION_RECIPES_SEARCH_ENTRY)
+  )
   const allRepos = useRepos()
   // Recomputes on every keystroke in the sibling recipe textareas otherwise, so
   // memoize the filter and the O(actions × repos) override scan on `repos`.

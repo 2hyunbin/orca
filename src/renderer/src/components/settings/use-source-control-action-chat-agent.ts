@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isCustomAgentId } from '../../../../shared/commit-message-agent-spec'
 import { isNativeChatDefaultFor } from '../../../../shared/structured-native-chat-launch-route'
@@ -8,7 +9,18 @@ import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-st
 import { useAppStore } from '@/store'
 import { useLocalChatAgents } from './NativeChatProvidersSetting'
 
-type ActionChatAgent = { agent: TuiAgent | null | undefined; loading: boolean; chat: boolean }
+type ActionChatAgent =
+  | { status: 'pending' }
+  | { status: 'ready'; agent: TuiAgent | null; chat: boolean }
+
+export function useSourceControlActionAgentInventory(enabled = true): void {
+  const ensure = useAppStore((state) => state.ensureNativeDetectedAgents)
+  useEffect(() => {
+    if (enabled) {
+      void ensure()
+    }
+  }, [enabled, ensure])
+}
 
 export function useSourceControlActionChatAgent(
   selected: SourceControlActionRecipe['agentId'],
@@ -17,20 +29,20 @@ export function useSourceControlActionChatAgent(
   const settings = useAppStore((state) => state.settings)
   const detected = useAppStore(readNativeDetectedAgents)
   const providers = useLocalChatAgents()
-  const resolve = (selected: SourceControlActionRecipe['agentId']) => {
+  const resolve = (selected: SourceControlActionRecipe['agentId']): ActionChatAgent => {
+    if (detected === null) {
+      return { status: 'pending' }
+    }
     const savedAgent = selected && !isCustomAgentId(selected) ? selected : null
-    const agent =
-      detected === null
-        ? (savedAgent ?? (defaultAgent === 'blank' ? null : defaultAgent))
-        : pickSourceControlLaunchAgent({
-            savedAgent,
-            defaultAgent,
-            detectedAgents: detected,
-            disabledAgents: settings?.disabledTuiAgents
-          })
+    const agent = pickSourceControlLaunchAgent({
+      savedAgent,
+      defaultAgent,
+      detectedAgents: detected,
+      disabledAgents: settings?.disabledTuiAgents
+    })
     return {
+      status: 'ready',
       agent,
-      loading: detected === null,
       chat: !!agent && providers.includes(agent) && isNativeChatDefaultFor(settings, agent)
     }
   }

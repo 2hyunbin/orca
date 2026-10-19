@@ -25,6 +25,7 @@ import {
 } from './source-control-action-recipe-options'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
+import { SourceControlActionOptionsPlaceholder } from './SourceControlActionOptionsPlaceholder'
 import { useSourceControlActionChatAgent } from './use-source-control-action-chat-agent'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
@@ -148,24 +149,22 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
           ) : agentSupportText ? (
             <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
           ) : null}
-          {isLaunchAction && actual.chat && onLaunchPreferencesChange ? (
-            <SourceControlActionModelPicker
-              agent={actual.agent}
-              disabled={actual.loading}
-              value={launchPreferences}
-              onChange={(value) => onLaunchPreferencesChange(actionId, value)}
-            />
-          ) : null}
         </div>
       </div>
-      <div
-        className={
-          isLaunchAction && actual.chat
-            ? 'mt-3 space-y-3'
-            : 'mt-3 grid gap-3 sm:grid-cols-[220px_1fr]'
-        }
-      >
-        {!(isLaunchAction && actual.chat) ? (
+      <div className="mt-3 grid items-start gap-3 sm:grid-cols-[220px_1fr]">
+        {isLaunchAction && actual.status === 'pending' ? (
+          <SourceControlActionOptionsPlaceholder value={launchPreferences} />
+        ) : isLaunchAction && actual.status === 'ready' && actual.chat ? (
+          <div>
+            {onLaunchPreferencesChange ? (
+              <SourceControlActionModelPicker
+                agent={actual.agent}
+                value={launchPreferences}
+                onChange={(value) => onLaunchPreferencesChange(actionId, value)}
+              />
+            ) : null}
+          </div>
+        ) : (
           <div className="space-y-2">
             <Label className="text-[11px] text-muted-foreground">
               {translate(
@@ -181,7 +180,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
               className="h-8 font-mono text-xs"
             />
           </div>
-        ) : null}
+        )}
         <div className="space-y-2">
           <Label className="text-[11px] text-muted-foreground">
             {translate(
