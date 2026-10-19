@@ -50,14 +50,16 @@ export async function addRepoWithWorkspaces(
     },
     realRepoPath
   )
-  // The add's own refresh can supersede a fetch, and updateRepo skips a repo the store lacks.
+  // The add's own refresh can supersede the helper's fetch, and updateRepo skips a repo the store lacks.
   await expect
-    .poll(() =>
-      page.evaluate(async (repoId) => {
-        const store = window.__store!
-        await store.getState().fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
-        return store.getState().repos.some((repo) => repo.id === repoId)
-      }, repoId)
+    .poll(
+      () =>
+        page.evaluate(async (repoId) => {
+          const store = window.__store!
+          await store.getState().fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
+          return store.getState().repos.some((repo) => repo.id === repoId)
+        }, repoId),
+      { message: 'the added repo never reached the store' }
     )
     .toBe(true)
   await evaluatePolled(
