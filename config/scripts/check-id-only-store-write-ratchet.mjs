@@ -22,13 +22,14 @@ const READ_METHOD = /^(?:get|list|has|peek|read|is|select|find|automation)[A-Z]/
 const MEMBER =
   /^ {2}(?:(?:public|override|static|async|readonly)\s+)*(\w+)\s*(?:<[^>\n]*>)?(?:\s*=\s*(?:async\s*)?(?:<[^>\n]*>)?)?\(\s*(\w+)\??\s*:\s*([^,)=]+)/gm
 
-/** First-parameter names whose id has no host twin, with the reason. */
+/** `Class.param` first parameters whose id has no host twin, with the reason. */
 export const NOT_HOST_TWINNED_PARAMS = new Map([
-  ['automationId', 'automation ids are minted UUIDs'],
-  ['environmentId', 'the id names the host itself'],
-  ['hostId', 'the id names the host itself'],
-  ['oldTargetId', 'the id names the host itself'],
-  ['targetId', 'the id names the host itself']
+  ['AutomationPersistence.automationId', 'automation ids are minted UUIDs'],
+  ['OrcadSourceExportPersistence.targetId', 'the id names the host itself'],
+  ['RemoteLayoutSnapshotPersistence.environmentId', 'the id names the host itself'],
+  ['SessionHostPartitionOperations.hostId', 'the id names the host itself'],
+  ['SshLeaseRecoveryOperations.targetId', 'the id names the host itself'],
+  ['SshProfileOperations.oldTargetId', 'the id names the host itself']
 ])
 
 /** Matches exempt by method, with the reason. Keep each reason true. */
@@ -97,7 +98,7 @@ export function findIdOnlyWrites(className, source) {
       method !== 'constructor' &&
       !READ_METHOD.test(method) &&
       ID_PARAM.test(param) &&
-      !NOT_HOST_TWINNED_PARAMS.has(param) &&
+      !NOT_HOST_TWINNED_PARAMS.has(`${className}.${param}`) &&
       !HOST_TARGET_TYPE.test(type.trim())
     ) {
       found.push(`${className}.${method}`)

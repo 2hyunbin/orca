@@ -56,10 +56,13 @@ describe('findIdOnlyWrites', () => {
       'RowOps.updateFolderWorkspace',
       'RowOps.removeWorktreeMeta',
       'RowOps.reorderRepos',
+      'RowOps.setRemoteLayoutSnapshot',
       'RowOps.renameRepo',
       'RowOps.setLineage',
       'RowOps.removeWorkspaceLineage',
-      'RowOps.dropRow'
+      'RowOps.dropRow',
+      // Param exemptions are per class, so these host-named params count on RowOps.
+      'RowOps.removeSessionHost'
     ])
   })
 
