@@ -470,6 +470,7 @@ const SCENARIOS: Scenario[] = [
   }
 ]
 
+// Each scenario below is a test declared on one line.
 const REPEAT = Math.max(1, Number(process.env.ORCA_LAYOUT_ORACLE_REPEAT ?? 1))
 const RECORD_ONLY = process.env.ORCA_LAYOUT_ORACLE_RECORD === '1'
 
