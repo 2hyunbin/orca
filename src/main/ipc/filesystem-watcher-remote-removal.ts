@@ -28,10 +28,12 @@ export async function closeRemoteWatcherForWorktreePath(
     worktreePath,
     listeners: new Map<number, WebContents>()
   }
+  const waiters = watcherLifecycleState.cancelledRemoteInstallWaiters.get(key)
   for (const source of [
     watcherLifecycleState.pendingRemoteWatcherRetryListeners.get(key)?.listeners,
     watcherLifecycleState.inFlightRemoteInstalls.get(key)?.listeners,
-    watcherLifecycleState.remoteWatchers.get(key)?.listeners
+    watcherLifecycleState.remoteWatchers.get(key)?.listeners,
+    new Map(Array.from(waiters?.values() ?? [], ({ sender }) => [sender.id, sender]))
   ]) {
     for (const [senderId, sender] of source ?? []) {
       if (!sender.isDestroyed()) {
@@ -39,6 +41,8 @@ export async function closeRemoteWatcherForWorktreePath(
       }
     }
   }
+  // Why: a waiter's retry would install after this close; the restore re-subscribes it instead.
+  watcherLifecycleState.cancelledRemoteInstallWaiters.delete(key)
   if (suspended.listeners.size > 0) {
     watcherLifecycleState.suspendedRemoteWatcherListeners.set(key, suspended)
   }
@@ -91,7 +95,8 @@ export async function restoreRemoteWatcherAfterFailedRemoval(
       break
     }
     // Why: owners stay suspended until their turn, so an unwatch during an earlier owner's re-subscribe still withdraws them.
-    if (!suspended.listeners.delete(sender.id) || !isCurrentWatcherSender(sender, signal)) {
+    // Why lifetime first: a reloaded window keeps its id, and its new entry is not this restore's to take.
+    if (!isCurrentWatcherSender(sender, signal) || !suspended.listeners.delete(sender.id)) {
       continue
     }
     let result: RemoteWatcherInstallResult

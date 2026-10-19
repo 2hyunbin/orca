@@ -1,6 +1,6 @@
 // Randomized model test for local watcher listener bookkeeping across watch churn and worktree removals.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createWatcherSender } from './filesystem-watcher-test-sender'
+import { createWatcherSender, fireWatcherSenderEvent } from './filesystem-watcher-test-sender'
 
 const { handleMock, statMock, subscribeMock } = vi.hoisted(() => ({
   handleMock: vi.fn(),
@@ -35,6 +35,8 @@ import {
 type Handler = (event: unknown, args: unknown) => unknown
 type Sender = ReturnType<typeof createWatcherSender> & { destroyed: boolean }
 type SubscribeOutcome = 'ok' | 'capacity'
+// Why 'wedged': a stuck watcher child ignores abort, so removals must fall back to their drain deadline.
+type SubscribeDelay = 'none' | 'abortable' | 'wedged'
 // Why 'rejected': a watch refused by an active removal may still come back from that removal's restore.
 type Intent = 'yes' | 'no' | 'rejected'
 type Removal = {
@@ -44,6 +46,7 @@ type Removal = {
 
 const ROOTS = ['/repo', '/other']
 const OUTCOMES: SubscribeOutcome[] = ['ok', 'ok', 'ok', 'capacity']
+const DELAYS: SubscribeDelay[] = ['none', 'none', 'abortable', 'abortable', 'abortable', 'wedged']
 // Why: CI keeps this quick; raise ORCA_WATCH_MODEL_RUNS locally for deeper searches.
 const RUNS = Number(process.env.ORCA_WATCH_MODEL_RUNS ?? 1000)
 const MIN_STEPS = 20
@@ -76,7 +79,7 @@ describe('local watcher lifecycle (randomized model)', () => {
   const handlers: Record<string, Handler> = {}
   const deferred: (() => void)[] = []
   let liveSubscriptions = 0
-  let nextOutcome: () => { outcome: SubscribeOutcome; defer: boolean }
+  let nextOutcome: () => { outcome: SubscribeOutcome; delay: SubscribeDelay }
   let trace: string[] = []
   const coordinator = createRuntimeFileWatcherRemoval({
     closeFileExplorerWatchersForPath: async () => {},
@@ -92,7 +95,7 @@ describe('local watcher lifecycle (randomized model)', () => {
   }
 
   // Like the watcher process, a pending subscribe rejects as soon as its install is aborted.
-  function waitForRelease(signal: AbortSignal | undefined): Promise<void> {
+  function waitForRelease(signal: AbortSignal | undefined, delay: SubscribeDelay): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const done = (): void => {
         signal?.removeEventListener('abort', abort)
@@ -103,7 +106,9 @@ describe('local watcher lifecycle (randomized model)', () => {
         reject(new Error('aborted'))
       }
       deferred.push(done)
-      signal?.addEventListener('abort', abort, { once: true })
+      if (delay === 'abortable') {
+        signal?.addEventListener('abort', abort, { once: true })
+      }
     })
   }
 
@@ -119,10 +124,10 @@ describe('local watcher lifecycle (randomized model)', () => {
     statMock.mockResolvedValue({ isDirectory: () => true })
     subscribeMock.mockImplementation(
       async (dir: string, _cb: unknown, _opts: unknown, hooks?: { signal?: AbortSignal }) => {
-        const { outcome, defer } = nextOutcome()
-        trace.push(`  subscribe ${dir}: ${defer ? 'deferred ' : ''}${outcome}`)
-        if (defer) {
-          await waitForRelease(hooks?.signal)
+        const { outcome, delay } = nextOutcome()
+        trace.push(`  subscribe ${dir}: ${delay} ${outcome}`)
+        if (delay !== 'none') {
+          await waitForRelease(hooks?.signal, delay)
         }
         if (outcome === 'capacity') {
           throw new WatcherChildCapacityError()
@@ -158,7 +163,7 @@ describe('local watcher lifecycle (randomized model)', () => {
   async function runModel(seed: number, steps: number): Promise<string | null> {
     const rand = mulberry32(seed)
     const pick = <T>(items: readonly T[]): T => items[Math.floor(rand() * items.length)]
-    nextOutcome = () => ({ outcome: pick(OUTCOMES), defer: rand() < 0.5 })
+    nextOutcome = () => ({ outcome: pick(OUTCOMES), delay: pick(DELAYS) })
     deferred.length = 0
     liveSubscriptions = 0
     let nextSenderId = 1
@@ -280,20 +285,21 @@ describe('local watcher lifecycle (randomized model)', () => {
         startRemoval(worktreePath)
       } else if (roll < 0.91 && removals.some((removal) => removal.finish)) {
         finishRemoval(pick(removals.filter((removal) => removal.finish)), rand() < 0.5)
-      } else if (roll < 0.95) {
-        trace.push(`window s${sender.id} closes`)
-        sender.destroyed = true
-        for (const [event, callback] of sender.once.mock.calls) {
-          if (event === 'destroyed') {
-            callback()
-          }
-        }
+      } else if (roll < 0.97) {
+        // A reload keeps the WebContents id but starts a new page lifetime with no watches.
+        const closes = rand() < 0.5
+        trace.push(`window s${sender.id} ${closes ? 'closes' : 'reloads'}`)
+        sender.destroyed = closes
+        fireWatcherSenderEvent(sender, closes ? 'destroyed' : 'did-navigate')
         for (const wantedEntry of wanted.keys()) {
           if (wantedEntry.startsWith(`${sender.id}|`)) {
             wanted.set(wantedEntry, 'no')
+            lastWatchOp.delete(wantedEntry)
           }
         }
-        senders.push(makeSender())
+        if (closes) {
+          senders.push(makeSender())
+        }
       }
       await settle()
       const stepFailure = checkListeners(`step ${step}`)
@@ -355,7 +361,7 @@ describe('local watcher lifecycle (randomized model)', () => {
   }
 
   it('drops a re-watch that was unwatched while waiting out a cancelled install', async () => {
-    nextOutcome = () => ({ outcome: 'ok', defer: true })
+    nextOutcome = () => ({ outcome: 'ok', delay: 'abortable' })
     const sender = createWatcherSender(1)
     const args = { worktreePath: '/repo' }
     const first = handlers['fs:watchWorktree']({ sender }, args)

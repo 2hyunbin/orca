@@ -7,11 +7,14 @@ import {
 } from './filesystem-watcher-lifecycle-state'
 import { getLocalWatcherRoot } from './filesystem-watcher-paths'
 import {
+  addCancelledInstallWaiter,
   addInFlightLocalInstallListener,
   addLocalWatchListener,
   clearLocalCapacityRetry,
+  forgetCancelledInstallWaiter,
   rememberUnwatchableRoot,
   registerWatcherSenderCleanup,
+  takeCancelledInstallWaiter,
   takeLocalCapacityRetryListeners,
   trackDetachedLocalUnsubscribe
 } from './filesystem-watcher-listener-lifecycle'
@@ -22,8 +25,7 @@ import { isCurrentWatcherSender } from './filesystem-watcher-sender-lifetime'
 
 // ── Subscribe / Unsubscribe ──────────────────────────────────────────
 
-// Why: a sender waiting out a cancelled install is in no listener map, so an unwatch must still be able to withdraw it.
-const cancelledInstallWaiters = new Map<string, Map<number, symbol>>()
+const cancelledInstallWaiters = watcherLifecycleState.cancelledLocalInstallWaiters
 
 export async function subscribeLocalWatcher(
   worktreePath: string,
@@ -102,21 +104,13 @@ async function subscribeWhileRemovalAllowed(
         addInFlightLocalInstallListener(inFlight, listener)
       }
     }
-    const waitToken = Symbol('cancelled-install-wait')
-    if (!canJoinInstall) {
-      const waiters = cancelledInstallWaiters.get(rootKey) ?? new Map<number, symbol>()
-      waiters.set(sender.id, waitToken)
-      cancelledInstallWaiters.set(rootKey, waiters)
-    }
+    const waitToken = canJoinInstall
+      ? null
+      : addCancelledInstallWaiter(cancelledInstallWaiters, rootKey, sender)
     const result = await pendingInstall
-    const waiters = cancelledInstallWaiters.get(rootKey)
-    const stillWanted = canJoinInstall || waiters?.get(sender.id) === waitToken
-    if (waiters?.get(sender.id) === waitToken) {
-      waiters.delete(sender.id)
-      if (waiters.size === 0) {
-        cancelledInstallWaiters.delete(rootKey)
-      }
-    }
+    const stillWanted =
+      waitToken === null ||
+      takeCancelledInstallWaiter(cancelledInstallWaiters, rootKey, sender.id, waitToken)
     const liveCapacityListeners = capacityRetryListeners.filter((listener) =>
       isCurrentWatcherSender(listener, retrySignals.get(listener.id)!)
     )
@@ -205,11 +199,7 @@ async function subscribeWhileRemovalAllowed(
 
 export function unsubscribeLocalWatcher(worktreePath: string, senderId: number): void {
   const { key: rootKey } = getLocalWatcherRoot(worktreePath)
-  const waiters = cancelledInstallWaiters.get(rootKey)
-  waiters?.delete(senderId)
-  if (waiters?.size === 0) {
-    cancelledInstallWaiters.delete(rootKey)
-  }
+  forgetCancelledInstallWaiter(cancelledInstallWaiters, rootKey, senderId)
   const suspended = watcherLifecycleState.suspendedLocalWatcherListeners.get(rootKey)
   suspended?.listeners.delete(senderId)
   if (suspended?.listeners.size === 0) {

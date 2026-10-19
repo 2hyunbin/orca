@@ -17,21 +17,14 @@ import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import { getRemoteWatcherKey } from './filesystem-watcher-paths'
 import { isCurrentWatcherSender } from './filesystem-watcher-sender-lifetime'
 import {
+  addCancelledInstallWaiter,
   addInFlightRemoteInstallListener,
   addRemoteWatchListener,
-  registerWatcherSenderCleanup
+  registerWatcherSenderCleanup,
+  takeCancelledInstallWaiter
 } from './filesystem-watcher-listener-lifecycle'
 
-// Why: a sender waiting out a cancelled install is in no listener map, so an unwatch must still be able to withdraw it.
-const cancelledRemoteInstallWaiters = new Map<string, Map<number, symbol>>()
-
-export function forgetCancelledRemoteInstallWaiter(key: string, senderId: number): void {
-  const waiters = cancelledRemoteInstallWaiters.get(key)
-  waiters?.delete(senderId)
-  if (waiters?.size === 0) {
-    cancelledRemoteInstallWaiters.delete(key)
-  }
-}
+const cancelledRemoteInstallWaiters = watcherLifecycleState.cancelledRemoteInstallWaiters
 
 export type RemoteWatcherTerminalErrorHandler = (
   key: string,
@@ -100,18 +93,13 @@ async function installRemoteWatcherWhileRemovalAllowed(
       // Why: a new watcher joining before provider.watch() resolves should revive the install instead of inheriting the stale cancellation.
       addInFlightRemoteInstallListener(inFlight, sender)
     }
-    const waitToken = Symbol('cancelled-install-wait')
-    if (!canJoinInstall) {
-      const waiters = cancelledRemoteInstallWaiters.get(key) ?? new Map<number, symbol>()
-      waiters.set(sender.id, waitToken)
-      cancelledRemoteInstallWaiters.set(key, waiters)
-    }
+    const waitToken = canJoinInstall
+      ? null
+      : addCancelledInstallWaiter(cancelledRemoteInstallWaiters, key, sender)
     const result = await pendingInstall
     const stillWanted =
-      canJoinInstall || cancelledRemoteInstallWaiters.get(key)?.get(sender.id) === waitToken
-    if (!canJoinInstall && stillWanted) {
-      forgetCancelledRemoteInstallWaiter(key, sender.id)
-    }
+      waitToken === null ||
+      takeCancelledInstallWaiter(cancelledRemoteInstallWaiters, key, sender.id, waitToken)
     if (!stillWanted || !isCurrentWatcherSender(sender, senderSignal)) {
       return 'cancelled'
     }

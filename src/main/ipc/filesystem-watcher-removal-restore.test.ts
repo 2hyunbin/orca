@@ -1,6 +1,6 @@
 // Restores after a failed worktree removal must not resurrect unwatched windows or lose a newer removal's owners.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createWatcherSender } from './filesystem-watcher-test-sender'
+import { createWatcherSender, fireWatcherSenderEvent } from './filesystem-watcher-test-sender'
 
 const { handleMock, statMock, subscribeMock, getSshFilesystemProviderMock } = vi.hoisted(() => ({
   handleMock: vi.fn(),
@@ -46,6 +46,8 @@ describe('watcher restore after a failed worktree removal', () => {
   const handlers: Record<string, Handler> = {}
   const deferred: (() => void)[] = []
   let deferSubscribe = false
+  // A wedged watcher child ignores abort until it finally answers.
+  let wedged = false
   const coordinator = createRuntimeFileWatcherRemoval({
     closeFileExplorerWatchersForPath: async () => {},
     restoreFileExplorerWatchersAfterFailedRemoval: async () => {},
@@ -73,7 +75,9 @@ describe('watcher restore after a failed worktree removal', () => {
         reject(new Error('aborted'))
       }
       deferred.push(done)
-      signal?.addEventListener('abort', abort, { once: true })
+      if (!wedged) {
+        signal?.addEventListener('abort', abort, { once: true })
+      }
     })
   }
 
@@ -83,6 +87,7 @@ describe('watcher restore after a failed worktree removal', () => {
     resetWatcherChildRegistryForTest()
     setWorktreeWatcherRemoval(desktopWorktreeWatcherRemoval)
     deferSubscribe = false
+    wedged = false
     deferred.length = 0
     handleMock.mockImplementation((channel: string, handler: Handler) => {
       handlers[channel] = handler
@@ -177,6 +182,72 @@ describe('watcher restore after a failed worktree removal', () => {
       expect(listeners().sort()).toEqual([1, 2])
       expect(watcherLifecycleState.suspendedLocalWatcherListeners.size).toBe(0)
       expect(watcherLifecycleState.suspendedRemoteWatcherListeners.size).toBe(0)
+    }
+  )
+
+  it.each([
+    ['local', LOCAL, localListeners],
+    ['SSH', REMOTE, remoteListeners]
+  ])(
+    'keeps a %s window that reloads (same id) while overlapping restores run',
+    async (_label, args, listeners) => {
+      const first = createWatcherSender(1)
+      const second = createWatcherSender(2)
+      // Window 3 keeps the first restore's snapshot non-empty after window 2's old page is cleaned up.
+      const third = createWatcherSender(3)
+      for (const sender of [first, second, third]) {
+        await handlers['fs:watchWorktree']({ sender }, args)
+      }
+      const firstRemoval = await coordinator.acquire(args.worktreePath, args.connectionId)
+
+      deferSubscribe = true
+      const firstRestore = firstRemoval.finish(false)
+      await settle()
+      // The first restore captured window 2's old lifetime; the reloaded page watches again.
+      fireWatcherSenderEvent(second, 'did-navigate')
+      const rewatch = Promise.resolve(handlers['fs:watchWorktree']({ sender: second }, args))
+      await settle()
+      const secondAcquire = coordinator.acquire(args.worktreePath, args.connectionId)
+      await settle()
+      await resolveAllDeferred()
+      const secondRemoval = await secondAcquire
+      await firstRestore
+      await rewatch.catch(() => {})
+
+      deferSubscribe = false
+      await secondRemoval.finish(false)
+      await settle()
+
+      expect(listeners().sort()).toEqual([1, 2, 3])
+    }
+  )
+
+  it.each([
+    ['local', LOCAL, localListeners],
+    ['SSH', REMOTE, remoteListeners]
+  ])(
+    'restores a %s window that was waiting out a cancelled install when removal began',
+    async (_label, args, listeners) => {
+      const sender = createWatcherSender(1)
+      deferSubscribe = true
+      wedged = true
+      const first = Promise.resolve(handlers['fs:watchWorktree']({ sender }, args))
+      await settle()
+      handlers['fs:unwatchWorktree']({ sender }, args)
+      await settle()
+      // The re-watch can't join the aborted install, so it waits for it in no listener map.
+      deferSubscribe = false
+      const second = Promise.resolve(handlers['fs:watchWorktree']({ sender }, args))
+      await settle()
+      const acquiring = coordinator.acquire(args.worktreePath, args.connectionId)
+      await settle()
+      await resolveAllDeferred()
+      const removal = await acquiring
+      await Promise.allSettled([first, second])
+      await removal.finish(false)
+      await settle()
+
+      expect(listeners()).toEqual([1])
     }
   )
 })

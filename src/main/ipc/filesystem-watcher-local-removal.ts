@@ -27,10 +27,12 @@ export async function closeLocalWatcherForWorktreePath(
     worktreePath,
     listeners: new Map<number, WebContents>()
   }
+  const waiters = watcherLifecycleState.cancelledLocalInstallWaiters.get(rootKey)
   for (const source of [
     watcherLifecycleState.pendingLocalCapacityRetries.get(rootKey)?.listeners,
     watcherLifecycleState.inFlightLocalInstalls.get(rootKey)?.listeners,
-    watcherLifecycleState.watchedRoots.get(rootKey)?.listeners
+    watcherLifecycleState.watchedRoots.get(rootKey)?.listeners,
+    new Map(Array.from(waiters?.values() ?? [], ({ sender }) => [sender.id, sender]))
   ]) {
     for (const [senderId, sender] of source ?? []) {
       if (!sender.isDestroyed()) {
@@ -38,6 +40,8 @@ export async function closeLocalWatcherForWorktreePath(
       }
     }
   }
+  // Why: a waiter's retry would install after this close; the restore re-subscribes it instead.
+  watcherLifecycleState.cancelledLocalInstallWaiters.delete(rootKey)
   if (suspended.listeners.size > 0) {
     watcherLifecycleState.suspendedLocalWatcherListeners.set(rootKey, suspended)
   }
@@ -141,7 +145,8 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
       break
     }
     // Why: owners stay suspended until their turn, so an unwatch during an earlier owner's re-subscribe still withdraws them.
-    if (!suspended.listeners.delete(sender.id) || !isCurrentWatcherSender(sender, signal)) {
+    // Why lifetime first: a reloaded window keeps its id, and its new entry is not this restore's to take.
+    if (!isCurrentWatcherSender(sender, signal) || !suspended.listeners.delete(sender.id)) {
       continue
     }
     try {
