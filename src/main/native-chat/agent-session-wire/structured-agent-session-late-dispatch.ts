@@ -53,9 +53,7 @@ export async function settleStructuredAgentSessionLateDispatch(
             fence
           }
   // The journal queue drains before close; the host queue would defer this past teardown.
-  if (settlement.state === 'accepted') {
-    await session.journal.acceptLate(settlement)
-  } else {
-    await session.journal.resolveDispatch(settlement)
-  }
+  await (settlement.state === 'accepted'
+    ? session.journal.acceptLate(settlement)
+    : session.journal.resolveDispatch(settlement))
 }
