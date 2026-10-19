@@ -1,4 +1,4 @@
-// Randomized model test for local watcher listener bookkeeping across watch churn.
+// Randomized model test for local watcher listener bookkeeping across watch churn and worktree removals.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWatcherSender } from './filesystem-watcher-test-sender'
 
@@ -22,11 +22,9 @@ vi.mock('../providers/ssh-filesystem-dispatch', () => ({
 
 import { closeAllWatchers } from './filesystem-watcher-shutdown'
 import { registerFilesystemWatcherHandlers } from './filesystem-watcher-handlers'
-import {
-  closeLocalWatcherForWorktreePath,
-  forgetLocalWatcherRemovalSnapshot,
-  restoreLocalWatcherAfterFailedRemoval
-} from './filesystem-watcher-local-removal'
+import { desktopWorktreeWatcherRemoval } from './filesystem-watcher'
+import { setWorktreeWatcherRemoval } from './worktree-watcher-removal'
+import { createRuntimeFileWatcherRemoval } from '../runtime/runtime-file-watcher-removal'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import { getLocalWatcherRoot } from './filesystem-watcher-paths'
 import {
@@ -37,6 +35,12 @@ import {
 type Handler = (event: unknown, args: unknown) => unknown
 type Sender = ReturnType<typeof createWatcherSender> & { destroyed: boolean }
 type SubscribeOutcome = 'ok' | 'capacity'
+// Why 'rejected': a watch refused by an active removal may still come back from that removal's restore.
+type Intent = 'yes' | 'no' | 'rejected'
+type Removal = {
+  path: string
+  finish: ((removed: boolean) => Promise<void>) | null
+}
 
 const ROOTS = ['/repo', '/other']
 const OUTCOMES: SubscribeOutcome[] = ['ok', 'ok', 'ok', 'capacity']
@@ -74,6 +78,11 @@ describe('local watcher lifecycle (randomized model)', () => {
   let liveSubscriptions = 0
   let nextOutcome: () => { outcome: SubscribeOutcome; defer: boolean }
   let trace: string[] = []
+  const coordinator = createRuntimeFileWatcherRemoval({
+    closeFileExplorerWatchersForPath: async () => {},
+    restoreFileExplorerWatchersAfterFailedRemoval: async () => {},
+    forgetFileExplorerWatchersAfterRemoval: () => {}
+  })
 
   async function resolveAllDeferred(): Promise<void> {
     while (deferred.length > 0) {
@@ -82,36 +91,55 @@ describe('local watcher lifecycle (randomized model)', () => {
     }
   }
 
+  // Like the watcher process, a pending subscribe rejects as soon as its install is aborted.
+  function waitForRelease(signal: AbortSignal | undefined): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const done = (): void => {
+        signal?.removeEventListener('abort', abort)
+        resolve()
+      }
+      const abort = (): void => {
+        deferred.splice(deferred.indexOf(done), 1)
+        reject(new Error('aborted'))
+      }
+      deferred.push(done)
+      signal?.addEventListener('abort', abort, { once: true })
+    })
+  }
+
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
     resetWatcherChildRegistryForTest()
+    setWorktreeWatcherRemoval(desktopWorktreeWatcherRemoval)
     handleMock.mockImplementation((channel: string, handler: Handler) => {
       handlers[channel] = handler
     })
     statMock.mockResolvedValue({ isDirectory: () => true })
-    subscribeMock.mockImplementation(async (dir: string) => {
-      const { outcome, defer } = nextOutcome()
-      trace.push(`  subscribe ${dir}: ${defer ? 'deferred ' : ''}${outcome}`)
-      if (defer) {
-        await new Promise<void>((resolve) => deferred.push(resolve))
+    subscribeMock.mockImplementation(
+      async (dir: string, _cb: unknown, _opts: unknown, hooks?: { signal?: AbortSignal }) => {
+        const { outcome, defer } = nextOutcome()
+        trace.push(`  subscribe ${dir}: ${defer ? 'deferred ' : ''}${outcome}`)
+        if (defer) {
+          await waitForRelease(hooks?.signal)
+        }
+        if (outcome === 'capacity') {
+          throw new WatcherChildCapacityError()
+        }
+        liveSubscriptions += 1
+        let unsubscribed = false
+        return {
+          unsubscribe: vi.fn(async () => {
+            if (unsubscribed) {
+              throw new Error('double unsubscribe')
+            }
+            unsubscribed = true
+            liveSubscriptions -= 1
+          })
+        }
       }
-      if (outcome === 'capacity') {
-        throw new WatcherChildCapacityError()
-      }
-      liveSubscriptions += 1
-      let unsubscribed = false
-      return {
-        unsubscribe: vi.fn(async () => {
-          if (unsubscribed) {
-            throw new Error('double unsubscribe')
-          }
-          unsubscribed = true
-          liveSubscriptions -= 1
-        })
-      }
-    })
+    )
     deferred.length = 0
     liveSubscriptions = 0
     registerFilesystemWatcherHandlers()
@@ -121,6 +149,7 @@ describe('local watcher lifecycle (randomized model)', () => {
   afterEach(async () => {
     await resolveAllDeferred()
     await closeAllWatchers()
+    setWorktreeWatcherRemoval(null)
     resetWatcherChildRegistryForTest()
     vi.useRealTimers()
     vi.restoreAllMocks()
@@ -141,32 +170,75 @@ describe('local watcher lifecycle (randomized model)', () => {
       return sender
     }
     const senders: Sender[] = [makeSender(), makeSender(), makeSender()]
-    // Last op per sender+root: true = watching, false = unwatched; missing = never asked.
-    const wanted = new Map<string, boolean>()
+    // The renderer's last request per sender+root; missing = never asked.
+    const wanted = new Map<string, Intent>()
+    const lastWatchOp = new Map<string, number>()
     const want = (senderId: number, key: string): string => `${senderId}|${key}`
+    let nextOp = 0
     trace = []
     const inFlight: Promise<unknown>[] = []
+    const removals: Removal[] = []
     const failed = (message: string): string => `${message}\n${trace.join('\n')}`
+    const liveSenders = (): Sender[] => senders.filter((candidate) => !candidate.destroyed)
+
+    // Removals go through the real coordinator so the install fence and gate release order apply.
+    const startRemoval = (path: string): void => {
+      const removal: Removal = { path, finish: null }
+      removals.push(removal)
+      inFlight.push(
+        coordinator.acquire(path).then(
+          (handle) => {
+            removal.finish = handle.finish
+          },
+          () => {
+            removals.splice(removals.indexOf(removal), 1)
+          }
+        )
+      )
+    }
+
+    const finishRemoval = (removal: Removal, removed: boolean): void => {
+      removals.splice(removals.indexOf(removal), 1)
+      trace.push(`finish removal ${removal.path} (${removed ? 'succeeds' : 'fails, restore'})`)
+      // Why not awaited: the restore re-subscribes, which may itself be a deferred install.
+      inFlight.push(removal.finish!(removed))
+      if (!removed) {
+        return
+      }
+      // The renderer drops the deleted workspace's watches.
+      const key = rootKey(removal.path)
+      for (const owner of liveSenders()) {
+        if (wanted.has(want(owner.id, key))) {
+          wanted.set(want(owner.id, key), 'no')
+          handlers['fs:unwatchWorktree']({ sender: owner }, { worktreePath: removal.path })
+        }
+      }
+    }
 
     const drain = async (): Promise<void> => {
-      await resolveAllDeferred()
-      await Promise.allSettled(inFlight)
-      inFlight.length = 0
-      await settle()
+      while (deferred.length > 0 || inFlight.length > 0 || removals.length > 0) {
+        await resolveAllDeferred()
+        await Promise.allSettled(inFlight.splice(0))
+        await settle()
+        for (const removal of removals.filter((candidate) => candidate.finish)) {
+          finishRemoval(removal, rand() < 0.5)
+        }
+        await settle()
+      }
     }
 
     const checkListeners = (phase: string): string | null => {
-      for (const [key, root] of watcherLifecycleState.watchedRoots) {
-        for (const senderId of root.listeners.keys()) {
-          if (wanted.get(want(senderId, key)) !== true) {
-            return `${phase}: sender ${senderId} still listens on ${key} after unwatch`
-          }
-        }
-      }
-      for (const [key, retry] of watcherLifecycleState.pendingLocalCapacityRetries) {
-        for (const senderId of retry.listeners.keys()) {
-          if (wanted.get(want(senderId, key)) !== true) {
-            return `${phase}: capacity retry for ${key} keeps unwatched sender ${senderId}`
+      const sources = [
+        ['listens on', watcherLifecycleState.watchedRoots],
+        ['waits on capacity for', watcherLifecycleState.pendingLocalCapacityRetries]
+      ] as const
+      for (const [label, byKey] of sources) {
+        for (const [key, { listeners }] of byKey) {
+          for (const senderId of listeners.keys()) {
+            const intent = wanted.get(want(senderId, key))
+            if (intent !== 'yes' && intent !== 'rejected') {
+              return `${phase}: unwatched sender ${senderId} still ${label} ${key}`
+            }
           }
         }
       }
@@ -175,42 +247,40 @@ describe('local watcher lifecycle (randomized model)', () => {
 
     for (let step = 0; step < steps; step += 1) {
       const roll = rand()
-      const sender = pick(senders.filter((candidate) => !candidate.destroyed))
+      const sender = pick(liveSenders())
       const worktreePath = pick(ROOTS)
       const key = rootKey(worktreePath)
-      if (roll < 0.4) {
+      const entry = want(sender.id, key)
+      if (roll < 0.36) {
         trace.push(`watch s${sender.id} ${worktreePath}`)
-        wanted.set(want(sender.id, key), true)
-        inFlight.push(Promise.resolve(handlers['fs:watchWorktree']({ sender }, { worktreePath })))
-      } else if (roll < 0.65) {
+        const op = nextOp++
+        wanted.set(entry, 'yes')
+        lastWatchOp.set(entry, op)
+        inFlight.push(
+          Promise.resolve(handlers['fs:watchWorktree']({ sender }, { worktreePath })).catch(() => {
+            if (lastWatchOp.get(entry) === op && wanted.get(entry) === 'yes') {
+              trace.push(`  watch s${sender.id} ${worktreePath} rejected`)
+              wanted.set(entry, 'rejected')
+            }
+          })
+        )
+      } else if (roll < 0.58) {
         trace.push(`unwatch s${sender.id} ${worktreePath}`)
-        wanted.set(want(sender.id, key), false)
+        wanted.set(entry, 'no')
+        lastWatchOp.delete(entry)
         handlers['fs:unwatchWorktree']({ sender }, { worktreePath })
-      } else if (roll < 0.8 && deferred.length > 0) {
+      } else if (roll < 0.72 && deferred.length > 0) {
         trace.push('resolve-subscribe')
         deferred.splice(Math.floor(rand() * deferred.length), 1)[0]()
-      } else if (roll < 0.86) {
+      } else if (roll < 0.77) {
         trace.push('grace-elapses')
         await vi.advanceTimersByTimeAsync(GRACE_PLUS_MS)
-      } else if (roll < 0.93) {
-        const restore = rand() < 0.5
-        trace.push(`remove ${worktreePath} (${restore ? 'fails, restore' : 'succeeds'})`)
-        await drain()
-        await closeLocalWatcherForWorktreePath(worktreePath)
-        if (restore) {
-          // Why not awaited: the restore re-subscribes, which may itself be a deferred install.
-          inFlight.push(restoreLocalWatcherAfterFailedRemoval(worktreePath))
-        } else {
-          forgetLocalWatcherRemovalSnapshot(worktreePath)
-          // The renderer drops the deleted workspace's watches.
-          for (const owner of senders.filter((candidate) => !candidate.destroyed)) {
-            if (wanted.has(want(owner.id, key))) {
-              wanted.set(want(owner.id, key), false)
-              handlers['fs:unwatchWorktree']({ sender: owner }, { worktreePath })
-            }
-          }
-        }
-      } else if (roll < 0.97) {
+      } else if (roll < 0.84) {
+        trace.push(`start removal ${worktreePath}`)
+        startRemoval(worktreePath)
+      } else if (roll < 0.91 && removals.some((removal) => removal.finish)) {
+        finishRemoval(pick(removals.filter((removal) => removal.finish)), rand() < 0.5)
+      } else if (roll < 0.95) {
         trace.push(`window s${sender.id} closes`)
         sender.destroyed = true
         for (const [event, callback] of sender.once.mock.calls) {
@@ -218,20 +288,21 @@ describe('local watcher lifecycle (randomized model)', () => {
             callback()
           }
         }
-        for (const entry of wanted.keys()) {
-          if (entry.startsWith(`${sender.id}|`)) {
-            wanted.set(entry, false)
+        for (const wantedEntry of wanted.keys()) {
+          if (wantedEntry.startsWith(`${sender.id}|`)) {
+            wanted.set(wantedEntry, 'no')
           }
         }
         senders.push(makeSender())
       }
       await settle()
       const stepFailure = checkListeners(`step ${step}`)
-      if (stepFailure && deferred.length === 0) {
+      if (stepFailure) {
         return failed(stepFailure)
       }
     }
 
+    trace.push('drain')
     await drain()
     const quiescent = checkListeners('quiescent')
     if (quiescent) {
@@ -247,22 +318,22 @@ describe('local watcher lifecycle (randomized model)', () => {
         `${liveSubscriptions} native subscriptions for ${watcherLifecycleState.watchedRoots.size} roots`
       )
     }
-    for (const [entry, isWanted] of wanted) {
+    for (const [entry, intent] of wanted) {
       const [senderIdText, key] = entry.split('|')
       const senderId = Number(senderIdText)
       const listening = watcherLifecycleState.watchedRoots.get(key)?.listeners.has(senderId)
       const capacityWaiting = watcherLifecycleState.pendingLocalCapacityRetries
         .get(key)
         ?.listeners.has(senderId)
-      if (isWanted && !listening && !capacityWaiting) {
+      if (intent === 'yes' && !listening && !capacityWaiting) {
         return failed(`wanted ${entry} is neither delivered nor waiting`)
       }
     }
 
     // Unwatching everything and waiting out the grace leaves no roots or native handles.
-    for (const sender of senders.filter((candidate) => !candidate.destroyed)) {
+    for (const sender of liveSenders()) {
       for (const worktreePath of ROOTS) {
-        wanted.set(want(sender.id, rootKey(worktreePath)), false)
+        wanted.set(want(sender.id, rootKey(worktreePath)), 'no')
         handlers['fs:unwatchWorktree']({ sender }, { worktreePath })
       }
     }
@@ -302,27 +373,6 @@ describe('local watcher lifecycle (randomized model)', () => {
     )
     await vi.advanceTimersByTimeAsync(GRACE_PLUS_MS)
     expect(liveSubscriptions).toBe(0)
-  })
-
-  it('drops a window that unwatches while an earlier window is restored after a failed removal', async () => {
-    nextOutcome = () => ({ outcome: 'ok', defer: false })
-    const first = createWatcherSender(1)
-    const second = createWatcherSender(2)
-    const args = { worktreePath: '/repo' }
-    await handlers['fs:watchWorktree']({ sender: first }, args)
-    await handlers['fs:watchWorktree']({ sender: second }, args)
-    await closeLocalWatcherForWorktreePath('/repo')
-
-    nextOutcome = () => ({ outcome: 'ok', defer: true })
-    const restoring = restoreLocalWatcherAfterFailedRemoval('/repo')
-    await settle()
-    handlers['fs:unwatchWorktree']({ sender: second }, args)
-    await resolveAllDeferred()
-    await restoring
-
-    const listeners = watcherLifecycleState.watchedRoots.get(rootKey('/repo'))?.listeners
-    expect([...(listeners?.keys() ?? [])]).toEqual([1])
-    expect(watcherLifecycleState.suspendedLocalWatcherListeners.size).toBe(0)
   })
 
   it('never leaks listeners, roots or native subscriptions across random watch histories', async () => {

@@ -134,7 +134,12 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
     sender,
     signal: registerWatcherSenderCleanup(sender)
   }))
+  const suspendedByKey = watcherLifecycleState.suspendedLocalWatcherListeners
   for (const { sender, signal } of owners) {
+    // Why: a forgotten or replaced snapshot belongs to a newer removal; this restore must not consume it.
+    if (suspendedByKey.get(rootKey) !== suspended) {
+      break
+    }
     // Why: owners stay suspended until their turn, so an unwatch during an earlier owner's re-subscribe still withdraws them.
     if (!suspended.listeners.delete(sender.id) || !isCurrentWatcherSender(sender, signal)) {
       continue
@@ -155,17 +160,22 @@ export async function restoreLocalWatcherAfterFailedRemoval(worktreePath: string
       failures.push({ sender, signal, error })
     }
   }
-  if (watcherLifecycleState.suspendedLocalWatcherListeners.get(rootKey) === suspended) {
-    watcherLifecycleState.suspendedLocalWatcherListeners.delete(rootKey)
+  // Why: an overlapping retried removal may have re-suspended owners into this same entry.
+  if (suspendedByKey.get(rootKey) === suspended && suspended.listeners.size === 0) {
+    suspendedByKey.delete(rootKey)
   }
   const liveFailures = failures.filter(({ sender, signal }) =>
     isCurrentWatcherSender(sender, signal)
   )
   if (liveFailures.length > 0) {
-    watcherLifecycleState.suspendedLocalWatcherListeners.set(rootKey, {
+    const current = suspendedByKey.get(rootKey) ?? {
       worktreePath: suspended.worktreePath,
-      listeners: new Map(liveFailures.map(({ sender }) => [sender.id, sender]))
-    })
+      listeners: new Map<number, WebContents>()
+    }
+    for (const { sender } of liveFailures) {
+      current.listeners.set(sender.id, sender)
+    }
+    suspendedByKey.set(rootKey, current)
     throw liveFailures[0].error
   }
 }
