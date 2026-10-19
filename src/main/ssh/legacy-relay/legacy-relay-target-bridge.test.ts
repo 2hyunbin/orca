@@ -468,6 +468,30 @@ describe('one target’s legacy relay bridge', () => {
     await expect(stops.stopAndWait(epochPty, subject, Date.now() + 5_000)).resolves.toBe(true)
   })
 
+  it('settles on the relay’s exit report even when the stop’s own reply is lost', async () => {
+    const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
+    leases = [lease({ ptyId: 'pty2:epoch:1' })]
+    const client = fakeClient(relay)
+    client.shutdown = async () => {
+      stops.exited(epochPty)
+      throw new Error('request timed out')
+    }
+    const lostReply = {
+      paneState: () => 'live' as const,
+      liveRoute: () => ({ client, relayPtyId: 'pty2:epoch:1' }),
+      listedIncarnation: () => undefined,
+      refresh: async () => {}
+    }
+    await expect(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: stop() reads only these members.
+      stops.stopAndWait(
+        epochPty,
+        lostReply as unknown as LegacyRelayTargetBridge,
+        Date.now() + 5_000
+      )
+    ).resolves.toBe(true)
+  })
+
   it('leaves a taken stop unproven while no exit report or complete listing confirms it', async () => {
     const epochPty = toAppSshPtyId(TARGET, 'pty2:epoch:1')
     leases = [lease({ ptyId: 'pty2:epoch:1' })]

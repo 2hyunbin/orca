@@ -89,10 +89,12 @@ export class LegacyRelayPaneStops {
     bridge: StopTarget | null,
     deadlineMs: number
   ): Promise<boolean> {
-    // Armed before the stop is sent, so an exit that races its reply still counts.
+    // Armed before the stop is sent, so an exit that beats its reply, or a lost reply, still counts.
     const exited = this.exits.wait(ptyId, Math.max(1, deadlineMs - Date.now()))
-    const result = await this.stop(ptyId, bridge)
-    return result.status === 'exited' || (result.status === 'requested' && (await exited))
+    const stopped = this.stop(ptyId, bridge).then((result) =>
+      result.status === 'requested' ? exited : result.status === 'exited'
+    )
+    return Promise.race([exited.then((proven) => proven || stopped), stopped])
   }
 
   /** The bridge saw the pane exit. */
