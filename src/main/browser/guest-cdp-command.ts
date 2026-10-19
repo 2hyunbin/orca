@@ -1,7 +1,6 @@
 import type { WebContents } from 'electron'
 import { BrowserError } from './browser-error'
-import { assertRemoteCliBrowserAccess } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
-import { isInputRelease, noteRemoteCliInput } from './remote-cli-page-admission'
+import { assertRemoteCliPageAccess, trackRemoteCliInput } from './remote-cli-page-admission'
 
 // Why: Chromium resizes the page's view for these without checking the view still exists
 // (WebContentsImpl::SetDeviceEmulationSize). A crashed renderer takes its view with it until the
@@ -28,8 +27,8 @@ export function sendGuestCdpCommand(
   sessionId?: string
 ): Promise<unknown> {
   try {
-    // Why: only a host's own command runs in its scope; desktop-owned sends are never refused here.
-    assertRemoteCliBrowserAccess(guest.id)
+    // Why: only a host's own work carries its scope; desktop-owned sends are never refused here.
+    assertRemoteCliPageAccess(guest.id)
   } catch (error) {
     return Promise.reject(error)
   }
@@ -43,20 +42,11 @@ export function sendGuestCdpCommand(
       )
     )
   }
-  // Why: a press counts as held once it may have landed; a release only once it surely did.
-  const releasing = params !== undefined && isInputRelease(params)
-  if (!releasing) {
-    noteRemoteCliInput(guest.id, method, params)
-  }
-  const sent = Promise.resolve(
-    sessionId === undefined
-      ? guest.debugger.sendCommand(method, params)
-      : guest.debugger.sendCommand(method, params, sessionId)
+  return trackRemoteCliInput(guest.id, method, params, () =>
+    Promise.resolve(
+      sessionId === undefined
+        ? guest.debugger.sendCommand(method, params)
+        : guest.debugger.sendCommand(method, params, sessionId)
+    )
   )
-  return releasing
-    ? sent.then((result: unknown) => {
-        noteRemoteCliInput(guest.id, method, params)
-        return result
-      })
-    : sent
 }

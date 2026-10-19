@@ -13,7 +13,7 @@ import type { AgentInputFocusGuard } from './agent-input-focus-guard'
 import { CdpPageInputCommands } from './cdp-page-input-commands'
 import { isTrustedCdpLoopbackRequest } from './cdp-loopback-request-guard'
 import {
-  assertRemoteCliPageAdmitted,
+  assertRemoteCliPageAccess,
   runUnderRemoteCliPageAdmission
 } from './remote-cli-page-admission'
 
@@ -186,7 +186,7 @@ export class CdpWsProxy {
     this.responder.recordRequestSessionId(client, clientId, msg)
     // Why here too: a revoked host's helper is refused even its read-only steps, so it stops at once.
     try {
-      assertRemoteCliPageAdmitted(this.webContents.id)
+      assertRemoteCliPageAccess(this.webContents.id)
     } catch (error) {
       this.responder.sendError(
         clientId,

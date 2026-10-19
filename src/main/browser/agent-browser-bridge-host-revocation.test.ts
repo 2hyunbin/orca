@@ -43,7 +43,10 @@ import {
   captureRemoteCliBrowserScope,
   runInRemoteCliBrowserScope
 } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
-import { assertRemoteCliPageAdmitted } from './remote-cli-page-admission'
+import {
+  assertRemoteCliPageAccess,
+  runUnderRemoteCliPageAdmission
+} from './remote-cli-page-admission'
 import {
   createFakeAgentBrowserChild,
   mockBrowserManager,
@@ -56,6 +59,11 @@ import {
 overrideBridgeWebContentsLookup(AgentBrowserBridge.prototype, webContentsFromIdMock)
 
 const WORKSPACE = 'repo-host::/srv/app'
+
+/** A helper step reaching the page's CDP proxy now. */
+function assertHelperStepAdmitted(): void {
+  runUnderRemoteCliPageAdmission(100, () => assertRemoteCliPageAccess(100))
+}
 
 function dispatchedMouseEvents(wc: ReturnType<typeof mockWebContents>): unknown[] {
   return wc.debugger.sendCommand.mock.calls.filter((call) => call[0] === 'Input.dispatchMouseEvent')
@@ -126,24 +134,21 @@ describe('AgentBrowserBridge under a host revocation', () => {
       revoked.signal
     )
     await vi.waitFor(() => expect(helperCallbacks).toHaveLength(1))
-    expect(() => assertRemoteCliPageAdmitted(100)).not.toThrow()
+    expect(() => assertHelperStepAdmitted()).not.toThrow()
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every instance the hoisted mock constructs has a vi.fn stop.
     const proxy = CdpWsProxyMock.instances.at(-1) as { stop: ReturnType<typeof vi.fn> }
     let heldWhenRetired = false
     proxy.stop.mockImplementation(async () => {
-      heldWhenRetired = (() => {
-        try {
-          assertRemoteCliPageAdmitted(100)
-          return false
-        } catch {
-          return true
-        }
-      })()
+      try {
+        assertHelperStepAdmitted()
+      } catch {
+        heldWhenRetired = true
+      }
     })
     revoked.abort()
     // The helper's next CDP step reaches the page's proxy and is refused there.
-    expect(() => assertRemoteCliPageAdmitted(100)).toThrow('stopped sharing')
+    expect(() => assertHelperStepAdmitted()).toThrow('stopped sharing')
     // Retired on the revocation itself, not when the helper's client times out.
     await vi.waitFor(() => expect(proxy.stop).toHaveBeenCalled())
     helperCallbacks[0]!(
@@ -153,7 +158,7 @@ describe('AgentBrowserBridge under a host revocation', () => {
     )
 
     await expect(click).rejects.toMatchObject({ code: 'desktop_browser_bridge_unavailable' })
-    expect(() => assertRemoteCliPageAdmitted(100)).not.toThrow()
+    expect(() => assertHelperStepAdmitted()).not.toThrow()
     // The helper's daemon outlives its client, so it is retired before the page is let go.
     expect(heldWhenRetired).toBe(true)
     expect(execFileMock).toHaveBeenCalledWith(

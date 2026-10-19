@@ -85,10 +85,8 @@ export class CdpPageInputCommands {
       return await this.debuggerChannel.sendDebuggerCommand(method, params, sessionId)
     }
     const send = (): Promise<unknown> =>
-      withAgentInputInjection(
-        this.webContents,
-        () => this.debuggerChannel.sendDebuggerCommand(method, params, sessionId),
-        { method, params }
+      withAgentInputInjection(this.webContents, () =>
+        this.debuggerChannel.sendDebuggerCommand(method, params, sessionId)
       )
     const routedByFocus = !sessionId && isFocusRoutedCdpInput(method)
     if (!routedByFocus && !isFocusTakingCdpInput(method, params)) {
