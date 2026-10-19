@@ -8,7 +8,9 @@ import {
 } from '../../../../shared/execution-host'
 import type { HostAuthority } from '../../../../shared/host-authority'
 import { translate } from '@/i18n/i18n'
-import { resolveOwner } from '@/lib/resolve-owner'
+import { resolveOwner, runtimeEnvironmentIdForWorkspaceOwner } from '@/lib/resolve-owner'
+import { getConnectionIdFromState } from '@/lib/connection-context'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { FileExplorerOperationOwner } from './file-explorer-types'
 import type { WorktreeOperationRoute } from '@/lib/worktree-operation-route'
@@ -53,9 +55,42 @@ export function getFileExplorerOperationOwnerFromState(
     return { kind: 'local' }
   }
   const match = resolveOwner(state, { workspaceId: worktreeId })
-  return match.kind === 'resolved'
-    ? operationOwnerFromAuthority(match.owner)
-    : { kind: 'unresolved' }
+  if (match.kind === 'ambiguous') {
+    return { kind: 'unresolved' }
+  }
+  if (parseWorkspaceKey(worktreeId)?.type !== 'folder') {
+    return match.kind === 'resolved'
+      ? operationOwnerFromAuthority(match.owner)
+      : { kind: 'unresolved' }
+  }
+  if (match.kind === 'resolved' && match.owner.endpoint.kind === 'environment') {
+    return operationOwnerFromAuthority(match.owner)
+  }
+  return thisAppFolderOwner(state, worktreeId)
+}
+
+/**
+ * An unstamped folder takes its host from its repos (the rule main shares), which `resolveOwner`
+ * does not read; a server it is restored on wins until that server's folder catalog loads.
+ */
+function thisAppFolderOwner(
+  state: FileExplorerOwnerState,
+  workspaceId: string
+): FileExplorerOperationOwner {
+  const owner = runtimeEnvironmentIdForWorkspaceOwner(state, { workspaceId })
+  const environmentId = owner.kind === 'resolved' ? owner.environmentId?.trim() : null
+  if (environmentId) {
+    return {
+      kind: 'runtime',
+      environmentId,
+      executionHostId: toRuntimeExecutionHostId(environmentId)
+    }
+  }
+  const connectionId = getConnectionIdFromState(state, workspaceId)
+  if (connectionId === undefined) {
+    return { kind: 'unresolved' }
+  }
+  return connectionId ? { kind: 'ssh', connectionId } : { kind: 'local' }
 }
 
 /** Keeps both halves of the pair: a server's nested SSH target stays the write's host (review-5 #9). */
