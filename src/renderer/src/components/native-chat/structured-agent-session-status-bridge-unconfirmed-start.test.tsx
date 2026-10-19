@@ -53,7 +53,6 @@ vi.mock('@/store', async () => {
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), message: vi.fn() } }))
 
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getRuntimeEnvironmentIdForWorktree: () => null,
   getExecutionHostIdForWorktree: () => 'local'
 }))
 
@@ -328,7 +327,8 @@ describe('a chat whose start was never confirmed', () => {
           envelope: expect.objectContaining({ clientOperationId: `operation-${CLAUDE_SESSION}` })
         })
       }),
-      expect.any(Function)
+      expect.any(Function),
+      true
     )
     expect(lifecycle()).toBeNull()
     expect(rows()).toEqual([])
@@ -339,7 +339,12 @@ describe('a chat whose start was never confirmed', () => {
     await loseStart(CLAUDE_SESSION, 'claude')
     await loseStart(CODEX_SESSION, 'codex')
     act(() => {
-      markStructuredAgentSessionLaunchCancelled(WORKTREE_ID, CLAUDE_SESSION, 'local')
+      markStructuredAgentSessionLaunchCancelled(
+        WORKTREE_ID,
+        CLAUDE_SESSION,
+        'local',
+        store().getState()
+      )
     })
     const creates = createCalls()
 

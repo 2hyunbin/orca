@@ -103,9 +103,14 @@ beforeEach(async () => {
   adapter = {
     supportsLocation: (location) =>
       location.executionHostId === 'local' && location.wslDistro === null,
+    open: async () => ({
+      reportedOptions: { model: '' }
+    }),
     acquire: vi.fn(async (input) => {
       acquisitions++
+      const acquisitionGeneration = `acquisition-${acquisitions}`
       return {
+        acquisitionGeneration,
         process: {
           hostId: 'local',
           pid: 4000 + acquisitions,

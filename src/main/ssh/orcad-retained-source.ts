@@ -12,11 +12,11 @@ import { getAppEnvironment } from '../../shared/app-environment'
 import { parseExecutionHostId } from '../../shared/execution-host'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
-import type { OrcadMigrationCatalogPayload } from '../../shared/orcad-migration-manifest'
+import type { OrcadMigrationCatalogPayload } from '../../shared/orcad-migration/orcad-migration-manifest'
 import {
   isRetainedOrcadMigrationSourceCutover,
   type OrcadMigrationSourceCutover
-} from '../../shared/orcad-migration-source-cutover'
+} from '../../shared/orcad-migration/orcad-migration-source-cutover'
 import type { Repo } from '../../shared/repo-types'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { getOrcadSshDeployment } from '../../shared/runtime-environments'
@@ -29,6 +29,10 @@ import {
   repoBelongsToOrcadSource
 } from '../persistence/migrating-orcad-catalog/orcad-source-ownership'
 import { findOrcadMigrationSourceCutoverForTarget } from './orcad-migration-cutover-journal'
+import {
+  withoutWslMovedFolderWorkspaces,
+  withoutWslMovedRepos
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 const appUserDataPath = (): string => getAppEnvironment().getPath('userData')
 
@@ -91,7 +95,7 @@ export function visibleRepos(
   getUserDataPath = appUserDataPath
 ): Repo[] {
   const hidden = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
-  const repos = store.getRepos()
+  const repos = withoutWslMovedRepos(store.getRepos())
   if (hidden.length === 0) {
     return repos
   }
@@ -120,7 +124,7 @@ export function visibleFolderWorkspaces(
   getUserDataPath = appUserDataPath
 ): FolderWorkspace[] {
   const hidden = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
-  const folderWorkspaces = store.getFolderWorkspaces()
+  const folderWorkspaces = withoutWslMovedFolderWorkspaces(store.getFolderWorkspaces())
   if (hidden.length === 0) {
     return folderWorkspaces
   }
