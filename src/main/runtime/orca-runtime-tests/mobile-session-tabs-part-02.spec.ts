@@ -149,6 +149,7 @@ describe('OrcaRuntimeService', () => {
       }
     )
     const worktreesChanged = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
     const runtime = new OrcaRuntimeService({
       ...store,
       getAllWorktreeMeta: () => metaById,
@@ -205,6 +206,7 @@ describe('OrcaRuntimeService', () => {
         return metaById[worktreeId]
       }
     )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
     const runtime = new OrcaRuntimeService({
       ...store,
       getAllWorktreeMeta: () => metaById,
