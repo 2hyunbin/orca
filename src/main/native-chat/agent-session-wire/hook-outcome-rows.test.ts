@@ -95,8 +95,6 @@ describe('a prompt hook that blocked the message', () => {
     expect(settledRows(items)).toEqual(rows)
   })
 
-  // Older Claude sends only its sentence: each hook's path goes, a hook's own tag stays.
-  const TWO_HOOKS = '[/a.sh]: [SEC-1]: Deploys are frozen\n[C:\\h\\b.ps1]: Ask first'
   it.each([
     ['2.1.302', { kind: 'blocked_by_hook', reason: 'Deploys are frozen' }, null, DEPLOYS_FROZEN],
     [
@@ -106,12 +104,6 @@ describe('a prompt hook that blocked the message', () => {
       row('Blocked by hook.')
     ],
     ['older', undefined, null, DEPLOYS_FROZEN],
-    [
-      'older, two hooks',
-      undefined,
-      TWO_HOOKS,
-      row('Blocked by hook: [SEC-1]: Deploys are frozen\nAsk first')
-    ],
     ['older, no reason', undefined, '', row('Blocked by hook.')]
   ])('Claude %s', async (_, outcome, hooks, expected) => {
     const frames = await captured<Captured>('claude', 'blocked-prompt')

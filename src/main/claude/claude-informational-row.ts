@@ -15,14 +15,14 @@ import { claudeRecord, claudeText } from './claude-structured-item-translation'
 
 export const CLAUDE_INFORMATIONAL_FRAME_KIND = 'message:system:informational'
 
-// `no_verdict` is Claude ending the prompt itself, not a hook's refusal, so it keeps its own words.
+// `no_verdict` is Claude ending the prompt itself, not a hook's refusal: only its sentence is read.
 const STRUCTURED_OUTCOMES = new Map<unknown, AgentSessionHookOutcome>([
   ['blocked_by_hook', 'blocked'],
   ['dropped_by_hook', 'blocked'],
   ['not_passed_on', 'blocked'],
   ['stopped_by_hook', 'stopped']
 ])
-// Older Claude sends only its sentence: each hook's `[label]: ` and reason, then a copy of the prompt.
+// Older Claude sends only its sentence: the hook's `[label]: ` and reason, then a copy of the prompt.
 const SENTENCE_OUTCOMES: [RegExp, AgentSessionHookOutcome][] = [
   [/^\S+ operation blocked by hook:\s*/, 'blocked'],
   [/^Operation stopped by hook:?\s*/, 'stopped']
@@ -38,11 +38,9 @@ function hookOutcomeOf(message: Record<string, unknown>, text: string) {
   if (!sentence) {
     return null
   }
-  // A label that is a hook's path goes; a hook's own `[TAG]: ` stays.
+  // The prompt copy goes first, so an empty reason never reads it as the reason.
   const [sentenceText = ''] = text.split(/\n+Original prompt:/)
-  const reason = sentenceText
-    .replace(sentence[0], '')
-    .replace(/^\[[^\]\n]*[/\\][^\]\n]*\]:[ \t]*/gm, '')
+  const reason = sentenceText.replace(sentence[0], '').replace(/^\[[^\]\n]+\]: /, '')
   return hookOutcomeRowBody(sentence[1], [reason])
 }
 
