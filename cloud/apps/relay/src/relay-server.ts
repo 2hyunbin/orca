@@ -878,6 +878,10 @@ export function createRelayServer(
     // Best effort: a crash loses at most one flush interval of resume audit rows anyway.
     void store.resumeAudit.flush()
   })
+  const resumeAuditDropped = (): number => {
+    const drops = store.resumeAudit.drops()
+    return drops.overflow + drops.aged
+  }
   const runtimeCounts = () => {
     const ledgerCounts = connectionLedger?.counts()
     return {
@@ -885,6 +889,7 @@ export function createRelayServer(
       preAuthConnections,
       ...sessions.runtimeCounts(),
       queuedBytes: queuedBytes.current(),
+      ...(config.role === 'cell' ? { resumeAuditDropped: resumeAuditDropped() } : {}),
       ...(ledgerCounts
         ? {
             inFlightConnections: ledgerCounts.inFlightConnections,

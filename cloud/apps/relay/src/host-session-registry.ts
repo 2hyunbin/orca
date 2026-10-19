@@ -37,10 +37,10 @@ import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-
 import { isRelayDatabaseTransientError } from './database.js'
 import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
-import { RelayCredentialStore, type CredentialReservation } from './credential-store.js'
+import { RelayCredentialStore, RelayStoreError, type CredentialReservation } from './credential-store.js'
 import { HostCloseReasonMemory } from './host-close-reason-memory.js'
 import { MemoryResumeConfirmations } from './memory-resume-confirmations.js'
-import { PhoneAcceptLog } from './phone-accept-log.js'
+import { PhoneConnectionLog } from './phone-connection-log.js'
 import {
   postProofCloseCause,
   PostProofCloseLog,
@@ -304,7 +304,7 @@ export class HostSessionRegistry {
   private readonly drainSentHosts = new Set<string>()
   private readonly seatLog: CellSeatLog
   private readonly postProofCloses: PostProofCloseLog
-  private readonly phoneAccepts: PhoneAcceptLog
+  private readonly phoneConnections: PhoneConnectionLog
   private readonly memoryConfirmations: MemoryResumeConfirmations
   // Seat key -> the demoted control socket. Its own set, not drainSentHosts: it ends with
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
@@ -450,7 +450,7 @@ export class HostSessionRegistry {
   ) {
     this.seatLog = new CellSeatLog(undefined, now)
     this.postProofCloses = new PostProofCloseLog(observer)
-    this.phoneAccepts = new PhoneAcceptLog(config.cellId)
+    this.phoneConnections = new PhoneConnectionLog(config.cellId)
     this.memoryConfirmations = new MemoryResumeConfirmations(store, now)
   }
 
@@ -860,7 +860,8 @@ export class HostSessionRegistry {
       } catch (error) {
         // Never the invite path: an unread device is not a missing one.
         capacityReservation?.release()
-        this.phoneAccepts.databaseError(
+        this.observer.recordPhoneAcceptDatabaseError?.()
+        this.phoneConnections.databaseError(
           isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
         )
         this.rejectClient(socket, RELAY_CLOSE_CODE.DRAINING)
@@ -976,6 +977,7 @@ export class HostSessionRegistry {
       capacityReservation?.release()
       this.failReservationBestEffort(reservation)
       if (credentialActivityId) this.releaseActivityBestEffort(identity, credentialActivityId)
+      this.recordAttachDeadline(session, reservation)
       this.rejectClient(socket, RELAY_CLOSE_CODE.HOST_OFFLINE)
     }, RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs)
     const pending: PendingConnection = {
@@ -1070,7 +1072,7 @@ export class HostSessionRegistry {
         relayHostId: reservation.relayHostId
       })
       elsewhere = row !== null && row.cellId !== this.config.cellId
-      if (row?.cellId === this.config.cellId) this.phoneAccepts.missRowNamesHere(reservation.relayHostId)
+      if (row?.cellId === this.config.cellId) this.phoneConnections.missRowNamesHere(reservation.relayHostId)
     } catch {
       elsewhere = true
     }
@@ -1265,13 +1267,14 @@ export class HostSessionRegistry {
       basis: nonNegativeMs(helloAt - attachedAt)
     }
     const totalMs = nonNegativeMs(helloAt - pending.timing.startedAt)
-    this.observer.recordClientAcceptCompleted?.({ totalMs, stageMs })
+    this.observer.recordClientAcceptCompleted?.({ totalMs, stageMs, phonePath: pending.phonePath })
     console.log(
       JSON.stringify({
         event: 'orca_relay_client_accept_completed',
         ...this.logIdentity(),
         ...this.sessionPlacementLogFields(session),
         credentialKind: pending.reservation.credentialKind,
+        phonePath: pending.phonePath,
         stageMs,
         totalMs,
         relayHostIdDigest: relayHostLogDigest(session.relayHostId)
@@ -2482,13 +2485,19 @@ export class HostSessionRegistry {
       if (type === 'device-resume-confirm') {
         const request = DeviceResumeConfirmSchema.parse(payload(raw, type))
         const confirm = { ...identity, ...request, owningControlGeneration: session.generation }
-        if (this.memoryConfirmations.owns(confirm)) {
-          send(session.socket, 'device-resume-confirmed', await this.memoryConfirmations.confirm(confirm))
-          return
+        const phonePath = this.memoryConfirmations.owns(confirm) ? 'memory' : 'db'
+        try {
+          if (phonePath === 'memory') {
+            send(session.socket, 'device-resume-confirmed', await this.memoryConfirmations.confirm(confirm))
+            return
+          }
+          const result = await this.store.confirmResume(confirm)
+          await this.assignments.releaseActivity(identity, `confirmation:${request.basisConnId}`)
+          send(session.socket, 'device-resume-confirmed', result)
+        } catch (error) {
+          this.recordConfirmFailure(error, phonePath)
+          throw error
         }
-        const result = await this.store.confirmResume(confirm)
-        await this.assignments.releaseActivity(identity, `confirmation:${request.basisConnId}`)
-        send(session.socket, 'device-resume-confirmed', result)
         return
       }
       if (type === 'device-revoke') {
@@ -2513,6 +2522,32 @@ export class HostSessionRegistry {
     }
   }
 
+  // Never the raw message as a key: pg errors can carry the database URL.
+  private recordConfirmFailure(error: unknown, phonePath: 'db' | 'memory'): void {
+    const code =
+      error instanceof RelayStoreError
+        ? error.code
+        : isRelayDatabaseTransientError(error)
+          ? 'database_transient'
+          : 'error'
+    this.observer.recordResumeConfirmFailure?.(code)
+    this.phoneConnections.confirmFailed(code, phonePath)
+  }
+
+  private recordAttachDeadline(session: HostSession, reservation: CredentialReservation): void {
+    const now = this.now()
+    const msSinceLastPong = now - session.lastPongAt
+    this.observer.recordPhoneAttachDeadline?.()
+    this.phoneConnections.attachDeadline(session.relayHostId, {
+      credentialKind: reservation.credentialKind,
+      msSinceLastPong,
+      pingOutstanding: session.pendingPingAt !== null,
+      controlAgeMs: now - session.controlWiredAt,
+      controlRttMs: session.controlRttSamplesMs.at(-1) ?? null,
+      pong: msSinceLastPong > RELAY_PROTOCOL_LIMITS.controlPingIntervalMs ? 'stale' : 'fresh'
+    })
+  }
+
   private sendControlError(session: HostSession, reqId: string | undefined, code: string): void {
     if (session.socket) send(session.socket, 'control-error', { ...(reqId ? { reqId } : {}), code })
   }
@@ -2525,6 +2560,7 @@ export class HostSessionRegistry {
     code: number,
     hostCloseReason?: RelayHostCloseReason | null
   ): void {
+    this.observer.recordPhoneRejection?.(code)
     send(socket, 'relay-hello', { ok: false, code })
     closeRelayWebSocket(socket, code, hostCloseReason ?? 'relay connection rejected')
   }
