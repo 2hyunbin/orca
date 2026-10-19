@@ -29,7 +29,10 @@ import { AGENT_SESSION_NOT_ATTACHED } from './structured-agent-session-mutation-
 import { deferredStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { stopWorkspaceSleepChat } from './structured-agent-session-workspace-sleep-stop'
+import {
+  settleWorkspaceSleepAbortedStarts,
+  stopWorkspaceSleepChat
+} from './structured-agent-session-workspace-sleep-stop'
 import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
 import {
   providerStartupFailureFact,
@@ -176,10 +179,13 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       // final identity check against a later restart.
       return { fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence, stopped }
     })
-    const result = await closed
     // Settled outside the lane its last commits need, so only a newer start reads as later work.
-    await Promise.allSettled(abortedStarts)
-    return result
+    return settleWorkspaceSleepAbortedStarts(
+      { deps: deps(), sessions, sessionId },
+      await closed,
+      abortedStarts,
+      () => host.context().runtimeState.startFlights.has(sessionId)
+    )
   }
 
   const idleSweep = new StructuredAgentSessionIdleSweep({

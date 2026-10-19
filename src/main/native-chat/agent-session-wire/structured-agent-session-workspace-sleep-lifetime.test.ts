@@ -259,6 +259,29 @@ it('stops an agent that is still starting', async () => {
   expect(host['sessions'].get(SESSION)?.child ?? null).toBeNull()
 })
 
+// Before the adapter owns a process, the aborted start leaves the chat at rest: that is stopped.
+it('stops an agent whose process is still being acquired', async () => {
+  const { host, acquire } = hostTestState()
+  await attach()
+  expect(await host.sleepWorkspace('workspace-1')).toEqual({ stoppedSessionIds: [SESSION] })
+  let acquiring = false
+  acquire.mockImplementationOnce(async ({ signal }) => {
+    acquiring = true
+    return await new Promise<never>((_, reject) =>
+      signal?.addEventListener('abort', () => reject(signal.reason))
+    )
+  })
+  const body = hostTestMessage('send while the agent is acquired')
+  expect(
+    await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  ).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(acquiring).toBe(true))
+
+  expect(await host.sleepWorkspace('workspace-1')).toEqual({ stoppedSessionIds: [SESSION] })
+  expect(host['runtimeState'].startFlights.has(SESSION)).toBe(false)
+  expect(host['sessions'].get(SESSION)?.child ?? null).toBeNull()
+})
+
 it('sleeps only proven ended chats after idle eviction or restart', async () => {
   const rig = await createRestTestRig()
   try {
