@@ -187,7 +187,7 @@ jobs:
     needs: [build]
     if: inputs.test_files == ''
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -274,12 +274,54 @@ jobs:
       - name: Run E2E tests (${{ matrix.shard_name }})
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ci-shards/results.json
-        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 ORCA_E2E_WEB_CLIENT=1 pnpm run test:e2e --test-list=ci-shards/selected.txt --reporter=list,json
+          LAYOUT_OWNER: ${{ inputs.layout_owner }}
+        run: |
+          if [ -n "$LAYOUT_OWNER" ]; then
+            test -f out/main/ORCA_LAYOUT_OWNER_MAIN
+            mkdir -p layout-divergence
+            export ORCA_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/shard-headless.jsonl"
+          fi
+          xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 ORCA_E2E_WEB_CLIENT=1 pnpm run test:e2e --test-list=ci-shards/selected.txt --reporter=list,json
+
+      # Throwaway full switch-on run only: the visible-window (@headful) tests, split across the same shards.
+      - name: Run visible-window E2E tests (${{ matrix.shard_name }})
+        if: ${{ !cancelled() }}
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ci-shards/headful-results.json
+          LAYOUT_OWNER: ${{ inputs.layout_owner }}
+        run: |
+          if [ -n "$LAYOUT_OWNER" ]; then
+            mkdir -p layout-divergence
+            export ORCA_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/shard-headful.jsonl"
+          fi
+          xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 ORCA_E2E_WEB_CLIENT=1 pnpm exec playwright test --config tests/playwright.config.ts --project=electron-headful --workers=1 --shard='${{ matrix.shard }}' --reporter=list,json
+
+      - name: Summarize shard layout save divergence
+        if: always() && inputs.layout_owner == 'main'
+        continue-on-error: true
+        run: |
+          cp ci-shards/results.json layout-divergence/shard-headless-results.json || true
+          cp ci-shards/headful-results.json layout-divergence/shard-headful-results.json || true
+          for run in layout-divergence/shard-headless layout-divergence/shard-headful; do
+            node config/scripts/layout-save-divergence-summary.mjs "$run.jsonl" "$run-summary.json" "$run-results.json" || true
+          done
+
+      - name: Upload shard layout save divergence report
+        if: always() && inputs.layout_owner == 'main'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: layout-divergence-shard-${{ matrix.shard_name }}${{ inputs.artifact_suffix }}-attempt-${{ github.run_attempt }}
+          path: layout-divergence/
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Summarize E2E failures
         if: always()
         continue-on-error: true
-        run: node config/scripts/ci-e2e-failure-summary.mjs ci-shards/results.json
+        run: |
+          node config/scripts/ci-e2e-failure-summary.mjs ci-shards/results.json
+          node config/scripts/ci-e2e-failure-summary.mjs ci-shards/headful-results.json
 
       - name: Upload E2E shard assignment
         if: always()
@@ -287,7 +329,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-shard-${{ matrix.shard_name }}-attempt-${{ github.run_attempt }}
+          name: e2e-shard-${{ matrix.shard_name }}${{ inputs.artifact_suffix }}-attempt-${{ github.run_attempt }}
           path: ci-shards/
           retention-days: 14
           if-no-files-found: warn
@@ -304,7 +346,7 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-traces-${{ matrix.shard_name }}
+          name: playwright-traces-${{ matrix.shard_name }}${{ inputs.artifact_suffix }}-attempt-${{ github.run_attempt }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
