@@ -11,6 +11,7 @@
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
 import { parseExecutionHostId } from './execution-host'
 import type { GlobalSettings } from './global-settings-types'
+import type { NativeChatProviderSettings } from './native-chat-providers'
 import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
 import {
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY,
@@ -20,7 +21,8 @@ import {
 import type { TuiAgent } from './tui-agent'
 import type { WorkspaceLaunchKind } from './workspace-launch-kind'
 
-export type NativeChatDefaultSettings = Pick<GlobalSettings, 'experimentalNativeChat'>
+export type NativeChatDefaultSettings = Pick<GlobalSettings, 'experimentalNativeChat'> &
+  Partial<NativeChatProviderSettings>
 
 /** Why a launch that the user's default asked to be structured cannot be. */
 export type StructuredNativeChatBlocker =
@@ -68,7 +70,15 @@ export function isNativeChatEnabled(
   return settings?.experimentalNativeChat === true
 }
 
-export function clientChoosesStructuredLaunches(capabilities: readonly string[] | undefined): boolean {
+/** Unchosen agents retain the chat default, independently of installation inventory. */
+export function isNativeChatDefaultFor(
+  settings: Partial<NativeChatDefaultSettings> | null | undefined,
+  agent: TuiAgent
+): boolean {
+  return isNativeChatEnabled(settings) && (settings?.nativeChatProviders?.[agent] ?? true)
+}
+
+function clientChoosesStructuredLaunches(capabilities: readonly string[] | undefined): boolean {
   return (
     capabilities?.includes(STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY) === true &&
     capabilities.includes(STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY)
@@ -87,6 +97,10 @@ export function resolveStructuredNativeChatSupport(
   if (input.reusesTerminal === true) {
     return { supported: false, blocker: 'reused-terminal' }
   }
+  const builtInAgent = isAgentSessionHandleProvider(input.agent)
+  if (!builtInAgent && !input.hostStructuredAgents?.includes(input.agent)) {
+    return { supported: false, blocker: 'agent-without-structured-session' }
+  }
   if (input.startsOutsideWorkspaceRoot === true) {
     return { supported: false, blocker: 'custom-start-directory' }
   }
@@ -96,10 +110,6 @@ export function resolveStructuredNativeChatSupport(
   }
   if (input.hostCapabilities === null) {
     return { supported: false, blocker: 'runtime-capability-unknown' }
-  }
-  const builtInAgent = isAgentSessionHandleProvider(input.agent)
-  if (!builtInAgent && !input.hostStructuredAgents?.includes(input.agent)) {
-    return { supported: false, blocker: 'agent-without-structured-session' }
   }
   if (
     !input.hostCapabilities.includes(STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY) ||

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { getDefaultWorkspaceSession } from '../shared/constants'
 import type { BrowserPage, BrowserWorkspace } from '../shared/browser-workspace-types'
 
-vi.mock('./ssh/ssh-config-parser', () => ({
+vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -103,8 +103,29 @@ describe('remote session startup ownership', () => {
     const reloaded = createStore()
     // Assert the row survived load first, or an empty partition below would prove nothing.
     expect(reloaded.getWorkspaceSession(HOST).browserPagesByWorkspace).not.toEqual({})
-    reloaded.removeProjectForHost(REPO, HOST)
+    reloaded.removeProjectForHost({ id: REPO, executionHostId: HOST })
     reloaded.flush()
     expect(createStore().getWorkspaceSession(HOST).browserPagesByWorkspace).toEqual({})
+  })
+
+  // STA-7117: a paired client registers none of these repos, so the removal must stay on its host.
+  it("drops only the removed host's rows when another paired host shares the repo id", () => {
+    const OTHER_HOST = 'runtime:other-host'
+    const seed = createStore()
+    seed.setWorkspaceSession(browserSession(), HOST)
+    seed.setWorkspaceSession(browserSession(), OTHER_HOST)
+    seed.setWorktreeMetaForHost(WORKTREE, HOST, { displayName: 'Removed host' })
+    seed.flush()
+    const reloaded = createStore()
+
+    reloaded.removeProjectForHost({ id: REPO, executionHostId: HOST })
+    reloaded.flush()
+
+    const after = createStore()
+    expect(after.getWorkspaceSession(HOST).browserPagesByWorkspace).toEqual({})
+    expect(after.getWorktreeMeta(WORKTREE)).toBeUndefined()
+    expect(after.getWorkspaceSession(OTHER_HOST).browserPagesByWorkspace).toEqual({
+      [BROWSER.id]: [PAGE]
+    })
   })
 })

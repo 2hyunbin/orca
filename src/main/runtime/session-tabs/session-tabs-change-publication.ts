@@ -8,6 +8,8 @@ import type {
 } from '../../../shared/runtime-types'
 import { UNPUBLISHED_WORKTREE_PUBLICATION_EPOCH } from '../../../shared/runtime-types'
 import { getRuntimeBrowserPageRegistry } from '../runtime-browser-page-registry'
+import { readCreatedWorkspaceLaunch } from '../../agent-launch/agent-launch-created-workspace'
+import { worktreeIdsEqual } from '../../../shared/worktree/id'
 
 export abstract class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab {
   protected scheduleMobileSessionTabsChanged(worktreeId: string): void {
@@ -68,7 +70,8 @@ export abstract class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends Or
 
   protected getMobileSessionTabsForWorktree(
     worktreeId: string,
-    clientNavigationId?: string
+    clientNavigationId?: string,
+    options?: { includeInitialSurfaceLaunch?: true }
   ): RuntimeMobileSessionTabsResult {
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
     if (!snapshot) {
@@ -76,15 +79,23 @@ export abstract class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends Or
       if (publishedEpoch === null) {
         this.notifyEmptyWorktreeOnPublication(worktreeId)
       }
-      return this.projectMobileSessionTabsForClient(
+      const result = this.projectMobileSessionTabsForClient(
         this.emptyMobileSessionTabsResult(worktreeId, publishedEpoch),
         clientNavigationId
       )
+      const launch = options?.includeInitialSurfaceLaunch
+        ? readCreatedWorkspaceLaunch(this, worktreeId)
+        : undefined
+      return launch ? { ...result, initialSurfaceLaunch: launch } : result
     }
-    return this.projectMobileSessionTabsForClient(
+    const result = this.projectMobileSessionTabsForClient(
       this.toMobileSessionTabsResult(snapshot),
       clientNavigationId
     )
+    const launch = options?.includeInitialSurfaceLaunch
+      ? readCreatedWorkspaceLaunch(this, worktreeId)
+      : undefined
+    return launch ? { ...result, initialSurfaceLaunch: launch } : result
   }
 
   // Why: only an unpublished graph is "ask me later"; once it publishes, a worktree with no entry
@@ -118,7 +129,10 @@ export abstract class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends Or
       this.sessionTabsInventoryWaiters.delete(onPublished)
       this.worktreesAwaitingSessionTabsPublication.delete(worktreeId)
       const publishedEpoch = this.getAuthoritativeSessionTabsInventoryEpoch()
-      if (publishedEpoch === null || this.mobileSessionTabsByWorktree.has(worktreeId)) {
+      if (
+        publishedEpoch === null ||
+        [...this.mobileSessionTabsByWorktree.keys()].some((id) => worktreeIdsEqual(id, worktreeId))
+      ) {
         return
       }
       const result = this.emptyMobileSessionTabsResult(worktreeId, publishedEpoch)
@@ -154,7 +168,7 @@ export abstract class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends Or
     tabId: string
   ): Promise<string> {
     const worktreeId =
-      this.getValidatedExplicitWorktreeIdSelector(worktreeSelector) ??
+      this.getExplicitSessionWorktreeIdSelector(worktreeSelector) ??
       (await this.resolveWorktreeSelector(worktreeSelector)).id
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
     const tab = snapshot?.tabs.find(

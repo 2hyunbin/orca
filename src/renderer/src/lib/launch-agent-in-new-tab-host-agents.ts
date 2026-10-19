@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import type { AgentStartupPlan } from '@/lib/tui-agent-startup'
 import {
   awaitStructuredRouteHostAnswer,
   planAgentSessionLaunch,
@@ -33,7 +34,9 @@ export function routeNewTabLaunch(
   if (requestId === undefined) {
     return { plan: args.agentSessionLaunchPlan }
   }
-  const awaited = awaitStructuredRouteHostAnswer(store, request, HOST_ANSWER_WAIT_MS)
+  const awaited = request.requestedSurface
+    ? null
+    : awaitStructuredRouteHostAnswer(store, request, HOST_ANSWER_WAIT_MS)
   return awaited
     ? {
         awaited,
@@ -50,9 +53,11 @@ export function routeNewTabLaunch(
 export function launchOnceHostAnswered(
   route: AwaitingHostAnswer,
   args: LaunchAgentInNewTabArgs,
+  startupPlan: AgentStartupPlan,
   relaunch: (args: LaunchAgentInNewTabArgs) => LaunchAgentInNewTabResult
 ): LaunchAgentInNewTabResult {
   if (args.beforeSurfaceOpen?.({ kind: 'host-published' }) === false) {
+    args.focusIntent?.cancel()
     return null
   }
   const opened = route.awaited.then(() =>
@@ -68,12 +73,16 @@ export function launchOnceHostAnswered(
       !result
         ? { kind: 'cancelled', sessionId: null }
         : (result.structuredSettlement ?? { kind: 'terminal' }),
-    (error: unknown): StructuredAgentLaunchSettlement => ({ kind: 'failed', error })
+    (error: unknown): StructuredAgentLaunchSettlement => {
+      args.focusIntent?.cancel()
+      return { kind: 'failed', error }
+    }
   )
   const deliversPrompt =
     Boolean(args.prompt?.trim()) && (args.promptDelivery ?? 'auto-submit') !== 'draft'
   return {
     surface: { kind: 'host-published' },
+    startupPlan,
     pasteDraftAfterLaunch: false,
     structuredSettlement,
     ...(deliversPrompt
