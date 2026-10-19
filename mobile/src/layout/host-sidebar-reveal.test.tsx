@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeBridgePortPair } from '../mobile-web-shell/bridge/bridge-port-pair-test-harness'
 import { RpcClientProvider } from '../transport/client-context.web'
 import type { MobileSessionController } from '../session/use-mobile-session-controller'
+import { useSessionTitleCard } from '../session/use-session-title-card'
 import { MobileSessionHeader } from '../session/MobileSessionHeader'
 import HostGroupLayout from '../../app/h/_layout'
 
@@ -62,7 +63,11 @@ vi.mock('../host-screen/HostScreen', () => ({
     })
 }))
 vi.mock('../navigation/host-stack', () => ({
-  HostStack: () => createElement(MobileSessionHeader, { controller: headerController() })
+  HostStack: () =>
+    createElement(MobileSessionHeader, {
+      controller: headerController(),
+      details: useSessionTitleCard(false, false)
+    })
 }))
 vi.mock('../components/MobileAgentIcon', () => ({ MobileAgentIcon: () => null }))
 vi.mock('../platform/haptics', () => ({ triggerMediumImpact: () => {} }))

@@ -1,23 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import {
   Animated,
   Easing,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
   type LayoutRectangle
 } from 'react-native'
 import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
-import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 import { useBackClaim } from '../navigation/use-back-claim'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 
-export type DetailCardAnchor = { trigger: LayoutRectangle; top: number }
+export type DetailCardAnchor = {
+  trigger: LayoutRectangle
+  top: number
+  origin: { x: number; y: number }
+}
 
 // Desktop's tab hover card: 256pt wide, under its anchor's left edge, 150ms ease-out entrance.
 const CARD_WIDTH = 256
@@ -30,7 +31,9 @@ const SLIDE_FROM = -6
 export function AnchoredDetailCard({
   anchor,
   open,
-  onTriggerPress,
+  bounds,
+  viewport,
+  contentRef,
   onDismiss,
   onClosed,
   title,
@@ -39,7 +42,9 @@ export function AnchoredDetailCard({
 }: {
   anchor: DetailCardAnchor
   open: boolean
-  onTriggerPress: () => void
+  bounds: { left: number; top: number; right: number; bottom: number }
+  viewport: LayoutRectangle
+  contentRef: RefObject<View | null>
   onDismiss: () => void
   onClosed: () => void
   title: string
@@ -48,8 +53,6 @@ export function AnchoredDetailCard({
 }): React.JSX.Element {
   // Unknown counts as reduced, so the card never slides before the setting is read.
   const slide = useReducedMotionEnabled() === false
-  const window = useWindowDimensions()
-  const insets = useWindowSafeAreaInsets()
   useBackClaim(() => {
     onDismiss()
     return true
@@ -70,45 +73,46 @@ export function AnchoredDetailCard({
     return () => animation.stop()
   }, [open, progress, onClosed])
 
-  const width = Math.max(
-    0,
-    Math.min(CARD_WIDTH, window.width - insets.left - insets.right - EDGE_INSET * 2)
-  )
+  const width = Math.max(0, Math.min(CARD_WIDTH, bounds.right - bounds.left - EDGE_INSET * 2))
   const left = Math.min(
-    Math.max(anchor.trigger.x, insets.left + EDGE_INSET),
-    window.width - insets.right - EDGE_INSET - width
+    Math.max(anchor.trigger.x, bounds.left + EDGE_INSET),
+    bounds.right - EDGE_INSET - width
   )
-  const top = anchor.top
-  const maxHeight = Math.max(0, window.height - top - insets.bottom - EDGE_INSET)
+  const top = Math.max(anchor.top, bounds.top)
+  const maxHeight = Math.max(0, bounds.bottom - top - EDGE_INSET)
+  const right = viewport.x + viewport.width
+  const bottom = viewport.y + viewport.height
+  const x = Math.max(viewport.x, Math.min(anchor.trigger.x, right))
+  const y = Math.max(viewport.y, Math.min(anchor.trigger.y, bottom))
+  const endX = Math.max(x, Math.min(anchor.trigger.x + anchor.trigger.width, right))
+  const endY = Math.max(y, Math.min(anchor.trigger.y + anchor.trigger.height, bottom))
+  // Leave the real title target uncovered for the whole pointer sequence, including exit.
+  const bands = [
+    {
+      key: 'above',
+      left: viewport.x,
+      top: viewport.y,
+      width: viewport.width,
+      height: y - viewport.y
+    },
+    { key: 'below', left: viewport.x, top: endY, width: viewport.width, height: bottom - endY },
+    { key: 'left', left: viewport.x, top: y, width: x - viewport.x, height: endY - y },
+    { key: 'right', left: endX, top: y, width: right - endX, height: endY - y }
+  ]
   return (
-    <Modal
-      transparent
-      visible
-      animationType="none"
-      statusBarTranslucent
-      supportedOrientations={['portrait', 'landscape']}
-      onRequestClose={onDismiss}
-    >
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={onDismiss}
-        accessibilityRole="button"
-        accessibilityLabel="Close details"
-      />
-      {/* The Modal owns title taps until its exit finishes. */}
-      <Pressable
-        accessible={false}
-        tabIndex={-1}
-        onPress={onTriggerPress}
-        style={{
-          position: 'absolute',
-          left: anchor.trigger.x,
-          top: anchor.trigger.y,
-          width: anchor.trigger.width,
-          height: anchor.trigger.height
-        }}
-      />
+    <>
+      {bands.map(({ key, ...frame }) => (
+        <Pressable
+          key={key}
+          accessible={false}
+          tabIndex={-1}
+          style={{ position: 'absolute', ...frame }}
+          onPress={onDismiss}
+        />
+      ))}
       <Animated.View
+        ref={contentRef}
+        tabIndex={-1}
         style={[
           styles.card,
           {
@@ -142,7 +146,7 @@ export function AnchoredDetailCard({
           {footer ? <View style={styles.footer}>{footer}</View> : null}
         </ScrollView>
       </Animated.View>
-    </Modal>
+    </>
   )
 }
 

@@ -1,4 +1,3 @@
-import { useContext, useRef } from 'react'
 import { View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ChevronLeft, Folder, GitBranch, MoreHorizontal, PanelLeftOpen } from 'lucide-react-native'
@@ -7,11 +6,16 @@ import { MobileSessionTabStrip } from './MobileSessionTabStrip'
 import { MobileSessionTitleBlock } from './MobileSessionTitleBlock'
 import { styles } from './mobile-session-styles'
 import { useHostSidebarReveal } from '../layout/host-sidebar-reveal'
-import { useResponsiveLayout } from '../layout/responsive-layout'
-import { WorkspaceServerContext } from '../transport/use-workspace-client'
+import type { SessionTitleCard } from './use-session-title-card'
 import type { MobileSessionController } from './use-mobile-session-controller'
 
-export function MobileSessionHeader({ controller }: { controller: MobileSessionController }) {
+export function MobileSessionHeader({
+  controller,
+  details
+}: {
+  controller: MobileSessionController
+  details: SessionTitleCard
+}) {
   const {
     hostId,
     isFolderWorkspaceRoute,
@@ -19,9 +23,6 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
     connState,
     forceReconnectHost,
     worktreeName,
-    worktreePath,
-    worktreeHostId,
-    hostName,
     activePanel,
     setShowHeaderMoreActions,
     requestLeaveSession,
@@ -32,19 +33,14 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
     showHeaderMoreButton
   } = controller
   const revealSidebar = useHostSidebarReveal()
-  const topBarRef = useRef<View>(null)
-  const server = useContext(WorkspaceServerContext)
-  // Only a proven local record belongs to this route's desktop or server.
-  const detailHostName = worktreeHostId === 'local' ? (server ? server.name : hostName) : null
-  // Why: a sideways phone is ~390pt tall, so the tabs share the top bar instead of taking a second row.
   const hasTabs = visibleTabs.length > 0
-  const tabsInTopBar = useResponsiveLayout().isLandscapePhone && hasTabs
+  const tabsInTopBar = details.besideTabs
   const tabStrip = hasTabs ? (
     <MobileSessionTabStrip controller={controller} inTopBar={tabsInTopBar} />
   ) : null
   return (
     <SafeAreaView style={styles.sessionChrome} edges={['top']}>
-      <View ref={topBarRef} style={styles.sessionTopBar}>
+      <View ref={details.barRef} style={styles.sessionTopBar}>
         {revealSidebar ? (
           <MobileSessionHeaderIconButton
             accessibilityLabel="Show sidebar"
@@ -60,11 +56,8 @@ export function MobileSessionHeader({ controller }: { controller: MobileSessionC
 
         <MobileSessionTitleBlock
           title={worktreeName || 'Terminal'}
-          path={worktreePath}
-          hostName={detailHostName ?? null}
           connState={connState}
-          besideTabs={tabsInTopBar}
-          barRef={topBarRef}
+          details={details}
           meta={terminalSummary}
           showConnectionRetry={showConnectionRetry}
           onRetry={() => {

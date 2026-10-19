@@ -1,15 +1,6 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ComponentRef,
-  type RefObject
-} from 'react'
-import { Pressable, Text, useWindowDimensions, type View } from 'react-native'
-import { AnchoredDetailCard, type DetailCardAnchor } from '../components/AnchoredDetailCard'
+import { Pressable, Text } from 'react-native'
+import type { SessionTitleCard } from './use-session-title-card'
 import { StatusDot } from '../components/StatusDot'
-import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 import type { ConnectionState } from '../transport/types'
 import { styles } from './mobile-session-styles'
 
@@ -17,97 +8,43 @@ import { styles } from './mobile-session-styles'
  *  and its host, as desktop's tab card does, because a sideways phone cuts the title short. */
 export function MobileSessionTitleBlock({
   title,
-  path,
-  hostName,
   connState,
-  besideTabs,
-  barRef,
+  details,
   meta,
   showConnectionRetry,
   onRetry
 }: {
   title: string
-  path: string | null
-  hostName: string | null
   connState: ConnectionState
-  besideTabs: boolean
-  /** The top bar, so the card opens under the bar rather than over it. */
-  barRef: RefObject<View | null>
+  details: SessionTitleCard
   meta: string
   showConnectionRetry: boolean
   onRetry: () => void
 }): React.JSX.Element {
-  const titleRef = useRef<ComponentRef<typeof Text>>(null)
-  const [anchor, setAnchor] = useState<DetailCardAnchor | null>(null)
-  const [open, setOpen] = useState(false)
-  const { width } = useWindowDimensions()
-  const insets = useWindowSafeAreaInsets()
-  const geometry = [width, insets.top, insets.left, insets.right, besideTabs].join(':')
-  const measurement = useRef(0)
-  const close = useCallback(() => setOpen(false), [])
-  const unmount = useCallback(() => setAnchor(null), [])
-  // A moved header invalidates the card and any opening measurement still in flight.
-  useLayoutEffect(() => {
-    close()
-    return () => {
-      measurement.current += 1
-    }
-  }, [close, geometry])
-  const show = () => {
-    const generation = ++measurement.current
-    titleRef.current?.measureInWindow((x, y, width, height) => {
-      barRef.current?.measureInWindow((_barX, barY, _barWidth, barHeight) => {
-        if (generation !== measurement.current) {
-          return
-        }
-        setAnchor({ trigger: { x, y, width, height }, top: barY + barHeight })
-        setOpen(true)
-      })
-    })
-  }
   return (
-    <>
+    <Pressable
+      style={[styles.sessionTitleBlock, details.besideTabs && styles.sessionTitleBlockBesideTabs]}
+      ref={details.openerRef}
+      onPress={details.toggle}
+      accessibilityState={{ expanded: details.present }}
+      accessibilityRole="button"
+      accessibilityHint="Shows the full workspace name and where it is"
+    >
+      <Text ref={details.titleRef} style={styles.sessionTitle} numberOfLines={1}>
+        {title}
+      </Text>
       <Pressable
-        style={[styles.sessionTitleBlock, besideTabs && styles.sessionTitleBlockBesideTabs]}
-        onPress={open ? close : show}
-        accessibilityRole="button"
-        accessibilityHint="Shows the full workspace name and where it is"
+        style={styles.sessionMetaRow}
+        disabled={!showConnectionRetry}
+        onPress={onRetry}
+        accessibilityRole={showConnectionRetry ? 'button' : undefined}
+        accessibilityLabel={showConnectionRetry ? 'Reconnect to desktop' : undefined}
       >
-        <Text ref={titleRef} style={styles.sessionTitle} numberOfLines={1}>
-          {title}
+        <StatusDot state={connState} />
+        <Text style={styles.sessionMetaText} numberOfLines={1}>
+          {meta}
         </Text>
-        <Pressable
-          style={styles.sessionMetaRow}
-          disabled={!showConnectionRetry}
-          onPress={onRetry}
-          accessibilityRole={showConnectionRetry ? 'button' : undefined}
-          accessibilityLabel={showConnectionRetry ? 'Reconnect to desktop' : undefined}
-        >
-          <StatusDot state={connState} />
-          <Text style={styles.sessionMetaText} numberOfLines={1}>
-            {meta}
-          </Text>
-        </Pressable>
       </Pressable>
-      {anchor ? (
-        <AnchoredDetailCard
-          anchor={anchor}
-          open={open}
-          onTriggerPress={open ? close : show}
-          onDismiss={close}
-          onClosed={unmount}
-          title={title}
-          detail={path}
-          footer={
-            hostName ? (
-              <>
-                <StatusDot state={connState} />
-                <Text style={styles.sessionMetaText}>{hostName}</Text>
-              </>
-            ) : null
-          }
-        />
-      ) : null}
-    </>
+    </Pressable>
   )
 }
