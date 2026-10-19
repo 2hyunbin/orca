@@ -104,6 +104,17 @@ function queuedEditImagesChanged(
   return draft.added.length > 0 || !sameImages(kept, imageBlocks(body))
 }
 
+/** Save waits: an added image is still uploading, or the image set changed while the host no
+ *  longer reads as taking images (a failed re-check), where text alone would keep the old images
+ *  under renumbered markers. Derived, so it clears once the host answers again. */
+export function queuedEditSaveHeld(
+  body: AgentJournalMessageItem,
+  draft: QueuedMessageEditDraft,
+  imagesCapable: boolean
+): boolean {
+  return queuedEditImagesPending(draft) || (!imagesCapable && queuedEditImagesChanged(body, draft))
+}
+
 export function queuedEditDirty(
   body: AgentJournalMessageItem,
   draft: QueuedMessageEditDraft

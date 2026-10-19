@@ -14,8 +14,8 @@ import type { AgentJournalSubmission } from '../../../../shared/agent-session-jo
 import { agentSessionSendBodyFingerprint } from '../../../../shared/structured-agent-session-send-mutation'
 import {
   queuedEditDirty,
-  queuedEditImagesPending,
   queuedEditInput,
+  queuedEditSaveHeld,
   queuedMessageEditableText,
   queuedMessageWithEdit
 } from '../../../../shared/queued-message-edit'
@@ -227,7 +227,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     }
     const input = queuedEditInput(edit.body, edit, imagesCapable)
     const edited = queuedMessageWithEdit(edit.body, input)
-    if (!edited.ok || queuedEditImagesPending(edit)) {
+    if (!edited.ok || queuedEditSaveHeld(edit.body, edit, imagesCapable)) {
       return
     }
     edit.saving = true
@@ -323,7 +323,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
           text: shown.text,
           acquiring: shown.acquiring,
           saving: shown.saving,
-          canSave: typed.ok && !queuedEditImagesPending(shown),
+          canSave: typed.ok && !queuedEditSaveHeld(shown.body, shown, imagesCapable),
           ...(imagesCapable ? { images: queuedEditImagesEditor(shown, typed) } : {}),
           change,
           save: () => void save(),

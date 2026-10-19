@@ -306,6 +306,19 @@ describe('queued card image edit', () => {
     })
   })
 
+  it('never saves an image change as text alone once the host stops reading as taking images', async () => {
+    writeSpy.mockClear()
+    const { rerender } = render(<EditedCard imagesCapable />)
+    const field = await screen.findByRole('textbox', { name: 'Edit message' })
+    await waitFor(() => expect(field.getAttribute('readonly')).toBeNull())
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove attachment' })[0]!)
+    rerender(<EditedCard imagesCapable={false} />)
+    const save = screen.getByRole('button', { name: 'Save' })
+    expect(save).toHaveProperty('disabled', true)
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(writeSpy).not.toHaveBeenCalled()
+  })
+
   it('against a host that edits text only, shows the count and saves text alone', async () => {
     writeSpy.mockClear()
     render(<EditedCard imagesCapable={false} />)
