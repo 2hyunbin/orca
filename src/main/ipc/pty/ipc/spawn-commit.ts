@@ -23,9 +23,26 @@ import { reflowHeadlessTerminalToCommittedGrid } from '../delivery/attached-pty-
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { markNativeWindowsConptyPty } from '../../../runtime/terminal-model-query-authority'
 import { commitPtyWithOpenCodePromptIntent } from '../../../opencode/opencode-startup-prompt-owner'
+import { resumeSpawnRefusal } from '../host-env/saved-resume-admission'
 
 export async function commitPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpawnResult> {
   return commitPtyWithOpenCodePromptIntent(ctx, () => commitReservedPtyIpcSpawn(ctx))
+}
+
+/** What became of a requested resume, on every result the renderer receives. */
+function resumeDisposition(ctx: PtyIpcSpawnState) {
+  // Why: the pane asked to resume and got a fresh session instead; only the
+  // renderer can say so, and a reattach never ran this launch command.
+  if (ctx.result.isReattach) {
+    return {}
+  }
+  const refusal = resumeSpawnRefusal(ctx.resumeAdmission)
+  return {
+    ...(ctx.codexResumeLaunch.notifyResumeUnavailable || refusal
+      ? { agentResumeUnavailable: true as const }
+      : {}),
+    ...(refusal ? { agentResumeRefused: refusal.verdict } : {})
+  }
 }
 
 async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpawnResult> {
@@ -89,11 +106,10 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
       ctx.pendingRegistrationPtyId = null
       ctx.exitedBeforeRegistration = true
       // The renderer drains this incarnation's buffered output and exit without publishing it live.
-      return resolvePaneSpawnReservation(
-        ctx.paneSpawnReservationKey,
-        ctx.paneSpawnReservation,
-        ctx.result
-      )
+      return resolvePaneSpawnReservation(ctx.paneSpawnReservationKey, ctx.paneSpawnReservation, {
+        ...ctx.result,
+        ...resumeDisposition(ctx)
+      })
     }
     ctx.pendingRegistrationPtyId = null
   } else if (ctx.pendingRegistrationPtyId) {
@@ -206,11 +222,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
     ...(ctx.startupCwdFallback && !ctx.result.isReattach
       ? { startupCwdFallback: ctx.startupCwdFallback }
       : {}),
-    // Why: the pane asked to resume and got a fresh session instead; only the
-    // renderer can say so, and a reattach never ran this launch command.
-    ...(ctx.codexResumeLaunch.notifyResumeUnavailable && !ctx.result.isReattach
-      ? { agentResumeUnavailable: true as const }
-      : {})
+    ...resumeDisposition(ctx)
   }
   // Why: renderer tab state cannot reliably infer background and reattached PTYs in the daemon inventory.
   ctx.deps.sendPtySpawnedToRenderer(ctx.result.id)

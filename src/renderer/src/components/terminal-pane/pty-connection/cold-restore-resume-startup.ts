@@ -109,6 +109,7 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
       },
       launchConfig: startupPlan.launchConfig,
       resumeProviderSession: providerSession,
+      resumeOrigin: 'saved',
       launchToken: coldRestoreLaunchToken,
       useLiveEntry: Boolean(useLiveEntry),
       hasSleepingRecord: Boolean(sleepingRecord),

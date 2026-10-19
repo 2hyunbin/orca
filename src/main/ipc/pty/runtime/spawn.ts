@@ -16,6 +16,7 @@ import { buildRuntimePtySpawnOptions } from './spawn-options'
 import { executeRuntimePtySpawn } from './spawn-execute'
 import { commitRuntimePtySpawn } from './spawn-commit'
 import { createRuntimePtySpawnState, type RuntimePtySpawnArgs } from './spawn-state'
+import { bindResumeSpawnStart, dropResumeSpawnStart } from '../host-env/saved-resume-admission'
 import {
   commitRuntimeSpawnHiddenDelivery,
   releaseRuntimeSpawnPreSpawnHiddenMark
@@ -89,13 +90,16 @@ export async function spawnPtyFromRuntimeController(
       throw error
     })
     if (earlyReserved) {
+      dropResumeSpawnStart(ctx.resumeAdmission)
       return toRuntimeSpawnReply(earlyReserved)
     }
     await executeRuntimePtySpawn(ctx)
     const committed = await commitRuntimePtySpawn(ctx)
+    bindResumeSpawnStart(deps.runtime, ctx.resumeAdmission, ctx.result)
     commitRuntimeSpawnHiddenDelivery(ctx)
     return toRuntimeSpawnReply(committed)
   } catch (err) {
+    dropResumeSpawnStart(ctx.resumeAdmission)
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(

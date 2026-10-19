@@ -78,6 +78,7 @@ export async function spawnIpcPty(
     commandDelivery,
     launchConfig,
     resumeProviderSession,
+    resumeOrigin,
     launchToken,
     launchAgent,
     startupCommandDelivery,
@@ -118,6 +119,9 @@ export async function spawnIpcPty(
       : {}),
     ...((connectOptions.resumeProviderSession ?? resumeProviderSession)
       ? { resumeProviderSession: connectOptions.resumeProviderSession ?? resumeProviderSession }
+      : {}),
+    ...(resumesAgent && (connectOptions.resumeOrigin ?? resumeOrigin)
+      ? { resumeOrigin: connectOptions.resumeOrigin ?? resumeOrigin }
       : {}),
     ...((connectOptions.launchToken ?? launchToken)
       ? { launchToken: connectOptions.launchToken ?? launchToken }

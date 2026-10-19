@@ -124,6 +124,9 @@ export type PtyConnectResult = {
   startupCwdFallback?: { kind: 'worktree'; cwd: string }
   /** Main declined an unverifiable provider-session resume and launched fresh. */
   agentResumeUnavailable?: true
+  /** Main refused the resume and started the plain shell: a native chat is the conversation's home
+   *  or may be writing it, or no record could be checked (the saved session is kept to retry). */
+  agentResumeRefused?: 'chat-home' | 'chat-writing' | 'unverifiable'
   /** Trailing partial escape the daemon emulator held mid-parse; the reattach
    *  replay writes it LAST (after the reset) so a racing live continuation
    *  completes it instead of rendering literally (#7329). */
@@ -187,6 +190,7 @@ export type PtyTransport = {
     envToDelete?: string[]
     launchConfig?: SleepingAgentLaunchConfig
     resumeProviderSession?: AgentProviderSessionMetadata
+    resumeOrigin?: 'saved'
     launchToken?: string
     launchAgent?: TuiAgent
     startupCommandDelivery?: StartupCommandDelivery
@@ -292,6 +296,7 @@ export type IpcPtyTransportOptions = {
   commandDelivery?: 'renderer' | 'provider'
   launchConfig?: SleepingAgentLaunchConfig
   resumeProviderSession?: AgentProviderSessionMetadata
+  resumeOrigin?: 'saved'
   agentPrompt?: string
   agentPromptDelivery?: AgentPromptDelivery
   agentArgsOverride?: string | null

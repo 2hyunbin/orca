@@ -44,6 +44,7 @@ export type OwnedMobileTerminalCreateOptions = {
   supportsSplitGroupPlacement?: boolean
   launchConfig?: SleepingAgentLaunchConfig
   resumeProviderSession?: AgentProviderSessionMetadata
+  resumeOrigin?: 'saved'
   spawnIntent?: SpawnIntent
   launchRuntime?: AgentLaunchRuntime
   signal?: AbortSignal
@@ -130,6 +131,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
           ? { resumeProviderSession: opts.resumeProviderSession }
           : {}),
         ...(opts.spawnIntent ? { spawnIntent: opts.spawnIntent } : {}),
+        ...(opts.resumeOrigin ? { resumeOrigin: opts.resumeOrigin } : {}),
         ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
         ...(opts.launchRuntime ? { launchRuntime: opts.launchRuntime } : {}),
         ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),

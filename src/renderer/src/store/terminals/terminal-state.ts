@@ -56,6 +56,7 @@ export type TerminalState = {
       envToDelete?: string[]
       launchConfig?: SleepingAgentLaunchConfig
       resumeProviderSession?: AgentProviderSessionMetadata
+      resumeOrigin?: 'saved'
       launchToken?: string
       launchAgent?: TuiAgent
       /** The agent launch the pane's own spawn starts, instead of `command`. */

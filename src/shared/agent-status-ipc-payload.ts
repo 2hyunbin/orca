@@ -89,6 +89,12 @@ export type AgentStatusCacheIdentity = {
   stateStartedAt: number
 }
 
+/** A pane's saved resume the host refused because a native chat is that conversation's home. */
+export type RefusedPaneResume = {
+  agent: string
+  providerSession: AgentProviderSessionMetadata
+}
+
 /** Wire shape for ordinary pane teardown or a stamped SSH disconnect batch. */
 export type AgentStatusClearIpcPayload =
   | {
@@ -96,6 +102,8 @@ export type AgentStatusClearIpcPayload =
       statusUnavailable?: true
       /** An OSC 7501 program took back its own row, so even a `done` row goes. */
       programStatusRemoved?: true
+      /** Forget that conversation as this pane's resume target too, not only its status. */
+      refusedResume?: RefusedPaneResume
     }
   | {
       transient: true

@@ -243,6 +243,7 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
             ...('resumeProviderSession' in agentStartup
               ? {
                   resumeProviderSession: agentStartup.resumeProviderSession,
+                  resumeOrigin: 'saved' as const,
                   spawnIntent: automatic ? 'automatic-restore' : 'user-resume'
                 }
               : {}),

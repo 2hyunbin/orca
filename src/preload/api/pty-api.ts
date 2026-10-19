@@ -40,6 +40,7 @@ export type PtyApi = {
     commandDelivery?: 'renderer' | 'provider'
     launchConfig?: SleepingAgentLaunchConfig
     resumeProviderSession?: AgentProviderSessionMetadata
+    resumeOrigin?: 'saved'
     launchToken?: string
     launchAgent?: TuiAgent
     startupCommandDelivery?: StartupCommandDelivery
@@ -88,6 +89,7 @@ export type PtyApi = {
     coldRestore?: { scrollback: string; cwd: string; cols?: number; rows?: number }
     startupCwdFallback?: { kind: 'worktree'; cwd: string }
     agentResumeUnavailable?: true
+    agentResumeRefused?: 'chat-home' | 'chat-writing' | 'unverifiable'
     /** Host verdict on the shell-ready marker; absent when the execution host predates the field. */
     shellReadyArmed?: boolean
   }>

@@ -205,6 +205,7 @@ export function createRemoteRuntimePtyTransport(
     envToDelete,
     launchConfig,
     resumeProviderSession,
+    resumeOrigin,
     launchToken,
     launchAgent,
     terminalColorQueryReplies,
@@ -3099,6 +3100,9 @@ export function createRemoteRuntimePtyTransport(
         ...(launchConfigToSend !== undefined ? { launchConfig: launchConfigToSend } : {}),
         ...(resumeProviderSessionToSend !== undefined
           ? { resumeProviderSession: resumeProviderSessionToSend }
+          : {}),
+        ...(resumeProviderSessionToSend && (options.resumeOrigin ?? resumeOrigin)
+          ? { resumeOrigin: options.resumeOrigin ?? resumeOrigin }
           : {}),
         ...(launchTokenToSend !== undefined ? { launchToken: launchTokenToSend } : {}),
         ...(launchAgentToSend !== undefined ? { launchAgent: launchAgentToSend } : {}),

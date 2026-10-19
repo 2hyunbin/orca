@@ -95,10 +95,15 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     }
 
     if (connectResult?.exitedBeforeAttach) {
+      if (connectResult.agentResumeUnavailable) {
+        session.showSessionRestoredBanner('resume-unavailable')
+      }
       // Why: the transport already delivered the dead session's final frame + exit; treat as terminal state, not a failed reattach.
       return true
     }
 
+    // Why: main started a plain shell instead, so nothing of the plan may be registered over it.
+    const startup = connectResult?.agentResumeRefused ? null : coldRestoreStartup
     const ptyId =
       connectResult?.id ?? (typeof result === 'string' ? result : session.transport.getPtyId())
     const hasExplicitPtyId = Boolean(connectResult?.id || typeof result === 'string')
@@ -125,11 +130,11 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       return false
     }
     session.registerEffectiveLaunchConfig(connectResult?.launchConfig, {
-      ...(coldRestoreStartup ? { launchToken: coldRestoreStartup.launchToken } : {}),
+      ...(startup ? { launchToken: startup.launchToken } : {}),
       ...(connectResult?.launchAgent
         ? { launchAgent: connectResult.launchAgent }
-        : coldRestoreStartup
-          ? { launchAgent: coldRestoreStartup.agent }
+        : startup
+          ? { launchAgent: startup.agent }
           : {})
     })
     if (connectResult?.sessionExpired) {
@@ -142,7 +147,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
         session.deps.clearTabPtyId(session.deps.tabId, staleSessionId)
       }
       // Why: a host can invalidate the PTY while the tab stays mounted; replace it in place, not with a stale overlay.
-      session.startFreshColdRestoreAgentResume(coldRestoreStartup, {
+      session.startFreshColdRestoreAgentResume(startup, {
         forceBlankRestoredViewport: true
       })
       return false
@@ -166,11 +171,15 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     const hasStructuralReplay = Boolean(
       connectResult?.snapshot || connectResult?.replay || connectResult?.coldRestore
     )
+    // Why here: a fresh result with no scrollback never reaches the cold-restore payload that says so.
+    if (connectResult?.agentResumeUnavailable && !connectResult.coldRestore) {
+      session.showSessionRestoredBanner('resume-unavailable')
+    }
     // Why: reattach drops startup commands; only real hibernation is authority to retire an empty adopted shell and resume its provider session.
     if (
       !hasStructuralReplay &&
       connectResult?.isReattach &&
-      hasEmptyReattachRetireEvidence(ptyId, coldRestoreStartup)
+      hasEmptyReattachRetireEvidence(ptyId, startup)
     ) {
       session.transport.disconnect()
       if (staleSessionId) {
@@ -179,7 +188,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       } else {
         session.syncPanePtyLayoutBinding(null)
       }
-      session.startFreshColdRestoreAgentResume(coldRestoreStartup, {
+      session.startFreshColdRestoreAgentResume(startup, {
         forceBlankRestoredViewport: true
       })
       return false
@@ -278,7 +287,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       prefetchedParkModelSnapshot,
       revealFollowsTerminalPark,
       shouldApplyStructuralPayload,
-      coldRestoreStartup,
+      coldRestoreStartup: startup,
       reattachPayloadApplied: !shouldApplyStructuralPayload,
       skippedAltFrameCaptureCols: null
     }

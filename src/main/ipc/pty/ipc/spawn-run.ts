@@ -19,6 +19,14 @@ import { triggerPtySpawnPushTargetMaterialization } from './spawn-push-target-ma
 import type { PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { refuseClosedPaneSpawn } from './closed-pane-spawn-refusal'
+import {
+  admitColdRestoreReattach,
+  bindResumeSpawnStart,
+  dropResumeSpawnStart,
+  forgetRefusedResume,
+  resumeSpawnRefusal,
+  savedResumeRecord
+} from '../host-env/saved-resume-admission'
 
 function releaseAbandonedAgentTeamsLeader(ctx: PtyIpcSpawnState): void {
   if (!ctx.agentTeamsLeaderHandle) {
@@ -58,6 +66,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     }
     await preparePtyIpcSpawnPreflight(ctx)
     await assemblePtyIpcSpawnEnv(ctx)
+    forgetRefusedResume(ctx.stablePaneKey, resumeSpawnRefusal(ctx.resumeAdmission))
     await preparePtyIpcQoderCommand(ctx)
     const earlyReserved = await buildPtyIpcSpawnOptions(ctx).catch((error: unknown) => {
       restoreProvisionalPtySize({
@@ -74,6 +83,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
       // evict the team env assembly created for it — exit/close cleanup keys
       // off handleByPtyId — so every lost race would leak one team forever.
       releaseAbandonedAgentTeamsLeader(ctx)
+      dropResumeSpawnStart(ctx.resumeAdmission)
       return earlyReserved
     }
     // Right before the provider spawn, with nothing awaited in between: a closed pane starts nothing.
@@ -83,7 +93,17 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
       refuseClosedPaneSpawn(deps.store, args.tabId, args.leafId)
     }
     await executePtyIpcSpawn(ctx)
+    if (!ctx.resumeAdmission) {
+      ctx.resumeAdmission = await admitColdRestoreReattach(
+        deps.runtime,
+        ctx.result,
+        { paneKey: ctx.stablePaneKey, saved: savedResumeRecord(deps.store, ctx.stablePaneKey) },
+        ctx.expectedWslDistro
+      )
+      forgetRefusedResume(ctx.stablePaneKey, resumeSpawnRefusal(ctx.resumeAdmission))
+    }
     const committed = await commitPtyIpcSpawn(ctx)
+    bindResumeSpawnStart(deps.runtime, ctx.resumeAdmission, ctx.result)
     endPaneAgentLaunch(
       ctx,
       ctx.exitedBeforeRegistration ? { exitedDuringStart: true } : { started: true }
@@ -91,6 +111,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     return committed
   } catch (caught) {
     const err = endPaneAgentLaunch(ctx, { error: caught }) ?? caught
+    dropResumeSpawnStart(ctx.resumeAdmission)
     releaseAbandonedAgentTeamsLeader(ctx)
     if (ctx.preSpawnHiddenMarkId !== null) {
       ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, false)

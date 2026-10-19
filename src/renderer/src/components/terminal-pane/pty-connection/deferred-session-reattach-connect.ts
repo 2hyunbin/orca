@@ -117,16 +117,23 @@ function connectDeferredSessionReattach(
     !session.disposed &&
     session.deps.paneTransportsRef.current.get(session.pane.id) === session.transport &&
     outputCallbacks.generation === session.transportStreamGeneration
-  const startFreshInstead = (): Promise<HeldPaneReopenOutcome> =>
-    session
-      .startFreshColdRestoreAgentResume(coldRestoreStartup, { forceBlankRestoredViewport: true })
+  const startFreshInstead = (): Promise<HeldPaneReopenOutcome> => {
+    let resumeUnavailable = false
+    return session
+      .startFreshColdRestoreAgentResume(coldRestoreStartup, {
+        forceBlankRestoredViewport: true,
+        onAgentResumeUnavailable: () => {
+          resumeUnavailable = true
+        }
+      })
       .then(
         (ptyId: string | null) => ({
           reopened: ptyId !== null,
-          agentResumed: ptyId !== null && Boolean(coldRestoreStartup)
+          agentResumed: ptyId !== null && Boolean(coldRestoreStartup) && !resumeUnavailable
         }),
         () => NOT_REOPENED
       )
+  }
 
   void Promise.resolve(reattachPromise)
     .catch(() => null)

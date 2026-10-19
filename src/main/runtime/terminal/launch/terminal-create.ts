@@ -146,6 +146,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
               agentTeamsPlan?.envToDelete
             ),
             resumeProviderSession: launchOpts.resumeProviderSession,
+            ...(launchOpts.resumeOrigin ? { resumeOrigin: launchOpts.resumeOrigin } : {}),
             telemetry: launchOpts.telemetry,
             connectionId: workspace.connectionId,
             worktreeId: workspace.id,

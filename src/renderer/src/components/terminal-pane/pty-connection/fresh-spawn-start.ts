@@ -105,7 +105,10 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
         : {}),
       ...(coldRestoreOverride ? { launchConfig: coldRestoreOverride.launchConfig } : {}),
       ...(coldRestoreOverride
-        ? { resumeProviderSession: coldRestoreOverride.resumeProviderSession }
+        ? {
+            resumeProviderSession: coldRestoreOverride.resumeProviderSession,
+            resumeOrigin: coldRestoreOverride.resumeOrigin
+          }
         : {}),
       ...(coldRestoreOverride ? { launchToken: coldRestoreOverride.launchToken } : {}),
       ...(coldRestoreOverride ? { launchAgent: coldRestoreOverride.agent } : {}),
@@ -180,10 +183,20 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           }
           return accepted ? resolvedPtyId : null
         }
+        // Why: main started a plain shell instead, so nothing of the plan may stay registered over it.
+        const coldRestore = connectResult?.agentResumeRefused ? null : coldRestoreOverride
+        if (connectResult?.agentResumeRefused) {
+          session.clearRegisteredStartupLaunchConfig()
+          session.pendingStartupCommand = null
+        }
+        if (connectResult?.agentResumeRefused === 'unverifiable') {
+          // Why: the saved session may have been consumed before this spawn; keep it for the next try.
+          session.keepUnrunResumeHandle(startupOverride)
+        }
         if (spawnedPtyId && typeof spawnedPtyId === 'object' && 'id' in spawnedPtyId) {
           session.registerEffectiveLaunchConfig(spawnedPtyId.launchConfig, {
-            ...(coldRestoreOverride ? { launchToken: coldRestoreOverride.launchToken } : {}),
-            ...(coldRestoreOverride ? { launchAgent: coldRestoreOverride.agent } : {})
+            ...(coldRestore ? { launchToken: coldRestore.launchToken } : {}),
+            ...(coldRestore ? { launchAgent: coldRestore.agent } : {})
           })
         }
         if (resolvedPtyId) {
@@ -204,10 +217,11 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
             // Why: main dropped the resume argv, so this pane is a NEW session —
             // the plain restored banner would claim the old one came back.
             session.showSessionRestoredBanner('resume-unavailable')
-          } else if (coldRestoreOverride?.hasSleepingRecord) {
+            options.onAgentResumeUnavailable?.()
+          } else if (coldRestore?.hasSleepingRecord) {
             session.showSessionRestoredBanner()
           }
-          session.clearSleepingRecordAfterColdRestoreSpawn(coldRestoreOverride)
+          session.clearSleepingRecordAfterColdRestoreSpawn(coldRestore)
         } else if (
           session.paneStartup?.launchConfig ||
           (startupOverride && 'launchConfig' in startupOverride)

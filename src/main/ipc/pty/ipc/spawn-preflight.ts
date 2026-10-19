@@ -10,6 +10,7 @@ import { getProvider } from '../provider/registry'
 import { resolvePtySpawnStartupTarget } from '../spawn-startup-target'
 import type { PtyIpcSpawnState } from './spawn-state'
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
+import { applyResumeSpawnAdmission, resumeSpawnRefusal } from '../host-env/saved-resume-admission'
 
 export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
@@ -107,6 +108,14 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
   ctx.terminalRuntimeOptions = target.terminalRuntimeOptions
   ctx.expectedWslDistro = target.expectedWslDistro
   ctx.codexSelectionTarget = target.codexSelectionTarget
+  if (!ctx.preAdoptedStablePane) {
+    ctx.resumeAdmission = await applyResumeSpawnAdmission(
+      ctx.deps.runtime,
+      args,
+      ctx.expectedWslDistro
+    )
+    ctx.isClaudeLaunch = ctx.isClaudeLaunch && !resumeSpawnRefusal(ctx.resumeAdmission)
+  }
   ctx.spawnTiming.mark('preflight')
   args.env = withClaudeProfileTerminalEnv(args.env, ctx.codexSelectionTarget)
   ctx.claudeAuth =

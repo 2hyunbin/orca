@@ -29,6 +29,8 @@ export type PtyPaneStartup = {
   envToDelete?: string[]
   launchConfig?: SleepingAgentLaunchConfig
   resumeProviderSession?: AgentProviderSessionMetadata
+  /** `saved`: a resume built from saved facts, which the host refuses for a chat's conversation. */
+  resumeOrigin?: 'saved'
   launchToken?: string
   launchAgent?: TuiAgent
   /** The agent launch the pane's own spawn starts, instead of `command`. */

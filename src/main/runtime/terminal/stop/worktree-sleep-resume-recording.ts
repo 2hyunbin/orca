@@ -16,7 +16,11 @@ import type {
   AgentStatusClearIpcPayload,
   AgentStatusIpcPayload
 } from '../../../../shared/agent-status-ipc-payload'
-import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
+import {
+  agentProviderSessionsEqual,
+  type SleepingAgentSessionRecord
+} from '../../../../shared/agent-session-resume'
+import type { RefusedPaneResume } from '../../../../shared/agent-status-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
@@ -24,6 +28,29 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
 export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRuntimeWithStopTerminalsForWorktree {
+  /** Forgets a pane's saved resume the host refused because a chat is its conversation's home,
+   *  as a window does for its own panes; a host with no window has no one else to. */
+  async forgetRefusedSavedResume(
+    worktreeId: string,
+    paneKey: string,
+    refused: RefusedPaneResume
+  ): Promise<void> {
+    await this.commitWorkspaceSessionEdit(
+      this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+      (session) => {
+        const saved = session.sleepingAgentSessionsByPaneKey?.[paneKey]
+        if (
+          saved?.agent !== refused.agent ||
+          !agentProviderSessionsEqual(refused.agent, saved.providerSession, refused.providerSession)
+        ) {
+          return null
+        }
+        const { [paneKey]: _refused, ...kept } = session.sleepingAgentSessionsByPaneKey ?? {}
+        return { ...session, sleepingAgentSessionsByPaneKey: kept }
+      }
+    )
+  }
+
   protected readonly sleepResumeRecords: WorktreeSleepResumeRecorder = {
     capture: (worktreeId, ptyIds) =>
       captureWorktreeSleepResumeRecords({
