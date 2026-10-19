@@ -28,7 +28,7 @@ const MODELS = [
 describe('Claude accepted message choices', () => {
   it.each([
     ['the effort the CLI applied over the settings level', 'low', { effort: 'low' }],
-    ['no effort where the CLI applies none, whatever the settings say', null, undefined]
+    ['no effort where the CLI applies none, whatever the settings say', null, {}]
   ])('reports %s', async (_name, applied, ranOptions) => {
     let effortLevel = 'high'
     const claude = fakeClaude({
@@ -57,7 +57,7 @@ describe('Claude accepted message choices', () => {
       executionOptions: {},
       fence: 7
     })
-    expect(outcome).toEqual({ state: 'admitted', ...(ranOptions ? { ranOptions } : {}) })
+    expect(outcome).toEqual({ state: 'admitted', ranOptions })
   })
 
   it('applies a held message A before its prompt, then message B on the existing child', async () => {
@@ -116,7 +116,7 @@ describe('Claude accepted message choices', () => {
     await adapter.setOption({ sessionId: 'session-1', key: 'effort', value: 'high', fence: 7 })
     order.length = 0
     release()
-    await expect(a).resolves.toEqual({ state: 'admitted' })
+    await expect(a).resolves.toMatchObject({ state: 'admitted' })
     expect(order).toEqual(['model:sonnet', 'effort:{"effortLevel":"low"}', 'prompt'])
 
     order.length = 0
@@ -156,7 +156,7 @@ describe('Claude accepted message choices', () => {
         executionOptions: { model: 'sonnet' },
         fence: 7
       })
-    ).resolves.toEqual({ state: 'admitted' })
+    ).resolves.toMatchObject({ state: 'admitted' })
     expect(actual).toBe('sonnet')
     expect(connection.sent).toHaveLength(1)
   })

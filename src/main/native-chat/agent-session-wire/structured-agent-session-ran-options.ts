@@ -21,7 +21,7 @@ type RanOptionsContext = {
 
 type RanOptions = Partial<Record<'model' | 'effort' | 'serviceTier' | 'fastMode', string>>
 
-export type StructuredAgentSessionStructuredAgentSessionHandedOptionsOptions = {
+export type StructuredAgentSessionHandedOptions = {
   message?: AgentSessionExecutionOptions
   executed?: Readonly<Record<string, string>>
 }
@@ -102,32 +102,29 @@ export async function recordStructuredAgentSessionRanOptions(
   const reported = childRuns.get(child)?.reported
   const model = executed?.model ?? message?.model ?? reported?.model
   childRuns.set(child, { ...(reported ? { reported } : {}), ...(model ? {} : { owed: handed }) })
-  if (!model || (record.options?.model ?? model) !== model) {
+  if (!model) {
     return
   }
-  // The report's other values ran only with its own model; a message's tier or Fast may not have
-  // run, as a steer runs its turn's.
-  const report = reported?.model === model ? reported : {}
+  // The dispatch's own evidence, where the agent gives it; else the message's effort and what the
+  // report says ran with its own model (a message's tier or Fast may not have run: a steer runs its
+  // turn's).
+  const report: RanOptions = reported?.model === model ? reported : {}
+  const proposed: Readonly<Record<string, string | undefined>> = executed ?? {
+    effort: message?.effort ?? report.effort,
+    serviceTier: report.serviceTier,
+    fastMode: report.fastMode
+  }
   const ran: Record<string, string> = {}
-  for (const [key, value] of Object.entries({
-    ...(executed ?? {
-      effort: message?.effort ?? report.effort,
-      serviceTier: report.serviceTier,
-      fastMode: report.fastMode
-    }),
-    model
-  })) {
-    // Never over a saved choice, nor one every later send would carry and the agent refuse.
+  for (const [key, value] of Object.entries({ ...proposed, model })) {
+    // Never one every later send would carry and the agent refuse as a choice.
     if (
       value &&
-      record.options?.[key] === undefined &&
       !structuredAgentSessionOptionOverridesRefusal(agents, record.provider, { [key]: value })
     ) {
       ran[key] = value
     }
   }
-  // Nothing new, or a model the agent would refuse on every later send.
-  if (record.options?.model === undefined ? !ran.model : Object.keys(ran).length === 0) {
+  if (!ran.model) {
     return
   }
   const models = await savedAgentSessionCatalogModels(context.deps, record.provider, sessionId)

@@ -309,7 +309,9 @@ describe('a chat at rest, read by the host', () => {
         recordStructuredAgentSessionOptionIntent(deps, ctx, { key, value }),
       ran: (model: string, ran: Record<string, string>, rows = models) =>
         (record = recordAgentSessionRanOptions(record, {
-          ...ctx,
+          sessionId: SESSION,
+          fence: 1,
+          now: 0,
           model,
           options: ran,
           models: rows

@@ -116,9 +116,8 @@ export async function dispatchClaudeMessage(
           }
         }
   )
-  const ranOptions = claudeRanOptions(session, messageOptions ?? {})
-  return (outcome.state === 'accepted' || outcome.state === 'admitted') &&
-    Object.keys(ranOptions).length > 0
-    ? { ...outcome, ranOptions }
+  // Always, even empty: the settings effort the CLI reports is never evidence of a run.
+  return outcome.state === 'accepted' || outcome.state === 'admitted'
+    ? { ...outcome, ranOptions: claudeRanOptions(session, messageOptions ?? {}) }
     : outcome
 }

@@ -12,10 +12,8 @@ import {
   savedAgentSessionCatalogModels,
   structuredAgentSessionPickReply
 } from './structured-agent-session-pick-reply'
-import {
-  agentSessionOptionAdmitted,
-  pickAgentSessionOption
-} from '../../runtime/agent-session-record-options'
+import { pickAgentSessionOption } from '../../runtime/agent-session-record-options'
+import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 
 /** Whether the agent takes this pick: a permission mode it offers, or an option key it names. */
 function acceptsOptionPick(
@@ -64,28 +62,17 @@ export async function recordStructuredAgentSessionOptionIntent(
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
   const { sessionId, fence } = ctx
   const record = deps.store.getRecord(sessionId)
-  const named =
-    record !== null && acceptsOptionPick(deps.agents, record.provider, input.key, input.value)
-  const models = record
-    ? await savedAgentSessionCatalogModels(deps, record.provider, sessionId)
-    : []
-  const model = deps.store.getRecord(sessionId)?.options?.model
-  if (
-    !record ||
-    !named ||
-    !agentSessionOptionAdmitted(record.provider, models, model, input.key, input.value)
-  ) {
+  if (!record || !acceptsOptionPick(deps.agents, record.provider, input.key, input.value)) {
     return {
       ok: false,
       refusal: refuse(
         'agent_session_operation_invalid',
         { reason: 'optionRejected' },
-        named
-          ? `${record?.provider} model ${model} does not offer ${input.key} ${input.value}`
-          : `${record?.provider ?? 'This session'} has no session option named ${input.key}`
+        `${record?.provider ?? 'This session'} has no session option named ${input.key}`
       )
     }
   }
+  const models = await savedAgentSessionCatalogModels(deps, record.provider, sessionId)
   let options: Readonly<Record<string, string>>
   if (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
     const permissionMode = input.value
@@ -94,7 +81,16 @@ export async function recordStructuredAgentSessionOptionIntent(
     options = { ...record.options, [input.key]: input.value }
   } else {
     const picked = { sessionId, fence, ...input, models, now: ctx.now() }
-    options = (await deps.store.reviseSessionOptions(pickAgentSessionOption, picked)).options ?? {}
+    try {
+      options =
+        (await deps.store.reviseSessionOptions(pickAgentSessionOption, picked)).options ?? {}
+    } catch (error) {
+      // The ordered write refused a value the chat's model doesn't offer.
+      if (isAgentSessionRefusalError(error)) {
+        return { ok: false, refusal: error.refusal }
+      }
+      throw error
+    }
   }
   ctx.publish()
   return {

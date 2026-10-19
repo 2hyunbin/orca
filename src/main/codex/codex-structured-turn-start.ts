@@ -277,21 +277,20 @@ export async function dispatchCodexTurn(
         ...codexAnsweredTurn(session, input.sessionId, answer.turnId, answer.via),
         ...rejection
       }
-    : { state: 'admitted', ...codexRanOptions(session) }
+    : { state: 'admitted', ranOptions: codexRanOptions(session) }
 }
 
 /** What a turn on this child runs, a steer its running turn's: the request's model and effort over
  *  the thread's own, and the tier it runs as. */
-function codexRanOptions(session: CodexTurnHost): { ranOptions?: Record<string, string> } {
+function codexRanOptions(session: CodexTurnHost): Record<string, string> {
   const requested = codexTurnRequestOptions(session)
   const thread = session.reportedOptions ?? {}
   const model = requested.model ?? thread.model
   const effort = requested.effort ?? (model === thread.model ? thread.effort : undefined)
   const { serviceTier } = requested
-  const ranOptions = {
+  return {
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
     ...(serviceTier ? { serviceTier } : {})
   }
-  return Object.keys(ranOptions).length > 0 ? { ranOptions } : {}
 }

@@ -82,6 +82,14 @@ export function pickAgentSessionOption(
   record: AgentSessionRecord,
   { key, value, models, ...at }: AgentSessionOptionPick
 ): AgentSessionRecord {
+  // A live child's own menu may offer more than its saved row (Pi's probe stops at high).
+  if (key !== 'model' && record.lease.claimStatus !== 'live') {
+    const { model } = record.options ?? {}
+    assertAgentSessionOptionsAdmitted(record.provider, models, {
+      ...(model ? { model } : {}),
+      [key]: value
+    })
+  }
   const picked = { ...record.options, [key]: value }
   const options = Object.fromEntries(
     Object.entries(picked).filter(

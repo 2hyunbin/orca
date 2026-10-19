@@ -73,7 +73,7 @@ async function turnEndRig() {
 describe('a Codex send its turn ended without echoing', () => {
   it('is withdrawn when the turn is interrupted, once', async () => {
     const rig = await turnEndRig()
-    await expect(rig.sendAndOpen('client-1')).resolves.toEqual({ state: 'admitted' })
+    await expect(rig.sendAndOpen('client-1')).resolves.toMatchObject({ state: 'admitted' })
 
     rig.turns.end('interrupted')
 
@@ -205,7 +205,7 @@ describe('a Codex send its turn ended without echoing', () => {
     await vi.waitFor(() => expect(rig.turns.turnId).toBe('turn-1'))
     rig.turns.start()
     release()
-    await expect(sending).resolves.toEqual({ state: 'admitted' })
+    await expect(sending).resolves.toMatchObject({ state: 'admitted' })
 
     rig.turns.end('interrupted')
 
@@ -264,7 +264,7 @@ describe('a Codex send its turn ended without echoing', () => {
     rig.turns.end('completed')
     release()
 
-    await expect(sending).resolves.toEqual({ state: 'admitted' })
+    await expect(sending).resolves.toMatchObject({ state: 'admitted' })
     expect(rig.settlements).toEqual([])
     rig.turns.echo('client-1')
     expect(rig.settledIds()).toEqual(['client-1'])
@@ -369,7 +369,7 @@ describe('the turn a withdrawn Codex send names', () => {
     rig.turns.end('completed')
     release()
 
-    await expect(sending).resolves.toEqual({ state: 'admitted' })
+    await expect(sending).resolves.toMatchObject({ state: 'admitted' })
     await rig.sendAndOpen('client-2')
     rig.turns.end('completed')
     expect(rig.settlements).toEqual([])
