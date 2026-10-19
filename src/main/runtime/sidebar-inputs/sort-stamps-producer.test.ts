@@ -629,14 +629,6 @@ describe('SortStampsProducer: unread flag', () => {
     expect(h.folders.get(FOLDER_ID)?.isUnread).toBe(true)
   })
 
-  it('raises the flag even where the Filters hide the workspace: it takes no mute', () => {
-    const h = unwatched()
-    hook(h.server, 'working')
-    advance(20_000)
-    hook(h.server, 'done')
-    expect(h.meta.get(WT)?.isUnread).toBe(true)
-  })
-
   it('raises nothing for a restored status, a frozen project or a workspace with no record', () => {
     const h = createHarness()
     h.viewing.isViewing = () => false

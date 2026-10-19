@@ -299,7 +299,7 @@ export class SortStampsProducer {
     if (next) {
       writeSortStamps(this.sources.store(), workspace, next)
     }
-    // Filters never gate the flag: it is one fact shared by clients with different Filters, and each surface mutes its own banner, sound or push.
+    // Filters never gate this shared dot (clients' Filters differ); banners, sounds and pushes mute per surface.
     const raised =
       isUnreadNews(event) &&
       !this.sources.isViewing(workspace.worktreeId, paneKey) &&

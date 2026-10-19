@@ -115,4 +115,16 @@ test('the host raises the flag even for a workspace the Filters hide while hidde
   await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
   await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
   await expect.poll(unread).toBe(true)
+  // The window keeps the host's dot; its Filters mute only its own banner and sound.
+  await expect
+    .poll(() =>
+      orcaPage.evaluate(
+        (id) =>
+          Object.values(window.__store?.getState().worktreesByRepo ?? {})
+            .flat()
+            .find((worktree) => worktree.id === id)?.isUnread,
+        pane.worktreeId
+      )
+    )
+    .toBe(true)
 })

@@ -122,6 +122,9 @@ test.describe('Hidden workspace notifications', () => {
     // dot; a switch-on host raises its shared dot, which ignores every client's Filters.
     await setFilterAndSetting(orcaPage, true, false)
     await ringBellOffScreen(orcaPage, ptyId, worktreeId, 'hwn-hidden')
+    if (SIDEBAR_INPUTS_BUILD) {
+      await expect.poll(() => isWorkspaceUnread(orcaPage, worktreeId)).toBe(true)
+    }
     await orcaPage.waitForTimeout(1_500)
     expect(await bellRequests(electronApp, worktreeId)).toBe(1)
     expect(await isWorkspaceUnread(orcaPage, worktreeId)).toBe(SIDEBAR_INPUTS_BUILD)

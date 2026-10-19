@@ -198,7 +198,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     })
   }
 
-  /** Host decisions (phone push, unread flag) raise nothing for this workspace; see the module. */
+  /** The host pushes no phone notification for this workspace; see the module. */
   isWorkspaceNotificationMuted(workspaceId: string): boolean {
     const store = this.store
     return (

@@ -1,5 +1,6 @@
 // The host's read of "Notify About Hidden Workspaces": with it off, news from a workspace the
-// desktop's sidebar Filters switches hide raises nothing the host decides (phone push, unread flag).
+// desktop's sidebar Filters switches hide sends no phone push from the host. The shared unread dot
+// ignores it: clients' Filters differ.
 // The setting and the switches are this host's own persisted state; a paired client's never apply.
 //
 // WHY NOT "HIDE SLEEPING": main sees the persisted switches and its in-memory workspace records,
