@@ -37,6 +37,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     },
     isWsl?: boolean
   ): void {
+    console.warn(`[e26] registerPty ${ptyId} wt=${worktreeId} binding=${JSON.stringify(binding ? { tabId: binding.tabId, leafId: binding.leafId, inc: binding.incarnationId, handle: binding.terminalHandle } : null)} graphSeq=${this.graphSequence} t=${Date.now()}`)
     this.assertPtyDidNotExitBeforeRegistration(ptyId, binding?.incarnationId)
     const existingPty = this.ptysById.get(ptyId)
     // Why: a relay reattach can finish registering after a stop recorded that incarnation's exit.

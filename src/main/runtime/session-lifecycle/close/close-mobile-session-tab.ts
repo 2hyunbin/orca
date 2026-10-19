@@ -38,12 +38,14 @@ export abstract class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWi
       force?: boolean
     } = {}
   ): Promise<MobileSessionTabCloseOutcome> {
+    console.warn(`[e26] closeMobileSessionTab start ${tabId} t=${Date.now()}`)
     const graphEpoch = options.clientNavigationId ? this.captureReadyGraphEpoch() : null
     const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     const observedPtyIds = await this.refreshMobileSessionPtyRecords()
+    console.warn(`[e26] closeMobileSessionTab refreshed t=${Date.now()}`)
     if (graphEpoch !== null) {
       this.assertStableReadyGraph(graphEpoch)
     }
@@ -87,6 +89,7 @@ export abstract class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWi
       observedPtyIds
     })
     if (!snapshot || !tab) {
+      console.warn(`[e26] closeMobileSessionTab absent tabId=${tabId} snapshot=${Boolean(snapshot)} authority=${JSON.stringify(options.expectedPtyCloseAuthority ?? null)} observed=${JSON.stringify(observedPtyIds ? [...observedPtyIds] : null)} t=${Date.now()}`)
       return adjudicateAbsentMobileSessionTabClose({
         host: this.getMobileSessionLifecycleCloseHost(),
         context: lifecycleClose,

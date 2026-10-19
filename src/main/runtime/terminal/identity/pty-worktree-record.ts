@@ -49,6 +49,7 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
   ): RuntimePtyWorktreeRecord {
     let pty = this.ptysById.get(ptyId)
     if (!pty) {
+      console.warn(`[e26] new pty record ${ptyId} paneKey=${state.paneKey ?? '-'} t=${Date.now()} stack=${new Error('e26').stack?.split('\n').slice(2, 6).join(' | ')}`)
       const titleObservedAt = state.title ? this.nextTitleObservationSequence() : null
       const connectionId = state.connectionId ?? parseAppSshPtyId(ptyId)?.connectionId ?? null
       const worktreePath = splitWorktreeIdForFilesystem(worktreeId)?.worktreePath

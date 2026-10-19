@@ -46,6 +46,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     createdWorktree?: Worktree
   ): Promise<RuntimeTerminalSplit> {
     const livePty = this.getLivePtyForHandle(handle)
+    console.warn(`[e26] splitTerminal ${handle} livePty=${livePty?.pty.ptyId ?? null} t=${Date.now()}`)
     if (livePty) {
       return await this.splitPtyBackedTerminal(livePty.pty, opts, createdWorktree)
     }
@@ -131,6 +132,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
             `split_pane_not_started: the new pane's terminal did not start within ${SPLIT_PANE_START_TIMEOUT_MS / 1000} s, so the pane was closed${opts.command ? ' and its command was not run' : ''}`
           )
         })
+        console.warn(`[e26] split (on) returns ${newHandle} leaf=${newLeafId} t=${Date.now()}`)
         return {
           handle: newHandle,
           tabId: leaf.tabId,
@@ -152,6 +154,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     })
 
     const newHandle = await this.waitForLeafInTab(leaf.tabId, newLeafId)
+    console.warn(`[e26] split (off) returns ${newHandle} leaf=${newLeafId} t=${Date.now()}`)
     return {
       handle: newHandle,
       tabId: leaf.tabId,

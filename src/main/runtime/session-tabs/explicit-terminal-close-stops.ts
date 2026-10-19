@@ -279,7 +279,9 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
   }
 
   async closeTerminalTab(handle: string): Promise<RuntimeTerminalClose> {
+    console.warn(`[e26] closeTerminalTab entry record=${JSON.stringify(this.handles.get(handle) ?? null)} byPty=${JSON.stringify([...this.handleByPtyId.entries()].filter(([, h]) => h === handle))} t=${Date.now()}`)
     const pty = this.getLivePtyForHandle(handle)
+    console.warn(`[e26] closeTerminalTab ${handle} pty=${JSON.stringify(pty ? { ptyId: pty.pty.ptyId, tabId: pty.pty.tabId, paneKey: pty.pty.paneKey, inc: pty.pty.incarnationId } : null)} t=${Date.now()}`)
     if (pty) {
       const closeAuthority: RuntimePtyTabCloseAuthority = {
         handle,

@@ -54,6 +54,7 @@ export abstract class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeW
     if (!sourceAuthority) {
       throw new Error('terminal_split_source_not_found')
     }
+    console.warn(`[e26] splitPtyBacked source=${pty.ptyId} authority=${JSON.stringify(sourceAuthority)} t=${Date.now()}`)
     const sourceIncarnationId =
       sourceAuthority.liveIncarnationId ?? sourceAuthority.persistedIncarnationId
     const leafId = randomUUID()
@@ -209,6 +210,7 @@ export abstract class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeW
       void revealSplit().catch(() => undefined)
     }
 
+    console.warn(`[e26] splitPtyBacked returns new=${createdPty?.ptyId ?? null} leaf=${leafId} t=${Date.now()}`)
     return {
       handle: this.issuePtyHandle(createdPty ?? pty),
       tabId: parentTabId,

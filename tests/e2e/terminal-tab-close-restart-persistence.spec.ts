@@ -39,6 +39,13 @@ test('durable whole-tab close removes a split tab across restart', async (// oxl
   try {
     const firstLaunch = await session.launch()
     firstApp = firstLaunch.app
+    firstApp.process().stderr?.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString().split('\n')) {
+        if (line.includes('[e26]')) {
+          console.log(`[main] ${line.slice(0, 1500)}`)
+        }
+      }
+    })
     const worktreeId = await attachRepoAndOpenTerminal(firstLaunch.page, repoPath)
     await waitForSessionReady(firstLaunch.page)
     await waitForActiveWorktree(firstLaunch.page)
@@ -111,6 +118,7 @@ test('durable whole-tab close removes a split tab across restart', async (// oxl
     expect(split.result.split.tabId).toBe(closedTabId)
     await waitForPaneCount(firstLaunch.page, 2, 30_000)
 
+    console.log(`[e26] spec split ${JSON.stringify(split.result.split)} closing t=${Date.now()}`)
     const close = await client.call<{ close: RuntimeTerminalClose }>('terminal.closeTab', {
       terminal: split.result.split.handle
     })

@@ -1,4 +1,5 @@
 /* eslint-disable unicorn/no-useless-spread */
+import { traceE26GraphSync } from './e26-trace'
 import { OrcaRuntimeWithAttachWindow } from './session-graph-promotion'
 import type {
   RuntimeRendererSyncWindowGraph,
@@ -338,6 +339,7 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
       }
     }
 
+    traceE26GraphSync(previousLeaves, this.leaves, this.mobileSessionTabsByWorktree, windowId)
     // Why: createTerminal waits for the renderer's graph sync to populate the
     // new leaf so it can return a handle. Drain callbacks after leaves update.
     for (const cb of [...this.graphSyncCallbacks]) {
