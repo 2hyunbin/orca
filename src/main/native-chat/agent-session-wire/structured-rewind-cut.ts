@@ -3,6 +3,7 @@
 // rewind record names the target instead of copying the history it keeps.
 
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
+import { isAgentSessionRewindTarget } from '../../../shared/agent-session-rewind'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { agentJournalLinkageFields } from '../../../shared/agent-session-journal-producer'
 import {
@@ -45,18 +46,14 @@ export function structuredRewindCut(
     : snapshot.items
   const { providerKey, omitted } = submissionKeys(snapshot.submissions)
   const selected = items.find((item) => item.itemId === target.itemId)
-  const key = selected ? parseAgentJournalItemKey(providerKey(selected.itemId)) : null
+  if (!selected || !isAgentSessionRewindTarget(selected)) {
+    return null
+  }
+  const key = parseAgentJournalItemKey(providerKey(selected.itemId))
   if (key?.provider === 'claude' && target.provider === 'claude') {
     // Any session the chat ran: a message from before an earlier rewind's fork is still cut there.
     const boundary = items.findIndex((item) => item.itemId === target.itemId)
-    // A message sent into a running turn joins it; the fork forgets the rest of that turn.
-    const cutTurn = selected && scopedTurn(selected)
-    const keptTurns = new Set(
-      items
-        .slice(0, boundary)
-        .flatMap((item) => scopedTurn(item) ?? [])
-        .filter((turn) => turn !== cutTurn)
-    )
+    const keptTurns = new Set(items.slice(0, boundary).flatMap((item) => scopedTurn(item) ?? []))
     const keptRows = items.filter((item, index) => {
       const turn = scopedTurn(item)
       // A kept turn's row can land after the cut, as a late provider item does.

@@ -5,6 +5,7 @@ import {
   AgentJournalTurnScopeSchema
 } from './agent-session-journal-schemas'
 import { parseAgentJournalItemKey } from './agent-session-journal-item-key'
+import type { AgentJournalRenderItem } from './agent-session-journal-types'
 import type { AgentSessionMutationEnvelope } from './agent-session-wire'
 
 export const AGENT_SESSION_REWIND_REASONS = [
@@ -81,6 +82,17 @@ export const AgentSessionRewindRecordSchema = z.object({
 })
 export type AgentSessionRewindRecord = z.infer<typeof AgentSessionRewindRecordSchema>
 export type AgentSessionRewindFork = NonNullable<AgentSessionRewindRecord['providerFork']>
+
+/** A message a rewind can return to: a user message that opened its own turn. One sent into a
+ *  running turn belongs to that turn, whose provider and journal orders it differently, so a rewind
+ *  goes back only to whole turns. */
+export function isAgentSessionRewindTarget(
+  item: Pick<AgentJournalRenderItem, 'body' | 'turnScope'>
+): boolean {
+  return (
+    item.body.kind === 'message' && item.body.role === 'user' && item.turnScope?.kind !== 'turn'
+  )
+}
 
 /**
  * The fork a rewind still owes the chat's next launch: it applies while the chat's provider

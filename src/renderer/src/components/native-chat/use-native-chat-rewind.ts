@@ -2,10 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from 'sonner'
 import type { ConfirmationDialogContextValue } from '@/components/confirmation-dialog-context'
 import { translate } from '@/i18n/i18n'
-import type {
-  AgentSessionRewindReason,
-  AgentSessionRewindResult,
-  AgentSessionRewindSupport
+import {
+  isAgentSessionRewindTarget,
+  type AgentSessionRewindReason,
+  type AgentSessionRewindResult,
+  type AgentSessionRewindSupport
 } from '../../../../shared/agent-session-rewind'
 import type { AgentSessionWriteFailure } from '../../../../shared/agent-session-write-failure'
 import type { StructuredAgentSessionState } from '../../../../shared/structured-agent-session-reducer'
@@ -74,11 +75,7 @@ function rewindFailureReason(failure: AgentSessionWriteFailure): string | undefi
 function isRewindTarget(input: RewindInput, itemId: string): boolean {
   const floor = rewindContextFloor(input)
   return input.state.items.some(
-    (item) =>
-      item.itemId === itemId &&
-      item.sequence > floor &&
-      item.body.kind === 'message' &&
-      item.body.role === 'user'
+    (item) => item.itemId === itemId && item.sequence > floor && isAgentSessionRewindTarget(item)
   )
 }
 
@@ -284,11 +281,11 @@ export function useNativeChatRewind(input: RewindInput) {
   const floor = rewindContextFloor(input)
   const eligibleItemIds = useMemo(
     () =>
-      floor > 0
-        ? new Set(
-            input.state.items.filter((item) => item.sequence > floor).map((item) => item.itemId)
-          )
-        : undefined,
+      new Set(
+        input.state.items
+          .filter((item) => item.sequence > floor && isAgentSessionRewindTarget(item))
+          .map((item) => item.itemId)
+      ),
     [floor, input.state.items]
   )
   // Rows re-render only when this changes; none get the action where the provider can never rewind.
