@@ -136,7 +136,7 @@ async function convertedThenChangedOnOlderBuild(): Promise<void> {
     })
   ).resolves.toMatchObject({ outcome: 'converted' })
   store.addRepo(repo('repo-2', '/srv/tool'))
-  store.updateRepo('repo-1', { displayName: 'app-renamed' })
+  store.updateRepo(store.getRepo('repo-1')!, { displayName: 'app-renamed' })
   reconcileManagedOrcadSshTargets(userDataPath, store, now)
   expect(store.getSshTarget(TARGET.id)?.orcadFence?.sourceChangedAt).toBeDefined()
 }
