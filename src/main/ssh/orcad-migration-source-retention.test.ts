@@ -14,7 +14,7 @@ import {
 import { orcadMigrationCutoverFixture } from './orcad-migration-cutover-fixture'
 import { listPendingManagedOrcadMigrations } from '../managed-server/lifecycle/orcad-managed-migration-status'
 import {
-  renameUnretainedOrcadMigrationDrafts,
+  retainUnretainedOrcadMigrationSources,
   retainOrcadMigrationSource
 } from './orcad-migration-source-retention'
 
@@ -166,37 +166,45 @@ describe('renaming unsaved drafts to the server on commit', () => {
     await retainOrcadMigrationSource(userDataPath, 'm-1', store)
     expect(serverFiles()).toEqual([])
     await restart()
-    renameUnretainedOrcadMigrationDrafts(userDataPath, store)
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
     await retainOrcadMigrationSource(userDataPath, 'm-1', store)
     expect(serverFiles()).toEqual([])
   })
 
-  it('renames at startup when a crash cut off the retained mark, and the late retain neither duplicates nor clobbers', async () => {
+  it('renames and retains at startup after a cut-off commit, so a draft closed later stays closed', async () => {
     saveFiles(SOURCE_HOST, [draftedFile('/srv/app/a.md', 'source A')])
     writeOrcadMigrationSourceCutover(userDataPath, committed())
     await restart()
 
-    renameUnretainedOrcadMigrationDrafts(userDataPath, store)
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
     expect(serverFiles()?.map((file) => file.dirtyDraftContent)).toEqual(['source A'])
-    // The user keeps typing on the server's copy before the connect retains the move.
+    expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.sourceRetainedAt).toBeDefined()
+    // Closed before any connect: neither the connect's retain nor a later start brings it back.
+    saveFiles(SERVER_HOST, [])
+    await retainOrcadMigrationSource(userDataPath, 'm-1', store)
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
+    await restart()
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
+    expect(serverFiles()).toEqual([])
+  })
+
+  it('keeps newer typing in the server copy when the connect retains first', async () => {
+    saveFiles(SOURCE_HOST, [draftedFile('/srv/app/a.md', 'source A')])
     saveFiles(SERVER_HOST, [
       { ...draftedFile('/srv/app/a.md', 'typed after'), runtimeEnvironmentId: 'env-1' }
     ])
+    writeOrcadMigrationSourceCutover(userDataPath, committed())
     await retainOrcadMigrationSource(userDataPath, 'm-1', store)
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
     expect(serverFiles()?.map((file) => file.dirtyDraftContent)).toEqual(['typed after'])
-    // Retained: a later start renames nothing, even once the server copy is discarded.
-    saveFiles(SERVER_HOST, [])
-    await restart()
-    renameUnretainedOrcadMigrationDrafts(userDataPath, store)
-    expect(serverFiles()).toEqual([])
   })
 
-  it('makes a startup rename durable before the retained mark, even when retain adds nothing', async () => {
+  it('makes the startup rename durable before its retained mark', async () => {
     saveFiles(SOURCE_HOST, [draftedFile('/srv/app/a.md', 'source A')])
     writeOrcadMigrationSourceCutover(userDataPath, committed())
     await restart()
-    renameUnretainedOrcadMigrationDrafts(userDataPath, store)
-    await retainOrcadMigrationSource(userDataPath, 'm-1', store)
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
+    expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.sourceRetainedAt).toBeDefined()
     // A crash now: a second reader sees only what reached disk.
     const crashed = createSqliteTestStore(Store, { dataFile: join(userDataPath, 'orca-data.json') })
     expect(

@@ -58,16 +58,15 @@ export async function retainOrcadMigrationSource(
 }
 
 /**
- * At startup, before any window reads its sessions: a commit whose retained mark a crash cut off
- * gets its drafts renamed here, since a renderer that booted without them would overwrite them.
+ * At startup, for a commit whose retained mark a crash cut off: its drafts are renamed before any
+ * window reads its sessions, since a renderer that booted without them would overwrite them; then
+ * the move is retained, so the rename never runs again and a draft closed later stays closed.
  */
-export function renameUnretainedOrcadMigrationDrafts(
+export function retainUnretainedOrcadMigrationSources(
   userDataPath: string,
-  store: Pick<
-    OrcadMigrationDraftRenameStore,
-    'collectOrcadMigrationSourceDrafts' | 'getWorkspaceSession' | 'setWorkspaceSession'
-  >
-): void {
+  store: OrcadMigrationDraftRenameStore
+): Promise<void> {
+  const migrationIds: string[] = []
   try {
     for (const cutover of listOrcadMigrationSourceCutovers(userDataPath)) {
       if (cutover.phase !== 'destination-committed' || cutover.sourceRetainedAt) {
@@ -77,11 +76,19 @@ export function renameUnretainedOrcadMigrationDrafts(
       if (renamed) {
         writeDestinationSession(store, cutover, renamed.next)
       }
+      migrationIds.push(cutover.migrationId)
     }
   } catch (error) {
     // The connect's retain renames them instead; startup must not fail on an unreadable journal.
     console.warn('[ssh] Could not rename committed migrations’ unsaved drafts:', error)
   }
+  return Promise.all(
+    migrationIds.map((migrationId) =>
+      retainOrcadMigrationSource(userDataPath, migrationId, store).catch((error: unknown) => {
+        console.warn('[ssh] Could not mark a finished migration retained:', error)
+      })
+    )
+  ).then(() => undefined)
 }
 
 function readCommittedCutover(userDataPath: string, migrationId: string) {
@@ -94,7 +101,7 @@ function readCommittedCutover(userDataPath: string, migrationId: string) {
   return cutover
 }
 
-/** Only files the server partition lacks, so a rerun before the retained mark never clobbers. */
+/** Only files the server partition lacks, so the retain after a startup rename adds nothing. */
 function renamedDestinationSession(
   store: Pick<
     OrcadMigrationDraftRenameStore,
