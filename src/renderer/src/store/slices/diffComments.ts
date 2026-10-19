@@ -6,10 +6,12 @@ import { isMarkdownComment } from '@/lib/diff-comment-compat'
 import {
   enqueueDiffCommentPersist,
   mutateDiffComments,
-  normalizeDiffComment,
-  readDiffCommentsForChange
+  normalizeDiffComment
 } from './diff-comment-persistence'
-import { selectWorktreeDiffCommentsOrEmpty } from '../worktree-diff-comments-selector'
+import {
+  readDiffCommentsForChange,
+  selectWorktreeDiffCommentsOrEmpty
+} from '../worktree-diff-comments-selector'
 
 export type DiffCommentsSlice = {
   getDiffComments: (worktreeId: string | null | undefined) => DiffComment[]

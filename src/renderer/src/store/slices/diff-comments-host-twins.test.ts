@@ -189,4 +189,30 @@ describe('diff comments on twin worktrees', () => {
       expect.objectContaining({ executionHostId: 'ssh:box', updates: { diffComments: [] } })
     )
   })
+
+  it('leaves an unstamped row to the owner its repo names, not this computer', async () => {
+    const store = createTwinStore(null)
+    store.setState({
+      repos: [{ ...repoBase, connectionId: 'box', executionHostId: 'ssh:box' }],
+      worktreesByRepo: { [REPO]: [worktree(undefined)] }
+    })
+
+    expect(await addNote(store)).not.toBeNull()
+
+    expect(updateMeta).toHaveBeenCalledTimes(1)
+    expect(updateMeta.mock.calls[0][0]).not.toHaveProperty('executionHostId')
+  })
+
+  it('picks an SSH twin a paired server proxies by its own stamp', () => {
+    const store = createTwinStore('ssh:box')
+    const proxied = { ...worktree('ssh:box'), runtimeOwnerEnvironmentId: 'hub' }
+    store.setState({ worktreesByRepo: { [REPO]: [worktree('local'), proxied] } })
+
+    // The optimistic write lands synchronously; its transport is not under test here.
+    void addNote(store).catch(() => {})
+
+    const ssh = store.getState().worktreesByRepo[REPO][1]
+    expect(ssh.diffComments?.map((c) => c.body)).toEqual(['ssh note'])
+    expect(rowNotes(store, 'local')).toEqual([])
+  })
 })

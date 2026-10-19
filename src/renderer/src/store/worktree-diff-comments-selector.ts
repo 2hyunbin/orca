@@ -1,16 +1,18 @@
 import type { DiffComment } from '../../../shared/diff-comment-types'
 import {
   LOCAL_EXECUTION_HOST_ID,
-  parseExecutionHostId,
   toRuntimeExecutionHostId,
   type ExecutionHostId
 } from '../../../shared/execution-host'
+import {
+  composeWorktreeHostIdentity,
+  type HostScopedWorktreeKey
+} from '../../../shared/worktree/host-qualified-identity'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { AppState } from './types'
 import { getIndexedWorktreeById } from './worktree-repo-index'
 import { findFolderWorkspaceOwner } from '@/lib/folder-workspace-runtime-owner'
 import { namedHostForOwnerRef } from '@/lib/resolve-owner'
-import { worktreeMatchesHost } from './slices/worktrees/listing/worktree-host-ownership'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 
@@ -30,14 +32,28 @@ type DiffCommentSelectorState = Pick<AppState, 'worktreesByRepo'> &
     >
   >
 
-/** One worktree on one host; `worktrees` holds every row a listing race duplicated for it. */
-export type DiffCommentCopy = { executionHostId: ExecutionHostId; worktrees: readonly Worktree[] }
-
-function copyHostId(row: Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>): ExecutionHostId {
+/**
+ * The host a row's notes are written through: its own stamp, except that a paired server's row
+ * stamped `local` (or not at all) is local to that server. `undefined` leaves the owner to the
+ * route resolvers, as for any unstamped row.
+ */
+function copyHostId(
+  row: Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>
+): ExecutionHostId | undefined {
   const environmentId = row.runtimeOwnerEnvironmentId?.trim()
-  return environmentId
+  return environmentId && (!row.hostId || row.hostId === LOCAL_EXECUTION_HOST_ID)
     ? toRuntimeExecutionHostId(environmentId)
-    : (parseExecutionHostId(row.hostId)?.id ?? LOCAL_EXECUTION_HOST_ID)
+    : row.hostId
+}
+
+/**
+ * One copy of a worktree: the rows on one host (a listing race can duplicate a row), keyed by the
+ * store's host-qualified identity. An unstamped row is its own copy.
+ */
+export type DiffCommentCopy = {
+  key: HostScopedWorktreeKey
+  hostId?: ExecutionHostId
+  worktrees: readonly Worktree[]
 }
 
 function onlyCopy(copies: readonly DiffCommentCopy[]): DiffCommentCopy | null {
@@ -45,9 +61,9 @@ function onlyCopy(copies: readonly DiffCommentCopy[]): DiffCommentCopy | null {
 }
 
 /**
- * The copy of a git worktree whose review notes a change reads or writes. The same id on two hosts
- * is a twin, picked by, in order: the host a queued write captured; the one copy holding the notes
- * the change names (UUIDs, so an async delivery still finds its copy after navigation); the open
+ * The copy of a worktree whose review notes a change reads or writes. The same id on two hosts is
+ * a twin, picked by, in order: the copy a queued write captured; the one copy holding the notes the
+ * change names (UUIDs, so an async delivery still finds its copy after navigation); the open
  * workspace's host. Nothing else guesses.
  */
 export function findDiffCommentCopy(
@@ -56,18 +72,24 @@ export function findDiffCommentCopy(
     'worktreesByRepo' | 'activeWorktreeId' | 'activeWorkspaceExecutionHostId'
   >,
   worktreeId: string,
-  hint: { executionHostId?: ExecutionHostId; commentIds?: ReadonlySet<string> } = {}
+  hint: { key?: HostScopedWorktreeKey; commentIds?: ReadonlySet<string> } = {}
 ): DiffCommentCopy | null {
-  const byHost = new Map<ExecutionHostId, Worktree[]>()
+  const byKey = new Map<HostScopedWorktreeKey, DiffCommentCopy>()
   for (const row of state.worktreesByRepo[getRepoIdFromWorktreeId(worktreeId)] ?? []) {
-    if (row.id === worktreeId) {
-      const hostId = copyHostId(row)
-      byHost.set(hostId, [...(byHost.get(hostId) ?? []), row])
+    if (row.id !== worktreeId) {
+      continue
     }
+    const hostId = copyHostId(row)
+    const key = composeWorktreeHostIdentity(hostId, worktreeId)
+    byKey.set(key, {
+      key,
+      ...(hostId ? { hostId } : {}),
+      worktrees: [...(byKey.get(key)?.worktrees ?? []), row]
+    })
   }
-  const copies = [...byHost].map(([executionHostId, worktrees]) => ({ executionHostId, worktrees }))
-  if (hint.executionHostId) {
-    return copies.find((copy) => copy.executionHostId === hint.executionHostId) ?? null
+  const copies = [...byKey.values()]
+  if (hint.key) {
+    return byKey.get(hint.key) ?? null
   }
   if (copies.length <= 1) {
     return copies[0] ?? null
@@ -84,9 +106,29 @@ export function findDiffCommentCopy(
     return holder
   }
   const named = namedHostForOwnerRef(state, { workspaceId: worktreeId })
+  // Why both: the selection names a row's own stamp, which a paired server's row may not route by.
   return named
-    ? onlyCopy(copies.filter((copy) => worktreeMatchesHost(copy.worktrees[0], named)))
+    ? onlyCopy(
+        copies.filter(
+          (copy) => copy.hostId === named || copy.worktrees.some((row) => row.hostId === named)
+        )
+      )
     : null
+}
+
+/** The list a change naming these notes would edit; see {@link findDiffCommentCopy}. */
+export function readDiffCommentsForChange(
+  state: DiffCommentSelectorState,
+  worktreeId: string,
+  commentIds: Iterable<string>
+): DiffComment[] {
+  const scope = parseWorkspaceKey(worktreeId)
+  const list =
+    scope?.type === 'folder'
+      ? findFolderWorkspaceOwner(state, scope.folderWorkspaceId)?.diffComments
+      : findDiffCommentCopy(state, worktreeId, { commentIds: new Set(commentIds) })?.worktrees[0]
+          .diffComments
+  return list ?? []
 }
 
 export function selectWorktreeDiffComments(

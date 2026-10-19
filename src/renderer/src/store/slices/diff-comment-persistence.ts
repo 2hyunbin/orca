@@ -8,6 +8,7 @@ import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
 import { findDiffCommentCopy } from '../worktree-diff-comments-selector'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { HostScopedWorktreeKey } from '../../../../shared/worktree/host-qualified-identity'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import {
   findFolderWorkspaceOwner,
@@ -128,8 +129,10 @@ const floorSeedEpochByQueue = new Map<string, number>()
 export type DiffCommentMutation = {
   previous: DiffComment[] | undefined
   next: DiffComment[]
-  /** The host of the folder or worktree copy changed, so its write lands on that copy. */
+  /** The folder's host, or the worktree copy's own host stamp; the write names it. */
   executionHostId?: ExecutionHostId
+  /** The worktree copy changed, so its queued write and rollback reach that copy only. */
+  copyKey?: HostScopedWorktreeKey
 }
 
 // Why: one key for the queue and both bookkeeping maps, so they can never drift apart.
@@ -146,8 +149,8 @@ export function enqueueDiffCommentPersist(
   get: () => AppState,
   mutation: DiffCommentMutation
 ): Promise<void> {
-  const executionHostId = mutation.executionHostId
-  const queueKey = persistQueueKey(worktreeId, executionHostId)
+  const { executionHostId, copyKey } = mutation
+  const queueKey = copyKey ?? persistQueueKey(worktreeId, executionHostId)
   const prior = persistQueueByWorktree.get(queueKey) ?? Promise.resolve()
   // Why: an idle queue means disk still holds the pre-mutation list, so that list is this burst's rollback floor.
   // Why: a `previous` that isn't the last mutation's `next` means something outside the mutators replaced the list
@@ -184,7 +187,7 @@ export function enqueueDiffCommentPersist(
         )
       } else {
         const state = get()
-        const copy = findDiffCommentCopy(state, worktreeId, { executionHostId })
+        const copy = findDiffCommentCopy(state, worktreeId, { key: copyKey })
         // Why: the copy these notes were made on is gone; never send another copy's list instead.
         if (!copy) {
           throw new Error('The workspace copy is gone; review notes were not saved.')
@@ -203,7 +206,7 @@ export function enqueueDiffCommentPersist(
       const floor = lastPersistedByQueue.has(queueKey)
         ? lastPersistedByQueue.get(queueKey)
         : mutation.previous
-      rollback(set, worktreeId, floor, mutation.next, executionHostId)
+      rollback(set, worktreeId, floor, mutation, copyKey)
       throw err
     }
     // Why: a chain break re-seeded the floor to an out-of-band replacement while this write was awaiting, so the
@@ -229,21 +232,6 @@ export function enqueueDiffCommentPersist(
   return next
 }
 
-/** The list a change naming these notes would edit; see {@link findDiffCommentCopy}. */
-export function readDiffCommentsForChange(
-  state: AppState,
-  worktreeId: string,
-  commentIds: Iterable<string>
-): DiffComment[] {
-  const scope = parseWorkspaceKey(worktreeId)
-  const list =
-    scope?.type === 'folder'
-      ? findFolderWorkspaceOwner(state, scope.folderWorkspaceId)?.diffComments
-      : findDiffCommentCopy(state, worktreeId, { commentIds: new Set(commentIds) })?.worktrees[0]
-          .diffComments
-  return list ?? []
-}
-
 // Why: derive the next list inside the `set` updater so concurrent writes can't clobber each other via a stale closure.
 export function mutateDiffComments(
   set: Parameters<StateCreator<AppState>>[0],
@@ -255,6 +243,7 @@ export function mutateDiffComments(
   let previous: DiffComment[] | undefined
   let next: DiffComment[] | null = null
   let executionHostId: ExecutionHostId | undefined
+  let copyKey: HostScopedWorktreeKey | undefined
   set((s) => {
     const scope = parseWorkspaceKey(worktreeId)
     if (scope?.type === 'folder') {
@@ -284,7 +273,8 @@ export function mutateDiffComments(
     if (!repoList || !copy) {
       return s
     }
-    executionHostId = copy.executionHostId
+    executionHostId = copy.hostId
+    copyKey = copy.key
     previous = copy.worktrees[0].diffComments
     const computed = mutate(previous ?? [])
     if (computed === null) {
@@ -299,7 +289,7 @@ export function mutateDiffComments(
   if (next === null) {
     return null
   }
-  return { previous, next, executionHostId }
+  return { previous, next, executionHostId, ...(copyKey ? { copyKey } : {}) }
 }
 
 // Why: on IPC-write failure, roll back optimistic state so the renderer matches disk (identity-guarded below).
@@ -307,8 +297,8 @@ function rollback(
   set: Parameters<StateCreator<AppState>>[0],
   worktreeId: string,
   previous: DiffComment[] | undefined,
-  expectedCurrent: DiffComment[],
-  executionHostId?: ExecutionHostId
+  { next: expectedCurrent, executionHostId }: DiffCommentMutation,
+  copyKey?: HostScopedWorktreeKey
 ): void {
   const repoId = getRepoIdFromWorktreeId(worktreeId)
   set((s) => {
@@ -329,9 +319,9 @@ function rollback(
       return s
     }
     // Why: only roll back rows no later mutation replaced, else our stale `previous` would erase newer state.
-    const targets = (
-      findDiffCommentCopy(s, worktreeId, { executionHostId })?.worktrees ?? []
-    ).filter((w) => w.diffComments === expectedCurrent)
+    const targets = (findDiffCommentCopy(s, worktreeId, { key: copyKey })?.worktrees ?? []).filter(
+      (w) => w.diffComments === expectedCurrent
+    )
     // Why: worktree gone since the mutation; bail before remapping so we don't allocate a new array identity and fire spurious notifications.
     if (targets.length === 0) {
       return s
