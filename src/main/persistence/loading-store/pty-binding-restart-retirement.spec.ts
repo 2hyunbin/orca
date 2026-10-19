@@ -1,3 +1,7 @@
+import {
+  fenceFreshPaneBinding,
+  assertPaneStillExists
+} from '../../ipc/pty/pane/pane-spawn-operation'
 import { expect, it, vi } from 'vitest'
 import { fixture } from './profile-state-delayed-authority-fixture'
 import { TEST_LEAF_1 } from '../../persistence-session-fixtures'
@@ -54,6 +58,59 @@ export function registerPtyBindingRestartRetirementTests(): void {
       store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId
     ).toEqual({})
   })
+
+  it('keeps a same-id incarnation published while an unstamped retirement waits in the Store queue', async () => {
+    const { store, authority } = await fixture()
+    await store.persistPtyBinding({ ...binding, incarnationId: undefined })
+    const gate = authority.pause()
+    const publish = store.persistPtyBinding(binding)
+    await gate.started.promise
+    const retire = store.retirePtyBinding(binding, undefined, { incarnationId: undefined })
+    gate.finish.resolve()
+    await publish
+    expect(await retire).toBe(false)
+    expect(
+      store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId?.[
+        binding.leafId
+      ]
+    ).toBe(binding.ptyId)
+    expect(await store.retirePtyBinding(binding)).toBe(true)
+  })
+
+  it.each(['winner', 'closed'] as const)(
+    'refuses a fresh late bind after %s without restoring the removed topology',
+    async (change) => {
+      const { store, authority } = await fixture()
+      await store.persistPtyBinding(binding)
+      const gate = authority.pause()
+      const predecessor = store.persistPtyBinding({ ...binding, incarnationId: 'next' })
+      await gate.started.promise
+      const pending = store.persistPtyBinding(
+        fenceFreshPaneBinding(store, { ...binding, ptyId: 'fresh', mayCreate: false })
+      )
+      if (change === 'closed') {
+        const session = store.getWorkspaceSession()
+        store.setWorkspaceSession({ ...session, terminalLayoutsByTabId: {}, tabsByWorktree: {} })
+      }
+      const refused =
+        change === 'winner'
+          ? expect(pending).rejects.toThrow('terminal_pane_owner_changed')
+          : expect(pending).resolves.toBe(false)
+      gate.finish.resolve()
+      await predecessor
+      await refused
+      if (change === 'closed')
+        expect(() =>
+          assertPaneStillExists(store, binding.worktreeId, binding.tabId, binding.leafId)
+        ).toThrow('terminal_pane_owner_changed')
+      else
+        expect(
+          store.getWorkspaceSession().terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId?.[
+            binding.leafId
+          ]
+        ).toBe(binding.ptyId)
+    }
+  )
 
   it('restores the old binding after a known save failure and allows another attempt', async () => {
     const { store, authority } = await fixture()

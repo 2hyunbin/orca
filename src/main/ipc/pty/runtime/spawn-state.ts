@@ -131,6 +131,7 @@ export type RuntimePtySpawnArgs = {
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
   onPtySpawnCommitted?: () => void
+  paneSpawnOperation?: import('../pane/pane-spawn-operation').PaneSpawnOperation
   adoptedStablePane?: {
     result: PtySpawnResult
     owner: {

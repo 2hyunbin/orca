@@ -9,8 +9,7 @@ import {
   reconcileAgentSessionOwnerListings
 } from '../pane/agent-session-owners'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
-import { spawnForStablePane } from '../pane/stable-pane-attach'
-import { clearProviderPtyState } from '../provider/state-cleanup'
+import { assertPaneStillExists, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
 import { isProviderAgentSessionOwnerLive } from '../provider/liveness'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { RuntimePtySpawnState } from './spawn-state'
@@ -41,8 +40,17 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
             args.worktreeId,
             args.connectionId
           )
-    const expectedPtyId =
-      stablePaneOwnerCandidate?.ptyId ?? ctx.effectiveSessionAppId ?? ctx.sessionId
+    if (stablePaneOwnerCandidate) throw new PaneOwnerContentionError()
+    if (args.paneSpawnOperation?.mustExist && args.worktreeId && args.tabId && args.leafId) {
+      assertPaneStillExists(
+        ctx.deps.store,
+        args.worktreeId,
+        args.tabId,
+        args.leafId,
+        args.connectionId
+      )
+    }
+    const expectedPtyId = ctx.effectiveSessionAppId ?? ctx.sessionId
     if (!stablePaneOwnerCandidate) {
       markRuntimeSpawnHiddenBeforeSpawn(ctx)
     }
@@ -57,7 +65,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
           preserveExisting: !ctx.isNewDaemonSession || Boolean(stablePaneOwnerCandidate)
         }) ?? false
     }
-    let sequenceBeforeProviderSpawn = expectedPtyId
+    const sequenceBeforeProviderSpawn = expectedPtyId
       ? (ctx.deps.runtime?.getPtyOutputSequence?.(expectedPtyId) ?? 0)
       : 0
     const assertClientStillConnected = (): void => {
@@ -134,39 +142,9 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       ctx.result.agentSessionEnsure = ensured
     } else {
       assertClientStillConnected()
-      const stablePaneSpawn = ctx.preAdoptedStablePane
-        ? ctx.preAdoptedStablePane
-        : await spawnForStablePane({
-            runtime: ctx.deps.runtime,
-            store: ctx.deps.store,
-            provider: ctx.provider,
-            spawnOptions: ctx.spawnOptions,
-            owner: stablePaneOwnerCandidate,
-            worktreeId: args.worktreeId,
-            connectionId: args.connectionId,
-            resolveOwner: () =>
-              resolveStablePaneOwner(
-                ctx.deps.runtime,
-                ctx.deps.store,
-                ctx.spawnIdentityPaneKey,
-                args.worktreeId,
-                args.connectionId
-              ),
-            onFreshSpawn: ctx.reportPtySpawnCommitted,
-            onOwnerReresolved: (owner) => {
-              sequenceBeforeProviderSpawn = ctx.deps.runtime?.getPtyOutputSequence?.(owner.ptyId) ?? 0
-            }
-          })
-      ctx.result = stablePaneSpawn.result
-      ctx.stablePaneOwner = stablePaneSpawn.owner
-      if (
-        ctx.stablePaneOwner &&
-        ctx.isNewDaemonSession &&
-        ctx.effectiveSessionAppId &&
-        ctx.effectiveSessionAppId !== ctx.result.id
-      ) {
-        clearProviderPtyState(ctx.effectiveSessionAppId)
-      }
+      ctx.result = await ctx.provider.spawn(ctx.spawnOptions)
+      ctx.reportPtySpawnCommitted()
+      ctx.stablePaneOwner = null
       ctx.rejectedRegistrationCandidate = ctx.result
       assertSpawnReplyWasLive(ctx.result)
     }

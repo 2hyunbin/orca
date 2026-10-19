@@ -10,7 +10,6 @@ import TerminalContextMenu from './TerminalContextMenu'
 import TerminalPaneHeaderOverlay from './TerminalPaneHeaderOverlay'
 import { isPaneOwnerRecoveryError, TerminalErrorToast } from './TerminalErrorToast'
 import { AgentLaunchPaneNoticePortal } from './AgentLaunchPaneNotice'
-import { requestTerminalPaneRecovery } from './terminal-pane-recovery'
 import { TerminalSessionStateSaveFailureDialog } from './TerminalSessionStateSaveFailureDialog'
 import { LinkActionPopover } from '@/components/link-actions/LinkActionPopover'
 import { TerminalAgentSessionForkDialog } from './TerminalAgentSessionForkDialog'
@@ -203,24 +202,10 @@ export function TerminalPaneSurface({
               onRestartDaemon={() => daemonActions.setPending('restart')}
               onRetry={
                 isPaneOwnerRecoveryError(visibleTerminalError)
-                  ? () => {
-                      const ptyId = activePane
-                        ? (paneTransportsRef.current.get(activePane.id)?.getPtyId() ?? null)
-                        : null
-                      return requestTerminalPaneRecovery({
-                        tabId,
-                        ptyId,
-                        reason: 'reattach-unverifiable',
-                        // The user asking again is the new trigger that reopens
-                        // a reason an observed failure has closed.
-                        trigger: 'user'
-                      }).then((recovered) => {
-                        if (recovered) {
-                          dismissTerminalError()
-                        }
-                        return recovered
-                      })
-                    }
+                  ? () =>
+                      Promise.resolve(
+                        paneTransportsRef.current.get(activePane.id)?.retryRecovery?.() ?? false
+                      )
                   : undefined
               }
             />,

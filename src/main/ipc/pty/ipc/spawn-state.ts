@@ -34,6 +34,7 @@ export type PtyIpcSpawnState = {
   replacedPaneOwner: ReplacedPaneOwner | null
   finishTerminalInstall: () => void
   result: PtySpawnResult
+  paneSpawnOperation?: import('../pane/pane-spawn-operation').PaneSpawnOperation
   stablePaneOwner: StablePaneOwner | null
   stablePaneBindingPersisted: boolean
   rejectedRegistrationCandidate: PtySpawnResult | null

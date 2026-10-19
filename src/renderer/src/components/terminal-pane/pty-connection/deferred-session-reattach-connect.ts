@@ -1,3 +1,4 @@
+import { armPaneOwnerRetry } from './pane-owner-recovery'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
 import { isSshSessionGoneError, recordPtyConnectDiagnostic } from './pty-connect-limits'
@@ -58,8 +59,7 @@ const NOT_REOPENED: HeldPaneReopenOutcome = { reopened: false, agentResumed: fal
 /** Resolves to what the reattach did, which a held pane's release reports. */
 function connectDeferredSessionReattach(
   session: ConnectPanePtySession,
-  deferredReattachSessionId: string,
-  ownerChangedRetried = false
+  deferredReattachSessionId: string
 ): Promise<HeldPaneReopenOutcome> {
   session.allowInitialIdleCacheSeed = true
   recordPtyConnectDiagnostic(`pane=${session.pane.id} -> REATTACH ${deferredReattachSessionId}`)
@@ -74,8 +74,6 @@ function connectDeferredSessionReattach(
   let expiredReattachError = false
   let paneOwnerUnverified = false
   let paneOwnerChanged = false
-  // Why local only: asking a paired host again replays its connect, which may create.
-  const retriesOwnerChange = !ownerChangedRetried && !session.runtimeEnvironmentId
   let heldByNewerDaemon = false
   const coldRestoreStartup = session.buildColdRestoreAgentResumeStartup()
   const outputCallbacks = session.captureTransportOutputCallbacks(
@@ -94,9 +92,6 @@ function connectDeferredSessionReattach(
       }
       if (message.includes(PANE_OWNER_CHANGED_ERROR)) {
         paneOwnerChanged = true
-        if (retriesOwnerChange) {
-          return
-        }
       }
       session.reportError(message)
     },
@@ -171,14 +166,16 @@ function connectDeferredSessionReattach(
         if (typeof gen === 'number') {
           void window.api.pty.clearPendingPaneSerializer(session.cacheKey, gen).catch(() => {})
         }
-        // Another connection owns the pane now: asking again attaches to it. Never a fresh launch.
-        if (retriesOwnerChange && isCurrentReattach()) {
-          return connectDeferredSessionReattach(session, deferredReattachSessionId, true)
-        }
+        armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+          connectDeferredSessionReattach(session, deferredReattachSessionId)
+        )
         session.settlePaneAttachAttempt('failed')
         return NOT_REOPENED
       }
       if (!result && paneOwnerUnverified) {
+        armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+          connectDeferredSessionReattach(session, deferredReattachSessionId)
+        )
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
         const gen = await preSignalPromise
         if (typeof gen === 'number') {
@@ -243,14 +240,14 @@ function connectDeferredSessionReattach(
       if (!isCurrentReattach()) {
         return NOT_REOPENED
       }
-      if (message.includes(PANE_OWNER_CHANGED_ERROR) && retriesOwnerChange) {
-        return connectDeferredSessionReattach(session, deferredReattachSessionId, true)
-      }
       if (
         message.includes(PANE_OWNER_UNVERIFIED_ERROR) ||
         message.includes(PANE_OWNER_CHANGED_ERROR)
       ) {
-        session.reportError(message)
+        outputCallbacks.callbacks.onError(message)
+        armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+          connectDeferredSessionReattach(session, deferredReattachSessionId)
+        )
         session.settlePaneAttachAttempt('failed')
         return NOT_REOPENED
       }

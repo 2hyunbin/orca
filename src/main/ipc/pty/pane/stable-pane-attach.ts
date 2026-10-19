@@ -1,3 +1,4 @@
+import { PaneOwnerContentionError } from './pane-spawn-operation'
 import {
   isDaemonEndpointGoneError,
   SessionNotFoundError,
@@ -22,7 +23,7 @@ function isSameStablePaneOwner(a: StablePaneOwner, b: StablePaneOwner): boolean 
   )
 }
 
-async function attemptStablePaneAttach(
+export async function attemptStablePaneAttach(
   args: StablePaneSpawnContext & { owner: StablePaneOwner }
 ): Promise<StablePaneAttachAttempt> {
   const { owner, provider, spawnOptions } = args
@@ -78,37 +79,46 @@ async function attemptStablePaneAttach(
   return { attached: { result, owner } }
 }
 
-export async function attachStablePaneOwner(
-  args: StablePaneSpawnContext & { owner: StablePaneOwner }
-): Promise<{ result: PtySpawnResult; owner: StablePaneOwner } | null> {
-  const attempt = await attemptStablePaneAttach(args)
-  if ('lostTo' in attempt) {
-    throw new Error('terminal_pane_owner_changed')
+export async function reconcilePaneOwner<T>(args: {
+  owner: StablePaneOwner | null
+  resolveOwner: () => StablePaneOwner | null
+  attach: (owner: StablePaneOwner) => Promise<T | null>
+  fresh: () => Promise<T>
+  losses?: number
+}): Promise<T> {
+  let owner = args.owner
+  let losses = args.losses ?? 0
+  for (;;) {
+    try {
+      if (owner) {
+        const attached = await args.attach(owner)
+        if (attached !== null) return attached
+      }
+      return await args.fresh()
+    } catch (error) {
+      if (!(error instanceof PaneOwnerContentionError) || losses++ >= 1) throw error
+      owner = args.resolveOwner()
+      if (!owner) throw error
+    }
   }
-  return 'attached' in attempt ? attempt.attached : null
 }
 
 export async function spawnForStablePane(
   args: StablePaneSpawnContext
 ): Promise<{ result: PtySpawnResult; owner: StablePaneOwner | null }> {
-  let owner = args.owner
-  // Why one retry: a writer that took the pane mid-attach owns it, so attach to it (fresh absence
-  // evidence even for the same id). No owner left (closed tab) or a second loss stays an error.
-  for (let attempt = 0; owner; attempt += 1) {
-    const outcome = await attemptStablePaneAttach({ ...args, owner })
-    if ('attached' in outcome) {
-      return outcome.attached
+  return reconcilePaneOwner({
+    owner: args.owner,
+    resolveOwner: () => args.resolveOwner?.() ?? null,
+    attach: async (owner) => {
+      if (owner !== args.owner) args.onOwnerReresolved?.(owner)
+      const attempt = await attemptStablePaneAttach({ ...args, owner })
+      if ('lostTo' in attempt) throw new PaneOwnerContentionError()
+      return 'attached' in attempt ? attempt.attached : null
+    },
+    fresh: async () => {
+      const result = await args.provider.spawn(args.spawnOptions)
+      args.onFreshSpawn?.(result)
+      return { result, owner: null }
     }
-    if ('absent' in outcome) {
-      break
-    }
-    if (!outcome.lostTo || attempt > 0) {
-      throw new Error('terminal_pane_owner_changed')
-    }
-    owner = outcome.lostTo
-    args.onOwnerReresolved?.(owner)
-  }
-  const result = await args.provider.spawn(args.spawnOptions)
-  args.onFreshSpawn?.(result)
-  return { result, owner: null }
+  })
 }

@@ -1,10 +1,9 @@
 import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
-import { spawnForStablePane } from '../pane/stable-pane-attach'
+import { assertPaneStillExists, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
 import { excludeReplacedPaneOwner } from '../pane/pane-owner-replacement'
 import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
-import { clearProviderPtyState } from '../provider/state-cleanup'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { PtyIpcSpawnState } from './spawn-state'
 
@@ -28,8 +27,17 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
         ctx.replacedPaneOwner
       )
     const stablePaneOwnerCandidate = resolveOwner()
-    const expectedPtyId =
-      stablePaneOwnerCandidate?.ptyId ?? ctx.effectiveSessionAppId ?? ctx.effectiveSessionId
+    if (stablePaneOwnerCandidate) throw new PaneOwnerContentionError()
+    if (ctx.paneSpawnOperation?.mustExist && args.worktreeId && args.tabId && args.leafId) {
+      assertPaneStillExists(
+        ctx.deps.store,
+        args.worktreeId,
+        args.tabId,
+        args.leafId,
+        args.connectionId
+      )
+    }
+    const expectedPtyId = ctx.effectiveSessionAppId ?? ctx.effectiveSessionId
     if (expectedPtyId) {
       ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
       ctx.pendingRegistrationPtyId = expectedPtyId
@@ -41,37 +49,14 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           preserveExisting: !ctx.isMintedSessionId || Boolean(stablePaneOwnerCandidate)
         }) ?? false
     }
-    let sequenceBeforeProviderSpawn = expectedPtyId
+    const sequenceBeforeProviderSpawn = expectedPtyId
       ? (ctx.deps.runtime?.getPtyOutputSequence?.(expectedPtyId) ?? 0)
       : 0
     if (!ctx.preAdoptedStablePane && ctx.paneAgentLaunch) {
       ctx.paneAgentLaunch.dispatched = true
     }
-    const stablePaneSpawn = ctx.preAdoptedStablePane
-      ? ctx.preAdoptedStablePane
-      : await spawnForStablePane({
-          runtime: ctx.deps.runtime,
-          store: ctx.deps.store,
-          provider: ctx.provider,
-          spawnOptions: ctx.spawnOptions,
-          owner: stablePaneOwnerCandidate,
-          worktreeId: args.worktreeId,
-          connectionId: args.connectionId,
-          resolveOwner,
-          onOwnerReresolved: (owner) => {
-            sequenceBeforeProviderSpawn = ctx.deps.runtime?.getPtyOutputSequence?.(owner.ptyId) ?? 0
-          }
-        })
-    ctx.result = stablePaneSpawn.result
-    ctx.stablePaneOwner = stablePaneSpawn.owner
-    if (
-      ctx.stablePaneOwner &&
-      ctx.isMintedSessionId &&
-      ctx.effectiveSessionAppId &&
-      ctx.effectiveSessionAppId !== ctx.result.id
-    ) {
-      clearProviderPtyState(ctx.effectiveSessionAppId)
-    }
+    ctx.result = await ctx.provider.spawn(ctx.spawnOptions)
+    ctx.stablePaneOwner = null
     ctx.rejectedRegistrationCandidate = ctx.result
     if (ctx.pendingRegistrationPtyId !== ctx.result.id) {
       if (ctx.pendingRegistrationPtyId) {

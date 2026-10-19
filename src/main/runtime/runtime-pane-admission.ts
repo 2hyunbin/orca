@@ -1,3 +1,4 @@
+import { PaneOwnerContentionError } from '../ipc/pty/pane/pane-spawn-operation'
 import { toSshExecutionHostId } from '../../shared/execution-host'
 import type {
   TerminalPaneAdmission,
@@ -102,7 +103,7 @@ export async function startInAdmittedPane<T>(
   try {
     return { outcome, result: await start(outcome) }
   } catch (error) {
-    if (outcome === 'admitted') {
+    if (outcome === 'admitted' && !(error instanceof PaneOwnerContentionError)) {
       await withdrawAdmittedPane(store, admission, hostId)
     }
     throw error

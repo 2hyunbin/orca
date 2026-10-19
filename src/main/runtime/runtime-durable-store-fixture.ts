@@ -50,7 +50,7 @@ export function withDurableRuntimeStore<
     retirePtyBinding(
       binding: { worktreeId: string; tabId: string; leafId: string; ptyId: string },
       hostId?: string | null,
-      fence?: { incarnationId: string }
+      fence?: { incarnationId: string | undefined }
     ): Promise<boolean> {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fakes that reach retirement are Store-shaped sessions; the accessors are optional and checked before use.
       const sessions = store as {

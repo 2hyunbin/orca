@@ -13,12 +13,7 @@ import {
 } from '../host-env/pi-agent'
 import { promoteAgentTeamsShimPath, deleteRequestedEnvKeys } from '../host-env/path'
 import { beginPtySpawnForWorktree } from '../host-env/fresh-spawn-routing'
-import {
-  makePaneSpawnReservationKey,
-  reservePaneSpawn,
-  paneSpawnReservationsByOwnerKey,
-  pendingRuntimePaneCreatesByOwnerKey
-} from '../pane/spawn-reservation'
+import { makePaneSpawnReservationKey } from '../pane/spawn-reservation'
 import { ptySizes } from '../delivery/visibility-state'
 import { shouldSeedPreAttachPtySize } from '../delivery/attached-pty-size'
 import { getStartupTerminalIngressIntent } from '../../terminal-startup-color-query-replies'
@@ -30,9 +25,7 @@ import { applyAgentWorkspaceTrustToSpawn } from '../../../agent-workspace-trust-
 import { prepareOpenCodePtyLaunch } from '../../../opencode/opencode-pty-launch'
 
 /** Carries deletions to provider-owned environments, including persistent older daemons. */
-export async function buildPtyIpcSpawnOptions(
-  ctx: PtyIpcSpawnState
-): Promise<{ isReattach: true } | null> {
+export async function buildPtyIpcSpawnOptions(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
   // Why here: every provider (local, daemon, SSH relay, WSL) spawns from this env.
   ctx.spawnEnv = withCodexTerminalServerIsolationEnv(
@@ -195,39 +188,7 @@ export async function buildPtyIpcSpawnOptions(
   ) {
     throw new Error('terminal_pane_identity_changed')
   }
-  if (!ctx.paneSpawnReservationKey) {
-    ctx.paneSpawnReservationKey = resolvedPaneSpawnReservationKey
-    const pendingRuntimeCreateAfterPreflight = ctx.paneSpawnReservationKey
-      ? pendingRuntimePaneCreatesByOwnerKey.get(ctx.paneSpawnReservationKey)
-      : undefined
-    if (pendingRuntimeCreateAfterPreflight) {
-      await pendingRuntimeCreateAfterPreflight.promise
-    }
-    const existingPaneSpawnAfterPreflight = ctx.paneSpawnReservationKey
-      ? paneSpawnReservationsByOwnerKey.get(ctx.paneSpawnReservationKey)
-      : undefined
-    if (existingPaneSpawnAfterPreflight) {
-      const reattach = {
-        ...(await existingPaneSpawnAfterPreflight.promise),
-        isReattach: true as const
-      }
-      // Why: discard only a distinct provisional id; the winner may have committed this id's real size.
-      if (ctx.effectiveSessionId !== undefined) {
-        const provisionalSizeKey = ctx.effectiveSessionAppId ?? ctx.effectiveSessionId
-        if (provisionalSizeKey !== reattach.id) {
-          if (ctx.hadSessionSizeBeforeAttach && ctx.sessionSizeBeforeAttach) {
-            ptySizes.set(provisionalSizeKey, ctx.sessionSizeBeforeAttach)
-          } else {
-            ptySizes.delete(provisionalSizeKey)
-          }
-        }
-      }
-      return reattach
-    }
-    ctx.paneSpawnReservation = ctx.paneSpawnReservationKey
-      ? reservePaneSpawn(ctx.paneSpawnReservationKey)
-      : null
-  }
+  ctx.paneSpawnReservationKey = resolvedPaneSpawnReservationKey
   ctx.finishTerminalInstall = beginPtySpawnForWorktree(args.worktreeId, ctx.cwd, args.connectionId)
   ctx.initiallyHidden = args.initiallyHidden === true
   // Why: daemon PTYs can emit before spawn() resolves, so the hidden mark must beat byte zero (terminal-query-authority.md §races); other providers are safe with the post-spawn mark below.
@@ -243,5 +204,4 @@ export async function buildPtyIpcSpawnOptions(
   ctx.releaseWorktreeSpawn = acquireWorktreeSpawn
     ? await acquireWorktreeSpawn.call(runtime, args.worktreeId)
     : undefined
-  return null
 }

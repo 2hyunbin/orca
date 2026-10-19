@@ -51,6 +51,86 @@ describe('remote runtime pane binding ownership', () => {
     resetRemoteRuntimeTransport()
   })
 
+  it.each(['connect', 'attach', 'stream'] as const)(
+    'resolves an old host owner refusal at %s without replaying create',
+    async (boundary) => {
+      const defaultCall = runtimeCall.getMockImplementation()
+      let refused = false
+      runtimeCall.mockImplementation(async (args: { method: string }) => {
+        if (
+          !refused &&
+          args.method === (boundary === 'connect' ? 'terminal.create' : 'terminal.resolvePane') &&
+          boundary !== 'stream'
+        ) {
+          refused = true
+          return {
+            ok: false,
+            error: { code: 'runtime_error', message: 'terminal_pane_owner_changed' }
+          }
+        }
+        return defaultCall?.(args)
+      })
+      const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+      const transport = createRemoteRuntimePtyTransport('env-1', {
+        worktreeId: 'wt-1',
+        tabId: 'tab-1',
+        leafId: 'pane:1'
+      })
+      const callbacks = { onError: vi.fn() }
+      if (boundary === 'attach')
+        transport.attach({ existingPtyId: 'remote:env-1@@terminal-1', callbacks })
+      else await transport.connect({ url: '', callbacks })
+      await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
+      if (boundary === 'stream') {
+        resolvedPaneHandle = 'terminal-2'
+        subscriptionCallbacks?.onError?.({
+          code: 'runtime_error',
+          message: 'terminal_pane_owner_changed'
+        })
+        await vi.waitFor(() => expect(transport.getPtyId()).toBe('remote:env-1@@terminal-2'))
+      }
+      expect(
+        runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.create')
+      ).toHaveLength(boundary === 'attach' ? 0 : 1)
+      expect(transport.getPtyId()).toBe(`remote:env-1@@${resolvedPaneHandle}`)
+      expect(callbacks.onError).not.toHaveBeenCalled()
+      transport.destroy?.()
+    }
+  )
+
+  it('parks unavailable owner resolution and Retry never issues a second create', async () => {
+    runtimeCall.mockImplementation(async ({ method }: { method: string }) => ({
+      ok: false,
+      error: {
+        code: 'runtime_error',
+        message: method === 'terminal.create' ? 'terminal_pane_owner_changed' : 'method_not_found'
+      }
+    }))
+    const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+    const transport = createRemoteRuntimePtyTransport('env-1', {
+      worktreeId: 'wt-1',
+      tabId: 'tab-1',
+      leafId: 'pane:1'
+    })
+    const onError = vi.fn()
+    expect(await transport.connect({ url: '', callbacks: { onError } })).toBeUndefined()
+    expect(transport.getRecoveryState?.()).toMatchObject({
+      phase: 'disconnected',
+      reason: 'ownership'
+    })
+    expect(transport.retryRecovery?.()).toBe(true)
+    await vi.waitFor(() =>
+      expect(
+        runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.resolvePane')
+      ).toHaveLength(2)
+    )
+    expect(
+      runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.create')
+    ).toHaveLength(1)
+    expect(onError).toHaveBeenCalledExactlyOnceWith('terminal_pane_owner_changed')
+    transport.destroy?.()
+  })
+
   it('settles an attach whose pane the host no longer knows instead of latching in connecting (#21344)', async () => {
     const defaultCall = runtimeCall.getMockImplementation()
     runtimeCall.mockImplementation(async (args: { method: string }) => {

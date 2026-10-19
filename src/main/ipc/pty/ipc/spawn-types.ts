@@ -75,7 +75,16 @@ export type AdoptStablePaneArgs = {
   preAllocatedHandle?: string
   tabId: string
   leafId: string
+  onAdopted?: (result: PtySpawnResult) => void
+  completed?: AdoptStablePaneResult
   ownsPaneSpawnReservation?: true
+  reservation?: import('../pane/spawn-reservation').PaneSpawnReservation
+  stoppedPtyId?: string
+  renderer?: boolean
+  signal?: AbortSignal
+  spawnFresh?: (
+    operation: import('../pane/pane-spawn-operation').PaneSpawnOperation
+  ) => Promise<PtySpawnResult>
 }
 
 export type AdoptStablePaneResult = {

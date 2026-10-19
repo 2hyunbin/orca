@@ -1,3 +1,4 @@
+import { fenceFreshPaneBinding, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
   ptyOwnership,
@@ -22,7 +23,6 @@ import { seedTerminalRestoreRecordsFromSpawnResult } from '../pane/agent-session
 import { seedResumeLaunchIdentityFromSpawn } from '../pane/resume-launch-identity'
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { recordPtySpawnTelemetry } from '../pane/spawn-telemetry'
-import { persistAdmittedStablePaneBinding } from '../pane/stable-owner'
 import {
   isNativeWindowsLocalPtySpawn,
   markNativeWindowsConptyPty
@@ -60,23 +60,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   // Seed before the first disk await so live output appends to the restored history.
   seedHeadlessTerminalFromSpawnResult(ctx.deps.runtime, ctx.result, ctx.spawnIdentityPaneKey)
   seedTerminalRestoreRecordsFromSpawnResult(ctx.deps.runtime, ctx.result)
-  try {
-    ctx.stablePaneBindingPersisted = await persistAdmittedStablePaneBinding({
-      store: ctx.hostSessionBinding?.store,
-      owner: ctx.stablePaneOwner,
-      result: ctx.result,
-      worktreeId: ctx.hostSessionBinding?.worktreeId,
-      startupCwd: ctx.cwd
-    })
-  } catch (error) {
-    if (error instanceof Error && error.message === 'terminal_pane_owner_changed') {
-      throw error
-    }
-    console.error('[pty] failed to persist runtime PTY binding after attach:', error)
-    throw Object.assign(new Error(createTerminalSessionStateSaveFailureMessage(error)), {
-      agentSessionOperationOutcome: 'unknown' as const
-    })
-  }
+
   if (ctx.result.agentSessionEnsure?.disposition === 'adopted') {
     // Why: an adoption is an attach to a live owner by definition, but an adopted reply can omit
     // isReattach; derive it once so the size commit and the reservation agree.
@@ -135,7 +119,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       agentSessionEnsure: ctx.result.agentSessionEnsure
     }
   }
-  if (ctx.hostSessionBinding && !ctx.stablePaneBindingPersisted) {
+  if (ctx.hostSessionBinding) {
     try {
       const { store, worktreeId, tabId, leafId, expectedSourceBinding, placement } =
         ctx.hostSessionBinding
@@ -152,14 +136,19 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         ...(placement ? { placement } : {}),
         origin: spawnCommitBindingOrigin(ctx.result, expectedSourceBinding)
       }
-      const persisted = await store.persistPtyBinding(binding)
+      const persisted = await store.persistPtyBinding(
+        fenceFreshPaneBinding(store, binding, undefined, args.connectionId)
+      )
       if (persisted === false) {
         throw new Error('terminal_split_source_not_found')
       }
     } catch (err) {
       console.error('[pty] failed to persist runtime PTY binding after spawn:', err)
       await discardUnpersistedPtySpawn(ctx.provider, ctx.result)
-      if (err instanceof Error && err.message === 'terminal_split_source_not_found') {
+      if (
+        err instanceof PaneOwnerContentionError ||
+        (err instanceof Error && err.message === 'terminal_split_source_not_found')
+      ) {
         throw err
       }
       throw Object.assign(new Error(createTerminalSessionStateSaveFailureMessage(err)), {
@@ -305,5 +294,5 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       : { snapshotKittyKeyboardFlags: undefined }),
     isReattach: true
   })
-  return response
+  return { ...ctx.result, ...response }
 }

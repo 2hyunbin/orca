@@ -24,14 +24,8 @@ import { PI_PROCESS_OWNER_ENV_KEYS } from '../../../pty/pi-process-owner-env'
 import { resolveConfiguredTerminalShellArgs } from '../configured-terminal-shell-args'
 import { withCodexTerminalServerIsolationEnv } from '../../../../shared/codex-terminal-server-isolation'
 import { planCodexNoDaemonLaunch } from '../../../pty/codex-no-daemon-launch-command'
-import { resolveStablePaneOwner } from '../pane/stable-owner'
 import { getStartupTerminalIngressIntent } from '../../terminal-startup-color-query-replies'
-import {
-  joinPaneSpawn,
-  makePaneSpawnReservationKey,
-  reservePaneSpawn,
-  paneSpawnReservationsByOwnerKey
-} from '../pane/spawn-reservation'
+import { makePaneSpawnReservationKey } from '../pane/spawn-reservation'
 import type { RuntimePtySpawnState } from './spawn-state'
 import { applyAgentWorkspaceTrustToSpawn } from '../../../agent-workspace-trust-spawn'
 import { prepareAntigravityAccountForLaunch } from '../../../antigravity/native-account-launch'
@@ -252,56 +246,8 @@ export async function buildRuntimePtySpawnOptions(
   ) {
     throw new Error('terminal_pane_identity_changed')
   }
-  if (!ctx.paneSpawnReservationKey) {
-    ctx.paneSpawnReservationKey = resolvedPaneSpawnReservationKey
-    const existingPaneSpawn = ctx.spawnIdentityPaneKey
-      ? paneSpawnReservationsByOwnerKey.get(resolvedPaneSpawnReservationKey!)
-      : undefined
-    const concurrentResult = existingPaneSpawn ? await joinPaneSpawn(existingPaneSpawn) : null
-    if (concurrentResult) {
-      const concurrentOwner = resolveStablePaneOwner(
-        ctx.deps.runtime,
-        ctx.deps.store,
-        ctx.spawnIdentityPaneKey,
-        args.worktreeId,
-        args.connectionId
-      )
-      if (
-        !concurrentOwner?.handle ||
-        concurrentOwner.ptyId !== concurrentResult.id ||
-        (concurrentOwner.incarnationId !== undefined &&
-          concurrentResult.incarnationId !== undefined &&
-          concurrentOwner.incarnationId !== concurrentResult.incarnationId)
-      ) {
-        throw new Error('terminal_pane_owner_unknown')
-      }
-      const reattach = {
-        id: concurrentOwner.ptyId,
-        ...(concurrentOwner.incarnationId ? { incarnationId: concurrentOwner.incarnationId } : {}),
-        stablePaneOwner: {
-          handle: concurrentOwner.handle,
-          tabId: concurrentOwner.tabId,
-          leafId: concurrentOwner.leafId
-        }
-      }
-      // Why: the winner owns its id's size; only a distinct losing session id remains provisional.
-      if (ctx.sessionId !== undefined) {
-        const provisionalSizeKey = ctx.effectiveSessionAppId ?? ctx.sessionId
-        if (provisionalSizeKey !== reattach.id) {
-          if (ctx.hadSessionSizeBeforeAttach && ctx.sessionSizeBeforeAttach) {
-            ptySizes.set(provisionalSizeKey, ctx.sessionSizeBeforeAttach)
-          } else {
-            ptySizes.delete(provisionalSizeKey)
-          }
-        }
-      }
-      return reattach
-    }
-  }
+  ctx.paneSpawnReservationKey = resolvedPaneSpawnReservationKey
   ctx.finishTerminalInstall = beginPtySpawnForWorktree(args.worktreeId, ctx.cwd, args.connectionId)
-  ctx.paneSpawnReservation ??= ctx.paneSpawnReservationKey
-    ? reservePaneSpawn(ctx.paneSpawnReservationKey)
-    : null
   ctx.stablePaneOwner = null
   ctx.stablePaneBindingPersisted = false
   ctx.rejectedRegistrationCandidate = null

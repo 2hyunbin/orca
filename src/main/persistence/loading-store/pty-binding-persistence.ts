@@ -98,7 +98,7 @@ export class PtyBindingPersistenceOperations {
   async retirePtyBinding(
     binding: Pick<PersistPtyBindingArgs, 'worktreeId' | 'tabId' | 'leafId' | 'ptyId'>,
     hostId?: string | null,
-    fence?: { incarnationId: string }
+    fence?: { incarnationId: string | undefined }
   ): Promise<boolean> {
     const { runtime, sessions } = this[ptyBindingPersistenceOperationsContext]
     const resolved = resolveHostId(hostId)

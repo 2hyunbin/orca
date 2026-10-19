@@ -53,7 +53,7 @@ export async function releaseAbsentPaneOwner(
   }
   return retireReplacedPaneBinding(store, {
     ptyId: owner.ptyId,
-    ...(owner.persistedIncarnationId ? { incarnationId: owner.persistedIncarnationId } : {}),
+    absenceFence: { incarnationId: owner.persistedIncarnationId },
     pane: {
       worktreeId,
       tabId: owner.tabId,

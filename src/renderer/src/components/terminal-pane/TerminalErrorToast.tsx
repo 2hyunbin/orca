@@ -172,8 +172,8 @@ export function humanizeTerminalError(error: string): string {
   }
   humanized = humanized.replaceAll(PANE_OWNER_CHANGED_MARKER, () =>
     translate(
-      'auto.components.terminal.pane.TerminalErrorToast.ownerChanged',
-      'Another connection took over this terminal while Orca was reconnecting it. Click Retry to reconnect.'
+      'auto.components.terminal.pane.TerminalErrorToast.ownerUnknown',
+      "Orca couldn't verify this terminal's owner."
     )
   )
   humanized = humanized.replace(SOURCE_RESTORE_REQUIRED.replaceAll, () =>

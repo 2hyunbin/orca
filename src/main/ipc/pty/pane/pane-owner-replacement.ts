@@ -84,15 +84,11 @@ export async function retireReplacedPaneBinding(
   replaced: ReplacedPaneOwner & {
     pane: NonNullable<ReplacedPaneOwner['pane']>
     /** Also fence on the saved incarnation, for an id the host reported absent rather than stopped. */
-    incarnationId?: string
+    absenceFence?: { incarnationId: string | undefined }
   }
 ): Promise<boolean> {
   const { hostId, ...pane } = replaced.pane
-  return store.retirePtyBinding(
-    { ...pane, ptyId: replaced.ptyId },
-    hostId,
-    replaced.incarnationId ? { incarnationId: replaced.incarnationId } : undefined
-  )
+  return store.retirePtyBinding({ ...pane, ptyId: replaced.ptyId }, hostId, replaced.absenceFence)
 }
 
 /** Best effort: a failed replacement must not leave the stopped id bound for the remount to reattach. */

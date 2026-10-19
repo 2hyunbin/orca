@@ -38,6 +38,10 @@ export type RuntimePtyController = {
     leafId: string
   }): () => void
   adoptStablePane?(opts: {
+    signal?: AbortSignal
+    spawnFresh?: (
+      operation: import('../ipc/pty/pane/pane-spawn-operation').PaneSpawnOperation
+    ) => Promise<PtySpawnResult>
     cols: number
     rows: number
     cwd?: string
@@ -96,6 +100,7 @@ export type RuntimePtyController = {
     signal?: AbortSignal
     refuseSleptWorktree?: boolean
     onPtySpawnCommitted?: () => void
+    paneSpawnOperation?: import('../ipc/pty/pane/pane-spawn-operation').PaneSpawnOperation
     adoptedStablePane?: {
       result: PtySpawnResult
       owner: {
