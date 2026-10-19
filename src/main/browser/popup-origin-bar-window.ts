@@ -244,7 +244,8 @@ export function openPopupWithOriginBar(
   // load completion means a dropped write can never leave a stale origin up
   // for the lifetime of the page.
   contentWebContents.on('did-finish-load', renderOrigin)
-  const handlePageTitleUpdated = (_event: Electron.Event, title: string): void => {
+  const handlePageTitleUpdated = (event: Electron.Event, title: string): void => {
+    event.preventDefault()
     if (!window.isDestroyed() && title && currentUrl !== 'about:blank') {
       window.setTitle(title)
     }

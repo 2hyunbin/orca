@@ -351,11 +351,15 @@ describe('openPopupWithOriginBar', () => {
       'https://accounts.example.com/oauth?code=SECRET'
     )
     expect(lastWindow().options.title).toBe('about:blank')
-    adopted.emit('page-title-updated', {}, 'Uncommitted destination')
+    const blankTitleEvent = { preventDefault: vi.fn() }
+    adopted.emit('page-title-updated', blankTitleEvent, 'Uncommitted destination')
+    expect(blankTitleEvent.preventDefault).toHaveBeenCalledOnce()
     expect(lastWindow().setTitle).toHaveBeenLastCalledWith('about:blank')
     adopted.emit('did-navigate', {}, 'https://accounts.example.com/oauth')
 
-    adopted.emit('page-title-updated', {}, 'Sign in to Example')
+    const committedTitleEvent = { preventDefault: vi.fn() }
+    adopted.emit('page-title-updated', committedTitleEvent, 'Sign in to Example')
+    expect(committedTitleEvent.preventDefault).toHaveBeenCalledOnce()
     expect(lastWindow().setTitle).toHaveBeenLastCalledWith('Sign in to Example')
 
     // A stale title must not survive a cross-origin navigation.
@@ -368,7 +372,7 @@ describe('openPopupWithOriginBar', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the presenter's WebContents surface.
     openPopupWithOriginBar({ webContents: adopted as never }, 'https://requested.example/auth')
     const { bar } = lastViews()
-    adopted.emit('page-title-updated', {}, 'https://requested.example')
+    adopted.emit('page-title-updated', { preventDefault: vi.fn() }, 'https://requested.example')
     adopted.emit('did-start-navigation', {}, 'https://requested.example/auth')
     adopted.emit('will-redirect', {}, 'https://redirect.example/auth')
     adopted.emit('did-fail-load', {}, -3, 'ERR_ABORTED', 'https://redirect.example/auth', true)
@@ -418,7 +422,7 @@ describe('openPopupWithOriginBar', () => {
     openPopupWithOriginBar({ webContents: adopted as never }, adopted.mainFrame.url)
     const { bar } = lastViews()
     bar.webContents.emit('did-finish-load')
-    adopted.emit('page-title-updated', {}, 'Stable popup title')
+    adopted.emit('page-title-updated', { preventDefault: vi.fn() }, 'Stable popup title')
     bar.webContents.executeJavaScript.mockClear()
     const titleUpdates = lastWindow().setTitle.mock.calls.length
 
