@@ -7,14 +7,12 @@ import type { RuntimeWorktreeTerminalSleepResult } from '../../../../shared/runt
 import { WORKTREE_TERMINAL_SLEEP_TIMEOUT_MS } from '../../orca-runtime-postlude'
 import { teardownRpcDeadline } from '../../worktree-teardown-deadline'
 import { sleptNothing } from './worktree-terminal-sleep-result'
-import { hostWorktreeSleepKey } from './worktree-terminal-sleep-key'
-import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
+import { resolvedWorktreeSleepKey } from './worktree-terminal-sleep-key'
 
 export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends OrcaRuntimeWithWorktreeSleepResumeRecording {
-  /** Same host as a spawn's `spawnWorktreeTarget`: a `runtime:` stamp runs here, like local. */
   protected getWorktreeTerminalSleepKey(worktree: ResolvedWorktree): string {
-    const { resolvedConnectionId } = this.getWorktreeHostFence(worktree)
-    return hostWorktreeSleepKey(getConnectionExecutionHostId(resolvedConnectionId), worktree.id)
+    const repo = worktree.repoId ? this.store?.getRepo?.(worktree.repoId) : undefined
+    return resolvedWorktreeSleepKey(worktree, repo)
   }
 
   protected async sleepResolvedWorktreeTerminals(

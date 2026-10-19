@@ -10,8 +10,20 @@ await import('./orca-runtime-test-lifecycle.spec')
 const { TEST_WORKTREE_ID, TEST_WORKTREE_PATH, store } =
   await import('./orca-runtime-test-fixtures.spec')
 
-async function sleepLocalCopy() {
-  const runtime = new OrcaRuntimeService(store)
+// A `runtime:` stamp whose files sit on a nested SSH target: its spawns name that target.
+const nestedSshRepo = {
+  ...store.getRepos()[0],
+  executionHostId: 'runtime:env-a',
+  connectionId: 'ssh-nested'
+}
+const nestedSshStore = {
+  ...store,
+  getRepo: () => nestedSshRepo,
+  getRepos: () => [nestedSshRepo]
+}
+
+async function sleepLocalCopy(runtimeStore: typeof store = store) {
+  const runtime = new OrcaRuntimeService(runtimeStore)
   const events: RuntimeClientEvent[] = []
   runtime.onClientEvent((event) => events.push(event))
   const processLists = [[{ id: 'pty-local', cwd: TEST_WORKTREE_PATH, title: 'Shell' }], []]
@@ -64,5 +76,18 @@ describe('worktree terminal sleep across same-id host twins', () => {
 
     expect(phases()).toContain('woken')
     expect(runtime.getTerminalSleepClientEventSnapshot()).toEqual([])
+  })
+
+  it("a runtime-stamped project's nested SSH spawn refuses and wakes its sleep", async () => {
+    const { runtime, phases } = await sleepLocalCopy(nestedSshStore)
+    const nested = spawnWorktreeTarget(TEST_WORKTREE_ID, 'ssh-nested')
+
+    await expect(
+      runtime.acquireWorktreeTerminalSpawn(nested, { refuseSleptWorktree: true })
+    ).rejects.toThrow(WORKTREE_TERMINALS_SLEEPING_ERROR)
+    const release = await runtime.acquireWorktreeTerminalSpawn(nested)
+    release()
+
+    expect(phases()).toContain('woken')
   })
 })

@@ -1,4 +1,12 @@
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import {
+  getConnectionExecutionHostId,
+  getRepoSshConnectionId,
+  getWorktreeExecutionHostId,
+  parseExecutionHostId,
+  type ExecutionHostId
+} from '../../../../shared/execution-host'
+import type { Repo } from '../../../../shared/repo-types'
+import type { Worktree } from '../../../../shared/worktree/types'
 import { worktreeIdentityKey } from '../../../../shared/worktree/id'
 import {
   composeWorktreeHostIdentity,
@@ -15,6 +23,21 @@ export function hostWorktreeSleepKey(
   worktreeId: string
 ): HostScopedWorktreeKey {
   return composeWorktreeHostIdentity(hostId, worktreeIdentityKey(worktreeId))
+}
+
+/** The host a spawn's `spawnWorktreeTarget` names: a `runtime:` stamp runs its nested SSH here. */
+export function resolvedWorktreeSleepKey(
+  worktree: Pick<Worktree, 'id' | 'hostId'>,
+  repo: Pick<Repo, 'connectionId' | 'executionHostId'> | undefined
+): HostScopedWorktreeKey {
+  const host = parseExecutionHostId(getWorktreeExecutionHostId(worktree, repo))
+  const connectionId =
+    host?.kind === 'ssh'
+      ? host.targetId
+      : host?.kind === 'runtime' && repo
+        ? getRepoSshConnectionId(repo)
+        : null
+  return hostWorktreeSleepKey(getConnectionExecutionHostId(connectionId), worktree.id)
 }
 
 /** Host-blind match, for readers that only know the bare workspace id. */
