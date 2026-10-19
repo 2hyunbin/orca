@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parse } from 'yaml'
-import { selectGeneralE2eSpecs } from './ci-e2e-job-selection.mjs'
+import { MANAGED_SSH_E2E_SPEC_PREFIX, selectGeneralE2eSpecs } from './ci-e2e-job-selection.mjs'
 import { divergenceKind, summarizeDivergence } from './layout-save-divergence-summary.mjs'
 import {
   isLayoutOwnerSwitchOnSource,
@@ -23,8 +23,19 @@ describe('layout owner switch-on job', () => {
     expect(job.with.layout_owner).toBe('main')
     expect(JSON.parse(job.with.test_files)).toEqual(LAYOUT_OWNER_SWITCH_ON_E2E_SPECS)
     for (const spec of LAYOUT_OWNER_SWITCH_ON_E2E_SPECS) {
-      expect(existsSync(join(projectDir, spec)), spec).toBe(true)
+      if (spec !== MANAGED_SSH_E2E_SPEC_PREFIX) {
+        expect(existsSync(join(projectDir, spec)), spec).toBe(true)
+      }
     }
+    // Every spec that gates on the switch-on build marker runs here.
+    const gated = readdirSync(join(projectDir, 'tests/e2e'))
+      .filter((file) => file.endsWith('.spec.ts'))
+      .map((file) => `tests/e2e/${file}`)
+      .filter((spec) =>
+        readFileSync(join(projectDir, spec), 'utf8').includes('ORCA_LAYOUT_OWNER_MAIN')
+      )
+    expect(gated.length).toBeGreaterThan(0)
+    expect(LAYOUT_OWNER_SWITCH_ON_E2E_SPECS).toEqual(expect.arrayContaining(gated))
     expect(selectGeneralE2eSpecs(LAYOUT_OWNER_SWITCH_ON_E2E_SPECS)).not.toContain(
       'tests/e2e/workspace-layout-oracle-headless.spec.ts'
     )
@@ -81,6 +92,7 @@ describe('layout save divergence summary', () => {
           specs: [
             {
               line: 8,
+              title: 'opens',
               tests: [{ results: [{ startTime: '2026-10-19T00:00:00.000Z', duration: 1000 }] }]
             }
           ]
@@ -109,9 +121,9 @@ describe('layout save divergence summary', () => {
         'terminal <id> tab-bar entry removed': 1,
         '<n> pane(s) rebound': 1
       },
-      bySpec: { 'a.spec.ts:8': 2, unattributed: 1 },
+      bySpec: { 'a.spec.ts:8 opens': 2, unattributed: 1 },
       bySpecAndKind: {
-        'a.spec.ts:8': {
+        'a.spec.ts:8 opens': {
           'group <id> changed: tabOrder': 1,
           'workspace added': 1,
           'terminal <id> tab-bar entry removed': 1

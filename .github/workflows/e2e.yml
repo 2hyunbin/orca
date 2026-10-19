@@ -564,9 +564,32 @@ jobs:
           ORCA_E2E_ORCAD_CONVERT_HOST: docker
           ORCA_E2E_FORWARD_APP_LOGS: '1'
           SHARD: ${{ matrix.shard }}
+          LAYOUT_OWNER: ${{ inputs.layout_owner }}
+          SHARD_INDEX: ${{ strategy.job-index }}
         run: |
           export ORCA_E2E_ORCAD_CONVERT_TEMPLATE="$RUNNER_TEMP/orcad-convert-template"
-          xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/ssh-orcad- --project=electron-headless --workers=1 --shard="$SHARD"
+          REPORT_ARGS=()
+          if [ -n "$LAYOUT_OWNER" ]; then
+            test -f out/main/ORCA_LAYOUT_OWNER_MAIN
+            mkdir -p layout-divergence
+            export ORCA_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/managed-ssh-$SHARD_INDEX.jsonl"
+            export PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/layout-divergence/managed-ssh-$SHARD_INDEX-results.json"
+            REPORT_ARGS=('--reporter=list,json')
+          fi
+          xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/ssh-orcad- --project=electron-headless --workers=1 --shard="$SHARD" "${REPORT_ARGS[@]}"
+      - name: Summarize layout save divergence
+        if: always() && inputs.layout_owner == 'main'
+        continue-on-error: true
+        run: *summarize_layout_divergence
+      - name: Upload layout save divergence report
+        if: always() && inputs.layout_owner == 'main'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: layout-divergence-managed-ssh-${{ strategy.job-index }}${{ inputs.artifact_suffix }}-attempt-${{ github.run_attempt }}
+          path: layout-divergence/
+          retention-days: 14
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

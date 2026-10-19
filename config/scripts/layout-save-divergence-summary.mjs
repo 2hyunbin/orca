@@ -32,7 +32,8 @@ export function testSpans(reports) {
           const start = Date.parse(result.startTime)
           if (Number.isFinite(start)) {
             spans.push({
-              spec: `${spec.file ?? suiteFile}:${spec.line}`,
+              // The title too: a loop declares many tests on one line.
+              spec: `${spec.file ?? suiteFile}:${spec.line} ${spec.title}`,
               start,
               end: start + (result.duration ?? 0)
             })
