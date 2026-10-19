@@ -110,20 +110,24 @@ describe.skipIf(process.platform === 'win32')('snapshot room on a real shell (#3
     const shortfall = orcadSnapshotShortfallKb(keepAll)
     expect(shortfall).toBeGreaterThan(0)
     expect(
-      orcadSnapshotShortfallMessage(keepAll ?? { neededKb: 0, availableKb: 0 }, shortfall ?? 0, {
-        userDataDir: '/home/work/.orca',
-        baseDir: '/home/work/.orca-remote',
-        fullVersion: '0.1.0+77dfa08c40aa',
-        active: '0.1.0+aa01'
-      })
+      orcadSnapshotShortfallMessage(
+        keepAll ?? { neededKb: 0, availableKb: 0, reclaimKb: 0 },
+        shortfall ?? 0,
+        {
+          userDataDir: '/home/work/.orca',
+          baseDir: '/home/work/.orca-remote',
+          fullVersion: '0.1.0+77dfa08c40aa',
+          active: '0.1.0+aa01'
+        }
+      )
     ).toMatch(
-      /has 0 KB free.*keeps running the current server \(0\.1\.0\+aa01\).*Nothing was stopped/u
+      /has 0 KB free, and.*left the current server \(0\.1\.0\+aa01\) in place.*Nothing was stopped/u
     )
   })
 
   it('reads no room answer from a host that printed none', () => {
     expect(parseOrcadSnapshotSpace('')).toBeNull()
     expect(orcadSnapshotShortfallKb(null)).toBeNull()
-    expect(orcadSnapshotShortfallKb({ neededKb: 0, availableKb: 0 })).toBeNull()
+    expect(orcadSnapshotShortfallKb({ neededKb: 0, availableKb: 0, reclaimKb: 0 })).toBeNull()
   })
 })

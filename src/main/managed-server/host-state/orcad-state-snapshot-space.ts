@@ -60,7 +60,8 @@ export function orcadSnapshotSpaceCommand(
   ].join(' ')
 }
 
-export type OrcadSnapshotSpace = { neededKb: number; availableKb: number }
+/** `availableKb` counts `reclaimKb`: room the capture's own prune frees before it writes. */
+export type OrcadSnapshotSpace = { neededKb: number; availableKb: number; reclaimKb: number }
 
 /** Null when the answer is missing or unreadable: the capture itself still decides. */
 export function parseOrcadSnapshotSpace(output: string): OrcadSnapshotSpace | null {
@@ -73,7 +74,11 @@ export function parseOrcadSnapshotSpace(output: string): OrcadSnapshotSpace | nu
   if (!need || !reclaim || !/^\d+$/u.test(need) || !/^\d+$/u.test(reclaim) || available === null) {
     return null
   }
-  return { neededKb: Number(need), availableKb: available + Number(reclaim) }
+  return {
+    neededKb: Number(need),
+    availableKb: available + Number(reclaim),
+    reclaimKb: Number(reclaim)
+  }
 }
 
 /** The KB the host is short of a snapshot, or null when it fits (or there is nothing to keep). */
@@ -90,13 +95,19 @@ export function orcadSnapshotShortfallMessage(
   shortfallKb: number,
   where: { userDataDir: string; baseDir: string; fullVersion: string; active: string | null }
 ): string {
+  // Says only what the update did: the record names the server, not whether it is up.
   const keeps = where.active
-    ? `Orca keeps running the current server (${where.active}) until then.`
+    ? `The update left the current server (${where.active}) in place.`
     : 'Orca cannot start its server on this host until then.'
+  const free = formatKb(space.availableKb - space.reclaimKb)
+  const reclaim =
+    space.reclaimKb > 0
+      ? ` (plus ${formatKb(space.reclaimKb)} Orca would reclaim from earlier snapshots)`
+      : ''
   return (
     `Not enough disk space to snapshot ${where.userDataDir} before activating ` +
     `${where.fullVersion}: the filesystem holding ${where.baseDir} has ` +
-    `${formatKb(space.availableKb)} free, and the snapshot needs about ` +
+    `${free} free${reclaim}, and the snapshot needs about ` +
     `${formatKb(space.neededKb)}. Free at least ${formatKb(shortfallKb)} there (or raise the ` +
     `quota), then reconnect. ${keeps} Nothing was stopped.`
   )
