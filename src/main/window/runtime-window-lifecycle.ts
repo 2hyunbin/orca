@@ -176,6 +176,7 @@ export function registerRuntimeWindowLifecycle(
     },
     renameTerminal: (tabId, title, options) =>
       send('ui:renameTerminal', { tabId, title, ...options }),
+    setPaneTitle: (tabId, leafId, title) => send('ui:setPaneTitle', { tabId, leafId, title }),
     focusTerminal: (tabId, worktreeId, leafId) =>
       send('ui:focusTerminal', { tabId, worktreeId, leafId }),
     revealTerminalPane: (target) => revealTerminalPaneInWindow(mainWindow, target),
