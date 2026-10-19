@@ -404,6 +404,30 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
     expect(bridge.detach.mock.calls.map(([args]) => args.acquisitionId).sort()).toEqual([1, 2])
   })
 
+  it('keeps the newest attach’s viewer when an older attach answers last', async () => {
+    const answers: ((acquisitionId: number) => void)[] = []
+    bridge.attach.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          answers.push((acquisitionId) =>
+            resolve({ status: 'attached', replay: `SCREEN-${acquisitionId}`, acquisitionId })
+          )
+        )
+    )
+    const transport = createLegacyRelayBridgeTransport(PTY, innerTransport())
+    const older = transport.connect({ url: '', sessionId: PTY, callbacks: callbacks() })
+    transport.attach({ existingPtyId: PTY, callbacks: callbacks() })
+    await vi.waitFor(() => expect(answers).toHaveLength(2))
+    // The newer attach answers first, then the older one.
+    answers[1](2)
+    await vi.waitFor(() => expect(transport.isConnected()).toBe(true))
+    answers[0](1)
+    await expect(older).resolves.toMatchObject({ replay: '' })
+    expect(bridge.detach.mock.calls.map(([args]) => args.acquisitionId)).toEqual([1])
+    transport.detach?.()
+    expect(bridge.detach.mock.calls.map(([args]) => args.acquisitionId)).toEqual([1, 2])
+  })
+
   it('hands any other connect straight to the managed server’s transport', async () => {
     const inner = innerTransport()
     const transport = createLegacyRelayBridgeTransport(PTY, inner)
