@@ -51,7 +51,8 @@ export function copyLaunchConfig(config: SleepingAgentLaunchConfig): SleepingAge
 export function resumeRecordFromStatus(args: {
   entry: ResumeRecordStatus
   worktreeId: string
-  tab?: ResumeRecordTab
+  /** Read only once the status can leave a record: a snapshot replays hundreds of statuses. */
+  tabOf?: () => ResumeRecordTab | undefined
   capturedAt: number
   launchConfig?: SleepingAgentLaunchConfig
   origin?: SleepingAgentSessionRecord['origin']
@@ -67,7 +68,7 @@ export function resumeRecordFromStatus(args: {
   if (!getAgentResumeArgv(agent, args.entry.providerSession)) {
     return null
   }
-  const tab = args.tab
+  const tab = args.tabOf?.()
   return {
     paneKey: args.entry.paneKey,
     ...(tab ? { tabId: tab.id } : {}),
@@ -150,7 +151,7 @@ export function liveResumeRecord(args: {
           ? { ...args.entry, prompt: '', lastAssistantMessage: undefined }
           : args.entry,
         worktreeId,
-        tab: args.tabOf(worktreeId),
+        tabOf: () => args.tabOf(worktreeId),
         capturedAt: args.capturedAt,
         launchConfig: args.launchConfig,
         origin: 'live'
@@ -201,7 +202,7 @@ export function capturedResumeRecord(args: {
   const record = resumeRecordFromStatus({
     entry,
     worktreeId,
-    tab: args.tabOf(worktreeId),
+    tabOf: () => args.tabOf(worktreeId),
     capturedAt,
     launchConfig: args.launchConfigOf(),
     origin
