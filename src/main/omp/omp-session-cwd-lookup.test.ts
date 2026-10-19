@@ -52,12 +52,7 @@ async function lookup(cwd = '/repo/orca', homeDir = join(root, 'home'), temp = j
     launchEnv
   })
   return store
-    ? OMP_TRANSCRIPT_IMPORT.findTranscript({
-        providerSessionId: ID,
-        store,
-        workspaceCwd: cwd,
-        launchEnv
-      })
+    ? OMP_TRANSCRIPT_IMPORT.findTranscript({ providerSessionId: ID, store, workspaceCwd: cwd, launchEnv })
     : null
 }
 
