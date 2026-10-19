@@ -11,6 +11,7 @@ import {
   type AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
 import { activeProviderContext } from '../../../shared/agent-session-provider-context'
+import { projectStructuredAgentSessionMessages } from '../../../shared/structured-agent-session-message-projection'
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
@@ -100,12 +101,23 @@ function seedLegacy(sessionId: string, rows: readonly Legacy[]): void {
   const insert = db().prepare(
     `INSERT INTO queued_messages (session_id, message_id, position, body_json, fingerprint,
        created_at, host_instance, state, hold_reason, returned_reason, consumed_as)
-     VALUES (?, ?, ?, ?, '', 0, 'earlier', ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, 0, 'earlier', ?, ?, ?, ?)`
   )
   rows.forEach(([id, state, text, consumedAs, hold], index) => {
     const body = text === null ? '{' : JSON.stringify(message(text))
+    const print = text === null ? '' : agentSessionSendBodyFingerprint(sessionId, message(text))
     const reason = state === 'returned' ? 'refused before' : null
-    insert.run(sessionId, id, index + 1, body, state, hold ?? null, reason, consumedAs ?? null)
+    insert.run(
+      sessionId,
+      id,
+      index + 1,
+      body,
+      print,
+      state,
+      hold ?? null,
+      reason,
+      consumedAs ?? null
+    )
   })
 }
 
@@ -156,19 +168,17 @@ it("moves an earlier build's cards into the journal, each action its own card, t
     'refused, never settled',
     'providerRejected'
   )
-  await handOff(earlier, 'att-echoed', 'disp-echoed', 'withdrawn, yet delivered', 'cancelled')
-  await earlier.appendItem(
-    { provider: 'codex', threadId: 'thread', turnId: 'turn-echo', ordinal: 0 },
-    message('withdrawn, yet delivered'),
-    { fence: 0, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
-  )
+  // Stopped after hand-over, which that build sent back to waiting: the agent may have them.
+  await handOff(earlier, 'att-stopped', 'stopped-same', 'stopped, unchanged', 'cancelled')
+  await handOff(earlier, 'att-edited', 'stopped-edited', 'stopped, then edited', 'cancelled')
   await earlier.close()
   seedLegacy(SESSION, [
     ['ret-present', 'returned', 'returned here, edited', 'att-present'],
     ['ret-gone', 'returned', 'returned in a lost epoch', 'att-gone'],
     ['cmd-gone', 'returned', '/compact', 'att-cmd'],
     ['disp-refused', 'dispatched', 'refused, never settled', 'att-refused'],
-    ['disp-echoed', 'dispatched', 'withdrawn, yet delivered', 'att-echoed'],
+    ['stopped-same', 'waiting', 'stopped, unchanged'],
+    ['stopped-edited', 'waiting', 'stopped, then edited, changed'],
     ['orphan', 'dispatched', 'its hand-off is gone', 'att-orphan'],
     ['edited', 'waiting', 'waiting, edited'],
     ['held', 'waiting', 'its send failed', undefined, 'send_failed'],
@@ -186,6 +196,7 @@ it("moves an earlier build's cards into the journal, each action its own card, t
     { messageId: 'ret-gone', state: 'returned' },
     { messageId: 'cmd-gone', state: 'returned' },
     { messageId: 'disp-refused', state: 'returned' },
+    { messageId: 'stopped-edited', state: 'waiting', paused: true },
     { messageId: 'edited', state: 'waiting' },
     { messageId: 'held', state: 'waiting', paused: true }
   ]
@@ -223,10 +234,20 @@ it("moves an earlier build's cards into the journal, each action its own card, t
   expect(queueRows().slice(3)).toEqual([
     'cmd-gone:queued+refusal',
     'disp-refused:queued',
+    'stopped-same:queued',
+    'stopped-edited:queued',
     'orphan:queued',
     'edited:queued',
     'held:queued'
   ])
+  // Unchanged, it is spent on that hand-off: drawn as the person's send its Stop took back.
+  const stopped = async () => {
+    const { items, submissions } = await rig.host.journalSnapshot(SESSION)
+    const drawn = projectStructuredAgentSessionMessages(items, [], submissions)
+    return drawn.find((entry) => entry.id === agentJournalSubmissionKey('att-stopped'))
+      ?.stoppedBeforeStart
+  }
+  expect(await stopped()).toBe(true)
 
   // The command card's own turn reports its refusal later: it is spent, not left holding the queue.
   const live = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
@@ -242,13 +263,20 @@ it("moves an earlier build's cards into the journal, each action its own card, t
   expect(await rig.deleteQueued('disp-refused')).toMatchObject({ value: { deleted: true } })
   await rig.resume()
   await eventually(async () => expect(await rig.handoff('edited')).toBeDefined())
-  expect(await rig.handoff('held')).toBeUndefined()
+  await nothingSentTo('held')
+  expect((await rig.handoff('stopped-edited'))?.clientMessageId).toBe('att-edited')
+  // Edited since, it waits for its own Send.
+  expect(await rig.sendNow('stopped-edited')).toMatchObject({ ok: true })
+  const resent = await rig.handoffId('stopped-edited')
+  expect(resent).not.toBe('att-edited')
+  await rig.settleAccepted(resent, 'resent')
 
   // A third open finds nothing to move, and an old Delete still answers from its receipt.
   const rows = queueRows()
   await rig.restartHostProcess()
   await rig.drafts()
   expect(queueRows()).toEqual(rows)
+  expect(await stopped()).toBe(true)
   expect(legacyIds()).toEqual(['broken'])
   expect(await rig.deleteQueued('ret-present', deletion)).toMatchObject({
     replayed: true,

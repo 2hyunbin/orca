@@ -20,6 +20,11 @@ export type QueuedMessageState = 'waiting' | 'dispatched' | 'returned' | 'withdr
  *  derives (`QUEUED_MESSAGE_RETIRED_HOLD_REASONS`) as none. */
 export type QueuedMessageHoldReason = typeof QUEUED_MESSAGE_PAUSED_SEND_FAILED
 
+/** Host-only: a card an earlier build put back to waiting whose hand-off may have reached the agent,
+ *  edited or sent again since, so it waits for its own Send (`journal-queue-import.ts`). Published
+ *  as a plain hold. */
+export const QUEUED_MESSAGE_HELD_DELIVERY_UNCONFIRMED = 'delivery_unconfirmed'
+
 /** Definitively unsettled: what Stop, /clear, Edit and the published-bytes bound count, and
  *  what the published list shows. Pending/unknown/accepted deliveries and
  *  withdrawn cards stay outside it. */
