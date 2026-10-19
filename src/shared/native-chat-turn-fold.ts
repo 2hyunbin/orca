@@ -39,8 +39,8 @@ export type NativeChatTurnFoldRow = {
    *  turn's answer, so a turn that failed shows the error as its end. */
   reportsFailure: boolean
   /** Whether the row explains what became of the turn: a compaction's result, that
-   *  the response was interrupted, or that a hook blocked the message. It never folds: hiding it would leave the
-   *  turn's status as the only trace of it. */
+   *  the response was interrupted, or that a hook blocked the message. It never
+   *  folds: hiding it would leave the turn's status as the only trace of it. */
   explainsTurn: boolean
 }
 

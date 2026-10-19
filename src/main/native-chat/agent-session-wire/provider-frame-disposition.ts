@@ -193,12 +193,15 @@ const CODEX_NOTIFICATION_CLASSIFICATIONS: Readonly<Record<string, ProviderFrameC
 const CLAUDE_FRAME_CLASSIFICATIONS: Readonly<Record<string, ProviderFrameClassification>> =
   PROVIDER_FRAME_CLASSIFICATIONS.claude
 
-/** A Codex prompt hook that refused the message. Other hooks' blocks reach the model as their
- *  tool's result, so they write no row of their own. */
-export function codexPromptHookOutcome(payload: unknown): AgentSessionHookOutcome | null {
+/** A Codex prompt hook that refused the message, with its entries. Other hooks' blocks reach the
+ *  model as their tool's result, so they write no row of their own. */
+export function codexPromptHookOutcome(
+  payload: unknown
+): { status: AgentSessionHookOutcome; entries: unknown[] } | null {
   const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
   const status = run?.eventName === 'userPromptSubmit' ? run.status : null
-  return status === 'blocked' || status === 'stopped' ? status : null
+  const entries: unknown[] = Array.isArray(run?.entries) ? run.entries : []
+  return status === 'blocked' || status === 'stopped' ? { status, entries } : null
 }
 
 /** Each provider's own table, by provider id: an unlisted provider has none, so every frame it

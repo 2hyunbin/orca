@@ -5,7 +5,7 @@ import {
   type AcpCompaction,
   type AcpCompactionFrame
 } from './acp-compaction-turn'
-import type { AcpDialect, AcpHookBlock } from './acp-dialects/acp-dialect'
+import type { AcpDialect, AcpTurnEnding } from './acp-dialects/acp-dialect'
 import { hookOutcomeRowBody } from '../../shared/agent-session-hook-outcome'
 import type { SessionUpdate } from './generated/acp-protocol.generated'
 
@@ -17,16 +17,6 @@ export type AcpPromptTurn = {
   durationMs?: number
   /** A `/compact` running as the turn the host opened for it. */
   compaction?: AcpCompaction
-}
-
-/** How a turn ended, as the agent reported it. */
-export type AcpTurnEnding = {
-  stopReason: string
-  at: number
-  durationMs?: number
-  failureDetail?: string
-  notSignedIn?: boolean
-  hookBlock?: AcpHookBlock
 }
 
 /** An injected identity is known before any provider output arrives. */

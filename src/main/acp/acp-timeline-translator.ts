@@ -3,9 +3,13 @@ import { BoundedMap } from '../../shared/bounded-map'
 import type { AcpTimelineEvent as ProviderTimelineEvent } from './acp-timeline-event'
 import { acpNotificationEnvelopeSchema, AcpContextTimeline } from './acp-context-usage'
 import { AcpBackgroundTaskTimeline } from './acp-background-task-timeline'
-import { GENERIC_ACP_DIALECT, type AcpDialect } from './acp-dialects/acp-dialect'
+import {
+  GENERIC_ACP_DIALECT,
+  type AcpDialect,
+  type AcpTurnEnding
+} from './acp-dialects/acp-dialect'
 import { AcpAgentError } from './acp-errors'
-import { acpTurnEndEvents, AcpPromptTurns, type AcpTurnEnding } from './acp-prompt-turns'
+import { acpTurnEndEvents, AcpPromptTurns } from './acp-prompt-turns'
 import { readAcpSessionEvent, type AcpSessionEvent } from './acp-session-events'
 import { translateAcpRequest } from './acp-timeline-requests'
 import { ACP_SUBSTANTIVE_UPDATES, acpSessionUpdate } from './acp-session-update'
@@ -247,9 +251,11 @@ export class AcpTimelineTranslator {
     }
     const end = extension?.end
     if (end && turn) {
+      // A hook's refusal is the whole turn: it ends here, and its answer adds nothing.
       if (
         this.prompts.current?.turn === turn &&
-        ['end_turn', 'cancelled'].includes(end.stopReason)
+        ['end_turn', 'cancelled'].includes(end.stopReason) &&
+        !end.hookBlock
       ) {
         this.prompts.current.durationMs = end.durationMs
       } else {

@@ -51,12 +51,7 @@ export type AcpDialectNotification =
       replay?: boolean
       at?: number
       started?: boolean
-      end?: {
-        stopReason: string
-        durationMs?: number
-        failureDetail?: string
-        hookBlock?: AcpHookBlock
-      }
+      end?: Omit<AcpTurnEnding, 'at' | 'notSignedIn'>
       /** The provider's own words for why `turn` failed, sent apart from its end. */
       failureDetail?: string
       usage?: AgentSessionContextUsage
@@ -66,6 +61,16 @@ export type AcpDialectNotification =
 
 /** A prompt hook refused the message: the turn ended, but the user did not stop it. */
 export type AcpHookBlock = { reason?: string }
+
+/** How a turn ended, as the agent reported it. */
+export type AcpTurnEnding = {
+  stopReason: string
+  at: number
+  durationMs?: number
+  failureDetail?: string
+  notSignedIn?: boolean
+  hookBlock?: AcpHookBlock
+}
 
 /** How a `/compact` the agent ended normally went, read from its reply; absent compacted. */
 export type AcpCompactionReply = { outcome: 'skipped' | 'failed'; detail: string }

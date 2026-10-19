@@ -84,14 +84,12 @@ function hookText(value: unknown): string | null {
 
 /** A blocked or stopped Codex prompt hook: every entry but its context, in Codex's order. */
 function codexHookOutcomeRow(payload: unknown): AgentJournalPlainStatusItem | null {
-  const outcome = codexPromptHookOutcome(payload)
-  const run = isProviderRecord(payload) && isProviderRecord(payload.run) ? payload.run : null
-  const entries: unknown[] = Array.isArray(run?.entries) ? run.entries : []
-  const details = entries.flatMap((entry) => {
+  const hook = codexPromptHookOutcome(payload)
+  const details = (entry: unknown) => {
     const text = isProviderRecord(entry) && entry.kind !== 'context' ? hookText(entry.text) : null
     return text ? [text] : []
-  })
-  return outcome ? hookOutcomeRowBody(outcome, details) : null
+  }
+  return hook && hookOutcomeRowBody(hook.status, hook.entries.flatMap(details))
 }
 
 function hookFailureFrameText(
@@ -152,6 +150,15 @@ export function unhandledProviderFrameJournalItem(
   }
   const serialized = serializeProviderPayload(payload)
   const bounded = boundPayload(serialized, limits)
+  const hook =
+    provider === 'codex' && kind === 'notification:hook/completed'
+      ? codexHookOutcomeRow(payload)
+      : null
+  if (hook) {
+    const providerFrame = { provider, kind, payload: bounded }
+    const text = boundInlineText(hook.text, limits).text
+    return { body: { ...hook, text, providerFrame }, classification: 'error-surface' }
+  }
   // Why: the opcode alone ("codex · notification:warning") tells the user nothing
   // and reads as protocol noise. Lead with the provider's own sentence when it has
   // one; the raw frame stays behind the row's disclosure either way.
@@ -166,12 +173,9 @@ export function unhandledProviderFrameJournalItem(
           ? 'warning'
           : undefined
       : undefined
-  const hookOutcome =
-    provider === 'codex' && method === 'hook/completed' ? codexHookOutcomeRow(payload) : null
-  const tone =
-    hookOutcome?.tone ?? noticeTone ?? (classification === 'error-surface' ? 'error' : undefined)
-  let message = hookOutcome?.text ?? readableProviderFrameText(payload)
-  if (classification === 'error-surface' && !hookOutcome) {
+  const tone = noticeTone ?? (classification === 'error-surface' ? 'error' : undefined)
+  let message = readableProviderFrameText(payload)
+  if (classification === 'error-surface') {
     message = hookFailureFrameText(provider, kind, payload, message) ?? message
   }
   if (
@@ -205,7 +209,6 @@ export function unhandledProviderFrameJournalItem(
         ? 'Context compacted'
         : (goalDisplay?.text ?? display?.text ?? `${provider} · ${kind}`),
       ...(compaction ? { presentation: 'compaction' } : {}),
-      ...(hookOutcome ? { presentation: hookOutcome.presentation } : {}),
       ...(tone ? { tone } : {}),
       providerFrame: { provider, kind, payload: bounded },
       ...(threadGoal
