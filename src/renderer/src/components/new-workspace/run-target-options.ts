@@ -7,6 +7,12 @@ import {
 } from '@/lib/project-host-setup-options'
 import { translate } from '@/i18n/i18n'
 import { boundHostList } from '@/components/host-picker/bounded-host-list'
+import {
+  buildMachineRows,
+  type MachineGroupOption,
+  type MachineGroupView,
+  type MachineRowModel
+} from './run-target-machine-rows'
 
 export type EphemeralVmRecipeOption = NonNullable<OrcaHooks['environmentRecipes']>[number]
 
@@ -19,6 +25,12 @@ export type RunTargetRowModel =
   | { key: string; kind: 'needs-setup'; option: NeedsSetupProjectHostOption }
   | { key: typeof RUN_TARGET_RECIPES_KEY; kind: 'recipes' }
   | { key: typeof RUN_TARGET_ADD_HOST_KEY; kind: 'add-host' }
+  | MachineRowModel
+
+/** Group headers label rows but can't be armed or committed. */
+export function isSelectableRunTargetRow(row: RunTargetRowModel): boolean {
+  return row.kind !== 'machine-group'
+}
 
 export function getEphemeralVmLabel(): string {
   return translate(
@@ -137,11 +149,15 @@ function buildSubmenuRows(hasRecipes: boolean, hasAddHost: boolean): RunTargetRo
 export function buildRunTargetRows({
   hostOptions,
   recipes,
+  machineGroups = [],
+  machineViews = {},
   query,
   hasAddHost
 }: {
   hostOptions: readonly ProjectHostSetupOption[]
   recipes: readonly EphemeralVmRecipeOption[]
+  machineGroups?: readonly MachineGroupOption[]
+  machineViews?: Readonly<Record<string, MachineGroupView>>
   query: string
   hasAddHost: boolean
 }): {
@@ -155,6 +171,7 @@ export function buildRunTargetRows({
   const hostRows = buildHostRows(hostOptions, trimmed)
   const rows: RunTargetRowModel[] = [
     ...hostRows.rows,
+    ...buildMachineRows({ groups: machineGroups, query: trimmed, views: machineViews }),
     ...buildSubmenuRows(matchedRecipes.length > 0, hasAddHost)
   ]
   return { rows, matchedRecipes, hiddenHostCount: hostRows.hiddenHostCount }

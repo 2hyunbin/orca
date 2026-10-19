@@ -15,9 +15,14 @@ import {
   buildRunTargetRows,
   getEphemeralVmLabel,
   getRecipeDetail,
+  isSelectableRunTargetRow,
   RUN_TARGET_ADD_HOST_KEY,
   type EphemeralVmRecipeOption
 } from './run-target-options'
+import { useRunTargetMachines, type RunTargetMachineProps } from './use-run-target-machines'
+import type { MachineRowModel } from './run-target-machine-rows'
+import { MachineStateLabel } from '@/components/machines/MachineStateLabel'
+import { useNow } from '@/hooks/use-now'
 import { AddHostSubmenuRow } from './RunTargetSubmenus'
 import RunTargetRowList from './RunTargetRowList'
 import RunTargetField from './RunTargetField'
@@ -35,6 +40,9 @@ type RunTargetComboboxProps = {
   onAddSshHost?: () => void
   onConnectHost?: (option: NeedsSetupProjectHostOption) => Promise<void> | void
   onSetLocation?: (option: NeedsSetupProjectHostOption) => void
+  /** Provider groups; absent while machines are off. */
+  machines?: RunTargetMachineProps
+  onBrowseMachinePlugins?: () => void
 }
 
 const ROOT_ATTRIBUTE = 'data-run-target-combobox-root'
@@ -59,25 +67,33 @@ export default function RunTargetCombobox({
   onAddRemoteServer,
   onAddSshHost,
   onConnectHost,
-  onSetLocation
+  onSetLocation,
+  machines,
+  onBrowseMachinePlugins
 }: RunTargetComboboxProps): React.JSX.Element {
   const [submenu, setSubmenu] = useState<'recipes' | 'add-host' | null>(null)
   // Track in-flight connects per host so one stalling connect never blocks the others.
   const [connectingHostIds, setConnectingHostIds] = useState<ReadonlySet<string>>(() => new Set())
 
-  const hasAddHost = Boolean(onAddSshHost || onAddRemoteServer)
+  const hasAddHost = Boolean(onAddSshHost || onAddRemoteServer || onBrowseMachinePlugins)
+  const machineRows = useRunTargetMachines(machines)
+  const { groups: machineGroups, views: machineViews } = machineRows
   const deriveRowKeys = useCallback(
     (query: string): string[] =>
-      buildRunTargetRows({ hostOptions, recipes, query, hasAddHost }).rows.map((row) => row.key),
-    [hasAddHost, hostOptions, recipes]
+      buildRunTargetRows({ hostOptions, recipes, machineGroups, machineViews, query, hasAddHost })
+        .rows.filter(isSelectableRunTargetRow)
+        .map((row) => row.key),
+    [hasAddHost, hostOptions, machineGroups, machineViews, recipes]
   )
   const combobox = useTypeAheadCombobox(deriveRowKeys)
   const { query, setQuery, open, setOpen, armedKey, arm, moveArm, inputRef, listId, setListNode } =
     combobox
+  const now = useNow(60_000, open)
 
   const { rows, matchedRecipes, hiddenHostCount } = useMemo(
-    () => buildRunTargetRows({ hostOptions, recipes, query, hasAddHost }),
-    [hasAddHost, hostOptions, query, recipes]
+    () =>
+      buildRunTargetRows({ hostOptions, recipes, machineGroups, machineViews, query, hasAddHost }),
+    [hasAddHost, hostOptions, machineGroups, machineViews, query, recipes]
   )
   const readyHostOptions = useMemo(
     () => hostOptions.filter((option) => option.kind === 'ready'),
@@ -92,9 +108,13 @@ export default function RunTargetCombobox({
     readyHostOptions[0] ??
     null
   const selectedRecipe = recipes.find((recipe) => recipe.id === recipeValue) ?? null
-  const armedRow = rows.find((row) => row.key === armedKey) ?? rows[0] ?? null
+  const armedRow =
+    rows.find((row) => row.key === armedKey) ?? rows.find(isSelectableRunTargetRow) ?? null
+  const selectedMachine = machineRows.selected
   // Only a committed selection paints the field; typing replaces it.
-  const committed = query.length === 0 && (selectedRecipe !== null || selectedHost !== null)
+  const committed =
+    query.length === 0 &&
+    (selectedMachine !== null || selectedRecipe !== null || selectedHost !== null)
 
   // Closing also drops any open submenu, which the shared hook doesn't know about.
   const close = useCallback((): void => {
@@ -106,17 +126,19 @@ export default function RunTargetCombobox({
     (option: ReadyProjectHostSetupOption): void => {
       onHostChange?.(getProjectHostSetupSelectionKey(option))
       onRecipeChange?.(null)
+      machines?.onChange(null)
       close()
     },
-    [close, onHostChange, onRecipeChange]
+    [close, machines, onHostChange, onRecipeChange]
   )
 
   const selectRecipe = useCallback(
     (recipeId: string): void => {
       onRecipeChange?.(recipeId)
+      machines?.onChange(null)
       close()
     },
-    [close, onRecipeChange]
+    [close, machines, onRecipeChange]
   )
 
   const connectHost = useCallback(
@@ -156,6 +178,16 @@ export default function RunTargetCombobox({
     [close, onSetLocation]
   )
 
+  const activateMachineRow = useCallback(
+    (row: MachineRowModel): void => {
+      if (row.kind === 'machine') {
+        onRecipeChange?.(null)
+      }
+      machineRows.activate(row, close)
+    },
+    [close, machineRows, onRecipeChange]
+  )
+
   /** Commits a row, or opens its submenu when the row is a submenu row. */
   const activate = useCallback(
     (key: string | null): void => {
@@ -172,9 +204,13 @@ export default function RunTargetCombobox({
         setLocation(row.option)
         return
       }
-      setSubmenu(row.kind === 'recipes' ? 'recipes' : 'add-host')
+      if (row.kind === 'recipes' || row.kind === 'add-host') {
+        setSubmenu(row.kind)
+        return
+      }
+      activateMachineRow(row)
     },
-    [rows, selectHost, setLocation]
+    [activateMachineRow, rows, selectHost, setLocation]
   )
 
   const handleKeyDown = useCallback(
@@ -216,10 +252,16 @@ export default function RunTargetCombobox({
     [close, setOpen]
   )
 
-  const fieldLabel = selectedRecipe
-    ? `${getEphemeralVmLabel()} / ${selectedRecipe.name}`
-    : (selectedHost?.label ?? '')
-  const fieldDetail = selectedRecipe ? getRecipeDetail(selectedRecipe) : (selectedHost?.path ?? '')
+  const fieldLabel = selectedMachine
+    ? selectedMachine.machine.name
+    : selectedRecipe
+      ? `${getEphemeralVmLabel()} / ${selectedRecipe.name}`
+      : (selectedHost?.label ?? '')
+  const fieldDetail = selectedMachine
+    ? selectedMachine.group.name
+    : selectedRecipe
+      ? getRecipeDetail(selectedRecipe)
+      : (selectedHost?.path ?? '')
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -234,7 +276,10 @@ export default function RunTargetCombobox({
         onOpenRequest={() => setOpen(true)}
         onToggle={() => setOpen(!open)}
         committed={committed}
-        isRecipe={selectedRecipe !== null}
+        kind={selectedMachine ? 'machine' : selectedRecipe ? 'recipe' : 'host'}
+        status={
+          selectedMachine ? <MachineStateLabel state={selectedMachine.machine.state} /> : null
+        }
         hostId={selectedHost?.hostId ?? null}
         label={fieldLabel}
         detail={fieldDetail}
@@ -291,7 +336,9 @@ export default function RunTargetCombobox({
               rows={rows}
               armedKey={armedRow?.key ?? null}
               listId={listId}
-              selectedHost={selectedRecipe === null ? selectedHost : null}
+              selectedHost={
+                selectedRecipe === null && selectedMachine === null ? selectedHost : null
+              }
               selectedRecipeId={selectedRecipe?.id ?? null}
               matchedRecipes={matchedRecipes}
               recipesOpen={submenu === 'recipes'}
@@ -307,6 +354,9 @@ export default function RunTargetCombobox({
               onSelectRecipe={selectRecipe}
               onConnectHost={(option) => void connectHost(option)}
               onSetLocation={setLocation}
+              selectedMachineRowKey={machineRows.selectedRowKey}
+              now={now}
+              onActivateMachineRow={activateMachineRow}
             />
           </div>
           {/* Why outside the listbox: the note is not an option. */}
@@ -334,6 +384,14 @@ export default function RunTargetCombobox({
                     onAddRemoteServer: () => {
                       close()
                       onAddRemoteServer()
+                    }
+                  }
+                : {})}
+              {...(onBrowseMachinePlugins
+                ? {
+                    onBrowseMachinePlugins: () => {
+                      close()
+                      onBrowseMachinePlugins()
                     }
                   }
                 : {})}
