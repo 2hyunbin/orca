@@ -45,6 +45,17 @@ import {
 } from './web-runtime-terminal-identity'
 import { settleWebRuntimeTerminalPlacement } from './web-runtime-terminal-placement-settlement'
 import { buildPlainCreateTerminalParams } from './web-runtime-plain-terminal-create-params'
+import {
+  isRecoverableRemoteRuntimeConnectionError,
+  toRemoteRuntimeClientErrorLike
+} from '../../../shared/remote-runtime-client-error-classification'
+
+// Why: a lost or timed-out reply may still have created the terminal, so it is never "refused".
+function terminalCreateFailureKind(error: unknown): 'refused' | 'unconfirmed' {
+  return isRecoverableRemoteRuntimeConnectionError(toRemoteRuntimeClientErrorLike(error))
+    ? 'unconfirmed'
+    : 'refused'
+}
 
 export async function createWebRuntimeSessionTerminalResult(
   args: CreateWebRuntimeSessionTerminalArgs
@@ -297,7 +308,7 @@ export async function createWebRuntimeSessionTerminalResult(
     return {
       outcome: hostCreated ? { status: 'created' } : { status: 'failed', message },
       ...(createdTabId ? { hostTabId: createdTabId } : {}),
-      ...(hostCreated ? {} : { hostFailed: true as const })
+      ...(hostCreated ? {} : { hostFailed: terminalCreateFailureKind(error) })
     }
   }
 }

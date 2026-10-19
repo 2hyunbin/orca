@@ -18218,7 +18218,10 @@
         "reconnectTimeout": "The server did not reconnect on the updated version."
       },
       "webRuntimeSession": {
-        "remoteHostDisconnected": "The workspace is not connected to a remote Orca host."
+        "remoteHostDisconnected": "The workspace is not connected to a remote Orca host.",
+        "terminalCreateUnconfirmed": "Orca lost contact with the host before it confirmed the new terminal.",
+        "terminalCreateUnconfirmedHint": "It may still appear when the host answers again. If it doesn’t, open a new terminal.",
+        "terminalCreateFailed": "Couldn’t open a new terminal on the host."
       },
       "gitlabJobTraceClient": {
         "loadFailed": "Failed to load the GitLab job log.",

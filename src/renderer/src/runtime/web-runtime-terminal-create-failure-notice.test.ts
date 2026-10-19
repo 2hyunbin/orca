@@ -87,20 +87,14 @@ describe('a terminal the host fails to create', () => {
     resetTerminalCreateEnvironment()
   })
 
-  it('tells the user why, with a retry, since no tab or pane will ever show it', async () => {
-    const runtimeCall = vi
-      .fn()
-      .mockResolvedValueOnce({
+  it('tells the user why the host refused, since no tab or pane will ever show it', async () => {
+    stubRuntimeEnvironmentBridge({
+      call: vi.fn().mockResolvedValue({
         id: 'create',
         ok: false,
         error: { code: 'runtime_error', message: HOST_REFUSAL }
       })
-      .mockResolvedValue({
-        id: 'create',
-        ok: true,
-        result: { tab: { id: 'host-tab-2' }, publicationEpoch: 'epoch-1', snapshotVersion: 2 }
-      })
-    stubRuntimeEnvironmentBridge({ call: runtimeCall })
+    })
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await expect(
@@ -109,17 +103,25 @@ describe('a terminal the host fails to create', () => {
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
       'Couldn’t open a new terminal on the host.',
-      expect.objectContaining({
-        description: expect.stringContaining(HOST_REFUSAL),
-        action: expect.objectContaining({ label: 'Try again' })
-      })
+      { description: expect.stringContaining(HOST_REFUSAL) }
     )
-    const retry = mocks.toastError.mock.calls[0][1].action.onClick as () => void
-    retry()
-    await vi.waitFor(() =>
-      expect(
-        runtimeCall.mock.calls.filter(([r]) => r.method === 'session.tabs.createTerminal')
-      ).toHaveLength(2)
+  })
+
+  it('never calls a lost reply a refusal, since the host may still have made the terminal', async () => {
+    stubRuntimeEnvironmentBridge({
+      call: vi.fn().mockResolvedValue({
+        id: 'create',
+        ok: false,
+        error: { code: 'runtime_timeout', message: 'Timed out waiting for the remote Orca runtime' }
+      })
+    })
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })
+
+    expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
+      'Orca lost contact with the host before it confirmed the new terminal.',
+      { description: expect.stringContaining('may still appear') }
     )
   })
 

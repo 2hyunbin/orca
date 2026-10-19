@@ -47,8 +47,8 @@ export type CreateWebRuntimeSessionTerminalArgs = {
 export type CreatedWebRuntimeSessionTerminal = {
   outcome: WebRuntimeTerminalCreateOutcome
   hostTabId?: string
-  /** The host was asked and refused or failed, as opposed to no session to ask. */
-  hostFailed?: true
+  /** The host was asked: `refused` it answered with an error, `unconfirmed` contact was lost first. */
+  hostFailed?: 'refused' | 'unconfirmed'
 }
 
 export type CreatedAgentTerminalIdentity = Pick<RuntimeTerminalCreate, 'tabId' | 'paneKey'> & {
