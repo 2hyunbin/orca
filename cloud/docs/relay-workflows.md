@@ -840,9 +840,11 @@ timestamp is unverifiable. This assumes the codes publish together; one code lag
 delays a trip by its lag but cannot hide one, because a later read sees its points. A host's own
 early or duplicate re-dial says nothing about a cell and grows with traffic: on 2026-10-18 it was
 ~98% of 503s and tripped c7 back twice with no fault. The subtraction is only trusted where the
-director logged: a judged minute no runtime-metrics line covers is unverifiable, a read short of one
-instance's lines or at its entry limit is unverifiable, and the measured background leaves such
-minutes out (and is not measured with fewer than half of its 10 metered). The same measure is the
+director logged: a judged minute no runtime-metrics line covers is unverifiable, a 10-minute read
+with fewer lines than a single instance logs (20) or at its entry limit is unverifiable, and the
+measured background leaves such minutes out (and is not measured with fewer than half of its 10
+metered). Coverage is any instance, not every one: an instance whose lines are missing while others
+log under-subtracts its re-dials, which can only push toward a trip, never hide one. The same measure is the
 background and `background-503-per-minute`. Until the
 minutes before `flipped-at` are published (3 minutes past it) the 503 rule is pending, which does
 not add to the streak. The duplicate read also takes `orca_relay_reserve_ledger_summary`, which

@@ -21,7 +21,12 @@ import {
   readRuntime,
   WRITE_CONFIRMATION
 } from './operate-relay-cell-flags.mjs'
-import { readDirectorDrainReturn, readDirectorRequestsByCodePerMinute, readLogEntries } from './relay-same-cap-shadow-gate.mjs'
+import {
+  DIRECTOR_METRICS_LIMIT,
+  readDirectorDrainReturn,
+  readDirectorRequestsByCodePerMinute,
+  readLogEntries
+} from './relay-same-cap-shadow-gate.mjs'
 import {
   DIRECTOR_METRICS_INTERVAL_MS,
   drainReturnByMinute,
@@ -137,8 +142,6 @@ export async function readCellSample(fetchImpl, request, idToken, wait) {
 
 const minuteFloor = (at) => Math.floor(at / MINUTE_MS) * MINUTE_MS
 const failed503Read = (error) => ({ ok: false, error, perMinute: {}, minutes: [], publishedThrough: null, unmetered: [] })
-// Five director instances at one runtime-metrics line per 30 s is ~100 per 10 minutes.
-const DIRECTOR_METRICS_LIMIT = 1_000
 
 // The `minutes` whole minutes that end at the minute boundary `endedAt`: the director's non-drain
 // 503s, the roll ladder's measure its line comes from. Cloud Run's 503 count less what the
@@ -147,6 +150,7 @@ const DIRECTOR_METRICS_LIMIT = 1_000
 // grow with traffic, not trouble. `publishedThrough` is the newest minute any response code has a
 // point for (the director always serves something, so no front at all is no evidence); a minute
 // with no metrics line from any instance is `unmetered`, since subtracting nothing there is a guess.
+// Coverage is any instance, not each: one instance's missing lines under-subtract, biased to a trip.
 export async function readDirector503Minutes(reader, { projectId, directorService, endedAt, minutes }) {
   const span = { startedAt: new Date(endedAt - minutes * MINUTE_MS), endedAt: new Date(endedAt) }
   const config = { projectId, directorService }
