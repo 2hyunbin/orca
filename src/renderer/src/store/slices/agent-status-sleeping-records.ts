@@ -18,10 +18,10 @@ export function sleepingRecordFromEntry(args: {
   launchConfig?: SleepingAgentLaunchConfig
   origin?: SleepingAgentSessionRecord['origin']
 }): SleepingAgentSessionRecord | null {
-  const { state, ...record } = args
+  const { state, tab, ...record } = args
   return resumeRecordFromStatus({
     ...record,
-    tab: args.tab ?? findTabForAgentEntry(state, args.worktreeId, args.entry)
+    tabOf: () => tab ?? findTabForAgentEntry(state, args.worktreeId, args.entry)
   })
 }
 
