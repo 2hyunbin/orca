@@ -2,7 +2,7 @@ import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { GitExecOptions } from '../git/command-runner/git-exec-options'
 import type { LocalGitExecOptions } from '../git/repo-default-base-ref'
 import { GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS } from '../../shared/git-fetch-auto-maintenance'
-import { getCanonicalRepoKey } from '../git/canonical-repo-key'
+import { getCanonicalRepoKey, type CanonicalRepoKeyOptions } from '../git/canonical-repo-key'
 import {
   armLocalRepoRefMaintenance,
   setRepoRefMaintenanceBusyProbe
@@ -35,14 +35,17 @@ export class RuntimeRemoteFetchController {
   private readonly canonicalFetchKeyCache = new Map<string, string>()
 
   /** `${runtimeKey}::${gitCommonDir}` -- one repo on one execution host. */
-  async getCanonicalRepoKey(repoPath: string, gitOptions: GitOptions = {}): Promise<string> {
+  async getCanonicalRepoKey(
+    repoPath: string,
+    gitOptions: CanonicalRepoKeyOptions = {}
+  ): Promise<string> {
     return getCanonicalRepoKey(repoPath, gitOptions)
   }
 
   async getCanonicalFetchKey(
     repoPath: string,
     remote: string,
-    gitOptions: GitOptions = {}
+    gitOptions: CanonicalRepoKeyOptions = {}
   ): Promise<string> {
     const runtimeKey = gitOptions.wslDistro ? `wsl:${gitOptions.wslDistro}` : 'local'
     const cacheKey = `${runtimeKey}::${repoPath}::${remote}`
