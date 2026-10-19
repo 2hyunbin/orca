@@ -84,7 +84,6 @@ export function useAgentsOfferedForLaunch(
 }
 
 export class AgentLaunchChoiceCancelled extends Error {}
-
 /** Chat discovery is bounded; ordinary CLI discovery keeps its existing wait. */
 export async function acquireAgentLaunchChoices(
   workspace: ProspectiveWorkspace,
