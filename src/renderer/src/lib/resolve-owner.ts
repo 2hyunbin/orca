@@ -4,6 +4,7 @@
  */
 import {
   getRepoSshConnectionId,
+  parseExecutionHostId,
   toRuntimeExecutionHostId,
   toSshExecutionHostId,
   type ExecutionHostId
@@ -249,4 +250,33 @@ export function runtimeEnvironmentIdUnlessTwin(
     warnAmbiguousOwnerOnce(workspaceId, refusalAction)
   }
   return null
+}
+
+/**
+ * A server route to `ssh:X` that only a repo row proves: no worktree row names that server. The
+ * row's `ssh:X` and the server's `connectionId: X` are different namespaces, so reads and spawn
+ * may follow it but a host write could land on another machine with the same path.
+ */
+export function isUnprovenServerSshRoute(
+  state: Pick<WorktreeOperationRouteState, 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
+  workspaceId: string,
+  owner: HostAuthority
+): boolean {
+  const { endpoint, at } = owner
+  if (
+    endpoint.kind !== 'environment' ||
+    at === 'local' ||
+    parseWorkspaceKey(workspaceId)?.type === 'folder'
+  ) {
+    return false
+  }
+  const repoId = getRepoIdFromWorktreeId(workspaceId)
+  const namesServer = (row: { id: string; hostId?: string; runtimeOwnerEnvironmentId?: string }) =>
+    row.id === workspaceId &&
+    parseExecutionHostId(row.hostId)?.id === at &&
+    row.runtimeOwnerEnvironmentId?.trim() === endpoint.environmentId
+  return !(
+    state.worktreesByRepo?.[repoId]?.some(namesServer) ||
+    state.detectedWorktreesByRepo?.[repoId]?.worktrees.some(namesServer)
+  )
 }
