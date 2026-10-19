@@ -4,6 +4,32 @@
 // hooks with the first tab's Orca env and dies with it (#22873). These args need that server or exit 2.
 export const CODEX_SHARED_SERVER_ARGS = ['agents', 'queue', '--no-daemon', '--remote'] as const
 const CODEX_SHARED_SERVER_ARG_PATTERN = `^(${CODEX_SHARED_SERVER_ARGS.join('|')}|--remote=.*)$`
+// Why: these need the shared server, and Codex counts any `-c` as opting out of it.
+const CODEX_SHARED_SERVER_ONLY_ARGS = CODEX_SHARED_SERVER_ARGS.filter(
+  (arg) => arg !== '--no-daemon'
+)
+const CODEX_SHARED_SERVER_ONLY_ARG_PATTERN = `^(${CODEX_SHARED_SERVER_ONLY_ARGS.join('|')}|--remote=.*)$`
+
+/**
+ * The caller identity `orca` reads, which a user's `shell_environment_policy` (`inherit = "core"`)
+ * strips from every command Codex runs (#25775). Codex applies `set` after `inherit` and `exclude`
+ * (so an `exclude = ["ORCA_*"]` is overridden) but before `include_only`, which still wins. Never a
+ * token: argv is readable by every local user.
+ */
+export const CODEX_COMMAND_IDENTITY_ENV_KEYS = [
+  'ORCA_TERMINAL_HANDLE',
+  'ORCA_PANE_KEY',
+  'ORCA_WORKTREE_ID',
+  'ORCA_WORKSPACE_ID',
+  'ORCA_USER_DATA_PATH'
+] as const
+
+// Why a TOML literal: a value holding `'` fails to parse, and Codex then takes the raw text minus
+// its outer quotes and whitespace, which is the same value for these keys.
+const identitySetArg = (key: string, value: string): string =>
+  `shell_environment_policy.set.${key}='${value}'`
+// Why reversed: the POSIX and fish functions prepend each key, so this keeps every shell in list order.
+const PREPENDED_IDENTITY_KEYS = CODEX_COMMAND_IDENTITY_ENV_KEYS.toReversed()
 
 export function getPosixCodexShellLaunchPreflight(): string {
   return `# Why: a typed alias expands inside the shell, after pane launch prep.
@@ -17,13 +43,19 @@ if [[ -n "\${__orca_codex_binary:-}" && -x "\${__orca_codex_binary}" ]]; then
   # which otherwise rewrites this header at parse time and aborts the whole file.
   function codex {
     # Why local: zsh's warn_create_global warns for each global a function creates.
-    local __orca_codex_arg __orca_codex_isolate="\${ORCA_CODEX_ISOLATE:-1}"
+    local __orca_codex_arg __orca_codex_isolate="\${ORCA_CODEX_ISOLATE:-1}" __orca_codex_identity="\${ORCA_CODEX_ISOLATE:-1}"
     if [[ -n "\${ORCA_CODEX_LAUNCH_PREFLIGHT:-}" && -x "\${ORCA_CODEX_LAUNCH_PREFLIGHT}" ]]; then
       "\${ORCA_CODEX_LAUNCH_PREFLIGHT}" agent hooks prepare-codex >/dev/null 2>&1 || :
     fi
     for __orca_codex_arg in "$@"; do
-      case "$__orca_codex_arg" in ${CODEX_SHARED_SERVER_ARGS.join('|')}|--remote=*) __orca_codex_isolate=0 ;; esac
+      case "$__orca_codex_arg" in
+        --no-daemon) __orca_codex_isolate=0 ;;
+        ${CODEX_SHARED_SERVER_ONLY_ARGS.join('|')}|--remote=*) __orca_codex_isolate=0 __orca_codex_identity=0 ;;
+      esac
     done
+    if [[ "$__orca_codex_identity" != 0 ]]; then
+${PREPENDED_IDENTITY_KEYS.map((key) => `      [[ -z "\${${key}:-}" ]] || set -- -c "${identitySetArg(key, `\${${key}}`)}" "$@"`).join('\n')}
+    fi
     # Why probe every launch: a cached answer goes stale across an upgrade, and 0.155 and older exit 2 on the flag.
     if [[ "$__orca_codex_isolate" != 0 ]]; then
       case "$(command codex --help 2>/dev/null </dev/null)" in *--no-daemon*) set -- --no-daemon "$@" ;; esac
@@ -44,6 +76,9 @@ if test "$__orca_codex_type" = file
   function codex
     if test -x "$ORCA_CODEX_LAUNCH_PREFLIGHT"
       command "$ORCA_CODEX_LAUNCH_PREFLIGHT" agent hooks prepare-codex >/dev/null 2>&1; or true
+    end
+    if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_SHARED_SERVER_ONLY_ARG_PATTERN}' $argv
+${PREPENDED_IDENTITY_KEYS.map((key) => `      test -n "$${key}"; and set argv -c "${identitySetArg(key, `$${key}`)}" $argv`).join('\n')}
     end
     if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_SHARED_SERVER_ARG_PATTERN}' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
       set argv --no-daemon $argv
@@ -81,7 +116,16 @@ if ($orcaCodexCommand -and
             } catch {
             }
         }
-        $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source $args)
+        $orcaCodexIdentity = @()
+        if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_SHARED_SERVER_ONLY_ARG_PATTERN}')) {
+            foreach ($orcaCodexKey in @(${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `'${key}'`).join(', ')})) {
+                $orcaCodexValue = [Environment]::GetEnvironmentVariable($orcaCodexKey)
+                if ($orcaCodexValue) {
+                    $orcaCodexIdentity += @('-c', "${identitySetArg('$orcaCodexKey', '$orcaCodexValue')}")
+                }
+            }
+        }
+        $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source (@($orcaCodexIdentity) + @($args)))
         # Why: a native command inside a function never sees the function's pipeline input on its own.
         if ($MyInvocation.ExpectingInput) {
             $input | & $orcaCodexExecutable.Source @orcaCodexFlags @orcaCodexArgs

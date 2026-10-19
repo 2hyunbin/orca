@@ -237,6 +237,23 @@ export function throwNoActiveSenderTerminal(): never {
   if (hasStructuredSessionMarker() && !process.env.ORCA_TERMINAL_HANDLE) {
     throw structuredSessionRefusal('from')
   }
+  // Why: Codex sets CODEX_THREAD_ID on every command after its env filter, so its presence without
+  // Orca's handle means that filter (or a launch outside Orca) dropped the identity (#25775).
+  if (process.env.CODEX_THREAD_ID && !process.env.ORCA_TERMINAL_HANDLE) {
+    throw new RuntimeClientError(
+      'no_active_sender_terminal',
+      'Could not determine the sender terminal for this orchestration command: it runs inside Codex ' +
+        'without Orca terminal identity (ORCA_TERMINAL_HANDLE). If Codex was started in an Orca ' +
+        'terminal, its shell_environment_policy (for example inherit = "core") removed that ' +
+        'identity from the commands it runs, and restarting Codex the same way will not restore it. ' +
+        'Orca keeps it when Codex is started by typing `codex` in an Orca bash, zsh, fish or ' +
+        'PowerShell terminal, unless Codex is started by full path or from cmd.exe, Codex server ' +
+        'sharing is on, or the policy sets include_only. Otherwise let ORCA_* through in the ' +
+        'Codex config (add "ORCA_*" to include_only, or use inherit = "all" with include_only ' +
+        'listing the variables to keep plus "ORCA_*"). Pass --from only with your own terminal\'s ' +
+        "handle — another pane's handle would act on its mailbox."
+    )
+  }
   throw new RuntimeClientError(
     'no_active_sender_terminal',
     'Could not determine the sender terminal for this orchestration command. ' +
