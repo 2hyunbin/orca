@@ -35,7 +35,8 @@ export class MemoryResumeConfirmations {
 
   constructor(
     private readonly store: RelayCredentialStore,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly onRenewalFailure?: (error: unknown) => void
   ) {}
 
   open(basis: MemoryConnectionBasis): void {
@@ -71,15 +72,18 @@ export class MemoryResumeConfirmations {
     ) {
       throw new RelayStoreError('confirmation_not_active')
     }
-    const result = await this.store.confirmMemoryResume({
-      userId: basis.userId,
-      relayHostId: basis.relayHostId,
-      reqId: request.reqId,
-      basisConnId: basis.basisConnId,
-      relayDeviceId: basis.relayDeviceId,
-      acceptedCredentialVersion: basis.acceptedCredentialVersion,
-      acceptedAs: basis.acceptedAs
-    })
+    const result = await this.store.confirmMemoryResume(
+      {
+        userId: basis.userId,
+        relayHostId: basis.relayHostId,
+        reqId: request.reqId,
+        basisConnId: basis.basisConnId,
+        relayDeviceId: basis.relayDeviceId,
+        acceptedCredentialVersion: basis.acceptedCredentialVersion,
+        acceptedAs: basis.acceptedAs
+      },
+      { onRenewalFailure: this.onRenewalFailure }
+    )
     this.results.set(key, { basisConnId: basis.basisConnId, result, at: this.now() })
     return result
   }
