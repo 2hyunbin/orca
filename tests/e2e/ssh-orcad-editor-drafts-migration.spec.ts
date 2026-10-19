@@ -23,6 +23,9 @@ import { readPersistedProfileState } from './helpers/persisted-profile-state'
 
 skipUnlessManagedDockerHost()
 
+// A large markdown file opens in the source editor instead of the rich one.
+const VISIBLE_EDITOR = '.rich-markdown-editor, .monaco-editor .view-lines'
+
 type EditorVerdict = 'present' | 'dirty-only' | 'absent'
 type HostVerdict = { verdict: 'present' | 'mismatch' | 'absent'; where: string[] }
 
@@ -167,10 +170,9 @@ for (const { label, bytes } of [
         )
         .toBe('present')
         .catch(() => {})
-      await expect(page.locator('.rich-markdown-editor').first()).toContainText(
-        `${marker} unsaved line 0`,
-        { timeout: 60_000 }
-      )
+      await expect(page.locator(VISIBLE_EDITOR).first()).toContainText(`${marker} unsaved line 0`, {
+        timeout: 60_000
+      })
       // A restart reads the draft back from this desktop's own record, now named for the server.
       const environmentId = await managedEnvironmentId(page, seeded.targetId)
       const restarted = await relaunchManagedApp(fixture)
@@ -186,7 +188,7 @@ for (const { label, bytes } of [
         )
         .toBe('present')
         .catch(() => {})
-      await expect(restarted.locator('.rich-markdown-editor').first()).toContainText(
+      await expect(restarted.locator(VISIBLE_EDITOR).first()).toContainText(
         `${marker} unsaved line 0`,
         { timeout: 60_000 }
       )
