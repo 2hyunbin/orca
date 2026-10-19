@@ -12,6 +12,7 @@ import { useEditorPanelFileContentLoader } from './useEditorPanelFileContentLoad
 import { useEditorPanelDiffContentLoader } from './useEditorPanelDiffContentLoader'
 import { useEditorPanelActiveTabContentLoad } from './useEditorPanelActiveTabContentLoad'
 import { useEditorPanelContentReloadTriggers } from './useEditorPanelContentReloadTriggers'
+import { useEditorBufferContentSync } from './use-editor-buffer-content-sync'
 
 type GitStatusByWorktree = ReturnType<typeof useAppStore.getState>['gitStatusByWorktree']
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
@@ -69,6 +70,7 @@ export function useEditorPanelContentState({
     isVisibleRef.current = isVisible
     activeContentFileIdRef.current = activeContentFileId
   }, [activeContentFileId, diffContents, editorViewMode, isVisible, openFiles])
+  useEditorBufferContentSync(fileContents, setFileContents, openFilesRef)
 
   const invalidateFileContent = useCallback((fileIds: string[]): void => {
     const uniqueIds = new Set(fileIds)

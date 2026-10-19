@@ -1,6 +1,7 @@
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import { ownsGlobalSelection } from '../../../global-selection-owner'
+import { EMPTY_EDITOR_BUFFER_INDEX } from '../buffers/editor-buffer-record'
 
 export function createOpenFileState(
   set: EditorSet,
@@ -9,6 +10,7 @@ export function createOpenFileState(
   EditorSlice,
   | 'openFiles'
   | 'editorBuffers'
+  | 'editorBufferIndex'
   | 'activeFileId'
   | 'activeFileIdByWorktree'
   | 'activeTabTypeByWorktree'
@@ -19,6 +21,7 @@ export function createOpenFileState(
   return {
     openFiles: [],
     editorBuffers: {},
+    editorBufferIndex: EMPTY_EDITOR_BUFFER_INDEX,
     activeFileId: null,
     activeFileIdByWorktree: {},
     activeTabTypeByWorktree: {},

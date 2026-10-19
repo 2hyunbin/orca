@@ -1,0 +1,369 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { StoreApi } from 'zustand/vanilla'
+import type { AppState } from '@/store'
+import type { OpenFile } from '@/store/slices/editor'
+import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import {
+  createEditorStore,
+  stubEditorWindowWithDisk,
+  type FakeEditorDisk
+} from '@/components/editor/editor-autosave-controller-test-fixture'
+import { createEditorSaveQueue } from '@/components/editor/editor-save-queue'
+import { __clearSelfWriteRegistryForTests } from '@/components/editor/editor-self-write-registry'
+import { registerPendingEditorFlush } from '@/components/editor/editor-pending-flush'
+import { assertEditorBufferInvariant } from '@/store/editor-buffer-record-lifecycle'
+import { buildEditorSessionData } from '@/lib/workspace-session'
+import { editorBufferIdOf, editorBufferViewIds } from './editor-buffer-record'
+import { editorModelOwnerKeyOf } from './editor-buffer-identity'
+import { needsSavePromptOnClose } from './editor-buffer-close-rule'
+
+const fixture = vi.hoisted((): { store: StoreApi<AppState> | null } => ({ store: null }))
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => fixture.store?.getState() }
+}))
+
+const FILE = '/repo/a.ts'
+
+function openTab(
+  store: StoreApi<AppState>,
+  worktreeId: string,
+  extra: Partial<OpenFile> = {}
+): string {
+  store.getState().openFile({
+    filePath: FILE,
+    relativePath: 'a.ts',
+    worktreeId,
+    language: 'typescript',
+    mode: 'edit',
+    ...extra
+  })
+  return store.getState().openFiles.at(-1)?.id ?? ''
+}
+
+function type(store: StoreApi<AppState>, id: string, text: string): void {
+  store.getState().setEditorDraft(id, text)
+  store.getState().markFileDirty(id, true)
+}
+
+function tab(store: StoreApi<AppState>, id: string): OpenFile | undefined {
+  return store.getState().openFiles.find((file) => file.id === id)
+}
+
+function modelOwnerOf(store: StoreApi<AppState>, id: string): string {
+  return editorModelOwnerKeyOf(store.getState(), tab(store, id)!)
+}
+
+describe('one editor buffer record per physical file', () => {
+  let store: StoreApi<AppState>
+  let disk: FakeEditorDisk
+
+  beforeEach(() => {
+    disk = stubEditorWindowWithDisk()
+    store = createEditorStore()
+    fixture.store = store
+    store.setState({
+      browserTabsByWorktree: {},
+      tabsByWorktree: {},
+      activeBrowserTabIdByWorktree: {},
+      unifiedTabsByWorktree: {},
+      folderWorkspaces: [],
+      worktreesByRepo: {
+        'repo-1': ['wt-1', 'wt-2', 'wt-3'].map((id) =>
+          makeWorktree({ id, repoId: 'repo-1', path: '/repo', hostId: 'local' })
+        ),
+        'repo-ssh': [
+          makeWorktree({ id: 'wt-ssh', repoId: 'repo-ssh', path: '/repo', hostId: 'ssh:target' })
+        ]
+      }
+    })
+  })
+
+  afterEach(() => {
+    assertEditorBufferInvariant(store.getState())
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    __clearSelfWriteRegistryForTests()
+  })
+
+  it('gives two workspaces one record, model, draft and dirty flag', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+
+    type(store, a, 'typed in A')
+
+    const state = store.getState()
+    expect(a).not.toBe(b)
+    expect(editorBufferIdOf(state, a)).toBe(editorBufferIdOf(state, b))
+    expect(modelOwnerOf(store, a)).toBe(modelOwnerOf(store, b))
+    expect(state.editorDrafts[b]).toBe('typed in A')
+    expect(tab(store, b)?.isDirty).toBe(true)
+    expect(Object.keys(state.editorBuffers)).toHaveLength(1)
+  })
+
+  it('lets a tab opened later join the unsaved record', () => {
+    const a = openTab(store, 'wt-1')
+    type(store, a, 'typed in A')
+
+    const b = openTab(store, 'wt-2')
+
+    expect(store.getState().editorDrafts[b]).toBe('typed in A')
+    expect(tab(store, b)?.isDirty).toBe(true)
+  })
+
+  it('clears every tab when either one saves, writing once at a time', async () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+    const queue = createEditorSaveQueue(store)
+
+    await Promise.all([
+      queue.queueSave(tab(store, b)!, 'typed in A', 'user'),
+      queue.queueSave(tab(store, a)!, 'typed in A', 'user')
+    ])
+    queue.dispose()
+
+    expect(disk.files.get(FILE)).toBe('typed in A')
+    expect(store.getState().editorDrafts).toEqual({})
+    expect([tab(store, a)?.isDirty, tab(store, b)?.isDirty]).toEqual([false, false])
+    expect(tab(store, a)?.lastKnownDiskSignature).toBe(tab(store, b)?.lastKnownDiskSignature)
+  })
+
+  it('flushes a delayed edit pending in another tab before saving', async () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+    const unregister = registerPendingEditorFlush(b, () => type(store, b, 'rich edit in B'))
+    const queue = createEditorSaveQueue(store)
+
+    await queue.queueSave(tab(store, a)!, 'typed in A', 'user')
+    unregister()
+    queue.dispose()
+
+    expect(disk.files.get(FILE)).toBe('rich edit in B')
+    expect(tab(store, a)?.isDirty).toBe(false)
+  })
+
+  it('runs one autosave timer for the record', async () => {
+    vi.useFakeTimers()
+    // Why re-stub: the window stub binds the timers that are current when it is created.
+    disk = stubEditorWindowWithDisk()
+    const a = openTab(store, 'wt-1')
+    openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+    const queue = createEditorSaveQueue(store)
+
+    queue.syncAutoSave()
+    await vi.advanceTimersByTimeAsync(1000)
+    queue.dispose()
+
+    expect(disk.fs.writeFile).toHaveBeenCalledTimes(1)
+    expect(disk.files.get(FILE)).toBe('typed in A')
+  })
+
+  it('marks every tab when the file changes on disk', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+
+    store.getState().setExternalMutation(b, 'changed')
+
+    expect(tab(store, a)?.externalMutation).toBe('changed')
+  })
+
+  it('persists the shared draft for every tab so hot exit restores each', () => {
+    const a = openTab(store, 'wt-1')
+    openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+    const state = store.getState()
+
+    const session = buildEditorSessionData(state.openFiles, state.editorDrafts, {}, {}, {})
+
+    expect(session.openFilesByWorktree?.['wt-1']?.[0]?.dirtyDraftContent).toBe('typed in A')
+    expect(session.openFilesByWorktree?.['wt-2']?.[0]?.dirtyDraftContent).toBe('typed in A')
+  })
+
+  it('prompts to save only when the last tab of a dirty record closes', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+
+    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
+    store.getState().closeFile(a)
+
+    expect(store.getState().editorDrafts[b]).toBe('typed in A')
+    expect(needsSavePromptOnClose(store.getState(), b)).toBe(true)
+  })
+
+  it("discarding a tab that isn't the last only closes it", async () => {
+    const { discardEditorFileChangesAndClose } =
+      await import('@/components/editor/discard-editor-file-changes')
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+
+    await discardEditorFileChangesAndClose(a)
+
+    expect(tab(store, a)).toBeUndefined()
+    expect(tab(store, b)?.isDirty).toBe(true)
+    expect(store.getState().editorDrafts[b]).toBe('typed in A')
+  })
+
+  it('shares autosave pauses, including with a tab that joins later', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    store.getState().setPendingLiveDiskVerification(b, true)
+    store.getState().setPendingDiskBaselineVerification(a, true)
+
+    const c = openTab(store, 'wt-3')
+
+    for (const id of [a, b, c]) {
+      expect(tab(store, id)).toMatchObject({
+        pendingLiveDiskVerification: true,
+        pendingDiskBaselineVerification: true
+      })
+    }
+    store.getState().clearPendingDiskBaselineVerification(c)
+    expect(tab(store, a)?.pendingDiskBaselineVerification).toBeUndefined()
+  })
+
+  it('keeps the same path on another host separate', () => {
+    const a = openTab(store, 'wt-1')
+    const remote = openTab(store, 'wt-ssh')
+
+    type(store, a, 'typed in A')
+    store.getState().setExternalMutation(a, 'changed')
+
+    expect(editorBufferViewIds(store.getState(), a)).toEqual([a])
+    expect(modelOwnerOf(store, a)).not.toBe(modelOwnerOf(store, remote))
+    expect(store.getState().editorDrafts[remote]).toBeUndefined()
+    expect(tab(store, remote)?.isDirty).toBe(false)
+    expect(tab(store, remote)?.externalMutation).toBeUndefined()
+  })
+
+  it('keeps paths that differ only in case apart', () => {
+    const a = openTab(store, 'wt-1')
+    const upper = openTab(store, 'wt-2', { filePath: '/repo/A.ts', relativePath: 'A.ts' })
+
+    expect(editorBufferIdOf(store.getState(), a)).not.toBe(
+      editorBufferIdOf(store.getState(), upper)
+    )
+  })
+
+  it('a read-only tab mounting beside a dirty writable tab shows the edits', () => {
+    const writable = openTab(store, 'wt-1')
+    type(store, writable, 'typed in A')
+
+    const readOnly = openTab(store, 'wt-2', { readOnly: true })
+    store.getState().setEditorDraft(readOnly, 'read-only typing')
+
+    expect(store.getState().editorDrafts[readOnly]).toBe('typed in A')
+    expect(modelOwnerOf(store, readOnly)).toBe(modelOwnerOf(store, writable))
+    // The read-only tab can't save, so the writable one still asks before closing.
+    expect(needsSavePromptOnClose(store.getState(), writable)).toBe(true)
+    expect(needsSavePromptOnClose(store.getState(), readOnly)).toBe(false)
+  })
+
+  it('a provisional tab joins its file once its owner resolves; its edits win', () => {
+    const resolved = openTab(store, 'wt-1')
+    const provisional = openTab(store, 'wt-late')
+    type(store, provisional, 'typed before the owner resolved')
+    expect(editorBufferIdOf(store.getState(), provisional)).not.toBe(
+      editorBufferIdOf(store.getState(), resolved)
+    )
+
+    store.setState({
+      worktreesByRepo: {
+        ...store.getState().worktreesByRepo,
+        'repo-late': [
+          makeWorktree({ id: 'wt-late', repoId: 'repo-late', path: '/repo', hostId: 'local' })
+        ]
+      }
+    })
+
+    expect(editorBufferIdOf(store.getState(), provisional)).toBe(
+      editorBufferIdOf(store.getState(), resolved)
+    )
+    expect(store.getState().editorDrafts[resolved]).toBe('typed before the owner resolved')
+    expect(tab(store, resolved)?.isDirty).toBe(true)
+  })
+
+  describe('joins where both sides have different unsaved edits stay apart', () => {
+    it('on owner resolution', () => {
+      const resolved = openTab(store, 'wt-1')
+      type(store, resolved, 'edit in the resolved tab')
+      const provisional = openTab(store, 'wt-late')
+      type(store, provisional, 'edit in the provisional tab')
+
+      store.setState({
+        worktreesByRepo: {
+          ...store.getState().worktreesByRepo,
+          'repo-late': [
+            makeWorktree({ id: 'wt-late', repoId: 'repo-late', path: '/repo', hostId: 'local' })
+          ]
+        }
+      })
+
+      const state = store.getState()
+      expect(editorBufferIdOf(state, provisional)).not.toBe(editorBufferIdOf(state, resolved))
+      expect(modelOwnerOf(store, provisional)).not.toBe(modelOwnerOf(store, resolved))
+      expect(state.editorDrafts[resolved]).toBe('edit in the resolved tab')
+      expect(state.editorDrafts[provisional]).toBe('edit in the provisional tab')
+    })
+
+    it.each([
+      ['differ', 'draft in wt-1', 'draft in wt-2', 2],
+      ['match', 'same draft', 'same draft', 1]
+    ])('for restored legacy drafts that %s', (_label, first, second, records) => {
+      const restore = (worktreeId: string, draft: string) => ({
+        filePath: FILE,
+        relativePath: 'a.ts',
+        worktreeId,
+        language: 'typescript',
+        dirtyDraftContent: draft,
+        lastKnownDiskSignature: 'sig-disk'
+      })
+
+      store.getState().hydrateEditorSession({
+        activeRepoId: null,
+        activeWorktreeId: 'wt-1',
+        activeTabId: null,
+        tabsByWorktree: {},
+        terminalLayoutsByTabId: {},
+        openFilesByWorktree: {
+          'wt-1': [restore('wt-1', first)],
+          'wt-2': [restore('wt-2', second)]
+        }
+      })
+
+      const state = store.getState()
+      const [a, b] = state.openFiles.map((file) => file.id)
+      expect(Object.keys(state.editorBuffers)).toHaveLength(records)
+      expect([state.editorDrafts[a], state.editorDrafts[b]]).toEqual([first, second])
+      expect(new Set([modelOwnerOf(store, a), modelOwnerOf(store, b)]).size).toBe(records)
+    })
+
+    it('on a rename onto a file with other unsaved edits', () => {
+      const target = openTab(store, 'wt-2', { filePath: '/repo/b.ts', relativePath: 'b.ts' })
+      type(store, target, 'unsaved b')
+      const moved = openTab(store, 'wt-1')
+      type(store, moved, 'unsaved a')
+
+      const result = store.getState().rekeyOpenFilesForPathChange({
+        rekeys: [
+          {
+            oldFileId: moved,
+            newFileId: `${moved}-renamed`,
+            oldFilePath: FILE,
+            newFilePath: '/repo/b.ts',
+            newRelativePath: 'b.ts'
+          }
+        ]
+      })
+
+      const state = store.getState()
+      expect(result).toEqual({ ok: true })
+      expect(editorBufferIdOf(state, `${moved}-renamed`)).not.toBe(editorBufferIdOf(state, target))
+      expect(state.editorDrafts[`${moved}-renamed`]).toBe('unsaved a')
+      expect(state.editorDrafts[target]).toBe('unsaved b')
+    })
+  })
+})
