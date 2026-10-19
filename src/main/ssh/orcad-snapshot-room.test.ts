@@ -72,7 +72,8 @@ const deploy = (extra: Partial<Parameters<typeof deployOrcad>[0]> = {}) =>
     now: () => new Date('2026-02-02T00:00:00.000Z'),
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc217',
-    census: { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 },
+    census: { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3, chatWork: 0 },
+    restartAdmission: host.restartAdmission(OLD),
     ...extra
   })
 
@@ -150,18 +151,21 @@ describe('an update on a host without room for its snapshot (#30491)', () => {
     )
   })
 
-  it('measures room before the last terminal recount, so the scan cannot outdate it', async () => {
+  it('measures room before reserving the restart, so the scan cannot outlast the reservation', async () => {
     answerRoom(400_000, 0, 10_000_000)
-    const probedBeforeRecount: boolean[] = []
-    const recountCensus = vi.fn(async () => {
-      probedBeforeRecount.push(
+    const probedBeforeReserve: boolean[] = []
+    const admission = host.restartAdmission(OLD)
+    const reserve: typeof admission.reserve = async (force) => {
+      probedBeforeReserve.push(
         vi.mocked(execCommand).mock.calls.some(([, command]) => command.includes('SNAPSHOT_SPACE'))
       )
-      return { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 }
-    })
+      return admission.reserve(force)
+    }
 
-    expect(await deploy({ recountCensus })).toMatchObject({ outcome: 'installed-and-activated' })
-    expect(probedBeforeRecount).toEqual([true])
+    expect(await deploy({ restartAdmission: { ...admission, reserve } })).toMatchObject({
+      outcome: 'installed-and-activated'
+    })
+    expect(probedBeforeReserve).toEqual([true])
   })
 
   it('goes ahead when the room probe loses its channel, leaving the capture to decide', async () => {
