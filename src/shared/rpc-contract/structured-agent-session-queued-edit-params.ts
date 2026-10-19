@@ -10,11 +10,9 @@ export const QueuedMessageUpdateParams = z
     expectedBodyFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
     text: z.string().refine((text) => new TextEncoder().encode(text).length <= MAX_PROMPT_BYTES),
     /** The complete ordered image set (`agent-session.queued-message-image-edit.v1`); absent keeps
-     *  the card's images, which is what every older client sends. */
-    images: z
-      .array(SendImageRefBlock)
-      .max(MAX_BLOCKS - 1)
-      .optional()
+     *  the card's images, which is what every older client sends. The shared edit rule counts
+     *  these with the text block. */
+    images: z.array(SendImageRefBlock).max(MAX_BLOCKS).optional()
   })
   .strict()
 
