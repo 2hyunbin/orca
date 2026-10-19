@@ -7,6 +7,7 @@ import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { LegacyRelayPty } from './legacy-relay-client'
+import { isEpochScopedRelayPtyId } from '../../../shared/ssh-pending-pty-kill'
 import type { LegacyRelayPaneOwners } from './legacy-relay-pane-owners'
 
 export type { LegacyRelayPty }
@@ -133,7 +134,9 @@ export function relistedPane(
   const owner = owners.owner(relayPtyId)
   // Why only on a complete listing: a relay that could not be asked, or that the host's census
   // could not account for, may be the one running it, and an owner once pinned is never revisited.
-  const adopted = owner === undefined && complete && rows.length === 1 ? rows[0] : undefined
+  // An epoch-scoped id names one process on one relay, so its sole lister is its owner regardless.
+  const provable = complete || isEpochScopedRelayPtyId(relayPtyId)
+  const adopted = owner === undefined && provable && rows.length === 1 ? rows[0] : undefined
   const listed = owner ? rows.find((row) => row.endpoint === owner) : adopted
   // A listing taken before the new owner's exit report must not bring the pane back live.
   const exitedFirst = adopted && owners.exitBeforeAdoption(relayPtyId, adopted.endpoint)
