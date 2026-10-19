@@ -83,6 +83,13 @@ type IdlePollSample = {
 
 const IDLE_ENTRY_FLAGS = { foregroundPollInFlight: false, screenReadInFlight: false }
 
+/** One sweep's readings, shared by every waiter on the same terminal. */
+type SweepReadings = {
+  verdicts: Map<object, Map<boolean | undefined, TuiIdleVerdict>>
+  screenReads: Map<string, Promise<RuntimeTerminalWaitBlockedReason | null> | null>
+  foregroundReads: Map<string, Promise<string | null> | null>
+}
+
 export class RuntimeTerminalIdlePolls {
   private readonly entries = new Set<IdlePollEntry>()
   private sweepTimer: ReturnType<typeof setInterval> | null = null
@@ -124,12 +131,41 @@ export class RuntimeTerminalIdlePolls {
     // its own foreground read exactly as an independent interval callback did — one
     // slow `ps` must never delay another waiter's checks, and a waiter registered by a
     // resolve inside this sweep must wait for the next tick, as a fresh interval would.
+    // Why shared readings: waiters on one terminal read the same evidence at the same instant,
+    // so the tail scan, screen read and process query run once per terminal, not per waiter.
+    const readings: SweepReadings = {
+      verdicts: new Map(),
+      screenReads: new Map(),
+      foregroundReads: new Map()
+    }
     for (const entry of Array.from(this.entries)) {
-      void this.tick(entry)
+      void this.tick(entry, readings)
     }
   }
 
-  private sample(entry: IdlePollEntry): IdlePollSample {
+  private evaluate(
+    record: object,
+    launchReadiness: boolean | undefined,
+    readings: SweepReadings | undefined,
+    evaluateOnce: () => TuiIdleVerdict
+  ): TuiIdleVerdict {
+    if (!readings) {
+      return evaluateOnce()
+    }
+    let byReadiness = readings.verdicts.get(record)
+    if (!byReadiness) {
+      byReadiness = new Map()
+      readings.verdicts.set(record, byReadiness)
+    }
+    let verdict = byReadiness.get(launchReadiness)
+    if (!verdict) {
+      verdict = evaluateOnce()
+      byReadiness.set(launchReadiness, verdict)
+    }
+    return verdict
+  }
+
+  private sample(entry: IdlePollEntry, readings: SweepReadings | undefined): IdlePollSample {
     const { handle } = entry.waiter
     if (entry.kind === 'pty') {
       // Why no re-read here: `ptysById` has a single create-once `set` site, so PTY
@@ -137,11 +173,14 @@ export class RuntimeTerminalIdlePolls {
       const { pty } = entry
       const readWaitText = () =>
         buildTerminalWaitText(pty.tailBuffer, pty.tailPartialLine, pty.preview)
+      const { launchReadiness } = entry.waiter
       return {
-        verdict: evaluateTuiIdle({
-          ...ptyTuiIdleEvidence(this.deps, pty, readWaitText),
-          launchReadiness: entry.waiter.launchReadiness
-        }),
+        verdict: this.evaluate(pty, launchReadiness, readings, () =>
+          evaluateTuiIdle({
+            ...ptyTuiIdleEvidence(this.deps, pty, readWaitText),
+            launchReadiness
+          })
+        ),
         ptyId: pty.ptyId,
         ready: () => buildPtyTerminalWaitResult(handle, 'tui-idle', pty),
         blocked: (reason) => buildPtyTerminalWaitBlockedResult(handle, 'tui-idle', pty, reason),
@@ -159,11 +198,14 @@ export class RuntimeTerminalIdlePolls {
     const readWaitText = () =>
       buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview)
     const live = () => this.deps.getLiveLeaf(entry.leaf)
+    const { launchReadiness } = entry.waiter
     return {
-      verdict: evaluateTuiIdle({
-        ...leafTuiIdleEvidence(this.deps, leaf, readWaitText),
-        launchReadiness: entry.waiter.launchReadiness
-      }),
+      verdict: this.evaluate(leaf, launchReadiness, readings, () =>
+        evaluateTuiIdle({
+          ...leafTuiIdleEvidence(this.deps, leaf, readWaitText),
+          launchReadiness
+        })
+      ),
       ptyId: leaf.ptyId,
       ready: () => buildTerminalWaitResult(handle, 'tui-idle', live()),
       blocked: (reason) => buildTerminalWaitBlockedResult(handle, 'tui-idle', live(), reason),
@@ -177,13 +219,13 @@ export class RuntimeTerminalIdlePolls {
     }
   }
 
-  private async tick(entry: IdlePollEntry): Promise<void> {
+  private async tick(entry: IdlePollEntry, readings?: SweepReadings): Promise<void> {
     if (!this.entries.has(entry)) {
       return
     }
     let startedForegroundPoll = false
     try {
-      const sample = this.sample(entry)
+      const sample = this.sample(entry, readings)
       const { verdict, ptyId } = sample
       if (verdict.kind === 'blocked') {
         this.settle(entry, sample.blocked(verdict.reason))
@@ -200,7 +242,7 @@ export class RuntimeTerminalIdlePolls {
       if (verdict.kind === 'working' || entry.screenReadInFlight) {
         return
       }
-      const screenRead = ptyId ? this.readScreenBlockedReason(entry, ptyId) : null
+      const screenRead = ptyId ? this.readScreenBlockedReason(entry, ptyId, readings) : null
       // Why await only a real read: a pane with no screen model keeps its tick synchronous.
       const screenBlockedReason = screenRead ? await screenRead : null
       if (!this.entries.has(entry)) {
@@ -218,7 +260,7 @@ export class RuntimeTerminalIdlePolls {
       // Why quiet before the read too: a streaming or not-yet-painted pane cannot settle, so it
       // must not pay a process inspection every tick for a whole turn.
       if (lane !== 'closed' && ptyId && !entry.foregroundPollInFlight && sample.isQuiet(lane)) {
-        const foregroundRead = this.deps.getForegroundProcess(ptyId)
+        const foregroundRead = this.readForegroundProcess(ptyId, readings)
         if (!foregroundRead) {
           return
         }
@@ -242,18 +284,36 @@ export class RuntimeTerminalIdlePolls {
    *  workspace trust) loses those rows from the line tail; the rendered screen still has them. */
   private readScreenBlockedReason(
     entry: IdlePollEntry,
-    ptyId: string
+    ptyId: string,
+    readings: SweepReadings | undefined
   ): Promise<RuntimeTerminalWaitBlockedReason | null> | null {
-    const screenRead = this.deps.readVisibleScreen(ptyId)
-    if (!screenRead) {
+    let reasonRead = readings?.screenReads.get(ptyId)
+    if (reasonRead === undefined) {
+      const screenRead = this.deps.readVisibleScreen(ptyId)
+      reasonRead = screenRead
+        ? screenRead.then((screen) => (screen ? detectTerminalWaitBlockedReason(screen) : null))
+        : null
+      readings?.screenReads.set(ptyId, reasonRead)
+    }
+    if (!reasonRead) {
       return null
     }
     entry.screenReadInFlight = true
-    return screenRead
-      .then((screen) => (screen ? detectTerminalWaitBlockedReason(screen) : null))
-      .finally(() => {
-        entry.screenReadInFlight = false
-      })
+    return reasonRead.finally(() => {
+      entry.screenReadInFlight = false
+    })
+  }
+
+  private readForegroundProcess(
+    ptyId: string,
+    readings: SweepReadings | undefined
+  ): Promise<string | null> | null {
+    let foregroundRead = readings?.foregroundReads.get(ptyId)
+    if (foregroundRead === undefined) {
+      foregroundRead = this.deps.getForegroundProcess(ptyId)
+      readings?.foregroundReads.set(ptyId, foregroundRead)
+    }
+    return foregroundRead
   }
 
   private settle(entry: IdlePollEntry, result: RuntimeTerminalWait): void {

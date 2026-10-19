@@ -198,6 +198,37 @@ describe('RuntimeTerminalIdlePolls timer budget', () => {
     expect(resolved).toEqual(['fast', 'slow'])
     expect(polls.activeTimerCount).toBe(0)
   })
+
+  it('reads each terminal once per sweep however many waiters share it', async () => {
+    const resolved: string[] = []
+    const foregroundReads: string[] = []
+    const polls = new RuntimeTerminalIdlePolls({
+      intervalMs: INTERVAL_MS,
+      quiescenceMs: 1500,
+      getTabTitle: () => null,
+      getForegroundProcess: (ptyId) => {
+        foregroundReads.push(ptyId)
+        return Promise.resolve('node')
+      },
+      hasCommandPainted: () => true,
+      getAdoptedPtyIdleStatus: () => null,
+      getPaneAgent: () => null,
+      getFirstPartyAgentStatus: () => null,
+      readScreenLines: () => null,
+      readVisibleScreen: () => null,
+      getLiveLeaf: (leaf) => leaf,
+      resolve: (waiter) => resolved.push(waiter.handle)
+    })
+    const ptys = ['pty-a', 'pty-b'].map((id) => makePty(id, { lastOutputAt: Date.now() - 10_000 }))
+    for (let index = 0; index < 200; index += 1) {
+      polls.startPty(makeWaiter(`waiter-${index}`), ptys[index % 2])
+    }
+
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS)
+
+    expect(resolved).toHaveLength(200)
+    expect(foregroundReads.sort()).toEqual(['pty-a', 'pty-b'])
+  })
 })
 
 describe('RuntimeTerminalIdlePolls rendered-screen blocked prompts', () => {
