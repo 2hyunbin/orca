@@ -18,7 +18,8 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: (length: number) => new Uint8Arr
 
 // The fakes' fixed jitter puts the known-offline wait at 5039ms.
 const HOST_OFFLINE_WAIT_MS = 5_039
-const ATTACH_TIMEOUT_REDIAL_MS = 1_000
+// ...and the attach-timeout redial at 1003ms.
+const ATTACH_TIMEOUT_REDIAL_MS = 1_003
 
 function attachTimeout(): RelayOuterError {
   return new RelayOuterError(4404, true, MOBILE_RELAY_PHONE_CLOSE_REASON.HOST_ATTACH_TIMEOUT)

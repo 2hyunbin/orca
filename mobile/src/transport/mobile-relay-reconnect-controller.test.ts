@@ -381,14 +381,32 @@ describe('relay reconnect controller', () => {
     expect(relayFailureAllowsGraceRetry(new RelayOuterError(4429))).toBe(false)
   })
 
+  it('probes a retained relay once on a real background return, not on a foreground nudge', () => {
+    const reconnect = createController(vi.fn())
+    const session = { getFailure: () => null, probeAfterBackground: vi.fn() }
+    const logical = { getActivePath: () => 'relay', getState: () => 'connected' }
+    reconnect.setActiveSession(session)
+
+    reconnect.handleForeground(logical as unknown as StableLogicalRpcClient, true)
+    expect(session.probeAfterBackground).not.toHaveBeenCalled()
+    reconnect.handleForeground(logical as unknown as StableLogicalRpcClient, false)
+    expect(session.probeAfterBackground).toHaveBeenCalledOnce()
+
+    // A relay the grace dropped (or never kept) is not probed.
+    reconnect.clear()
+    reconnect.handleForeground(logical as unknown as StableLogicalRpcClient, false)
+    expect(session.probeAfterBackground).toHaveBeenCalledOnce()
+  })
+
   it('redials an attach timeout once quickly per failure streak', () => {
     const onRetry = vi.fn()
     const reconnect = createController(onRetry)
     const attachTimeout = () =>
       new RelayOuterError(4404, true, MOBILE_RELAY_PHONE_CLOSE_REASON.HOST_ATTACH_TIMEOUT)
 
+    // Jittered over 1–2s; this controller's fixed jitter lands mid-range.
     reconnect.registerFailure(attachTimeout())
-    vi.advanceTimersByTime(999)
+    vi.advanceTimersByTime(1_499)
     expect(onRetry).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1)
     expect(onRetry).toHaveBeenCalledOnce()
@@ -400,10 +418,10 @@ describe('relay reconnect controller', () => {
     expect(onRetry).toHaveBeenCalledTimes(2)
 
     // A stable connection ends the streak and earns a fresh quick redial.
-    reconnect.setActiveSession({ getFailure: () => null })
+    reconnect.setActiveSession({ getFailure: () => null, probeAfterBackground: () => {} })
     vi.advanceTimersByTime(30_000)
     reconnect.registerFailure(attachTimeout())
-    vi.advanceTimersByTime(1_000)
+    vi.advanceTimersByTime(1_500)
     expect(onRetry).toHaveBeenCalledTimes(3)
   })
 })

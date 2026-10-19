@@ -216,13 +216,13 @@ describe('mobile relay RPC session liveness', () => {
     expect(fakes.close).toHaveBeenCalledOnce()
   })
 
-  it('redials after one short miss when the app returns to the foreground', async () => {
+  it('redials after one 4s miss when a retained relay returns from the background', async () => {
     const onLog = vi.fn<ConnectionLogSink>()
     const session = await authenticateSession(onLog)
 
-    session.notifyForeground('app-resume')
+    session.probeAfterBackground()
     expect(sentRequests().map(({ method }) => method)).toEqual(['status.get'])
-    await vi.advanceTimersByTimeAsync(2_999)
+    await vi.advanceTimersByTimeAsync(3_999)
     expect(session.getState()).toBe('connected')
     await vi.advanceTimersByTimeAsync(1)
 
@@ -236,10 +236,21 @@ describe('mobile relay RPC session liveness', () => {
     )
   })
 
-  it('keeps a relay that answers the foreground probe', async () => {
+  it('keeps two 4s misses for an app-resume nudge without a background stay', async () => {
     const session = await authenticateSession()
 
     session.notifyForeground('app-resume')
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(session.getState()).toBe('connected')
+    await vi.advanceTimersByTimeAsync(4_000)
+
+    expect(session.getState()).toBe('disconnected')
+  })
+
+  it('keeps a relay that answers the background-return probe', async () => {
+    const session = await authenticateSession()
+
+    session.probeAfterBackground()
     const probe = sentRequests()[0]!
     fakes.linkOptions!.onText(
       JSON.stringify({ id: probe.id, ok: true, result: {}, _meta: { runtimeId: 'r1' } })

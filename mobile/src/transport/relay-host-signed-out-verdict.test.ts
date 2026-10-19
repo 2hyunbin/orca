@@ -179,7 +179,7 @@ describe('the sign-out the cell reported outranks a later plain 4404', () => {
     const controller = controllerReporting(reported)
 
     controller.assertHostReachability('signed-out')
-    controller.setActiveSession({ getFailure: () => null })
+    controller.setActiveSession({ getFailure: () => null, probeAfterBackground: () => {} })
 
     expect(reported).toEqual(['connecting', 'signed-out', 'connecting'])
   })
