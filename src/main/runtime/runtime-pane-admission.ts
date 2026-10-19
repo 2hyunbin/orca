@@ -121,6 +121,9 @@ export async function spawnInAdmittedPane(
   args: AdmittedSpawnArgs
 ): ReturnType<Spawn> {
   const { groupId: _groupId, afterTabId: _afterTabId, ...spawnArgs } = args
+  if (args.paneSpawnOperation?.mustExist) {
+    return controller.spawn!(spawnArgs)
+  }
   const { outcome, result } = await startInAdmittedPane(
     store,
     admissionFor(args),

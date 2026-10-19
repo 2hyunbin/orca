@@ -260,8 +260,19 @@ export function createRemoteRuntimePtyTransport(
   let storedCallbacks: Parameters<PtyTransport['connect']>[0]['callbacks'] = {}
   const surfacedErrorMessages = new Set<string>()
   const ownerChanged = 'terminal_pane_owner_changed'
-  let ownerRecovery: Promise<PtyConnectResult | undefined> | null = null
-  let ownerChangedAgain = false
+  type OwnerRecovery = {
+    promise: Promise<PtyConnectResult | undefined>
+    settle: (result?: PtyConnectResult) => void
+    current: () => boolean
+    retry: () => void
+  }
+  let ownerRecovery: OwnerRecovery | null = null
+  function finishOwnerRecovery(attempt: OwnerRecovery | null, result?: PtyConnectResult): void {
+    if (attempt && ownerRecovery === attempt) {
+      ownerRecovery = null
+      attempt.settle(result)
+    }
+  }
   let resubscribeEpoch: number | null = null
   let resubscribeRequestedHandle: string | null = null
   let resubscribeRequestedReplacementPolicy: HostHandleReplacementPolicy = 'reuse'
@@ -386,6 +397,11 @@ export function createRemoteRuntimePtyTransport(
       recovery.currentPhase === 'disposed' ||
       recovery.currentPhase === 'idle'
     ) {
+      const attempt = ownerRecovery
+      finishOwnerRecovery(attempt)
+      if (attempt && recovery.currentPhase === 'disconnected') {
+        recovery.parkRetryAfterDeadline(attempt.retry)
+      }
       settleHostSessionAttachRetry?.(false)
     }
     emitRecoveryState()
@@ -1468,12 +1484,19 @@ export function createRemoteRuntimePtyTransport(
     ) {
       return undefined
     }
+    if (!notifySpawn) {
+      rebindRemoteTerminalHandle(terminal.handle, terminal.incarnationId ?? null)
+    } else {
+      const previousPtyId = remotePtyId
+      handle = terminal.handle
+      remotePtyId = toRemoteRuntimePtyId(handle, currentRuntimeEnvironmentId)
+      unregisterShutdownHandlers(previousPtyId)
+      registerShutdownHandlers(remotePtyId)
+    }
     adoptExecutionMetadata(terminal)
-    const previousPtyId = remotePtyId
-    handle = terminal.handle
-    remotePtyId = toRemoteRuntimePtyId(handle, currentRuntimeEnvironmentId)
-    unregisterShutdownHandlers(previousPtyId)
-    registerShutdownHandlers(remotePtyId)
+    if (!remotePtyId) {
+      return undefined
+    }
     connected = true
     desiredViewport = {
       cols: options.cols ?? 80,
@@ -1486,7 +1509,10 @@ export function createRemoteRuntimePtyTransport(
     try {
       await subscribeToHandle(expectedRecoveryEpoch)
     } catch (error) {
-      if (!recoverAfterSubscribeFailure(error, handle, remotePtyId)) {
+      if (ownerRecovery) {
+        throw error
+      }
+      if (!recoverAfterSubscribeFailure(error, terminal.handle, remotePtyId)) {
         throw error
       }
     }
@@ -1511,64 +1537,74 @@ export function createRemoteRuntimePtyTransport(
     expectedLifecycle = lifecycleEpoch
   ): Promise<PtyConnectResult | undefined> {
     if (ownerRecovery) {
-      ownerChangedAgain = true
-      return ownerRecovery
+      const attempt = ownerRecovery
+      exhaustOwnerRecovery(attempt)
+      return attempt.promise
     }
-    ownerChangedAgain = false
     const generation = attachGeneration
     const epoch = recovery.begin()
-    const current = () =>
-      !destroyed &&
-      expectedLifecycle === lifecycleEpoch &&
-      generation === attachGeneration &&
-      recovery.ownsEpoch(epoch)
+    let settle!: OwnerRecovery['settle']
+    const attempt: OwnerRecovery = {
+      promise: new Promise((resolve) => {
+        settle = resolve
+      }),
+      settle: (result) => settle(result),
+      current: () =>
+        !destroyed &&
+        ownerRecovery === attempt &&
+        expectedLifecycle === lifecycleEpoch &&
+        generation === attachGeneration &&
+        recovery.ownsEpoch(epoch),
+      retry: () => {
+        void reconcilePaneOwner(options, expectedLifecycle)
+      }
+    }
+    ownerRecovery = attempt
     holdUnsentPendingInput()
     closeMultiplexedStream()
     connected = false
     connecting = true
-    ownerRecovery = (async () => {
+    void (async () => {
       try {
         const resolution = await resolvePersistedHostPane()
-        if (!current()) {
-          return undefined
+        if (!attempt.current()) {
+          return
         }
         if (resolution.kind !== 'resolved' || !recovery.isCurrent(epoch)) {
-          throw new Error(ownerChanged)
+          exhaustOwnerRecovery(attempt)
+          return
         }
-        const result = await adoptResolvedHostPane(
-          resolution.terminal,
-          options,
-          false,
-          generation,
-          epoch
-        )
-        if (!current()) {
-          return undefined
+        await adoptResolvedHostPane(resolution.terminal, options, false, generation, epoch)
+        // Subscribe only sends; the current stream's accepted snapshot settles this operation.
+      } catch (error) {
+        if (!attempt.current()) {
+          return
         }
-        if (!result || ownerChangedAgain || recovery.currentPhase === 'disconnected') {
-          throw new Error(ownerChanged)
-        }
-        return result
-      } catch {
-        if (current()) {
-          connecting = false
-          connected = false
-          recovery.markDisconnected()
-          surfaceErrorMessage(ownerChanged)
-          recovery.parkRetryAfterDeadline(() => {
-            void reconcilePaneOwner(options, expectedLifecycle)
-          })
-        }
-        return undefined
-      } finally {
-        ownerRecovery = null
-        if (current()) {
-          emitRecoveryState(true)
+        if (runtimeTerminalErrorMessage(error).includes(ownerChanged)) {
+          exhaustOwnerRecovery(attempt)
+        } else {
+          finishOwnerRecovery(attempt)
+          handleRemoteTerminalError(error)
         }
       }
     })()
     emitRecoveryState(true)
-    return ownerRecovery
+    return attempt.promise
+  }
+
+  function exhaustOwnerRecovery(attempt: OwnerRecovery): void {
+    if (!attempt.current()) {
+      return
+    }
+    finishOwnerRecovery(attempt)
+    subscriptionGeneration += 1
+    closeMultiplexedStream()
+    connecting = false
+    connected = false
+    recovery.markDisconnected()
+    surfaceErrorMessage(ownerChanged)
+    recovery.parkRetryAfterDeadline(attempt.retry)
+    emitRecoveryState(true)
   }
 
   function recoverExpiredHostPane(): void {
@@ -2214,9 +2250,17 @@ export function createRemoteRuntimePtyTransport(
     nextIncarnationId: string | null = null
   ): void {
     clearPublishedHandleWait()
-    // Why: keys typed at the replaced shell must not run in its successor (#10065).
-    discardPendingInput()
     const replacedPtyId = remotePtyId
+    const nextPtyId = toRemoteRuntimePtyId(nextHandle, currentRuntimeEnvironmentId)
+    const changed =
+      replacedPtyId !== nextPtyId ||
+      (authoritativePtyIncarnationId !== null &&
+        nextIncarnationId !== null &&
+        authoritativePtyIncarnationId !== nextIncarnationId)
+    // A newly learned stamp is not evidence that held typing belongs to another process.
+    if (changed) {
+      discardPendingInput()
+    }
     unregisterShutdownHandlers(replacedPtyId)
     handle = nextHandle
     remotePtyId = toRemoteRuntimePtyId(nextHandle, currentRuntimeEnvironmentId)
@@ -2226,7 +2270,7 @@ export function createRemoteRuntimePtyTransport(
     registerShutdownHandlers(remotePtyId)
     setAttachmentReady(false)
     // Why: host handle rotation preserves the pane generation; only the store identity changes, not spawn/exit semantics.
-    if (replacedPtyId) {
+    if (replacedPtyId && (changed || nextIncarnationId !== null)) {
       replaceFitOverridePtyId(replacedPtyId, remotePtyId)
       replaceDriverPtyId(replacedPtyId, remotePtyId)
       if (nextIncarnationId) {
@@ -2637,6 +2681,7 @@ export function createRemoteRuntimePtyTransport(
     const subscribedHandle = handle
     const subscribedPtyId = remotePtyId
     const generation = ++subscriptionGeneration
+    const ownerAttempt = ownerRecovery
     setAttachmentReady(false)
     let transportClosed = false
     let subscriptionAttached = false
@@ -2761,6 +2806,14 @@ export function createRemoteRuntimePtyTransport(
           subscriptionAttached = true
           setAttachmentReady(true)
           connecting = false
+          finishOwnerRecovery(ownerAttempt, {
+            id: subscribedPtyId!,
+            replay: '',
+            isReattach: true,
+            ...(authoritativePtyIncarnationId
+              ? { incarnationId: authoritativePtyIncarnationId }
+              : {})
+          })
           resetRecoveryReplacementPolicy()
           markRecoveryHealthy()
           emitRecoveryState()
@@ -2780,6 +2833,11 @@ export function createRemoteRuntimePtyTransport(
         onEnd: (verdict) => {
           if (!isCurrentSubscription()) {
             return
+          }
+          if (ownerAttempt && ownerRecovery === ownerAttempt) {
+            finishOwnerRecovery(ownerAttempt)
+            subscriptionGeneration += 1
+            closeMultiplexedStream()
           }
           outputProcessor.clearAccumulatedState()
           if (verdict === 'unverifiable' || (tabId && isWebTerminalSurfaceTabId(tabId))) {
@@ -2818,6 +2876,16 @@ export function createRemoteRuntimePtyTransport(
         },
         onError: (message) => {
           if (isCurrentSubscription()) {
+            if (
+              ownerAttempt &&
+              ownerRecovery === ownerAttempt &&
+              !message.includes(ownerChanged) &&
+              message !== REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE
+            ) {
+              finishOwnerRecovery(ownerAttempt)
+              subscriptionGeneration += 1
+              closeMultiplexedStream()
+            }
             handleRemoteTerminalError(message)
           }
         },
@@ -2863,6 +2931,7 @@ export function createRemoteRuntimePtyTransport(
               return
             }
           }
+          finishOwnerRecovery(ownerAttempt)
           multiplexedStream = null
           multiplexedStreamHandle = null
           setAttachmentReady(false)
@@ -2941,6 +3010,7 @@ export function createRemoteRuntimePtyTransport(
   // Why replay: a recovery retry re-enters attach inside its own epoch; cancelling it would restart
   // the backoff ladder forever and the auto-recovery deadline could never latch (#18495).
   function attachPane(options: Parameters<PtyTransport['attach']>[0], replay: boolean): void {
+    finishOwnerRecovery(ownerRecovery)
     const attachLifecycleEpoch = ++lifecycleEpoch
     const generation = ++attachGeneration
     cancelTerminalCreateRetryWait()
@@ -2967,7 +3037,7 @@ export function createRemoteRuntimePtyTransport(
     handle = nextHandle
     unregisterShutdownHandlers(previousPtyId)
     connected = false
-    remotePtyId = null
+    remotePtyId = options.existingPtyId
     clearPendingViewportClaim()
     closeMultiplexedStream()
     if (!nextHandle) {
@@ -3110,6 +3180,7 @@ export function createRemoteRuntimePtyTransport(
     options: Parameters<PtyTransport['connect']>[0]
   ): Promise<PtyConnectResult | undefined> {
     cancelTerminalCreateRetryWait()
+    finishOwnerRecovery(ownerRecovery)
     const connectLifecycleEpoch = ++lifecycleEpoch
     const createEnvironmentId = currentRuntimeEnvironmentId
     lastConnectOptions = options

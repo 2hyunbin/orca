@@ -127,7 +127,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
         })
       }
       const exactSurfaces = [...exactSurfaceByKey.values()]
-      const pendingIncarnation = this.pendingPtyRegistrationIncarnations.get(ptyId)
+      const pendingIncarnation = this.pendingPtyRegistrationIncarnations.get(ptyId)?.incarnationId
       const exitMatchesPendingRegistration =
         this.pendingPtyRegistrationIncarnations.has(ptyId) &&
         (pendingIncarnation === null ||

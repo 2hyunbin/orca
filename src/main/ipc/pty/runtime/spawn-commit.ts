@@ -1,4 +1,4 @@
-import { fenceFreshPaneBinding, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import { persistFreshPaneBinding, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
   ptyOwnership,
@@ -136,9 +136,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         ...(placement ? { placement } : {}),
         origin: spawnCommitBindingOrigin(ctx.result, expectedSourceBinding)
       }
-      const persisted = await store.persistPtyBinding(
-        fenceFreshPaneBinding(store, binding, undefined, args.connectionId)
-      )
+      const persisted = await persistFreshPaneBinding(store, binding, args.connectionId)
       if (persisted === false) {
         throw new Error('terminal_split_source_not_found')
       }

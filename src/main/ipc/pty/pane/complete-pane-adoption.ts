@@ -40,8 +40,10 @@ export async function completePaneAdoption(
   const { runtime, owner } = args
   const paneKey = makePaneKey(owner.tabId, owner.leafId)
   const cachedBeforeAttach = ptySizes.get(owner.ptyId)
-  runtime?.beginPtyRegistration?.(owner.ptyId, owner.incarnationId)
-  runtime?.preparePtyExecutionContext?.(owner.ptyId, null, { preserveExisting: true })
+  const claim = runtime?.beginPtyRegistration?.(owner.ptyId, owner.runtimeIncarnationId)
+  runtime?.preparePtyExecutionContext?.(owner.ptyId, null, {
+    preserveExisting: true
+  })
   const beforeAttach = runtime?.getPtyOutputSequence?.(owner.ptyId) ?? 0
   let incarnationId = owner.incarnationId
   try {
@@ -57,6 +59,12 @@ export async function completePaneAdoption(
       throw new Error('client_disconnected')
     }
     incarnationId = result.incarnationId
+    const assertClaim = () => {
+      if (claim && !runtime?.narrowPtyRegistration(result.id, claim, result.incarnationId)) {
+        throw new PaneOwnerContentionError()
+      }
+    }
+    assertClaim()
     assertSpawnReplyWasLive(result)
     runtime?.assertPtyRegistrationAllowed?.(result.id, result.incarnationId)
     const beforeReconcile = runtime?.getPtyOutputSequence?.(result.id) ?? 0
@@ -104,6 +112,7 @@ export async function completePaneAdoption(
         agentSessionOperationOutcome: 'unknown' as const
       })
     }
+    assertClaim()
     const terminalHandle = owner.handle ?? args.preAllocatedHandle
     const rejected = registerPersistedPtySpawn(
       runtime,
@@ -176,6 +185,6 @@ export async function completePaneAdoption(
       materialized: true as const
     }
   } finally {
-    runtime?.cancelPendingPtyRegistration?.(owner.ptyId, incarnationId)
+    runtime?.cancelPendingPtyRegistration?.(owner.ptyId, incarnationId, claim)
   }
 }

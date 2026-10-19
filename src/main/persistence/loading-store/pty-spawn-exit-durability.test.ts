@@ -1,3 +1,5 @@
+import { completePaneAdoption } from '../../ipc/pty/pane/complete-pane-adoption'
+import type { IPtyProvider } from '../../providers/pty-provider-contract'
 import { expect, it, vi } from 'vitest'
 import { fixture, admitRuntimeSpawnPane } from './profile-state-delayed-authority-fixture'
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
@@ -59,13 +61,35 @@ it.each(
     if (owner) {
       await store.persistPtyBinding({ ...binding, incarnationId: owner.persistedIncarnationId })
     }
-    runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
-    runtime.beginPtyRegistration(binding.ptyId, binding.incarnationId)
-    runtime.assertPtyRegistrationAllowed(binding.ptyId, binding.incarnationId)
+    if (!stableOwner) {
+      runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
+      runtime.beginPtyRegistration(binding.ptyId, binding.incarnationId)
+    }
     let commit: () => Promise<unknown>
     const reservationKey = JSON.stringify([connectionId, binding.worktreeId, binding.leafId])
     let reservation: PaneSpawnReservation | undefined
-    if (controller === 'runtime') {
+    if (owner) {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: adoption invokes only spawn; process creation and shutdown are unreachable.
+      const provider = {
+        spawn: async () => ({
+          id: binding.ptyId,
+          incarnationId: binding.incarnationId,
+          isReattach: true
+        })
+      } as IPtyProvider
+      commit = async () =>
+        (
+          await completePaneAdoption({
+            runtime,
+            store,
+            owner,
+            provider,
+            worktreeId: binding.worktreeId,
+            renderer: controller === 'ipc',
+            spawnOptions: { cols: 80, rows: 24 }
+          })
+        )?.result
+    } else if (controller === 'runtime') {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only commit runs; its runtime/store are real and preflight-only dependencies are unreachable.
       const deps = { runtime, store, options: {} } as PtyRuntimeControllerDeps
       const ctx = createRuntimePtySpawnState(deps, { ...binding, connectionId, cols: 80, rows: 24 })
@@ -222,3 +246,76 @@ it('keeps successful registration synchronous through the remaining spawn public
     registerPersistedPtySpawn(runtime, store, binding.ptyId, binding.worktreeId, null, binding)
   ).toBeUndefined()
 })
+
+it.each(['success', 'provider-exit', 'newer-claim'] as const)(
+  'owns the pending same-ID incarnation through adoption: %s',
+  async (event) => {
+    const { store, authority } = await fixture()
+    const runtime = new OrcaRuntimeService(store)
+    await store.persistPtyBinding(binding)
+    const begin = vi.spyOn(runtime, 'beginPtyRegistration')
+    let newer: ReturnType<typeof runtime.beginPtyRegistration> | undefined
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this actual adoption path calls only the provider spawn method.
+    const provider = {
+      spawn: async () => {
+        if (event === 'provider-exit') {
+          await runtime.onPtyExit(binding.ptyId, 0, 'new-incarnation', {
+            providerExitObserved: true
+          })
+        }
+        if (event === 'newer-claim') {
+          newer = runtime.beginPtyRegistration(binding.ptyId, 'successor-incarnation')
+        }
+        return {
+          id: binding.ptyId,
+          incarnationId: 'new-incarnation',
+          isReattach: true,
+          snapshot: 'history before attach\r\n',
+          providerSequence: { value: 10, generation: 'continued' as const }
+        }
+      }
+    } as IPtyProvider
+    const gate = event === 'success' ? authority.pause() : undefined
+    const operation = completePaneAdoption({
+      runtime,
+      store,
+      provider,
+      owner: {
+        ...binding,
+        hasPersistedBinding: true,
+        persistedIncarnationId: binding.incarnationId
+      },
+      worktreeId: binding.worktreeId,
+      spawnOptions: { cols: 80, rows: 24 }
+    })
+    if (gate) {
+      await gate.started.promise
+      runtime.onPtyData(binding.ptyId, 'live during save\r\n', 11)
+      gate.finish.resolve()
+    }
+    if (event === 'success') {
+      await expect(operation).resolves.toMatchObject({
+        result: { incarnationId: 'new-incarnation', snapshotSeq: 10 }
+      })
+      const history = await runtime.serializeMainTerminalBuffer(binding.ptyId)
+      expect(history?.data).toContain('history before attach')
+      expect(history?.data).toContain('live during save')
+      expect(runtime.getPtyOutputSequence(binding.ptyId)).toBe(11)
+    } else {
+      await expect(operation).rejects.toThrow(
+        event === 'provider-exit'
+          ? 'agent_session_exited_during_start'
+          : 'terminal_pane_owner_changed'
+      )
+    }
+    expect(
+      runtime.narrowPtyRegistration(binding.ptyId, begin.mock.results[0].value, 'new-incarnation')
+    ).toBe(false)
+    if (newer) {
+      expect(runtime.narrowPtyRegistration(binding.ptyId, newer, 'successor-incarnation')).toBe(
+        true
+      )
+      runtime.cancelPendingPtyRegistration(binding.ptyId, 'successor-incarnation', newer)
+    }
+  }
+)

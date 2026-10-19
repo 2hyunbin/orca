@@ -1,3 +1,4 @@
+import { createLaunchRaceRuntime } from './pty-launch-race-test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentPaneLaunchRequest } from '../../shared/agent-pane-launch-request'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
@@ -75,10 +76,10 @@ describe('a pane that starts its own agent launch', () => {
   ) {
     installDaemonTestProvider({ spawn: providerSpawn })
     const runtime = {
+      ...createLaunchRaceRuntime(),
       setPtyController: vi.fn(),
       createPreAllocatedTerminalHandle: vi.fn(() => 'term_pane'),
       registerPreAllocatedHandleForPty: vi.fn(),
-      registerPty: vi.fn(),
       onPtySpawned: vi.fn(),
       onPtyExit: vi.fn(),
       onPtyData: vi.fn(),

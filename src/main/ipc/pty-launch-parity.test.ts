@@ -1,3 +1,5 @@
+import * as teamsPlan from '../runtime/terminal/launch/agent-teams-launch-plan'
+import { SessionNotFoundError } from '../daemon/daemon-errors'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { classifyErrorMock, statSyncMock, trackMock } from './pty-ipc-mock-registry'
@@ -286,6 +288,51 @@ const WORKER = HOST_LAUNCH_CASES.find((c) => c.name.startsWith('orchestration wo
 describe('launch facts outside the tables', () => {
   const suite = setupPtyIpcSuite()
   afterEach(() => restoreMainPlatform())
+
+  it('does not readmit a recovered pane closed during lazy launch preparation', async () => {
+    const lanes = startParityLanes(suite, { workspace: POSIX_REPO })
+    const binding = {
+      worktreeId: launchWorkspaceId(POSIX_REPO),
+      tabId: HOST_TAB_ID,
+      leafId: HOST_LEAF_ID,
+      ptyId: 'absent-before-preparation'
+    }
+    await lanes.store.persistPtyBinding(binding)
+    lanes.provider.mockRejectedValueOnce(new SessionNotFoundError(binding.ptyId))
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const plan = teamsPlan.buildRuntimeAgentTeamsLaunchPlan
+    const preparing = vi
+      .spyOn(teamsPlan, 'buildRuntimeAgentTeamsLaunchPlan')
+      .mockImplementation(async (args) => {
+        await gate
+        return plan(args)
+      })
+    try {
+      const created = lanes.runtime.createTerminal(`id:${binding.worktreeId}`, {
+        tabId: HOST_TAB_ID,
+        leafId: HOST_LEAF_ID
+      })
+      const refused = expect(created).rejects.toThrow('terminal_pane_owner_changed')
+      await vi.waitFor(() => expect(preparing).toHaveBeenCalledOnce())
+      await lanes.store.withdrawTerminalPane({
+        type: 'closePane',
+        workspace: binding.worktreeId,
+        tabId: HOST_TAB_ID,
+        leafId: HOST_LEAF_ID
+      })
+      release()
+      await refused
+      expect(lanes.provider).toHaveBeenCalledOnce()
+      expect(lanes.store.getWorkspaceSession().terminalLayoutsByTabId[HOST_TAB_ID]).toBeUndefined()
+      expect(lanes.reveal).not.toHaveBeenCalled()
+    } finally {
+      release()
+      preparing.mockRestore()
+    }
+  })
 
   // C5a (one agent_error place): main today reports a failed window-lane spawn.
   it.each([

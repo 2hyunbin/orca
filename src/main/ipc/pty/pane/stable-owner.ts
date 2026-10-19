@@ -1,4 +1,4 @@
-import { fenceFreshPaneBinding } from './pane-spawn-operation'
+import { persistFreshPaneBinding } from './pane-spawn-operation'
 import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../../../persistence/restoring-sessions/workspace-session-write-rollback'
 import { cloneWorkspaceSessionState } from '../../../persistence/restoring-sessions/session-owner-fields'
 import { toSshExecutionHostId } from '../../../../shared/execution-host'
@@ -212,12 +212,12 @@ export async function persistAdmittedStablePaneBinding(args: {
     mayReviveRetiredSurface: false,
     origin: spawnCommitBindingOrigin(args.result)
   }
-  const persisted = await args.store.persistPtyBinding(
-    expectedBinding
-      ? binding
-      : fenceFreshPaneBinding(args.store, binding, undefined, args.connectionId),
-    args.connectionId ? toSshExecutionHostId(args.connectionId) : undefined
-  )
+  const persisted = expectedBinding
+    ? await args.store.persistPtyBinding(
+        binding,
+        args.connectionId ? toSshExecutionHostId(args.connectionId) : undefined
+      )
+    : await persistFreshPaneBinding(args.store, binding, args.connectionId)
   if (persisted === false) {
     throw new Error('terminal_pane_owner_changed')
   }

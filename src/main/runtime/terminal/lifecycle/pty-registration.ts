@@ -145,7 +145,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       // Why: daemon metadata owns the surviving process; its incarnation fence restores identity without minting renderer launch authority.
       pty.launchAgent = providerReattachLaunchIdentity.launchAgent
     }
-    const pendingIncarnation = this.pendingPtyRegistrationIncarnations.get(ptyId)
+    const pendingIncarnation = this.pendingPtyRegistrationIncarnations.get(ptyId)?.incarnationId
     if (
       pendingIncarnation === null ||
       pendingIncarnation === undefined ||
@@ -199,8 +199,22 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     }
   }
 
-  beginPtyRegistration(ptyId: string, incarnationId?: PtyIncarnationId): void {
-    this.pendingPtyRegistrationIncarnations.set(ptyId, incarnationId ?? null)
+  beginPtyRegistration(ptyId: string, incarnationId?: PtyIncarnationId) {
+    const claim = { incarnationId: incarnationId ?? null }
+    this.pendingPtyRegistrationIncarnations.set(ptyId, claim)
+    return claim
+  }
+
+  narrowPtyRegistration(
+    ptyId: string,
+    claim: { incarnationId: PtyIncarnationId | null },
+    incarnationId?: PtyIncarnationId
+  ): boolean {
+    if (this.pendingPtyRegistrationIncarnations.get(ptyId) !== claim) {
+      return false
+    }
+    claim.incarnationId = incarnationId ?? null
+    return true
   }
 
   acceptPtyIncarnationForExit(ptyId: string, incarnationId: PtyIncarnationId): void {
@@ -211,11 +225,18 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     }
   }
 
-  cancelPendingPtyRegistration(ptyId: string, incarnationId?: PtyIncarnationId): void {
+  cancelPendingPtyRegistration(
+    ptyId: string,
+    incarnationId?: PtyIncarnationId,
+    claim?: { incarnationId: PtyIncarnationId | null }
+  ): void {
     const pending = this.pendingPtyRegistrationIncarnations.get(ptyId)
     if (
-      !this.pendingPtyRegistrationIncarnations.has(ptyId) ||
-      (pending !== null && incarnationId !== undefined && pending !== incarnationId)
+      !pending ||
+      (claim !== undefined && pending !== claim) ||
+      (pending.incarnationId !== null &&
+        incarnationId !== undefined &&
+        pending.incarnationId !== incarnationId)
     ) {
       return
     }

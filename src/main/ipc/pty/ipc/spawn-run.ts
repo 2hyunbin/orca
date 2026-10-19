@@ -1,7 +1,11 @@
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { codexReattachedHomeRouteField } from '../host-env/codex-home'
 import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
-import { rejectPaneSpawnReservation, reserveIdlePaneSpawn } from '../pane/spawn-reservation'
+import {
+  rejectPaneSpawnReservation,
+  reserveIdlePaneSpawn,
+  pendingRuntimePaneCreatesByOwnerKey
+} from '../pane/spawn-reservation'
 import { ptySizes } from '../delivery/visibility-state'
 import {
   beginPtyIpcSpawn,
@@ -92,7 +96,14 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
       !resolveEarlyPaneKey(args) && ctx.reservationPaneKey
         ? parsePaneKey(ctx.reservationPaneKey)
         : null
-    if (latePane && args.worktreeId) {
+    if (latePane) {
+      const pendingCreate = ctx.paneSpawnReservationKey
+        ? pendingRuntimePaneCreatesByOwnerKey.get(ctx.paneSpawnReservationKey)
+        : undefined
+      if (pendingCreate) {
+        await pendingCreate.promise
+      }
+      ctx.args = { ...ctx.args, ...latePane }
       let completed: Awaited<ReturnType<typeof complete>> | undefined
       const adopted = await deps.adoptStablePane({
         cols: args.cols,

@@ -1,3 +1,4 @@
+import { ptyIncarnationById } from '../provider/ownership-state'
 import { reconcilePaneOwner } from './stable-pane-attach'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import type { Store } from '../../../persistence'
@@ -44,7 +45,7 @@ export async function adoptStablePane(
     if (!owner) {
       throw new Error('terminal_pane_owner_changed')
     }
-    if (typeof store?.getWorkspaceSession === 'function') {
+    if (args.worktreeId && typeof store?.getWorkspaceSession === 'function') {
       assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
     }
     if (
@@ -70,11 +71,33 @@ export async function adoptStablePane(
       if (!joined) {
         continue
       }
+      if (!args.worktreeId) {
+        const successor = paneSpawnReservationsByOwnerKey.get(key)
+        if (successor && successor !== pending) {
+          if (remaining-- <= 0) {
+            throw new Error('terminal_pane_owner_changed')
+          }
+          continue
+        }
+        const incarnation = ptyIncarnationById.get(joined.id)
+        if (
+          joined.incarnationId !== undefined &&
+          incarnation !== undefined &&
+          incarnation !== joined.incarnationId
+        ) {
+          throw new Error('terminal_pane_owner_changed')
+        }
+        return {
+          result: { ...joined, isReattach: true },
+          owner: { ptyId: joined.id, tabId: args.tabId, leafId: args.leafId },
+          materialized: true
+        }
+      }
       const owner = resolveOwner()
       if (!owner) {
         throw new Error('terminal_pane_owner_changed')
       }
-      if (typeof store?.getWorkspaceSession === 'function') {
+      if (args.worktreeId && typeof store?.getWorkspaceSession === 'function') {
         assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
       }
       if (owner.ptyId === joined.id && owner.incarnationId === joined.incarnationId) {
@@ -96,8 +119,11 @@ export async function adoptStablePane(
       resolveOwner,
       losses: 1 - remaining,
       attach: async (owner) => {
+        if (!args.worktreeId) {
+          throw new Error('terminal_pane_owner_changed')
+        }
         mustExist = true
-        if (typeof store?.getWorkspaceSession === 'function') {
+        if (args.worktreeId && typeof store?.getWorkspaceSession === 'function') {
           assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
         }
         const adopted = await completePaneAdoption({
@@ -122,7 +148,7 @@ export async function adoptStablePane(
         if (args.signal?.aborted) {
           throw new Error('client_disconnected')
         }
-        if (mustExist) {
+        if (mustExist && args.worktreeId) {
           assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
         }
         if (!args.spawnFresh) {

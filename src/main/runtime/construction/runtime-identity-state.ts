@@ -237,7 +237,10 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
   // Why: provider exit can beat surface registration; that exact dead incarnation must never publish.
   protected earlyExitedPtyIncarnations = new Map<string, PtyIncarnationId | null>()
 
-  protected pendingPtyRegistrationIncarnations = new Map<string, PtyIncarnationId | null>()
+  protected pendingPtyRegistrationIncarnations = new Map<
+    string,
+    { incarnationId: PtyIncarnationId | null }
+  >()
 
   // Why public: the PTY IPC layer's stop paths write it and its exit delivery reads it.
   readonly intentionalPtyStops = new TerminalIntentionalStops()

@@ -40,14 +40,14 @@ export function assertPaneStillExists(
 }
 
 /** Runs inside the existing durable mutation, after source/topology checks and before any bind. */
-export function fenceFreshPaneBinding(
+export async function persistFreshPaneBinding(
   store: Store,
   binding: PersistPtyBindingArgs,
-  stoppedPtyId?: string,
   connectionId?: string | null
-): () => PersistPtyBindingArgs {
-  return () => {
-    const hostId = connectionId ? toSshExecutionHostId(connectionId) : undefined
+): Promise<boolean> {
+  let targetChanged = false
+  const hostId = connectionId ? toSshExecutionHostId(connectionId) : undefined
+  const persisted = await store.persistPtyBinding(() => {
     const session = store.getWorkspaceSession(hostId)
     const paneKey = makePaneKey(binding.tabId, binding.leafId)
     if (ptyBindingIsRefused(binding, session, binding.worktreeId, paneKey, [])) {
@@ -55,13 +55,14 @@ export function fenceFreshPaneBinding(
     }
     const bound = session.terminalLayoutsByTabId[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
     const stamp = session.terminalPtyIncarnationsByPaneKey?.[paneKey]
-    if (
-      bound &&
-      bound !== stoppedPtyId &&
-      (bound !== binding.ptyId || stamp !== binding.incarnationId)
-    ) {
-      throw new PaneOwnerContentionError()
+    if (bound && (bound !== binding.ptyId || stamp !== binding.incarnationId)) {
+      targetChanged = true
+      return null
     }
     return binding
+  }, hostId)
+  if (targetChanged) {
+    throw new PaneOwnerContentionError()
   }
+  return persisted
 }

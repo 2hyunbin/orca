@@ -1,5 +1,5 @@
 import type { AgentSessionClaimedSpawnResult } from '../../../../shared/agent-session-host-authority'
-import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
+import { isTerminalLeafId, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { rejectPaneSpawnReservation } from '../pane/spawn-reservation'
 import { ptySizes } from '../delivery/visibility-state'
@@ -49,7 +49,6 @@ export async function spawnPtyFromRuntimeController(
 ) {
   if (
     args.paneSpawnOperation ||
-    !args.worktreeId ||
     !args.tabId ||
     !args.leafId ||
     !isValidTerminalTabId(args.tabId) ||
@@ -79,6 +78,9 @@ export async function spawnPtyFromRuntimeController(
   })
   if (!adopted) {
     return toRuntimeSpawnReply(freshResult!)
+  }
+  if (!args.worktreeId) {
+    return toRuntimeSpawnReply(adopted.result)
   }
   const completed = await adoptMaterializedRuntimePtySpawn(
     createRuntimePtySpawnState(deps, { ...args, adoptedStablePane: adopted })
@@ -110,10 +112,34 @@ async function spawnFreshPtyFromRuntimeController(
     if (earlyReserved) {
       return toRuntimeSpawnReply(earlyReserved)
     }
-    await executeRuntimePtySpawn(ctx)
-    const committed = await commitRuntimePtySpawn(ctx)
-    commitRuntimeSpawnHiddenDelivery(ctx)
-    return committed
+    const complete = async (operation = args.paneSpawnOperation) => {
+      ctx.args.paneSpawnOperation = operation
+      await executeRuntimePtySpawn(ctx)
+      const committed = await commitRuntimePtySpawn(ctx)
+      commitRuntimeSpawnHiddenDelivery(ctx)
+      return committed
+    }
+    const latePane =
+      !args.paneSpawnOperation && ctx.spawnIdentityPaneKey
+        ? parsePaneKey(ctx.spawnIdentityPaneKey)
+        : null
+    if (latePane) {
+      ctx.args = { ...ctx.args, ...latePane }
+      let result: Awaited<ReturnType<typeof complete>> | undefined
+      const adopted = await deps.adoptStablePane({
+        cols: args.cols,
+        rows: args.rows,
+        cwd: args.cwd,
+        worktreeId: args.worktreeId,
+        connectionId: args.connectionId,
+        ...latePane,
+        signal: args.signal,
+        preAllocatedHandle: args.preAllocatedHandle,
+        spawnFresh: async (operation) => (result = await complete(operation))
+      })
+      return toRuntimeSpawnReply(adopted?.result ?? result!)
+    }
+    return await complete()
   } catch (err) {
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     if (ctx.pendingRegistrationPtyId) {

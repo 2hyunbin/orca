@@ -73,7 +73,7 @@ export type AdoptStablePaneArgs = {
   rows: number
   cwd?: string
   connectionId?: string | null
-  worktreeId: string
+  worktreeId?: string
   preAllocatedHandle?: string
   tabId: string
   leafId: string
