@@ -160,22 +160,43 @@ describe('RemoteRuntimePtyRecoveryState', () => {
     state.dispose()
   })
 
-  it.each([
-    ['healthy', (state: RemoteRuntimePtyRecoveryState) => state.markHealthy()],
-    ['cancelled', (state: RemoteRuntimePtyRecoveryState) => state.cancel()],
-    ['disposed', (state: RemoteRuntimePtyRecoveryState) => state.dispose()]
-  ])('removes %s panes from the scheduled recovery registry', (_label, finish) => {
-    vi.useFakeTimers()
-    const state = new RemoteRuntimePtyRecoveryState()
-    const epoch = state.begin()
-    state.schedule(epoch, vi.fn())
-    const retryNow = vi.spyOn(state, 'retryNow')
-
-    finish(state)
-    retryAllRemoteRuntimePtyRecoveriesNow()
-
-    expect(retryNow).not.toHaveBeenCalled()
-  })
+  it.each(['healthy', 'cancelled', 'disposed', 'deadline', 'exhausted', 'contact loss'] as const)(
+    'settles the owner caller once and retains only the allowance owned by %s',
+    async (finish) => {
+      vi.useFakeTimers()
+      const state = new RemoteRuntimePtyRecoveryState()
+      const epoch = state.begin()
+      const retry = vi.fn()
+      const claim = state.claimOwnerRefresh(epoch, retry)
+      const settled = vi.fn()
+      void claim?.promise.then(settled)
+      expect(state.claimOwnerRefresh(epoch, retry)).toEqual({
+        started: false,
+        promise: claim?.promise
+      })
+      const result = { id: 'owner', replay: '', isReattach: true }
+      if (finish === 'healthy') state.markHealthy(result)
+      else if (finish === 'cancelled') state.cancel()
+      else if (finish === 'disposed') state.dispose()
+      else if (finish === 'exhausted') state.markDisconnected()
+      else if (finish === 'contact loss') state.parkOwnerRefresh(epoch)
+      else await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS)
+      expect(await claim?.promise).toEqual(finish === 'healthy' ? result : undefined)
+      if (finish === 'deadline' || finish === 'exhausted' || finish === 'contact loss') {
+        expect(state.hasOwnerRefresh).toBe(true)
+        expect(state.retryNow()).toBe(true)
+        const nextEpoch = finish === 'contact loss' ? epoch : epoch + 1
+        expect(retry).toHaveBeenCalledExactlyOnceWith(nextEpoch)
+        expect(state.claimOwnerRefresh(nextEpoch, retry)?.started).toBe(finish !== 'contact loss')
+      } else {
+        expect(state.hasOwnerRefresh).toBe(false)
+        expect(retryAllRemoteRuntimePtyRecoveriesNow()).toBe(0)
+      }
+      state.dispose()
+      await Promise.resolve()
+      expect(settled).toHaveBeenCalledOnce()
+    }
+  )
 
   it('keeps a timed-out pane revivable through the scheduled recovery registry', async () => {
     vi.useFakeTimers()

@@ -345,7 +345,7 @@ describe('launch race parity, both spawn lanes', () => {
           immediate: true,
           expectedIncarnationId: 'inc-1'
         })
-        expect(runtime.cancelPendingPtyRegistration).toHaveBeenCalledWith(ptyId, 'inc-1')
+        expect(runtime.cancelPendingPtyRegistration).toHaveBeenCalledWith(ptyId, 'inc-1', undefined)
       }
     )
 
@@ -376,7 +376,11 @@ describe('launch race parity, both spawn lanes', () => {
         await (EXITED_DURING_REGISTRATION[lane] === 'resolves'
           ? expect(spawn).resolves.toMatchObject({ id: ptyId, incarnationId: 'inc-exited' })
           : expect(spawn).rejects.toThrow('agent_session_exited_during_start'))
-        expect(runtime.cancelPendingPtyRegistration).toHaveBeenCalledWith(ptyId, 'inc-exited')
+        expect(runtime.cancelPendingPtyRegistration).toHaveBeenCalledWith(
+          ptyId,
+          'inc-exited',
+          undefined
+        )
         expect(runtime.noteTerminalSpawnCommit).not.toHaveBeenCalled()
         expect(runtime.reflowHeadlessTerminalToPtyGrid).not.toHaveBeenCalled()
       }

@@ -430,6 +430,7 @@ describe('launch facts outside the tables', () => {
           release()
         }
       })
+      const beginRegistration = vi.spyOn(lanes.runtime, 'beginPtyRegistration')
       const cancelRegistration = vi.spyOn(lanes.runtime, 'cancelPendingPtyRegistration')
       const worktreeId = launchWorkspaceId(POSIX_REPO)
       const launch =
@@ -452,7 +453,12 @@ describe('launch facts outside the tables', () => {
       expect(trackMock.mock.calls).toEqual(FAILED_START_AGENT_ERROR[lane])
       expect(hiddenWhileSpawning).toBe(true)
       expect(isHiddenRendererPty(sessionId)).toBe(false)
-      expect(cancelRegistration.mock.calls).toEqual([[sessionId, undefined]])
+      const claim =
+        beginRegistration.mock.results[
+          beginRegistration.mock.calls.findIndex(([id]) => id === sessionId)
+        ]?.value
+      expect(claim).toBeDefined()
+      expect(cancelRegistration.mock.calls).toEqual([[sessionId, undefined, claim]])
       expect(gateReleased).toHaveBeenCalledOnce()
       expect(ptySizes.has(sessionId)).toBe(false)
       const paneKey = makePaneKey(HOST_TAB_ID, HOST_LEAF_ID)

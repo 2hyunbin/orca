@@ -282,6 +282,7 @@ describe('registerPtyHandlers', () => {
         return {
           id: 'pty-early-exit',
           incarnationId: 'incarnation-early-exit',
+          exitedBeforeSpawnReply: true,
           providerSequence: { value: 17, generation: 'reset' as const },
           wslDistro: 'Ubuntu'
         }

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPaneBindingStore } from '../../pty-launch-race-test-fixture'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import {
@@ -11,6 +11,8 @@ import { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import * as providers from '../provider/registry'
 import { adoptStablePane } from './adopt-stable'
 import type { StablePaneOwner } from './stable-owner'
+
+import { ptyIncarnationById, ptyOwnership } from '../provider/ownership-state'
 
 const LEAF = '1b3f2c4d-5e6a-4b7c-8d9e-0f1a2b3c4d5e'
 const SIBLING_LEAF = '2c4d3e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f'
@@ -86,6 +88,16 @@ function sessionStore(leaves: string[]): { store: Store; read: () => WorkspaceSe
 }
 
 describe('stable pane adoption after the owning host reports the PTY absent', () => {
+  beforeEach(() => {
+    for (const id of [OWNER.ptyId, 'ssh:conn-1@@pty-2']) ptyOwnership.set(id, 'ssh:conn-1')
+  })
+  afterEach(() => {
+    for (const id of [OWNER.ptyId, 'ssh:conn-1@@pty-2']) {
+      ptyOwnership.delete(id)
+      ptyIncarnationById.delete(id)
+    }
+  })
+
   it.each([false, true])(
     'reattaches a live pane without launching a provider process (settled worker: %s)',
     async (settledWorker) => {
@@ -141,8 +153,10 @@ describe('stable pane adoption after the owning host reports the PTY absent', ()
   })
 
   it('refuses to respawn a workspace pane when no Store can clear its binding', async () => {
-    const spawn = vi.fn().mockRejectedValueOnce(new SessionNotFoundError(OWNER.ptyId))
-
+    const spawn = vi.fn()
+    const provider = new LocalPtyProvider()
+    vi.spyOn(provider, 'spawn').mockRejectedValueOnce(new SessionNotFoundError(OWNER.ptyId))
+    vi.spyOn(providers, 'getProvider').mockReturnValue(provider)
     const runtime = new OrcaRuntimeService()
     runtime.registerPty(OWNER.ptyId, WORKTREE, 'conn-1', OWNER)
     await expect(

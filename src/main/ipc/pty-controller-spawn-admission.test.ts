@@ -75,7 +75,7 @@ describe('registerPtyHandlers', () => {
       spawn: vi.fn(async () => {
         runtime.onPtySpawned(ptyId, incarnationId)
         runtime.onPtyExit(ptyId, 0, incarnationId)
-        return { id: ptyId, incarnationId }
+        return { id: ptyId, incarnationId, exitedBeforeSpawnReply: true }
       }),
       authoritativeOwnerListings: false
     })

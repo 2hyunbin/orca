@@ -1,3 +1,5 @@
+import type { PtyConnectResult } from './pty-transport-types'
+
 export const REMOTE_RUNTIME_RECOVERY_DELAYS_MS = [
   250, 500, 1000, 2000, 4000, 8000, 15_000, 30_000
 ] as const
@@ -77,6 +79,12 @@ export function reviveRemoteRuntimePtyRecoveriesForEnvironment(environmentId: st
 }
 
 export class RemoteRuntimePtyRecoveryState {
+  // Caller settlement does not restore this epoch's spent owner-refresh allowance.
+  private ownerRefresh: {
+    promise: Promise<PtyConnectResult | undefined>
+    settle: ((result?: PtyConnectResult) => void) | null
+    retry: (epoch: number) => void
+  } | null = null
   private phase: RemoteRuntimePtyRecoveryPhase = 'idle'
   private epoch = 0
   private attempt = 0
@@ -110,11 +118,54 @@ export class RemoteRuntimePtyRecoveryState {
     return this.deadlineExpired
   }
 
+  get hasOwnerRefresh(): boolean {
+    return this.ownerRefresh !== null
+  }
+
+  claimOwnerRefresh(epoch: number, retry: (epoch: number) => void) {
+    if (!this.isCurrent(epoch)) {
+      return null
+    }
+    if (this.ownerRefresh) {
+      return { started: false, promise: this.ownerRefresh.promise }
+    }
+    const { promise, resolve } = Promise.withResolvers<PtyConnectResult | undefined>()
+    this.ownerRefresh = { promise, settle: resolve, retry }
+    return { started: true, promise }
+  }
+
+  parkOwnerRefresh(epoch: number): void {
+    if (!this.ownsEpoch(epoch) || !this.ownerRefresh) {
+      return
+    }
+    this.settleOwnerRefresh()
+    if (this.isActive) {
+      this.parkRetryForExternalTrigger(epoch, this.ownerRefresh.retry)
+    } else {
+      this.parkRetryAfterDeadline(this.ownerRefresh.retry)
+    }
+  }
+
+  private settleOwnerRefresh(result?: PtyConnectResult): void {
+    const refresh = this.ownerRefresh
+    if (refresh?.settle) {
+      const settle = refresh.settle
+      refresh.settle = null
+      settle(result)
+    }
+  }
+
+  private clearOwnerRefresh(result?: PtyConnectResult): void {
+    this.settleOwnerRefresh(result)
+    this.ownerRefresh = null
+  }
+
   begin(): number {
     if (this.phase === 'disposed') {
       return this.epoch
     }
     if (!this.isActive) {
+      this.clearOwnerRefresh()
       this.epoch += 1
       this.attempt = 0
       this.armDeadline(this.epoch)
@@ -211,6 +262,7 @@ export class RemoteRuntimePtyRecoveryState {
     this.clearRetryTimer()
     if (latched) {
       // Why: the deadline only stops auto-retry; an explicit trigger opens a fresh recovery window.
+      this.clearOwnerRefresh()
       this.epoch += 1
       this.attempt = 0
       this.armDeadline(this.epoch)
@@ -222,10 +274,11 @@ export class RemoteRuntimePtyRecoveryState {
     return true
   }
 
-  markHealthy(): void {
+  markHealthy(result?: PtyConnectResult): void {
     if (this.phase === 'disposed') {
       return
     }
+    this.clearOwnerRefresh(result)
     this.deadlineExpired = false
     this.clearTimers()
     this.phase = 'idle'
@@ -243,6 +296,11 @@ export class RemoteRuntimePtyRecoveryState {
     this.stopRetryTimer()
     this.clearDeadlineTimer()
     this.phase = 'disconnected'
+    if (this.ownerRefresh) {
+      this.settleOwnerRefresh()
+      this.clearRetryTimer()
+      this.parkRetry(this.ownerRefresh.retry)
+    }
     this.onChange?.()
   }
 
@@ -250,6 +308,7 @@ export class RemoteRuntimePtyRecoveryState {
     if (this.phase === 'disposed') {
       return
     }
+    this.clearOwnerRefresh()
     this.deadlineExpired = false
     this.epoch += 1
     this.clearTimers()
@@ -259,6 +318,7 @@ export class RemoteRuntimePtyRecoveryState {
   }
 
   dispose(): void {
+    this.clearOwnerRefresh()
     this.epoch += 1
     this.clearTimers()
     this.phase = 'disposed'
@@ -275,9 +335,7 @@ export class RemoteRuntimePtyRecoveryState {
       this.deadlineTimer = null
       this.deadlineExpired = true
       // Why: the cutoff stops self-initiated retries but must keep the pane revivable by online/resume/reconnect.
-      this.stopRetryTimer()
-      this.phase = 'disconnected'
-      this.onChange?.()
+      this.markDisconnected()
     }, REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS)
     timer.unref?.()
     this.deadlineTimer = timer
