@@ -11,13 +11,8 @@ import {
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { isWithinComboboxRoot, useTypeAheadCombobox } from './use-type-ahead-combobox'
 import { COMBOBOX_POPOVER_SURFACE } from './type-ahead-combobox-styles'
-import {
-  ConnectHostButton,
-  HostRowIcon,
-  NeedsSetupHostIcon,
-  RunTargetRow,
-  SetLocationButton
-} from './RunTargetComboboxRow'
+import { HostRowIcon, RunTargetRow } from './RunTargetComboboxRow'
+import { ConnectHostButton, NeedsSetupHostIcon, SetLocationButton } from './RunTargetRowActions'
 import {
   buildRunTargetRows,
   getEphemeralVmLabel,
