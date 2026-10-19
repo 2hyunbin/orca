@@ -14,17 +14,24 @@ vi.mock('@/store', () => ({
   }
 }))
 
-it('opens a selected HTML preview without preparing file mutations', async () => {
-  await openTabBarEntry({
-    classification: { kind: 'html-file-url', filePath: '/repo/report.html' },
-    query: 'file:///repo/report.html',
-    worktreeId: 'remote',
-    groupId: 'group-2',
-    fileList: { files: [], loading: true, loadError: null }
-  })
-  expect(preview).toHaveBeenCalledWith({
-    filePath: '/repo/report.html',
-    worktreeId: 'remote',
-    targetGroupId: 'group-2'
-  })
-})
+it.each([true, false])(
+  'opens an HTML preview without requiring file mutations (selected: %s)',
+  async (selected) => {
+    preview.mockClear()
+    await openTabBarEntry({
+      ...(selected
+        ? { classification: { kind: 'html-file-url' as const, filePath: '/repo/report.html' } }
+        : {}),
+      query: 'file:///repo/report.html',
+      worktreeId: 'remote',
+      groupId: 'group-2',
+      fileList: { files: [], loading: true, loadError: null }
+    })
+    expect(preview).toHaveBeenCalledTimes(1)
+    expect(preview).toHaveBeenCalledWith({
+      filePath: '/repo/report.html',
+      worktreeId: 'remote',
+      targetGroupId: 'group-2'
+    })
+  }
+)
