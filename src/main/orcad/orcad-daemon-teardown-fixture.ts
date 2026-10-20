@@ -128,7 +128,7 @@ export async function killChildAndWait(child: ReturnType<typeof spawnProcess>): 
 }
 
 type ProfileDaemonRecord = {
-  /** Daemon pid to its creation time when first seen alive; later sightings may be a reused pid. */
+  /** Daemon pid to the creation time of the first process seen holding it. */
   pids: Map<number, number | undefined>
   descendants: Map<string, WindowsProcessIdentityRow>
 }
@@ -162,20 +162,30 @@ const identityKey = (row: WindowsProcessIdentityRow): string =>
   `${row.pid}:${row.creationTimeMs ?? ''}`
 
 /** Descendants of a daemon, skipping any row created before its claimed parent (a reused ppid). */
-export function collectDaemonDescendants(
+function collectDaemonDescendants(
   index: ProcessTableIndexOf<WindowsProcessIdentityRow>,
   daemonPid: number,
   daemonCreationTimeMs: number | undefined
 ): WindowsProcessIdentityRow[] {
-  const parentCreationTime = (ppid: number): number | undefined =>
-    ppid === daemonPid ? daemonCreationTimeMs : index.byPid.get(ppid)?.creationTimeMs
+  const holderCreated = index.byPid.get(daemonPid)?.creationTimeMs
+  // A different process now holds the daemon's pid: the daemon's own children predate it.
+  const reusedAt =
+    daemonCreationTimeMs !== undefined && holderCreated !== daemonCreationTimeMs
+      ? holderCreated
+      : undefined
   return collectDescendantsFromIndex(index, daemonPid, (row) => {
-    const parentCreated = parentCreationTime(row.ppid)
-    // Without both times, keep the row: a real leak must still fail teardown.
+    const created = row.creationTimeMs
+    if (created === undefined) {
+      // Unknown age keeps the row: a real leak must still fail teardown.
+      return false
+    }
+    if (row.ppid !== daemonPid) {
+      const parentCreated = index.byPid.get(row.ppid)?.creationTimeMs
+      return parentCreated !== undefined && created < parentCreated
+    }
     return (
-      row.creationTimeMs !== undefined &&
-      parentCreated !== undefined &&
-      row.creationTimeMs < parentCreated
+      (daemonCreationTimeMs !== undefined && created < daemonCreationTimeMs) ||
+      (reusedAt !== undefined && created >= reusedAt)
     )
   })
 }
@@ -225,7 +235,9 @@ async function waitForDescendantExit(rows: WindowsProcessIdentityRow[]): Promise
       return
     }
     if (Date.now() >= deadline) {
-      const names = remaining.map((row) => `${row.name} ${row.pid}`).join(', ')
+      const names = remaining
+        .map((row) => `${row.name} ${row.pid} (ppid ${row.ppid}, created ${row.creationTimeMs})`)
+        .join(', ')
       throw new Error(`Daemon descendants did not exit: ${names}`)
     }
     await sleep(POLL_MS)

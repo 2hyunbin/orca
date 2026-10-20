@@ -83,7 +83,7 @@ describe('daemon descendant walk under Windows pid reuse', () => {
     const child = { pid: 77, ppid: daemonPid, name: 'OpenConsole.exe', creationTimeMs: 6_000 }
     const root = profile(daemonPid, onTestFinished)
     expect(await teardown(root, [daemon, child], [child])).toMatchObject(
-      leaked('OpenConsole.exe 77')
+      leaked(`OpenConsole.exe 77 (ppid ${daemonPid}, created 6000)`)
     )
   })
 
@@ -94,7 +94,7 @@ describe('daemon descendant walk under Windows pid reuse', () => {
     const grandchild = { pid: 88, ppid: 77, name: 'pwsh.exe', creationTimeMs: 7_000 }
     const root = profile(daemonPid, onTestFinished)
     expect(await teardown(root, [daemon, child, grandchild], [grandchild])).toMatchObject(
-      leaked('pwsh.exe 88')
+      leaked('pwsh.exe 88 (ppid 77, created 7000)')
     )
   })
 
@@ -109,13 +109,39 @@ describe('daemon descendant walk under Windows pid reuse', () => {
     expect(await teardown(root, [daemon, child, telemetry], [telemetry])).toBeNull()
   })
 
-  it('keeps a child when either creation time is unknown', async ({ onTestFinished }) => {
+  it('ignores children of a newer process that reused the exited daemon pid', async ({
+    onTestFinished
+  }) => {
     const daemonPid = await exitedPid()
-    const daemon = { pid: daemonPid, ppid: 1, name: 'node.exe' }
-    const child = { pid: 77, ppid: daemonPid, name: 'OpenConsole.exe', creationTimeMs: 10 }
+    const daemon = { pid: daemonPid, ppid: 1, name: 'node.exe', creationTimeMs: 5_000 }
+    const orphan = { pid: 77, ppid: daemonPid, name: 'OpenConsole.exe', creationTimeMs: 6_000 }
+    const linker = { pid: daemonPid, ppid: 1, name: 'link.exe', creationTimeMs: 9_000 }
+    const telemetry = { pid: 2_904, ppid: daemonPid, name: 'vctip.exe', creationTimeMs: 9_500 }
     const root = profile(daemonPid, onTestFinished)
-    expect(await teardown(root, [daemon, child], [child])).toMatchObject(
-      leaked('OpenConsole.exe 77')
+    // The daemon's own orphan still counts; the new holder's child does not.
+    expect(await teardown(root, [daemon, orphan], [linker, orphan, telemetry])).toMatchObject(
+      leaked(`OpenConsole.exe 77 (ppid ${daemonPid}, created 6000)`)
     )
   })
+
+  it.for([
+    { daemonCreated: undefined, childCreated: 10 },
+    { daemonCreated: 5_000, childCreated: undefined }
+  ])(
+    'keeps a child when a creation time is unknown (%o)',
+    async ({ daemonCreated, childCreated }, { onTestFinished }) => {
+      const daemonPid = await exitedPid()
+      const daemon = { pid: daemonPid, ppid: 1, name: 'node.exe', creationTimeMs: daemonCreated }
+      const child = {
+        pid: 77,
+        ppid: daemonPid,
+        name: 'OpenConsole.exe',
+        creationTimeMs: childCreated
+      }
+      const root = profile(daemonPid, onTestFinished)
+      expect(await teardown(root, [daemon, child], [child])).toMatchObject(
+        leaked(`OpenConsole.exe 77 (ppid ${daemonPid}, created ${childCreated})`)
+      )
+    }
+  )
 })
