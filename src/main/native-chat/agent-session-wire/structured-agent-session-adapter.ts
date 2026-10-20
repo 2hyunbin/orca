@@ -1,6 +1,7 @@
 import type { AiVaultConversationCopy } from '../../../shared/ai-vault-resume-preparation'
 import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
 import type {
+  AgentSessionRewindFork,
   AgentSessionRewindReason,
   AgentSessionRewindSupport
 } from '../../../shared/agent-session-rewind'
@@ -28,7 +29,8 @@ import type { AgentSessionProviderHandleLink } from '../../../shared/agent-sessi
 import type {
   AgentSessionAccountHome,
   AgentSessionExecutionLocation,
-  AgentSessionProcessIdentity
+  AgentSessionProcessIdentity,
+  AgentSessionRecord
 } from '../../../shared/agent-session-record'
 import type { StructuredAgentSessionAtRestCommands } from './structured-agent-session-at-rest-commands'
 import type {
@@ -304,6 +306,16 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     fence: number
     beforeTurnId: string
   }): Promise<{ ok: true } | { ok: false; reason: AgentSessionRewindReason }>
+  /** An agent that rewinds by forking: the session a rewind to before `beforeMessage` continues the
+   *  chat in, which its next launch creates. Read before anything is saved, so a refusal changes
+   *  nothing, and the agent need not be running. */
+  forkForRewind?(input: {
+    record: AgentSessionRecord
+    beforeMessage: { sessionId: string; uuid: string }
+    rewindOperationId: string
+  }): Promise<
+    { ok: true; fork: AgentSessionRewindFork } | { ok: false; reason: AgentSessionRewindReason }
+  >
   /** Sends a conversation compaction and answers with the provider's receipt of it, as a dispatch
    *  does. The command's turn is the child's journal translator's to end, from the provider's own
    *  frames; a child that ends first leaves it to the host's settlement of that child. */
