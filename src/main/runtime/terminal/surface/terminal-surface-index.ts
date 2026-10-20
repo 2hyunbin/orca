@@ -72,11 +72,13 @@ export class TerminalSurfaceIndex {
       .filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
     const loaded = hostIds.map((hostId) => reads?.readPartition(hostId) ?? null)
     // Which partition owns a workspace can change with no write (an SSH terminal registering).
-    const homes = JSON.stringify(
+    // The titles setting changes tab titles with no write, so it keys the cache too.
+    const homes = JSON.stringify([
+      this.deps.generatedTitlesEnabled(),
       loaded.map((partition) =>
         Object.keys(partition?.layout.workspaces ?? {}).map((key) => this.homeOf(key))
       )
-    )
+    ])
     if (
       this.current &&
       homes === this.projectedHomes &&

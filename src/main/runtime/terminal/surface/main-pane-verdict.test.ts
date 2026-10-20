@@ -21,7 +21,7 @@ function host(opts: {
 
 describe('a main-owned pane verdict', () => {
   it('a pane with no status is live only on the host word', () => {
-    const pane = { ptyId: 'pty-a', hasStatus: false }
+    const pane = { ptyId: 'pty-a', hasStatus: false, starting: false }
     expect(mainPaneVerdict(pane, host({ registered: true, inventory: ['pty-a'] }))).toBe('live')
     expect(
       mainPaneVerdict(
@@ -39,22 +39,30 @@ describe('a main-owned pane verdict', () => {
           ? { status: 'live', ptyIds: ['pty-a'] }
           : { status: 'unverifiable', reason: 'lost contact' }
       expect(
-        mainPaneVerdict({ ptyId: 'pty-a', hasStatus: true }, host({ registered: true, verdict }))
+        mainPaneVerdict(
+          { ptyId: 'pty-a', hasStatus: true, starting: false },
+          host({ registered: true, verdict })
+        )
       ).toBe('unverifiable')
     }
   )
 
   it('a sleeping pane whose terminal the host reports absent is exited', () => {
-    expect(mainPaneVerdict({ ptyId: 'pty-a', hasStatus: true }, host({ inventory: [] }))).toBe(
-      'exited'
-    )
+    expect(
+      mainPaneVerdict({ ptyId: 'pty-a', hasStatus: true, starting: false }, host({ inventory: [] }))
+    ).toBe('exited')
   })
 
   it('a sleeping pane on an unreachable host is unverifiable, never exited', () => {
-    expect(mainPaneVerdict({ ptyId: 'pty-a', hasStatus: true }, host({}))).toBe('unverifiable')
+    expect(mainPaneVerdict({ ptyId: 'pty-a', hasStatus: true, starting: false }, host({}))).toBe(
+      'unverifiable'
+    )
     // The local inventory cannot speak for an SSH terminal.
     expect(
-      mainPaneVerdict({ ptyId: 'ssh:conn-1@@pty-a', hasStatus: true }, host({ inventory: [] }))
+      mainPaneVerdict(
+        { ptyId: 'ssh:conn-1@@pty-a', hasStatus: true, starting: false },
+        host({ inventory: [] })
+      )
     ).toBe('unverifiable')
   })
 
@@ -66,14 +74,22 @@ describe('a main-owned pane verdict', () => {
   ])('a remote host answer %o reads %s', (verdict, expected) => {
     expect(
       mainPaneVerdict(
-        { ptyId: 'ssh:conn-1@@pty-a', hasStatus: false },
+        { ptyId: 'ssh:conn-1@@pty-a', hasStatus: false, starting: false },
         host({ verdict, inventory: [] })
       )
     ).toBe(expected)
   })
 
+  it('a starting pane is never exited on the inventory alone, unbound or rebinding', () => {
+    for (const ptyId of [null, 'pty-a']) {
+      expect(
+        mainPaneVerdict({ ptyId, hasStatus: true, starting: true }, host({ inventory: [] }))
+      ).toBe('unverifiable')
+    }
+  })
+
   it('an unbound pane is exited only once the host answered', () => {
-    const pane = { ptyId: null, hasStatus: false }
+    const pane = { ptyId: null, hasStatus: false, starting: false }
     expect(mainPaneVerdict(pane, host({ inventory: [] }))).toBe('exited')
     expect(mainPaneVerdict(pane, host({}))).toBe('unverifiable')
   })

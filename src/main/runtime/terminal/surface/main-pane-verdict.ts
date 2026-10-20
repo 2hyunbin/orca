@@ -5,21 +5,31 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { paneTerminalFact, type RuntimePtyRegistryView } from '../../runtime-leaf-record-projection'
 
+/** A pane main owns: its bound terminal, and whether a status says that binding is not live. */
+export type MainPaneBinding = {
+  ptyId: string | null
+  hasStatus: boolean
+  /** A start is in flight: the old binding's absence does not mean the pane's terminal ended. */
+  starting: boolean
+}
+
 /**
  * The host's verdict on the pane's terminal. `exited` needs proof: the local inventory answered
  * without it, or the registry holds its exit. A pane with a status is never live.
  */
 export function mainPaneVerdict(
-  pane: { ptyId: string | null; hasStatus: boolean },
+  pane: MainPaneBinding,
   host: RuntimePtyRegistryView & {
     /** The local inventory's live terminals; null when it has not answered. */
     inventoryLivePtyIds: ReadonlySet<string> | null
     controllerHasPty: (ptyId: string) => boolean
   }
 ): PtyLivenessVerdict['status'] {
-  const verdict = provenAbsent(pane.ptyId, host)
-    ? 'exited'
-    : (paneTerminalFact(pane.ptyId, host) ?? 'unverifiable')
+  const fact = paneTerminalFact(pane.ptyId, host)
+  if (pane.starting) {
+    return fact === 'exited' ? 'exited' : 'unverifiable'
+  }
+  const verdict = provenAbsent(pane.ptyId, host) ? 'exited' : (fact ?? 'unverifiable')
   return pane.hasStatus && verdict === 'live' ? 'unverifiable' : verdict
 }
 

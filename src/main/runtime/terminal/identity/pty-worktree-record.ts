@@ -10,7 +10,7 @@ import type { RuntimeSyncedLeaf } from '../../../../shared/runtime-types'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { inferWorktreeIdFromPtyId } from '../../runtime-worktree-path-identity'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
+import { withMainPaneClaim } from '../surface/main-terminal-surfaces'
 import {
   recordPtySurfaceClaim,
   SURFACE_CLAIM_WITHOUT_STANDING
@@ -51,24 +51,7 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
   ): RuntimePtyWorktreeRecord {
     // Switch point: the pane main's layout binds the terminal to outranks any caller's claim.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      const surfaces = startedMainTerminalSurfaces(this)
-      const pane = surfaces?.findPaneForPty(ptyId)
-      // A bound pane's terminal connecting or ending changes its leaf, though no layout changed.
-      if (
-        pane &&
-        state.connected !== undefined &&
-        this.ptysById.get(ptyId)?.connected !== state.connected
-      ) {
-        surfaces?.terminalChanged()
-      }
-      if (pane && (state.tabId !== undefined || state.paneKey !== undefined)) {
-        state = {
-          ...state,
-          tabId: pane.tabId,
-          paneKey: makePaneKey(pane.tabId, pane.leafId),
-          surfaceRecordedAtGraphSequence: this.graphSequence
-        }
-      }
+      state = withMainPaneClaim(this, this.ptysById.get(ptyId), ptyId, state, this.graphSequence)
     }
     let pty = this.ptysById.get(ptyId)
     if (!pty) {

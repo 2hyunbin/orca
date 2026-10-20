@@ -3,6 +3,8 @@
 // Only switch-on code reaches this module, so a window-owned build bundles none of it.
 
 import type { PaneStartFactOf } from '../../pane-start-statuses'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
+import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
 import type { RuntimeStore } from '../../runtime-store-contract'
@@ -65,7 +67,7 @@ class MainSurfacePublisher {
    * A pane main owns: the terminal its layout binds and whether it has a status (a start in flight
    * or failed, or a sleeping agent), which says that binding is not live; null otherwise.
    */
-  paneOf(tabId: string, leafId: string): { ptyId: string | null; hasStatus: boolean } | null {
+  paneOf(tabId: string, leafId: string): MainPaneBinding | null {
     const surfaces = this.index.surfaces()
     const pane = surfaces.leaves.find((leaf) => leaf.tabId === tabId && leaf.leafId === leafId)
     const facts = surfaces.paneFacts.get(`${tabId}::${leafId}`)
@@ -73,7 +75,8 @@ class MainSurfacePublisher {
       return null
     }
     const started = this.host.paneStartFact(`${tabId}:${leafId}`, facts.binding)
-    return { ptyId: pane.ptyId, hasStatus: facts.sleeping || started !== null }
+    const status = started?.status ?? (facts.sleeping ? 'sleeping' : null)
+    return { ptyId: pane.ptyId, hasStatus: status !== null, starting: status === 'starting' }
   }
 
   /** Whether main lists the workspace's terminals. */
@@ -175,4 +178,53 @@ export function windowListsTab(
   tabId: string
 ): boolean {
   return startedMainTerminalSurfaces(runtime)?.windowListsTab(tabId) ?? tabs.has(tabId)
+}
+
+type PaneClaim = {
+  connected?: boolean
+  tabId?: string | null
+  paneKey?: string | null
+  surfaceRecordedAtGraphSequence?: number
+}
+
+/**
+ * A terminal record's update with main's pane in place of the caller's claim. Looked up only when
+ * the claim or the connection changes, since output records every chunk with neither changed.
+ */
+export function withMainPaneClaim<State extends PaneClaim>(
+  runtime: SurfacesOwner,
+  prior: { connected: boolean; tabId: string | null; paneKey: string | null } | undefined,
+  ptyId: string,
+  state: State,
+  graphSequence: number
+): State {
+  const connectedChanges = state.connected !== undefined && prior?.connected !== state.connected
+  const claimChanges =
+    (state.tabId !== undefined && state.tabId !== prior?.tabId) ||
+    (state.paneKey !== undefined && state.paneKey !== prior?.paneKey)
+  if (!connectedChanges && !claimChanges) {
+    return state
+  }
+  const surfaces = startedMainTerminalSurfaces(runtime)
+  const pane = surfaces?.findPaneForPty(ptyId)
+  if (!pane) {
+    return state
+  }
+  // A bound pane's terminal connecting or ending changes its leaf, though no layout changed.
+  if (connectedChanges) {
+    surfaces?.terminalChanged()
+  }
+  return claimChanges
+    ? {
+        ...state,
+        tabId: pane.tabId,
+        paneKey: makePaneKey(pane.tabId, pane.leafId),
+        surfaceRecordedAtGraphSequence: graphSequence
+      }
+    : state
+}
+
+/** Whether main lists the workspace's panes, so terminal.list shows every saved one. */
+export function mainListsEveryPane(runtime: SurfacesOwner, worktreeId: string): boolean {
+  return startedMainTerminalSurfaces(runtime)?.ownsWorkspace(worktreeId) === true
 }

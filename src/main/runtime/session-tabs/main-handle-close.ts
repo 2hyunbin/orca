@@ -6,8 +6,7 @@ import type { RuntimeTerminalClose } from '../../../shared/runtime-types'
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
-
-type ExplicitCloseStop = { stopped: boolean }
+import { NO_STOP, type ExplicitCloseStop } from './explicit-terminal-close-pty-stops'
 
 type HandleTarget = { worktreeId: string; ptyId: string | null; tabId?: string; leafId?: string }
 
@@ -85,8 +84,11 @@ export async function closeMainOwnedPaneByHandle(
     : target.ptyId
       ? [target.ptyId]
       : []
-  const stop = target.ptyId ? await host.stop(ended, target.ptyId) : { stopped: false }
+  // Main's tab close stops nothing itself: every terminal it ends stops here, addressed or not.
+  const addressed = target.ptyId ?? ended[0]
+  const stop = addressed ? await host.stop(ended, addressed) : NO_STOP
+  const addressedStop = target.ptyId ? stop : NO_STOP
   return wholeTab
     ? { handle, tabId: pane.tabId, closeMode: 'tab', ptyKilled: false }
-    : host.describe(handle, pane.tabId, target.ptyId, stop)
+    : host.describe(handle, pane.tabId, target.ptyId, addressedStop)
 }
