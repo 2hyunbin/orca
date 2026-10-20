@@ -121,12 +121,14 @@ export function getGitHubWorkItemRowHostId(
   repoPath: string,
   sourceContext?: TaskSourceContext | null
 ): ExecutionHostId | undefined {
-  if (sourceContext?.provider === 'github') {
-    return sourceContext.hostId
-  }
-  // Why id and path: by id alone a twin resolves to whichever row is listed first.
-  const row = state.repos?.find((entry) => entry.id === repoId && entry.path === repoPath)
-  return row ? getRepoExecutionHostId(row) : undefined
+  const sourceHostId = sourceContext?.provider === 'github' ? sourceContext.hostId : undefined
+  const rows = state.repos?.filter((entry) => entry.id === repoId) ?? []
+  // Why not by id alone: a twin would resolve to whichever row is listed first.
+  const row =
+    rows.find((entry) => getRepoExecutionHostId(entry) === sourceHostId) ??
+    rows.find((entry) => entry.path === repoPath) ??
+    (rows.length === 1 ? rows[0] : undefined)
+  return row ? getRepoExecutionHostId(row) : sourceHostId
 }
 
 export function getGitHubWorkItemSourceCacheScope(

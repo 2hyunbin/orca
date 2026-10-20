@@ -117,7 +117,8 @@ export function useTaskPageGitHubDetail(model: TaskPageGitHubListStateModel) {
     if (
       pageData.openGitHubSourceContext?.provider === 'github' &&
       pageData.openGitHubWorkItem?.id === dialogWorkItem.id &&
-      pageData.openGitHubWorkItem.repoId === dialogWorkItem.repoId
+      pageData.openGitHubWorkItem.repoId === dialogWorkItem.repoId &&
+      pageData.openGitHubWorkItem.repoHostId === dialogWorkItem.repoHostId
     ) {
       return pageData.openGitHubSourceContext
     }

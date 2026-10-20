@@ -107,7 +107,7 @@ export function TaskPageGitHubRows({
             // Why: clickable div not a <button> — it nests buttons, and button-in-button is invalid HTML that breaks hydration.
             <div
               // Why: key on repoId+item.id — repos sharing an upstream reuse item.id, so a bare key collides and React silently drops rows.
-              key={`${item.repoId}:${item.id}`}
+              key={`${item.repoId}:${item.repoHostId ?? ''}:${item.id}`}
               role="button"
               tabIndex={0}
               onClick={() => openGitHubDetailPage(item)}

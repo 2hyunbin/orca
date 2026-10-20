@@ -253,6 +253,20 @@ describe('task page cache selectors', () => {
     ).toBe(remote)
   })
 
+  it('keeps each twin host row on its own copy when the cache syncs the table', () => {
+    const local = { ...workItem('pr:7', 'twin'), repoHostId: 'local' as const }
+    const remote = { ...local, repoHostId: 'ssh:builder' as const }
+    const pages = [[local, { ...remote }]]
+
+    const nextPages = reconcileTaskPagePagesWithWorkItemsCache(pages, [
+      entry<GitHubWorkItem[]>([local]),
+      entry<GitHubWorkItem[]>([remote])
+    ])
+
+    expect(nextPages[0]?.map((item) => item.repoHostId)).toEqual(['local', 'ssh:builder'])
+    expect(nextPages[0]?.[1]).toBe(remote)
+  })
+
   it('reconciles paged table rows with patched work-item cache entries', () => {
     const stale = {
       ...workItem('pr-1', 'repo-1'),

@@ -122,10 +122,6 @@ export function selectTaskPageUnresolvedSourceRepos(
   return unresolved
 }
 
-function taskPageWorkItemCacheKey(item: GitHubWorkItem): string {
-  return `${item.repoId}\u0000${item.id}`
-}
-
 export function reconcileTaskPagePagesWithWorkItemsCache(
   pages: TaskPageWorkItemPages,
   entries: readonly (CacheEntry<readonly GitHubWorkItem[]> | undefined)[]
@@ -133,7 +129,7 @@ export function reconcileTaskPagePagesWithWorkItemsCache(
   const cachedItems = new Map<string, GitHubWorkItem>()
   for (const entry of entries) {
     for (const item of entry?.data ?? []) {
-      cachedItems.set(taskPageWorkItemCacheKey(item), item)
+      cachedItems.set(taskPageWorkItemKey(item), item)
     }
   }
 
@@ -144,7 +140,7 @@ export function reconcileTaskPagePagesWithWorkItemsCache(
     }
     let pageChanged = false
     const nextPage = page.map((item) => {
-      const cached = cachedItems.get(taskPageWorkItemCacheKey(item))
+      const cached = cachedItems.get(taskPageWorkItemKey(item))
       if (!cached || cached === item) {
         return item
       }

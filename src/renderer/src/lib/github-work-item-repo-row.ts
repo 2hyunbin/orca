@@ -11,6 +11,7 @@ export function getGitHubWorkItemRepo(
   item: Pick<GitHubWorkItem, 'repoId' | 'repoHostId'>
 ): Repo | undefined {
   let byId: Repo | undefined
+  let rowCount = 0
   for (const repo of repos) {
     if (repo.id !== item.repoId) {
       continue
@@ -19,6 +20,8 @@ export function getGitHubWorkItemRepo(
       return repo
     }
     byId = repo
+    rowCount += 1
   }
-  return item.repoHostId ? undefined : byId
+  // Why: only a twin needs the stamp; a lone row stays the item's row whatever it was stamped.
+  return item.repoHostId && rowCount > 1 ? undefined : byId
 }
