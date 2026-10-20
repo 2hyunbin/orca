@@ -423,6 +423,29 @@ describe('setWorktreesPinnedAndReveal', () => {
     expect(reveal).not.toHaveBeenCalled()
   })
 
+  it("never scrolls to the focused card for its same-id twin's pin, and reveals the focused copy by host", () => {
+    const store = createTestStore()
+    const local = makeWorktree({ id: 'repo1::/a', repoId: 'repo1', path: '/a', hostId: 'local' })
+    const ssh = makeWorktree({ ...local, hostId: 'ssh:box' })
+    const reveal = vi.fn()
+    store.setState({
+      worktreesByRepo: { repo1: [local, ssh] },
+      activeWorktreeId: local.id,
+      activeWorkspaceExecutionHostId: 'local',
+      revealWorktreeInSidebar: reveal
+    })
+
+    store.getState().setWorktreesPinnedAndReveal([ssh], true)
+    expect(reveal).not.toHaveBeenCalled()
+
+    store.getState().setWorktreesPinnedAndReveal([local], true)
+    expect(reveal).toHaveBeenCalledWith(local.id, {
+      behavior: 'smooth',
+      highlight: true,
+      executionHostId: 'local'
+    })
+  })
+
   it.each([
     { previousPinned: false, nextPinned: true },
     { previousPinned: true, nextPinned: false }

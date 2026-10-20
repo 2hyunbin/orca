@@ -64,6 +64,8 @@ export function createSetWorktreesPinnedAndReveal(
       get().activeWorkspaceKey,
       get().activeWorktreeId
     )
+    // Why: a same-id twin on another host is not the focused card, so it must not scroll to it.
+    const activeHostId = get().activeWorkspaceExecutionHostId ?? null
     // Skip worktrees already in the target state so a no-op toggle doesn't scroll the viewport away.
     const updates: WorktreeMetaBatchUpdate[] = []
     const changedWorktreeIds = new Set<string>()
@@ -92,7 +94,11 @@ export function createSetWorktreesPinnedAndReveal(
           executionHostId
         })
       }
-      if (revealWorktreeId === null && worktreeId === activeSidebarWorktreeId) {
+      if (
+        revealWorktreeId === null &&
+        worktreeId === activeSidebarWorktreeId &&
+        (!activeHostId || executionHostId === activeHostId)
+      ) {
         revealWorktreeId = worktreeId
       }
     }
@@ -112,7 +118,11 @@ export function createSetWorktreesPinnedAndReveal(
       void get().updateWorktreesMeta(updates)
     }
     if (revealWorktreeId !== null) {
-      get().revealWorktreeInSidebar(revealWorktreeId, { behavior: 'smooth', highlight: true })
+      get().revealWorktreeInSidebar(revealWorktreeId, {
+        behavior: 'smooth',
+        highlight: true,
+        ...(activeHostId ? { executionHostId: activeHostId } : {})
+      })
     }
   }
 }
