@@ -4,6 +4,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
+import type { RepoHostTarget } from '../../shared/repo-host-identity'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 
 const hostRef: { current: unknown } = { current: null }
@@ -74,8 +75,11 @@ function createRuntime(rows: Repo[]) {
     ...store,
     getRepo: (id: string) => current.find((row) => row.id === id),
     getRepos: () => current,
-    removeProjectForHost: (id: string, hostId: string) => {
-      current = current.filter((row) => row.id !== id || getRepoExecutionHostId(row) !== hostId)
+    removeProjectForHost: (target: RepoHostTarget) => {
+      const hostId = getRepoExecutionHostId(target)
+      current = current.filter(
+        (row) => row.id !== target.id || getRepoExecutionHostId(row) !== hostId
+      )
     }
   })
   runtime.setPtyController({
