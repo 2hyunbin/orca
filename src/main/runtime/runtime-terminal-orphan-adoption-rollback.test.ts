@@ -113,12 +113,17 @@ function adopt(
       ]),
       queriedHostIds: new Set([host.hostId])
     },
-    session: store.getWorkspaceSession(host.hostId),
-    sessionWorktreeId: GIT_KEY,
     repoId: REPO_ID,
     worktreeWslDistro: null,
-    currentRevision: revision,
     ports: {
+      readSession: () => {
+        const session = store.getWorkspaceSession(host.hostId)
+        return {
+          session,
+          sessionWorktreeId: GIT_KEY,
+          currentRevision: session.terminalTopologyRevisionByRepoId?.[REPO_ID] ?? 0
+        }
+      },
       getPty: () => pty,
       getLeaves: () => [],
       getLeaf: () => undefined,
@@ -167,7 +172,7 @@ describe('orphan adoption whose flush fails', () => {
     expect(after.tabGroups?.[GIT_KEY]).toEqual(before.tabGroups?.[GIT_KEY])
   })
 
-  it('refuses when a write queued ahead changed the session it checked', async () => {
+  it('keeps an unrelated edit that landed while it waited to write', async () => {
     const store = createStore()
     store.setWorkspaceSession(seededSession(3))
 
@@ -176,9 +181,30 @@ describe('orphan adoption whose flush fails', () => {
       return store.runDurableMutation(mutate)
     })
 
+    await expect(adoption).resolves.toMatchObject({ adopted: true })
+    const after = store.getWorkspaceSession()
+    expect(after.tabsByWorktree[GIT_KEY]?.map((tab) => tab.id)).toEqual(['tab-kept', ORPHAN_TAB])
+    expect(after.activeTabId).toBe('tab-kept')
+  })
+
+  it('refuses when a binding write queued ahead edited the session in place', async () => {
+    const store = createStore()
+    store.setWorkspaceSession(seededSession(3))
+
+    const adoption = adopt(store, 3, (mutate) => {
+      void store.persistPtyBinding({
+        worktreeId: GIT_KEY,
+        tabId: 'tab-bound',
+        leafId: leaf(3),
+        ptyId: 'pty-bound'
+      })
+      return store.runDurableMutation(mutate)
+    })
+
     await expect(adoption).rejects.toThrow('terminal_topology_conflict')
     expect(store.getWorkspaceSession().tabsByWorktree[GIT_KEY]?.map((tab) => tab.id)).toEqual([
-      'tab-kept'
+      'tab-kept',
+      'tab-bound'
     ])
   })
 

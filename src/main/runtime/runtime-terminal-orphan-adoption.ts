@@ -1,35 +1,28 @@
-import { isDeepStrictEqual } from 'node:util'
 import type {
   RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeTerminalOrphanAdoptionRequest,
   RuntimeTerminalOrphanAdoptionResult
 } from '../../shared/runtime-types'
-import type { ExecutionHostId } from '../../shared/execution-host'
-import { makePaneKey } from '../../shared/stable-pane-id'
-import { hasClosedTerminalTabRecord } from '../../shared/closed-terminal-tab-tombstones'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { terminalOrphanExecutionOwnersEqual } from './terminal-orphan-owner'
-import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
-import type { PtyControllerInventory } from './runtime-pty-controller-contract'
-import { buildRuntimeTerminalOrphanSession } from './runtime-terminal-orphan-session-adoption'
-import { validateRuntimeTerminalOrphanTopology } from './runtime-terminal-orphan-topology-validation'
-import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../persistence/restoring-sessions/workspace-session-write-rollback'
-import { worktreeIdsEqual } from '../../shared/worktree/id'
 import type { DurableProfileStateMutation } from '../persistence/loading-store/store-runtime-state'
+import {
+  planRuntimeTerminalOrphanAdoption,
+  type RuntimeTerminalOrphanAdoptionPlan,
+  type RuntimeTerminalOrphanAdoptionPlanArgs,
+  type RuntimeTerminalOrphanAdoptionPlanPorts,
+  type RuntimeTerminalOrphanAdoptionSession
+} from './runtime-terminal-orphan-adoption-plan'
 
-type RuntimeTerminalOrphanAdoptionPorts = {
-  getPty: (handle: string) => RuntimePtyWorktreeRecord | null
-  getLeaves: (ptyId: string) => readonly RuntimeLeafRecord[]
-  getLeaf: (tabId: string, leafId: string) => RuntimeLeafRecord | undefined
-  /** The title display surfaces show for the PTY, which an adopted tab persists. */
-  getDisplayTitle: (pty: RuntimePtyWorktreeRecord) => string | null
+type AdoptPlan = Extract<RuntimeTerminalOrphanAdoptionPlan, { kind: 'adopt' }>
+
+type RuntimeTerminalOrphanAdoptionPorts = RuntimeTerminalOrphanAdoptionPlanPorts & {
   /** Replays a binding the session already held: names the pane without claiming the graph holds it. */
   replayPersistedSurface: (pty: RuntimePtyWorktreeRecord, tabId: string, paneKey: string) => void
   /** Names a pane this adoption just wrote, ahead of the graph statement that will carry it. */
   recordAdoptedSurface: (pty: RuntimePtyWorktreeRecord, tabId: string, paneKey: string) => void
-  getMobileSnapshots: () => Iterable<RuntimeMobileSessionTabsSnapshot>
+  /** The session as it is now; throws the refusal when it cannot be read. */
+  readSession: () => RuntimeTerminalOrphanAdoptionSession
   getSession: (worktreeId: string) => WorkspaceSessionState | null
   setSession: (worktreeId: string, session: WorkspaceSessionState) => void
   /** The store's durable transaction; without one, `flushSession` writes and the rollback is manual. */
@@ -40,244 +33,82 @@ type RuntimeTerminalOrphanAdoptionPorts = {
   getSnapshot: (worktreeId: string) => RuntimeMobileSessionTabsResult
 }
 
-export async function adoptRuntimeTerminalOrphansFromInventory(args: {
-  /** The partition the session is read from and written to. */
-  hostId: ExecutionHostId
-  request: RuntimeTerminalOrphanAdoptionRequest
-  workspace: TerminalWorkspaceLaunchScope
-  inventory: PtyControllerInventory
-  session: WorkspaceSessionState
-  sessionWorktreeId: string
-  repoId: string
-  worktreeWslDistro: string | null
-  currentRevision: number
-  ports: RuntimeTerminalOrphanAdoptionPorts
-}): Promise<RuntimeTerminalOrphanAdoptionResult> {
-  const { request, workspace, inventory, session, sessionWorktreeId, currentRevision, ports } = args
-  const seenPtyIds = new Set<string>()
-  const seenPaneKeys = new Set<string>()
-  const validated = request.claims.map((claim) => {
-    const paneKey = makePaneKey(claim.tabId, claim.leafId)
-    if (seenPtyIds.has(claim.ptyId) || seenPaneKeys.has(paneKey)) {
-      throw new Error('terminal_orphan_claim_duplicate')
-    }
-    seenPtyIds.add(claim.ptyId)
-    seenPaneKeys.add(paneKey)
-    const pty = ports.getPty(claim.terminal)
-    const controllerIdentity = inventory.terminalIdentityByPtyId.get(claim.ptyId)
-    if (
-      !pty ||
-      pty.ptyId !== claim.ptyId ||
-      controllerIdentity?.handle !== claim.terminal ||
-      controllerIdentity?.incarnationId !== claim.incarnationId ||
-      !inventory.livePtyIds.has(claim.ptyId) ||
-      !pty.connected ||
-      !pty.incarnationId ||
-      pty.incarnationId !== claim.incarnationId
-    ) {
-      throw new Error('terminal_orphan_stale')
-    }
-    if (
-      !worktreeIdsEqual(pty.worktreeId, workspace.id) ||
-      !terminalOrphanExecutionOwnersEqual(
-        { connectionId: workspace.connectionId, wslDistro: args.worktreeWslDistro },
-        {
-          connectionId: pty.connectionId ?? null,
-          ...(controllerIdentity?.wslDistro !== undefined
-            ? { wslDistro: controllerIdentity.wslDistro }
-            : process.platform === 'win32' && !workspace.connectionId
-              ? {}
-              : { wslDistro: null })
-        }
+export async function adoptRuntimeTerminalOrphansFromInventory(
+  args: RuntimeTerminalOrphanAdoptionPlanArgs & {
+    repoId: string
+    ports: RuntimeTerminalOrphanAdoptionPorts
+  }
+): Promise<RuntimeTerminalOrphanAdoptionResult> {
+  const { workspace, ports } = args
+  const plan = (): RuntimeTerminalOrphanAdoptionPlan =>
+    planRuntimeTerminalOrphanAdoption(args, ports.readSession())
+  const stage = (planned: AdoptPlan): (() => void) => {
+    ports.setSession(workspace.id, planned.persisted)
+    const staged = ports.getSession(workspace.id)
+    return () => {
+      const current = ports.getSession(workspace.id)
+      if (!staged || !current) {
+        return
+      }
+      const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(
+        planned.session,
+        staged,
+        current
       )
-    ) {
-      throw new Error('terminal_orphan_owner_mismatch')
+      if (rolledBack !== current) {
+        ports.setSession(workspace.id, rolledBack)
+      }
     }
-    if (
-      ports
-        .getLeaves(claim.ptyId)
-        .some(
-          (owner) =>
-            !worktreeIdsEqual(owner.worktreeId, workspace.id) ||
-            owner.tabId !== claim.tabId ||
-            owner.leafId !== claim.leafId
-        )
-    ) {
-      throw new Error('terminal_orphan_already_visual')
-    }
-    if ((pty.tabId && pty.tabId !== claim.tabId) || (pty.paneKey && pty.paneKey !== paneKey)) {
-      throw new Error('terminal_orphan_competing_owner')
-    }
-    return { claim, pty, paneKey }
-  })
-
-  const persistedBindings = new Map<string, { worktreeId: string; paneKey: string }[]>()
-  const addBinding = (ptyId: string, worktreeId: string, paneKey: string): void => {
-    const bindings = persistedBindings.get(ptyId) ?? []
-    bindings.push({ worktreeId, paneKey })
-    persistedBindings.set(ptyId, bindings)
   }
-  for (const [worktreeId, tabs] of Object.entries(session.tabsByWorktree)) {
-    for (const tab of tabs) {
-      const layout = session.terminalLayoutsByTabId[tab.id]
-      for (const [leafId, ptyId] of Object.entries(layout?.ptyIdsByLeafId ?? {})) {
-        if (ptyId) {
-          addBinding(ptyId, worktreeId, makePaneKey(tab.id, leafId))
+  let planned: RuntimeTerminalOrphanAdoptionPlan
+  if (ports.runDurableMutation) {
+    // Why checked and written inside the store's transaction: a write queued ahead may change the
+    // session, and only the transaction's rollback skips the topology-fence rebase, which treats
+    // a write below the fence (this rollback) as a stale renderer replay and keeps the adoption.
+    const outcome = await ports.runDurableMutation<RuntimeTerminalOrphanAdoptionPlan | Error>(
+      () => {
+        let next: RuntimeTerminalOrphanAdoptionPlan
+        try {
+          next = plan()
+        } catch (error) {
+          // A throwing callback freezes the store; a refusal must not.
+          return {
+            value: error instanceof Error ? error : new Error(String(error)),
+            persist: false
+          }
         }
+        return next.kind === 'replay'
+          ? { value: next, persist: false }
+          : { value: next, rollback: stage(next) }
       }
-      if (tab.ptyId && !layout) {
-        addBinding(tab.ptyId, worktreeId, tab.id)
-      }
-    }
-  }
-  const persistedBinding = (ptyId: string): { worktreeId: string; paneKey: string } | null => {
-    const bindings = persistedBindings.get(ptyId) ?? []
-    if (bindings.length > 1) {
-      throw new Error('terminal_orphan_competing_owner')
-    }
-    return bindings[0] ?? null
-  }
-  const isExactPersisted = validated.every(({ claim, paneKey }) => {
-    const binding = persistedBinding(claim.ptyId)
-    return (
-      binding !== null &&
-      worktreeIdsEqual(binding.worktreeId, workspace.id) &&
-      binding.paneKey === paneKey &&
-      session.terminalPtyIncarnationsByPaneKey?.[paneKey] === claim.incarnationId
     )
-  })
-  if (isExactPersisted && sessionWorktreeId === workspace.id) {
-    for (const { claim, pty, paneKey } of validated) {
+    if (outcome instanceof Error) {
+      throw outcome
+    }
+    planned = outcome
+  } else {
+    planned = plan()
+    if (planned.kind === 'adopt') {
+      const rollback = stage(planned)
+      try {
+        await ports.flushSession()
+      } catch (error) {
+        rollback()
+        throw error
+      }
+    }
+  }
+  if (planned.kind === 'replay') {
+    for (const { claim, pty, paneKey } of planned.validated) {
       ports.replayPersistedSurface(pty, claim.tabId, paneKey)
     }
     return {
       adopted: false,
-      topologyRevision: currentRevision,
+      topologyRevision: planned.currentRevision,
       snapshot: ports.getSnapshot(workspace.id)
     }
   }
-  if (currentRevision !== request.expectedTopologyRevision) {
-    throw new Error('terminal_topology_conflict')
-  }
-
-  const { topologyTabsById, topologyGroups } = validateRuntimeTerminalOrphanTopology(
-    request,
-    validated
-  )
-  for (const { claim, paneKey } of validated) {
-    const existingBinding = persistedBinding(claim.ptyId)
-    if (
-      existingBinding &&
-      (!worktreeIdsEqual(existingBinding.worktreeId, workspace.id) ||
-        existingBinding.paneKey !== paneKey)
-    ) {
-      throw new Error('terminal_orphan_competing_owner')
-    }
-    const proposedPtyId =
-      session.terminalLayoutsByTabId[claim.tabId]?.ptyIdsByLeafId?.[claim.leafId]
-    if (proposedPtyId && proposedPtyId !== claim.ptyId) {
-      throw new Error('terminal_orphan_surface_occupied')
-    }
-    const graphOwner = ports.getLeaf(claim.tabId, claim.leafId)
-    if (
-      graphOwner &&
-      (graphOwner.ptyId !== claim.ptyId || !worktreeIdsEqual(graphOwner.worktreeId, workspace.id))
-    ) {
-      throw new Error('terminal_orphan_surface_occupied')
-    }
-    if (
-      Object.entries(session.tabsByWorktree).some(
-        ([ownerWorktreeId, tabs]) =>
-          !worktreeIdsEqual(ownerWorktreeId, workspace.id) &&
-          tabs.some((tab) => tab.id === claim.tabId)
-      )
-    ) {
-      throw new Error('terminal_orphan_surface_occupied')
-    }
-    // Why the close record too: it outlives a host restart, which the client's retirement proofs do not.
-    if (
-      session.terminalSurfaceTombstonesByPaneKey?.[paneKey] ||
-      hasClosedTerminalTabRecord(session.closedTerminalTabTombstonesByTabId, claim.tabId)
-    ) {
-      throw new Error('terminal_orphan_surface_retired')
-    }
-    for (const snapshot of ports.getMobileSnapshots()) {
-      const surfaceOwner = snapshot.tabs.find(
-        (tab) =>
-          tab.type === 'terminal' && tab.parentTabId === claim.tabId && tab.leafId === claim.leafId
-      )
-      if (
-        surfaceOwner?.type === 'terminal' &&
-        (snapshot.worktree !== workspace.id || surfaceOwner.ptyId !== claim.ptyId)
-      ) {
-        throw new Error('terminal_orphan_surface_occupied')
-      }
-      const owner = snapshot.tabs.find(
-        (tab) => tab.type === 'terminal' && tab.ptyId === claim.ptyId
-      )
-      if (
-        owner?.type === 'terminal' &&
-        (snapshot.worktree !== workspace.id ||
-          owner.parentTabId !== claim.tabId ||
-          owner.leafId !== claim.leafId)
-      ) {
-        throw new Error('terminal_orphan_competing_owner')
-      }
-    }
-  }
-
-  const persisted = buildRuntimeTerminalOrphanSession({
-    hostId: args.hostId,
-    session,
-    sessionWorktreeId,
-    worktreeId: workspace.id,
-    request,
-    validated,
-    topologyTabsById,
-    topologyGroups,
-    getDisplayTitle: ports.getDisplayTitle
-  })
-  const stage = (): DurableProfileStateMutation<Error | undefined> => {
-    ports.setSession(workspace.id, persisted)
-    const staged = ports.getSession(workspace.id)
-    return {
-      value: undefined,
-      rollback: () => {
-        const current = ports.getSession(workspace.id)
-        if (!staged || !current) {
-          return
-        }
-        const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(session, staged, current)
-        if (rolledBack !== current) {
-          ports.setSession(workspace.id, rolledBack)
-        }
-      }
-    }
-  }
-  if (ports.runDurableMutation) {
-    // Why the store's transaction: only its rollback phase skips the topology-fence rebase, which
-    // treats a write below the fence (this rollback) as a stale renderer replay and keeps the adoption.
-    const refusal = await ports.runDurableMutation(() => {
-      const current = ports.getSession(workspace.id)
-      // A write queued ahead may have changed what this adoption was checked against. Why deep:
-      // an absent host partition reads back as a fresh default object each time.
-      return current === session || isDeepStrictEqual(current, session)
-        ? stage()
-        : { value: new Error('terminal_topology_conflict'), persist: false }
-    })
-    if (refusal) {
-      throw refusal
-    }
-  } else {
-    const { rollback } = stage()
-    try {
-      await ports.flushSession()
-    } catch (error) {
-      rollback?.()
-      throw error
-    }
-  }
-  for (const { claim, pty, paneKey } of validated) {
+  for (const { claim, pty, paneKey } of planned.validated) {
     ports.recordAdoptedSurface(pty, claim.tabId, paneKey)
   }
   ports.hydrateSession(workspace.id)
@@ -285,7 +116,8 @@ export async function adoptRuntimeTerminalOrphansFromInventory(args: {
   return {
     adopted: true,
     topologyRevision:
-      persisted.terminalTopologyRevisionByRepoId?.[args.repoId] ?? currentRevision + 1,
+      planned.persisted.terminalTopologyRevisionByRepoId?.[args.repoId] ??
+      planned.currentRevision + 1,
     snapshot: ports.getSnapshot(workspace.id)
   }
 }
