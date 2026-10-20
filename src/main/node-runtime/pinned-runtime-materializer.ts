@@ -11,7 +11,10 @@ import {
 } from './runtime-archive-download'
 import { findOrcadCachePath } from './orcad-cache-path'
 import { orcadNodeRuntimeExecutable } from '../../shared/orcad-artifacts'
+import { nodeDistMirrorUrl } from '../../shared/node-dist-mirror'
+import { configuredNodeDistMirror } from './node-dist-mirror-setting'
 import {
+  NODE_RUNTIME_PIN,
   pinnedNodeRuntimeAsset,
   nodeRuntimeExecutablePath,
   nodeRuntimeReleaseUrl,
@@ -199,16 +202,47 @@ function nodeRuntimeArchive(target: NodeRuntimeTarget): PinnedRuntimeArchive {
   }
 }
 
+/** Tries the configured mirror before the release URL; the pinned hash decides what is kept. */
+async function withNodeDistMirror<T>(
+  target: NodeRuntimeTarget,
+  options: PinnedRuntimeMaterializeOptions,
+  run: (archive: PinnedRuntimeArchive) => Promise<T>
+): Promise<T> {
+  const archive = nodeRuntimeArchive(target)
+  const asset = pinnedNodeRuntimeAsset(target)
+  // Mirrors carry the official tree only; unofficial builds live at one address.
+  const mirror = asset.source === 'official' ? configuredNodeDistMirror() : null
+  if (!mirror) {
+    return run(archive)
+  }
+  const mirrorUrl = nodeDistMirrorUrl(mirror, NODE_RUNTIME_PIN.version, asset.archive)
+  try {
+    return await run({ ...archive, url: mirrorUrl })
+  } catch (mirrorError) {
+    if (options.signal?.aborted) {
+      throw mirrorError
+    }
+    return run(archive).catch((error: unknown) => {
+      throw new Error(
+        `${errorText(error)} (the mirror ${mirrorUrl} failed too: ${errorText(mirrorError)})`,
+        { cause: error }
+      )
+    })
+  }
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** The pinned official archive, uploaded to hosts as published (design D5). */
 export function materializeNodeRuntimeArchive(
   target: NodeRuntimeTarget,
   cacheRoot: string,
   options: PinnedRuntimeMaterializeOptions
 ): Promise<string> {
-  return materializeVerifiedRuntimeArchive(
-    nodeRuntimeArchive(target),
-    nodeRuntimeArchiveDir(cacheRoot),
-    options
+  return withNodeDistMirror(target, options, (archive) =>
+    materializeVerifiedRuntimeArchive(archive, nodeRuntimeArchiveDir(cacheRoot), options)
   )
 }
 
@@ -232,21 +266,23 @@ export function materializeCachedNodeRuntime(
 ): Promise<string> {
   const asset = pinnedNodeRuntimeAsset(target)
   const executableName = basename(orcadNodeRuntimeExecutable(target))
-  return materializeCachedRuntimeExecutable(
-    {
-      ...nodeRuntimeArchive(target),
-      executableSha256: asset.executableSha256,
-      member: nodeRuntimeExecutablePath(target, asset.archive),
-      isWindows: target.startsWith('win32-'),
-      cachePath: (attempt) =>
-        join(
-          cacheRoot,
-          'node',
-          asset.executableSha256,
-          `${attempt ? `repair-${attempt}-` : ''}${executableName}`
-        )
-    },
-    options
+  return withNodeDistMirror(target, options, (archive) =>
+    materializeCachedRuntimeExecutable(
+      {
+        ...archive,
+        executableSha256: asset.executableSha256,
+        member: nodeRuntimeExecutablePath(target, asset.archive),
+        isWindows: target.startsWith('win32-'),
+        cachePath: (attempt) =>
+          join(
+            cacheRoot,
+            'node',
+            asset.executableSha256,
+            `${attempt ? `repair-${attempt}-` : ''}${executableName}`
+          )
+      },
+      options
+    )
   )
 }
 

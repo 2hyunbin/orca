@@ -61,3 +61,41 @@ describe('AdvancedNetworkSettingsSection bypass rules control', () => {
     expect(updateSettings).not.toHaveBeenCalled()
   })
 })
+
+describe('AdvancedNetworkSettingsSection Node.js download mirror', () => {
+  it('shows a saved mirror and commits a normalized new one on blur', () => {
+    const updateSettings = vi.fn()
+    const { container } = render(
+      <AdvancedNetworkSettingsSection
+        settings={{ ...getDefaultSettings('/tmp'), nodeDistMirrorUrl: 'https://old.example/dist' }}
+        updateSettings={updateSettings}
+      />
+    )
+    const input = container.querySelector<HTMLInputElement>('#settings-node-dist-mirror-url')!
+    expect(input.value).toBe('https://old.example/dist')
+
+    fireEvent.change(input, { target: { value: ' https://npmmirror.com/mirrors/node/ ' } })
+    fireEvent.blur(input)
+
+    expect(updateSettings).toHaveBeenCalledWith({
+      nodeDistMirrorUrl: 'https://npmmirror.com/mirrors/node'
+    })
+  })
+
+  it('keeps an invalid mirror out of settings and says why', () => {
+    const updateSettings = vi.fn()
+    const { container } = render(
+      <AdvancedNetworkSettingsSection
+        settings={{ ...getDefaultSettings('/tmp'), nodeDistMirrorUrl: 'https://old.example/dist' }}
+        updateSettings={updateSettings}
+      />
+    )
+    const input = container.querySelector<HTMLInputElement>('#settings-node-dist-mirror-url')!
+
+    fireEvent.change(input, { target: { value: 'https://user:pw@mirror.example/dist' } })
+    fireEvent.blur(input)
+
+    expect(updateSettings).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('cannot contain a user name or password')
+  })
+})

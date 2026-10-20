@@ -6,7 +6,9 @@
  */
 import { copyFile, link, mkdtemp } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import { NODE_DIST_MIRROR_ENV_KEYS, nodeDistMirrorUrl } from '../../../shared/node-dist-mirror'
 import {
+  NODE_RUNTIME_PIN,
   nodeRuntimeReleaseUrl,
   pinnedNodeRuntimeAsset,
   type NodeRuntimeTarget
@@ -21,16 +23,22 @@ import {
   joinRemotePath,
   type RemoteHostPlatform
 } from '../../ssh/ssh-remote-platform'
+import { configuredNodeDistMirror } from '../../node-runtime/node-dist-mirror-setting'
 import { remoteSha256Command } from './remote-sha256-command'
 
 export const HOST_NODE_DOWNLOAD_OK = 'ORCA_NODE_HOST_DOWNLOAD_OK'
 export const HOST_NODE_DOWNLOAD_FAILED = 'ORCA_NODE_HOST_DOWNLOAD_FAILED'
 export const HOST_NODE_DOWNLOAD_NO_TOOL = 'ORCA_NODE_HOST_DOWNLOAD_NO_TOOL'
-export const HOST_NODE_DOWNLOAD_HASH_MISMATCH = 'ORCA_NODE_HOST_DOWNLOAD_HASH_MISMATCH'
 /** Each tool's wall-clock cap: ~140 KB/s still fetches the ~58 MB archive. */
 const HOST_DOWNLOAD_TOOL_SECONDS = 420
-/** Both tools plus the hash, so a tool's own limit always reports before the exec gives up. */
-export const HOST_NODE_DOWNLOAD_TIMEOUT_MS = (2 * HOST_DOWNLOAD_TOOL_SECONDS + 60) * 1000
+/**
+ * Both tools on one slow URL, plus quick refusals from the others and the hash. A timed-out URL
+ * ends the loop, so a tool's own limit always reports before the exec gives up.
+ */
+export const HOST_NODE_DOWNLOAD_TIMEOUT_MS = (2 * HOST_DOWNLOAD_TOOL_SECONDS + 180) * 1000
+
+const HOST_NODE_DOWNLOAD_NOT_PINNED =
+  'the file is not the pinned release (a proxy or filter may have replaced it, or the host lacks sha256sum and shasum)'
 
 export function hostNodeRuntimeUrl(target: NodeRuntimeTarget): string {
   const asset = pinnedNodeRuntimeAsset(target)
@@ -38,33 +46,59 @@ export function hostNodeRuntimeUrl(target: NodeRuntimeTarget): string {
 }
 
 /**
- * Downloads into the installer's stage with curl, else wget, keeping the file only if it hashes
- * to the pin. Always exits 0 with a marker, so the caller gets the tool's own words.
+ * Downloads into the installer's stage, trying this computer's configured mirror, then the
+ * host's own mirror variable, then the release URL; curl first, else wget. Keeps the file only if
+ * it hashes to the pin, and always exits 0 with a marker so the caller gets the tools' own words.
  */
 export function hostDownloadNodeRuntimeCommand(
   host: RemoteHostPlatform,
-  args: { stageDir: string; target: NodeRuntimeTarget }
+  args: { stageDir: string; target: NodeRuntimeTarget; mirror?: string | null }
 ): string {
   const asset = pinnedNodeRuntimeAsset(args.target)
   const file = quotePosixShell(joinRemotePath(host, args.stageDir, asset.archive))
-  const url = quotePosixShell(hostNodeRuntimeUrl(args.target))
-  const curl = `curl -fsSL --connect-timeout 20 --max-time ${HOST_DOWNLOAD_TOOL_SECONDS} -o ${file} ${url}`
+  // Mirrors carry the official tree only; unofficial builds live at one address.
+  const official = asset.source === 'official'
+  const urls = [
+    official && args.mirror
+      ? quotePosixShell(nodeDistMirrorUrl(args.mirror, NODE_RUNTIME_PIN.version, asset.archive))
+      : null,
+    official
+      ? `"\${orca_dl_mirror:+$orca_dl_mirror/v${NODE_RUNTIME_PIN.version}/${asset.archive}}"`
+      : null,
+    quotePosixShell(hostNodeRuntimeUrl(args.target))
+  ].filter((url): url is string => url !== null)
+  const curl = `curl -fsSL --connect-timeout 20 --max-time ${HOST_DOWNLOAD_TOOL_SECONDS} -o ${file} "$orca_dl_url"`
   // wget has no total-time limit of its own. Probed by running it: old busybox wants `-t SECS`.
-  const wget = `$orca_dl_timeout wget -q -T 20 -t 2 -O ${file} ${url}`
+  const wget = `$orca_dl_timeout wget -q -T 20 -t 2 -O ${file} "$orca_dl_url"`
+  const hostMirror = NODE_DIST_MIRROR_ENV_KEYS.reduceRight(
+    (fallback, key) => `\${${key}:-${fallback}}`,
+    ''
+  )
   return [
-    'orca_dl_status=127; orca_dl_out=; orca_dl_timeout=',
+    'orca_dl_status=127; orca_dl_out=; orca_dl_timeout=; orca_dl_ok=',
     `timeout 5 true >/dev/null 2>&1 && orca_dl_timeout="timeout ${HOST_DOWNLOAD_TOOL_SECONDS}"`,
-    `if command -v curl >/dev/null 2>&1; then orca_dl_out=$(${curl} 2>&1); orca_dl_status=$?; fi`,
+    `orca_dl_mirror="${hostMirror}"; orca_dl_mirror="\${orca_dl_mirror%/}"`,
+    `for orca_dl_url in ${urls.join(' ')}; do`,
+    '[ -n "$orca_dl_url" ] || continue',
+    'orca_dl_try=127; orca_dl_said=',
+    `if command -v curl >/dev/null 2>&1; then orca_dl_said=$(${curl} 2>&1); orca_dl_try=$?; fi`,
     // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget
     // works. Not after curl's timeout (28): the link is just slow, and wget would be too.
-    `if [ "$orca_dl_status" != 0 ] && [ "$orca_dl_status" != 28 ] && command -v wget >/dev/null 2>&1; then ` +
-      `orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$(${wget} 2>&1)"; orca_dl_status=$?; fi`,
-    `if [ "$orca_dl_status" = 127 ] && [ -z "$orca_dl_out" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}`,
-    `elif [ "$orca_dl_status" != 0 ]; then rm -f ${file}; echo ${HOST_NODE_DOWNLOAD_FAILED}; ` +
-      `echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_dl_status"; printf '%s\\n' "$orca_dl_out" | tail -c 2000`,
-    `elif [ "$(${remoteSha256Command(file)})" != ${quotePosixShell(asset.archiveSha256)} ]; then ` +
-      `rm -f ${file}; echo ${HOST_NODE_DOWNLOAD_HASH_MISMATCH}`,
-    `else echo ${HOST_NODE_DOWNLOAD_OK}; fi`
+    `if [ "$orca_dl_try" != 0 ] && [ "$orca_dl_try" != 28 ] && command -v wget >/dev/null 2>&1; then ` +
+      `orca_dl_said="$orca_dl_said\${orca_dl_said:+; }$(${wget} 2>&1)"; orca_dl_try=$?; fi`,
+    'if [ "$orca_dl_try" = 127 ] && [ -z "$orca_dl_said" ]; then break; fi',
+    'orca_dl_status=$orca_dl_try',
+    `if [ "$orca_dl_try" = 0 ] && [ "$(${remoteSha256Command(file)})" = ${quotePosixShell(asset.archiveSha256)} ]; then orca_dl_ok=1; break; fi`,
+    `rm -f ${file}`,
+    `[ "$orca_dl_try" = 0 ] && orca_dl_said='${HOST_NODE_DOWNLOAD_NOT_PINNED}'`,
+    'orca_dl_out="$orca_dl_out${orca_dl_out:+; }$orca_dl_url: $orca_dl_said"',
+    // A slow link stays slow on the next URL, and the exec budget assumes one slow attempt.
+    'case "$orca_dl_try" in 28|124) break ;; esac',
+    'done',
+    `if [ -n "$orca_dl_ok" ]; then echo ${HOST_NODE_DOWNLOAD_OK}`,
+    `elif [ "$orca_dl_status" = 127 ] && [ -z "$orca_dl_out" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}`,
+    `else echo ${HOST_NODE_DOWNLOAD_FAILED}; echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_dl_status"; ` +
+      `printf '%s' "$orca_dl_out" | tail -c 3000; fi`
   ].join('\n')
 }
 
@@ -78,13 +112,6 @@ export function readHostNodeDownload(output: string): HostNodeDownloadResult {
   }
   if (lines.some((line) => line.trim() === HOST_NODE_DOWNLOAD_NO_TOOL)) {
     return { ok: false, report: 'it has neither curl nor wget' }
-  }
-  if (lines.some((line) => line.trim() === HOST_NODE_DOWNLOAD_HASH_MISMATCH)) {
-    return {
-      ok: false,
-      report:
-        "it couldn't verify the file as the pinned release, so it was discarded (a proxy or filter may have replaced it, or the host lacks sha256sum and shasum)"
-    }
   }
   const failed = output.indexOf(HOST_NODE_DOWNLOAD_FAILED)
   if (failed !== -1) {
@@ -103,16 +130,21 @@ export class NodeRuntimeUnreachableError extends Error {
     readonly url: string,
     readonly hostReport: string,
     readonly offlineArchivePath: string | undefined,
-    cause: unknown
+    cause: unknown,
+    mirrorable = true
   ) {
     const desktop = cause instanceof Error ? cause.message : String(cause)
+    const mirror = mirrorable
+      ? ', set a mirror of nodejs.org/dist in Settings > Advanced > Network > Node.js download mirror ' +
+        '(or NODEJS_ORG_MIRROR on the host)'
+      : ''
     const offline = offlineArchivePath
       ? `, or download that file on another machine and copy it to ${offlineArchivePath} on this computer.`
       : '.'
     super(
       `Neither this computer nor the host could download Node from ${url}. ` +
         `This computer: ${desktop}. The host: ${hostReport}. ` +
-        `Check the network or proxy on either machine and connect again${offline}`,
+        `Check the network or proxy on either machine and connect again${mirror}${offline}`,
       { cause }
     )
     this.name = 'NodeRuntimeUnreachableError'
@@ -134,7 +166,11 @@ export async function downloadNodeRuntimeOnHost(args: {
   signal?: AbortSignal
 }): Promise<string> {
   const output = await args.exec(
-    hostDownloadNodeRuntimeCommand(args.host, { stageDir: args.stageDir, target: args.target }),
+    hostDownloadNodeRuntimeCommand(args.host, {
+      stageDir: args.stageDir,
+      target: args.target,
+      mirror: configuredNodeDistMirror()
+    }),
     { signal: args.signal, timeoutMs: args.timeoutMs }
   )
   const result = readHostNodeDownload(output)
@@ -143,7 +179,8 @@ export async function downloadNodeRuntimeOnHost(args: {
       hostNodeRuntimeUrl(args.target),
       result.report,
       args.offlineArchivePath,
-      args.desktopError
+      args.desktopError,
+      pinnedNodeRuntimeAsset(args.target).source === 'official'
     )
   }
   console.warn(

@@ -7761,6 +7761,9 @@
           "823e0f15b1": "Proxy URL for Orca network requests and local terminal children.",
           "d93c7cd531": "Configure app-level network routing.",
           "c46cdbbd4e": "Network",
+          "nodeDistMirrorLabel": "Node.js Download Mirror",
+          "nodeDistMirrorPlaceholder": "https://mirror.example.com/nodejs/dist",
+          "nodeDistMirrorDescription": "Optional. A copy of nodejs.org/dist that Orca uses first when it installs Node on SSH and WSL servers. Each file is still checked against the release Orca expects.",
           "configureProxy": "Configure proxy"
         },
         "GeneralPane": {
@@ -10288,6 +10291,8 @@
             "e9d948d3c3": "Save editor and editable diff changes automatically after a short pause.",
             "ae21e806ce": "Auto Save Files",
             "c56cb6f1c2": "network",
+            "nodeDistMirror": "mirror",
+            "nodeDistNodejs": "nodejs",
             "3566fce83f": "localhost",
             "91a46caafc": "no_proxy",
             "3a73054565": "bypass",

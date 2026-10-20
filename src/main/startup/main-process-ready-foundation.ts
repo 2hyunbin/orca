@@ -4,6 +4,7 @@ import { applyBackgroundActivationPolicy } from '../window/foreground-activation
 import { applyElectronProxySettings } from '../network/proxy-settings'
 import { installElectronProxyRequestGuard } from '../network/electron-proxy-request-guard'
 import { handleElectronProxyLogin } from '../network/electron-proxy-credentials'
+import { setNodeDistMirrorSettingReader } from '../node-runtime/node-dist-mirror-setting'
 import { handleBrowserGuestLogin } from '../browser/browser-http-auth-prompt'
 import { installMainThreadHangWatchdog } from '../hang-watchdog/main-thread-hang-watchdog'
 import { preservePreviousHangDetection } from '../hang-watchdog/previous-hang-detection'
@@ -61,6 +62,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   // Why: a headless automated run must not claim a macOS Dock tile or the menu bar.
   applyBackgroundActivationPolicy({ warn: console.warn })
   installElectronProxyRequestGuard(session.defaultSession)
+  setNodeDistMirrorSettingReader(() => store.getSettings().nodeDistMirrorUrl)
   app.on('login', (event, webContents, details, authInfo, callback) => {
     handleElectronProxyLogin(
       event,
