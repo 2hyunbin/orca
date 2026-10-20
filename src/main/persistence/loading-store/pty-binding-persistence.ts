@@ -19,6 +19,7 @@ import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
 import { durabilityOnlyBindingResult, isDurabilityOnlyMatch } from './pty-binding-durability-only'
 import { ptyBindingIsRefused } from './pty-binding-refusals'
 import { applyPtyBinding } from './pty-binding-session-update'
+import { markPtyBindingSessionDirty } from './pty-binding-session-dirty'
 import {
   reportPtyBindingOwnerConflict,
   reportPtyBindingPlacement,
@@ -119,9 +120,7 @@ export class PtyBindingPersistenceOperations {
           [resolved]: session
         }
       }
-      runtime.dirtyProfileStateDomains?.add(
-        resolved === LOCAL_EXECUTION_HOST_ID ? 'workspaceSession' : 'workspaceSessionsByHostId'
-      )
+      markPtyBindingSessionDirty(runtime, resolved)
     }
     return runtime.runDurableMutation(() => {
       const session = sessions.getWorkspaceSession(resolved)
@@ -206,7 +205,8 @@ export class PtyBindingPersistenceOperations {
         }
         if (isDurabilityOnlyMatch(verdict)) {
           span.setPath('durability_only')
-          return durabilityOnlyBindingResult(runtime, resolvedHostId)
+          markPtyBindingSessionDirty(runtime, resolvedHostId)
+          return durabilityOnlyBindingResult(resolvedHostId)
         }
         span.setPath('mutation')
         // After the fast lane, so a no-op rebind skips the scan.
@@ -293,9 +293,7 @@ function writePtyBinding(
     }
     applyPtyBinding(args, session, bindingWorktreeId, paneKey)
     bumpPtyBindingGeneration(runtime, resolvedHostId, args.leafId)
-    runtime.dirtyProfileStateDomains?.add(
-      resolvedHostId === LOCAL_EXECUTION_HOST_ID ? 'workspaceSession' : 'workspaceSessionsByHostId'
-    )
+    markPtyBindingSessionDirty(runtime, resolvedHostId)
     const boundSession = cloneWorkspaceSessionState(session)
     return () => {
       const current = sessions.getWorkspaceSession(resolvedHostId)
