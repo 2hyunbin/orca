@@ -11,6 +11,7 @@ import {
   recordPtySurface,
   SURFACE_CLAIM_WITHOUT_STANDING
 } from '../../pty-recorded-surface-topology'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 import {
   placeUnshownLiveTerminals,
@@ -65,12 +66,14 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
     return this.placementRun
   }
 
-  /** Settles once a placement pass in flight has placed what its census found; never rejects. */
-  protected livePlacementSettled(): Promise<void> {
-    return this.placementRun?.then(
-      () => {},
-      () => {}
-    ) ?? Promise.resolve()
+  /**
+   * A workspace's first surface waits out a placement pass in flight: a live terminal the pass is
+   * placing is the workspace's tab, not room for a fresh shell. Never rejects.
+   */
+  protected async livePlacementSettledFor(command: WindowLayoutCommand): Promise<void> {
+    if (ORCA_LAYOUT_OWNER_IS_MAIN && 'initial' in command && command.initial && this.placementRun) {
+      await this.placementRun.catch(() => {})
+    }
   }
 
   private async placeUnshownLiveTerminalsOnce(): Promise<LiveTerminalPlacement> {
