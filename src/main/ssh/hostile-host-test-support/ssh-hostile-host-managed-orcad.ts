@@ -1,7 +1,8 @@
 /**
  * One hostile-host cell: on a fresh host, resolve the context, deploy orcad, and prove it picked
- * the cell's runtime, uploaded no other and ran no toolchain. An activated server must be live; an
- * unavailable host must fail with the classified reason the connect reports.
+ * the cell's runtime, uploaded no other and ran no toolchain. An activated server must be live and
+ * stop for recovery while refusing a restart; an unavailable host must fail with the classified
+ * reason the connect reports.
  */
 import { posix } from 'node:path'
 import { expect } from 'vitest'
@@ -29,6 +30,7 @@ import {
 } from './ssh-hostile-host-cells'
 import { connectHostileHost } from './ssh-hostile-host-test-harness'
 import { hostExec, hostExecStatus, type HostileHostTarget } from './ssh-hostile-host-test-fixture'
+import { proveRecoveryStopsRefusingOrcad } from './ssh-hostile-host-recovery-stop'
 
 const EMPTY_CENSUS = { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: null }
 
@@ -102,6 +104,7 @@ async function assertLiveThenDecommissioned(
   const liveness = async (): Promise<string> =>
     parseOrcadLiveness(await execOrcadRemote(slot, orcadLivenessProbeCommand(slot.host, slotDir)))
   expect(await liveness()).toBe('LIVE')
+  await proveRecoveryStopsRefusingOrcad(slot, slotDir, version)
   const decommission = await decommissionRemoteOrcad({
     ...slot,
     record: await readOrcadActivationRecord(slot),
