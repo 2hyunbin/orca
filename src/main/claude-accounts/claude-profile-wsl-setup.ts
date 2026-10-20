@@ -1,5 +1,8 @@
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
-import { readUserClaudeConfigDir } from '../../shared/claude-user-config'
+import { readUserClaudeConfigDir, resolveClaudeDefaultHome } from '../../shared/claude-user-config'
+import { resolveClaudeCommand } from '../../shared/node-cli-command-resolution'
+import { probeClaudeCliVersion } from '../claude/claude-hook-event-versions'
+import { ClaudeHookService } from '../claude/hook-service'
 import {
   provisionClaudeAccountProfile,
   type ClaudeProfileSetupReport
@@ -10,14 +13,35 @@ import { wslClaudeProfile } from './claude-profile-wsl-paths'
 export async function provisionWslClaudeAccountProfile(
   userHome: string,
   distro: string,
-  accountId: string
+  accountId: string,
+  hooks = false
 ): Promise<ClaudeProfileSetupReport> {
   const { dataRoot, profile } = wslClaudeProfile(userHome, distro, accountId)
+  const env = await resolveLoginShellEnvironment()
+  const userConfigDir = readUserClaudeConfigDir(env)
+  const claudeVersion = hooks
+    ? await probeClaudeCliVersion(resolveClaudeCommand({ pathEnv: env.PATH, homePath: userHome }), {
+        cwd: userHome,
+        env: Object.fromEntries(
+          Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+        )
+      })
+    : null
   return provisionClaudeAccountProfile({
     dataRoot,
     profile,
     userHome,
-    userConfigDir: readUserClaudeConfigDir(await resolveLoginShellEnvironment()),
-    installHooks: null
+    userConfigDir,
+    installHooks: hooks
+      ? ({ configDir }) =>
+          new ClaudeHookService().install({
+            target: {
+              kind: 'profile',
+              configDir,
+              systemDefaultConfigDir: resolveClaudeDefaultHome(userHome, userConfigDir)
+            },
+            claudeVersion: claudeVersion ?? undefined
+          })
+      : null
   })
 }
