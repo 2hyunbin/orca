@@ -563,7 +563,12 @@ it('opens Antigravity accounts from its signed-out notice, and offers no link fo
       false,
       'Antigravity'
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Open Antigravity settings' }))
+    const link = screen.getByRole('link', { name: 'Settings → Accounts → Antigravity' })
+    expect(link.parentElement).toHaveTextContent(
+      "Antigravity isn't signed in. Sign in under Settings → Accounts → Antigravity. Then send your message again."
+    )
+    expect(screen.queryByRole('button')).toBeNull()
+    fireEvent.click(link)
     expect(openSettingsTarget).toHaveBeenCalledExactlyOnceWith({
       pane: 'accounts',
       repoId: null,
@@ -586,7 +591,7 @@ it('opens Antigravity accounts from its signed-out notice, and offers no link fo
         false,
         agentName
       )
-      expect(screen.queryByRole('button', { name: 'Open Antigravity settings' })).toBeNull()
+      expect(screen.queryByRole('link')).toBeNull()
       cleanup()
     }
   } finally {
