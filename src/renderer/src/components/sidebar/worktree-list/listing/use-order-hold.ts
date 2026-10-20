@@ -1,5 +1,10 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
+import {
+  withHeldProjectRecency,
+  type SidebarFeedIndex
+} from '../../../../../../shared/sidebar-list/sidebar-feed-index'
 import type { SortBy } from '../../../../../../shared/sidebar-list/smart-sort'
+import type { ProjectOrderBy } from '../../../../../../shared/ui-chrome-types'
 import { mergeHeldOrder } from './held-order'
 
 const LIST_SELECTOR = '[data-worktree-sidebar-container]'
@@ -66,13 +71,17 @@ function subscribe(listener: () => void): () => void {
 
 const notEngaged = (): boolean => false
 
+function useListEngaged(): boolean {
+  // The stamp-sorted list moves on events, so it holds.
+  return useSyncExternalStore(subscribe, isEngaged, notEngaged)
+}
+
 /**
  * Desktop only, display only: in Recent and Smart, rows stay put under the pointer and during a
  * drag, so a click never lands on a row that just moved; the new order applies on leave or drag end.
  */
 export function useOrderHeldWhileEngaged(ids: string[], sortBy: SortBy): string[] {
-  // The stamp-sorted list moves on events, so it holds.
-  const engaged = useSyncExternalStore(subscribe, isEngaged, notEngaged)
+  const engaged = useListEngaged()
   const [shown, setShown] = useState({ ids, sortBy })
   // Only Recent and Smart move on their own; a mode switch applies at once, like adds and removals.
   const holds = engaged && (sortBy === 'recent' || sortBy === 'smart')
@@ -85,4 +94,21 @@ export function useOrderHeldWhileEngaged(ids: string[], sortBy: SortBy): string[
     setShown(next)
   }
   return next.ids
+}
+
+/** As above for project sections in Recent order: they keep the stamps they had at engagement. */
+export function useProjectRecencyHeldWhileEngaged(
+  index: SidebarFeedIndex,
+  projectOrderBy: ProjectOrderBy
+): SidebarFeedIndex {
+  const holds = useListEngaged() && projectOrderBy === 'recent'
+  const [heldFrom, setHeldFrom] = useState<SidebarFeedIndex | null>(null)
+  const nextHeldFrom = holds ? (heldFrom ?? index) : null
+  if (nextHeldFrom !== heldFrom) {
+    setHeldFrom(nextHeldFrom)
+  }
+  return useMemo(
+    () => (nextHeldFrom ? withHeldProjectRecency(index, nextHeldFrom) : index),
+    [index, nextHeldFrom]
+  )
 }

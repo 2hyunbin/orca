@@ -36,7 +36,7 @@ describe('a synthetic PTY exit', () => {
 
   it('leaves the liveness verdict to the exit when the host proved it', () => {
     const { calls, deps } = harness()
-    publishSyntheticExit(deps, 'pty-1', 0, undefined, PtyExitProof.from('absent'))
+    publishSyntheticExit(deps, 'pty-1', 0, undefined, PtyExitProof.from('absent', undefined))
     expect(calls).toEqual(['exit'])
   })
 })

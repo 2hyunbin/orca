@@ -21,12 +21,11 @@ import type {
 } from '../../../../shared/sidebar-list/sidebar-feed-rows'
 import type { SmartStampFields } from '../../../../shared/sidebar-list/sort-stamps'
 import { buildPairedServerActivityFacts } from '../../../../shared/sidebar-list/paired-server-activity-facts'
-import { GOLDEN_NOW, folder, group, lineage } from './sidebar-list-golden-factories.test-fixture'
+import { GOLDEN_NOW, folder, lineage } from './sidebar-list-golden-factories.test-fixture'
 import {
   GROUPED_REPOS,
   GROUPED_WORKTREES,
-  GROUPS_OF_GROUPED_REPOS,
-  publishedCatalog
+  GROUPS_OF_GROUPED_REPOS
 } from './sidebar-list-parity-catalog.test-fixture'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
@@ -39,6 +38,12 @@ import {
   readWindowPairedServerRows
 } from './window-paired-server-rows.test-fixture'
 import type { SidebarInputsFeedDomain } from '../../../../main/runtime/sidebar-inputs/sidebar-inputs-feed'
+import type { SidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
+import { buildSidebarFeedCatalog } from '../../../../shared/sidebar-list/sidebar-feed-catalog'
+import {
+  projectCatalogFromWindowState,
+  windowCatalogFromServerAnswers
+} from './sidebar-list-parity-project-catalog.test-fixture'
 
 const SERVER_HOST_ID = 'runtime:env-1'
 
@@ -99,24 +104,16 @@ export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState>
   }
   const pending = Object.values(base.pendingWorktreeCreations ?? {})[0]
   const [serverMain, serverChild] = worktreesByRepo.api ?? []
+  // The repos, projects and server groups as the window's all-host fetch folds them.
+  const projectGroups = [...(base.projectGroups ?? []), ...GROUPS_OF_GROUPED_REPOS]
+  const catalog = windowCatalogFromServerAnswers({ ...base, repos, worktreesByRepo, projectGroups })
   return {
-    repos,
-    worktreesByRepo,
+    ...catalog,
     // A server workspace nested under the server's main, and a server folder workspace.
     worktreeLineageById: {
       ...base.worktreeLineageById,
       ...(serverMain && serverChild ? { [serverChild.id]: lineage(serverChild, serverMain) } : {})
     },
-    projectGroups: [
-      ...(base.projectGroups ?? []),
-      ...GROUPS_OF_GROUPED_REPOS,
-      group('pg-server-folders', 'Server folders', {
-        parentPath: '/srv/folders',
-        createdFrom: 'folder-scan',
-        executionHostId: SERVER_HOST_ID,
-        tabOrder: 3
-      })
-    ],
     folderWorkspaces: [
       ...(base.folderWorkspaces ?? []),
       folder('fw-server', 'pg-server-folders', { executionHostId: SERVER_HOST_ID, sortOrder: 3 })
@@ -208,7 +205,10 @@ export function feedDomainsFromWindowState(
   // Each server reports only its own rows, keyed `hostId|worktreeId`.
   const rowsOf = <Row extends { key: string }>(rows: readonly Row[], hostId: string): Row[] =>
     rows.filter((row) => row.key.startsWith(`${hostId}|`))
-  const domain = (name: string, read: () => Record<string, unknown>): SidebarInputsFeedDomain => ({
+  const domain = (
+    name: string,
+    read: SidebarInputsFeedDomain['read']
+  ): SidebarInputsFeedDomain => ({
     name,
     read,
     watch: () => () => {}
@@ -269,17 +269,22 @@ export function feedDomainsFromWindowState(
       )
     ),
     domain('pairedServerRows', () => Object.fromEntries(serverRows)),
-    domain('desktop', () => readWindowDesktopSidebarFacts(state))
+    domain('desktop', () => readWindowDesktopSidebarFacts(state)),
+    // Main's own builder, over the store and server reads the window's catalog came from.
+    domain('projectCatalog', () => projectCatalogFromWindowState(state))
   ]
 }
 
-/** What the host's own phone reads beside the feed: repo.list, groups and ui.get/settings.get. */
-export function phoneInputsFromWindowState(state: AppState): {
+/** What the host's own phone reads: the feed's catalog, and ui.get/settings.get for its view. */
+export function phoneInputsFromWindowState(
+  state: AppState,
+  domains: SidebarFeedDomains
+): {
   catalog: SidebarFeedCatalog
   view: SidebarFeedView
 } {
   return {
-    catalog: publishedCatalog(state),
+    catalog: buildSidebarFeedCatalog(domains.projectCatalog, [], []),
     view: {
       groupBy: state.groupBy,
       sortBy: state.sortBy,

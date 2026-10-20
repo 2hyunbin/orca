@@ -122,6 +122,8 @@ export function useVisibleSidebarWorktrees(args: {
       defaultHostId,
       worktreeLineageById,
       preserveLineageParentOrder: sortBy === 'manual',
+      // The stamp sort ranks by host identity (use-sort-order.ts).
+      sortedByHostIdentity: true,
       forcedVisibleWorktreeIds: args.agentSendTargetWorktreeId
         ? [args.agentSendTargetWorktreeId]
         : undefined

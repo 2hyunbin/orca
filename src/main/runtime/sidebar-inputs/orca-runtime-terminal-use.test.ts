@@ -10,6 +10,7 @@ import {
 import { OrcaRuntimeService } from '../orca-runtime'
 import type { RuntimeStore } from '../runtime-store-contract'
 import { TERMINAL_USE_THROTTLE_MS } from './terminal-use-producer'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 const WT = 'repo-1::/tmp/phone-only'
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -19,12 +20,13 @@ function createHeadlessRuntime(ptyId = 'pty-1') {
   const meta: Record<string, Partial<WorktreeMeta>> = { [WT]: { lastActivityAt: 1 } }
   const writes: Partial<WorktreeMeta>[] = []
   const store = {
-    getRepos: () => [],
+    // An unstamped row's writes resolve their host from its repo's only registration.
+    getRepos: () => [{ id: 'repo-1', connectionId: null }],
     getRepo: (id: string) => (id === 'repo-1' ? { id, connectionId: null } : undefined),
     getSettings: () => ({}),
     getWorktreeMeta: (id: string) => meta[id],
     getAllWorktreeMeta: () => meta,
-    setWorktreeMeta: (id: string, updates: Partial<WorktreeMeta>) => {
+    setWorktreeMeta: ({ id }: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => {
       writes.push(updates)
       meta[id] = { ...meta[id], ...updates }
       return meta[id]

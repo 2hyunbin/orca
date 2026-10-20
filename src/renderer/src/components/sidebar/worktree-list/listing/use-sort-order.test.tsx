@@ -9,10 +9,18 @@ import { useAppStore } from '@/store'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import { makeRepo, makeWorktree } from '../../../worktree-jump-palette-test-fixtures'
 import type { SortBy } from '../../../../../../shared/sidebar-list/smart-sort'
+import {
+  composeWorktreeHostIdentity,
+  getWorktreeHostIdentity
+} from '../../../../../../shared/worktree/host-qualified-identity'
 import { useSidebarWorktreeSortOrder } from './use-sort-order'
 
 // Main's list session is a runtime call with no bearing on the order.
 vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+
+// The order names rows by host identity; these rows carry no host.
+const keys = (...ids: string[]): string[] =>
+  ids.map((id) => composeWorktreeHostIdentity(undefined, id))
 
 const initialState = useAppStore.getInitialState()
 const repo = makeRepo()
@@ -116,14 +124,14 @@ describe('useSidebarWorktreeSortOrder', () => {
       'manual'
     )
     const { result } = renderSortOrder({ strict: true })
-    expect(result.current).toEqual(['a', 'b'])
+    expect(result.current).toEqual(keys('a', 'b'))
     act(() =>
       replaceWorktrees([
         makeWorktree('a', 'A', { manualOrder: 2 }),
         makeWorktree('b', 'B', { manualOrder: 3 })
       ])
     )
-    expect(result.current).toEqual(['b', 'a'])
+    expect(result.current).toEqual(keys('b', 'a'))
   })
 
   it('survives a burst of synchronous row writes in Manual', () => {
@@ -155,10 +163,10 @@ describe('useSidebarWorktreeSortOrder', () => {
         flushSync(() => replaceWorktrees(worktrees))
         const expected = [...worktrees]
           .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
-          .map((w) => w.id)
+          .map(getWorktreeHostIdentity)
         expect(view.latest.ids).toEqual(expected)
       }
-      expect(view.latest.ids[0]).toBe('w0')
+      expect(view.latest.ids[0]).toBe(composeWorktreeHostIdentity(undefined, 'w0'))
       expect(view.errors).toEqual([])
     } finally {
       view.unmount()
@@ -169,7 +177,7 @@ describe('useSidebarWorktreeSortOrder', () => {
     seed([makeWorktree('a', 'A')], 'name')
     const { result } = renderSortOrder()
     act(() => replaceWorktrees([makeWorktree('a', 'A'), makeWorktree('0', '0 first')]))
-    expect(result.current).toEqual(['0', 'a'])
+    expect(result.current).toEqual(keys('0', 'a'))
   })
 
   it('re-sorts on Manual -> Recent', () => {
@@ -181,9 +189,9 @@ describe('useSidebarWorktreeSortOrder', () => {
       'manual'
     )
     const { result } = renderSortOrder()
-    expect(result.current).toEqual(['a', 'b'])
+    expect(result.current).toEqual(keys('a', 'b'))
     act(() => useAppStore.getState().setSortBy('recent'))
-    expect(result.current).toEqual(['b', 'a'])
+    expect(result.current).toEqual(keys('b', 'a'))
   })
 
   it('applies a removed worktree with the same write', () => {
@@ -202,7 +210,7 @@ describe('useSidebarWorktreeSortOrder', () => {
         makeWorktree('c', 'C', { lastActivityAt: 4_000 })
       ])
     )
-    expect(result.current).toEqual(['c', 'b'])
+    expect(result.current).toEqual(keys('c', 'b'))
   })
 
   it('follows another client order save while manual ranks by persisted sortOrder', () => {
@@ -211,9 +219,9 @@ describe('useSidebarWorktreeSortOrder', () => {
       'manual'
     )
     const { result } = renderSortOrder()
-    expect(result.current).toEqual(['a', 'b'])
+    expect(result.current).toEqual(keys('a', 'b'))
     act(() => publishSortOrders({ a: 1, b: 2 }))
-    expect(result.current).toEqual(['b', 'a'])
+    expect(result.current).toEqual(keys('b', 'a'))
   })
 
   it('keeps Smart order steady and saves nothing when only persisted sortOrder changes', () => {

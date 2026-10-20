@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { AppState } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { setCachedWorktrees } from '../cache/worktree-cache'
 import type { RpcClient } from '../transport/rpc-client'
@@ -27,7 +28,7 @@ export function useHostWorktreeCatalog(args: {
   hostId: string | undefined
   sidebarFeed: HostSidebarFeedTriggers
   state: HostScreenState
-  syncViewSettingsFromDesktop: (options?: { reconnected?: boolean }) => Promise<void>
+  syncViewSettingsFromDesktop: (options?: { resend?: boolean }) => Promise<void>
 }) {
   const {
     client,
@@ -181,13 +182,13 @@ export function useHostWorktreeCatalog(args: {
     if (!client || connState !== 'connected') {
       return
     }
-    void syncViewSettingsFromDesktop()
     return startHostWorktreeRefresh({
       client,
       fetchWorktrees,
       fetchRepoMetadata,
       syncViewSettings: syncViewSettingsFromDesktop,
-      sidebarFeed
+      sidebarFeed,
+      appState: AppState
     })
   }, [
     client,
