@@ -66,7 +66,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
       args.startupLaunchPreferences
     )
 
-    const repo = await this.resolveRepoSelector(args.repoSelector, args.repoHostId)
+    const repo = await this.resolveRepoSelector(args.repoSelector)
     // Listed from here: a create refused before its project resolved has nothing to show.
     const creation = this.workspaceCreations?.open({ creationId: args.creationId, repoId: repo.id })
     try {

@@ -165,6 +165,77 @@ describe('orca worktree create carries the selected host', () => {
     process.exitCode = priorExitCode
   })
 
+  it('checks a GitLab link against the repo on the selected host', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_project_setups', { setups: TWIN_SETUPS }),
+      okFixture('req_repo', {
+        repo: { id: 'repo-1', gitRemoteIdentity: { remoteUrl: 'https://gitlab.com/acme/app.git' } }
+      }),
+      okFixture('req_create', {
+        worktree: buildWorktree('/tmp/orca/feature', 'feature', 'abc', 'repo-1'),
+        lineage: null,
+        warnings: []
+      })
+    )
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      [
+        'worktree',
+        'create',
+        '--project',
+        'github:stablyai/orca',
+        '--host',
+        'local',
+        '--gitlab-mr',
+        'https://gitlab.com/acme/app/-/merge_requests/5',
+        '--name',
+        'feature',
+        '--no-parent',
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+
+    expect(callMock).toHaveBeenNthCalledWith(2, 'repo.show', {
+      repo: 'id:repo-1',
+      repoHostId: 'local'
+    })
+    expect(callMock).toHaveBeenNthCalledWith(
+      3,
+      'worktree.create',
+      expect.objectContaining({ repo: 'id:repo-1', repoHostId: 'local' })
+    )
+  })
+
+  it('names the host when a --project-host-setup id is missing there', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const priorExitCode = process.exitCode
+    queueFixtures(callMock, okFixture('req_project_setups', { setups: [TWIN_SETUPS[1]] }))
+
+    await main(
+      [
+        'worktree',
+        'create',
+        '--project-host-setup',
+        'setup-1',
+        '--host',
+        'local',
+        '--name',
+        'feature',
+        '--no-parent',
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+
+    const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
+    expect(printed).toContain('not ready or was not found: setup-1 on local')
+    process.exitCode = priorExitCode
+  })
+
   it('keeps --repo selector-only', async () => {
     queueFixtures(
       callMock,

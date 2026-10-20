@@ -132,7 +132,7 @@ export async function resolveProjectCreateTarget(
     if (projectHostSetupId) {
       throw new RuntimeClientError(
         'invalid_argument',
-        `Project host setup is not ready or was not found: ${projectHostSetupId}`
+        `Project host setup is not ready or was not found: ${projectHostSetupId}${host ? ` on ${host.id}` : ''}`
       )
     }
     // Why: blaming the host when no project matched sent callers to debug the wrong flag.
@@ -176,12 +176,17 @@ function getRepoSelectorFromWorktreeId(worktreeId: string | undefined): string |
   return `id:${worktreeId.slice(0, separatorIndex)}`
 }
 
-/** `repoHostId` rides only when a project target picked a host; `--repo` stays selector-only. */
+/**
+ * The repo a create names, as RPC params: spread it whole into every call that looks the repo up,
+ * so the host a project target picked is never dropped. `--repo` stays selector-only.
+ */
+export type CliRepoTarget = { repo: string; repoHostId?: string }
+
 export async function getCreateRepoTarget(
   flags: Map<string, string | boolean>,
   cwdParentWorktree: { worktreeId: string } | undefined,
   client: RuntimeClient
-): Promise<{ repo: string; repoHostId?: string }> {
+): Promise<CliRepoTarget> {
   const projectTarget = await resolveProjectCreateTarget(flags, client)
   if (projectTarget) {
     return { repo: projectTarget.repoSelector, repoHostId: projectTarget.repoHostId }

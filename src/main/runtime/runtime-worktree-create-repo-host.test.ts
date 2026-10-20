@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import './rpc/unused-default-rpc-methods.test-fixture'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
-import { WorktreeCreate } from '../../shared/rpc-contract/worktree-create-params'
-import { buildManagedWorktreeCreateArgs } from './rpc/methods/worktree-create-args'
+import { RpcDispatcher } from './rpc/dispatcher'
+import type { RpcContext, RpcRequest } from './rpc/core'
+import { REPO_METHODS } from './rpc/methods/repo'
+import { WORKTREE_METHODS } from './rpc/methods/worktree'
+import { agentLaunchWorkspaceFactory } from './rpc/methods/agent-launch-worktree-creation'
 import { OrcaRuntimeService } from './orca-runtime'
 
+// Why twins: a project copied between hosts keeps its repo id (Codex review 6 #6).
 const REPOS: Repo[] = [
   {
     id: 'dup',
@@ -11,6 +16,7 @@ const REPOS: Repo[] = [
     displayName: 'Dup',
     badgeColor: '#000',
     addedAt: 1,
+    kind: 'git',
     executionHostId: 'local'
   },
   {
@@ -19,64 +25,98 @@ const REPOS: Repo[] = [
     displayName: 'Dup',
     badgeColor: '#000',
     addedAt: 2,
+    kind: 'git',
     executionHostId: 'ssh:gpu'
   }
 ]
 
 function createRuntime(): OrcaRuntimeService {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo selection reads only getRepos/getRepo.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these paths stop right after repo resolution, which reads only these store methods.
   return new OrcaRuntimeService({
     getRepos: () => REPOS,
     getRepo: (id: string) => REPOS.find((repo) => repo.id === id) ?? null,
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => null,
     setWorktreeMeta: vi.fn(),
-    getGitHubCache: () => null
+    getGitHubCache: () => null,
+    getSettings: () => ({})
   } as never)
 }
 
-describe('worktree.create with the same repo id on two hosts', () => {
-  it('carries repoHostId from the wire into the runtime create args', () => {
-    const params = WorktreeCreate.parse({ repo: 'id:dup', repoHostId: 'local', name: 'x' })
-    const args = buildManagedWorktreeCreateArgs(params, {})
-    expect(args).toMatchObject({ repoSelector: 'id:dup', repoHostId: 'local' })
+/** Stops every create at the step that receives the resolved repo, and records that repo. */
+function stopAtResolvedProject() {
+  return vi
+    .spyOn(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: spies on the private step that receives the resolved repo; it exists on the prototype.
+      OrcaRuntimeService.prototype as unknown as {
+        createInResolvedProject: (args: unknown, repo: Repo) => Promise<never>
+      },
+      'createInResolvedProject'
+    )
+    .mockRejectedValue(new Error('stop after resolution'))
+}
+
+function request(method: string, params: unknown): RpcRequest {
+  return { id: 'req-1', authToken: 'tok', method, params }
+}
+
+describe('a repo id set up on two hosts, named with repoHostId', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
-  it('keeps the selector-only shape older clients send', () => {
-    const params = WorktreeCreate.parse({ repo: 'id:dup', name: 'x' })
-    expect(buildManagedWorktreeCreateArgs(params, {})).not.toHaveProperty('repoHostId')
+  it('repo.show resolves the row on the named host and still refuses a bare id', async () => {
+    const dispatcher = new RpcDispatcher({ runtime: createRuntime(), methods: REPO_METHODS })
+
+    const named = await dispatcher.dispatch(
+      request('repo.show', { repo: 'id:dup', repoHostId: 'ssh:gpu' })
+    )
+    const bare = await dispatcher.dispatch(request('repo.show', { repo: 'id:dup' }))
+
+    expect(named).toMatchObject({ ok: true, result: { repo: { path: '/remote/dup' } } })
+    expect(bare).toMatchObject({ ok: false, error: { code: 'selector_ambiguous' } })
   })
 
-  it('resolves the row on the named host', async () => {
+  it.each([
+    ['plain', {}],
+    ['with a startup agent', { startupAgent: 'claude' }],
+    ['with a linked startup draft', { startupDraft: 'Fix the bug' }]
+  ])('worktree.create keeps the host through every lookup (%s)', async (_label, extra) => {
+    const reached = stopAtResolvedProject()
+    const dispatcher = new RpcDispatcher({ runtime: createRuntime(), methods: WORKTREE_METHODS })
+
+    await dispatcher.dispatch(
+      request('worktree.create', { repo: 'id:dup', repoHostId: 'local', name: 'x', ...extra })
+    )
+
+    expect(reached).toHaveBeenCalledTimes(1)
+    expect(reached.mock.calls[0]?.[1]).toMatchObject({ path: '/laptop/dup' })
+  })
+
+  it('agent.launch create-worktree keeps the host', async () => {
+    const reached = stopAtResolvedProject()
     const runtime = createRuntime()
-    await expect(runtime.showRepo('id:dup', 'local')).resolves.toMatchObject({
-      path: '/laptop/dup'
-    })
-    await expect(runtime.showRepo('id:dup', 'ssh:gpu')).resolves.toMatchObject({
-      path: '/remote/dup'
-    })
-  })
-
-  it('still refuses a bare duplicated id', async () => {
-    await expect(createRuntime().showRepo('id:dup')).rejects.toThrow('selector_ambiguous')
-  })
-
-  it('creation proceeds with the row on the named host', async () => {
-    const runtime = createRuntime()
-    const reached = vi
-      .spyOn(
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: spies on the private step that receives the resolved repo; it exists on the prototype.
-        OrcaRuntimeService.prototype as unknown as {
-          createInResolvedProject: (args: unknown, repo: Repo) => Promise<never>
-        },
-        'createInResolvedProject'
-      )
-      .mockRejectedValue(new Error('stop after resolution'))
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create reads only `runtime` and the creator-provenance fields, which default when absent.
+    const factory = agentLaunchWorkspaceFactory({ runtime } as unknown as RpcContext, 'claude')
 
     await expect(
-      runtime.createManagedWorktree({ repoSelector: 'id:dup', repoHostId: 'ssh:gpu', name: 'x' })
+      factory.createWorktree({
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the parsed AgentLaunch create payload; this test sets only the fields the lookup reads.
+        create: { repo: 'id:dup', repoHostId: 'ssh:gpu', name: 'x' } as never,
+        startupAgent: 'claude'
+      } as never)
     ).rejects.toThrow('stop after resolution')
+
     expect(reached.mock.calls[0]?.[1]).toMatchObject({ path: '/remote/dup' })
-    reached.mockRestore()
+  })
+
+  it('a retried create for one host never coalesces with the same retry for another', async () => {
+    const runtime = createRuntime()
+    const run = vi.fn(async () => 'created')
+
+    await runtime.dedupeWorktreeCreate({ repo: 'id:dup', repoHostId: 'local' }, 'retry-1', run)
+    await runtime.dedupeWorktreeCreate({ repo: 'id:dup', repoHostId: 'ssh:gpu' }, 'retry-1', run)
+
+    expect(run).toHaveBeenCalledTimes(2)
   })
 })

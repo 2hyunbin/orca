@@ -14,12 +14,10 @@ import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type { TaskSourceContext } from '../../shared/task-source-context'
 import type { WorktreeStartupDraftPaste } from './runtime-worktree-agent-startup'
 import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
-import type { ExecutionHostId } from '../../shared/execution-host'
+import type { RuntimeRepoSelector } from './runtime-repo-selector'
 
 export type RuntimeManagedWorktreeCreateArgs = {
-  repoSelector: string
-  /** Narrows `repoSelector` to the row on this host; see WorktreeCreate.repoHostId. */
-  repoHostId?: ExecutionHostId
+  repoSelector: RuntimeRepoSelector
   name: string
   nameWasGenerated?: boolean
   navigation?: RuntimeNavigationTarget

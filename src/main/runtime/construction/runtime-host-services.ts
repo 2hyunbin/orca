@@ -337,7 +337,7 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
 
   protected readonly repositorySettings = new RuntimeRepositorySettingsController({
     getStore: () => this.store,
-    resolveRepo: (selector, hostId) => this.resolveRepoSelector(selector, hostId),
+    resolveRepo: (selector) => this.resolveRepoSelector(selector),
     forgetTerminalTopology: (repoId) => this.terminalTopologyRevisionByRepoId.delete(repoId),
     stopProjectTerminals: (repo, options) => this.stopTerminalsForProject(repo, options),
     invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
