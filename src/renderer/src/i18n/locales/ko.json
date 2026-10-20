@@ -14203,6 +14203,7 @@
             "sourceActionsUnavailable": "스크립트 소스를 사용할 수 없습니다."
           },
           "AiVaultScanProgressStrip": {
+            "agentChecked": "{{agent}}: 기록 후보 {{total}}개 중 {{settled}}개 확인됨",
             "fileCount_one": "파일 {{value0}}개",
             "fileCount_other": "파일 {{value0}}개",
             "databaseCount_one": "데이터베이스 {{value0}}개",
