@@ -142,7 +142,7 @@ describe('WslHostService', () => {
     // Reusing a distro's name after unregister/import must not reuse its old project owner.
     connector.listDistros.mockResolvedValue([{ ...UBUNTU, id: UBUNTU_ID.replace('0e', '3e') }])
     const connects = connector.connect.mock.calls.length
-    await expect(service.ensure('Ubuntu')).rejects.toThrow('does not match its registration')
+    await expect(service.ensure('Ubuntu')).rejects.toThrow('reconnecting it will not repair the registration')
     expect(connector.connect).toHaveBeenCalledTimes(connects)
   })
 
