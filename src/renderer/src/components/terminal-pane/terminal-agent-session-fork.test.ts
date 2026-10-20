@@ -25,6 +25,7 @@ const store = {
   settings: {} as {
     localWindowsRuntimeDefault?: { kind: 'windows-host' } | { kind: 'wsl'; distro: string }
   },
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an empty test catalog; rows are typed below.
   worktreesByRepo: {} as Record<
     string,
     {
