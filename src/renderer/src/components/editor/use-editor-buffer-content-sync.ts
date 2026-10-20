@@ -21,7 +21,9 @@ function isFreshText(content: FileContent | undefined): content is FileContent {
 export function useEditorBufferContentSync(
   fileContents: Record<string, FileContent>,
   setFileContents: Dispatch<SetStateAction<Record<string, FileContent>>>,
-  openFilesRef: { current: OpenFile[] }
+  openFilesRef: { current: OpenFile[] },
+  /** Discards this panel's in-flight read of a tab, so it can't land after newer text. */
+  supersedeRead?: (fileId: string) => void
 ): void {
   const previousRef = useRef(fileContents)
   // Entries this panel received from another panel; re-publishing them would echo.
@@ -31,6 +33,11 @@ export function useEditorBufferContentSync(
     const listener: BufferContentListener = (sourceFileId, content) => {
       const ids = editorBufferViewIds(useAppStore.getState(), sourceFileId)
       receivedRef.current.add(content)
+      for (const id of ids) {
+        if (previousRef.current[id] !== content) {
+          supersedeRead?.(id)
+        }
+      }
       setFileContents((prev) => {
         let next = prev
         for (const id of ids) {
@@ -48,7 +55,7 @@ export function useEditorBufferContentSync(
     return () => {
       listeners.delete(listener)
     }
-  }, [setFileContents])
+  }, [setFileContents, supersedeRead])
 
   useEffect(() => {
     const previous = previousRef.current

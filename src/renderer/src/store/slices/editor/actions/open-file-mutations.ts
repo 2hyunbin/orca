@@ -74,8 +74,9 @@ export function createOpenFileMutations(
         if (!file) {
           return s
         }
-        // Why: read-only tabs can never become dirty; hard no-op any stray change/save callback that reached here.
-        if (file.readOnly === true || file.csvPreviewOnly === true) {
+        // Why: read-only tabs can never make a file dirty; hard no-op any stray change/save callback that reached here.
+        // Clearing stays allowed: a read-only tab may be the record's first view when a sibling saves.
+        if (dirty && (file.readOnly === true || file.csvPreviewOnly === true)) {
           return s
         }
         // Why every view: a dirty preview tab in another workspace could be replaced without a prompt.

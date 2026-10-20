@@ -20,13 +20,21 @@ type PanelHandle = {
   set: (id: string, content: string) => void
 }
 
-function Panel({ initial, handle }: { initial: Record<string, FileContent>; handle: PanelHandle }) {
+function Panel({
+  initial,
+  handle,
+  supersedeRead
+}: {
+  initial: Record<string, FileContent>
+  handle: PanelHandle
+  supersedeRead?: (fileId: string) => void
+}) {
   const [contents, setContents] = useState(initial)
   const openFilesRef = useRef(fixture.store?.getState().openFiles ?? [])
   handle.contents = contents
   handle.set = (id, content) =>
     setContents((prev) => ({ ...prev, [id]: { content, isBinary: false } }))
-  useEditorBufferContentSync(contents, setContents, openFilesRef)
+  useEditorBufferContentSync(contents, setContents, openFilesRef, supersedeRead)
   return null
 }
 
@@ -82,4 +90,26 @@ it("refreshes another panel's cached disk text for the same file after a reload"
   act(() => panelA.set(a, 'reloaded disk'))
 
   expect(panelB.contents[b]?.content).toBe('reloaded disk')
+})
+
+it("discards another panel's in-flight read once newer text for the file lands", () => {
+  const a = openTab('wt-1')
+  const b = openTab('wt-2')
+  const old = { content: 'old disk', isBinary: false }
+  const superseded: string[] = []
+  const panelA: PanelHandle = { contents: {}, set: () => {} }
+  const panelB: PanelHandle = { contents: {}, set: () => {} }
+  act(() =>
+    root.render(
+      <>
+        <Panel initial={{ [a]: old }} handle={panelA} />
+        <Panel initial={{}} handle={panelB} supersedeRead={(id) => superseded.push(id)} />
+      </>
+    )
+  )
+
+  act(() => panelA.set(a, 'saved text'))
+
+  // B's read started before the save; its generation moves, so its old bytes are dropped.
+  expect(superseded).toContain(b)
 })

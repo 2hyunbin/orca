@@ -190,26 +190,27 @@ export function reconcileEditorBufferSharing(
     }
   }
 
-  let filesChanged = false
-  const nextFiles = openFiles.map((file) => {
-    const record = records[recordIdByFileId[file.id]]
-    const endPreview = record.isDirty && file.isPreview === true
-    if (editorBufferMirrorMismatch(file, record) === null && !endPreview) {
-      return file
-    }
-    filesChanged = true
-    // Why: a preview tab showing unsaved edits must not be replaced by the next single click.
-    return { ...file, ...record, ...(endPreview ? { isPreview: undefined } : {}) }
-  })
-
   return {
-    openFiles: filesChanged ? nextFiles : openFiles,
+    // Unchanged tabs keep their identity; the caller keeps the list when none changed.
+    openFiles: openFiles.map((file) => {
+      const record = records[recordIdByFileId[file.id]]
+      return editorBufferMirrorMismatch(file, record) === null ? file : { ...file, ...record }
+    }),
     records: sameKeysAndValues(records, input.records) ? input.records : records,
     index: sameIndex(recordIdByFileId, keyByRecordId, input.index)
       ? input.index
       : { recordIdByFileId, keyByRecordId },
     drafts: draftsChanged ? drafts : input.drafts
   }
+}
+
+/** Records of one file kept apart because their unsaved edits differ; none may autosave over another. */
+export function editorBufferRecordsKeptApart(index: EditorBufferIndex): Set<string> {
+  const byKey = new Map<string, string[]>()
+  for (const [recordId, key] of Object.entries(index.keyByRecordId)) {
+    byKey.set(key.identity.key, [...(byKey.get(key.identity.key) ?? []), recordId])
+  }
+  return new Set([...byKey.values()].filter((ids) => ids.length > 1).flat())
 }
 
 function findSharedRecord(

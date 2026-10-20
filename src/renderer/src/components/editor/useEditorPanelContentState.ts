@@ -70,7 +70,12 @@ export function useEditorPanelContentState({
     isVisibleRef.current = isVisible
     activeContentFileIdRef.current = activeContentFileId
   }, [activeContentFileId, diffContents, editorViewMode, isVisible, openFiles])
-  useEditorBufferContentSync(fileContents, setFileContents, openFilesRef)
+  const supersedeFileRead = useCallback((fileId: string): void => {
+    if (fileId in fileReadGenerationRef.current) {
+      fileReadGenerationRef.current[fileId] = ++fileReadGenerationCounterRef.current
+    }
+  }, [])
+  useEditorBufferContentSync(fileContents, setFileContents, openFilesRef, supersedeFileRead)
 
   const invalidateFileContent = useCallback((fileIds: string[]): void => {
     const uniqueIds = new Set(fileIds)

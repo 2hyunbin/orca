@@ -63,7 +63,9 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
   })
   return {
     ...write,
-    ...(result.openFiles === openFiles ? {} : { openFiles: result.openFiles }),
+    ...(result.openFiles.every((file, index) => file === openFiles[index])
+      ? {}
+      : { openFiles: result.openFiles }),
     ...(result.records === records ? {} : { editorBuffers: result.records }),
     ...(result.index === index ? {} : { editorBufferIndex: result.index }),
     ...(result.drafts === drafts ? {} : { editorDrafts: result.drafts })

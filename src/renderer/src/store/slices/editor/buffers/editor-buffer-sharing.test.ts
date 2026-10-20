@@ -267,13 +267,45 @@ describe('one editor buffer record per physical file', () => {
     const joined = openTab(store, 'wt-3', {}, { preview: true })
 
     expect(tab(store, preview)?.isPreview).toBeUndefined()
-    expect(tab(store, joined)?.isPreview).toBeUndefined()
-    store.setState({
-      openFiles: store
-        .getState()
-        .openFiles.map((file) => (file.id === preview ? { ...file, isPreview: true } : file))
+    expect(tab(store, joined)).toMatchObject({ isPreview: undefined, isDirty: true })
+    expect(getReplaceablePreviewFileId(store.getState(), 'wt-3', undefined)).toBeNull()
+  })
+
+  it("a queued save whose text a newer write already covered doesn't write its old fallback", async () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'draft X')
+    let pending = true
+    const unregister = registerPendingEditorFlush(b, () => {
+      if (pending) {
+        pending = false
+        type(store, b, 'rich edit Y')
+      }
     })
-    expect(getReplaceablePreviewFileId(store.getState(), 'wt-2', undefined)).toBeNull()
+    const queue = createEditorSaveQueue(store)
+
+    await Promise.all([
+      queue.queueSave(tab(store, a)!, 'draft X', 'user'),
+      queue.queueSave(tab(store, a)!, 'draft X', 'user')
+    ])
+    unregister()
+    queue.dispose()
+
+    expect(disk.files.get(FILE)).toBe('rich edit Y')
+    expect(disk.fs.writeFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('a save from a writable tab clears a read-only first tab of the same file', async () => {
+    const readOnly = openTab(store, 'wt-1', { readOnly: true })
+    const writable = openTab(store, 'wt-2')
+    type(store, writable, 'typed')
+    const queue = createEditorSaveQueue(store)
+
+    await queue.queueSave(tab(store, writable)!, 'typed', 'user')
+    queue.dispose()
+
+    expect([tab(store, readOnly)?.isDirty, tab(store, writable)?.isDirty]).toEqual([false, false])
+    expect(store.getState().editorDrafts).toEqual({})
   })
 
   it('a tab queued to close behind its sibling leaves the prompt to the sibling', () => {
@@ -402,6 +434,29 @@ describe('one editor buffer record per physical file', () => {
       expect(Object.keys(state.editorBuffers)).toHaveLength(records)
       expect([state.editorDrafts[a], state.editorDrafts[b]]).toEqual([first, second])
       expect(new Set([modelOwnerOf(store, a), modelOwnerOf(store, b)]).size).toBe(records)
+    })
+
+    it('neither of two different restored drafts autosaves over the other', async () => {
+      vi.useFakeTimers()
+      // Why re-stub: the window stub binds the timers that are current when it is created.
+      disk = stubEditorWindowWithDisk()
+      const a = openTab(store, 'wt-1')
+      const b = openTab(store, 'wt-2')
+      // Same baseline, different drafts: the shape a restored legacy session produces.
+      store.setState({
+        editorDrafts: { [`${a}-restored`]: 'draft one', [`${b}-restored`]: 'draft two' },
+        openFiles: store
+          .getState()
+          .openFiles.map((file) => ({ ...file, id: `${file.id}-restored`, isDirty: true }))
+      })
+      expect(Object.keys(store.getState().editorBuffers)).toHaveLength(2)
+      const queue = createEditorSaveQueue(store)
+
+      queue.syncAutoSave()
+      await vi.advanceTimersByTimeAsync(5000)
+      queue.dispose()
+
+      expect(disk.fs.writeFile).not.toHaveBeenCalled()
     })
 
     it('on a rename onto a file with other unsaved edits', () => {

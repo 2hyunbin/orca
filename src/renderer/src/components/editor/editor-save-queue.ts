@@ -21,9 +21,11 @@ import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
 import { editorTabFileAccess } from '@/lib/local-file-access'
 import {
+  EMPTY_EDITOR_BUFFER_INDEX,
   editorBufferIdOf,
   editorBufferViewIds
 } from '@/store/slices/editor/buffers/editor-buffer-record'
+import { editorBufferRecordsKeptApart } from '@/store/slices/editor/buffers/editor-buffer-sharing'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -57,6 +59,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const autoSaveScheduledContent = new Map<string, string>()
   const saveQueue = new Map<string, Promise<void>>()
   const saveGeneration = new Map<string, number>()
+  const completedWrites = new Map<string, number>()
 
   const recordIdOf = (fileId: string): string => editorBufferIdOf(store.getState(), fileId)
 
@@ -84,6 +87,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     const recordId = recordIdOf(file.id)
     clearRecordAutoSaveTimer(recordId)
     const queuedGeneration = saveGeneration.get(recordId) ?? 0
+    const queuedAfterWrites = completedWrites.get(recordId) ?? 0
 
     const previousSave = saveQueue.get(recordId) ?? Promise.resolve()
     const queuedSave = previousSave
@@ -115,12 +119,23 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         }
 
         // Why: only autosave is blocked while suspended; explicit user saves proceed (the banner warned).
-        if (trigger === 'autosave' && isAutosaveSuspendedForFile(liveFile)) {
+        if (
+          trigger === 'autosave' &&
+          (isAutosaveSuspendedForFile(liveFile) ||
+            editorBufferRecordsKeptApart(state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX).has(
+              recordId
+            ))
+        ) {
           return
         }
 
         flushPendingBufferChanges(state, file.id, trigger === 'autosave')
-        const contentToSave = store.getState().editorDrafts[file.id] ?? fallbackContent
+        const draft = store.getState().editorDrafts[file.id]
+        // Why: a write since this request queued already saved newer text than its fallback.
+        if (draft === undefined && (completedWrites.get(recordId) ?? 0) !== queuedAfterWrites) {
+          return
+        }
+        const contentToSave = draft ?? fallbackContent
         if (
           trigger === 'autosave' &&
           hasPendingBufferChange(store.getState(), file.id) &&
@@ -155,15 +170,17 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           throw error
         }
 
+        completedWrites.set(recordId, (completedWrites.get(recordId) ?? 0) + 1)
         if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
           return
         }
 
         // Why the record: the tab that started the save may have closed while another still shows the file.
         const nextState = store.getState()
-        const view = nextState.openFiles.find(
+        const views = nextState.openFiles.filter(
           (openFile) => editorBufferIdOf(nextState, openFile.id) === recordId
         )
+        const view = views.find(canAutoSaveOpenFile) ?? views[0]
         if (!view) {
           return
         }
@@ -217,9 +234,14 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     // One autosave candidate per record: the first tab that may write it.
     const candidates = new Map<string, OpenFile>()
     if (state.settings?.editorAutoSave) {
+      // Why: two different drafts of one file wait for the user instead of racing to disk.
+      const keptApart = editorBufferRecordsKeptApart(
+        state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX
+      )
       for (const file of state.openFiles) {
         const recordId = editorBufferIdOf(state, file.id)
         if (
+          !keptApart.has(recordId) &&
           !candidates.has(recordId) &&
           file.isDirty &&
           state.editorDrafts[file.id] !== undefined &&
@@ -277,6 +299,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     autoSaveScheduledContent.clear()
     saveQueue.clear()
     saveGeneration.clear()
+    completedWrites.clear()
   }
 
   return {
