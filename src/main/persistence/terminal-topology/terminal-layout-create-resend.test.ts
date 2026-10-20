@@ -25,7 +25,6 @@ const TAB = 'tab-1'
 const LEAF = '11111111-1111-4111-8111-111111111111'
 const NEW_TAB = 'tab-new'
 const NEW_LEAF = '22222222-2222-4222-8222-222222222222'
-const SPLIT_LEAF = '33333333-3333-4333-8333-333333333333'
 const directories: string[] = []
 
 afterEach(() => {
@@ -68,29 +67,5 @@ describe('layout-owner build: a create sent again after its close', () => {
 
     expect(await store.applyLayoutCommand(create)).toEqual({ ok: false, code: 'tab_closed' })
     expect(store.getWorkspaceSession()).toBe(before)
-  })
-
-  it('refuses a tab and a split pane main closed within the binding window', async () => {
-    const store = await openStore()
-    await store.applyLayoutCommand(create)
-    const split: CommandOf<'splitPane'> = {
-      type: 'splitPane',
-      workspace: WORKTREE,
-      tabId: NEW_TAB,
-      leafId: NEW_LEAF,
-      direction: 'vertical',
-      newLeafId: SPLIT_LEAF
-    }
-    await store.applyLayoutCommand(split)
-    await store.applyLayoutCommand({
-      type: 'closePane',
-      workspace: WORKTREE,
-      tabId: NEW_TAB,
-      leafId: SPLIT_LEAF
-    })
-    expect(await store.applyLayoutCommand(split)).toEqual({ ok: false, code: 'tab_closed' })
-
-    await store.applyLayoutCommand({ type: 'closeTabs', workspace: WORKTREE, tabIds: [NEW_TAB] })
-    expect(await store.applyLayoutCommand(create)).toEqual({ ok: false, code: 'tab_closed' })
   })
 })

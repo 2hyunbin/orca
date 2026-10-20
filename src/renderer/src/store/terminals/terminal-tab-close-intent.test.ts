@@ -24,6 +24,8 @@ function sentCloses(
   closeTerminalSurface: ReturnType<typeof vi.fn>
 ): { worktreeId: string; tabId: string; reason: CloseReason }[] {
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    // Main hears each close once: never also through today's call.
+    expect(closeTerminalSurface).not.toHaveBeenCalled()
     return layoutApplyTestTransport.sentOfType('closeTabs').map((command) => ({
       worktreeId: command.workspace,
       tabId: command.tabIds[0]!,
