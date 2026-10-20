@@ -17,7 +17,7 @@ import { REMOTE_RUNTIME_MAX_FILE_WRITE_CONTENT_BYTES } from '../../../shared/rem
 import {
   FILE_WRITE_OK,
   parseFileWriteResult,
-  type FileWriteDiskPrecondition,
+  type ClientFileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../../shared/file-write-disk-precondition'
 import { writeRemoteFileIfUnchanged } from './runtime-file-write-disk-precondition'
@@ -60,7 +60,7 @@ export async function writeRuntimeFile(
   filePath: string,
   content: string,
   access?: LocalFileAccess,
-  diskPrecondition?: FileWriteDiskPrecondition
+  diskPrecondition?: ClientFileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
   const remoteArgs = getRemoteFileArgs(context, filePath)
   if (!remoteArgs) {

@@ -190,7 +190,8 @@ export function reconcileEditorBufferSharing(
     }
   }
 
-  // Why: a split lasts only while both sides hold unsaved edits; a clean side rejoins its file.
+  // Why: a split lasts only while a side holds unsaved edits; once both are clean they rejoin.
+  // A clean side never adopts the other side's draft: that draft was made against other disk text.
   for (const [recordId, key] of Object.entries(keyByRecordId)) {
     const views = viewsByRecord.get(recordId)
     const record = records[recordId]
@@ -198,21 +199,24 @@ export function reconcileEditorBufferSharing(
       continue
     }
     const target = findSharedRecord(keyByRecordId, viewsByRecord, key.identity, recordId)
-    const targetEdited =
-      target !== undefined && hasEdits(records[target.id], drafts[target.views[0]])
-    // Two clean sides: the one holding the default model stays and the other joins it. A clean
-    // side adopts the other side's edits only when both start from the same disk version, so a
-    // just-saved tab never swaps its text for a draft made against older disk.
     if (
       target === undefined ||
-      (key.modelOwnerKey === key.identity.modelOwnerKey && !targetEdited) ||
-      (targetEdited && records[target.id].lastKnownDiskSignature !== record.lastKnownDiskSignature)
+      hasEdits(records[target.id], drafts[target.views[0]]) ||
+      // The side holding the default model stays; the other joins it.
+      key.modelOwnerKey === key.identity.modelOwnerKey
     ) {
       continue
     }
-    records[target.id] = joinPauses(records[target.id], record)
+    // The newest disk version is the one this write just recorded (a save or a read).
+    const recordIsNewer =
+      record !== input.previousRecords[recordId] &&
+      records[target.id] === input.previousRecords[target.id]
+    records[target.id] = {
+      ...joinPauses(records[target.id], record),
+      ...(recordIsNewer ? { lastKnownDiskSignature: record.lastKnownDiskSignature } : {})
+    }
     for (const viewId of views) {
-      setDraft(viewId, drafts[target.views[0]])
+      setDraft(viewId, undefined)
       claim(viewId, target.id)
     }
     viewsByRecord.delete(recordId)

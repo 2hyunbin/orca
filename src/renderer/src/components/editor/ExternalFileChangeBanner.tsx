@@ -12,6 +12,7 @@ import type { OpenFile } from '@/store/slices/editor'
 import { ExternalFileChangeCompareDialog } from './ExternalFileChangeCompareDialog'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
+import { trackKeepEditsBaselineRead } from './editor-keep-edits-baseline'
 
 // Why: when an external process (usually an agent) rewrites a file while the
 // tab holds unsaved edits, the reload pipeline preserves the buffer and marks
@@ -91,7 +92,7 @@ export function keepTabEditsOverExternalChange(file: OpenFile): void {
   if (!target) {
     return
   }
-  void readRuntimeFileContent({
+  const baselineRead = readRuntimeFileContent({
     target,
     filePath: file.filePath,
     relativePath: file.relativePath,
@@ -114,6 +115,7 @@ export function keepTabEditsOverExternalChange(file: OpenFile): void {
       current.setLastKnownDiskSignature(file.id, getDiskBaselineSignature(result.content))
     })
     .catch(() => undefined)
+  trackKeepEditsBaselineRead(file.id, baselineRead)
 }
 
 export function ExternalFileChangeBanner({

@@ -3,6 +3,7 @@ import type { AppState } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
+import { parseFileWriteResult } from '../../../../shared/file-write-disk-precondition'
 import { getEditorFileOperationContext } from '@/lib/editor-file-operation-owner'
 import {
   canAutoSaveOpenFile,
@@ -12,6 +13,7 @@ import {
   type EditorFileSavedDetail
 } from './editor-autosave'
 import { flushPendingEditorChange, hasPendingEditorChange } from './editor-pending-flush'
+import { waitForKeepEditsBaselineReads } from './editor-keep-edits-baseline'
 import {
   clearSelfWrite,
   recordSelfWrite,
@@ -24,21 +26,27 @@ import {
   editorBufferIdOf,
   editorBufferViewIds
 } from '@/store/slices/editor/buffers/editor-buffer-record'
-import type { EditorBufferIdentity } from '@/store/slices/editor/buffers/editor-buffer-identity'
 import {
-  createEditorFileWriteLedger,
-  markOtherEditorRecordsChanged
-} from './editor-file-write-ledger'
+  isEditorBufferKeptApart,
+  markKeptApartSiblingsChanged
+} from '@/store/slices/editor/buffers/editor-buffer-kept-apart'
 import { markEditorBufferNewer } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
+
+/**
+ * `written`: disk holds the text. `blocked-stale`: the host refused it because another write landed
+ * since the record's disk version; the banner now shows. `skipped`: nothing to write (read-only,
+ * suspended autosave, superseded). A failed write rejects.
+ */
+export type EditorSaveResult = 'written' | 'blocked-stale' | 'skipped'
 
 export type EditorSaveQueue = {
   queueSave: (
     file: OpenFile,
     fallbackContent: string,
     trigger?: 'autosave' | 'user'
-  ) => Promise<void>
+  ) => Promise<EditorSaveResult>
   quiesceFileSave: (fileId: string) => Promise<void>
   clearAutoSaveTimer: (fileId: string) => void
   bumpSaveGeneration: (fileId: string) => void
@@ -62,15 +70,13 @@ function hasPendingBufferChange(state: AppState, fileId: string): boolean {
 export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const autoSaveTimers = new Map<string, number>()
   const autoSaveScheduledContent = new Map<string, string>()
-  const saveQueue = new Map<string, Promise<void>>()
+  const saveQueue = new Map<string, Promise<EditorSaveResult>>()
   const saveGeneration = new Map<string, number>()
   const completedWrites = new Map<string, number>()
-  const writeLedger = createEditorFileWriteLedger()
 
   const recordIdOf = (fileId: string): string => editorBufferIdOf(store.getState(), fileId)
-  const identityOf = (recordId: string): EditorBufferIdentity | undefined =>
-    store.getState().editorBufferIndex?.keyByRecordId[recordId]?.identity
-  const fileQueueKeyOf = (recordId: string): string => identityOf(recordId)?.key ?? recordId
+  const fileQueueKeyOf = (recordId: string): string =>
+    store.getState().editorBufferIndex?.keyByRecordId[recordId]?.identity.key ?? recordId
 
   const clearRecordAutoSaveTimer = (recordId: string): void => {
     const timerId = autoSaveTimers.get(recordId)
@@ -92,7 +98,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     file: OpenFile,
     fallbackContent: string,
     trigger: 'autosave' | 'user' = 'user'
-  ): Promise<void> => {
+  ): Promise<EditorSaveResult> => {
     const recordId = recordIdOf(file.id)
     clearRecordAutoSaveTimer(recordId)
     const queuedGeneration = saveGeneration.get(recordId) ?? 0
@@ -102,15 +108,16 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     const previousSave = saveQueue.get(fileKey) ?? Promise.resolve()
     const queuedSave = previousSave
       .catch(() => undefined)
-      .then(async () => {
+      .then(async (): Promise<EditorSaveResult> => {
+        await waitForKeepEditsBaselineReads(editorBufferViewIds(store.getState(), file.id))
         if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
-          return
+          return 'skipped'
         }
 
         const state = store.getState()
         const liveFile = state.openFiles.find((openFile) => openFile.id === file.id) ?? null
         if (!liveFile) {
-          return
+          return 'skipped'
         }
         if (liveFile.csvPreviewOnly === true) {
           throw new Error('Large CSV previews are read-only.')
@@ -118,26 +125,26 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
         // Why: read-only tabs (AI Vault View Log) must never write the agent-owned artifact through editor paths.
         if (liveFile.readOnly === true) {
-          return
+          return 'skipped'
         }
 
         if (liveFile.pendingOwnerMigration === true) {
           if (trigger === 'autosave') {
-            return
+            return 'skipped'
           }
           throw new Error('This file is still restoring its workspace owner. Try saving again.')
         }
 
         // Why: only autosave is blocked while suspended; explicit user saves proceed (the banner warned).
         if (trigger === 'autosave' && isAutosaveSuspendedForFile(liveFile)) {
-          return
+          return 'skipped'
         }
 
         flushPendingBufferChanges(state, file.id, trigger === 'autosave')
         const draft = store.getState().editorDrafts[file.id]
         // Why: a write since this request queued already saved newer text than its fallback.
         if (draft === undefined && (completedWrites.get(recordId) ?? 0) !== queuedAfterWrites) {
-          return
+          return 'skipped'
         }
         const contentToSave = draft ?? fallbackContent
         if (
@@ -145,17 +152,19 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           hasPendingBufferChange(store.getState(), file.id) &&
           liveFile.lastKnownDiskSignature === getDiskBaselineSignature(contentToSave)
         ) {
-          return
+          return 'skipped'
         }
-        // Why: another record of this file wrote since this one's disk version; its edits must not
-        // silently replace that write. An explicit save after the banner still overwrites.
-        const identity = identityOf(recordId)
-        if (
-          writeLedger.isStaleWrite(fileKey, recordId, identity, liveFile.lastKnownDiskSignature) &&
+        // Why: a record kept apart from another record of its file is compared on the host, so the
+        // other record's write is never silently replaced. The banner's explicit save overwrites.
+        const guarded =
+          isEditorBufferKeptApart(state, recordId) &&
           !(trigger === 'user' && liveFile.externalMutation === 'changed')
-        ) {
+        const blockStale = (): EditorSaveResult => {
           store.getState().setExternalMutation(liveFile.id, 'changed')
-          return
+          return 'blocked-stale'
+        }
+        if (guarded && liveFile.lastKnownDiskSignature === undefined) {
+          return blockStale()
         }
         const worktree = liveFile.worktreeId
           ? findWorktreeById(state.worktreesByRepo ?? {}, liveFile.worktreeId)
@@ -171,30 +180,34 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
             ? SELF_WRITE_REMOTE_TTL_MS
             : undefined
         )
+        let written: boolean
         try {
-          await writeRuntimeFile(
-            fileContext,
-            liveFile.filePath,
-            contentToSave,
-            editorTabFileAccess(state, liveFile)
-          )
+          const access = editorTabFileAccess(state, liveFile)
+          const baseline = liveFile.lastKnownDiskSignature
+          const result =
+            guarded && baseline !== undefined
+              ? await writeRuntimeFile(fileContext, liveFile.filePath, contentToSave, access, {
+                  expectedSignature: baseline,
+                  hostCompareRequired: true
+                })
+              : await writeRuntimeFile(fileContext, liveFile.filePath, contentToSave, access)
+          // Why parse: only an explicit refusal is one; older writers answer nothing.
+          written = parseFileWriteResult(result).ok
         } catch (error) {
           // Why: the self-write stamp is only valid after a real write; clear on failure so it can't suppress a real update.
           clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
           throw error
         }
+        if (!written) {
+          clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
+          return blockStale()
+        }
 
         completedWrites.set(recordId, (completedWrites.get(recordId) ?? 0) + 1)
         // Why: a read of this file that started before the write must not land after it.
         markEditorBufferNewer(recordId)
-        writeLedger.recordWrite(
-          fileKey,
-          recordId,
-          identity,
-          getDiskBaselineSignature(contentToSave)
-        )
         if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
-          return
+          return 'written'
         }
 
         // Why the record: the tab that started the save may have closed while another still shows the file.
@@ -204,7 +217,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         )
         const view = views.find(canAutoSaveOpenFile) ?? views[0]
         if (!view) {
-          return
+          return 'written'
         }
         const currentDraft = nextState.editorDrafts[view.id]
         const stillDirty =
@@ -217,7 +230,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         // Why: disk now holds contentToSave — rebaseline so our own save isn't flagged external; drop pending verification.
         nextState.setLastKnownDiskSignature(view.id, getDiskBaselineSignature(contentToSave))
         nextState.clearPendingDiskBaselineVerification(view.id)
-        markOtherEditorRecordsChanged(store.getState(), recordId, identity)
+        markKeptApartSiblingsChanged(store.getState(), recordId)
         // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
         const savedFile = store.getState().openFiles.find((openFile) => openFile.id === view.id)
         if (savedFile?.externalMutation === 'changed') {
@@ -230,9 +243,10 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
             detail: { fileId: view.id, content: contentToSave }
           })
         )
+        return 'written'
       })
 
-    let trackedSave: Promise<void>
+    let trackedSave: Promise<EditorSaveResult>
     trackedSave = queuedSave.finally(() => {
       if (saveQueue.get(fileKey) === trackedSave) {
         saveQueue.delete(fileKey)
@@ -318,7 +332,6 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     saveQueue.clear()
     saveGeneration.clear()
     completedWrites.clear()
-    writeLedger.clear()
   }
 
   return {

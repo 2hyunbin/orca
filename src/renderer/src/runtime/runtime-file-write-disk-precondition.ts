@@ -5,6 +5,8 @@ import {
   FILE_WRITE_IF_UNCHANGED_METHOD,
   FILE_WRITE_OK,
   parseFileWriteResult,
+  toHostDiskPrecondition,
+  type ClientFileWriteDiskPrecondition,
   type FileWriteDiskConflict,
   type FileWriteDiskPrecondition,
   type FileWriteResult
@@ -91,8 +93,9 @@ export async function writeRemoteFileIfUnchanged(
   filePath: string,
   content: string,
   params: RemoteFileWriteParams,
-  precondition: FileWriteDiskPrecondition
+  clientPrecondition: ClientFileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
+  const precondition = toHostDiskPrecondition(clientPrecondition)
   // Why once per save: a retry may follow a reconnect, never a re-pair to another host.
   const pairingRevision = captureRuntimeEnvironmentRequestRevision(context.target.environmentId)
   const attempt = async (): Promise<FileWriteResult> =>
@@ -106,6 +109,9 @@ export async function writeRemoteFileIfUnchanged(
               method: FILE_WRITE_IF_UNCHANGED_METHOD,
               params: { ...params, diskPrecondition: precondition }
             }
+          }
+          if (clientPrecondition.hostCompareRequired) {
+            return { result: { ok: false, diskConflict: 'changed' } }
           }
           const diskConflict = await checkDiskPreconditionFromClient(
             context,

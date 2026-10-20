@@ -10,7 +10,6 @@ import {
 } from './editor-buffer-identity'
 import { EMPTY_EDITOR_BUFFER_INDEX } from './editor-buffer-record'
 import { reconcileEditorBufferSharing } from './editor-buffer-sharing'
-import { createEditorFileWriteLedger } from '@/components/editor/editor-file-write-ledger'
 
 function file(overrides: Partial<OpenFile>): OpenFile {
   return {
@@ -93,19 +92,6 @@ describe('editor buffer identity', () => {
     ).toBeNull()
   })
 
-  it("treats a proven re-pair's write as the same file's write", () => {
-    replaceRuntimeEnvironmentRevisions([{ id: 'env', createdAt: 0, pairingRevision: 1 }])
-    replaceRuntimeEnvironmentRevisions([{ id: 'env', createdAt: 0, pairingRevision: 2 }], {
-      retired: [],
-      sameHost: [{ id: 'env', fromRevision: 1, toRevision: 2 }]
-    })
-    const ledger = createEditorFileWriteLedger()
-    ledger.recordWrite('file', 'a', identity(1), 'sig-a')
-
-    expect(ledger.isStaleWrite('file', 'b', identity(2), 'sig-disk')).toBe(true)
-    expect(ledger.isStaleWrite('file', 'b', identity(2), 'sig-a')).toBe(false)
-  })
-
   it('joins a re-pair proven to be the same machine, never a retired one', () => {
     replaceRuntimeEnvironmentRevisions([{ id: 'env', createdAt: 0, pairingRevision: 1 }])
     replaceRuntimeEnvironmentRevisions([{ id: 'env', createdAt: 0, pairingRevision: 2 }], {
@@ -158,10 +144,6 @@ describe('editor buffer identity', () => {
       next.index.keyByRecordId[oldRecord].modelOwnerKey
     )
     expect(next.drafts).toEqual({ old: 'edit on the old machine' })
-    // The old machine's write never makes the replacement's save look stale, and vice versa.
-    const ledger = createEditorFileWriteLedger()
-    ledger.recordWrite('file', oldRecord, identity(1), 'sig-old-machine')
-    expect(ledger.isStaleWrite('file', newRecord, identity(2), 'sig-disk')).toBe(false)
     expect(next.openFiles.find((tab) => tab.id === 'new')?.isDirty).toBe(false)
   })
 })
