@@ -1,4 +1,10 @@
 // @vitest-environment happy-dom
+import { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
+import {
+  clearNativeChatComposerDraftsForTests,
+  readNativeChatComposerDraft,
+  updateNativeChatComposerDraft
+} from './native-chat-composer-draft-store'
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { dispatchStructuredAgentSessionComposerCommand } from '../../../../shared/structured-agent-session-composer'
@@ -175,14 +181,26 @@ describe("says a failed send in Orca's words, with the error it hit apart", () =
         errorText: 'connect ECONNREFUSED /tmp/a.sock'
       })
     )
+    updateNativeChatComposerDraft('tab-1:pane', { text: '$review' }, 'immediate')
+    const before = readNativeChatComposerDraft('tab-1:pane')
+    vi.mocked(structuredTransport.send).mockImplementation((text) =>
+      Boolean(
+        structuredAgentSessionSendBody(
+          text,
+          [],
+          Array.from({ length: 17 }, (_, path) => ({ name: 'review', path: `/${path}` }))
+        )
+      )
+    )
+    await send('$review', [])
+    expect(readNativeChatComposerDraft('tab-1:pane')).toBe(before)
+    expect(structuredTransport.onError).toHaveBeenLastCalledWith(
+      'Your message was not sent to Claude. Keep at most 16 selected skill files and try again.',
+      { errorText: undefined }
+    )
   })
 })
 
-import {
-  clearNativeChatComposerDraftsForTests,
-  readNativeChatComposerDraft,
-  updateNativeChatComposerDraft
-} from './native-chat-composer-draft-store'
 it('checks both the picked command and its draft, and projects completed paths', async () => {
   const { send, structuredTransport } = harness('claude')
   const id = '00000000-0000-4000-8000-000000000000'

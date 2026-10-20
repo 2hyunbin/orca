@@ -171,14 +171,13 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     })
     const { imageAttachments, attachResolvedPaths, clearImageAttachments, removeImageAttachment } =
       attachments
-    const textPasteAdmission = useNativeChatPastedTextAdmission(draftScopeKey)
     const sendBlock = nativeChatImageSendBlock(imageAttachments)
     const sendBlockedReason = sendBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
     const sendHeld =
+      useNativeChatPastedTextAdmission(draftScopeKey) === 'saving' ||
       disabled ||
       structuredTransport?.sendOut === true ||
       sendBlock.holdsSend ||
-      textPasteAdmission === 'saving' ||
       structuredTransport?.sendBlockedReason !== undefined
     const sendButtonDisabled = isWorking
       ? !hasPty || !onStop
@@ -381,7 +380,10 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         isWorking={isWorking}
         isStopping={isStopping}
         afterStop={afterStop}
-        attachDisabled={disabled}
+        attachDisabled={
+          disabled ||
+          (structuredTransport?.runtime === 'remote' && structuredTransport.sessionPending === true)
+        }
         dictationDisabled={dictation.dictationDisabled}
         isDictating={dictation.isDictating}
         isDictationHoldMode={dictation.isDictationHoldMode}

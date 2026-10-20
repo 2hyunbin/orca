@@ -1,3 +1,4 @@
+import type { AgentJournalSkillRef } from '../../../../shared/agent-session-journal-types'
 import { structuredAgentSessionBlocksTooLarge } from '../../../../shared/rpc-contract/structured-agent-session-message-params'
 import { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
 import { AGENT_SESSION_MESSAGE_TOO_LARGE_PARTS } from '../../../../shared/agent-session-refusal-notice'
@@ -10,7 +11,8 @@ import type { NativeChatComposerImageAttachment } from './NativeChatComposerFiel
 export async function dispatchNativeChatStructuredComposerText(
   transport: NativeChatStructuredComposerTransport,
   draftText: string,
-  attachments: readonly NativeChatComposerImageAttachment[] = []
+  attachments: readonly NativeChatComposerImageAttachment[] = [],
+  skills: readonly AgentJournalSkillRef[] = []
 ): Promise<Omit<StructuredAgentSessionCommandOutcome, 'handled'> & { revealsTranscript: boolean }> {
   // The one place a chip's image gets its number: its place among the images this message carries.
   const prompt = imageReferencesToPromptMarkers(
@@ -34,6 +36,9 @@ export async function dispatchNativeChatStructuredComposerText(
       revealsTranscript: false
     }
   }
-  const admission = transport.send(prompt, attachments)
+  const admission =
+    skills.length > 0
+      ? transport.send(prompt, attachments, { skills })
+      : transport.send(prompt, attachments)
   return { accepted: admission !== false, error: null, revealsTranscript: admission === true }
 }
