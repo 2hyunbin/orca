@@ -93,7 +93,7 @@ function makeSnapshotWatchState(): DashboardSnapshotWatchState {
     activeRepoId: null,
     projects: [],
     removedRuntimeEnvironmentIds: new Set()
-  } as DashboardSnapshotWatchState
+  }
 }
 
 function Harness({ enabled }: { enabled: boolean }): null {

@@ -287,7 +287,6 @@ describe('SourceControlAgentActionDialog', () => {
     const worktree = makeWorktree({ id: 'repo-1::wt-1', repoId: 'repo-1' })
     useAppStore.setState({ worktreesByRepo: { 'repo-1': [worktree] } })
     renderControlledDialog({ repoId: 'repo-1', worktreeId: worktree.id, connectionId: null })
-    // Learned r1, then replaced by r2, which still offers the saved agent.
     for (const runtimeId of ['r1', 'r2']) {
       await flushEffects()
       expect(container.textContent).not.toContain('Launch agent')
