@@ -36,7 +36,7 @@ export function SourceControlActionOptionTrigger({
   disabled?: boolean
 }): React.JSX.Element {
   const trigger = (
-    <SelectTrigger size="sm" className="h-8 w-full min-w-0 text-xs" aria-label={label}>
+    <SelectTrigger size="sm" className="h-8 w-full min-w-0" aria-label={label}>
       <SelectValue className="min-w-0 flex-1">
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
       </SelectValue>
