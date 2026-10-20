@@ -211,7 +211,8 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
     distrosFile,
     connectLogFile
   })
-  const projectPath = createGitProject()
+  // realpath: the host reports workspace paths resolved (/private/var on macOS).
+  const projectPath = realpathSync(createGitProject())
   const cleanupDirs: string[] = []
   try {
     const { page } = desktop
@@ -358,16 +359,13 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
     await expect.poll(() => hubTerminalsIn(projectPath), { timeout: 30_000 }).toBe(0)
     await expect.poll(() => hubHasRepo(projectPath), { timeout: 30_000 }).toBe(false)
 
-    // An orphan: a terminal whose project the host already forgot (left by older builds).
-    // realpath: the host reports workspace paths resolved (/private/var on macOS).
-    const orphanPath = realpathSync(createGitProject())
-    cleanupDirs.push(orphanPath)
-    const orphanRepo = await hubRuntime.call<{ repo: { id: string } }>('repo.add', {
-      path: orphanPath
-    })
-    await hubRuntime.call('terminal.create', { worktree: `path:${orphanPath}` })
-    await hubRuntime.call('repo.rm', { repo: orphanRepo.result.repo.id })
-    expect(await hubTerminalsIn(orphanPath)).toBeGreaterThan(0)
+    // A shell only the host knows of: no desktop pane ever opened it. Why not a removed project's
+    // orphan: repo.rm now ends the project's shells on the host itself (#29964).
+    const hostOnlyPath = realpathSync(createGitProject())
+    cleanupDirs.push(hostOnlyPath)
+    await hubRuntime.call('repo.add', { path: hostOnlyPath })
+    await hubRuntime.call('terminal.create', { worktree: `path:${hostOnlyPath}` })
+    expect(await hubTerminalsIn(hostOnlyPath)).toBeGreaterThan(0)
 
     // Experiment off: the host stays listed so its projects never seem to vanish, but turned off.
     await setWslHostsEnabled(page, false)
@@ -415,8 +413,8 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
     await page.screenshot({ path: testInfo.outputPath('wsl-host-remove-confirm.png') })
     await confirm.getByRole('button', { name: 'Remove host' }).click()
     await expect(confirm).toBeHidden({ timeout: 30_000 })
-    // Closed by handle, so the orphan ends too, and nothing is reported left running.
-    await expect.poll(() => hubTerminalsIn(orphanPath), { timeout: 30_000 }).toBe(0)
+    // Closed by handle, so the host-only shell ends too, and nothing is reported left running.
+    await expect.poll(() => hubTerminalsIn(hostOnlyPath), { timeout: 30_000 }).toBe(0)
     await expect(page.getByText(/something in the distro is still running/)).toHaveCount(0)
     await expect
       .poll(() =>
