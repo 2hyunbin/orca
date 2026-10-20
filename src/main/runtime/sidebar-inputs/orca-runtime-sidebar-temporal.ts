@@ -49,6 +49,8 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     retentionCandidates: () => this.readSidebarRetentionCandidates()
   })
   readonly workspaceViewers = new WorkspaceViewers(Date.now)
+  // By connection: a window's own sleep stops its PTYs without entering main's sleep map.
+  private readonly windowSleptWorkspaces = new Map<string, ReadonlySet<string>>()
   // A streaming agent can flip its title many times a second; each notice makes every client
   // re-list the repo, so a burst is announced once. The store is already written.
   private readonly sortStampNotices = createKeyedTrailingEdgeCoalescer(
@@ -129,6 +131,23 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
   beginSidebarListSession(sessionId: string): void {
     this.sidebarTemporal.beginSession(sessionId)
+  }
+
+  /** The workspaces a window holds asleep (its whole set); their inactivity is no rebind gap. */
+  noteWindowSleptWorkspaces(connectionId: string, worktreeIds: readonly string[]): void {
+    if (!this.windowSleptWorkspaces.has(connectionId)) {
+      this.registerSubscriptionCleanup(
+        `sidebar-window-slept-${connectionId}`,
+        () => {
+          this.windowSleptWorkspaces.delete(connectionId)
+          this.sidebarTemporal.noteActivityChange()
+        },
+        connectionId
+      )
+    }
+    this.windowSleptWorkspaces.set(connectionId, new Set(worktreeIds))
+    // Order-free: a sleep reported after its PTYs exited still ends the grace it opened.
+    this.sidebarTemporal.noteActivityChange()
   }
 
   /** After a restart, once hook rows and the provider's PTYs settle: drop tiers nothing backs. */
@@ -249,6 +268,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       isActive: (worktreeId) => worktreeId in facts,
       isUnverifiableGap: (worktreeId) =>
         !anySleepKeyNames(this.terminalSleepByHostWorktree.keys(), worktreeId) &&
+        ![...this.windowSleptWorkspaces.values()].some((ids) => ids.has(worktreeId)) &&
         (this.mobileSessionTabsByWorktree
           .get(worktreeId)
           ?.tabs.some((tab) => tab.type === 'terminal') ??

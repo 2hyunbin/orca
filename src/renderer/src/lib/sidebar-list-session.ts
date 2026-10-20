@@ -17,3 +17,25 @@ export function useSidebarListSession(): void {
       .catch(() => {})
   }, [])
 }
+
+/**
+ * Switch point. The window's own sleep stops PTYs without main's sleep map, so main hears which
+ * workspaces it holds asleep. Sent before any kill, so main never mistakes the exits for a rebind.
+ */
+export function reportWindowSleptWorkspaces(worktreeIds: readonly string[]): void {
+  // Store tests run the sleep flow without a window bridge.
+  const runtime = typeof window === 'undefined' ? undefined : window.api?.runtime
+  if (
+    !ORCA_SIDEBAR_INPUTS_IS_MAIN ||
+    isPairedWebClientWindow() ||
+    typeof runtime?.call !== 'function'
+  ) {
+    return
+  }
+  void Promise.resolve(
+    runtime.call({
+      method: 'sidebarSession.sleptWorkspaces',
+      params: { worktreeIds: [...worktreeIds] }
+    })
+  ).catch(() => {})
+}

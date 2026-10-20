@@ -3,7 +3,10 @@ import { requireSwitchedOn } from '../../sidebar-inputs/require-switched-on'
 import { readRuntimeDesktopSidebarFacts } from '../../sidebar-inputs/sidebar-inputs-feed-domains'
 import { isHostOwnPhone } from '../host-own-phone'
 import { SidebarInputsReadParams } from '../../../../shared/sidebar-list/sidebar-inputs-feed-contract'
-import { SidebarSessionBeginParams } from '../../../../shared/rpc-contract/sidebar-session-params'
+import {
+  SidebarSessionBeginParams,
+  SidebarSessionSleptWorkspacesParams
+} from '../../../../shared/rpc-contract/sidebar-session-params'
 import { RepoIconDataUrlsParams } from '../../../../shared/sidebar-list/repo-icon-data-urls-contract'
 import { SetCollapsedParams } from '../../../../shared/rpc-contract/workspace-view-collapse-params'
 import { setCollapsedSection } from '../../workspace-view-collapse-writes'
@@ -96,6 +99,19 @@ export const SIDEBAR_INPUT_METHODS = [
     params: SidebarSessionBeginParams,
     handler: async ({ sessionId }, { runtime }) => {
       requireSwitchedOn(runtime.sidebarFacts).beginSidebarListSession(sessionId)
+      return { ok: true }
+    }
+  }),
+  defineMethod({
+    name: 'sidebarSession.sleptWorkspaces',
+    permission: 'workspace',
+    params: SidebarSessionSleptWorkspacesParams,
+    // Held until the window's connection closes; a reload starts with none.
+    handler: async ({ worktreeIds }, { runtime, connectionId, signal }) => {
+      if (connectionId === undefined || signal?.aborted) {
+        throw new Error('client_disconnected')
+      }
+      requireSwitchedOn(runtime.sidebarFacts).noteWindowSleptWorkspaces(connectionId, worktreeIds)
       return { ok: true }
     }
   }),

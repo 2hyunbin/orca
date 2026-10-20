@@ -15,7 +15,7 @@ export type SidebarRetentionCandidates = {
   /** Active ids; the last listing's rows are added to them. */
   ids: Iterable<string>
   isActive: (worktreeId: string) => boolean
-  /** False when the inactivity is definitive: a sleep this host started, or no terminal tab left. */
+  /** False when the inactivity is definitive: a sleep this host or its window started, or no terminal tab left. */
   isUnverifiableGap: (worktreeId: string) => boolean
 }
 
