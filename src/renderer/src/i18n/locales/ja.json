@@ -18874,7 +18874,7 @@
         "leadIn": "待たずにこのチャットを続ける：",
         "switchAccount": "アカウントを切り替え",
         "addAccount": "アカウントを追加…",
-        "accountUnavailable": "このチャットは別のアカウントに移せません。別のエージェントに引き継いでください。"
+        "accountUnavailable": "このチャットは別のアカウントに移せません。別の Agent に引き継いでください。"
       }
     },
     "tab": {
