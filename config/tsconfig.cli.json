@@ -76,6 +76,7 @@
     "../src/main/persistence/profile-state/profile-state-database-snapshot.ts",
     "../src/main/persistence/profile-state/profile-state-database-recovery.ts",
     "../src/main/persistence/profile-state/profile-state-recovery-required.ts",
+    "../src/main/persistence/profile-state/profile-state-section-labels.ts",
     "../src/main/persistence/profile-state/profile-state-section-repair.ts",
     "../src/main/persistence/profile-state/legacy-json/profile-state-recovery.ts",
     "../src/main/persistence/profile-state/profile-state-recovery-copy.ts",

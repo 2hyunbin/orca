@@ -14,7 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PROFILE_STATE_DESKTOP_RECOVERY_FLAG,
   PROFILE_STATE_RECOVERY_FLAG,
-  PROFILE_STATE_RECOVERY_RESULT_PREFIX
+  PROFILE_STATE_RECOVERY_RESULT_PREFIX,
+  type ProfileStateRecoveryRequest
 } from '../../shared/profile-state-recovery-command'
 import { acquireProfileStateRuntimeAdmission } from '../persistence/profile-state/profile-state-access'
 import { profileStateJsonExportPath } from '../persistence/profile-state/legacy-json/profile-state-export-path'
@@ -292,11 +293,11 @@ describe('Electron recovery preflight', () => {
 
   describe('desktop choice relaunch', () => {
     it('carries the captured root, failing profile and approved repair sources unchanged', () => {
-      const request = {
+      const request: ProfileStateRecoveryRequest = {
         userDataPath: '/captured/orca',
         profileId: 'damaged-profile',
         selector: { kind: 'repair', sections: [{ domain: 'repos', backupId: null }] }
-      } as const
+      }
       const args = profileStateDesktopRecoveryArgs(['Orca', '--inspect'], request)
       expect(JSON.parse(args[args.indexOf(PROFILE_STATE_DESKTOP_RECOVERY_FLAG) + 1])).toEqual(
         request

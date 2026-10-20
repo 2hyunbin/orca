@@ -7,7 +7,7 @@ export const PROFILE_STATE_DESKTOP_RECOVERY_FLAG = '--profile-state-desktop-reco
 
 const positiveInteger = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
 const repairSectionSchema = z
-  .object({ domain: z.string().min(1), backupId: z.string().min(1).nullable() })
+  .object({ domain: z.string(), backupId: z.string().min(1).nullable() })
   .strict()
 const selectorSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('json'), revision: positiveInteger }).strict(),

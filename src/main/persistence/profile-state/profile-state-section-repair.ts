@@ -20,7 +20,7 @@ import {
   validateProfileStateDocumentRow,
   type ProfileStateParsedDocument
 } from './profile-state-document-validation'
-import { readProfileStateDomain } from './profile-state-domain-reader'
+import { readProfileStateDomainsWithRevisionFromDatabase } from './profile-state-domain-reader'
 import { withProfileStateReadSnapshot } from './profile-state-read-snapshot'
 import { ProfileStateSqliteAuthority } from './profile-state-sqlite-authority'
 import {
@@ -160,19 +160,40 @@ export function planProfileStateSectionRepair(
   }
   const repairedState = scan.intact
   const backups = profileStateDatabaseBackups(location.databaseFile)
-  const sections = [...scan.damaged].map((domain): ProfileStateRepairSection => {
-    for (const backup of backups) {
-      const read = readProfileStateDomain(backup.path, location.profileId, domain)
-      if (read.kind === 'unreadable') {
-        continue
-      }
-      if (read.kind === 'value') {
-        repairedState.set(domain, read.value)
-      }
-      return { domain, backupId: backup.id, backupCreatedAtMs: backup.createdAtMs }
+  const resolved = new Map<string, ProfileStateRepairSection>()
+  for (const backup of backups) {
+    const pending = [...scan.damaged].filter((domain) => !resolved.has(domain))
+    if (pending.length === 0) {
+      break
     }
-    return { domain, backupId: null }
-  })
+    let candidate: ReturnType<typeof openProfileStateDatabaseReadOnly>
+    try {
+      candidate = openProfileStateDatabaseReadOnly(backup.path, location.profileId)
+    } catch {
+      continue
+    }
+    try {
+      for (const domain of pending) {
+        const read = readProfileStateDomainsWithRevisionFromDatabase(candidate.db, [domain])
+        if (read.kind === 'unreadable') {
+          continue
+        }
+        if (read.values.has(domain)) {
+          repairedState.set(domain, read.values.get(domain))
+        }
+        resolved.set(domain, {
+          domain,
+          backupId: backup.id,
+          backupCreatedAtMs: backup.createdAtMs
+        })
+      }
+    } finally {
+      candidate.db.close()
+    }
+  }
+  const sections = [...scan.damaged].map(
+    (domain) => resolved.get(domain) ?? { domain, backupId: null }
+  )
   return {
     profileId: location.profileId,
     revision: scan.revision,

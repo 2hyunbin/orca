@@ -10,6 +10,7 @@ import {
 } from './profile-state-backup-path'
 import { writeProfileStateBackup } from './profile-state-backup-job'
 import { openWritableProfileStateDatabase } from './profile-state-database'
+import * as database from './profile-state-database'
 import { profileProjectMoveIntentPath } from '../../orca-profiles/profile-project-move-record'
 import { hashProfileStatePayload } from './profile-state-document-validation'
 import { writeProfileStateDomains } from './profile-state-domain-writes'
@@ -17,7 +18,11 @@ import { migrateProfileStateToSqlite } from './profile-state-migration'
 import { rollbackProfileState } from './profile-state-recovery-command'
 import { ProfileStateRecoveryRequiredError } from './profile-state-recovery-required'
 import { formatProfileStateStartupFailure } from './profile-state-startup-failure'
-import type { ProfileStateRecoverySelector } from '../../../shared/profile-state-recovery-command'
+import {
+  profileStateRecoveryRequestSchema,
+  profileStateRecoveryResponseSchema,
+  type ProfileStateRecoverySelector
+} from '../../../shared/profile-state-recovery-command'
 
 const roots: string[] = []
 const profileId = 'section-repair'
@@ -136,18 +141,21 @@ describe('repairing damaged profile-state sections', () => {
       damage: `UPDATE profile_state_documents SET ${metadata} WHERE domain = 'repos'`,
       repaired: { repos: ['a'], ui: { width: 2 }, automationRuns: [{ id: 'r1', n: 1 }] }
     })),
-    {
-      section: '__proto__',
-      damage: `UPDATE profile_state_documents SET payload = '{}' WHERE domain = '__proto__'`,
-      repaired: JSON.parse(
-        '{"__proto__":{"saved":true},"repos":["a","b"],"ui":{"width":2},"automationRuns":[{"id":"r1","n":1}]}'
-      )
-    }
+    ...['__proto__', ''].map((section) => ({
+      section,
+      damage: `UPDATE profile_state_documents SET payload = '{}' WHERE domain = '${section}'`,
+      repaired: {
+        [section]: { saved: true },
+        repos: ['a', 'b'],
+        ui: { width: 2 },
+        automationRuns: [{ id: 'r1', n: 1 }]
+      }
+    }))
   ])(
     'replaces only damaged $section from a backup and keeps newer intact sections',
     async ({ section, damage, repaired }) => {
       const profile = await profileWithNewerSaves(
-        section === '__proto__' ? JSON.parse('{"__proto__":{"saved":true}}') : {}
+        section === '__proto__' || section === '' ? { [section]: { saved: true } } : {}
       )
       withDatabase(profile.databaseFile, (db) => db.exec(damage))
       const damagedBytes = readFileSync(profile.databaseFile)
@@ -172,11 +180,17 @@ describe('repairing damaged profile-state sections', () => {
       ).toThrow('changed since you chose')
       expect(readFileSync(profile.databaseFile)).toEqual(damagedBytes)
 
-      const result = rollback(profile, {
-        kind: 'repair',
-        sections: [{ domain: section, backupId: profile.backupId }]
+      const request = profileStateRecoveryRequestSchema.parse({
+        userDataPath: profile.root,
+        profileId,
+        selector: { kind: 'repair', sections: [{ domain: section, backupId: profile.backupId }] }
       })
+      const result = rollback(profile, request.selector)
+      expect(
+        profileStateRecoveryResponseSchema.parse(JSON.parse(JSON.stringify({ ok: true, result })))
+      ).toEqual({ ok: true, result })
       expect(result).toMatchObject({ storage: 'sqlite', revision: 3, removedDatabaseFiles: [] })
+      expect(result.repairedSections).toEqual(failure.repairableSections)
       expect(readFileSync(join(result.quarantineDirectory, 'profile-state.db'))).toEqual(
         damagedBytes
       )
@@ -257,21 +271,64 @@ describe('repairing damaged profile-state sections', () => {
     }
   )
 
-  it('chooses the newest readable section over an older backup matching the stored hash', async () => {
-    const profile = await profileWithNewerSaves()
+  it('resolves independent sources and absence newest-first, opening each candidate once', async () => {
+    const profile = await profileWithNewerSaves({ absent: true })
     const newest = createProfileStateDatabaseBackupId(Date.now())
+    const newestPath = profileStateDatabaseBackupPath(profile.databaseFile, newest)
     await writeProfileStateBackup({
       databasePath: profile.databaseFile,
       profileId,
-      targetPath: profileStateDatabaseBackupPath(profile.databaseFile, newest)
+      targetPath: newestPath
     })
-    withDatabase(profile.databaseFile, (db) =>
-      db
-        .prepare(
-          "UPDATE profile_state_documents SET payload = 'bad', content_hash = ? WHERE domain = 'repos'"
-        )
-        .run(hashProfileStatePayload('["a"]'))
-    )
-    expect(startupFailure(profile).repairableSections?.[0].backupId).toBe(newest)
+    withDatabase(newestPath, (db) => {
+      db.exec("DELETE FROM profile_state_documents WHERE domain = 'absent'")
+      db.exec("UPDATE profile_state_documents SET payload = 'bad' WHERE domain = 'ui'")
+    })
+    withDatabase(profile.databaseFile, (db) => {
+      writeProfileStateDomains(db, {
+        expectedRevision: 2,
+        replacements: [{ domain: 'automationRuns', payload: '[{"id":"r1","n":2}]' }]
+      })
+      db.exec("UPDATE profile_state_documents SET payload = 'bad' WHERE domain IN ('absent', 'ui')")
+      db.prepare(
+        "UPDATE profile_state_documents SET payload = 'bad', content_hash = ? WHERE domain = 'repos'"
+      ).run(hashProfileStatePayload('["a"]'))
+    })
+    const backupPaths = [
+      newestPath,
+      profileStateDatabaseBackupPath(profile.databaseFile, profile.backupId)
+    ]
+    const observations: { path: string; close: () => void }[] = []
+    const open = database.openProfileStateDatabaseReadOnly
+    vi.spyOn(database, 'openProfileStateDatabaseReadOnly').mockImplementation((...args) => {
+      const opened = open(...args)
+      if (backupPaths.includes(args[0])) {
+        observations.push({ path: args[0], close: vi.spyOn(opened.db, 'close') })
+      }
+      return opened
+    })
+    const sections = startupFailure(profile).repairableSections
+    expect(sections).toEqual([
+      { domain: 'absent', backupId: newest, backupCreatedAtMs: expect.any(Number) },
+      { domain: 'repos', backupId: newest, backupCreatedAtMs: expect.any(Number) },
+      { domain: 'ui', backupId: profile.backupId, backupCreatedAtMs: expect.any(Number) }
+    ])
+    expect(observations.map(({ path }) => path)).toEqual(backupPaths)
+    const result = rollback(profile, { kind: 'repair', sections: sections && [...sections] })
+    expect(result.repairedSections).toEqual(sections)
+    expect(observations.map(({ path }) => path)).toEqual([...backupPaths, ...backupPaths])
+    for (const { close } of observations) {
+      expect(close).toHaveBeenCalledTimes(1)
+    }
+    const reopened = bootstrapProfileStateAuthority(profile)
+    try {
+      expect(JSON.parse(reopened.authority?.readSerializedState() ?? 'null')).toEqual({
+        repos: ['a', 'b'],
+        ui: { width: 1 },
+        automationRuns: [{ id: 'r1', n: 2 }]
+      })
+    } finally {
+      reopened.authority?.close()
+    }
   })
 })
