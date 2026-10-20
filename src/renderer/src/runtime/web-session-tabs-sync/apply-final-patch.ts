@@ -95,6 +95,7 @@ export function buildWebSessionTabsFinalPatch(
     ...agentStatusPatch,
     ...retractedTabSweepPatch,
     ...remirroredClosedTabLiftPatch,
+    // Why no editorBuffers: the store's buffer middleware adopts the host's mirrored tab state.
     ...(nextOpenFiles !== state.openFiles ? { openFiles: nextOpenFiles } : {}),
     ...(nextTabsByWorktree !== state.tabsByWorktree ? { tabsByWorktree: nextTabsByWorktree } : {}),
     ...(nextBrowserTabsByWorktree !== state.browserTabsByWorktree
