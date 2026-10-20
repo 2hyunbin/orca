@@ -3,8 +3,20 @@ import { getWorktreeIdFromVisitKey } from '@/lib/worktree-visit-recency'
 
 // Why: recently used workspaces keep their watch so switching back needs no re-read.
 export const WARM_RECURSIVE_WATCH_WORKSPACE_COUNT = 3
+// Why: deleted/renamed-tab pins sit outside the recency set, so bound them or they grow without limit.
+export const PINNED_RECURSIVE_WATCH_WORKSPACE_COUNT = 3
 
-/** Workspaces whose open tabs keep a native watch: the active one, the most recently visited, and any showing a deleted/renamed tab. */
+function mostRecent(
+  ids: Iterable<string>,
+  visitedAtById: ReadonlyMap<string, number>,
+  count: number
+): string[] {
+  return [...ids]
+    .sort((left, right) => (visitedAtById.get(right) ?? 0) - (visitedAtById.get(left) ?? 0))
+    .slice(0, count)
+}
+
+/** Workspaces whose open tabs keep a native watch: the active one, the most recently visited, and a few showing a deleted/renamed tab. */
 export function selectWatchEligibleWorkspaceIds(args: {
   activeWorktreeId: string | null
   lastVisitedAtByWorktreeId: Readonly<Record<string, number>> | undefined
@@ -15,31 +27,35 @@ export function selectWatchEligibleWorkspaceIds(args: {
   if (args.activeWorktreeId) {
     ids.add(args.activeWorktreeId)
   }
-  // Why: a switch-back resync clears deleted/renamed marks and reloads into a read error, erasing the warning and the last content.
-  for (const file of args.openFiles) {
-    if (file.externalMutation === 'deleted' || file.externalMutation === 'renamed') {
-      ids.add(file.worktreeId)
-    }
-  }
-  // Why top-k instead of a full sort: the visit map grows with history.
-  const warm: { id: string; visitedAt: number }[] = []
+  // Why: one visit map entry per host, so take each workspace's latest.
+  const visitedAtById = new Map<string, number>()
   for (const [key, visitedAt] of Object.entries(args.lastVisitedAtByWorktreeId ?? {})) {
     const id = getWorktreeIdFromVisitKey(key)
-    // Why: `exists` keeps deleted workspaces from holding warm slots.
-    if (id === args.activeWorktreeId || !args.exists(id)) {
-      continue
-    }
-    const existing = warm.find((entry) => entry.id === id)
-    if (existing) {
-      existing.visitedAt = Math.max(existing.visitedAt, visitedAt)
-    } else {
-      warm.push({ id, visitedAt })
-    }
-    warm.sort((left, right) => right.visitedAt - left.visitedAt)
-    warm.length = Math.min(warm.length, WARM_RECURSIVE_WATCH_WORKSPACE_COUNT)
+    visitedAtById.set(id, Math.max(visitedAtById.get(id) ?? 0, visitedAt))
   }
-  for (const entry of warm) {
-    ids.add(entry.id)
+  const warmCandidates = [...visitedAtById.keys()].filter(
+    // Why: `exists` keeps deleted workspaces from holding warm slots.
+    (id) => id !== args.activeWorktreeId && args.exists(id)
+  )
+  for (const id of mostRecent(
+    warmCandidates,
+    visitedAtById,
+    WARM_RECURSIVE_WATCH_WORKSPACE_COUNT
+  )) {
+    ids.add(id)
+  }
+  // Why: a live watch clears a deleted/renamed mark the moment the file reappears; a catch-up only re-checks on switch-back.
+  const pinned = new Set<string>()
+  for (const file of args.openFiles) {
+    if (
+      (file.externalMutation === 'deleted' || file.externalMutation === 'renamed') &&
+      !ids.has(file.worktreeId)
+    ) {
+      pinned.add(file.worktreeId)
+    }
+  }
+  for (const id of mostRecent(pinned, visitedAtById, PINNED_RECURSIVE_WATCH_WORKSPACE_COUNT)) {
+    ids.add(id)
   }
   return ids
 }

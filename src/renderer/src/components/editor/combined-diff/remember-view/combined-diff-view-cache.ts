@@ -147,6 +147,15 @@ export function forgetCombinedDiffViewsShowingPath(relativePath: string): void {
   }
 }
 
+/** An overflow names no paths, so every cached body for the workspace may be stale; scroll position survives. */
+export function forgetCombinedDiffViewBodiesForWorktree(worktreeId: string): void {
+  for (const [viewKey, memory] of memoryByViewKey) {
+    if (memory.worktreeId === worktreeId && memory.view) {
+      memoryByViewKey.set(viewKey, { ...memory, view: undefined })
+    }
+  }
+}
+
 export function renameCombinedDiffViewOwner(oldWorktreeId: string, newWorktreeId: string): void {
   for (const [viewKey, memory] of memoryByViewKey) {
     if (memory.worktreeId === oldWorktreeId) {

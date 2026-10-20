@@ -3,7 +3,10 @@ import {
   selectEditorExternalWatchTargets,
   type EditorExternalWatchTargetState
 } from './editor-external-watch-targets'
-import { WARM_RECURSIVE_WATCH_WORKSPACE_COUNT } from './editor-external-watch-scope'
+import {
+  PINNED_RECURSIVE_WATCH_WORKSPACE_COUNT,
+  WARM_RECURSIVE_WATCH_WORKSPACE_COUNT
+} from './editor-external-watch-scope'
 import { getWorktreeVisitKey } from '@/lib/worktree-visit-recency'
 import { getDefaultSettings } from '../../../shared/constants'
 import {
@@ -143,6 +146,28 @@ describe('background workspace watch trim', () => {
       expect(watchedIds(state)).toEqual(['wt0', 'wt1'])
     }
   )
+
+  it(`keeps at most ${PINNED_RECURSIVE_WATCH_WORKSPACE_COUNT} deleted/renamed-tab workspaces beyond the recent ones, evicting the least recent`, () => {
+    const pinnedIds = ['p1', 'p2', 'p3', 'p4', 'p5']
+    const state = makeState({
+      worktrees: [...worktrees, ...pinnedIds.map((id) => worktree('r', id))],
+      openFiles: [
+        tab('wt0'),
+        tab('wt1'),
+        tab('wt2'),
+        tab('wt3'),
+        ...pinnedIds.map((id) => tab(id, { externalMutation: 'deleted' as const }))
+      ],
+      activeWorktreeId: 'wt0',
+      visits: { wt1: 100, wt2: 99, wt3: 98, p1: 1, p2: 2, p3: 3, p4: 4 }
+    })
+    expect(watchedIds(state)).toEqual(['p2', 'p3', 'p4', 'wt0', 'wt1', 'wt2', 'wt3'])
+    // Why: an evicted pin is released like any other workspace, so switching back still catches it up.
+    expect([...selectEditorExternalWatchTargets(state).unwatchedTargetKeys].sort()).toEqual([
+      'p1::/r/p1::local::client::literal',
+      'p5::/r/p5::local::client::literal'
+    ])
+  })
 
   it('never watches for a virtual tab', () => {
     const state = makeState({

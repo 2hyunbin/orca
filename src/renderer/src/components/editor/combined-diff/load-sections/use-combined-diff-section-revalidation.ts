@@ -5,6 +5,8 @@ import {
   ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
   type EditorPathMutationTarget
 } from '../../editor-autosave'
+import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
+import { normalizeRuntimePathForComparison } from '../../../../../../shared/cross-platform-path'
 import { buildCombinedGitStatusSignature } from '../resolve-changes/combined-diff-git-status-signature'
 import {
   getCombinedDiffFileTreeSectionKey,
@@ -26,7 +28,7 @@ export function useCombinedDiffSectionRevalidation({
 }: {
   file: OpenFile
   gitStatusEntries: GitStatusEntry[]
-  registry: CombinedDiffSectionLoadRegistry
+  registry: Pick<CombinedDiffSectionLoadRegistry, 'loadedIndicesRef'>
   requestSectionReload: (index: number) => void
   sectionIndexByKeyRef: React.RefObject<ReadonlyMap<string, number>>
   // The entry set is structurally stable while individual section content/loading state changes.
@@ -104,6 +106,30 @@ export function useCombinedDiffSectionRevalidation({
     sectionIndexByKeyRef,
     treeMode
   ])
+
+  useEffect(() => {
+    if (treeMode !== 'all' && treeMode !== 'uncommitted') {
+      return
+    }
+    // Why: an overflow (or a switch-back catch-up) names no paths, and snapshot-backed reviews skip
+    // status-driven reloads, so re-read every loaded working-tree section of this workspace.
+    const handler = (event: WindowEventMap[typeof ORCA_WORKTREE_FILE_CHANGE_EVENT]): void => {
+      const { payload, runtimeEnvironmentId } = event.detail
+      if (
+        (runtimeEnvironmentId?.trim() || null) !== (file.runtimeEnvironmentId?.trim() || null) ||
+        normalizeRuntimePathForComparison(payload.worktreePath) !==
+          normalizeRuntimePathForComparison(file.filePath) ||
+        !payload.events.some((change) => change.kind === 'overflow')
+      ) {
+        return
+      }
+      for (const index of loadedIndicesRef.current) {
+        requestSectionReload(index)
+      }
+    }
+    window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handler)
+    return () => window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handler)
+  }, [file.filePath, file.runtimeEnvironmentId, loadedIndicesRef, requestSectionReload, treeMode])
 
   return combinedGitStatusSignature
 }

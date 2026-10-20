@@ -3,13 +3,12 @@ import { useAppStore } from '@/store'
 import { subscribeEditorRuntimeFileWatch } from './editor-runtime-file-watch'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
 import type { FsChangedPayload } from '../../../shared/filesystem-entry-types'
-import { canAutoSaveOpenFile } from '@/components/editor/editor-autosave'
 import {
   getEditorExternalWatchTargetKey,
-  getOpenFileRuntimeOwner,
   selectEditorExternalWatchTargets,
   type EditorExternalWatchTarget
 } from './editor-external-watch-targets'
+import { markWorktreeCatchUpPayload } from './worktree-file-change-event'
 import { buildEditorExternalWatchEventHandler } from './editor-external-watch-event-reconciliation'
 import { verifyLatchedEditorMoveDestinations } from './editor-external-watch-disk-verification'
 import {
@@ -24,24 +23,6 @@ type FsChangedHandler = (
   runtimeEnvironmentId?: string | null,
   onlyTarget?: EditorExternalWatchTarget
 ) => void
-
-// Why: the overflow resync reloads only clean tabs; dirty ones go through the restored-tab disk check, which shows the changed-on-disk banner.
-function verifyRewatchedDirtyTabs(target: EditorExternalWatchTarget): void {
-  const state = useAppStore.getState()
-  for (const file of state.openFiles) {
-    // Why: mirror the scan's eligibility so it always resolves the flag it is handed.
-    if (
-      file.isDirty &&
-      file.worktreeId === target.worktreeId &&
-      getOpenFileRuntimeOwner(file) === target.runtimeEnvironmentId &&
-      file.lastKnownDiskSignature &&
-      file.externalMutation !== 'changed' &&
-      canAutoSaveOpenFile(file)
-    ) {
-      state.setPendingDiskBaselineVerification(file.id, true)
-    }
-  }
-}
 
 function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknown): void {
   console.warn('[filesystem-watch] failed to watch worktree', {
@@ -85,18 +66,15 @@ export function useEditorExternalWatch(): void {
       const resync = previousUnwatchedKeys.has(getEditorExternalWatchTargetKey(target))
         ? () =>
             fsChangedHandlerRef.current?.(
-              {
+              markWorktreeCatchUpPayload({
                 worktreePath: target.worktreePath,
                 events: [{ kind: 'overflow', absolutePath: target.worktreePath }],
                 connectionId: target.connectionId
-              },
+              }),
               target.runtimeEnvironmentId,
               target
             )
         : undefined
-      if (resync) {
-        verifyRewatchedDirtyTabs(target)
-      }
       if (target.runtimeEnvironmentId) {
         // Why: the host's ready event means its watcher is installed, so nothing after the resync is lost.
         subscribeRuntimeTarget(target, remoteWatchUnsubsRef.current, fsChangedHandlerRef, resync)

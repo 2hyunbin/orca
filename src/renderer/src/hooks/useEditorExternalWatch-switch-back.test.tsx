@@ -54,6 +54,13 @@ import {
   ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT
 } from '@/components/editor/editor-autosave'
 import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from './worktree-file-change-event'
+import {
+  claimCombinedDiffView,
+  clearCombinedDiffViewMemory,
+  readCombinedDiffViewMemory,
+  releaseCombinedDiffView,
+  rememberCombinedDiffView
+} from '@/components/editor/combined-diff/remember-view/combined-diff-view-cache'
 
 function WatchProbe(): null {
   useEditorExternalWatch()
@@ -82,6 +89,8 @@ describe('switching back to a workspace that was not watched', () => {
   let previousApi: unknown
   let detachScan: () => void
   let settleWatch: () => void
+  let emitIpc: (payload: unknown) => void
+  let pathExists: ReturnType<typeof vi.fn>
   let reloads: string[]
   let fileChangeEvents: number
   const onReload = (event: Event): void => {
@@ -121,6 +130,7 @@ describe('switching back to a workspace that was not watched', () => {
     openTab(DIRTY)
     store.getState().setEditorDraft(DIRTY, 'unsaved edit')
     store.getState().markFileDirty(DIRTY, true)
+    pathExists = vi.fn().mockResolvedValue(true)
     previousApi = (window as unknown as { api?: unknown }).api
     ;(window as unknown as { api: unknown }).api = {
       fs: {
@@ -131,8 +141,11 @@ describe('switching back to a workspace that was not watched', () => {
             })
         ),
         unwatchWorktree: vi.fn().mockResolvedValue(undefined),
-        onFsChanged: vi.fn(() => vi.fn()),
-        pathExists: vi.fn().mockResolvedValue(true)
+        onFsChanged: vi.fn((listener: (payload: unknown) => void) => {
+          emitIpc = listener
+          return vi.fn()
+        }),
+        pathExists
       }
     }
     reloads = []
@@ -149,6 +162,7 @@ describe('switching back to a workspace that was not watched', () => {
     window.removeEventListener(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, onReload)
     window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, onFileChange)
     detachScan()
+    clearCombinedDiffViewMemory()
     container.remove()
     vi.useRealTimers()
     ;(window as unknown as { api?: unknown }).api = previousApi
@@ -170,6 +184,74 @@ describe('switching back to a workspace that was not watched', () => {
     expect(file(DIRTY).isDirty).toBe(true)
     expect(file(CLEAN).externalMutation).toBeFalsy()
     expect(fileChangeEvents).toBe(1)
+  })
+
+  it('checks dirty tabs only once the watch is back, so a write in between still gets the banner', async () => {
+    harness.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
+    await render([active], [background])
+    await render([active, background], [])
+    await act(async () => vi.advanceTimersByTimeAsync(200))
+    expect(harness.readRuntimeFileContent).not.toHaveBeenCalled()
+
+    // An agent writes after the switch but before the watch is installed.
+    harness.readRuntimeFileContent.mockResolvedValue({ content: 'v2 late write', isBinary: false })
+    await act(async () => settleWatch())
+    await act(async () => vi.advanceTimersByTimeAsync(200))
+
+    expect(file(DIRTY).externalMutation).toBe('changed')
+  })
+
+  it('checks dirty tabs again when a late install (capacity, SSH retry) lands', async () => {
+    harness.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
+    // The request returns while the watcher waits for capacity; the catch-up finds nothing yet.
+    await switchBack()
+    expect(file(DIRTY).externalMutation).toBeFalsy()
+
+    harness.readRuntimeFileContent.mockResolvedValue({
+      content: 'v2 before install',
+      isBinary: false
+    })
+    // Main announces the late install with the same overflow it sends after a reconnect.
+    await act(async () =>
+      emitIpc({
+        worktreePath: '/background',
+        events: [{ kind: 'overflow', absolutePath: '/background' }]
+      })
+    )
+    await act(async () => vi.advanceTimersByTimeAsync(200))
+
+    expect(file(DIRTY).externalMutation).toBe('changed')
+  })
+
+  it('marks a clean tab deleted and keeps it when its file was deleted while unwatched', async () => {
+    harness.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
+    pathExists.mockImplementation(async ({ filePath }: { filePath: string }) => filePath !== CLEAN)
+    await switchBack()
+
+    expect(file(CLEAN).externalMutation).toBe('deleted')
+    expect(reloads).toEqual([])
+  })
+
+  it('drops cached bodies of an unmounted combined-diff tab so a remount reloads them', async () => {
+    const viewKey = 'background::all-diffs::uncommitted::tab-1'
+    const lease = claimCombinedDiffView(viewKey, 'background')
+    releaseCombinedDiffView(lease)
+    rememberCombinedDiffView(lease, {
+      scrollTop: 120,
+      view: {
+        entrySignature: 'e',
+        gitStatusSignature: 'g',
+        sections: [],
+        sectionHeights: {},
+        loadedIndices: [],
+        sideBySide: false
+      }
+    })
+    harness.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
+    await switchBack()
+
+    expect(readCombinedDiffViewMemory(viewKey)?.view).toBeUndefined()
+    expect(readCombinedDiffViewMemory(viewKey)?.scrollTop).toBe(120)
   })
 
   it('leaves a dirty tab alone when disk still matches what it last read', async () => {
