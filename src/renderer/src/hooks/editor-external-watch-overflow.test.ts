@@ -134,6 +134,21 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     )
   })
 
+  it('probes more tabs than one host batch allows in ordered chunks', async () => {
+    const ids = Array.from({ length: 129 }, (_, index) => `f${index}.ts`)
+    setTabs(...ids.map((id) => tab(id)))
+    harness.runtimePathsExist.mockImplementation(async (_context: unknown, paths: string[]) =>
+      // The last tab (the only one in the second chunk) is gone.
+      paths.map((path) => ({ exists: path !== '/repo/f128.ts' }))
+    )
+    reconcileEditorTabsAfterOverflow(target)
+    await vi.waitFor(() => expect(harness.scheduleReload).toHaveBeenCalledTimes(128))
+
+    expect(harness.runtimePathsExist.mock.calls.map(([, paths]) => paths.length)).toEqual([128, 1])
+    expect(setExternalMutation).toHaveBeenCalledWith('f128.ts', 'deleted')
+    expect(harness.scheduleReload).not.toHaveBeenCalledWith(notification('f128.ts'))
+  })
+
   it('drops an older existence answer once a newer probe for the tab has answered', async () => {
     setTabs(tab('a.ts'))
     let answerFirst: (rows: unknown) => void = () => {}

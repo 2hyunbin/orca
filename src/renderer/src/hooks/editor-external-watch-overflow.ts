@@ -8,7 +8,11 @@ import {
 import { forgetCombinedDiffViewBodiesForWorktree } from '@/components/editor/combined-diff/remember-view/combined-diff-view-cache'
 import { getRuntimeTargetForFileOwner } from '@/lib/file-owner-runtime-target'
 import { runtimePathsExist } from '@/runtime/runtime-path-existence-batch'
-import type { PathExistenceResult } from '../../../shared/path-existence-batch'
+import {
+  PATH_EXISTENCE_BATCH_MAX,
+  type PathExistenceResult
+} from '../../../shared/path-existence-batch'
+import { requestRestoredTabReverification } from '@/components/editor/editor-restored-tab-conflict-scan'
 import {
   getLocalWindowsWslAliasOption,
   getOpenFileRuntimeOwner,
@@ -96,6 +100,7 @@ export function reconcileEditorTabsAfterOverflow(target: OverflowTarget): void {
         file.externalMutation !== 'changed' &&
         canAutoSaveOpenFile(file)
       ) {
+        requestRestoredTabReverification(file.id)
         state.setPendingDiskBaselineVerification(file.id, true)
       }
       continue
@@ -139,19 +144,26 @@ async function probeEditTabs(
   if (!owner) {
     return null
   }
+  const context = {
+    target: owner,
+    worktreeId: target.worktreeId,
+    worktreePath: target.worktreePath,
+    connectionId: target.connectionId
+  }
+  const paths = probes.map((probe) => probe.filePath)
+  // Why: the host rejects a batch above its limit outright, which would reload every tab.
+  const chunks: string[][] = []
+  for (let start = 0; start < paths.length; start += PATH_EXISTENCE_BATCH_MAX) {
+    chunks.push(paths.slice(start, start + PATH_EXISTENCE_BATCH_MAX))
+  }
   try {
-    return await runtimePathsExist(
-      {
-        target: owner,
-        worktreeId: target.worktreeId,
-        worktreePath: target.worktreePath,
-        connectionId: target.connectionId
-      },
-      probes.map((probe) => probe.filePath),
-      undefined,
-      // Why: a whole-request "not found" (worktree re-pairing) must never mark every tab deleted.
-      { codedAbsenceOnly: true }
+    const results = await Promise.all(
+      chunks.map((chunk) =>
+        // Why: a whole-request "not found" (worktree re-pairing) must never mark every tab deleted.
+        runtimePathsExist(context, chunk, undefined, { codedAbsenceOnly: true })
+      )
     )
+    return results.flat()
   } catch {
     // Why: a failed probe cannot prove absence; reload as before.
     return null
