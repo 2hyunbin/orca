@@ -90,18 +90,50 @@ describe('project sidebar OS folder drops', () => {
     })
   })
 
-  it('admits an unpaired UNC drop through desktop admission while another server is focused', async () => {
-    mocks.state.settings = { activeRuntimeEnvironmentId: 'ssh-server', experimentalWslHosts: true }
+  it.each([
+    {
+      path: '\\\\wsl$\\Ubuntu\\home\\me\\repo',
+      normalized: '\\\\wsl$\\Ubuntu\\home\\me\\repo',
+      focus: 'ssh-server',
+      paired: false
+    },
+    {
+      path: '\\\\?\\UNC\\wsl$\\Ubuntu\\home\\me\\Repo',
+      normalized: '\\\\wsl$\\Ubuntu\\home\\me\\Repo',
+      focus: 'wsl:Ubuntu',
+      paired: true
+    },
+    {
+      path: '//?/UNC/wsl.localhost/Ubuntu/home/me/Repo',
+      normalized: '\\\\wsl.localhost\\Ubuntu\\home\\me\\Repo',
+      focus: 'wsl:Debian',
+      paired: false
+    },
+    {
+      path: '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo',
+      normalized: '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo',
+      focus: null,
+      paired: true
+    }
+  ])('admits physical WSL drop $path through desktop admission', async ({ path, normalized, focus, paired }) => {
+    mocks.state.settings = { activeRuntimeEnvironmentId: focus, experimentalWslHosts: true }
     Object.assign(window.api, { runtimeEnvironments: { wslHosts: {} } })
-    mocks.droppedPath = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
+    mocks.state.runtimeEnvironments = paired
+      ? [{
+          id: 'wsl:Ubuntu',
+          orcadDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 4100, remotePort: 4200 }
+        }]
+      : []
+    mocks.droppedPath = path
     const view = render(<SidebarProbe />)
     expect(drag(view.getByTestId('worktree-card'), 'dragover').dropEffect).toBe('copy')
     drag(view.getByTestId('worktree-card'), 'drop')
     await waitFor(() =>
       expect(mocks.state.openModal).toHaveBeenCalledWith('add-repo', {
-        droppedLocalPath: mocks.droppedPath
+        droppedLocalPath: normalized
       })
     )
+    expect(mocks.stat).toHaveBeenCalledWith(expect.objectContaining({ filePath: path }))
   })
 
   it('refuses the drop while a remote runtime is active', () => {

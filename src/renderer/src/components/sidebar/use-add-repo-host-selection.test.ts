@@ -55,6 +55,8 @@ vi.mock('@/store', () => ({
   useAppStore: (selector: (state: typeof mocks.storeState) => unknown) => selector(mocks.storeState)
 }))
 
+vi.mock('./use-wsl-hosts-enabled', () => ({ useWslHostsEnabled: () => true }))
+
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn()
@@ -288,18 +290,18 @@ describe('useAddRepoHostSelection', () => {
     expect(mocks.stateSetters[0]).toHaveBeenCalledWith('local')
   })
 
-  it('pins a dropped UNC action locally even when an already-open picker still holds a server', async () => {
+  it.each([false, true])('pins a dropped UNC action synchronously; already open: %s', async (alreadyOpen) => {
     mocks.stateValues = ['runtime:env-1', false]
-    mocks.refValues = [true]
+    mocks.refValues = [alreadyOpen]
     const { useAddRepoHostSelection } = await import('./use-add-repo-host-selection')
     const result = useAddRepoHostSelection({
       isOpen: true,
       setStep: vi.fn(),
-      preferredHostId: 'local',
-      pinLocalHost: true
+      droppedLocalPath: '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo'
     })
     expect(result.selectedParsedHost?.kind).toBe('local')
     expect(result.selectedHostId).toBe('local')
+    expect(result.displayedHostId).toBe('local')
     expect(mocks.storeState.setActiveRuntimeEnvironmentPreference).not.toHaveBeenCalled()
   })
 

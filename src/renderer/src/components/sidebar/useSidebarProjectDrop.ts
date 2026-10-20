@@ -153,7 +153,7 @@ export function useSidebarProjectDrop(): {
           'add-repo',
           route.kind === 'wsl-host'
             ? { droppedHostPath: { hostId: route.hostId, path: route.linuxPath } }
-            : { droppedLocalPath: pathResolution.path }
+            : { droppedLocalPath: route.kind === 'local' ? route.path : pathResolution.path }
         )
       } catch (error) {
         if (mountedRef.current) {

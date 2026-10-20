@@ -83,6 +83,12 @@ function stripWin32LongPathPrefix(path: string): string {
   return /^\\\\\?\\[A-Za-z]:/.test(path) ? path.slice('\\\\?\\'.length) : path
 }
 
+/** Normalize only supported WSL spellings; Linux path case remains significant. */
+export function normalizeWindowsWslPath(path: string): string {
+  const normalized = stripWin32LongPathPrefix(path.replace(/\//g, '\\'))
+  return parseWslUncPath(normalized) ? normalized : path
+}
+
 /** Absolute, no `..`/backslash/NUL (Windows would read those differently); trailing slash dropped. */
 function normalizeLinuxPath(linuxPath: string): string | null {
   if (!linuxPath.startsWith('/') || linuxPath.startsWith('//') || /[\\\0]/.test(linuxPath)) {

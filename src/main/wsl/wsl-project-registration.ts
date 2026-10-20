@@ -10,7 +10,7 @@ import type { Repo } from '../../shared/repo-types'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { getWslHostService } from './wsl-host-service-instance'
-import { wslHostsGateOpen } from './wsl-host-gate'
+import { wslProjectRoutingEnabled } from './wsl-host-gate'
 import {
   admitRepositoryCheckout,
   type RepositoryCheckoutAdmission
@@ -22,17 +22,7 @@ type WslProjectRegistrationStore = {
   getSettings?(): Pick<GlobalSettings, 'experimentalWslHosts'>
 }
 
-export function wslProjectRoutingEnabled(
-  store: WslProjectRegistrationStore,
-  executionHostId?: ExecutionHostId | null
-): boolean {
-  return (
-    process.platform === 'win32' &&
-    (executionHostId == null || executionHostId === LOCAL_EXECUTION_HOST_ID) &&
-    wslHostsGateOpen() &&
-    (getWslHostService()?.isEnabled() ?? store.getSettings?.().experimentalWslHosts === true)
-  )
-}
+export { wslProjectRoutingEnabled } from './wsl-host-gate'
 
 type WslProjectOperation =
   | { kind: 'add'; path: string; repoKind?: 'git' | 'folder'; displayName?: string }
@@ -69,24 +59,25 @@ export async function registerProjectOnWslHost(
   operation: WslProjectOperation,
   options: WslProjectRoutingOptions = {}
 ): Promise<Repo | null> {
-  const path = parseWslUncPath(operation.path)
+  const supplied = options.admission
+  const selection = operation.kind === 'add' ? operation.path : join(operation.path, operation.name)
+  const sameSelection =
+    supplied !== undefined &&
+    supplied.executionHostId === (options.executionHostId ?? null) &&
+    (supplied.selectedPath === selection || supplied.registrationPath === selection)
+  const path = parseWslUncPath(sameSelection ? supplied.selectedPath : operation.path)
   if (!path || !wslProjectRoutingEnabled(store, options.executionHostId)) {
     return null
   }
   const admission =
-    operation.kind === 'add'
-      ? (options.admission ??
-        (await admitRepositoryCheckout(
-          store,
-          operation.path,
-          operation.repoKind ?? 'git',
-          LOCAL_EXECUTION_HOST_ID
-        )))
+    sameSelection && supplied.wslRouting
+      ? supplied
       : await admitRepositoryCheckout(
           store,
-          join(operation.path, operation.name),
-          'folder',
-          LOCAL_EXECUTION_HOST_ID
+          sameSelection ? supplied.selectedPath : selection,
+          operation.kind === 'add' ? operation.repoKind ?? 'git' : 'folder',
+          options.executionHostId,
+          true
         )
   const saved = admission.findSaved()
   if (saved) {
@@ -99,6 +90,9 @@ export async function registerProjectOnWslHost(
   const winner = admission.findSaved()
   if (winner) {
     return winner
+  }
+  if (!wslProjectRoutingEnabled(store, options.executionHostId)) {
+    return null
   }
   return registerOnWslOwner(
     owner.environmentId,
@@ -125,6 +119,35 @@ const OwnerProjects = z.object({ projects: z.array(z.object({ id: z.string() }))
 export async function listWslOwnerRepos(environmentId: string): Promise<Repo[]> {
   return OwnerRepos.parse(await callWslProjectHost(environmentId, 'repo.list', undefined)).repos
 }
+
+export const WslNestedImportReply = z.object({
+  group: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      parentPath: z.string().nullable(),
+      parentGroupId: z.string().nullable(),
+      createdFrom: z.enum(['manual', 'folder-scan', 'migration']),
+      tabOrder: z.number(),
+      isCollapsed: z.boolean(),
+      color: z.string().nullable(),
+      createdAt: z.number(),
+      updatedAt: z.number()
+    })
+    .passthrough()
+    .optional(),
+  projects: z.array(
+    z.object({
+      path: z.string(),
+      projectId: z.string().optional(),
+      status: z.enum(['imported', 'already-known', 'failed']),
+      error: z.string().optional()
+    })
+  ),
+  importedCount: z.number(),
+  alreadyKnownCount: z.number(),
+  failedCount: z.number()
+})
 
 /** Existing owner operations also prepare metadata/root on guests whose update was deferred. */
 export async function registerOnWslOwner(

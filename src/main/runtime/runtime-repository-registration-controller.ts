@@ -1,3 +1,4 @@
+import { parseWslUncPath } from '../../shared/wsl-paths'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
@@ -19,6 +20,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
 import {
   registerProjectOnWslHost,
+  wslProjectRoutingEnabled,
   type WslProjectRoutingOptions
 } from '../wsl/wsl-project-registration'
 
@@ -43,7 +45,13 @@ export class RuntimeRepositoryRegistrationController {
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
-    const admission = await admitRepositoryCheckout(store, path, kind, executionHostId)
+    const admission = await admitRepositoryCheckout(
+      store,
+      path,
+      kind,
+      executionHostId,
+      parseWslUncPath(path) !== null && wslProjectRoutingEnabled(store, executionHostId)
+    )
     const repoPath = admission.registrationPath
     const existing = admission.findSaved()
     if (existing) {

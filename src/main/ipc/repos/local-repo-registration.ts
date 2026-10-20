@@ -1,3 +1,4 @@
+import { parseWslUncPath } from '../../../shared/wsl-paths'
 import { randomUUID } from 'node:crypto'
 import type { Store } from '../../persistence'
 import type { Repo } from '../../../shared/repo-types'
@@ -7,7 +8,7 @@ import { admitRepositoryCheckout } from '../../repository-checkout-admission'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
-import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
+import { registerProjectOnWslHost, wslProjectRoutingEnabled } from '../../wsl/wsl-project-registration'
 
 export async function addLocalRepoFromPath(
   store: Store,
@@ -18,7 +19,13 @@ export async function addLocalRepoFromPath(
   const repoKind = kind === 'folder' ? 'folder' : 'git'
   let admission
   try {
-    admission = await admitRepositoryCheckout(store, path, repoKind, LOCAL_EXECUTION_HOST_ID)
+    admission = await admitRepositoryCheckout(
+      store,
+      path,
+      repoKind,
+      LOCAL_EXECUTION_HOST_ID,
+      parseWslUncPath(path) !== null && wslProjectRoutingEnabled(store, LOCAL_EXECUTION_HOST_ID)
+    )
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
   }

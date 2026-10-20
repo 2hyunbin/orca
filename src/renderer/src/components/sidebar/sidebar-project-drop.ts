@@ -1,3 +1,4 @@
+import { normalizeWindowsWslPath } from '../../../../shared/windows-path-access'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
@@ -48,8 +49,9 @@ export function routeSidebarProjectDrop(args: {
   wslHosts: readonly WslHostWindowsPathAccess[]
   wslRoutingEnabled?: boolean
 }): SidebarProjectDropRoute {
-  if (args.wslRoutingEnabled && parseWslUncPath(args.path)) {
-    return { kind: 'local', path: args.path }
+  const path = args.wslRoutingEnabled ? normalizeWindowsWslPath(args.path) : args.path
+  if (args.wslRoutingEnabled && parseWslUncPath(path)) {
+    return { kind: 'local', path }
   }
   for (const host of args.wslHosts) {
     const linuxPath = host.access.fromWindows(args.path)

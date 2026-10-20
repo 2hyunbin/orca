@@ -1,3 +1,6 @@
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
+import type { GlobalSettings } from '../../shared/global-settings-types'
+import { getWslHostService } from './wsl-host-service-instance'
 import { isWslHostsInternalGateOpen } from '../../shared/wsl-host-internal-gate'
 import type { OrcadDeploymentLink } from '../../shared/runtime-environments'
 
@@ -20,4 +23,16 @@ export function assertWslHostReachable(environment: {
   if (isGatedOffWslHost(environment)) {
     throw new Error(WSL_HOSTS_GATED_OFF_MESSAGE)
   }
+}
+
+export function wslProjectRoutingEnabled(
+  store: { getRepos(): unknown[]; getSettings?(): Pick<GlobalSettings, 'experimentalWslHosts'> },
+  executionHostId?: ExecutionHostId | null
+): boolean {
+  return (
+    process.platform === 'win32' &&
+    (executionHostId == null || executionHostId === LOCAL_EXECUTION_HOST_ID) &&
+    wslHostsGateOpen() &&
+    (getWslHostService()?.isEnabled() ?? store.getSettings?.().experimentalWslHosts === true)
+  )
 }

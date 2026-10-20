@@ -70,7 +70,8 @@ export async function setupProjectOnWslHost(
     store,
     args.path,
     args.kind ?? 'git',
-    LOCAL_EXECUTION_HOST_ID
+    LOCAL_EXECUTION_HOST_ID,
+    true
   )
   if (admission.findSaved()) {
     return null
@@ -79,7 +80,7 @@ export async function setupProjectOnWslHost(
     ...options,
     executionHostId: args.hostId
   })
-  if (!owner || admission.findSaved()) {
+  if (!owner || admission.findSaved() || !wslProjectRoutingEnabled(store, args.hostId)) {
     return null
   }
   // Why: the guest has never seen this desktop's project, so its identity travels with the link.

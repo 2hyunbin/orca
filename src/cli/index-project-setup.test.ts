@@ -86,7 +86,7 @@ describe('orca cli worktree awareness', () => {
     })
   })
 
-  it('waits for first-use server setup when adding a local WSL path', async () => {
+  it('dispatches relative Add from a UNC cwd with the platform path and call arity', async () => {
     queueFixtures(
       callMock,
       okFixture('req_repo_add', {
@@ -100,12 +100,13 @@ describe('orca cli worktree awareness', () => {
     )
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const repoPath = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
-    await main(['repo', 'add', '--path', repoPath, '--json'], '/tmp')
-    expect(callMock).toHaveBeenCalledWith(
-      'repo.add',
-      { path: path.resolve('/tmp', repoPath) },
-      { timeoutMs: 600_000 }
-    )
+    await main(['repo', 'add', '--path', '.', '--json'], repoPath)
+    const expectedPath = process.platform === 'win32' ? repoPath : path.resolve(repoPath, '.')
+    expect(callMock.mock.calls).toEqual([
+      process.platform === 'win32'
+        ? ['repo.add', { path: expectedPath }, { timeoutMs: 600_000 }]
+        : ['repo.add', { path: expectedPath }]
+    ])
   })
 
   it('lists projects through the project-first runtime API', async () => {
