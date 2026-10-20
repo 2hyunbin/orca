@@ -13,6 +13,7 @@ function domainsWith(creations: SidebarFeedDomains['creations']): SidebarFeedDom
     pairedServerRows: new Map(),
     repoIcons: new Map(),
     desktop: null,
+    projectCatalog: null,
     retention: null
   }
 }
