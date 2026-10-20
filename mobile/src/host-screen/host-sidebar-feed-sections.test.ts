@@ -20,7 +20,7 @@ import {
 import type { MobileViewState } from '../worktree/workspace-view-settings'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 import { readServedProjectSections } from '../worktree/project-sections-operations'
-import type { LastVisitedWorktreeOnHost } from '../worktree/last-visited-worktree-by-host'
+import type { HostVisit } from '../worktree/last-visited-worktree-by-host'
 
 const catalog = buildSidebarFeedCatalog(SERVED_SECTIONS, [], [])
 
@@ -43,7 +43,7 @@ function sectionsFor(
     showPinnedInGroups?: boolean
     live?: ReturnType<typeof liveRow>[]
     search?: string
-    lastVisited?: LastVisitedWorktreeOnHost | null
+    lastVisited?: HostVisit
   } = {}
 ) {
   const built = buildSidebarFeedRows(
@@ -53,7 +53,8 @@ function sectionsFor(
   )
   return buildHostFeedSections({
     rows: built.sectionRows,
-    lastVisited: options.lastVisited ?? null,
+    activeRowKeys: built.activeRowKeys,
+    lastVisited: 'lastVisited' in options ? options.lastVisited : null,
     liveRows: options.live ?? [],
     repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
     search: options.search ?? ''
@@ -64,11 +65,12 @@ function sectionsFromDomains(
   domains: SidebarFeedDomains,
   view: MobileViewState,
   search = '',
-  lastVisited: LastVisitedWorktreeOnHost | null = null
+  lastVisited: HostVisit = null
 ) {
   const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
   return buildHostFeedSections({
     rows: built.sectionRows,
+    activeRowKeys: built.activeRowKeys,
     lastVisited,
     liveRows: [],
     repoHostIdByRepoId: new Map(),
@@ -143,6 +145,7 @@ describe('the phone list from the sidebar feed', () => {
     const built = buildSidebarFeedRows(domains, grouped, phoneFeedView(phoneView()))
     const sections = buildHostFeedSections({
       rows: built.sectionRows,
+      activeRowKeys: built.activeRowKeys,
       lastVisited: null,
       liveRows: [],
       repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
@@ -170,13 +173,26 @@ describe('the phone list from the sidebar feed', () => {
     expect(sections.at(-2)?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
   })
 
-  describe('the highlight: the workspace this phone last opened on the host', () => {
+  describe('the highlight: this phone’s last-opened workspace, else the desktop’s selection', () => {
     const active = (sections: ReturnType<typeof sectionsFor>) =>
       outline(sections).filter((line) => line.endsWith(' ACTIVE'))
 
-    it('never takes the desktop’s selected workspace, so a phone that opened nothing has none', () => {
+    it('shows the desktop’s selection while this phone has opened nothing on the host', () => {
       // The fixture's desktop has the pinned parent selected.
-      expect(active(sectionsFor(phoneView()))).toEqual([])
+      const lines = active(sectionsFor(phoneView(), { lastVisited: null }))
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('orca::/w/parent')
+    })
+
+    it('shows nothing while the phone’s stored visit is still being read', () => {
+      expect(active(sectionsFor(phoneView(), { lastVisited: undefined }))).toEqual([])
+    })
+
+    it('never takes the desktop’s selection once this phone has opened a workspace here', () => {
+      const lines = active(
+        sectionsFor(phoneView(), { lastVisited: { worktreeId: 'orca::/w/child' } })
+      )
+      expect(lines.some((line) => line.includes('orca::/w/parent'))).toBe(false)
     })
 
     it('highlights the listed row this phone opened, and only it', () => {
@@ -270,6 +286,7 @@ describe('the phone list from the sidebar feed', () => {
       )
       const sections = buildHostFeedSections({
         rows: built.sectionRows,
+        activeRowKeys: built.activeRowKeys,
         lastVisited: null,
         liveRows: [],
         repoHostIdByRepoId: new Map(),
@@ -341,6 +358,7 @@ describe('the phone list from the sidebar feed', () => {
     })
     const sections = buildHostFeedSections({
       rows: built.sectionRows,
+      activeRowKeys: built.activeRowKeys,
       lastVisited: null,
       liveRows: [stale],
       repoHostIdByRepoId: new Map(),
@@ -434,11 +452,7 @@ describe('the phone list before the first feed read', () => {
     liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' }),
     liveRow({ worktreeId: 'orca::/w/old', displayName: 'old', isArchived: true })
   ]
-  const preFeed = (
-    search: string,
-    rows = cached,
-    lastVisited: LastVisitedWorktreeOnHost | null = null
-  ) =>
+  const preFeedVisiting = (search: string, rows: typeof cached, lastVisited: HostVisit) =>
     buildPreFeedSections({
       rows,
       view: phoneView(),
@@ -446,6 +460,7 @@ describe('the phone list before the first feed read', () => {
       repoHostIdByRepoId: new Map(),
       lastVisited
     })
+  const preFeed = (search: string, rows = cached) => preFeedVisiting(search, rows, null)
 
   it('shows the rows the page last listed, in their order under no header, filtered as the view is', () => {
     expect(preFeed('')).toEqual([
@@ -457,14 +472,16 @@ describe('the phone list before the first feed read', () => {
     ])
   })
 
-  it('highlights the row this phone opened, never the one the desktop marked active', () => {
+  it('highlights the row this phone opened, else the one the desktop marked active', () => {
     const rows = [{ ...cached[0]!, isActive: true }, cached[1]!]
-    const highlighted = (lastVisited: LastVisitedWorktreeOnHost | null) =>
-      preFeed('', rows, lastVisited)[0]
+    const highlighted = (lastVisited: HostVisit) =>
+      preFeedVisiting('', rows, lastVisited)[0]
         ?.data.filter((row) => row.isActive)
         .map((row) => row.worktreeId)
-    expect(highlighted(null)).toEqual([])
+    expect(highlighted(undefined)).toEqual([])
+    expect(highlighted(null)).toEqual(['orca::/w/b'])
     expect(highlighted({ worktreeId: 'orca::/w/a' })).toEqual(['orca::/w/a'])
+    expect(highlighted({ worktreeId: 'orca::/w/gone' })).toEqual([])
   })
 
   it('narrows them by search, and draws nothing with none', () => {

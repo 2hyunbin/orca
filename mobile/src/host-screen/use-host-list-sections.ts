@@ -138,6 +138,7 @@ function useFeedHostListSections({
       built
         ? buildHostFeedSections({
             rows: built.sectionRows,
+            activeRowKeys: built.activeRowKeys,
             lastVisited,
             liveRows: displayWorktrees,
             repoHostIdByRepoId: state.repoHostIdByRepoId,

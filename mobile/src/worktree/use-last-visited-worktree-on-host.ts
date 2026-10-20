@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react'
-import { readMirroredKeyOrStore } from '../storage/mirrored-storage-keys'
+import { readMirroredKeyOrStore, subscribeMirroredKey } from '../storage/mirrored-storage-keys'
 import { LAST_VISITED_WORKTREE_STORAGE_KEY } from './last-visited-worktree-repo'
 import {
   readLastVisitedWorktreeOnHost,
   subscribeLastVisitedWorktree,
+  type HostVisit,
   type LastVisitedWorktreeOnHost
 } from './last-visited-worktree-by-host'
 
-/** The workspace this phone last opened on `hostId`: stored, then each visit as it is written. */
-export function useLastVisitedWorktreeOnHost(
-  hostId: string | undefined
-): LastVisitedWorktreeOnHost | null {
+/**
+ * The workspace this phone last opened on `hostId`: stored, then each visit noted in this context
+ * (a list tap) or written through this context's store (in the app, a session page's write).
+ * A web page's store is its load-time copy, so a visit another page makes reaches it on reload.
+ * Undefined until the stored visit is read.
+ */
+export function useLastVisitedWorktreeOnHost(hostId: string | undefined): HostVisit {
   const [visited, setVisited] = useState<{
     hostId: string
     value: LastVisitedWorktreeOnHost | null
@@ -21,27 +25,43 @@ export function useLastVisitedWorktreeOnHost(
       return
     }
     let stale = false
-    let written = false
-    const unsubscribe = subscribeLastVisitedWorktree((visitedHostId, value) => {
+    let noted = false
+    const take = (value: LastVisitedWorktreeOnHost) => {
+      noted = true
+      setVisited({ hostId, value })
+    }
+    const unsubscribeNotes = subscribeLastVisitedWorktree((visitedHostId, value) => {
       if (visitedHostId === hostId) {
-        written = true
-        setVisited({ hostId, value })
+        take(value)
+      }
+    })
+    const unsubscribeStore = subscribeMirroredKey(LAST_VISITED_WORKTREE_STORAGE_KEY, (raw) => {
+      // A write naming no visit here (another host's, in an older shape) leaves this one standing.
+      const value = readLastVisitedWorktreeOnHost(raw, hostId)
+      if (value) {
+        take(value)
       }
     })
     void readMirroredKeyOrStore(LAST_VISITED_WORKTREE_STORAGE_KEY)
       .then((raw) => {
-        // A visit written while the read was open is newer than anything it returns.
-        if (!stale && !written) {
+        // A visit noted while the read was open is newer than anything it returns.
+        if (!stale && !noted) {
           setVisited({ hostId, value: readLastVisitedWorktreeOnHost(raw, hostId) })
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Unreadable reads as never opened, so the list still shows the desktop's selection.
+        if (!stale && !noted) {
+          setVisited({ hostId, value: null })
+        }
+      })
     return () => {
       stale = true
-      unsubscribe()
+      unsubscribeNotes()
+      unsubscribeStore()
     }
   }, [hostId])
 
   // Keyed by host so a switch to another host never shows the last one's visit.
-  return visited && visited.hostId === hostId ? visited.value : null
+  return visited && visited.hostId === hostId ? visited.value : undefined
 }
