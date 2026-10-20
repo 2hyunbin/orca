@@ -30,6 +30,7 @@ const NODE_RUNTIME_INCLUDE = [
   'src/renderer/src/lib/react-commit-cascade-telemetry.test.ts',
   // These reach Node SQLite through a shared helper or a dynamic import, which the scan skips.
   'tests/e2e/native-chat-startup-option-pickers.unit.test.ts',
+  'src/main/ai-vault/session-document-consumer-replacement.test.ts',
   'src/main/ai-vault-search/session-search-dependent-transcripts.test.ts',
   'src/main/ai-vault-search/session-search-list-reparse.test.ts',
   'src/main/ai-vault-search/session-search-transcript-dependencies.test.ts',
