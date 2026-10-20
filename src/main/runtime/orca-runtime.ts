@@ -272,7 +272,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
   /** A window's layout command (`layout.apply`), applied to the partitions that hold its tab. */
   async applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply> {
     // A workspace's first surface comes after the live terminals main is placing.
-    await this.livePlacementSettledFor(command)
+    const placing = this.livePlacementSettledFor(command)
     const apply = (): Promise<LayoutApplyReply> =>
       applyWindowLayoutCommand(
         this.requireStore(),
@@ -287,7 +287,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     const reply = await (ORCA_LAYOUT_OWNER_IS_MAIN &&
     (command.type === 'sleep' || command.type === 'wake')
       ? this.inResumeRecordOrder(apply)
-      : apply())
+      : (placing?.then(apply) ?? apply()))
     // Sent before the reply, so the window can wait for the frame that shows the change.
     return { ...reply, frameSeq: this.workspaceLayoutStream.settledSeq() }
   }

@@ -37,6 +37,8 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
 
   private placementRun: Promise<LiveTerminalPlacement> | null = null
   private placementAgain = false
+  /** The one pass running now, without the passes queued behind it. */
+  private placementPass: Promise<LiveTerminalPlacement> | null = null
   private stopFollowingProviderRebinds: (() => void) | null = null
 
   /**
@@ -56,24 +58,28 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
       let placement: LiveTerminalPlacement
       do {
         this.placementAgain = false
-        placement = await this.placeUnshownLiveTerminalsOnce()
+        this.placementPass = this.placeUnshownLiveTerminalsOnce()
+        placement = await this.placementPass
       } while (this.placementAgain)
       return placement
     }
     this.placementRun = run().finally(() => {
       this.placementRun = null
+      this.placementPass = null
     })
     return this.placementRun
   }
 
   /**
-   * A workspace's first surface waits out a placement pass in flight: a live terminal the pass is
-   * placing is the workspace's tab, not room for a fresh shell. Never rejects.
+   * A workspace's first surface waits out the placement pass running when it arrives (its census
+   * is time-bound), not the passes queued behind it: a live terminal that pass is placing is the
+   * workspace's tab, not room for a fresh shell. Null when there is nothing to wait for.
    */
-  protected async livePlacementSettledFor(command: WindowLayoutCommand): Promise<void> {
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && 'initial' in command && command.initial && this.placementRun) {
-      await this.placementRun.catch(() => {})
+  protected livePlacementSettledFor(command: WindowLayoutCommand): Promise<unknown> | null {
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !('initial' in command) || !command.initial) {
+      return null
     }
+    return this.placementPass?.catch(() => {}) ?? null
   }
 
   private async placeUnshownLiveTerminalsOnce(): Promise<LiveTerminalPlacement> {
