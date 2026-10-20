@@ -57,12 +57,15 @@ export async function sweepOrphanedProviderGroup(
     return isErrnoCode(error, 'ESRCH') ? 'absent' : 'refused'
   }
   const leader = await (deps.readProcessRow ?? readPosixProcessRow)(identity.pgid)
-  if (leader === 'unverifiable') {
-    return 'refused'
-  }
-  // A leaderless group is still ours: POSIX never reuses a pid while a group of that id exists.
-  // The recorded start predates its read's second, so a later reuse cannot share it.
-  if (leader && (leader.pgid !== identity.pgid || leader.startedAt !== identity.startedAt)) {
+  // Only a leader that re-proves its recorded identity names our group; a leaderless group has
+  // nothing to prove it by, so its survivors are left alone. The recorded start predates its
+  // read's second, so a later reuse cannot share it.
+  if (
+    !leader ||
+    leader === 'unverifiable' ||
+    leader.pgid !== identity.pgid ||
+    leader.startedAt !== identity.startedAt
+  ) {
     return 'refused'
   }
   try {

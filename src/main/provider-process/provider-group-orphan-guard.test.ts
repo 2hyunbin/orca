@@ -55,7 +55,7 @@ describe('sweepOrphanedProviderGroup', () => {
     expect(signalGroup).toHaveBeenLastCalledWith(4242, 'SIGKILL')
   })
 
-  it('kills a leaderless group, whose id cannot have been reused', async () => {
+  it('refuses a leaderless group, which nothing can prove is still ours', async () => {
     const signalGroup = vi.fn()
     await expect(
       sweepOrphanedProviderGroup(identity, {
@@ -64,8 +64,8 @@ describe('sweepOrphanedProviderGroup', () => {
         signalGroup,
         readProcessRow: async () => null
       })
-    ).resolves.toBe('killed')
-    expect(signalGroup).toHaveBeenLastCalledWith(4242, 'SIGKILL')
+    ).resolves.toBe('refused')
+    expect(signalGroup).not.toHaveBeenCalledWith(4242, 'SIGKILL')
   })
 
   it.each<[string, ProcessRowRead]>([
