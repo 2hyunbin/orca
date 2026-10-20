@@ -118,9 +118,9 @@ export function beginHostQualifiedRemoval(
                 ? WORKTREE_REMOVAL_HOST_CHANGED_ERROR
                 : WORKTREE_REMOVAL_AMBIGUOUS_ERROR
             ),
-          // Why: every mid-flight re-check must re-resolve at the CONFIRMED host,
-          // or the active host's route would read as "ownership changed".
-          requiredExecutionHostId ? resolveRemovalRoute : undefined
+          // Why: every mid-flight re-check re-resolves the same way the route was chosen (at the
+          // CONFIRMED host, or focus-free), or an unchanged owner would read as "changed".
+          resolveRemovalRoute
         )
       : null,
     sameIdSurvivesOnAnotherHost: sameIdSurvivingHostId !== null,

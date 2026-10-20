@@ -54,6 +54,20 @@ export function managedTunnelAccess(
     : null
 }
 
+/** The build's environment is still the same pairing, with an SSH tunnel it may use. */
+export function managedTunnelStillPaired(
+  built: KnownRuntimeEnvironment,
+  current: KnownRuntimeEnvironment | null,
+  target: SshTarget | null | undefined,
+  expected: ManagedTunnelExpectation
+): boolean {
+  return (
+    current?.runtimeId === built.runtimeId &&
+    (current.pairingRevision ?? current.createdAt) === (built.pairingRevision ?? built.createdAt) &&
+    managedTunnelAccess(current, target, expected) !== null
+  )
+}
+
 /** The SSH target and transport a managed environment's tunnel must use, or why it cannot. */
 export function resolveManagedTunnelBinding(
   environment: KnownRuntimeEnvironment,
@@ -97,6 +111,26 @@ export async function dropActiveOrcadTunnel(
   if (active.get(environmentId) === entry) {
     active.delete(environmentId)
   }
+}
+
+/** The recorded tunnel already rides this transport to this deployment, so a build can reuse it. */
+export function activeTunnelMatches(
+  active: ActiveOrcadTunnel | undefined,
+  current: {
+    connection: SshConnection
+    transportGeneration: number
+    target: SshTarget
+    deployment: RuntimeSshTunnelLink
+  }
+): boolean {
+  return (
+    active?.connection === current.connection &&
+    active.transportGeneration === current.transportGeneration &&
+    active.targetId === current.target.id &&
+    active.sshTargetGeneration === current.target.generation &&
+    active.localPort === current.deployment.localPort &&
+    active.preferredPort === current.deployment.remotePort
+  )
 }
 
 export function recordActiveOrcadTunnel(
