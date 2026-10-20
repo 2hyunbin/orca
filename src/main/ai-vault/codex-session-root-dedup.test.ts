@@ -354,7 +354,7 @@ describe('dedupeScannedSessions', () => {
     expect(dedupeScannedSessions([local, remote, claude])).toEqual([local, remote, claude])
   })
 
-  it('preserves same-host session-id collisions when rollout file names differ', () => {
+  it('lists one conversation once when its segments have different rollout file names', () => {
     const older = codexSession({
       sessionId: 'collision',
       filePath: '/Users/ada/.codex/sessions/2026/07/01/rollout-old.jsonl',
@@ -369,7 +369,8 @@ describe('dedupeScannedSessions', () => {
       updatedAt: '2026-07-02T10:00:00.000Z',
       modifiedAt: '2026-07-02T10:00:00.000Z'
     })
-    expect(dedupeScannedSessions([older, newer])).toEqual([older, newer])
+    // Codex's thread id is the conversation; a revert writes another file under the same id.
+    expect(dedupeScannedSessions([older, newer])).toEqual([newer])
   })
 
   it('resolves same-rollout aliases with a stable path tie-break', () => {

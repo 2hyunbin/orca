@@ -8,6 +8,7 @@ import {
 } from '../codex/codex-home-paths'
 import { syncSystemConfigIntoManagedCodexHome } from '../codex/codex-config-mirror'
 import { startCodexAccountSessionBridgeInBackground } from '../codex/codex-account-session-bridge'
+import { startCodexSharedStoreMigrationInBackground } from '../codex/codex-shared-store-migration'
 import {
   resolveHostCodexSessionSourceHome,
   resolveWslCodexSessionSourceHome
@@ -146,9 +147,17 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
   // since history trees can be large — so switching accounts no longer hides
   // the user's conversations.
   protected startSelfContainedSessionBridgeForLaunch(perAccountHome: string): void {
-    void startCodexAccountSessionBridgeInBackground({
-      targetCodexHomePath: perAccountHome,
-      sourceCodexHomePaths: this.getSelfContainedSessionBridgeSourceHomes()
+    // Why: one store for every account is what lets a revert under one account
+    // be what another resumes; the file bridge still covers accounts not on it yet.
+    startCodexSharedStoreMigrationInBackground({
+      managedHome: perAccountHome,
+      storeHome:
+        resolveHostCodexSessionSourceHome(this.store.getSettings()) ?? getSystemCodexHomePath(),
+      after: () =>
+        void startCodexAccountSessionBridgeInBackground({
+          targetCodexHomePath: perAccountHome,
+          sourceCodexHomePaths: this.getSelfContainedSessionBridgeSourceHomes()
+        })
     })
   }
 
