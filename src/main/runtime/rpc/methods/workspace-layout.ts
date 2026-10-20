@@ -9,6 +9,8 @@ import {
 } from '../../../../shared/rpc-contract/workspace-layout-params'
 import type { WorkspaceLayoutStreamFrame } from '../../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { defineMethod, defineStreamingMethod } from '../core'
+import { getAppEnvironment } from '../../../../shared/app-environment'
+import { listEnvironments } from '../../../../shared/runtime-environment-store'
 
 let layoutSubscriptionSeq = 0
 
@@ -75,7 +77,17 @@ export const WORKSPACE_LAYOUT_METHODS = [
     name: 'layout.getRemoteSnapshots',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => ({ snapshots: runtime.getRemoteLayoutSnapshots() })
+    handler: async (_params, { runtime }) => {
+      // Only servers still paired: a removed server's last layout must not seed a view again.
+      const known = new Set(
+        listEnvironments(getAppEnvironment().getPath('userData')).map(({ id }) => id)
+      )
+      return {
+        snapshots: Object.fromEntries(
+          Object.entries(runtime.getRemoteLayoutSnapshots()).filter(([id]) => known.has(id))
+        )
+      }
+    }
   })
 ]
 
