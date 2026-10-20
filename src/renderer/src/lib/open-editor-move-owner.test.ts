@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { useAppStore } from '@/store'
 import type { EditorFileOperationProvenance } from '@/lib/editor-file-operation-owner'
 import type { WorktreeOperationRoute } from '@/lib/worktree-operation-route'
+import { makeWorktree, TEST_REPO } from '@/store/slices/worktrees-slice-test-fixtures'
 import { editorMoveOwnerFromContext, isOpenFileOnMoveOwner } from './open-editor-move-owner'
 
 function captured(route: WorktreeOperationRoute): EditorFileOperationProvenance {
@@ -94,13 +95,13 @@ describe('isOpenFileOnMoveOwner', () => {
   it('moves a tab from another workspace only when that workspace is on the renaming host', () => {
     useAppStore.setState({
       repos: [
-        { id: 'repo-ssh', connectionId: 'box' },
-        { id: 'repo-local', connectionId: null }
-      ] as never,
+        { ...TEST_REPO, id: 'repo-ssh', connectionId: 'box' },
+        { ...TEST_REPO, id: 'repo-local' }
+      ],
       worktreesByRepo: {
-        'repo-ssh': [{ id: 'wt-ssh', repoId: 'repo-ssh' }],
-        'repo-local': [{ id: 'wt-local', repoId: 'repo-local' }]
-      } as never
+        'repo-ssh': [makeWorktree({ id: 'wt-ssh', repoId: 'repo-ssh' })],
+        'repo-local': [makeWorktree({ id: 'wt-local', repoId: 'repo-local' })]
+      }
     })
     const state = useAppStore.getState()
     const owner = editorMoveOwnerFromContext(

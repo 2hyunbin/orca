@@ -1,9 +1,11 @@
 import type { OpenFile } from '@/store/slices/editor'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import { parseExecutionHostId, toSshExecutionHostId } from '../../../shared/execution-host'
-import { authorityKey, SELF_LOCAL_AUTHORITY } from '../../../shared/host-authority'
+import {
+  getFileExplorerOperationOwnerFromState,
+  type FileExplorerOwnerState
+} from '@/components/right-sidebar/file-explorer-operation-owner'
 import { resolveOwner } from './resolve-owner'
-import type { WorktreeOperationRouteState } from './worktree-operation-route'
 
 /**
  * Who a file lives on: the paired server (null for this app) and, when known, the SSH host behind
@@ -37,7 +39,7 @@ export function editorMoveOwnerFromContext(
  * File Explorer resolves further (an unstamped folder of SSH repos, a server's nested SSH target).
  */
 function openFileOwner(
-  state: WorktreeOperationRouteState,
+  state: FileExplorerOwnerState,
   file: Pick<
     OpenFile,
     'externalSshTargetId' | 'operationProvenance' | 'runtimeEnvironmentId' | 'worktreeId'
@@ -67,7 +69,7 @@ function openFileOwner(
  * same-id workspace on another host is a different file, and its draft must stay where it is.
  */
 export function isOpenFileOnMoveOwner(
-  state: WorktreeOperationRouteState,
+  state: FileExplorerOwnerState,
   file: Pick<
     OpenFile,
     'externalSshTargetId' | 'operationProvenance' | 'runtimeEnvironmentId' | 'worktreeId'
@@ -81,48 +83,54 @@ export function isOpenFileOnMoveOwner(
   if (own.sshHostId !== undefined && owner.sshHostId !== undefined) {
     return own.sshHostId === owner.sshHostId
   }
-  // Why the rows, read now: a lookup from before the rename, or one following focus, can disagree.
+  // Why read now, from the rows: a lookup from before the rename, or one following focus, can disagree.
   if (file.worktreeId === owner.worktreeId) {
     return true
   }
-  const tabHost = workspaceHostKey(state, file.worktreeId)
-  return tabHost !== null && tabHost === moveHostKey(state, owner)
+  const tabHost = workspaceHost(state, file.worktreeId)
+  const moveHost =
+    owner.sshHostId === undefined
+      ? workspaceHost(state, owner.worktreeId)
+      : { runtimeEnvironmentId: owner.runtimeEnvironmentId, sshHostId: owner.sshHostId }
+  return (
+    tabHost !== null &&
+    moveHost !== null &&
+    tabHost.runtimeEnvironmentId === moveHost.runtimeEnvironmentId &&
+    tabHost.sshHostId === moveHost.sshHostId
+  )
 }
 
-/** The host the rename was sent to, when its route named one; else its workspace's rows. */
-function moveHostKey(state: WorktreeOperationRouteState, owner: EditorMoveOwner): string | null {
-  if (owner.sshHostId === undefined) {
-    return workspaceHostKey(state, owner.worktreeId)
-  }
-  const at = parseExecutionHostId(owner.sshHostId ?? 'local')
-  if (at?.kind !== 'ssh' && at?.kind !== 'local') {
-    return null
-  }
-  return authorityKey({
-    endpoint: owner.runtimeEnvironmentId
-      ? { kind: 'environment', environmentId: owner.runtimeEnvironmentId }
-      : { kind: 'self' },
-    at: at.id
-  })
-}
-
-/** A workspace's host from its rows; one without rows is this app's, as everywhere; a twin has none. */
-function workspaceHostKey(
-  state: WorktreeOperationRouteState,
+/**
+ * Where the File Explorer sends a workspace's file operations, the resolver its rename used, so a
+ * folder of SSH repos reads as that host on both sides. Null for a twin.
+ */
+function workspaceHost(
+  state: FileExplorerOwnerState,
   workspaceId: string | undefined
-): string | null {
-  const match = workspaceId ? resolveOwner(state, { workspaceId }) : null
-  if (match?.kind === 'ambiguous') {
-    return null
+): FileOwner | null {
+  const owner = getFileExplorerOperationOwnerFromState(state, workspaceId)
+  switch (owner.kind) {
+    case 'local':
+      return { runtimeEnvironmentId: null, sshHostId: null }
+    case 'ssh':
+      return { runtimeEnvironmentId: null, sshHostId: toSshExecutionHostId(owner.connectionId) }
+    case 'runtime': {
+      const host = parseExecutionHostId(owner.executionHostId)
+      return {
+        runtimeEnvironmentId: owner.environmentId,
+        sshHostId: host?.kind === 'ssh' ? host.id : null
+      }
+    }
+    case 'unresolved':
+      // A workspace with no rows is this app's, as everywhere; a twin's host can't be told.
+      return workspaceId && resolveOwner(state, { workspaceId }).kind === 'missing'
+        ? { runtimeEnvironmentId: null, sshHostId: null }
+        : null
   }
-  return authorityKey(match?.kind === 'resolved' ? match.owner : SELF_LOCAL_AUTHORITY)
 }
 
 /** The paired server a workspace's rows name, or null for this app, a twin or no row. */
-function ownerEnvironmentId(
-  state: WorktreeOperationRouteState,
-  workspaceId: string
-): string | null {
+function ownerEnvironmentId(state: FileExplorerOwnerState, workspaceId: string): string | null {
   const match = resolveOwner(state, { workspaceId })
   return match.kind === 'resolved' && match.owner.endpoint.kind === 'environment'
     ? match.owner.endpoint.environmentId
