@@ -10,6 +10,7 @@ import { useAppStore } from '@/store'
 import { launchSessionEndedLine } from './ssh-host-launch-session-copy'
 import { bridgedTerminalsLine } from './ssh-host-bridged-terminals-copy'
 import { managedUpdateLine, withDetail } from './ssh-host-server-update-copy'
+import { blockedNodeDownload, nodeDownloadBlockedText } from './ssh-host-node-download-copy'
 
 export type SshHostServerStatusLine = {
   text: string
@@ -304,10 +305,18 @@ function unservedLine(
         ...withDetail(status.detail)
       }
     case 'deferred':
-    case 'failed':
+    case 'failed': {
+      const blocked = blockedNodeDownload(status)
       return {
-        ...(status.held ? heldMoveLine() : status.contactLost ? contactLostLine() : retryLine()),
+        ...(blocked
+          ? { tone: 'destructive' as const, text: nodeDownloadBlockedText(blocked) }
+          : status.held
+            ? heldMoveLine()
+            : status.contactLost
+              ? contactLostLine()
+              : retryLine()),
         ...withDetail(status.detail)
       }
+    }
   }
 }
