@@ -14208,7 +14208,7 @@
             "databaseCount_one": "{{value0}} 個のデータベース",
             "databaseCount_other": "{{value0}} 個のデータベース",
             "scanning": "{{value0}}をスキャン中",
-            "reading": "{{value0}} ファイルを読み込み中",
+            "checking": "確認中 {{value0}}",
             "scanned": "{{value0}}をスキャン済み"
           }
         }

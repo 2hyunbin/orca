@@ -14203,7 +14203,7 @@
             "databaseCount_one": "{{value0}} base de datos",
             "databaseCount_other": "{{value0}} bases de datos",
             "scanning": "Analizando {{value0}}",
-            "reading": "Leyendo {{value0}} archivos",
+            "checking": "Comprobando {{value0}}",
             "scanned": "Analizados {{value0}}"
           }
         }
