@@ -17,7 +17,6 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/codex/codex-account-session-bridge.test.ts',
   'src/main/codex/codex-index-heal-binary-contract.test.ts',
   'src/main/codex/codex-state-db.test.ts',
-  'src/main/native-chat/agent-session-wire/structured-agent-session-queued-stop-row.test.ts',
   'src/main/native-chat/structured-agent-cli-conversation-adoption.test.ts',
   'src/main/native-chat/transcript-opencode-semantic-fidelity.test.ts',
   'src/main/native-chat/transcript-opencode-sqlite-query.test.ts',

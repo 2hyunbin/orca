@@ -5,7 +5,6 @@ import { vi, type Mock } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { activeProviderContext } from '../../../shared/agent-session-provider-context'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
-import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/structured-agent-session-main-agent-working'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
@@ -130,15 +129,7 @@ export function createQueuedRigProvider(
   }
 
   function working(sessionId: string): boolean {
-    const journal = host().collaboratorsForTests().sessions.get(sessionId)?.journal
-    return (
-      journal !== undefined &&
-      isStructuredAgentSessionMainAgentWorking(
-        journal.activeTurnId(),
-        journal.submissions(),
-        store.getRecord(sessionId)?.lease.runtimeFence
-      )
-    )
+    return host().currentWork(sessionId)?.working() ?? false
   }
 
   const adapter = options.starting ? scripted : startsWhenPublished(scripted, host)
