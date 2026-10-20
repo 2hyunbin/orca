@@ -64,6 +64,11 @@ export function writeWorktreeSortOrder(
     if (targets.has(worktreeId)) {
       return
     }
+    // Before any host-qualified read: that read migrates a legacy row the move must keep frozen.
+    if (isBlocked(worktreeId)) {
+      targets.set(worktreeId, undefined)
+      return
+    }
     if (!hostIds) {
       targets.set(worktreeId, resolveWorktreeMetaOwner(store, worktreeId))
       return
@@ -80,7 +85,7 @@ export function writeWorktreeSortOrder(
   }
   return planWorktreeSortOrderUpdates(request.orderedIds, metaFor, now).filter((update) => {
     const target = targets.get(update.worktreeId)
-    if (!target || isBlocked(update.worktreeId)) {
+    if (!target) {
       return false
     }
     store.setWorktreeMeta(target, { sortOrder: update.sortOrder })
