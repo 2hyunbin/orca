@@ -4,6 +4,7 @@
 
 import {
   LayoutApplyParams,
+  LayoutReportViewParams,
   LayoutSubscribeParams,
   LayoutUnsubscribeParams
 } from '../../../../shared/rpc-contract/workspace-layout-params'
@@ -101,5 +102,22 @@ export const LAYOUT_APPLY_METHODS = [
     permission: 'workspace',
     params: LayoutApplyParams,
     handler: async (params, { runtime }) => runtime.applyLayoutCommand(params.command)
+  })
+]
+
+/** A paired desktop's view of this server's workspaces, so a CLI or phone file opens in the group it
+ *  shows. Registered with layout.apply: only a server advertising `layout.intents.v1` takes it. */
+export const LAYOUT_VIEW_REPORT_METHODS = [
+  defineMethod({
+    name: 'layout.reportView',
+    permission: 'workspace',
+    params: LayoutReportViewParams,
+    handler: async (params, { runtime, connectionId, signal }) => {
+      // Why: without a connection, or after it closed, nothing would ever drop the report.
+      if (connectionId && !signal?.aborted) {
+        runtime.reportClientView(connectionId, params.activeGroupByWorkspace)
+      }
+      return { reported: connectionId !== undefined }
+    }
   })
 ]

@@ -13,6 +13,7 @@ import {
   runtimeHostConnectionStateForEntry
 } from './runtime-host-connection-state'
 import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
+import { createServerViewReport } from './server-layout-view-report'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
@@ -85,6 +86,7 @@ function openServerFrames(
     gate(new Set())
   }
   const draws = serverDraws(environmentId)
+  const viewReport = createServerViewReport(environmentId)
 
   const sync = openWorkspaceLayoutFrameSync(store, {
     target: { kind: 'environment', environmentId },
@@ -96,6 +98,11 @@ function openServerFrames(
     translate: (frame) => {
       const translated = translator.translate(frame)
       live ||= frame.type === 'snapshot'
+      if (frame.type === 'snapshot') {
+        viewReport.reset()
+        // After the snapshot applies: it may change nothing in the store to report on.
+        queueMicrotask(() => viewReport.update(store.getState().activeGroupIdByWorktree, gated))
+      }
       // Before the frame shows: the mirror must not write a workspace the frames now draw.
       regate()
       return translated
@@ -110,6 +117,9 @@ function openServerFrames(
   // gated, then drawn, as the routing that names it arrives.
   let routing: unknown[] = []
   const stopRouting = store.subscribe((state) => {
+    if (live) {
+      viewReport.update(state.activeGroupIdByWorktree, gated)
+    }
     const next = routingInputs(state)
     if (sameValues(next, routing)) {
       return

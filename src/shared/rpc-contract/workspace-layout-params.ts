@@ -19,6 +19,11 @@ export const LayoutUnsubscribeParams = z.object({
   subscriptionId: z.string().min(1, 'Missing subscriptionId')
 })
 
+/** A paired desktop's view of the server's workspaces: each one's shown group, null for none. */
+export const LayoutReportViewParams = z.object({
+  activeGroupByWorkspace: z.record(z.string().min(1), z.string().min(1).nullable())
+})
+
 const OnPane = {
   workspace: z.string().min(1),
   tabId: z.string().min(1),
