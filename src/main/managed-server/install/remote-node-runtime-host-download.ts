@@ -6,7 +6,7 @@
  */
 import { copyFile, link, mkdtemp } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import { NODE_DIST_MIRROR_ENV_KEYS, nodeDistMirrorUrl } from '../../../shared/node-dist-mirror'
+import { nodeDistMirrorUrl } from '../../../shared/node-dist-mirror'
 import {
   NODE_RUNTIME_PIN,
   nodeRuntimeReleaseUrl,
@@ -44,10 +44,9 @@ export function hostNodeRuntimeUrl(target: NodeRuntimeTarget): string {
 }
 
 /**
- * Downloads into the installer's stage from this computer's mirror, then the host's own mirror
- * variable, then the release URL, with curl or else wget. Sources are reported by label, never by
- * URL, so a host variable's credentials stay on the host. Keeps the file only if it hashes to the
- * pin, and always exits 0 with a marker so the caller gets the tool's own words.
+ * Downloads into the installer's stage from this computer's mirror, then the release URL, with
+ * curl or else wget. Only URLs Orca validated are used, so no host secret can reach the report.
+ * Keeps the file only if it hashes to the pin, and always exits 0 with a marker.
  */
 export function hostDownloadNodeRuntimeCommand(
   host: RemoteHostPlatform,
@@ -55,27 +54,18 @@ export function hostDownloadNodeRuntimeCommand(
 ): string {
   const asset = pinnedNodeRuntimeAsset(args.target)
   const file = quotePosixShell(joinRemotePath(host, args.stageDir, asset.archive))
-  const path = `v${NODE_RUNTIME_PIN.version}/${asset.archive}`
   // Mirrors carry the official tree only; unofficial builds live at one address.
   const official = asset.source === 'official'
   const desktopMirror =
     official && args.mirror
       ? nodeDistMirrorUrl(args.mirror, NODE_RUNTIME_PIN.version, asset.archive)
       : null
-  const hostMirror = NODE_DIST_MIRROR_ENV_KEYS.reduceRight(
-    (fallback, key) => `\${${key}:-${fallback}}`,
-    ''
-  )
   const sources = [
     desktopMirror
       ? `orca_dl_get 'the mirror set on this computer' ${quotePosixShell(desktopMirror)}`
       : null,
-    official
-      ? `[ -n "$orca_dl_mirror" ] && orca_dl_get "the host's NODEJS_ORG_MIRROR" "$orca_dl_mirror/${path}"`
-      : null,
     `orca_dl_get ${quotePosixShell(new URL(hostNodeRuntimeUrl(args.target)).host)} ${quotePosixShell(hostNodeRuntimeUrl(args.target))}`
   ].filter((line): line is string => line !== null)
-  const fixedSources = sources.length - (official ? 1 : 0)
   const min = HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS
   // Why ulimit: a proxy or mirror serving endless bytes would otherwise fill the host's disk.
   const sizeCap = `ulimit -f ${HOST_DOWNLOAD_MAX_BLOCKS} 2>/dev/null`
@@ -87,21 +77,18 @@ export function hostDownloadNodeRuntimeCommand(
     `(trap 'kill "$orca_dl_z" 2>/dev/null; exit 0' TERM; sleep "$orca_dl_t" & orca_dl_z=$!; ` +
     'wait "$orca_dl_z" && kill "$orca_dl_pid") </dev/null >/dev/null 2>&1 & orca_dl_dog=$!; ' +
     'wait "$orca_dl_pid"; orca_dl_s=$?; kill "$orca_dl_dog" 2>/dev/null; exit "$orca_dl_s"'
-  const curl = `curl -fsSL --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$2"`
+  const curl = `curl -fsSLg --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$2"`
   return [
     'orca_dl_ok=; orca_dl_out=; orca_dl_tool=',
     'if command -v curl >/dev/null 2>&1; then orca_dl_tool=curl; elif command -v wget >/dev/null 2>&1; then orca_dl_tool=wget; fi',
-    `orca_dl_mirror="${hostMirror}"; orca_dl_mirror="\${orca_dl_mirror%/}"`,
-    official
-      ? `orca_dl_n=${fixedSources}; [ -n "$orca_dl_mirror" ] && orca_dl_n=$((orca_dl_n + 1))`
-      : `orca_dl_n=${fixedSources}`,
+    `orca_dl_n=${sources.length}`,
     'orca_dl_end=$(date +%s 2>/dev/null)',
     `case "$orca_dl_end" in ''|*[!0-9]*) orca_dl_end= ;; *) orca_dl_end=$((orca_dl_end + ${HOST_DOWNLOAD_BUDGET_SECONDS})) ;; esac`,
     // Each source gets an even share of what is left, so a stalled mirror can't starve the release
     // URL, and the last source inherits whatever the others didn't use.
     'orca_dl_get() {',
     '  [ -z "$orca_dl_ok" ] || return 0',
-    `  if [ -n "$orca_dl_end" ]; then orca_dl_t=$(((orca_dl_end - $(date +%s)) / orca_dl_n)); else orca_dl_t=$((${HOST_DOWNLOAD_BUDGET_SECONDS} / orca_dl_n)); fi`,
+    `  if [ -n "$orca_dl_end" ]; then orca_dl_t=$(((orca_dl_end - $(date +%s)) / orca_dl_n)); else orca_dl_t=${Math.floor(HOST_DOWNLOAD_BUDGET_SECONDS / sources.length)}; fi`,
     '  orca_dl_n=$((orca_dl_n - 1))',
     `  if [ "$orca_dl_t" -lt ${min} ]; then orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$1: not tried, out of time"; return 0; fi`,
     `  if [ "$orca_dl_tool" = curl ]; then orca_dl_said=$( (${sizeCap}; ${curl}) 2>&1 ); orca_dl_try=$?`,
@@ -154,7 +141,7 @@ export class NodeRuntimeUnreachableError extends Error {
           : String(cause)
     const mirror = mirrorable
       ? ', set a mirror of nodejs.org/dist in Settings > Advanced > Network > Node.js download mirror ' +
-        '(or NODEJS_ORG_MIRROR on the host)'
+        "(or NODEJS_ORG_MIRROR in this computer's environment)"
       : ''
     const offline = offlineArchivePath
       ? `, or download that file on another machine and copy it to ${offlineArchivePath} on this computer.`

@@ -239,7 +239,10 @@ async function withNodeDistMirror<T>(
       throw mirrorError
     }
     return run(archive, options).catch((error: unknown) => {
-      const mirrorReason = `${mirrorUrl}: ${errorReason(mirrorError)}`
+      const mirrorReason =
+        mirrorError instanceof DesktopDownloadUnreachableError
+          ? mirrorError.reason
+          : `${mirrorUrl}: ${errorText(mirrorError)}`
       throw new DesktopDownloadUnreachableError(
         `${errorText(error)} (the mirror ${mirrorReason} failed too)`,
         `${mirrorReason}; ${errorReason(error)}`,

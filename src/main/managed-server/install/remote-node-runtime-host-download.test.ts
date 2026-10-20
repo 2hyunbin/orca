@@ -159,25 +159,17 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
     expect(read(bin, 'urls')).toEqual([mirrored('https://desk.example/dist')])
   })
 
-  it("uses the host's NODEJS_ORG_MIRROR, then the release URL, and never reports its URL", () => {
-    const { bin, stage } = fakeHost({
-      curl: curlServing('https://none/', "echo 'curl: (6) Could not resolve' >&2; exit 6")
-    })
+  it("ignores the host's own mirror variables, so only URLs Orca validated are fetched", () => {
+    const { bin, stage } = fakeHost({ curl: curlServing('https://nodejs.org/') })
     const output = runOnHost(bin, stage, {
       mirror: 'https://desk.example/dist',
-      env: { NODEJS_ORG_MIRROR: 'https://user:secret@host.example/dist/' }
+      env: { NODEJS_ORG_MIRROR: 'https://user:secret@host.example/dist[' }
     })
+    expect(readHostNodeDownload(output)).toEqual({ ok: true })
     expect(read(bin, 'urls')).toEqual([
       mirrored('https://desk.example/dist'),
-      mirrored('https://user:secret@host.example/dist'),
       hostNodeRuntimeUrl(TARGET)
     ])
-    const result = readHostNodeDownload(output)
-    expect(result).toMatchObject({
-      ok: false,
-      report: expect.stringContaining("the host's NODEJS_ORG_MIRROR: curl exit 6")
-    })
-    expect(JSON.stringify(result)).not.toContain('secret')
   })
 
   it('splits the deadline over the sources left, so a stalled mirror leaves time for the release', () => {

@@ -102,7 +102,7 @@ describe('pinned Node when this computer cannot download it', () => {
     expect(message).toContain('curl: (7) Failed to connect to nodejs.org')
     expect(message).toContain(OFFLINE_PATH)
     expect(message).toContain('Settings > Advanced > Network > Node.js download mirror')
-    expect(message).toContain('NODEJS_ORG_MIRROR on the host')
+    expect(message).toContain("NODEJS_ORG_MIRROR in this computer's environment")
     expect(uploadRelayDirectory).not.toHaveBeenCalled()
   })
 

@@ -3,7 +3,7 @@
  * Node runtime. It only changes where bytes come from: the SHA-256 pin decides what is accepted.
  */
 
-/** The host-side variables Node tooling already reads for the same mirror. */
+/** The variables Node tooling already reads for the same mirror; read on this computer only. */
 export const NODE_DIST_MIRROR_ENV_KEYS = ['NODEJS_ORG_MIRROR', 'NVM_NODEJS_ORG_MIRROR'] as const
 
 export type NodeDistMirrorValidationResult =
