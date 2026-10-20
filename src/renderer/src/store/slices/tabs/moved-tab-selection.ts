@@ -1,13 +1,12 @@
 // The user's move selects the moved tab in the store update whose frame shows the move (L120),
 // not on main's later reply, which a newer drag may have overtaken.
 
-import type { Tab, TabGroup } from '../../../../../shared/tab-types'
 import type { AppState } from '../../types'
 import {
   dropMovedTabSelection,
   pendingMovedTabSelections
 } from '@/runtime/layout-owner-pane-intents'
-import { pushRecentTabId, sanitizeRecentTabIds } from '../tab-group-state'
+import { tabActivationPatch } from './tabs-focus-actions'
 import { buildActiveSurfacePatch } from './tabs-surface'
 
 type SelectionState = Pick<AppState, 'activeGroupIdByWorktree' | 'groupsByWorktree'>
@@ -18,23 +17,6 @@ export function tabSelectionKey(state: SelectionState, worktreeId: string): stri
     (group) => `${group.id}:${group.activeTabId ?? ''}`
   )
   return `${state.activeGroupIdByWorktree[worktreeId] ?? ''}|${groups.join(',')}`
-}
-
-/** `groups` with `tab` its group's active tab, last in the group's recent tabs. */
-export function withTabActiveInGroup(groups: readonly TabGroup[], tab: Tab): TabGroup[] {
-  return groups.map((group) =>
-    group.id === tab.groupId
-      ? {
-          ...group,
-          activeTabId: tab.id,
-          // Why: track every activation in the group's MRU so closeUnifiedTab returns to the previous tab; sanitize to prune removed ids.
-          recentTabIds: pushRecentTabId(
-            sanitizeRecentTabIds(group.recentTabIds, group.tabOrder),
-            tab.id
-          )
-        }
-      : group
-  )
 }
 
 /** `patch` plus the selection of each moved tab it shows out of its old group. */
@@ -59,13 +41,11 @@ export function withMovedTabSelections(
       continue
     }
     dropMovedTabSelection(intent)
-    const selected = {
-      groupsByWorktree: {
-        ...state.groupsByWorktree,
-        [worktreeId]: withTabActiveInGroup(state.groupsByWorktree[worktreeId] ?? [], tab)
-      },
-      activeGroupIdByWorktree: { ...state.activeGroupIdByWorktree, [worktreeId]: tab.groupId }
-    }
+    // As the window's own move selects it: the preview kept, no focus time recorded.
+    const selected = tabActivationPatch(state, tab, worktreeId, {
+      preservePreview: true,
+      recordFocus: false
+    })
     next = {
       ...next,
       ...selected,
