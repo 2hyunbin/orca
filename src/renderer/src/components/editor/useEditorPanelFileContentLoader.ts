@@ -2,6 +2,11 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import type { OpenFile } from '@/store/slices/editor'
 import { getConnectionIdForFile, isWorktreeConnectionResolved } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
+import { editorBufferIdOf } from '@/store/slices/editor/buffers/editor-buffer-record'
+import {
+  beginEditorBufferRead,
+  isEditorBufferReadCurrent
+} from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { getRuntimeFileReadScope } from '@/runtime/runtime-file-routing'
 import { readEditorCsvFileContent } from './csv/csv-file-content'
@@ -90,6 +95,12 @@ export function useEditorPanelFileContentLoader({
       fileReadGenerationCounterRef.current = generation
       fileReadGenerationRef.current[id] = generation
       outstandingFileReadsRef.current[id] = generation
+      // Why the record: another panel's newer read, save or reload of the same file supersedes this one.
+      const bufferId = editorBufferIdOf(useAppStore.getState(), id)
+      const bufferReadToken = beginEditorBufferRead(bufferId)
+      const isCurrentRead = (): boolean =>
+        fileReadGenerationRef.current[id] === generation &&
+        isEditorBufferReadCurrent(bufferId, bufferReadToken)
       let readConnectionId: string | undefined
       try {
         const resolvedConnectionId = getConnectionIdForFile(worktreeId ?? null, filePath)
@@ -246,7 +257,7 @@ export function useEditorPanelFileContentLoader({
           })
         }
         const result = await pending.promise
-        if (fileReadGenerationRef.current[id] !== generation) {
+        if (!isCurrentRead()) {
           return
         }
         if (result.csvPreview && useAppStore.getState().editorDrafts[id] !== undefined) {
@@ -261,7 +272,7 @@ export function useEditorPanelFileContentLoader({
         setFileContents((prev) => ({ ...prev, [id]: result }))
         stampCleanTabDiskBaseline(id, result)
       } catch (err) {
-        if (fileReadGenerationRef.current[id] !== generation) {
+        if (!isCurrentRead()) {
           return
         }
         const hostConnection = selectWorktreeHostConnectionPhase(

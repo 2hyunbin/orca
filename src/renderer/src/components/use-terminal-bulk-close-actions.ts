@@ -70,7 +70,7 @@ export function useTerminalBulkCloseActions(
         } else if (
           state.openFiles.some((file) => file.worktreeId === activeWorktreeId && file.id === id)
         ) {
-          if (needsSavePromptOnClose(useAppStore.getState(), id)) {
+          if (needsSavePromptOnClose(useAppStore.getState, id)) {
             dirtyFileIds.push(id)
             continue
           }
@@ -155,7 +155,7 @@ export function useTerminalBulkCloseActions(
         const dirtyFileIds: string[] = []
         // Why live state: closing one tab of a shared file makes the next one its last view.
         for (const file of files) {
-          if (needsSavePromptOnClose(useAppStore.getState(), file.id)) {
+          if (needsSavePromptOnClose(useAppStore.getState, file.id)) {
             dirtyFileIds.push(file.id)
           } else {
             closeFile(file.id)

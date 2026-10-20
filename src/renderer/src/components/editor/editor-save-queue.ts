@@ -21,11 +21,15 @@ import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
 import { editorTabFileAccess } from '@/lib/local-file-access'
 import {
-  EMPTY_EDITOR_BUFFER_INDEX,
   editorBufferIdOf,
   editorBufferViewIds
 } from '@/store/slices/editor/buffers/editor-buffer-record'
-import { editorBufferRecordsKeptApart } from '@/store/slices/editor/buffers/editor-buffer-sharing'
+import type { EditorBufferIdentity } from '@/store/slices/editor/buffers/editor-buffer-identity'
+import {
+  createEditorFileWriteLedger,
+  markOtherEditorRecordsChanged
+} from './editor-file-write-ledger'
+import { markEditorBufferNewer } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -53,15 +57,20 @@ function hasPendingBufferChange(state: AppState, fileId: string): boolean {
 }
 
 // Why: keeping the save queue, quiesce coordination, and the debounce timers that feed it together avoids split-brain saves.
-// Queue, generation and autosave timer are keyed by buffer record, so every tab of a file shares them.
+// Generation and autosave timer are keyed by buffer record, so every tab of a file shares them; the
+// queue is keyed by physical file, so records of one file kept apart never write at the same time.
 export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const autoSaveTimers = new Map<string, number>()
   const autoSaveScheduledContent = new Map<string, string>()
   const saveQueue = new Map<string, Promise<void>>()
   const saveGeneration = new Map<string, number>()
   const completedWrites = new Map<string, number>()
+  const writeLedger = createEditorFileWriteLedger()
 
   const recordIdOf = (fileId: string): string => editorBufferIdOf(store.getState(), fileId)
+  const identityOf = (recordId: string): EditorBufferIdentity | undefined =>
+    store.getState().editorBufferIndex?.keyByRecordId[recordId]?.identity
+  const fileQueueKeyOf = (recordId: string): string => identityOf(recordId)?.key ?? recordId
 
   const clearRecordAutoSaveTimer = (recordId: string): void => {
     const timerId = autoSaveTimers.get(recordId)
@@ -88,8 +97,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     clearRecordAutoSaveTimer(recordId)
     const queuedGeneration = saveGeneration.get(recordId) ?? 0
     const queuedAfterWrites = completedWrites.get(recordId) ?? 0
+    const fileKey = fileQueueKeyOf(recordId)
 
-    const previousSave = saveQueue.get(recordId) ?? Promise.resolve()
+    const previousSave = saveQueue.get(fileKey) ?? Promise.resolve()
     const queuedSave = previousSave
       .catch(() => undefined)
       .then(async () => {
@@ -119,14 +129,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         }
 
         // Why: only autosave is blocked while suspended; explicit user saves proceed (the banner warned).
-        if (
-          trigger === 'autosave' &&
-          (isAutosaveSuspendedForFile(liveFile) ||
-            editorBufferRecordsKeptApart(
-              state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX,
-              state.editorBuffers ?? {}
-            ).has(recordId))
-        ) {
+        if (trigger === 'autosave' && isAutosaveSuspendedForFile(liveFile)) {
           return
         }
 
@@ -142,6 +145,16 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           hasPendingBufferChange(store.getState(), file.id) &&
           liveFile.lastKnownDiskSignature === getDiskBaselineSignature(contentToSave)
         ) {
+          return
+        }
+        // Why: another record of this file wrote since this one's disk version; its edits must not
+        // silently replace that write. An explicit save after the banner still overwrites.
+        const identity = identityOf(recordId)
+        if (
+          writeLedger.isStaleWrite(fileKey, recordId, identity, liveFile.lastKnownDiskSignature) &&
+          !(trigger === 'user' && liveFile.externalMutation === 'changed')
+        ) {
+          store.getState().setExternalMutation(liveFile.id, 'changed')
           return
         }
         const worktree = liveFile.worktreeId
@@ -172,6 +185,14 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         }
 
         completedWrites.set(recordId, (completedWrites.get(recordId) ?? 0) + 1)
+        // Why: a read of this file that started before the write must not land after it.
+        markEditorBufferNewer(recordId)
+        writeLedger.recordWrite(
+          fileKey,
+          recordId,
+          identity,
+          getDiskBaselineSignature(contentToSave)
+        )
         if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
           return
         }
@@ -196,18 +217,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         // Why: disk now holds contentToSave — rebaseline so our own save isn't flagged external; drop pending verification.
         nextState.setLastKnownDiskSignature(view.id, getDiskBaselineSignature(contentToSave))
         nextState.clearPendingDiskBaselineVerification(view.id)
-        // Why: another record of this file kept apart now holds edits against an older disk version.
-        const savedKey = nextState.editorBufferIndex?.keyByRecordId[recordId]?.identity.key
-        for (const other of savedKey === undefined ? [] : nextState.openFiles) {
-          const otherId = editorBufferIdOf(nextState, other.id)
-          if (
-            otherId !== recordId &&
-            other.isDirty &&
-            nextState.editorBufferIndex?.keyByRecordId[otherId]?.identity.key === savedKey
-          ) {
-            store.getState().setExternalMutation(other.id, 'changed')
-          }
-        }
+        markOtherEditorRecordsChanged(store.getState(), recordId, identity)
         // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
         const savedFile = store.getState().openFiles.find((openFile) => openFile.id === view.id)
         if (savedFile?.externalMutation === 'changed') {
@@ -224,11 +234,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
     let trackedSave: Promise<void>
     trackedSave = queuedSave.finally(() => {
-      if (saveQueue.get(recordId) === trackedSave) {
-        saveQueue.delete(recordId)
+      if (saveQueue.get(fileKey) === trackedSave) {
+        saveQueue.delete(fileKey)
       }
     })
-    saveQueue.set(recordId, trackedSave)
+    saveQueue.set(fileKey, trackedSave)
     return trackedSave
   }
 
@@ -236,7 +246,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     // Why: rich markdown debounces serialization, so force the pending draft out before we cancel timers.
     flushPendingBufferChanges(store.getState(), fileId)
     const recordId = recordIdOf(fileId)
-    const pendingSave = saveQueue.get(recordId)
+    const pendingSave = saveQueue.get(fileQueueKeyOf(recordId))
     clearRecordAutoSaveTimer(recordId)
     bumpSaveGeneration(fileId)
     await pendingSave?.catch(() => undefined)
@@ -247,15 +257,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     // One autosave candidate per record: the first tab that may write it.
     const candidates = new Map<string, OpenFile>()
     if (state.settings?.editorAutoSave) {
-      // Why: two different drafts of one file wait for the user instead of racing to disk.
-      const keptApart = editorBufferRecordsKeptApart(
-        state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX,
-        state.editorBuffers ?? {}
-      )
       for (const file of state.openFiles) {
         const recordId = editorBufferIdOf(state, file.id)
         if (
-          !keptApart.has(recordId) &&
           !candidates.has(recordId) &&
           file.isDirty &&
           state.editorDrafts[file.id] !== undefined &&
@@ -314,6 +318,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     saveQueue.clear()
     saveGeneration.clear()
     completedWrites.clear()
+    writeLedger.clear()
   }
 
   return {

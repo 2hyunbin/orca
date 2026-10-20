@@ -31,7 +31,7 @@ export function useTerminalSaveDialog({
 
   const requestCloseFile = useCallback(
     (fileId: string) => {
-      if (needsSavePromptOnClose(useAppStore.getState(), fileId)) {
+      if (needsSavePromptOnClose(useAppStore.getState, fileId)) {
         setSaveDialogFileId(fileId)
         return
       }

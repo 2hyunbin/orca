@@ -190,6 +190,36 @@ export function reconcileEditorBufferSharing(
     }
   }
 
+  // Why: a split lasts only while both sides hold unsaved edits; a clean side rejoins its file.
+  for (const [recordId, key] of Object.entries(keyByRecordId)) {
+    const views = viewsByRecord.get(recordId)
+    const record = records[recordId]
+    if (views === undefined || hasEdits(record, drafts[views[0]])) {
+      continue
+    }
+    const target = findSharedRecord(keyByRecordId, viewsByRecord, key.identity, recordId)
+    const targetEdited =
+      target !== undefined && hasEdits(records[target.id], drafts[target.views[0]])
+    // Two clean sides: the one holding the default model stays and the other joins it. A clean
+    // side adopts the other side's edits only when both start from the same disk version, so a
+    // just-saved tab never swaps its text for a draft made against older disk.
+    if (
+      target === undefined ||
+      (key.modelOwnerKey === key.identity.modelOwnerKey && !targetEdited) ||
+      (targetEdited && records[target.id].lastKnownDiskSignature !== record.lastKnownDiskSignature)
+    ) {
+      continue
+    }
+    records[target.id] = joinPauses(records[target.id], record)
+    for (const viewId of views) {
+      setDraft(viewId, drafts[target.views[0]])
+      claim(viewId, target.id)
+    }
+    viewsByRecord.delete(recordId)
+    delete records[recordId]
+    delete keyByRecordId[recordId]
+  }
+
   return {
     // Unchanged tabs keep their identity; the caller keeps the list when none changed.
     openFiles: openFiles.map((file) => {
@@ -204,34 +234,16 @@ export function reconcileEditorBufferSharing(
   }
 }
 
-/**
- * Dirty records of one file whose differing drafts start from the same disk version, so neither
- * may autosave over the other. A save from one moves its baseline and marks the rest changed.
- */
-export function editorBufferRecordsKeptApart(
-  index: EditorBufferIndex,
-  records: EditorBufferRecords
-): Set<string> {
-  const byKey = new Map<string, string[]>()
-  for (const [recordId, key] of Object.entries(index.keyByRecordId)) {
-    const record = records[recordId]
-    if (record?.isDirty === true) {
-      const group = JSON.stringify([key.identity.key, record.lastKnownDiskSignature ?? null])
-      byKey.set(group, [...(byKey.get(group) ?? []), recordId])
-    }
-  }
-  return new Set([...byKey.values()].filter((ids) => ids.length > 1).flat())
-}
-
 function findSharedRecord(
   keyByRecordId: Record<string, EditorBufferKey>,
   viewsByRecord: ReadonlyMap<string, string[]>,
-  identity: EditorBufferIdentity
+  identity: EditorBufferIdentity,
+  excludeId?: string
 ): { id: string; views: string[] } | undefined {
   let found: { id: string; views: string[] } | undefined
   for (const [id, key] of Object.entries(keyByRecordId)) {
     const views = viewsByRecord.get(id)
-    if (views === undefined || !isSameEditorBuffer(key.identity, identity)) {
+    if (id === excludeId || views === undefined || !isSameEditorBuffer(key.identity, identity)) {
       continue
     }
     // The record holding the default model wins over one kept apart from it.

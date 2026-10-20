@@ -23,18 +23,18 @@ type PanelHandle = {
 function Panel({
   initial,
   handle,
-  supersedeRead
+  tracksRead
 }: {
   initial: Record<string, FileContent>
   handle: PanelHandle
-  supersedeRead?: (fileId: string) => boolean
+  tracksRead?: (fileId: string) => boolean
 }) {
   const [contents, setContents] = useState(initial)
   const openFilesRef = useRef(fixture.store?.getState().openFiles ?? [])
   handle.contents = contents
   handle.set = (id, content) =>
     setContents((prev) => ({ ...prev, [id]: { content, isBinary: false } }))
-  useEditorBufferContentSync(contents, setContents, openFilesRef, supersedeRead)
+  useEditorBufferContentSync(contents, setContents, openFilesRef, tracksRead)
   return null
 }
 
@@ -92,27 +92,22 @@ it("refreshes another panel's cached disk text for the same file after a reload"
   expect(panelB.contents[b]?.content).toBe('reloaded disk')
 })
 
-it("discards another panel's in-flight read once newer text for the file lands", () => {
+it('fills a tab whose own first read was superseded by newer text for the file', () => {
   const a = openTab('wt-1')
   const b = openTab('wt-2')
-  const old = { content: 'old disk', isBinary: false }
-  const superseded: string[] = []
   const panelA: PanelHandle = { contents: {}, set: () => {} }
   const panelB: PanelHandle = { contents: {}, set: () => {} }
   act(() =>
     root.render(
       <>
-        <Panel initial={{ [a]: old }} handle={panelA} />
-        <Panel initial={{}} handle={panelB} supersedeRead={(id) => superseded.push(id) > 0} />
+        <Panel initial={{ [a]: { content: 'old disk', isBinary: false } }} handle={panelA} />
+        <Panel initial={{}} handle={panelB} tracksRead={(id) => id === b} />
       </>
     )
   )
 
   act(() => panelA.set(a, 'saved text'))
 
-  // B's read started before the save; its generation moves, so its old bytes are dropped,
-  // and the newer text fills the tab so it doesn't stay loading.
-  expect(superseded).toContain(b)
   expect(panelB.contents[b]?.content).toBe('saved text')
 })
 
@@ -125,7 +120,7 @@ it("doesn't seed a tab another panel has no read for", () => {
     root.render(
       <>
         <Panel initial={{ [a]: { content: 'old', isBinary: false } }} handle={panelA} />
-        <Panel initial={{}} handle={panelB} supersedeRead={() => false} />
+        <Panel initial={{}} handle={panelB} tracksRead={() => false} />
       </>
     )
   )

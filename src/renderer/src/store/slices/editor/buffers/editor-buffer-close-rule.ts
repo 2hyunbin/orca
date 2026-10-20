@@ -29,12 +29,18 @@ export function hasOtherSavingEditorView(
   )
 }
 
-/** Only the last tab that can save the file asks to save it; earlier closes keep the edits. */
+/**
+ * Only the last tab that can save the file asks to save it; earlier closes keep the edits.
+ * Why flush first: a delayed editor's text must be in the draft before deciding, or a tab whose
+ * only siblings are read-only would close without a prompt.
+ */
 export function needsSavePromptOnClose(
-  state: EditorBufferViewState,
+  getState: () => EditorBufferViewState,
   fileId: string,
   closing: ReadonlySet<string> = NONE_CLOSING
 ): boolean {
+  flushPendingEditorChange(fileId)
+  const state = getState()
   const file = state.openFiles.find((candidate) => candidate.id === fileId)
   return (
     file?.isDirty === true && canSave(file) && !hasOtherSavingEditorView(state, fileId, closing)

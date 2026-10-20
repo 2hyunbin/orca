@@ -68,7 +68,13 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
       }
       // Why the queue: a sibling tab queued behind this one closes only after this decision,
       // so a cancelled quit keeps it open.
-      if (!needsSavePromptOnClose(state, fileId, new Set(pendingEditorCloseQueueRef.current))) {
+      if (
+        !needsSavePromptOnClose(
+          useAppStore.getState,
+          fileId,
+          new Set(pendingEditorCloseQueueRef.current)
+        )
+      ) {
         closeFile(fileId)
         settleQueuedClose(fileId)
         continue
@@ -123,7 +129,7 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
       if (activeWorktreeId && isPinnedActiveEditorTab(state, activeWorktreeId, fileId)) {
         return
       }
-      if (needsSavePromptOnClose(state, fileId)) {
+      if (needsSavePromptOnClose(useAppStore.getState, fileId)) {
         queueEditorCloseRequests([fileId])
         return
       }

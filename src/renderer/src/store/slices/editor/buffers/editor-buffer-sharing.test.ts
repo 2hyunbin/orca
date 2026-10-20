@@ -191,11 +191,11 @@ describe('one editor buffer record per physical file', () => {
     const b = openTab(store, 'wt-2')
     type(store, a, 'typed in A')
 
-    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
+    expect(needsSavePromptOnClose(store.getState, a)).toBe(false)
     store.getState().closeFile(a)
 
     expect(store.getState().editorDrafts[b]).toBe('typed in A')
-    expect(needsSavePromptOnClose(store.getState(), b)).toBe(true)
+    expect(needsSavePromptOnClose(store.getState, b)).toBe(true)
   })
 
   it("discarding a tab that isn't the last only closes it", async () => {
@@ -308,6 +308,15 @@ describe('one editor buffer record per physical file', () => {
     expect(store.getState().editorDrafts).toEqual({})
   })
 
+  it('closing a rich tab beside only a read-only view flushes first and then prompts', () => {
+    const a = openTab(store, 'wt-1', { filePath: '/repo/a.md', relativePath: 'a.md' })
+    openTab(store, 'wt-2', { filePath: '/repo/a.md', relativePath: 'a.md', readOnly: true })
+    const unregister = registerPendingEditorFlush(a, () => type(store, a, 'typed in rich A'))
+
+    expect(needsSavePromptOnClose(store.getState, a)).toBe(true)
+    unregister()
+  })
+
   it('closing a tab inside its rich-editor delay hands the pending text to its sibling', () => {
     const a = openTab(store, 'wt-1', { filePath: '/repo/a.md', relativePath: 'a.md' })
     const b = openTab(store, 'wt-2', { filePath: '/repo/a.md', relativePath: 'a.md' })
@@ -319,7 +328,7 @@ describe('one editor buffer record per physical file', () => {
       }
     })
 
-    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
+    expect(needsSavePromptOnClose(store.getState, a)).toBe(false)
     store.getState().closeFile(a)
     unregister()
 
@@ -334,9 +343,9 @@ describe('one editor buffer record per physical file', () => {
     const closing = new Set([a, b])
 
     // Quit queues both: the first prompts, the second waits for that decision.
-    expect(needsSavePromptOnClose(store.getState(), a, closing)).toBe(true)
+    expect(needsSavePromptOnClose(store.getState, a, closing)).toBe(true)
     expect(hasOtherSavingEditorView(store.getState(), a, closing)).toBe(false)
-    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
+    expect(needsSavePromptOnClose(store.getState, a)).toBe(false)
   })
 
   it('keeps the same path on another host separate', () => {
@@ -372,8 +381,8 @@ describe('one editor buffer record per physical file', () => {
     expect(store.getState().editorDrafts[readOnly]).toBe('typed in A')
     expect(modelOwnerOf(store, readOnly)).toBe(modelOwnerOf(store, writable))
     // The read-only tab can't save, so the writable one still asks before closing.
-    expect(needsSavePromptOnClose(store.getState(), writable)).toBe(true)
-    expect(needsSavePromptOnClose(store.getState(), readOnly)).toBe(false)
+    expect(needsSavePromptOnClose(store.getState, writable)).toBe(true)
+    expect(needsSavePromptOnClose(store.getState, readOnly)).toBe(false)
   })
 
   it('a provisional tab joins its file once its owner resolves; its edits win', () => {
@@ -455,7 +464,7 @@ describe('one editor buffer record per physical file', () => {
       expect(new Set([modelOwnerOf(store, a), modelOwnerOf(store, b)]).size).toBe(records)
     })
 
-    it('neither of two different restored drafts autosaves over the other', async () => {
+    it('two different restored drafts never autosave over each other', async () => {
       vi.useFakeTimers()
       // Why re-stub: the window stub binds the timers that are current when it is created.
       disk = stubEditorWindowWithDisk()
@@ -475,7 +484,41 @@ describe('one editor buffer record per physical file', () => {
       await vi.advanceTimersByTimeAsync(5000)
       queue.dispose()
 
-      expect(disk.fs.writeFile).not.toHaveBeenCalled()
+      // One file queue: the first write lands, the other record sees it and waits on the banner.
+      const tabs = [`${a}-restored`, `${b}-restored`].map((id) => tab(store, id))
+      expect(disk.fs.writeFile).toHaveBeenCalledTimes(1)
+      expect(tabs.filter((file) => file?.externalMutation === 'changed')).toHaveLength(1)
+      expect(Object.values(store.getState().editorDrafts)).toContain(
+        disk.files.get(FILE) === 'draft one' ? 'draft two' : 'draft one'
+      )
+    })
+
+    it("a side that becomes clean rejoins its file and shows the other side's edits", async () => {
+      const a = openTab(store, 'wt-1')
+      const b = openTab(store, 'wt-2')
+      store.setState({
+        editorDrafts: { [`${a}-restored`]: 'draft one', [`${b}-restored`]: 'draft two' },
+        openFiles: store
+          .getState()
+          .openFiles.map((file) => ({ ...file, id: `${file.id}-restored`, isDirty: true }))
+      })
+      const [ra, rb] = [`${a}-restored`, `${b}-restored`]
+      const queue = createEditorSaveQueue(store)
+      await queue.queueSave(tab(store, ra)!, 'draft one', 'user')
+      queue.dispose()
+
+      // Reload from Disk on B, as the changed-on-disk banner does.
+      store.getState().markFileDirty(rb, false)
+      store.getState().clearEditorDraft(rb)
+      store.getState().setExternalMutation(rb, null)
+      store.getState().setLastKnownDiskSignature(rb, tab(store, ra)?.lastKnownDiskSignature ?? '')
+      type(store, ra, 'typing in A after the reload')
+
+      const state = store.getState()
+      expect(editorBufferIdOf(state, rb)).toBe(editorBufferIdOf(state, ra))
+      expect(modelOwnerOf(store, rb)).toBe(modelOwnerOf(store, ra))
+      expect(state.editorDrafts[rb]).toBe('typing in A after the reload')
+      expect(tab(store, rb)?.isDirty).toBe(true)
     })
 
     it('autosaves again once only one of the drafts kept apart is still unsaved', async () => {
