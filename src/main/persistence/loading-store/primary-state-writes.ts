@@ -14,7 +14,6 @@ import { writeProfileStateInWorker } from './primary-state-write-worker'
 import type { DurableProfileStateMutation } from './store-runtime-state'
 import { profileStateWriterFailureOutcome } from '../profile-state/profile-state-writer-errors'
 import { notifyWorkspaceSessionOperationEnded } from './workspace-session-write-listeners'
-import type { ExecutionHostId } from '../../../shared/execution-host'
 
 const primaryStateWriteOperationsContext = Symbol('PrimaryStateWriteOperations')
 export class PrimaryStateWriteOperations {
@@ -62,13 +61,13 @@ export class PrimaryStateWriteOperations {
       if (runtime.profileStateAuthority?.asynchronous) {
         runtime.profileStateAuthority.assertWritable()
       }
-      let mutation: DurableProfileStateMutation<T>
+      let mutation: DurableProfileStateMutation<T> | undefined
       try {
-        mutation = this.runAdmittedMutationCallback(
-          'mutate',
-          mutate,
-          (result) => result.writtenHostIds
-        )
+        try {
+          mutation = this.runAdmittedMutationCallback('mutate', mutate)
+        } finally {
+          notifyWorkspaceSessionOperationEnded(runtime, mutation?.writtenHostIds ?? null)
+        }
       } catch (error) {
         await stopAfterFailedPrimaryStateMutation(runtime, error)
         throw error
@@ -93,13 +92,18 @@ export class PrimaryStateWriteOperations {
         }
       } catch (error) {
         if (profileStateWriterFailureOutcome(error) !== 'indeterminate') {
-          if (mutation.rollback) {
+          try {
             try {
-              this.runAdmittedMutationCallback('rollback', mutation.rollback)
-            } catch (rollbackError) {
-              await stopAfterFailedPrimaryStateMutation(runtime, rollbackError)
-              throw rollbackError
+              if (mutation.rollback) {
+                this.runAdmittedMutationCallback('rollback', mutation.rollback)
+              }
+            } finally {
+              // Unscheduled getter edits need publication even when there is nothing to restore.
+              notifyWorkspaceSessionOperationEnded(runtime, null)
             }
+          } catch (recoveryError) {
+            await stopAfterFailedPrimaryStateMutation(runtime, recoveryError)
+            throw recoveryError
           }
         }
         throw error
@@ -108,26 +112,14 @@ export class PrimaryStateWriteOperations {
     })
   }
 
-  private runAdmittedMutationCallback<T>(
-    phase: 'mutate' | 'rollback',
-    callback: () => T,
-    /** The partitions the callback declared it wrote; a rollback's are any. */
-    writtenHostIdsOf: (result: T) => readonly ExecutionHostId[] | undefined = () => undefined
-  ): T {
+  private runAdmittedMutationCallback<T>(phase: 'mutate' | 'rollback', callback: () => T): T {
     const { runtime } = this[primaryStateWriteOperationsContext]
     // Finalization drains admitted mutations; the disk wait must not admit new snapshots.
     runtime.durableMutationPhase = phase
-    let result: T | undefined
     try {
-      result = callback()
-      return result
+      return callback()
     } finally {
       runtime.durableMutationPhase = null
-      // Durable writers may edit sessions without scheduling a save; a rollback republishes.
-      notifyWorkspaceSessionOperationEnded(
-        runtime,
-        result === undefined ? null : (writtenHostIdsOf(result) ?? null)
-      )
     }
   }
 
