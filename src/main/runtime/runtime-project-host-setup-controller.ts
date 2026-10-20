@@ -121,7 +121,9 @@ export class RuntimeProjectHostSetupController {
     if (sshTargetId) {
       throw sshTargetNotServedError(sshTargetId)
     }
-    const placed = await placeExistingFolderSetup(store, args, { ...caller, domain: args.hostId })
+    const placed = await placeExistingFolderSetup(store, args, {
+      ...caller, domain: args.hostId, claimsOutsideWsl: { scope: 'runtime', executionHostId: args.hostId }
+    })
     if ('hosted' in placed) {
       return placed.hosted
     }

@@ -63,7 +63,7 @@ export async function placeNestedImport(
   for (const [order, path] of selection.selectedPaths.entries()) {
     try {
       const target = await targetResolver.resolveLocal(path)
-      const admission = await admitRepositoryCheckout(store, target, 'git', caller.domain, true)
+      const admission = await admitRepositoryCheckout(store, target, 'git', { scope: 'wsl', domain: caller.domain })
       const owner = parseWslUncPath(admission.registrationPath)
       const original = parseWslUncPath(path)
       if (!owner || !original || !sameWslDistroName(owner.distro, parent.distro)) {

@@ -181,7 +181,8 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
         parsedHost.kind === 'local'
           ? await placeExistingFolderSetup(store, { ...args, hostId: parsedHost.id }, {
               domain: LOCAL_EXECUTION_HOST_ID,
-              fromPairedClient: false
+              fromPairedClient: false,
+              claimsOutsideWsl: { scope: 'desktop' }
             })
           : null
       if (placed && 'hosted' in placed) {

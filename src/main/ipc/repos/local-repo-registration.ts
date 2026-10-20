@@ -24,7 +24,8 @@ export async function addLocalRepoFromPath(
       selectedPath: path,
       kind: repoKind,
       domain: LOCAL_EXECUTION_HOST_ID,
-      fromPairedClient: false
+      fromPairedClient: false,
+      claimsOutsideWsl: { scope: 'desktop' }
     })
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
@@ -40,7 +41,8 @@ export async function registerPlacedDesktopProject(
   displayName?: string
 ): Promise<{ repo: Repo; alreadyExisted: boolean }> {
   if (placement.kind === 'saved') {
-    const repo = placement.admission.findSaved()
+    // The exact claimed row, still saved right before it is linked or returned.
+    const repo = store.getRepos().find((row) => row.id === placement.repo.id)
     if (!repo) {
       throw new Error('This project changed while it was being added. Try again.')
     }

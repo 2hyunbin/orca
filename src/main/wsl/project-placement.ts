@@ -5,7 +5,8 @@ import type { Repo } from '../../shared/repo-types'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import {
   admitRepositoryCheckout,
-  type RepositoryCheckoutAdmission
+  type RepositoryCheckoutAdmission,
+  type SavedClaimRule
 } from '../repository-checkout-admission'
 import { wslHostsGateOpen } from './wsl-host-gate'
 import { getWslHostService } from './wsl-host-service-instance'
@@ -36,7 +37,13 @@ export function registrationDomain(
 
 export type PlacementContext = PlacementCaller &
   (
-    | { operation: 'add' | 'setup'; selectedPath: string; kind: 'git' | 'folder' }
+    | {
+        operation: 'add' | 'setup'
+        selectedPath: string
+        kind: 'git' | 'folder'
+        /** The caller's own saved-row rule for selections no WSL host can own. */
+        claimsOutsideWsl: Exclude<SavedClaimRule, { scope: 'wsl' }>
+      }
     | {
         operation: 'create'
         parentPath: string
@@ -106,8 +113,8 @@ export async function placeProject(
   if (context.operation === 'create' && !wsl) {
     const { sameTarget } = context
     const findSaved = () => store.getRepos().find((repo) => sameTarget(repo.path))
-    const admission = { selectedPath: target, registrationPath: target, mainRepoPath: null, findSaved }
     const repo = findSaved()
+    const admission = { selectedPath: target, registrationPath: target, saved: repo, findSaved }
     return repo ? { kind: 'saved', repo, admission } : { kind: 'local', admission }
   }
   // Why folder for Create: a prospective folder must not be swallowed by a parent checkout.
@@ -115,10 +122,11 @@ export async function placeProject(
     store,
     target,
     context.operation === 'create' ? 'folder' : context.kind,
-    context.domain,
-    wsl
+    wsl || context.operation === 'create'
+      ? { scope: 'wsl', domain: context.domain }
+      : context.claimsOutsideWsl
   )
-  const saved = admission.findSaved()
+  const { saved } = admission
   if (saved) {
     return { kind: 'saved', repo: saved, admission }
   }

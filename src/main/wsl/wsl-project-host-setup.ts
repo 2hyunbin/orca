@@ -17,6 +17,7 @@ import {
   type ProjectPlacement,
   type WslPlacement
 } from './project-placement'
+import type { SavedClaimRule } from '../repository-checkout-admission'
 import { callWslProjectHost } from './wsl-project-registration'
 
 const SetupReply = z.object({
@@ -62,7 +63,7 @@ const SetupReply = z.object({
 export async function placeExistingFolderSetup(
   store: PlacementStore & { getProjects?(): Project[] },
   args: ProjectHostSetupExistingFolderArgs,
-  caller: PlacementCaller
+  caller: PlacementCaller & { claimsOutsideWsl: Exclude<SavedClaimRule, { scope: 'wsl' }> }
 ): Promise<{ hosted: ProjectHostSetupResult } | { placement: Exclude<ProjectPlacement, WslPlacement> }> {
   if (!isAbsolute(args.path)) {
     throw new Error('Project path must be an absolute path')

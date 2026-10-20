@@ -11,27 +11,37 @@ import { normalizeWindowsWslPath } from '../shared/windows-path-access'
 import { awaitWindowsHostGitEnvironmentReady } from './git/runner'
 import { getGitRepoRootAsync, inspectGitRepoForRegistrationAsync } from './git/repo'
 import { findProjectAtSameRealPath } from './project-realpath-identity'
+import { runtimePathsEqual } from './runtime/runtime-worktree-path-identity'
 import { runtimeRepoMatchesExecutionHost } from './runtime/runtime-worktree-selection'
 
 export type RepositoryCheckoutAdmission = {
   selectedPath: string
   registrationPath: string
-  mainRepoPath: string | null
+  /** The saved row that claimed the selection when it was admitted. */
+  saved: Repo | undefined
+  /** Re-read after asynchronous work; never retains a deleted or transferred claim. */
   findSaved: () => Repo | undefined
 }
 
 /**
- * The files are inspected here; SSH paths cannot claim a checkout on this physical host.
- * `domain` names whose rows may claim it: local is this computer's own rows, a runtime id that
- * endpoint's rows, and null a path-only runtime caller's rows (its reuse contract on main).
- * `wslScope` adds the gated WSL evidence: extended spellings and the realpath of a verified main.
+ * Which saved rows may claim a selection. Inside the gated WSL scope only this domain's rows do;
+ * outside it every caller keeps its existing rule unchanged.
  */
+export type SavedClaimRule =
+  /** local is this computer's rows, a runtime id that endpoint's, null a path-only caller's. */
+  | { scope: 'wsl'; domain: ExecutionHostId | null }
+  /** Desktop Add: rows without an SSH connection; realpath only against this computer's rows. */
+  | { scope: 'desktop' }
+  /** Runtime add: the caller's host rows (every row when it names none), with no late re-check. */
+  | { scope: 'runtime'; executionHostId: ExecutionHostId | null | undefined }
+
+type Store = { getRepos(): Repo[] }
+
 export async function admitRepositoryCheckout(
-  store: { getRepos(): Repo[] },
+  store: Store,
   selectedPath: string,
   kind: 'git' | 'folder',
-  domain: ExecutionHostId | null,
-  wslScope: boolean
+  rule: SavedClaimRule
 ): Promise<RepositoryCheckoutAdmission> {
   if (kind === 'git') {
     await awaitWindowsHostGitEnvironmentReady({ cwd: selectedPath })
@@ -41,32 +51,80 @@ export async function admitRepositoryCheckout(
     throw new Error(`Not a valid git repository: ${selectedPath}`)
   }
   const registrationPath = info?.rootPath ?? selectedPath
+  if (rule.scope === 'runtime') {
+    const sameHost = store.getRepos().filter((repo) => runtimeRepoMatchesExecutionHost(repo, rule.executionHostId))
+    const saved = sameHost.find((repo) =>
+      runtimePathsEqual(repo.path, selectedPath) || runtimePathsEqual(repo.path, registrationPath)) ??
+      // Why: SSH rows name paths on another machine; resolving them here could match an unrelated local dir.
+      await findProjectAtSameRealPath(sameHost.filter((repo) => !isSshRow(repo)), registrationPath)
+    const findSaved = liveClaim(() => store.getRepos(), saved)
+    return { selectedPath, registrationPath, saved: saved ?? undefined, findSaved }
+  }
   const mainRepoPath = info?.mainRepoPath ? await getGitRepoRootAsync(info.mainRepoPath) : null
-  const pathKey = wslScope
-    ? (path: string) => normalizeRuntimePathForComparison(normalizeWindowsWslPath(path))
-    : normalizeRuntimePathForComparison
-  const sameHostRepos = () => store.getRepos().filter((repo) =>
-    parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'ssh' &&
+  const paths = { selectedPath, registrationPath, mainRepoPath }
+  const claim = rule.scope === 'desktop'
+    ? await admitDesktopClaim(store, paths)
+    : await admitWslClaim(store, paths, rule.domain)
+  return { selectedPath, registrationPath, ...claim }
+}
+
+type CheckoutPaths = { selectedPath: string; registrationPath: string; mainRepoPath: string | null }
+type Claim = Pick<RepositoryCheckoutAdmission, 'saved' | 'findSaved'>
+
+function isSshRow(repo: Repo): boolean {
+  return parseExecutionHostId(getRepoExecutionHostId(repo))?.kind === 'ssh'
+}
+
+/** A captured claim survives only while the same row is still saved at the same path. */
+function liveClaim(
+  rows: () => Repo[],
+  claim: Repo | null | undefined,
+  key = normalizeRuntimePathForComparison
+): () => Repo | undefined {
+  return () => rows().find((repo) =>
+    claim != null && repo.id === claim.id && key(repo.path) === key(claim.path))
+}
+
+async function admitDesktopClaim(store: Store, paths: CheckoutPaths): Promise<Claim> {
+  const key = normalizeRuntimePathForComparison
+  const rows = () => store.getRepos().filter((repo) => !repo.connectionId)
+  const at = (path: string, repo: Repo) => key(repo.path) === key(path)
+  const atMain = (repo: Repo) => paths.mainRepoPath !== null && !isFolderRepo(repo) && at(paths.mainRepoPath, repo)
+  const saved = rows().find((repo) => at(paths.selectedPath, repo)) ??
+    rows().find((repo) => at(paths.registrationPath, repo)) ??
+    await findProjectAtSameRealPath(
+      store.getRepos().filter((repo) => getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID),
+      paths.registrationPath
+    ) ??
+    rows().find(atMain)
+  const captured = liveClaim(rows, saved)
+  return {
+    saved: saved ?? undefined,
+    findSaved: () => rows().find((repo) =>
+      at(paths.selectedPath, repo) || at(paths.registrationPath, repo) || atMain(repo)) ?? captured()
+  }
+}
+
+async function admitWslClaim(
+  store: Store,
+  paths: CheckoutPaths,
+  domain: ExecutionHostId | null
+): Promise<Claim> {
+  const key = (path: string) => normalizeRuntimePathForComparison(normalizeWindowsWslPath(path))
+  const sameHostRepos = () => store.getRepos().filter((repo) => !isSshRow(repo) &&
     (domain === LOCAL_EXECUTION_HOST_ID
       ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
       : runtimeRepoMatchesExecutionHost(repo, domain)))
-  const matches = (repo: Repo) => pathKey(repo.path) === pathKey(selectedPath) ||
-    pathKey(repo.path) === pathKey(registrationPath) ||
-    (mainRepoPath !== null && !isFolderRepo(repo) && pathKey(repo.path) === pathKey(mainRepoPath))
+  const { mainRepoPath } = paths
+  const matches = (repo: Repo) => key(repo.path) === key(paths.selectedPath) ||
+    key(repo.path) === key(paths.registrationPath) ||
+    (mainRepoPath !== null && !isFolderRepo(repo) && key(repo.path) === key(mainRepoPath))
   const realPathMatch = sameHostRepos().find(matches) ??
-    await findProjectAtSameRealPath(sameHostRepos(), registrationPath, pathKey) ??
-    (wslScope && mainRepoPath !== null
-      ? await findProjectAtSameRealPath(
-          sameHostRepos().filter((repo) => !isFolderRepo(repo)), mainRepoPath, pathKey
-        )
+    await findProjectAtSameRealPath(sameHostRepos(), paths.registrationPath, key) ??
+    (mainRepoPath !== null
+      ? await findProjectAtSameRealPath(sameHostRepos().filter((repo) => !isFolderRepo(repo)), mainRepoPath, key)
       : null)
-  return {
-    selectedPath,
-    registrationPath,
-    mainRepoPath,
-    // Re-read after asynchronous discovery; never retain a deleted or transferred claim.
-    findSaved: () => sameHostRepos().find(matches) ?? sameHostRepos().find((repo) =>
-      realPathMatch !== null && repo.id === realPathMatch.id &&
-      pathKey(repo.path) === pathKey(realPathMatch.path))
-  }
+  const captured = liveClaim(sameHostRepos, realPathMatch, key)
+  const findSaved = () => sameHostRepos().find(matches) ?? captured()
+  return { saved: findSaved(), findSaved }
 }

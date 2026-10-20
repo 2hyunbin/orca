@@ -51,7 +51,8 @@ export class RuntimeRepositoryRegistrationController {
       selectedPath: path,
       kind,
       domain: registrationDomain(caller, executionHostId),
-      fromPairedClient: caller.fromPairedClient
+      fromPairedClient: caller.fromPairedClient,
+      claimsOutsideWsl: { scope: 'runtime', executionHostId }
     })
     return this.addPlaced(placement, kind, executionHostId, displayName)
   }
