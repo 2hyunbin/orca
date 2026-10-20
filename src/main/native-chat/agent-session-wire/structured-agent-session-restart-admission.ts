@@ -13,3 +13,8 @@ export function structuredAgentSessionRestartRefusal() {
       }
     : null
 }
+
+/** Refuses before `work` starts while the server is updating. */
+export async function unlessStructuredAgentSessionRestarting<T>(work: () => Promise<T>) {
+  return structuredAgentSessionRestartRefusal() ?? (await work())
+}

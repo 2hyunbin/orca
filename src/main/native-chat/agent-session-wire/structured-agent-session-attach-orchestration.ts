@@ -1,4 +1,4 @@
-import { structuredAgentSessionRestartRefusal } from './structured-agent-session-restart-admission'
+import { unlessStructuredAgentSessionRestarting } from './structured-agent-session-restart-admission'
 import type { StructuredRewindRecoveryEvidence } from './structured-rewind-recovery'
 import {
   publishAttachedChild,
@@ -52,6 +52,8 @@ import {
 
 export type StructuredAgentSessionAttachOptions = {
   hostLaunchDirectory?: string
+  /** The saved list a new chat's options are admitted against, for the folder its picker read. */
+  catalogModels?: AttachFlowInput['models']
   recordPhase?: AgentSessionCreatePhaseRecorder
   onAcquisitionFailed?: AttachFlowInput['onAcquisitionFailed']
   /** The queued message a start is for; see `StructuredAgentSessionProviderChild.startedFor`. */
@@ -147,26 +149,24 @@ async function runAttach(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionAttachOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
-  const updating = structuredAgentSessionRestartRefusal()
-  if (updating) {
-    return updating
-  }
-  // Begun first, so a close or Stop during any phase below still stops the start. A start's lock
-  // carries the controller it registered before its first wait.
-  const acquire = options.lock
-    ? null
-    : context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
-  const lock = options.lock ?? heldStructuredAgentSessionAttachLock(acquire?.signal)
-  try {
-    return await runAttachUnderAbort(context, callerKey, params, options, lock)
-  } finally {
-    acquire?.end()
-    if (isStructuredAgentSessionStartupExpired(lock.signal.reason)) {
-      options.onStartupExpired?.()
-    } else if (lock.signal.aborted) {
-      options.onAborted?.()
+  return unlessStructuredAgentSessionRestarting(async () => {
+    // Begun first, so a close or Stop during any phase below still stops the start. A start's lock
+    // carries the controller it registered before its first wait.
+    const acquire = options.lock
+      ? null
+      : context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
+    const lock = options.lock ?? heldStructuredAgentSessionAttachLock(acquire?.signal)
+    try {
+      return await runAttachUnderAbort(context, callerKey, params, options, lock)
+    } finally {
+      acquire?.end()
+      if (isStructuredAgentSessionStartupExpired(lock.signal.reason)) {
+        options.onStartupExpired?.()
+      } else if (lock.signal.aborted) {
+        options.onAborted?.()
+      }
     }
-  }
+  })
 }
 
 async function runAttachUnderAbort(
@@ -223,6 +223,7 @@ async function runAttachUnderAbort(
   const { startupAttempts } = context.runtimeState
   try {
     const attached = await performAttach({
+      models: priorRecord ? undefined : options.catalogModels,
       store: context.deps.store,
       adapter: context.deps.adapter,
       agents: context.deps.agents,

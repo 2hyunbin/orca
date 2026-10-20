@@ -240,7 +240,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       sessionId: string,
       failed: StructuredAgentSessionProviderChildIdentity,
       error: unknown,
-      openMs?: number
+      openMs: number
     ): Promise<void> =>
       serialize(sessionId, async () => {
         const session = sessions.get(sessionId)
@@ -255,7 +255,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
           sessionId,
           failure: failure.kind,
           ...failure.requestTimeout,
-          ...(openMs === undefined ? {} : { openMs }),
+          openMs,
           error
         })
         try {

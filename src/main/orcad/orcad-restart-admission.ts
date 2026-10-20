@@ -153,8 +153,10 @@ export class OrcadRestartAdmission {
 }
 
 let requestShutdown: OrcadShutdownTrigger | null = null
-export function bindOrcadRestartShutdown(request: OrcadShutdownTrigger): void {
+/** Returns what an older client's empty stop request runs: the restart this shutdown completes. */
+export function bindOrcadRestartShutdown(request: OrcadShutdownTrigger): () => Promise<void> {
   requestShutdown = request
+  return () => orcadRestartAdmission.restartLegacySlot()
 }
 
 export const orcadRestartAdmission = new OrcadRestartAdmission(orcadRestartWorkAdmission, {
