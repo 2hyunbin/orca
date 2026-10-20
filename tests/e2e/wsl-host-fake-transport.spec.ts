@@ -211,8 +211,7 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
     distrosFile,
     connectLogFile
   })
-  // realpath: the host reports workspace paths resolved (/private/var on macOS).
-  const projectPath = realpathSync(createGitProject())
+  const projectPath = createGitProject()
   const cleanupDirs: string[] = []
   try {
     const { page } = desktop
