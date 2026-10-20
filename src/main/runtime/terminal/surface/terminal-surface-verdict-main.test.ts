@@ -45,13 +45,12 @@ async function firstPaneRow(
 
 // Layout-owner build: a terminal.list row carries the host's verdict; a pane with a status is never live.
 describe("main's pane verdicts (switch on)", () => {
-  // Every status D1a publishes on a bound pane (PaneStartStatus) and the sleeping record; C1b's
-  // resuming and held join this list when they reach main's pane binding.
-  it.each(['starting', 'failed', 'sleeping'] as const)(
+  // Every status main publishes on a bound pane (PaneStartStatus), and the sleeping record.
+  it.each(['starting', 'failed', 'sleeping', 'resuming', 'held', 'sleeping record'] as const)(
     'a %s pane whose terminal still runs is not connected and never live',
     async (status) => {
-      const harness = status === 'sleeping' ? sleepingPaneRuntime() : surfaceRuntime()
-      if (status !== 'sleeping') {
+      const harness = status === 'sleeping record' ? sleepingPaneRuntime() : surfaceRuntime()
+      if (status !== 'sleeping record') {
         harness.runtime.attachWindow(1)
         harness.runtime.syncWindowGraph(1, { tabs: [], leaves: [], mountedLeaves: [] })
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the layout-owner runtime always holds this register; the test sets a start status as main's start does.

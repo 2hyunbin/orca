@@ -94,7 +94,11 @@ class MainSurfacePublisher {
     }
     const started = this.host.paneStartFact(`${tabId}:${leafId}`, facts.binding)
     const status = started?.status ?? (facts.sleeping ? 'sleeping' : null)
-    return { ptyId: pane.ptyId, hasStatus: status !== null, starting: status === 'starting' }
+    return {
+      ptyId: pane.ptyId,
+      hasStatus: status !== null,
+      starting: status === 'starting' || status === 'resuming'
+    }
   }
 
   /** Main's panes with the terminals its layout binds, registered or not. */
