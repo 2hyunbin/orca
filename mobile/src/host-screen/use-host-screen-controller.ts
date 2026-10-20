@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocalSearchParams, usePathname } from 'expo-router'
 import { useRouteHandoff } from '../navigation/route-handoff'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -83,7 +83,9 @@ export function useHostScreenController({
   const sidebarFeed = useSwitchedHostSidebarFeed(client)
   // Read through a ref so the metadata refresh keeps its identity across installs.
   const feedRef = useRef(sidebarFeed?.feed)
-  feedRef.current = sidebarFeed?.feed
+  useEffect(() => {
+    feedRef.current = sidebarFeed?.feed
+  }, [sidebarFeed?.feed])
   const feedCarriesCatalog = useCallback(
     () => feedRef.current?.kind === 'ready' && feedRef.current.domains.projectCatalog !== null,
     []

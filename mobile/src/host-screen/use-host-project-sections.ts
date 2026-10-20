@@ -49,28 +49,37 @@ export function useHostProjectSections(args: {
       ) {
         return
       }
-      inFlight.current.add(client)
-      try {
-        do {
-          queued.current.delete(client)
-          const reply = await projectSectionsRead.request(client).catch(() => null)
-          if (clientRef.current !== client) {
-            return
-          }
-          const sections = readServedProjectSections(reply)
-          if (sections.kind === 'answered') {
-            fetchedAt.current.set(client, Date.now())
-            setServedProjectSections(sections.value)
-            // Switch point: with no window catalog's groups, a feed-built list reads the host's own.
-            if (ORCA_SIDEBAR_INPUTS_IS_MAIN && !sections.value?.projectGroups) {
-              const reply = await hostProjectGroupsRead.request(client).catch(() => null)
-              const groups = reply && readHostMethodReply(reply, hostProjectGroupsRead.interpret)
-              if (groups?.kind === 'answered' && clientRef.current === client) {
-                setHostProjectGroups(groups.value)
-              }
+      const readOnce = async (): Promise<boolean> => {
+        const reply = await projectSectionsRead.request(client).catch(() => null)
+        if (clientRef.current !== client) {
+          return false
+        }
+        const sections = readServedProjectSections(reply)
+        if (sections.kind === 'answered') {
+          fetchedAt.current.set(client, Date.now())
+          setServedProjectSections(sections.value)
+          // Switch point: with no window catalog's groups, a feed-built list reads the host's own.
+          if (ORCA_SIDEBAR_INPUTS_IS_MAIN && !sections.value?.projectGroups) {
+            const groupReply = await hostProjectGroupsRead.request(client).catch(() => null)
+            const groups =
+              groupReply && readHostMethodReply(groupReply, hostProjectGroupsRead.interpret)
+            if (groups?.kind === 'answered' && clientRef.current === client) {
+              setHostProjectGroups(groups.value)
             }
           }
-        } while (queued.current.has(client))
+        }
+        return true
+      }
+      // Reads again while a read queued during the last one; each read waits on the one before.
+      const readUntilCurrent = async (): Promise<void> => {
+        queued.current.delete(client)
+        if ((await readOnce()) && queued.current.has(client)) {
+          await readUntilCurrent()
+        }
+      }
+      inFlight.current.add(client)
+      try {
+        await readUntilCurrent()
       } finally {
         inFlight.current.delete(client)
       }
