@@ -23,12 +23,15 @@ export async function expectMainFrameClosesExitedSplitPaneOnce(
     expandedLeafId: null
   }
   const closePane = vi.fn()
-  const framedManager = { ...manager, applyLayoutGeometry: vi.fn() }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock manager implements every PaneManager member the frame reconciler reads.
+  const framedManager = { ...manager, applyLayoutGeometry: vi.fn() } as unknown as Parameters<
+    typeof reconcileMountedPanesToLayout
+  >[0]['manager']
   // A repeated frame (the stream re-sends main's tab) must not close it again.
   for (let frame = 0; frame < 2; frame += 1) {
     reconcileMountedPanesToLayout({
       tabId: 'tab-1',
-      manager: framedManager as never,
+      manager: framedManager,
       layout: frameLayout,
       closePane,
       isExpanded: false

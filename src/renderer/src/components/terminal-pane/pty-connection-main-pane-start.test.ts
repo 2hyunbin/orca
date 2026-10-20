@@ -13,6 +13,7 @@ import {
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
 import { createInitialStoreState } from './pty-connection-test-store-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
+import type { TerminalPaneStart } from '@/store/terminals/terminal-state'
 import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
@@ -34,16 +35,20 @@ function setStore(patch: Partial<StoreState>): void {
   }
 }
 
-async function connectWithStart(start: unknown) {
+async function connectWithStart(start: TerminalPaneStart | undefined) {
   const { connectPanePty } = await import('./pty-connection')
   const transport = createMockTransport()
   transportFactoryQueue.push(transport)
   setStore({
     tabsByWorktree: { 'wt-1': [{ id: TAB, ptyId: null }] },
-    terminalPaneStartsByPaneKey: { [PANE_KEY]: start }
-  } as never)
+    terminalPaneStartsByPaneKey: start ? { [PANE_KEY]: start } : {}
+  })
   const deps = buildPaneConnectionDeps(() => mockStoreState, { tabId: TAB })
-  connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
+  const args = [createPane(1), createManager(1), deps] as unknown as Parameters<
+    typeof connectPanePty
+  >
+  connectPanePty(...args)
   await flushAsyncTicks()
   return { transport, deps }
 }
@@ -89,7 +94,7 @@ describe('a pane main is starting a terminal for', () => {
         }
       },
       terminalPaneStartsByPaneKey: {}
-    } as never)
+    })
     await flushAsyncTicks()
 
     // It attaches to main's terminal at the pane's own grid, and starts none of its own.

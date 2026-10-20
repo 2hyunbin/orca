@@ -1,0 +1,102 @@
+// Layout-owner build: a split of a pane in main's layout is written and started by main, under the
+// caller's proposed pane id; every view, the window's included, attaches to the terminal it starts.
+import { OrcaRuntimeWithSplitPtyBackedTerminal } from './terminal-split-surface'
+import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
+import { parseExecutionHostId } from '../../../../shared/execution-host'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
+import { runtimeSplitPlacement } from '../../runtime-terminal-spawn-placement'
+import { spawnInAdmittedPane } from '../../runtime-pane-admission'
+import { resolvePtyFirstSize, type PtyGridSize } from '../../../ipc/pty/pty-first-size'
+import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
+import { randomUUID } from 'node:crypto'
+
+export type SplitPaneSource = { worktreeId: string; tabId: string; leafId: string }
+
+export type SplitPaneInMainOptions = {
+  direction: 'horizontal' | 'vertical'
+  /** The caller's id for the new pane; main refuses one already taken. */
+  newLeafId?: string
+  cwd?: string
+  initialSize?: PtyGridSize
+  command?: string
+  env?: Record<string, string>
+  envToDelete?: string[]
+  /** The window's own split keeps a pane whose start failed, showing why, as its spawn did. */
+  keepPaneOnStartFailure?: boolean
+}
+
+export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSplitPtyBackedTerminal {
+  /** Whether main's layout holds the tab, so main writes and starts its splits. */
+  protected ownsTabLayout(worktreeId: string, tabId: string): boolean {
+    const [hostId] = this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
+    return Boolean(hostId && parseExecutionHostId(hostId)?.kind !== 'runtime')
+  }
+
+  /** `terminal.split` from a view that names its pane: main writes the split and starts it. */
+  async splitTerminalPane(
+    source: SplitPaneSource,
+    opts: SplitPaneInMainOptions
+  ): Promise<RuntimeTerminalSplit> {
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !this.ownsTabLayout(source.worktreeId, source.tabId)) {
+      // The window then splits it as before (a paired server's tab, or the window-owned build).
+      throw new Error('host_not_owned')
+    }
+    return this.splitPaneInMain(source, opts)
+  }
+
+  protected async splitPaneInMain(
+    source: SplitPaneSource,
+    opts: SplitPaneInMainOptions
+  ): Promise<RuntimeTerminalSplit> {
+    if (!this.ptyController?.spawn) {
+      throw new Error('runtime_unavailable')
+    }
+    const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${source.worktreeId}`)
+    const leafId =
+      opts.newLeafId && isTerminalLeafId(opts.newLeafId) ? opts.newLeafId : randomUUID()
+    const preAllocatedHandle = this.createPreAllocatedTerminalHandle()
+    const result = await spawnInAdmittedPane(this.store, this.ptyController, {
+      ...resolvePtyFirstSize({ pane: opts.initialSize }),
+      cwd: opts.cwd ?? workspace.path,
+      command: opts.command,
+      commandDelivery: 'provider',
+      env: this.buildTerminalWorkspaceEnv(workspace, {
+        ...(workspace.connectionId ? {} : this.accounts.hostLaunchEnvFor(null)),
+        ...opts.env
+      }),
+      envToDelete: opts.envToDelete,
+      connectionId: workspace.connectionId,
+      worktreeId: workspace.id,
+      preAllocatedHandle,
+      tabId: source.tabId,
+      leafId,
+      persistHostSessionBinding: true,
+      placement: runtimeSplitPlacement(source.leafId, opts.direction),
+      ...this.paneStartStatusArgs(
+        opts.keepPaneOnStartFailure ? { keepPaneOnStartFailure: true } : {}
+      )
+    })
+    this.registerPreAllocatedHandleForPty(result.id, preAllocatedHandle)
+    if (result.wslDistro) {
+      this.preparePtyExecutionContext(result.id, result.wslDistro)
+    }
+    this.registerPty(result.id, workspace.id, workspace.connectionId)
+    const createdPty = this.getOrCreatePtyWorktreeRecord(result.id)
+    if (!createdPty) {
+      throw new Error('terminal_exited')
+    }
+    recordPtySurface(
+      createdPty,
+      source.tabId,
+      makePaneKey(source.tabId, leafId),
+      spawnSurfaceClaimSequence(this.graphSequence)
+    )
+    return {
+      handle: this.issuePtyHandle(createdPty),
+      tabId: source.tabId,
+      paneRuntimeId: -1,
+      leafId
+    }
+  }
+}
