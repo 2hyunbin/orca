@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { readMirroredKeyOrStore, subscribeMirroredKey } from '../storage/mirrored-storage-keys'
 import { LAST_VISITED_WORKTREE_STORAGE_KEY } from './last-visited-worktree-repo'
+import type { HostVisit, LastVisitedWorktreeOnHost } from './host-list-highlight'
 import {
   readLastVisitedWorktreeOnHost,
-  subscribeLastVisitedWorktree,
-  type HostVisit,
-  type LastVisitedWorktreeOnHost
+  subscribeLastVisitedWorktree
 } from './last-visited-worktree-by-host'
 
 /**

@@ -1,4 +1,4 @@
-import { parseExecutionHostId, type ExecutionHostId } from '../../../src/shared/execution-host'
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import { PAGE_STORAGE_MAX_VALUE_CHARS } from '../mobile-web-shell/page-storage-keys'
 import { persistMirrored, readMirroredKeyOrStore } from '../storage/mirrored-storage-keys'
 import {
@@ -6,28 +6,13 @@ import {
   readLastVisitedWorktreeRecord,
   type LastVisitedWorktreeRecord
 } from './last-visited-worktree-repo'
-import type { Worktree } from './workspace-list-types'
-
-/** The workspace this phone last opened on one paired host: the session route's own params. */
-export type LastVisitedWorktreeOnHost = {
-  worktreeId: string
-  /** A server workspace's `runtime:` host; absent for the desktop's own (local and SSH) rows. */
-  executionHost?: ExecutionHostId
-}
+import { routeExecutionHostOf, type LastVisitedWorktreeOnHost } from './host-list-highlight'
 
 // Why a cap: the page's store refuses a value past its frame cap, and a forgotten host never writes again.
 const MAX_REMEMBERED_HOSTS = 16
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-/** The route's server for a row, as the host list routes it: only a `runtime:` host is named. */
-export function routeExecutionHostOf(
-  hostId: string | null | undefined
-): ExecutionHostId | undefined {
-  const parsed = parseExecutionHostId(hostId)
-  return parsed?.kind === 'runtime' ? parsed.id : undefined
 }
 
 function visitOf(worktreeId: string, executionHost: string | undefined): LastVisitedWorktreeOnHost {
@@ -112,36 +97,6 @@ export function withLastVisitedWorktree(
     value = serialize()
   }
   return value
-}
-
-/** Whether `row` is the workspace this phone last opened on its host. */
-export function isLastVisitedWorktreeRow(
-  row: Pick<Worktree, 'worktreeId' | 'hostId'>,
-  visited: LastVisitedWorktreeOnHost | null
-): boolean {
-  return (
-    visited !== null &&
-    row.worktreeId === visited.worktreeId &&
-    routeExecutionHostOf(row.hostId) === visited.executionHost
-  )
-}
-
-/** Undefined while the stored visit is read; null when this phone has opened nothing on the host. */
-export type HostVisit = LastVisitedWorktreeOnHost | null | undefined
-
-/**
- * The host list's highlight: the phone's own choice once it has one (nothing while that row is
- * unlisted), the desktop's selection before the phone has opened anything there.
- */
-export function isHighlightedWorktreeRow(
-  row: Pick<Worktree, 'worktreeId' | 'hostId'>,
-  visit: HostVisit,
-  desktopSelected: boolean
-): boolean {
-  if (visit === undefined) {
-    return false
-  }
-  return visit === null ? desktopSelected : isLastVisitedWorktreeRow(row, visit)
 }
 
 type Listener = (hostId: string, visited: LastVisitedWorktreeOnHost) => void

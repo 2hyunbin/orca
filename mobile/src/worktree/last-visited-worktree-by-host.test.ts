@@ -19,8 +19,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   }
 }))
 
+import { isLastVisitedWorktreeRow } from './host-list-highlight'
 import {
-  isLastVisitedWorktreeRow,
   readLastVisitedWorktreeOnHost,
   subscribeLastVisitedWorktree,
   withLastVisitedWorktree,

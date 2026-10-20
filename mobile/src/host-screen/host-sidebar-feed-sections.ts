@@ -11,7 +11,7 @@ import { PR_GROUP_LABELS } from '../../../src/shared/workspace-view/workspace-pr
 import type { Worktree as HostWorktree } from '../../../src/shared/worktree/types'
 import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
 import type { Section, Worktree } from '../worktree/workspace-list-types'
-import { isHighlightedWorktreeRow, type HostVisit } from '../worktree/last-visited-worktree-by-host'
+import { highlightPhoneVisit, type HostVisit } from '../worktree/host-list-highlight'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 import { filterWorktrees } from '../worktree/workspace-list-sections'
 import { rowFiltersForView, type MobileViewState } from '../worktree/workspace-view-settings'
@@ -19,7 +19,7 @@ import { rowFiltersForView, type MobileViewState } from '../worktree/workspace-v
 /** What the host screen draws from a feed-built list, besides its rows' own live content. */
 export type HostFeedListSources = {
   rows: readonly HostSectionRow[]
-  /** The desktop's selected rows, highlighted only until this phone opens a workspace here. */
+  /** The desktop's selected rows: the highlight wherever this phone's own visit is not shown. */
   activeRowKeys: ReadonlySet<string>
   lastVisited: HostVisit
   /** The rows worktree.ps and the desktop's server lists served, for what each row draws. */
@@ -101,7 +101,7 @@ function matchesSearch(row: Worktree, query: string): boolean {
 /**
  * The phone's sections from the list the shared builder made from the feed: the desktop's headers,
  * order and nesting, each row drawn with the live content the phone already reads, and highlighted
- * by `isHighlightedWorktreeRow`.
+ * by `highlightPhoneVisit`.
  * Search narrows the rows here, as the desktop's own search never reaches the feed.
  */
 export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
@@ -157,11 +157,7 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
         const drawn = rowOf(row.worktree, hostId, row.repo?.displayName, 'git')
         current().data.push({
           ...drawn,
-          isActive: isHighlightedWorktreeRow(
-            { worktreeId: row.worktree.id, hostId },
-            sources.lastVisited,
-            sources.activeRowKeys.has(row.rowKey)
-          ),
+          isActive: sources.activeRowKeys.has(row.rowKey),
           sectionListKey: row.rowKey,
           lineageDepth: row.depth,
           ...(row.groupDepth ? { projectGroupDepth: row.groupDepth } : {}),
@@ -189,11 +185,7 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
         )
         current().data.push({
           ...rowOf(worktree, hostId, row.projectGroup.name, 'folder-workspace'),
-          isActive: isHighlightedWorktreeRow(
-            { worktreeId: worktree.id, hostId },
-            sources.lastVisited,
-            sources.activeRowKeys.has(row.key)
-          ),
+          isActive: sources.activeRowKeys.has(row.key),
           sectionListKey: row.key,
           lineageDepth: 0,
           ...(row.groupDepth ? { projectGroupDepth: row.groupDepth } : {}),
@@ -220,7 +212,10 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
         break
     }
   }
-  return query ? narrowSections(sections, query) : sections
+  return highlightPhoneVisit(
+    query ? narrowSections(sections, query) : sections,
+    sources.lastVisited
+  )
 }
 
 /**
@@ -240,12 +235,11 @@ export function buildPreFeedSections(sources: {
     rowFiltersForView(sources.view),
     sources.search,
     sources.repoHostIdByRepoId
-  ).map((row) => ({
-    ...row,
-    // worktree.ps marks the desktop's selection.
-    isActive: isHighlightedWorktreeRow(row, sources.lastVisited, row.isActive === true)
-  }))
-  return rows.length > 0 ? [{ key: 'all', title: '', data: rows }] : []
+  )
+  // worktree.ps marks the desktop's selection.
+  return rows.length > 0
+    ? highlightPhoneVisit([{ key: 'all', title: '', data: rows }], sources.lastVisited)
+    : []
 }
 
 /** A section whose title matches keeps every row; otherwise only matching rows, counted as shown. */

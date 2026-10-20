@@ -20,7 +20,7 @@ import {
 import type { MobileViewState } from '../worktree/workspace-view-settings'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 import { readServedProjectSections } from '../worktree/project-sections-operations'
-import type { HostVisit } from '../worktree/last-visited-worktree-by-host'
+import type { HostVisit } from '../worktree/host-list-highlight'
 
 const catalog = buildSidebarFeedCatalog(SERVED_SECTIONS, [], [])
 
@@ -173,7 +173,7 @@ describe('the phone list from the sidebar feed', () => {
     expect(sections.at(-2)?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
   })
 
-  describe('the highlight: this phone’s last-opened workspace, else the desktop’s selection', () => {
+  describe('the highlight: this phone’s last-opened workspace where shown, else the desktop’s', () => {
     const active = (sections: ReturnType<typeof sectionsFor>) =>
       outline(sections).filter((line) => line.endsWith(' ACTIVE'))
 
@@ -188,7 +188,7 @@ describe('the phone list from the sidebar feed', () => {
       expect(active(sectionsFor(phoneView(), { lastVisited: undefined }))).toEqual([])
     })
 
-    it('never takes the desktop’s selection once this phone has opened a workspace here', () => {
+    it('drops the desktop’s selection while this phone’s own row is shown', () => {
       const lines = active(
         sectionsFor(phoneView(), { lastVisited: { worktreeId: 'orca::/w/child' } })
       )
@@ -211,24 +211,29 @@ describe('the phone list from the sidebar feed', () => {
 
     it('never matches a desktop row for a visit on a server of the same id', () => {
       const lastVisited = { worktreeId: 'orca::/w/child', executionHost: 'runtime:env-1' as const }
-      expect(active(sectionsFor(phoneView(), { lastVisited }))).toEqual([])
+      const lines = active(sectionsFor(phoneView(), { lastVisited }))
+      expect(lines.some((line) => line.includes('orca::/w/child'))).toBe(false)
     })
 
-    it('highlights nothing while the row is not listed, and the row again once it is', () => {
+    it('falls back to the desktop’s selection while the row is not shown, and back once it is', () => {
       const lastVisited = { worktreeId: 'orca::/w/child' }
-      const hidden = sectionsFor(phoneView(), { lastVisited, search: 'gpu' })
-      expect(active(hidden)).toEqual([])
-      expect(active(sectionsFor(phoneView(), { lastVisited }))).toHaveLength(1)
+      const hidden = active(sectionsFor(phoneView(), { lastVisited, search: 'parent' }))
+      expect(hidden).toHaveLength(1)
+      expect(hidden[0]).toContain('orca::/w/parent')
+      const shown = active(sectionsFor(phoneView(), { lastVisited }))
+      expect(shown).toHaveLength(1)
+      expect(shown[0]).toContain('orca::/w/child')
     })
 
-    it('highlights nothing once the row is deleted, rather than another row', () => {
+    it('falls back to the desktop’s selection once the row is deleted', () => {
       const workspaces = new Map(feedDomains().workspaces)
       workspaces.delete('|orca::/w/child')
       const domains = feedDomains({ workspaces })
-      const sections = sectionsFromDomains(domains, phoneView(), '', {
-        worktreeId: 'orca::/w/child'
-      })
-      expect(active(sections)).toEqual([])
+      const lines = active(
+        sectionsFromDomains(domains, phoneView(), '', { worktreeId: 'orca::/w/child' })
+      )
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('orca::/w/parent')
     })
 
     it('highlights every occurrence when pinned rows also show in their groups', () => {
@@ -463,13 +468,7 @@ describe('the phone list before the first feed read', () => {
   const preFeed = (search: string, rows = cached) => preFeedVisiting(search, rows, null)
 
   it('shows the rows the page last listed, in their order under no header, filtered as the view is', () => {
-    expect(preFeed('')).toEqual([
-      {
-        key: 'all',
-        title: '',
-        data: cached.slice(0, 2).map((row) => ({ ...row, isActive: false }))
-      }
-    ])
+    expect(preFeed('')).toEqual([{ key: 'all', title: '', data: cached.slice(0, 2) }])
   })
 
   it('highlights the row this phone opened, else the one the desktop marked active', () => {
@@ -481,7 +480,7 @@ describe('the phone list before the first feed read', () => {
     expect(highlighted(undefined)).toEqual([])
     expect(highlighted(null)).toEqual(['orca::/w/b'])
     expect(highlighted({ worktreeId: 'orca::/w/a' })).toEqual(['orca::/w/a'])
-    expect(highlighted({ worktreeId: 'orca::/w/gone' })).toEqual([])
+    expect(highlighted({ worktreeId: 'orca::/w/gone' })).toEqual(['orca::/w/b'])
   })
 
   it('narrows them by search, and draws nothing with none', () => {
