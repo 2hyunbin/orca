@@ -1,5 +1,5 @@
-import type { TerminalLaunchResult } from './agent-session-resume'
 import type {
+  TerminalLaunchResult,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from './agent-session-resume'

@@ -1,6 +1,7 @@
-import type { SavedResumeDecision, TerminalLaunchResult } from '../../shared/agent-session-resume'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 import type {
+  SavedResumeDecision,
+  TerminalLaunchResult,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../shared/agent-session-resume'

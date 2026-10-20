@@ -1,8 +1,8 @@
-import type { SavedResumeStartupSource } from '../../../../shared/agent-session-resume'
 import type { ClosedTerminalTabTombstonesByTabId } from '../../../../shared/closed-terminal-tab-tombstones'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type {
+  SavedResumeStartupSource,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../../../shared/agent-session-resume'

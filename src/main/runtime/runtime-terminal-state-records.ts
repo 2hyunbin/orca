@@ -1,7 +1,9 @@
-import type { TerminalLaunchResult } from '../../shared/agent-session-resume'
 import type { AgentStatus } from '../../shared/agent-detection'
 import type { AgentStatusState } from '../../shared/agent-status-types'
-import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
+import type {
+  TerminalLaunchResult,
+  SleepingAgentLaunchConfig
+} from '../../shared/agent-session-resume'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { RuntimeSyncedLeaf } from '../../shared/runtime-types'
 import type { RuntimeTerminalRowMetadata } from '../../shared/runtime-terminal-contracts'

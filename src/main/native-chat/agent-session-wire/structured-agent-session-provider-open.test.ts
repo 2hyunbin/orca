@@ -1,5 +1,4 @@
 import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
-import { HOST_TEST_SESSION } from './structured-agent-session-host-test-data'
 import { expect, it, vi } from 'vitest'
 import type {
   StructuredAgentSessionProviderOpen,
@@ -12,7 +11,7 @@ import {
   envelope,
   hostTestState
 } from './structured-agent-session-host-test-harness'
-import { hostTestMessage } from './structured-agent-session-host-test-data'
+import { HOST_TEST_SESSION, hostTestMessage } from './structured-agent-session-host-test-data'
 
 const OPENED: StructuredAgentSessionProviderOpenResult = {
   reportedOptions: { model: 'gpt-test' }

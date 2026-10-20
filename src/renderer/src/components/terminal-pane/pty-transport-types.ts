@@ -1,5 +1,4 @@
 import type { TerminalAttachmentLaunchResult } from '../../../../shared/terminal-attachment-launch-result'
-import type { TerminalLaunchResult } from '../../../../shared/agent-session-resume'
 import type { AgentIdleEdgeMeta } from '../../../../shared/terminal-output-side-effects'
 import type {
   RestoreSpawnIntent,
@@ -7,6 +6,7 @@ import type {
 } from '../../../../shared/host-spawn-admission'
 import type { ParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
 import type {
+  TerminalLaunchResult,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../../../shared/agent-session-resume'

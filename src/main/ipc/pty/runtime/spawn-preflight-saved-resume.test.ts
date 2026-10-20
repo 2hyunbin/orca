@@ -11,11 +11,14 @@ import {
 import { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { finishPtyShutdown } from '../provider/liveness'
-import { admitColdRestoreReattach, admitResumeSpawn } from '../host-env/saved-resume-admission'
 import { listStructuredProviderSessionOwnership } from '../../../native-chat/agent-session-wire/structured-provider-session-ownership'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
 import { executeRuntimePtySpawn } from './spawn-execute'
-import { savedResumeResult } from '../host-env/saved-resume-admission'
+import {
+  admitColdRestoreReattach,
+  admitResumeSpawn,
+  savedResumeResult
+} from '../host-env/saved-resume-admission'
 import { createRuntimePtySpawnState } from './spawn-state'
 
 const forgetRefusedPaneResume = vi.hoisted(() => vi.fn())
