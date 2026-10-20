@@ -142,7 +142,6 @@ describe('parseAntigravityUsageEnvelope', () => {
       windowName: '5h Limit Remaining'
     })
     expect(reading?.buckets[1]).toMatchObject({ group: 'Gemini Models' })
-    // Why absent: agy omitted the bucket name, so there is no window name to carry.
     expect(reading?.buckets[1]).not.toHaveProperty('windowName')
   })
 
@@ -159,9 +158,9 @@ describe('parseAntigravityUsageEnvelope', () => {
       ])
     )
 
-    const windowKeys = ['usedPercent', 'windowMinutes', 'resetsAt', 'resetDescription']
-    expect(Object.keys(reading?.session ?? {})).toEqual(windowKeys)
-    expect(Object.keys(reading?.weekly ?? {})).toEqual(windowKeys)
+    const window = { usedPercent: 0, resetsAt: null, resetDescription: null }
+    expect(reading?.session).toEqual({ ...window, windowMinutes: 300 })
+    expect(reading?.weekly).toEqual({ ...window, windowMinutes: 10_080 })
   })
 
   it('drops a disabled bucket instead of drawing it as unused', () => {

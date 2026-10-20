@@ -185,12 +185,8 @@ export function parseAntigravityUsageEnvelope(value: unknown): AntigravityUsageR
   if (buckets.length === 0) {
     return null
   }
-  // Why drop the id first: the summary is a RateLimitWindow, and the summariser only strips `name`,
-  // so an id left on the bucket would ride into the published window.
-  const windowsOf = (minutes: number): RateLimitBucket[] =>
-    buckets
-      .filter((bucket) => bucket.windowMinutes === minutes)
-      .map(({ id: _id, ...bucket }) => bucket)
+  const windowsOf = (minutes: number): AntigravityUsageBucket[] =>
+    buckets.filter((bucket) => bucket.windowMinutes === minutes)
   return {
     session: deriveMostConstrainedWindow(windowsOf(SESSION_WINDOW_MINUTES)),
     weekly: deriveMostConstrainedWindow(windowsOf(WEEKLY_WINDOW_MINUTES)),

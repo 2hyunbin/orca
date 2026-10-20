@@ -1,7 +1,11 @@
 import React from 'react'
 import type { RateLimitBucket } from '../../../../shared/rate-limit-types'
 import type { UsagePercentageDisplay } from '../../../../shared/usage-percentage-display'
-import { getPoolLabelParts } from './usage-pool-label'
+import {
+  formatPoolGroupLabel,
+  formatPoolWindowLabel,
+  type GroupedUsagePool
+} from './usage-pool-label'
 import { formatBareUsagePercentage } from './usage-percentage-label'
 
 // Shortest window first; an unknown window (0) sorts last. Stable, so ties keep agy's order.
@@ -37,32 +41,32 @@ export function GroupedPoolUsage({
   display,
   now
 }: {
-  visibleBuckets: readonly RateLimitBucket[]
+  visibleBuckets: readonly GroupedUsagePool[]
   allBuckets: readonly RateLimitBucket[]
   display: UsagePercentageDisplay
   now: number
 }): React.JSX.Element {
   const groups = new Map<string, RateLimitBucket[]>()
   for (const bucket of visibleBuckets) {
-    const key = bucket.group ?? bucket.name
-    groups.set(key, [...(groups.get(key) ?? []), bucket])
+    const buckets = groups.get(bucket.group) ?? []
+    buckets.push(bucket)
+    groups.set(bucket.group, buckets)
   }
   return (
     <>
       {[...groups].map(([group, buckets], groupIndex) => {
         const windows = keyedWindows(buckets)
-        const header = getPoolLabelParts(windows[0].bucket, allBuckets, now)
         return (
           <React.Fragment key={group}>
             {groupIndex > 0 ? (
               <span aria-hidden="true" className="h-3 w-px shrink-0 bg-border" />
             ) : null}
-            <span className="max-w-[120px] truncate" title={header?.fullGroup ?? group}>
-              {header?.group ?? group}
+            <span className="max-w-[120px] truncate" title={group}>
+              {formatPoolGroupLabel(group, allBuckets)}
             </span>
             {windows.map(({ bucket, key }, index) => {
               const percentage = formatBareUsagePercentage(bucket.usedPercent, display)
-              const window = getPoolLabelParts(bucket, allBuckets, now)?.window ?? ''
+              const window = formatPoolWindowLabel(bucket, now)
               return (
                 <React.Fragment key={key}>
                   {index > 0 ? <span className="text-muted-foreground">·</span> : null}

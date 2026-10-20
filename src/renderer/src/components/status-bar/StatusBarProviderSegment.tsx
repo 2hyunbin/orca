@@ -22,7 +22,7 @@ import { formatBareUsagePercentage, formatUsagePercentageLabel } from './usage-p
 import { translate } from '@/i18n/i18n'
 import { getStatusBarUsageSections } from './status-bar-usage-sections'
 import { GroupedPoolUsage } from './usage-grouped-pools'
-import { formatStatusBarSectionLabel } from './usage-pool-label'
+import { formatStatusBarSectionLabel, isGroupedUsagePool } from './usage-pool-label'
 import { useResetCountdownClock } from '@/hooks/useResetCountdownClock'
 
 function MiniBar({
@@ -233,15 +233,15 @@ export function ProviderSegment({
       ? getUsageHeadlineSection(p)
       : getTightestUsageSection(p)
     : null
+  const sections = getStatusBarUsageSections(p, mode)
+  const groupedBuckets = sections.map((section) => section.window).filter(isGroupedUsagePool)
+  const showLabels = mode === 'verbose' || !compact
   const now = useResetCountdownClock(
-    p?.buckets
-      ?.filter(
-        (bucket) =>
-          bucket.group &&
-          clampUsedPercent(bucket.usedPercent) >= USAGE_URGENT_PERCENT &&
-          (mode === 'verbose' || (!compact && bucket === tightest?.window))
-      )
-      .map((bucket) => bucket.resetsAt) ?? []
+    showLabels
+      ? groupedBuckets
+          .filter((bucket) => clampUsedPercent(bucket.usedPercent) >= USAGE_URGENT_PERCENT)
+          .map((bucket) => bucket.resetsAt)
+      : []
   )
 
   // Idle / initial load
@@ -287,15 +287,8 @@ export function ProviderSegment({
   // Has data (ok, fetching with stale data, or error with stale data)
   const isStale = p.status === 'error' && !calm
   const showBalance = isExtraUsageActive(p)
-  const sections = getStatusBarUsageSections(p, mode)
-  const groupedBuckets = p.buckets?.filter((bucket) =>
-    sections.some((section) => section.window === bucket)
-  )
   const showGroupedPools =
-    mode === 'verbose' &&
-    groupedBuckets !== undefined &&
-    groupedBuckets.length > 0 &&
-    groupedBuckets.every((bucket) => bucket.group)
+    mode === 'verbose' && groupedBuckets.length > 0 && groupedBuckets.length === sections.length
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -318,7 +311,7 @@ export function ProviderSegment({
               w={section.window}
               label={formatStatusBarSectionLabel(p, section, now)}
               display={display}
-              showLabel={mode === 'verbose' || !compact}
+              showLabel={showLabels}
               labelFirst={section.labelFirst}
             />
           </React.Fragment>

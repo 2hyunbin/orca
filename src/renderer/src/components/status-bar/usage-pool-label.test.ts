@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ProviderRateLimits, RateLimitBucket } from '../../../../shared/rate-limit-types'
 import {
   formatPoolShortLabel,
   formatStatusBarSectionLabel,
-  getPoolLabelParts
+  formatPoolGroupLabel,
+  formatPoolWindowLabel
 } from './usage-pool-label'
 import { getTightestUsageSection } from './UsageRosterPanel'
 
@@ -48,11 +49,7 @@ const TWO_GROUPS = [
   pool('Claude and GPT models', WEEK)
 ]
 
-describe('getPoolLabelParts', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
+describe('pool labels', () => {
   it('shortens two groups with two windows each', () => {
     expect(TWO_GROUPS.map((b) => formatPoolShortLabel(b, TWO_GROUPS))).toEqual([
       'Gemini 5h',
@@ -60,11 +57,7 @@ describe('getPoolLabelParts', () => {
       'Claude/GPT 5h',
       'Claude/GPT wk'
     ])
-    expect(getPoolLabelParts(TWO_GROUPS[2], TWO_GROUPS)).toEqual({
-      group: 'Claude/GPT',
-      fullGroup: 'Claude and GPT models',
-      window: '5h'
-    })
+    expect(formatPoolGroupLabel('Claude and GPT models', TWO_GROUPS)).toBe('Claude/GPT')
   })
 
   it('labels a single-window group by its window length', () => {
@@ -80,7 +73,7 @@ describe('getPoolLabelParts', () => {
   it('shows the group alone for an unknown window with no window name', () => {
     const { windowName: _windowName, ...unnamed } = pool('Gemini Models', 0)
     expect(formatPoolShortLabel(unnamed, [unnamed])).toBe('Gemini')
-    expect(getPoolLabelParts(unnamed, [unnamed])?.window).toBe('')
+    expect(formatPoolWindowLabel(unnamed)).toBe('')
   })
 
   it('keeps full group names when two groups shorten to the same text', () => {
@@ -88,6 +81,19 @@ describe('getPoolLabelParts', () => {
     expect(buckets.map((b) => formatPoolShortLabel(b, buckets))).toEqual([
       'Gemini Models wk',
       'Gemini models wk'
+    ])
+  })
+
+  it('does not shorten another group to a name retained after a collision', () => {
+    const buckets = [
+      pool('Gemini Models', WEEK),
+      pool('Gemini models', WEEK),
+      pool('Gemini Models Models', WEEK)
+    ]
+    expect(buckets.map((bucket) => formatPoolShortLabel(bucket, buckets))).toEqual([
+      'Gemini Models wk',
+      'Gemini models wk',
+      'Gemini Models Models wk'
     ])
   })
 
@@ -101,7 +107,6 @@ describe('getPoolLabelParts', () => {
 
   it('keeps the full name for a pool with no group (an old host)', () => {
     const legacy = pool(undefined, WEEK, { name: 'Gemini Models · Weekly Limit Remaining' })
-    expect(getPoolLabelParts(legacy, [legacy])).toBeNull()
     expect(formatPoolShortLabel(legacy, [legacy])).toBe('Gemini Models · Weekly Limit Remaining')
   })
 
@@ -110,20 +115,36 @@ describe('getPoolLabelParts', () => {
     expect(formatPoolShortLabel(pro, [pro])).toBe('Pro')
   })
 
-  it('switches to a reset countdown only once a pool is urgent and its reset is known', () => {
+  it('adds a reset countdown only once a pool is urgent and its reset is known', () => {
     const now = Date.UTC(2026, 9, 1, 12)
-    vi.useFakeTimers()
-    vi.setSystemTime(now)
     const resetsAt = now + 130 * 60_000
     const label = (overrides: Partial<RateLimitBucket>): string => {
       const bucket = pool('Gemini Models', FIVE_HOURS, overrides)
-      return getPoolLabelParts(bucket, [bucket])?.window ?? ''
+      return formatPoolWindowLabel(bucket, now)
     }
 
-    expect(label({ usedPercent: 80, resetsAt })).toBe('2h 10m')
+    expect(label({ usedPercent: 80, resetsAt })).toBe('5h (2h 10m)')
     expect(label({ usedPercent: 79, resetsAt })).toBe('5h')
     expect(label({ usedPercent: 80, resetsAt: null })).toBe('5h')
   })
+
+  it.each([
+    [WEEK, 'Weekly Limit Remaining', 'wk (2h 10m)'],
+    [0, 'Daily Limit Remaining', 'Daily (2h 10m)'],
+    [0, undefined, '2h 10m']
+  ] as const)(
+    'keeps the window identity for an urgent %s-minute pool',
+    (minutes, windowName, expected) => {
+      const now = Date.UTC(2026, 9, 1, 12)
+      const bucket = pool('Gemini Models', minutes, {
+        windowName,
+        usedPercent: 90,
+        resetsAt: now + 130 * 60_000
+      })
+
+      expect(formatPoolWindowLabel(bucket, now)).toBe(expected)
+    }
+  )
 })
 
 describe('formatStatusBarSectionLabel', () => {
