@@ -188,12 +188,13 @@ describe('workspace unread flag on a headless host', () => {
     expect(host.sshMeta[SSH_WT].isUnread).toBe(true)
   })
 
-  it("clears a server-owned copy's own record, not its local twin's", async () => {
+  // The phone names only an id, so it cannot say which of two same-id copies it shows.
+  it('clears neither copy of a workspace two hosts register', async () => {
     const host = createHeadlessHost()
     host.hubMeta[HUB_WT].isUnread = true
     host.meta[HUB_WT].isUnread = true
     await host.openOnPhone(HUB_WT)
-    expect(host.hubMeta[HUB_WT].isUnread).toBe(false)
+    expect(host.hubMeta[HUB_WT].isUnread).toBe(true)
     expect(host.meta[HUB_WT].isUnread).toBe(true)
   })
 
