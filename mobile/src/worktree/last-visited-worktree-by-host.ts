@@ -126,6 +126,24 @@ export function isLastVisitedWorktreeRow(
   )
 }
 
+/** Undefined while the stored visit is read; null when this phone has opened nothing on the host. */
+export type HostVisit = LastVisitedWorktreeOnHost | null | undefined
+
+/**
+ * The host list's highlight: the phone's own choice once it has one (nothing while that row is
+ * unlisted), the desktop's selection before the phone has opened anything there.
+ */
+export function isHighlightedWorktreeRow(
+  row: Pick<Worktree, 'worktreeId' | 'hostId'>,
+  visit: HostVisit,
+  desktopSelected: boolean
+): boolean {
+  if (visit === undefined) {
+    return false
+  }
+  return visit === null ? desktopSelected : isLastVisitedWorktreeRow(row, visit)
+}
+
 type Listener = (hostId: string, visited: LastVisitedWorktreeOnHost) => void
 const listeners = new Set<Listener>()
 

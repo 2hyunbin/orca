@@ -4,6 +4,7 @@ import { LAST_VISITED_WORKTREE_STORAGE_KEY } from './last-visited-worktree-repo'
 import {
   readLastVisitedWorktreeOnHost,
   subscribeLastVisitedWorktree,
+  type HostVisit,
   type LastVisitedWorktreeOnHost
 } from './last-visited-worktree-by-host'
 
@@ -11,10 +12,9 @@ import {
  * The workspace this phone last opened on `hostId`: stored, then each visit noted in this context
  * (a list tap) or written through this context's store (in the app, a session page's write).
  * A web page's store is its load-time copy, so a visit another page makes reaches it on reload.
+ * Undefined until the stored visit is read.
  */
-export function useLastVisitedWorktreeOnHost(
-  hostId: string | undefined
-): LastVisitedWorktreeOnHost | null {
+export function useLastVisitedWorktreeOnHost(hostId: string | undefined): HostVisit {
   const [visited, setVisited] = useState<{
     hostId: string
     value: LastVisitedWorktreeOnHost | null
@@ -49,7 +49,12 @@ export function useLastVisitedWorktreeOnHost(
           setVisited({ hostId, value: readLastVisitedWorktreeOnHost(raw, hostId) })
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Unreadable reads as never opened, so the list still shows the desktop's selection.
+        if (!stale && !noted) {
+          setVisited({ hostId, value: null })
+        }
+      })
     return () => {
       stale = true
       unsubscribeNotes()
@@ -58,5 +63,5 @@ export function useLastVisitedWorktreeOnHost(
   }, [hostId])
 
   // Keyed by host so a switch to another host never shows the last one's visit.
-  return visited && visited.hostId === hostId ? visited.value : null
+  return visited && visited.hostId === hostId ? visited.value : undefined
 }
