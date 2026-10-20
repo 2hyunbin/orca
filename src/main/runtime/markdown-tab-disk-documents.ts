@@ -33,8 +33,13 @@ type MarkdownFileAddress = Pick<
   'filePath' | 'relativePath' | 'externalSshTargetId'
 >
 
-export type MarkdownTabDiskHost = {
+export type MarkdownTabDiskHost = Pick<MarkdownFileIo, 'readFile'> & {
   getWorkspaceSessionForWorktree(worktreeId: string): WorkspaceSessionState | null | undefined
+  /** The file calls of one save, all reaching the host its first call reached. */
+  forSave(worktreeId: string, file: MarkdownFileAddress): Promise<MarkdownFileIo>
+}
+
+export type MarkdownFileIo = {
   /** A prefix of the file decoded (at most `maxBytes`, the host may send less), and its full
    *  size; throws `binary_file` for binary. */
   readFile(
@@ -182,7 +187,8 @@ async function saveOnce(
   if (refusal) {
     throw new Error(refusal)
   }
-  const disk = await host.readFile(worktreeId, file, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
+  const io = await host.forSave(worktreeId, file)
+  const disk = await io.readFile(worktreeId, file, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
   const reason = readOnlyReason(tab, file, disk.byteLength)
   if (reason) {
     throw new Error(reason)
@@ -195,7 +201,7 @@ async function saveOnce(
     }
     throw new Error('conflict')
   }
-  const written = await host.writeFileIfUnchanged(worktreeId, file, content, {
+  const written = await io.writeFileIfUnchanged(worktreeId, file, content, {
     expectedSignature: getDiskBaselineSignature(disk.content)
   })
   if (!written.ok) {

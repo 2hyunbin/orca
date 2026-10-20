@@ -120,18 +120,27 @@ async function desktopOnServer(
   const pins: (number | undefined)[] = []
   const serverForwards = vi.spyOn(server, 'callOrchestrationWorkerServer')
   const desktop = await runtimeOnHost('runtime:env-a')
-  vi.spyOn(desktop, 'resolveOrchestrationWorkerServer').mockReturnValue({
+  const pairing = { revision: PAIRING_REVISION }
+  vi.spyOn(desktop, 'resolveOrchestrationWorkerServer').mockImplementation(() => ({
     environmentId: 'env-a',
     name: 'env-a',
     peerFingerprint: 'peer',
-    pairingRevision: PAIRING_REVISION
-  })
+    pairingRevision: pairing.revision
+  }))
   const call = vi
     .spyOn(desktop, 'callOrchestrationWorkerServer')
     .mockImplementation(async (environmentId, method, params, _timeout, _envelope, internal) => {
       expect(environmentId).toBe('env-a')
       serverCalls.push(method)
-      pins.push(internal?.expectedEnvironmentPairingRevision)
+      const pin = internal?.expectedEnvironmentPairingRevision
+      pins.push(pin)
+      // As `callRuntimeEnvironment` refuses a call pinned to a pairing that has since changed.
+      if (pin !== undefined && pin !== pairing.revision) {
+        throw new OrchestrationError(
+          'runtime_environment_changed',
+          'Runtime environment pairing changed; refresh and try again'
+        )
+      }
       if (method === 'status.get') {
         return { runtimeId: 'server-runtime', capabilities }
       }
@@ -146,7 +155,7 @@ async function desktopOnServer(
       }
       return response.result
     })
-  return { desktop, call, serverCalls, serverForwards, pins }
+  return { desktop, call, serverCalls, serverForwards, pins, pairing }
 }
 
 describe("a phone's Markdown tab on a paired server's workspace", () => {
@@ -198,8 +207,7 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
     ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
     expect(await readFile(readme, 'utf8')).toBe('# Phone\n')
     expect(serverCalls).toEqual(['files.read', 'status.get', 'files.writeIfUnchanged'])
-    // The phone's read is unpinned; every call of the save goes to the pairing it probed.
-    expect(pins).toEqual([undefined, PAIRING_REVISION, PAIRING_REVISION])
+    expect(pins).toEqual([PAIRING_REVISION, PAIRING_REVISION, PAIRING_REVISION])
     expect(serverForwards).not.toHaveBeenCalled()
   })
 
@@ -237,7 +245,7 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
     ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
     expect(await readFile(readme, 'utf8')).toBe('# Phone\n')
     expect(serverCalls).toEqual(['files.read', 'status.get', 'files.read', 'files.write'])
-    expect(pins).toEqual([undefined, PAIRING_REVISION, PAIRING_REVISION, PAIRING_REVISION])
+    expect(pins).toEqual([PAIRING_REVISION, PAIRING_REVISION, PAIRING_REVISION, PAIRING_REVISION])
   })
 
   it('refuses a changed file on a server too old to check the disk, and never writes', async () => {
@@ -261,6 +269,29 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
     expect(serverCalls).not.toContain('files.write')
     expect(serverCalls).not.toContain(FILE_WRITE_IF_UNCHANGED_METHOD)
     expect(await readFile(readme, 'utf8')).toBe('# Changed on the server\n')
+  })
+
+  it('refuses a save whose server was re-paired after its first read, writing nothing', async () => {
+    const { desktop, call, serverCalls, pairing } = await desktopOnServer()
+    const forward = call.getMockImplementation()!
+    call.mockImplementation(async (environmentId, method, params, ...rest) => {
+      const answer = await forward(environmentId, method, params, ...rest)
+      if (method === 'files.read') {
+        pairing.revision = PAIRING_REVISION + 1
+      }
+      return answer
+    })
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).rejects.toThrow('pairing changed')
+    expect(serverCalls).not.toContain(FILE_WRITE_IF_UNCHANGED_METHOD)
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
   })
 
   it('reports a lost server as unavailable, never as a missing or empty file', async () => {
@@ -483,6 +514,18 @@ describe("a phone's Markdown tab with a desktop window attached", () => {
       )
     ).rejects.toThrow('unsupported_untitled')
     expect(existsSync(untitled)).toBe(false)
+  })
+})
+
+describe("a phone's Markdown tab with no window, on a desktop's untitled document", () => {
+  it('is an ordinary file, because the saved session does not record untitled', async () => {
+    const untitled = join(root, 'untitled.md')
+    await writeFile(untitled, '')
+    const runtime = await runtimeOnHost('local', sessionWithFile(untitled, 'untitled.md'))
+
+    await expect(
+      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)
+    ).resolves.toMatchObject({ content: '', editable: true })
   })
 })
 

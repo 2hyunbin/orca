@@ -46,8 +46,7 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
     openFilesByWorktree: { [WORKTREE]: [file] }
   }
   const state = { disk }
-  const host = {
-    getWorkspaceSessionForWorktree: () => session,
+  const io = {
     readFile: vi.fn(async (_worktreeId: string, _file: { filePath: string }, maxBytes: number) => {
       const bytes = Buffer.from(state.disk)
       return { content: bytes.subarray(0, maxBytes).toString('utf8'), byteLength: bytes.length }
@@ -66,6 +65,11 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
         return { ok: true as const }
       }
     )
+  }
+  const host = {
+    ...io,
+    getWorkspaceSessionForWorktree: () => session,
+    forSave: async () => io
   } satisfies MarkdownTabDiskHost
   return { host, state }
 }

@@ -27,7 +27,11 @@ import {
   type ResolvedRuntimeFileTarget,
   type RuntimeLocalFileHost
 } from './files/file-target'
-import type { MarkdownDiskFile, MarkdownTabDiskHost } from './markdown-tab-disk-documents'
+import type {
+  MarkdownDiskFile,
+  MarkdownFileIo,
+  MarkdownTabDiskHost
+} from './markdown-tab-disk-documents'
 import { OrchestrationError } from './orchestration/orchestration-error'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
@@ -60,13 +64,18 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
     requireLocalRuntimeFileRoute(target)
     return { environmentId: null, target }
   }
-  return {
-    getWorkspaceSessionForWorktree: (worktreeId) =>
-      runtime.getWorkspaceSessionForWorktree(worktreeId),
+  // `pairingRevision` is the pairing a save captured before its first call; a phone read leaves it unset.
+  const fileIo = (pairingRevision: number | undefined): MarkdownFileIo => ({
     readFile: async (worktreeId, file, maxBytes) => {
       const { environmentId } = await routeOf(worktreeId, file)
       if (environmentId) {
-        return readFileOnEnvironment(runtime.callEnvironment, environmentId, worktreeId, file)
+        return readFileOnEnvironment(
+          runtime.callEnvironment,
+          environmentId,
+          worktreeId,
+          file,
+          pairingRevision
+        )
       }
       const { bytes, size } = await readLocalRuntimeFilePrefix(
         file.filePath,
@@ -82,8 +91,9 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
       const { environmentId, target } = await routeOf(worktreeId, file)
       if (environmentId) {
         return writeFileOnEnvironment(
-          runtime,
+          runtime.callEnvironment,
           environmentId,
+          pairingRevision,
           worktreeId,
           file,
           content,
@@ -96,6 +106,29 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
         precondition
       )
     }
+  })
+  return {
+    getWorkspaceSessionForWorktree: (worktreeId) =>
+      runtime.getWorkspaceSessionForWorktree(worktreeId),
+    readFile: fileIo(undefined).readFile,
+    forSave: async (worktreeId, file) => {
+      const { environmentId } = await routeOf(worktreeId, file)
+      return fileIo(environmentId ? pairingRevisionOf(runtime, environmentId) : undefined)
+    }
+  }
+}
+
+function pairingRevisionOf(
+  runtime: Pick<MarkdownTabDiskRuntime, 'environmentPairingRevision'>,
+  environmentId: string
+): number | undefined {
+  try {
+    return runtime.environmentPairingRevision(environmentId)
+  } catch (error) {
+    throw new RemoteRuntimeClientError(
+      'remote_runtime_unavailable',
+      error instanceof Error ? error.message : String(error)
+    )
   }
 }
 
@@ -126,10 +159,11 @@ async function readFileOnEnvironment(
   call: EnvironmentCall,
   environmentId: string,
   worktreeId: string,
-  file: MarkdownFileAddress
+  file: MarkdownFileAddress,
+  pairingRevision: number | undefined
 ): Promise<MarkdownDiskFile> {
   const address = { worktree: `id:${worktreeId}`, relativePath: file.relativePath }
-  const read = await callEnvironment(call, environmentId, 'files.read', address)
+  const read = await callEnvironment(call, environmentId, 'files.read', address, pairingRevision)
   if (!isRecord(read) || typeof read.content !== 'string') {
     throw new Error('invalid_runtime_response')
   }
@@ -138,7 +172,7 @@ async function readFileOnEnvironment(
     return { content: read.content, byteLength: cut }
   }
   // Why: a truncated `files.read` reports where it cut, not the file size the phone labels.
-  const stat = await callEnvironment(call, environmentId, 'files.stat', address)
+  const stat = await callEnvironment(call, environmentId, 'files.stat', address, pairingRevision)
   const size = isRecord(stat) && typeof stat.size === 'number' ? stat.size : 0
   return { content: read.content, byteLength: Math.max(size, cut + 1) }
 }
@@ -150,27 +184,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * The desktop editor's guarded remote save (`writeRemoteFileIfUnchanged`): a server that advertises
  * the disk check compares at write time; an older one is compared from here before a plain write.
- * Every call of the save is pinned to the pairing it probed, so a re-pair never receives the write.
+ * Every call is pinned to the pairing the save captured before its first read, so a re-pair never
+ * receives the write.
  */
 async function writeFileOnEnvironment(
-  runtime: Pick<MarkdownTabDiskRuntime, 'callEnvironment' | 'environmentPairingRevision'>,
+  call: EnvironmentCall,
   environmentId: string,
+  pairingRevision: number | undefined,
   worktreeId: string,
   file: MarkdownFileAddress,
   content: string,
   diskPrecondition: FileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
-  let pairingRevision: number | undefined
-  try {
-    pairingRevision = runtime.environmentPairingRevision(environmentId)
-  } catch (error) {
-    throw new RemoteRuntimeClientError(
-      'remote_runtime_unavailable',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
   const pinned = (method: string, params: unknown): Promise<unknown> =>
-    callEnvironment(runtime.callEnvironment, environmentId, method, params, pairingRevision)
+    callEnvironment(call, environmentId, method, params, pairingRevision)
   const status = await pinned('status.get', undefined)
   const capabilities =
     isRecord(status) && Array.isArray(status.capabilities) ? status.capabilities : []
