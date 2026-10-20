@@ -1,3 +1,7 @@
+import { structuredAgentSessionBlocksTooLarge } from '../../../../shared/rpc-contract/structured-agent-session-message-params'
+import { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
+import { AGENT_SESSION_MESSAGE_TOO_LARGE_PARTS } from '../../../../shared/agent-session-refusal-notice'
+import { agentSessionWriteNoticeText } from './agent-session-write-notice-text'
 import { imageReferencesToPromptMarkers } from '../../../../shared/native-chat-image-transcript-markers'
 import type { StructuredAgentSessionCommandOutcome } from '../../../../shared/structured-agent-session-composer'
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
@@ -17,6 +21,18 @@ export async function dispatchNativeChatStructuredComposerText(
   // A command's reveal, if any, came at the press; a message reveals unless it waits as a queued card.
   if (handled) {
     return { ...command, revealsTranscript: false }
+  }
+  // The composer still owns its draft until admission, so refusal must precede the handoff.
+  const body = structuredAgentSessionSendBody(
+    prompt,
+    attachments.map(({ path }) => ({ path, previewUri: '' }))
+  )
+  if (structuredAgentSessionBlocksTooLarge(body.blocks)) {
+    return {
+      accepted: false,
+      error: agentSessionWriteNoticeText([...AGENT_SESSION_MESSAGE_TOO_LARGE_PARTS]),
+      revealsTranscript: false
+    }
   }
   const admission = transport.send(prompt, attachments)
   return { accepted: admission !== false, error: null, revealsTranscript: admission === true }
