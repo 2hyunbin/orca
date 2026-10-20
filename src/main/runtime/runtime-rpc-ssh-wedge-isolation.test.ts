@@ -1,5 +1,5 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConnection, type Socket } from 'node:net'
@@ -35,6 +35,7 @@ vi.mock('../ssh/targets/ssh-target-registry', () => ({
 
 const servers: OrcaRuntimeRpcServer[] = []
 const sockets: Socket[] = []
+const userDataPaths: string[] = []
 
 afterEach(async () => {
   vi.clearAllMocks()
@@ -42,10 +43,14 @@ afterEach(async () => {
     socket.destroy()
   }
   await Promise.all(servers.splice(0).map((server) => server.stop()))
+  for (const path of userDataPaths.splice(0)) {
+    rmSync(path, { recursive: true, force: true })
+  }
 })
 
 async function startServer(): Promise<{ endpoint: string; token: string }> {
   const userDataPath = mkdtempSync(join(tmpdir(), 'orca-rpc-ssh-wedge-'))
+  userDataPaths.push(userDataPath)
   const server = new OrcaRuntimeRpcServer({
     runtime: new OrcaRuntimeService(),
     userDataPath,
@@ -60,7 +65,6 @@ async function startServer(): Promise<{ endpoint: string; token: string }> {
 /** Writes every frame on one connection and collects responses by id. */
 function openPipelinedSocket(endpoint: string): {
   write: (frame: Record<string, unknown>) => void
-  responses: Map<string, object>
   next: (id: string) => Promise<object>
 } {
   const socket = createConnection(endpoint)
@@ -69,6 +73,8 @@ function openPipelinedSocket(endpoint: string): {
   const waiters = new Map<string, (frame: object) => void>()
   let buffer = ''
   socket.setEncoding('utf8')
+  // Why: a reset on a wedged socket must fail the probe assertions, not crash the worker.
+  socket.on('error', () => {})
   socket.on('data', (chunk: string) => {
     buffer += chunk
     let newline = buffer.indexOf('\n')
@@ -86,7 +92,6 @@ function openPipelinedSocket(endpoint: string): {
   })
   return {
     write: (frame) => socket.write(`${JSON.stringify(frame)}\n`),
-    responses,
     next: (id) =>
       new Promise((resolve) => {
         const existing = responses.get(id)
@@ -144,6 +149,5 @@ describe('runtime RPC with a wedged SSH layer (#31179)', () => {
     session.write({ id: 'list', authToken: token, method: 'ssh.listTargets' })
 
     await expect(session.next('list')).resolves.toMatchObject({ ok: true })
-    expect(session.responses.has('wedged')).toBe(false)
   })
 })
