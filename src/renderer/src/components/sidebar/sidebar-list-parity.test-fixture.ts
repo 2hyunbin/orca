@@ -21,7 +21,7 @@ import type {
 } from '../../../../shared/sidebar-list/sidebar-feed-rows'
 import type { SmartStampFields } from '../../../../shared/sidebar-list/sort-stamps'
 import { buildPairedServerActivityFacts } from '../../../../shared/sidebar-list/paired-server-activity-facts'
-import { GOLDEN_NOW, folder, group, lineage } from './sidebar-list-golden-factories.test-fixture'
+import { GOLDEN_NOW, folder, lineage } from './sidebar-list-golden-factories.test-fixture'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   readWindowWorkspaceActivityFacts,
@@ -35,7 +35,10 @@ import {
 import type { SidebarInputsFeedDomain } from '../../../../main/runtime/sidebar-inputs/sidebar-inputs-feed'
 import type { SidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
 import { buildSidebarFeedCatalog } from '../../../../shared/sidebar-list/sidebar-feed-catalog'
-import { projectCatalogFromWindowState } from './sidebar-list-parity-project-catalog.test-fixture'
+import {
+  projectCatalogFromWindowState,
+  windowCatalogFromServerAnswers
+} from './sidebar-list-parity-project-catalog.test-fixture'
 
 const SERVER_HOST_ID = 'runtime:env-1'
 
@@ -92,22 +95,15 @@ export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState>
   }
   const pending = Object.values(base.pendingWorktreeCreations ?? {})[0]
   const [serverMain, serverChild] = worktreesByRepo.api ?? []
+  // The repos, projects and server groups as the window's all-host fetch folds them.
+  const catalog = windowCatalogFromServerAnswers({ ...base, worktreesByRepo })
   return {
-    worktreesByRepo,
+    ...catalog,
     // A server workspace nested under the server's main, and a server folder workspace.
     worktreeLineageById: {
       ...base.worktreeLineageById,
       ...(serverMain && serverChild ? { [serverChild.id]: lineage(serverChild, serverMain) } : {})
     },
-    projectGroups: [
-      ...(base.projectGroups ?? []),
-      group('pg-server-folders', 'Server folders', {
-        parentPath: '/srv/folders',
-        createdFrom: 'folder-scan',
-        executionHostId: SERVER_HOST_ID,
-        tabOrder: 3
-      })
-    ],
     folderWorkspaces: [
       ...(base.folderWorkspaces ?? []),
       folder('fw-server', 'pg-server-folders', { executionHostId: SERVER_HOST_ID, sortOrder: 3 })
@@ -193,7 +189,10 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
     const facts = windowActivity.get(row.worktreeId)
     return { ...row, activity: { terminal: facts?.terminal ?? null, agent: facts?.agent ?? null } }
   })
-  const domain = (name: string, read: () => Record<string, unknown>): SidebarInputsFeedDomain => ({
+  const domain = (
+    name: string,
+    read: SidebarInputsFeedDomain['read']
+  ): SidebarInputsFeedDomain => ({
     name,
     read,
     watch: () => () => {}

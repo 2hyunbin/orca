@@ -5,6 +5,7 @@ import {
 } from '../execution-host'
 import { adoptEndpointProjectCatalog, adoptEndpointRepo } from '../endpoint-catalog-adoption'
 import { applyManualRepoOrder } from '../manual-repo-order'
+import { applyInheritedProjectGroups } from '../project-group-inheritance'
 import {
   buildMobileProjectSectionCatalog,
   type MobileProjectSectionCatalog
@@ -44,13 +45,13 @@ export function buildSidebarProjectCatalog(
   ui: Pick<PersistedUIState, 'manualRepoOrder' | 'projectOrderBy'> | undefined
 ): MobileProjectSectionCatalog {
   const local = { kind: 'local' } as const
-  const repos = applyManualRepoOrder(
-    [
-      ...own.repos.map((repo) => adoptEndpointRepo(local, repo)),
-      ...servers.flatMap((server) => server.repos)
-    ],
-    ui?.manualRepoOrder
-  )
+  // Folded host by host as the window's mergeFetchedReposForHost does: a server's copy of a
+  // grouped project joins the group the copies listed before it have.
+  let merged: Repo[] = own.repos.map((repo) => adoptEndpointRepo(local, repo))
+  for (const server of servers) {
+    merged = [...merged, ...applyInheritedProjectGroups(merged, server.repos)]
+  }
+  const repos = applyManualRepoOrder(merged, ui?.manualRepoOrder)
   const hosts = [
     {
       hostId: LOCAL_EXECUTION_HOST_ID,

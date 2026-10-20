@@ -52,7 +52,13 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
   const retiredListeners = new Set<(environmentId: string) => void>()
   const watches = new Map<
     string,
-    { onChange: () => void; onClose: () => void; closed: boolean; ended: boolean }
+    {
+      /** A catalog change unless told otherwise, as ready and reposChanged are. */
+      onChange: (change?: { catalog: boolean }) => void
+      onClose: () => void
+      closed: boolean
+      ended: boolean
+    }
   >()
   // worktree.ps; the catalog reads go to `catalogCall`, unanswered unless a test sets them.
   const call = vi.fn<MobileDesktopRelayHosts['call']>()
@@ -91,7 +97,12 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
       return () => statusListeners.delete(listener)
     },
     watchChanges: (host, _expected, callbacks) => {
-      const watch = { ...callbacks, closed: false, ended: false }
+      const watch = {
+        onChange: (change = { catalog: true }) => callbacks.onChange(change),
+        onClose: callbacks.onClose,
+        closed: false,
+        ended: false
+      }
       watches.set(host.environmentId, watch)
       return {
         close: () => {
@@ -570,5 +581,30 @@ describe('PairedServerRowsProducer', () => {
     // The failed read left it stale, so the poll reads it again.
     await vi.advanceTimersByTimeAsync(FALLBACK_REFRESH_MS)
     expect(catalogCall.mock.calls.length).toBeGreaterThan(reads)
+  })
+
+  it('reads no catalog for worktreesChanged, which no catalog write sends alone', async () => {
+    const { hosts, call, catalogCall, watches } = fakeHosts([{ id: 'box', live: true }])
+    call.mockResolvedValue(psReply([]))
+    catalogCall.mockResolvedValue({
+      id: 'repo.list',
+      ok: true,
+      result: { repos: [] },
+      _meta: { runtimeId: 'runtime-a' }
+    })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
+    producer.attach(hosts)
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+    const reads = catalogCall.mock.calls.length
+    const rowReads = call.mock.calls.length
+
+    watches.get('box')?.onChange({ catalog: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(call.mock.calls.length).toBe(rowReads + 1)
+    expect(catalogCall.mock.calls.length).toBe(reads)
   })
 })

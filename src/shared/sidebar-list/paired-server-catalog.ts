@@ -1,17 +1,14 @@
 import { z } from 'zod'
-import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
-import {
-  adoptEndpointProjectCatalog,
-  adoptEndpointRepo
-} from '../../../shared/endpoint-catalog-adoption'
-import { ProjectGroupSchema } from '../../../shared/project-section-catalog-schema'
-import type { ProjectGroup } from '../../../shared/project-group-types'
-import { projectHostSetupProjectionFromRepos } from '../../../shared/project-host-setup-projection'
-import type { Project, ProjectHostSetup } from '../../../shared/project-types'
-import type { Repo } from '../../../shared/repo-types'
-import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
-import type { PairedServerCatalog } from '../../../shared/sidebar-list/sidebar-project-catalog'
-import { salvagingArray } from '../../../shared/zod-salvage'
+import { toRuntimeExecutionHostId } from '../execution-host'
+import { adoptEndpointProjectCatalog, adoptEndpointRepo } from '../endpoint-catalog-adoption'
+import { ProjectGroupSchema } from '../project-section-catalog-schema'
+import type { ProjectGroup } from '../project-group-types'
+import { projectHostSetupProjectionFromRepos } from '../project-host-setup-projection'
+import type { Project, ProjectHostSetup } from '../project-types'
+import type { Repo } from '../repo-types'
+import type { RuntimeRpcResponse } from '../runtime-rpc-envelope'
+import type { PairedServerCatalog } from './sidebar-project-catalog'
+import { salvagingArray } from '../zod-salvage'
 
 // The server's own rows as it sends them; the adoption and projection steps normalize the rest.
 function rowWith<T>(...keys: string[]) {

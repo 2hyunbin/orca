@@ -23,7 +23,7 @@ import {
   stampServerWorktreeRows
 } from '../mobile-desktop-relay/server-worktree-fetch'
 import type { PairedServerCatalog } from '../../../shared/sidebar-list/sidebar-project-catalog'
-import { fetchPairedServerCatalog } from './paired-server-catalog'
+import { fetchPairedServerCatalog } from '../../../shared/sidebar-list/paired-server-catalog'
 
 // Owner-approved fallback for changes a server announces no event for (status-only, older servers).
 export const FALLBACK_REFRESH_MS = 30_000
@@ -39,7 +39,7 @@ type ServerEntry = {
   confirmed: boolean
   /** Its repos and project groups as last fetched under this pairing; null until one answered. */
   catalog: PairedServerCatalog | null
-  /** A catalog change may have gone unread: set on contact and on each change event. */
+  /** A catalog change may have gone unread: set on contact and on a catalog change event. */
   catalogStale: boolean
   watch: MobileDesktopRelayHostWatch | null
   refreshing: Promise<void> | null
@@ -205,11 +205,11 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
     const current = (): boolean => this.servers.get(entry.environmentId) === entry
     // Ready fires on every (re)connect, so contact and a missed-event replay both count as changes.
     const watch = hosts.watchChanges({ environmentId: entry.environmentId }, entry.identity, {
-      onChange: () => {
+      onChange: ({ catalog }) => {
         if (current()) {
           // A fetch already in flight may predate this change, so one more runs after it.
           entry.refreshAgain ||= entry.refreshing !== null
-          entry.catalogStale = true
+          entry.catalogStale ||= catalog
           void this.refresh(entry.environmentId)
         }
       },
@@ -237,13 +237,13 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
   }
 
   private async fetch(hosts: MobileDesktopRelayHosts, entry: ServerEntry): Promise<void> {
-    const call = (method: string, params?: unknown) =>
+    const call = async (method: string, params?: unknown) =>
       hosts.call({ environmentId: entry.environmentId }, method, params, {
         // Why the transport bound too: it ends the hung call, so the next request fetches afresh.
         timeoutMs: SERVER_FETCH_TIMEOUT_MS,
         expected: entry.identity
       })
-    // Only after a change event or contact: catalog writes always announce reposChanged.
+    // Only on contact, ready, a replay or reposChanged, which every catalog write announces.
     const readCatalog = entry.catalogStale
     entry.catalogStale = false
     const [response, catalog] = await Promise.all([
