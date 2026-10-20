@@ -116,6 +116,26 @@ describe('a server layout under desktop ids', () => {
     expect(desktop.browserTabs).toEqual(serverLayout().browserTabs)
   })
 
+  it('names a bare-path tab by its path when the server holds that path under two owners', () => {
+    const layout = serverLayout()
+    const both: PublishedWorkspaceLayout = {
+      ...layout,
+      editorFiles: [
+        {
+          filePath: '/srv/app/a.ts',
+          relativePath: 'a.ts',
+          language: 'typescript',
+          runtimeEnvironmentId: 'other-env'
+        },
+        ...layout.editorFiles
+      ]
+    }
+    const mapped = serverLayoutForDesktop(both, ENV, handles)
+    expect(mapped.tabs.find((entry) => entry.id === '/srv/app/a.ts')?.entityId).toBe(
+      ownedEditorFileId('/srv/app/a.ts', WT, ENV)
+    )
+  })
+
   it('binds a pane to its session.tabs handle, and a bound pane without one stays pending', () => {
     const panes = desktop.tabs[0]!.terminal!.panes
     expect(panes[0]).toEqual({

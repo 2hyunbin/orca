@@ -65,13 +65,17 @@ function desktopEditorEntityId(
   layout: PublishedWorkspaceLayout,
   environmentId: string
 ): string {
-  const file =
+  const filePath =
     layout.editorFiles.find(
       (candidate) =>
         ownedEditorFileId(candidate.filePath, layout.worktreeId, candidate.runtimeEnvironmentId) ===
         entityId
-    ) ?? layout.editorFiles.find((candidate) => candidate.filePath === entityId)
-  return file ? ownedEditorFileId(file.filePath, layout.worktreeId, environmentId) : entityId
+    )?.filePath ??
+    // Why only the path: every desktop record of a server file is owned by that server, whichever server record a bare path names.
+    (layout.editorFiles.some((candidate) => candidate.filePath === entityId) ? entityId : null)
+  return filePath === null
+    ? entityId
+    : ownedEditorFileId(filePath, layout.worktreeId, environmentId)
 }
 
 /** The handle session.tabs gives a server terminal tab's pane; null while it has none. */
