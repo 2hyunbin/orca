@@ -75,22 +75,18 @@ export function collectOrcadMigrationUntransferredDependencyCensus(
 }
 
 // Consumer recoveries never block: the terminal gate proves before every move that their leases exited.
+// Legacy pane-key aliases never block either: an alias only routes hook events to a pane whose
+// terminal the lease check, the bridge or the terminal gate already accounts for.
 function countTerminalRecoveryState(
   state: PersistedState,
   scope: OrcadMigrationSourceScope,
   sessions: OrcadMigrationSourceSessionInspection
 ): number {
-  const unsupported = state.migrationUnsupportedPtyEntries.filter(
+  return state.migrationUnsupportedPtyEntries.filter(
     (entry) =>
       orcadMigrationOwnerMatchesScope(entry.worktreeId, scope) ||
       (entry.tabId ? sessions.tabIds.has(entry.tabId) : false) ||
       sessions.ptyIds.has(entry.ptyId) ||
       (entry.paneKey ? paneBelongsToTabs(entry.paneKey, sessions.tabIds) : false)
   ).length
-  const aliases = state.legacyPaneKeyAliasEntries.filter(
-    (entry) =>
-      paneBelongsToTabs(entry.legacyPaneKey, sessions.tabIds) ||
-      paneBelongsToTabs(entry.stablePaneKey, sessions.tabIds)
-  ).length
-  return unsupported + aliases
 }
