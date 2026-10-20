@@ -44,19 +44,20 @@ export class PaneGridRecorder {
       return
     }
     clearTimeout(this.pending.get(ptyId)?.timer)
-    const timer = setTimeout(() => this.write(ptyId), this.delayMs)
+    const timer = setTimeout(() => void this.write(ptyId), this.delayMs)
     timer.unref?.()
     this.pending.set(ptyId, { grid, timer })
   }
 
-  /** Writes every grid still waiting, e.g. before a quit. */
-  flush(): void {
-    for (const ptyId of [...this.pending.keys()]) {
-      this.write(ptyId)
+  /** Writes every grid still waiting, for a quit's final save; null when none waits. */
+  flush(): Promise<void> | null {
+    if (this.pending.size === 0) {
+      return null
     }
+    return Promise.all([...this.pending.keys()].map((ptyId) => this.write(ptyId))).then(() => {})
   }
 
-  private write(ptyId: string): void {
+  private async write(ptyId: string): Promise<void> {
     const entry = this.pending.get(ptyId)
     if (!entry) {
       return
@@ -67,7 +68,7 @@ export class PaneGridRecorder {
       const pane = paneShowingTerminal(session, ptyId)
       if (pane) {
         // A refusal means the pane went away meanwhile: nothing to remember.
-        void this.ports.apply({ type: 'setPaneGrid', ...pane, grid: entry.grid }).catch(() => {})
+        await this.ports.apply({ type: 'setPaneGrid', ...pane, grid: entry.grid }).catch(() => {})
         return
       }
     }

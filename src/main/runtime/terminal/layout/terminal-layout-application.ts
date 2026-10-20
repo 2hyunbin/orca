@@ -25,6 +25,11 @@ export abstract class OrcaRuntimeWithApplyLayout extends OrcaRuntimeWithPickMost
     })
     this.paneGrids.record(ptyId, { cols, rows })
   }
+
+  /** Layout-owner build: writes each grid still waiting out its burst; null when none waits. */
+  flushPaneGrids(): Promise<void> | null {
+    return this.paneGrids?.flush() ?? null
+  }
   protected abstract notifyTerminalResize(
     ptyId: string,
     event: { cols: number; rows: number; displayMode: string; reason: string; seq?: number }

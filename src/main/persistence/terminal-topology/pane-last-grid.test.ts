@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LayoutCommand } from '../../../shared/workspace-layout/workspace-layout-command-types'
+import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import type { Store } from '../loading-store/store'
 import {
   emptyTerminalSessionProfile,
@@ -88,6 +89,26 @@ describe("a pane's last grid (layout-owner build)", () => {
     expect(layouts[movedTo!]?.lastGridsByLeafId).toEqual({ [LEAF_B]: { cols: 91, rows: 33 } })
   })
 
+  it("writes only the pane's own tab record", async () => {
+    const { store } = await storeWithSplit()
+    await apply(store, { ...on, type: 'createTerminalTab', tabId: 'tab-other' })
+    const before = store.getWorkspaceSession()
+    await apply(store, {
+      ...on,
+      type: 'setPaneGrid',
+      tabId: 'tab-1',
+      leafId: LEAF_B,
+      grid: { cols: 91, rows: 33 }
+    })
+    const after = store.getWorkspaceSession()
+
+    expect(after.terminalLayoutsByTabId['tab-other']).toBe(
+      before.terminalLayoutsByTabId['tab-other']
+    )
+    expect(after.unifiedTabs).toBe(before.unifiedTabs)
+    expect(after.tabsByWorktree).toBe(before.tabsByWorktree)
+  })
+
   it('is refused for a pane the tab does not hold', async () => {
     const { store } = await storeWithSplit()
     const result = await store.applyLayoutCommand({
@@ -98,5 +119,25 @@ describe("a pane's last grid (layout-owner build)", () => {
       grid: { cols: 80, rows: 24 }
     })
     expect(result).toMatchObject({ ok: false })
+  })
+
+  it("keeps a grid resized just before quit, written by the quit's flush", async () => {
+    const { store, directory } = await storeWithSplit()
+    await store.persistPtyBinding({
+      worktreeId: FIXTURE_GIT_WORKTREE_ID,
+      tabId: 'tab-1',
+      leafId: LEAF_B,
+      ptyId: 'pty-b'
+    })
+    const runtime = new OrcaRuntimeService(store)
+
+    // Inside the write burst: nothing written yet when the quit starts.
+    runtime.onExternalPtyResize('pty-b', 91, 33)
+    await runtime.flushPaneGrids()
+    const relaunched = await reopenTopologyStore(store, directory)
+
+    expect(
+      relaunched.getWorkspaceSession().terminalLayoutsByTabId['tab-1']?.lastGridsByLeafId
+    ).toEqual({ [LEAF_B]: { cols: 91, rows: 33 } })
   })
 })

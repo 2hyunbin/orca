@@ -129,6 +129,7 @@ async function startOrcadRuntime(
 
   const { disposeWatcherProcessAndWait } = await import('../ipc/parcel-watcher-process')
 
+  let paneGridsForShutdown: { flushPaneGrids(): Promise<void> | null } | null = null
   let profileStoreForShutdown:
     | { flushFinalOrThrowAsync(): Promise<void>; freezeWritesAsync(): Promise<void> }
     | undefined
@@ -144,6 +145,8 @@ async function startOrcadRuntime(
   registerCleanup(async () => {
     // A SQLite-backed orcad has no JSON mirror to absorb a debounced write after SIGTERM.
     if (profileStoreForShutdown) {
+      // Layout-owner build: a pane's grid still inside its write burst joins the final save.
+      await paneGridsForShutdown?.flushPaneGrids()
       await flushOrcadProfileStoreForShutdown(profileStoreForShutdown)
     }
   })
@@ -245,6 +248,7 @@ async function startOrcadRuntime(
       }
     }
   })
+  paneGridsForShutdown = runtime
 
   accountLaunch?.attachToRuntime(runtime)
 

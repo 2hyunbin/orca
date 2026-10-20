@@ -117,6 +117,26 @@ it('releases admission only after the final flush and freeze complete', async ()
   expect(app.quit).toHaveBeenCalledOnce()
 })
 
+it('writes a pane grid still inside its write burst before the final flush', async () => {
+  const paneGrids = Promise.withResolvers<void>()
+  const { store } = await startQuit(async () => {}, {
+    runtime: {
+      getOffscreenBrowserBackend: () => null,
+      getAgentBrowserBridge: () => null,
+      getEmulatorBridge: () => null,
+      disposeSkillUploadSessions: settled(),
+      getRuntimeId: () => undefined,
+      closeNotificationDismissals: settled(),
+      flushPaneGrids: () => paneGrids.promise
+    }
+  })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.flushFinalOrThrowAsync).not.toHaveBeenCalled()
+  paneGrids.resolve()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(store.flushFinalOrThrowAsync).toHaveBeenCalledOnce()
+})
+
 // The chat teardown decides which chats to offer to resume from the hook server's status store,
 // and finishes after the hook server stops: that stop must leave the store readable.
 it('stops the hook server without clearing the status store the chat teardown reads', async () => {
@@ -143,7 +163,8 @@ it.each([
         getEmulatorBridge: () => null,
         disposeSkillUploadSessions: settled(),
         getRuntimeId: () => undefined,
-        closeNotificationDismissals
+        closeNotificationDismissals,
+        flushPaneGrids: () => null
       },
       runtimeRpc: { setMobileRelayPairingProvider: idle(), stop: vi.fn(() => rpcStop.promise) }
     })

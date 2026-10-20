@@ -114,6 +114,8 @@ function installWillQuitHandler(): void {
     if (!quitTeardownStartGate.tryStart(event)) {
       return
     }
+    // Layout-owner build: a pane's grid still inside its write burst joins the final save.
+    const paneGridFlush = state.runtime?.flushPaneGrids() ?? null
     // A renderer can veto before-quit; push must survive until quit is committed.
     state.desktopPushService?.stop()
     state.unsubscribeSystemResumeBroadcast?.()
@@ -219,6 +221,10 @@ function installWillQuitHandler(): void {
         return
       }
       try {
+        // Null unless a grid was waiting, so a quit with none adds no await before the flush.
+        if (paneGridFlush) {
+          await paneGridFlush
+        }
         await finalStore.flushFinalOrThrowAsync()
         await finalStore.freezeWritesAsync()
         state.profileStateAdmission?.release()

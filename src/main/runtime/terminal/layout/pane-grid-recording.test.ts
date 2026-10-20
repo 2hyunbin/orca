@@ -71,14 +71,17 @@ describe('PaneGridRecorder', () => {
     expect(apply).not.toHaveBeenCalled()
   })
 
-  it('writes a waiting grid at once on flush', () => {
+  it('writes a waiting grid at once on flush, and has nothing to flush after', async () => {
     vi.useFakeTimers()
     const apply = vi.fn(async () => ({ ok: true }))
     const recorder = new PaneGridRecorder({ sessions: () => [sessionBinding('pty-1')], apply })
 
     recorder.record('pty-1', { cols: 90, rows: 20 })
-    recorder.flush()
+    await recorder.flush()
 
+    expect(apply).toHaveBeenCalledTimes(1)
+    expect(recorder.flush()).toBeNull()
+    await vi.advanceTimersByTimeAsync(PANE_GRID_RECORD_DELAY_MS)
     expect(apply).toHaveBeenCalledTimes(1)
   })
 })
