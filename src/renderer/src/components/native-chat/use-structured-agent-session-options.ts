@@ -80,13 +80,9 @@ export function useStructuredAgentSessionOptions(args: {
     conversationSupport: support,
     sessionSupport
   } = useStructuredAgentSessionOptionState({
-    transportEnabled,
-    agent,
+    ...args,
     optionCatalog,
     identity: `${agent}:${sessionId}`,
-    fence,
-    sessionId,
-    target,
     newLaunch: launch?.kind === 'new',
     ...(launch?.worktree ? { worktree: launch.worktree } : {}),
     seedsModel: launchSeedOptions?.model !== undefined,
@@ -308,6 +304,7 @@ export function useStructuredAgentSessionOptions(args: {
     /** Absent from a host that predates it or a session that writes no context facts. */
     contextUsage: support?.contextUsage,
     /** Absent from a host that predates it, and until the options read answers. */
+    ...sessionSupport,
     sessionSupport,
     /** Undefined until this fence's options read answers. */
     rewind: support?.fence === fence ? support.rewind : undefined,
