@@ -1,6 +1,5 @@
 import type { AppState } from '@/store/types'
 import { getAllWorktreesFromState } from '@/store/selectors'
-import { getProjectHostSetupProjectionFromState } from '@/store/project-host-setup-selector'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import {
   getLocalExecutionHostLabel,
@@ -23,6 +22,12 @@ import type {
 import type { SmartStampFields } from '../../../../shared/sidebar-list/sort-stamps'
 import { buildPairedServerActivityFacts } from '../../../../shared/sidebar-list/paired-server-activity-facts'
 import { GOLDEN_NOW, folder, group, lineage } from './sidebar-list-golden-factories.test-fixture'
+import {
+  GROUPED_REPOS,
+  GROUPED_WORKTREES,
+  GROUPS_OF_GROUPED_REPOS,
+  publishedCatalog
+} from './sidebar-list-parity-catalog.test-fixture'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
 import {
   readWindowWorkspaceActivityFacts,
@@ -71,9 +76,13 @@ const STAMPS: Record<string, SmartStampFields & { lastActivityAt?: number; isUnr
  * this host runs.
  */
 export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState> {
-  const repoById = new Map((base.repos ?? []).map((repo) => [repo.id, repo]))
+  const repos = [...(base.repos ?? []), ...GROUPED_REPOS]
+  const repoById = new Map(repos.map((entry) => [entry.id, entry]))
   const worktreesByRepo: AppState['worktreesByRepo'] = {}
-  for (const [repoId, worktrees] of Object.entries(base.worktreesByRepo ?? {})) {
+  for (const [repoId, worktrees] of Object.entries({
+    ...base.worktreesByRepo,
+    ...GROUPED_WORKTREES
+  })) {
     const repo = repoById.get(repoId)
     worktreesByRepo[repoId] = worktrees.map((worktree) => {
       const branch = worktree.branch.replace('refs/heads/', '')
@@ -91,6 +100,7 @@ export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState>
   const pending = Object.values(base.pendingWorktreeCreations ?? {})[0]
   const [serverMain, serverChild] = worktreesByRepo.api ?? []
   return {
+    repos,
     worktreesByRepo,
     // A server workspace nested under the server's main, and a server folder workspace.
     worktreeLineageById: {
@@ -99,6 +109,7 @@ export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState>
     },
     projectGroups: [
       ...(base.projectGroups ?? []),
+      ...GROUPS_OF_GROUPED_REPOS,
       group('pg-server-folders', 'Server folders', {
         parentPath: '/srv/folders',
         createdFrom: 'folder-scan',
@@ -267,17 +278,8 @@ export function phoneInputsFromWindowState(state: AppState): {
   catalog: SidebarFeedCatalog
   view: SidebarFeedView
 } {
-  const projection = getProjectHostSetupProjectionFromState(state)
   return {
-    catalog: {
-      repos: state.repos,
-      projectGroups: state.projectGroups ?? [],
-      // The projection the window publishes for the phone (mobileRelay.projectSections).
-      projectGrouping: {
-        projects: projection.projects,
-        projectHostSetups: projection.setups
-      }
-    },
+    catalog: publishedCatalog(state),
     view: {
       groupBy: state.groupBy,
       sortBy: state.sortBy,
@@ -312,7 +314,7 @@ export function projectParityRows(
         ]
       case 'header':
         return [
-          `HEADER ${row.key} collapseKey=${row.collapseKey ?? '-'} label=${row.label ?? '-'} icon=${JSON.stringify(row.icon)} count=${row.count} hostId=${row.hostId ?? '-'}`
+          `HEADER ${row.key} collapseKey=${row.collapseKey ?? '-'} label=${row.label ?? '-'} icon=${JSON.stringify(row.icon)} count=${row.count} hostId=${row.hostId ?? '-'} groupDepth=${row.projectGroupDepth ?? '-'}`
         ]
       case 'item':
         return [
