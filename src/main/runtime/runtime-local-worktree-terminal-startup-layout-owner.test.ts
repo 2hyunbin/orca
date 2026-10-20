@@ -72,8 +72,10 @@ describe('layout-owner build: a create whose agent failed to start', () => {
       defaultTabs,
       ports
     })
+    expect(createTerminal.mock.calls[0]![1]).toMatchObject({ keepPaneOnStartFailure: true })
+    // The agent's pane stays, showing the failure, so no extra shell is seeded beside it.
     expect(ports.provision).toHaveBeenCalledWith(
-      expect.objectContaining({ setup, defaultTabs, hasStartupTerminal: false })
+      expect.objectContaining({ setup, defaultTabs, hasStartupTerminal: true })
     )
     // Setup did not start here either (the fake spawns nothing), and still stays main's.
     expect(ports.activate).toHaveBeenCalledWith(
@@ -83,5 +85,30 @@ describe('layout-owner build: a create whose agent failed to start', () => {
       undefined,
       undefined
     )
+  })
+
+  it('asks main to start the agent even when its launch failed or no terminal service runs', async () => {
+    const repair = new Error('agent runtime needs repair')
+    for (const [canSpawn, startupLaunchRuntime] of [
+      [true, repair],
+      [false, undefined]
+    ] as const) {
+      const { ports, createTerminal } = createPorts()
+      ports.canSpawn = canSpawn
+      createTerminal.mockRejectedValueOnce(new Error('start failed'))
+      await startRuntimeLocalWorktreeTerminals({
+        request: { repoSelector: repo.id, name: 'recover', activate: true },
+        repo,
+        worktree,
+        startup: { command: 'codex' },
+        ...(startupLaunchRuntime ? { startupLaunchRuntime } : {}),
+        ports
+      })
+      expect(createTerminal).toHaveBeenCalledTimes(1)
+      expect(createTerminal.mock.calls[0]![1]).toMatchObject({
+        keepPaneOnStartFailure: true,
+        ...(startupLaunchRuntime ? { startFailure: repair } : {})
+      })
+    }
   })
 })
