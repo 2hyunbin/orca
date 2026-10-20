@@ -4,6 +4,7 @@
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { OrcaRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-interactive-wait'
 import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
+import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from '../../orca-runtime-core'
 
 export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntimeWithGetTerminalInteractiveWait {
   /**
@@ -28,7 +29,7 @@ export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntime
         tabId: leaf.tabId,
         leafId: leaf.leafId
       }),
-      bounds
+      { ...bounds, startTimeoutMs: MOBILE_TERMINAL_SURFACE_TIMEOUT_MS }
     )
     const pty = ptyId === null ? undefined : this.ptysById.get(ptyId)
     if (!pty) {
@@ -38,30 +39,34 @@ export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntime
   }
 }
 
-/** The start, or the caller's abort or deadline first; the shared start itself runs on. */
+/**
+ * The start, or the first of: the caller's abort, the caller's deadline (`timeout`), or the start's
+ * own cap (`runtime_timeout`, the pending-terminal create bound), so no caller waits on a start
+ * forever. The shared start itself runs on.
+ */
 function withinCallerBounds<T>(
   start: Promise<T>,
-  { signal, timeoutMs }: { signal?: AbortSignal; timeoutMs?: number }
+  {
+    signal,
+    timeoutMs,
+    startTimeoutMs
+  }: { signal?: AbortSignal; timeoutMs?: number; startTimeoutMs: number }
 ): Promise<T> {
-  if (!signal && !(timeoutMs && timeoutMs > 0)) {
-    return start
-  }
   if (signal?.aborted) {
     return Promise.reject(new Error('request_aborted'))
   }
+  const callerFirst = !!timeoutMs && timeoutMs > 0 && timeoutMs <= startTimeoutMs
   return new Promise<T>((resolve, reject) => {
     const settle = (finish: () => void): void => {
-      if (timer) {
-        clearTimeout(timer)
-      }
+      clearTimeout(timer)
       signal?.removeEventListener('abort', abort)
       finish()
     }
     const abort = (): void => settle(() => reject(new Error('request_aborted')))
-    const timer =
-      timeoutMs && timeoutMs > 0
-        ? setTimeout(() => settle(() => reject(new Error('timeout'))), timeoutMs)
-        : null
+    const timer = setTimeout(
+      () => settle(() => reject(new Error(callerFirst ? 'timeout' : 'runtime_timeout'))),
+      callerFirst ? timeoutMs : startTimeoutMs
+    )
     signal?.addEventListener('abort', abort, { once: true })
     start.then(
       (value) => settle(() => resolve(value)),

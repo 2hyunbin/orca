@@ -1,6 +1,6 @@
 // Layout-owner build: a CLI send, wait or read on a saved pane main holds with no terminal yet
 // starts it through main's one starter, then delivers to the started terminal.
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -18,7 +18,10 @@ const { SURFACE_PTYS, SURFACE_TAB_ID, surfaceRuntime } =
   await import('./terminal/surface/terminal-surface-replies.test-fixture')
 await import('./rpc/unused-default-rpc-methods.test-fixture')
 const { RpcDispatcher } = await import('./rpc/dispatcher')
+const { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } = await import('./orca-runtime-core')
 const { TERMINAL_METHODS } = await import('./rpc/methods/terminal')
+
+type Runtime = ReturnType<typeof surfaceRuntime>['runtime']
 
 /**
  * A windowless host whose saved tab gained a third pane no terminal is bound to yet. Its start
@@ -210,5 +213,32 @@ describe('a CLI trigger on a saved pane with no terminal (layout-owner build)', 
     await expect(
       runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 50 })
     ).rejects.toThrow('timeout')
+  })
+
+  describe('a start that never finishes errors within the create bound, never a hang', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it.each([
+      ['a read', (runtime: Runtime, handle: string) => runtime.readTerminal(handle)],
+      [
+        'a tui-idle wait with no timeout',
+        (runtime: Runtime, handle: string) =>
+          runtime.waitForTerminal(handle, { condition: 'tui-idle' })
+      ]
+    ])('%s', async (_name, call) => {
+      const { runtime, handle, spawn } = await restoredPane()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+      const outcome = call(runtime, handle).then(
+        () => 'settled',
+        (error: unknown) => (error instanceof Error ? error.message : String(error))
+      )
+      await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+      await vi.advanceTimersByTimeAsync(MOBILE_TERMINAL_SURFACE_TIMEOUT_MS)
+
+      await expect(outcome).resolves.toBe('runtime_timeout')
+    })
   })
 })
