@@ -105,4 +105,24 @@ describe('PaneGridRecorder', () => {
     expect(settled).toBe(true)
     expect(apply).toHaveBeenCalledTimes(1)
   })
+
+  it('clears its budget once the writes finish first, and survives a session read that throws', async () => {
+    vi.useFakeTimers()
+    const recorder = new PaneGridRecorder({
+      sessions: () => [sessionBinding('pty-1')],
+      apply: vi.fn(async () => ({ ok: true }))
+    })
+    recorder.record('pty-1', { cols: 90, rows: 20 })
+    await recorder.flush()
+    expect(vi.getTimerCount()).toBe(0)
+
+    const broken = new PaneGridRecorder({
+      sessions: () => {
+        throw new Error('store closed')
+      },
+      apply: vi.fn(async () => ({ ok: true }))
+    })
+    broken.record('pty-1', { cols: 90, rows: 20 })
+    await expect(broken.flush()).resolves.toBeUndefined()
+  })
 })

@@ -211,7 +211,8 @@ function installWillQuitHandler(): void {
     const emulatorShutdown =
       state.runtime?.getEmulatorBridge()?.destroyAllSessions() ?? Promise.resolve()
     // Why immediately before the final store flush with no await in between: beginSshShutdown() marks every
-    // active SSH lease detached in memory synchronously, and that flush is what persists it.
+    // active SSH lease detached in memory synchronously, and that flush is what persists it. The one
+    // exception is a layout-owner build's pending pane-grid flush (at most 1 s; it writes no lease).
     const sshShutdown = beginSshShutdown()
     killAllPty()
     const watcherShutdown = shutdownWatchersOnce()

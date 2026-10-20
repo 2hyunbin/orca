@@ -57,12 +57,15 @@ export class PaneGridRecorder {
       return null
     }
     let timer: NodeJS.Timeout | undefined
-    const writes = Promise.all([...this.pending.keys()].map((ptyId) => this.write(ptyId)))
+    // A grid that cannot be written must never cost the quit its final save.
+    const writes = Promise.all([...this.pending.keys()].map((ptyId) => this.write(ptyId))).then(
+      () => {},
+      () => {}
+    )
     const budget = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, budgetMs)
-      timer.unref?.()
     })
-    return Promise.race([writes.then(() => {}), budget]).finally(() => clearTimeout(timer))
+    return Promise.race([writes, budget]).finally(() => clearTimeout(timer))
   }
 
   private async write(ptyId: string): Promise<void> {
