@@ -99,5 +99,6 @@ export const WORK_METHODS = [
   { method: 'agentSession.hold', params: { sessionId: SESSION, holderId: 'surface-1' } },
   { method: 'agentSession.reveal', params: { sessionId: SESSION } },
   { method: 'agentSession.switchToTerminal', params: { sessionId: SESSION } },
+  { method: 'agentSession.switchToChat', params: { sessionId: SESSION } },
   { method: 'agentSession.subscribeStatus', params: null }
 ] as const

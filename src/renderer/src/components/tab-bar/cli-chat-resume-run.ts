@@ -169,8 +169,11 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
       retireSwitchedTerminalPane(source)
     }
   } catch (error) {
-    if (pending.get(key) === controller) {
-      await reportCliChatResumeFailure(source, error, target)
+    if (
+      pending.get(key) === controller &&
+      (await reportCliChatResumeFailure(source, error, target))
+    ) {
+      retireSwitchedTerminalPane(source)
     }
   } finally {
     clearTimeout(timer)

@@ -9,7 +9,10 @@ import { codexProviderHandle } from '../../../shared/agent-session-provider-hand
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
-import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
+import {
+  AgentSessionAcquisitionRefusal,
+  type StructuredAgentSessionAdapter
+} from './structured-agent-session-adapter'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
@@ -39,6 +42,9 @@ const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>(async ({ fence, 
     observedAt: NOW
   }
 }))
+const open = vi.fn<StructuredAgentSessionAdapter['open']>(async () => ({
+  reportedOptions: { model: '' }
+}))
 const assertNoTerminalWriter = vi.fn(async () => {
   if (terminalWriting) {
     throw agentSessionRefusalError('agent_session_conflict', {
@@ -52,6 +58,7 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   terminalWriting = false
   acquire.mockClear()
+  open.mockClear()
   assertNoTerminalWriter.mockClear()
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
@@ -69,7 +76,7 @@ beforeEach(async () => {
       cancelTurn: vi.fn(async () => ({ cancelled: false })),
       answerPrompt: vi.fn(async () => undefined),
       setOption: vi.fn(async () => undefined),
-      open: async () => ({ reportedOptions: { model: '' } })
+      open
     },
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
@@ -179,4 +186,32 @@ it('refuses a switch while the chat is starting, without aborting that start', a
   expect(admit).not.toHaveBeenCalled()
   expect(signal?.aborted).toBe(false)
   release()
+})
+
+// Terminal to chat: the chat's agent starts with no send, and only its ready provider is success.
+it('starts the chat that holds the conversation for a switch from its terminal', async () => {
+  await host.close(SESSION, 'evict')
+  terminalWriting = true
+  const spawnsBefore = acquire.mock.calls.length
+  expect(await host.switchToChat(SESSION)).toMatchObject({
+    ok: false,
+    refusal: { details: { reason: 'conversationOpenInTerminal' } }
+  })
+  expect(acquire.mock.calls.length).toBe(spawnsBefore)
+
+  terminalWriting = false
+  open.mockRejectedValueOnce(
+    new AgentSessionAcquisitionRefusal('thread has an active writer', 'conversationOpenElsewhere')
+  )
+  expect(await host.switchToChat(SESSION)).toMatchObject({
+    ok: false,
+    refusal: {
+      code: 'agent_session_operation_invalid',
+      details: { reason: 'conversationOpenElsewhere' }
+    }
+  })
+
+  expect(await host.switchToChat(SESSION)).toEqual({ ok: true })
+  expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('ready')
+  expect(vi.mocked(host.deps.adapter.dispatch)).not.toHaveBeenCalled()
 })

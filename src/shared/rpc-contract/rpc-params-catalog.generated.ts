@@ -719,6 +719,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.subscribeAvailability': AvailabilityParams,
   'agentSession.subscribeStatus': null,
   'agentSession.subscribeTurnCompletions': SubscribeTurnCompletionsParams,
+  'agentSession.switchToChat': OptionsParams,
   'agentSession.switchToTerminal': OptionsParams,
   'agentSession.threadGoal': ThreadGoalParams,
   'agentSession.unsubscribe': UnsubscribeParams,

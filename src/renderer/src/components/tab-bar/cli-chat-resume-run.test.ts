@@ -12,13 +12,16 @@ const mocks = vi.hoisted(() => {
     createCapability: vi.fn(),
     call: vi.fn(),
     toast: vi.fn(),
-    activate: vi.fn(async () => true)
+    activate: vi.fn(async () => true),
+    activateVerified: vi.fn(async () => 'activated'),
+    switchCapability: vi.fn(async () => false)
   }
 })
 vi.mock('./cli-chat-resume-source', () => ({ resolveCliChatResumeSource: () => mocks.source }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   supportsStructuredAgentSessionCliSource: mocks.sourceCapability,
   supportsStructuredAgentSessionCreateMessage: mocks.createCapability,
+  supportsInPlaceSwitch: mocks.switchCapability,
   callStructuredAgentSession: (...args: unknown[]) =>
     args[1] === 'agentSession.createSupport'
       ? Promise.resolve({ supported: true })
@@ -34,7 +37,8 @@ vi.mock('@/lib/structured-agent-session-create-hydration', () => ({
 }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toast } }))
 vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
-  activateAiVaultStructuredSession: mocks.activate
+  activateAiVaultStructuredSession: mocks.activate,
+  activateAiVaultStructuredSessionVerified: mocks.activateVerified
 }))
 
 import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
@@ -237,25 +241,55 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect([...structuredLaunchStates()]).toEqual([])
   })
 
-  it('reveals the chat that already holds the conversation in place and closes the terminal pane', async () => {
+  it('starts the chat that holds the conversation before the terminal closes; a refusal keeps it', async () => {
     const owner = { sessionId: 'owner-chat', workspaceId: 'owner-workspace' }
-    mocks.call.mockResolvedValue({
+    let switched: unknown = {
       ok: false,
       refusal: {
-        code: 'agent_session_conflict',
-        message: 'owner',
-        details: { reason: 'conversationHeldElsewhere', owner },
-        createAttemptRefusedBeforeCommit: true
+        code: 'agent_session_operation_invalid',
+        message: 'x',
+        details: { reason: 'conversationOpenElsewhere' }
       }
-    })
+    }
+    mocks.call.mockImplementation(async (_target, method) =>
+      method === 'agentSession.switchToChat'
+        ? switched
+        : {
+            ok: false,
+            refusal: {
+              code: 'agent_session_conflict',
+              message: 'owner',
+              details: { reason: 'conversationHeldElsewhere', owner },
+              createAttemptRefusedBeforeCommit: true
+            }
+          }
+    )
     const leafId = '11111111-1111-4111-8111-111111111111'
     mocks.source = { ...SOURCE, paneKey: `tab-1:${leafId}` }
     const closed = vi.fn()
     window.addEventListener('orca-close-terminal-pane', closed)
+    // A host without the switch only shows the chat; it never receives the switch.
+    await runCliChatResume(mocks.source)
+    expect(mocks.activate).toHaveBeenCalledWith({ structuredSession: owner }, undefined, {
+      kind: 'local'
+    })
+    mocks.switchCapability.mockResolvedValue(true)
+    await runCliChatResume(mocks.source)
+    expect(mocks.toast).toHaveBeenCalledOnce()
+    expect(mocks.activateVerified).not.toHaveBeenCalled()
+    expect(closed).not.toHaveBeenCalled()
+
+    switched = { ok: true, sessionId: 'owner-chat' }
     await runCliChatResume(mocks.source)
     window.removeEventListener('orca-close-terminal-pane', closed)
-    expect(mocks.toast).not.toHaveBeenCalled()
-    expect(mocks.activate).toHaveBeenCalledWith({ structuredSession: owner }, undefined, {
+    const switches = mocks.call.mock.calls.filter(
+      ([, method]) => method === 'agentSession.switchToChat'
+    )
+    expect(switches).toEqual([
+      [{ kind: 'local' }, 'agentSession.switchToChat', { sessionId: 'owner-chat' }],
+      [{ kind: 'local' }, 'agentSession.switchToChat', { sessionId: 'owner-chat' }]
+    ])
+    expect(mocks.activateVerified).toHaveBeenCalledWith({ structuredSession: owner }, undefined, {
       kind: 'local'
     })
     expect(closed).toHaveBeenCalledOnce()

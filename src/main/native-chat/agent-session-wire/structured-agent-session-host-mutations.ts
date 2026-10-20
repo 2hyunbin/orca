@@ -7,6 +7,7 @@
 // admitted without the writer lease; the delivery loop starts the provider child a send needs, and
 // an operation only the provider can perform starts it before admission.
 
+import { startStructuredAgentSessionForSwitch } from './structured-agent-session-switch-to-chat'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionCancelResult,
@@ -282,6 +283,7 @@ export function structuredAgentSessionMutationDelegates(
       settleStructuredAgentSessionLateDispatch(context(), input),
     releaseUnansweredDispatches: (
       input: Parameters<typeof releaseStructuredAgentSessionUnansweredDispatches>[1]
-    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input)
+    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input),
+    switchToChat: (sessionId: string) => startStructuredAgentSessionForSwitch(context(), sessionId)
   }
 }

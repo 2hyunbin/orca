@@ -212,8 +212,7 @@ export class StructuredAgentSessionHost {
    *  `user-close` makes a turn it cuts short the user's cancellation; an `evict` leaves it news. */
   close: StructuredAgentSessionConversationLifetime['close'] = (sessionId, cause) =>
     this.lifetime.close(sessionId, cause)
-  switchToTerminal: StructuredAgentSessionConversationLifetime['switchToTerminal'] = (id, admit) =>
-    this.lifetime.switchToTerminal(id, admit)
+  switchToTerminal = <T>(id: string, admit: () => T) => this.lifetime.switchToTerminal(id, admit)
 
   /** One bounded host-owned snapshot; a tab need not be visible for its child to be stopped. */
   sleepWorkspace = (workspaceId: string): Promise<{ stoppedSessionIds: string[] }> =>
@@ -319,6 +318,8 @@ export class StructuredAgentSessionHost {
   setOption = this.mutations.setOption
   changeThreadGoal = this.mutations.changeThreadGoal
   readOptions = this.mutations.readOptions
+  /** A terminal's conversation moves into this chat: its agent starts and is ready, or why not. */
+  switchToChat = this.mutations.switchToChat
 
   rewind = (caller: HostTypes.StructuredAgentSessionCaller, params: AgentSessionRewindParams) =>
     rewindStructuredAgentSession(this.mutationContext(), this.attachContext(), caller, params)
