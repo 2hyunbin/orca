@@ -9,6 +9,9 @@ import type {
 
 export type PaneStartFact = { status: PaneStartStatus; reason?: string }
 
+/** A pane's start status while it has no terminal (layout-owner build). */
+export type PaneStartFactOf = (paneKey: string) => PaneStartFact | null
+
 export class PaneStartStatuses {
   private readonly byPaneKey = new Map<string, PaneStartFact>()
 
@@ -33,8 +36,11 @@ export class PaneStartStatuses {
 /** Each pane's start status, in tab and pane order; null for a bound pane or one with none. */
 export function paneStartFactsOf(
   layout: PublishedWorkspaceLayout,
-  statusOf: (paneKey: string) => PaneStartFact | null
+  { paneStartFact: statusOf }: { paneStartFact?: PaneStartFactOf }
 ): (PaneStartFact | null)[] {
+  if (!statusOf) {
+    return []
+  }
   return layout.tabs.flatMap((tab) =>
     (tab.terminal?.panes ?? []).map((pane) =>
       pane.ptyId ? null : statusOf(`${tab.entityId}:${pane.leafId}`)

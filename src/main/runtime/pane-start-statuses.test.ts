@@ -59,7 +59,11 @@ describe('a start into a pane main holds', () => {
     await expect(
       spawnInAdmittedPane(
         runtimeStore,
-        { spawn: vi.fn(async () => Promise.reject(new Error('shell not found'))) },
+        {
+          spawn: vi.fn(async () => {
+            throw new Error('shell not found')
+          })
+        },
         ARGS,
         { sink: register, keepOnFailure: false }
       )
@@ -69,7 +73,11 @@ describe('a start into a pane main holds', () => {
   })
 
   it('keeps a pane the create wrote only when asked to; otherwise takes it back as today', async () => {
-    const failing = { spawn: vi.fn(async () => Promise.reject(new Error('no pty'))) }
+    const failing = {
+      spawn: vi.fn(async () => {
+        throw new Error('no pty')
+      })
+    }
     const kept = storeAnswering('admitted')
     const { register } = statuses()
     await expect(
@@ -115,7 +123,9 @@ describe('a pane’s start status in the published layout', () => {
   }
 
   it('rides the pane’s binding record, never its tree, and goes once the pane binds', () => {
-    const facts = paneStartFactsOf(layout, () => ({ status: 'failed', reason: 'no pty' }))
+    const facts = paneStartFactsOf(layout, {
+      paneStartFact: () => ({ status: 'failed', reason: 'no pty' })
+    })
     const shown = withPaneStartFacts(layout, facts)
     const records = splitPublishedLayout(shown)
     expect(records.paneTrees[0]!.panes).toEqual([{ leafId: ARGS.leafId }])
@@ -133,6 +143,8 @@ describe('a pane’s start status in the published layout', () => {
         }
       ]
     }
-    expect(paneStartFactsOf(bound, () => ({ status: 'starting' }))).toEqual([null])
+    expect(paneStartFactsOf(bound, { paneStartFact: () => ({ status: 'starting' }) })).toEqual([
+      null
+    ])
   })
 })
