@@ -61,3 +61,18 @@ export function paneStartsWithFrames(
   }
   return next
 }
+
+/** Shows the starts of the `changed` workspaces, and drops those of workspaces main stopped sending. */
+export function showFramePaneStarts(
+  store: { getState: () => AppState; setState: (patch: Partial<AppState>) => void },
+  changed: readonly string[],
+  cache: Readonly<Record<string, PublishedWorkspaceLayout | undefined>>,
+  shownByKey: Map<string, ReadonlySet<string>>
+): void {
+  const starts = store.getState().terminalPaneStartsByPaneKey
+  const gone = [...shownByKey.keys()].filter((key) => !(key in cache))
+  const next = paneStartsWithFrames(starts, [...changed, ...gone], cache, shownByKey)
+  if (next !== starts) {
+    store.setState({ terminalPaneStartsByPaneKey: next })
+  }
+}
