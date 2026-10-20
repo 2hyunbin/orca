@@ -43,7 +43,9 @@ describe('a terminal close whose profile write fails', () => {
     const mutate = vi.fn()
     await expect(
       keptOnWriteFailure(
-        async () => Promise.reject(new Error('Cannot mutate finalized profile persistence')),
+        async () => {
+          throw new Error('Cannot mutate finalized profile persistence')
+        },
         mutate,
         writeLater
       )

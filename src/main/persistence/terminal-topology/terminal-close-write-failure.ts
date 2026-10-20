@@ -16,19 +16,23 @@ export async function keptOnWriteFailure<V>(
   mutate: () => DurableProfileStateMutation<V>,
   writeLater: () => void
 ): Promise<V> {
-  let applied: { value: V } | null = null
+  const applied: { current: { value: V } | null } = { current: null }
   try {
     return await run(() => {
       const { rollback: _rollback, ...mutation } = mutate()
-      applied = { value: mutation.value }
+      applied.current = { value: mutation.value }
       return mutation
     })
   } catch (error) {
-    if (!applied) {
+    const kept = applied.current
+    if (!kept) {
       throw error
     }
-    console.warn('[layout] a terminal close is applied but not yet saved; saving again later:', error)
+    console.warn(
+      '[layout] a terminal close is applied but not yet saved; saving again later:',
+      error
+    )
     writeLater()
-    return (applied as { value: V }).value
+    return kept.value
   }
 }

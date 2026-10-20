@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest'
+import type { LayoutCommand } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import {
   admitRuntimeSpawnPane,
   fixture
@@ -16,21 +17,20 @@ const pane = {
   leafId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 }
 
-it.each([
-  [
-    'tab',
-    { type: 'closeTabs' as const, workspace: pane.worktreeId, tabIds: [pane.tabId] as [string] }
-  ],
+const closes: [string, LayoutCommand][] = [
+  ['tab', { type: 'closeTabs', workspace: pane.worktreeId, tabIds: [pane.tabId] }],
   [
     'pane',
     {
-      type: 'closePane' as const,
+      type: 'closePane',
       workspace: pane.worktreeId,
       tabId: pane.tabId,
       leafId: pane.leafId
     }
   ]
-])(
+]
+
+it.each(closes)(
   'switch off: a %s close through layout.apply still refuses and rolls back on a failed write',
   async (_kind, command) => {
     const { store, authority } = await fixture()
