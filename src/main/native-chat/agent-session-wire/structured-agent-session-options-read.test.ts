@@ -383,12 +383,13 @@ describe('a chat at rest, read by the host', () => {
     const child = {
       id: 'A',
       label: 'A',
+      isDefault: false,
       efforts: [
         { value: 'low', label: 'Low' },
         { value: 'high', label: 'High' }
       ]
     }
-    const inventory = [{ id: 'B', label: 'B', efforts: [] }]
+    const inventory = [{ id: 'B', label: 'B', isDefault: false, efforts: [] }]
     const chat = picking({ model: 'A', effort: 'high' }, inventory, (_id, options) => ({
       models: [...inventory, child],
       options: { ...options }

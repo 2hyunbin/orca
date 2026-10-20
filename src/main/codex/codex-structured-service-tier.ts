@@ -95,7 +95,7 @@ export function codexOffersServiceTier(
   model: AgentSessionModelOption | undefined,
   models: readonly AgentSessionModelOption[],
   tier: string,
-  listedTiers = models.flatMap(tierValues)
+  listedTiers: readonly string[] = models.flatMap(tierValues)
 ): boolean {
   const reported = tier === session.reportedOptions.serviceTier
   return (

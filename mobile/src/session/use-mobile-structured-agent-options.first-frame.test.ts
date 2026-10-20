@@ -118,6 +118,7 @@ describe('the phone picker’s first frame', () => {
         {
           id: 'A',
           label: 'A',
+          isDefault: false,
           efforts: [
             { value: 'low', label: 'Low' },
             { value: 'high', label: 'High' }
