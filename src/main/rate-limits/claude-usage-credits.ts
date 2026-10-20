@@ -1,4 +1,6 @@
-import type { ExtraUsageBalance } from '../../shared/rate-limit-types'
+import type { ExtraUsageBalance, RateLimitWindow } from '../../shared/rate-limit-types'
+
+const MONTHLY_WINDOW_MINUTES = 43_200
 
 // Minor units use the reported exponent: 200000 at exponent 2 is 2000 currency units.
 type OAuthMoney = {
@@ -51,6 +53,26 @@ export function mapClaudeExtraUsage(data: {
   extra_usage?: ClaudeOAuthExtraUsage
 }): ExtraUsageBalance | null {
   return mapSpend(data.spend) ?? mapLegacyExtraUsage(data.extra_usage)
+}
+
+// Why: Enterprise seats have no 5h/7d windows; their monthly spend cap is the only limit that binds.
+export function mapClaudeSpendLimitWindow(
+  extraUsage: ExtraUsageBalance | null
+): RateLimitWindow | null {
+  if (
+    extraUsage?.unit !== 'currency' ||
+    extraUsage.spentPercent === null ||
+    extraUsage.spendLimit === null ||
+    extraUsage.spendLimit <= 0
+  ) {
+    return null
+  }
+  return {
+    usedPercent: extraUsage.spentPercent,
+    windowMinutes: MONTHLY_WINDOW_MINUTES,
+    resetsAt: extraUsage.resetsAt,
+    resetDescription: null
+  }
 }
 
 function mapSpend(spend: ClaudeOAuthSpend | undefined): ExtraUsageBalance | null {
