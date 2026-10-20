@@ -1,5 +1,6 @@
 // A windowless server (orca serve, orcad): a change main makes to its own layout reaches a
-// subscribed phone, with no window to republish rows.
+// subscribed phone, with no window to republish rows. Rows there are rebuilt from the saved layout
+// main writes (mobile-session-hydration.ts), not by A2's merge, which needs a window publication.
 import { describe, expect, it, vi } from 'vitest'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-session-contracts'
@@ -32,9 +33,10 @@ describe('session.tabs on a windowless server (switch on)', () => {
       })
       await vi.runAllTimersAsync()
 
+      // Pushed by main on its own, before any phone asks again.
+      expect(seen.at(-1)?.tabs.map((tab) => tab.title)).toEqual(['Build', 'Build'])
       const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
       expect(listed.tabs.map((tab) => tab.title)).toEqual(['Build', 'Build'])
-      expect(seen.at(-1)?.tabs.map((tab) => tab.title)).toEqual(['Build', 'Build'])
     } finally {
       vi.useRealTimers()
     }

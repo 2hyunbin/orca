@@ -160,4 +160,22 @@ describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
     expect(merged.tabGroups?.[0]?.activeTabId).toBe('d1')
     expect(merged.tabs.filter((tab) => tab.isActive).map((tab) => tab.id)).toEqual(['d1'])
   })
+
+  it('moves the window-selected row of a group main lacks into a group, and selects that group', () => {
+    const published: RuntimeMobileSessionTabsSnapshot = {
+      ...windowSnapshot([terminal('t::a'), file('d1', 'diff')], ['t'], 'd1'),
+      activeGroupId: 'g2',
+      tabGroups: [
+        { id: 'g', activeTabId: 't', tabOrder: ['t'] },
+        { id: 'g2', activeTabId: 'd1', tabOrder: ['d1'] }
+      ]
+    }
+    const merged = withMainSessionTabRows(
+      published,
+      mainProjection([terminal('t::a')], ['t'], 't::a')
+    )
+
+    expect(merged.tabGroups).toEqual([{ id: 'g', activeTabId: 'd1', tabOrder: ['t', 'd1'] }])
+    expect(merged).toMatchObject({ activeGroupId: 'g', activeTabId: 'd1' })
+  })
 })
