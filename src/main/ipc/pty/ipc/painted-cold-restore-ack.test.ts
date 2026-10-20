@@ -1,6 +1,7 @@
 // A view's painted-restore ack releases the terminal service's in-memory copy. Layout-owner builds
 // release it only for the terminal main binds the named pane to now; no view, no ack.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PaintedRestoreAck } from '../../../../shared/painted-restore-ack'
 
 const ackColdRestore = vi.fn()
 vi.mock('../provider/registry', () => ({
@@ -11,7 +12,7 @@ const PANE = { worktreeId: 'repo::/wt', tabId: 'tab-1', leafId: 'leaf-1' }
 
 async function ackWithSwitch(
   on: boolean,
-  args: Parameters<typeof import('./painted-cold-restore-ack').acknowledgePaintedColdRestore>[0],
+  args: Partial<PaintedRestoreAck>,
   boundPtyId: string | null
 ): Promise<void> {
   vi.resetModules()
