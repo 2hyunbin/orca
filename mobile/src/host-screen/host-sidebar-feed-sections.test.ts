@@ -6,9 +6,11 @@ import {
 import type { ExecutionHostScope } from '../../../src/shared/execution-host'
 import type { SidebarFeedDomains } from '../../../src/shared/sidebar-list/sidebar-feed-domains'
 import { resolveVisibleWorkspaceHostIds } from '../../../src/shared/workspace-view/workspace-host-visibility'
-import { buildHostFeedCatalog, buildHostFeedView } from './host-sidebar-feed-inputs'
+import { buildSidebarFeedCatalog } from '../../../src/shared/sidebar-list/sidebar-feed-catalog'
+import { buildHostFeedView } from './host-sidebar-feed-inputs'
 import { buildHostFeedSections, buildPreFeedSections } from './host-sidebar-feed-sections'
 import {
+  FEED_ROWS,
   SERVED_SECTIONS,
   feedDomains,
   feedRow,
@@ -20,7 +22,7 @@ import type { ProjectGroup } from '../../../src/shared/project-group-types'
 import { readServedProjectSections } from '../worktree/project-sections-operations'
 import type { LastVisitedWorktreeOnHost } from '../worktree/last-visited-worktree-by-host'
 
-const catalog = buildHostFeedCatalog(SERVED_SECTIONS, [], [])
+const catalog = buildSidebarFeedCatalog(SERVED_SECTIONS, [], [])
 
 function phoneFeedView(
   view: MobileViewState,
@@ -129,10 +131,15 @@ describe('the phone list from the sidebar feed', () => {
     if (served.kind !== 'answered' || !served.value) {
       throw new Error('expected a served catalog')
     }
-    const grouped = buildHostFeedCatalog(served.value, [], [])
-    const domains = feedDomains()
+    const grouped = buildSidebarFeedCatalog(served.value, [], [])
+    const base = feedDomains()
     // An unpinned orca workspace, so orca draws its own header beside lab.
-    domains.workspaces.set('|orca::/w/solo', feedRow({ id: 'orca::/w/solo', manualOrder: 4 }))
+    const domains = feedDomains({
+      workspaces: new Map([
+        ...base.workspaces,
+        ['|orca::/w/solo', feedRow({ id: 'orca::/w/solo', manualOrder: 4 })]
+      ])
+    })
     const built = buildSidebarFeedRows(domains, grouped, phoneFeedView(phoneView()))
     const sections = buildHostFeedSections({
       rows: built.sectionRows,
@@ -278,7 +285,12 @@ describe('the phone list from the sidebar feed', () => {
     const sections = sectionsFor(phoneView(), {
       live: [
         liveRow({ worktreeId: 'orca::/w/child', liveTerminalCount: 2, status: 'working' }),
-        liveRow({ worktreeId: 'lab::/w/gpu', hostId: 'ssh:gpu', repoId: 'lab', unread: true })
+        liveRow({
+          worktreeId: 'lab::/w/gpu',
+          hostId: 'ssh:gpu',
+          repoId: 'lab',
+          hasAttachedPty: true
+        })
       ]
     })
     const rows = sections.flatMap((section) => section.data)
@@ -287,13 +299,65 @@ describe('the phone list from the sidebar feed', () => {
       status: 'working',
       lineageDepth: 1
     })
-    expect(rows.find((row) => row.worktreeId === 'lab::/w/gpu')).toMatchObject({ unread: true })
+    expect(rows.find((row) => row.worktreeId === 'lab::/w/gpu')).toMatchObject({
+      hasAttachedPty: true
+    })
     // Not listed by worktree.ps yet: drawn from the feed alone.
     expect(rows.find((row) => row.worktreeId === 'orca::/w/parent')).toMatchObject({
       displayName: 'orca::/w/parent',
       liveTerminalCount: 0,
       isPinned: true
     })
+  })
+
+  it('takes what the feed carries from the feed, over an older worktree.ps row', () => {
+    const feedChild = {
+      ...FEED_ROWS.child,
+      displayName: 'new name',
+      branch: 'new-branch',
+      comment: 'new note',
+      isUnread: true,
+      isPinned: true
+    }
+    const built = buildSidebarFeedRows(
+      feedDomains({
+        workspaces: new Map([
+          ['|orca::/w/parent', FEED_ROWS.parent],
+          ['|orca::/w/child', feedChild]
+        ])
+      }),
+      catalog,
+      phoneFeedView(phoneView())
+    )
+    const stale = liveRow({
+      worktreeId: 'orca::/w/child',
+      displayName: 'old name',
+      branch: 'old-branch',
+      comment: 'old note',
+      unread: false,
+      isPinned: false,
+      isArchived: true,
+      liveTerminalCount: 3
+    })
+    const sections = buildHostFeedSections({
+      rows: built.sectionRows,
+      lastVisited: null,
+      liveRows: [stale],
+      repoHostIdByRepoId: new Map(),
+      search: 'new name'
+    })
+    expect(sections.flatMap((section) => section.data)).toEqual([
+      expect.objectContaining({
+        worktreeId: 'orca::/w/child',
+        displayName: 'new name',
+        branch: 'new-branch',
+        comment: 'new note',
+        unread: true,
+        isPinned: true,
+        isArchived: false,
+        liveTerminalCount: 3
+      })
+    ])
   })
 
   it('never draws one host’s live row under another host’s workspace of the same id', () => {

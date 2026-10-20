@@ -46,13 +46,16 @@ export function sidebarFeedFromWindowState(state: Partial<AppState>): DesktopSid
     full.runtimeEnvironments.map((environment) => toRuntimeExecutionHostId(environment.id))
   )
   const json = new Map(
-    feedDomainsFromWindowState(full, serverHostIds).map((domain) => {
-      const entities = domain.read()
-      if (entities instanceof Promise) {
-        throw new Error(`domain ${domain.name} read asynchronously`)
-      }
-      return [domain.name, JSON.stringify(entities)]
-    })
+    feedDomainsFromWindowState(full, serverHostIds)
+      // The window lists from its own catalog; main's (read async from servers) is the phone's.
+      .filter((domain) => domain.name !== 'projectCatalog')
+      .map((domain) => {
+        const entities = domain.read()
+        if (entities instanceof Promise) {
+          throw new Error(`domain ${domain.name} read asynchronously`)
+        }
+        return [domain.name, JSON.stringify(entities)]
+      })
   )
   const previous = last
   if (previous && [...json].every(([name, text]) => previous.json.get(name) === text)) {
