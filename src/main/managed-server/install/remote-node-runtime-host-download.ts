@@ -49,11 +49,11 @@ export function hostDownloadNodeRuntimeCommand(
   const file = quotePosixShell(joinRemotePath(host, args.stageDir, asset.archive))
   const url = quotePosixShell(hostNodeRuntimeUrl(args.target))
   const curl = `curl -fsSL --connect-timeout 20 --max-time ${HOST_DOWNLOAD_TOOL_SECONDS} -o ${file} ${url}`
-  // wget has no total-time limit of its own; `timeout` is in coreutils and busybox.
+  // wget has no total-time limit of its own. Probed by running it: old busybox wants `-t SECS`.
   const wget = `$orca_dl_timeout wget -q -T 20 -t 2 -O ${file} ${url}`
   return [
     'orca_dl_status=127; orca_dl_out=; orca_dl_timeout=',
-    `command -v timeout >/dev/null 2>&1 && orca_dl_timeout="timeout ${HOST_DOWNLOAD_TOOL_SECONDS}"`,
+    `timeout 5 true >/dev/null 2>&1 && orca_dl_timeout="timeout ${HOST_DOWNLOAD_TOOL_SECONDS}"`,
     `if command -v curl >/dev/null 2>&1; then orca_dl_out=$(${curl} 2>&1); orca_dl_status=$?; fi`,
     // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget
     // works. Not after curl's timeout (28): the link is just slow, and wget would be too.
