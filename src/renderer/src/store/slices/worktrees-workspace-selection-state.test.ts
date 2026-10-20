@@ -480,6 +480,37 @@ describe('setWorktreesPinnedAndReveal', () => {
     }
   )
 
+  it("does not reveal the focused descendant for its ancestor's twin on another host", () => {
+    const store = createTestStore()
+    const parent = makeWorktree({
+      id: 'repo1::/parent',
+      instanceId: 'parent-instance',
+      repoId: 'repo1',
+      hostId: 'local'
+    })
+    const parentTwin = makeWorktree({ ...parent, hostId: 'ssh:box' })
+    const child = makeWorktree({
+      id: 'repo1::/child',
+      instanceId: 'child-instance',
+      repoId: 'repo1',
+      hostId: 'local'
+    })
+    const reveal = vi.fn()
+    store.setState({
+      worktreesByRepo: { repo1: [parent, parentTwin, child] },
+      worktreeLineageById: {
+        [child.id]: makeLineage({ worktreeId: child.id, parentWorktreeId: parent.id })
+      },
+      activeWorktreeId: child.id,
+      activeWorkspaceExecutionHostId: 'local',
+      revealWorktreeInSidebar: reveal
+    })
+
+    store.getState().setWorktreesPinnedAndReveal([parentTwin], true)
+
+    expect(reveal).not.toHaveBeenCalled()
+  })
+
   it('reveals the focused descendant from embedded legacy lineage', () => {
     const store = createTestStore()
     const parent = makeWorktree({

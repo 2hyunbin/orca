@@ -6,7 +6,6 @@ import { getFullDropIndexForWorktreeDragUnit } from '../../worktree-drag-units'
 import { getWorktreeSidebarDragRectsForGroup } from '../../worktree-sidebar-drag-autoscroll'
 import { getWorktreeSidebarDragGrab } from '../../worktree-sidebar-drag-geometry'
 import { getPointerDropStatusTarget } from './status-target'
-import { nativeDragSourceGroupKey } from './native-drag-source-group'
 import type { WorktreeDropCommitContext } from './drop-commit-context'
 import type { WorktreeDragRuntime } from './use-runtime'
 import type { WorktreeDragSession } from './use-session'
@@ -49,11 +48,8 @@ export function useWorktreeNativeDrag(args: {
       draggedCopies: DraggedWorktreeCopies
     ) => {
       const draggedIds = draggedCopies.map((copy) => copy.id)
-      const sourceGroupKey = nativeDragSourceGroupKey(
-        event.currentTarget,
-        ctx.worktreeDragGroups,
-        worktreeId
-      )
+      const sourceGroupKey =
+        ctx.worktreeDragGroups.find((group) => group.worktreeIds.includes(worktreeId))?.key ?? null
       if (!sourceGroupKey) {
         return
       }
