@@ -12,6 +12,7 @@ import {
   noteLayoutFramePosition
 } from './layout-frame-position'
 import { mainLayoutFrameSender } from './main-loaded-layout-frames.test-fixture'
+import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
 import {
   CAPABLE,
   ENV,
@@ -260,6 +261,59 @@ describe('frames to mirror', () => {
       }
     }
   )
+})
+
+describe('a workspace that turns out to be the server’s after its snapshot', () => {
+  it('stays the mirror’s until routing names its owner, then draws from frames until the stream stops', async () => {
+    const store = mirroredStore()
+    hoisted.owners.delete(WT)
+    install(store)
+    setServers(store, [CAPABLE])
+    const check = installLayoutFrameApplyCheck()
+    try {
+      const stream = streams.openTo(ENV)
+      const frames = mainLayoutFrameSender()
+      const before = store.getState()
+      const recorded: AppState[] = []
+      const stop = store.subscribe((state) => recorded.push(state))
+
+      streams.send(stream, senderSnapshot(frames, { [WT]: SERVER_LAYOUT }, 1))
+      await settle()
+      stop()
+
+      // Presence: the snapshot carried the workspace, and the mirror drew it.
+      expect(treeOf(before, WT).tabIds).toEqual([TAB_1])
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+      expect(recorded).toEqual([])
+      expect(check.fullBuilt).toEqual([])
+
+      hoisted.owners.set(WT, ENV)
+      // A routing slice moves, as pairing does when it names the workspace's owner.
+      store.setState({ repos: [...store.getState().repos] })
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+      await settle()
+      expect(check.fullBuilt).toEqual([WT])
+
+      const renamed = structuredClone(SERVER_LAYOUT)
+      renamed.tabs[0]!.customTitle = 'renamed on the server'
+      streams.send(stream, frames.records(WT, renamed))
+      await settle()
+      expect(store.getState().tabsByWorktree[WT]?.[0]?.customTitle).toBe('renamed on the server')
+
+      stream.onStatus({ state: 'lost' })
+      await settle()
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+      expect(hoisted.resync.mock.calls).toEqual([[ENV, WT]])
+      // The owner still reads ENV: a routing change after the loss must not take it back.
+      expect(hoisted.owners.get(WT)).toBe(ENV)
+      store.setState({ repos: [...store.getState().repos] })
+      await settle()
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+      expect(check.failures).toEqual([])
+    } finally {
+      check.uninstall()
+    }
+  })
 })
 
 describe('server frames and this window’s layout.apply positions', () => {
