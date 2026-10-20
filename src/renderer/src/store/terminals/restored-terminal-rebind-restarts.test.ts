@@ -20,6 +20,7 @@ import {
   GIT_KEY,
   leaf
 } from '../../../../shared/workspace-layout/workspace-layout-session.test-fixture'
+import { bindTabTerminalPanesInSession } from '../../../../main/persistence/restoring-sessions/tab-terminal-pane-binding-repair'
 import { windowViewSaveForMain } from '../../../../main/persistence/window-save-view'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { buildWorkspaceSessionHostSnapshots } from '@/lib/workspace-session-host-persistence'
@@ -90,6 +91,8 @@ function storedBeforeUpgrade(): StoredPartition[] {
 
 type Launched = {
   store: ReturnType<typeof createTestStore>
+  /** What main's Store holds after its load repairs: the window reads it, main saves over it. */
+  stored: StoredPartition[]
   /** Tab id → the terminal main's frame binds to its first pane. */
   mainPaneTerminals: Map<string, string | undefined>
 }
@@ -122,10 +125,14 @@ function applyMainFrames(
   store.setState(buildLayoutFrameStorePatch(store.getState(), slices, Object.keys(layouts)))
 }
 
-/** One app launch: startup hydration and reconnect, then main's frames, SSH connected. */
-async function launch(partitions: StoredPartition[]): Promise<Launched> {
+/** One app launch: main's load, the window's hydration and reconnect, then main's frames. */
+async function launch(onDisk: StoredPartition[]): Promise<Launched> {
+  const partitions = onDisk.map(({ hostId, session }) => ({
+    hostId,
+    session: bindTabTerminalPanesInSession(session)
+  }))
   const store = createTestStore()
-  const launched: Launched = { store, mainPaneTerminals: new Map() }
+  const launched: Launched = { store, stored: partitions, mainPaneTerminals: new Map() }
   store.setState({
     sshConnectionStates: new Map([
       [TARGET_ID, { targetId: TARGET_ID, status: 'connected', error: null, reconnectAttempt: 0 }]
@@ -149,10 +156,7 @@ function windowPaneTerminal(state: AppState, tabId: string): string | undefined 
 }
 
 /** The window's quit save, through main's save join, per partition. */
-function quit(
-  store: ReturnType<typeof createTestStore>,
-  stored: StoredPartition[]
-): StoredPartition[] {
+function quit({ store, stored }: Launched): StoredPartition[] {
   const payload = buildWorkspaceSessionPayload(store.getState())
   const snapshots = buildWorkspaceSessionHostSnapshots(payload, store.getState())
   return stored.map(({ hostId, session }) => {
@@ -190,14 +194,18 @@ describe('restored tab-level terminals across two restarts (layout owner is main
       firstRun.store.getState().updateTabTitle(tabId, `vim ${tabId}`)
     }
 
-    const second = quit(firstRun.store, first)
+    const second = quit(firstRun)
+    // Main's save keeps the binding its load repair made, so the next load needs no repair.
+    const local = second.find(({ hostId }) => hostId === LOCAL_EXECUTION_HOST_ID)!.session
+    expect(local.terminalLayoutsByTabId['tab-g']?.ptyIdsByLeafId).toEqual({ [leaf(1)]: 'pty-git' })
     const ssh = second.find(({ hostId }) => hostId === SSH_HOST)!.session
+    expect(ssh.terminalLayoutsByTabId['tab-s']?.ptyIdsByLeafId).toEqual({ [leaf(3)]: RELAY_PTY_ID })
     expect(ssh.remoteSessionIdsByTabId).toEqual({ 'tab-s': RELAY_PTY_ID })
     expect(ssh.activeConnectionIdsAtShutdown).toEqual([TARGET_ID])
 
     const secondRun = await launch(second)
     expectReattaches(secondRun)
-    const third = quit(secondRun.store, second)
+    const third = quit(secondRun)
     expect(
       third.find(({ hostId }) => hostId === SSH_HOST)!.session.remoteSessionIdsByTabId
     ).toEqual({ 'tab-s': RELAY_PTY_ID })

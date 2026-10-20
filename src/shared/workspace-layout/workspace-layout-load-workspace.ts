@@ -62,58 +62,6 @@ function legacyLayout(
   }
 }
 
-/** The plan's rule (workspace-terminal-reconnect-plan.ts): the shutdown list, else any bound row. */
-function wasLiveAtShutdown(session: WorkspaceSessionState, key: string): boolean {
-  return session.activeWorktreeIdsOnShutdown
-    ? session.activeWorktreeIdsOnShutdown.includes(key)
-    : (session.tabsByWorktree?.[key] ?? []).some((row) => row.ptyId)
-}
-
-/** A legacy row's terminals a tab-bar tab holds: the tab-bar tab keeps them (#10486). */
-function releasedToTabBar(
-  session: WorkspaceSessionState,
-  row: TerminalTab,
-  args: WorkspaceLoadArgs
-): ReadonlySet<string> {
-  const claim = resolveCanonicalPtyClaim(
-    session,
-    row,
-    readCanonicalPtyOwners(session, args.key, takeRows(args))
-  )
-  return claim.kind === 'retained' ? claim.releasedPtyIds : new Set()
-}
-
-/**
- * A one-pane tab whose layout binds no terminal restores onto the one named on the tab (an older
- * session, or an unvisited SSH tab's relay session), as the window's reconnect rebinds it.
- */
-function withTabTerminalBound(
-  layout: TerminalLayoutSnapshot,
-  session: WorkspaceSessionState,
-  row: TerminalTab,
-  args: WorkspaceLoadArgs
-): TerminalLayoutSnapshot {
-  const leafId = layout.root?.type === 'leaf' ? layout.root.leafId : undefined
-  // Reconnect takes the relay session id over the row's.
-  const named = [session.remoteSessionIdsByTabId?.[row.id], row.ptyId].filter(
-    (ptyId): ptyId is string => Boolean(ptyId)
-  )
-  if (
-    !leafId ||
-    named.length === 0 ||
-    layout.ptyIdsByLeafId?.[leafId] ||
-    !wasLiveAtShutdown(session, args.key)
-  ) {
-    return layout
-  }
-  const released = releasedToTabBar(session, row, args)
-  const ptyId = named.find((candidate) => !released.has(candidate))
-  if (!ptyId) {
-    return layout
-  }
-  return { ...layout, ptyIdsByLeafId: { ...layout.ptyIdsByLeafId, [leafId]: ptyId } }
-}
-
 function loadPanes(
   session: WorkspaceSessionState,
   row: TerminalTab,
@@ -122,24 +70,16 @@ function loadPanes(
   entry: Tab | undefined
 ): LayoutTerminalTab {
   const stored = session.terminalLayoutsByTabId?.[tab.entityId] ?? legacyLayout(session, row, args)
-  // Switch point: main applies the window's load repairs: one pane per terminal, no lone-pane
-  // title that only repeats the tab's name, and a tab's own terminal bound to its unbound pane.
+  // Switch point: main applies the window's load repairs: one pane per terminal, and no lone-pane
+  // title that only repeats the tab's name.
   const layout = ORCA_LAYOUT_OWNER_IS_MAIN
-    ? sanitizeTerminalLayoutPaneTitles(
-        withTabTerminalBound(
-          normalizeTerminalLayoutPtyOwnership(stored).snapshot,
-          session,
-          row,
-          args
-        ),
-        {
-          ...row,
-          // The tab's labels as the window loads them: the tab-bar label is the live title, and
-          // fills a quick command label the row lacks.
-          title: entry?.label ?? row.title,
-          quickCommandLabel: row.quickCommandLabel?.trim() || entry?.quickCommandLabel?.trim()
-        }
-      )
+    ? sanitizeTerminalLayoutPaneTitles(normalizeTerminalLayoutPtyOwnership(stored).snapshot, {
+        ...row,
+        // The tab's labels as the window loads them: the tab-bar label is the live title, and
+        // fills a quick command label the row lacks.
+        title: entry?.label ?? row.title,
+        quickCommandLabel: row.quickCommandLabel?.trim() || entry?.quickCommandLabel?.trim()
+      })
     : stored
   // Each pane's data is loaded once every tab is placed (loadLeaves).
   args.layouts.set(tab.entityId, layout)
