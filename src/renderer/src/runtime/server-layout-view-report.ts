@@ -8,10 +8,12 @@ import { callRuntimeRpc } from './runtime-rpc-client'
 import { changedActiveGroups } from './sync-runtime-graph/active-group-publication'
 
 export type ServerViewReport = {
-  /** Sends the frame-drawn workspaces whose group changed since the last send, if any did. */
+  /** Sends the frame-drawn workspaces whose group changed since the last send, if any did.
+   *  `fromFrames`: the server's own frames moved it, not the user, so it goes as a refresh. */
   update: (
     activeGroupIdByWorktree: Readonly<Record<string, string>>,
-    drawn: ReadonlySet<string>
+    drawn: ReadonlySet<string>,
+    fromFrames?: boolean
   ) => void
   /** Forgets what was sent: a new stream may come with a connection the server knows nothing of.
    *  The next report of each workspace is a refresh, which never outranks another client's. A
@@ -68,7 +70,7 @@ export function createServerViewReport(environmentId: string): ServerViewReport 
     })
   }
   return {
-    update: (activeGroupIdByWorktree, drawn) => {
+    update: (activeGroupIdByWorktree, drawn, fromFrames = false) => {
       if (seen?.[0] === activeGroupIdByWorktree && seen[1] === drawn) {
         return
       }
@@ -80,7 +82,7 @@ export function createServerViewReport(environmentId: string): ServerViewReport 
       if (!changed) {
         return
       }
-      const [refreshed, live] = partition(changed, (key) => !reported.has(key))
+      const [refreshed, live] = partition(changed, (key) => fromFrames || !reported.has(key))
       for (const key of Object.keys(changed)) {
         reported.add(key)
       }

@@ -88,15 +88,32 @@ function openServerFrames(
   const draws = serverDraws(environmentId)
   const viewReport = createServerViewReport(environmentId)
   /** The server may hold none of this window's reports: a new stream or control socket. */
-  const reportAgain = (): void => {
-    viewReport.reset()
+  const reportCurrent = (): void => {
     if (live) {
       viewReport.update(store.getState().activeGroupIdByWorktree, gated)
     }
   }
+  const reportAgain = (): void => {
+    viewReport.reset()
+    reportCurrent()
+  }
   const stopControlWatch = onServerControlConnected(environmentId, reportAgain)
+  /** True while the sync writes a frame: a group it moves is the server's doing, not the user's. */
+  let applyingFrames = false
+  const frameStore: FramesStore = {
+    getState: () => store.getState(),
+    subscribe: (listener) => store.subscribe(listener),
+    setState: (patch) => {
+      applyingFrames = true
+      try {
+        store.setState(patch)
+      } finally {
+        applyingFrames = false
+      }
+    }
+  }
 
-  const sync = openWorkspaceLayoutFrameSync(store, {
+  const sync = openWorkspaceLayoutFrameSync(frameStore, {
     target: { kind: 'environment', environmentId },
     // Only gated workspaces: a handed-back one is the mirror's, whatever the frozen frames still hold.
     draws: (state) => {
@@ -107,8 +124,10 @@ function openServerFrames(
       const translated = translator.translate(frame)
       live ||= frame.type === 'snapshot'
       if (frame.type === 'snapshot') {
-        // After the snapshot applies: it may change nothing in the store to report on.
-        queueMicrotask(reportAgain)
+        viewReport.reset()
+        // Two hops, past the flush the sync queues after this returns: if applying the snapshot
+        // changed nothing in the store, nothing has re-sent the view yet.
+        queueMicrotask(() => queueMicrotask(reportCurrent))
       }
       // Before the frame shows: the mirror must not write a workspace the frames now draw.
       regate()
@@ -125,7 +144,7 @@ function openServerFrames(
   let routing: unknown[] = []
   const stopRouting = store.subscribe((state) => {
     if (live) {
-      viewReport.update(state.activeGroupIdByWorktree, gated)
+      viewReport.update(state.activeGroupIdByWorktree, gated, applyingFrames)
     }
     const next = routingInputs(state)
     if (sameValues(next, routing)) {
