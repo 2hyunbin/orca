@@ -12,9 +12,9 @@ import {
 } from './worktree-operation-generation'
 import {
   getFloatingWorkspaceOperationRoute,
+  resolveWorktreeOperationRoute,
   type WorktreeOperationRoute
 } from './worktree-operation-route'
-import { resolveWorktreeOperationRoute } from './worktree-operation-route'
 import { resolveExplicitWorktreeOperationRouteResult } from './worktree-operation-catalog-route'
 
 export type EditorFileOperationProvenance = {

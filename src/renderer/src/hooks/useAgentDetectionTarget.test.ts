@@ -105,23 +105,10 @@ describe('getAgentDetectionTargetKeyForWorktree', () => {
     expect(getAgentDetectionTargetKeyForWorktree(state, 'repo-1::/remote/worktree')).toBeUndefined()
   })
 
-  it('keeps a hydrated unstamped worktree local while a runtime is focused', () => {
+  it('reads a server row by its stamp, never by the focused runtime', () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resolver reads only these owner fields.
     const state = {
       settings: { activeRuntimeEnvironmentId: 'env-1' },
-      folderWorkspaces: [],
-      projectGroups: [],
-      repos: [{ id: 'repo-1', connectionId: null, executionHostId: null }],
-      worktreesByRepo: {
-        'repo-1': [{ id: 'repo-1::worktree-1', repoId: 'repo-1' }]
-      }
-    } as unknown as Parameters<typeof getAgentDetectionTargetKeyForWorktree>[0]
-
-    expect(getAgentDetectionTargetKeyForWorktree(state, 'repo-1::worktree-1')).toBe('local')
-  })
-
-  it('carries the workspace on a runtime-owned worktree key', () => {
-    const state = {
-      settings: { activeRuntimeEnvironmentId: null },
       folderWorkspaces: [],
       projectGroups: [],
       repos: [{ id: 'repo-1', connectionId: null, executionHostId: 'runtime:env-1' }],
@@ -130,6 +117,11 @@ describe('getAgentDetectionTargetKeyForWorktree', () => {
       }
     } as unknown as Parameters<typeof getAgentDetectionTargetKeyForWorktree>[0]
 
+    const unstamped = {
+      ...state,
+      repos: state.repos?.map((repo) => ({ ...repo, executionHostId: null }))
+    }
+    expect(getAgentDetectionTargetKeyForWorktree(unstamped, 'repo-1::worktree-1')).toBe('local')
     const key = getAgentDetectionTargetKeyForWorktree(state, 'repo-1::worktree-1')
     // The workspace rides along so the paired host resolves its runtime (#19885).
     expect(key).toBe('runtime:env-1:repo-1%3A%3Aworktree-1')

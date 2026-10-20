@@ -9,8 +9,10 @@ import { forgetHugeRepoWarningDismissalsForWorktrees } from '@/lib/source-contro
 import { forgetWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { readIpcErrorDetail } from '@/lib/ipc-error'
 import { isArchiveHookRemovalError } from '../../../../../../shared/worktree/archive-hook-removal-gate'
-import { resolveWorktreeOperationRouteResultForHost } from '@/lib/worktree-operation-route'
-import { resolveWorktreeOperationRouteResult } from '@/lib/worktree-operation-route'
+import {
+  resolveWorktreeOperationRouteResult,
+  resolveWorktreeOperationRouteResultForHost
+} from '@/lib/worktree-operation-route'
 import {
   beginHostQualifiedRemoval,
   completeSameIdHostScopedRemoval,

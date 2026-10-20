@@ -2,12 +2,14 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { translate } from '@/i18n/i18n'
-import { resolveWorktreeOperationRouteForHost } from '@/lib/worktree-operation-route'
+import {
+  resolveWorktreeOperationRoute,
+  resolveWorktreeOperationRouteForHost
+} from '@/lib/worktree-operation-route'
 import type { WorktreeRemovalTarget } from '../../../../shared/worktree/removal'
 import { showDeleteWorktreeFailureToast } from './delete-worktree-failure-toast'
 import type { WorktreeDeleteWithToastOptions } from './worktree-delete-request'
 import { getDeleteStateForWorktreeHost } from './worktree-delete-state-host-match'
-import { resolveWorktreeOperationRoute } from '@/lib/worktree-operation-route'
 
 // A failed delete usually means unresolved changes, so land on the diff panel.
 function viewWorktreeDiff(

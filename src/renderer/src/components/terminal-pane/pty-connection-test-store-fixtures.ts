@@ -123,5 +123,5 @@ export function buildActiveRuntimeEnvironmentState(
       ...current.settings,
       activeRuntimeEnvironmentId: environmentId
     }
-  } as StoreState
+  }
 }
