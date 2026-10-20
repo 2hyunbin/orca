@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { defaultExclude, defineConfig } from 'vitest/config'
 import { UNIT_INCLUDE, UNIT_EXCLUDE } from './scripts/ci-unit-files.mjs'
@@ -16,7 +17,9 @@ const transforms = {
   define: {
     ORCA_FEATURE_WALL_ENABLED: 'true',
     // Why: tests only interpolate it; they must not depend on the checkout's HEAD.
-    ORCA_BUILD_COMMIT: JSON.stringify('0'.repeat(40))
+    ORCA_BUILD_COMMIT: JSON.stringify('0'.repeat(40)),
+    // `ORCA_LAYOUT_OWNER=main pnpm vitest ...` runs the suite with that dark switch on.
+    ...createRequire(import.meta.url)('./dark-build-switches.cjs').turnedOnDarkBuildDefines()
   },
   resolve: {
     alias: [

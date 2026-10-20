@@ -644,14 +644,15 @@ describe('createEditorSlice openDiff', () => {
     expect(store.getState().unifiedTabsByWorktree['wt-1']).toEqual([
       expect.objectContaining({
         entityId: '/repo/a.ts',
-        isPinned: true,
-        isPreview: false
+        isPinned: true
       }),
       expect.objectContaining({
         entityId: 'wt-1::diff::unstaged::b.ts',
         isPreview: true
       })
     ])
+    // Not a preview: a switch-on build omits the flag rather than writing false.
+    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview ?? false).toBe(false)
   })
 
   it('makes a preview file permanent without pinning the tab', () => {
@@ -678,10 +679,11 @@ describe('createEditorSlice openDiff', () => {
     expect(store.getState().unifiedTabsByWorktree['wt-1']).toEqual([
       expect.objectContaining({
         entityId: '/repo/a.ts',
-        isPinned: undefined,
-        isPreview: false
+        isPinned: undefined
       })
     ])
+    // Not a preview: a switch-on build omits the flag rather than writing false.
+    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview ?? false).toBe(false)
   })
 
   it('does not replace a dirty file that was opened as a preview', () => {
@@ -714,13 +716,14 @@ describe('createEditorSlice openDiff', () => {
     ])
     expect(store.getState().unifiedTabsByWorktree['wt-1']).toEqual([
       expect.objectContaining({
-        entityId: '/repo/a.ts',
-        isPreview: false
+        entityId: '/repo/a.ts'
       }),
       expect.objectContaining({
         entityId: 'wt-1::diff::unstaged::b.ts',
         isPreview: true
       })
     ])
+    // Not a preview: a switch-on build omits the flag rather than writing false.
+    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview ?? false).toBe(false)
   })
 })
