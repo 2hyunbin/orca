@@ -279,6 +279,17 @@ export function getRepoSshConnectionId(
   return host?.kind === 'runtime' ? normalizeHostPart(repo.connectionId) : null
 }
 
+/**
+ * Drop-in for a raw `repo.connectionId` in a routing or "is this SSH?" check. It returns what the
+ * raw field holds on every consistent row, and also the target of a row that names its SSH host
+ * only as `executionHostId: 'ssh:<target>'`, which the raw field reports as local.
+ */
+export function getRepoRoutingConnectionId(
+  repo: Pick<Repo, 'connectionId' | 'executionHostId'>
+): string | null {
+  return getRepoSshConnectionId(repo) ?? normalizeHostPart(repo.connectionId)
+}
+
 export function getWorktreeExecutionHostId(
   worktree: Pick<Worktree, 'hostId'>,
   repo: Pick<Repo, 'connectionId' | 'executionHostId'> | undefined,
