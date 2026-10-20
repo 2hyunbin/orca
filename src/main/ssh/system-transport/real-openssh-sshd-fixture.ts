@@ -67,7 +67,7 @@ export type RealOpenSshFixture = {
   ssh: (args: readonly string[]) => string
   /** New logins fail from here on; the open master keeps working, like a login it cannot repeat. */
   refuseNewLogins: () => void
-  close: () => void
+  close: () => Promise<void>
 }
 
 export async function startRealOpenSshFixture(
@@ -122,7 +122,7 @@ export async function startRealOpenSshFixture(
       `  User ${userInfo().username}`,
       `  IdentityFile ${join(dir, 'clientkey')}`,
       '  IdentitiesOnly yes',
-      `  UserKnownHostsFile ${join(dir, 'known_hosts')}`,
+      '  UserKnownHostsFile /dev/null',
       '  StrictHostKeyChecking no',
       '  ControlMaster auto',
       `  ControlPath "${controlPath}"`,
@@ -162,14 +162,18 @@ export async function startRealOpenSshFixture(
     }),
     ssh,
     refuseNewLogins: () => writeFileSync(authorizedKeys, ''),
-    close: () => {
+    close: async () => {
       try {
         ssh(['-O', 'exit'])
       } catch {
         /* no master */
       }
+      const exited = new Promise((resolve) => sshd.once('exit', resolve))
       sshd.kill('SIGTERM')
-      rmSync(dir, { recursive: true, force: true })
+      await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 2_000))])
+      // Why the wait: the master and sshd's session children finish exiting after these return.
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3 })
     }
   }
 }

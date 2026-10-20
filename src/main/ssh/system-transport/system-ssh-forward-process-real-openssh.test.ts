@@ -29,8 +29,8 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
       fixture = await startRealOpenSshFixture({ sshd: ['PermitOpen 127.0.0.1:1'] })
     }, 30_000)
 
-    afterAll(() => {
-      fixture?.close()
+    afterAll(async () => {
+      await fixture?.close()
     })
 
     it('closing the forward releases its listener', async () => {

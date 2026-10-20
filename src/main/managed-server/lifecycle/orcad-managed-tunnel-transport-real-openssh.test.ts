@@ -115,7 +115,7 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
         socket.destroy()
       }
       await new Promise((resolve) => orcad.close(resolve))
-      fixture.close()
+      await fixture.close()
     })
 
     it('forwards when a fresh login works', async () => {
