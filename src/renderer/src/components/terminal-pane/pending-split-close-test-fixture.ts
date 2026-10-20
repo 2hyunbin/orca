@@ -110,13 +110,14 @@ export async function preparePendingSplitClose(
     retireAgentPaneAuthority: vi.fn(),
     suppressPtyExit: vi.fn()
   }) as unknown as AppState
-  // Main answers the window's layout commands (a layout-owner build) through the local runtime call.
+  // Main answers the window's layout commands (a layout-owner build): the only local runtime call
+  // these closes make. The transport refuses anything that carries no command.
   const { layoutApplyTestTransport: main } =
     await import('@/runtime/layout-apply-test-transport.test-fixture')
-  const runtimeCall = async ({ method, params }: { method: string; params?: unknown }) =>
-    method === 'layout.apply'
-      ? { ok: true, result: await main.call(params) }
-      : { ok: false, error: { code: 'method_not_found', message: method } }
+  const runtimeCall = async ({ params }: { params?: unknown }) => ({
+    ok: true,
+    result: await main.call(params)
+  })
   Object.assign(window.api, { runtime: { ...window.api.runtime, call: vi.fn(runtimeCall) } })
   const spawn = Promise.withResolvers<PtyConnectResult>()
   vi.mocked(window.api.pty.spawn).mockReturnValueOnce(spawn.promise)
