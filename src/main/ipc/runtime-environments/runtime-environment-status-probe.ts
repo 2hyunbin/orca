@@ -1,6 +1,8 @@
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import {
+  getOrcadSshDeployment,
   getPreferredPairedRuntimeConnection,
+  getPreferredPairingOffer,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
@@ -17,6 +19,7 @@ export async function getRuntimeEnvironmentStatus(
   selector: string,
   timeoutMs?: number,
   options?: { observeOnly?: true; signal?: AbortSignal; reconnect?: true },
+  /** False for a caller pinned to this pairing revision, which a re-pair must fail instead. */
   followRepair = true
 ): Promise<RuntimeRpcResponse<RuntimeStatus>> {
   const environment = resolveEnvironment(userDataPath, selector)
@@ -38,7 +41,7 @@ export async function getRuntimeEnvironmentStatus(
   // A retired request must not publish old status or borrow its replacement's diagnostics.
   if (getRuntimeEnvironmentCapabilityIncarnation(environment.id) !== incarnation) {
     // Why follow once: a re-pair this probe set off retired its owner; the successor answers it.
-    return followRepair && pairingRevisionChanged(userDataPath, environment)
+    return followRepair && repairedSameServer(userDataPath, environment)
       ? getRuntimeEnvironmentStatus(userDataPath, environment.id, timeoutMs, options, false)
       : runtimeEnvironmentChangedFailure(environment, 'status.get')
   }
@@ -52,11 +55,18 @@ export async function getRuntimeEnvironmentStatus(
   )
 }
 
-function pairingRevisionChanged(userDataPath: string, before: KnownRuntimeEnvironment): boolean {
+/**
+ * A new pairing for the same server managed over SSH, under the host key it pinned: what a re-pair
+ * stores. Any other replacement (another host, key or kind) stays a changed environment.
+ */
+function repairedSameServer(userDataPath: string, before: KnownRuntimeEnvironment): boolean {
   try {
     const after = resolveEnvironment(userDataPath, before.id)
     return (
-      (after.pairingRevision ?? after.createdAt) !== (before.pairingRevision ?? before.createdAt)
+      (after.pairingRevision ?? after.createdAt) !== (before.pairingRevision ?? before.createdAt) &&
+      getOrcadSshDeployment(before) !== undefined &&
+      getOrcadSshDeployment(after) !== undefined &&
+      getPreferredPairingOffer(after).publicKeyB64 === getPreferredPairingOffer(before).publicKeyB64
     )
   } catch {
     return false

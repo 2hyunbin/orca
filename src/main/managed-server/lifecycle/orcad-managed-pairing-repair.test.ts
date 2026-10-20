@@ -323,6 +323,25 @@ describe('buildWithPairingRepair', () => {
     expect(build).toHaveBeenCalledTimes(MAX_PAIRING_REPAIRS_PER_WINDOW + 1)
   })
 
+  it('does not block a newer pairing stored while the repaired one was being refused', async () => {
+    const { state, recovery: deps } = recovery()
+    const newer = environment('updated-token', 9)
+    deps.ensure.mockImplementationOnce(async () => {
+      // An update stores a fresh pairing while the repaired one is still being refused.
+      state.deps.resolve.mockReturnValue(newer)
+      throw refusal()
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(
+      buildWithPairingRepair(deps, 'env-1', vi.fn().mockRejectedValue(refusal()))
+    ).rejects.toThrow(/refused the new pairing too/)
+    warn.mockRestore()
+    expect(state.repairs.standingFailure('env-1', pairingRevisionOf(newer))).toBeNull()
+    const build = vi.fn().mockResolvedValue(undefined)
+    await expect(buildWithPairingRepair(deps, 'env-1', build)).resolves.toBe('built')
+    expect(build).toHaveBeenCalledWith(newer)
+  })
+
   it('fails clearly, without looping, when the new pairing is refused too', async () => {
     const { state, recovery: deps } = recovery()
     deps.ensure.mockRejectedValue(refusal())

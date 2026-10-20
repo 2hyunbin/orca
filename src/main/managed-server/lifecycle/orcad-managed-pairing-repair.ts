@@ -127,11 +127,14 @@ export class ManagedOrcadPairingRepairs {
     return operation
   }
 
-  /** The new pairing was refused too, so it counts as a failed repair. */
-  recordRefusedAfterRepair(environmentId: string): Error {
+  /**
+   * The new pairing was refused too, so it counts as a failed repair. Stands under that pairing's
+   * revision: a newer one stored meanwhile was never tried, so it must not be blocked.
+   */
+  recordRefusedAfterRepair(environmentId: string, repairedRevision: number): Error {
     return this.stand(
       environmentId,
-      pairingRevisionOf(this.deps.resolve(environmentId)),
+      repairedRevision,
       this.resetsOf(environmentId),
       new OrcadManagedPairingRepairFailedError('the server refused the new pairing too')
     )

@@ -44,7 +44,7 @@ export async function buildWithPairingRepair(
     await recovery.ensure(repaired)
   } catch (error) {
     throw error instanceof OrcadManagedPairingRejectedError
-      ? recovery.repairs.recordRefusedAfterRepair(environmentId)
+      ? recovery.repairs.recordRefusedAfterRepair(environmentId, pairingRevisionOf(repaired))
       : error
   }
   return 'repaired'
