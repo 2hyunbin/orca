@@ -50,10 +50,12 @@ describe('runtime environment store with records this build cannot read', () => 
     rmSync(userDataPath, { recursive: true, force: true })
   })
 
+  // Why a key per name: two names with one key are one server, which the store refreshes in place.
   function add(name: string) {
+    const publicKeyB64 = Buffer.alloc(32, name).toString('base64')
     return addEnvironmentFromPairingCode(userDataPath, {
       name,
-      pairingCode: encodePairingOffer(pairing),
+      pairingCode: encodePairingOffer({ ...pairing, publicKeyB64 }),
       now: 100
     })
   }

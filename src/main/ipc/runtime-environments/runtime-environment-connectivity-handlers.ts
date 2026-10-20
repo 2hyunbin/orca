@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import {
-  addEnvironmentFromPairingCode,
+  addOrUpdateEnvironmentFromPairingCode,
   listEnvironments,
   removeEnvironment,
   resolveEnvironment
@@ -88,13 +88,15 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
   })
   ipcMain.handle(
     'runtimeEnvironments:addFromPairingCode',
-    (
-      _event,
-      args: { name: string; pairingCode: string }
-    ): { environment: PublicKnownRuntimeEnvironment } => {
-      const environment = addEnvironmentFromPairingCode(getUserDataPath(), args)
+    async (_event, args: { name: string; pairingCode: string }) => {
+      const { environment, updatedExisting } = addOrUpdateEnvironmentFromPairingCode(
+        getUserDataPath(),
+        { name: args.name, pairingCode: args.pairingCode }
+      )
       clearRuntimeEnvironmentManualDisconnect(environment.id)
-      return { environment: redactRuntimeEnvironment(environment) }
+      // Retires the owner keyed on the replaced pairing revision.
+      await (updatedExisting ? invalidateTransport(environment.id) : undefined)
+      return { environment: redactRuntimeEnvironment(environment), updatedExisting }
     }
   )
   ipcMain.handle(
@@ -103,6 +105,8 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
       const result = await verifyAndAddRuntimeEnvironmentFromPairingCode(getUserDataPath(), args)
       if (result.ok) {
         clearRuntimeEnvironmentManualDisconnect(result.environment.id)
+        // Why after clearing: a manually disconnected server would not get a fresh owner.
+        await (result.updatedExisting ? invalidateTransport(result.environment.id) : undefined)
         getRuntimeEnvironmentStatusOwner(getUserDataPath(), result.environment.id).acceptVerified({
           id: 'status.get',
           ok: true,

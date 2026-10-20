@@ -48,17 +48,20 @@ export const ENVIRONMENT_HANDLERS: Record<string, CommandHandler> = {
   'environment add': async ({ flags, json }) => {
     const name = getRequiredStringFlag(flags, 'name')
     const pairingCode = getRequiredStringFlag(flags, 'pairing-code')
-    const environment = redactRuntimeEnvironment(
-      addEnvironmentFromPairingCode(getDefaultUserDataPath(), {
-        name,
-        pairingCode
-      })
+    const { environment, updatedExisting } = addEnvironmentFromPairingCode(
+      getDefaultUserDataPath(),
+      { name, pairingCode }
     )
     printResult(
-      localSuccess({ environment }),
+      localSuccess({
+        environment: redactRuntimeEnvironment(environment),
+        ...(updatedExisting ? { updatedExisting: true as const } : {})
+      }),
       json,
       (result: EnvironmentAddResult) =>
-        `Saved environment ${result.environment.name} (${result.environment.id}).`
+        result.updatedExisting
+          ? `This server is already paired as ${result.environment.name}; updated its connection (${result.environment.id}).`
+          : `Saved environment ${result.environment.name} (${result.environment.id}).`
     )
   },
   // Why: an agent told "run it on <name>" had nowhere to look. `orca environment list` showed

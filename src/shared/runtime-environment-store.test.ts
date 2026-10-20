@@ -13,12 +13,16 @@ import {
   updateEnvironmentFromPairingCode
 } from './runtime-environment-store'
 
-function pairingCode(endpoint = 'ws://127.0.0.1:6768', pairedDeviceId?: string): string {
+function pairingCode(
+  endpoint = 'ws://127.0.0.1:6768',
+  pairedDeviceId?: string,
+  keyFill = 1
+): string {
   return encodePairingOffer({
     v: 2,
     endpoint,
     deviceToken: 'device-token',
-    publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64'),
+    publicKeyB64: Buffer.from(new Uint8Array(32).fill(keyFill)).toString('base64'),
     ...(pairedDeviceId ? { pairedDeviceId } : {})
   })
 }
@@ -104,7 +108,7 @@ describe('runtime environment store', () => {
     expect(() =>
       addEnvironmentFromPairingCode(userDataPath, {
         name: 'dev box',
-        pairingCode: pairingCode('ws://192.0.2.10:6768')
+        pairingCode: pairingCode('ws://192.0.2.10:6768', undefined, 2)
       })
     ).toThrow(RuntimeEnvironmentStoreError)
     expect(listEnvironments(userDataPath)).toEqual([first])
@@ -123,7 +127,7 @@ describe('runtime environment store', () => {
       expect(() =>
         addEnvironmentFromPairingCode(userDataPath, {
           name,
-          pairingCode: pairingCode('ws://192.0.2.10:6768')
+          pairingCode: pairingCode('ws://192.0.2.10:6768', undefined, 2)
         })
       ).toThrow('A server named "build" already exists.')
     }
@@ -270,7 +274,7 @@ describe('runtime environment store', () => {
     expect(() =>
       addEnvironmentFromPairingCode(userDataPath, {
         name: 'x'.repeat(MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES),
-        pairingCode: pairingCode('ws://192.0.2.10:6768')
+        pairingCode: pairingCode('ws://192.0.2.10:6768', undefined, 2)
       })
     ).toThrow(RuntimeEnvironmentStoreError)
     expect(listEnvironments(userDataPath)).toEqual([first])

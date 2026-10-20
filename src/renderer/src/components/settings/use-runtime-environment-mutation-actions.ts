@@ -92,14 +92,24 @@ export function useRuntimeEnvironmentMutationActions({
         environmentId: result.environment.id,
         runtimeStatus: result.runtimeStatus
       })
+      if (result.updatedExisting && mountedRef.current) {
+        toast.success(
+          translate(
+            'auto.components.settings.RuntimeEnvironmentsPane.serverAlreadyPaired',
+            'This server is already paired as {{value0}}; updated its connection.',
+            { value0: result.environment.name }
+          )
+        )
+      }
       if (!allowLocalRuntime) {
         const connected = await connectEnvironment(result.environment)
-        if (!connected) {
+        // Why not a refreshed entry: removing it would drop a server the user had already saved.
+        if (!connected && !result.updatedExisting) {
           await window.api.runtimeEnvironments.remove({ selector: result.environment.id })
           await loadEnvironments()
           return
         }
-      } else {
+      } else if (!result.updatedExisting) {
         if (mountedRef.current) {
           toast.success(
             translate(

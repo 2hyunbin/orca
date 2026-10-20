@@ -410,7 +410,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     await expect(
       verifyAndAdd(null, {
         name: 'desk',
-        pairingCode: pairingCode('ws://100.76.32.125:6768')
+        pairingCode: pairingCode('ws://100.76.32.125:6768', { keyByte: 2 })
       })
     ).resolves.toMatchObject({
       ok: false,
@@ -418,6 +418,41 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       message: 'A server named "desk" already exists.'
     })
     expect(environmentStore.listEnvironments(userDataPath)).toHaveLength(1)
+  })
+
+  it('refreshes the saved server when a verified link is for it, and retires its old connection', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    const saved = environmentStore.addEnvironmentFromPairingCode(userDataPath, {
+      name: 'desk',
+      pairingCode: pairingCode('ws://100.76.32.125:6768')
+    })
+    sendRemoteRuntimeRequestMock.mockResolvedValue({
+      id: 'status',
+      ok: true,
+      result: runtimeStatus(),
+      _meta: { runtimeId: 'runtime-a' }
+    })
+    const verifyAndAdd = handler<
+      { name: string; pairingCode: string },
+      { ok: boolean; updatedExisting?: boolean; environment?: { id: string; name: string } }
+    >('runtimeEnvironments:verifyAndAddFromPairingCode')
+
+    await expect(
+      verifyAndAdd(null, {
+        name: 'desk over relay',
+        pairingCode: pairingCode('ws://192.0.2.10:6768', { deviceToken: 'second-token' })
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      updatedExisting: true,
+      environment: { id: saved.id, name: 'desk' }
+    })
+    expect(environmentStore.listEnvironments(userDataPath)).toHaveLength(1)
+    expect(environmentStore.resolveEnvironmentPairingOffer(userDataPath, saved.id)).toMatchObject({
+      endpoint: 'ws://192.0.2.10:6768',
+      deviceToken: 'second-token'
+    })
+    expect(closeRemoteRuntimeRequestConnectionMock).toHaveBeenCalledWith(saved.id)
   })
 
   it('requires an explicit Advanced selection before removing the Active Server', async () => {

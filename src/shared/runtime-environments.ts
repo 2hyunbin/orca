@@ -309,6 +309,19 @@ export function getPreferredPairingOffer(environment: PreferredEndpointSource): 
   }
 }
 
+/**
+ * The saved server holding this host key. Why the key: it is the server's persisted identity,
+ * so two pairings carrying it are one server whatever endpoint or name each was saved under.
+ */
+export function findEnvironmentWithHostKey<T extends PreferredEndpointSource>(
+  environments: readonly T[],
+  publicKeyB64: string
+): T | undefined {
+  return environments.find(
+    (environment) => getPreferredPairingOffer(environment).publicKeyB64 === publicKeyB64
+  )
+}
+
 /** The SSH tunnel a server is reached through; only orcadDeployment also grants lifecycle ownership. */
 export function getRuntimeSshAccess(
   environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment' | 'sshAccess'>
