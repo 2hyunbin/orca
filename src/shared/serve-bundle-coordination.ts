@@ -157,7 +157,8 @@ export function decideServeParkHold(
     return facts.installerAlive && facts.now < record.parkDeadlineAt ? 'hold' : 'release'
   }
   // Committed: the installer quits into ShipIt by design, so its death proves nothing.
-  if (facts.bundleNow !== record.bundleBefore) {
+  // A missing bundle is mid-swap, not installed: restarting from it now would fail.
+  if (facts.bundleNow !== record.bundleBefore && facts.bundleNow !== formatBundleIdentity(null)) {
     return 'release'
   }
   return record.commitDeadlineAt !== null && facts.now < record.commitDeadlineAt

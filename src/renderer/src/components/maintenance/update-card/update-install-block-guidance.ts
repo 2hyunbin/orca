@@ -33,7 +33,7 @@ export function getUpdateInstallBlockGuidance(block: UpdateInstallBlock): {
     }
   }
   if (block.instances.length > 0 && block.instances.every(({ kind }) => kind === 'browser')) {
-    // A live server's browser helper: on this Mac it is usually orcad, kept alive by another computer.
+    // A helper an older orcad runs never pauses for installs; ending it leaves orcad and terminals up.
     return {
       title: translate('updates.installBlock.readyTitle', 'Your update is ready'),
       summary: translate(
@@ -42,7 +42,7 @@ export function getUpdateInstallBlockGuidance(block: UpdateInstallBlock): {
       ),
       explainer: translate(
         'updates.installBlock.browserGuidance',
-        'If another computer uses this Mac as an SSH host, update Orca on that computer and reconnect, so the browser can pause for updates. Or end the process below: the server keeps running without its browser. Then retry.'
+        'End the process below, then retry: its server keeps running without a browser. If another computer uses this Mac as an SSH host, updating Orca there lets the browser pause for updates on its own.'
       )
     }
   }

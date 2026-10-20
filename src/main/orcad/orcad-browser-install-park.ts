@@ -5,6 +5,8 @@ import {
 import { openServeBundlePark, type ServeBundlePark } from '../../shared/serve-bundle-park'
 
 const PARK_POLL_MS = 1_000
+const RESTART_RETRY_MIN_MS = 5_000
+const RESTART_RETRY_MAX_MS = 5 * 60_000
 
 export type OrcadBrowserHelper = {
   /** The running helper's pid, or null when none runs. */
@@ -34,13 +36,19 @@ export function watchOrcadBrowserInstallPark(
   const now = deps.now ?? Date.now
   const log = deps.log ?? ((message, error) => console.warn(message, error))
   const acked = new Set<string>()
+  /** True from the stop until a restart succeeds, so a failed restart is retried, not dropped. */
   let parked = false
+  let restartAt = 0
+  let restartDelayMs = RESTART_RETRY_MIN_MS
   let closed = false
   const closing = new AbortController()
   let inFlight: Promise<void> | null = null
   let lastBeat: { pid: number | null | undefined; at: number } = { pid: undefined, at: 0 }
 
   const beat = (pid: number | null): void => {
+    if (closed) {
+      return
+    }
     if (pid !== lastBeat.pid || now() - lastBeat.at >= SERVE_SUPERVISOR_HEARTBEAT_MS) {
       park.heartbeat(pid)
       lastBeat = { pid, at: now() }
@@ -55,8 +63,24 @@ export function watchOrcadBrowserInstallPark(
       })
   }
 
+  const restart = async (): Promise<void> => {
+    try {
+      // Same executable path: after a completed install this is the new bundle's helper.
+      await helper.start(closing.signal)
+      parked = false
+      restartDelayMs = RESTART_RETRY_MIN_MS
+    } catch (error) {
+      restartAt = now() + restartDelayMs
+      restartDelayMs = Math.min(restartDelayMs * 2, RESTART_RETRY_MAX_MS)
+      throw error
+    }
+  }
+
   const tick = (): void => {
-    if (closed || inFlight) {
+    if (closed) {
+      return
+    }
+    if (inFlight) {
       // Why beat mid-step: a slow stop must not let the registration go stale and look abandoned.
       beat(helper.pid())
       return
@@ -69,17 +93,15 @@ export function watchOrcadBrowserInstallPark(
       run(async () => {
         await helper.stop()
         beat(null)
-        if (attemptId !== null) {
+        if (attemptId !== null && !closed) {
           acked.add(attemptId)
           park.ack(attemptId)
         }
       })
       return
     }
-    if (parked && !park.holds()) {
-      parked = false
-      // Same executable path: after a completed install this is the new bundle's helper.
-      run(() => helper.start(closing.signal))
+    if (parked && !park.holds() && now() >= restartAt) {
+      run(restart)
       return
     }
     beat(helper.pid())
@@ -92,8 +114,8 @@ export function watchOrcadBrowserInstallPark(
       closed = true
       cancel()
       closing.abort()
-      park.unregister()
       await inFlight
+      park.unregister()
     }
   }
 }

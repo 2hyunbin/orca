@@ -96,6 +96,11 @@ export class ElectronServeBrowserProcess {
       serialization: 'json'
     })
     this.child = child
+    let spawnError: unknown = null
+    // Why: a restart can race the bundle swap after an install; ENOENT must fail start, not orcad.
+    child.once('error', (error) => {
+      spawnError = error
+    })
     for (const stream of [child.stdout, child.stderr]) {
       stream?.on('error', () => undefined)
       stream?.resume()
@@ -119,6 +124,10 @@ export class ElectronServeBrowserProcess {
         } catch (error) {
           lastError = error
         }
+      }
+      if (spawnError) {
+        lastError = spawnError
+        break
       }
       if (child.exitCode !== null || child.signalCode !== null) {
         break
@@ -151,9 +160,10 @@ export class ElectronServeBrowserProcess {
     return this.metadata !== null && isProcessAlive(this.metadata.pid)
   }
 
+  /** From the child's own exit state, so a recycled pid is never reported as the helper. */
   pid(): number | null {
-    const pid = this.metadata?.pid ?? this.child?.pid ?? null
-    return pid !== null && isProcessAlive(pid) ? pid : null
+    const child = this.child
+    return child?.pid && child.exitCode === null && child.signalCode === null ? child.pid : null
   }
 
   async stop(): Promise<void> {

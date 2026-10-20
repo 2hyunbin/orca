@@ -26,6 +26,8 @@ describe('orcad browser helper in the desktop install park', () => {
   let tick: () => void
   let running: boolean
   let starts: AbortSignal[]
+  let failStarts: number
+  let clock: number
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'orcad-browser-park-'))
@@ -37,6 +39,8 @@ describe('orcad browser helper in the desktop install park', () => {
     tick = () => undefined
     running = true
     starts = []
+    failStarts = 0
+    clock = 1_000
   })
 
   afterEach(async () => {
@@ -61,11 +65,17 @@ describe('orcad browser helper in the desktop install park', () => {
         },
         start: async (signal) => {
           starts.push(signal)
+          if (failStarts > 0) {
+            failStarts--
+            throw new Error('helper did not become ready')
+          }
           running = true
         }
       },
       {
         park: park!,
+        now: () => clock,
+        log: () => undefined,
         setRepeating: (callback) => {
           tick = callback
           return () => {
@@ -100,6 +110,11 @@ describe('orcad browser helper in the desktop install park', () => {
     await step()
     expect(running).toBe(false)
 
+    // Mid-swap the bundle is briefly absent: still held.
+    await rm(join(bundle, 'Contents', 'Info.plist'))
+    await step()
+    expect(starts).toHaveLength(0)
+
     // ShipIt swapped the bundle: the hold ends and the helper runs from the new app.
     await writeFile(join(bundle, 'Contents', 'Info.plist'), 'v2-new-bundle')
     await step()
@@ -115,6 +130,23 @@ describe('orcad browser helper in the desktop install park', () => {
     ).resolves.toEqual({ kind: 'parked' })
     await releaseServeSupervisorPark()
     await step()
+    expect(running).toBe(true)
+    await parkWatch.close()
+  })
+
+  it('retries a failed restart with backoff instead of leaving the browser off', async () => {
+    const parkWatch = watch()
+    await parkServeSupervisorsForInstall(executable, [HELPER], installerDeps())
+    await releaseServeSupervisorPark()
+    failStarts = 1
+    await step()
+    expect(starts).toHaveLength(1)
+    expect(running).toBe(false)
+    await step()
+    expect(starts).toHaveLength(1)
+    clock += 5_000
+    await step()
+    expect(starts).toHaveLength(2)
     expect(running).toBe(true)
     await parkWatch.close()
   })

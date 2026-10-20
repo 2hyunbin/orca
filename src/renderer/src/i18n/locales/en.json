@@ -20398,6 +20398,8 @@
       "unresponsiveGuidance": "Stop it from the terminal or service that started it, then retry. Connected devices will disconnect.",
       "readyTitle": "Your update is ready",
       "serverSummary": "A background Orca server is still using this app.",
+      "browserSummary": "A background Orca server's browser is still using this app.",
+      "browserGuidance": "End the process below, then retry: its server keeps running without a browser. If another computer uses this Mac as an SSH host, updating Orca there lets the browser pause for updates on its own.",
       "instanceSummary": "Another Orca instance is still using this app.",
       "serverGuidance": "Stop the server from the terminal or service that started it, then retry. Connected devices will disconnect.",
       "mixedGuidance": "Close any other Orca windows and stop the server from the terminal or service that started it. Connected devices will disconnect. Then retry.",
