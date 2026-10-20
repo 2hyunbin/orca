@@ -77,14 +77,33 @@ async function defaultModelForMessage(
   return fallback
 }
 
-export function dispatchClaudeMessage(
+/** What the turn runs on, from the CLI's own answers: the message's choices it applied, and the
+ *  effort the CLI resolved for the model it applies (never the settings level alone). */
+function claudeRanOptions(
+  session: ClaudeSession,
+  options: AgentSessionExecutionOptions
+): Record<string, string> {
+  const resolvedHere = options.model === undefined || options.model === session.launchedModel
+  const ran = {
+    model: options.model,
+    effort: options.effort ?? (resolvedHere ? session.configuredDefaults?.effort : undefined),
+    fastMode: options.fastMode
+  }
+  return Object.fromEntries(
+    Object.entries(ran).flatMap(([key, value]) =>
+      value !== undefined && session.appliedInputOptions.get(key) === value ? [[key, value]] : []
+    )
+  )
+}
+
+export async function dispatchClaudeMessage(
   session: ClaudeSession,
   input: Parameters<StructuredAgentSessionAdapter['dispatch']>[0],
   timeoutMs: number | undefined,
   logger: StructuredAgentSessionLogger = defaultLogger
 ): ReturnType<StructuredAgentSessionAdapter['dispatch']> {
   const messageOptions = input.executionOptions
-  return dispatchClaudeTurn(
+  const outcome = await dispatchClaudeTurn(
     session,
     input,
     messageOptions === undefined
@@ -110,4 +129,8 @@ export function dispatchClaudeMessage(
           }
         }
   )
+  // Always, even empty: the settings effort the CLI reports is never evidence of a run.
+  return outcome.state === 'accepted' || outcome.state === 'admitted'
+    ? { ...outcome, ranOptions: claudeRanOptions(session, messageOptions ?? {}) }
+    : outcome
 }

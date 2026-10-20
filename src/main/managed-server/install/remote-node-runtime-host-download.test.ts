@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { runProcessSync } from '@orca/process-host'
-import { NODE_RUNTIME_ASSETS } from '../../../shared/node-runtime-pin'
+import { NODE_RUNTIME_ASSETS, NODE_RUNTIME_PIN } from '../../../shared/node-runtime-pin'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import {
   hostDownloadNodeRuntimeCommand,
@@ -43,7 +43,7 @@ function fakeHost(tools: Record<string, string>): { bin: string; stage: string }
   const stage = join(root, 'stage')
   mkdirSync(bin)
   mkdirSync(stage)
-  for (const basic of ['cut', 'rm', 'tail', 'sha256sum', 'shasum', 'perl']) {
+  for (const basic of ['cut', 'rm', 'head', 'sleep', 'kill', 'sha256sum', 'shasum', 'perl']) {
     const resolved = which(basic)
     if (resolved) {
       symlinkSync(resolved, join(bin, basic))
@@ -59,48 +59,72 @@ function fakeHost(tools: Record<string, string>): { bin: string; stage: string }
 const writeTo = (flag: string, content: string): string =>
   `while [ $# -gt 0 ]; do if [ "$1" = ${flag} ]; then printf '%s' '${content}' > "$2"; fi; shift; done`
 
-function runOnHost(bin: string, stage: string): string {
+function runOnHost(
+  bin: string,
+  stage: string,
+  options: { mirror?: string; env?: Record<string, string>; timeoutMs?: number } = {}
+): string {
+  const command = hostDownloadNodeRuntimeCommand(host, {
+    stageDir: stage,
+    target: TARGET,
+    mirror: options.mirror
+  })
   const result = runProcessSync({
     program: '/bin/sh',
-    args: ['-c', hostDownloadNodeRuntimeCommand(host, { stageDir: stage, target: TARGET })],
-    env: { PATH: bin },
-    timeoutMs: 30_000
+    args: ['-c', command],
+    env: { PATH: bin, ...options.env },
+    timeoutMs: options.timeoutMs ?? 30_000
   })
   expect(result.code, result.stderr).toBe(0)
   return result.stdout
 }
 
+const read = (bin: string, name: string): string[] =>
+  runProcessSync({ program: '/bin/cat', args: [join(bin, name)] })
+    .stdout.trim()
+    .split('\n')
+const mirrored = (base: string): string =>
+  `${base}/v${NODE_RUNTIME_PIN.version}/${originalAsset.archive}`
+// Records each URL and --max-time, and serves only URLs with the given prefix.
+const curlServing = (prefix: string, failure = "echo 'curl: (22) 404' >&2; exit 22"): string =>
+  [
+    `prev=; for a in "$@"; do case "$a" in http*) echo "$a" >> "\${0%/*}/urls";; esac;`,
+    `[ "$prev" = --max-time ] && echo "$a" >> "\${0%/*}/max-times"; prev=$a; done`,
+    `ulimit -f >> "\${0%/*}/file-limit"`,
+    `for a in "$@"; do case "$a" in ${prefix}*) ${writeTo('-o', PAYLOAD)}; exit 0;; esac; done`,
+    failure
+  ].join('\n')
+
 describe.skipIf(process.platform === 'win32')('the host-side pinned Node download', () => {
-  it('downloads the pinned URL with curl and keeps the verified archive', () => {
-    const { bin, stage } = fakeHost({
-      curl: `echo "$@" > "\${0%/*}/curl.args"\n${writeTo('-o', PAYLOAD)}`
-    })
+  it('downloads the release URL with curl and keeps the verified archive', () => {
+    const { bin, stage } = fakeHost({ curl: curlServing('https://nodejs.org/') })
     expect(readHostNodeDownload(runOnHost(bin, stage))).toEqual({ ok: true })
     expect(existsSync(join(stage, originalAsset.archive))).toBe(true)
-    expect(
-      runProcessSync({ program: '/bin/cat', args: [join(bin, 'curl.args')] }).stdout
-    ).toContain(hostNodeRuntimeUrl(TARGET))
+    expect(read(bin, 'urls')).toEqual([hostNodeRuntimeUrl(TARGET)])
+    // 200 MiB in 512-byte blocks: an endless response can't fill the host's disk.
+    expect(read(bin, 'file-limit')).toEqual(['409600'])
   })
 
-  it('falls back to wget when curl fails', () => {
-    const { bin, stage } = fakeHost({
-      curl: "echo 'curl: (35) TLS connect error' >&2; exit 35",
-      wget: writeTo('-O', PAYLOAD)
-    })
+  it('uses wget where the host has no curl', () => {
+    const { bin, stage } = fakeHost({ wget: writeTo('-O', PAYLOAD) })
     expect(readHostNodeDownload(runOnHost(bin, stage))).toEqual({ ok: true })
   })
 
-  it('does not start wget after curl ran out of time, so both fit the exec limit', () => {
-    const { bin, stage } = fakeHost({
-      curl: "echo 'curl: (28) Operation timed out' >&2; exit 28",
-      wget: `touch "\${0%/*}/wget.ran"; ${writeTo('-O', PAYLOAD)}`
-    })
-    expect(readHostNodeDownload(runOnHost(bin, stage))).toMatchObject({
-      ok: false,
-      report: expect.stringContaining('exit 28')
-    })
-    expect(existsSync(join(bin, 'wget.ran'))).toBe(false)
-  })
+  it(
+    'stops a trickling wget at its share of the deadline, without the timeout command',
+    { timeout: 90_000 },
+    () => {
+      // Deadline 1840; every later reading leaves 31 s.
+      const { bin, stage } = fakeHost({
+        date: `if [ -e "\${0%/*}/clock" ]; then echo 1809; else : > "\${0%/*}/clock"; echo 1000; fi`,
+        wget: 'exec sleep 120'
+      })
+      const started = Date.now()
+      const result = readHostNodeDownload(runOnHost(bin, stage, { timeoutMs: 80_000 }))
+      expect(Date.now() - started).toBeLessThan(70_000)
+      expect(result).toMatchObject({ ok: false, report: expect.stringContaining('wget exit 143') })
+    }
+  )
 
   it('discards a file that is not the pinned release', () => {
     const { bin, stage } = fakeHost({ curl: writeTo('-o', '<html>blocked by policy</html>') })
@@ -109,14 +133,14 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
     expect(existsSync(join(stage, originalAsset.archive))).toBe(false)
   })
 
-  it("reports the tool's own words when every download fails", () => {
+  it("reports each source by name with the tool's own words", () => {
     const { bin, stage } = fakeHost({
       curl: "echo 'curl: (7) Failed to connect to nodejs.org port 443' >&2; exit 7"
     })
-    const result = readHostNodeDownload(runOnHost(bin, stage))
-    expect(result).toEqual({
+    expect(readHostNodeDownload(runOnHost(bin, stage))).toEqual({
       ok: false,
-      report: 'its download failed (exit 7): curl: (7) Failed to connect to nodejs.org port 443'
+      report:
+        'its downloads failed (nodejs.org: curl exit 7, curl: (7) Failed to connect to nodejs.org port 443)'
     })
   })
 
@@ -126,5 +150,45 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
       ok: false,
       report: 'it has neither curl nor wget'
     })
+  })
+
+  it("tries this computer's mirror first and stops once it serves the pinned file", () => {
+    const { bin, stage } = fakeHost({ curl: curlServing('https://desk.example/') })
+    const output = runOnHost(bin, stage, { mirror: 'https://desk.example/dist' })
+    expect(readHostNodeDownload(output)).toEqual({ ok: true })
+    expect(read(bin, 'urls')).toEqual([mirrored('https://desk.example/dist')])
+  })
+
+  it("ignores the host's own mirror variables, so only URLs Orca validated are fetched", () => {
+    const { bin, stage } = fakeHost({ curl: curlServing('https://nodejs.org/') })
+    const output = runOnHost(bin, stage, {
+      mirror: 'https://desk.example/dist',
+      env: { NODEJS_ORG_MIRROR: 'https://user:secret@host.example/dist[' }
+    })
+    expect(readHostNodeDownload(output)).toEqual({ ok: true })
+    expect(read(bin, 'urls')).toEqual([
+      mirrored('https://desk.example/dist'),
+      hostNodeRuntimeUrl(TARGET)
+    ])
+  })
+
+  it('splits the deadline over the sources left, so a stalled mirror leaves time for the release', () => {
+    const { bin, stage } = fakeHost({
+      date: 'echo 1000',
+      curl: curlServing('https://nodejs.org/', "echo 'curl: (28) timed out' >&2; exit 28")
+    })
+    const output = runOnHost(bin, stage, { mirror: 'https://desk.example/dist' })
+    expect(readHostNodeDownload(output)).toEqual({ ok: true })
+    expect(read(bin, 'max-times')).toEqual(['420', '840'])
+  })
+
+  it('reports a source as not tried once the deadline has passed', () => {
+    const { bin, stage } = fakeHost({
+      date: `if [ -e "\${0%/*}/clock" ]; then echo 99999; else : > "\${0%/*}/clock"; echo 1000; fi`,
+      curl: `touch "\${0%/*}/curl.ran"; exit 7`
+    })
+    const result = readHostNodeDownload(runOnHost(bin, stage))
+    expect(result).toMatchObject({ ok: false, report: expect.stringContaining('out of time') })
+    expect(existsSync(join(bin, 'curl.ran'))).toBe(false)
   })
 })
