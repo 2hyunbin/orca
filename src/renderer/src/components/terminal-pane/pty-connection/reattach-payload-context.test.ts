@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAppStore } from '@/store'
 import { createPane } from '../pty-connection-test-pane-fixtures'
 import {
   installTerminalTestGlobals,
@@ -159,6 +160,84 @@ it.each(['missing', 'different', 'admitted'] as const)(
       expect(schedule).toHaveBeenCalledTimes(kind === 'admitted' ? 1 : 0)
       expect(cancel).toHaveBeenCalledTimes(kind === 'admitted' ? 0 : 1)
     } finally {
+      await restoreTerminalTestGlobals()
+    }
+  }
+)
+
+it.each(['missing', 'admitted', 'prepared'] as const)(
+  'observes a cached cold owner without consuming an uncorrelated newer recipe (%s)',
+  async (kind) => {
+    await installTerminalTestGlobals()
+    const record = {
+      paneKey: 'tab:leaf',
+      worktreeId: 'wt',
+      agent: 'codex' as const,
+      providerSession: { key: 'session_id' as const, id: 'C' },
+      state: 'done' as const,
+      prompt: '',
+      capturedAt: 20,
+      updatedAt: 20
+    }
+    const previousRecords = useAppStore.getState().sleepingAgentSessionsByPaneKey
+    useAppStore.setState({ sleepingAgentSessionsByPaneKey: { [record.paneKey]: record } })
+    try {
+      const startup: ColdRestoreAgentResumeStartup = {
+        command: 'codex resume C',
+        agent: 'codex',
+        resumeOrigin: 'saved',
+        resumeProviderSession: record.providerSession,
+        launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
+        launchToken: 'replacement-token',
+        useLiveEntry: false,
+        hasSleepingRecord: true,
+        sleepingRecordEntry: { paneKey: record.paneKey, record }
+      }
+      const session = createSession({
+        cacheKey: record.paneKey,
+        buildColdRestoreAgentResumeStartup: vi.fn(() => startup),
+        applyColdRestoreAgentResumeStartup: vi.fn(() => true),
+        cancelSavedResumeStartup: vi.fn(),
+        schedulePendingStartupCommandDelivery: vi.fn(),
+        clearSleepingRecordAfterColdRestoreSpawn: vi.fn(),
+        showSessionRestoredBanner: vi.fn(),
+        consumeRestoredViewportBlankingMarker: vi.fn(),
+        writeFreshShellViewportBlanking: vi.fn()
+      })
+      const context: ReattachPayloadContext = {
+        ...createContext('', 1),
+        connectResult: {
+          id: 'pty-1',
+          isReattach: true,
+          coldRestore: { scrollback: 'cached history', cwd: '/workspace' },
+          ...(kind === 'admitted'
+            ? {
+                savedResumeDecision: {
+                  agent: 'codex',
+                  providerSession: record.providerSession,
+                  verdict: 'admitted'
+                }
+              }
+            : {})
+        },
+        coldRestoreStartup: kind === 'prepared' ? startup : null
+      }
+      await createReattachPayloadHandlers(session, context).applyReattachPayload()
+      expect(session.writeReplayData).toHaveBeenCalledWith(
+        expect.stringContaining('cached history')
+      )
+      expect(window.api.pty.ackColdRestore).toHaveBeenCalledWith('pty-1')
+      expect(context.reattachPayloadApplied).toBe(true)
+      expect(session.buildColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
+      expect(session.applyColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
+      expect(session.cancelSavedResumeStartup).not.toHaveBeenCalled()
+      expect(session.schedulePendingStartupCommandDelivery).not.toHaveBeenCalled()
+      expect(session.clearSleepingRecordAfterColdRestoreSpawn).not.toHaveBeenCalled()
+      expect(session.showSessionRestoredBanner).not.toHaveBeenCalled()
+      expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
+      expect(window.api.pty.write).not.toHaveBeenCalled()
+    } finally {
+      useAppStore.setState({ sleepingAgentSessionsByPaneKey: previousRecords })
       await restoreTerminalTestGlobals()
     }
   }

@@ -1,4 +1,8 @@
-import { recordTerminalLaunchMetadata, resolveTerminalLaunchResult } from './terminal-launch-result'
+import {
+  recordTerminalLaunchMetadata,
+  resolveTerminalLaunchResult,
+  terminalLaunchPublicFacts
+} from './terminal-launch-result'
 import { OrcaRuntimeWithTerminalCreateDeduplication } from './terminal-create-deduplication'
 import * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { createDesktopTerminal } from '../../orca-runtime-create-terminal-desktop'
@@ -282,7 +286,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           warning = dependencies.createTerminalRevealWarning(handle)
         }
         return {
-          ...result,
+          ...terminalLaunchPublicFacts(result, launch.adoptedStablePane),
           handle,
           tabId,
           paneKey,
@@ -294,11 +298,6 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           launchToken: pty?.launchToken ?? undefined,
           ...this.getPtyExecutionHostMetadata(result.id),
           surface,
-          ...(result.pid ? { processId: result.pid } : {}),
-          ...(result.agentSessionEnsure
-            ? { agentSessionDisposition: result.agentSessionEnsure.disposition }
-            : {}),
-          ...(launch.adoptedStablePane ? { isReattach: true as const } : {}),
           ...(warning ? { warning } : {})
         }
       } finally {

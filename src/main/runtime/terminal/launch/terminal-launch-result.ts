@@ -1,3 +1,4 @@
+import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import { admitStablePaneAdoption } from '../../runtime-terminal-pane-identity'
 import type { RuntimePtyController } from '../../runtime-pty-controller-contract'
 import type { TerminalCreateOptions } from '../../runtime-terminal-contracts'
@@ -62,5 +63,17 @@ export function recordTerminalLaunchMetadata(
     pty.launchToken = launch.launchToken ?? null
     pty.launchIncarnationId = launch.launchToken ? pty.incarnationId : null
     pty.launchAgent = launch.launchAgent ?? null
+  }
+}
+
+export function terminalLaunchPublicFacts(result: TerminalSpawnResult, adoptedStablePane: boolean) {
+  return {
+    ...terminalLaunchFacts(result),
+    ...(!adoptedStablePane && result.coldRestore ? { coldRestore: result.coldRestore } : {}),
+    ...(result.pid ? { processId: result.pid } : {}),
+    ...(result.agentSessionEnsure
+      ? { agentSessionDisposition: result.agentSessionEnsure.disposition }
+      : {}),
+    ...(adoptedStablePane ? { isReattach: true as const } : {})
   }
 }

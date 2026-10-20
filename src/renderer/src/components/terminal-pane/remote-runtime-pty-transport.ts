@@ -3347,7 +3347,9 @@ export function createRemoteRuntimePtyTransport(
 
       return {
         ...terminalLaunchFacts(createdTerminal),
-        ...(createdTerminal.coldRestore ? { coldRestore: createdTerminal.coldRestore } : {}),
+        ...(createdTerminal.isReattach !== true && createdTerminal.coldRestore
+          ? { coldRestore: createdTerminal.coldRestore }
+          : {}),
         id: remotePtyId,
         replay: '',
         ...(authoritativePtyIncarnationId ? { incarnationId: authoritativePtyIncarnationId } : {}),
