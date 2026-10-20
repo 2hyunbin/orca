@@ -29,6 +29,7 @@ export type TaskPageDialogWorkItemKey = {
   id: string
   repoId: string
   url: string
+  repoHostId?: GitHubWorkItem['repoHostId']
 } | null
 
 export type TaskPageRepoSourceState = {
@@ -244,7 +245,9 @@ export function findTaskPageDialogWorkItem(
       (wi) =>
         wi.id === dialogWorkItemKey.id &&
         wi.repoId === dialogWorkItemKey.repoId &&
-        wi.url === dialogWorkItemKey.url
+        wi.url === dialogWorkItemKey.url &&
+        // Why: a twin's other host caches the same PR; its copy routes edits to that host.
+        (!dialogWorkItemKey.repoHostId || wi.repoHostId === dialogWorkItemKey.repoHostId)
     )
     if (found) {
       return found

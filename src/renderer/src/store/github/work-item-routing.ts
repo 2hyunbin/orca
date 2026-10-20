@@ -114,6 +114,21 @@ export function getGitHubWorkItemSourceHostId(
     : undefined
 }
 
+/** The host whose row a fetch read, never the focused server: items carry it to their actions. */
+export function getGitHubWorkItemRowHostId(
+  state: Partial<Pick<AppState, 'repos'>>,
+  repoId: string,
+  repoPath: string,
+  sourceContext?: TaskSourceContext | null
+): ExecutionHostId | undefined {
+  if (sourceContext?.provider === 'github') {
+    return sourceContext.hostId
+  }
+  // Why id and path: by id alone a twin resolves to whichever row is listed first.
+  const row = state.repos?.find((entry) => entry.id === repoId && entry.path === repoPath)
+  return row ? getRepoExecutionHostId(row) : undefined
+}
+
 export function getGitHubWorkItemSourceCacheScope(
   state: AppState,
   repo: Pick<Repo, 'connectionId' | 'executionHostId'> | undefined,

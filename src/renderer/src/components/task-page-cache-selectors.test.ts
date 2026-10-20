@@ -235,6 +235,24 @@ describe('task page cache selectors', () => {
     ).toBe(origin)
   })
 
+  it('opens the copy the clicked twin host returned, not the other host cached copy', () => {
+    const local = { ...workItem('pr:7', 'twin'), repoHostId: 'local' as const }
+    const remote = { ...local, repoHostId: 'ssh:builder' as const }
+    const cache = {
+      local: entry<GitHubWorkItem[]>([local]),
+      remote: entry<GitHubWorkItem[]>([remote])
+    }
+
+    expect(
+      findTaskPageDialogWorkItem(cache, {
+        id: remote.id,
+        repoId: remote.repoId,
+        url: remote.url,
+        repoHostId: remote.repoHostId
+      })
+    ).toBe(remote)
+  })
+
   it('reconciles paged table rows with patched work-item cache entries', () => {
     const stale = {
       ...workItem('pr-1', 'repo-1'),

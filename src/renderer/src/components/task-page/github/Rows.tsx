@@ -1,4 +1,5 @@
 import type { TaskPageComposerActionsModel } from '../../use-task-page-composer-actions'
+import { getGitHubWorkItemRepo } from '@/lib/github-work-item-repo-row'
 import { findGithubWorkItemWorkspaceAttachment } from '@/lib/github-work-item-workspace-attachment'
 import { getWorktreeAttachmentLabel } from '@/lib/worktree-attachment-label'
 import { formatPRDelta } from '@/components/task-page-pr-delta-summary'
@@ -48,7 +49,7 @@ export function TaskPageGitHubRows({
   model: TaskPageComposerActionsModel
 }): React.JSX.Element | null {
   const {
-    repoMap,
+    repos,
     allWorktrees,
     selectedRepos,
     openGitHubDetailPage,
@@ -65,7 +66,7 @@ export function TaskPageGitHubRows({
     <div className="divide-y divide-border/40">
       {!showGitHubTaskSkeletons &&
         filteredWorkItems.map((item) => {
-          const itemRepo = repoMap.get(item.repoId) ?? null
+          const itemRepo = getGitHubWorkItemRepo(repos, item) ?? null
           const attachedWorkspace = findGithubWorkItemWorkspaceAttachment(
             allWorktrees,
             item.repoId,
