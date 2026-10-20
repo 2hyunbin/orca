@@ -8,9 +8,11 @@ import { createIdempotentCallback } from '../../orca-runtime-report-pty-spawn-co
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
 import { agentLaunchTokenFor, withAgentLaunchToken } from '../../../agent-launch/agent-launch-token'
 import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
-import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
+import { paneSize, resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
 
 export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
+  protected abstract paneStartStatusArgs: dependencies.PaneStartArgsOf
+
   async createTerminal(
     worktreeSelector?: string,
     opts: dependencies.TerminalCreateOptions = {},
@@ -49,7 +51,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           ? this.singleGroupWorkspaceGridSize
           : undefined
       const group = groupId ? this.terminalGroupGridSizes?.[groupId] : undefined
-      const initialSize = resolvePtyFirstSize({ pane: opts.initialSize, group, singleGroup })
+      const initialSize = resolvePtyFirstSize({ pane: paneSize(session, opts), group, singleGroup })
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
@@ -167,7 +169,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
             ...(launchOpts.afterTabId ? { afterTabId: launchOpts.afterTabId } : {}),
             ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
             ...(launchOpts.isNewSession ? { isNewSession: true } : {}),
-            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS
+            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS,
+            ...this.paneStartStatusArgs(launchOpts)
           })
         } finally {
           releaseStablePaneCreate?.()
