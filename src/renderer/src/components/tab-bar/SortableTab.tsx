@@ -122,7 +122,7 @@ export default function SortableTab({
       unreadAgentCompletionPanes: s.unreadAgentCompletionPanes
     })
   )
-  const { activityStatus } = useTerminalTabActivity(tab)
+  const { activityStatus, programProgress } = useTerminalTabActivity(tab)
 
   // Why: shellOverride is stamped at create time, so changing the default shell later won't repaint existing tabs.
   const shellForIcon = tab.shellOverride
@@ -250,6 +250,7 @@ export default function SortableTab({
         shell={shellForIcon}
         showUnreadActivity={showUnreadActivity}
         isActive={isActive}
+        progress={programProgress}
       />
       {isPinned && !isEditing && (
         <Pin className="mr-1 size-3 shrink-0 text-muted-foreground" aria-hidden />
@@ -365,13 +366,12 @@ export default function SortableTab({
         {...slotProps}
         onContextMenuCapture={(event) => {
           // The hover card is portalled: React still routes its events through this slot.
-          if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) {
-            return
+          if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
+            event.preventDefault()
+            window.dispatchEvent(new Event(CLOSE_ALL_CONTEXT_MENUS_EVENT))
+            setMenuPoint({ x: event.clientX, y: event.clientY })
+            setMenuOpen(true)
           }
-          event.preventDefault()
-          window.dispatchEvent(new Event(CLOSE_ALL_CONTEXT_MENUS_EVENT))
-          setMenuPoint({ x: event.clientX, y: event.clientY })
-          setMenuOpen(true)
         }}
       >
         {isEditing || menuOpen ? (
@@ -393,6 +393,7 @@ export default function SortableTab({
                 shell={shellForIcon}
                 showUnreadActivity={false}
                 isActive
+                progress={programProgress}
               />
             }
             alert={naming ? <NativeChatNamingErrorBlock naming={naming} /> : undefined}
