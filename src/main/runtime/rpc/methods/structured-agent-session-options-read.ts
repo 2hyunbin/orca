@@ -60,7 +60,10 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
         ...process.env,
         ...(record ? await host.deps.resolveLaunchEnv?.(record.provider) : {})
       }
-      return { ...result, ...(await structuredSessionRecoveryOptions(record, launchEnv)) }
+      return {
+        ...result,
+        ...(record ? await structuredSessionRecoveryOptions(record, launchEnv) : {})
+      }
     }
   }),
   defineMethod({
