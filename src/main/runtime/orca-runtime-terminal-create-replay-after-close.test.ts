@@ -58,7 +58,13 @@ describe('a paired desktop terminal.create replayed with its pane ids', () => {
     const { spawn, session, live, pane, create } = pairedDesktopCreate()
 
     const first = await create(false)
-    live.push({ id: first.ptyId, terminalHandle: first.handle, worktreeId: WORKTREE_ID, title: '' })
+    expect(first.ptyId).toEqual(expect.any(String))
+    live.push({
+      id: first.ptyId!,
+      terminalHandle: first.handle,
+      worktreeId: WORKTREE_ID,
+      title: ''
+    })
     const retry = await create(true)
 
     expect(retry.handle).toBe(first.handle)

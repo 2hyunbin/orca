@@ -198,16 +198,13 @@ function closedIds(
 
 /** A client's ids only: a runtime create may name a tab that exists, as a host's second pane does. */
 function takenIds(layout: WorkspaceLayoutModel, command: LayoutCommand): LayoutApplyOutcome | null {
-  switch (command.type) {
-    case 'createTerminalTab':
-      return takenTabId(layout, command)
-    case 'splitPane':
-      return takenLeafId(layout, command)
-    case 'applyDefaultTabs':
-      return takenDefaultTabId(layout, command)
-    default:
-      return null
+  if (command.type === 'createTerminalTab') {
+    return takenTabId(layout, command)
   }
+  if (command.type === 'splitPane') {
+    return takenLeafId(layout, command)
+  }
+  return command.type === 'applyDefaultTabs' ? takenDefaultTabId(layout, command) : null
 }
 
 /**
