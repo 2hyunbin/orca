@@ -42,6 +42,12 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
       tabId: session.deps.tabId,
       leafId: session.pane.leafId
     })
+    if (startup.resumeSource) {
+      session.savedStartupLaunchRegistration = {
+        source: startup.resumeSource,
+        entry: useAppStore.getState().agentLaunchConfigByPaneKey[session.cacheKey]
+      }
+    }
     return true
   }
   session.clearSleepingRecordAfterColdRestoreSpawn = (

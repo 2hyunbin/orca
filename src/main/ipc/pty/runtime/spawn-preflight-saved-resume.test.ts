@@ -8,10 +8,11 @@ import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../../shared/agent-session-record.test-fixture'
-import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
+import { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { finishPtyShutdown } from '../provider/liveness'
-import { admitColdRestoreReattach } from '../host-env/saved-resume-admission'
+import { admitColdRestoreReattach, admitResumeSpawn } from '../host-env/saved-resume-admission'
+import { listStructuredProviderSessionOwnership } from '../../../native-chat/agent-session-wire/structured-provider-session-ownership'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
 import { executeRuntimePtySpawn } from './spawn-execute'
 import { savedResumeResult } from '../host-env/saved-resume-admission'
@@ -281,5 +282,42 @@ it('returns the committed runtime shell when exact saved-record persistence fail
   } finally {
     spawn.mockRestore()
     warning.mockRestore()
+  }
+})
+
+it('preserves case-distinct conversation heads and saved homes across the shared OpenCode family', async () => {
+  const ids = ['ses_000000000001AAAAAAAAAAAAAA', 'ses_000000000001aaaaaaaaaaaaaa']
+  const record = {
+    ...chat,
+    provider: 'opencode' as const,
+    providerHandleChain: ids.map((nativeId, index) => ({
+      ...chat.providerHandleChain[0]!,
+      linkId: `case-${index}`,
+      handle: { transport: 'acp' as const, agent: 'opencode' as const, nativeId }
+    }))
+  }
+  const opencodeStore: AgentSessionRecordStore = Object.create(AgentSessionRecordStore.prototype)
+  opencodeStore.listRecords = () => [record]
+  opencodeStore.getVisibleSessionTabIndex = () => ({
+    present: true,
+    sessionIds: [record.sessionId]
+  })
+  const runtime = { openAgentSessionRecordStore: async () => opencodeStore }
+  expect(listStructuredProviderSessionOwnership([record]).map((holding) => holding.role)).toEqual([
+    'earlier',
+    'head'
+  ])
+  for (const [index, id] of ids.entries()) {
+    await expect(
+      admitResumeSpawn(
+        runtime,
+        {
+          launchAgent: 'opencode2',
+          resumeOrigin: 'saved',
+          resumeProviderSession: { key: 'session_id', id }
+        },
+        null
+      )
+    ).resolves.toMatchObject({ verdict: index === 0 ? 'admitted' : 'chat-home' })
   }
 })

@@ -28,6 +28,12 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
     if (session.deferredSpawn?.startupOverride?.resumeSource === source) {
       session.deferredSpawn = null
     }
+    const ownsPaneStartup = session.paneStartup?.resumeSource === source
+    const registered = session.savedStartupLaunchRegistration
+    const ownsRegistration =
+      registered?.source === source &&
+      registered.entry !== undefined &&
+      registered.entry === state.agentLaunchConfigByPaneKey[session.cacheKey]
     session.clearRegisteredStartupLaunchConfig(startup)
     const claim = state.automaticAgentResumeClaimsByTabId[session.deps.tabId]
     if (
@@ -44,7 +50,7 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
         return { automaticAgentResumeClaimsByTabId: next }
       })
     }
-    if (session.paneStartup?.resumeSource === source) {
+    if (ownsPaneStartup || ownsRegistration) {
       const pending = state.pendingStartupByTabId[session.deps.tabId]
       const installed = useAppStore.getState().agentLaunchConfigByPaneKey[session.cacheKey]
       const replaced = pending && pending.resumeSource !== source
@@ -53,13 +59,15 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
           (entry) => entry.id === session.deps.tabId
         )
         if (
-          tab?.launchAgent === session.paneStartup.launchAgent &&
+          tab?.launchAgent === ('agent' in startup ? startup.agent : startup.launchAgent) &&
           (tab?.generation ?? 0) === session.tabGeneration
         ) {
           state.clearTabLaunchAgent(session.deps.tabId)
           clearStaleAgentTabTitleOnConfirmedShell(session)
         }
       }
+    }
+    if (ownsPaneStartup) {
       const seeded = session.savedStartupStatus
       if (seeded?.source === source) {
         useAppStore.setState((current) => {

@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type {
+  AgentLaunchConfigRegistryEntry,
+  AgentLaunchConfigRegistrationMetadata
+} from '@/store/slices/agent-status-contract'
+import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { bindSettlePaneSerializer } from './pane-serializer-settle'
 import { bindDeferredColdRestoreAndSnapshot } from './deferred-cold-restore-and-snapshot'
@@ -127,3 +132,93 @@ describe('a refused saved startup and its delayed paste', () => {
     }
   )
 })
+
+it.each(['refused', 'same-C', 'different-D'] as const)(
+  'clears the real generated cold/wake registration and conditional tab identity only while owned (%s)',
+  (kind) => {
+    const cacheKey = 'tab:leaf'
+    const source = { cancelled: false }
+    const startup: ColdRestoreAgentResumeStartup = {
+      agent: 'codex',
+      command: 'codex resume C',
+      launchToken: 'saved-token',
+      launchConfig: { agentCommand: 'codex', agentArgs: 'resume C', agentEnv: {} },
+      resumeProviderSession: { key: 'session_id', id: 'C' },
+      resumeOrigin: 'saved',
+      resumeSource: source,
+      useLiveEntry: false,
+      hasSleepingRecord: false,
+      sleepingRecordEntry: null
+    }
+    const registry: Record<string, AgentLaunchConfigRegistryEntry> = {}
+    const pending: Record<string, object> = {}
+    const tab = { id: 'tab', title: 'Codex', launchAgent: 'codex', generation: 1 }
+    const clearTabLaunchAgent = vi.fn()
+    const registerAgentLaunchConfig = (
+      paneKey: string,
+      launchConfig: AgentLaunchConfigRegistryEntry['launchConfig'],
+      identity: AgentLaunchConfigRegistrationMetadata
+    ) => {
+      registry[paneKey] = { launchConfig, identity, registeredAt: 1 }
+    }
+    fixture.state = {
+      agentLaunchConfigByPaneKey: registry,
+      pendingStartupByTabId: pending,
+      automaticAgentResumeClaimsByTabId: {},
+      sleepingAgentSessionsByPaneKey: {},
+      tabsByWorktree: { wt: [tab] },
+      registerAgentLaunchConfig,
+      clearAgentLaunchConfig: (key: string) => {
+        delete registry[key]
+      },
+      consumeTabStartupCommand: vi.fn(),
+      clearTabLaunchAgent
+    }
+    const updateTabTitle = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the real installers/cancellation access only the supplied session members in this contract.
+    const session = {
+      cacheKey,
+      paneStartup: null,
+      pane: { id: 1, leafId: 'leaf' },
+      manager: { getActivePane: () => ({ id: 1 }) },
+      deps: { tabId: 'tab', worktreeId: 'wt', setRuntimePaneTitle: vi.fn(), updateTabTitle },
+      tabGeneration: 1,
+      startupInjectTimer: null,
+      transport: {},
+      shouldDeliverStartupViaTerminalPaste: false
+    } as unknown as ConnectPanePtySession
+    installSleepingRecordAccess(session)
+    bindDeferredColdRestoreAndSnapshot(session)
+    expect(session.applyColdRestoreAgentResumeStartup(startup)).toBe(true)
+    const saved = registry[cacheKey]
+    expect(saved?.identity.launchToken).toBe('saved-token')
+    if (kind !== 'refused') {
+      const command = kind === 'same-C' ? 'resume C' : 'resume D'
+      registerAgentLaunchConfig(
+        cacheKey,
+        { ...startup.launchConfig, agentArgs: command },
+        {
+          agentType: 'codex',
+          launchToken: 'explicit-token'
+        }
+      )
+      pending.tab = { command }
+    }
+    const current = registry[cacheKey]
+    const newer = pending.tab
+    session.cancelSavedResumeStartup(startup, { id: 'shell', agentResumeRefused: 'chat-home' })
+    session.registerEffectiveLaunchConfig(undefined, {})
+    expect(source.cancelled).toBe(true)
+    expect(session.paneStartup).toBeNull()
+    if (kind === 'refused') {
+      expect(registry[cacheKey]).toBeUndefined()
+      expect(clearTabLaunchAgent).toHaveBeenCalledWith('tab')
+      expect(updateTabTitle).toHaveBeenCalledWith('tab', 'Terminal')
+    } else {
+      expect(registry[cacheKey]).toBe(current)
+      expect(pending.tab).toBe(newer)
+      expect(clearTabLaunchAgent).not.toHaveBeenCalled()
+      expect(updateTabTitle).not.toHaveBeenCalled()
+    }
+  }
+)
