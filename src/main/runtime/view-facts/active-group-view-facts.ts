@@ -1,11 +1,16 @@
 // The tab group each workspace shows, as the window and each paired desktop last reported it: a
 // view fact, kept in memory only. Main opens a CLI or phone file in the group of whichever of them
 // reported that workspace last; with none, in the saved view's. A refresh (a desktop re-sending its
-// view after a reconnect) ranks below every live report, so it never displaces another's. A closed connection's reports go
-// with it. A removed workspace's entry stays: a stale group is refused and the open falls back to
+// view after a reconnect) ranks below every live report, so it never displaces another's, nor
+// lowers the connection's own. A closed connection's reports go with it. A removed workspace's entry stays: a stale group is refused and the open falls back to
 // main's rule.
 
-type Reported = { groupId: string | null; order: number }
+/** `refresh` entries rank below every `live` one; within a tier, the later wins. */
+type Reported = { groupId: string | null; tier: 'live' | 'refresh'; order: number }
+
+function outranks(a: Reported, b: Reported): boolean {
+  return a.tier === b.tier ? a.order > b.order : a.tier === 'live'
+}
 
 export class ActiveGroupViewFacts {
   /** Workspace key → the group the window shows; null when it shows none. */
@@ -41,7 +46,7 @@ export class ActiveGroupViewFacts {
     let latest = this.fromWindow.get(workspace)
     for (const reports of this.fromClients.values()) {
       const reported = reports.get(workspace)
-      if (reported && (!latest || reported.order > latest.order)) {
+      if (reported && (!latest || outranks(reported, latest))) {
         latest = reported
       }
     }
@@ -55,9 +60,13 @@ export class ActiveGroupViewFacts {
     refresh = false
   ): void {
     for (const [workspace, groupId] of Object.entries(report ?? {})) {
-      // Still ordered among refreshes, but below every live report.
-      const order = ++this.order
-      into.set(workspace, { groupId, order: refresh ? order - Number.MAX_SAFE_INTEGER : order })
+      const previous = into.get(workspace)
+      if (refresh && previous?.tier === 'live') {
+        // A resubscribe on the same connection re-sends its view: it keeps the rank it earned.
+        into.set(workspace, { ...previous, groupId })
+        continue
+      }
+      into.set(workspace, { groupId, tier: refresh ? 'refresh' : 'live', order: ++this.order })
     }
   }
 }

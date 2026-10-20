@@ -99,3 +99,23 @@ describe("a desktop's refresh: its view re-sent after a reconnect", () => {
     expect(facts.groupFor('wt', () => 'saved')).toBe('gW')
   })
 })
+
+describe("a refresh on the connection's own live report", () => {
+  it('keeps its rank: a resubscribe does not hand the workspace to an older report', () => {
+    const facts = new ActiveGroupViewFacts()
+    facts.mergeFromClient('desktop-b', { wt: 'g1' })
+    facts.mergeFromClient('desktop-a', { wt: 'g2' })
+    facts.mergeFromClient('desktop-a', { wt: 'g2' }, true)
+    expect(facts.groupFor('wt', () => 'saved')).toBe('g2')
+  })
+
+  it('takes a changed group at the rank it had', () => {
+    const facts = new ActiveGroupViewFacts()
+    facts.mergeFromClient('desktop-b', { wt: 'g1' })
+    facts.mergeFromClient('desktop-a', { wt: 'g2' })
+    facts.mergeFromClient('desktop-a', { wt: 'g3' }, true)
+    expect(facts.groupFor('wt', () => 'saved')).toBe('g3')
+    facts.mergeFromClient('desktop-b', { wt: 'g4' })
+    expect(facts.groupFor('wt', () => 'saved')).toBe('g4')
+  })
+})

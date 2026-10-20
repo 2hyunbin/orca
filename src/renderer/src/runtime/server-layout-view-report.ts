@@ -3,6 +3,7 @@
 // Group ids are the server's own: frames draw its groups under their ids. Fire-and-forget.
 
 import { errorMessage } from '../../../shared/error-message'
+import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { changedActiveGroups } from './sync-runtime-graph/active-group-publication'
 
@@ -13,7 +14,8 @@ export type ServerViewReport = {
     drawn: ReadonlySet<string>
   ) => void
   /** Forgets what was sent: a new stream may come with a connection the server knows nothing of.
-   *  The next report of each workspace is a refresh, which never outranks another client's. */
+   *  The next report of each workspace is a refresh, which never outranks another client's. A
+   *  server that lacked the method stays skipped: it is the same server for this stream's life. */
   reset: () => void
 }
 
@@ -35,29 +37,36 @@ function partition(
   ]
 }
 
-function send(
-  environmentId: string,
-  activeGroupByWorkspace: Record<string, string | null>,
-  refresh: boolean
-): void {
-  if (Object.keys(activeGroupByWorkspace).length === 0) {
-    return
-  }
-  callRuntimeRpc({ kind: 'environment', environmentId }, 'layout.reportView', {
-    activeGroupByWorkspace,
-    ...(refresh ? { refresh: true } : {})
-  }).catch((error: unknown) => {
-    // Not resent: the next change or stream reports again, and the server keeps its saved view.
-    console.warn('[layout-owner] a server did not take the view report:', errorMessage(error))
-  })
-}
-
 export function createServerViewReport(environmentId: string): ServerViewReport {
   let sent: Record<string, string> = {}
   /** Workspaces reported since the last reset: a first report re-establishes, a later one is a change. */
   const reported = new Set<string>()
   // Store slices are replaced, never edited: unchanged inputs have nothing new to send.
   let seen: [Readonly<Record<string, string>>, ReadonlySet<string>] | null = null
+  /** A switch-on server from before the method: it advertises layout intents without it. */
+  let unsupported = false
+  const send = (activeGroupByWorkspace: Record<string, string | null>, refresh: boolean): void => {
+    if (unsupported || Object.keys(activeGroupByWorkspace).length === 0) {
+      return
+    }
+    callRuntimeRpc({ kind: 'environment', environmentId }, 'layout.reportView', {
+      activeGroupByWorkspace,
+      ...(refresh ? { refresh: true } : {})
+    }).catch((error: unknown) => {
+      if (unsupported) {
+        return
+      }
+      if (hasRuntimeRpcErrorCode(error, 'method_not_found')) {
+        unsupported = true
+        console.warn(
+          '[layout-owner] this server takes no view reports; files open in its saved view'
+        )
+        return
+      }
+      // Not resent: the next change or stream reports again, and the server keeps its saved view.
+      console.warn('[layout-owner] a server did not take the view report:', errorMessage(error))
+    })
+  }
   return {
     update: (activeGroupIdByWorktree, drawn) => {
       if (seen?.[0] === activeGroupIdByWorktree && seen[1] === drawn) {
@@ -75,8 +84,8 @@ export function createServerViewReport(environmentId: string): ServerViewReport 
       for (const key of Object.keys(changed)) {
         reported.add(key)
       }
-      send(environmentId, refreshed, true)
-      send(environmentId, live, false)
+      send(refreshed, true)
+      send(live, false)
     },
     reset: () => {
       sent = {}

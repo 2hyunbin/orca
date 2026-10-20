@@ -231,4 +231,25 @@ describe('the group this window shows, told to the server whose frames draw it',
     }
     expect(reports()).toEqual([again, again])
   })
+
+  it('stops sending, and warns once, after a server answers it has no such method', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    hoisted.call.mockRejectedValue(new Error('method_not_found'))
+    const store = await frameDrawnStore()
+    expect(reports()).toHaveLength(1)
+
+    showGroup(store, WT, 'host-group-2')
+    streams.send(streams.openTo(ENV), {
+      type: 'snapshot',
+      workspaces: [{ key: WT, layout: SERVER_LAYOUT }],
+      seq: 2,
+      epoch: 'e2'
+    })
+    control(ENV, 'ready', 3, 300)
+    await settle()
+
+    expect(reports()).toHaveLength(1)
+    expect(warn.mock.calls.filter(([line]) => String(line).includes('view report'))).toHaveLength(1)
+    warn.mockRestore()
+  })
 })
