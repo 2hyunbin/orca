@@ -215,12 +215,20 @@ export type LayoutCommand =
   | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
   /** The workspace's default tabs were applied (or it had none): never apply them again. */
   | (On & { type: 'setDefaultTabsApplied' })
+  /** A workspace's default terminal tabs, in order, and the mark: nothing once it is marked. */
+  | (On & { type: 'applyDefaultTabs'; tabs: DefaultTerminalTab[] })
 
 /**
  * Why a workspace's first surface is asked for: `restore` at relaunch, `activation` when a user
  * opens the workspace. Either is a no-op once the workspace has a tab.
  */
 export type InitialSurfaceReason = 'restore' | 'activation'
+
+export type DefaultTerminalTab = {
+  title?: string
+  color?: string
+  creation?: Partial<LayoutTerminalCreation>
+}
 
 export type CommandOf<T extends LayoutCommand['type']> = Extract<LayoutCommand, { type: T }>
 
@@ -308,6 +316,8 @@ export type LayoutCommandResult = {
   renamedTabIds?: Record<string, string>
   /** `renameTabs`: the titles main did not give; every other tab has its title. */
   untitled?: UntitledTab[]
+  /** Tabs one command made, in order (`applyDefaultTabs`). */
+  createdTabs?: { tabId: string; leafId: string; paneKey: string }[]
 }
 
 /** A command applied to a stored layout: its result, or why it changed nothing. */
