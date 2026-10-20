@@ -53,9 +53,21 @@ export function renameEditorFiles(
       ? { ...group, tabOrder: group.tabOrder.map(tabId) }
       : group
   )
+  // A renamed tab's view follows its file to the new path.
+  const views = new Map(
+    command.renames.flatMap((rename) =>
+      rename.view ? [[rename.newFileId, rename.view] as const] : []
+    )
+  )
+  const entityOf = new Map(tabs.map((tab) => [tab.id, tab.entityId]))
   const editorViews =
     workspace.editorViews &&
-    Object.fromEntries(Object.entries(workspace.editorViews).map(([id, view]) => [tabId(id), view]))
+    Object.fromEntries(
+      Object.entries(workspace.editorViews).map(([id, view]) => [
+        tabId(id),
+        views.get(entityOf.get(tabId(id)) ?? '') ?? view
+      ])
+    )
   const editorFiles = renamedEditorFiles(
     workspace.editorFiles,
     command.renames,

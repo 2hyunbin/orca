@@ -150,8 +150,9 @@ export type LayoutCommand =
       type: 'moveTabToWorkspace'
       /** The workspace that owns the tabs' file, as the window resolved it; same partition. */
       toWorkspace: string
-      /** In the order they join the group's end; ids change when they name the old owner. */
-      tabs: { tabId: string; newTabId: string; newEntityId: string }[]
+      /** In the order they join the group's end; ids change when they name the old owner. A
+       *  non-plain tab's view names its file under the new owner. */
+      tabs: { tabId: string; newTabId: string; newEntityId: string; view?: LayoutEditorView }[]
       groupId: string
       /** The moved edit-mode file's record in its new workspace. */
       file?: LayoutEditorFile
@@ -231,6 +232,8 @@ export type EditorFileRename = {
   fileId: string
   newFileId: string
   record?: { fromFilePath: string; file: LayoutEditorFile }
+  /** A non-plain tab's view under the file's new path. */
+  view?: LayoutEditorView
 }
 
 export type GroupSide = 'left' | 'right' | 'up' | 'down'

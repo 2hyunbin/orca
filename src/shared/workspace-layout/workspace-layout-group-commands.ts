@@ -16,6 +16,7 @@ import {
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import type { WorkspaceLayout, WorkspaceLayoutModel } from './workspace-layout-model'
 import { withWorkspace } from './workspace-layout-removal'
+import { groupShowsTabFile } from './workspace-layout-workspace-move'
 
 function sourceGroupOf(workspace: WorkspaceLayout, tabId: string) {
   return findTab(workspace, tabId)
@@ -39,6 +40,9 @@ export function moveTab(model: WorkspaceLayoutModel, command: CommandOf<'moveTab
       group.id === source.id ? { ...group, tabOrder } : group
     )
     return applied(withWorkspace(model, command.workspace, { ...workspace, groups }))
+  }
+  if (groupShowsTabFile(workspace, command.toGroupId, findTab(workspace, command.tabId)!)) {
+    return refuse('tab_exists')
   }
   const moved = buildHeadlessTabGroupMove({
     groups: workspace.groups,

@@ -3,6 +3,7 @@ import { applyLayoutCommand } from './workspace-layout-commands'
 import type { CommandOf } from './workspace-layout-command-types'
 import { build, testContext, WS } from './workspace-layout-command.test-fixture'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 
 const TO = 'wt-target'
 const PATH = '/target/docs/readme.md'
@@ -191,17 +192,58 @@ describe('moveTabToWorkspace', () => {
     }
     expect(moved.model.workspaces[WS]!.editorViews).toEqual({})
     expect(moved.model.workspaces[TO]!.editorViews).toEqual({ [NEW_ID]: view })
+
+    // The window's view under the new owner replaces the one the tab had.
+    const renamed = { ...view, file: { ...FILE, relativePath: 'renamed.md' } }
+    const withNewView = applyLayoutCommand(
+      withView,
+      move({ tabs: [{ tabId: PATH, newTabId: NEW_ID, newEntityId: NEW_ID, view: renamed }] }),
+      ctx
+    )
+    expect(withNewView.ok && withNewView.model.workspaces[TO]!.editorViews).toEqual({
+      [NEW_ID]: renamed
+    })
   })
 
-  it('changes nothing for a move already saved, and refuses what main cannot match', () => {
+  it.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+    'refuses a second tab for a file the target group already shows, layout-owner build',
+    () => {
+      const { ctx, model } = twoWorkspaces()
+      const shown = applyLayoutCommand(
+        model,
+        {
+          type: 'openEditorTab',
+          workspace: TO,
+          tabId: 'shown-tab',
+          fileId: NEW_ID,
+          contentType: 'editor',
+          groupId: 'target-group'
+        },
+        ctx
+      )
+      if (!shown.ok) {
+        throw new Error(shown.code)
+      }
+
+      expect(applyLayoutCommand(shown.model, move(), ctx)).toEqual({
+        ok: false,
+        code: 'tab_exists'
+      })
+    }
+  )
+
+  it('refuses a move it already made, and what main cannot match', () => {
     const { ctx, model } = twoWorkspaces()
     const moved = applyLayoutCommand(model, move(), ctx)
     if (!moved.ok) {
       throw new Error(moved.code)
     }
 
-    const again = applyLayoutCommand(moved.model, move(), ctx)
-    expect(again.ok && again.model).toEqual(moved.model)
+    // No window save carries the move, so a repeat names a tab the source no longer holds.
+    expect(applyLayoutCommand(moved.model, move(), ctx)).toEqual({
+      ok: false,
+      code: 'tab_not_found'
+    })
 
     expect(applyLayoutCommand(model, move({ groupId: 'other-group' }), ctx)).toEqual({
       ok: false,

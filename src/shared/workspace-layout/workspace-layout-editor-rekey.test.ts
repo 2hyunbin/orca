@@ -137,4 +137,28 @@ describe('editor tabs follow a file renamed on disk', () => {
     ).toBe(true)
     expect(result.ok && result.result.renamedTabIds).toEqual({ '/repo/a.ts': '/repo/c.ts' })
   })
+
+  it("gives a renamed view tab its file's new path, and leaves other views alone", () => {
+    const model = setup()
+    const diffTab = model.workspaces[WS]!.tabs.find((tab) => tab.entityId === DIFF_A)!
+    const oldView = { view: { mode: 'diff' as const }, file: file('/repo/a.ts') }
+    const withView: WorkspaceLayoutModel = {
+      ...model,
+      workspaces: {
+        [WS]: { ...model.workspaces[WS]!, editorViews: { [diffTab.id]: oldView } }
+      }
+    }
+    const newDiff = 'wt::diff::unstaged::src/a.ts'
+    const newView = { view: { mode: 'diff' as const }, file: file('/repo/src/a.ts') }
+
+    const result = rename(withView, [{ fileId: DIFF_A, newFileId: newDiff, view: newView }])
+
+    expect(result.ok && result.model.workspaces[WS]!.editorViews).toEqual({
+      [diffTab.id]: newView
+    })
+    const untouched = rename(withView, [edit('/repo/b.ts', '/repo/c.ts')])
+    expect(untouched.ok && untouched.model.workspaces[WS]!.editorViews).toEqual({
+      [diffTab.id]: oldView
+    })
+  })
 })

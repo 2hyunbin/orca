@@ -298,8 +298,8 @@ const OpenSimulatorTabCommand = z.object({
 })
 
 /**
- * Restored editor tabs the window moved to the workspace that owns their file (F42): the window
- * resolved that owner. Main refuses it when the two workspaces are in different partitions.
+ * Restored editor tabs the window asks main to move to the workspace that owns their file (F42),
+ * under the ids it proposes: the window resolved that owner.
  */
 const MoveTabToWorkspaceCommand = z.object({
   type: z.literal('moveTabToWorkspace'),
@@ -310,7 +310,8 @@ const MoveTabToWorkspaceCommand = z.object({
       z.object({
         tabId: z.string().min(1),
         newTabId: z.string().min(1),
-        newEntityId: z.string().min(1)
+        newEntityId: z.string().min(1),
+        view: EditorViewRecord.optional()
       })
     )
     .min(1),
@@ -319,8 +320,8 @@ const MoveTabToWorkspaceCommand = z.object({
 })
 
 /**
- * Open files the window renamed or moved on disk, under the ids the window gave them; an edit-mode
- * file's record moves from its old path.
+ * Open files renamed or moved on disk, under the ids the window proposes; an edit-mode file's record
+ * moves from its old path, and a non-plain tab's view takes its new path.
  */
 const RenameEditorFilesCommand = z.object({
   type: z.literal('renameEditorFiles'),
@@ -330,7 +331,8 @@ const RenameEditorFilesCommand = z.object({
       z.object({
         fileId: z.string().min(1),
         newFileId: z.string().min(1),
-        record: z.object({ fromFilePath: z.string().min(1), file: EditorFileRecord }).optional()
+        record: z.object({ fromFilePath: z.string().min(1), file: EditorFileRecord }).optional(),
+        view: EditorViewRecord.optional()
       })
     )
     .min(1)
