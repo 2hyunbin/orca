@@ -1,10 +1,6 @@
 import type * as ExecCommandModule from './remote-exec/remote-exec-command'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  parseGlibcVersion,
-  parseOrcadLinuxLibc,
-  resolveOrcadDeploymentTargetFacts
-} from './orcad-deployment-target'
+import { resolveOrcadDeploymentTargetFacts } from './orcad-deployment-target'
 import { SshConnection } from './connection/ssh-connection'
 import { createCallbacks, createTarget } from './connection/ssh-connection-test-fixtures'
 import { execCommand } from './remote-exec/remote-exec-command'
@@ -29,7 +25,7 @@ beforeEach(() => vi.mocked(execCommand).mockReset())
 describe('deployment C library selection', () => {
   it.each([
     ['glibc 2.31', 'linux-x64-glibc'],
-    ['musl', 'linux-x64-musl']
+    ['musl libc', 'linux-x64-musl']
   ])('uses host fallback evidence %j when ldd is unavailable', async (evidence, target) => {
     vi.mocked(execCommand).mockResolvedValueOnce('ldd: not found').mockResolvedValueOnce(evidence)
     const conn = new SshConnection(createTarget(), createCallbacks())
@@ -99,32 +95,6 @@ describe('deployment C library selection', () => {
     await expect(pending).rejects.toThrow('SSH connection changed')
     expect(exec).toHaveBeenLastCalledWith(expect.stringContaining('getconf GNU_LIBC_VERSION'))
     expect(execCommand).toHaveBeenCalledOnce()
-  })
-
-  it.each([
-    ['ldd (Ubuntu GLIBC 2.31-0ubuntu9) 2.31', 'glibc'],
-    ['ldd (GNU libc) 2.28', 'glibc'],
-    ['musl libc (x86_64)\nVersion 1.2.5', 'musl']
-  ])('recognizes %s', (output, expected) => {
-    expect(parseOrcadLinuxLibc(output)).toBe(expected)
-  })
-
-  it.each(['', 'ldd: command not found', 'Linux x86_64'])(
-    'refuses unproven target %j',
-    (output) => {
-      expect(() => parseOrcadLinuxLibc(output)).toThrow('Could not identify')
-    }
-  )
-
-  it.each([
-    ['ldd (Ubuntu GLIBC 2.31-0ubuntu9.16) 2.31\nCopyright (C) 2020', { major: 2, minor: 31 }],
-    ['ldd (GNU libc) 2.17', { major: 2, minor: 17 }],
-    ['glibc 2.28', { major: 2, minor: 28 }],
-    [SYNOLOGY_LOADER_VERSION, { major: 2, minor: 36 }],
-    ['GNU C Library (GNU libc) stable release version 2.26.', { major: 2, minor: 26 }],
-    ['ldd (GNU libc) unknown', null]
-  ])('reads glibc major.minor from %j', (output, expected) => {
-    expect(parseGlibcVersion(output)).toEqual(expected)
   })
 
   it('returns the glibc version with the target, from either probe', async () => {

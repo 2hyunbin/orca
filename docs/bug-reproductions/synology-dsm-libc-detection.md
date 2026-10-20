@@ -19,10 +19,15 @@ The firmware's loader gives direct evidence:
 ld.so (GNU libc) stable release version 2.36.
 ```
 
-The fix tries the GNU loader only after the existing probes cannot identify
-the library, and parses its release banner. Unknown libraries still fail
-closed; SSH errors propagate. Normal Linux, musl and non-Linux selection
-retain their existing probe order.
+SSH and both WSL runtime setup paths now share the same probe. It tries
+`ldd`, `getconf`, GNU loaders, executable GNU libraries, then musl loaders.
+Each command uses the C locale, and only recognizable library banners count
+as evidence. Unrecognized output falls through even when a tool exits
+successfully. Unknown libraries still fail closed; transport errors propagate.
+
+The musl fallback executes the loader instead of inferring the host library
+from a filename. Checking GNU libraries first also prevents an installed
+musl toolchain from overriding a GNU host when the normal tools are missing.
 
 ## Live evidence
 
@@ -51,6 +56,38 @@ DSM library detection and Node startup, not a complete managed-server
 deployment or Synology's login services. The VM kernel was
 `6.1.0-53-cloud-arm64`; the NAS's 4.4.302 kernel was not booted.
 
+## Related failures checked
+
+The same VM also ran official DS920+ DSM 7.2.2-72806 and 7.1.1-42962
+filesystems. Both omit `ldd` and `getconf`. DSM 7.2.2 reports glibc 2.36
+through its loader. DSM 7.1.1 has glibc 2.26, whose loader treats
+`--version` as a program name and prints an error:
+
+```text
+--version: error while loading shared libraries: --version: cannot open shared object file: No such file or directory
+```
+
+Executing `/lib/libc.so.6` instead prints:
+
+```text
+GNU C Library (GNU libc) stable release version 2.26, by Roland McGrath et al.
+```
+
+The shared production probe correctly identifies that version, and the SSH
+runtime selector chooses the existing `linux-x64-glibc217` compatibility
+runtime. That runtime was not launched in this additional root filesystem.
+The WSL path retains its existing minimum-version rejection policy.
+
+Alpine 3.22.2 ARM64 and the VM's Debian 12 ARM64 also passed. With
+`PATH=/nonexistent`, Alpine was identified from its musl loader's stderr
+banner despite its nonzero exit status, and Debian from its GNU loader.
+These checks used real shells and libraries; WSL command dispatch and
+reader preparation were checked through automated tests, not a Windows VM.
+
+Regression tests also cover login banners before library output, unrelated
+version numbers, error text mentioning glibc/musl, and connection loss
+during a fallback.
+
 ## Reproduction inputs
 
 - [Official DS920+ firmware](https://global.synologydownload.com/download/DSM/release/7.4.1/90080/DSM_DS920%2B_90080.pat)
@@ -63,6 +100,13 @@ deployment or Synology's login services. The VM kernel was
 - Node archive: `node-v24.21.0-linux-x64.tar.gz` from nodejs.org. SHA-256
   `6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff`,
   matching Orca's runtime pin.
+- [Official DSM 7.1.1-42962 firmware](https://global.synologydownload.com/download/DSM/release/7.1.1/42962/DSM_DS920%2B_42962.pat)
+  SHA-256: `90b1bd215b85eb366b3d3b6bef6bb6bef657dd0caba032dae556717b58e44c06`.
+  Its decrypted `hda1.tgz` SHA-256:
+  `2516a283561ad78d0bb42e0a065af96772b80e575d30338f8279006a1e2864af`.
+- [Official DSM 7.2.2-72806 firmware](https://global.synologydownload.com/download/DSM/release/7.2.2/72806/DSM_DS920%2B_72806.pat)
+  SHA-256: `c8dc7d0f327718f40820a7e6275a5257c6decd80c231b312540ca0a6b7120cfb`.
+- [Alpine 3.22.2 ARM64 root filesystem](https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/aarch64/alpine-minirootfs-3.22.2-aarch64.tar.gz).
 
 The local VM is named `orca-synology-debug`, with the root filesystem at
 `/var/tmp/orca-dsm-root` inside it. Ignored local files under
@@ -76,4 +120,7 @@ ORCA_BACKGROUND_LAUNCH=1 limactl shell orca-synology-debug -- sudo sh "$PWD/tmp/
 ORCA_BACKGROUND_LAUNCH=1 pnpm exec tsx --conditions=orca-source tmp/synology-debug/probe-ssh.ts
 ```
 
-Regression coverage lives in `src/main/ssh/orcad-deployment-target.test.ts`.
+Regression coverage lives in `src/main/node-runtime/linux-libc-probe.test.ts`,
+`src/main/ssh/orcad-deployment-target.test.ts`,
+`src/main/wsl/wsl-pinned-runtime.test.ts`, and
+`src/main/ai-vault/opencode-wsl-runtime-preparation.test.ts`.
