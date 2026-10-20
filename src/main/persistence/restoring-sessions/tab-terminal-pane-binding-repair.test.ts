@@ -193,7 +193,21 @@ describe("load repair: a tab's own terminal and its unbound pane", () => {
         connectionId: 'box'
       }
     ]
+    // A local repo's workspace in the same partition still binds its row's terminal.
     state.workspaceSession = tabLevelSession(SSH_KEY)
-    expect(bindPersistedTabTerminalPanes(state)).toBe(state)
+    const local = tabLevelSession(GIT_KEY)
+    local.tabsByWorktree[GIT_KEY]![0]!.id = 'tab-g'
+    local.terminalLayoutsByTabId['tab-g'] = local.terminalLayoutsByTabId['tab-a']!
+    state.workspaceSession.tabsByWorktree[GIT_KEY] = local.tabsByWorktree[GIT_KEY]!
+    state.workspaceSession.terminalLayoutsByTabId['tab-g'] = {
+      ...local.terminalLayoutsByTabId['tab-g'],
+      root: { type: 'leaf', leafId: leaf(2) },
+      activeLeafId: leaf(2)
+    }
+    state.workspaceSession.tabsByWorktree[GIT_KEY]![0]!.ptyId = 'pty-g'
+    state.workspaceSession.activeWorktreeIdsOnShutdown = [SSH_KEY, GIT_KEY]
+    const repaired = bindPersistedTabTerminalPanes(state).workspaceSession
+    expect(bindings(repaired)?.[leaf(1)]).toBeUndefined()
+    expect(bindings(repaired, 'tab-g')).toEqual({ [leaf(2)]: 'pty-g' })
   })
 })

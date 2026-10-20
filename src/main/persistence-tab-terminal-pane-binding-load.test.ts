@@ -48,12 +48,12 @@ function tabLevelOnly(): WorkspaceSessionState {
   }
 }
 
-function loadStored(): WorkspaceSessionState {
+function loadStored(session = tabLevelOnly()): WorkspaceSessionState {
   writeDataFile({
     schemaVersion: 1,
     repos: [makeRepo({ id: REPO, path: '/work/a' })],
     worktreeMeta: {},
-    workspaceSession: tabLevelOnly()
+    workspaceSession: session
   })
   return createStore().getWorkspaceSession()
 }
@@ -73,6 +73,21 @@ describe("main's Store load binds a tab's own terminal to its unbound pane", () 
     expect(loadStored().terminalLayoutsByTabId['tab-a']?.ptyIdsByLeafId).toEqual({
       [LEAF]: 'pty-a'
     })
+  })
+
+  it("after the load purge, so a dropped workspace's pane cannot hold the terminal", () => {
+    const session = tabLevelOnly()
+    const gone = 'legacy-bare-key'
+    session.tabsByWorktree[gone] = [makeTerminalTab({ id: 'tab-gone', worktreeId: gone })]
+    session.terminalLayoutsByTabId['tab-gone'] = {
+      root: { type: 'leaf', leafId: LEAF.replace(/1/g, '2') },
+      activeLeafId: LEAF.replace(/1/g, '2'),
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [LEAF.replace(/1/g, '2')]: 'pty-a' }
+    }
+    const loaded = loadStored(session)
+    expect(Object.keys(loaded.tabsByWorktree)).toEqual([WORKTREE])
+    expect(loaded.terminalLayoutsByTabId['tab-a']?.ptyIdsByLeafId).toEqual({ [LEAF]: 'pty-a' })
   })
 
   it('not while the window owns the layout', () => {
