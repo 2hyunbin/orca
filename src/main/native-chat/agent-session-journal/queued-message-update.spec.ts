@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import Database from '../../sqlite/sync-database'
 import { ensureQueuedMessagesTable } from './queued-message-schema'
 import { getQueuedMessage, insertQueuedMessage } from './queued-message-table'
-import { updateQueuedMessageText } from './queued-message-text-update'
+import { updateQueuedMessage } from './queued-message-update'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { MAX_PROMPT_BYTES } from '../../../shared/rpc-contract/structured-agent-session-params'
 
-export function registerQueuedMessageTextUpdateTests(): void {
+export function registerQueuedMessageUpdateTests(): void {
   let db: Database.Database
   const sessionId = 'folder-session'
   const initial: AgentJournalMessageItem = {
@@ -33,11 +33,12 @@ export function registerQueuedMessageTextUpdateTests(): void {
     })
   }
   function update(text: string, fingerprint = agentSessionSendBodyFingerprint(sessionId, initial)) {
-    return updateQueuedMessageText(db, sessionId, {
-      messageId: 'card',
-      expectedBodyFingerprint: fingerprint,
-      text
-    })
+    return updateQueuedMessage(
+      db,
+      sessionId,
+      { messageId: 'card', expectedBodyFingerprint: fingerprint, text },
+      () => {}
+    )
   }
 
   describe('atomic queued text update', () => {
@@ -152,11 +153,12 @@ export function registerQueuedMessageTextUpdateTests(): void {
         'image'
       )
       expect(
-        updateQueuedMessageText(db, sessionId, {
-          messageId: 'image',
-          expectedBodyFingerprint: imageOnly.fingerprint,
-          text: 'added'
-        }).status
+        updateQueuedMessage(
+          db,
+          sessionId,
+          { messageId: 'image', expectedBodyFingerprint: imageOnly.fingerprint, text: 'added' },
+          () => {}
+        ).status
       ).toBe('updated')
       expect(getQueuedMessage(db, sessionId, 'image')?.body.blocks).toEqual([
         { type: 'text', text: 'added' },

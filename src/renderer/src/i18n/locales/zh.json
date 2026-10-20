@@ -18437,6 +18437,7 @@
         "notDoneOption": "设置未更改。",
         "notDoneCommand": "命令未运行。",
         "notDoneGoal": "目标未更改。",
+        "notDoneQueuedEdit": "你的编辑未保存。",
         "restartFailed": "智能体无法重新启动。",
         "capacity": "运行此聊天的计算机上的 Orca 已达到请求上限。请在那台计算机上更新 Orca，然后重试。",
         "outcomeUnknown": "Orca 无法确认发生了什么。请查看聊天。",
@@ -18619,6 +18620,9 @@
         "interruptedCallsLabel": "已中断的工具调用：{{value0}}",
         "runningPreview": "正在运行 {{preview}}",
         "runningCommand": "运行命令",
+        "showFullOutput": "显示完整输出",
+        "fullOutputFailed": "无法加载完整输出。",
+        "fullOutputPartial": "正在显示 {{total}} 中的 {{shown}}。",
         "runningNamedPreview": "运行 {{toolName}} {{preview}}",
         "runningNamed": "正在运行 {{toolName}}",
         "ranCommandOneToolSummary": "运行 {{commandCount}} 命令并使用 {{toolCount}} 工具",
@@ -18917,6 +18921,7 @@
         "pendingWork": "在使用此命令之前，请等待挂起的工作和消息完成。"
       },
       "drop": {
+        "messageTitle": "拖放以附加到此消息",
         "title": "拖放以附加到此聊天",
         "subtitle": "文件将作为智能体可以读取的路径添加到您的消息中。"
       },
@@ -18994,6 +18999,7 @@
         "cancelEditing": "取消编辑",
         "editChanged": "你编辑时此消息已更改。你编辑的内容已放入聊天输入框。",
         "editChangedPrompt": "你编辑时此消息已更改。回答智能体后，你编辑的内容会出现在聊天输入框中。",
+        "editChangedNotSaved": "你编辑时此消息已更改。你的编辑未保存。",
         "editFailed": "此消息无法编辑。",
         "editGone": "此消息已发送或移除。你编辑的内容已放入聊天输入框。",
         "editGonePrompt": "此消息已发送或移除。回答智能体后，你编辑的内容会出现在聊天输入框中。",
@@ -19003,7 +19009,9 @@
         "collapse": "收起",
         "expand": "展开",
         "queued": "已排队",
-        "clearAll": "全部清除"
+        "clearAll": "全部清除",
+        "pasteOrDropImages": "粘贴或拖入图片",
+        "saveNeedsContent": "添加文字或图片后才能保存"
       },
       "thought": "已思考",
       "thoughtForDuration": "思考了 {{duration}}",

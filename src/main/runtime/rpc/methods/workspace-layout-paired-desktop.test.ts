@@ -70,7 +70,7 @@ describe('the layout intents capability', () => {
 })
 
 describe('layout methods on a layout-owner server', () => {
-  // Past the scope check a desktop meets the next one: a stream asked for as a request, or bad params.
+  // Past the scope check: a stream asked for as a request, or bad params.
   it.each([
     ['layout.subscribe', 'method_not_supported'],
     ['layout.unsubscribe', 'invalid_argument'],

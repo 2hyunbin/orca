@@ -3262,6 +3262,7 @@
         "notDoneAnswer": "Your answer was not sent.",
         "notDoneCommand": "The command didn't run.",
         "notDoneGoal": "The goal wasn't changed.",
+        "notDoneQueuedEdit": "Your edit wasn't saved.",
         "notDoneOption": "The setting wasn't changed.",
         "notDoneReadHistory": "This chat's history couldn't be loaded.",
         "notDoneSend": "Your message was not sent.",
