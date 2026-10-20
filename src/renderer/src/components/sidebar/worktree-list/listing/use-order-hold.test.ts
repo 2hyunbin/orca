@@ -25,7 +25,6 @@ function fire(target: EventTarget, type: string, init: PointerEventInit = {}): v
 
 describe('useOrderHeldWhileEngaged', () => {
   afterEach(() => {
-    vi.useRealTimers()
     cleanup()
     document.body.replaceChildren()
   })
@@ -67,7 +66,6 @@ describe('useOrderHeldWhileEngaged', () => {
   })
 
   it('holds through a drag in Smart and applies the order once the drag has ended', () => {
-    vi.useFakeTimers()
     const { row } = mountList()
     const { result, rerender } = renderHook(
       ({ ids, sortBy }: { ids: string[]; sortBy: SortBy }) => useOrderHeldWhileEngaged(ids, sortBy),
@@ -77,12 +75,10 @@ describe('useOrderHeldWhileEngaged', () => {
     fire(row, 'dragstart')
     rerender({ ids: ['b', 'a'], sortBy: 'smart' })
     expect(result.current).toEqual(['a', 'b'])
-    fire(row, 'dragend')
-    // The list's own drop commit reads the held rows, so the release waits for the event to end.
+    // The list's own drop commit reads the held rows, so only the drag's end releases them.
+    fire(row, 'drop')
     expect(result.current).toEqual(['a', 'b'])
-    act(() => {
-      vi.runAllTimers()
-    })
+    fire(row, 'dragend')
     expect(result.current).toEqual(['b', 'a'])
   })
 
