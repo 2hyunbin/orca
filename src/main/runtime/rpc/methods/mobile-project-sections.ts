@@ -9,7 +9,10 @@ export const MOBILE_PROJECT_SECTIONS_METHODS = [
     params: null,
     // For a page that predates the feed's projectCatalog domain: main's own catalog.
     handler: (_params, { runtime }) => ({
-      catalog: readSidebarProjectCatalog(runtime.requireStore(), runtime.pairedServerRows.catalogs())
+      catalog: readSidebarProjectCatalog(
+        runtime.requireStore(),
+        runtime.pairedServerRows.catalogs()
+      )
     })
   })
 ]

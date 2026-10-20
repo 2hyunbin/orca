@@ -10,7 +10,6 @@ import { ALL_RPC_METHODS } from '../rpc/methods'
 import type { RuntimeStore } from '../runtime-store-contract'
 import { TestPhone } from './sidebar-inputs-feed.test-fixture'
 
-
 function group(id: string): ProjectGroup {
   return {
     id,
