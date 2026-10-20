@@ -32,6 +32,13 @@ type WorktreeListComponent = React.ComponentType<{
 
 let WorktreeList: WorktreeListComponent
 
+vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+vi.mock('@/lib/desktop-sidebar-feed', async () =>
+  (await import('./window-state-sidebar-feed.test-fixture')).createWindowStateSidebarFeedModuleMock(
+    () => mockStore.state
+  )
+)
+
 vi.mock('@/store', () => {
   const useAppStore = ((selector: (state: Record<string, unknown>) => unknown) =>
     selector(mockStore.state)) as ((
@@ -297,7 +304,6 @@ describe('WorktreeCard memo bail-out across epoch bumps', () => {
     expect(cardRenderSpy.mock.calls.length).toBe(countAfterMount)
 
     // Order-preserving epoch bump: same worktrees, same order, new epoch.
-    // Manual sort applies the bump without the smart-sort settle debounce.
     mockStore.state = { ...mockStore.state, sortEpoch: 1 }
     await renderList(root)
 

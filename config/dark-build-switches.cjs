@@ -6,9 +6,7 @@ const { join } = require('node:path')
 // and packaging refuses either; packaging and the orcad template also refuse the variable itself.
 const DARK_BUILD_SWITCHES = [
   // src/shared/layout-owner-switch.ts
-  { variable: 'ORCA_LAYOUT_OWNER', off: 'window' },
-  // src/shared/sidebar-inputs-switch.ts
-  { variable: 'ORCA_SIDEBAR_INPUTS', off: 'window' }
+  { variable: 'ORCA_LAYOUT_OWNER', off: 'window' }
 ]
 
 function markerFileName(darkSwitch) {

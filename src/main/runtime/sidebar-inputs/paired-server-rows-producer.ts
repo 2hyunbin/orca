@@ -17,7 +17,6 @@ import {
 } from '../mobile-desktop-relay/mobile-relay-host-descriptions'
 import type { ServerWorktreeRows } from '../mobile-desktop-relay/mobile-relay-host-catalog'
 import {
-  SERVER_FETCH_TIMEOUT_MS,
   SERVER_WORKTREE_LIMIT,
   WorktreePsReplySchema,
   stampServerWorktreeRows
@@ -228,8 +227,10 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
         { environmentId: entry.environmentId },
         'worktree.ps',
         { limit: SERVER_WORKTREE_LIMIT, supportsWorktreeVisibilitySourceDefaults: true },
-        // Why the transport bound too: it ends the hung call, so the next request fetches afresh.
-        { timeoutMs: SERVER_FETCH_TIMEOUT_MS, expected: entry.identity }
+        // Why the transport's normal bound, as the window's own listing had: nothing waits on this
+        // fetch (readers take the latest rows), so a slow server's answer must still land. The
+        // bound still ends a hung call, so the next fetch starts afresh.
+        { expected: entry.identity }
       )
     } catch {
       // An unreachable server keeps its last rows.

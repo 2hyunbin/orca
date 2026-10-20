@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 /**
- * One store goes in; the window's own row pipeline (switch on), the desktop window reading main's
- * feed (useMainSidebarListModel) and a phone reading it (feed pages, the shared installer,
+ * One store goes in; the window's own row pipeline (a paired web client window), the desktop window
+ * reading main's feed (useMainSidebarListModel) and a phone reading it (feed pages, the shared installer,
  * buildSidebarFeedRows) must draw the same list. The goldens check that list is right; this
  * checks only that the adapters agree.
  *
@@ -13,7 +13,7 @@
  * server runs; a PR unlinked on a server workspace; an SSH workspace reached through a paired
  * server; a server terminal only another client opened (the server counts it, the window does not).
  */
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook } from '@testing-library/react'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -22,11 +22,10 @@ import { TestPhone } from '../../../../main/runtime/sidebar-inputs/sidebar-input
 import { isActiveSidebarWorkspace } from '../../../../shared/sidebar-list/active-workspace'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import type { HostSectionRow } from '../../../../shared/sidebar-list/host-section-rows'
-import type { readSidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
-import type { buildSidebarFeedRows } from '../../../../shared/sidebar-list/sidebar-feed-rows'
+import { readSidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
+import { buildSidebarFeedRows } from '../../../../shared/sidebar-list/sidebar-feed-rows'
 import { GOLDEN_NOW } from './sidebar-list-golden-factories.test-fixture'
 import type { DesktopSidebarFeed } from '@/lib/desktop-sidebar-feed'
-import { readSidebarFeedDomains as readFeedDomainsSwitchedOn } from '../../../../shared/sidebar-list/sidebar-feed-domains'
 import { useMainSidebarListModel } from './worktree-list/listing/use-main-list-model'
 import {
   GOLDEN_WORKTREE_IDS,
@@ -49,8 +48,6 @@ import {
   projectParityRows
 } from './sidebar-list-parity.test-fixture'
 
-const SWITCH = '../../../../shared/sidebar-inputs-switch'
-vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
 // The feed the window would install from main; set per list.
 let windowFeed: DesktopSidebarFeed | null = null
@@ -59,23 +56,6 @@ vi.mock('@/lib/desktop-sidebar-feed', () => ({
   onDesktopSidebarFeedInstalled: () => () => {},
   refreshDesktopSidebarFeed: () => 0
 }))
-
-// The phone page is built without the switch, so its adapter loads in a module graph with it off.
-let phoneAdapter: {
-  readSidebarFeedDomains: typeof readSidebarFeedDomains
-  buildSidebarFeedRows: typeof buildSidebarFeedRows
-}
-beforeAll(async () => {
-  vi.resetModules()
-  vi.doUnmock(SWITCH)
-  expect(
-    (await import('../../../../shared/sidebar-inputs-switch')).ORCA_SIDEBAR_INPUTS_IS_MAIN
-  ).toBe(false)
-  phoneAdapter = {
-    ...(await import('../../../../shared/sidebar-list/sidebar-feed-domains')),
-    ...(await import('../../../../shared/sidebar-list/sidebar-feed-rows'))
-  }
-})
 
 const SORT_BYS: AppState['sortBy'][] = ['manual', 'name', 'recent', 'smart', 'repo']
 const PROJECT_ORDER_BYS: AppState['projectOrderBy'][] = ['manual', 'recent']
@@ -135,8 +115,8 @@ async function installFeed(state: Partial<AppState>) {
 async function phoneList(state: Partial<AppState>): Promise<string[]> {
   const { installed, full } = await installFeed(state)
   const { catalog, view } = phoneInputsFromWindowState(full)
-  const { sectionRows, activeRowKeys } = phoneAdapter.buildSidebarFeedRows(
-    phoneAdapter.readSidebarFeedDomains(installed),
+  const { sectionRows, activeRowKeys } = buildSidebarFeedRows(
+    readSidebarFeedDomains(installed),
     catalog,
     view
   )
@@ -148,10 +128,10 @@ function worldState(view: GoldenView, extra: Partial<AppState> = {}): Partial<Ap
   return { ...base, ...parityWorldOverrides(base), ...extra }
 }
 
-/** The window's list built from main's feed, as an ORCA_SIDEBAR_INPUTS=main window draws it. */
+/** The window's list built from main's feed, as the desktop window draws it. */
 async function windowFeedList(state: Partial<AppState>): Promise<string[]> {
   const { installed } = await installFeed(state)
-  windowFeed = { domains: readFeedDomainsSwitchedOn(installed), readId: 1 }
+  windowFeed = { domains: readSidebarFeedDomains(installed), readId: 1 }
   try {
     return desktopList(state, useMainSidebarListModel)
   } finally {

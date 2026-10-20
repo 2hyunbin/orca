@@ -25,7 +25,12 @@ type PhoneList = Awaited<ReturnType<typeof openPhoneFeedList>>
 const AddedRepoSchema = z.object({ repo: z.object({ id: z.string() }) })
 
 /** Both sides inside one poll: either may still be catching up with the last change. */
-async function expectPhoneMatchesDesktop(page: Page, phone: PhoneList): Promise<ListOutline> {
+/** Waits until both sides agree on a list that already shows the change (`showsChange`). */
+async function expectPhoneMatchesDesktop(
+  page: Page,
+  phone: PhoneList,
+  showsChange: (outline: ListOutline) => boolean = () => true
+): Promise<ListOutline> {
   let desktop: ListOutline = []
   let shown: ListOutline = []
   await expect
@@ -33,7 +38,8 @@ async function expectPhoneMatchesDesktop(page: Page, phone: PhoneList): Promise<
       async () => {
         desktop = await desktopSidebarOutline(page)
         shown = await phone.outline()
-        return shown.join('\n') === desktop.join('\n')
+        // Why the change too: the phone hears a change later, so both still agree on the old list.
+        return shown.join('\n') === desktop.join('\n') && showsChange(shown)
       },
       { timeout: 30_000 }
     )
@@ -84,15 +90,23 @@ test.describe('switch on', () => {
 
       // A pin on the desktop reaches the phone through a notice, with a Pinned section.
       await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: true })
-      const pinned = await expectPhoneMatchesDesktop(orcaPage, list)
-      expect(pinned.some((line) => line.startsWith('HEADER Pinned'))).toBe(true)
+      const hasPinned = (outline: ListOutline): boolean =>
+        outline.some((line) => line.startsWith('HEADER Pinned'))
+      const pinned = await expectPhoneMatchesDesktop(orcaPage, list, hasPinned)
+      expect(hasPinned(pinned)).toBe(true)
 
       // Pinned rows also in their groups: the open workspace highlights at both.
       await orcaPage.evaluate(() =>
         window.__store!.getState().updateSettings({ showPinnedWorktreesInGroups: true })
       )
-      const duplicated = await expectPhoneMatchesDesktop(orcaPage, list)
-      expect(duplicated.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(2)
+      const activeCount = (outline: ListOutline): number =>
+        outline.filter((line) => line.endsWith(' ACTIVE')).length
+      const duplicated = await expectPhoneMatchesDesktop(
+        orcaPage,
+        list,
+        (outline) => activeCount(outline) === 2
+      )
+      expect(activeCount(duplicated)).toBe(2)
 
       // The phone collapses one section with ui.setCollapsed; the desktop and the phone both fold it.
       const project = (await list.sections())?.find((section) => section.repo)
@@ -107,7 +121,11 @@ test.describe('switch on', () => {
       await expect
         .poll(() => orcaPage.evaluate(() => [...window.__store!.getState().collapsedGroups]))
         .toEqual([...before, project!.key])
-      const folded = await expectPhoneMatchesDesktop(orcaPage, list)
+      const folded = await expectPhoneMatchesDesktop(
+        orcaPage,
+        list,
+        (outline) => outline.length < duplicated.length
+      )
       const foldedSection = (await list.sections())?.find((section) => section.key === project!.key)
       expect(foldedSection?.data).toEqual([])
       expect(foldedSection?.count).toBeGreaterThan(0)
@@ -121,14 +139,22 @@ test.describe('switch on', () => {
           opId: { writer: 'e2e-phone', seq: 2 }
         })
       ).toMatchObject({ ok: true })
-      await expectPhoneMatchesDesktop(orcaPage, list)
+      await expectPhoneMatchesDesktop(
+        orcaPage,
+        list,
+        (outline) => outline.length === duplicated.length
+      )
       const unfolded = (await list.sections())?.find((section) => section.key === project!.key)
       expect(unfolded?.data.length).toBeGreaterThan(0)
 
       // Unpinned on the desktop: the Pinned section goes and one highlight is left.
       await runtimeCall(orcaPage, 'worktree.set', { worktree: `id:${activeId}`, isPinned: false })
-      const unpinned = await expectPhoneMatchesDesktop(orcaPage, list)
-      expect(unpinned.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
+      const unpinned = await expectPhoneMatchesDesktop(
+        orcaPage,
+        list,
+        (outline) => !hasPinned(outline)
+      )
+      expect(activeCount(unpinned)).toBe(1)
     } finally {
       list.close()
       phone.dispose()

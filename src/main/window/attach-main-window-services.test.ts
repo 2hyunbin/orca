@@ -717,6 +717,31 @@ describe('attachMainWindowServices', () => {
     )
   })
 
+  it('forwards sidebar input notices to the renderer until the window closes', () => {
+    const sendMock = vi.fn()
+    const mainWindowOnMock = vi.fn()
+    const mainWindow = createMainWindow({ send: sendMock })
+    mainWindow.on = mainWindowOnMock
+    const runtime = createRuntime()
+    const detach = vi.fn()
+    runtime.onClientEvent.mockReturnValue(detach)
+
+    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
+
+    expect(runtime.onClientEvent).toHaveBeenCalledTimes(1)
+    const [listener, options] = runtime.onClientEvent.mock.calls[0]
+    expect(options).toEqual({ consumesTerminalSideEffects: false })
+    const notice = { type: 'sidebarInputsChanged', generation: 'gen-1', revision: 3 }
+    listener(notice)
+    listener({ type: 'otherEvent' })
+    expect(sendMock.mock.calls).toEqual([['runtime:sidebarInputsChanged', notice]])
+
+    for (const handler of getClosedHandlers(mainWindowOnMock)) {
+      handler()
+    }
+    expect(detach).toHaveBeenCalledTimes(1)
+  })
+
   it('marks renderer process loss as a graph reload failure', () => {
     const mainWindow = createMainWindow()
     const runtime = createRuntime()

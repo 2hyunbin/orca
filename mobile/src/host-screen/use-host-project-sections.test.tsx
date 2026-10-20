@@ -6,6 +6,8 @@ const request = vi.hoisted(() => vi.fn())
 
 vi.mock('../worktree/project-sections-operations', () => ({
   projectSectionsRead: { request },
+  // A catalog without groups asks the host for its own; this one has none to give.
+  hostProjectGroupsRead: { request: async () => null, interpret: () => ({ accepted: false }) },
   readServedProjectSections: () => ({ kind: 'answered', value: null })
 }))
 

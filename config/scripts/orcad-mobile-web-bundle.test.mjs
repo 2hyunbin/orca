@@ -44,14 +44,14 @@ it('stages the manifest and every asset it lists, byte for byte', async () => {
 })
 
 it('stages a dark page into a dark orcad, and refuses it in any other', async () => {
-  vi.stubEnv('ORCA_SIDEBAR_INPUTS', 'main')
+  vi.stubEnv('ORCA_LAYOUT_OWNER', 'main')
   await writeMobileWebBundleFixtureTree({ outDir: bundleDir })
   stageOrcadMobileWebBundle(outputDir, bundleDir)
   expect(existsSync(join(outputDir, ORCAD_MOBILE_WEB_MANIFEST))).toBe(true)
 
   vi.unstubAllEnvs()
   rmSync(outputDir, { recursive: true, force: true })
-  expect(() => stageOrcadMobileWebBundle(outputDir, bundleDir)).toThrow('ORCA_SIDEBAR_INPUTS=main')
+  expect(() => stageOrcadMobileWebBundle(outputDir, bundleDir)).toThrow('ORCA_LAYOUT_OWNER=main')
   expect(existsSync(join(outputDir, ORCAD_MOBILE_WEB_MANIFEST))).toBe(false)
 })
 

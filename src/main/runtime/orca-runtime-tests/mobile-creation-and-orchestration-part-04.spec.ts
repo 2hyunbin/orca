@@ -169,7 +169,8 @@ describe('OrcaRuntimeService', () => {
           lastActivityAt: 0,
           lastOutputAt: 321,
           preview: 'build green',
-          agents: []
+          agents: [],
+          sortedByStamps: true
         }
       ],
       // Why: the summary now names the hosts it covered; an absent scope would read as absolute.

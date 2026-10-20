@@ -11,6 +11,10 @@ import { createTestStore, makeWorktree, TEST_REPO } from '../store/slices/store-
 import { isWorkspaceNotificationMutedBySidebarFilters } from './hidden-workspace-notification-mute'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
+// The window raises the flag only for an older paired server's workspace; this pins that path.
+vi.mock('@/store/slices/worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: async () => false
+}))
 
 createTabsSliceMockApi()
 
@@ -155,7 +159,7 @@ describe('muted workspace attention', () => {
     expect(createStructuredAttentionSurface(store.getState()).isWorkspaceMuted(CLI_ID)).toBe(true)
   })
 
-  it('writes no bell marker for a muted workspace, and still does for a visible one', () => {
+  it('writes no bell marker for a muted workspace, and still does for a visible one', async () => {
     const terminalTab = (id: string, worktreeId: string) => ({
       id,
       ptyId: null,
@@ -178,6 +182,7 @@ describe('muted workspace attention', () => {
     store
       .getState()
       .markTerminalBell({ worktreeId: PLAIN_ID, tabId: 'tab-plain', paneKey: 'tab-plain:0' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
     const rows = store.getState().worktreesByRepo.repo1
     expect(rows.find((row) => row.id === CLI_ID)?.isUnread).toBe(false)
     expect(store.getState().unreadTerminalTabs['tab-cli']).toBeUndefined()

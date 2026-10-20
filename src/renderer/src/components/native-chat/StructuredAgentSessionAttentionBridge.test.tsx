@@ -168,6 +168,18 @@ function indicators(): Record<string, unknown> {
   }
 }
 
+// The workspace is local, so its host raises the bold row; the window lights the dots.
+const LIT_BY_WINDOW = {
+  workspaceBold: false,
+  paneDot: 'agent-completion',
+  tabDot: 'agent-completion'
+}
+
+/** Lets the deferred owner check run, so a window-side bold raise would have landed. */
+function settleOwnerAnswer(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe('StructuredAgentSessionAttentionBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -247,11 +259,8 @@ describe('StructuredAgentSessionAttentionBridge', () => {
 
     act(() => hostStream()(completionFrame()))
 
-    expect(indicators()).toEqual({
-      workspaceBold: true,
-      paneDot: 'agent-completion',
-      tabDot: 'agent-completion'
-    })
+    await settleOwnerAnswer()
+    expect(indicators()).toEqual(LIT_BY_WINDOW)
     expect(onlyDispatch()).toMatchObject({
       source: 'agent-task-complete',
       surface: 'agent-session',
@@ -268,11 +277,8 @@ describe('StructuredAgentSessionAttentionBridge', () => {
 
     act(() => hostStream()(promptFrame()))
 
-    expect(indicators()).toEqual({
-      workspaceBold: true,
-      paneDot: 'agent-completion',
-      tabDot: 'agent-completion'
-    })
+    await settleOwnerAnswer()
+    expect(indicators()).toEqual(LIT_BY_WINDOW)
     const request = onlyDispatch()
     expect(request).toMatchObject({
       source: 'agent-task-complete',
@@ -315,11 +321,8 @@ describe('StructuredAgentSessionAttentionBridge', () => {
 
       act(() => hostStream()(completionFrame(SESSION, outcome)))
 
-      expect(indicators()).toEqual({
-        workspaceBold: true,
-        paneDot: 'agent-completion',
-        tabDot: 'agent-completion'
-      })
+      await settleOwnerAnswer()
+      expect(indicators()).toEqual(LIT_BY_WINDOW)
       expect(onlyDispatch()).toMatchObject({ agentState: 'done', agentTurnOutcome: outcome })
     }
   )

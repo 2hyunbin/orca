@@ -9,7 +9,7 @@ import {
 import { makeFolderWorkspace } from '@/store/slices/worktrees-slice-test-fixtures'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../shared/project-group-types'
-import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { folderWorkspaceKey, parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { createUnreadBadgeCountSelector } from './unread-badge-count-selector'
 
 // Why: marking a folder workspace unread persists through this API; echo the write back.
@@ -70,9 +70,32 @@ function addTerminalTab(store: TestStore, worktreeId: string): string {
   return unifiedTab.entityId
 }
 
-// A bell: the workspace flag plus the tab marker.
+/** The owning host raises the workspace flag; it reaches this window as a row update. */
+function hostRaisesFlag(store: TestStore, workspaceId: string): void {
+  const state = store.getState()
+  const scope = parseWorkspaceKey(workspaceId)
+  if (scope?.type === 'folder') {
+    store.setState({
+      folderWorkspaces: state.folderWorkspaces.map((workspace) =>
+        workspace.id === scope.folderWorkspaceId ? { ...workspace, isUnread: true } : workspace
+      )
+    })
+    return
+  }
+  store.setState({
+    worktreesByRepo: Object.fromEntries(
+      Object.entries(state.worktreesByRepo).map(([repoId, rows]) => [
+        repoId,
+        rows.map((row) => (row.id === workspaceId ? { ...row, isUnread: true } : row))
+      ])
+    )
+  })
+}
+
+// A bell: this window's tab marker plus the host's workspace flag.
 function raiseAttention(store: TestStore, worktreeId: string, tabId: string): void {
   store.getState().markTerminalBell({ worktreeId, tabId, paneKey: `${tabId}:0` })
+  hostRaisesFlag(store, worktreeId)
 }
 
 function sidebarUnreadCount(store: TestStore): number {
@@ -165,12 +188,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
   it('drops a flagged worktree when it is archived in place', () => {
     const store = createStoreOnOtherWorktree()
     const selectCount = createUnreadBadgeCountSelector()
-    store.getState().markAgentAttentionUnread({
-      workspaceId: BELL_WORKTREE,
-      subjectKey: null,
-      groupId: null,
-      reason: 'agent-completion'
-    })
+    hostRaisesFlag(store, BELL_WORKTREE)
     expect(selectCount(store.getState())).toBe(1)
 
     store.setState({
@@ -253,12 +271,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
         folderWorkspaceKey(store.getState().folderWorkspaces[0].id)
       )
       raiseAttention(store, folderWorkspaceKey(store.getState().folderWorkspaces[0].id), tabId)
-      store.getState().markAgentAttentionUnread({
-        workspaceId: BELL_WORKTREE,
-        subjectKey: null,
-        groupId: null,
-        reason: 'agent-completion'
-      })
+      hostRaisesFlag(store, BELL_WORKTREE)
       store.getState().setVisibleWorkspaceHostIds(['local'])
       expect(selectCount(store.getState())).toBe(2)
 
@@ -281,12 +294,7 @@ describe('Dock unread count against the sidebar (#23363)', () => {
           ]
         }
       })
-      store.getState().markAgentAttentionUnread({
-        workspaceId: BELL_WORKTREE,
-        subjectKey: null,
-        groupId: null,
-        reason: 'agent-completion'
-      })
+      hostRaisesFlag(store, BELL_WORKTREE)
       expect(selectCount(store.getState())).toBe(1)
 
       store.getState().setVisibleWorkspaceHostIds(['local'])
