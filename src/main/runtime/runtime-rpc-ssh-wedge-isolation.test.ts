@@ -54,31 +54,34 @@ async function startServer(): Promise<{ endpoint: string; token: string }> {
   servers.push(server)
   await server.start()
   const metadata = readRuntimeMetadata(userDataPath)!
-  return { endpoint: metadata.transports[0]!.endpoint, token: metadata.authToken }
+  return { endpoint: metadata.transports[0]!.endpoint, token: metadata.authToken ?? '' }
 }
 
 /** Writes every frame on one connection and collects responses by id. */
 function openPipelinedSocket(endpoint: string): {
   write: (frame: Record<string, unknown>) => void
-  responses: Map<string, Record<string, unknown>>
-  next: (id: string) => Promise<Record<string, unknown>>
+  responses: Map<string, object>
+  next: (id: string) => Promise<object>
 } {
   const socket = createConnection(endpoint)
   sockets.push(socket)
-  const responses = new Map<string, Record<string, unknown>>()
-  const waiters = new Map<string, (frame: Record<string, unknown>) => void>()
+  const responses = new Map<string, object>()
+  const waiters = new Map<string, (frame: object) => void>()
   let buffer = ''
   socket.setEncoding('utf8')
   socket.on('data', (chunk: string) => {
     buffer += chunk
     let newline = buffer.indexOf('\n')
     while (newline !== -1) {
-      const frame = JSON.parse(buffer.slice(0, newline)) as Record<string, unknown>
+      const frame: unknown = JSON.parse(buffer.slice(0, newline))
       buffer = buffer.slice(newline + 1)
+      newline = buffer.indexOf('\n')
+      if (typeof frame !== 'object' || frame === null || !('id' in frame)) {
+        continue
+      }
       const id = String(frame.id)
       responses.set(id, frame)
       waiters.get(id)?.(frame)
-      newline = buffer.indexOf('\n')
     }
   })
   return {
