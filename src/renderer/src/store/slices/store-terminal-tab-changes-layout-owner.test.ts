@@ -20,7 +20,13 @@ const mocks = vi.hoisted(() => ({
     async (
       _target: unknown,
       _method: string,
-      _params: { command: { viewMode?: string; title?: unknown; renames?: { title: unknown }[] } }
+      _params: {
+        command: {
+          viewMode?: string
+          title?: unknown
+          renames?: { tabId: string; title: string | null }[]
+        }
+      }
     ): Promise<Reply> => ({ ok: true, result: {} })
   )
 }))
@@ -76,8 +82,7 @@ const row = (store: ReturnType<typeof createTestStore>) =>
 function mainFrameDrawsTitles(store: ReturnType<typeof createTestStore>): void {
   const titles = new Map<string, string | null>()
   for (const params of sent()) {
-    const renames: { tabId: string; title: string | null }[] = params.command.renames ?? []
-    for (const { tabId, title } of renames) {
+    for (const { tabId, title } of params.command.renames ?? []) {
       titles.set(tabId, title)
     }
   }
