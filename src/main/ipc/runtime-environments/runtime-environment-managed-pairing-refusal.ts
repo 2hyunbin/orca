@@ -3,7 +3,10 @@ import { errorMessage } from '../../../shared/error-message'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import { getOrcadSshDeployment } from '../../../shared/runtime-environments'
 import { OrcadManagedPairingRepairFailedError } from '../../managed-server/lifecycle/orcad-managed-pairing-repair-failure'
-import { recoverRefusedManagedOrcadPairing } from '../../managed-server/lifecycle/orcad-managed-tunnel'
+import {
+  managedOrcadPairingFailureStands,
+  recoverRefusedManagedOrcadPairing
+} from '../../managed-server/lifecycle/orcad-managed-tunnel'
 import { getRuntimeEnvironmentStatusOwner } from './runtime-environment-request-connections'
 
 /** Null for anything but a server managed over SSH; other servers are paired by their user. */
@@ -26,7 +29,8 @@ export function recoverRefusedManagedPairing(
 export function handleManagedSharedControlRefusal(
   userDataPath: string,
   environmentId: string,
-  recover: typeof recoverRefusedManagedOrcadPairing = recoverRefusedManagedOrcadPairing
+  recover: typeof recoverRefusedManagedOrcadPairing = recoverRefusedManagedOrcadPairing,
+  failureStands: typeof managedOrcadPairingFailureStands = managedOrcadPairingFailureStands
 ): Promise<'retry' | 'stop'> | null {
   const recovery = recoverRefusedManagedPairing(userDataPath, environmentId, recover)
   if (!recovery) {
@@ -36,7 +40,11 @@ export function handleManagedSharedControlRefusal(
     // A re-pair retired this socket for one on the new pairing; otherwise retry with backoff.
     (outcome) => (outcome === 'repaired' ? 'stop' : 'retry'),
     (error: unknown) => {
-      if (error instanceof OrcadManagedPairingRepairFailedError) {
+      // Why fenced: a newer pairing stored meanwhile has a successor owner this failure never judged.
+      if (
+        error instanceof OrcadManagedPairingRepairFailedError &&
+        failureStands(userDataPath, environmentId)
+      ) {
         // Why stop: the verdict stands until the user connects again.
         try {
           getRuntimeEnvironmentStatusOwner(userDataPath, environmentId).authenticationRejected(

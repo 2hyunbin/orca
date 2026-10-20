@@ -9,7 +9,8 @@ vi.mock('../../../shared/runtime-environment-store', () => ({
   resolveEnvironment: mocks.resolveEnvironment
 }))
 vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  recoverRefusedManagedOrcadPairing: vi.fn()
+  recoverRefusedManagedOrcadPairing: vi.fn(),
+  managedOrcadPairingFailureStands: vi.fn()
 }))
 vi.mock('./runtime-environment-request-connections', () => ({
   getRuntimeEnvironmentStatusOwner: () => ({
@@ -63,10 +64,24 @@ describe('handleManagedSharedControlRefusal', () => {
       'the server refused the new pairing too'
     )
     const recover = vi.fn().mockRejectedValue(failure)
-    await expect(handleManagedSharedControlRefusal('/profile', 'env-1', recover)).resolves.toBe(
-      'stop'
-    )
+    await expect(
+      handleManagedSharedControlRefusal('/profile', 'env-1', recover, () => true)
+    ).resolves.toBe('stop')
     expect(mocks.authenticationRejected).toHaveBeenCalledWith(failure.message)
+  })
+
+  it('leaves a newer pairing stored meanwhile to its own owner', async () => {
+    mocks.resolveEnvironment.mockReturnValue(SSH_MANAGED)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const recover = vi
+      .fn()
+      .mockRejectedValue(new OrcadManagedPairingRepairFailedError('the server refused it'))
+    // The failure stands for the old pairing only; an update stored a newer one meanwhile.
+    await expect(
+      handleManagedSharedControlRefusal('/profile', 'env-1', recover, () => false)
+    ).resolves.toBe('retry')
+    warn.mockRestore()
+    expect(mocks.authenticationRejected).not.toHaveBeenCalled()
   })
 
   it('settles quietly when the server was removed while it re-paired', async () => {
@@ -77,9 +92,9 @@ describe('handleManagedSharedControlRefusal', () => {
     const recover = vi
       .fn()
       .mockRejectedValue(new OrcadManagedPairingRepairFailedError('the server refused it'))
-    await expect(handleManagedSharedControlRefusal('/profile', 'env-1', recover)).resolves.toBe(
-      'stop'
-    )
+    await expect(
+      handleManagedSharedControlRefusal('/profile', 'env-1', recover, () => true)
+    ).resolves.toBe('stop')
   })
 
   it('keeps retrying after lost contact, which is no verdict on the pairing', async () => {

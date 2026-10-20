@@ -16,7 +16,8 @@ import {
 } from './orcad-managed-tunnel-target'
 import {
   liveManagedOrcadPairingRepairDeps,
-  ManagedOrcadPairingRepairs
+  ManagedOrcadPairingRepairs,
+  pairingRevisionOf
 } from './orcad-managed-pairing-repair'
 import {
   buildWithPairingRepair,
@@ -53,14 +54,16 @@ function pairingRecovery(userDataPath: string): ManagedOrcadPairingRecovery {
   }
 }
 
+/** Returns the environment as stored once the tunnel stands: a re-pair replaces its credentials. */
 export async function ensureOrcadManagedTunnel(
   userDataPath: string,
   selector: string
-): Promise<void> {
+): Promise<KnownRuntimeEnvironment> {
   const { id } = resolveEnvironment(userDataPath, selector)
   await buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
     managedTunnels.ensure(environment, () => resolveEnvironmentOrNull(userDataPath, id))
   )
+  return resolveEnvironment(userDataPath, id)
 }
 
 /** After a redeploy: the reused forward may target the port the previous server bound. */
@@ -83,6 +86,20 @@ export function recoverRefusedManagedOrcadPairing(
   environmentId: string
 ): Promise<'built' | 'repaired'> {
   return rebuildOrcadManagedTunnel(userDataPath, environmentId)
+}
+
+/** Whether a failed re-pair stands for the pairing stored now; one for an older pairing judges nothing current. */
+export function managedOrcadPairingFailureStands(
+  userDataPath: string,
+  environmentId: string
+): boolean {
+  const environment = resolveEnvironmentOrNull(userDataPath, environmentId)
+  return (
+    environment !== null &&
+    (pairingRepairs
+      .get(userDataPath)
+      ?.standingFailure(environmentId, pairingRevisionOf(environment)) ?? null) !== null
+  )
 }
 
 /** An explicit connect is the user asking again, so recent failed re-pairs must not answer it. */
