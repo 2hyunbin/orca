@@ -8,6 +8,7 @@ import {
   openTopologyStore
 } from '../../../persistence/terminal-topology/terminal-topology-profile-fixture'
 import { OrcaRuntimeService } from '../../orca-runtime'
+import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('../../../telemetry/client', () => ({ track: vi.fn() }))
@@ -23,8 +24,9 @@ const WINDOW_LEAF = '44444444-4444-4444-8444-444444444444'
 const directories: string[] = []
 
 class CensusRuntime extends OrcaRuntimeService {
-  override async getResolvedWorktreeMap() {
-    return new Map([[WT, this.buildResolvedWorktreeFromId(WT)]])
+  protected override async getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>> {
+    const worktree = this.buildResolvedWorktreeFromId(WT)
+    return new Map(worktree ? [[WT, worktree]] : [])
   }
 }
 
@@ -70,9 +72,9 @@ it("gives an activating workspace no fresh shell beside a live terminal main's p
   const session = store.getWorkspaceSession()
   const tabs = session.tabsByWorktree[WT] ?? []
   expect(tabs).toHaveLength(1)
-  expect(Object.values(session.terminalLayoutsByTabId[tabs[0]!.id]?.ptyIdsByLeafId ?? {})).toEqual(
-    [LIVE_PTY]
-  )
+  expect(Object.values(session.terminalLayoutsByTabId[tabs[0]!.id]?.ptyIdsByLeafId ?? {})).toEqual([
+    LIVE_PTY
+  ])
   expect(reply.ok && reply.result.tabId).toBeFalsy()
   expect(spawn).not.toHaveBeenCalled()
 })
