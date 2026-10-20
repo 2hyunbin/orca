@@ -1,0 +1,63 @@
+name: PR 28977 format measurement
+on:
+  push:
+    branches: [brennanb2025/pr28977-ci-format-probe]
+permissions:
+  contents: read
+concurrency:
+  group: pr28977-format-measurement
+  cancel-in-progress: false
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+jobs:
+  measure:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+      - name: Fetch fixed measurement bases
+        run: git fetch --no-tags --depth=1 origin e1e6ebc50e09aac6795956b2d9004c023db18746 d384fa69a10b019603ca55ac4b66ed8e91f4aa42 86ef00ad55cb229763cfefdd7b46884e01a71888
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: none
+          node-version: '24'
+      - name: Format explicit source files and measure fixed bases
+        run: |
+          python3 - <<'PYMEASURE'
+          import hashlib, json, pathlib, re, subprocess
+          out = pathlib.Path('.build/pr28977-format-measurement')
+          out.mkdir(parents=True, exist_ok=True)
+          files = ['src/cli/handlers/wsl-registration-timeouts.test.ts', 'src/cli/index-project-setup.test.ts', 'src/main/ipc/repos/local-repo-registration.ts', 'src/main/ipc/wsl-host-handlers.ts', 'src/main/repository-checkout-admission.ts', 'src/main/runtime/runtime-repository-registration-controller.test.ts', 'src/main/wsl/wsl-host-service-contract.ts', 'src/main/wsl/wsl-host-service.test.ts', 'src/main/wsl/wsl-nested-project-import.ts', 'src/main/wsl/wsl-project-host-setup.ts', 'src/main/wsl/wsl-project-registration.test.ts', 'src/main/wsl/wsl-project-registration.ts', 'src/renderer/src/components/sidebar/AddRepoDialog.tsx', 'src/renderer/src/components/sidebar/add-repo-runtime-owner.ts', 'src/renderer/src/components/sidebar/sidebar-project-drop.ts', 'src/renderer/src/components/sidebar/use-add-repo-host-selection.test.ts', 'src/renderer/src/components/sidebar/use-add-repo-host-selection.ts', 'src/renderer/src/components/sidebar/useCreateRepo.ts', 'src/renderer/src/components/sidebar/useSidebarProjectDrop.os-file-drop.test.tsx', 'src/renderer/src/components/sidebar/useSidebarProjectDrop.ts', 'src/renderer/src/hooks/composer-state/composer-target-store.ts', 'src/renderer/src/hooks/composer-state/first-pairing-setup-completion.test.tsx', 'src/renderer/src/lib/agent-launch-route-input.test.ts', 'src/renderer/src/lib/agent-launch-route-registered-agents.test.ts', 'src/renderer/src/lib/agent-launch-routing.test.ts', 'src/renderer/src/lib/launch-agent-in-new-tab-web-runtime.test.ts', 'src/renderer/src/store/projects/project-host-setup-actions.ts', 'src/renderer/src/store/repos/repo-add-actions.ts', 'src/renderer/src/store/repos/repo-owner-host-readiness.ts']
+          subprocess.run(['pnpm', 'exec', 'oxfmt', '--write', *files], check=True)
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          bases = {'frozen': 'e1e6ebc50e09aac6795956b2d9004c023db18746', 'correction': 'd384fa69a10b019603ca55ac4b66ed8e91f4aa42', 'whole': '86ef00ad55cb229763cfefdd7b46884e01a71888'}
+          report = {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'formatFiles': files, 'bases': {}}
+          for label, base in bases.items():
+              raw = subprocess.check_output(['git', 'diff', '--numstat', base, '--', 'src'], text=True)
+              (out / (label + '.numstat')).write_text(raw)
+              counts = {'production': 0, 'tests': 0}
+              rows = []
+              for line in raw.splitlines():
+                  added, deleted, path = line.split('\t', 2)
+                  assert added.isdigit() and deleted.isdigit(), line
+                  is_test = bool(re.search(r'(?:\.test\.|\.spec\.|(?:^|/)(?:tests?|__tests__)/|test-harness|test-support|test-fixture)', path))
+                  group = 'tests' if is_test else 'production'
+                  count = int(added) + int(deleted)
+                  counts[group] += count
+                  rows.append({'path': path, 'added': int(added), 'deleted': int(deleted), 'classification': group})
+              report['bases'][label] = {'base': base, 'totals': counts, 'files': rows}
+          patch = subprocess.check_output(['git', 'diff', '--binary', bases['frozen'], '--', 'src'])
+          (out / 'source.patch').write_bytes(patch)
+          report['patchSha256'] = hashlib.sha256(patch).hexdigest()
+          report['hashes'] = {row['path']: hashlib.sha256(pathlib.Path(row['path']).read_bytes()).hexdigest() for row in report['bases']['frozen']['files'] if pathlib.Path(row['path']).exists()}
+          (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps({key: value['totals'] for key, value in report['bases'].items()}, indent=2))
+          PYMEASURE
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pr28977-format-measurement
+          path: .build/pr28977-format-measurement/
+          retention-days: 7
