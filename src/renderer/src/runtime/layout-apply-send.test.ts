@@ -26,7 +26,8 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
 }))
 vi.mock('@/runtime/layout-frame-position', () => ({
   afterLayoutFrame: (_seq: number | undefined, run: () => void) =>
-    mocks.frame.arrives ? run() : mocks.frame.waiting.push(run)
+    mocks.frame.arrives ? run() : mocks.frame.waiting.push(run),
+  layoutFramePositionKey: () => 'local'
 }))
 vi.mock('@/runtime/layout-owner-pane-intents', () => ({
   holdTabPaneTree: () => mocks.paneRelease

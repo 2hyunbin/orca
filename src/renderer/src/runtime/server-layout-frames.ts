@@ -14,6 +14,7 @@ import {
 } from './runtime-host-connection-state'
 import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
+import { provideServerLayoutApplyRoutes } from './server-layout-apply-routes'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
   isFrameDrawnServerWorkspace,
@@ -127,10 +128,22 @@ function openServerFrames(
       sync.receive(frame)
     }
   })
+  // Layout intents for a workspace these frames draw go to this server's main (H5c).
+  const stopRoutes = provideServerLayoutApplyRoutes(environmentId, (worktreeId) =>
+    live && gated.has(worktreeId)
+      ? {
+          environmentId,
+          serverTabId: (desktopTabId) => translator.serverTabId(worktreeId, desktopTabId),
+          desktopTabId: (serverTabId) => translator.desktopTabId(worktreeId, serverTabId),
+          redraw: () => sync.redraw([worktreeId])
+        }
+      : null
+  )
   sync.start()
   return {
     gated: () => gated,
     close: (returnWorkspaces) => {
+      stopRoutes()
       stopRouting()
       stopHandles()
       sync.close()
