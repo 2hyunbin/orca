@@ -15,16 +15,7 @@ vi.mock('@/lib/connection-context', () => ({
 const FILE_ID = '/repo/README.md'
 
 function resetEditorState(): void {
-  useAppStore.setState({
-    openFiles: [],
-    editorDrafts: {},
-    worktreesByRepo: {
-      repo: [{ id: 'wt-1', repoId: 'repo', path: '/repo', branch: 'main', hostId: 'local' }]
-    },
-    repos: [
-      { id: 'repo', path: '/repo', displayName: 'repo', kind: 'git', executionHostId: 'local' }
-    ]
-  } as never)
+  useAppStore.setState({ openFiles: [], editorDrafts: {} })
   const tab: Tab = {
     id: 'tab-md',
     entityId: FILE_ID,
