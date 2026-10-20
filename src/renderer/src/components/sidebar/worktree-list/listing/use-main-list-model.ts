@@ -55,6 +55,8 @@ const NO_FEED: SidebarFeedDomains = {
   desktop: null,
   retention: null
 }
+const NO_REPOS: SidebarListModelArgs['repos'] = []
+const NO_PROJECT_GROUPS: SidebarListModelArgs['projectGroups'] = []
 // The window renders its own collapse, so planning never re-runs on a toggle.
 const PLANNED_UNCOLLAPSED: ReadonlySet<string> = new Set()
 
@@ -103,9 +105,17 @@ function windowFolderRecordOf(
  * the window's own records for the rows main lists.
  */
 export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarListModel {
-  const { filterState, sortBy, groupBy, repos, defaultHostId, settings } = args
+  const { filterState, sortBy, groupBy, defaultHostId, settings } = args
   useSidebarListSession()
-  const feed = useDesktopSidebarFeed()
+  // Main's rows can land before this window has its saved view and project catalog, and the catalog
+  // before main's rows; either half alone draws rows under default grouping and unnamed headers, or
+  // headers with no rows, then regroups. Nothing draws until both are in.
+  const catalogHydrated = useAppStore((s) => s.startupLocalCatalogHydrated)
+  const installedFeed = useDesktopSidebarFeed()
+  const ready = catalogHydrated && installedFeed !== null
+  const feed = ready ? installedFeed : null
+  const repos = ready ? args.repos : NO_REPOS
+  const projectGroups = ready ? args.projectGroups : NO_PROJECT_GROUPS
   const pending = useSyncExternalStore(subscribeSidebarPendingLayer, readSidebarPendingLayer)
   const pendingCreationKeys = useAppStore(
     useShallow((s) => selectPendingWorktreeCreationKeys(s.pendingWorktreeCreations))
@@ -114,18 +124,20 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
   const setWorkspaceHostOrder = useAppStore((s) => s.setWorkspaceHostOrder)
   const domains = useMemo(
     () =>
-      withWindowCreations(
-        overlaySidebarPendingLayer(feed?.domains ?? NO_FEED, pending, {
-          repos,
-          lineageById: args.worktreeLineageById
-        }),
-        pendingCreationKeys
-      ),
+      feed
+        ? withWindowCreations(
+            overlaySidebarPendingLayer(feed.domains, pending, {
+              repos,
+              lineageById: args.worktreeLineageById
+            }),
+            pendingCreationKeys
+          )
+        : NO_FEED,
     [feed, pending, pendingCreationKeys, repos, args.worktreeLineageById]
   )
   const catalog = useMemo(
-    () => ({ repos, projectGroups: args.projectGroups, projectGrouping: args.projectGrouping }),
-    [repos, args.projectGroups, args.projectGrouping]
+    () => ({ repos, projectGroups, projectGrouping: args.projectGrouping }),
+    [repos, projectGroups, args.projectGrouping]
   )
   const view: SidebarFeedView = useMemo(
     () => ({
