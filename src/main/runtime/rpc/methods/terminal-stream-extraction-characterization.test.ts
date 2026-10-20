@@ -120,6 +120,7 @@ describe('terminal stream extraction characterization', () => {
       pendingOutputOverflowed: true,
       outputBatcher: { push: vi.fn(), flush: vi.fn() }
     } as unknown as TerminalMultiplexStream
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies the runtime reads made by initial snapshot publication.
     const runtime = {
       getPtyExecutionHostMetadata: () => ({}),
       getTerminalLaunchResult: () => undefined,
