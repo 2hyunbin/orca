@@ -29,6 +29,10 @@ export type WslHostServiceDependencies = {
   /** A connection came up: verify the server now rather than on the status owner's backoff. */
   ready: (environmentId: string) => void
   removed: (environmentId: string) => Promise<void> | void
-  call?: (environmentId: string, method: string, params: unknown, timeoutMs: number) => Promise<unknown>
+  call?: (
+    environmentId: string,
+    method: string,
+    params: unknown,
+    timeoutMs: number
+  ) => Promise<unknown>
 }
-

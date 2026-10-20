@@ -167,7 +167,11 @@ describe('new agent launch routing', () => {
     expect(route({ ...server, clientCapabilities: [] })).toBe('terminal-tui')
     expect(route({ ...server, clientCapabilities: undefined })).toBe('terminal-tui')
     // An unanswered server gets the existing admission handshake; only its answer can decline.
-    const unanswered = { ...server, hostCapabilities: null, admissionHostId: server.executionHostId }
+    const unanswered = {
+      ...server,
+      hostCapabilities: null,
+      admissionHostId: server.executionHostId
+    }
     for (const agent of ['claude', 'codex', 'grok'] as const) {
       expect(route({ ...unanswered, agent })).toBe('structured-native-chat')
     }

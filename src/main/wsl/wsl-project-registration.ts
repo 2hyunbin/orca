@@ -75,12 +75,18 @@ export async function registerProjectOnWslHost(
   }
   const admission =
     operation.kind === 'add'
-      ? options.admission ??
-        await admitRepositoryCheckout(
-          store, operation.path, operation.repoKind ?? 'git', LOCAL_EXECUTION_HOST_ID
-        )
+      ? (options.admission ??
+        (await admitRepositoryCheckout(
+          store,
+          operation.path,
+          operation.repoKind ?? 'git',
+          LOCAL_EXECUTION_HOST_ID
+        )))
       : await admitRepositoryCheckout(
-          store, join(operation.path, operation.name), 'folder', LOCAL_EXECUTION_HOST_ID
+          store,
+          join(operation.path, operation.name),
+          'folder',
+          LOCAL_EXECUTION_HOST_ID
         )
   const saved = admission.findSaved()
   if (saved) {
@@ -104,13 +110,15 @@ export async function registerProjectOnWslHost(
 
 const OwnerRepos = z.object({ repos: z.array(ProjectReply.shape.repo) })
 const OwnerSetups = z.object({
-  setups: z.array(z.object({
-    projectId: z.string(),
-    repoId: z.string(),
-    path: z.string(),
-    hostId: z.string(),
-    setupMethod: z.enum(['legacy-repo', 'imported-existing-folder', 'cloned', 'provisioned'])
-  }))
+  setups: z.array(
+    z.object({
+      projectId: z.string(),
+      repoId: z.string(),
+      path: z.string(),
+      hostId: z.string(),
+      setupMethod: z.enum(['legacy-repo', 'imported-existing-folder', 'cloned', 'provisioned'])
+    })
+  )
 })
 const OwnerProjects = z.object({ projects: z.array(z.object({ id: z.string() })) })
 
@@ -139,8 +147,11 @@ export async function registerOnWslOwner(
     const { setups } = OwnerSetups.parse(
       await callWslProjectHost(environmentId, 'projectHostSetup.list', undefined)
     )
-    const setup = setups.find((row) =>
-      row.repoId === repo.id && row.path === repo.path && row.hostId === getRepoExecutionHostId(repo)
+    const setup = setups.find(
+      (row) =>
+        row.repoId === repo.id &&
+        row.path === repo.path &&
+        row.hostId === getRepoExecutionHostId(repo)
     )
     const { projects } = OwnerProjects.parse(
       await callWslProjectHost(environmentId, 'project.list', undefined)
@@ -150,13 +161,17 @@ export async function registerOnWslOwner(
     }
     // A concurrent explicit registration owns its provenance, even if our earlier snapshot missed it.
     if (setup.setupMethod === 'legacy-repo' && repo.projectHostSetupMethod == null) {
-      const result = await callWslProjectHost(environmentId, 'projectHostSetup.setupExistingFolder', {
-        projectId: setup.projectId,
-        hostId: LOCAL_EXECUTION_HOST_ID,
-        path: repo.path,
-        kind: 'git',
-        setupMethod: 'imported-existing-folder'
-      })
+      const result = await callWslProjectHost(
+        environmentId,
+        'projectHostSetup.setupExistingFolder',
+        {
+          projectId: setup.projectId,
+          hostId: LOCAL_EXECUTION_HOST_ID,
+          path: repo.path,
+          kind: 'git',
+          setupMethod: 'imported-existing-folder'
+        }
+      )
       repo = z.object({ result: ProjectReply }).parse(result).result.repo
     }
   }

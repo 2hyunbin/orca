@@ -9,7 +9,10 @@ import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-t
 import { defaultCreationHost } from '@/lib/default-creation-host'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { translate } from '@/i18n/i18n'
-import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  getWorktreeExecutionHostId
+} from '../../../../shared/execution-host'
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { fetchRuntimeAddProjectPathStatus, getRuntimeEnvironmentDisplayName } from './owner-routing'
@@ -17,7 +20,10 @@ import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
 import { warnIfProjectKnownInAnotherProfile } from '../projects/project-profile-presence'
 import { warnIfProjectCrossesWslFilesystemBoundary } from '../projects/project-wsl-filesystem-boundary-advisory'
-import { awaitRepoOwnerHostKnown, refreshWslRegistrationAfterFailure } from './repo-owner-host-readiness'
+import {
+  awaitRepoOwnerHostKnown,
+  refreshWslRegistrationAfterFailure
+} from './repo-owner-host-readiness'
 
 export function createRepoAddActions(
   set: Parameters<StateCreator<AppState>>[0],

@@ -11,17 +11,23 @@ const mocks = vi.hoisted(() => ({
   serviceAvailable: true
 }))
 vi.mock('./wsl-host-service-instance', () => ({
-  getWslHostService: () => mocks.serviceAvailable
-    ? { isEnabled: () => mocks.enabled, ensure: mocks.ensure, callProject: mocks.call }
-    : null
+  getWslHostService: () =>
+    mocks.serviceAvailable
+      ? { isEnabled: () => mocks.enabled, ensure: mocks.ensure, callProject: mocks.call }
+      : null
 }))
 vi.mock('../git/runner', () => ({ awaitWindowsHostGitEnvironmentReady: vi.fn(async () => {}) }))
 vi.mock('../git/repo', () => ({
-  inspectGitRepoForRegistrationAsync: vi.fn(async (path: string) => ({ isRepo: true, rootPath: mocks.target(path) })),
+  inspectGitRepoForRegistrationAsync: vi.fn(async (path: string) => ({
+    isRepo: true,
+    rootPath: mocks.target(path)
+  })),
   getGitRepoRootAsync: vi.fn(async (path: string) => path)
 }))
 vi.mock('../project-groups/nested-repo-import-target', () => ({
-  createNestedRepoImportTargetResolver: () => ({ resolveLocal: async (path: string) => mocks.target(path) })
+  createNestedRepoImportTargetResolver: () => ({
+    resolveLocal: async (path: string) => mocks.target(path)
+  })
 }))
 import { setupProjectOnWslHost } from './wsl-project-host-setup'
 import { registerProjectOnWslHost } from './wsl-project-registration'
@@ -38,9 +44,18 @@ const guest: Repo = {
 }
 const saved: Repo = { ...guest, id: 'saved-repo', path: '\\\\wsl$\\Ubuntu\\home\\me\\old' }
 function scan(projectPaths: string[]): NestedRepoScanResult {
-  return { selectedPath: '\\\\wsl$\\Ubuntu\\home\\me', selectedPathKind: 'non_git_folder',
+  return {
+    selectedPath: '\\\\wsl$\\Ubuntu\\home\\me',
+    selectedPathKind: 'non_git_folder',
     repos: projectPaths.map((path) => ({ path, displayName: 'repo', depth: 1 })),
-    truncated: false, timedOut: false, stopped: false, durationMs: 1, maxDepth: 5, maxRepos: 100, timeoutMs: 15000 }
+    truncated: false,
+    timedOut: false,
+    stopped: false,
+    durationMs: 1,
+    maxDepth: 5,
+    maxRepos: 100,
+    timeoutMs: 15000
+  }
 }
 const originalPlatform = process.platform
 
@@ -59,9 +74,15 @@ describe('new WSL project ownership', () => {
         return { repos: [...mocks.ownerRepos] }
       }
       if (method === 'projectHostSetup.list') {
-        return { setups: mocks.ownerRepos.map((repo) => ({
-          projectId: 'owner-project', repoId: repo.id, path: repo.path, hostId: 'local', setupMethod: mocks.setupMethod
-        })) }
+        return {
+          setups: mocks.ownerRepos.map((repo) => ({
+            projectId: 'owner-project',
+            repoId: repo.id,
+            path: repo.path,
+            hostId: 'local',
+            setupMethod: mocks.setupMethod
+          }))
+        }
       }
       if (method === 'project.list') {
         return { projects: [{ id: 'owner-project' }] }
@@ -102,8 +123,11 @@ describe('new WSL project ownership', () => {
       executionHostId: 'runtime:wsl%3Aubuntu'
     })
     expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'projectHostSetup.setupExistingFolder', {
-      projectId: 'owner-project', hostId: 'local', path: guest.path,
-      kind: 'git', setupMethod: 'imported-existing-folder'
+      projectId: 'owner-project',
+      hostId: 'local',
+      path: guest.path,
+      kind: 'git',
+      setupMethod: 'imported-existing-folder'
     })
     await registerProjectOnWslHost(store, {
       kind: 'add',
@@ -116,9 +140,21 @@ describe('new WSL project ownership', () => {
       name: 'repo',
       repoKind: 'git'
     })
-    expect(mocks.call.mock.calls.filter(([, method]) => method === 'repo.add' || method === 'repo.create')).toEqual([
-      ['wsl:ubuntu', 'repo.add', { path: '/home/me/repo', kind: undefined, displayName: undefined }],
-      ['wsl:ubuntu', 'repo.add', { path: '/home/me/notes', kind: 'folder', displayName: undefined }],
+    expect(
+      mocks.call.mock.calls.filter(
+        ([, method]) => method === 'repo.add' || method === 'repo.create'
+      )
+    ).toEqual([
+      [
+        'wsl:ubuntu',
+        'repo.add',
+        { path: '/home/me/repo', kind: undefined, displayName: undefined }
+      ],
+      [
+        'wsl:ubuntu',
+        'repo.add',
+        { path: '/home/me/notes', kind: 'folder', displayName: undefined }
+      ],
       ['wsl:ubuntu', 'repo.create', { parentPath: '/home/me', name: 'repo', kind: 'git' }]
     ])
   })
@@ -126,7 +162,10 @@ describe('new WSL project ownership', () => {
   it('keeps saved Windows rows across UNC aliases and leaves other owners and drive paths alone', async () => {
     const store = { getRepos: () => [saved] }
     await expect(
-      registerProjectOnWslHost(store, { kind: 'add', path: '\\\\wsl.localhost\\ubuntu\\home\\me\\old\\' })
+      registerProjectOnWslHost(store, {
+        kind: 'add',
+        path: '\\\\wsl.localhost\\ubuntu\\home\\me\\old\\'
+      })
     ).resolves.toBe(saved)
     await expect(
       registerProjectOnWslHost(store, { kind: 'add', path: 'C:\\work\\repo' })
@@ -149,7 +188,11 @@ describe('new WSL project ownership', () => {
       registerProjectOnWslHost(store, { kind: 'add', path: saved.path }, paired)
     ).resolves.toBe(saved)
     await expect(
-      registerProjectOnWslHost(store, { kind: 'add', path: '\\\\wsl$\\Ubuntu\\home\\me\\new' }, paired)
+      registerProjectOnWslHost(
+        store,
+        { kind: 'add', path: '\\\\wsl$\\Ubuntu\\home\\me\\new' },
+        paired
+      )
     ).rejects.toThrow('Windows desktop')
     expect(mocks.ensure).not.toHaveBeenCalled()
   })
@@ -165,7 +208,9 @@ describe('new WSL project ownership', () => {
     expect(mocks.ensure).not.toHaveBeenCalled()
     vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '1')
     mocks.ensure.mockRejectedValueOnce(new Error('server install failed'))
-    await expect(registerProjectOnWslHost(store, operation)).rejects.toThrow('server install failed')
+    await expect(registerProjectOnWslHost(store, operation)).rejects.toThrow(
+      'server install failed'
+    )
     expect(mocks.call).not.toHaveBeenCalled()
   })
 
@@ -197,7 +242,11 @@ describe('new WSL project ownership', () => {
       },
       { scan: scan(['\\\\wsl$\\Ubuntu\\home\\me\\new', saved.path]) }
     )
-    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'repo.add', expect.objectContaining({ path: '/home/me/new' }))
+    expect(mocks.call).toHaveBeenCalledWith(
+      'wsl:ubuntu',
+      'repo.add',
+      expect.objectContaining({ path: '/home/me/new' })
+    )
     expect(result).toMatchObject({
       importedCount: 1,
       alreadyKnownCount: 1,
@@ -212,55 +261,112 @@ describe('new WSL project ownership', () => {
     const store = { getRepos: () => [saved] }
     const parentPath = '\\\\wsl.localhost\\Ubuntu\\home\\me'
     const linked = `${parentPath}\\topic`
-    mocks.target = (path) => path === linked ? saved.path : path
-    await expect(importNestedProjectsOnWslHost(store, { parentPath, mode: 'group',
-      projectPaths: [linked] }, { scan: scan([linked]) })).resolves.toBeNull()
+    mocks.target = (path) => (path === linked ? saved.path : path)
     await expect(
-      importNestedProjectsOnWslHost(store, { parentPath, mode: 'group', projectPaths: [saved.path] }, { scan: scan([saved.path]) })
+      importNestedProjectsOnWslHost(
+        store,
+        { parentPath, mode: 'group', projectPaths: [linked] },
+        { scan: scan([linked]) }
+      )
     ).resolves.toBeNull()
     await expect(
-      importNestedProjectsOnWslHost(store, {
-        parentPath,
-        mode: 'group',
-        projectPaths: [saved.path, '\\\\wsl$\\Ubuntu\\home\\me\\new']
-      }, { scan: scan([saved.path, '\\\\wsl$\\Ubuntu\\home\\me\\new']) })
+      importNestedProjectsOnWslHost(
+        store,
+        { parentPath, mode: 'group', projectPaths: [saved.path] },
+        { scan: scan([saved.path]) }
+      )
+    ).resolves.toBeNull()
+    await expect(
+      importNestedProjectsOnWslHost(
+        store,
+        {
+          parentPath,
+          mode: 'group',
+          projectPaths: [saved.path, '\\\\wsl$\\Ubuntu\\home\\me\\new']
+        },
+        { scan: scan([saved.path, '\\\\wsl$\\Ubuntu\\home\\me\\new']) }
+      )
     ).rejects.toThrow('Import them separately')
     expect(mocks.ensure).not.toHaveBeenCalled()
     expect(mocks.call).not.toHaveBeenCalled()
   })
   it('keeps a canonical Windows claim before paired refusal and preserves concurrent cloned provenance', async () => {
     const child = `${saved.path}\\packages\\web`
-    mocks.target = (path) => path === child ? saved.path : path
-    await expect(registerProjectOnWslHost({ getRepos: () => [saved] }, { kind: 'add', path: child },
-      { fromPairedClient: true })).resolves.toBe(saved)
-    await expect(setupProjectOnWslHost({ getRepos: () => [saved] },
-      { projectId: 'owner-project', hostId: 'local', path: child }, { fromPairedClient: true })).resolves.toBeNull()
+    mocks.target = (path) => (path === child ? saved.path : path)
+    await expect(
+      registerProjectOnWslHost(
+        { getRepos: () => [saved] },
+        { kind: 'add', path: child },
+        { fromPairedClient: true }
+      )
+    ).resolves.toBe(saved)
+    await expect(
+      setupProjectOnWslHost(
+        { getRepos: () => [saved] },
+        { projectId: 'owner-project', hostId: 'local', path: child },
+        { fromPairedClient: true }
+      )
+    ).resolves.toBeNull()
     expect(mocks.ensure).not.toHaveBeenCalled()
     mocks.setupMethod = 'cloned'
     await registerProjectOnWslHost({ getRepos: () => [] }, { kind: 'add', path: child })
-    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'repo.add', expect.objectContaining({ path: '/home/me/old' }))
-    expect(mocks.call.mock.calls.some(([, method]) => method === 'projectHostSetup.setupExistingFolder')).toBe(false)
+    expect(mocks.call).toHaveBeenCalledWith(
+      'wsl:ubuntu',
+      'repo.add',
+      expect.objectContaining({ path: '/home/me/old' })
+    )
+    expect(
+      mocks.call.mock.calls.some(([, method]) => method === 'projectHostSetup.setupExistingFolder')
+    ).toBe(false)
   })
 
   it('validates every original selection and retains a row when grouping returns a different checkout', async () => {
     const linked = '\\\\wsl$\\Ubuntu\\home\\me\\topic'
     const outside = '\\\\wsl$\\Ubuntu\\elsewhere\\repo'
-    mocks.target = (path) => path === linked ? outside : path
+    mocks.target = (path) => (path === linked ? outside : path)
     const normal = mocks.call.getMockImplementation()
     if (!normal) {
       throw new Error('fixture requires an owner implementation')
     }
-    mocks.call.mockImplementation(async (env, method, params) => method === 'projectGroup.importNested'
-      ? { projects: [{ path: '/home/me/topic', projectId: 'changed-graph-row', status: 'imported' }], importedCount: 1, alreadyKnownCount: 0, failedCount: 0 }
-      : normal(env, method, params))
-    const result = await importNestedProjectsOnWslHost({ getRepos: () => [saved] }, {
-      parentPath: scan([]).selectedPath, projectPaths: [linked, saved.path], mode: 'group'
-    }, { scan: scan([linked]) })
-    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'repo.add', expect.objectContaining({ path: '/elsewhere/repo' }))
-    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'projectGroup.importNested', expect.objectContaining({ projectPaths: ['/home/me/topic'], groupName: 'me' }))
-    expect(result).toMatchObject({ failedCount: 2, importedCount: 0, projects: [
-      { path: linked, projectId: 'changed-graph-row', status: 'failed' }, { path: saved.path, status: 'failed' }
-    ] })
+    mocks.call.mockImplementation(async (env, method, params) =>
+      method === 'projectGroup.importNested'
+        ? {
+            projects: [
+              { path: '/home/me/topic', projectId: 'changed-graph-row', status: 'imported' }
+            ],
+            importedCount: 1,
+            alreadyKnownCount: 0,
+            failedCount: 0
+          }
+        : normal(env, method, params)
+    )
+    const result = await importNestedProjectsOnWslHost(
+      { getRepos: () => [saved] },
+      {
+        parentPath: scan([]).selectedPath,
+        projectPaths: [linked, saved.path],
+        mode: 'group'
+      },
+      { scan: scan([linked]) }
+    )
+    expect(mocks.call).toHaveBeenCalledWith(
+      'wsl:ubuntu',
+      'repo.add',
+      expect.objectContaining({ path: '/elsewhere/repo' })
+    )
+    expect(mocks.call).toHaveBeenCalledWith(
+      'wsl:ubuntu',
+      'projectGroup.importNested',
+      expect.objectContaining({ projectPaths: ['/home/me/topic'], groupName: 'me' })
+    )
+    expect(result).toMatchObject({
+      failedCount: 2,
+      importedCount: 0,
+      projects: [
+        { path: linked, projectId: 'changed-graph-row', status: 'failed' },
+        { path: saved.path, status: 'failed' }
+      ]
+    })
     expect(mocks.ownerRepos[0].path).toBe('/elsewhere/repo')
   })
 
@@ -283,14 +389,29 @@ describe('new WSL project ownership', () => {
       }
       return normal(env, method, params)
     })
-    const result = await importNestedProjectsOnWslHost({ getRepos: () => [] }, {
-      parentPath: scan([]).selectedPath, projectPaths: [path, broken], mode: 'separate'
-    }, { scan: scan([path, broken]) })
-    expect(result).toMatchObject({ importedCount: 0, failedCount: 2, projects: [
-      { path, projectId: guest.id, executionHostId: 'runtime:wsl%3Aubuntu', status: 'failed', error: 'setup failed' },
-      { path: broken, status: 'failed', error: 'repository disappeared' }
-    ] })
+    const result = await importNestedProjectsOnWslHost(
+      { getRepos: () => [] },
+      {
+        parentPath: scan([]).selectedPath,
+        projectPaths: [path, broken],
+        mode: 'separate'
+      },
+      { scan: scan([path, broken]) }
+    )
+    expect(result).toMatchObject({
+      importedCount: 0,
+      failedCount: 2,
+      projects: [
+        {
+          path,
+          projectId: guest.id,
+          executionHostId: 'runtime:wsl%3Aubuntu',
+          status: 'failed',
+          error: 'setup failed'
+        },
+        { path: broken, status: 'failed', error: 'repository disappeared' }
+      ]
+    })
     expect(mocks.ownerRepos).toHaveLength(1)
   })
-
 })

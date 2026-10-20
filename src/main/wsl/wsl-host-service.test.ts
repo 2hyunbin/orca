@@ -131,9 +131,9 @@ describe('WslHostService', () => {
       { ...UBUNTU, id: UBUNTU_ID.replace('0e', '2e'), name: 'Debian', state: 'stopped' }
     ])
     const service = makeService(connector)
-    await expect(Promise.all([service.ensure('Ubuntu'), service.ensure('ubuntu')])).resolves.toEqual([
-      'wsl:ubuntu', 'wsl:ubuntu'
-    ])
+    await expect(
+      Promise.all([service.ensure('Ubuntu'), service.ensure('ubuntu')])
+    ).resolves.toEqual(['wsl:ubuntu', 'wsl:ubuntu'])
     expect(connector.connect.mock.calls).toEqual([['Ubuntu']])
     await service.ensure('Ubuntu')
     expect(listEnvironments(userDataPath)).toHaveLength(1)
@@ -142,7 +142,9 @@ describe('WslHostService', () => {
     // Reusing a distro's name after unregister/import must not reuse its old project owner.
     connector.listDistros.mockResolvedValue([{ ...UBUNTU, id: UBUNTU_ID.replace('0e', '3e') }])
     const connects = connector.connect.mock.calls.length
-    await expect(service.ensure('Ubuntu')).rejects.toThrow('reconnecting it will not repair the registration')
+    await expect(service.ensure('Ubuntu')).rejects.toThrow(
+      'reconnecting it will not repair the registration'
+    )
     expect(connector.connect).toHaveBeenCalledTimes(connects)
   })
 

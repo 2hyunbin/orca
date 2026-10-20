@@ -28,7 +28,9 @@ export async function addLocalRepoFromPath(
   }
   const resolvedPath = admission.registrationPath
   const hosted = await registerProjectOnWslHost(
-    store, { kind: 'add', path: resolvedPath, repoKind, displayName }, { admission }
+    store,
+    { kind: 'add', path: resolvedPath, repoKind, displayName },
+    { admission }
   )
   if (hosted) {
     return { repo: hosted, alreadyExisted: false }

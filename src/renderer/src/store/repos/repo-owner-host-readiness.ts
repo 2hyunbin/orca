@@ -41,9 +41,16 @@ export async function awaitRepoOwnerHostKnown(
 }
 
 /** A failed multi-method registration can still have saved a usable row on its owner. */
-export async function refreshWslRegistrationAfterFailure(getState: () => AppState, path: string): Promise<void> {
+export async function refreshWslRegistrationAfterFailure(
+  getState: () => AppState,
+  path: string
+): Promise<void> {
   const parsed = parseWslUncPath(path)
-  if (!parsed || !getState().settings?.experimentalWslHosts || !window.api.runtimeEnvironments?.wslHosts) {
+  if (
+    !parsed ||
+    !getState().settings?.experimentalWslHosts ||
+    !window.api.runtimeEnvironments?.wslHosts
+  ) {
     return
   }
   try {
@@ -51,8 +58,11 @@ export async function refreshWslRegistrationAfterFailure(getState: () => AppStat
   } catch (error) {
     console.warn('[add-project] could not read the partial registration owner', error)
   }
-  const environment = getState().runtimeEnvironments.find((row) =>
-    row.orcadDeployment?.kind === 'wsl' && row.orcadDeployment.distro.toLowerCase() === parsed.distro.toLowerCase())
+  const environment = getState().runtimeEnvironments.find(
+    (row) =>
+      row.orcadDeployment?.kind === 'wsl' &&
+      row.orcadDeployment.distro.toLowerCase() === parsed.distro.toLowerCase()
+  )
   if (!environment) {
     return
   }

@@ -292,7 +292,12 @@ describe('useAddRepoHostSelection', () => {
     mocks.stateValues = ['runtime:env-1', false]
     mocks.refValues = [true]
     const { useAddRepoHostSelection } = await import('./use-add-repo-host-selection')
-    const result = useAddRepoHostSelection({ isOpen: true, setStep: vi.fn(), preferredHostId: 'local', pinLocalHost: true })
+    const result = useAddRepoHostSelection({
+      isOpen: true,
+      setStep: vi.fn(),
+      preferredHostId: 'local',
+      pinLocalHost: true
+    })
     expect(result.selectedParsedHost?.kind).toBe('local')
     expect(result.selectedHostId).toBe('local')
     expect(mocks.storeState.setActiveRuntimeEnvironmentPreference).not.toHaveBeenCalled()

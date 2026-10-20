@@ -128,8 +128,12 @@ export function useComposerTargetStore(options: ComposerStateInput, decisions: C
   const hostOptions = useMemo(
     () =>
       buildComposerHostOptions({
-        repos, settings, sshTargetLabels, sshConnectionStates,
-        runtimeEnvironments, runtimeStatusByEnvironmentId
+        repos,
+        settings,
+        sshTargetLabels,
+        sshConnectionStates,
+        runtimeEnvironments,
+        runtimeStatusByEnvironmentId
       }),
     [
       repos,
@@ -207,17 +211,31 @@ export function useComposerTargetStore(options: ComposerStateInput, decisions: C
 }
 
 export function buildComposerHostOptions(
-  state: Pick<AppState,
-    'repos' | 'settings' | 'sshTargetLabels' | 'sshConnectionStates' |
-    'runtimeEnvironments' | 'runtimeStatusByEnvironmentId'>
+  state: Pick<
+    AppState,
+    | 'repos'
+    | 'settings'
+    | 'sshTargetLabels'
+    | 'sshConnectionStates'
+    | 'runtimeEnvironments'
+    | 'runtimeStatusByEnvironmentId'
+  >
 ) {
   const {
-    repos, settings, sshTargetLabels, sshConnectionStates,
-    runtimeEnvironments, runtimeStatusByEnvironmentId
+    repos,
+    settings,
+    sshTargetLabels,
+    sshConnectionStates,
+    runtimeEnvironments,
+    runtimeStatusByEnvironmentId
   } = state
   return buildExecutionHostRegistry({
-    repos, settings, sshTargetLabels, sshConnectionStates,
-    runtimeEnvironments, runtimeStatusByEnvironmentId,
+    repos,
+    settings,
+    sshTargetLabels,
+    sshConnectionStates,
+    runtimeEnvironments,
+    runtimeStatusByEnvironmentId,
     hostSource: 'configured-only',
     hostLabelOverrides: getHostDisplayLabelOverrides(settings)
   })

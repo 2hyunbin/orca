@@ -35,23 +35,35 @@ export async function admitRepositoryCheckout(
   }
   const registrationPath = info?.rootPath ?? selectedPath
   const mainRepoPath = info?.mainRepoPath ? await getGitRepoRootAsync(info.mainRepoPath) : null
-  const sameHostRepos = () => store.getRepos().filter((repo) =>
-    parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'ssh' &&
-    (executionHostId === LOCAL_EXECUTION_HOST_ID
-      ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
-      : runtimeRepoMatchesExecutionHost(repo, executionHostId)))
-  const matches = (repo: Repo) => pathKey(repo.path) === pathKey(selectedPath) ||
+  const sameHostRepos = () =>
+    store
+      .getRepos()
+      .filter(
+        (repo) =>
+          parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'ssh' &&
+          (executionHostId === LOCAL_EXECUTION_HOST_ID
+            ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
+            : runtimeRepoMatchesExecutionHost(repo, executionHostId))
+      )
+  const matches = (repo: Repo) =>
+    pathKey(repo.path) === pathKey(selectedPath) ||
     pathKey(repo.path) === pathKey(registrationPath) ||
     (mainRepoPath !== null && !isFolderRepo(repo) && pathKey(repo.path) === pathKey(mainRepoPath))
-  const realPathMatch = sameHostRepos().find(matches) ??
-    await findProjectAtSameRealPath(sameHostRepos(), registrationPath)
+  const realPathMatch =
+    sameHostRepos().find(matches) ??
+    (await findProjectAtSameRealPath(sameHostRepos(), registrationPath))
   return {
     selectedPath,
     registrationPath,
     mainRepoPath,
     // Re-read after asynchronous discovery; never retain a deleted or transferred claim.
-    findSaved: () => sameHostRepos().find(matches) ?? sameHostRepos().find((repo) =>
-      realPathMatch !== null && repo.id === realPathMatch.id &&
-      pathKey(repo.path) === pathKey(realPathMatch.path))
+    findSaved: () =>
+      sameHostRepos().find(matches) ??
+      sameHostRepos().find(
+        (repo) =>
+          realPathMatch !== null &&
+          repo.id === realPathMatch.id &&
+          pathKey(repo.path) === pathKey(realPathMatch.path)
+      )
   }
 }

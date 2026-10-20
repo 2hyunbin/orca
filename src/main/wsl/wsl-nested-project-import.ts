@@ -72,9 +72,12 @@ export async function importNestedProjectsOnWslHost(
   if (args.connectionId || !parent || !wslProjectRoutingEnabled(store)) {
     return null
   }
-  const scan = options.scan ?? await scanNestedRepos({
-    path: args.parentPath, options: { timeoutMs: 15_000 }
-  })
+  const scan =
+    options.scan ??
+    (await scanNestedRepos({
+      path: args.parentPath,
+      options: { timeoutMs: 15_000 }
+    }))
   const selection = resolveNestedRepoSelection({ scan, projectPaths: args.projectPaths })
   const targetResolver = createNestedRepoImportTargetResolver()
   const results = new Map<string, ProjectGroupImportResult['projects'][number]>()
@@ -94,11 +97,15 @@ export async function importNestedProjectsOnWslHost(
         throw new Error('Selected projects must belong to the selected WSL distro.')
       }
       selected.push({
-        path, selectedLinuxPath: original.linuxPath, linuxPath: parsed.linuxPath, admission
+        path,
+        selectedLinuxPath: original.linuxPath,
+        linuxPath: parsed.linuxPath,
+        admission
       })
     } catch (error) {
       results.set(selectionKey(path), {
-        path, status: 'failed',
+        path,
+        status: 'failed',
         error: error instanceof Error ? error.message : 'Repository could not be inspected'
       })
     }
@@ -110,8 +117,14 @@ export async function importNestedProjectsOnWslHost(
     return null
   }
   const refuseMixedGroup = () => {
-    if (args.mode === 'group' && hasNew() && selected.some((entry) => entry.admission.findSaved())) {
-      throw new Error('Some of these projects are already saved on Windows. Import them separately instead of as a group.')
+    if (
+      args.mode === 'group' &&
+      hasNew() &&
+      selected.some((entry) => entry.admission.findSaved())
+    ) {
+      throw new Error(
+        'Some of these projects are already saved on Windows. Import them separately instead of as a group.'
+      )
     }
   }
   refuseMixedGroup()
@@ -130,7 +143,10 @@ export async function importNestedProjectsOnWslHost(
     const saved = admission.findSaved()
     if (saved) {
       results.set(selectionKey(path), {
-        path, projectId: saved.id, status: 'already-known', executionHostId: LOCAL_EXECUTION_HOST_ID
+        path,
+        projectId: saved.id,
+        status: 'already-known',
+        executionHostId: LOCAL_EXECUTION_HOST_ID
       })
       continue
     }
@@ -138,17 +154,23 @@ export async function importNestedProjectsOnWslHost(
     const previous = registered.get(key)
     if (previous) {
       results.set(selectionKey(path), {
-        ...previous, path, status: previous.status === 'imported' ? 'already-known' : previous.status
+        ...previous,
+        path,
+        status: previous.status === 'imported' ? 'already-known' : previous.status
       })
       continue
     }
     let result: ProjectGroupImportResult['projects'][number]
     try {
       const repo = await registerOnWslOwner(owner.environmentId, {
-        kind: 'add', path: linuxPath, repoKind: 'git'
+        kind: 'add',
+        path: linuxPath,
+        repoKind: 'git'
       })
       result = {
-        path, projectId: repo.id, status: knownIds.has(repo.id) ? 'already-known' : 'imported',
+        path,
+        projectId: repo.id,
+        status: knownIds.has(repo.id) ? 'already-known' : 'imported',
         executionHostId
       }
       knownIds.add(repo.id)
@@ -157,7 +179,10 @@ export async function importNestedProjectsOnWslHost(
       const repos = await listWslOwnerRepos(owner.environmentId).catch(() => [])
       const repo = repos.find((row) => linuxPathKey(row.path) === key)
       result = {
-        path, projectId: repo?.id, status: 'failed', executionHostId,
+        path,
+        projectId: repo?.id,
+        status: 'failed',
+        executionHostId,
         error: error instanceof Error ? error.message : 'Repository could not be prepared'
       }
     }
@@ -165,28 +190,37 @@ export async function importNestedProjectsOnWslHost(
     results.set(selectionKey(path), result)
   }
   let group: ProjectGroupImportResult['group']
-  const successful = selected.filter(({ path }) => results.get(selectionKey(path))?.status !== 'failed')
+  const successful = selected.filter(
+    ({ path }) => results.get(selectionKey(path))?.status !== 'failed'
+  )
   if (args.mode === 'group' && successful.length > 0) {
     try {
-      const grouped = ImportReply.parse(await callWslProjectHost(
-        owner.environmentId, 'projectGroup.importNested', {
-        parentPath: parent.linuxPath, mode: 'group',
-        groupName: args.groupName?.trim() || posix.basename(parent.linuxPath) || parent.distro,
+      const grouped = ImportReply.parse(
+        await callWslProjectHost(owner.environmentId, 'projectGroup.importNested', {
+          parentPath: parent.linuxPath,
+          mode: 'group',
+          groupName: args.groupName?.trim() || posix.basename(parent.linuxPath) || parent.distro,
           projectPaths: successful.map(({ selectedLinuxPath }) => selectedLinuxPath)
-        }
-      ))
+        })
+      )
       group = grouped.group ? { ...grouped.group, executionHostId } : undefined
       for (const { path, selectedLinuxPath } of successful) {
         const expected = results.get(selectionKey(path))
         if (!expected) {
           continue
         }
-        const groupedItem = grouped.projects.find((item) =>
-          linuxPathKey(item.path) === linuxPathKey(selectedLinuxPath)
+        const groupedItem = grouped.projects.find(
+          (item) => linuxPathKey(item.path) === linuxPathKey(selectedLinuxPath)
         )
-        if (!group || groupedItem?.status === 'failed' || groupedItem?.projectId !== expected.projectId) {
+        if (
+          !group ||
+          groupedItem?.status === 'failed' ||
+          groupedItem?.projectId !== expected.projectId
+        ) {
           results.set(selectionKey(path), {
-            ...expected, projectId: groupedItem?.projectId ?? expected.projectId, status: 'failed',
+            ...expected,
+            projectId: groupedItem?.projectId ?? expected.projectId,
+            status: 'failed',
             error: 'The project was added, but its group or preparation could not be completed.'
           })
         }
@@ -196,7 +230,8 @@ export async function importNestedProjectsOnWslHost(
         const result = results.get(selectionKey(path))
         if (result) {
           results.set(selectionKey(path), {
-            ...result, status: 'failed',
+            ...result,
+            status: 'failed',
             error: 'The project was added, but its group could not be completed.'
           })
         }
@@ -214,15 +249,20 @@ export async function importNestedProjectsOnWslHost(
       return [{ ...result, path }]
     }
     if (selection.rejectedPaths.includes(path)) {
-      return [{
-        path, status: 'failed' as const,
-        error: 'Repository was not found in the nested repo scan result'
-      }]
+      return [
+        {
+          path,
+          status: 'failed' as const,
+          error: 'Repository was not found in the nested repo scan result'
+        }
+      ]
     }
     return []
   })
   return {
-    executionHostId, ...(group ? { group } : {}), projects,
+    executionHostId,
+    ...(group ? { group } : {}),
+    projects,
     importedCount: projects.filter((row) => row.status === 'imported').length,
     alreadyKnownCount: projects.filter((row) => row.status === 'already-known').length,
     failedCount: projects.filter((row) => row.status === 'failed').length

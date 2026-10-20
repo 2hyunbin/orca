@@ -89,7 +89,10 @@ function store(settings: Record<string, unknown> = STRUCTURED_SETTINGS): AgentLa
 function stageLocalStructuredHost(): void {
   vi.clearAllMocks()
   mocks.getExecutionHostIdForWorktree.mockReturnValue('local')
-  mocks.runtimeEnvironmentIdForWorkspaceOwner.mockReturnValue({ kind: 'resolved', environmentId: null })
+  mocks.runtimeEnvironmentIdForWorkspaceOwner.mockReturnValue({
+    kind: 'resolved',
+    environmentId: null
+  })
   mocks.getConnectionIdFromState.mockReturnValue(null)
   mocks.getLocalProjectExecutionRuntimeContext.mockReturnValue(undefined)
   mocks.getLocalRepoProjectExecutionRuntimeContext.mockReturnValue(undefined)

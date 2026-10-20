@@ -114,7 +114,11 @@ function createService(args: WslHostHandlerArgs): WslHostService | null {
     hasServerFiles: fake ? () => fake.serverFiles !== 'missing' : hasOrcadTemplate,
     call: async (environmentId, method, params, timeoutMs) => {
       const response = await callRuntimeEnvironment(
-        args.getUserDataPath(), environmentId, method, params, timeoutMs
+        args.getUserDataPath(),
+        environmentId,
+        method,
+        params,
+        timeoutMs
       )
       if (!response.ok) {
         throw new Error(response.error.message)

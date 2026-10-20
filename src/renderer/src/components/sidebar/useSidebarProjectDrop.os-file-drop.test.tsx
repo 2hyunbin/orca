@@ -97,7 +97,11 @@ describe('project sidebar OS folder drops', () => {
     const view = render(<SidebarProbe />)
     expect(drag(view.getByTestId('worktree-card'), 'dragover').dropEffect).toBe('copy')
     drag(view.getByTestId('worktree-card'), 'drop')
-    await waitFor(() => expect(mocks.state.openModal).toHaveBeenCalledWith('add-repo', { droppedLocalPath: mocks.droppedPath }))
+    await waitFor(() =>
+      expect(mocks.state.openModal).toHaveBeenCalledWith('add-repo', {
+        droppedLocalPath: mocks.droppedPath
+      })
+    )
   })
 
   it('refuses the drop while a remote runtime is active', () => {

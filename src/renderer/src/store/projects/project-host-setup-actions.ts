@@ -24,7 +24,10 @@ import {
   prepareProjectHostSetupMutation,
   upsertProjectHostSetup
 } from './project-host-routing'
-import { awaitRepoOwnerHostKnown, refreshWslRegistrationAfterFailure } from '../repos/repo-owner-host-readiness'
+import {
+  awaitRepoOwnerHostKnown,
+  refreshWslRegistrationAfterFailure
+} from '../repos/repo-owner-host-readiness'
 
 export function createProjectHostSetupActions(
   set: Parameters<StateCreator<AppState>>[0],
