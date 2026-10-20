@@ -85,3 +85,21 @@ export function createServerViewReport(environmentId: string): ServerViewReport 
     }
   }
 }
+
+/** Calls back each time the shared control connection to `environmentId` comes up on a new socket:
+ *  the server dropped the reports of the old one, while the layout stream may have stayed up. */
+export function onServerControlConnected(environmentId: string, connected: () => void): () => void {
+  let socket: string | null = null
+  return (
+    window.api?.runtimeEnvironments?.onSharedControlDiagnostics?.((event) => {
+      if (event.environmentId !== environmentId || event.diagnostics.state !== 'ready') {
+        return
+      }
+      const next = `${event.transportGeneration}:${event.diagnostics.lastConnectedAt}`
+      if (next !== socket) {
+        socket = next
+        connected()
+      }
+    }) ?? (() => {})
+  )
+}

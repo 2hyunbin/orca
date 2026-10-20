@@ -74,6 +74,34 @@ beforeEach(() => {
 })
 afterEach(uninstallAll)
 
+type ControlEvent = {
+  environmentId: string
+  transportGeneration: number
+  diagnostics: { state: string; lastConnectedAt: number | null }
+}
+const controlListeners = new Set<(event: ControlEvent) => void>()
+beforeEach(() => {
+  controlListeners.clear()
+  Object.assign(window.api.runtimeEnvironments ?? {}, {
+    onSharedControlDiagnostics: (listener: (event: ControlEvent) => void) => {
+      controlListeners.add(listener)
+      return () => controlListeners.delete(listener)
+    }
+  })
+})
+
+/** The shared control connection's state, as main broadcasts it. */
+function control(
+  environmentId: string,
+  state: string,
+  transportGeneration: number,
+  lastConnectedAt: number
+): void {
+  for (const listener of controlListeners) {
+    listener({ environmentId, transportGeneration, diagnostics: { state, lastConnectedAt } })
+  }
+}
+
 function reports(): unknown[] {
   return hoisted.call.mock.calls
     .filter(([, method]) => method === 'layout.reportView')
@@ -181,5 +209,26 @@ describe('the group this window shows, told to the server whose frames draw it',
     expect(store.getState().runtimeEnvironments.map((environment) => environment.id)).toEqual([ENV])
     expect(store.getState().activeGroupIdByWorktree[WT]).toBe('host-group-2')
     expect(reports()).toEqual([])
+  })
+
+  it('reports again as a refresh when the control connection comes up on a new socket, the stream still up', async () => {
+    const store = await frameDrawnStore()
+    control(ENV, 'ready', 1, 100)
+    showGroup(store, WT, 'host-group-2')
+    hoisted.call.mockClear()
+
+    control(ENV, 'reconnecting', 1, 100)
+    control(ENV, 'ready', 1, 100)
+    control('web-env-other', 'ready', 1, 200)
+    expect(reports()).toEqual([])
+
+    control(ENV, 'ready', 1, 200)
+    control(ENV, 'ready', 2, 200)
+    expect(streams.openTo(ENV).closed).toBe(false)
+    const again = {
+      target: { kind: 'environment', environmentId: ENV },
+      params: { activeGroupByWorkspace: { [WT]: 'host-group-2' }, refresh: true }
+    }
+    expect(reports()).toEqual([again, again])
   })
 })

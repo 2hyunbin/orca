@@ -13,7 +13,7 @@ import {
   runtimeHostConnectionStateForEntry
 } from './runtime-host-connection-state'
 import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
-import { createServerViewReport } from './server-layout-view-report'
+import { createServerViewReport, onServerControlConnected } from './server-layout-view-report'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
@@ -87,6 +87,14 @@ function openServerFrames(
   }
   const draws = serverDraws(environmentId)
   const viewReport = createServerViewReport(environmentId)
+  /** The server may hold none of this window's reports: a new stream or control socket. */
+  const reportAgain = (): void => {
+    viewReport.reset()
+    if (live) {
+      viewReport.update(store.getState().activeGroupIdByWorktree, gated)
+    }
+  }
+  const stopControlWatch = onServerControlConnected(environmentId, reportAgain)
 
   const sync = openWorkspaceLayoutFrameSync(store, {
     target: { kind: 'environment', environmentId },
@@ -99,9 +107,8 @@ function openServerFrames(
       const translated = translator.translate(frame)
       live ||= frame.type === 'snapshot'
       if (frame.type === 'snapshot') {
-        viewReport.reset()
         // After the snapshot applies: it may change nothing in the store to report on.
-        queueMicrotask(() => viewReport.update(store.getState().activeGroupIdByWorktree, gated))
+        queueMicrotask(reportAgain)
       }
       // Before the frame shows: the mirror must not write a workspace the frames now draw.
       regate()
@@ -143,6 +150,7 @@ function openServerFrames(
     close: (returnWorkspaces) => {
       stopRouting()
       stopHandles()
+      stopControlWatch()
       sync.close()
       if (returnWorkspaces) {
         handBack()
