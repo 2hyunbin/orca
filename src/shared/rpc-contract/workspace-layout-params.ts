@@ -6,6 +6,7 @@ import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 import { SleepCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
+import { RenameTabsCommand } from './workspace-layout-rename-tabs-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -212,13 +213,6 @@ const RenameTabCommand = z.discriminatedUnion('kind', [
     title: z.union([AiVaultTitle, z.null()])
   })
 ])
-
-/** Agent-generated titles for many tabs, of any workspaces: main renames them in one write. */
-const RenameTabsCommand = z.object({
-  type: z.literal('renameTabs'),
-  kind: z.literal('generated'),
-  renames: z.array(z.object({ ...OnTab, title: z.union([z.string(), z.null()]) })).min(1)
-})
 
 const SetTabPropsCommand = z.object({
   type: z.literal('setTabProps'),
