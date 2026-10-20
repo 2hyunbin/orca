@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { HostRowIcon } from '@/components/host-row-icon'
+import { isRepoHeaderActionTarget } from '../../project-header-drag-contract'
 import type { ProjectHeaderHostContext } from './project-header-host-context'
 
 export function ProjectHeaderHostLabel({
@@ -25,12 +26,54 @@ export function ProjectHeaderHostTooltip({
   label: string
   children: React.JSX.Element
 }): React.JSX.Element {
-  if (!context) {
-    return children
-  }
+  return context ? (
+    <ProjectHeaderIdentityTooltip context={context} label={label}>
+      {children}
+    </ProjectHeaderIdentityTooltip>
+  ) : (
+    children
+  )
+}
+
+function ProjectHeaderIdentityTooltip({
+  context,
+  label,
+  children
+}: {
+  context: ProjectHeaderHostContext
+  label: string
+  children: React.JSX.Element
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const actionOwnsTooltip = useRef(false)
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
+    <Tooltip
+      open={open}
+      onOpenChange={(nextOpen) => setOpen(nextOpen && !actionOwnsTooltip.current)}
+    >
+      <TooltipTrigger
+        asChild
+        onFocus={(event) => {
+          // Nested actions keep their own tooltip.
+          actionOwnsTooltip.current = event.target !== event.currentTarget
+          if (actionOwnsTooltip.current) {
+            setOpen(false)
+            event.preventDefault()
+          }
+        }}
+        onPointerMove={(event) => {
+          const wasOverAction = actionOwnsTooltip.current
+          actionOwnsTooltip.current = isRepoHeaderActionTarget(event.target, event.currentTarget)
+          if (actionOwnsTooltip.current) {
+            setOpen(false)
+            event.preventDefault()
+          } else if (wasOverAction) {
+            setOpen(true)
+          }
+        }}
+      >
+        {children}
+      </TooltipTrigger>
       <TooltipContent
         side="right"
         sideOffset={8}

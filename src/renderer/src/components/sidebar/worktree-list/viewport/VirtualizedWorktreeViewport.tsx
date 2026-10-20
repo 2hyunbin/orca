@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
-import { useSidebarHostScopeOptions } from '../../use-sidebar-host-scope-options'
 import { getProjectHeaderHostContexts } from '../rows/project-header-host-context'
 import { translate } from '@/i18n/i18n'
 import { WorktreeListScrollToTopButton } from '../../WorktreeListScrollToTopButton'
@@ -62,16 +61,25 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
   const worktreeVisibilityDefaultsByHost = useAppStore((s) => s.worktreeVisibilityDefaultsByHost)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const getRepoSshGate = useRepoSshGateResolver()
-  const { hostOptions } = useSidebarHostScopeOptions()
+  const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const projectHeaderHostContexts = useMemo(
     () =>
       getProjectHeaderHostContexts({
         rows,
-        hosts: hostOptions,
+        hosts: props.hostOptions ?? [],
+        runtimeEnvironments,
+        sshConnectionStates,
         repoMap,
         projectGrouping: props.projectGrouping
       }),
-    [rows, hostOptions, repoMap, props.projectGrouping]
+    [
+      rows,
+      props.hostOptions,
+      repoMap,
+      props.projectGrouping,
+      runtimeEnvironments,
+      sshConnectionStates
+    ]
   )
   const newCardStyle = settings?.experimentalNewWorktreeCardStyle === true
 

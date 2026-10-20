@@ -136,6 +136,63 @@ describe('project header host context', () => {
     ).toBe(0)
   })
 
+  it('restores managed aliases from owner configuration when feed host options omit them', () => {
+    const ssh: Repo = { ...local, id: 'ssh-app', connectionId: 'home' }
+    const unmerged: SidebarHostOption[] = [
+      ...hosts,
+      {
+        id: 'ssh:home',
+        label: 'My Home',
+        detail: 'Configured SSH host',
+        kind: 'ssh',
+        health: 'disconnected',
+        presence: 'configured'
+      }
+    ]
+    const contexts = getProjectHeaderHostContexts({
+      rows: [header(local), header(ssh), header(paired)],
+      hosts: unmerged,
+      repoMap: new Map([local, ssh, paired].map((value) => [value.id, value])),
+      runtimeEnvironments: [{ id: 'home', orcadDeployment: { kind: 'ssh', sshTargetId: 'home' } }]
+    })
+    expect(contexts.get(`repo:${ssh.id}`)).toEqual({
+      hostId: 'runtime:home',
+      label: 'My Home',
+      detail: 'Configured SSH host'
+    })
+    expect(contexts.get(`repo:${paired.id}`)).toEqual(contexts.get(`repo:${ssh.id}`))
+  })
+
+  it('preserves an authoritative alias snapshot while the relay route is changing', () => {
+    const ssh: Repo = { ...local, id: 'ssh-app', connectionId: 'home' }
+    const annotated: SidebarHostOption[] = [
+      hosts[0]!,
+      { ...hosts[1]!, aliasHostIds: ['ssh:home'] },
+      {
+        id: 'ssh:home',
+        label: 'Home',
+        detail: 'SSH',
+        kind: 'ssh',
+        health: 'disconnected',
+        presence: 'configured',
+        mergedIntoHostId: 'runtime:home'
+      }
+    ]
+    const contexts = getProjectHeaderHostContexts({
+      rows: [header(local), header(ssh), header(paired)],
+      hosts: annotated,
+      repoMap: new Map([local, ssh, paired].map((value) => [value.id, value])),
+      runtimeEnvironments: [{ id: 'home', orcadDeployment: { kind: 'ssh', sshTargetId: 'home' } }],
+      sshConnectionStates: new Map([
+        ['home', { managedServer: { kind: 'relay', reason: 'failed' } }]
+      ])
+    })
+    expect(contexts.get(`repo:${ssh.id}`)?.hostId).toBe('runtime:home')
+    expect(contexts.get(`repo:${paired.id}`)?.hostId).toBe('runtime:home')
+    expect(annotated[2]?.mergedIntoHostId).toBe('runtime:home')
+    expect(annotated[2]?.aliasHostIds).toBeUndefined()
+  })
+
   it('uses a folder-backed group owner even with no children and a disconnected host', () => {
     const contexts = getProjectHeaderHostContexts({
       rows: [header(local), folderHeader],

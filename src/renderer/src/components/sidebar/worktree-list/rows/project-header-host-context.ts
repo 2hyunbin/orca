@@ -1,8 +1,13 @@
 import {
   getRepoExecutionHostId,
+  toRuntimeExecutionHostId,
   type ExecutionHostId
 } from '../../../../../../shared/execution-host'
-import { indexExecutionHostsById } from '../../../../../../shared/managed-orcad-execution-host'
+import {
+  annotateManagedOrcadExecutionHosts,
+  indexExecutionHostsById,
+  type ManagedOrcadEnvironmentSummary
+} from '../../../../../../shared/managed-orcad-execution-host'
 import {
   buildProjectGroupingIndex,
   getProjectGroupingForRepo,
@@ -11,7 +16,8 @@ import {
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { HostSectionRow } from '../../../../../../shared/sidebar-list/host-section-rows'
 import { getHostContextLabel } from '../../../../../../shared/worktree/host-context-labels'
-import type { SidebarHostOption } from '../../sidebar-host-options'
+import type { ExecutionHostRegistryEntry } from '../../../../../../shared/execution-host-registry'
+import type { SshConnectionState } from '../../../../../../shared/ssh-types'
 
 export type ProjectHeaderHostContext = {
   hostId: ExecutionHostId
@@ -21,11 +27,23 @@ export type ProjectHeaderHostContext = {
 
 export function getProjectHeaderHostContexts(args: {
   rows: readonly HostSectionRow[]
-  hosts: readonly SidebarHostOption[]
+  hosts: readonly ExecutionHostRegistryEntry[]
+  runtimeEnvironments?: readonly ManagedOrcadEnvironmentSummary[]
+  sshConnectionStates?: ReadonlyMap<string, Pick<SshConnectionState, 'managedServer'>>
   repoMap: Map<string, Repo>
   projectGrouping?: ProjectGroupingModel
 }): ReadonlyMap<string, ProjectHeaderHostContext> {
-  const hostsById = indexExecutionHostsById(args.hosts)
+  const hostRegistry = new Map(args.hosts.map((host) => [host.id, host]))
+  annotateManagedOrcadExecutionHosts({
+    hosts: hostRegistry,
+    // Preserve authoritative aliases; feed options need owner configuration to fill them in.
+    runtimeEnvironments: (args.runtimeEnvironments ?? []).filter((environment) => {
+      const host = hostRegistry.get(toRuntimeExecutionHostId(environment.id))
+      return !host?.mergedIntoHostId && !host?.aliasHostIds?.length
+    }),
+    sshConnectionStates: args.sshConnectionStates
+  })
+  const hostsById = indexExecutionHostsById([...hostRegistry.values()])
   const canonicalHostId = (hostId: ExecutionHostId): ExecutionHostId =>
     hostsById.get(hostId)?.id ?? hostId
   const projectIndex = buildProjectGroupingIndex(args.projectGrouping)
