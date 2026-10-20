@@ -12,6 +12,7 @@ import { recordNativeChatSessionOptionCommand } from '../../../../shared/native-
 import {
   applyNativeChatReportedSessionOptions,
   clearNativeChatSessionModel,
+  cloneDefaultModel,
   createNativeChatSessionOptionRecord,
   setTrackedSessionOption
 } from '../../../../shared/native-chat-session-option-state'
@@ -71,14 +72,48 @@ export function createNativeChatPtySessionOptions(
       ? { ...baseCatalog, modelApply: { ...baseCatalog.modelApply, midSession: undefined } }
       : baseCatalog
   let models = [...(args.initialModels ?? catalog.models)]
-  // The enrichment cache only ever holds probe output, so being handed a list at all
-  // means `isDefault` below names the account's real default rather than the seed guess.
+  // Cached discovery is initial inventory, not a report from the running child.
   let modelsAreDiscovered = args.initialModels !== undefined
   let record =
     readNativeChatSessionOptionCache(args.scopeKey, args.fallbackScopeKey) ??
     createNativeChatSessionOptionRecord(args.agent)
   if (record.agent !== args.agent) {
     record = createNativeChatSessionOptionRecord(args.agent)
+  }
+
+  if (args.mode === 'live' && catalog.defaultModelIsCliDefault && !record.defaultContext) {
+    record.defaultContext = {
+      resolved: false,
+      model: cloneDefaultModel(catalog.models.find((model) => model.isDefault) ?? null),
+      provisionalOptions: []
+    }
+  }
+  const resolveDefaultContext = (): void => {
+    const context = record.defaultContext
+    if (!context || context.resolved || !modelsAreDiscovered || models.length === 0) {
+      return
+    }
+    const model = models.find((model) => model.isDefault) ?? null
+    if (!record.model && model && context.model) {
+      const provisional = record.valuesByModel[context.model.id] ?? {}
+      for (const id of context.provisionalOptions) {
+        if (provisional[id]) {
+          record.valuesByModel[model.id] = {
+            ...record.valuesByModel[model.id],
+            [id]: provisional[id]
+          }
+        }
+      }
+    }
+    record.defaultContext = {
+      resolved: true,
+      model: cloneDefaultModel(model),
+      provisionalOptions: []
+    }
+  }
+  resolveDefaultContext()
+  if (record.defaultContext) {
+    writeNativeChatSessionOptionCache(args.scopeKey, record)
   }
 
   if (args.reportedValues && applyNativeChatReportedSessionOptions(record, args.reportedValues)) {
@@ -132,9 +167,7 @@ export function createNativeChatPtySessionOptions(
     clearNativeChatSessionModel(record)
   }
 
-  /** Resolved at commit, not pre-dispatch: with nothing tracked the pre-dispatch id was
-   *  only the seed's guess at grok's default, and a probe landing mid-dispatch replaces
-   *  it with the id the CLI actually reported — the model the command truly reached. */
+  // Initial discovery may correct the provisional context while an effort is in flight.
   const setTrackedValue = (
     optionId: string,
     value: SessionOptionValue,
@@ -225,6 +258,7 @@ export function createNativeChatPtySessionOptions(
     replaceModels: (nextModels) => {
       models = [...nextModels]
       modelsAreDiscovered = true
+      resolveDefaultContext()
       untrackRetiredDraftModel()
       publish()
     },

@@ -1,6 +1,7 @@
 import type { AgentType } from './agent-status-types'
 import type {
   CatalogMidSessionApply,
+  CatalogModel,
   AgentSessionOptionCatalog
 } from './agent-session-option-catalog'
 import type { SessionOptionValue, SessionOptionValueSource } from './native-chat-session-options'
@@ -13,6 +14,8 @@ export type TrackedNativeChatSessionOption = {
 export type NativeChatSessionOptionRecord = {
   agent: AgentType
   model?: TrackedNativeChatSessionOption
+  /** Terminal-only renderer memory; an inferred default never proves runtime identity. */
+  defaultContext?: { resolved: boolean; model: CatalogModel | null; provisionalOptions: string[] }
   valuesByModel: Record<string, Record<string, TrackedNativeChatSessionOption>>
 }
 
@@ -28,6 +31,15 @@ export function cloneNativeChatSessionOptionRecord(
   return {
     agent: record.agent,
     ...(record.model ? { model: { ...record.model } } : {}),
+    ...(record.defaultContext
+      ? {
+          defaultContext: {
+            ...record.defaultContext,
+            model: cloneDefaultModel(record.defaultContext.model),
+            provisionalOptions: [...record.defaultContext.provisionalOptions]
+          }
+        }
+      : {}),
     valuesByModel: Object.fromEntries(
       Object.entries(record.valuesByModel).map(([modelId, values]) => [
         modelId,
@@ -35,6 +47,25 @@ export function cloneNativeChatSessionOptionRecord(
       ])
     )
   }
+}
+
+export function cloneDefaultModel(model: CatalogModel | null): CatalogModel | null {
+  return model
+    ? {
+        ...model,
+        options: model.options.map((option) => ({
+          ...option,
+          apply: {
+            ...option.apply,
+            ...(option.apply.midSession ? { midSession: { ...option.apply.midSession } } : {})
+          },
+          kind:
+            option.kind.type === 'select'
+              ? { ...option.kind, choices: option.kind.choices.map((choice) => ({ ...choice })) }
+              : { ...option.kind }
+        }))
+      }
+    : null
 }
 
 export function isFlipOnlyMidSession(
@@ -75,6 +106,9 @@ export function clearTrackedSessionOption(
 export function clearNativeChatSessionModel(record: NativeChatSessionOptionRecord): void {
   const modelId = typeof record.model?.value === 'string' ? record.model.value : null
   record.model = undefined
+  if (record.defaultContext) {
+    record.defaultContext = { resolved: true, model: null, provisionalOptions: [] }
+  }
   if (modelId) {
     delete record.valuesByModel[modelId]
   }
@@ -101,6 +135,11 @@ export function setTrackedSessionOption(
   record.valuesByModel[modelId] = {
     ...record.valuesByModel[modelId],
     [optionId]: { value, source }
+  }
+  if (!record.model && record.defaultContext && !record.defaultContext.resolved) {
+    record.defaultContext.provisionalOptions = [
+      ...new Set([...record.defaultContext.provisionalOptions, optionId])
+    ]
   }
   return modelId
 }

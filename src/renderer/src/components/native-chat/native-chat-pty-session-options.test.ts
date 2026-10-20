@@ -705,6 +705,8 @@ describe('native chat PTY session options', () => {
     // from the tracked model alone threw `Unknown session option: effort` on click.
     await surface.setOption('effort', 'low')
 
+    surface.replaceModels([{ ...GROK_SESSION_OPTION_CATALOG.models[0], id: 'grok-5' }])
+    expect(surface.getSnapshot()[0].kind).toMatchObject({ currentValue: 'grok-5' })
     expect(dispatch).toHaveBeenCalledWith('/effort low')
     expect(surface.getSnapshot().find(({ id }) => id === 'effort')).toMatchObject({
       valueSource: 'dispatched',

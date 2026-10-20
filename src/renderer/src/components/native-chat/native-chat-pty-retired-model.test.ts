@@ -60,7 +60,7 @@ describe('grok inventory and session selection', () => {
       currentValue: 'grok-4.5',
       choices: ['grok-5', 'grok-4.5'].map((value) => expect.objectContaining({ value }))
     })
-    expect(readNativeChatSessionOptionCache('pty-1')).toEqual(tracked)
+    expect(readNativeChatSessionOptionCache('pty-1')).toMatchObject(tracked)
 
     await surface.setOption('model', 'grok-4.5')
     await surface.setOption('effort', 'low')
