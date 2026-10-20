@@ -36,9 +36,9 @@ export function buildMuxedLocalForwardCancelArgs(
   return [
     '-F',
     '/dev/null',
-    '-o',
-    // Why doubled: ssh expands `%` tokens again in an -o ControlPath.
-    `ControlPath=${controlPath.replaceAll('%', '%%')}`,
+    // Why -S, not -o: an -o value is split on spaces. Doubled: ssh expands `%` tokens in it again.
+    '-S',
+    controlPath.replaceAll('%', '%%'),
     '-O',
     'cancel',
     '-L',

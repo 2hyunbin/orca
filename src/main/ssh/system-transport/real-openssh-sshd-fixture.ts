@@ -99,7 +99,9 @@ export async function startRealOpenSshFixture(
       ...(extra.sshd ?? [])
     ].join('\n')
   )
-  const controlPath = join(dir, 'cm-%C')
+  // Why a space: a quoted ControlPath with one is valid, and recovery must keep it whole.
+  mkdirSync(join(dir, 'control sockets'))
+  const controlPath = join(dir, 'control sockets', 'cm-%C')
   const configFile = join(dir, 'ssh_config')
   const target: SshTarget = {
     id: 'real-openssh',
@@ -123,7 +125,7 @@ export async function startRealOpenSshFixture(
       `  UserKnownHostsFile ${join(dir, 'known_hosts')}`,
       '  StrictHostKeyChecking no',
       '  ControlMaster auto',
-      `  ControlPath ${controlPath}`,
+      `  ControlPath "${controlPath}"`,
       '  ControlPersist 600',
       ...(extra.client ?? []).map((line) => `  ${line}`)
     ].join('\n')

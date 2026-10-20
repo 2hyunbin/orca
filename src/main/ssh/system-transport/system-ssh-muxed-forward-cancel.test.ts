@@ -72,9 +72,14 @@ describe('system SSH muxed forward cancel', () => {
 
   // Why: `-O cancel` also cancels every forward a loaded ssh_config declares for the host.
   it('asks that socket to cancel only this exact forward, reading no ssh_config', () => {
-    const args = buildMuxedLocalForwardCancelArgs('/tmp/cm-50%', 59418, '127.0.0.1', 6768)
+    const args = buildMuxedLocalForwardCancelArgs(
+      '/tmp/my sockets/cm-50%',
+      59418,
+      '127.0.0.1',
+      6768
+    )
     expect(args.slice(0, 2)).toEqual(['-F', '/dev/null'])
-    expect(args).toContain('ControlPath=/tmp/cm-50%%')
+    expect(args[args.indexOf('-S') + 1]).toBe('/tmp/my sockets/cm-50%%')
     expect(args.indexOf('-O')).toBeLessThan(args.indexOf('--'))
     expect(args[args.indexOf('-O') + 1]).toBe('cancel')
     expect(args.filter((arg) => arg === '-L')).toHaveLength(1)
@@ -85,7 +90,7 @@ describe('system SSH muxed forward cancel', () => {
     await expect(cancelMuxedLocalForward(createTarget(), 59418, '127.0.0.1', 6768)).resolves.toBe(
       true
     )
-    expect(cancelCall()?.args).toContain('ControlPath=/tmp/cm-abc123')
+    expect(cancelCall()?.args).toContain('/tmp/cm-abc123')
   })
 
   it('asks nothing when the target has no control socket', async () => {
