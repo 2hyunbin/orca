@@ -64,6 +64,7 @@ describe('VoiceModelList cloud models', () => {
     const ready = cloud('openai-gpt-4o-mini-transcribe', 'ready')
     const { texts, pressables, onUseModel } = render({
       enabled: true,
+      dictationMode: 'toggle',
       selectedModelId: '',
       models: [ready]
     })
@@ -77,6 +78,7 @@ describe('VoiceModelList cloud models', () => {
     const ready = cloud('openai-gpt-4o-mini-transcribe', 'ready')
     const { texts, pressables } = render({
       enabled: true,
+      dictationMode: 'toggle',
       selectedModelId: ready.id,
       models: [ready]
     })
@@ -87,6 +89,7 @@ describe('VoiceModelList cloud models', () => {
   it('says where to add the key when the cloud model is not ready', () => {
     const { texts, pressables } = render({
       enabled: true,
+      dictationMode: 'toggle',
       selectedModelId: '',
       models: [cloud('openai-gpt-4o-transcribe', 'not-downloaded')]
     })
