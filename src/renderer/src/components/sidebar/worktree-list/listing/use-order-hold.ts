@@ -42,10 +42,9 @@ const DOCUMENT_HANDLERS: [string, (event: Event) => void][] = [
   ['pointerup', () => update({ pressed: false })],
   ['pointercancel', () => update({ pressed: false })],
   ['dragstart', (event) => update({ drag: inList(event.target) })],
-  // Pointer events pause during a drag, so its end also ends the hover hold. Why dragend, not
-  // drop: the list commits a drop in its own listener for that event, against the held rows.
+  // Pointer events pause during a drag, so its end also ends the hover hold.
   ['dragend', () => update({ drag: false, inside: false })],
-  ['drop', () => update(dragging ? {} : { inside: false })]
+  ['drop', () => update({ drag: false, inside: false })]
 ]
 
 function subscribe(listener: () => void): () => void {

@@ -65,7 +65,7 @@ describe('useOrderHeldWhileEngaged', () => {
     expect(result.current).toEqual(['a', 'b'])
   })
 
-  it('holds through a drag in Smart and applies the order once the drag has ended', () => {
+  it('holds through a drag in Smart and applies the order when the drag ends over the list', () => {
     const { row } = mountList()
     const { result, rerender } = renderHook(
       ({ ids, sortBy }: { ids: string[]; sortBy: SortBy }) => useOrderHeldWhileEngaged(ids, sortBy),
@@ -74,9 +74,6 @@ describe('useOrderHeldWhileEngaged', () => {
     fire(row, 'pointerover')
     fire(row, 'dragstart')
     rerender({ ids: ['b', 'a'], sortBy: 'smart' })
-    expect(result.current).toEqual(['a', 'b'])
-    // The list's own drop commit reads the held rows, so only the drag's end releases them.
-    fire(row, 'drop')
     expect(result.current).toEqual(['a', 'b'])
     fire(row, 'dragend')
     expect(result.current).toEqual(['b', 'a'])
