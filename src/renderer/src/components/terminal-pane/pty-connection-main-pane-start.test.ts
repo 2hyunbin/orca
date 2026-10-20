@@ -29,7 +29,7 @@ let storeSubscribers: ((state: StoreState) => void)[] = []
 
 function setStore(patch: Partial<StoreState>): void {
   mockStoreState = { ...mockStoreState, ...patch }
-  for (const listener of [...storeSubscribers]) {
+  for (const listener of storeSubscribers) {
     listener(mockStoreState)
   }
 }
