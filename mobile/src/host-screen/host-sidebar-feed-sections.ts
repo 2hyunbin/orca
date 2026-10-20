@@ -11,6 +11,10 @@ import { PR_GROUP_LABELS } from '../../../src/shared/workspace-view/workspace-pr
 import type { Worktree as HostWorktree } from '../../../src/shared/worktree/types'
 import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
 import type { Section, Worktree } from '../worktree/workspace-list-types'
+import {
+  isLastVisitedWorktreeRow,
+  type LastVisitedWorktreeOnHost
+} from '../worktree/last-visited-worktree-by-host'
 import { resolveWorktreeHostId } from '../worktree/worktree-host-context-labels'
 import { filterWorktrees } from '../worktree/workspace-list-sections'
 import { rowFiltersForView, type MobileViewState } from '../worktree/workspace-view-settings'
@@ -18,7 +22,8 @@ import { rowFiltersForView, type MobileViewState } from '../worktree/workspace-v
 /** What the host screen draws from a feed-built list, besides its rows' own live content. */
 export type HostFeedListSources = {
   rows: readonly HostSectionRow[]
-  activeRowKeys: ReadonlySet<string>
+  /** The phone's own highlight; the desktop's selected workspace never sets it. */
+  lastVisited: LastVisitedWorktreeOnHost | null
   /** The rows worktree.ps and the desktop's server lists served, for what each row draws. */
   liveRows: readonly Worktree[]
   repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId>
@@ -97,7 +102,8 @@ function matchesSearch(row: Worktree, query: string): boolean {
 
 /**
  * The phone's sections from the list the shared builder made from the feed: the desktop's headers,
- * order, nesting and highlight, each row drawn with the live content the phone already reads.
+ * order and nesting, each row drawn with the live content the phone already reads, and highlighted
+ * where it is the workspace this phone last opened.
  * Search narrows the rows here, as the desktop's own search never reaches the feed.
  */
 export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
@@ -153,7 +159,10 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
         const drawn = rowOf(row.worktree, hostId, row.repo?.displayName, 'git')
         current().data.push({
           ...drawn,
-          isActive: sources.activeRowKeys.has(row.rowKey),
+          isActive: isLastVisitedWorktreeRow(
+            { worktreeId: row.worktree.id, hostId },
+            sources.lastVisited
+          ),
           sectionListKey: row.rowKey,
           lineageDepth: row.depth,
           ...(row.groupDepth ? { projectGroupDepth: row.groupDepth } : {}),
@@ -181,7 +190,10 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
         )
         current().data.push({
           ...rowOf(worktree, hostId, row.projectGroup.name, 'folder-workspace'),
-          isActive: sources.activeRowKeys.has(row.key),
+          isActive: isLastVisitedWorktreeRow(
+            { worktreeId: worktree.id, hostId },
+            sources.lastVisited
+          ),
           sectionListKey: row.key,
           lineageDepth: 0,
           ...(row.groupDepth ? { projectGroupDepth: row.groupDepth } : {}),
@@ -221,13 +233,17 @@ export function buildPreFeedSections(sources: {
   view: MobileViewState
   search: string
   repoHostIdByRepoId: ReadonlyMap<string, ExecutionHostId>
+  lastVisited: LastVisitedWorktreeOnHost | null
 }): Section[] {
   const rows = filterWorktrees(
     sources.rows,
     rowFiltersForView(sources.view),
     sources.search,
     sources.repoHostIdByRepoId
-  )
+  ).map((row) => ({
+    ...row,
+    isActive: isLastVisitedWorktreeRow(row, sources.lastVisited)
+  }))
   return rows.length > 0 ? [{ key: 'all', title: '', data: rows }] : []
 }
 
