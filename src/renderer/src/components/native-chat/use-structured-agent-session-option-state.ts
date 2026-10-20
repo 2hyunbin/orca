@@ -160,7 +160,14 @@ export function useStructuredAgentSessionOptionState(args: {
         target,
         'agentSession.options',
         { sessionId }
-      )
+      ).catch((error: unknown) => {
+        if (!stale) {
+          setConversationSupport((current) =>
+            current ? { ...current, canSwitchAccount: false } : current
+          )
+        }
+        throw error
+      })
       if (!stale && optionMutationGeneration.current === readGeneration) {
         setConversationSupport({
           sessionId,
