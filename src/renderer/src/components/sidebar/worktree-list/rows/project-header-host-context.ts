@@ -27,6 +27,7 @@ export type ProjectHeaderHostContext = {
 
 export function getProjectHeaderHostContexts(args: {
   rows: readonly HostSectionRow[]
+  visibleProjectRepoIdsBySection?: ReadonlyMap<string, ReadonlySet<string>>
   hosts: readonly ExecutionHostRegistryEntry[]
   runtimeEnvironments?: readonly ManagedOrcadEnvironmentSummary[]
   sshConnectionStates?: ReadonlyMap<string, Pick<SshConnectionState, 'managedServer'>>
@@ -47,12 +48,14 @@ export function getProjectHeaderHostContexts(args: {
   const canonicalHostId = (hostId: ExecutionHostId): ExecutionHostId =>
     hostsById.get(hostId)?.id ?? hostId
   const projectIndex = buildProjectGroupingIndex(args.projectGrouping)
+  const repoHostId = (repo: Repo): ExecutionHostId =>
+    canonicalHostId(
+      projectIndex?.setupByRepoId.get(repo.id)?.hostId ?? getRepoExecutionHostId(repo)
+    )
   const hostsByProjectKey = new Map<string, Set<ExecutionHostId>>()
   for (const repo of args.repoMap.values()) {
     const key = getProjectGroupingForRepo(repo.id, args.repoMap, projectIndex).key
-    const hostId = canonicalHostId(
-      projectIndex?.setupByRepoId.get(repo.id)?.hostId ?? getRepoExecutionHostId(repo)
-    )
+    const hostId = repoHostId(repo)
     const projectHosts = hostsByProjectKey.get(key) ?? new Set<ExecutionHostId>()
     projectHosts.add(hostId)
     hostsByProjectKey.set(key, projectHosts)
@@ -72,7 +75,14 @@ export function getProjectHeaderHostContexts(args: {
       const projectHosts = hostsByProjectKey.get(row.key)
       // A logical project can contain checkouts on several machines.
       if (projectHosts && projectHosts.size > 1) {
-        for (const hostId of projectHosts) {
+        const visibleRepoIds = args.visibleProjectRepoIdsBySection?.get(row.key)
+        const visibleProjectHosts = visibleRepoIds
+          ? [...visibleRepoIds].flatMap((repoId) => {
+              const repo = args.repoMap.get(repoId)
+              return repo ? [repoHostId(repo)] : []
+            })
+          : projectHosts
+        for (const hostId of visibleProjectHosts) {
           visibleHostIds.add(hostId)
         }
         continue

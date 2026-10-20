@@ -138,6 +138,10 @@ const WorktreeList = React.memo(function WorktreeList({
     prCache,
     agentSendTargetWorktreeId
   })
+  const visibleProjectRepoIdsBySection = useMemo(
+    () => new Map(rowModel.occurrencePlan.sections.map(({ key, group }) => [key, group.repoIds])),
+    [rowModel.occurrencePlan]
+  )
   const effectiveCollapsedGroups = rowModel.effectiveCollapsedGroups
   const selection = useSidebarWorktreeSelection({
     sectionRows: rowModel.sectionRows,
@@ -249,6 +253,7 @@ const WorktreeList = React.memo(function WorktreeList({
         rows={rowModel.sectionRows}
         hostOptions={rowModel.hostOptions}
         occurrencePlan={rowModel.occurrencePlan}
+        visibleProjectRepoIdsBySection={visibleProjectRepoIdsBySection}
         // Why: full-page nav views aren't scoped to a worktree, so no sidebar card should look selected.
         activeWorktreeId={
           activeView === 'tasks' || activeView === 'activity' ? null : currentSidebarWorktreeId

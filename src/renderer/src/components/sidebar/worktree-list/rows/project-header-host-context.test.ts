@@ -4,11 +4,15 @@ import type { Repo } from '../../../../../../shared/repo-types'
 import type { GroupHeaderRow } from '../../../../../../shared/sidebar-list/row-types'
 import type { HostHeaderRow } from '../../../../../../shared/sidebar-list/host-section-rows'
 import type { SidebarHostOption } from '../../sidebar-host-options'
+import { planSidebarRows } from '../../../../../../shared/sidebar-list/sidebar-row-plan'
+import { addHostSectionRows } from '../../../../../../shared/sidebar-list/host-section-rows'
 import {
   project,
   projectHostSetups,
   repo,
-  remoteRepo
+  remoteRepo,
+  remoteWorktree,
+  worktree
 } from '../../worktree-list-groups-test-fixtures'
 import { getProjectHeaderHostContexts } from './project-header-host-context'
 
@@ -219,6 +223,106 @@ describe('project header host context', () => {
     })
     expect(contexts.has(logical.key)).toBe(false)
     expect(contexts.get(`repo:${other.id}`)?.hostId).toBe('runtime:home')
+  })
+
+  describe.each([
+    { name: 'filtered local checkout', includeRemote: false, empty: false, hostFiltered: false },
+    {
+      name: 'visible checkouts on both hosts',
+      includeRemote: true,
+      empty: false,
+      hostFiltered: false
+    },
+    {
+      name: 'filtered empty local checkout',
+      includeRemote: false,
+      empty: true,
+      hostFiltered: false
+    },
+    {
+      name: 'empty checkouts on both hosts',
+      includeRemote: true,
+      empty: true,
+      hostFiltered: false
+    },
+    { name: 'local host scope', includeRemote: false, empty: false, hostFiltered: true },
+    { name: 'empty local host scope', includeRemote: false, empty: true, hostFiltered: true }
+  ])('$name', ({ includeRemote, empty, hostFiltered }) => {
+    it.each([false, true])('counts only listed owners (collapsed: %s)', (collapsed) => {
+      const other = { ...local, id: 'independent-local' }
+      const map = new Map([repo, remoteRepo, other].map((value) => [value.id, value]))
+      const listedRepoIds = [repo.id, ...(includeRemote ? [remoteRepo.id] : []), other.id]
+      const items = [
+        ...(empty ? [] : [worktree, ...(includeRemote ? [remoteWorktree] : [])]),
+        { ...worktree, id: 'independent-workspace', repoId: other.id }
+      ]
+      const plan = planSidebarRows({
+        groupBy: 'repo',
+        worktrees: items,
+        repoMap: map,
+        prGroupOf: () => 'in-progress',
+        workspaceStatuses: [],
+        projectOrderBy: 'manual',
+        lineageById: {},
+        worktreeMap: new Map(items.map((item) => [item.id, item])),
+        nestLineage: false,
+        projectGroups: [],
+        placeholderRepoIds: new Set(empty ? listedRepoIds : []),
+        importedWorktreesByRepo: new Map(),
+        newExternalWorktreesInboxByRepo: new Map(),
+        pendingCreations: [],
+        projectGrouping: { projects: [project], projectHostSetups },
+        folderWorkspaces: [],
+        defaultHostId: 'local',
+        pinnedDisplayPolicy: 'single-location',
+        filterRepoIds: hostFiltered ? [] : listedRepoIds
+      })
+      const sectionRows = addHostSectionRows({
+        rows: plan.render(new Set(collapsed ? [`project:${project.id}`] : [])),
+        hostOptions: hosts,
+        workspaceHostScope: hostFiltered ? 'local' : 'all',
+        defaultHostId: 'local',
+        localHostLabel: 'Local Mac',
+        preferProjectGrouping: true
+      })
+      expect(sectionRows.some((row) => row.type === 'host-header')).toBe(false)
+      const contexts = getProjectHeaderHostContexts({
+        rows: sectionRows,
+        visibleProjectRepoIdsBySection: new Map(
+          plan.occurrencePlan.sections.map(({ key, group }) => [key, group.repoIds])
+        ),
+        hosts,
+        repoMap: map,
+        projectGrouping: { projects: [project], projectHostSetups }
+      })
+      expect(contexts.has(`project:${project.id}`)).toBe(false)
+      expect(contexts.size).toBe(includeRemote ? 1 : 0)
+      if (includeRemote) {
+        expect(contexts.get(`repo:${other.id}`)?.hostId).toBe('local')
+      }
+    })
+  })
+
+  it('canonicalizes listed checkout aliases before counting visible hosts', () => {
+    const logical: GroupHeaderRow = { ...header(remoteRepo), key: `project:${project.id}` }
+    const contexts = getProjectHeaderHostContexts({
+      rows: [logical, header(paired)],
+      visibleProjectRepoIdsBySection: new Map([[logical.key, new Set([remoteRepo.id])]]),
+      hosts: [
+        ...hosts,
+        {
+          id: 'ssh:gpu-vm',
+          label: 'Home SSH',
+          detail: '',
+          kind: 'ssh',
+          health: 'disconnected',
+          mergedIntoHostId: 'runtime:home'
+        }
+      ],
+      repoMap: new Map([repo, remoteRepo, paired].map((value) => [value.id, value])),
+      projectGrouping: { projects: [project], projectHostSetups }
+    })
+    expect(contexts.size).toBe(0)
   })
 
   it('keeps non-project lanes unchanged', () => {

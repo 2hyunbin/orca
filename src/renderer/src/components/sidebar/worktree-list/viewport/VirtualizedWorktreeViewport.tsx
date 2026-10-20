@@ -66,6 +66,7 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
     () =>
       getProjectHeaderHostContexts({
         rows,
+        visibleProjectRepoIdsBySection: props.visibleProjectRepoIdsBySection,
         hosts: props.hostOptions ?? [],
         runtimeEnvironments,
         sshConnectionStates,
@@ -74,6 +75,7 @@ export const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktr
       }),
     [
       rows,
+      props.visibleProjectRepoIdsBySection,
       props.hostOptions,
       repoMap,
       props.projectGrouping,
