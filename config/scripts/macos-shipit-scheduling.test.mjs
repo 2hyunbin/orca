@@ -18,7 +18,7 @@ describe.skipIf(process.platform !== 'darwin')('native ShipIt scheduling', () =>
         buildMacShipItScheduling(join(work, arch), arch)
       }
       const addon = join(work, process.arch, 'orca_shipit_scheduling.node')
-      // Loading outside Electron must fail safely, and permit a later retry.
+      // Loading outside Electron must fail safely when Squirrel is absent.
       expect(require(addon).configure()).toBe(false)
       const compatibilityProbe = join(work, 'unsupported-api')
       execFileSync('/usr/bin/clang', [
@@ -29,7 +29,14 @@ describe.skipIf(process.platform !== 'darwin')('native ShipIt scheduling', () =>
         '-o',
         compatibilityProbe
       ])
-      for (const mode of ['return-type', 'object', 'payload', 'exception', 'supported']) {
+      for (const mode of [
+        'return-type',
+        'object',
+        'payload',
+        'exception',
+        'thrown-object',
+        'supported'
+      ]) {
         execFileSync(compatibilityProbe, [addon, mode], { timeout: 20_000 })
       }
       const contents = join(work, 'Probe.app', 'Contents')

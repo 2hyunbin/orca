@@ -15,7 +15,7 @@ function buildMacShipItScheduling(resourcesDir, arch) {
     cpSync(join(root, 'native/macos-shipit-scheduling'), workDir, { recursive: true })
     execFileSync(
       process.execPath,
-      [join(root, 'node_modules/node-gyp/bin/node-gyp.js'), 'rebuild', `--arch=${arch}`],
+      [require.resolve('node-gyp/bin/node-gyp.js'), 'rebuild', `--arch=${arch}`],
       { cwd: workDir, stdio: 'inherit' }
     )
     const built = join(workDir, 'build/Release', SHIPIT_SCHEDULING_ADDON)

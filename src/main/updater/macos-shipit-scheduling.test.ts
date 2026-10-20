@@ -38,17 +38,20 @@ describe('macOS installer scheduling', () => {
   })
 
   it.each([
-    null,
-    {},
-    { configure: () => false },
+    { addon: null, reason: 'missing_export' },
+    { addon: {}, reason: 'missing_export' },
+    { addon: { configure: () => false }, reason: 'contract_mismatch' },
     {
-      configure: () => {
-        throw new Error('unsupported')
-      }
+      addon: {
+        configure: () => {
+          throw new Error('unsupported')
+        }
+      },
+      reason: 'configure_failed'
     }
   ])(
     'keeps the updater usable and retries when the native hook is unavailable: %j',
-    async (addon) => {
+    async ({ addon, reason }) => {
       loadNative.mockReturnValueOnce(addon).mockReturnValue({ configure: () => true })
       const { configureMacShipItScheduling } = await import('./macos-shipit-scheduling')
       expect(() => configureMacShipItScheduling()).not.toThrow()
@@ -56,11 +59,30 @@ describe('macOS installer scheduling', () => {
       expect(loadNative).toHaveBeenCalledTimes(2)
       expect(record).toHaveBeenCalledWith(
         'macos_installer_scheduling_unavailable',
-        expect.anything(),
+        expect.objectContaining({ reason }),
         expect.objectContaining({ level: 'warn' })
       )
     }
   )
+
+  it('records a native load failure and retries the same module on the next attempt', async () => {
+    loadNative
+      .mockImplementationOnce(() => {
+        throw new Error('missing addon')
+      })
+      .mockReturnValue({ configure: () => true })
+    const { configureMacShipItScheduling } = await import('./macos-shipit-scheduling')
+    expect(() => configureMacShipItScheduling()).not.toThrow()
+    expect(record).toHaveBeenCalledWith(
+      'macos_installer_scheduling_unavailable',
+      { reason: 'load_failed', errorType: 'Error' },
+      expect.objectContaining({ level: 'warn' })
+    )
+    configureMacShipItScheduling()
+    expect(record).toHaveBeenCalledWith('macos_installer_scheduling_configured', {
+      processType: 'Interactive'
+    })
+  })
 
   it('does not load native code on other platforms', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })

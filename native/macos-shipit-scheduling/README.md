@@ -24,10 +24,11 @@ This hook avoids rebuilding or replacing that dependency and can be removed once
 Electron sets the service type itself. Changing a running PID with `taskpolicy`
 did not reproduce the improvement from setting the launchd job type.
 
-On macOS arm64, signed Orca 1.4.230 clone installs took approximately 72 seconds
-with Standard scheduling and 9 seconds with Interactive scheduling. A real
-unmodified update took 75 seconds. These are local observations, not a timing
-guarantee. The signed installer and its verification ran in both cases.
+On macOS arm64, a real unmodified update took 75 seconds. Signed Orca 1.4.230
+clone installs with Interactive scheduling took 8 seconds with a patched job
+dictionary and 6 seconds through Squirrel's native job submission. These runs
+used different cache conditions; they are local observations, not a controlled
+benchmark or timing guarantee. The signed installer verified each bundle.
 
 The first update into a build containing this fix still uses the previous app's
 launcher. Faster scheduling starts with updates initiated by the fixed build.

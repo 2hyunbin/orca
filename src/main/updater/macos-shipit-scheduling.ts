@@ -10,15 +10,22 @@ export function configureMacShipItScheduling(): void {
   if (process.platform !== 'darwin' || configured) {
     return
   }
+  let reason = 'load_failed'
   try {
     const addon: unknown = requireNative(join(process.resourcesPath, 'orca_shipit_scheduling.node'))
+    reason = 'missing_export'
     if (
       typeof addon !== 'object' ||
       addon === null ||
       !('configure' in addon) ||
-      typeof addon.configure !== 'function' ||
-      addon.configure() !== true
+      typeof addon.configure !== 'function'
     ) {
+      throw new Error('Squirrel installer scheduling is unavailable')
+    }
+    reason = 'configure_failed'
+    const result = addon.configure()
+    reason = 'contract_mismatch'
+    if (result !== true) {
       throw new Error('Squirrel installer scheduling is unavailable')
     }
     configured = true
@@ -27,7 +34,7 @@ export function configureMacShipItScheduling(): void {
     // An Electron API change must leave the native updater usable.
     recordUpdaterLifecycle(
       'macos_installer_scheduling_unavailable',
-      { errorType: error instanceof Error ? error.name : typeof error },
+      { reason, errorType: error instanceof Error ? error.name : typeof error },
       { level: 'warn', message: 'Could not configure macOS installer scheduling' }
     )
   }

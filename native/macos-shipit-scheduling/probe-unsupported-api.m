@@ -5,11 +5,13 @@
 @interface OrcaSchedulingProbeSignal : NSObject
 @property id payload;
 @property BOOL throwsOnMap;
+@property BOOL throwsObject;
 - (id)map:(id (^)(id))transform;
 @end
 
 @implementation OrcaSchedulingProbeSignal
 - (id)map:(id (^)(id))transform {
+  if (self.throwsObject) @throw @"Unsupported map contract";
   if (self.throwsOnMap) {
     [NSException raise:NSInvalidArgumentException format:@"Unsupported map contract"];
   }
@@ -43,8 +45,9 @@ int main(int argc, char **argv) {
       OrcaSchedulingProbeSignal *signal = [OrcaSchedulingProbeSignal new];
       signal.payload = [mode isEqual:@"payload"] ? @"unsupported" : @{@"Label": @"unchanged"};
       signal.throwsOnMap = [mode isEqual:@"exception"];
+      signal.throwsObject = [mode isEqual:@"thrown-object"];
       originalResult = signal;
-      if (signal.throwsOnMap) expected = signal;
+      if (signal.throwsOnMap || signal.throwsObject) expected = signal;
       else if ([mode isEqual:@"payload"]) expected = signal.payload;
       else expected = @{@"Label": @"unchanged", @"ProcessType": @"Interactive"};
     }

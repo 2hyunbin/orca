@@ -20,11 +20,11 @@ static id interactiveJobDictionary(id receiver, SEL selector) {
         // A user-requested install must not inherit launchd's daemon I/O throttling.
         interactiveJob[@"ProcessType"] = @"Interactive";
         return interactiveJob;
-      } @catch (NSException *exception) {
+      } @catch (id exception) {
         return job;
       }
     }];
-  } @catch (NSException *exception) {
+  } @catch (id exception) {
     return signal;
   }
 }
