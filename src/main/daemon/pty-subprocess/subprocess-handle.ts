@@ -1,3 +1,7 @@
+import {
+  discardStagedStartupCommand,
+  type StartupCommandStaging
+} from '../../../shared/startup-command-staging'
 import type * as pty from 'node-pty'
 import type { RecognizedAgentProcess } from '../../../shared/agent-process-recognition'
 import { readPtySlavePath } from '../../../shared/pty-slave-line-discipline-echo'
@@ -24,6 +28,7 @@ export function createDaemonPtySubprocessHandle(args: {
   env: Record<string, string>
   startupCommandDeliveredInShellArgs: boolean
   startupCommandDeliveredByWrapper: boolean
+  startupCommandStaging?: StartupCommandStaging
   reportsChildExitStatus: boolean
   requestedCwd?: string
   sessionId: string
@@ -56,6 +61,7 @@ export function createDaemonPtySubprocessHandle(args: {
   proc.onExit(({ exitCode, signal }) => {
     // Exit listeners may re-enter cleanup; retire signal authority before notifying them.
     dead = true
+    discardStagedStartupCommand(args.startupCommandStaging)
     foreground.markDead()
     // Why: neutralize kill synchronously so a later async socket-close SIGHUP cannot hit a recycled pid.
     if (process.platform !== 'win32') {
@@ -210,6 +216,7 @@ export function createDaemonPtySubprocessHandle(args: {
         return
       }
       disposed = true
+      discardStagedStartupCommand(args.startupCommandStaging)
       dead = true
       events.clear()
       // POSIX destroy() can asynchronously signal a recycled pid; Windows needs kill() to close ConPTY.

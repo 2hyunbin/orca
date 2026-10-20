@@ -50,13 +50,13 @@ async function startShell(
   shellPath: string,
   startupFile: string,
   shellReadyTimeoutMs: number,
-  prompt: string
+  prompt: string,
+  command = `printf 'ORCA_STARTUP_%s\\n' COMMAND_RAN\r`
 ): Promise<{ session: Session; output: () => string; cleanup: () => Promise<void> }> {
   const tempHome = mkdtempSync(join(tmpdir(), 'orca-zsh-interactive-init-restore-'))
   mkdirSync(dirname(join(tempHome, startupFile)), { recursive: true })
   writeFileSync(join(tempHome, startupFile), prompt)
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  const command = `printf 'ORCA_STARTUP_%s\\n' COMMAND_RAN\r`
   const subprocess = await createPtySubprocess({
     sessionId: `interactive-rc-${startupFile}`,
     cols: 80,
@@ -101,41 +101,59 @@ async function startShell(
 describe.each(SHELLS)(
   'startup file that prompts before the shell is ready ($shellPath $prompt)',
   ({ shellPath, startupFile, prompt }) => {
-    it('the passphrase typed into the prompt reaches it, and the startup command runs once after', async () => {
-      const running = await startShell(shellPath, startupFile, 15_000, prompt)
-      try {
-        await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
-        running.session.write(`${SECRET}\r`)
-        await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000).catch((error) => {
-          throw new Error(
-            `${error}\n${JSON.stringify(running.output())}\nstate=${running.session.shellState}`
-          )
-        })
-        expect(running.output()).toContain(`RC_GOT:${SECRET}`)
-        expect(running.session.shellState).toBe('ready')
-        expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
-      } finally {
-        await running.cleanup()
-      }
-    }, 20_000)
-
-    it('a prompt left unanswered past the ready timeout does not receive the startup command', async () => {
-      const running = await startShell(shellPath, startupFile, 500, prompt)
-      try {
-        await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
-        await new Promise((resolve) => setTimeout(resolve, 1_000))
-        running.session.write(`${SECRET}\r`)
-        await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000).catch((error) => {
-          throw new Error(
-            `${error}\n${JSON.stringify(running.output())}\nstate=${running.session.shellState}`
-          )
-        })
-        expect(running.output()).toContain(`RC_GOT:${SECRET}`)
-        expect(running.session.shellState).toBe('ready')
-        expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
-      } finally {
-        await running.cleanup()
-      }
-    }, 20_000)
+    it.each([false, true])(
+      'answers startup questions and executes once (past deadline: %s)',
+      async (pastDeadline) => {
+        const running = await startShell(
+          shellPath,
+          startupFile,
+          pastDeadline ? 500 : 15_000,
+          prompt
+        )
+        try {
+          await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
+          if (pastDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 1_000))
+            expect(running.output()).not.toContain(STARTUP_OUTPUT)
+          }
+          running.session.write(`${SECRET}\r`)
+          await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000).catch((error) => {
+            throw new Error(
+              `${error}\n${JSON.stringify(running.output())}\nstate=${running.session.shellState}`
+            )
+          })
+          expect(running.output()).toContain(`RC_GOT:${SECRET}`)
+          expect(running.session.shellState).toBe('ready')
+          expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
+        } finally {
+          await running.cleanup()
+        }
+      },
+      20_000
+    )
   }
+)
+
+// The command body can exceed exec's per-environment-string limit without creating a large argv.
+it.skipIf(process.platform === 'win32')(
+  'runs a staged large command after the startup question',
+  async () => {
+    const running = await startShell(
+      '/bin/bash',
+      '.bash_profile',
+      15_000,
+      PASSPHRASE_PROMPT,
+      `# ${'x'.repeat(200_000)}\nprintf 'ORCA_STARTUP_%s\\n' COMMAND_RAN`
+    )
+    try {
+      await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
+      running.session.write(`${SECRET}\r`)
+      await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000)
+      expect(running.output()).toContain(`RC_GOT:${SECRET}`)
+      expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
+    } finally {
+      await running.cleanup()
+    }
+  },
+  20_000
 )

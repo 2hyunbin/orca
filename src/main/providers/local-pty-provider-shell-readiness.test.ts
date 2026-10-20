@@ -7,6 +7,7 @@ const {
   accessSyncMock,
   mkdirSyncMock,
   writeFileSyncMock,
+  rmSyncMock,
   spawnMock,
   prepareMacosTccLoginShellMock,
   resolveAgentForegroundProcessMock,
@@ -21,6 +22,7 @@ const {
   accessSyncMock: vi.fn(),
   mkdirSyncMock: vi.fn(),
   writeFileSyncMock: vi.fn(),
+  rmSyncMock: vi.fn(),
   spawnMock: vi.fn(),
   prepareMacosTccLoginShellMock: vi.fn(),
   resolveAgentForegroundProcessMock: vi.fn(),
@@ -39,7 +41,7 @@ vi.mock('fs', () => ({
   writeFileSync: writeFileSyncMock,
   chmodSync: vi.fn(),
   renameSync: vi.fn(),
-  rmSync: vi.fn(),
+  rmSync: rmSyncMock,
   constants: { X_OK: 1 }
 }))
 
@@ -146,6 +148,7 @@ describe('LocalPtyProvider', () => {
       createShellPromptReadinessProbeMock
     })
 
+    rmSyncMock.mockClear()
     exitCb = undefined
     mockProc = createLocalPtyMockProcess({
       get: () => exitCb,
@@ -242,6 +245,36 @@ describe('LocalPtyProvider', () => {
         vi.useRealTimers()
       }
     })
+
+    it.each(['exit', 'quit'])(
+      'cleans staged wrapper commands after fallback and %s',
+      async (cleanup) => {
+        process.env.SHELL = '/usr/bin/fish'
+        const command = `# ${'x'.repeat(200_000)}\nprintf STAGING_OK`
+        spawnMock.mockImplementationOnce(() => {
+          throw new Error('fish failed')
+        })
+        await provider.spawn({ cols: 80, rows: 24, command })
+        const staged = writeFileSyncMock.mock.calls.filter(([path]) =>
+          String(path).includes('orca-launch-')
+        )
+        expect(staged).toHaveLength(2)
+        const [loser, winner] = staged
+        expect(winner?.[1]).toContain(`\n${command}\n`)
+        expect(spawnMock.mock.calls.at(-1)?.[2].env[POSIX_SHELL_STARTUP_COMMAND_ENV]).toBe(
+          `. '${winner?.[0]}'`
+        )
+        expect(rmSyncMock).toHaveBeenCalledWith(loser?.[0], { force: true })
+        expect(rmSyncMock).not.toHaveBeenCalledWith(winner?.[0], { force: true })
+        expect(mockProc.write).not.toHaveBeenCalled()
+        if (cleanup === 'exit') {
+          exitCb?.({ exitCode: 0 })
+        } else {
+          provider.killAll()
+        }
+        expect(rmSyncMock).toHaveBeenCalledWith(winner?.[0], { force: true })
+      }
+    )
 
     it('prints a notice in the terminal when it types a line it could not stage', async () => {
       vi.useFakeTimers()

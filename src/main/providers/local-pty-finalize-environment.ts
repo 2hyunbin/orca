@@ -1,3 +1,4 @@
+import { stageStartupCommand } from '../../shared/startup-command-staging'
 import { win32 as pathWin32 } from 'node:path'
 import { expandWindowsPathEnvironmentVariables } from '../../shared/windows-environment-expansion'
 import { dropInheritedOrcaFishHistory } from '../fish-history-session'
@@ -102,10 +103,20 @@ export function finalizeLocalPtySpawnEnvironment(args: {
       shellArgs: plan.shellArgs
     }
     plan.getFallbackShellReadyConfig = (shell) => {
-      const wrapperStartupCommand =
-        spawn.command !== undefined && supportsPosixShellStartupCommand(shell)
-          ? spawn.command
-          : undefined
+      let wrapperStartupCommand: string | undefined
+      if (spawn.command !== undefined && supportsPosixShellStartupCommand(shell)) {
+        const stagedByShell = (plan.startupCommandStaging ??= new Map())
+        let staging = stagedByShell.get(shell)
+        if (!staging) {
+          staging = stageStartupCommand({
+            command: spawn.command,
+            shellPath: shell,
+            orcaBuiltLine: spawn.launchAgent !== undefined
+          })
+          stagedByShell.set(shell, staging)
+        }
+        wrapperStartupCommand = staging.command
+      }
       const waitsForShellReady = Boolean(spawn.command)
       const config = getShellLaunchConfig(
         shell,
@@ -121,7 +132,7 @@ export function finalizeLocalPtySpawnEnvironment(args: {
         wrapperStartupCommand,
         fishLaunch
       )
-      assertPosixShellStartupCommandPrepared(spawn.command, shell, config.env)
+      assertPosixShellStartupCommandPrepared(wrapperStartupCommand, shell, config.env)
       return config
     }
     const shellLaunch = plan.getFallbackShellReadyConfig(plan.shellPath)
