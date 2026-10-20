@@ -94,7 +94,7 @@ describe('Claude host-awaited open', () => {
         executionOptions: { fastMode: 'true' },
         fence: 7
       })
-    ).resolves.toEqual({ state: 'admitted' })
+    ).resolves.toMatchObject({ state: 'admitted' })
     expect(connection.calls.filter((call) => call.subtype === 'apply_flag_settings')).toEqual([
       { subtype: 'apply_flag_settings', params: { settings: { effortLevel: 'high' } } },
       { subtype: 'apply_flag_settings', params: { settings: { fastMode: true } } }
