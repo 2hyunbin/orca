@@ -1,4 +1,4 @@
-import type { ParsedExecutionHost } from '../../../shared/execution-host'
+import type { ExecutionHostId, ParsedExecutionHost } from '../../../shared/execution-host'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
@@ -35,7 +35,9 @@ export function getGitHubSourceRuntimeTarget(
 export function getGitHubRepoRoutingTarget(
   state: RepoRuntimeOwnerState,
   repoId: string | null | undefined,
-  sourceContext: TaskSourceContext | null | undefined
+  sourceContext: TaskSourceContext | null | undefined,
+  /** The host of the row the caller is showing; picks between twins without a github source. */
+  hostId?: ExecutionHostId | null
 ): RuntimeClientTarget {
   const sourceHost = getGitHubSourceRuntimeHost(sourceContext)
   if (sourceHost) {
@@ -44,7 +46,7 @@ export function getGitHubRepoRoutingTarget(
   return runtimeTargetForOwnerEnvironment(
     sourceContext?.provider === 'github'
       ? getHostlessSourceRepoOwnerEnvironmentId(state.repos, repoId)
-      : getExplicitRuntimeOwnerEnvironmentId(state, repoId)
+      : getExplicitRuntimeOwnerEnvironmentId(state, repoId, hostId)
   )
 }
 
