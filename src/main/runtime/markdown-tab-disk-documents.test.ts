@@ -23,7 +23,9 @@ const FILE_PATH = '/srv/repo/README.md'
 const TAB: ListedMarkdownTab = {
   id: FILE_PATH,
   mode: 'edit',
+  filePath: FILE_PATH,
   sourceFilePath: FILE_PATH,
+  sourceRelativePath: 'README.md',
   isDirty: false
 }
 

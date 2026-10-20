@@ -53,7 +53,7 @@ export type MarkdownTabDiskHost = {
 /** The tab as the phone was shown it; a preview names its source file in `sourceFilePath`. */
 export type ListedMarkdownTab = Pick<
   RuntimeMobileSessionMarkdownTab,
-  'id' | 'mode' | 'sourceFilePath' | 'isDirty'
+  'id' | 'mode' | 'filePath' | 'sourceFilePath' | 'sourceRelativePath' | 'isDirty' | 'isUntitled'
 >
 
 // Why up to 4 bytes over: a character straddling the cap still decodes whole before the cut.
@@ -69,13 +69,39 @@ function savedEditorFile(
 ): PersistedOpenFile {
   const session = host.getWorkspaceSessionForWorktree(worktreeId)
   const files = session?.openFilesByWorktree?.[worktreeId] ?? []
+  const sourceFilePath = tab.sourceFilePath || tab.filePath
   const file = session
-    ? findListedEditorFile(files, session, worktreeId, { id: tab.id, filePath: tab.sourceFilePath })
+    ? findListedEditorFile(files, session, worktreeId, { id: tab.id, filePath: sourceFilePath })
     : undefined
+  if (!file && tab.mode === 'markdown-preview') {
+    // Why: a preview outlives its closed source tab, and only edit tabs are saved; it stays read-only.
+    return {
+      filePath: sourceFilePath,
+      relativePath: tab.sourceRelativePath,
+      worktreeId,
+      language: 'markdown'
+    }
+  }
   if (!file || (file.language !== 'markdown' && tab.mode !== 'markdown-preview')) {
     throw new Error('tab_not_found')
   }
   return file
+}
+
+/** Why a tab is read-only on the phone whatever the file holds; checked before any disk access. */
+function tabReadOnlyReason(
+  tab: ListedMarkdownTab,
+  file: PersistedOpenFile
+): RuntimeMarkdownReadTabResult['readOnlyReason'] {
+  if (tab.mode === 'markdown-preview') {
+    return 'unsupported_preview'
+  }
+  // Why: a phone save must never make a file of a document the user has not named and saved.
+  if (tab.isUntitled) {
+    return 'unsupported_untitled'
+  }
+  // Why: the editor never saves a read-only tab (a log view), so the phone may not either.
+  return file.readOnly ? 'unsupported_tab' : undefined
 }
 
 function readOnlyReason(
@@ -83,14 +109,10 @@ function readOnlyReason(
   file: PersistedOpenFile,
   byteLength: number
 ): RuntimeMarkdownReadTabResult['readOnlyReason'] {
-  if (tab.mode === 'markdown-preview') {
-    return 'unsupported_preview'
-  }
-  // Why: the editor never saves a read-only tab (a log view), so the phone may not either.
-  if (file.readOnly) {
-    return 'unsupported_tab'
-  }
-  return byteLength > MOBILE_MARKDOWN_EDIT_MAX_BYTES ? 'file_too_large' : undefined
+  return (
+    tabReadOnlyReason(tab, file) ??
+    (byteLength > MOBILE_MARKDOWN_EDIT_MAX_BYTES ? 'file_too_large' : undefined)
+  )
 }
 
 export async function readMarkdownTabFromDisk(
@@ -156,6 +178,10 @@ async function saveOnce(
   content: string
 ): Promise<RuntimeMarkdownSaveTabResult> {
   const file = savedEditorFile(host, worktreeId, tab)
+  const refusal = tabReadOnlyReason(tab, file)
+  if (refusal) {
+    throw new Error(refusal)
+  }
   const disk = await host.readFile(worktreeId, file, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
   const reason = readOnlyReason(tab, file, disk.byteLength)
   if (reason) {

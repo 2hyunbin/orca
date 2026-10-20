@@ -222,8 +222,19 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
       getWorkspaceSessionForWorktree: (worktreeId) =>
         this.getWorkspaceSessionForWorktree(worktreeId),
       resolveRuntimeFileTarget: (selector) => this.resolveRuntimeFileTarget(selector),
-      callEnvironment: (environmentId, method, params) =>
-        this.callOrchestrationWorkerServer(environmentId, method, params)
+      callEnvironment: (environmentId, method, params, expectedPairingRevision) =>
+        this.callOrchestrationWorkerServer(
+          environmentId,
+          method,
+          params,
+          undefined,
+          undefined,
+          expectedPairingRevision === undefined
+            ? undefined
+            : { expectedEnvironmentPairingRevision: expectedPairingRevision }
+        ),
+      environmentPairingRevision: (environmentId) =>
+        this.resolveOrchestrationWorkerServer(environmentId).pairingRevision
     })
   }
 

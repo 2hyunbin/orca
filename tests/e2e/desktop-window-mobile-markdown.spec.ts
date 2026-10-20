@@ -5,7 +5,7 @@
  * dirty, and its save lands on disk. The desktop keeps its unsaved text and reports the newer disk
  * content with its usual changed-on-disk banner.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-session-contracts'
 import type {
   RuntimeMarkdownReadTabResult,
@@ -131,7 +131,9 @@ test('a phone saves a Markdown tab the desktop has unsaved edits in, without tou
   }
 })
 
-test("a phone opens the desktop's unsaved untitled Markdown tab", async ({ orcaPage }) => {
+test("a phone reads the desktop's unsaved untitled Markdown tab read-only and never saves it", async ({
+  orcaPage
+}, testInfo) => {
   test.setTimeout(180_000)
   await waitForSessionReady(orcaPage)
   await waitForActiveWorktree(orcaPage)
@@ -195,16 +197,44 @@ test("a phone opens the desktop's unsaved untitled Markdown tab", async ({ orcaP
         { timeout: 30_000 }
       )
       .toBe(true)
+    const disk = readFileSync(untitledPath, 'utf8')
     expect(answer).toMatchObject({
       tabId,
       filePath: untitledPath,
-      content: readFileSync(untitledPath, 'utf8'),
+      content: disk,
       source: 'file',
       isDirty: true,
-      // The relay refused an untitled tab as read-only (unsupported_untitled); its file is on disk now.
-      editable: true
+      editable: false,
+      readOnlyReason: 'unsupported_untitled'
     })
     expect(JSON.stringify(answer)).not.toContain(DRAFT_LINE)
+
+    const read = answer as RuntimeMarkdownReadTabResult
+    const save = await phone.request('markdown.saveTab', {
+      worktree,
+      tabId,
+      baseVersion: read.version,
+      content: PHONE
+    })
+    expect(save).toMatchObject({ ok: false, error: { message: 'unsupported_untitled' } })
+    expect(readFileSync(untitledPath, 'utf8')).toBe(disk)
+
+    // With no file on disk the read fails, and a save still makes none.
+    rmSync(untitledPath)
+    const missingRead = await phone.request('markdown.readTab', { worktree, tabId })
+    testInfo.annotations.push({
+      type: 'untitled-missing-read',
+      description: JSON.stringify(missingRead.ok ? missingRead.result : missingRead.error)
+    })
+    expect(missingRead.ok).toBe(false)
+    const missingSave = await phone.request('markdown.saveTab', {
+      worktree,
+      tabId,
+      baseVersion: read.version,
+      content: PHONE
+    })
+    expect(missingSave).toMatchObject({ ok: false, error: { message: 'unsupported_untitled' } })
+    expect(existsSync(untitledPath)).toBe(false)
   } finally {
     phone.dispose()
     if (untitledPath) {

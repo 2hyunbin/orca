@@ -7,14 +7,18 @@
 import { isBinaryBuffer } from '../../shared/binary-buffer'
 import { parseExecutionHostId } from '../../shared/execution-host'
 import {
+  compareDiskWritePrecondition,
+  diskConflictFromReadFailure,
+  FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
   parseFileWriteResult,
+  type FileWriteDiskConflict,
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../shared/file-write-disk-precondition'
 import { utf8ByteLength } from '../../shared/mobile-markdown-document'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
-import { FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE } from '../../shared/runtime-capability-constants'
+import { assertFileMutationOwnershipCapability } from '../../shared/file-mutation-ownership'
 import type { PersistedOpenFile } from '../../shared/workspace-session-state-types'
 import { readLocalRuntimeFilePrefix } from './files/file-reads'
 import {
@@ -27,12 +31,19 @@ import type { MarkdownDiskFile, MarkdownTabDiskHost } from './markdown-tab-disk-
 import { OrchestrationError } from './orchestration/orchestration-error'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
-type EnvironmentCall = (environmentId: string, method: string, params: unknown) => Promise<unknown>
+type EnvironmentCall = (
+  environmentId: string,
+  method: string,
+  params: unknown,
+  expectedPairingRevision?: number
+) => Promise<unknown>
 
 export type MarkdownTabDiskRuntime = RuntimeLocalFileHost &
   Pick<MarkdownTabDiskHost, 'getWorkspaceSessionForWorktree'> & {
     resolveRuntimeFileTarget(selector: string): Promise<ResolvedRuntimeFileTarget>
     callEnvironment: EnvironmentCall
+    /** The server's current pairing, so every call of one save reaches the server it probed. */
+    environmentPairingRevision(environmentId: string): number | undefined
   }
 
 export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): MarkdownTabDiskHost {
@@ -71,7 +82,7 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
       const { environmentId, target } = await routeOf(worktreeId, file)
       if (environmentId) {
         return writeFileOnEnvironment(
-          runtime.callEnvironment,
+          runtime,
           environmentId,
           worktreeId,
           file,
@@ -95,10 +106,11 @@ async function callEnvironment(
   call: EnvironmentCall,
   environmentId: string,
   method: string,
-  params: unknown
+  params: unknown,
+  expectedPairingRevision?: number
 ): Promise<unknown> {
   try {
-    return await call(environmentId, method, params)
+    return await call(environmentId, method, params, expectedPairingRevision)
   } catch (error) {
     if (error instanceof OrchestrationError && error.code !== 'server_required') {
       throw error
@@ -135,30 +147,70 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+/**
+ * The desktop editor's guarded remote save (`writeRemoteFileIfUnchanged`): a server that advertises
+ * the disk check compares at write time; an older one is compared from here before a plain write.
+ * Every call of the save is pinned to the pairing it probed, so a re-pair never receives the write.
+ */
 async function writeFileOnEnvironment(
-  call: EnvironmentCall,
+  runtime: Pick<MarkdownTabDiskRuntime, 'callEnvironment' | 'environmentPairingRevision'>,
   environmentId: string,
   worktreeId: string,
   file: MarkdownFileAddress,
   content: string,
   diskPrecondition: FileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
-  let written: unknown
+  let pairingRevision: number | undefined
   try {
-    written = await callEnvironment(call, environmentId, FILE_WRITE_IF_UNCHANGED_METHOD, {
-      worktree: `id:${worktreeId}`,
-      relativePath: file.relativePath,
-      content,
-      // Why `local`: the server writes only a workspace it runs itself, so the write never hops on.
-      expectedExecutionHostId: 'local',
-      diskPrecondition
+    pairingRevision = runtime.environmentPairingRevision(environmentId)
+  } catch (error) {
+    throw new RemoteRuntimeClientError(
+      'remote_runtime_unavailable',
+      error instanceof Error ? error.message : String(error)
+    )
+  }
+  const pinned = (method: string, params: unknown): Promise<unknown> =>
+    callEnvironment(runtime.callEnvironment, environmentId, method, params, pairingRevision)
+  const status = await pinned('status.get', undefined)
+  const capabilities =
+    isRecord(status) && Array.isArray(status.capabilities) ? status.capabilities : []
+  assertFileMutationOwnershipCapability({ capabilities })
+  const params = {
+    worktree: `id:${worktreeId}`,
+    relativePath: file.relativePath,
+    content,
+    // Why `local`: the server writes only a workspace it runs itself, so the write never hops on.
+    expectedExecutionHostId: 'local'
+  }
+  if (capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY)) {
+    return parseFileWriteResult(
+      await pinned(FILE_WRITE_IF_UNCHANGED_METHOD, { ...params, diskPrecondition })
+    )
+  }
+  const diskConflict = await diskConflictOnServer(pinned, params, diskPrecondition)
+  if (diskConflict) {
+    return { ok: false, diskConflict }
+  }
+  return parseFileWriteResult(await pinned('files.write', params))
+}
+
+/** For a server that would write unguarded: a read that cannot prove the disk fails the save. */
+async function diskConflictOnServer(
+  pinned: (method: string, params: unknown) => Promise<unknown>,
+  address: { worktree: string; relativePath: string },
+  precondition: FileWriteDiskPrecondition
+): Promise<FileWriteDiskConflict | null> {
+  let read: unknown
+  try {
+    read = await pinned('files.read', {
+      worktree: address.worktree,
+      relativePath: address.relativePath
     })
   } catch (error) {
-    // Why no plain `files.write` fallback: a server before #30605 cannot check the disk, so it may not write.
-    if (error instanceof OrchestrationError && error.code === 'method_not_found') {
-      throw new Error(FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE)
-    }
-    throw error
+    return diskConflictFromReadFailure(precondition, error)
   }
-  return parseFileWriteResult(written)
+  if (!isRecord(read) || typeof read.content !== 'string' || read.truncated === true) {
+    return compareDiskWritePrecondition(precondition, undefined)
+  }
+  return compareDiskWritePrecondition(precondition, read.content)
 }
