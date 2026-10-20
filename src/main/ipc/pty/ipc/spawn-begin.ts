@@ -3,7 +3,6 @@ import { resolveAgentLaunchPaneVerdict } from '../../../agent-launch/agent-launc
 import { AGENT_LAUNCH_PANE_REFUSED_CODE } from '../../../../shared/agent-launch-pane-verdict'
 import { agentLaunchPaneLiveness } from '../pane/agent-launch-pane-evidence'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
-import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
 import type { CodexPaneHomeRoute } from '../../../codex/codex-pane-account-registry'
 import { createPtySpawnTiming } from '../../pty-spawn-timing'
 import { allocatePtyLifecycleSequence } from '../host-env/types'
@@ -13,7 +12,8 @@ import {
   makePaneSpawnReservationKey,
   reservePaneSpawn,
   paneSpawnReservationsByOwnerKey,
-  pendingRuntimePaneCreatesByOwnerKey
+  pendingRuntimePaneCreatesByOwnerKey,
+  type PaneSpawnReservationResult
 } from '../pane/spawn-reservation'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
 import { excludeReplacedPaneOwner } from '../pane/replaced-pane-owner'
@@ -39,7 +39,7 @@ export function resolveEarlyPaneSpawnReservationKey(args: PtySpawnIpcArgs): stri
 
 export async function beginPtyIpcSpawn(
   ctx: PtyIpcSpawnState
-): Promise<PtySpawnResult | { isReattach: true } | null> {
+): Promise<PaneSpawnReservationResult | null> {
   const args = ctx.args
   // A pane an agent launch laid out attaches to its agent or says why it can't, never runs a shell.
   // A replacing spawn already holds the pane: the user restarted it, and that is theirs to run.

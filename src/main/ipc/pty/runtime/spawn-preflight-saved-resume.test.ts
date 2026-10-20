@@ -64,6 +64,7 @@ function chatHost() {
     getAgentProviderSessionRows: () => [
       {
         paneKey: 'tab-1:leaf',
+        connectionId: null,
         agentType: 'claude' as const,
         state: 'working' as const,
         prompt: '',

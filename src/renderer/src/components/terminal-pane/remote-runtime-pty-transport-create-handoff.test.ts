@@ -531,6 +531,9 @@ describe('createRemoteRuntimePtyTransport', () => {
       const onConnect = vi.fn()
       const result = await transport.connect({ url: '', callbacks: { onReplayData, onConnect } })
       try {
+        if (!result || typeof result === 'string') {
+          throw new Error('Expected a terminal connection result')
+        }
         expect(runtimeCall).toHaveBeenCalledWith(
           expect.objectContaining({ method: 'terminal.create' })
         )

@@ -102,6 +102,7 @@ export async function admitColdRestoreReattach(
         row.state !== 'done' &&
         !row.structuredHost &&
         !row.connectionId &&
+        row.agentType &&
         row.providerSession
           ? [{ agent: row.agentType, providerSession: row.providerSession }]
           : []
