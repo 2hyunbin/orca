@@ -5,12 +5,15 @@ import {
   claudeModelEffortLevels,
   claudeModelFastModeSupport,
   readClaudeCurrentModel,
+  observeClaudeSettingsApplied,
   readClaudeListedModels,
   readClaudeSettingsEffort,
   readClaudeSettingsFastMode
 } from './claude-structured-session-options'
 import type { ClaudeSession } from './claude-structured-session-state'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
+
+import { beginClaudeOptionMutation } from './claude-structured-execution-observations'
 
 const OPTION_ORDER = ['model', 'effort', 'fastMode'] as const
 
@@ -115,18 +118,10 @@ export async function setClaudeStructuredOption(
     input.key === 'model' && session.options.get('fastMode') === 'true'
       ? claudeModelFastModeSupport(session, listed, input.value)
       : null
-  const modelWasConfirmed = readClaudeCurrentModel(session).confirmed
   session.appliedInputOptions.delete(input.key)
-  const mutationSequence = ++session.optionMutationSequence
+  const mutationSequence = beginClaudeOptionMutation(session, input.key)
   // Read with the fence bump, so a write that lands after an earlier one's bookkeeping compares against it.
   const held = session.options.get(input.key)
-  // Only a model write can stale the model report — an effort or Fast write does
-  // not change what the child is running. Leaving the stamp behind
-  // would drop the session back to the written model and refuse, on the next
-  // effort write, a level the model actually running advertises.
-  if (modelWasConfirmed && input.key !== 'model') {
-    session.reportedModelMutation = mutationSequence
-  }
   try {
     await apply()
     if (mutationSequence === session.optionMutationSequence) {
@@ -138,8 +133,6 @@ export async function setClaudeStructuredOption(
     }
     if (input.key === 'model') {
       session.translator?.modelWritten(input.value)
-      // It described the model this write replaced; the next readback re-reads it.
-      delete session.appliedOptions
     }
     if (
       input.key === 'model' &&
@@ -173,22 +166,25 @@ export async function setClaudeStructuredOption(
   }
   // Readback confirms presentation; accepted input remains independent of optional reports.
   // Max is session-only; settings readback reports the underlying level.
-  const adopted =
+  const settings =
     (input.key === 'effort' && input.value !== 'max') || input.key === 'fastMode'
-      ? await session.connection
-          .getSettings({ timeoutMs })
-          .then((settings) =>
-            input.key === 'fastMode'
-              ? readClaudeSettingsFastMode(settings)
-              : readClaudeSettingsEffort(settings)
-          )
-          .catch(() => null)
+      ? await session.connection.getSettings({ timeoutMs }).catch(() => null)
       : null
   if (mutationSequence !== session.optionMutationSequence) {
     return Object.fromEntries(session.options)
   }
+  if (settings !== null) {
+    observeClaudeSettingsApplied(session, settings)
+  }
+  const adopted =
+    input.key === 'fastMode'
+      ? readClaudeSettingsFastMode(settings)
+      : readClaudeSettingsEffort(settings)
   if (input.key === 'fastMode' && typeof adopted === 'boolean') {
     session.reportedOptions.fastMode = adopted
+    if (!adopted) {
+      delete session.fastModeReportedMutation
+    }
   }
   // A disagreement stops main vouching for the value, it does not veto the write:
   // the pre-flight guard already refused levels the model advertises no control for,

@@ -75,7 +75,11 @@ export async function noteStructuredAgentSessionReportedOptions(
   const runs = childRuns.get(child)
   childRuns.set(child, { reported: ran })
   if (runs?.owed) {
-    await recordStructuredAgentSessionRanOptions(context, sessionId, fence, runs.owed)
+    const owed = runs.owed
+    await recordStructuredAgentSessionRanOptions(context, sessionId, fence, {
+      ...owed,
+      ...(owed.executed ? { executed: { ...owed.executed, model: ran.model } } : {})
+    })
   }
 }
 
@@ -100,7 +104,7 @@ export async function recordStructuredAgentSessionRanOptions(
   }
   const { message, executed } = handed
   const reported = childRuns.get(child)?.reported
-  const model = executed?.model ?? message?.model ?? reported?.model
+  const model = executed ? (executed.model ?? message?.model) : (message?.model ?? reported?.model)
   childRuns.set(child, { ...(reported ? { reported } : {}), ...(model ? {} : { owed: handed }) })
   if (!model) {
     return

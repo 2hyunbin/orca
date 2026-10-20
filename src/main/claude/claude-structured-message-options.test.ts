@@ -139,7 +139,10 @@ describe('Claude accepted message choices', () => {
       executionOptions: {},
       fence: 7
     })
-    expect(outcome).toEqual({ state: 'admitted', ranOptions })
+    expect(outcome).toEqual({
+      state: 'admitted',
+      ranOptions: applied ? { model: 'claude-sonnet-5', ...ranOptions } : {}
+    })
   })
 
   it('applies a held message A before its prompt, then message B on the existing child', async () => {

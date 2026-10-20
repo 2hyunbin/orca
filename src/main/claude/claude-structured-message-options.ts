@@ -1,3 +1,4 @@
+import { claudeExecutionObservations } from './claude-structured-execution-observations'
 import { dispatchClaudeTurn } from './claude-structured-dispatch'
 import type { StructuredAgentSessionAdapter } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { AgentSessionExecutionOptions } from '../../shared/agent-session-execution-options'
@@ -77,25 +78,6 @@ async function defaultModelForMessage(
   return fallback
 }
 
-/** What the turn runs on, from the CLI's own answers: the message's choices it applied, and the
- *  effort the CLI resolved for the model it applies (never the settings level alone). */
-function claudeRanOptions(
-  session: ClaudeSession,
-  options: AgentSessionExecutionOptions
-): Record<string, string> {
-  const resolvedHere = options.model === undefined || options.model === session.launchedModel
-  const ran = {
-    model: options.model,
-    effort: options.effort ?? (resolvedHere ? session.configuredDefaults?.effort : undefined),
-    fastMode: options.fastMode
-  }
-  return Object.fromEntries(
-    Object.entries(ran).flatMap(([key, value]) =>
-      value !== undefined && session.appliedInputOptions.get(key) === value ? [[key, value]] : []
-    )
-  )
-}
-
 export async function dispatchClaudeMessage(
   session: ClaudeSession,
   input: Parameters<StructuredAgentSessionAdapter['dispatch']>[0],
@@ -103,34 +85,35 @@ export async function dispatchClaudeMessage(
   logger: StructuredAgentSessionLogger = defaultLogger
 ): ReturnType<StructuredAgentSessionAdapter['dispatch']> {
   const messageOptions = input.executionOptions
-  const outcome = await dispatchClaudeTurn(
-    session,
-    input,
-    messageOptions === undefined
-      ? input.beforeDispatch
-      : async () => {
-          await input.beforeDispatch?.()
-          try {
-            await applyClaudeMessageOptions(session, messageOptions, timeoutMs, input.signal)
-            input.signal?.throwIfAborted()
-          } catch (error) {
-            neverThrowingStructuredAgentSessionLogger(logger).warn(
-              'applying Claude message choices failed',
-              {
-                scope: 'claude-message-options',
-                sessionId: input.sessionId,
-                clientMessageId: input.clientMessageId,
-                error
-              }
-            )
-            throw error instanceof AgentSessionOptionRejectedError
-              ? error
-              : new AgentSessionOptionRejectedError(error)
-          }
+  let ranOptions: Record<string, string> = {}
+  const outcome = await dispatchClaudeTurn(session, input, async () => {
+    await input.beforeDispatch?.()
+    try {
+      if (messageOptions !== undefined) {
+        await applyClaudeMessageOptions(session, messageOptions, timeoutMs, input.signal)
+      }
+      input.signal?.throwIfAborted()
+      ranOptions = claudeExecutionObservations(session)
+      if (messageOptions?.model && ranOptions.model !== messageOptions.model) {
+        delete ranOptions.model
+      }
+    } catch (error) {
+      neverThrowingStructuredAgentSessionLogger(logger).warn(
+        'applying Claude message choices failed',
+        {
+          scope: 'claude-message-options',
+          sessionId: input.sessionId,
+          clientMessageId: input.clientMessageId,
+          error
         }
-  )
+      )
+      throw error instanceof AgentSessionOptionRejectedError
+        ? error
+        : new AgentSessionOptionRejectedError(error)
+    }
+  })
   // Always, even empty: the settings effort the CLI reports is never evidence of a run.
   return outcome.state === 'accepted' || outcome.state === 'admitted'
-    ? { ...outcome, ranOptions: claudeRanOptions(session, messageOptions ?? {}) }
+    ? { ...outcome, ranOptions }
     : outcome
 }

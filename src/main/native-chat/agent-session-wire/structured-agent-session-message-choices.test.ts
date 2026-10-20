@@ -195,3 +195,23 @@ it('steers a matching choice but holds a different one for a new turn', async ()
     effort: 'low'
   })
 })
+
+it('waits for this dispatch’s model without filling its omitted effort or Fast from an older report', async () => {
+  await rig.dispose()
+  rig = await createQueuedMessageTestRig({ reportsModel: 'old-model', reportsEffort: 'high' })
+  rig.dispatch.mockResolvedValueOnce({ state: 'admitted', ranOptions: {} })
+  const first = rig.send('first')
+  expect(await first.result).toMatchObject({ ok: true })
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledOnce())
+  expect(rig.store.getRecord(SESSION)?.options).toBeUndefined()
+  await rig.host.handleAdapterEvent({
+    type: 'options-reported',
+    sessionId: SESSION,
+    fence: rig.store.getRecord(SESSION)!.lease.runtimeFence,
+    acquisitionGeneration: 'generation-1',
+    reportedOptions: { model: 'actual-model', effort: 'low', fastMode: true, fastModeState: 'on' }
+  })
+  await eventually(() =>
+    expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'actual-model' })
+  )
+})

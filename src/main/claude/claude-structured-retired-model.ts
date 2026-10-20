@@ -2,6 +2,7 @@
 // retired fails the turn. The CLI says so itself: a synthetic reply whose `error` is
 // `model_not_found` (Claude Code 2.1.280). That reply is the evidence the saved model cannot run.
 
+import { beginClaudeOptionMutation } from './claude-structured-execution-observations'
 import type {
   ClaudeSession,
   ClaudeStructuredSessionAdapterDeps
@@ -38,7 +39,7 @@ export function resetClaudeRetiredModel(
   retired: string
 ): void {
   session.appliedInputOptions.delete('model')
-  const sequence = ++session.optionMutationSequence
+  const sequence = beginClaudeOptionMutation(session, 'model')
   void session.connection.setModel(undefined, { timeoutMs: deps.requestTimeoutMs }).then(
     () => {
       if (sequence !== session.optionMutationSequence) {

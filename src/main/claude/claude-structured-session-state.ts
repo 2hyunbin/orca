@@ -170,6 +170,8 @@ export type ClaudeSession = {
   appliedOptions?: { model?: string; effort?: string }
   /** CLI settings resolved before a turn changed them, when no launch override hid that value. */
   configuredDefaults?: { model?: string; effort?: string }
+  /** Mutation at which the provider last reported its Fast routing state. */
+  fastModeReportedMutation?: number
   fastModeState?: AgentSessionFastModeState
   fastModeDisabledReason?: string
   fastModePerSessionOptIn?: boolean

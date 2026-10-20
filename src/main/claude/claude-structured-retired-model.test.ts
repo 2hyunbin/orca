@@ -163,7 +163,7 @@ describe('a live child still launched with a retired model', () => {
         executionOptions: { model: RETIRED },
         fence: 7
       })
-    ).resolves.toEqual({ state: 'admitted' })
+    ).resolves.toMatchObject({ state: 'admitted' })
     expect(setModelCalls(claude).map((call) => call.params?.model)).toEqual([undefined, RETIRED])
     await adapter.closeAll()
   })

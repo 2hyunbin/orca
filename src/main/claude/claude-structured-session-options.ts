@@ -87,6 +87,7 @@ export function observeClaudeFastModeFacts(session: ClaudeSession, value: unknow
   const facts = readClaudeFastModeFacts(value)
   if (facts.state) {
     session.fastModeState = facts.state
+    session.fastModeReportedMutation = session.optionMutationSequence
   }
   if (facts.disabledReason) {
     session.fastModeDisabledReason = facts.disabledReason
@@ -226,6 +227,9 @@ function observeClaudeSettingsReadback(
     }
     if (fastMode !== null) {
       session.reportedOptions.fastMode = fastMode
+      if (!fastMode) {
+        delete session.fastModeReportedMutation
+      }
       if (decodedFastMode(session) !== undefined) {
         session.options.set('fastMode', String(fastMode))
       }
