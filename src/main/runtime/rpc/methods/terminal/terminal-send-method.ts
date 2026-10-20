@@ -19,6 +19,7 @@ import {
   ensureUnsupportedTerminalPromptReceipt,
   observeReplayedTerminalPrompt
 } from './terminal-prompt-receipt'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 export const TERMINAL_SEND_METHODS = [
   defineMethod({
@@ -74,30 +75,25 @@ export const TERMINAL_SEND_METHODS = [
       if (replayObservation) {
         return replayObservation
       }
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        // Before the driver and lock checks, so they judge the terminal a saved pane starts.
+        await runtime.startRestoredHandlePane(params.terminal)
+      }
       // Why: a stale handle must fail with terminal_handle_stale, not evaluate driver/lock state against the wrong PTY (#7718).
       const leaf = runtime.resolveLiveLeafForHandle(params.terminal)
       const driver = leaf?.ptyId ? runtime.getDriver(leaf.ptyId) : null
+      const notAccepted = () => ({
+        send: { handle: params.terminal, accepted: false, bytesWritten: 0 }
+      })
       if (
         params.inputKind === 'query-reply' &&
         leaf?.ptyId &&
         !runtime.isMobileTerminalQueryReplyAuthority(leaf.ptyId, queryReplyClientId!)
       ) {
-        return {
-          send: {
-            handle: params.terminal,
-            accepted: false,
-            bytesWritten: 0
-          }
-        }
+        return notAccepted()
       }
       if (leaf?.ptyId && isTerminalInputLockedForClient(runtime, leaf.ptyId, params.client)) {
-        return {
-          send: {
-            handle: params.terminal,
-            accepted: false,
-            bytesWritten: 0
-          }
-        }
+        return notAccepted()
       }
       if (
         leaf?.ptyId &&
@@ -138,13 +134,7 @@ export const TERMINAL_SEND_METHODS = [
       const hasSuffix = params.enter === true || params.interrupt === true
       if (params.requireAgentStatus === 'sendable' && hasText && hasSuffix) {
         // Why: guarded sends are two-phase; reject combined payload + submit so a guard flip can't cause partial delivery.
-        return {
-          send: {
-            handle: params.terminal,
-            accepted: false,
-            bytesWritten: 0
-          }
-        }
+        return notAccepted()
       }
       // Why: recheck permission/no-agent state immediately before accepting the PTY write.
       const assertSendPreconditions =

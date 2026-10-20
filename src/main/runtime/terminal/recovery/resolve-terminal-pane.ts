@@ -1,5 +1,5 @@
 import type { OrcaRuntimeWithCreateTerminal } from '../launch/terminal-create'
-import { OrcaRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-interactive-wait'
+import { OrcaRuntimeWithRestoredHandlePaneStart } from '../surface/restored-handle-pane-start'
 import type {
   RuntimeTerminalRead,
   RuntimeTerminalResolvePane,
@@ -27,9 +27,8 @@ import {
 import { getTerminalState } from '../../terminal-wait-results'
 import { readStructuredWorkerTerminal } from '../../structured-worker-terminal-read'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startRestoredHandlePane } from '../surface/main-handle-pane-start'
 
-export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWithGetTerminalInteractiveWait {
+export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWithRestoredHandlePaneStart {
   protected abstract assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void
   abstract createTerminal(
     ...args: Parameters<OrcaRuntimeWithCreateTerminal['createTerminal']>
@@ -239,8 +238,8 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
       return { ...structured, source: opts.screen ? 'screen-unavailable' : 'stream' }
     }
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && !this.getLivePtyForHandle(handle)) {
-      await startRestoredHandlePane(this, this.getLiveLeafForHandle(handle).leaf)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      await this.startRestoredHandlePane(handle)
     }
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {
