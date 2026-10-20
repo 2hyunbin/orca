@@ -43,3 +43,7 @@ it('tells apart the same file recovered in two workspaces', () => {
     recoveredEditorDraftId(draft(1, 'a', 'wt-2'))
   )
 })
+
+it('tells apart two id-less drafts (an older build dropped ids) by their text', () => {
+  expect(recoveredEditorDraftId(draft(1, 'a'))).not.toBe(recoveredEditorDraftId(draft(1, 'b')))
+})

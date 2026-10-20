@@ -173,3 +173,20 @@ it("doesn't copy one live log tail's bytes into another tail of the same file", 
 
   expect(panelB.contents[b]?.content).toBe('tail b')
 })
+
+it("a failed newest read reaches a panel still showing older text, so it can't look current", () => {
+  const a = openTab('wt-1')
+  const b = openTab('wt-2')
+  const panelB: PanelHandle = { contents: {}, set: () => {} }
+  act(() =>
+    root.render(
+      <Panel initial={{ [b]: { content: 'old disk', isBinary: false } }} handle={panelB} />
+    )
+  )
+
+  act(() =>
+    publishEditorBufferContent(a, { content: '', isBinary: false, loadError: 'connection lost' })
+  )
+
+  expect(panelB.contents[b]?.loadError).toBe('connection lost')
+})

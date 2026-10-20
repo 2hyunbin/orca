@@ -13,7 +13,6 @@ import {
   beginEditorBufferFileRead,
   trackPanelEditorBufferRead
 } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
-import { liveEditorBufferViewOf } from '@/store/slices/editor/buffers/editor-buffer-record'
 import { stampCleanTabDiskBaseline } from './editor-clean-tab-disk-baseline'
 import { getRuntimeFileReadScope } from '@/runtime/runtime-file-routing'
 import { readEditorCsvFileContent } from './csv/csv-file-content'
@@ -36,7 +35,7 @@ import type { RuntimeWorkspaceFileRoute } from '@/lib/runtime-workspace-file-rou
 import { editorTabFileAccess, isClientLocalReadOnlyTab } from '@/lib/local-file-access'
 import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
-import { publishEditorBufferContent } from './use-editor-buffer-content-sync'
+import { publishEditorBufferRead } from './use-editor-buffer-content-sync'
 import { useSupersededFileReadRetry } from './use-superseded-file-read-retry'
 
 export type EditorPanelFileContentLoader = (
@@ -266,8 +265,7 @@ export function useEditorPanelFileContentLoader({
         delete fileLoadRetryAttemptsRef.current[id]
         // Why publish: the result belongs to the record, so it reaches every panel showing the
         // file even if this panel has closed.
-        const viewId = liveEditorBufferViewOf(useAppStore.getState(), read.recordId) ?? id
-        publishEditorBufferContent(viewId, result)
+        const viewId = publishEditorBufferRead(read.recordId, id, result)
         setFileContents((prev) => ({ ...prev, [id]: result }))
         stampCleanTabDiskBaseline(viewId, result)
       } catch (err) {
@@ -294,15 +292,16 @@ export function useEditorPanelFileContentLoader({
         // classifiers downstream must see the token, not only its rendering (#21041).
         const loadErrorCode =
           !hostConnecting && err instanceof RuntimeRpcCallError ? err.code : undefined
-        setFileContents((prev) => ({
-          ...prev,
-          [id]: {
-            content: '',
-            isBinary: false,
-            loadError: message,
-            ...(loadErrorCode ? { loadErrorCode } : {})
-          }
-        }))
+        const failed: FileContent = {
+          content: '',
+          isBinary: false,
+          loadError: message,
+          ...(loadErrorCode ? { loadErrorCode } : {})
+        }
+        // Why publish: the newest read of the file failed, so no panel may keep showing older text
+        // as current and save over the file.
+        publishEditorBufferRead(read.recordId, id, failed)
+        setFileContents((prev) => ({ ...prev, [id]: failed }))
       } finally {
         if (outstandingFileReadsRef.current[id] === generation) {
           delete outstandingFileReadsRef.current[id]

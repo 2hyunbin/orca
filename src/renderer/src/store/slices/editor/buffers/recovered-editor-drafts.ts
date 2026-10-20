@@ -1,11 +1,21 @@
 import type { RecoveredEditorDraft } from '../../../../../../shared/workspace-session-state-types'
+import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
 
 const MAX_RECOVERED_DRAFTS = 20
 const MAX_RECOVERED_DRAFT_CHARS = 2 * 1024 * 1024
 
 /** Unique per draft: the same file can be recovered in two workspaces. */
 export function recoveredEditorDraftId(draft: RecoveredEditorDraft): string {
-  return draft.id ?? JSON.stringify([draft.worktreeId, draft.filePath, draft.recoveredAt])
+  // Why the text's hash: an older build rewriting the session drops `id`.
+  return (
+    draft.id ??
+    JSON.stringify([
+      draft.worktreeId,
+      draft.filePath,
+      draft.recoveredAt,
+      getDiskBaselineSignature(draft.draft)
+    ])
+  )
 }
 
 /**

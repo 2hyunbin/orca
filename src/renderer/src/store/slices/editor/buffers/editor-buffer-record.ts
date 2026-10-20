@@ -21,7 +21,14 @@ export type EditorBufferKey = {
   identity: EditorBufferIdentity
   /** Fixed per record: a record kept apart from a same-file record gets its own model. */
   modelOwnerKey: string
+  /** The tab whose unsaved draft the record carries; absent while the record is clean. */
+  draftOwner?: EditorBufferDraftOwner
 }
+
+export type EditorBufferDraftOwner = Pick<
+  OpenFile,
+  'worktreeId' | 'relativePath' | 'runtimeEnvironmentId'
+>
 
 export type EditorBufferIndex = {
   recordIdByFileId: Record<string, string>

@@ -2,6 +2,7 @@ import type { OpenFile } from '../types/open-file'
 import {
   editorBufferMirrorMismatch,
   editorBufferRecordFromFile,
+  type EditorBufferDraftOwner,
   type EditorBufferIndex,
   type EditorBufferKey,
   type EditorBufferRecord,
@@ -38,6 +39,16 @@ export type EditorBufferSharingResult = {
 
 // Why a counter: drafts recovered in one join share a timestamp but each needs its own id.
 let recoveredDraftSequence = 0
+
+function draftOwnerOf(file: OpenFile): EditorBufferDraftOwner {
+  return {
+    worktreeId: file.worktreeId,
+    relativePath: file.relativePath,
+    ...(file.runtimeEnvironmentId !== undefined
+      ? { runtimeEnvironmentId: file.runtimeEnvironmentId }
+      : {})
+  }
+}
 
 function hasEdits(record: EditorBufferRecord, draft: string | undefined): boolean {
   return record.isDirty || draft !== undefined
@@ -96,15 +107,16 @@ export function reconcileEditorBufferSharing(
     )
   let draftsChanged = false
 
-  // The tab whose draft a record carries, so a draft that loses a later join is credited to it.
-  const draftOwnerByRecord = new Map<string, OpenFile>()
   const filesById = new Map(openFiles.map((file) => [file.id, file]))
+  // Why on the record: a draft that loses a later join must be credited to the tab it came from.
+  const setDraftOwner = (recordId: string, owner: OpenFile | undefined): void => {
+    const key = keyByRecordId[recordId]
+    if (key !== undefined) {
+      keyByRecordId[recordId] = { ...key, draftOwner: owner && draftOwnerOf(owner) }
+    }
+  }
   const claim = (fileId: string, recordId: string): void => {
     recordIdByFileId[fileId] = recordId
-    const owner = filesById.get(fileId)
-    if (owner && !draftOwnerByRecord.has(recordId)) {
-      draftOwnerByRecord.set(recordId, owner)
-    }
     const views = viewsByRecord.get(recordId)
     if (views) {
       views.push(fileId)
@@ -178,19 +190,21 @@ export function reconcileEditorBufferSharing(
         ? input.draftPreference(file.id) > Math.max(...target.views.map(input.draftPreference))
         : viewEdited && !targetEdited
       if (divergent) {
-        const [loser, loserState, loserFile] = viewWins
-          ? [targetDraft, targetRecord, draftOwnerByRecord.get(target.id) ?? file]
-          : [draft, state, file]
-        if (viewWins) {
-          draftOwnerByRecord.set(target.id, file)
-        }
+        const firstView = filesById.get(target.views[0])
+        const [loser, loserState, loserOwner] = viewWins
+          ? [
+              targetDraft,
+              targetRecord,
+              keyByRecordId[target.id]?.draftOwner ?? draftOwnerOf(firstView ?? file)
+            ]
+          : [draft, state, draftOwnerOf(file)]
         if (loser !== undefined) {
           recovered.push({
-            filePath: loserFile.filePath,
-            relativePath: loserFile.relativePath,
-            worktreeId: loserFile.worktreeId,
-            ...(loserFile.runtimeEnvironmentId !== undefined
-              ? { runtimeEnvironmentId: loserFile.runtimeEnvironmentId }
+            filePath: file.filePath,
+            relativePath: loserOwner.relativePath,
+            worktreeId: loserOwner.worktreeId,
+            ...(loserOwner.runtimeEnvironmentId !== undefined
+              ? { runtimeEnvironmentId: loserOwner.runtimeEnvironmentId }
               : {}),
             draft: loser,
             ...(loserState.lastKnownDiskSignature
@@ -208,6 +222,7 @@ export function reconcileEditorBufferSharing(
         for (const viewId of target.views) {
           setDraft(viewId, draft)
         }
+        setDraftOwner(target.id, file)
       } else {
         setDraft(file.id, targetDraft)
       }
@@ -231,11 +246,15 @@ export function reconcileEditorBufferSharing(
           keyByRecordId[otherId]?.modelOwnerKey === identity.modelOwnerKey
       )
       indexIdentity(recordId, identity.key)
+      const previousOwner = input.index.keyByRecordId[recordId]?.draftOwner
       keyByRecordId[recordId] = {
         identity,
         modelOwnerKey: uriTaken
           ? JSON.stringify([identity.modelOwnerKey, 'record', recordId])
-          : identity.modelOwnerKey
+          : identity.modelOwnerKey,
+        ...(hasEdits(state, drafts[file.id])
+          ? { draftOwner: previousOwner ?? draftOwnerOf(file) }
+          : {})
       }
     }
     claim(file.id, recordId)
@@ -247,9 +266,13 @@ export function reconcileEditorBufferSharing(
       delete keyByRecordId[recordId]
     }
   }
-  for (const recordId of Object.keys(keyByRecordId)) {
-    if (!(recordId in records)) {
+  for (const [recordId, key] of Object.entries(keyByRecordId)) {
+    const views = viewsByRecord.get(recordId)
+    if (!(recordId in records) || views === undefined) {
       delete keyByRecordId[recordId]
+    } else if (key.draftOwner && !hasEdits(records[recordId], drafts[views[0]])) {
+      // A clean record carries no draft, so nobody owns one.
+      setDraftOwner(recordId, undefined)
     }
   }
 

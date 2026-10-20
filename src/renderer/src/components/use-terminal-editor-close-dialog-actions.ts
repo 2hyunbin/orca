@@ -82,10 +82,14 @@ export function useTerminalEditorCloseDialogActions(
       }
     }
     // Why: the save landed, but a sibling's newer edits keep the tab open; that is no failure.
+    // The tab never closed, so its close reaction must not fire. While quitting, ask again.
     if (outcome === 'kept-open') {
-      settleQueuedClose(fileId)
+      closedReactionsRef.current.delete(fileId)
+      pendingEditorCloseQueueRef.current = windowCloseAfterDirtyRef.current
+        ? [fileId, ...pendingEditorCloseQueueRef.current.filter((id) => id !== fileId)]
+        : pendingEditorCloseQueueRef.current.filter((id) => id !== fileId)
+      isClosingRef.current = false
       advanceEditorCloseQueue()
-      releaseCloseDialogGuardAfterDebounce()
       return
     }
     if (!closed) {

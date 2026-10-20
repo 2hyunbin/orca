@@ -456,6 +456,30 @@ describe('one editor buffer record per physical file', () => {
     expect(new Set(state.recoveredEditorDrafts.map((entry) => entry.id)).size).toBe(2)
   })
 
+  it('credits a losing draft to its own workspace when the first tab had none', () => {
+    for (const wt of ['wt-1', 'wt-2', 'wt-3']) {
+      openTab(store, wt)
+    }
+    const ids = store.getState().openFiles.map((file) => file.id)
+    store.setState((state) => ({
+      activeWorktreeId: 'wt-1',
+      activeFileId: null,
+      activeFileIdByWorktree: Object.fromEntries(ids.map((id, i) => [`wt-${i + 1}`, `${id}-r`])),
+      lastVisitedAtByWorktreeId: { 'wt-1': 100, 'wt-2': 200, 'wt-3': 300 },
+      // wt-1 restores clean; wt-2 and wt-3 restore different drafts.
+      editorDrafts: { [`${ids[1]}-r`]: 'd2', [`${ids[2]}-r`]: 'd3' },
+      openFiles: state.openFiles.map((file, i) => ({
+        ...file,
+        id: `${file.id}-r`,
+        isDirty: i > 0
+      }))
+    }))
+
+    expect(
+      store.getState().recoveredEditorDrafts.map((entry) => [entry.worktreeId, entry.draft])
+    ).toEqual([['wt-2', 'd2']])
+  })
+
   it('dismissing a recovered draft lets one held for this launch be kept across restarts', () => {
     const entries = Array.from({ length: 21 }, (_, i) => ({
       id: `r${i}`,

@@ -1,7 +1,10 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
-import { editorBufferViewIds } from '@/store/slices/editor/buffers/editor-buffer-record'
+import {
+  editorBufferViewIds,
+  liveEditorBufferViewOf
+} from '@/store/slices/editor/buffers/editor-buffer-record'
 import type { FileContent } from './editor-panel-content-types'
 
 type BufferContentListener = (sourceFileId: string, content: FileContent) => void
@@ -16,6 +19,17 @@ export function publishEditorBufferContent(sourceFileId: string, content: FileCo
   for (const listener of listeners) {
     listener(sourceFileId, content)
   }
+}
+
+/** Publishes a read of a record through any tab still showing it; returns that tab's id. */
+export function publishEditorBufferRead(
+  recordId: string,
+  startedByFileId: string,
+  content: FileContent
+): string {
+  const viewId = liveEditorBufferViewOf(useAppStore.getState(), recordId) ?? startedByFileId
+  publishEditorBufferContent(viewId, content)
+  return viewId
 }
 
 function isFreshText(content: FileContent | undefined): content is FileContent {
