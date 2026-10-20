@@ -49,9 +49,11 @@ function remoteRow(path: string, fields: Pick<Repo, 'connectionId' | 'executionH
   }
 }
 
+// Why the third: a runtime host's nested SSH target appears only in `connectionId`.
 const SSH_SPELLINGS = [
   ['executionHostId', { executionHostId: 'ssh:gpu' as const }],
-  ['legacy connectionId', { connectionId: 'gpu' }]
+  ['legacy connectionId', { connectionId: 'gpu' }],
+  ['nested SSH on a runtime host', { executionHostId: 'runtime:env' as const, connectionId: 'gpu' }]
 ] as const
 
 describe('project registration dedupes only against rows on the same host', () => {
@@ -73,7 +75,11 @@ describe('project registration dedupes only against rows on the same host', () =
 
       const result = await controller.create(root, 'notes', 'folder')
 
-      expect('repo' in result && result.repo.id).not.toBe('ssh-row')
+      if (!('repo' in result)) {
+        throw new Error(result.error)
+      }
+      expect(result.repo.id).not.toBe('ssh-row')
+      expect(result.repo.path).toBe(targetPath)
       expect(repos).toHaveLength(2)
       expect((await stat(targetPath)).isDirectory()).toBe(true)
     }
@@ -87,7 +93,10 @@ describe('project registration dedupes only against rows on the same host', () =
 
     const result = await controller.create(root, 'notes', 'folder')
 
-    expect('repo' in result && result.repo.id).toBe('local-row')
+    if (!('repo' in result)) {
+      throw new Error(result.error)
+    }
+    expect(result.repo.id).toBe('local-row')
     expect(repos).toHaveLength(1)
   })
 
@@ -104,4 +113,28 @@ describe('project registration dedupes only against rows on the same host', () =
       expect(repos).toHaveLength(2)
     }
   )
+
+  it("add for a runtime host skips that host's nested SSH project at the same path", async () => {
+    const folderPath = join(root, 'notes')
+    await mkdir(folderPath)
+    const nested = remoteRow(folderPath, { executionHostId: 'runtime:env', connectionId: 'gpu' })
+    const { controller, repos } = createController([nested])
+
+    const added = await controller.add(folderPath, 'folder', 'runtime:env')
+
+    expect(added.id).not.toBe('ssh-row')
+    expect(repos).toHaveLength(2)
+  })
+
+  it('add for a runtime host still returns its own project at the same path', async () => {
+    const folderPath = join(root, 'notes')
+    await mkdir(folderPath)
+    const own: Repo = { ...remoteRow(folderPath, { executionHostId: 'runtime:env' }), id: 'own' }
+    const { controller, repos } = createController([own])
+
+    const added = await controller.add(folderPath, 'folder', 'runtime:env')
+
+    expect(added.id).toBe('own')
+    expect(repos).toHaveLength(1)
+  })
 })
