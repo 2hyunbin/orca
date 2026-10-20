@@ -1,8 +1,4 @@
-import {
-  getRepoExecutionHostId,
-  getSettingsFocusedExecutionHostId,
-  parseExecutionHostId
-} from '../../../shared/execution-host'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../../shared/execution-host'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { Repo } from '../../../shared/repo-types'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
@@ -13,24 +9,13 @@ export type RepoRuntimeOwnerState = {
   settings?: Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | null
 }
 
+/** The only row with this id; a twin names no owner, as `resolveOwner` reads it, so callers refuse. */
 function findRepoOwner(
   state: RepoRuntimeOwnerState,
   repoId: string
 ): Pick<Repo, 'id' | 'connectionId' | 'executionHostId'> | null {
   const matchingRepos = state.repos?.filter((entry) => entry.id === repoId) ?? []
-  if (matchingRepos.length === 0) {
-    return null
-  }
-  if (matchingRepos.length === 1) {
-    return matchingRepos[0]
-  }
-  const focusedHostId = getSettingsFocusedExecutionHostId(state.settings)
-  const focusedMatches = matchingRepos.filter(
-    (entry) => getRepoExecutionHostId(entry) === focusedHostId
-  )
-  // Why: duplicate bare repo ids are only safe to route when focus selects one
-  // owner unambiguously; otherwise callers must avoid guessing a host.
-  return focusedMatches.length === 1 ? focusedMatches[0] : null
+  return matchingRepos.length === 1 ? matchingRepos[0] : null
 }
 
 /**
@@ -58,7 +43,10 @@ export function getRuntimeEnvironmentIdForRepo(
     const parsed = parseExecutionHostId(getRepoExecutionHostId(repo))
     return parsed?.kind === 'runtime' ? parsed.environmentId : null
   }
-  return state.settings?.activeRuntimeEnvironmentId?.trim() || null
+  // Why: only a repo with no row yet follows focus; a twin names no server rather than a guessed one.
+  return state.repos?.some((entry) => entry.id === repoId)
+    ? null
+    : state.settings?.activeRuntimeEnvironmentId?.trim() || null
 }
 
 // Why: PR mutations must not fall back to the globally focused runtime — a

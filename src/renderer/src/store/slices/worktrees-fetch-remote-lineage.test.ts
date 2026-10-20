@@ -4,7 +4,15 @@ import type { RuntimeEnvironmentCallRequest } from '../../runtime/runtime-compat
 import { clearHugeRepoWarningDismissalsForTests } from '@/lib/source-control-huge-repo-warning-dismissals'
 import { worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
 import { makeDetectedResult } from './worktrees-detected-listing-fixtures'
-import { makeLineage, makeWorkspaceLineage, makeWorktree } from './worktrees-slice-test-fixtures'
+import {
+  makeLineage,
+  makeWorkspaceLineage,
+  makeWorktree,
+  TEST_REPO
+} from './worktrees-slice-test-fixtures'
+
+// The client stamps a server's repo row on arrival; focus alone never names the owner.
+const REMOTE_REPO = { ...TEST_REPO, executionHostId: 'runtime:env-1' as const }
 import {
   createTestStore,
   mockApi,
@@ -52,6 +60,7 @@ describe('fetchWorktrees', () => {
     const refreshed = { ...initial, lineage }
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [initial] },
       sortEpoch: 7
     } as Partial<AppState>)
@@ -116,6 +125,7 @@ describe('fetchWorktrees', () => {
     })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [worktree] },
       worktreeLineageById: { [worktree.id]: staleLineage },
       sortEpoch: 7
@@ -172,6 +182,7 @@ describe('fetchWorktrees', () => {
     const detected = makeDetectedResult('repo1', [worktree])
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [worktree] },
       detectedWorktreesByRepo: { repo1: detected },
       worktreeLineageById: { [lineage.worktreeId]: lineage },
@@ -221,6 +232,7 @@ describe('fetchWorktrees', () => {
     })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: {}
     } as Partial<AppState>)
     runtimeEnvironmentCall.mockImplementation(({ method }: RuntimeEnvironmentCallRequest) => {
@@ -277,6 +289,7 @@ describe('fetchWorktrees', () => {
     })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [worktree] },
       worktreeLineageById: {},
       workspaceLineageByChildKey: {}
@@ -343,6 +356,7 @@ describe('fetchWorktrees', () => {
     })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [worktree] },
       worktreeLineageById: { [before.worktreeId]: before },
       workspaceLineageByChildKey: { [childKey]: beforeWorkspace }
@@ -408,6 +422,7 @@ describe('fetchWorktrees', () => {
     const beforeWorkspace = makeWorkspaceLineage({ childWorkspaceKey: childKey })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [worktree] },
       worktreeLineageById: { [before.worktreeId]: before },
       workspaceLineageByChildKey: { [childKey]: beforeWorkspace }
@@ -463,6 +478,7 @@ describe('fetchWorktrees', () => {
     const stale = makeLineage({ worktreeId: worktree.id })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: { repo1: [worktree] },
       worktreeLineageById: { [stale.worktreeId]: stale }
     } as Partial<AppState>)
@@ -494,6 +510,7 @@ describe('fetchWorktrees', () => {
     const staleLineage = makeLineage({ worktreeId: refreshed.id })
     store.setState({
       settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
+      repos: [REMOTE_REPO],
       worktreesByRepo: {},
       worktreeLineageById: { [staleLineage.worktreeId]: staleLineage },
       sortEpoch: 7
