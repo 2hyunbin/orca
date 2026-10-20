@@ -24,6 +24,7 @@ const {
   killStaleDaemonMock,
   daemonClientMock,
   spawnerInstances,
+  isPackagedMock,
   ensureRunningOverrides,
   adoptionLeaseReleases,
   lifecycleLeaseErrors,
@@ -248,6 +249,16 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     expect(spawnerInstances).toHaveLength(1)
     expect(originalSpawner.resetHandle).toHaveBeenCalledTimes(1)
     expect(originalSpawner.ensureRunning).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the launch policy stale-daemon recycle across a restart', async () => {
+    const mod = await importFresh()
+    isPackagedMock.mockReturnValue(true)
+    await mod.initDaemonPtyProvider(undefined, { recycleStaleDaemonOnEveryPlatform: true })
+
+    await mod.restartDaemon()
+
+    expect(adapterInstances[1].options.packagedAppVersion).toBe('1.2.3')
   })
 
   it('builds a fresh adapter whose respawn callback closes over the same spawner', async () => {

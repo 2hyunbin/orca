@@ -55,6 +55,7 @@ describe('startOrcadDaemon', () => {
     // moment the operator logged out, which is the opposite of the property being bought.
     expect(initDaemonPtyProviderMock).toHaveBeenCalledWith(undefined, {
       macosLoginSessionWatch: false,
+      recycleStaleDaemonOnEveryPlatform: true,
       spawnAdmission: 'enforce'
     })
   })
@@ -63,9 +64,19 @@ describe('startOrcadDaemon', () => {
     await startOrcadDaemon('win32')
     expect(initDaemonPtyProviderMock).toHaveBeenCalledWith(undefined, {
       macosLoginSessionWatch: false,
+      recycleStaleDaemonOnEveryPlatform: true,
       spawnAdmission: 'enforce',
       startupTimeoutMs: 30_000
     })
+  })
+
+  it('recycles a daemon an older orcad forked once it drains, on Linux too', async () => {
+    // A pre-#31135 daemon still runs at umask 077, so its terminals create owner-only files.
+    await startOrcadDaemon('linux')
+    expect(initDaemonPtyProviderMock).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ recycleStaleDaemonOnEveryPlatform: true })
+    )
   })
 
   it('retries the daemon spawn once before falling back to in-process terminals', async () => {
