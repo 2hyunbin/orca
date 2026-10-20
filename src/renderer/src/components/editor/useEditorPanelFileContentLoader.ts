@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useLayoutEffect,
   useRef,
   type Dispatch,
   type MutableRefObject,
@@ -23,11 +24,8 @@ import {
   toRuntimeExecutionHostId,
   toSshExecutionHostId
 } from '../../../../shared/execution-host'
-import {
-  WORKTREE_OWNER_NOT_READY_ERROR,
-  type FileContent,
-  type InFlightContentRead
-} from './editor-panel-content-types'
+import { WORKTREE_OWNER_NOT_READY_ERROR, type FileContent } from './editor-panel-content-types'
+import { inFlightFileReads, inFlightReadKey } from './editor-in-flight-file-reads'
 import type { EditorPanelContentLoadOptions } from './useEditorPanelExternalContentEvents'
 import { migrateRestoredEditorFileOwner } from './migrate-restored-editor-file-owner'
 import { findRestoredEditorWorkspaceRuntimeOwner } from './restored-editor-workspace-runtime-owner'
@@ -37,8 +35,6 @@ import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-wor
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
 import { publishEditorBufferContent } from './use-editor-buffer-content-sync'
 import { useSupersededFileReadRetry } from './use-superseded-file-read-retry'
-
-const inFlightFileReads = new Map<string, InFlightContentRead<FileContent>>()
 
 export type EditorPanelFileContentLoader = (
   filePath: string,
@@ -57,10 +53,6 @@ type UseEditorPanelFileContentLoaderParams = {
   openFilesRef: MutableRefObject<OpenFile[]>
   outstandingFileReadsRef: MutableRefObject<Record<string, number>>
   setFileContents: Dispatch<SetStateAction<Record<string, FileContent>>>
-}
-
-function inFlightReadKey(connectionId: string | undefined, filePath: string): string {
-  return `${connectionId ?? ''}::${filePath}`
 }
 
 export function useEditorPanelFileContentLoader({
@@ -324,6 +316,8 @@ export function useEditorPanelFileContentLoader({
       setFileContents
     ]
   )
-  loadRef.current = load
+  useLayoutEffect(() => {
+    loadRef.current = load
+  }, [load])
   return load
 }

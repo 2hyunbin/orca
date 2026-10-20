@@ -46,8 +46,6 @@ export function useEditorPanelContentState({
 }: UseEditorPanelContentStateParams): UseEditorPanelContentStateResult {
   const [fileContents, setFileContents] = useState<Record<string, FileContent>>({})
   const fileContentsRef = useRef(fileContents)
-  // Why during render: a read landing after this render must see what the panel shows now.
-  fileContentsRef.current = fileContents
   const [diffContents, setDiffContents] = useState<Record<string, DiffContent>>({})
   const diffContentsRef = useRef(diffContents)
   const fileLoadRetryAttemptsRef = useRef<Record<string, number>>({})
@@ -72,11 +70,12 @@ export function useEditorPanelContentState({
   useLayoutEffect(() => {
     // Why: event-driven readers must only observe state from committed renders.
     diffContentsRef.current = diffContents
+    fileContentsRef.current = fileContents
     openFilesRef.current = openFiles
     editorViewModeRef.current = editorViewMode
     isVisibleRef.current = isVisible
     activeContentFileIdRef.current = activeContentFileId
-  }, [activeContentFileId, diffContents, editorViewMode, isVisible, openFiles])
+  }, [activeContentFileId, diffContents, editorViewMode, fileContents, isVisible, openFiles])
   const tracksFileRead = useCallback(
     (fileId: string): boolean => fileId in fileReadGenerationRef.current,
     []
