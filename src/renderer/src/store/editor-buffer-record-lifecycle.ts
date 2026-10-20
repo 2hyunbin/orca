@@ -1,24 +1,19 @@
 import type { StateCreator } from 'zustand'
-import type { OpenFile } from './slices/editor/types/open-file'
 import {
   editorBufferMirrorMismatch,
   reconcileEditorBufferMembership,
-  type EditorBufferRecords
+  type EditorBufferState
 } from './slices/editor/buffers/editor-buffer-record'
-
-type EditorBufferState = {
-  openFiles: OpenFile[]
-  editorBuffers: EditorBufferRecords
-}
 
 /**
  * Ties editor buffer records to `openFiles` membership inside the same write: a new tab's record
  * is seeded from the tab and a closed tab's record is dropped. Field writes go through the record
- * (`writeEditorBuffer`); dev and test builds throw when a tab mirror drifts from it.
+ * (`writeEditorBuffer`); with `checkInvariant` a write that drifts a tab mirror from it throws.
  */
 function reconcileEditorBuffers<TState extends EditorBufferState>(
   state: TState,
-  write: TState | Partial<TState>
+  write: TState | Partial<TState>,
+  checkInvariant: boolean
 ): TState | Partial<TState> {
   const openFiles = write.openFiles ?? state.openFiles
   const records = write.editorBuffers ?? state.editorBuffers
@@ -26,7 +21,7 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
     return write
   }
   const next = reconcileEditorBufferMembership(records, openFiles)
-  if (import.meta.env.DEV) {
+  if (checkInvariant) {
     assertEditorBufferInvariant({ openFiles, editorBuffers: next })
   }
   return next === records ? write : { ...write, editorBuffers: next }
@@ -47,7 +42,8 @@ export function assertEditorBufferInvariant(state: EditorBufferState): void {
 }
 
 export function withEditorBufferRecords<TState extends EditorBufferState>(
-  createState: StateCreator<TState, [], []>
+  createState: StateCreator<TState, [], []>,
+  checkInvariant: boolean = import.meta.env.DEV
 ): StateCreator<TState, [], []> {
   return (set, get, api) => {
     const wrap = (write: typeof set): typeof set => {
@@ -58,7 +54,11 @@ export function withEditorBufferRecords<TState extends EditorBufferState>(
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: forwards the caller's own partial/replace pair; with replace=true the updater still yields a full state.
         ;(write as (next: (state: TState) => TState | Partial<TState>, replace?: boolean) => void)(
           (state) =>
-            reconcileEditorBuffers(state, typeof partial === 'function' ? partial(state) : partial),
+            reconcileEditorBuffers(
+              state,
+              typeof partial === 'function' ? partial(state) : partial,
+              checkInvariant
+            ),
           replace
         )
       }

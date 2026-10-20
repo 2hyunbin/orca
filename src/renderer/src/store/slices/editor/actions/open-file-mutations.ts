@@ -143,7 +143,7 @@ export function createOpenFileMutations(
       set((s) => updateEditorBuffer(s, fileId, { lastKnownDiskSignature: signature })),
 
     clearPendingDiskBaselineVerification: (fileId) =>
-      set((s) => updateEditorBuffer(s, fileId, { pendingDiskBaselineVerification: undefined })),
+      get().setPendingDiskBaselineVerification(fileId, false),
 
     setPendingDiskBaselineVerification: (fileId, value) =>
       set((s) =>

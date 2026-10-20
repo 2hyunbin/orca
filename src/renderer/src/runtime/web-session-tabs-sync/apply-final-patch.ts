@@ -99,9 +99,7 @@ export function buildWebSessionTabsFinalPatch(
     ...(nextOpenFiles !== state.openFiles
       ? {
           openFiles: nextOpenFiles,
-          ...(state.editorBuffers
-            ? { editorBuffers: adoptMirroredEditorBuffers(state.editorBuffers, nextOpenFiles) }
-            : {})
+          editorBuffers: adoptMirroredEditorBuffers(state.editorBuffers, nextOpenFiles)
         }
       : {}),
     ...(nextTabsByWorktree !== state.tabsByWorktree ? { tabsByWorktree: nextTabsByWorktree } : {}),

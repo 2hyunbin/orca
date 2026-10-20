@@ -16,7 +16,7 @@ export type EditorBufferRecord = Pick<
 
 export type EditorBufferRecords = Record<string, EditorBufferRecord>
 
-type EditorBufferState = { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords }
+export type EditorBufferState = { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords }
 
 export const EDITOR_BUFFER_FIELDS = [
   'isDirty',
@@ -50,8 +50,7 @@ export function editorBufferMirrorMismatch(
   return EDITOR_BUFFER_FIELDS.find((field) => !Object.is(file[field], record[field])) ?? null
 }
 
-/** Patches `file`'s record; callers spread the same patch onto the tab in the same update. */
-export function patchEditorBuffer(
+function patchEditorBuffer(
   records: EditorBufferRecords,
   file: OpenFile,
   patch: Partial<EditorBufferRecord>
