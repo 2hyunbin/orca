@@ -1,5 +1,6 @@
 import {
   SendBody,
+  AgentSessionOptions,
   MAX_OPTION_LABEL,
   MAX_PROMPT_BYTES
 } from './structured-agent-session-message-params'
@@ -23,7 +24,6 @@ export {
 } from './structured-agent-session-identifiers'
 import { z } from 'zod'
 import { isAgentSessionSurfaceTabId } from '../agent-session-surface-tab-id'
-import { isAgentSessionOptions } from '../agent-session-record'
 import { isStructuredAgentId } from '../agent-session-provider-handle-encoding'
 import { normalizeExecutionHostId } from '../execution-host'
 import {
@@ -134,8 +134,6 @@ export const CreateSupportParams = z
   })
   .strict()
 
-const AgentSessionOptions = z.record(z.string(), z.string()).refine(isAgentSessionOptions)
-
 export const SendParams = z
   .object({
     envelope: MutationEnvelope,
@@ -147,6 +145,8 @@ export const SendParams = z
     /** The composer's choices for the turn this message starts, kept with the message until it is
      *  dispatched. Sent only when `agent-session.send-options.v1` is advertised. Operation fingerprint only. */
     options: AgentSessionOptions.optional(),
+    // Strict payload: only hosts advertising the bound usage-limit send capability accept this.
+    usageLimitContinuationOfTurnItemId: Identifier('Invalid source turn item id').optional(),
     body: SendBody
   })
   .strict()

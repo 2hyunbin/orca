@@ -87,7 +87,6 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
         if (isNativeBrowserPopupRequest({ disposition, features, frameName })) {
           return allowNativeBrowserPopup({
             opener: guest,
-            targetUrl: url,
             options: SAFE_POPUP_WINDOW_OPTIONS,
             background: disposition === 'background-tab',
             canPresent: () => Boolean(this.resolvePopupOwnerContext(guest.id)),

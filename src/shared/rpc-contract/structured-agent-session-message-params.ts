@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { isAgentSessionOptions } from '../agent-session-record'
+
+export const AgentSessionOptions = z.record(z.string(), z.string()).refine(isAgentSessionOptions)
 
 export const MAX_PROMPT_BYTES = 256 * 1024
 export const MAX_BLOCKS = 64
