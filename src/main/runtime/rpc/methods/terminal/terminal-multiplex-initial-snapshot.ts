@@ -57,7 +57,7 @@ export async function publishMultiplexInitialSnapshot(
   const snapshotOutputSeq = serialized?.seq
   // Snapshot awaits may outlive the handle binding or the physical shell.
   if (
-    runtime.resolveLiveLeafForHandle(request.terminal).ptyId !== ptyId ||
+    runtime.resolveLiveLeafForHandle(request.terminal)?.ptyId !== ptyId ||
     runtime.getPtyExecutionHostMetadata(ptyId).incarnationId !== incarnationId
   ) {
     throw new Error('terminal_handle_stale')

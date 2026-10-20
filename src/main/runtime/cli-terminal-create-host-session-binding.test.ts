@@ -9,6 +9,11 @@ import {
 } from './rpc/terminal-multiplex-test-harness'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { OrcaRuntimeService } from './orca-runtime'
+import {
+  TerminalStreamOpcode,
+  decodeTerminalStreamFrame,
+  decodeTerminalStreamText
+} from '../../shared/terminal-stream-protocol'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => ({ isDestroyed: () => false })) },
@@ -198,6 +203,10 @@ it.each(['unchanged', 'hook', 'config', 'incarnation', 'handle'] as const)(
       )
       if (stale) {
         expect(events().some((event) => event?.type === 'subscribed')).toBe(false)
+        const error = harness.binaryFrames
+          .map(decodeTerminalStreamFrame)
+          .find((frame) => frame?.opcode === TerminalStreamOpcode.Error)
+        expect(error && decodeTerminalStreamText(error.payload)).toBe('terminal_handle_stale')
       } else {
         const result = events().find((event) => event?.type === 'subscribed').launchResult
         expect(result).toMatchObject({ ptyId: 'effective-pty', incarnationId: 'i1' })

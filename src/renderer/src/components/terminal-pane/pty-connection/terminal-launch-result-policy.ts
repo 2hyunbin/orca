@@ -68,7 +68,7 @@ export function applyTerminalLaunchResult(
     if (
       rejected &&
       (!result.isReattach || result.agentResumeRefused) &&
-      (kind !== 'observer' || matches)
+      (matches || kind === 'candidate' || (kind === 'creator' && !result.isReattach))
     ) {
       session.cancelSavedResumeStartup(
         startup,

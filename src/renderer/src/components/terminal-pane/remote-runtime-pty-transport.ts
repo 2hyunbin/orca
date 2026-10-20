@@ -1513,6 +1513,10 @@ export function createRemoteRuntimePtyTransport(
       return
     }
     const recoverySubscriptionGeneration = subscriptionGeneration
+    const recoveryLifecycleEpoch = lifecycleEpoch
+    const recoveryCallbacks = storedCallbacks
+    const ownsRecoveryLifecycle = (): boolean =>
+      recoveryLifecycleEpoch === lifecycleEpoch && recoveryCallbacks === storedCallbacks
     recoveringPaneHandle = expiredHandle
     connected = false
     clearPendingViewportClaim()
@@ -1524,7 +1528,7 @@ export function createRemoteRuntimePtyTransport(
       expectedTerminal: expiredHandle
     })
       .then(async ({ terminal }) => {
-        if (destroyed || handle !== expiredHandle) {
+        if (destroyed || handle !== expiredHandle || !ownsRecoveryLifecycle()) {
           return
         }
         const previousIncarnationId = authoritativePtyIncarnationId
@@ -1549,6 +1553,9 @@ export function createRemoteRuntimePtyTransport(
             onPtyRebind?.(remotePtyId, replacedPtyId)
           }
         }
+        if (!ownsRecoveryLifecycle()) {
+          return
+        }
         const launchResult = parseTerminalAttachmentLaunchResult({
           ...terminalLaunchFacts(terminal),
           ptyId: terminal.ptyId,
@@ -1556,19 +1563,22 @@ export function createRemoteRuntimePtyTransport(
         })
         if (
           launchResult &&
+          ownsRecoveryLifecycle() &&
           recoverySubscriptionGeneration === subscriptionGeneration &&
           currentPaneRevision() === getRuntimeEnvironmentRevision(currentRuntimeEnvironmentId)
         ) {
           try {
-            storedCallbacks.onLaunchResult?.(launchResult)
+            recoveryCallbacks.onLaunchResult?.(launchResult)
           } catch (error) {
             console.warn('Terminal launch result bookkeeping failed', error)
           }
         }
-        await subscribeToHandle()
+        if (ownsRecoveryLifecycle()) {
+          await subscribeToHandle()
+        }
       })
       .catch((error) => {
-        if (!destroyed && handle === expiredHandle) {
+        if (!destroyed && handle === expiredHandle && ownsRecoveryLifecycle()) {
           surfaceErrorMessage(runtimeTerminalErrorMessage(error))
         }
       })
@@ -2585,6 +2595,10 @@ export function createRemoteRuntimePtyTransport(
     }
     const subscribedHandle = handle
     const subscribedPtyId = remotePtyId
+    const subscribedLifecycleEpoch = lifecycleEpoch
+    const subscribedCallbacks = storedCallbacks
+    const ownsSubscriptionLifecycle = (): boolean =>
+      subscribedLifecycleEpoch === lifecycleEpoch && subscribedCallbacks === storedCallbacks
     const generation = ++subscriptionGeneration
     setAttachmentReady(false)
     let transportClosed = false
@@ -2597,6 +2611,7 @@ export function createRemoteRuntimePtyTransport(
     const isCurrentSubscription = (): boolean =>
       !transportClosed &&
       generation === subscriptionGeneration &&
+      ownsSubscriptionLifecycle() &&
       (expectedRecoveryEpoch === undefined || recovery.ownsEpoch(expectedRecoveryEpoch)) &&
       isCurrentRemoteTerminal(subscribedHandle, subscribedPtyId)
     if (currentPaneRevision() !== getRuntimeEnvironmentRevision(currentRuntimeEnvironmentId)) {
@@ -2681,7 +2696,7 @@ export function createRemoteRuntimePtyTransport(
             ) {
               authoritativePtyIncarnationId = result.incarnationId
               try {
-                storedCallbacks.onLaunchResult?.(result)
+                subscribedCallbacks.onLaunchResult?.(result)
               } catch (error) {
                 console.warn('Terminal launch result bookkeeping failed', error)
               }
@@ -2818,7 +2833,7 @@ export function createRemoteRuntimePtyTransport(
         },
         onTransportClose: ({ recoverable, retryWithBackoff }) => {
           transportClosed = true
-          if (generation !== subscriptionGeneration) {
+          if (generation !== subscriptionGeneration || !ownsSubscriptionLifecycle()) {
             return
           }
           if (!isCurrentSubscription()) {
@@ -2849,6 +2864,7 @@ export function createRemoteRuntimePtyTransport(
     })
     if (
       transportClosed ||
+      !ownsSubscriptionLifecycle() ||
       generation !== subscriptionGeneration ||
       (expectedRecoveryEpoch !== undefined && !recovery.ownsEpoch(expectedRecoveryEpoch)) ||
       destroyed ||

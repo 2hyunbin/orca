@@ -42,8 +42,11 @@ afterEach(() => vi.clearAllMocks())
 it.each([
   'refused',
   'adopted',
+  'adopted-D',
+  'observer-only',
   'unavailable',
   'legacy',
+  'ackless',
   'malformed',
   'bookkeeping-error',
   'new-C',
@@ -114,7 +117,7 @@ it.each([
       },
       cacheKey: record.paneKey,
       paneStartup: kind === 'observer-only' ? null : startup,
-      pendingStartupCommand: startup,
+      pendingStartupCommand: kind === 'observer-only' ? null : startup,
       shouldDeliverStartupViaTerminalPaste: true,
       startupInjectTimer: null,
       transportStreamGeneration: 0,
@@ -145,13 +148,14 @@ it.each([
         : {
             savedResumeDecision: {
               agent: 'codex',
-              providerSession: record.providerSession,
+              providerSession:
+                kind === 'adopted-D' ? { key: 'session_id', id: 'D' } : record.providerSession,
               verdict: kind === 'unavailable' ? 'admitted' : 'chat-home'
             },
             agentResumeUnavailable: true,
             ...(kind === 'unavailable' ? {} : { agentResumeRefused: 'chat-home' })
           }),
-      ...(kind === 'adopted' || kind === 'unavailable'
+      ...(kind === 'adopted' || kind === 'adopted-D' || kind === 'unavailable'
         ? {
             launchAgent: 'codex',
             launchToken: 'actual-token',
@@ -164,11 +168,19 @@ it.each([
         return
       }
       if (kind === 'new-C' || kind === 'new-D') {
-        const newer = { ...startup, resumeSource: { cancelled: false } }
+        const providerSession = {
+          key: 'session_id' as const,
+          id: kind === 'new-D' ? 'D' : 'C'
+        }
+        const newer = {
+          ...startup,
+          resumeProviderSession: providerSession,
+          resumeSource: { cancelled: false }
+        }
         session.paneStartup = newer
         session.pendingStartupCommand = newer
         registry[record.paneKey] = { launchConfig: actualConfig, identity: {}, registeredAt: 20 }
-        records[record.paneKey] = { ...record, updatedAt: 20 }
+        records[record.paneKey] = { ...record, providerSession, updatedAt: 20 }
       }
       if (kind === 'stale-generation') {
         session.transportStreamGeneration += 1
@@ -205,6 +217,11 @@ it.each([
         ([request]) => request.method === 'terminal.resolvePane'
       ).length
       transport.sendInput('ordinary-input', 'driving')
+      if (kind === 'ackless') {
+        expect(inputFrameTexts().join('')).not.toContain('ordinary-input')
+      } else {
+        await vi.waitFor(() => expect(inputFrameTexts().join('')).toContain('ordinary-input'))
+      }
       if (kind === 'refused' || kind === 'bookkeeping-error' || kind === 'unavailable') {
         expect(session.pendingStartupCommand).toBeNull()
       }
@@ -247,6 +264,22 @@ it.each([
       } else if (kind !== 'bookkeeping-error') {
         expect(register).not.toHaveBeenCalled()
       }
+      if (kind === 'adopted-D') {
+        applyTerminalLaunchResult(
+          session,
+          { ...launchResult, isReattach: true },
+          output.launchContext,
+          'creator'
+        )
+        expect(source.cancelled).toBe(false)
+        expect(session.pendingStartupCommand?.resumeSource).toBe(source)
+        expect(records[record.paneKey]).toBe(record)
+        expect(clearRecord).not.toHaveBeenCalled()
+        expect(register).toHaveBeenCalledWith(actualConfig, {
+          launchAgent: 'codex',
+          launchToken: 'actual-token'
+        })
+      }
       if (kind === 'refused' || kind === 'unavailable') {
         // The returning creator repeats the acknowledgment; existing note idempotence survives.
         applyTerminalLaunchResult(session, launchResult, output.launchContext, 'creator')
@@ -264,6 +297,94 @@ it.each([
       )
     } finally {
       transport.disconnect()
+    }
+  }
+)
+
+it.each(['subscription', 'recovery'] as const)(
+  'rejects predecessor %s facts while a successor connect owns the callback bundle',
+  async (operation) => {
+    const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+    const transport = createRemoteRuntimePtyTransport('env-1', {
+      worktreeId: 'wt-1',
+      tabId: 'web-terminal-host-tab-1',
+      leafId: 'pane:1'
+    })
+    const predecessorResult = vi.fn()
+    const successorResult = vi.fn()
+    const launchResult: TerminalAttachmentLaunchResult = {
+      ptyId: 'physical-1',
+      incarnationId: 'incarnation-1',
+      agentResumeRefused: 'chat-home',
+      savedResumeDecision: {
+        agent: 'codex',
+        providerSession: { key: 'session_id', id: 'C' },
+        verdict: 'chat-home'
+      }
+    }
+    let finishRecovery: (value: unknown) => void = () => {}
+    const recoveryResult = new Promise((resolve) => {
+      finishRecovery = resolve
+    })
+    let finishActivation: (value: unknown) => void = () => {}
+    const activationResult = new Promise((resolve) => {
+      finishActivation = resolve
+    })
+    try {
+      transport.attach({
+        existingPtyId: 'remote:env-1@@terminal-1',
+        callbacks: { onLaunchResult: predecessorResult }
+      })
+      await vi.waitFor(() => expect(subscriptionSendBinary).toHaveBeenCalled())
+      const { streamId, terminal } = latestSubscribePayload()
+      const defaultCall = runtimeCall.getMockImplementation()
+      runtimeCall.mockImplementation((request: { method: string }) => {
+        if (request.method === 'terminal.recoverPane') {
+          return recoveryResult
+        }
+        if (request.method === 'session.tabs.activate') {
+          return activationResult
+        }
+        return defaultCall?.(request)
+      })
+      if (operation === 'recovery') {
+        subscriptionCallbacks?.onResponse({
+          ok: true,
+          result: { type: 'error', streamId, message: 'SSH_SESSION_EXPIRED: relay changed' }
+        })
+        await vi.waitFor(() =>
+          expect(runtimeCall).toHaveBeenCalledWith(
+            expect.objectContaining({ method: 'terminal.recoverPane' })
+          )
+        )
+      }
+      const successor = transport.connect({
+        url: '',
+        callbacks: { onLaunchResult: successorResult }
+      })
+      await vi.waitFor(() =>
+        expect(runtimeCall).toHaveBeenCalledWith(
+          expect.objectContaining({ method: 'session.tabs.activate' })
+        )
+      )
+      subscriptionCallbacks?.onResponse({
+        ok: true,
+        result: { type: 'subscribed', streamId, terminal, launchResult }
+      })
+      finishRecovery({
+        ok: true,
+        result: { terminal: { handle: terminal, ...launchResult } }
+      })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(predecessorResult).not.toHaveBeenCalled()
+      expect(successorResult).not.toHaveBeenCalled()
+      transport.disconnect()
+      finishActivation({ ok: true, result: {} })
+      await successor
+    } finally {
+      transport.disconnect()
+      finishRecovery({ ok: true, result: {} })
+      finishActivation({ ok: true, result: {} })
     }
   }
 )
