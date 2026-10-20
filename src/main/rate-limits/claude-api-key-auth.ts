@@ -1,13 +1,17 @@
-import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import type { ClaudeNoLoginAuth } from '../../shared/rate-limit-types'
 import { claudeStateFile } from '../claude-accounts/claude-account-folder'
-import type { ClaudeProfileRead } from '../claude-accounts/claude-profile-paths'
 import { CLAUDE_AUTH_ENV_VARS } from '../claude-accounts/environment'
 import { hasClaudeApiKeyKeychainItem } from '../claude-accounts/keychain'
 import type { ClaudeOAuthCredentialReadOptions } from './claude-oauth-credentials'
+import {
+  claudeManagedSettingsLocations,
+  isRecord,
+  readClaudeSettingsSources,
+  readJsonObject,
+  type ClaudeManagedSettingsLocations
+} from './claude-settings-sources'
 
 // Why: these route Claude to another backend or credential, so "no API key" is not "not configured".
 const OTHER_BACKEND_ENV = [
@@ -24,6 +28,7 @@ type ClaudeApiKeyAuthOptions = ClaudeOAuthCredentialReadOptions & {
   env: NodeJS.ProcessEnv
   platform?: NodeJS.Platform
   userHome?: string
+  managedSettings?: ClaudeManagedSettingsLocations
 }
 
 /**
@@ -35,21 +40,26 @@ export async function readClaudeNoLoginAuth(
 ): Promise<ClaudeNoLoginAuth | undefined> {
   const platform = options.platform ?? process.platform
   const userHome = options.userHome ?? homedir()
-  const settings = await readJsonObject(
-    path.join(options.credentialsFileConfigDir ?? path.join(userHome, '.claude'), 'settings.json')
+  const managed = options.managedSettings ?? claudeManagedSettingsLocations(platform)
+  const settingsReads = await readClaudeSettingsSources(
+    options.credentialsFileConfigDir ?? path.join(userHome, '.claude'),
+    managed
   )
-  const settingsEnv = settings.kind === 'present' ? stringRecord(settings.value.env) : {}
-  // Why settings last: Claude applies its settings' env over the one it was started with.
+  const settings = settingsReads.flatMap((read) => (read.kind === 'present' ? [read.value] : []))
+  const settingsEnv = settings.map((value) => stringRecord(value.env))
+  // Why settings too: Claude applies its settings' env over the one it was started with.
   const isSet = (name: string): boolean =>
-    Boolean(envValue(options.env, name, platform)?.trim() || settingsEnv[name]?.trim())
+    Boolean(
+      envValue(options.env, name, platform)?.trim() || settingsEnv.some((env) => env[name]?.trim())
+    )
   if (OTHER_BACKEND_ENV.some(isSet)) {
     return undefined
   }
-  if (isSet('ANTHROPIC_API_KEY') || hasText(settings, 'apiKeyHelper')) {
+  if (isSet('ANTHROPIC_API_KEY') || settings.some((value) => hasText(value, 'apiKeyHelper'))) {
     return 'api-key'
   }
   const state = await readJsonObject(claudeStateFile(options.keychainConfigDir, userHome))
-  if (hasText(state, 'primaryApiKey')) {
+  if (state.kind === 'present' && hasText(state.value, 'primaryApiKey')) {
     return 'api-key'
   }
   const keychain = platform === 'darwin' ? await readKeychainApiKeyPresence(options) : false
@@ -58,7 +68,9 @@ export async function readClaudeNoLoginAuth(
   }
   if (
     keychain === undefined ||
-    settings.kind === 'unavailable' ||
+    // Why: 'none' claims every source Claude reads was checked and empty.
+    settingsReads.some((read) => read.kind === 'unavailable') ||
+    managed.hasUncheckedStore ||
     state.kind === 'unavailable' ||
     OTHER_CREDENTIAL_ENV.some(isSet)
   ) {
@@ -86,18 +98,9 @@ async function readKeychainApiKeyPresence(
   }
 }
 
-async function readJsonObject(file: string): Promise<ClaudeProfileRead<Record<string, unknown>>> {
-  try {
-    const value: unknown = JSON.parse(await readFile(file, 'utf8'))
-    return isRecord(value) ? { kind: 'present', value } : { kind: 'unavailable', error: null }
-  } catch (error) {
-    return isDefinitiveAbsence(error) ? { kind: 'absent' } : { kind: 'unavailable', error }
-  }
-}
-
-function hasText(read: ClaudeProfileRead<Record<string, unknown>>, key: string): boolean {
-  const value = read.kind === 'present' ? read.value[key] : undefined
-  return typeof value === 'string' && value.trim() !== ''
+function hasText(value: Record<string, unknown>, key: string): boolean {
+  const text = value[key]
+  return typeof text === 'string' && text.trim() !== ''
 }
 
 function envValue(
@@ -121,8 +124,4 @@ function stringRecord(value: unknown): Record<string, string> {
         )
       )
     : {}
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

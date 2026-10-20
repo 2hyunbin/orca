@@ -4,12 +4,15 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as Keychain from '../claude-accounts/keychain'
 import type * as ClaudeOAuthCredentials from './claude-oauth-credentials'
+import type * as ClaudeSettingsSources from './claude-settings-sources'
+import type { ClaudeManagedSettingsLocations } from './claude-settings-sources'
 
 type Fixture = {
   hasKeychainKey: ReturnType<typeof vi.fn>
   readCredentials: ReturnType<typeof vi.fn>
   launchEnv: NodeJS.ProcessEnv
   userConfigDir?: string
+  managed?: ClaudeManagedSettingsLocations
 }
 
 const fixture = vi.hoisted((): Fixture => ({
@@ -26,6 +29,15 @@ vi.mock('./claude-oauth-credentials', async (importOriginal) => ({
   ...(await importOriginal<typeof ClaudeOAuthCredentials>()),
   readClaudeOAuthCredentials: fixture.readCredentials
 }))
+vi.mock('./claude-settings-sources', async (importOriginal) => {
+  const actual = await importOriginal<typeof ClaudeSettingsSources>()
+  return {
+    ...actual,
+    claudeManagedSettingsLocations: (
+      ...args: Parameters<typeof actual.claudeManagedSettingsLocations>
+    ) => fixture.managed ?? actual.claudeManagedSettingsLocations(...args)
+  }
+})
 vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
   getClaudeProfileRouter: () => ({
     claudeLaunchEnv: () => fixture.launchEnv,
@@ -35,13 +47,28 @@ vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
 
 import { readClaudeNoLoginAuth } from './claude-api-key-auth'
 import { fetchActiveClaudeRateLimits } from './claude-active-usage-fetch'
+import { claudeManagedSettingsLocations } from './claude-settings-sources'
 
 const SECRET = 'sk-ant-synthetic-secret-value'
 let home: string
 let configDir: string
+let managedDir: string
 
 function writeJson(file: string, value: unknown): void {
   writeFileSync(file, JSON.stringify(value))
+}
+
+function managedIn(
+  dir: string,
+  extra: Partial<ClaudeManagedSettingsLocations> = {}
+): ClaudeManagedSettingsLocations {
+  return {
+    files: [join(dir, 'managed-settings.json')],
+    dropInDirs: [join(dir, 'managed-settings.d')],
+    opaqueFiles: [join(dir, 'policy.plist')],
+    hasUncheckedStore: false,
+    ...extra
+  }
 }
 
 function detect(
@@ -62,6 +89,8 @@ beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'orca-claude-api-key-auth-'))
   configDir = join(home, '.claude')
   mkdirSync(configDir)
+  managedDir = join(home, 'managed')
+  fixture.managed = managedIn(managedDir)
   fixture.hasKeychainKey.mockResolvedValue(false)
   fixture.launchEnv = {}
   fixture.userConfigDir = undefined
@@ -137,6 +166,85 @@ describe('readClaudeNoLoginAuth', () => {
     rmSync(join(configDir, 'settings.json'))
     fixture.hasKeychainKey.mockRejectedValue(new Error('keychain locked'))
     await expect(detect({}, { platform: 'darwin' })).resolves.toBeUndefined()
+  })
+})
+
+describe('readClaudeNoLoginAuth settings sources', () => {
+  it('finds a key or helper in settings.local.json', async () => {
+    writeJson(join(configDir, 'settings.local.json'), { env: { ANTHROPIC_API_KEY: SECRET } })
+    await expect(detect()).resolves.toBe('api-key')
+    writeJson(join(configDir, 'settings.local.json'), { apiKeyHelper: '/usr/local/bin/key' })
+    await expect(detect()).resolves.toBe('api-key')
+  })
+
+  it('finds a key or helper in managed settings and their drop-ins', async () => {
+    mkdirSync(join(managedDir, 'managed-settings.d'), { recursive: true })
+    writeJson(join(managedDir, 'managed-settings.json'), { apiKeyHelper: '/opt/key' })
+    await expect(detect()).resolves.toBe('api-key')
+    rmSync(join(managedDir, 'managed-settings.json'))
+    writeJson(join(managedDir, 'managed-settings.d', '10-key.json'), {
+      env: { ANTHROPIC_API_KEY: SECRET }
+    })
+    await expect(detect()).resolves.toBe('api-key')
+  })
+
+  it('omits the answer when managed settings route Claude elsewhere', async () => {
+    mkdirSync(managedDir)
+    writeJson(join(managedDir, 'managed-settings.json'), { env: { CLAUDE_CODE_USE_VERTEX: '1' } })
+    await expect(detect()).resolves.toBeUndefined()
+  })
+
+  it.each([
+    ['settings.local.json', () => writeFileSync(join(configDir, 'settings.local.json'), '{')],
+    [
+      'managed-settings.json',
+      () => {
+        mkdirSync(managedDir)
+        writeFileSync(join(managedDir, 'managed-settings.json'), '[]')
+      }
+    ],
+    [
+      'a managed drop-in',
+      () => {
+        mkdirSync(join(managedDir, 'managed-settings.d'), { recursive: true })
+        writeFileSync(join(managedDir, 'managed-settings.d', 'a.json'), 'nope')
+      }
+    ],
+    [
+      'a policy file Orca cannot parse',
+      () => {
+        mkdirSync(managedDir)
+        writeFileSync(join(managedDir, 'policy.plist'), 'binary')
+      }
+    ]
+  ])('omits rather than reporting none when %s cannot be checked', async (_label, arrange) => {
+    arrange()
+    await expect(detect()).resolves.toBeUndefined()
+  })
+
+  it('never reports none where a policy store goes unread, but still finds a key', async () => {
+    fixture.managed = managedIn(managedDir, { hasUncheckedStore: true })
+    await expect(detect()).resolves.toBeUndefined()
+    await expect(detect({ ANTHROPIC_API_KEY: SECRET })).resolves.toBe('api-key')
+  })
+
+  it("names Claude Code's managed paths per OS", () => {
+    fixture.managed = undefined
+    expect(claudeManagedSettingsLocations('linux').files).toEqual([
+      '/etc/claude-code/managed-settings.json'
+    ])
+    const mac = claudeManagedSettingsLocations('darwin')
+    expect(mac.files).toEqual(['/Library/Application Support/ClaudeCode/managed-settings.json'])
+    expect(mac.opaqueFiles[0]).toBe('/Library/Managed Preferences/com.anthropic.claudecode.plist')
+    const win = claudeManagedSettingsLocations('win32', {
+      ProgramFiles: 'D:\\Programs',
+      ProgramData: 'D:\\Data'
+    })
+    expect(win.files).toEqual([
+      'D:\\Programs\\ClaudeCode\\managed-settings.json',
+      'D:\\Data\\ClaudeCode\\managed-settings.json'
+    ])
+    expect(win.hasUncheckedStore).toBe(true)
   })
 })
 
