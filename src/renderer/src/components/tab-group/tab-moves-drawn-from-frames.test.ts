@@ -124,19 +124,16 @@ describe('a tab move drawn from main’s frame', () => {
     await Promise.resolve()
     // A second drag starts and selects elsewhere before main answers the first.
     useAppStore.getState().focusGroup(GIT_KEY, 'group-b')
-    const selected = useAppStore.getState().groupsByWorktree[GIT_KEY]!.map((group) => [
-      group.id,
-      group.activeTabId
-    ])
+    const selected = useAppStore
+      .getState()
+      .groupsByWorktree[GIT_KEY]!.map((group) => [group.id, group.activeTabId])
     layoutApplyTestTransport.answerWith('apply')
     layoutApplyTestTransport.answerPending()
     await settle()
 
     expect(tabOf('tab-unbound').groupId).toBe('group-a')
     expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe('group-b')
-    expect(groupOf('group-a')!.activeTabId).toBe(
-      selected.find(([id]) => id === 'group-a')![1]
-    )
+    expect(groupOf('group-a')!.activeTabId).toBe(selected.find(([id]) => id === 'group-a')![1])
   })
 
   it('splits the tab into the group main made beside its target, and selects it there', async () => {
