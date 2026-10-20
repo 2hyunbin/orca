@@ -5,6 +5,7 @@
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
 import type { RuntimeStore } from '../../runtime-store-contract'
+import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 import {
   composeMainTerminalSurfaces,
   TerminalSurfaceIndex,
@@ -12,13 +13,9 @@ import {
 } from './terminal-surface-index'
 
 export type MainTerminalSurfacesHost = {
-  store: () => Pick<
-    RuntimeStore,
-    | 'getWorkspaceSession'
-    | 'getWorkspaceSessionHostIds'
-    | 'onWorkspaceSessionWritten'
-    | 'getSettings'
-  > | null
+  store: () => Pick<RuntimeStore, 'getWorkspaceSessionHostIds' | 'getSettings'> | null
+  /** Main's one layout projection. */
+  reads: () => WorkspaceLayoutReads
   homeHostId: (key: string) => ExecutionHostId | null
   /** The graph authority now, when its graph is ready; null otherwise. */
   readyGraphPublisher: () => number | null
@@ -36,7 +33,8 @@ class MainSurfacePublisher {
 
   constructor(private readonly host: MainTerminalSurfacesHost) {
     this.index = new TerminalSurfaceIndex({
-      store: host.store,
+      reads: host.reads,
+      hostIds: () => host.store()?.getWorkspaceSessionHostIds?.() ?? [],
       homeHostId: host.homeHostId,
       generatedTitlesEnabled: () => host.store()?.getSettings?.().tabAutoGenerateTitle === true,
       onChanged: () => this.schedule()

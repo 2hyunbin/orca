@@ -1,5 +1,5 @@
-// Layout-owner builds: the terminal tabs and panes of every workspace main owns, read from the
-// Store's layout and pane bindings rather than from the window's graph. A paired server's
+// Layout-owner builds: the terminal tabs and panes of every workspace main owns, read from main's
+// one layout projection (the layout stream's) rather than from the window's graph. A paired server's
 // workspaces (`runtime:<env>` partitions) are not here: the window still mirrors those.
 
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
@@ -8,16 +8,9 @@ import type {
   RuntimeSyncedTab,
   RuntimeSyncWindowGraph
 } from '../../../../shared/runtime-types'
-import { loadWorkspaceLayoutWithoutReport } from '../../../../shared/workspace-layout/workspace-layout-load'
 import type { LoadedWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-load-types'
-import { nameBasedLoadContext } from '../../../../shared/workspace-layout/workspace-layout-minted-ids'
 import { projectRuntimeSurfaces } from '../../runtime-leaf-record-projection'
-import type { RuntimeStore } from '../../runtime-store-contract'
-
-type SurfaceStore = Pick<
-  RuntimeStore,
-  'getWorkspaceSession' | 'getWorkspaceSessionHostIds' | 'onWorkspaceSessionWritten'
->
+import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 
 type LoadedPartition = Pick<LoadedWorkspaceLayout, 'layout' | 'desktopView' | 'facts'>
 
@@ -31,53 +24,57 @@ export type MainTerminalSurfaces = {
 }
 
 export class TerminalSurfaceIndex {
-  private readonly loaded = new Map<ExecutionHostId, LoadedPartition>()
-  private dirty: Set<ExecutionHostId> | 'all' = 'all'
   private stopWatching: (() => void) | null = null
-  private started = false
   private current: MainTerminalSurfaces | null = null
   private currentJson = ''
+  /** The loaded partitions `current` was projected from: the projection's own cached objects. */
+  private projectedFrom: (LoadedWorkspaceLayout | null)[] = []
 
   constructor(
     private readonly deps: {
-      store: () => SurfaceStore | null
+      /** Main's one layout projection, which the layout stream publishes from. */
+      reads: () => WorkspaceLayoutReads | null
+      /** Every session partition the Store holds. */
+      hostIds: () => readonly ExecutionHostId[]
       /** The partition that owns a workspace key; null when none does. */
       homeHostId: (key: string) => ExecutionHostId | null
       generatedTitlesEnabled: () => boolean
-      /** Main's surfaces may have changed; they are read again on the next `surfaces()`. */
+      /** A layout operation ended, so main's surfaces may have changed. */
       onChanged: () => void
     }
   ) {}
 
-  /** Watches the Store's writes; idempotent, and a no-op until the runtime has a store. */
+  /** Follows each layout operation's end, which also keeps the projection's partitions cached. */
   start(): void {
-    if (this.started) {
+    if (this.stopWatching) {
       return
     }
-    this.started = true
     this.stopWatching =
-      this.deps.store()?.onWorkspaceSessionWritten?.((hostId) => this.markDirty(hostId)) ?? null
-    this.markDirty(null)
+      this.deps.reads()?.onLayoutOperationCommitted(() => this.deps.onChanged()) ?? null
+    this.deps.onChanged()
   }
 
   stop(): void {
     this.stopWatching?.()
     this.stopWatching = null
-    this.started = false
   }
 
-  /** True while a Store write has not yet been read into `surfaces()`. */
-  isDirty(): boolean {
-    return this.dirty === 'all' || this.dirty.size > 0
-  }
-
+  /** Main's surfaces now: re-projected only when a partition the projection holds was rewritten. */
   surfaces(): MainTerminalSurfaces {
-    if (this.current && !this.isDirty()) {
+    const reads = this.deps.reads()
+    const hostIds = this.deps.hostIds().filter(
+      (hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime'
+    )
+    const loaded = hostIds.map((hostId) => reads?.readPartition(hostId) ?? null)
+    if (
+      this.current &&
+      loaded.length === this.projectedFrom.length &&
+      loaded.every((partition, index) => partition === this.projectedFrom[index])
+    ) {
       return this.current
     }
-    const dirty = this.dirty
-    this.dirty = new Set()
-    const next = this.project(dirty)
+    this.projectedFrom = loaded
+    const next = this.project(hostIds, loaded)
     const json = JSON.stringify({ tabs: next.tabs, leaves: next.leaves })
     // The same object when nothing changed, so a write that moves no pane installs nothing.
     if (!this.current || json !== this.currentJson) {
@@ -87,51 +84,26 @@ export class TerminalSurfaceIndex {
     return this.current
   }
 
-  private markDirty(hostId: ExecutionHostId | null): void {
-    if (hostId === null) {
-      this.dirty = 'all'
-    } else if (this.dirty !== 'all') {
-      this.dirty.add(hostId)
-    }
-    this.deps.onChanged()
-  }
-
-  private project(dirty: Set<ExecutionHostId> | 'all'): MainTerminalSurfaces {
-    const store = this.deps.store()
-    const hostIds = (store?.getWorkspaceSessionHostIds?.() ?? []).filter(
-      (hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime'
-    )
-    for (const hostId of this.loaded.keys()) {
-      if (!hostIds.includes(hostId)) {
-        this.loaded.delete(hostId)
-      }
-    }
-    for (const hostId of hostIds) {
-      if (dirty !== 'all' && !dirty.has(hostId) && this.loaded.has(hostId)) {
-        continue
-      }
-      const session = store?.getWorkspaceSession?.(hostId)
-      if (session) {
-        this.loaded.set(
-          hostId,
-          loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext())
-        )
-      } else {
-        this.loaded.delete(hostId)
-      }
-    }
+  private project(
+    hostIds: readonly ExecutionHostId[],
+    loaded: readonly (LoadedWorkspaceLayout | null)[]
+  ): MainTerminalSurfaces {
     const partitions: LoadedPartition[] = []
     const worktreeIds = new Set<string>()
-    for (const [hostId, loaded] of this.loaded) {
+    hostIds.forEach((hostId, index) => {
+      const partition = loaded[index]
+      if (!partition) {
+        return
+      }
       // Only the owning partition's copy counts; a stray copy elsewhere is not a second pane.
       const workspaces = Object.fromEntries(
-        Object.entries(loaded.layout.workspaces).filter(([key]) => this.homeOf(key) === hostId)
+        Object.entries(partition.layout.workspaces).filter(([key]) => this.homeOf(key) === hostId)
       )
       for (const workspace of Object.values(workspaces)) {
         worktreeIds.add(workspace.worktreeId)
       }
-      partitions.push({ ...loaded, layout: { ...loaded.layout, workspaces } })
-    }
+      partitions.push({ ...partition, layout: { ...partition.layout, workspaces } })
+    })
     const { tabs, panes } = projectRuntimeSurfaces(partitions, this.deps.generatedTitlesEnabled())
     return {
       tabs: [...tabs.values()],
