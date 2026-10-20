@@ -71,7 +71,7 @@ export async function proveManagedOrcadCell(
       await assertLiveThenDecommissioned(slot, slotDir, deployed.fullVersion)
     }
     if (desktop) {
-      // Proves the runtime came from the host: this computer was asked and refused.
+      // With an empty cache and every fetch refused there was nothing to upload, so the host fetched it.
       expect(desktop.refusedUrls().length).toBeGreaterThan(0)
     }
     const toolLog = await hostExec(

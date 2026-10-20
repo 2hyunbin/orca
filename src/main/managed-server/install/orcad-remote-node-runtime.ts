@@ -321,7 +321,6 @@ export async function ensureRemoteOrcadNodeRuntime(options: {
       stageDir,
       upload: (dir) =>
         remoteStep(() => uploadRelayDirectory(conn, dir, stageDir, host, { signal })),
-      timeoutMs: NODE_RUNTIME_PROMOTE_TIMEOUT_MS,
       onLocalStage: (dir) => (localStage = dir)
     })
     let promoteRan = false

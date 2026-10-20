@@ -27,8 +27,10 @@ export const HOST_NODE_DOWNLOAD_OK = 'ORCA_NODE_HOST_DOWNLOAD_OK'
 export const HOST_NODE_DOWNLOAD_FAILED = 'ORCA_NODE_HOST_DOWNLOAD_FAILED'
 export const HOST_NODE_DOWNLOAD_NO_TOOL = 'ORCA_NODE_HOST_DOWNLOAD_NO_TOOL'
 export const HOST_NODE_DOWNLOAD_HASH_MISMATCH = 'ORCA_NODE_HOST_DOWNLOAD_HASH_MISMATCH'
-/** Under the promote timeout the exec runs with, so the tool's own limit reports first. */
-const HOST_DOWNLOAD_MAX_SECONDS = 270
+/** Each tool's wall-clock cap: ~140 KB/s still fetches the ~58 MB archive. */
+const HOST_DOWNLOAD_TOOL_SECONDS = 420
+/** Both tools plus the hash, so a tool's own limit always reports before the exec gives up. */
+export const HOST_NODE_DOWNLOAD_TIMEOUT_MS = (2 * HOST_DOWNLOAD_TOOL_SECONDS + 60) * 1000
 
 export function hostNodeRuntimeUrl(target: NodeRuntimeTarget): string {
   const asset = pinnedNodeRuntimeAsset(target)
@@ -46,14 +48,17 @@ export function hostDownloadNodeRuntimeCommand(
   const asset = pinnedNodeRuntimeAsset(args.target)
   const file = quotePosixShell(joinRemotePath(host, args.stageDir, asset.archive))
   const url = quotePosixShell(hostNodeRuntimeUrl(args.target))
-  const curl = `curl -fsSL --connect-timeout 20 --max-time ${HOST_DOWNLOAD_MAX_SECONDS} -o ${file} ${url}`
-  const wget = `wget -q -T 20 -t 2 -O ${file} ${url}`
+  const curl = `curl -fsSL --connect-timeout 20 --max-time ${HOST_DOWNLOAD_TOOL_SECONDS} -o ${file} ${url}`
+  // wget has no total-time limit of its own; `timeout` is in coreutils and busybox.
+  const wget = `$orca_dl_timeout wget -q -T 20 -t 2 -O ${file} ${url}`
   return [
-    'orca_dl_status=127; orca_dl_out=',
+    'orca_dl_status=127; orca_dl_out=; orca_dl_timeout=',
+    `command -v timeout >/dev/null 2>&1 && orca_dl_timeout="timeout ${HOST_DOWNLOAD_TOOL_SECONDS}"`,
     `if command -v curl >/dev/null 2>&1; then orca_dl_out=$(${curl} 2>&1); orca_dl_status=$?; fi`,
-    // Why wget after a failed curl too: a curl built without TLS or proxy support can fail where wget works.
-    `if [ "$orca_dl_status" != 0 ] && command -v wget >/dev/null 2>&1; then ` +
-      `orca_dl_out="$orca_dl_out$(${wget} 2>&1)"; orca_dl_status=$?; fi`,
+    // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget
+    // works. Not after curl's timeout (28): the link is just slow, and wget would be too.
+    `if [ "$orca_dl_status" != 0 ] && [ "$orca_dl_status" != 28 ] && command -v wget >/dev/null 2>&1; then ` +
+      `orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$(${wget} 2>&1)"; orca_dl_status=$?; fi`,
     `if [ "$orca_dl_status" = 127 ] && [ -z "$orca_dl_out" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}`,
     `elif [ "$orca_dl_status" != 0 ]; then rm -f ${file}; echo ${HOST_NODE_DOWNLOAD_FAILED}; ` +
       `echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_dl_status"; printf '%s\\n' "$orca_dl_out" | tail -c 2000`,
@@ -78,7 +83,7 @@ export function readHostNodeDownload(output: string): HostNodeDownloadResult {
     return {
       ok: false,
       report:
-        "it received a file that isn't the pinned release, so it was discarded (a proxy or filter may have replaced it)"
+        "it couldn't verify the file as the pinned release, so it was discarded (a proxy or filter may have replaced it, or the host lacks sha256sum and shasum)"
     }
   }
   const failed = output.indexOf(HOST_NODE_DOWNLOAD_FAILED)
@@ -161,7 +166,6 @@ export async function stageNodeRuntimeArchive(args: {
   upload: (localDir: string) => Promise<void>
   /** Receives the local upload directory as soon as it exists, so the caller can remove it. */
   onLocalStage: (localDir: string) => void
-  timeoutMs: number
   signal?: AbortSignal
 }): Promise<{ archive: string }> {
   let archivePath: string
@@ -172,7 +176,13 @@ export async function stageNodeRuntimeArchive(args: {
     if (isWindowsRemoteHost(args.host) || args.signal?.aborted) {
       throw desktopError
     }
-    return { archive: await downloadNodeRuntimeOnHost({ ...args, desktopError }) }
+    return {
+      archive: await downloadNodeRuntimeOnHost({
+        ...args,
+        desktopError,
+        timeoutMs: HOST_NODE_DOWNLOAD_TIMEOUT_MS
+      })
+    }
   }
   const uploadDir = await mkdtemp(join(dirname(archivePath), '.runtime-upload-'))
   args.onLocalStage(uploadDir)

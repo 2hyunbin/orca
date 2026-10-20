@@ -90,6 +90,18 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
     expect(readHostNodeDownload(runOnHost(bin, stage))).toEqual({ ok: true })
   })
 
+  it('does not start wget after curl ran out of time, so both fit the exec limit', () => {
+    const { bin, stage } = fakeHost({
+      curl: "echo 'curl: (28) Operation timed out' >&2; exit 28",
+      wget: `touch "\${0%/*}/wget.ran"; ${writeTo('-O', PAYLOAD)}`
+    })
+    expect(readHostNodeDownload(runOnHost(bin, stage))).toMatchObject({
+      ok: false,
+      report: expect.stringContaining('exit 28')
+    })
+    expect(existsSync(join(bin, 'wget.ran'))).toBe(false)
+  })
+
   it('discards a file that is not the pinned release', () => {
     const { bin, stage } = fakeHost({ curl: writeTo('-o', '<html>blocked by policy</html>') })
     const result = readHostNodeDownload(runOnHost(bin, stage))
