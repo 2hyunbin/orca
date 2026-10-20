@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as ShellAloneModule from './run-terminal-shell-alone'
 import { AgentHookServer } from '../agent-hooks/server'
 import { OrcaRuntimeService } from './orca-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
@@ -20,6 +21,13 @@ const WORKTREE = {
   isBare: false,
   isMainWorktree: false
 }
+
+// The shell's process tree after OpenCode exits: nothing but the shell.
+const shellAlone = vi.hoisted(() => vi.fn(async () => true))
+vi.mock('./run-terminal-shell-alone', async (importOriginal) => ({
+  ...(await importOriginal<typeof ShellAloneModule>()),
+  confirmRootShellHasNoChildrenFromProcessTable: shellAlone
+}))
 
 vi.mock('../git/worktree', () => ({
   listWorktrees: vi.fn().mockResolvedValue([
@@ -70,7 +78,10 @@ async function launchOpenCodePane(options: {
     spawn,
     write: () => true,
     kill: () => true,
-    getForegroundProcess: options.getForegroundProcess
+    getForegroundProcess: options.getForegroundProcess,
+    listProcesses: async () => [
+      { id: options.ptyId, rootProcessId: 4242, cwd: WORKTREE.path, title: 'zsh' }
+    ]
   })
   const terminal = await runtime.createTerminal(`path:${WORKTREE.path}`, {
     command: 'opencode',
@@ -132,7 +143,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
 
     // OpenCode exits; the shell prints its OSC 133;D and repaints its title while the
     // foreground read is still in flight, then the read lands proving a plain shell.
-    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07', 100)
+    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07\x1b]133;A\x07', 100)
     pane.runtime.onPtyData(pane.ptyId, '\x1b]0;~/worktree-a\x07', 101)
     resolveForeground?.('zsh')
     await settle()
@@ -161,7 +172,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
       getForegroundProcess
     })
 
-    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07', 100)
+    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07\x1b]133;A\x07', 100)
     await settle()
 
     expect(pane.runtime.verifyOrchestrationCompatibilityCaller(pane.evidence)).toBeNull()
@@ -208,7 +219,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
       })
     ).not.toBeNull()
 
-    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07', 100)
+    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07\x1b]133;A\x07', 100)
     await settle()
 
     // Every later process in this shell inherits ORCA_AGENT_LAUNCH_TOKEN from the PTY env,
@@ -271,7 +282,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
     // Session 1 ends. Nothing about the PTY changes across an agent session boundary:
     // same record, same incarnation, no title write — so every guard on the deferred
     // read still matches the baseline captured for session 1.
-    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07', 100)
+    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07\x1b]133;A\x07', 100)
     await post('session-2')
     resolveForeground?.('opencode')
     await settle()
@@ -307,7 +318,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
       })
     })
 
-    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07', 100)
+    pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07\x1b]133;A\x07', 100)
     await settle()
     first.flushStatusPersistSync()
     first.stop()

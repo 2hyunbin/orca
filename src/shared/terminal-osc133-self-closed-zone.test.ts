@@ -53,7 +53,7 @@ describe('OSC 133 zone an app closes for itself', () => {
 
   it('still finishes a silent shell command right after its start', () => {
     expect(scanChunks([`${C}${D0}${A}$ `]).finished).toEqual([0])
-    expect(scanChunks([C, D0]).finished).toEqual([0])
+    expect(scanChunks([C, D0, A]).finished).toEqual([0])
   })
 
   it("finishes a command typed after the prompt's own B", () => {
@@ -64,12 +64,31 @@ describe('OSC 133 zone an app closes for itself', () => {
     expect(scanChunks([`${B}${C}\x1b]133;D;1\x07`]).finished).toEqual([1])
   })
 
-  it('forgets the zone end on reset', () => {
+  it.each([0, 1, 2])(
+    'does not finish a bubble whose reader changed %d markers before its D',
+    (markersBeforeReset) => {
+      const finished = vi.fn()
+      const scanner = createOsc133CommandFinishedScanner(finished)
+      const markers = [B, C, D0]
+      scanner.scan(`$ ${markers.slice(0, markersBeforeReset).join('')}`)
+      scanner.reset()
+      scanner.scan(`${markers.slice(markersBeforeReset).join('')}OMP reply`)
+      expect(finished).not.toHaveBeenCalled()
+    }
+  )
+
+  it('still finishes silent, failed and interrupted commands right after a reset', () => {
     const finished = vi.fn()
     const scanner = createOsc133CommandFinishedScanner(finished)
-    scanner.scan(`${B}${C}`)
-    scanner.reset()
-    scanner.scan(D0)
-    expect(finished).toHaveBeenCalledExactlyOnceWith(0)
+    for (const chunks of [
+      [D0, A],
+      [C, `${D0}${A}`],
+      ['\x1b]133;D;1\x07'],
+      ['\x1b]133;D;130\x07']
+    ]) {
+      scanner.reset()
+      chunks.forEach(scanner.scan)
+    }
+    expect(finished.mock.calls).toEqual([[0], [0], [1], [130]])
   })
 })

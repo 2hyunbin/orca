@@ -60,6 +60,21 @@ export function closesAppOsc133Zone(adjacentMarkers: string, payload: string): b
   return sequence === 'D' && exitCode === '0' && adjacentMarkers.endsWith('BC')
 }
 
+// Adjacency of a scanner that joined the stream mid-flight (new reader, scan handoff, reset).
+const UNSEEN_MARKERS = '?'
+
+/**
+ * A `D;0` a mid-flight scanner sees before any other output may end a `B C` it never saw. Orca's
+ * shell hooks print the next prompt's `A` straight after a real `D`, while OMP follows its zone
+ * close with output, so the next thing seen decides.
+ */
+function mayCloseUnseenAppZone(adjacentMarkers: string, payload: string): boolean {
+  return (
+    closesAppOsc133Zone('BC', payload) &&
+    (adjacentMarkers === UNSEEN_MARKERS || adjacentMarkers === `${UNSEEN_MARKERS}C`)
+  )
+}
+
 export type Osc133CommandFinishedScanner = {
   /** Feed one raw PTY chunk; fires once per complete OSC 133;D sequence. */
   scan: (data: string) => void
@@ -78,18 +93,27 @@ export function createOsc133CommandFinishedScanner(
 ): Osc133CommandFinishedScanner {
   let carry = ''
   // OSC 133 markers seen back to back since the last other output, e.g. 'BC'.
-  let adjacentMarkers = ''
+  let adjacentMarkers = UNSEEN_MARKERS
+  let unseenZoneFinishPending = false
 
   const noteOutput = (): void => {
     adjacentMarkers = ''
+    unseenZoneFinishPending = false
   }
 
   const handleOsc133 = (payload: string, endInChunk: number): void => {
     const [sequence, exitCode] = payload.split(';')
+    if (unseenZoneFinishPending) {
+      unseenZoneFinishPending = false
+      if (sequence === 'A') {
+        onCommandFinished(0)
+      }
+    }
     // Why: read as the command's exit, that `D` retired a live agent's status.
     const closesAppZone = closesAppOsc133Zone(adjacentMarkers, payload)
+    unseenZoneFinishPending = mayCloseUnseenAppZone(adjacentMarkers, payload)
     adjacentMarkers = (adjacentMarkers + sequence.slice(0, 1)).slice(-2)
-    if (closesAppZone) {
+    if (closesAppZone || unseenZoneFinishPending) {
       return
     }
     if (sequence === 'C') {
@@ -145,7 +169,8 @@ export function createOsc133CommandFinishedScanner(
     scan,
     reset() {
       carry = ''
-      adjacentMarkers = ''
+      adjacentMarkers = UNSEEN_MARKERS
+      unseenZoneFinishPending = false
     }
   }
 }

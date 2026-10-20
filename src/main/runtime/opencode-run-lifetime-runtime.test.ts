@@ -129,7 +129,7 @@ describe('OpenCode run process lifetime in the runtime', () => {
 
       runtime.onPtyData('pty-1', '\x1b]133;C\x07', 100)
       await vi.advanceTimersByTimeAsync(FOREGROUND_COMMAND_READS.settleMs)
-      runtime.onPtyData('pty-1', '\x1b]133;D;0\x07', 101)
+      runtime.onPtyData('pty-1', '\x1b]133;D;0\x07\x1b]133;A\x07', 101)
 
       expect(summary(statuses)).toEqual([`${PANE_KEY}:working:process`, `${PANE_KEY}:done:process`])
     } finally {

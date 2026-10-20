@@ -5,6 +5,11 @@
  * exited never sets it. Every failure to observe reads as unproven.
  */
 import { confirmShellForegroundProcess } from '../providers/agent-foreground-process'
+import { inspectSpawnFileChildProcessesFromRows } from '../daemon/pty-subprocess/spawn-file-child-processes'
+import {
+  getCommandTokenPathBasename,
+  getFirstCommandToken
+} from '../../shared/command-token-scanner'
 import { getFreshProcessTableSnapshot } from '../../shared/process-table-snapshot-reader'
 import { getProcessTableIndex } from '../../shared/process-table-index'
 import { isShellProcess } from '../../shared/shell-process-detection'
@@ -33,4 +38,21 @@ export function inspectionShowsShellAlone(inspection: TerminalProcessInspection 
     inspection.childProcessEvidence === 'no-children' &&
     (inspection.foregroundProcess === null || isShellProcess(inspection.foregroundProcess))
   )
+}
+
+/** POSIX: nothing but the PTY's root shell lives in its tree, background and stopped jobs included. */
+export async function confirmRootShellHasNoChildrenFromProcessTable(
+  rootPid: number
+): Promise<boolean> {
+  try {
+    const rows = await getFreshProcessTableSnapshot()
+    const command = getProcessTableIndex(rows).byPid.get(rootPid)?.command ?? ''
+    const shell = getCommandTokenPathBasename(getFirstCommandToken(command)).replace(/^-/, '')
+    return (
+      isShellProcess(shell) &&
+      inspectSpawnFileChildProcessesFromRows(rows, rootPid, shell) === 'no-children'
+    )
+  } catch {
+    return false
+  }
 }

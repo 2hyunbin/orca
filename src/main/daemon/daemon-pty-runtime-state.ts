@@ -19,6 +19,7 @@ import {
   PROTOCOL_VERSION,
   supportsMode2031UnsubscribeFact,
   supportsPtyStartupIngress,
+  supportsUnseenOsc133Zones,
   type TakePendingOutputResult
 } from './types'
 import { ColdRestorePayloadCache } from './cold-restore-payload-cache'
@@ -255,7 +256,9 @@ export abstract class DaemonPtyRuntimeState {
   protected get canDelegateBackgroundToDaemon(): boolean {
     return (
       this.supportsAuthoritativeBufferSnapshots &&
-      supportsMode2031UnsubscribeFact(this.protocolVersion)
+      supportsMode2031UnsubscribeFact(this.protocolVersion) &&
+      // Why: main's own scanner must read an older relay's bytes, or a hidden OMP bubble ends its turn.
+      supportsUnseenOsc133Zones(this.protocolVersion)
     )
   }
 

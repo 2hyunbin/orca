@@ -1,7 +1,11 @@
 import { emitPtyListeners, createPtyExitPayload } from './daemon-pty-listener-emission'
 import { DaemonPtyDaemonRecovery } from './daemon-pty-daemon-recovery'
 import type { DaemonPtyAdapterOptions } from './daemon-pty-runtime-state'
-import { supportsMode2031UnsubscribeFact, type DaemonEvent } from './types'
+import {
+  supportsMode2031UnsubscribeFact,
+  supportsUnseenOsc133Zones,
+  type DaemonEvent
+} from './types'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
 import type { IPtyProvider } from '../providers/pty-provider-contract'
 import type { DeveloperPermissionStatus } from '../../shared/developer-permissions-types'
@@ -117,6 +121,13 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
             : { sequenceChars: event.payload.sequenceChars })
         })
       } else if (event.event === 'transientFact') {
+        // Why: an older relay can still flush a queued OMP bubble close as a finished command.
+        if (
+          event.payload.kind === 'command-finished' &&
+          !supportsUnseenOsc133Zones(this.protocolVersion)
+        ) {
+          return
+        }
         // Why (#9993): a preserved pre-v29 daemon can retain a stale relay tracker. Its
         // unretractable subscribe is harmful; an unsubscribe is always safe to forward.
         if (
