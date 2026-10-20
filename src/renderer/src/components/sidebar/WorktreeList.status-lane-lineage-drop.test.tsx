@@ -52,6 +52,13 @@ function makeFolderWorkspacePathStatusMockState(): Record<string, unknown> {
   }
 }
 
+vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+vi.mock('@/lib/desktop-sidebar-feed', async () =>
+  (await import('./window-state-sidebar-feed.test-fixture')).createWindowStateSidebarFeedModuleMock(
+    () => mockStore.state
+  )
+)
+
 vi.mock('@/store', () => ({
   useAppStore: Object.assign(
     (selector: (state: Record<string, unknown>) => unknown) => selector(mockStore.state),
@@ -240,6 +247,7 @@ function setStatusLaneState(): void {
     workspaceStatus: 'todo'
   })
   mockStore.state = {
+    startupLocalCatalogHydrated: true,
     ...makeFolderWorkspacePathStatusMockState(),
     activeModal: '',
     activeView: 'terminal',

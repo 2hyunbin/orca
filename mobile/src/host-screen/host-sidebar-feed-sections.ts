@@ -121,18 +121,29 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
     return first
   }
 
+  // Why: the desktop steps folder-scanned groups' rows by the compact header step; a group's header precedes its rows.
+  const folderScanGroupIds = new Set<string>()
   for (const row of sources.rows) {
     switch (row.type) {
       case 'host-header':
         push({ key: row.key, title: row.label, count: row.count, data: [] })
         break
       case 'header':
+        if (
+          row.projectGroup?.id &&
+          'createdFrom' in row.projectGroup &&
+          row.projectGroup.createdFrom === 'folder-scan'
+        ) {
+          folderScanGroupIds.add(row.projectGroup.id)
+        }
         push({
           key: row.collapseKey ?? row.key,
           title: headerTitle(row),
           count: row.count,
           ...(row.icon.kind === 'pinned' ? { icon: 'pin' as const } : {}),
           ...(row.repo ? { repo: row.repo } : {}),
+          ...(row.projectGroup && !row.repo ? { isProjectGroup: true } : {}),
+          ...(row.projectGroupDepth ? { projectGroupDepth: row.projectGroupDepth } : {}),
           data: []
         })
         break
@@ -145,6 +156,10 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
           isActive: sources.activeRowKeys.has(row.rowKey),
           sectionListKey: row.rowKey,
           lineageDepth: row.depth,
+          ...(row.groupDepth ? { projectGroupDepth: row.groupDepth } : {}),
+          ...(row.repo?.projectGroupId && folderScanGroupIds.has(row.repo.projectGroupId)
+            ? { inFolderScanGroup: true }
+            : {}),
           lineageChildCount: row.lineageChildCount,
           lineageCollapsed: row.lineageCollapsed === true,
           isLastLineageChild: row.isLastLineageChild,
@@ -168,7 +183,9 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
           ...rowOf(worktree, hostId, row.projectGroup.name, 'folder-workspace'),
           isActive: sources.activeRowKeys.has(row.key),
           sectionListKey: row.key,
-          lineageDepth: 0
+          lineageDepth: 0,
+          ...(row.groupDepth ? { projectGroupDepth: row.groupDepth } : {}),
+          ...(row.projectGroup.createdFrom === 'folder-scan' ? { inFolderScanGroup: true } : {})
         })
         break
       }

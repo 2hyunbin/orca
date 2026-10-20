@@ -22,9 +22,12 @@ describe('mobile RPC method routing census', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get(method)).toBe('paired-desktop')
   })
 
-  it('routes no per-section collapse write while the sidebar-inputs switch is off', () => {
-    expect(MOBILE_RPC_METHOD_ROUTES.has('ui.setCollapsed')).toBe(false)
-  })
+  it.each(['ui.setCollapsed', 'sidebarInputs.read', 'sidebarInputs.repoIcons'])(
+    'keeps %s on the paired desktop whose sidebar the phone mirrors',
+    (method) => {
+      expect(MOBILE_RPC_METHOD_ROUTES.get(method)).toBe('paired-desktop')
+    }
+  )
 
   it('sends a targeted status to the server, whose features a server workspace gates on', () => {
     expect(MOBILE_RPC_METHOD_ROUTES.get('status.get')).toBe('execution-host')

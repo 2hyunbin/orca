@@ -109,10 +109,10 @@ describe('writeMobileWebBundleTree', () => {
           protocolWindow: { runtimeProtocolVersion: 3, minCompatibleRuntimeProtocolVersion: 3 },
           env
         })
-      const dark = await tree({ ORCA_SIDEBAR_INPUTS: 'main' })
-      expect(existsSync(join(outDir, 'ORCA_SIDEBAR_INPUTS_MAIN'))).toBe(true)
+      const dark = await tree({ ORCA_LAYOUT_OWNER: 'main' })
+      expect(existsSync(join(outDir, 'ORCA_LAYOUT_OWNER_MAIN'))).toBe(true)
       const off = await tree({})
-      expect(existsSync(join(outDir, 'ORCA_SIDEBAR_INPUTS_MAIN'))).toBe(false)
+      expect(existsSync(join(outDir, 'ORCA_LAYOUT_OWNER_MAIN'))).toBe(false)
       expect(dark.manifest.buildId).toBe(off.manifest.buildId)
     } finally {
       await rm(outDir, { recursive: true, force: true })

@@ -22,6 +22,11 @@ import {
 
 // On screen means read, the flag follows its markers, and reads retire OS notifications.
 
+// The window raises the flag only for an older paired server's rows; these suites pin that path.
+vi.mock('../worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: vi.fn(async () => false)
+}))
+
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }
 }))
@@ -67,15 +72,28 @@ function splitTab(store: AttentionStore, tabId: string): void {
 const dismissedPaneKeys = (): string[][] =>
   dismiss.mock.calls.map((call) => [...(call[1] ?? [])].sort())
 
+/** Observes once the owning host's answer has settled the deferred flag raise. */
+async function observeSettled(
+  store: Parameters<typeof observe>[0],
+  persists: Parameters<typeof observe>[1]
+): Promise<string[]> {
+  await settleOwnerAnswer()
+  return observe(store, persists)
+}
+
+function settleOwnerAnswer(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe('on screen means read', () => {
-  it('a bell on screen waits while the window is unfocused and is read when focus returns', () => {
+  it('a bell on screen waits while the window is unfocused and is read when focus returns', async () => {
     const { store, persists } = createAttentionStore({ windowOnScreen: false })
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     ringBell(store, pane)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
@@ -88,7 +106,7 @@ describe('on screen means read', () => {
     expect(dismiss).not.toHaveBeenCalled()
 
     setWindowOnScreen(store, true)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -101,14 +119,14 @@ describe('on screen means read', () => {
     expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
   })
 
-  it('a bell in the pane on screen of a focused window leaves no marker and writes no flag', () => {
+  it('a bell in the pane on screen of a focused window leaves no marker and writes no flag', async () => {
     const { store, persists } = createAttentionStore()
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     ringBell(store, pane)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
@@ -120,15 +138,15 @@ describe('on screen means read', () => {
     expect(dismiss).not.toHaveBeenCalled()
   })
 
-  it('a completion in any split pane of the tab on screen leaves no marker and writes no flag', () => {
+  it('a completion in any split pane of the tab on screen leaves no marker and writes no flag', async () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     addLiveTerminalTab(store, WS_A, 'tab-a1')
     splitTab(store, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     completeAgentTurn(store, { worktreeId: WS_A, paneKey: `tab-a1:${LEAF_2}` })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
@@ -140,7 +158,7 @@ describe('on screen means read', () => {
     expect(dismiss).not.toHaveBeenCalled()
   })
 
-  it('a tab-level bell dismisses every pane of its split tab; a pane completion only its pane', () => {
+  it('a tab-level bell dismisses every pane of its split tab; a pane completion only its pane', async () => {
     const { store } = createAttentionStore()
     addLiveTerminalTab(store, WS_A, 'tab-a1')
     const hidden = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_1)
@@ -156,7 +174,7 @@ describe('on screen means read', () => {
     expect(dismissedPaneKeys()).toEqual([[`tab-a2:${LEAF_1}`, `tab-a2:${LEAF_2}`]])
   })
 
-  it('no-op keystrokes and pointerdowns write nothing and send no dismiss', () => {
+  it('no-op keystrokes and pointerdowns write nothing and send no dismiss', async () => {
     const { store } = createAttentionStore()
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
@@ -172,7 +190,7 @@ describe('on screen means read', () => {
 })
 
 describe('the flag follows its markers', () => {
-  it('a restart flag with no marker is read when its workspace comes on screen', () => {
+  it('a restart flag with no marker is read when its workspace comes on screen', async () => {
     const { store, persists } = createAttentionStore({ windowOnScreen: false })
     store.setState({
       worktreesByRepo: {
@@ -181,7 +199,7 @@ describe('the flag follows its markers', () => {
     })
     addLiveTerminalTab(store, WS_A, 'tab-a1')
     store.getState().setActiveWorktree(WS_A)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:0 sortEpoch=0",
         "tabs -",
@@ -192,7 +210,7 @@ describe('the flag follows its markers', () => {
     `)
 
     setWindowOnScreen(store, true)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 sortEpoch=0",
         "tabs -",
@@ -204,17 +222,17 @@ describe('the flag follows its markers', () => {
     `)
   })
 
-  it('Mark as unread on the workspace on screen survives input until the screen moves', () => {
+  it('Mark as unread on the workspace on screen survives input until the screen moves', async () => {
     const { store, persists } = createAttentionStore()
     const first = addLiveTerminalTab(store, WS_A, 'tab-a1')
     addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
     store.getState().setActiveWorktree(WS_A)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     toggleUnreadByUser(store, store.getState().worktreesByRepo.repo1[0]!)
     typeInPane(store, first)
     pointerDownInTab(store, { ...first, paneKey: null })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:0 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -226,7 +244,7 @@ describe('the flag follows its markers', () => {
     `)
 
     store.getState().activateTab('unified-tab-a1')
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -238,11 +256,11 @@ describe('the flag follows its markers', () => {
     `)
   })
 
-  it('a superseded turn removing the last completion marker clears the flag', () => {
+  it('a superseded turn removing the last completion marker clears the flag', async () => {
     const { store, persists } = createAttentionStore()
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     completeAgentTurn(store, pane)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store
       .getState()
@@ -253,7 +271,7 @@ describe('the flag follows its markers', () => {
         { updatedAt: 2000 },
         { tabId: pane.tabId, worktreeId: WS_A }
       )
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -266,16 +284,16 @@ describe('the flag follows its markers', () => {
     expect(dismissedPaneKeys()).toEqual([[pane.paneKey]])
   })
 
-  it('Mark as read removes every marker in the workspace and dismisses their panes', () => {
+  it('Mark as read removes every marker in the workspace and dismisses their panes', async () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const first = addLiveTerminalTab(store, WS_A, 'tab-a1')
     const second = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
     ringBell(store, first)
     completeAgentTurn(store, second)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     toggleUnreadByUser(store, store.getState().worktreesByRepo.repo1[0]!)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=2",
         "tabs -",
@@ -288,15 +306,15 @@ describe('the flag follows its markers', () => {
     expect(dismissedPaneKeys()).toEqual([[first.paneKey, second.paneKey]])
   })
 
-  it('closing an unmarked tab keeps a manual unread; closing a marked one dismisses its panes', () => {
+  it('closing an unmarked tab keeps a manual unread; closing a marked one dismisses its panes', async () => {
     const { store, persists } = createAttentionStore()
     const marked = addLiveTerminalTab(store, WS_A, 'tab-a1')
     const unmarked = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
     toggleUnreadByUser(store, store.getState().worktreesByRepo.repo1[0]!)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store.getState().closeTab(unmarked.tabId)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:0 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -308,8 +326,10 @@ describe('the flag follows its markers', () => {
     expect(dismiss).not.toHaveBeenCalled()
 
     ringBell(store, marked)
+    // A later event: the raise has already landed.
+    await settleOwnerAnswer()
     store.getState().closeTab(marked.tabId)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=1",
         "tabs -",

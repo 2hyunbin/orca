@@ -1,6 +1,9 @@
+// @vitest-environment happy-dom
+
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../../shared/project-group-types'
+import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
   createAppStoreModuleMock,
@@ -29,7 +32,12 @@ import {
   getPaddingLeft
 } from './worktree-list-card-markup-queries'
 
+import { createWindowStateSidebarFeedModuleMock } from './window-state-sidebar-feed.test-fixture'
 vi.mock('@/store', () => createAppStoreModuleMock())
+vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+vi.mock('@/lib/desktop-sidebar-feed', () =>
+  createWindowStateSidebarFeedModuleMock(() => mockStore.state)
+)
 vi.mock('@tanstack/react-virtual', () => createReactVirtualModuleMock())
 vi.mock('@/hooks/useVirtualizedScrollAnchor', () => createVirtualizedScrollAnchorModuleMock())
 vi.mock('./project-header-drag', () => createProjectHeaderDragModuleMock())
@@ -59,6 +67,19 @@ function makeFolderWorkspace(
     createdAt: 1,
     updatedAt: 1,
     ...overrides
+  }
+}
+
+function makeRuntimeEnvironment(id: string): PublicKnownRuntimeEnvironment {
+  return {
+    id,
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    lastUsedAt: null,
+    runtimeId: null,
+    endpoints: [{ id: 'ws', kind: 'websocket', label: 'WebSocket', endpoint: 'ws://127.0.0.1:1' }],
+    preferredEndpointId: 'ws'
   }
 }
 
@@ -177,6 +198,10 @@ describe('WorktreeList lineage child card renderer', () => {
         id: executionHostId,
         executionHostId
       }))
+      // The paired servers that own these folders, as the window's store knows them.
+      mockStore.state.runtimeEnvironments = hosts.map((hostId) =>
+        makeRuntimeEnvironment(hostId.slice('runtime:'.length))
+      )
       mockStore.state.activeWorkspaceExecutionHostId = selectedHost
       const markup = await renderWorktreeListMarkup()
       const options = Array.from(markup.matchAll(/<div[^>]*role="option"[^>]*>/g), ([tag]) => tag)

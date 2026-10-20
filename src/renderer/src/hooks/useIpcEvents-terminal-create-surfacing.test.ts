@@ -136,7 +136,9 @@ describe('useIpcEvents updater integration', () => {
 
     expect(setActiveView).toHaveBeenCalledWith('terminal')
     expect(setActiveWorktree).toHaveBeenCalledWith('wt-2')
-    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-2')
+    // Leaving wt-1 marks it visited just before wt-2's visit.
+    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-1', expect.any(Number), undefined)
+    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-2', expect.any(Number))
     expect(recordWorktreeVisit).toHaveBeenCalledWith('wt-2')
     expect(createTab).toHaveBeenCalledWith('wt-2', undefined, undefined, undefined)
     expect(setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-2')
@@ -401,7 +403,7 @@ describe('useIpcEvents updater integration', () => {
 
     expect(setActiveView).toHaveBeenCalledWith('terminal')
     expect(setActiveWorktree).toHaveBeenCalledWith('wt-4')
-    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-4')
+    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-4', expect.any(Number))
     expect(recordWorktreeVisit).toHaveBeenCalledWith('wt-4')
     expect(setActiveTab).toHaveBeenCalledWith('tab-focus')
     expect(revealWorktreeInSidebar).toHaveBeenCalledWith('wt-4')
@@ -422,7 +424,7 @@ describe('useIpcEvents updater integration', () => {
 
     expect(setActiveView).toHaveBeenCalledWith('terminal')
     expect(setActiveWorktree).toHaveBeenCalledWith('wt-history')
-    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-history')
+    expect(markWorktreeVisited).toHaveBeenCalledWith('wt-history', expect.any(Number))
     expect(recordWorktreeVisit).not.toHaveBeenCalled()
     expect(setActiveTab).toHaveBeenCalledWith('tab-history')
     expect(revealWorktreeInSidebar).toHaveBeenCalledWith('wt-history')

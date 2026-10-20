@@ -74,7 +74,8 @@ describe('activateAndRevealWorktree', () => {
     const result = activateAndRevealWorktree(worktree.id)
 
     expect(result).toEqual({ primaryTabId: null })
-    expect(markWorktreeVisited).toHaveBeenCalledWith(worktree.id)
+    // Same workspace, so nothing was left: one visit stamp, no previous-workspace mark.
+    expect(markWorktreeVisited).toHaveBeenCalledExactlyOnceWith(worktree.id, expect.any(Number))
     expect(recordWorktreeVisit).toHaveBeenCalledWith(worktree.id)
   })
 

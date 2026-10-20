@@ -22,6 +22,11 @@ import { completeAgentTurn, ringBell } from './workspace-unread-characterization
 // Pins what removing a tab or pane does to unread: its markers go, and a workspace whose removed
 // marker was its last live one is read.
 
+// The window raises the flag only for an older paired server's rows; these suites pin that path.
+vi.mock('../worktrees/listing/owner-host-sidebar-inputs', () => ({
+  ownerHostOwnsSidebarInputs: vi.fn(async () => false)
+}))
+
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }
 }))
@@ -56,12 +61,12 @@ afterEach(() => {
 })
 
 /** Two live tabs in background WS_A, each with every marker layer lit. */
-function seedLitWorkspace(): {
+async function seedLitWorkspace(): Promise<{
   store: AttentionStore
   persists: ReturnType<typeof createAttentionStore>['persists']
   first: PaneTarget
   second: PaneTarget
-} {
+}> {
   const { store, persists } = createAttentionStore({ experimental: true })
   const first = addLiveTerminalTab(store, WS_A, 'tab-a1')
   const second = addLiveTerminalTab(store, WS_A, 'tab-a2', LEAF_2)
@@ -69,20 +74,29 @@ function seedLitWorkspace(): {
     ringBell(store, pane)
     completeAgentTurn(store, pane)
   }
-  observe(store, persists)
+  await observeSettled(store, persists)
   return { store, persists, first, second }
 }
 
+/** Observes once the owning host's answer has settled the deferred flag raise. */
+async function observeSettled(
+  store: Parameters<typeof observe>[0],
+  persists: Parameters<typeof observe>[1]
+): Promise<string[]> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  return observe(store, persists)
+}
+
 describe('closing tabs', () => {
-  it('closing the only unread terminal tab removes its markers and the dot (STA-9043)', () => {
+  it('closing the only unread terminal tab removes its markers and the dot (STA-9043)', async () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const pane = addLiveTerminalTab(store, WS_A, 'tab-a1')
     ringBell(store, pane)
     completeAgentTurn(store, pane)
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store.getState().closeTab(pane.tabId)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -94,11 +108,11 @@ describe('closing tabs', () => {
     `)
   })
 
-  it('closing a terminal through its unified tab removes all of its markers', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('closing a terminal through its unified tab removes all of its markers', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
 
     store.getState().closeUnifiedTab(`unified-${first.tabId}`)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a2=terminal-bell",
@@ -109,11 +123,11 @@ describe('closing tabs', () => {
     `)
   })
 
-  it('a unified close whose terminal retirement is handled elsewhere removes only the tab marker', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('a unified close whose terminal retirement is handled elsewhere removes only the tab marker', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
 
     store.getState().closeUnifiedTab(`unified-${first.tabId}`, { terminalRetirementHandled: true })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a2=terminal-bell",
@@ -124,7 +138,7 @@ describe('closing tabs', () => {
     `)
   })
 
-  it('closing a structured chat tab removes its markers', () => {
+  it('closing a structured chat tab removes its markers', async () => {
     const { store, persists } = createAttentionStore({ experimental: true })
     const chat = store.getState().createUnifiedTab(WS_A, 'agent-session', {
       id: 'chat-1',
@@ -136,10 +150,10 @@ describe('closing tabs', () => {
       unreadTerminalPanes: { [paneKey]: 'agent-completion' },
       unreadAgentCompletionPanes: { [paneKey]: 'agent-completion' }
     })
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store.getState().closeUnifiedTab(chat.id)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 sortEpoch=0",
         "tabs -",
@@ -150,7 +164,7 @@ describe('closing tabs', () => {
     `)
   })
 
-  it('closing the only unread folder tab clears the folder flag', () => {
+  it('closing the only unread folder tab clears the folder flag', async () => {
     const { store, persists } = createAttentionStore()
     store.setState({
       projectGroups: [
@@ -171,7 +185,7 @@ describe('closing tabs', () => {
     })
     const pane = addLiveTerminalTab(store, folderWorkspaceKey('folder-1'), 'tab-f1')
     ringBell(store, pane)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 folder-1@local:UNREAD:1000 sortEpoch=1",
         "tabs tab-f1=terminal-bell",
@@ -183,7 +197,7 @@ describe('closing tabs', () => {
     `)
 
     store.getState().closeTab(pane.tabId)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:0 b@local:read:0 folder-1@local:read:1000 sortEpoch=1",
         "tabs -",
@@ -198,10 +212,10 @@ describe('closing tabs', () => {
 
 describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
   it('sleeping the workspace removes every marker of its tabs and its flag', async () => {
-    const { store, persists } = seedLitWorkspace()
+    const { store, persists } = await seedLitWorkspace()
 
     await store.getState().shutdownWorktreeTerminals(WS_A, { keepIdentifiers: true })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -214,7 +228,7 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
   })
 
   it('hibernating a completed agent pane removes that pane’s markers only', async () => {
-    const { store, persists, first } = seedLitWorkspace()
+    const { store, persists, first } = await seedLitWorkspace()
     store
       .getState()
       .setAgentStatus(
@@ -225,7 +239,7 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
         { tabId: first.tabId, worktreeId: WS_A },
         { providerSession: { key: 'session_id', id: 'session-a1' } }
       )
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     await store.getState().shutdownCompletedAgentPaneForHibernation(WS_A, {
       paneKey: first.paneKey,
@@ -233,7 +247,7 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
       leafId: first.paneKey.split(':')[1]!,
       ptyId: `pty-${first.tabId}`
     })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=3",
         "tabs tab-a1=terminal-bell tab-a2=terminal-bell",
@@ -244,11 +258,11 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     `)
   })
 
-  it('retiring a pane authority removes its pane and completion markers', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('retiring a pane authority removes its pane and completion markers', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
 
     store.getState().retireAgentPaneAuthority(first.paneKey)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell tab-a2=terminal-bell",
@@ -259,8 +273,8 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     `)
   })
 
-  it('recording a provider session removes only the completion marker', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('recording a provider session removes only the completion marker', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
 
     store
       .getState()
@@ -271,7 +285,7 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
         { updatedAt: 2000 },
         { tabId: first.tabId, worktreeId: WS_A }
       )
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell tab-a2=terminal-bell",
@@ -282,14 +296,14 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     `)
   })
 
-  it('transferring a pane authority moves its pane markers', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('transferring a pane authority moves its pane markers', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
 
     store.getState().transferAgentPaneAuthority({
       fromPaneKey: first.paneKey,
       toPaneKey: `${first.tabId}:33333333-3333-4333-8333-333333333333`
     })
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell tab-a2=terminal-bell",
@@ -300,8 +314,8 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     `)
   })
 
-  it('reconciling a dropped terminal on activation leaves no live marker, so the flag reads', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('reconciling a dropped terminal on activation leaves no live marker, so the flag reads', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
     store.setState({
       tabsByWorktree: {
         [WS_A]: (store.getState().tabsByWorktree[WS_A] ?? []).filter(
@@ -309,10 +323,10 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
         )
       }
     })
-    observe(store, persists)
+    await observeSettled(store, persists)
 
     store.getState().setActiveWorktree(WS_A)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -324,11 +338,11 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
     `)
   })
 
-  it('purging the workspace removes every marker of its tabs and its flag', () => {
-    const { store, persists } = seedLitWorkspace()
+  it('purging the workspace removes every marker of its tabs and its flag', async () => {
+    const { store, persists } = await seedLitWorkspace()
 
     store.getState().purgeWorktreeTerminalState([WS_A])
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:read:1000 b@local:read:0 sortEpoch=1",
         "tabs -",
@@ -342,14 +356,14 @@ describe('sleep, hibernate, retire, rekey, reconcile, purge', () => {
 })
 
 describe('engagement, read state and tab focus on other surfaces', () => {
-  it('focusing a group reads nothing beyond the active tab already on screen', () => {
-    const { store, persists } = seedLitWorkspace()
+  it('focusing a group reads nothing beyond the active tab already on screen', async () => {
+    const { store, persists } = await seedLitWorkspace()
     store.getState().setActiveWorktree(WS_A)
-    observe(store, persists)
+    await observeSettled(store, persists)
     const groupId = store.getState().groupsByWorktree[WS_A]?.[0]?.id
 
     store.getState().focusGroup(WS_A, groupId!)
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell",
@@ -360,11 +374,11 @@ describe('engagement, read state and tab focus on other surfaces', () => {
     `)
   })
 
-  it('acknowledging agents drops their completion markers only', () => {
-    const { store, persists, first } = seedLitWorkspace()
+  it('acknowledging agents drops their completion markers only', async () => {
+    const { store, persists, first } = await seedLitWorkspace()
 
     store.getState().acknowledgeAgents([first.paneKey], [])
-    expect(observe(store, persists)).toMatchInlineSnapshot(`
+    expect(await observeSettled(store, persists)).toMatchInlineSnapshot(`
       [
         "rows a@local:UNREAD:1000 b@local:read:0 sortEpoch=1",
         "tabs tab-a1=terminal-bell tab-a2=terminal-bell",

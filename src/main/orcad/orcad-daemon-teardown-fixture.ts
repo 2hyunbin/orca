@@ -174,12 +174,31 @@ async function recordDaemonTree(daemonDir: string): Promise<ProfileDaemonRecord>
   if (rows) {
     const index = buildProcessTableIndex(rows)
     for (const pid of record.pids) {
-      for (const row of collectDescendantsFromIndex(index, pid)) {
+      for (const row of collectDescendantsFromIndex(index, pid, (row) =>
+        isOlderThanItsParent(index.byPid, row)
+      )) {
         record.descendants.set(identityKey(row), row)
       }
     }
   }
   return record
+}
+
+/**
+ * Windows never reparents, so a process whose parent died keeps naming that pid, and a later
+ * process can reuse it: a build's lingering vctip.exe then reads as a child of the daemon that took
+ * its parent's pid. A child is never older than its parent.
+ */
+function isOlderThanItsParent(
+  byPid: ReadonlyMap<number, WindowsProcessIdentityRow>,
+  row: WindowsProcessIdentityRow
+): boolean {
+  const parentCreatedAt = byPid.get(row.ppid)?.creationTimeMs
+  return (
+    row.creationTimeMs !== undefined &&
+    parentCreatedAt !== undefined &&
+    row.creationTimeMs < parentCreatedAt
+  )
 }
 
 /** Requires each recorded descendant's exit; a reused pid has a different creation time. */

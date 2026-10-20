@@ -4,6 +4,11 @@
   "family": "host.view-settings",
   "namedDeltas": [],
   "values": {
+    "0cdd0b419dd2": {
+      "name": "actionError",
+      "ordinal": 10,
+      "value": "The desktop did not take that change."
+    },
     "1071e4898c81": {
       "name": "ui.set#1",
       "ordinal": 8,
@@ -39,10 +44,46 @@
         }
       }
     },
+    "189f6a2bd608": {
+      "name": "ui.get#2",
+      "ordinal": 13,
+      "json": "{\"id\":\"frame-4\",\"deviceToken\":\"recording-device\",\"method\":\"ui.get\"}"
+    },
     "1c2564f1daca": {
       "name": "settings.get#1",
       "ordinal": 4,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
+    },
+    "35770df2ea23": {
+      "name": "settings.get#2",
+      "ordinal": 14,
+      "json": "{\"id\":\"frame-5\",\"deviceToken\":\"recording-device\",\"method\":\"settings.get\"}"
+    },
+    "3ffeade6c2e3": {
+      "name": "settings.get#2",
+      "ordinal": 12,
+      "args": [
+        {
+          "name": "method",
+          "value": "settings.get"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "pending",
+        "startedAt": 0
+      }
     },
     "424e4d52d6fa": {
       "view": {
@@ -593,6 +634,32 @@
       "ordinal": 9,
       "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"sortBy\":\"name\"}}"
     },
+    "d439c9fb612f": {
+      "name": "ui.get#2",
+      "ordinal": 11,
+      "args": [
+        {
+          "name": "method",
+          "value": "ui.get"
+        },
+        {
+          "name": "params",
+          "value": {
+            "$rpc": "absent"
+          }
+        },
+        {
+          "name": "options",
+          "value": {
+            "$rpc": "absent"
+          }
+        }
+      ],
+      "settlement": {
+        "status": "pending",
+        "startedAt": 0
+      }
+    },
     "dc007face350": {
       "view": {
         "agentActivityDisplayMode": "compact",
@@ -914,43 +981,79 @@
       {
         "id": "host-view-settings-sync.outer-refused:settled",
         "observation": {
-          "sender": ["651e8014c9ff", "e55533c6e358", "1071e4898c81"],
-          "payloads": ["ec336f23ef91", "1c2564f1daca", "cd9c5de9f2aa"],
+          "sender": [
+            "651e8014c9ff",
+            "e55533c6e358",
+            "1071e4898c81",
+            "d439c9fb612f",
+            "3ffeade6c2e3"
+          ],
+          "payloads": [
+            "ec336f23ef91",
+            "1c2564f1daca",
+            "cd9c5de9f2aa",
+            "189f6a2bd608",
+            "35770df2ea23"
+          ],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
           "state": "424e4d52d6fa",
-          "effects": ["6bab186637b0", "8369a6f35fda", "c49dcad120d2"]
+          "effects": ["6bab186637b0", "8369a6f35fda", "c49dcad120d2", "0cdd0b419dd2"]
         }
       },
       {
         "id": "host-view-settings-sync.outer-refused-no-message:settled",
         "observation": {
-          "sender": ["651e8014c9ff", "e55533c6e358", "b5cabaf13de8"],
-          "payloads": ["ec336f23ef91", "1c2564f1daca", "cd9c5de9f2aa"],
+          "sender": [
+            "651e8014c9ff",
+            "e55533c6e358",
+            "b5cabaf13de8",
+            "d439c9fb612f",
+            "3ffeade6c2e3"
+          ],
+          "payloads": [
+            "ec336f23ef91",
+            "1c2564f1daca",
+            "cd9c5de9f2aa",
+            "189f6a2bd608",
+            "35770df2ea23"
+          ],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
           "state": "424e4d52d6fa",
-          "effects": ["6bab186637b0", "8369a6f35fda", "c49dcad120d2"]
+          "effects": ["6bab186637b0", "8369a6f35fda", "c49dcad120d2", "0cdd0b419dd2"]
         }
       },
       {
         "id": "host-view-settings-sync.method-not-found:settled",
         "observation": {
-          "sender": ["651e8014c9ff", "e55533c6e358", "793af4fc3c95"],
-          "payloads": ["ec336f23ef91", "1c2564f1daca", "cd9c5de9f2aa"],
+          "sender": [
+            "651e8014c9ff",
+            "e55533c6e358",
+            "793af4fc3c95",
+            "d439c9fb612f",
+            "3ffeade6c2e3"
+          ],
+          "payloads": [
+            "ec336f23ef91",
+            "1c2564f1daca",
+            "cd9c5de9f2aa",
+            "189f6a2bd608",
+            "35770df2ea23"
+          ],
           "settlements": {
             "mount": "eb79a9b3682a",
             "sync": "eb79a9b3682a",
             "sort": "eb79a9b3682a"
           },
           "state": "424e4d52d6fa",
-          "effects": ["6bab186637b0", "8369a6f35fda", "c49dcad120d2"]
+          "effects": ["6bab186637b0", "8369a6f35fda", "c49dcad120d2", "0cdd0b419dd2"]
         }
       },
       {

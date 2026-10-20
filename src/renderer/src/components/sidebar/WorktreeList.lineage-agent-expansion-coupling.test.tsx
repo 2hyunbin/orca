@@ -47,6 +47,13 @@ type WorktreeListComponent = React.ComponentType<{
 
 let WorktreeList: WorktreeListComponent
 
+vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+vi.mock('@/lib/desktop-sidebar-feed', async () =>
+  (await import('./window-state-sidebar-feed.test-fixture')).createWindowStateSidebarFeedModuleMock(
+    () => mockStore.state
+  )
+)
+
 vi.mock('@/store', () => ({
   useAppStore: Object.assign(
     (selector: (state: Record<string, unknown>) => unknown) => selector(mockStore.state),
@@ -270,6 +277,7 @@ function setAgentLineageState(options: {
   }
 
   mockStore.state = {
+    startupLocalCatalogHydrated: true,
     // Reactive-ish toggle: the chip's onClick eventually calls
     // toggleCollapsedGroup; mutate the live Set so the next manual re-render
     // (store isn't reactive in this harness) reflects the user's toggle.
