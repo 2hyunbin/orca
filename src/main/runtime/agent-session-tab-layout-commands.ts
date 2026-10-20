@@ -8,8 +8,7 @@ import { savedSessionId } from './saved-structured-agent-session-restoration'
 
 /**
  * The commands for `changes` against the workspace's stored tabs: a chat opens in the window's
- * active group unless a tab shows it, and a close drops the chat's tab. Main's open keeps a group
- * it lacks out, as a window's does.
+ * active group unless a tab shows it, and a close drops the chat's tab.
  */
 export function chatTabLayoutCommands(
   session: WorkspaceSessionState | null,
