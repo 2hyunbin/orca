@@ -158,8 +158,15 @@ export async function spawnInAdmittedPane(
       startStatus?.keepOnFailure
     )
   } catch (error) {
-    // A pane that stays (kept to show the failure, or one main already held) shows why.
-    if (startStatus && admittedAs && (startStatus.keepOnFailure || admittedAs === 'exists')) {
+    // A pane that stays (kept to show the failure, or one main already held) shows why; one
+    // closed while it started is gone, so nothing is left to show.
+    const paneGone = error instanceof Error && error.message === 'terminal_split_source_not_found'
+    if (
+      startStatus &&
+      admittedAs &&
+      !paneGone &&
+      (startStatus.keepOnFailure || admittedAs === 'exists')
+    ) {
       startStatus.sink.set(paneKey, paneStartFailure(error))
     } else {
       startStatus?.sink.clear(paneKey)

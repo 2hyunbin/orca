@@ -189,4 +189,60 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
     ).rejects.toThrow('terminal_split_source_not_found')
     expect(spawn).not.toHaveBeenCalled()
   })
+
+  // The real spawn commit refuses a pane that left the layout while it started (spawn-commit.ts).
+  function closeWhileStarting(setupResult: ReturnType<typeof setup>, close: () => Promise<void>) {
+    const { spawn, getSession } = setupResult
+    spawn.mockImplementationOnce(async (args: { tabId?: string; leafId?: string }) => {
+      await close()
+      const root = getSession().terminalLayoutsByTabId[TAB_ID]?.root
+      if (!root || !collectLayoutLeafIdsInOrder(root).includes(args.leafId!)) {
+        throw new Error('terminal_split_source_not_found')
+      }
+      return { id: 'pty-late' }
+    })
+  }
+
+  it.each([
+    ['its pane', { kind: 'pane', tabId: TAB_ID, leafId: NEW_LEAF_ID }],
+    ['its tab', { kind: 'tab', tabId: TAB_ID }]
+  ] as const)(
+    'answers a split once, and leaves nothing, when the user closes %s while it starts',
+    async (_, target) => {
+      const context = setup()
+      const { runtime, getSession } = context
+      closeWhileStarting(context, () =>
+        runtime.closeTerminalSurfaceFromRenderer({
+          worktreeId: TEST_WORKTREE_ID,
+          target,
+          reason: 'user'
+        })
+      )
+
+      await expect(
+        runtime.splitTerminalPane(
+          { worktreeId: TEST_WORKTREE_ID, tabId: TAB_ID, leafId: HEADLESS_LEAF_ID },
+          { direction: 'vertical', newLeafId: NEW_LEAF_ID, keepPaneOnStartFailure: true }
+        )
+      ).rejects.toThrow('terminal_split_source_not_found')
+
+      const root = getSession().terminalLayoutsByTabId[TAB_ID]?.root
+      expect(root ? collectLayoutLeafIdsInOrder(root) : []).not.toContain(NEW_LEAF_ID)
+      // Nothing is left showing a start for a pane that is gone.
+      expect(runtime.startStatusOf(makePaneKey(TAB_ID, NEW_LEAF_ID))).toBeNull()
+    }
+  )
+
+  it('refuses a named pane id another pane already holds, starting nothing', async () => {
+    const { runtime, spawn } = setup()
+
+    await expect(
+      runtime.splitTerminalPane(
+        { worktreeId: TEST_WORKTREE_ID, tabId: TAB_ID, leafId: HEADLESS_LEAF_ID },
+        { direction: 'vertical', newLeafId: HEADLESS_LEAF_ID }
+      )
+    ).rejects.toThrow('pane_exists')
+    expect(spawn).not.toHaveBeenCalled()
+    expect(runtime.startStatusOf(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))).toBeNull()
+  })
 })

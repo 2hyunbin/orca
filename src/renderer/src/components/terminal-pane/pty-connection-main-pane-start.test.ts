@@ -104,6 +104,53 @@ describe('a pane main is starting a terminal for', () => {
     )
   })
 
+  it('attaches a split pane to the terminal main bound it to, not its tab’s', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const transport = createMockTransport()
+    transportFactoryQueue.push(transport)
+    const newLeaf = leafIdForPane(2)
+    setStore({
+      tabsByWorktree: { 'wt-1': [{ id: TAB, ptyId: 'pty-source' }] },
+      terminalPaneStartsByPaneKey: { [`${TAB}:${newLeaf}`]: { status: 'starting' } }
+    })
+    // The source pane already shows the tab's terminal.
+    const source = createMockTransport('pty-source')
+    const deps = buildPaneConnectionDeps(() => mockStoreState, {
+      tabId: TAB,
+      paneTransportsRef: { current: new Map([[1, source]]) }
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
+    const args = [createPane(2), createManager(2), deps] as unknown as Parameters<
+      typeof connectPanePty
+    >
+    connectPanePty(...args)
+    await flushAsyncTicks()
+    expect(transport.connect).not.toHaveBeenCalled()
+
+    setStore({
+      terminalLayoutsByTabId: {
+        [TAB]: {
+          root: {
+            type: 'split',
+            direction: 'vertical',
+            first: { type: 'leaf', leafId: leafIdForPane(1) },
+            second: { type: 'leaf', leafId: newLeaf }
+          },
+          activeLeafId: newLeaf,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafIdForPane(1)]: 'pty-source', [newLeaf]: 'pty-split' }
+        }
+      },
+      terminalPaneStartsByPaneKey: {}
+    })
+    await flushAsyncTicks()
+
+    expect(transport.connect).toHaveBeenCalledTimes(1)
+    expect(transport.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'pty-split' })
+    )
+  })
+
   it('shows why a failed start failed and starts nothing', async () => {
     const { transport, deps } = await connectWithStart({
       status: 'failed',

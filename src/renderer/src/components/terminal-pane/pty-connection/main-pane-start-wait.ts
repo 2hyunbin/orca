@@ -6,6 +6,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-sw
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
 import type { PaneStartStatus } from '../../../../../shared/workspace-layout/workspace-layout-published'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import { resolveTerminalTabId } from './terminal-tab-id'
 
 const waiting = new WeakSet<ConnectPanePtySession>()
 
@@ -52,6 +53,7 @@ export function waitsForMainPaneStart(
       return
     }
     // Main's start ended: the pane is bound to its terminal now, or main took it back.
+    adoptMainBinding(session, state)
     unsubscribe()
     waiting.delete(session)
     const index = session.waitTeardowns.indexOf(unsubscribe)
@@ -64,4 +66,18 @@ export function waitsForMainPaneStart(
   })
   session.waitTeardowns.push(unsubscribe)
   return true
+}
+
+/** The terminal main bound the pane to, as the pane's restore id: the connect then attaches it. */
+function adoptMainBinding(
+  session: ConnectPanePtySession,
+  state: ReturnType<typeof useAppStore.getState>
+): void {
+  const tabId = resolveTerminalTabId(state, session.deps.tabId)
+  const leafId = session.pane.leafId
+  const ptyId = state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[leafId]
+  if (ptyId) {
+    session.deps.restoredLeafId = leafId
+    session.deps.restoredPtyIdByLeafId = { ...session.deps.restoredPtyIdByLeafId, [leafId]: ptyId }
+  }
 }

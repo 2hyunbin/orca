@@ -10,12 +10,13 @@ import { spawnInAdmittedPane } from '../../runtime-pane-admission'
 import { resolvePtyFirstSize, type PtyGridSize } from '../../../ipc/pty/pty-first-size'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { randomUUID } from 'node:crypto'
+import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 
 export type SplitPaneSource = { worktreeId: string; tabId: string; leafId: string }
 
 export type SplitPaneInMainOptions = {
   direction: 'horizontal' | 'vertical'
-  /** The caller's id for the new pane; main refuses one already taken. */
+  /** The caller's id for the new pane; main refuses one another pane holds. */
   newLeafId?: string
   cwd?: string
   initialSize?: PtyGridSize
@@ -31,6 +32,11 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
   protected ownsTabLayout(worktreeId: string, tabId: string): boolean {
     const [hostId] = this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
     return Boolean(hostId && parseExecutionHostId(hostId)?.kind !== 'runtime')
+  }
+
+  private holdsLeaf(worktreeId: string, leafId: string): boolean {
+    const layouts = this.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId ?? {}
+    return Object.values(layouts).some((layout) => collectLeafIds(layout?.root).includes(leafId))
   }
 
   /** `terminal.split` from a view that names its pane: main writes the split and starts it. */
@@ -55,6 +61,10 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${source.worktreeId}`)
     const leafId =
       opts.newLeafId && isTerminalLeafId(opts.newLeafId) ? opts.newLeafId : randomUUID()
+    // A named pane id another pane holds is refused: the start must not land in a live pane.
+    if (opts.newLeafId && this.holdsLeaf(source.worktreeId, leafId)) {
+      throw new Error('pane_exists')
+    }
     const preAllocatedHandle = this.createPreAllocatedTerminalHandle()
     const result = await spawnInAdmittedPane(this.store, this.ptyController, {
       ...resolvePtyFirstSize({ pane: opts.initialSize }),
