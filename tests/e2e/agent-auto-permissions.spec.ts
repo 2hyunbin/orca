@@ -8,9 +8,13 @@ test('global Auto applies to supporting agents, other agents switch separately, 
 }) => {
   await waitForSessionReady(orcaPage)
   // Terminal permission changes must leave the native chat default alone.
-  await orcaPage.evaluate(() =>
-    window.__store.getState().updateSettingsOrThrow({ nativeChatPermissionMode: 'accept-edits' })
-  )
+  await orcaPage.evaluate(() => {
+    const store = window.__store
+    if (!store) {
+      throw new Error('Orca store is unavailable')
+    }
+    return store.getState().updateSettingsOrThrow({ nativeChatPermissionMode: 'accept-edits' })
+  })
   await orcaPage.getByRole('button', { name: 'Settings', exact: true }).click()
   await orcaPage.getByRole('button', { name: 'Agents', exact: true }).click()
   const group = orcaPage.getByRole('radiogroup', { name: 'Agent Permissions' })
