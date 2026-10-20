@@ -162,7 +162,13 @@ export function createRekeyOpenFilesAction(
       }
       // Switch point: main renames the tabs, and its frame rekeys the content.
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        return renameEditorFilesThroughLayoutOwner(set, get, rekeys, moveOperationId)
+        return renameEditorFilesThroughLayoutOwner(
+          set,
+          get,
+          rekeys,
+          moveOperationId,
+          rekeyOpenFilesPatch
+        )
       }
       let result: RekeyOpenFilesResult = { ok: true }
       set((s) => {

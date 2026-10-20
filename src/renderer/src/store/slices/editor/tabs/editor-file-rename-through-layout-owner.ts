@@ -10,7 +10,6 @@ import {
 } from '@/runtime/layout-owner-content-rekeys'
 import type { EditorFileRename } from '../../../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { AppState } from '../../../types'
-import { rekeyOpenFilesPatch } from '../actions/rekey-open-files-action'
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { OpenFile } from '../types/open-file'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from '../types/open-file-path-rekey'
@@ -65,7 +64,13 @@ export function renameEditorFilesThroughLayoutOwner(
   set: EditorSet,
   get: EditorGet,
   rekeys: readonly OpenFilePathRekey[],
-  moveOperationId: string | undefined
+  moveOperationId: string | undefined,
+  /** The window's pure rekey (rekey-open-files-action), passed in so neither module imports the other. */
+  rekeyOpenFilesPatch: (
+    state: AppState,
+    rekeys: readonly OpenFilePathRekey[],
+    moveOperationId: string | undefined
+  ) => { ok: true; patch: Partial<AppState> } | Extract<RekeyOpenFilesResult, { ok: false }>
 ): RekeyOpenFilesResult {
   const state = get()
   const planned = rekeyOpenFilesPatch(state, rekeys, moveOperationId)
