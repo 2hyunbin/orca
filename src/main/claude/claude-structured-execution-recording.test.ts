@@ -131,7 +131,7 @@ it('retires earlier Fast routing when an effort read reports Fast off', async ()
     })
     fastMode = false
     expect(await send('low')).toMatchObject({ state: 'admitted', ranOptions: { effort: 'low' } })
-    expect((await send('low')).ranOptions).not.toHaveProperty('fastMode')
+    expect(await send('low')).toEqual({ state: 'admitted', ranOptions: { effort: 'low' } })
   } finally {
     await adapter.closeAll()
   }
