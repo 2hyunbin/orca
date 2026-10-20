@@ -3,7 +3,7 @@
 // Only switch-on code reaches this module, so a window-owned build bundles none of it.
 
 import type { PaneStartFactOf } from '../../pane-start-statuses'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
@@ -77,6 +77,11 @@ class MainSurfacePublisher {
     const started = this.host.paneStartFact(`${tabId}:${leafId}`, facts.binding)
     const status = started?.status ?? (facts.sleeping ? 'sleeping' : null)
     return { ptyId: pane.ptyId, hasStatus: status !== null, starting: status === 'starting' }
+  }
+
+  /** Every workspace main lists the terminals of, read once for a batch of checks. */
+  ownedWorkspaces(): ReadonlySet<string> {
+    return this.index.surfaces().worktreeIds
   }
 
   /** Whether main lists the workspace's terminals. */
@@ -214,7 +219,8 @@ export function withMainPaneClaim<State extends PaneClaim>(
   if (connectedChanges) {
     surfaces?.terminalChanged()
   }
-  return claimChanges
+  // A legacy pane id names no pane key; the caller's claim stands for it.
+  return claimChanges && isTerminalLeafId(pane.leafId)
     ? {
         ...state,
         tabId: pane.tabId,

@@ -111,10 +111,12 @@ export abstract class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends O
     leaves: readonly RuntimeSyncedLeaf[]
   ): RuntimeSyncedLeaf[] {
     // Switch point: main's own panes are the membership record; the window-era fence is not asked.
-    const mainOwns = ORCA_LAYOUT_OWNER_IS_MAIN ? startedMainTerminalSurfaces(this) : null
+    const mainOwns = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? startedMainTerminalSurfaces(this)?.ownedWorkspaces()
+      : null
     return leaves.filter(
       (leaf) =>
-        mainOwns?.ownsWorkspace(leaf.worktreeId) ||
+        mainOwns?.has(leaf.worktreeId) ||
         this.isMobileSessionSurfaceMembershipAllowed(
           leaf.worktreeId,
           leaf.tabId,

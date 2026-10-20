@@ -71,13 +71,12 @@ export class TerminalSurfaceIndex {
       .hostIds()
       .filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
     const loaded = hostIds.map((hostId) => reads?.readPartition(hostId) ?? null)
-    // Which partition owns a workspace can change with no write (an SSH terminal registering).
-    // The titles setting changes tab titles with no write, so it keys the cache too.
+    // Which partition owns a workspace held twice can change with no write (an SSH terminal
+    // registering). The titles setting changes tab titles with no write, so it keys the cache too.
+    const shared = sharedWorkspaceKeys(loaded)
     const homes = JSON.stringify([
       this.deps.generatedTitlesEnabled(),
-      loaded.map((partition) =>
-        Object.keys(partition?.layout.workspaces ?? {}).map((key) => this.homeOf(key))
-      )
+      [...shared].map((key) => this.homeOf(key))
     ])
     if (
       this.current &&
@@ -108,6 +107,7 @@ export class TerminalSurfaceIndex {
     loaded: readonly (LoadedWorkspaceLayout | null)[]
   ): MainTerminalSurfaces {
     const partitions: LoadedPartition[] = []
+    const shared = sharedWorkspaceKeys(loaded)
     const worktreeIds = new Set<string>()
     const paneFacts = new Map<string, { binding: string; sleeping: boolean }>()
     hostIds.forEach((hostId, index) => {
@@ -117,7 +117,9 @@ export class TerminalSurfaceIndex {
       }
       // Only the owning partition's copy counts; a stray copy elsewhere is not a second pane.
       const workspaces = Object.fromEntries(
-        Object.entries(partition.layout.workspaces).filter(([key]) => this.homeOf(key) === hostId)
+        Object.entries(partition.layout.workspaces).filter(
+          ([key]) => !shared.has(key) || this.homeOf(key) === hostId
+        )
       )
       for (const workspace of Object.values(workspaces)) {
         worktreeIds.add(workspace.worktreeId)
@@ -200,4 +202,19 @@ export function composeMainTerminalSurfaces(
       })
     ]
   }
+}
+
+/** Workspaces more than one partition holds: only those need routing to pick their copy. */
+function sharedWorkspaceKeys(loaded: readonly (LoadedWorkspaceLayout | null)[]): Set<string> {
+  const seen = new Set<string>()
+  const shared = new Set<string>()
+  for (const partition of loaded) {
+    for (const key of Object.keys(partition?.layout.workspaces ?? {})) {
+      if (seen.has(key)) {
+        shared.add(key)
+      }
+      seen.add(key)
+    }
+  }
+  return shared
 }
