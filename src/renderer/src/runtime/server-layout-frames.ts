@@ -104,11 +104,12 @@ function openServerFrames(
     getState: () => store.getState(),
     subscribe: (listener) => store.subscribe(listener),
     setState: (patch) => {
+      const previous = applyingFrames
       applyingFrames = true
       try {
         store.setState(patch)
       } finally {
-        applyingFrames = false
+        applyingFrames = previous
       }
     }
   }

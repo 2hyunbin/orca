@@ -129,6 +129,21 @@ async function frameDrawnStore(): Promise<TestStore> {
   return store
 }
 
+/** ENV's workspace with a second, empty group beside the first. */
+const TWO_GROUPS = {
+  ...SERVER_LAYOUT,
+  groups: [
+    { id: HOST_GROUP, tabIds: ['host-tab-1'] },
+    { id: 'host-group-2', tabIds: [] }
+  ],
+  groupLayout: {
+    type: 'split' as const,
+    direction: 'horizontal' as const,
+    first: { type: 'leaf' as const, groupId: HOST_GROUP },
+    second: { type: 'leaf' as const, groupId: 'host-group-2' }
+  }
+}
+
 describe('the group this window shows, told to the server whose frames draw it', () => {
   it('reports the frame-drawn workspaces only', async () => {
     await frameDrawnStore()
@@ -254,25 +269,12 @@ describe('the group this window shows, told to the server whose frames draw it',
   })
 
   it("sends a snapshot's own group move as a refresh, never as a live report", async () => {
-    const twoGroups = {
-      ...SERVER_LAYOUT,
-      groups: [
-        { id: HOST_GROUP, tabIds: ['host-tab-1'] },
-        { id: 'host-group-2', tabIds: [] }
-      ],
-      groupLayout: {
-        type: 'split' as const,
-        direction: 'horizontal' as const,
-        first: { type: 'leaf' as const, groupId: HOST_GROUP },
-        second: { type: 'leaf' as const, groupId: 'host-group-2' }
-      }
-    }
     const store = mirroredStore()
     install(store)
     setServers(store, [CAPABLE])
     streams.send(streams.openTo(ENV), {
       type: 'snapshot',
-      workspaces: [{ key: WT, layout: twoGroups }],
+      workspaces: [{ key: WT, layout: TWO_GROUPS }],
       seq: 1,
       epoch: 'e'
     })
@@ -288,6 +290,37 @@ describe('the group this window shows, told to the server whose frames draw it',
       seq: 2,
       epoch: 'e2'
     })
+    await settle()
+
+    expect(store.getState().activeGroupIdByWorktree[WT]).toBe(HOST_GROUP)
+    expect(reports()).toEqual([
+      {
+        target: { kind: 'environment', environmentId: ENV },
+        params: { activeGroupByWorkspace: { [WT]: HOST_GROUP }, refresh: true }
+      }
+    ])
+  })
+
+  it("sends a later frame's group move as a refresh, after a live report", async () => {
+    const store = mirroredStore()
+    install(store)
+    setServers(store, [CAPABLE])
+    const stream = streams.openTo(ENV)
+    streams.send(stream, {
+      type: 'snapshot',
+      workspaces: [{ key: WT, layout: TWO_GROUPS }],
+      seq: 1
+    })
+    await settle()
+    showGroup(store, WT, 'host-group-2')
+    expect(reports().at(-1)).toEqual({
+      target: { kind: 'environment', environmentId: ENV },
+      params: { activeGroupByWorkspace: { [WT]: 'host-group-2' } }
+    })
+    hoisted.call.mockClear()
+
+    // The server closes the group the desktop shows, in a frame after the snapshot.
+    streams.send(stream, { type: 'workspace', key: WT, layout: SERVER_LAYOUT, seq: 2 })
     await settle()
 
     expect(store.getState().activeGroupIdByWorktree[WT]).toBe(HOST_GROUP)
