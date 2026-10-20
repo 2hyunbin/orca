@@ -12850,6 +12850,7 @@
         "SshTargetList": {
           "addedInOrca": "Orca で追加",
           "fromConfig": "~/.ssh/config から",
+          "showMore": "{{count}} をもっと見る",
           "selectGroup": "このグループをすべて選択",
           "filteredCount": "{{total}} 件中 {{count}} 件",
           "selectManualGroup": "Orca で追加したホストをすべて選択",
