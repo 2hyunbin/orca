@@ -137,18 +137,29 @@ export function relistedPane(
   // An epoch-scoped id names one process on one relay, so its sole lister is its owner regardless.
   const provable = complete || isEpochScopedRelayPtyId(relayPtyId)
   const adopted = owner === undefined && provable && rows.length === 1 ? rows[0] : undefined
-  const listed = owner ? rows.find((row) => row.endpoint === owner) : adopted
+  const ownRow = owner ? rows.find((row) => row.endpoint === owner) : undefined
+  // A relay restarted at the owner's socket numbers its shells from pty-1 again: same id, another
+  // process. Never served; a closed tab's stop still sees it, so its incarnation fence refuses it.
+  const replaced = ownRow !== undefined && !owners.isOwnerProcess(relayPtyId, ownRow)
+  if (replaced) {
+    owners.markReplaced(relayPtyId)
+  }
+  const listed = replaced && !lease.pendingKill ? undefined : (ownRow ?? adopted)
+  // The owner's relay answering without it proves the exit; a replacement's silence proves nothing.
+  const ownerSilent = owner ? !owners.isReplaced(relayPtyId) : rows.length === 0
   // A listing taken before the new owner's exit report must not bring the pane back live.
   const exitedFirst = adopted && owners.exitBeforeAdoption(relayPtyId, adopted.endpoint)
-  if (exitedFirst !== undefined || (!listed && complete && (owner || rows.length === 0))) {
+  if (exitedFirst !== undefined || (!listed && complete && ownerSilent)) {
     owners.forget(relayPtyId)
     return { exited: exitedFirst ?? null }
   }
   if (listed) {
-    owners.claim(relayPtyId, listed.endpoint)
+    if (adopted) {
+      owners.claim(relayPtyId, adopted)
+    }
     return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
   }
-  // Unreachable or contested: loss of contact is never exit, so the pane waits.
+  // Unreachable, contested or replaced: loss of contact is never exit, so the pane waits.
   return toPane(lease, relayPtyId, null, 'unverifiable')
 }
 
