@@ -154,6 +154,39 @@ const start = () =>
 const draft = (sessionId: string) =>
   readNativeChatDraftCache(structuredAgentSessionDraftScopeKey(sessionId))
 
+// An older host (no create-message) applies an action's explicit options one setOption at a time.
+function startLegacyActionLaunch(
+  launchOptions: Record<string, string>,
+  refusedKey: string,
+  refusal: Record<string, unknown>
+) {
+  mocks.supports.mockResolvedValue(false)
+  mocks.call.mockImplementation(async (_target, method, params) => {
+    if (method === 'agentSession.create') {
+      return created()
+    }
+    if (method === 'agentSession.setOption') {
+      const key = params && typeof params === 'object' && 'key' in params ? params.key : null
+      return key === refusedKey
+        ? { ok: false, refusal }
+        : { ok: true, value: { options: { model: launchOptions.model } } }
+    }
+    const send = SendParams.parse(params)
+    const clientMessageId = send.envelope.clientOperationId
+    return { ok: true, value: { clientMessageId, submission: submission(clientMessageId) } }
+  })
+  const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
+    requestId: newAgentLaunchRequestId(),
+    executionHostId: 'local',
+    prompt: 'opening text',
+    launchOptions
+  })
+  mocks.inventory.mockResolvedValue([
+    { worktree: 'workspace-1', tabs: [{ type: 'agent-session', sessionId: launch.sessionId }] }
+  ])
+  return launch
+}
+
 describe('the first message owned by create', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -471,38 +504,10 @@ describe('the first message owned by create', () => {
   })
 
   it('a generated legacy effort refusal does not stop the opening prompt', async () => {
-    mocks.supports.mockResolvedValue(false)
-    mocks.call.mockImplementation(async (_target, method, params) => {
-      if (method === 'agentSession.create') {
-        return created()
-      }
-      if (method === 'agentSession.setOption') {
-        const key = params && typeof params === 'object' && 'key' in params ? params.key : null
-        return key === 'effort'
-          ? {
-              ok: false,
-              refusal: { code: 'agent_session_operation_invalid', message: 'unavailable' }
-            }
-          : { ok: true, value: { options: { model: 'gpt-5.6-sol' } } }
-      }
-      const send = SendParams.parse(params)
-      return {
-        ok: true,
-        value: {
-          clientMessageId: send.envelope.clientOperationId,
-          submission: submission(send.envelope.clientOperationId)
-        }
-      }
+    const launch = startLegacyActionLaunch({ model: 'gpt-5.6-sol' }, 'effort', {
+      code: 'agent_session_operation_invalid',
+      message: 'unavailable'
     })
-    const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
-      requestId: newAgentLaunchRequestId(),
-      executionHostId: 'local',
-      prompt: 'opening text',
-      launchOptions: { model: 'gpt-5.6-sol' }
-    })
-    mocks.inventory.mockResolvedValue([
-      { worktree: 'workspace-1', tabs: [{ type: 'agent-session', sessionId: launch.sessionId }] }
-    ])
     const receipt = await launch.launchResult
     expect(receipt.configurationFailure).toBeUndefined()
     await expect(launch.promptDeliveryResult).resolves.toMatchObject({ delivered: true })
@@ -521,32 +526,11 @@ describe('the first message owned by create', () => {
   it.each(['model', 'effort'])(
     'keeps the legacy chat and text when required %s is refused, with no fresh Retry',
     async (refused) => {
-      mocks.supports.mockResolvedValue(false)
-      mocks.call.mockImplementation(async (_target, method, params) => {
-        if (method === 'agentSession.create') {
-          return created()
-        }
-        const key = params && typeof params === 'object' && 'key' in params ? params.key : null
-        return key === refused
-          ? {
-              ok: false,
-              refusal: {
-                code: 'agent_session_operation_invalid',
-                details: { reason: 'optionRejected' },
-                message: 'unavailable'
-              }
-            }
-          : { ok: true, value: { options: { model: 'action-model' } } }
+      const launch = startLegacyActionLaunch({ model: 'action-model', effort: 'high' }, refused, {
+        code: 'agent_session_operation_invalid',
+        details: { reason: 'optionRejected' },
+        message: 'unavailable'
       })
-      const launch = startStructuredAgentLaunch('workspace-1', 'codex', {
-        requestId: newAgentLaunchRequestId(),
-        executionHostId: 'local',
-        prompt: 'opening text',
-        launchOptions: { model: 'action-model', effort: 'high' }
-      })
-      mocks.inventory.mockResolvedValue([
-        { worktree: 'workspace-1', tabs: [{ type: 'agent-session', sessionId: launch.sessionId }] }
-      ])
       const receipt = await launch.launchResult
       expect(receipt).toMatchObject({ sessionId: launch.sessionId, configurationFailure: {} })
       await expect(launch.promptDeliveryResult).resolves.toMatchObject({

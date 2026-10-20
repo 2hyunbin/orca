@@ -2,11 +2,11 @@ import {
   adoptAgentSessionLaunchVerdict,
   type AgentSessionLaunchPlan
 } from '@/lib/agent-session-launch-plan'
+import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
 import type {
   AgentLaunchSurface,
-  LaunchAgentInNewTabArgs,
   AgentTabLaunchOutcome
-} from '@/lib/launch-agent-in-new-tab'
+} from '@/lib/launch-agent-in-new-tab-host-agents'
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
 import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-session-launch-prompt'
 import type { StructuredLaunchTerminal } from '@/lib/structured-agent-session-launch-admission'

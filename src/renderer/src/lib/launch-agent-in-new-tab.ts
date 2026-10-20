@@ -80,11 +80,6 @@ export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
 }
 
 export { shouldQueueTerminalFocusAfterMenuClose } from '@/lib/launch-agent-in-new-tab-host-agents'
-export type {
-  AgentLaunchSurface,
-  LaunchAgentInNewTabResult,
-  AgentTabLaunchOutcome
-} from '@/lib/launch-agent-in-new-tab-host-agents'
 
 /**
  * Create a new terminal tab and queue the agent's launch command, optionally
