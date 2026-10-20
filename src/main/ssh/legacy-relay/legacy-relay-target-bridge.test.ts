@@ -346,6 +346,7 @@ describe('one target’s legacy relay bridge', () => {
     const client = fakeClient(relay)
     const recycled = {
       paneState: () => 'live' as const,
+      paneReplaced: () => false,
       liveRoute: () => ({ client, relayPtyId: 'pty-1' }),
       listedIncarnation: () => 'inc-2',
       refresh: async () => {}
@@ -375,6 +376,7 @@ describe('one target’s legacy relay bridge', () => {
     }
     const lostReply = {
       paneState: () => 'live' as const,
+      paneReplaced: () => false,
       liveRoute: () => ({ client, relayPtyId: 'pty2:epoch:1' }),
       listedIncarnation: () => undefined,
       refresh: async () => {}

@@ -18,6 +18,7 @@ import type { LegacyRelayEndpoint, LegacyRelayEndpointListing } from './legacy-r
 import { LegacyRelayRetry, LegacyRelayWaiters } from './legacy-relay-bridge-timers'
 import {
   ATTACH_WAIT_MS,
+  liveRouteOf,
   findLivePane,
   leasedAppPtyIds,
   listedLeasesByRelayId,
@@ -69,6 +70,7 @@ export class LegacyRelayTargetBridge {
   readonly listedIncarnation = (ptyId: string) => this.panes.get(ptyId)?.listed?.incarnationId
   /** Whether a relay lists a pane now, including one whose stop is owed; undefined when untracked. */
   readonly paneState = (ptyId: string) => this.panes.get(ptyId)?.state
+  readonly paneReplaced = (ptyId: string) => Boolean(this.panes.get(ptyId)?.replaced)
   private readonly attached = new Map<string, Set<number>>()
   private readonly waiters = new LegacyRelayWaiters()
   private readonly retry = new LegacyRelayRetry(() => void this.refresh())
@@ -119,8 +121,8 @@ export class LegacyRelayTargetBridge {
     if (!leased) {
       return { status: 'not-bridged' }
     }
-    const client = pane.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
-    if (pane.state !== 'live' || !client) {
+    const client = this.liveRoute(ptyId)?.client
+    if (!client) {
       return { status: 'unverifiable' }
     }
     // Why before the request: output that races the reply must reach the pane, not be dropped.
@@ -232,7 +234,6 @@ export class LegacyRelayTargetBridge {
     this.closeIdleClients(new Set([...next.values()].map((pane) => pane.endpoint ?? '')))
     this.replacePanes(next)
     // A contested pane is unverifiable under a complete listing too; only a later one resolves it.
-    // A replaced pane schedules no retry of its own: no listing can resolve it.
     if (!complete || [...next.values()].some((p) => p.state === 'unverifiable' && !p.replaced)) {
       this.retry.schedule()
     } else if (!this.attachFailing) {
@@ -328,9 +329,7 @@ export class LegacyRelayTargetBridge {
 
   /** The connection that carries a live pane, or null while its relay can't be asked. */
   liveRoute(ptyId: string): { client: LegacyRelayClient; relayPtyId: string } | null {
-    const pane = this.panes.get(ptyId)
-    const client = pane?.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
-    return pane?.state === 'live' && client ? { client, relayPtyId: pane.relayPtyId } : null
+    return liveRouteOf(this.panes.get(ptyId), this.endpoints, this.deps.owners)
   }
 
   private replacePanes(next: Map<string, Pane>): void {

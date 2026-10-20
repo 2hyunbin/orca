@@ -83,7 +83,8 @@ export type Pane = {
   listed?: ListedRow
   /** Its tab closed and its stop is still owed: listed for the stop, never served. */
   stopping?: true
-  /** Its relay's socket now runs another relay: no later listing can bring it back or prove it gone. */
+  /** Its relay's socket now runs another relay: no listing can bring it back or prove it gone, so it
+   *  schedules no retry, and a stop owed to it is abandoned rather than sent. */
   replaced?: true
 }
 
@@ -144,12 +145,12 @@ export function relistedPane(
   const adopted = owner === undefined && provable && rows.length === 1 ? rows[0] : undefined
   const ownRow = owner ? rows.find((row) => row.endpoint === owner) : undefined
   // A relay restarted at the owner's socket numbers its shells from pty-1 again: same id, another
-  // process. Never served; a closed tab's stop still sees it, so its incarnation fence refuses it.
+  // process. Never bound, so no attach, input, stop or report ever reaches it.
   const replaced = ownRow !== undefined && !owners.isOwnerProcess(relayPtyId, ownRow)
   if (replaced) {
     owners.markReplaced(relayPtyId)
   }
-  const listed = replaced && !lease.pendingKill ? undefined : (ownRow ?? adopted)
+  const listed = replaced ? undefined : (ownRow ?? adopted)
   // The owner's relay answering without it proves the exit; a replacement's silence proves nothing.
   const ownerSilent = owner ? !owners.isReplaced(relayPtyId) : rows.length === 0
   // A listing taken before its relay's exit report must not bring the pane back live.
@@ -162,14 +163,26 @@ export function relistedPane(
     return { exited: exitedFirst ?? null }
   }
   if (listed) {
-    if (!replaced) {
-      owners.bind(relayPtyId, listed)
-    }
+    owners.bind(relayPtyId, listed)
     return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
   }
   // Unreachable, contested or replaced: loss of contact is never exit, so the pane waits.
   const waiting = toPane(lease, relayPtyId, null, 'unverifiable')
   return owners.isReplaced(relayPtyId) ? { ...waiting, replaced: true } : waiting
+}
+
+/** The connection a live pane's attach, input and stop go to: only one the ledger says speaks for it. */
+export function liveRouteOf(
+  pane: Pane | undefined,
+  endpoints: ReadonlyMap<string, { client: LegacyRelayClient | null }>,
+  owners: LegacyRelayPaneOwners
+): { client: LegacyRelayClient; relayPtyId: string } | null {
+  const client = pane?.endpoint ? endpoints.get(pane.endpoint)?.client : null
+  const speaks =
+    pane?.state === 'live' && pane.endpoint && client
+      ? owners.speaksFor(pane.relayPtyId, pane.endpoint, client)
+      : false
+  return speaks && pane && client ? { client, relayPtyId: pane.relayPtyId } : null
 }
 
 /** The panes a bridge serves; a closed tab's pane, its stop owed or its lease ended, is not one. */
