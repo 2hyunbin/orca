@@ -50,7 +50,11 @@ describe('runLayoutPaneStarts', () => {
   })
 
   it('shows a failed start on its pane', async () => {
-    const run = ports({ start: vi.fn(async () => Promise.reject(new Error('boom'))) })
+    const run = ports({
+      start: vi.fn(async (): Promise<string | null> => {
+        throw new Error('boom')
+      })
+    })
     runLayoutPaneStarts(
       { type: 'wake', workspace: 'wt' },
       { stopPtyIds: [], startPaneKeys: [PANE_KEY] },
