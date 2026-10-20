@@ -27,8 +27,13 @@ export function launchAiVaultSessionInNewTab(args: {
   providerSession?: AgentProviderSessionMetadata
   targetGroupId?: string
   splitDirection?: TabSplitDirection
+  /** Opens in this tab's slot: the next tab in its group. */
+  afterTabId?: string
+  /** A chat's switch, whose spawn claims the conversation; set only for a capable host. */
+  resumeOrigin?: 'switch'
 }): LaunchAiVaultSessionInNewTabResult {
   const store = useAppStore.getState()
+  const switchStart = args.resumeOrigin ? { resumeOrigin: args.resumeOrigin } : {}
   // Why both paths split: the runtime path used to return first and drop the split (#22791).
   const split =
     args.splitDirection && args.targetGroupId
@@ -49,6 +54,8 @@ export function launchAiVaultSessionInNewTab(args: {
         worktreeId: args.worktreeId,
         environmentId: runtimeEnvironmentId,
         ...(targetGroupId ? { targetGroupId } : {}),
+        ...(args.afterTabId ? { afterTabId: args.afterTabId } : {}),
+        ...switchStart,
         agentSessionKind: 'resume',
         launchAgent: args.agent,
         command: args.command,
@@ -74,7 +81,10 @@ export function launchAiVaultSessionInNewTab(args: {
     return { tabId: null, runtimeLaunch: observedRuntimeLaunch }
   }
 
-  const tab = store.createTab(args.worktreeId, args.targetGroupId, undefined, {
+  const slot = args.afterTabId
+    ? store.unifiedTabsByWorktree[args.worktreeId]?.find((tab) => tab.id === args.afterTabId)
+    : undefined
+  const tab = store.createTab(args.worktreeId, slot?.groupId ?? args.targetGroupId, undefined, {
     ...(split ? { split } : {}),
     ...(args.cwd ? { startupCwd: args.cwd } : {}),
     pendingStartup: {
@@ -83,6 +93,7 @@ export function launchAiVaultSessionInNewTab(args: {
       ...(args.envToDelete ? { envToDelete: args.envToDelete } : {}),
       ...(args.launchConfig ? { launchConfig: args.launchConfig, launchAgent: args.agent } : {}),
       ...(args.providerSession ? { resumeProviderSession: args.providerSession } : {}),
+      ...(args.resumeOrigin ? { launchAgent: args.agent, ...switchStart } : {}),
       telemetry: {
         agent_kind: tuiAgentToAgentKind(args.agent),
         launch_source: 'sidebar',
@@ -93,6 +104,14 @@ export function launchAiVaultSessionInNewTab(args: {
   store.setActiveTabType('terminal', args.worktreeId)
 
   persistAgentLaunchTabOrder(args.worktreeId, tab.id)
+  if (slot) {
+    const order = (
+      useAppStore.getState().groupsByWorktree[args.worktreeId]?.find((g) => g.id === slot.groupId)
+        ?.tabOrder ?? []
+    ).filter((id) => id !== tab.id)
+    order.splice(order.indexOf(slot.id) + 1, 0, tab.id)
+    useAppStore.getState().reorderUnifiedTabs(slot.groupId, order)
+  }
 
   return { tabId: tab.id }
 }

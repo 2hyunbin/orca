@@ -1,3 +1,4 @@
+import { useAiVaultInPlaceAgent } from '@/lib/in-place-switch-support'
 import type React from 'react'
 import {
   ChevronDown,
@@ -95,6 +96,7 @@ export function SessionRowTrailingActions({
   /** Only the details toggle shows. */
   actionsHidden?: boolean
 }) {
+  const inPlaceAgent = useAiVaultInPlaceAgent(session)
   const jumpToWorktreeTooltip = aiVaultWorktreeJumpTooltip(worktreeInfo)
 
   return (
@@ -274,6 +276,7 @@ export function SessionRowTrailingActions({
               onContinueInNewSession={onContinueInNewSession}
               onResumeInNewChat={onResumeInNewChat}
               onResumeInNewCli={onResumeInNewCli}
+              inPlaceAgent={inPlaceAgent}
               onJumpToOriginalPane={onJumpToOriginalPane}
               showJumpToWorktree={showJumpToWorktree}
               jumpWorkspaceId={worktreeInfo?.worktreeId}

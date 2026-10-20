@@ -1,3 +1,4 @@
+import { switchedTerminalConversation } from '../tab-bar/switched-terminal-conversation'
 import { useCallback, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import {
@@ -188,10 +189,11 @@ export function useTerminalPaneProjection(controller: TerminalPaneMobileControll
       activePaneCanResumeInChat:
         !activePaneIsChatLeaf &&
         activeLeafId !== null &&
-        canPaneOfferResumeInNewChat(state, {
-          worktreeId,
-          paneKey: makePaneKey(tabId, activeLeafId)
-        })
+        (switchedTerminalConversation(tabId) !== undefined ||
+          canPaneOfferResumeInNewChat(state, {
+            worktreeId,
+            paneKey: makePaneKey(tabId, activeLeafId)
+          }))
     }))
   )
   const contextMenuIsChatView = effectiveChatViewMode && contextMenuLeafId === chatLeafId

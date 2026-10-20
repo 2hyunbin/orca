@@ -8,21 +8,22 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 import { cliConversationExitGuidance } from '@/lib/cli-conversation-exit-guidance'
 import type { CliChatResumeSource } from './cli-chat-resume-source'
 
+/** True when the chat that already holds the conversation was revealed instead: the switch's
+ *  writer check passed before the host named that chat. */
 export async function reportCliChatResumeFailure(
   source: CliChatResumeSource,
   error: unknown,
-  openOwner: boolean,
   target: RuntimeClientTarget
-): Promise<void> {
+): Promise<boolean> {
   const refusal = structuredLaunchFailure(error)
   if (
     refusal?.code === 'agent_session_conflict' ||
     refusal?.code === 'agent_session_ownership_unknown'
   ) {
     const owner = refusal.owner
-    if (openOwner && owner) {
+    if (owner) {
       await activateAiVaultStructuredSession({ structuredSession: owner }, undefined, target)
-      return
+      return true
     }
     toast.error(
       refusal.code === 'agent_session_conflict' &&
@@ -34,7 +35,7 @@ export async function reportCliChatResumeFailure(
             'Another chat is already holding this conversation.'
           )
     )
-    return
+    return false
   }
   // The chat's agent refused to start while the terminal may still write the conversation.
   if (
@@ -42,7 +43,11 @@ export async function reportCliChatResumeFailure(
     refusal.details?.reason === 'conversationOpenInTerminal'
   ) {
     toast.error(cliConversationExitGuidance(source.agent, true))
-    return
+    return false
+  }
+  if (refusal?.details?.reason === 'conversationMovingToTerminal') {
+    toast.error(agentSessionWriteFailureText(refusal, 'read-history'))
+    return false
   }
   if (refusal?.code === 'agent_session_identity_required') {
     if (refusal.details?.reason === 'transcriptNotFound') {
@@ -53,12 +58,12 @@ export async function reportCliChatResumeFailure(
           { agent: agentLabel(source.agent) }
         )
       )
-      return
+      return false
     }
     const failure = structuredLaunchFailure(error)
     if (failure) {
       toast.error(agentSessionWriteFailureText(failure, 'read-history'))
-      return
+      return false
     }
   }
   toast.error(
@@ -67,4 +72,5 @@ export async function reportCliChatResumeFailure(
       'Could not resume this session in a new chat.'
     )
   )
+  return false
 }

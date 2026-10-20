@@ -13,6 +13,7 @@ import { ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-m
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { AiVaultSessionSurfaceSwitchMenuItems } from './AiVaultSessionSurfaceSwitchMenuItems'
+import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
 import { isAiVaultFolderWorkspaceId } from './ai-vault-session-worktree-affordances'
 
 export function SessionActionMenuItems({
@@ -35,7 +36,8 @@ export function SessionActionMenuItems({
   onRevealLog,
   onOpenCwd,
   deleteBlockedReason,
-  onDelete
+  onDelete,
+  inPlaceAgent
 }: {
   menuKind?: 'dropdown' | 'context'
   resumeDisabled: boolean
@@ -61,6 +63,7 @@ export function SessionActionMenuItems({
   // Null when Delete is offered; otherwise the tooltip explaining why it isn't.
   deleteBlockedReason: string | null
   onDelete?: () => void
+  inPlaceAgent?: AiVaultAgent
 }) {
   const Item = menuKind === 'context' ? ContextMenuItem : DropdownMenuItem
   const Separator = menuKind === 'context' ? ContextMenuSeparator : DropdownMenuSeparator
@@ -126,6 +129,7 @@ export function SessionActionMenuItems({
         tooltipSide={menuKind === 'context' ? 'right' : 'left'}
         onResumeInNewChat={onResumeInNewChat}
         onResumeInNewCli={onResumeInNewCli}
+        inPlaceAgent={inPlaceAgent}
       />
       {onCopyResume ? (
         <Item onSelect={onCopyResume}>

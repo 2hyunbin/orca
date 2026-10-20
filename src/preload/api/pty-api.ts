@@ -41,7 +41,7 @@ export type PtyApi = {
     commandDelivery?: 'renderer' | 'provider'
     launchConfig?: SleepingAgentLaunchConfig
     resumeProviderSession?: AgentProviderSessionMetadata
-    resumeOrigin?: 'saved'
+    resumeOrigin?: 'saved' | 'switch'
     launchToken?: string
     launchAgent?: TuiAgent
     startupCommandDelivery?: StartupCommandDelivery

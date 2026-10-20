@@ -167,3 +167,33 @@ export function resolvePaneAgentConversation<Agent extends AgentType>(
   const { priority: _priority, ...request } = candidate
   return request
 }
+
+/** As above, or the conversation the pane's agent last reported once it exited: a switch is
+ *  offered when the agent is gone, which is when it can succeed. */
+export function resolvePaneLastAgentConversation<Agent extends AgentType>(
+  state: AppState,
+  pane: { worktreeId: string; paneKey: string },
+  isAgent: (agent: AgentType | null | undefined) => agent is Agent
+): AgentPaneConversation<Agent> | null {
+  const live = resolvePaneAgentConversation(state, pane, isAgent)
+  const retained = state.retainedAgentsByPaneKey[pane.paneKey]
+  if (live || retained?.entry.paneKey !== pane.paneKey || retained.worktreeId !== pane.worktreeId) {
+    return live
+  }
+  const candidates = new Map<string, RequestCandidate<Agent>>()
+  registerCandidate(state, new Map([[retained.tab.id, retained.tab]]), candidates, isAgent, {
+    agent: retained.agentType,
+    paneKey: pane.paneKey,
+    priority: 10,
+    providerSession: retained.entry.providerSession,
+    refresh: false,
+    tabId: retained.tab.id,
+    worktreeId: retained.worktreeId
+  })
+  const [candidate] = candidates.values()
+  if (!candidate) {
+    return null
+  }
+  const { priority: _priority, ...request } = candidate
+  return request
+}

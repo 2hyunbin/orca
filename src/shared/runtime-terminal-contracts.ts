@@ -253,6 +253,8 @@ type RuntimeTerminalCreateBaseRequestPayload = {
   envToDelete?: string[]
   launchConfig?: SleepingAgentLaunchConfig
   resumeProviderSession?: AgentProviderSessionMetadata
+  /** A chat's switch: the pane's spawn admission claims the conversation. */
+  resumeOrigin?: 'switch'
   launchToken?: string
   launchAgent?: TuiAgent
   viewMode?: 'terminal' | 'chat'
@@ -267,10 +269,7 @@ type RuntimeTerminalCreateBaseRequestPayload = {
 
 export type RuntimeTerminalCreateRequestPayload =
   | (RuntimeTerminalCreateBaseRequestPayload & { source?: undefined })
-  | (RuntimeTerminalCreateBaseRequestPayload & {
-      worktreeId: string
-      source: 'runtime-session'
-    })
+  | (RuntimeTerminalCreateBaseRequestPayload & { worktreeId: string; source: 'runtime-session' })
 
 export type RuntimeTerminalCreate = TerminalLaunchResult & {
   coldRestore?: { scrollback: string; cwd: string; cols?: number; rows?: number }

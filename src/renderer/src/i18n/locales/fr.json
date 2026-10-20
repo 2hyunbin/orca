@@ -18171,6 +18171,7 @@
         "runtimeNotInstalled": "{{agent}} n'est pas installé sur l'ordinateur qui exécute ce chat. Installez-le depuis le chat dans une version récente d'Orca.",
         "conversationOpenElsewhere": "Codex garde cette conversation ouverte ailleurs. Fermez-la à cet endroit, puis réessayez.",
         "conversationOpenInTerminal": "Orca ne peut pas confirmer que {{agent}} a quitté son terminal. Arrêtez ce qui s'y exécute ou fermez le terminal, puis réessayez.",
+        "conversationMovingToTerminal": "Cette conversation est en cours de transfert vers un terminal. Utilisez-la là-bas, ou attendez un instant et réessayez.",
         "chooseClaudeAccount": "Choisissez-en un ou ajoutez-en un dans les paramètres Comptes Claude.",
         "chooseClaudeAccountThenRunCommand": "Choisissez-en un ou ajoutez-en un dans les paramètres Comptes Claude, puis relancez /{{command}}.",
         "chooseClaudeAccountThenSend": "Choisissez-en un ou ajoutez-en un dans les paramètres Comptes Claude, puis renvoyez votre message.",
@@ -18870,9 +18871,19 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Passer au terminal",
-          "switchToChatView": "Passer au chat",
+          "switchToTerminalView": "Afficher en terminal",
+          "switchToChatView": "Afficher en chat",
           "closeTabsToLeft": "Fermer tous les onglets à gauche"
+        },
+        "switch": {
+          "toCli": "Passer à la CLI",
+          "toNativeChat": "Passer au chat natif",
+          "toCliTooltip": "Passer à la CLI : arrête {{agent}} ici et poursuit la même conversation dans le terminal, dans cet onglet.",
+          "toNativeChatTooltip": "Passer au chat natif : poursuit la même conversation dans un chat, dans cet onglet.",
+          "exitAgentFirst": "Quittez {{agent}} dans ce terminal pour basculer.",
+          "waitForReply": "Attendez la fin de la réponse ou arrêtez-la, puis basculez.",
+          "stopUnconfirmed": "Impossible de confirmer l'arrêt de {{agent}}. Réessayez.",
+          "failed": "Impossible de basculer cette conversation vers la CLI."
         },
         "BrowserTab": {
           "closeOthers": "Fermer les autres",

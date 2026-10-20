@@ -94,7 +94,9 @@ export async function createWebRuntimeSessionTerminalResult(
       // Why: structured creation cannot yet express afterTabId; keep the exact legacy placement contract until it can.
       // Why: focus belongs to the paired client; a headless execution host has no renderer to focus.
       // Why: rebuilding a prepared command through host authority can discard its embedded prompt and delivery flags.
-      const mustUseLegacyAgentCreate = args.preparedAgentCommand || args.afterTabId
+      // A switch keeps its prepared recipe and its claim, which only the prepared create carries.
+      const mustUseLegacyAgentCreate =
+        args.preparedAgentCommand || args.afterTabId || args.resumeOrigin === 'switch'
       const hostAuthority = mustUseLegacyAgentCreate
         ? undefined
         : args.agentSessionKind === 'resume'
@@ -182,6 +184,9 @@ export async function createWebRuntimeSessionTerminalResult(
               ...(args.launchToken ? { launchToken: args.launchToken } : {}),
               ...(args.agent ? { agent: args.agent } : {}),
               ...(args.launchAgent ? { launchAgent: args.launchAgent } : {}),
+              ...(args.resumeOrigin && args.providerSession
+                ? { resumeOrigin: args.resumeOrigin, resumeProviderSession: args.providerSession }
+                : {}),
               ...(args.viewMode ? { viewMode: args.viewMode } : {}),
               // Why: old hosts understand activate:false; new hosts use select/navigation for caller-local focus.
               activate: false,

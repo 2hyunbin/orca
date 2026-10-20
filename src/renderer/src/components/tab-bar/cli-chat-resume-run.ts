@@ -3,13 +3,29 @@ import { useAppStore } from '@/store'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { adoptAgentSessionLaunchVerdict } from '@/lib/agent-session-launch-plan'
 import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
-import { supportsStructuredAgentSessionCliSource } from '@/runtime/structured-agent-session-client'
+import {
+  supportsInPlaceSwitch,
+  supportsStructuredAgentSessionCliSource
+} from '@/runtime/structured-agent-session-client'
+import { CLOSE_TERMINAL_PANE_EVENT, type CloseTerminalPaneDetail } from '@/constants/terminal'
+import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { resolveCliChatResumeSource, type CliChatResumeSource } from './cli-chat-resume-source'
 import { reportCliChatResumeFailure } from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
+import { forgetSwitchedTerminalConversation } from './switched-terminal-conversation'
+
+/** The chat took the conversation, so the terminal pane it came from closes (its tab with it). */
+function retireSwitchedTerminalPane(source: CliChatResumeSource): void {
+  const pane = parsePaneKey(source.paneKey)
+  forgetSwitchedTerminalConversation(source.tabId)
+  if (pane) {
+    const detail: CloseTerminalPaneDetail = { tabId: pane.tabId, leafId: pane.leafId }
+    window.dispatchEvent(new CustomEvent(CLOSE_TERMINAL_PANE_EVENT, { detail }))
+  }
+}
 
 const pending = new Map<string, AbortController>()
 const listeners = new Set<() => void>()
@@ -33,16 +49,15 @@ export function useCliChatResumePending(source: CliChatResumeSource | null): boo
   )
 }
 
-export async function runCliChatResume(
-  source: CliChatResumeSource,
-  openOwner = false
-): Promise<void> {
+/** Switches a terminal's conversation into a chat in the terminal's slot: a new chat, or the chat
+ *  that already holds it, revealed. The terminal pane closes once the chat has it. */
+export async function runCliChatResume(source: CliChatResumeSource): Promise<void> {
   const key = keyFor(source)
   if (pending.has(key)) {
     return
   }
   const target = structuredAgentSessionTargetForHost(source.executionHostId)
-  if (!target || target.kind !== 'local') {
+  if (!target) {
     return
   }
   const controller = new AbortController()
@@ -97,6 +112,15 @@ export async function runCliChatResume(
     return true
   }
   try {
+    if (
+      target.kind !== 'local' &&
+      !(await waitForPromiseWithSignal(
+        supportsInPlaceSwitch(target, source.agent),
+        controller.signal
+      ))
+    ) {
+      return
+    }
     const cliSourceSupported = await waitForPromiseWithSignal(
       supportsStructuredAgentSessionCliSource(target),
       controller.signal
@@ -127,18 +151,26 @@ export async function runCliChatResume(
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan,
       hooks: { beforeCreate: handoff },
+      afterTabId: source.tabId,
       deferPublication: true
     })
     if (!launch) {
       return
     }
     const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
-    if (result.kind === 'failed' && !result.notified && pending.get(key) === controller) {
-      await reportCliChatResumeFailure(source, result.error, openOwner, target)
+    if (result.kind === 'structured') {
+      retireSwitchedTerminalPane(source)
+    } else if (
+      result.kind === 'failed' &&
+      !result.notified &&
+      pending.get(key) === controller &&
+      (await reportCliChatResumeFailure(source, result.error, target))
+    ) {
+      retireSwitchedTerminalPane(source)
     }
   } catch (error) {
     if (pending.get(key) === controller) {
-      await reportCliChatResumeFailure(source, error, false, target)
+      await reportCliChatResumeFailure(source, error, target)
     }
   } finally {
     clearTimeout(timer)

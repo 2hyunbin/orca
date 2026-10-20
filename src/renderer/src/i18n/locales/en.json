@@ -18348,6 +18348,7 @@
         "runtimeNotInstalled": "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Orca.",
         "conversationOpenElsewhere": "Codex still has this conversation open somewhere else. Close it there, then try again.",
         "conversationOpenInTerminal": "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
+        "conversationMovingToTerminal": "This conversation is moving to a terminal. Use it there, or wait a moment and try again.",
         "chooseClaudeAccount": "Choose or add one in Claude Accounts settings.",
         "chooseClaudeAccountThenRunCommand": "Choose or add one in Claude Accounts settings, then run /{{command}} again.",
         "chooseClaudeAccountThenSend": "Choose or add one in Claude Accounts settings, then send your message again.",
@@ -19065,9 +19066,19 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Switch to Terminal",
-          "switchToChatView": "Switch to Chat",
+          "switchToTerminalView": "Show as terminal",
+          "switchToChatView": "Show as chat",
           "closeTabsToLeft": "Close All Tabs To The Left"
+        },
+        "switch": {
+          "toCli": "Switch to CLI",
+          "toNativeChat": "Switch to native chat",
+          "toCliTooltip": "Switch to CLI: stops {{agent}} here and continues the same conversation in the terminal, in this tab.",
+          "toNativeChatTooltip": "Switch to native chat: continues the same conversation in a chat, in this tab.",
+          "exitAgentFirst": "Exit {{agent}} in this terminal to switch.",
+          "waitForReply": "Wait for the reply to finish or stop it, then switch.",
+          "stopUnconfirmed": "Couldn't confirm {{agent}} stopped. Try again.",
+          "failed": "Couldn't switch this conversation to the CLI."
         },
         "BrowserTab": {
           "closeOthers": "Close Others",

@@ -7,6 +7,7 @@ import { basename } from '@/lib/path'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import { Input } from '@/components/ui/input'
 import { TabHoverCard } from './TabHoverCard'
+import { TabSessionSwitchHoverAction } from './TabSessionSwitchHoverAction'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type { TabDragItemData } from '../tab-group/useTabDragSplit'
@@ -368,6 +369,7 @@ export default function SortableTab({
           tabRoot
         ) : (
           <TabHoverCard
+            action={<TabSessionSwitchHoverAction tab={tab} nativeChat={nativeChat} />}
             title={displayTitle}
             programName={
               tabAgent

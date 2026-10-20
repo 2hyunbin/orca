@@ -18067,6 +18067,7 @@
         "runtimeNotInstalled": "运行此聊天的计算机上未安装 {{agent}}。请在最新版本的 Orca 中从聊天里安装。",
         "conversationOpenElsewhere": "Codex 仍在其他地方打开着此对话。请在那里关闭后重试。",
         "conversationOpenInTerminal": "Orca 无法确认 {{agent}} 已在其终端中退出。请停止那里正在运行的内容或关闭终端，然后重试。",
+        "conversationMovingToTerminal": "此对话正在转移到终端。请在那里使用，或稍等片刻后重试。",
         "chooseClaudeAccount": "请在 Claude 账户设置中选择或添加一个。",
         "chooseClaudeAccountThenRunCommand": "请在 Claude 账户设置中选择或添加一个，然后重新运行 /{{command}}。",
         "chooseClaudeAccountThenSend": "请在 Claude 账户设置中选择或添加一个，然后重新发送您的消息。",
@@ -18766,9 +18767,19 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "切换到终端",
-          "switchToChatView": "切换到聊天",
+          "switchToTerminalView": "以终端显示",
+          "switchToChatView": "以聊天显示",
           "closeTabsToLeft": "关闭左侧的所有选项卡"
+        },
+        "switch": {
+          "toCli": "切换到 CLI",
+          "toNativeChat": "切换到原生聊天",
+          "toCliTooltip": "切换到 CLI：在此停止 {{agent}}，并在此标签页的终端中继续同一对话。",
+          "toNativeChatTooltip": "切换到原生聊天：在此标签页的聊天中继续同一对话。",
+          "exitAgentFirst": "请先在此终端中退出 {{agent}}，然后再切换。",
+          "waitForReply": "请等待回复完成或停止回复，然后再切换。",
+          "stopUnconfirmed": "无法确认 {{agent}} 已停止。请重试。",
+          "failed": "无法将此对话切换到 CLI。"
         },
         "BrowserTab": {
           "closeOthers": "关闭其他",

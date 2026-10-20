@@ -1,3 +1,4 @@
+import { useAiVaultInPlaceAgent } from '@/lib/in-place-switch-support'
 import { isAntigravityReferenceSession } from '../../../../shared/antigravity-session-origin'
 import type { AiVaultSubagentResumeActions } from './AiVaultSessionSubagents'
 import { useCallback } from 'react'
@@ -101,6 +102,7 @@ export function VaultSessionRow({
   const updatedAt = session.updatedAt ?? session.modifiedAt
   const title = useAiVaultSessionDisplayTitle(session)
   const detailsId = getSessionDetailsId(session.id)
+  const inPlaceAgent = useAiVaultInPlaceAgent(session)
   const latestTurn = latestSessionConversationTurn(session)
   // Computed once so the dropdown menu and the context menu never disagree.
   const deleteBlockedReason = onRequestDelete
@@ -286,6 +288,7 @@ export function VaultSessionRow({
           onContinueInNewSession={onContinueInNewSession}
           onResumeInNewChat={onResumeInNewChat}
           onResumeInNewCli={onResumeInNewCli}
+          inPlaceAgent={inPlaceAgent}
           onCopyResume={onCopyResume}
           onCopyId={onCopyId}
           onCopyPath={onCopyPath}
