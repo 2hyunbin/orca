@@ -316,11 +316,13 @@ describe('composer image chips at send and back', () => {
     ).toBe(`${chip('r-3')} then ${chip('r-1')}, not [Image #3]`)
   })
 
-  it.each([
-    ['[Image #1] then [Image #2], not [Image #3]', 2, 'then , not [Image #3]'],
-    ['literal [Image #1]', 0, 'literal [Image #1]']
-  ])('strips only markers for attached images: %s', (text, count, expected) => {
-    expect(stripSentImagePromptMarkers(text, count)).toBe(expected)
+  it('strips only the markers its images have, leaving a typed one past them', () => {
+    expect(stripSentImagePromptMarkers('[Image #1] then [Image #2], not [Image #3]', 2)).toBe(
+      'then , not [Image #3]'
+    )
+    expect(stripSentImagePromptMarkers('Explain the literal token [Image #1]', 0)).toBe(
+      'Explain the literal token [Image #1]'
+    )
   })
 
   it('leaves a quoted file path that reads like a marker as typed, back or stripped', () => {
