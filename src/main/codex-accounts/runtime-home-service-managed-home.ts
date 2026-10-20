@@ -147,17 +147,17 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
   // since history trees can be large — so switching accounts no longer hides
   // the user's conversations.
   protected startSelfContainedSessionBridgeForLaunch(perAccountHome: string): void {
-    // Why: one store for every account is what lets a revert under one account
-    // be what another resumes; the file bridge still covers accounts not on it yet.
+    // Why: accounts not on the shared store yet still reach this one through the file
+    // bridge; a move already under way folds these links in with its catch-up merge.
+    void startCodexAccountSessionBridgeInBackground({
+      targetCodexHomePath: perAccountHome,
+      sourceCodexHomePaths: this.getSelfContainedSessionBridgeSourceHomes()
+    })
+    // One store for every account is what lets a revert under one account be what another resumes.
     startCodexSharedStoreMigrationInBackground({
       managedHome: perAccountHome,
       storeHome:
-        resolveHostCodexSessionSourceHome(this.store.getSettings()) ?? getSystemCodexHomePath(),
-      after: () =>
-        void startCodexAccountSessionBridgeInBackground({
-          targetCodexHomePath: perAccountHome,
-          sourceCodexHomePaths: this.getSelfContainedSessionBridgeSourceHomes()
-        })
+        resolveHostCodexSessionSourceHome(this.store.getSettings()) ?? getSystemCodexHomePath()
     })
   }
 

@@ -5,7 +5,8 @@ import { mapWithConcurrency } from '../../shared/map-with-concurrency'
 import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import {
   codexRolloutFileNameOf,
-  compareCodexRolloutRecency
+  compareCodexRolloutRecency,
+  parseCodexRolloutFileName
 } from '../codex/codex-rollout-file-name'
 import { isCodexCurrentRollout } from './codex-current-rollout'
 import { sessionSortTime } from './session-scanner-accumulator'
@@ -225,12 +226,16 @@ export function codexSessionAliasKey(session: AiVaultSession): string | null {
   if (session.agent !== 'codex') {
     return null
   }
-  const fileName = lastPathSegment(session.filePath)
+  const filePath = session.filePath
+  const fileName = lastPathSegment(filePath)
   if (!CODEX_ROLLOUT_FILE_NAME_PATTERN.test(fileName)) {
     return null
   }
-  // Why: one conversation, not one file — a reverted thread's `_<rollout id>` segments share this key.
-  return `${session.executionHostId}\0${sessionFileExecutionNamespace(session.filePath)}\0${session.sessionId.toLowerCase()}`
+  // Why: one conversation, not one file — a reverted thread's `_<rollout id>` segments share the
+  // file name's thread id; a name without one stays its own row.
+  const threadId = parseCodexRolloutFileName(fileName)?.threadId
+  const conversation = threadId ? threadId.toLowerCase() : `${session.sessionId}\0${fileName}`
+  return `${session.executionHostId}\0${sessionFileExecutionNamespace(filePath)}\0${conversation}`
 }
 
 export function codexSessionAliasBeats(candidate: AiVaultSession, best: AiVaultSession): boolean {

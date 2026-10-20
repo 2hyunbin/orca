@@ -355,16 +355,18 @@ describe('dedupeScannedSessions', () => {
   })
 
   it('lists one conversation once when its segments have different rollout file names', () => {
+    const THREAD = '019a1566-3ec8-7bf2-bcb0-71c09cfb4e9d'
+    const REVERT_ROLLOUT = '019a1567-0000-7000-8000-000000000001'
     const older = codexSession({
       sessionId: 'collision',
-      filePath: '/Users/ada/.codex/sessions/2026/07/01/rollout-old.jsonl',
+      filePath: `/Users/ada/.codex/sessions/2026/07/01/rollout-2026-07-01T10-00-00-${THREAD}.jsonl`,
       codexHome: null,
       updatedAt: '2026-07-01T10:00:00.000Z',
       modifiedAt: '2026-07-01T10:00:00.000Z'
     })
     const newer = codexSession({
       sessionId: 'collision',
-      filePath: '/Users/ada/.codex/sessions/2026/07/02/rollout-new.jsonl',
+      filePath: `/Users/ada/.codex/sessions/2026/07/02/rollout-2026-07-02T10-00-00-${THREAD}_${REVERT_ROLLOUT}.jsonl`,
       codexHome: null,
       updatedAt: '2026-07-02T10:00:00.000Z',
       modifiedAt: '2026-07-02T10:00:00.000Z'

@@ -36,10 +36,7 @@ export function linkedCodexConversationStore(homePath: string): string | null {
  * an unlinked home gets Orca's line removed.
  */
 export function applyCodexSharedStoreConfig(config: string, homePath: string): string {
-  const withoutOrcaLine = config
-    .split('\n')
-    .filter((line) => !line.trimEnd().endsWith(CODEX_SHARED_STORE_MARKER))
-    .join('\n')
+  const withoutOrcaLine = stripCodexSharedStoreConfig(config)
   // Why: a distro home's links resolve only inside Linux, so distro homes keep their own store for now.
   const store =
     parseWslUncPath(homePath) || !isCodexHomeOnSharedStore(homePath)
@@ -51,4 +48,11 @@ export function applyCodexSharedStoreConfig(config: string, homePath: string): s
   // Top-level keys must precede every table, so the line goes first.
   const line = `sqlite_home = ${JSON.stringify(resolveEffectiveCodexSqliteHome(store))} ${CODEX_SHARED_STORE_MARKER}`
   return withoutOrcaLine.length > 0 ? `${line}\n${withoutOrcaLine}` : `${line}\n`
+}
+
+export function stripCodexSharedStoreConfig(config: string): string {
+  return config
+    .split('\n')
+    .filter((line) => !line.trimEnd().endsWith(CODEX_SHARED_STORE_MARKER))
+    .join('\n')
 }

@@ -266,18 +266,13 @@ function readJson<T>(path: string): T | null {
 
 const inFlightByHome = new Map<string, Promise<CodexSharedStoreMigrationOutcome>>()
 
-/**
- * Starts (or joins) one home's move onto the shared store, then runs `after`
- * either way: the file bridge still brings in accounts not on the store yet.
- */
+/** Starts one home's move onto the shared store, unless one is already running. */
 export function startCodexSharedStoreMigrationInBackground(args: {
   managedHome: string
   storeHome: string
-  after: () => void
 }): void {
-  let task = inFlightByHome.get(args.managedHome)
-  if (!task) {
-    task = migrateCodexHomeToSharedStore(args.managedHome, args.storeHome)
+  if (!inFlightByHome.has(args.managedHome)) {
+    const task = migrateCodexHomeToSharedStore(args.managedHome, args.storeHome)
       .catch((error: unknown) => {
         console.warn('[codex-shared-store] Migration attempt failed:', error)
         return 'pending' as const
@@ -285,7 +280,6 @@ export function startCodexSharedStoreMigrationInBackground(args: {
       .finally(() => inFlightByHome.delete(args.managedHome))
     inFlightByHome.set(args.managedHome, task)
   }
-  void task.then(args.after)
 }
 
 export function settleCodexSharedStoreMigrationsForTests(): Promise<unknown> {
