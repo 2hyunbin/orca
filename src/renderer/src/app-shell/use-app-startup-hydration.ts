@@ -21,6 +21,7 @@ import {
   timeRendererStartupSyncStep
 } from '../startup/startup-diagnostics'
 import { recoverFromDegradedStartup } from '../startup/startup-degraded-recovery'
+import { hydrateStartupLocalCatalog } from '../startup/startup-local-catalog'
 import { restoreSshConnectionsForStartup } from '../startup/startup-ssh-connection-restore'
 import { collectActiveWorkspaceSshTargetIds } from '../startup/active-workspace-ssh-targets'
 import { publishTerminalViewAttributesAtAppStart } from '../components/terminal-pane/terminal-appearance'
@@ -133,14 +134,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
         )
         // Why: folder workspaces merge against projectGroups (repos.ts fetchFolderWorkspacesForAllHosts),
         // so keep this chain ordered while overlapping it with session-scoped hydration.
-        const localCatalogChain = (async () => {
-          await timeRendererStartupStep('fetch-project-groups-local', () =>
-            actions.fetchProjectGroupsForAllHosts({ remoteHosts: 'skip' })
-          )
-          await timeRendererStartupStep('fetch-folder-workspaces-local', () =>
-            actions.fetchFolderWorkspacesForAllHosts({ remoteHosts: 'skip' })
-          )
-        })()
+        const localCatalogChain = hydrateStartupLocalCatalog(actions, () => cancelled)
         const sessionReadPromise = runtimeHostsPromise.then((startupRuntimeHostIds) =>
           // Why: include saved runtime host ids so per-host worktree session slices restore from local settings without waiting on network reachability; unreadable partitions skip.
           timeRendererStartupStep('session-get', () =>
