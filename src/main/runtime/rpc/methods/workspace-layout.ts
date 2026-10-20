@@ -1,4 +1,4 @@
-// The read-only layout stream (design 2.4) and the server snapshot read (design 6.3). Paired
+// The layout stream (design 2.4), the server snapshot read (design 6.3) and layout.apply. Paired
 // desktops may call them; a desktop relies on them only on a server advertising
 // `layout.intents.v1` (layout-intents-capability.ts). Not on the mobile allowlist.
 
