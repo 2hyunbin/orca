@@ -18472,6 +18472,7 @@
         "notDoneOption": "설정이 변경되지 않았습니다.",
         "notDoneCommand": "명령이 실행되지 않았습니다.",
         "notDoneGoal": "목표가 변경되지 않았습니다.",
+        "notDoneQueuedEdit": "편집한 내용은 저장되지 않았습니다.",
         "restartFailed": "에이전트를 다시 시작하지 못했습니다.",
         "capacity": "이 채팅을 실행하는 컴퓨터의 Orca가 요청 한도에 도달했습니다. 해당 컴퓨터에서 Orca를 업데이트한 다음 다시 시도하세요.",
         "outcomeUnknown": "Orca가 무슨 일이 있었는지 확인하지 못했습니다. 채팅을 확인하세요.",
@@ -18654,6 +18655,9 @@
         "interruptedCallsLabel": "중단된 도구 호출: {{value0}}",
         "runningPreview": "{{preview}} 실행 중",
         "runningCommand": "실행 명령",
+        "showFullOutput": "전체 출력 보기",
+        "fullOutputFailed": "전체 출력을 불러오지 못했습니다.",
+        "fullOutputPartial": "{{total}} 중 {{shown}}을(를) 표시하는 중입니다.",
         "runningNamedPreview": "{{toolName}} {{preview}} 실행 중",
         "runningNamed": "{{toolName}} 실행 중",
         "ranCommandOneToolSummary": "{{commandCount}} 명령을 실행하고 {{toolCount}} 도구를 사용했습니다.",
@@ -18952,6 +18956,7 @@
         "pendingWork": "이 명령을 사용하기 전에 보류 중인 작업과 메시지가 완료될 때까지 기다리십시오."
       },
       "drop": {
+        "messageTitle": "놓아서 이 메시지에 첨부",
         "title": "이 채팅에 첨부하려면 드롭하세요.",
         "subtitle": "파일은 에이전트가 읽을 수 있는 경로로 메시지에 추가됩니다."
       },
@@ -19029,6 +19034,7 @@
         "cancelEditing": "편집 취소",
         "editChanged": "편집하는 동안 이 메시지가 변경되었습니다. 편집한 내용은 채팅 입력란에 있습니다.",
         "editChangedPrompt": "편집하는 동안 이 메시지가 변경되었습니다. 에이전트에 답하면 편집한 내용이 채팅 입력란에 표시됩니다.",
+        "editChangedNotSaved": "편집하는 동안 이 메시지가 변경되었습니다. 편집한 내용은 저장되지 않았습니다.",
         "editFailed": "이 메시지는 편집할 수 없습니다.",
         "editGone": "이 메시지는 이미 전송되었거나 삭제되었습니다. 편집한 내용은 채팅 입력란에 있습니다.",
         "editGonePrompt": "이 메시지는 이미 전송되었거나 삭제되었습니다. 에이전트에 답하면 편집한 내용이 채팅 입력란에 표시됩니다.",
@@ -19038,7 +19044,9 @@
         "collapse": "접기",
         "expand": "펼치기",
         "queued": "대기 중",
-        "clearAll": "모두 지우기"
+        "clearAll": "모두 지우기",
+        "pasteOrDropImages": "이미지를 붙여넣거나 끌어다 놓기",
+        "saveNeedsContent": "저장하려면 텍스트나 이미지를 추가하세요"
       },
       "thought": "생각함",
       "thoughtForDuration": "{{duration}} 동안 생각함",

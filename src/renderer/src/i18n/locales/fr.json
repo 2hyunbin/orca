@@ -18541,6 +18541,7 @@
         "notDoneOption": "Le paramètre n'a pas été modifié.",
         "notDoneCommand": "La commande n'a pas été exécutée.",
         "notDoneGoal": "L'objectif n'a pas été modifié.",
+        "notDoneQueuedEdit": "Votre modification n'a pas été enregistrée.",
         "restartFailed": "L'agent n'a pas pu redémarrer.",
         "capacity": "Orca sur l'ordinateur qui exécute ce chat a atteint une limite de requêtes. Mettez à jour Orca sur cet ordinateur, puis réessayez.",
         "outcomeUnknown": "Orca n'a pas pu confirmer ce qui s'est passé. Vérifiez le chat.",
@@ -18723,6 +18724,9 @@
         "interruptedCallsLabel": "Appels d'outil interrompus : {{value0}}",
         "runningPreview": "Exécution de {{preview}}",
         "runningCommand": "Commande en cours d'exécution",
+        "showFullOutput": "Afficher la sortie complète",
+        "fullOutputFailed": "Impossible de charger la sortie complète.",
+        "fullOutputPartial": "Affichage de {{shown}} sur {{total}}.",
         "runningNamedPreview": "En cours d'exécution {{toolName}} {{preview}}",
         "runningNamed": "Exécution de {{toolName}}",
         "ranCommandOneToolSummary": "Exécuté la commande {{commandCount}} et utilisé l'outil {{toolCount}}",
@@ -19021,6 +19025,7 @@
         "pendingWork": "Attendez la fin du travail et des messages en attente avant d'utiliser cette commande."
       },
       "drop": {
+        "messageTitle": "Déposez pour joindre à ce message",
         "title": "Déposer pour joindre à ce chat",
         "subtitle": "Les fichiers sont ajoutés à votre message sous forme de chemins que l'agent peut lire."
       },
@@ -19098,6 +19103,7 @@
         "cancelEditing": "Annuler la modification",
         "editChanged": "Ce message a changé pendant que vous le modifiiez. Votre modification se trouve dans le champ de discussion.",
         "editChangedPrompt": "Ce message a changé pendant que vous le modifiiez. Votre modification sera dans le champ de discussion une fois que vous aurez répondu à l'agent.",
+        "editChangedNotSaved": "Ce message a changé pendant que vous le modifiiez. Votre modification n'a pas été enregistrée.",
         "editFailed": "Ce message ne peut pas être modifié.",
         "editGone": "Ce message a déjà été envoyé ou supprimé. Votre modification se trouve dans le champ de discussion.",
         "editGonePrompt": "Ce message a déjà été envoyé ou supprimé. Votre modification sera dans le champ de discussion une fois que vous aurez répondu à l'agent.",
@@ -19107,7 +19113,9 @@
         "collapse": "Réduire",
         "expand": "Développer",
         "queued": "En file d'attente",
-        "clearAll": "Tout effacer"
+        "clearAll": "Tout effacer",
+        "pasteOrDropImages": "Collez ou déposez des images",
+        "saveNeedsContent": "Ajoutez du texte ou une image pour enregistrer"
       },
       "thought": "A réfléchi",
       "thoughtForDuration": "A réfléchi pendant {{duration}}",

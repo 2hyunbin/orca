@@ -18432,6 +18432,7 @@
         "notDoneOption": "La configuración no se cambió.",
         "notDoneCommand": "El comando no se ejecutó.",
         "notDoneGoal": "El objetivo no se cambió.",
+        "notDoneQueuedEdit": "Tu edición no se guardó.",
         "restartFailed": "El agente no pudo reiniciarse.",
         "capacity": "Orca en el equipo que ejecuta este chat alcanzó un límite de solicitudes. Actualice Orca en ese equipo y vuelva a intentarlo.",
         "outcomeUnknown": "Orca no pudo confirmar qué pasó. Revise el chat.",
@@ -18614,6 +18615,9 @@
         "interruptedCallsLabel": "Llamadas a herramientas interrumpidas: {{value0}}",
         "runningPreview": "Ejecutando {{preview}}",
         "runningCommand": "Ejecutando comando",
+        "showFullOutput": "Mostrar salida completa",
+        "fullOutputFailed": "No se pudo cargar la salida completa.",
+        "fullOutputPartial": "Se muestran {{shown}} de {{total}}.",
         "runningNamedPreview": "Ejecutando {{toolName}} {{preview}}",
         "runningNamed": "Ejecutando {{toolName}}",
         "ranCommandOneToolSummary": "Se ejecutó {{commandCount}} comando y se usó {{toolCount}} herramienta",
@@ -18846,6 +18850,7 @@
         "cancelEditing": "Cancelar edición",
         "editChanged": "Este mensaje cambió mientras lo editabas. Tu edición está en el cuadro de chat.",
         "editChangedPrompt": "Este mensaje cambió mientras lo editabas. Tu edición estará en el cuadro de chat cuando respondas al agente.",
+        "editChangedNotSaved": "Este mensaje cambió mientras lo editabas. Tu edición no se guardó.",
         "editFailed": "Este mensaje no se puede editar.",
         "editGone": "Este mensaje ya se envió o se eliminó. Tu edición está en el cuadro de chat.",
         "editGonePrompt": "Este mensaje ya se envió o se eliminó. Tu edición estará en el cuadro de chat cuando respondas al agente.",
@@ -18855,7 +18860,9 @@
         "collapse": "Contraer",
         "expand": "Expandir",
         "queued": "En cola",
-        "clearAll": "Borrar todo"
+        "clearAll": "Borrar todo",
+        "pasteOrDropImages": "Pega o suelta imágenes",
+        "saveNeedsContent": "Añade texto o una imagen para guardar"
       },
       "thought": "Pensó",
       "thoughtForDuration": "Pensó durante {{duration}}",
@@ -18969,6 +18976,7 @@
         "pendingWork": "Espera a que terminen el trabajo y los mensajes pendientes antes de usar este comando."
       },
       "drop": {
+        "messageTitle": "Suelta para adjuntar a este mensaje",
         "title": "Suelta para adjuntar a este chat",
         "subtitle": "Los archivos se añaden a tu mensaje como rutas que el agente puede leer."
       },
