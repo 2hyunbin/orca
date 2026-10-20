@@ -1,3 +1,5 @@
+import type * as PageStorage from '../mobile-web-shell/bridge/page-async-storage'
+import type * as Visits from './last-visited-worktree-by-host'
 import { describe, expect, it, vi } from 'vitest'
 
 const KEY = 'orca:last-visited-worktree'
@@ -7,8 +9,8 @@ const HOST = 'host-1'
 const appStore = new Map<string, string>()
 
 type PageModules = {
-  storage: typeof import('../mobile-web-shell/bridge/page-async-storage')
-  visits: typeof import('./last-visited-worktree-by-host')
+  storage: typeof PageStorage
+  visits: typeof Visits
 }
 
 /** One embedded page: its own module graph and its own copy of the store, taken at load. */
