@@ -40,11 +40,16 @@ export function restoreTerminalPaneLayout(args: {
       isActive
     )
   )
-  const localOnlyBuffers = useAppStore.getState().localOnlyScrollbackByTabId[tabId]
-  const restoredBuffers = resolveLeafScrollbackBuffers({
-    shared: initialLayoutRef.current,
-    localOnly: localOnlyBuffers
-  })
+  // Switch point: history comes only from the terminal's host (L236), never the window's copy.
+  const localOnlyBuffers = ORCA_LAYOUT_OWNER_IS_MAIN
+    ? undefined
+    : useAppStore.getState().localOnlyScrollbackByTabId[tabId]
+  const restoredBuffers = ORCA_LAYOUT_OWNER_IS_MAIN
+    ? undefined
+    : resolveLeafScrollbackBuffers({
+        shared: initialLayoutRef.current,
+        localOnly: localOnlyBuffers
+      })
   restoreScrollbackBuffers(
     manager,
     restoredBuffers,
