@@ -14,6 +14,7 @@ import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
+  isFrameDrawnServerWorkspace,
   mirroredTerminalHandle,
   onMirroredTerminalHandlesChanged,
   resyncMirroredServerWorkspace,
@@ -46,17 +47,30 @@ function openServerFrames(
   /** A replaced stream's workspaces: this one hands them back if it never takes them over. */
   inherited: ReadonlySet<string>
 ): ServerFrames {
-  const translator = createServerLayoutFrameTranslator(environmentId, (worktreeId) =>
-    (hostTabId, leafId) => mirroredTerminalHandle(environmentId, worktreeId, hostTabId, leafId)
+  const translator = createServerLayoutFrameTranslator(
+    environmentId,
+    (worktreeId) => (hostTabId, leafId) =>
+      mirroredTerminalHandle(environmentId, worktreeId, hostTabId, leafId)
   )
   const owns = (key: string): boolean =>
     mirroredRuntimeEnvironmentIdForWorkspace(store.getState(), key) === environmentId
   let gated = inherited
+  /** From the stream's snapshot until it stops: only then do its frames draw. */
+  let live = false
   const gate = (keys: ReadonlySet<string>): void => {
     gated = keys
     setFrameDrawnServerWorkspaces(environmentId, keys)
   }
+  const regate = (): boolean => {
+    const keys = new Set(translator.keys().filter(owns))
+    const changed = keys.size !== gated.size || [...keys].some((key) => !gated.has(key))
+    if (changed) {
+      gate(keys)
+    }
+    return changed
+  }
   const handBack = (): void => {
+    live = false
     const keys = [...gated]
     gate(new Set())
     for (const key of keys) {
@@ -72,14 +86,28 @@ function openServerFrames(
     draws: serverDraws(environmentId),
     translate: (frame) => {
       const translated = translator.translate(frame)
+      live ||= frame.type === 'snapshot'
       // Before the frame shows: the mirror must not write a workspace the frames now draw.
-      gate(new Set(translator.keys().filter(owns)))
+      regate()
       return translated
     },
     onStatus: (status) => {
       if (status.state === 'lost' || status.state === 'refused') {
         handBack()
       }
+    }
+  })
+  // A workspace can turn out to be this server's after its snapshot (pairing just finished): it is
+  // gated, then drawn, as the routing that names it arrives.
+  let routing: unknown[] = []
+  const stopRouting = store.subscribe((state) => {
+    const next = Object.values(selectRuntimeSessionMirrorTargetInputs(state))
+    if (sameValues(next, routing)) {
+      return
+    }
+    routing = next
+    if (live && regate()) {
+      sync.redraw()
     }
   })
   const stopHandles = onMirroredTerminalHandlesChanged((environment, worktreeId) => {
@@ -92,6 +120,7 @@ function openServerFrames(
   return {
     gated: () => gated,
     close: (returnWorkspaces) => {
+      stopRouting()
       stopHandles()
       sync.close()
       if (returnWorkspaces) {
@@ -107,8 +136,8 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
   const open = new Map<string, { identity: string; frames: ServerFrames }>()
   let inputs: unknown[] = []
   const reconcile = (state: AppState): void => {
-    const next = selectRuntimeSessionMirrorTargetInputsList(state)
-    if (next.length === inputs.length && next.every((value, index) => value === inputs[index])) {
+    const next = Object.values(selectRuntimeSessionMirrorTargetInputs(state))
+    if (sameValues(next, inputs)) {
       return
     }
     inputs = next
@@ -138,7 +167,11 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
     }
     for (const [environmentId, identity] of wanted) {
       if (!open.has(environmentId)) {
-        const frames = openServerFrames(store, environmentId, replaced.get(environmentId) ?? new Set())
+        const frames = openServerFrames(
+          store,
+          environmentId,
+          replaced.get(environmentId) ?? new Set()
+        )
         open.set(environmentId, { identity, frames })
       }
     }
@@ -154,9 +187,9 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
   }
 }
 
-/** The store slices the reachable servers derive from, so other store writes skip the work. */
-function selectRuntimeSessionMirrorTargetInputsList(state: AppState): unknown[] {
-  return Object.values(selectRuntimeSessionMirrorTargetInputs(state))
+/** The store slices reachability and workspace routing derive from, compared by reference. */
+function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index])
 }
 
 let installed: (() => void) | null = null
@@ -165,4 +198,7 @@ let installed: (() => void) | null = null
 export function showServerLayoutFrames(): void {
   // Kept for the document's life: a re-run boot reuses the streams already open.
   installed ??= installServerLayoutFrames(useAppStore)
+  if (import.meta.env.MODE === 'e2e') {
+    window.__isFrameDrawnServerWorkspaceE2E = isFrameDrawnServerWorkspace
+  }
 }
