@@ -34,11 +34,13 @@ function keyedWindows(
 export function GroupedPoolUsage({
   visibleBuckets,
   allBuckets,
-  display
+  display,
+  now
 }: {
   visibleBuckets: readonly RateLimitBucket[]
   allBuckets: readonly RateLimitBucket[]
   display: UsagePercentageDisplay
+  now: number
 }): React.JSX.Element {
   const groups = new Map<string, RateLimitBucket[]>()
   for (const bucket of visibleBuckets) {
@@ -49,7 +51,7 @@ export function GroupedPoolUsage({
     <>
       {[...groups].map(([group, buckets], groupIndex) => {
         const windows = keyedWindows(buckets)
-        const header = getPoolLabelParts(windows[0].bucket, allBuckets)
+        const header = getPoolLabelParts(windows[0].bucket, allBuckets, now)
         return (
           <React.Fragment key={group}>
             {groupIndex > 0 ? (
@@ -60,7 +62,7 @@ export function GroupedPoolUsage({
             </span>
             {windows.map(({ bucket, key }, index) => {
               const percentage = formatBareUsagePercentage(bucket.usedPercent, display)
-              const window = getPoolLabelParts(bucket, allBuckets)?.window ?? ''
+              const window = getPoolLabelParts(bucket, allBuckets, now)?.window ?? ''
               return (
                 <React.Fragment key={key}>
                   {index > 0 ? <span className="text-muted-foreground">·</span> : null}

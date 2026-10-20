@@ -23,6 +23,7 @@ import { translate } from '@/i18n/i18n'
 import { getStatusBarUsageSections } from './status-bar-usage-sections'
 import { GroupedPoolUsage } from './usage-grouped-pools'
 import { formatStatusBarSectionLabel } from './usage-pool-label'
+import { useResetCountdownClock } from '@/hooks/useResetCountdownClock'
 
 function MiniBar({
   usedPct,
@@ -227,6 +228,21 @@ export function ProviderSegment({
   const statusLabel = p ? getProviderUsageStatusLabel(p) : ''
   // Why: not a problem; Claude updates its own login the next time it runs.
   const calm = p ? isClaudeUsageWaitingForClaude(p) : false
+  const tightest = p
+    ? mode === 'compact'
+      ? getUsageHeadlineSection(p)
+      : getTightestUsageSection(p)
+    : null
+  const now = useResetCountdownClock(
+    p?.buckets
+      ?.filter(
+        (bucket) =>
+          bucket.group &&
+          clampUsedPercent(bucket.usedPercent) >= USAGE_URGENT_PERCENT &&
+          (mode === 'verbose' || (!compact && bucket === tightest?.window))
+      )
+      .map((bucket) => bucket.resetsAt) ?? []
+  )
 
   // Idle / initial load
   if (!p || p.status === 'idle') {
@@ -237,8 +253,6 @@ export function ProviderSegment({
       </span>
     )
   }
-
-  const tightest = mode === 'compact' ? getUsageHeadlineSection(p) : getTightestUsageSection(p)
 
   // Fetching with no prior data
   if (p.status === 'fetching' && !tightest) {
@@ -278,7 +292,10 @@ export function ProviderSegment({
     sections.some((section) => section.window === bucket)
   )
   const showGroupedPools =
-    mode === 'verbose' && groupedBuckets?.length && groupedBuckets.every((bucket) => bucket.group)
+    mode === 'verbose' &&
+    groupedBuckets !== undefined &&
+    groupedBuckets.length > 0 &&
+    groupedBuckets.every((bucket) => bucket.group)
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -291,6 +308,7 @@ export function ProviderSegment({
           visibleBuckets={groupedBuckets}
           allBuckets={p.buckets ?? []}
           display={display}
+          now={now}
         />
       ) : (
         sections.map((section, index) => (
@@ -298,7 +316,7 @@ export function ProviderSegment({
             {index > 0 ? <span className="text-muted-foreground">·</span> : null}
             <WindowLabel
               w={section.window}
-              label={formatStatusBarSectionLabel(p, section)}
+              label={formatStatusBarSectionLabel(p, section, now)}
               display={display}
               showLabel={mode === 'verbose' || !compact}
               labelFirst={section.labelFirst}

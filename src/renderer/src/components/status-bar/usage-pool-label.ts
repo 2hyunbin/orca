@@ -77,9 +77,10 @@ export function formatPoolShortLabel(
 /** Status-bar label for a headline section: the pool short label when `section.window` is a grouped bucket in `p.buckets`, else `section.label`. */
 export function formatStatusBarSectionLabel(
   p: ProviderRateLimits,
-  section: { label: string; window: RateLimitWindow }
+  section: { label: string; window: RateLimitWindow },
+  now?: number
 ): string {
   // Why identity: getWindowSections passes the bucket object itself as the section window.
   const bucket = p.buckets?.find((b) => b === section.window)
-  return bucket?.group && p.buckets ? formatPoolShortLabel(bucket, p.buckets) : section.label
+  return bucket?.group && p.buckets ? formatPoolShortLabel(bucket, p.buckets, now) : section.label
 }
