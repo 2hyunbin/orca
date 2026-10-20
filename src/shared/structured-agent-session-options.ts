@@ -116,8 +116,8 @@ export function finishedListingIds(catalog: AgentSessionModelCatalogResult): str
 /**
  * Applies the host's stored model catalog: models only, no current selection
  * and no record writes, so nothing here reads as a committed value — the pick
- * stays provisional until a live options result confirms it. A live catalog
- * is never replaced by this.
+ * stays provisional until a live options result confirms it. Exact child
+ * controls survive inventory refreshes.
  */
 export function applyStructuredAgentSessionModelCatalog(
   state: StructuredAgentSessionOptionState,
@@ -155,7 +155,7 @@ export function applyStructuredAgentSessionModelCatalog(
     // `isDefault` came from a real listing, so a launch's CLI default is nameable —
     // as a provisional `default`-source value, never a confirmed one.
     catalog: {
-      ...(state.catalogSource === 'live' ? state.catalog : seed),
+      ...(state.catalogSource === 'live' ? (state.catalog ?? seed) : seed),
       models: inventory,
       ...(namesDefault ? { defaultModelIsCliDefault: true } : {})
     },
