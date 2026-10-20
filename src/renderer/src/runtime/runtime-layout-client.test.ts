@@ -400,6 +400,15 @@ describe.each(targets)(
       expect(host.streams).toHaveLength(5)
       await vi.advanceTimersByTimeAsync(1)
       expect(host.streams).toHaveLength(6)
+      // A clean change ends the storm: the next drop reopens after 1 s again.
+      const sixth = await opened(6)
+      sixth.send(snapshot('epoch-1', 3, ['a']))
+      sixth.send(regrouped('epoch-1', 4, 'a', ['t1']))
+      sixth.drop()
+      await vi.advanceTimersByTimeAsync(999)
+      expect(host.streams).toHaveLength(6)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(host.streams).toHaveLength(7)
     })
 
     it('starts the backoff over after one resync, once the stream is healthy again', async () => {

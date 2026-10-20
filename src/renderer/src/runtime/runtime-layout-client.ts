@@ -175,7 +175,10 @@ export function subscribeRuntimeLayout(
         return
       }
       resyncs = 0
-      storm = false
+      if (storm) {
+        storm = false
+        reopenDelay = LOCAL_REOPEN_DELAY_MS
+      }
       return
     }
     onFrame(frame)
