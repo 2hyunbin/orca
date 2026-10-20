@@ -33,7 +33,7 @@ describe('Node.js mirror recovery for a setup that could not download Node', () 
     ['a plain failure', { kind: 'relay', reason: 'failed', detail: DETAIL }],
     ['lost contact', blocked('unset', { contactLost: true })],
     ['a held move', blocked('unset', { held: true })],
-    ['a refusal', { ...blocked('unset'), reason: 'refused' }],
+    ['a refusal', blocked('unset', { reason: 'refused' })],
     ['a managed server', { kind: 'managed', environmentId: 'env-1' }]
   ])('offers nothing for %s', (_label, status) => {
     expect(nodeMirrorRecovery(status, '')).toBeNull()
