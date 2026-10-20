@@ -71,6 +71,7 @@ export type RuntimeStore = {
   peekOrcadMigrationTerminalRestoreHint?: Store['peekOrcadMigrationTerminalRestoreHint']
   consumeOrcadMigrationTerminalRestoreHint?: Store['consumeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']
+  retirePtyBinding?: Store['retirePtyBinding']
   getPtyBindingGeneration?: Store['getPtyBindingGeneration']
   admitTerminalPane?: Store['admitTerminalPane']
   withdrawTerminalPane?: Store['withdrawTerminalPane']

@@ -23,6 +23,7 @@ import {
   type ShutdownReconnectFacts
 } from '../../terminal/recovery/shutdown-reconnect-facts'
 import { OrcaRuntimeWithAutomationOperations } from './automation-operations'
+import { panesBoundToAnotherWorkspace } from '../../terminal/recovery/foreign-pane-bindings'
 
 export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRuntimeWithAutomationOperations {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
@@ -59,6 +60,7 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
   }
 
   private async placeUnshownLiveTerminalsOnce(): Promise<LiveTerminalPlacement> {
+    await this.unbindPanesFromOtherWorkspacesTerminals()
     // A host that keeps no local terminals across restarts has none to find.
     if (!this.canRecoverPersistentLocalPtysFn()) {
       return { placed: [], declined: [] }
@@ -97,6 +99,19 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
         }
       }
     })
+  }
+
+  /** A pane bound to a terminal another workspace owns starts fresh; that terminal is placed home. */
+  private async unbindPanesFromOtherWorkspacesTerminals(): Promise<void> {
+    const store = this.store
+    for (const hostId of store?.getWorkspaceSessionHostIds?.() ?? []) {
+      const session = store?.getWorkspaceSession?.(hostId)
+      for (const binding of session ? panesBoundToAnotherWorkspace(session) : []) {
+        await store?.retirePtyBinding?.(binding, hostId).catch((error: unknown) => {
+          console.warn('[layout] a pane kept another workspace terminal', error)
+        })
+      }
+    }
   }
 
   /** Layout-owner build: what the next startup reconnects for `session`, from main's own state. */

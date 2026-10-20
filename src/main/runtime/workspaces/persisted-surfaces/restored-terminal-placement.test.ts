@@ -29,7 +29,11 @@ const LIVE_PTY = (worktreeId: string) => ({
   incarnationId: 'inc-1'
 })
 
-function runtimeWithLiveTerminal(worktreeId: string, live = [LIVE_PTY(worktreeId)]) {
+function runtimeWithLiveTerminal(
+  worktreeId: string,
+  live = [LIVE_PTY(worktreeId)],
+  session = getDefaultWorkspaceSession()
+) {
   const applyLayoutCommand = vi.fn(async (_command: { adopt?: { ptyId: string } }) => ({
     ok: true as const,
     result: { tabId: 'tab-new', leafId: 'leaf-new', paneKey: 'tab-new:leaf-new' }
@@ -41,8 +45,9 @@ function runtimeWithLiveTerminal(worktreeId: string, live = [LIVE_PTY(worktreeId
     getSettings: () => ({}),
     getAllWorktreeMeta: () => ({}),
     getWorkspaceSessionHostIds: () => ['local'],
-    getWorkspaceSession: () => getDefaultWorkspaceSession(),
-    applyLayoutCommand
+    getWorkspaceSession: () => session,
+    applyLayoutCommand,
+    retirePtyBinding: vi.fn(async () => true)
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup pass reads only these store methods.
   const runtime = new OrcaRuntimeService(store as never)
@@ -56,7 +61,7 @@ function runtimeWithLiveTerminal(worktreeId: string, live = [LIVE_PTY(worktreeId
       hostIds: ['local' as const]
     })
   })
-  return { runtime, applyLayoutCommand, live }
+  return { runtime, applyLayoutCommand, live, retirePtyBinding: store.retirePtyBinding }
 }
 
 describe('main’s startup pass over the host census, layout-owner build', () => {
@@ -120,6 +125,50 @@ describe('main’s startup pass over the host census, layout-owner build', () =>
     expect(overlapped).toBe(false)
     expect(applyLayoutCommand.mock.calls.map(([command]) => command.adopt?.ptyId)).toContain(
       'pty-b'
+    )
+  })
+
+  it("starts fresh a pane bound to another workspace's terminal, keeping its own", async () => {
+    const own = `${FOLDER_KEY}@@own`
+    const other = 'repo-2::/fixture/other@@theirs'
+    const session = {
+      ...getDefaultWorkspaceSession(),
+      tabsByWorktree: {
+        [FOLDER_KEY]: [
+          {
+            id: 'tab-1',
+            ptyId: own,
+            worktreeId: FOLDER_KEY,
+            title: 'Terminal 1',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: {
+            type: 'split' as const,
+            direction: 'vertical' as const,
+            first: { type: 'leaf' as const, leafId: 'leaf-own' },
+            second: { type: 'leaf' as const, leafId: 'leaf-other' }
+          },
+          activeLeafId: 'leaf-own',
+          expandedLeafId: null,
+          ptyIdsByLeafId: { 'leaf-own': own, 'leaf-other': other }
+        }
+      }
+    }
+    const { runtime, retirePtyBinding } = runtimeWithLiveTerminal(FOLDER_KEY, [], session)
+
+    await runtime.placeUnshownLiveTerminals()
+
+    expect(retirePtyBinding).toHaveBeenCalledTimes(1)
+    expect(retirePtyBinding).toHaveBeenCalledWith(
+      { worktreeId: FOLDER_KEY, tabId: 'tab-1', leafId: 'leaf-other', ptyId: other },
+      'local'
     )
   })
 })
