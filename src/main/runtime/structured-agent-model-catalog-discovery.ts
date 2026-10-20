@@ -31,6 +31,7 @@ export function codexModelCatalogDiscovery({
     listingNamesConfiguredModel: true,
     probe: createCodexModelCatalogProbe({
       resolveAccountKind: deps.resolveCodexAccountKind,
+      ...(deps.runCodexCatalogSession ? { runSession: deps.runCodexCatalogSession } : {}),
       resolveLaunchArgs: () => deps.resolveLaunchArgs('codex'),
       ...(deps.prepareCodexCatalogProbeHome
         ? { prepareHome: deps.prepareCodexCatalogProbeHome }

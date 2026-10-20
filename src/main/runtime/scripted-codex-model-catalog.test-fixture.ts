@@ -1,32 +1,31 @@
-import { vi } from 'vitest'
-import type * as ModelCatalogDiscovery from './structured-agent-model-catalog-discovery'
-import type { AgentModelCatalogDiscovery } from '../native-chat/agent-model-catalog/agent-model-catalog-discovery'
+import type { CodexModelCatalogProbeDeps } from '../codex/codex-model-catalog-probe'
 
-/** Independent discovery for a scripted Codex transport, without starting another process. */
-export function scriptedCodexModelCatalogDiscovery(): AgentModelCatalogDiscovery {
-  return {
-    kind: 'probe',
-    listingNamesConfiguredModel: true,
-    probe: async () => ({
-      origin: 'probe',
-      complete: true,
-      models: [
-        {
-          id: 'gpt-live',
-          label: 'GPT Live',
-          isDefault: true,
-          defaultEffort: 'medium',
-          efforts: [
-            { value: 'medium', label: 'Balanced' },
-            { value: 'high', label: 'Deep reasoning' }
-          ]
-        }
-      ]
-    })
-  }
-}
-
-vi.mock('./structured-agent-model-catalog-discovery', async (importOriginal) => ({
-  ...(await importOriginal<typeof ModelCatalogDiscovery>()),
-  codexModelCatalogDiscovery: () => scriptedCodexModelCatalogDiscovery()
-}))
+/** Independent RPC transport for the scripted chat's installed-CLI discovery. */
+export const scriptedCodexCatalogSession: NonNullable<
+  CodexModelCatalogProbeDeps['runSession']
+> = async (_invocation, body) =>
+  body({
+    request: async (method) => {
+      if (method === 'config/read') {
+        return { config: { model: 'gpt-live', model_reasoning_effort: 'medium' } }
+      }
+      return method === 'model/list'
+        ? {
+            data: [
+              {
+                model: 'gpt-live',
+                displayName: 'GPT Live',
+                isDefault: true,
+                defaultReasoningEffort: 'medium',
+                supportedReasoningEfforts: [
+                  { reasoningEffort: 'medium', description: 'Balanced' },
+                  { reasoningEffort: 'high', description: 'Deep reasoning' }
+                ]
+              }
+            ],
+            nextCursor: null
+          }
+        : {}
+    },
+    notify: () => {}
+  })
