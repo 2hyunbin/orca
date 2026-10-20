@@ -12,6 +12,7 @@ import {
 } from './codex-app-server-session'
 import { createCodexAppServerRecordDispatcher } from './codex-app-server-record-dispatch'
 import { createProviderRecordReader } from '../provider-process/provider-record-reader'
+import { withProviderRequestTimeout } from '../provider-process/provider-request-timeout'
 import type {
   CodexAppServerConnection,
   CodexAppServerConnectionHandlers
@@ -165,15 +166,19 @@ async function connectCodexAppServer(
     const timeoutMs =
       options.timeoutMs === undefined ? DEFAULT_REQUEST_TIMEOUT_MS : options.timeoutMs
     return new Promise<unknown>((resolve, reject) => {
-      // Why: per request, not per session — a chat session outlives every call, so only the
-      // individual call can carry a deadline. Null is a call whose caller bounds it instead.
+      // Null requests are bounded by their caller; timed requests belong to this call.
       const timer =
         timeoutMs === null
           ? undefined
           : setTimeout(() => {
               dispatcher.timeOutPending(id)
               reject(
-                new CodexAppServerTimeoutError(`codex app-server ${method} exceeded ${timeoutMs}ms`)
+                withProviderRequestTimeout(
+                  new CodexAppServerTimeoutError(
+                    `codex app-server ${method} exceeded ${timeoutMs}ms`
+                  ),
+                  { method, timeoutMs }
+                )
               )
             }, timeoutMs)
       dispatcher.addPending(id, { method, resolve, reject, timer, onReply: options.onReply })
