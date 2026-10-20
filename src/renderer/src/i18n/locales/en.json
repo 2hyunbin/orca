@@ -19383,8 +19383,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Switch to Terminal",
-          "switchToChatView": "Switch to Chat",
+          "switchToTerminalView": "Switch to Terminal Agent",
+          "switchToChatView": "Switch to Chat UI",
           "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "BrowserTab": {

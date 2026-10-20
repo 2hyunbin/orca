@@ -19100,8 +19100,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "터미널로 전환",
-          "switchToChatView": "채팅으로 전환",
+          "switchToTerminalView": "터미널 에이전트로 전환",
+          "switchToChatView": "채팅 UI로 전환",
           "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
         },
         "BrowserTab": {

@@ -19169,8 +19169,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Passer au terminal",
-          "switchToChatView": "Passer au chat",
+          "switchToTerminalView": "Passer à l’agent de terminal",
+          "switchToChatView": "Passer à l’interface de chat",
           "closeTabsToLeft": "Fermer tous les onglets à gauche"
         },
         "BrowserTab": {

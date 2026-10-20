@@ -19100,8 +19100,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "ターミナルに切り替える",
-          "switchToChatView": "チャットに切り替える",
+          "switchToTerminalView": "ターミナル Agent に切り替える",
+          "switchToChatView": "チャット UI に切り替える",
           "closeTabsToLeft": "左側のすべてのタブを閉じる"
         },
         "BrowserTab": {

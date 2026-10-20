@@ -19065,8 +19065,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "切换到终端",
-          "switchToChatView": "切换到聊天",
+          "switchToTerminalView": "切换到终端智能体",
+          "switchToChatView": "切换到聊天UI",
           "closeTabsToLeft": "关闭左侧的所有选项卡"
         },
         "BrowserTab": {
