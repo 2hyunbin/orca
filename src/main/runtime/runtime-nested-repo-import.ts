@@ -18,7 +18,12 @@ import {
 } from '../project-groups/nested-repo-import'
 import { createNestedRepoImportTargetResolver } from '../project-groups/nested-repo-import-target'
 import type { RuntimeStore } from './runtime-store-contract'
-import { importNestedProjectsOnWslHost } from '../wsl/wsl-nested-project-import'
+import { placeNestedImport } from '../wsl/wsl-nested-project-import'
+import {
+  registrationDomain,
+  UNNAMED_REGISTRATION_CALLER,
+  type RegistrationCaller
+} from '../wsl/project-placement'
 
 type RuntimeNestedRepoImportDependencies = {
   getStore: () => RuntimeStore | null
@@ -50,7 +55,7 @@ export class RuntimeNestedRepoImport {
       projectPaths: string[]
       mode: ProjectGroupImportMode
     },
-    wslRouting: { fromPairedClient?: boolean } = {}
+    caller: RegistrationCaller = UNNAMED_REGISTRATION_CALLER
   ): Promise<ProjectGroupImportResult> {
     const store = this.deps.getStore()
     if (!store?.createProjectGroup || !store.moveProjectToGroup) {
@@ -62,9 +67,14 @@ export class RuntimeNestedRepoImport {
     }
     const scan = await scanNestedRepos({ path: args.parentPath, options: { timeoutMs: 15_000 } })
     const selection = resolveNestedRepoSelection({ scan, projectPaths: args.projectPaths })
-    const hosted = await importNestedProjectsOnWslHost(store, args, { ...wslRouting, scan })
-    if (hosted) {
-      return hosted
+    const placement = await placeNestedImport(
+      store,
+      args,
+      { domain: registrationDomain(caller), fromPairedClient: caller.fromPairedClient },
+      scan
+    )
+    if (placement.kind === 'done') {
+      return placement.result
     }
     const groupResolver = createNestedProjectGroupResolver({
       parentPath: args.parentPath,
@@ -85,6 +95,16 @@ export class RuntimeNestedRepoImport {
     const importTargetResolver = createNestedRepoImportTargetResolver()
     for (const [projectGroupOrder, repoPath] of selection.selectedPaths.entries()) {
       try {
+        if (placement.kind === 'saved-windows') {
+          const saved = placement.savedRow(repoPath)
+          const group = groupResolver.getGroupForRepo(repoPath)
+          if (group && !importedProjectIdsByRepoPath.has(saved.path)) {
+            store.moveProjectToGroup(saved, group.id, projectGroupOrder)
+          }
+          importedProjectIdsByRepoPath.set(saved.path, saved.id)
+          results.push({ path: repoPath, projectId: saved.id, status: 'already-known' })
+          continue
+        }
         await awaitWindowsHostGitEnvironmentReady({ cwd: repoPath })
         if (!(await isGitRepoAsync(repoPath))) {
           results.push({ path: repoPath, status: 'failed', error: 'Not a valid git repository' })

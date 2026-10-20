@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, posix } from 'node:path'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../shared/constants'
 import {
   LOCAL_EXECUTION_HOST_ID,
@@ -12,15 +12,18 @@ import { gitExecFileAsync } from '../git/runner'
 import { getRepoName } from '../git/repo'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import { isENOENT } from '../ipc/filesystem-path-containment'
-import { admitRepositoryCheckout } from '../repository-checkout-admission'
 import { detectRepoIconAndUpstream } from '../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
 import {
-  registerProjectOnWslHost,
-  type WslProjectRoutingOptions
-} from '../wsl/wsl-project-registration'
+  placeProject,
+  registrationDomain,
+  UNNAMED_REGISTRATION_CALLER,
+  type ProjectPlacement,
+  type RegistrationCaller
+} from '../wsl/project-placement'
+import { registerOnWslOwner } from '../wsl/wsl-project-registration'
 
 type RuntimeRepositoryRegistrationDependencies = {
   getStore: () => RuntimeStore | null
@@ -37,16 +40,32 @@ export class RuntimeRepositoryRegistrationController {
     kind: 'git' | 'folder' = 'git',
     executionHostId?: ExecutionHostId | null,
     displayName?: string,
-    wslRouting: Pick<WslProjectRoutingOptions, 'fromPairedClient'> = {}
+    caller: RegistrationCaller = UNNAMED_REGISTRATION_CALLER
   ): Promise<Repo> {
     const store = this.requireStore()
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
-    const admission = await admitRepositoryCheckout(store, path, kind, executionHostId)
-    const repoPath = admission.registrationPath
-    const existing = admission.findSaved()
-    if (existing) {
+    const placement = await placeProject(store, {
+      operation: 'add',
+      selectedPath: path,
+      kind,
+      domain: registrationDomain(caller, executionHostId),
+      fromPairedClient: caller.fromPairedClient
+    })
+    return this.addPlaced(placement, kind, executionHostId, displayName)
+  }
+
+  /** The ordinary writer: it reuses the placement's admission and never admits again. */
+  async addPlaced(
+    placement: ProjectPlacement,
+    kind: 'git' | 'folder',
+    executionHostId?: ExecutionHostId | null,
+    displayName?: string
+  ): Promise<Repo> {
+    const store = this.requireStore()
+    if (placement.kind === 'saved') {
+      const existing = placement.repo
       if (
         existing.executionHostId == null &&
         parseExecutionHostId(executionHostId)?.kind === 'runtime'
@@ -59,15 +78,13 @@ export class RuntimeRepositoryRegistrationController {
       }
       return existing
     }
-    // Why here: a saved Windows row for this checkout stays its owner; only a new one goes to WSL.
-    const hosted = await registerProjectOnWslHost(
-      store,
-      { kind: 'add', path: repoPath, repoKind: kind, displayName },
-      { ...wslRouting, executionHostId, admission }
-    )
-    if (hosted) {
-      return hosted
+    if (placement.kind === 'wsl') {
+      return registerOnWslOwner(placement.environmentId, {
+        kind: 'add', path: placement.linuxPath, repoKind: kind, displayName
+      })
     }
+    const { admission } = placement
+    const repoPath = admission.registrationPath
     // Local on purpose, whatever `executionHostId` stamps on the row: this controller already
     // validated and will read `path` in this process. A `runtime:` stamp is how a paired client
     // addresses the row, not a second machine holding the files.
@@ -102,7 +119,7 @@ export class RuntimeRepositoryRegistrationController {
     parentPath: string,
     name: string,
     kind: 'git' | 'folder' = 'git',
-    wslRouting: Pick<WslProjectRoutingOptions, 'fromPairedClient'> = {}
+    caller: RegistrationCaller = UNNAMED_REGISTRATION_CALLER
   ): Promise<{ repo: Repo } | { error: string }> {
     const store = this.requireStore()
     const trimmedName = name.trim()
@@ -121,17 +138,22 @@ export class RuntimeRepositoryRegistrationController {
       return { error: 'Parent directory must be an absolute path' }
     }
     const targetPath = join(trimmedParentPath, trimmedName)
-    const existing = store.getRepos().find((repo) => runtimePathsEqual(repo.path, targetPath))
-    if (existing) {
-      return { repo: existing }
+    const placement = await placeProject(store, {
+      operation: 'create',
+      parentPath: trimmedParentPath,
+      name: trimmedName,
+      domain: registrationDomain(caller),
+      fromPairedClient: caller.fromPairedClient,
+      sameTarget: (path) => runtimePathsEqual(path, targetPath)
+    })
+    if (placement.kind === 'saved') {
+      return { repo: placement.repo }
     }
-    const hosted = await registerProjectOnWslHost(
-      store,
-      { kind: 'create', path: trimmedParentPath, name: trimmedName, repoKind },
-      wslRouting
-    )
-    if (hosted) {
-      return { repo: hosted }
+    if (placement.kind === 'wsl') {
+      const repo = await registerOnWslOwner(placement.environmentId, {
+        kind: 'create', path: posix.dirname(placement.linuxPath), name: trimmedName, repoKind
+      })
+      return { repo }
     }
 
     let createdDir = false
@@ -165,7 +187,7 @@ export class RuntimeRepositoryRegistrationController {
         return { error }
       }
     }
-    const raceWinner = store.getRepos().find((repo) => runtimePathsEqual(repo.path, targetPath))
+    const raceWinner = placement.admission.findSaved()
     if (raceWinner) {
       return { repo: raceWinner }
     }

@@ -30,7 +30,8 @@ import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidato
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { updateProjectHostSetupWithProvenKind } from '../folder-repo-git-conversion'
 import type { RuntimeStore } from './runtime-store-contract'
-import { setupProjectOnWslHost } from '../wsl/wsl-project-host-setup'
+import { placeExistingFolderSetup } from '../wsl/wsl-project-host-setup'
+import { UNNAMED_REGISTRATION_CALLER, type ProjectPlacement } from '../wsl/project-placement'
 import { assertCloneHostIsSupported } from './runtime-repository-clone-controller'
 import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
 import { readCurrentGitRemoteIdentity } from '../repo-git-remote-identity'
@@ -51,7 +52,7 @@ import {
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
   listRepos: () => Repo[]
-  addRepo: (path: string, kind: 'folder' | 'git', hostId: ExecutionHostId) => Promise<Repo>
+  addRepo: (placement: ProjectPlacement, kind: 'folder' | 'git', hostId: ExecutionHostId) => Promise<Repo>
   cloneRepo: (url: string, destination: string, hostId: ExecutionHostId) => Promise<Repo>
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
@@ -109,23 +110,23 @@ export class RuntimeProjectHostSetupController {
 
   async setupExistingFolder(
     args: ProjectHostSetupExistingFolderArgs,
-    wslRouting: { fromPairedClient?: boolean } = {}
+    caller = UNNAMED_REGISTRATION_CALLER
   ): Promise<ProjectHostSetupResult> {
     const store = this.deps.getStore()
     if (!store) {
       throw new Error('runtime_unavailable')
     }
-    const hosted = await setupProjectOnWslHost(store, args, wslRouting)
-    if (hosted) {
-      return hosted
-    }
-    const kind = args.kind === 'folder' ? 'folder' : 'git'
     const knownRepoIds = new Set(this.deps.listRepos().map((repo) => repo.id))
     const sshTargetId = getSshTargetIdForExecutionHost(args.hostId)
     if (sshTargetId) {
       throw sshTargetNotServedError(sshTargetId)
     }
-    const repo = await this.deps.addRepo(args.path, kind, args.hostId)
+    const placed = await placeExistingFolderSetup(store, args, { ...caller, domain: args.hostId })
+    if ('hosted' in placed) {
+      return placed.hosted
+    }
+    const kind = args.kind === 'folder' ? 'folder' : 'git'
+    const repo = await this.deps.addRepo(placed.placement, kind, args.hostId)
     const repoWasCreated = !knownRepoIds.has(repo.id)
     // Why: a registered row's stored remote can predate a remote the user has since added.
     const folderRemote = repoWasCreated ? repo : await readCurrentGitRemoteIdentity(repo)

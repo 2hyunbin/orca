@@ -1,5 +1,5 @@
 import type { Repo } from '../shared/repo-types'
-import { normalizeRuntimePathForComparison as pathKey } from '../shared/cross-platform-path'
+import { normalizeRuntimePathForComparison } from '../shared/cross-platform-path'
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
@@ -7,6 +7,7 @@ import {
   type ExecutionHostId
 } from '../shared/execution-host'
 import { isFolderRepo } from '../shared/repo-kind'
+import { normalizeWindowsWslPath } from '../shared/windows-path-access'
 import { awaitWindowsHostGitEnvironmentReady } from './git/runner'
 import { getGitRepoRootAsync, inspectGitRepoForRegistrationAsync } from './git/repo'
 import { findProjectAtSameRealPath } from './project-realpath-identity'
@@ -19,28 +20,46 @@ export type RepositoryCheckoutAdmission = {
   findSaved: () => Repo | undefined
 }
 
-/** The files are inspected here; SSH paths cannot claim a checkout on this physical host. */
+/**
+ * The files are inspected here; SSH paths cannot claim a checkout on this physical host.
+ * `domain` names whose rows may claim it: local is this computer's own rows, a runtime id that
+ * endpoint's rows, and null a path-only runtime caller's rows (its reuse contract on main).
+ * `wslScope` adds the gated WSL evidence: extended spellings and the realpath of a verified main.
+ */
 export async function admitRepositoryCheckout(
   store: { getRepos(): Repo[] },
   selectedPath: string,
   kind: 'git' | 'folder',
-  executionHostId?: ExecutionHostId | null
+  domain: ExecutionHostId | null,
+  wslScope: boolean
 ): Promise<RepositoryCheckoutAdmission> {
-  if (kind === 'git') await awaitWindowsHostGitEnvironmentReady({ cwd: selectedPath })
+  if (kind === 'git') {
+    await awaitWindowsHostGitEnvironmentReady({ cwd: selectedPath })
+  }
   const info = kind === 'git' ? await inspectGitRepoForRegistrationAsync(selectedPath) : null
-  if (info && !info.isRepo) throw new Error(`Not a valid git repository: ${selectedPath}`)
+  if (info && !info.isRepo) {
+    throw new Error(`Not a valid git repository: ${selectedPath}`)
+  }
   const registrationPath = info?.rootPath ?? selectedPath
   const mainRepoPath = info?.mainRepoPath ? await getGitRepoRootAsync(info.mainRepoPath) : null
+  const pathKey = wslScope
+    ? (path: string) => normalizeRuntimePathForComparison(normalizeWindowsWslPath(path))
+    : normalizeRuntimePathForComparison
   const sameHostRepos = () => store.getRepos().filter((repo) =>
     parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'ssh' &&
-    (executionHostId === LOCAL_EXECUTION_HOST_ID
+    (domain === LOCAL_EXECUTION_HOST_ID
       ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
-      : runtimeRepoMatchesExecutionHost(repo, executionHostId)))
+      : runtimeRepoMatchesExecutionHost(repo, domain)))
   const matches = (repo: Repo) => pathKey(repo.path) === pathKey(selectedPath) ||
     pathKey(repo.path) === pathKey(registrationPath) ||
     (mainRepoPath !== null && !isFolderRepo(repo) && pathKey(repo.path) === pathKey(mainRepoPath))
   const realPathMatch = sameHostRepos().find(matches) ??
-    await findProjectAtSameRealPath(sameHostRepos(), registrationPath)
+    await findProjectAtSameRealPath(sameHostRepos(), registrationPath, pathKey) ??
+    (wslScope && mainRepoPath !== null
+      ? await findProjectAtSameRealPath(
+          sameHostRepos().filter((repo) => !isFolderRepo(repo)), mainRepoPath, pathKey
+        )
+      : null)
   return {
     selectedPath,
     registrationPath,

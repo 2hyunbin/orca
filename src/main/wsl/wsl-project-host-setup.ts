@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 import {
   adoptEndpointProjectHostSetup,
@@ -9,10 +10,14 @@ import type {
   ProjectHostSetupExistingFolderArgs,
   ProjectHostSetupResult
 } from '../../shared/project-types'
-import { parseWslUncPath } from '../../shared/wsl-paths'
-import { admitRepositoryCheckout } from '../repository-checkout-admission'
-import type { Repo } from '../../shared/repo-types'
-import { callWslProjectHost, resolveNewWslProjectHost, wslProjectRoutingEnabled } from './wsl-project-registration'
+import {
+  placeProject,
+  type PlacementCaller,
+  type PlacementStore,
+  type ProjectPlacement,
+  type WslPlacement
+} from './project-placement'
+import { callWslProjectHost } from './wsl-project-registration'
 
 const SetupReply = z.object({
   result: z.object({
@@ -53,19 +58,32 @@ const SetupReply = z.object({
   })
 })
 
-/** Linking an existing project must also happen in the guest's catalog transaction. */
-export async function setupProjectOnWslHost(
-  store: { getRepos(): Repo[]; getProjects?(): Project[] },
+/** Setup places its folder once: a WSL owner links it there; anything else returns to the caller's writer. */
+export async function placeExistingFolderSetup(
+  store: PlacementStore & { getProjects?(): Project[] },
   args: ProjectHostSetupExistingFolderArgs,
-  options: { fromPairedClient?: boolean } = {}
-): Promise<ProjectHostSetupResult | null> {
-  if (!parseWslUncPath(args.path) || !wslProjectRoutingEnabled(store, args.hostId)) return null
-  const admission = await admitRepositoryCheckout(store, args.path, args.kind ?? 'git', LOCAL_EXECUTION_HOST_ID)
-  if (admission.findSaved()) return null
-  const owner = await resolveNewWslProjectHost(store, admission.registrationPath, {
-    ...options, executionHostId: args.hostId
+  caller: PlacementCaller
+): Promise<{ hosted: ProjectHostSetupResult } | { placement: Exclude<ProjectPlacement, WslPlacement> }> {
+  if (!isAbsolute(args.path)) {
+    throw new Error('Project path must be an absolute path')
+  }
+  const placement = await placeProject(store, {
+    operation: 'setup',
+    selectedPath: args.path,
+    kind: args.kind === 'folder' ? 'folder' : 'git',
+    ...caller
   })
-  if (!owner || admission.findSaved()) return null
+  return placement.kind === 'wsl'
+    ? { hosted: await setupProjectOnWslOwner(store, args, placement) }
+    : { placement }
+}
+
+/** Linking an existing project must also happen in the guest's catalog transaction. */
+async function setupProjectOnWslOwner(
+  store: { getProjects?(): Project[] },
+  args: ProjectHostSetupExistingFolderArgs,
+  owner: WslPlacement
+): Promise<ProjectHostSetupResult> {
   // Why: the guest has never seen this desktop's project, so its identity travels with the link.
   const projectProviderIdentity =
     args.projectProviderIdentity ??

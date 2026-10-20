@@ -1,49 +1,16 @@
-import { join } from 'node:path'
 import { z } from 'zod'
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
-  toRuntimeExecutionHostId,
-  type ExecutionHostId
+  toRuntimeExecutionHostId
 } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
-import type { GlobalSettings } from '../../shared/global-settings-types'
-import { parseWslUncPath } from '../../shared/wsl-paths'
 import { getWslHostService } from './wsl-host-service-instance'
-import { wslHostsGateOpen } from './wsl-host-gate'
-import {
-  admitRepositoryCheckout,
-  type RepositoryCheckoutAdmission
-} from '../repository-checkout-admission'
 import type { RpcCallerIdentity } from '../runtime/rpc/rpc-caller-identity'
-
-type WslProjectRegistrationStore = {
-  getRepos(): Repo[]
-  getSettings?(): Pick<GlobalSettings, 'experimentalWslHosts'>
-}
-
-export function wslProjectRoutingEnabled(
-  store: WslProjectRegistrationStore,
-  executionHostId?: ExecutionHostId | null
-): boolean {
-  return (
-    process.platform === 'win32' &&
-    (executionHostId == null || executionHostId === LOCAL_EXECUTION_HOST_ID) &&
-    wslHostsGateOpen() &&
-    (getWslHostService()?.isEnabled() ?? store.getSettings?.().experimentalWslHosts === true)
-  )
-}
 
 type WslProjectOperation =
   | { kind: 'add'; path: string; repoKind?: 'git' | 'folder'; displayName?: string }
   | { kind: 'create'; path: string; name: string; repoKind: 'git' | 'folder' }
-
-export type WslProjectRoutingOptions = {
-  executionHostId?: ExecutionHostId | null
-  /** A paired client cannot address an environment saved only on this Windows desktop. */
-  fromPairedClient?: boolean
-  admission?: RepositoryCheckoutAdmission
-}
 
 export function isPairedWslRoutingCaller(caller: RpcCallerIdentity | undefined): boolean {
   return caller?.kind !== 'local-cli' && caller?.kind !== 'desktop'
@@ -61,42 +28,6 @@ const ProjectReply = z.object({
     })
     .passthrough()
 })
-
-/** Null keeps the existing route. Callers run their saved-project checks first, so this decides
- *  only who owns a project that no saved row already claims; the guest registers it. */
-export async function registerProjectOnWslHost(
-  store: WslProjectRegistrationStore,
-  operation: WslProjectOperation,
-  options: WslProjectRoutingOptions = {}
-): Promise<Repo | null> {
-  const path = parseWslUncPath(operation.path)
-  if (!path || !wslProjectRoutingEnabled(store, options.executionHostId)) {
-    return null
-  }
-  const admission =
-    operation.kind === 'add'
-      ? options.admission ??
-        await admitRepositoryCheckout(
-          store, operation.path, operation.repoKind ?? 'git', LOCAL_EXECUTION_HOST_ID
-        )
-      : await admitRepositoryCheckout(
-          store, join(operation.path, operation.name), 'folder', LOCAL_EXECUTION_HOST_ID
-        )
-  const saved = admission.findSaved()
-  if (saved) return saved
-  const owner = await resolveNewWslProjectHost(store, admission.registrationPath, options)
-  if (!owner) {
-    return null
-  }
-  const winner = admission.findSaved()
-  if (winner) return winner
-  return registerOnWslOwner(
-    owner.environmentId,
-    operation.kind === 'add'
-      ? { ...operation, path: owner.linuxPath }
-      : { ...operation, path: path.linuxPath }
-  )
-}
 
 const OwnerRepos = z.object({ repos: z.array(ProjectReply.shape.repo) })
 const OwnerSetups = z.object({
@@ -157,28 +88,6 @@ export async function registerOnWslOwner(
     }
   }
   return { ...repo, executionHostId: toRuntimeExecutionHostId(environmentId) }
-}
-
-/** Only called after canonical admission has settled the saved checkout claim. */
-export async function resolveNewWslProjectHost(
-  store: WslProjectRegistrationStore,
-  uncPath: string,
-  options: WslProjectRoutingOptions = {}
-): Promise<{ environmentId: string; linuxPath: string } | null> {
-  const path = parseWslUncPath(uncPath)
-  if (!path || !wslProjectRoutingEnabled(store, options.executionHostId)) {
-    return null
-  }
-  if (options.fromPairedClient) {
-    throw new Error('Add this WSL project from the Windows desktop, then open it on its WSL host.')
-  }
-  const service = getWslHostService()
-  if (!service) {
-    throw new Error(
-      'WSL projects need the desktop app for now. Open Orca on Windows and add this project there.'
-    )
-  }
-  return { environmentId: await service.ensure(path.distro), linuxPath: path.linuxPath }
 }
 
 export function callWslProjectHost(

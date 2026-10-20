@@ -3,11 +3,11 @@ import type { Store } from '../../persistence'
 import type { Repo } from '../../../shared/repo-types'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../../shared/constants'
 import { getRepoName } from '../../git/repo'
-import { admitRepositoryCheckout } from '../../repository-checkout-admission'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
-import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
+import { placeProject, type ProjectPlacement } from '../../wsl/project-placement'
+import { registerOnWslOwner } from '../../wsl/wsl-project-registration'
 
 export async function addLocalRepoFromPath(
   store: Store,
@@ -16,20 +16,44 @@ export async function addLocalRepoFromPath(
   displayName?: string
 ): Promise<{ repo: Repo; alreadyExisted: boolean } | { error: string }> {
   const repoKind = kind === 'folder' ? 'folder' : 'git'
-  let admission
+  let placement: ProjectPlacement
   try {
-    admission = await admitRepositoryCheckout(store, path, repoKind, LOCAL_EXECUTION_HOST_ID)
+    // Desktop selections are placed on this computer's own domain.
+    placement = await placeProject(store, {
+      operation: 'add',
+      selectedPath: path,
+      kind: repoKind,
+      domain: LOCAL_EXECUTION_HOST_ID,
+      fromPairedClient: false
+    })
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
   }
-  const existing = admission.findSaved()
-  if (existing) return { repo: existing, alreadyExisted: true }
-  const resolvedPath = admission.registrationPath
-  const hosted = await registerProjectOnWslHost(
-    store, { kind: 'add', path: resolvedPath, repoKind, displayName }, { admission }
-  )
-  if (hosted) return { repo: hosted, alreadyExisted: false }
+  return registerPlacedDesktopProject(store, placement, repoKind, displayName)
+}
 
+/** The ordinary writer: it reuses the placement's admission and never admits again. */
+export async function registerPlacedDesktopProject(
+  store: Store,
+  placement: ProjectPlacement,
+  repoKind: 'git' | 'folder',
+  displayName?: string
+): Promise<{ repo: Repo; alreadyExisted: boolean }> {
+  if (placement.kind === 'saved') {
+    const repo = placement.admission.findSaved()
+    if (!repo) {
+      throw new Error('This project changed while it was being added. Try again.')
+    }
+    return { repo, alreadyExisted: true }
+  }
+  if (placement.kind === 'wsl') {
+    const repo = await registerOnWslOwner(placement.environmentId, {
+      kind: 'add', path: placement.linuxPath, repoKind, displayName
+    })
+    return { repo, alreadyExisted: false }
+  }
+  const { admission } = placement
+  const resolvedPath = admission.registrationPath
   const detected = await detectRepoIconAndUpstream({
     repoPath: resolvedPath,
     kind: repoKind,
