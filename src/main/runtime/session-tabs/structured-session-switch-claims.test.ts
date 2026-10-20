@@ -14,6 +14,8 @@ import {
 } from '../../../shared/terminal-switch'
 import { setAgentSessionRecordTerminalSwitch } from '../agent-session-record-terminal-switch'
 import { routedTerminalSwitchOwners } from '../../providers/terminal-switch-owners'
+import { isLaterSwitchHostBoot } from './structured-session-switch-boot'
+import { seedResumeLaunchIdentity } from '../../ipc/pty/pane/resume-launch-identity'
 import type { AgentProcessVerdict } from '../../../shared/agent-process-presence'
 import type { SwitchClaim } from './structured-session-switch-claims'
 
@@ -26,6 +28,7 @@ vi.mock('electron', () => ({
 vi.mock('../../agent-hooks/managed-hook-owner-identity', () => ({
   readBootIdentity: async () => boot
 }))
+vi.mock('../../ipc/pty/pane/resume-launch-identity', () => ({ seedResumeLaunchIdentity: vi.fn() }))
 vi.mock('./structured-session-switch-observation', () => ({
   readSwitchPaneAgentProcesses: vi.fn(async () => []),
   readSwitchShellProcess: vi.fn(async (pid: number) => ({
@@ -193,7 +196,7 @@ describe('a chat → terminal switch start', () => {
         owner: 'daemon:gone',
         paneKey: PANE,
         processes: [],
-        boot: 'boot-1',
+        boot: 'boot-1@0',
         ...extra
       })
     lost({ ptyId: 'pty-1', incarnationId: 'i1', shell: SHELL, processes: [AGENT] })
@@ -213,6 +216,45 @@ describe('a chat → terminal switch start', () => {
     boot = 'boot-2'
     expect(await reason(chatStart())).toBe('admitted')
     expect(saved.has('chat-1')).toBe(false)
+  })
+
+  it('reads a later boot from the id where there is one, else from the derived boot time', () => {
+    expect(isLaterSwitchHostBoot('a@0', 'a@999999')).toBe(false)
+    expect(isLaterSwitchHostBoot('a@0', 'b@0')).toBe(true)
+    // Windows: no id, so only a boot time clearly past rounding and clock steps counts.
+    expect(isLaterSwitchHostBoot('@1000', '@61000')).toBe(false)
+    expect(isLaterSwitchHostBoot('@1000', '@3600000')).toBe(true)
+    expect(isLaterSwitchHostBoot('unreadable', '@3600000')).toBe(false)
+  })
+
+  it('restamps a reattached switch terminal from the saved switch after a restart', async () => {
+    const claim = await acceptedSwitch()
+    Object.assign(claim, { ptyId: 'pty-1', incarnationId: 'i1' })
+    const providerSession = { key: 'session_id' as const, id: C }
+    vi.spyOn(runtime, 'getAgentProviderSessionRows').mockReturnValue([
+      {
+        paneKey: PANE,
+        connectionId: null,
+        receivedAt: 1,
+        stateStartedAt: 1,
+        state: 'done',
+        prompt: '',
+        providerSession
+      }
+    ])
+    const reattach = (incarnationId: string) =>
+      runtime.registerPty('pty-1', 'wt-1', null, {
+        tabId: 'tab-1',
+        leafId: LEAF,
+        incarnationId,
+        providerReattachLaunchIdentity: { incarnationId, launchAgent: 'codex' }
+      })
+    reattach('i2')
+    reattach('i1')
+    await vi.waitFor(() => expect(seedResumeLaunchIdentity).toHaveBeenCalledOnce())
+    expect(seedResumeLaunchIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({ paneKey: PANE, execution: { ptyId: 'pty-1', incarnationId: 'i1' } })
+    )
   })
 })
 

@@ -11,7 +11,9 @@ import {
   type TerminalSwitchObservation
 } from '../../../shared/terminal-switch'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
-import { readBootIdentity } from '../../agent-hooks/managed-hook-owner-identity'
+import { isLaterSwitchHostBoot, readSwitchHostBoot } from './structured-session-switch-boot'
+import { seedResumeLaunchIdentity } from '../../ipc/pty/pane/resume-launch-identity'
+import { adoptsCliConversations } from '../../../shared/structured-agent-cli-conversation-adoption'
 import {
   readSwitchPaneAgentProcesses,
   readSwitchShellProcess,
@@ -83,6 +85,40 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     return this.switchClaimsLoaded
   }
 
+  /** A reattached switch terminal regains its exact-execution stamp on the host's identity row,
+   *  rebuilt from the saved switch: the stamp itself is never persisted. */
+  override registerPty(...args: Parameters<OrcaRuntimeWithGetWorktreePs['registerPty']>): void {
+    super.registerPty(...args)
+    const [ptyId, worktreeId, , binding] = args
+    const reattached = binding?.providerReattachLaunchIdentity
+    if (!reattached || !adoptsCliConversations(reattached.launchAgent)) {
+      return
+    }
+    const { incarnationId } = reattached
+    void this.loadSwitchClaims().then(
+      () => {
+        for (const claim of this.switchClaims.values()) {
+          const row = this.getAgentProviderSessionRows().find(
+            (candidate) =>
+              candidate.paneKey === claim.paneKey &&
+              candidate.providerSession?.id === claim.providerSessionId
+          )
+          if (claim.ptyId === ptyId && claim.incarnationId === incarnationId && row) {
+            seedResumeLaunchIdentity({
+              paneKey: claim.paneKey,
+              launchAgent: claim.agent,
+              resumeProviderSession: row.providerSession,
+              worktreeId,
+              launchedAt: 0,
+              execution: { ptyId, incarnationId }
+            })
+          }
+        }
+      },
+      () => undefined
+    )
+  }
+
   /** Throws while a switch of this conversation exists: one no terminal took yet, or with `all`, any. */
   protected assertNoPendingSwitch(agent: string, id: string, all = false): void {
     if (this.switchClaimsFor(agent, id).some((claim) => all || !claim.accepted)) {
@@ -147,7 +183,7 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
   /** Saved before dispatch, so a restart still knows the start may exist. A retired claim's
    *  late evidence never writes, and the store only updates the generation it holds. */
   async saveSwitchClaim(claim: SwitchClaim): Promise<boolean> {
-    claim.boot ??= await readBootIdentity()
+    claim.boot ??= await readSwitchHostBoot()
     const { chatSessionId, at: _at, accepted: _a, saved, unsaved: _u, ...descriptor } = claim
     if (saved && this.switchClaims.get(claim.generation) !== claim) {
       return false
@@ -184,8 +220,7 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
       return own?.observation ?? { state: 'unverifiable' }
     }
     // Every reachable owner answered and none is this one: only the execution can end it.
-    const boot = claim.boot ? await readBootIdentity() : undefined
-    if (boot && boot !== claim.boot) {
+    if (claim.boot && isLaterSwitchHostBoot(claim.boot, await readSwitchHostBoot())) {
       return { state: 'ended' }
     }
     const recorded = claim.shell ? [claim.shell, ...claim.processes] : []
