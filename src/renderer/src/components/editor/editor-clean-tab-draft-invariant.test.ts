@@ -123,3 +123,11 @@ it("a reload keeps a clean Markdown tab's trailing-whitespace draft, but not one
   stampCleanTabDiskBaseline(id, { content: '# newer notes', isBinary: false })
   expect(store.getState().editorDrafts[id]).toBeUndefined()
 })
+
+it('a reload drops a whitespace-only Markdown draft when disk moved, even by whitespace alone', () => {
+  const { store, id } = openCleanTab('# notes', 'markdown')
+  store.getState().setEditorDraft(id, '# notes\n\n')
+  // An outside write added a trailing newline; keeping the draft would undo it.
+  stampCleanTabDiskBaseline(id, { content: '# notes\n', isBinary: false })
+  expect(store.getState().editorDrafts[id]).toBeUndefined()
+})

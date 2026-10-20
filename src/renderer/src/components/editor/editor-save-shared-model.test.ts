@@ -360,6 +360,27 @@ describe('two tabs sharing one model', () => {
     expect(store.getState().editorDrafts[b.id]).toBe('typed in the joined tab')
   })
 
+  it('Undo of Reload leaves alone a reloaded tab that left the model and typed', () => {
+    const { store, a, b, edit, tab } = openSharedTabs('A')
+    edit(a.id, 'mine')
+    const toastMock = vi.mocked(toast)
+    toastMock.mockClear()
+    reloadTabContentFromDisk(store.getState().openFiles[0], vi.fn())
+    // The other workspace's tab switches to the Changes view, leaving the model, and types.
+    store.getState().setEditorViewMode(b.id, 'changes')
+    edit(b.id, 'typed in the Changes view')
+
+    const undo: unknown = toastMock.mock.calls[0]?.[1]?.action
+    expect(isClickAction(undo)).toBe(true)
+    if (isClickAction(undo)) {
+      undo.onClick()
+    }
+
+    expect(store.getState().editorDrafts[a.id]).toBe('mine')
+    expect(store.getState().editorDrafts[b.id]).toBe('typed in the Changes view')
+    expect(tab(b.id)?.externalMutation).toBeUndefined()
+  })
+
   it('never reaches a Changes-view tab through Keep or Reload', async () => {
     stubGuardedDisk({ [GUARDED_PATH]: 'B' })
     const { store, a, b, edit, tab } = openSharedTabs('A')

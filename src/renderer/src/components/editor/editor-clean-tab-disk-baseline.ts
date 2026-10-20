@@ -11,11 +11,14 @@ import {
 import { setModelExternalMutation } from './editor-save-rebaseline'
 import { notifyEditorFileCacheStale } from './editor-autosave'
 
+/** `tab` is the pre-load snapshot, so its baseline is the version the draft was typed over. */
 function clearDraftUnlessWhitespaceOnly(state: AppState, tab: OpenFile, diskContent: string): void {
   const draft = state.editorDrafts[tab.id]
   if (
     draft !== undefined &&
     draft !== diskContent &&
+    // Why: if disk moved at all (even whitespace), keeping the draft would undo an outside change.
+    tab.lastKnownDiskSignature === getDiskBaselineSignature(diskContent) &&
     tab.language === 'markdown' &&
     isEditorContentUnchanged(draft, diskContent, true)
   ) {

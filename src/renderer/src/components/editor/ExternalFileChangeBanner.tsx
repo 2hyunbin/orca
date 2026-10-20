@@ -74,13 +74,15 @@ export function reloadTabContentFromDisk(
           // signal: the editor content-sync repopulates editorDrafts with the
           // reloaded content itself, so draft existence proves nothing.
           // Why every sibling: they share the reloaded text, so typing in any of them is newer work.
-          const liveSiblings = siblings.flatMap(
-            (tab) => current.openFiles.find((openFile) => openFile.id === tab.id) ?? []
-          )
           // Why re-read: a tab that joined the model since the reload (another workspace) counts too.
-          if (!liveFile || editorModelSiblingTabs(current, liveFile).some((tab) => tab.isDirty)) {
+          const modelTabs = liveFile ? editorModelSiblingTabs(current, liveFile) : []
+          if (!liveFile || modelTabs.some((tab) => tab.isDirty)) {
             return
           }
+          // Why: a reloaded tab that has since left the model holds its own text; leave it alone.
+          const liveSiblings = modelTabs.filter((tab) =>
+            siblings.some((reloaded) => reloaded.id === tab.id)
+          )
           if (discardedDiskSignature !== undefined) {
             // Why: the reload re-stamped the baseline to the new disk content;
             // restoring the pre-reload signature with the draft keeps the
