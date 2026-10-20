@@ -25,7 +25,14 @@ export const answerWithoutWebClient: RequestListener = (_request, response) => {
 
 export function createStaticWebClientHandler(staticRoot: string): RequestListener {
   const resolvedRoot = resolve(staticRoot)
-  const files = readBundledWebClientFiles(resolvedRoot)
+  let files: ReadonlySet<string> | undefined
+  try {
+    files = readBundledWebClientFiles(resolvedRoot)
+  } catch (error) {
+    // Why: a damaged install must disable only the browser client, not the runtime server.
+    console.warn(`[ws-transport] browser client disabled: ${String(error)}`)
+    return answerWithoutWebClient
+  }
   if (basename(resolvedRoot) === 'renderer' && !files) {
     return answerWithoutWebClient
   }
