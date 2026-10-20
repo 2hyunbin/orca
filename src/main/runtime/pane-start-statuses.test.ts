@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeStore } from './runtime-store-contract'
 import { spawnInAdmittedPane } from './runtime-pane-admission'
-import { PaneStartStatuses, paneStartFactsOf, withPaneStartFacts } from './pane-start-statuses'
+import {
+  bindingOf,
+  PaneStartStatuses,
+  paneStartFactsOf,
+  withPaneStartFacts
+} from './pane-start-statuses'
 import {
   joinPublishedLayout,
   splitPublishedLayout
@@ -27,6 +32,8 @@ function storeAnswering(admit: 'admitted' | 'exists') {
   return { store, runtimeStore: store as unknown as RuntimeStore }
 }
 
+const UNBOUND = bindingOf({})
+
 function statuses() {
   const changed = vi.fn()
   return { changed, register: new PaneStartStatuses(changed) }
@@ -41,14 +48,14 @@ describe('a start into a pane main holds', () => {
       runtimeStore,
       {
         spawn: vi.fn(async () => {
-          seen = register.get(PANE_KEY)
+          seen = register.get(PANE_KEY, UNBOUND)
           return { id: 'pty-1' }
         })
       },
       { ...ARGS, startStatus: { sink: register, keepOnFailure: false } }
     )
     expect(seen).toEqual({ status: 'starting' })
-    expect(register.get(PANE_KEY)).toBeNull()
+    expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
     expect(changed).toHaveBeenCalledTimes(2)
   })
 
@@ -66,7 +73,7 @@ describe('a start into a pane main holds', () => {
         { ...ARGS, startStatus: { sink: register, keepOnFailure: false } }
       )
     ).rejects.toThrow('shell not found')
-    expect(register.get(PANE_KEY)).toEqual({ status: 'failed', reason: 'shell not found' })
+    expect(register.get(PANE_KEY, UNBOUND)).toEqual({ status: 'failed', reason: 'shell not found' })
     expect(store.withdrawTerminalPane).not.toHaveBeenCalled()
   })
 
@@ -85,7 +92,7 @@ describe('a start into a pane main holds', () => {
       })
     ).rejects.toThrow('no pty')
     expect(kept.store.withdrawTerminalPane).not.toHaveBeenCalled()
-    expect(register.get(PANE_KEY)?.status).toBe('failed')
+    expect(register.get(PANE_KEY, UNBOUND)?.status).toBe('failed')
 
     const taken = storeAnswering('admitted')
     const untouched = statuses()
@@ -96,7 +103,7 @@ describe('a start into a pane main holds', () => {
       })
     ).rejects.toThrow('no pty')
     expect(taken.store.withdrawTerminalPane).toHaveBeenCalledTimes(1)
-    expect(untouched.register.get(PANE_KEY)).toBeNull()
+    expect(untouched.register.get(PANE_KEY, UNBOUND)).toBeNull()
   })
 })
 
@@ -153,5 +160,15 @@ describe('a pane’s start status in the published layout', () => {
       { leafId: ARGS.leafId, ptyId: 'p', status: 'starting' }
     ])
     expect(paneStartFactsOf(bound, { paneStartFact: () => null })).toEqual([null])
+  })
+
+  it('ends a status once its pane binds again by any path', () => {
+    const { register } = statuses()
+    register.set(PANE_KEY, { status: 'failed', reason: 'no pty' })
+    const dead = bindingOf({ ptyId: 'old', ptyGeneration: 1 })
+    expect(register.get(PANE_KEY, dead)).toEqual({ status: 'failed', reason: 'no pty' })
+    expect(register.get(PANE_KEY, dead)?.status).toBe('failed')
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'new', ptyGeneration: 2 }))).toBeNull()
+    expect(register.get(PANE_KEY, dead)).toBeNull()
   })
 })

@@ -8,6 +8,7 @@ import { applyCommandToSession } from '../persistence/terminal-topology/terminal
 import { resolveHostId } from '../persistence/loading-store/session-host-partitions'
 import { withDurableRuntimeStore, withRuntimePaneAdmission } from './runtime-durable-store-fixture'
 import { OrcaRuntimeService } from './orca-runtime'
+import { bindingOf } from './pane-start-statuses'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
 
 export const REPO = {
@@ -24,7 +25,7 @@ export class ProvisioningRuntime extends OrcaRuntimeService {
     return this.getWorktreeTerminalProvisioningHost()
   }
   startStatusOf(paneKey: string) {
-    return this.paneStartStatuses?.get(paneKey) ?? null
+    return this.paneStartStatuses?.get(paneKey, bindingOf({})) ?? null
   }
 }
 
