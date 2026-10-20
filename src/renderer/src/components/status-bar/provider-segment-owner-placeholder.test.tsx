@@ -39,6 +39,18 @@ function placeholder(ownerLabel: string): ProviderRateLimits {
   }
 }
 
+function claudeUnknownPlaceholder(ownerLabel: string): ProviderRateLimits {
+  return {
+    provider: 'claude',
+    session: null,
+    weekly: null,
+    updatedAt: 0,
+    error: `Claude usage isn't available from ${ownerLabel}. It may not be signed in there, or it may use API-key billing.`,
+    status: 'error',
+    usageMetadata: { ownerNotSetUp: { kind: 'claude-unknown', ownerLabel } }
+  }
+}
+
 describe('ProviderSegment owner placeholder', () => {
   it('names the host in the chip, truncating only the name, with no warning glyph', () => {
     const markup = renderToStaticMarkup(
@@ -75,5 +87,19 @@ describe('ProviderSegment owner placeholder', () => {
     // Why: an icon alone would read as a healthy chip.
     expect(markup).toContain('--')
     expect(markup).toContain('title="Not configured on devbox')
+  })
+
+  it('says Claude shows no usage from the host, never that it is not configured there', () => {
+    const markup = renderToStaticMarkup(
+      <ProviderSegment p={claudeUnknownPlaceholder('devbox')} compact={false} display="used" />
+    )
+    expect(markup).toContain(
+      'No usage from <span data-owner-host="true" class="inline-block max-w-28 truncate align-bottom">devbox</span>'
+    )
+    expect(markup).toContain(
+      'title="Claude usage isn&#x27;t available from devbox. It may not be signed in there, or it may use API-key billing."'
+    )
+    expect(markup).not.toContain('Not configured')
+    expect(markup).not.toContain('lucide-triangle-alert')
   })
 })
