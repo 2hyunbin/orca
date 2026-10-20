@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { Check } from 'lucide-react'
 import { CommandItem, CommandSeparator } from '@/components/ui/command'
 import { AgentIcon, type AgentCatalogEntry } from '@/lib/agent-catalog'
 import { searchAgentPickerEntries } from '@/lib/agent-picker-search'
@@ -15,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import { AgentDefaultContextMenu, AgentIconLabel } from './agent-combobox-items'
+import { renderAgentComboboxItem } from './agent-combobox-items'
 import { AgentTerminalLaunchButton } from './AgentTerminalLaunchButton'
 
 /** The "+" menu's rows in the picker: a chat row picks the chat, its terminal button the CLI. */
@@ -153,7 +152,6 @@ export function SurfaceAgentItems({
           'auto.components.tab.bar.QuickLaunchButton.agentsLoading',
           'Loading agents'
         )}
-        className="items-center gap-2 px-3 py-1.5"
       >
         <span aria-hidden="true" className="flex h-[1lh] flex-1 items-center">
           <span className={cn('h-2 rounded-full bg-muted', width)} />
@@ -173,53 +171,42 @@ export function SurfaceAgentItems({
     return (
       <React.Fragment key={id}>
         {startsCliGroup ? <CommandSeparator /> : null}
-        <AgentDefaultContextMenu
-          isDefault={defaultAgent === row.agent}
-          onSetDefault={onSetDefault && !unavailable ? () => onSetDefault(row.agent) : undefined}
-        >
-          <CommandItem
-            value={unavailable ? `unavailable:${row.agent}` : id}
-            disabled={unavailable}
-            onSelect={() => onPick(row.agent, row.kind === 'chat' ? 'chat' : 'terminal')}
-            title={
-              unavailable
-                ? undefined
-                : row.kind === 'chat'
-                  ? rowTitle(row, agentLabel)
-                  : terminalPickTitle(agentLabel)
-            }
-            className="items-center gap-2 px-3 py-1.5"
-          >
-            <Check
+        {renderAgentComboboxItem({
+          key: id,
+          itemValue: unavailable ? `unavailable:${row.agent}` : id,
+          isChecked: id === pickedValue,
+          isDefault: defaultAgent === row.agent,
+          onSelect: () => onPick(row.agent, row.kind === 'chat' ? 'chat' : 'terminal'),
+          onSetDefault: onSetDefault && !unavailable ? () => onSetDefault(row.agent) : undefined,
+          icon: <AgentIcon agent={row.agent} />,
+          label,
+          disabled: unavailable,
+          title: unavailable
+            ? undefined
+            : row.kind === 'chat'
+              ? rowTitle(row, agentLabel)
+              : terminalPickTitle(agentLabel),
+          trailing: unavailable ? (
+            <span className="shrink-0 text-muted-foreground">
+              {chatUnavailableLabel(row.reason)}
+            </span>
+          ) : row.kind === 'chat' ? (
+            <AgentTerminalLaunchButton
+              title={terminalPickTitle(agentLabel)}
+              aria-pressed={pressed}
               className={cn(
-                'size-4 shrink-0 text-foreground',
-                id === pickedValue ? 'opacity-100' : 'opacity-0'
+                'hover:bg-background [[data-selected=true]_&]:opacity-100',
+                (pressed || armedValue === id) && 'bg-background opacity-100'
               )}
+              // Keeps focus in the search box; the click picks the CLI, not the row.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                onPick(row.agent, 'terminal')
+              }}
             />
-            <AgentIconLabel icon={<AgentIcon agent={row.agent} />} label={label} />
-            {unavailable ? (
-              <span className="shrink-0 text-muted-foreground">
-                {chatUnavailableLabel(row.reason)}
-              </span>
-            ) : null}
-            {row.kind === 'chat' ? (
-              <AgentTerminalLaunchButton
-                title={terminalPickTitle(agentLabel)}
-                aria-pressed={pressed}
-                className={cn(
-                  'hover:bg-background [[data-selected=true]_&]:opacity-100',
-                  (pressed || armedValue === id) && 'bg-background opacity-100'
-                )}
-                // Keeps focus in the search box; the click picks the CLI, not the row.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onPick(row.agent, 'terminal')
-                }}
-              />
-            ) : null}
-          </CommandItem>
-        </AgentDefaultContextMenu>
+          ) : null
+        })}
       </React.Fragment>
     )
   })
