@@ -11,7 +11,7 @@ import {
   type TerminalSwitchObservation
 } from '../../../shared/terminal-switch'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
-import { readBootIdentity } from '../../agent-hooks/managed-hook-owner-identity'
+import { isLaterSwitchHostBoot, readSwitchHostBoot } from './structured-session-switch-boot'
 import { seedResumeLaunchIdentity } from '../../ipc/pty/pane/resume-launch-identity'
 import { adoptsCliConversations } from '../../../shared/structured-agent-cli-conversation-adoption'
 import {
@@ -199,7 +199,7 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
   /** Saved before dispatch, so a restart still knows the start may exist. A retired claim's
    *  late evidence never writes, and the store only updates the generation it holds. */
   async saveSwitchClaim(claim: SwitchClaim): Promise<boolean> {
-    claim.boot ??= await readBootIdentity()
+    claim.boot ??= await readSwitchHostBoot()
     const { chatSessionId, at: _at, accepted: _a, saved, unsaved: _u, ...descriptor } = claim
     if (saved && this.switchClaims.get(claim.generation) !== claim) {
       return false
@@ -238,9 +238,8 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
       return own?.observation ?? { state: 'unverifiable' }
     }
     // Every reachable owner answered and none is this one: only the execution can end it.
-    // Only an OS boot id proves a later boot; a wall clock can step without one (Windows has none).
-    const boot = claim.boot ? await readBootIdentity() : undefined
-    if (boot && boot !== claim.boot) {
+    // Only clock-free facts prove a later boot; a wall clock can step without one.
+    if (claim.boot && isLaterSwitchHostBoot(claim.boot, await readSwitchHostBoot())) {
       return { state: 'ended' }
     }
     const recorded = claim.shell ? [claim.shell, ...claim.processes] : []

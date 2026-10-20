@@ -15,6 +15,7 @@ import {
 import { setAgentSessionRecordTerminalSwitch } from '../agent-session-record-terminal-switch'
 import { routedTerminalSwitchOwners } from '../../providers/terminal-switch-owners'
 import { seedResumeLaunchIdentity } from '../../ipc/pty/pane/resume-launch-identity'
+import { isLaterSwitchHostBoot, readSwitchHostBoot } from './structured-session-switch-boot'
 import type { AgentProcessVerdict } from '../../../shared/agent-process-presence'
 import type { SwitchClaim } from './structured-session-switch-claims'
 
@@ -28,6 +29,13 @@ vi.mock('../../agent-hooks/managed-hook-owner-identity', () => ({
   readBootIdentity: async () => boot
 }))
 vi.mock('../../ipc/pty/pane/resume-launch-identity', () => ({ seedResumeLaunchIdentity: vi.fn() }))
+vi.mock('@orca/process-host', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  runProcess: vi.fn(async () => ({
+    code: 0,
+    stdout: `    BootId    REG_DWORD    ${boot ?? ''}\r\n`
+  }))
+}))
 vi.mock('./structured-session-switch-observation', () => ({
   readSwitchPaneAgentProcesses: vi.fn(async () => []),
   readSwitchShellProcess: vi.fn(async (pid: number) => ({
@@ -47,7 +55,7 @@ let runtime: OrcaRuntimeService
 let host: TerminalHostSwitches
 let shellAlone: boolean
 let ownerReachable: boolean
-let boot: string | undefined = 'boot-1'
+let boot: string | undefined = '0x1'
 /** The chat records' saved switch descriptors, keyed by chat session id. */
 let saved: Map<string, TerminalSwitchDescriptor>
 
@@ -65,7 +73,7 @@ const live = () => session({ isAlive: true, sessionId: 'pty-1', incarnationId: '
 beforeEach(() => {
   shellAlone = true
   ownerReachable = true
-  boot = 'boot-1'
+  boot = '0x1'
   saved = new Map()
   host = new TerminalHostSwitches()
   runtime = new OrcaRuntimeService()
@@ -189,6 +197,7 @@ describe('a chat → terminal switch start', () => {
   })
 
   it('survives a restart: an unreachable owner holds; a lost one yields only to proof', async () => {
+    const sameBoot = await readSwitchHostBoot()
     const lost = (extra: Partial<TerminalSwitchDescriptor>) =>
       saved.set('chat-1', {
         generation: 'g-old',
@@ -197,7 +206,7 @@ describe('a chat → terminal switch start', () => {
         owner: 'daemon:gone',
         paneKey: PANE,
         processes: [],
-        boot: 'boot-1',
+        boot: sameBoot,
         ...extra
       })
     lost({ ptyId: 'pty-1', incarnationId: 'i1', shell: SHELL, processes: [AGENT] })
@@ -216,9 +225,26 @@ describe('a chat → terminal switch start', () => {
     runtime['switchClaimsLoaded'] = null
     boot = undefined
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
-    boot = 'boot-2'
+    boot = '0x2'
     expect(await reason(chatStart())).toBe('admitted')
     expect(saved.has('chat-1')).toBe(false)
+  })
+
+  it('proves a later boot only from a boot id or an uptime drop, never the wall clock', async () => {
+    const onPlatform = (platform: string) =>
+      Object.defineProperty(process, 'platform', { value: platform })
+    const real = process.platform
+    expect(isLaterSwitchHostBoot('a@100', 'a@1')).toBe(false)
+    expect(isLaterSwitchHostBoot('a@1', 'b@100')).toBe(true)
+    onPlatform('win32')
+    boot = '0x1A'
+    expect(await readSwitchHostBoot()).toMatch(/^win:0x1a@/)
+    expect(isLaterSwitchHostBoot('@100', '@5')).toBe(true)
+    expect(isLaterSwitchHostBoot('@100', '@500')).toBe(false)
+    // macOS derives uptime from the wall clock, so only its boot id counts there.
+    onPlatform('darwin')
+    expect(isLaterSwitchHostBoot('@100', '@5')).toBe(false)
+    onPlatform(real)
   })
 
   it('rebuilds a reattached switch terminal’s stamp from its owner, never onto a replacement', async () => {
