@@ -26,7 +26,7 @@ const PANE = { worktreeId: TEST_WORKTREE_ID, tabId: 'host-tab', leafId: HEADLESS
 
 /** A windowless host whose first start of the pane is held for a newer build. */
 async function heldPaneRuntime() {
-  const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+  const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
   const runtime = new OrcaRuntimeService(
@@ -35,7 +35,7 @@ async function heldPaneRuntime() {
     })
   )
   // A paired desktop's layout stream: what main publishes is what it reads.
-  runtime.subscribeWorkspaceLayouts(() => {})
+  const desktopStream = runtime.subscribeWorkspaceLayouts(() => {})
   const spawn = vi.fn(async (_args: { sessionId?: string }) => ({ id: 'pty-reopened' }))
   spawn.mockRejectedValueOnce(new Error(NEWER_DAEMON_HOLD_ERROR))
   runtime.setPtyController({
@@ -48,7 +48,7 @@ async function heldPaneRuntime() {
   })
   runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
   await expect(runtime.ensureRestoredPaneStarted(PANE)).rejects.toThrow(NEWER_DAEMON_HOLD_ERROR)
-  return { runtime, spawn }
+  return { runtime, spawn, getSession, setSession, desktopStream }
 }
 
 /** The pane's start status as main publishes it to a paired desktop. */
@@ -87,6 +87,30 @@ describe("a paired desktop's Reopen of a held pane (layout-owner build)", () => 
 
     expect(spawn).toHaveBeenCalledOnce()
     expect(publishedStatus(runtime)).toBe('held')
+  })
+
+  it('stops nothing for a pane since bound to a new terminal, though its held entry stays', async () => {
+    const { runtime, spawn, getSession, setSession, desktopStream } = await heldPaneRuntime()
+    expect(publishedStatus(runtime)).toBe('held')
+    const session = getSession()
+    const layout = session.terminalLayoutsByTabId[PANE.tabId]!
+    setSession({
+      ...session,
+      terminalLayoutsByTabId: {
+        ...session.terminalLayoutsByTabId,
+        [PANE.tabId]: {
+          ...layout,
+          ptyIdsByLeafId: { ...layout.ptyIdsByLeafId, [PANE.leafId]: 'pty-rebound' }
+        }
+      }
+    })
+    // The stream re-projects from the rebound session, as a write notification would make it.
+    desktopStream.unsubscribe()
+
+    await expect(runtime.reopenHeldTerminalPanes([PANE])).resolves.toEqual({ reopened: true })
+
+    expect(daemonHold.reopen).not.toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledOnce()
   })
 
   it('stops nothing for a pane main does not hold', async () => {
