@@ -3,7 +3,6 @@ import { connect } from 'node:net'
 import { buildForwardProcessSshArgs, type SystemSshBuildArgsOptions } from './system-ssh-args'
 import { findSystemSsh } from './system-ssh-binary'
 import { reserveLocalForwardPort } from './system-ssh-forward-port-reservation'
-import { cancelMuxedLocalForward } from './system-ssh-muxed-forward-cancel'
 import type { SshTarget } from '../../../shared/ssh-types'
 
 export const SYSTEM_SSH_FORWARD_STARTUP_GRACE_MS = 750
@@ -74,8 +73,8 @@ export function buildSystemSshPortForwardArgs(
 }
 
 /**
- * An `ssh -N` forward, already listening on the port it reports. A fixed port carries both ways to
- * reclaim it from an earlier Orca; port 0 carries neither, since the one it lands on was just free.
+ * An `ssh -N` forward, already listening on the port it reports. Never asks a ControlMaster to
+ * cancel a forward: any fixed port reaches here, so that is the managed tunnel's call alone.
  */
 export function startSystemSshPortForwardProcess(
   target: SshTarget,
@@ -88,12 +87,7 @@ export function startSystemSshPortForwardProcess(
     localPort === 0
       ? undefined
       : buildSystemSshPortForwardArgs(target, localPort, remoteHost, remotePort, options)
-  const cancelMuxedForward =
-    localPort === 0
-      ? undefined
-      : (): Promise<boolean> =>
-          cancelMuxedLocalForward(target, localPort, remoteHost, remotePort, options)
-  return reserveLocalForwardPort(localPort, orphanArgs, cancelMuxedForward).then((boundPort) => {
+  return reserveLocalForwardPort(localPort, orphanArgs).then((boundPort) => {
     const process = spawnSystemSshPortForward(target, boundPort, remoteHost, remotePort, options)
     stopOnOwnListenFailure(process, boundPort)
     return {

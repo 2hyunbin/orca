@@ -24,7 +24,7 @@ vi.mock('../../ssh/system-transport/system-ssh-muxed-forward-cancel', () => ({
   cancelMuxedLocalForward
 }))
 
-import { reserveBridgeLocalPort } from './orcad-managed-tunnel-transport'
+import { reserveManagedTunnelLocalPort } from './orcad-managed-tunnel-transport'
 
 const options: PortForwardStartOptions = {
   id: 'pf-1',
@@ -50,9 +50,9 @@ beforeEach(() => {
   cancelMuxedLocalForward.mockClear()
 })
 
-describe('the stdio bridge’s port reservation', () => {
+describe('the managed tunnel’s port reservation', () => {
   it('lets a system-SSH host clear an `ssh -L` an earlier Orca left on the port', async () => {
-    await reserveBridgeLocalPort(connection(true), options)
+    await reserveManagedTunnelLocalPort(connection(true), options)
     const orphanArgs = reserveLocalForwardPort.mock.calls[0]?.[1]
     expect(orphanArgs).toEqual(expect.arrayContaining(['-L', '127.0.0.1:47123:127.0.0.1:6768']))
     expect(orphanArgs).toContain('LogLevel=INFO')
@@ -60,7 +60,7 @@ describe('the stdio bridge’s port reservation', () => {
 
   // Why: a forward made through a ControlMaster is left on the master, with no process to stop.
   it('lets a system-SSH host have that same forward cancelled on its ControlMaster', async () => {
-    await reserveBridgeLocalPort(connection(true), options)
+    await reserveManagedTunnelLocalPort(connection(true), options)
 
     await reserveLocalForwardPort.mock.calls[0]?.[2]?.()
     expect(cancelMuxedLocalForward).toHaveBeenCalledWith(
@@ -73,7 +73,7 @@ describe('the stdio bridge’s port reservation', () => {
   })
 
   it('never offers a kill on an ssh2 host, which never spawned one', async () => {
-    await reserveBridgeLocalPort(connection(false), options)
+    await reserveManagedTunnelLocalPort(connection(false), options)
     expect(reserveLocalForwardPort).toHaveBeenCalledWith(47123)
   })
 })

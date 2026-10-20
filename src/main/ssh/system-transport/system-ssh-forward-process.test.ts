@@ -301,59 +301,9 @@ describe('system SSH forward process', () => {
       startSystemSshPortForwardProcess(createTarget(), 5173, '127.0.0.1', 3000)
     ).rejects.toThrow('Local port 127.0.0.1:5173 is not available')
     expect(stopOrphanMock).toHaveBeenCalledWith(5173, expect.any(Array))
-    expect(cancelMuxedMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'target-1' }),
-      5173,
-      '127.0.0.1',
-      3000,
-      undefined
-    )
+    // Why: any fixed-port forward reaches here, and the master's forward may be the user's own.
+    expect(cancelMuxedMock).not.toHaveBeenCalled()
     expect(spawnMock).not.toHaveBeenCalled()
-  })
-
-  // Why: a forward made through a ControlMaster is left on the master, so the port is held with no
-  // process of Orca's on the table for the orphan sweep to match.
-  it('cancels a muxed forward left on a ControlMaster, then binds the port', async () => {
-    const busy = createFakeServer()
-    busy.listen.mockImplementation(() => {
-      queueMicrotask(() =>
-        busy.emit('error', Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' }))
-      )
-      return busy
-    })
-    createServerMock.mockReturnValueOnce(busy)
-    cancelMuxedMock.mockResolvedValue(true)
-    spawnMock.mockReturnValue(createFakeProcess())
-
-    const forward = await startSystemSshPortForwardProcess(createTarget(), 5173, '127.0.0.1', 3000)
-
-    expect(forward.localPort).toBe(5173)
-    expect(spawnMock).toHaveBeenCalledOnce()
-  })
-
-  it("leaves masters alone when a process of Orca's was holding the port", async () => {
-    const busy = createFakeServer()
-    busy.listen.mockImplementation(() => {
-      queueMicrotask(() =>
-        busy.emit('error', Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' }))
-      )
-      return busy
-    })
-    createServerMock.mockReturnValueOnce(busy)
-    stopOrphanMock.mockResolvedValue(true)
-    spawnMock.mockReturnValue(createFakeProcess())
-
-    await startSystemSshPortForwardProcess(createTarget(), 5173, '127.0.0.1', 3000)
-
-    expect(cancelMuxedMock).not.toHaveBeenCalled()
-  })
-
-  it('asks no master about a port OpenSSH picks itself', async () => {
-    spawnMock.mockReturnValue(createFakeProcess())
-
-    await startSystemSshPortForwardProcess(createTarget(), 0, '127.0.0.1', 3000)
-
-    expect(cancelMuxedMock).not.toHaveBeenCalled()
   })
 
   it('spawns ssh after the requested local forward port preflight succeeds', async () => {
