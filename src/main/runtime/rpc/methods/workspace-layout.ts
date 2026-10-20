@@ -7,6 +7,7 @@ import {
   LayoutSubscribeParams,
   LayoutUnsubscribeParams
 } from '../../../../shared/rpc-contract/workspace-layout-params'
+import { LayoutReopenHeldPanesParams } from '../../../../shared/rpc-contract/workspace-layout-held-panes-params'
 import type { WorkspaceLayoutStreamFrame } from '../../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { defineMethod, defineStreamingMethod } from '../core'
 import { getAppEnvironment } from '../../../../shared/app-environment'
@@ -101,5 +102,12 @@ export const LAYOUT_APPLY_METHODS = [
     permission: 'workspace',
     params: LayoutApplyParams,
     handler: async (params, { runtime }) => runtime.applyLayoutCommand(params.command)
+  }),
+  // A paired desktop's Reopen of held panes; main's frames, not the reply, show them start.
+  defineMethod({
+    name: 'layout.reopenHeldPanes',
+    permission: 'workspace',
+    params: LayoutReopenHeldPanesParams,
+    handler: async (params, { runtime }) => runtime.reopenHeldTerminalPanes(params.panes)
   })
 ]

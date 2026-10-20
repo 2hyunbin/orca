@@ -40,7 +40,12 @@ export function TerminalPaneCodexRestartPortals({
           paneTransportsRef.current.get(pane.id)?.getPtyId() ??
           savedLayout.ptyIdsByLeafId?.[pane.leafId]
         if (!ptyId) {
-          return null
+          // A server's held pane has no terminal handle to bind until it reopens.
+          return createPortal(
+            <NewerDaemonHoldBanner tabId={tabId} leafId={pane.leafId} />,
+            pane.container,
+            `codex-restart-${pane.id}`
+          )
         }
         return createPortal(
           <>
