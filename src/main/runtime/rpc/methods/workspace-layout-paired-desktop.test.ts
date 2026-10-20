@@ -60,7 +60,7 @@ describe('the layout intents capability', () => {
     )
   })
 
-  it('names only methods a layout-owner build registers', async () => {
+  it('comes with the layout methods registered', async () => {
     const { ALL_RPC_METHODS } = await switchedBuild(true)
     const registered = new Set(ALL_RPC_METHODS.map((method) => method.name))
     for (const method of LAYOUT_METHODS) {
@@ -70,16 +70,19 @@ describe('the layout intents capability', () => {
 })
 
 describe('layout methods on a layout-owner server', () => {
-  it.each(LAYOUT_METHODS)('admits a paired desktop and refuses a phone: %s', async (method) => {
+  // Past the scope check a desktop meets the next one: a stream asked for as a request, or bad params.
+  it.each([
+    ['layout.subscribe', 'method_not_supported'],
+    ['layout.unsubscribe', 'invalid_argument'],
+    ['layout.apply', 'invalid_argument']
+  ] as const)('admits a paired desktop and refuses a phone: %s', async (method, nextCheck) => {
     const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
     const dispatcher = new RpcDispatcher({ runtime: new OrcaRuntimeService() })
-    // Malformed params: admission runs before validation, so a refusal is the scope's.
     const asDesktop = await dispatcher.dispatch(request(method, { bad: 1 }), {
       callerScope: PAIRED_DESKTOP
     })
     const asPhone = await dispatcher.dispatch(request(method, { bad: 1 }), { callerScope: PHONE })
-    expect(errorCode(asDesktop)).not.toBe('forbidden')
-    expect(errorCode(asDesktop)).not.toBe('method_not_found')
+    expect(errorCode(asDesktop)).toBe(nextCheck)
     expect(errorCode(asPhone)).toBe('forbidden')
   })
 
@@ -108,15 +111,13 @@ describe('layout methods on a layout-owner server', () => {
 describe('an older desktop on a layout-owner server', () => {
   const WT = 'wt-1'
   const SELECTOR = `id:${WT}`
-  // What a desktop from before the capability sends with every request.
+  // An older desktop: the capability is the server's, so it differs only in never sending intents.
   const OLDER_DESKTOP = {
     callerScope: PAIRED_DESKTOP,
     clientKind: 'runtime' as const,
     connectionId: 'older-desktop',
     pairedDeviceId: 'older-desktop',
-    clientCapabilities: remoteRuntimeClientCapabilities().filter(
-      (capability) => capability !== LAYOUT_INTENTS_RUNTIME_CAPABILITY
-    )
+    clientCapabilities: remoteRuntimeClientCapabilities()
   }
 
   function terminalTab(parentTabId: string, isActive: boolean) {

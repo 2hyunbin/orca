@@ -1,6 +1,6 @@
-// The read-only layout stream (design 2.4) and the server snapshot read (design 6.3). A paired
-// desktop reaches them under a layout-owner build's `layout.intents.v1` (layout-intents-capability.ts);
-// they are not on the mobile allowlist.
+// The read-only layout stream (design 2.4) and the server snapshot read (design 6.3). Paired
+// desktops may call them; a desktop relies on them only on a server advertising
+// `layout.intents.v1` (layout-intents-capability.ts). Not on the mobile allowlist.
 
 import {
   LayoutApplyParams,
