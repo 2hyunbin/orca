@@ -1,6 +1,4 @@
-import { isDeepStrictEqual } from 'node:util'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../shared/execution-host'
-import { isTerminalLeafId } from '../../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { rollbackFailedPtyBinding } from './pty-binding-write-rollback'
 import { cloneWorkspaceSessionState } from '../restoring-sessions/session-owner-fields'
@@ -19,7 +17,6 @@ import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
 import { durabilityOnlyBindingResult, isDurabilityOnlyMatch } from './pty-binding-durability-only'
 import { ptyBindingIsRefused } from './pty-binding-refusals'
 import { applyPtyBinding } from './pty-binding-session-update'
-import { markPtyBindingSessionDirty } from './pty-binding-session-dirty'
 import {
   reportPtyBindingOwnerConflict,
   reportPtyBindingPlacement,
@@ -61,6 +58,15 @@ type PtyBindingPersistenceOperationsRuntime = Pick<
   | 'writeTimer'
   | 'ptyBindingGenerations'
 >
+
+function markPtyBindingSessionDirty(
+  runtime: Pick<StoreRuntimeState, 'dirtyProfileStateDomains'>,
+  hostId: ReturnType<typeof resolveHostId>
+): void {
+  runtime.dirtyProfileStateDomains?.add(
+    hostId === LOCAL_EXECUTION_HOST_ID ? 'workspaceSession' : 'workspaceSessionsByHostId'
+  )
+}
 
 export type PersistPtyBindingArgs = {
   worktreeId: string
@@ -297,22 +303,6 @@ function writePtyBinding(
     const boundSession = cloneWorkspaceSessionState(session)
     return () => {
       const current = sessions.getWorkspaceSession(resolvedHostId)
-      const ownerState = (value: WorkspaceSessionState) => {
-        const tab = value.tabsByWorktree[bindingWorktreeId]?.find((tab) => tab.id === args.tabId)
-        return {
-          createdAt: tab?.createdAt,
-          generation: tab?.generation,
-          worktreeId: tab?.worktreeId,
-          ptyId: isTerminalLeafId(args.leafId)
-            ? value.terminalLayoutsByTabId[args.tabId]?.ptyIdsByLeafId?.[args.leafId]
-            : tab?.ptyId,
-          incarnation: value.terminalPtyIncarnationsByPaneKey?.[paneKey]
-        }
-      }
-      // Presentation edits do not replace the binding that must be rolled back.
-      if (!isDeepStrictEqual(ownerState(current), ownerState(boundSession))) {
-        return
-      }
       const rolledBack = rollbackFailedPtyBinding(
         sessionBeforeBinding,
         boundSession,
