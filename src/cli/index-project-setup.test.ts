@@ -93,7 +93,10 @@ describe('orca cli worktree awareness', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const repoPath = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
     await main(['repo', 'add', '--path', repoPath, '--json'], '/tmp')
-    expect(callMock).toHaveBeenCalledWith('repo.add', { path: path.resolve('/tmp', repoPath) }, { timeoutMs: 600_000 })
+    // Why: the budget follows the resolved path, which is only a UNC path on Windows.
+    const resolved = path.resolve('/tmp', repoPath)
+    const budget = process.platform === 'win32' ? [{ timeoutMs: 600_000 }] : []
+    expect(callMock).toHaveBeenCalledWith('repo.add', { path: resolved }, ...budget)
   })
 
   it('lists projects through the project-first runtime API', async () => {

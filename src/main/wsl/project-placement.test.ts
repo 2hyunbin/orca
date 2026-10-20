@@ -1,0 +1,235 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as NodePath from 'node:path'
+import type { NestedRepoScanResult, ProjectGroup } from '../../shared/project-group-types'
+import type { BrowserWindow } from 'electron'
+import type { Repo } from '../../shared/repo-types'
+import type { Store } from '../persistence'
+import type { RuntimeStore } from '../runtime/runtime-store-contract'
+
+type PlacementTestState = {
+  ownerRepos: Repo[]
+  target: (path: string) => string
+  handlers: Map<string, (event: unknown, args: unknown) => Promise<unknown>>
+  scan?: NestedRepoScanResult
+}
+const mocks = vi.hoisted(() => {
+  const state: PlacementTestState = { ownerRepos: [], target: (path) => path, handlers: new Map() }
+  return Object.assign(state, {
+    ensure: vi.fn(async (_distro: string) => 'wsl:ubuntu'),
+    call: vi.fn()
+  })
+})
+// Why win32: the handlers resolve these UNC parents as Windows does; POSIX would call them relative.
+vi.mock('node:path', async (importOriginal) => {
+  const actual = await importOriginal<typeof NodePath>()
+  return { ...actual.win32, default: actual.win32, posix: actual.posix, win32: actual.win32 }
+})
+vi.mock('electron', () => ({
+  ipcMain: { handle: (channel: string, handler: never) => mocks.handlers.set(channel, handler) }
+}))
+vi.mock('./wsl-host-service-instance', () => ({
+  getWslHostService: () => ({ isEnabled: () => true, ensure: mocks.ensure, callProject: mocks.call })
+}))
+vi.mock('../git/runner', () => ({
+  awaitWindowsHostGitEnvironmentReady: vi.fn(async () => {}),
+  gitExecFileAsync: vi.fn()
+}))
+vi.mock('../git/repo', () => ({
+  inspectGitRepoForRegistrationAsync: vi.fn(async (path: string) => ({ isRepo: true, rootPath: mocks.target(path) })),
+  getGitRepoRootAsync: vi.fn(async (path: string) => path),
+  getRepoName: (path: string) => path.split(/[\\/]/).pop() ?? path,
+  isGitRepoAsync: vi.fn(async () => true)
+}))
+vi.mock('../project-groups/nested-repo-import-target', () => ({
+  createNestedRepoImportTargetResolver: () => ({ resolveLocal: async (path: string) => mocks.target(path) })
+}))
+vi.mock('../ipc/repos/nested-repo-scan-ipc', () => ({
+  getCompletedNestedRepoScan: () => mocks.scan,
+  scanNestedReposForIpc: vi.fn()
+}))
+vi.mock('../ipc/repos/repos-changed-notification', () => ({ notifyReposChanged: vi.fn() }))
+vi.mock('../ipc/repos/repo-added-telemetry', () => ({ emitRepoAdded: vi.fn() }))
+vi.mock('../ipc/registered-worktree-roots-cache', () => ({ invalidateAuthorizedRootsCache: vi.fn() }))
+vi.mock('../repo-icon-autodetect', () => ({ detectRepoIconAndUpstream: vi.fn(async () => ({})) }))
+vi.mock('../worktree-root-preparation', () => ({ prepareLocalWorktreeRootForRepo: vi.fn(async () => {}) }))
+
+import { registerRepoCreationHandlers } from '../ipc/repos/repo-creation-handlers'
+import { registerNestedRepoImportHandler } from '../ipc/repos/nested-repo-import-handler'
+import { addLocalRepoFromPath } from '../ipc/repos/local-repo-registration'
+import { RuntimeRepositoryRegistrationController } from '../runtime/runtime-repository-registration-controller'
+
+const OWNER = 'runtime:wsl%3Aubuntu'
+const OLD_PEER_METHODS = new Set([
+  'repo.list', 'repo.add', 'repo.create', 'projectHostSetup.list', 'project.list',
+  'projectHostSetup.setupExistingFolder', 'projectGroup.create', 'projectGroup.moveProject'
+])
+const row = (id: string, path: string, extra: Partial<Repo> = {}): Repo =>
+  ({ id, path, displayName: id, badgeColor: 'blue', addedAt: 1, kind: 'git', ...extra })
+
+function makeStore(repos: Repo[], gatesOn = true) {
+  let groups = 0
+  const store = {
+    repos,
+    getRepos: () => repos,
+    getSettings: () => ({ experimentalWslHosts: gatesOn }),
+    addRepo: vi.fn((repo: Repo) => repos.push(repo)),
+    createProjectGroup: vi.fn((input: Partial<ProjectGroup>) => ({ ...input, id: `local-group-${++groups}` })),
+    moveProjectToGroup: vi.fn(),
+    deleteProjectGroup: vi.fn()
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these callers only use the methods above.
+  return store as typeof store & Store & RuntimeStore
+}
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: handlers pass it only to the mocked notifier.
+const mainWindow = {} as BrowserWindow
+
+function scanOf(parent: string, paths: string[]): NestedRepoScanResult {
+  return { selectedPath: parent, selectedPathKind: 'non_git_folder',
+    repos: paths.map((path) => ({ path, displayName: 'repo', depth: 1 })),
+    truncated: false, timedOut: false, stopped: false, durationMs: 1, maxDepth: 5, maxRepos: 100, timeoutMs: 15000 }
+}
+
+const originalPlatform = process.platform
+
+describe('one placement per project operation', () => {
+  beforeEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '1')
+    mocks.ensure.mockReset().mockResolvedValue('wsl:ubuntu')
+    mocks.ownerRepos = []
+    mocks.target = (path) => path
+    mocks.handlers.clear()
+    let groups = 0
+    mocks.call.mockReset().mockImplementation(async (_env, method, params) => {
+      const replies: Record<string, () => unknown> = {
+        'repo.list': () => ({ repos: [...mocks.ownerRepos] }),
+        'projectHostSetup.list': () => ({ setups: mocks.ownerRepos.map((repo) => ({
+          projectId: 'owner-project', repoId: repo.id, path: repo.path, hostId: 'local', setupMethod: 'imported-existing-folder'
+        })) }),
+        'project.list': () => ({ projects: [{ id: 'owner-project' }] }),
+        'projectGroup.create': () => ({ group: { ...params, id: `guest-group-${++groups}`,
+          parentPath: params.parentPath ?? null, tabOrder: 0, isCollapsed: false, color: null, createdAt: 1, updatedAt: 1 } }),
+        'projectGroup.moveProject': () => ({ repo: {} })
+      }
+      const reply = replies[method]
+      if (reply) {
+        return reply()
+      }
+      const path = method === 'repo.create' ? `${params.parentPath}/${params.name}` : params.path
+      const repo = mocks.ownerRepos.find((owned) => owned.path === path) ?? row(`guest:${path}`, path)
+      mocks.ownerRepos.push(repo)
+      return { repo }
+    })
+  })
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+    vi.unstubAllEnvs()
+  })
+
+  it('creates on the named distro instead of returning another machine\'s project at an alias', async () => {
+    const foreign = row('other-windows-notes', '\\\\wsl$\\Ubuntu\\home\\me\\notes', {
+      kind: 'folder', executionHostId: 'runtime:other-windows'
+    })
+    const request = { parentPath: '\\\\wsl.localhost\\Ubuntu\\home\\me', name: 'notes', kind: 'folder' }
+    registerRepoCreationHandlers(mainWindow, makeStore([foreign]))
+    await expect(mocks.handlers.get('repos:create')!(null, request)).resolves.toMatchObject({
+      repo: { path: '/home/me/notes', executionHostId: OWNER }
+    })
+    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'repo.create', { parentPath: '/home/me', name: 'notes', kind: 'folder' })
+
+    // This desktop's own Windows row at the other alias keeps the project.
+    const saved = row('saved-notes', foreign.path, { kind: 'folder' })
+    mocks.ensure.mockClear()
+    registerRepoCreationHandlers(mainWindow, makeStore([saved]))
+    await expect(mocks.handlers.get('repos:create')!(null, request)).resolves.toEqual({ repo: saved })
+    expect(mocks.ensure).not.toHaveBeenCalled()
+  })
+
+  it('adds a new selection on its distro at the verified root and keeps saved and gated-off paths on Windows', async () => {
+    const saved = row('saved-repo', '\\\\wsl$\\Ubuntu\\home\\me\\old')
+    const child = '\\\\wsl.localhost\\ubuntu\\home\\me\\old\\packages\\ui'
+    mocks.target = (path) => path === child ? saved.path : path
+    await expect(addLocalRepoFromPath(makeStore([saved]), child)).resolves.toEqual({ repo: saved, alreadyExisted: true })
+    expect(mocks.ensure).not.toHaveBeenCalled()
+
+    const added = await addLocalRepoFromPath(makeStore([]), child)
+    expect(added).toMatchObject({ repo: { path: '/home/me/old', executionHostId: OWNER }, alreadyExisted: false })
+    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'repo.add', expect.objectContaining({ path: '/home/me/old' }))
+
+    const gatedOff = makeStore([], false)
+    vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '0')
+    await addLocalRepoFromPath(gatedOff, '\\\\wsl$\\Ubuntu\\home\\me\\new')
+    expect(gatedOff.addRepo).toHaveBeenCalledWith(expect.objectContaining({ path: '\\\\wsl$\\Ubuntu\\home\\me\\new' }))
+    expect(mocks.ensure).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets a paired caller reuse a saved project but never start a new WSL owner', async () => {
+    const saved = row('saved-repo', '\\\\wsl$\\Ubuntu\\home\\me\\old')
+    const store = makeStore([saved])
+    const controller = new RuntimeRepositoryRegistrationController({
+      getStore: () => store,
+      invalidateResolvedWorktrees: vi.fn(),
+      invalidateWorktreeScan: vi.fn(),
+      notifyReposChanged: vi.fn()
+    })
+    const paired = { fromPairedClient: true }
+    await expect(controller.add(saved.path, 'git', undefined, undefined, paired)).resolves.toBe(saved)
+    await expect(controller.add('\\\\wsl$\\Ubuntu\\home\\me\\new', 'git', undefined, undefined, paired))
+      .rejects.toThrow('Windows desktop')
+    expect(mocks.ensure).not.toHaveBeenCalled()
+    expect(store.addRepo).not.toHaveBeenCalled()
+  })
+
+  it('groups an all-saved selection on Windows with the exact saved row, even in its extended spelling', async () => {
+    const saved = row('saved-a', '\\\\?\\UNC\\wsl$\\Ubuntu\\home\\me\\a')
+    const parentPath = '\\\\wsl$\\Ubuntu\\home\\me'
+    const selected = `${parentPath}\\a`
+    mocks.scan = scanOf(parentPath, [selected])
+    const store = makeStore([saved])
+    registerNestedRepoImportHandler(mainWindow, store)
+    const result = await mocks.handlers.get('projectGroups:importNested')!(null, {
+      parentPath, projectPaths: [selected], mode: 'group', scanId: 'scan-1'
+    })
+    expect(result).toMatchObject({ alreadyKnownCount: 1, projects: [{ projectId: saved.id, status: 'already-known' }] })
+    expect(store.moveProjectToGroup).toHaveBeenCalledWith(saved, 'local-group-1', 0)
+    expect(store.addRepo).not.toHaveBeenCalled()
+    expect(mocks.ensure).not.toHaveBeenCalled()
+  })
+
+  it('groups guest projects by acknowledged id with existing methods and leaves a late Windows claim out', async () => {
+    const parentPath = '\\\\wsl.localhost\\Ubuntu\\home\\me'
+    const [web, api, late] = ['apps\\web', 'apps\\api', 'late'].map((name) => `${parentPath}\\${name}`)
+    mocks.scan = scanOf(parentPath, [web, api, late])
+    const store = makeStore([])
+    const normal = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation(async (env, method, params) => {
+      // Another window saves `late` on Windows while this import registers its siblings.
+      if (method === 'repo.add' && params.path === '/home/me/apps/web') {
+        store.repos.push(row('late-windows', late))
+      }
+      return normal(env, method, params)
+    })
+    registerNestedRepoImportHandler(mainWindow, store)
+    const result = await mocks.handlers.get('projectGroups:importNested')!(null, {
+      parentPath, projectPaths: [web, api, late], mode: 'group', scanId: 'scan-1'
+    })
+    const methods = mocks.call.mock.calls.map(([, method]) => method)
+    expect(methods.every((method) => OLD_PEER_METHODS.has(method))).toBe(true)
+    expect(mocks.call.mock.calls.filter(([, method]) => method.startsWith('projectGroup.')).map(([, method, params]) => [method, params])).toEqual([
+      ['projectGroup.create', { name: 'me', parentPath: '/home/me', parentGroupId: null, createdFrom: 'folder-scan' }],
+      ['projectGroup.create', { name: 'apps', parentPath: '/home/me/apps', parentGroupId: 'guest-group-1', createdFrom: 'folder-scan' }],
+      ['projectGroup.moveProject', { repo: 'id:guest:/home/me/apps/web', groupId: 'guest-group-2', order: 0 }],
+      ['projectGroup.moveProject', { repo: 'id:guest:/home/me/apps/api', groupId: 'guest-group-2', order: 1 }]
+    ])
+    expect(result).toMatchObject({
+      group: { id: 'guest-group-1', executionHostId: OWNER },
+      importedCount: 2,
+      projects: [
+        { path: web, status: 'imported', executionHostId: OWNER },
+        { path: api, status: 'imported', executionHostId: OWNER },
+        { path: late, projectId: 'late-windows', status: 'failed', executionHostId: 'local' }
+      ]
+    })
+    expect(store.addRepo).not.toHaveBeenCalled()
+  })
+})
