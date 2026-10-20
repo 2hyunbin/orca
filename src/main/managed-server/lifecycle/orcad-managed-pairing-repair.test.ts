@@ -242,6 +242,30 @@ describe('ManagedOrcadPairingRepairs', () => {
     state.deps.readReadiness.mockResolvedValueOnce(readiness(offer('fixed-token')))
     await expect(state.repairs.repair('env-1', REFUSED)).resolves.toBeDefined()
   })
+
+  it('keeps a connect that lands mid-repair from being undone by that repair', async () => {
+    const state = setup(() => readiness(offer('refused-token')))
+    for (let i = 0; i < MAX_PAIRING_REPAIRS_PER_WINDOW - 1; i++) {
+      await state.repairs.repair('env-1', REFUSED).catch(() => undefined)
+      state.advance(PAIRING_REPAIR_FAILURE_HOLD_MS)
+    }
+    let answer: (value: ServeReadiness) => void = () => {}
+    state.deps.readReadiness.mockImplementationOnce(
+      () => new Promise<ServeReadiness>((resolve) => (answer = resolve))
+    )
+    const inFlight = state.repairs.repair('env-1', REFUSED)
+    await vi.waitFor(() => expect(state.deps.readReadiness).toHaveBeenCalledTimes(3))
+    state.repairs.forgetFailures('env-1')
+    answer(readiness(offer('refused-token')))
+    await expect(inFlight).rejects.toThrow(/still offers/)
+    // Neither the in-flight attempt nor its failure survives the reset: the user gets a full cap.
+    expect(state.repairs.standingFailure('env-1', REFUSED)).toBeNull()
+    for (let i = 0; i < MAX_PAIRING_REPAIRS_PER_WINDOW; i++) {
+      await expect(state.repairs.repair('env-1', REFUSED)).rejects.toThrow(/still offers/)
+      state.advance(PAIRING_REPAIR_FAILURE_HOLD_MS)
+    }
+    expect(state.deps.readReadiness).toHaveBeenCalledTimes(3 + MAX_PAIRING_REPAIRS_PER_WINDOW)
+  })
 })
 
 describe('buildWithPairingRepair', () => {
@@ -275,6 +299,28 @@ describe('buildWithPairingRepair', () => {
       buildWithPairingRepair(deps, 'env-1', vi.fn().mockRejectedValue(foreign))
     ).rejects.toBe(foreign)
     expect(state.deps.readReadiness).not.toHaveBeenCalled()
+  })
+
+  it('builds at most the capped number of times however many refused opens ask', async () => {
+    const state = setup(() => readiness(offer('refused-token')))
+    const deps = { resolve: state.deps.resolve, repairs: state.repairs, ensure: vi.fn() }
+    const build = vi.fn().mockRejectedValue(refusal())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // Every reconnect of a refused socket asks again, far more often than the hold lasts.
+    for (let open = 0; open < 200; open++) {
+      await expect(buildWithPairingRepair(deps, 'env-1', build)).rejects.toBeInstanceOf(
+        OrcadManagedPairingRepairFailedError
+      )
+      state.advance(1_000)
+    }
+    warn.mockRestore()
+    expect(build).toHaveBeenCalledTimes(MAX_PAIRING_REPAIRS_PER_WINDOW)
+    expect(state.deps.readReadiness).toHaveBeenCalledTimes(MAX_PAIRING_REPAIRS_PER_WINDOW)
+    await expect(buildWithPairingRepair(deps, 'env-1', build)).rejects.toThrow(/tried 3 times/)
+    // An explicit connect is the user asking again: the next open builds.
+    state.repairs.forgetFailures('env-1')
+    await expect(buildWithPairingRepair(deps, 'env-1', build)).rejects.toThrow()
+    expect(build).toHaveBeenCalledTimes(MAX_PAIRING_REPAIRS_PER_WINDOW + 1)
   })
 
   it('fails clearly, without looping, when the new pairing is refused too', async () => {

@@ -37,6 +37,7 @@ vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [] } }))
 
 import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
 import { resetRuntimeEnvironmentStatusOwners } from './runtime-environment-request-connections'
+import { setRefusedPairingHandlers } from './runtime-environment-pairing-refusal-registry'
 
 let directory: string
 let envId: string
@@ -149,4 +150,22 @@ it('follows a re-pair only once', async () => {
     error: { code: 'runtime_environment_changed' }
   })
   expect(mocks.request).toHaveBeenCalledTimes(2)
+})
+
+it('does not claim the pairing changed when the refusal only rebuilt the tunnel', async () => {
+  const noRecovery = { recover: () => null, sharedControl: () => null, connectRequested: () => {} }
+  setRefusedPairingHandlers({ ...noRecovery, recover: async () => 'built' as const })
+  mocks.request.mockResolvedValueOnce({
+    id: 'status',
+    ok: false,
+    error: { code: 'unauthorized', message: 'refused' },
+    _meta: { runtimeId: 'old-host' }
+  })
+  try {
+    const answer = await getRuntimeEnvironmentStatus(directory, envId)
+    expect(answer).toMatchObject({ ok: false, error: { code: 'runtime_environment_changed' } })
+    expect(JSON.stringify(answer)).not.toMatch(/pairing changed/)
+  } finally {
+    setRefusedPairingHandlers(noRecovery)
+  }
 })

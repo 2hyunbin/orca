@@ -4477,6 +4477,7 @@
             "access_revoked_summary": "This server revoked access for this computer",
             "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
             "managed_access_revoked_explanation": "Orca couldn't pair with it again over SSH. Connect to try again.",
+            "connect_access_revoked_explanation": "Connect to try again.",
             "update_required": "Update required",
             "update_required_summary": "Orca versions are not compatible",
             "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
@@ -8741,6 +8742,7 @@
           "cloudVmWorkflowHelp": "Manage recipe-created cloud machines",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
           "managedAccessRevoked": "{{value0}} no longer accepts this computer, and Orca couldn't pair with it again over SSH. Connect to try again.",
+          "connectAccessRevoked": "{{value0}} no longer accepts this computer. Connect to try again.",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"

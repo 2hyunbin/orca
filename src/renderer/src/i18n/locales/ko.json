@@ -3415,8 +3415,8 @@
           },
           "TerminalRemoteRuntimeReconnectBanner": {
             "retryingTitle": "원격 런타임에 다시 연결 중",
-            "pairingRefusedTitle": "This host no longer accepts this computer",
-            "pairingRefusedBody": "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again.",
+            "pairingRefusedTitle": "이 호스트가 더 이상 이 컴퓨터를 허용하지 않습니다",
+            "pairingRefusedBody": "Orca가 SSH로 다시 페어링하지 못했습니다. 호스트에서는 아무것도 중지되지 않았습니다. 다시 연결하여 재시도하세요.",
             "disconnectedTitle": "원격 런타임 연결 끊김",
             "retryingBody": "Orca가 자동으로 재시도합니다. 연결이 복원되면 이 터미널이 재개됩니다.",
             "disconnectedBody": "자동 재시도가 중지되었습니다. 이 터미널 세션을 재개하려면 다시 연결하세요.",
@@ -4206,7 +4206,8 @@
             "access_revoked": "Access revoked",
             "access_revoked_summary": "This server revoked access for this computer",
             "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
-            "managed_access_revoked_explanation": "Orca couldn't pair with it again over SSH. Connect to try again.",
+            "managed_access_revoked_explanation": "Orca가 SSH로 다시 페어링하지 못했습니다. 연결하여 다시 시도하세요.",
+            "connect_access_revoked_explanation": "연결하여 다시 시도하세요.",
             "update_required": "Update required",
             "update_required_summary": "Orca versions are not compatible",
             "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
@@ -8291,7 +8292,7 @@
           "e57dde9d93": "저장되지 않은 변경사항"
         },
         "RuntimeAccessGrantList": {
-          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
+          "sshAccessCaveat": "여기서 취소해도 이 컴퓨터에 SSH로 접근할 수 있는 사람은 다시 페어링할 수 있습니다. 차단하려면 해당 SSH 접근 권한을 제거하세요.",
           "8b82879581": "활성화된 권한을 가진 사람은 누구나 취소할 때까지 연결할 수 있습니다. 공유 액세스를 취소하면 활성 클라이언트의 연결이 즉시 끊어집니다.",
           "68ec21309f": "액세스 취소",
           "6f6d5188ed": "{{value0}} 취소",
@@ -8402,7 +8403,8 @@
           "serverRuntimeUnavailableDescription": "SSH 전송이 연결되었지만 Orca 런타임이 응답하지 않았습니다. 호스트가 아직 실행 중일 수 있습니다.",
           "serverReconnecting": "다시 연결하는 중",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
-          "managedAccessRevoked": "{{value0}} no longer accepts this computer, and Orca couldn't pair with it again over SSH. Connect to try again.",
+          "managedAccessRevoked": "{{value0}}이(가) 더 이상 이 컴퓨터를 허용하지 않으며, Orca가 SSH로 다시 페어링하지 못했습니다. 연결하여 다시 시도하세요.",
+          "connectAccessRevoked": "{{value0}}이(가) 더 이상 이 컴퓨터를 허용하지 않습니다. 연결하여 다시 시도하세요.",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"

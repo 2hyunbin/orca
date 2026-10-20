@@ -27,7 +27,7 @@ import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { sshConnectVerb } from '@/ssh/ssh-connect-verb'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { isRepairableWithAccessLink } from '../../../../shared/runtime-environments'
+import { runtimePairingRepairRoute } from '../../../../shared/runtime-environments'
 import { describeRuntimeCompatBlock } from '../../../../shared/protocol-compat'
 import { clearRuntimeCompatibilityCache } from '@/runtime/runtime-rpc-client'
 import { unwrapRuntimeRpcResult } from '@/runtime/runtime-rpc-result'
@@ -87,10 +87,11 @@ export function HostSectionHeaderMenu({ row }: { row: HostHeaderRow }): React.JS
 
   const parsedHost = parseExecutionHostId(row.hostId)
   const runtimeEnvironmentId = parsedHost?.kind === 'runtime' ? parsedHost.environmentId : null
-  const repairableWithAccessLink = useAppStore((s) => {
+  const repairRoute = useAppStore((s) => {
     const environment = s.runtimeEnvironments.find((entry) => entry.id === runtimeEnvironmentId)
-    return environment ? isRepairableWithAccessLink(environment) : true
+    return environment ? runtimePairingRepairRoute(environment) : 'access-link'
   })
+  const repairableWithAccessLink = repairRoute === 'access-link'
   const model = buildHostHeaderMenuModel({
     kind: row.kind,
     health: row.health,
@@ -147,7 +148,7 @@ export function HostSectionHeaderMenu({ row }: { row: HostHeaderRow }): React.JS
     // version skew instead of trusting the prior pass.
     clearRuntimeCompatibilityCache(parsed.environmentId)
     // Why connect: a refusal Orca can answer over SSH is retried, not just read back.
-    const retryPairing = row.blockedReason === 'access-revoked' && !repairableWithAccessLink
+    const retryPairing = row.blockedReason === 'access-revoked' && repairRoute === 'ssh'
     try {
       const response = await (
         retryPairing
@@ -188,7 +189,7 @@ export function HostSectionHeaderMenu({ row }: { row: HostHeaderRow }): React.JS
         setBusy(false)
       }
     }
-  }, [mountedRef, repairableWithAccessLink, row.blockedReason, row.hostId, row.label])
+  }, [mountedRef, repairRoute, row.blockedReason, row.hostId, row.label])
 
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>

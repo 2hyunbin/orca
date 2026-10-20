@@ -3544,8 +3544,8 @@
           },
           "TerminalRemoteRuntimeReconnectBanner": {
             "retryingTitle": "Reconnexion au runtime distant",
-            "pairingRefusedTitle": "This host no longer accepts this computer",
-            "pairingRefusedBody": "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again.",
+            "pairingRefusedTitle": "Cet hôte n'accepte plus cet ordinateur",
+            "pairingRefusedBody": "Orca n'a pas pu s'associer de nouveau à lui via SSH. Rien n'a été arrêté sur l'hôte. Reconnectez-vous pour réessayer.",
             "disconnectedTitle": "Runtime distant déconnecté",
             "retryingBody": "Orca réessaie automatiquement. Ce terminal reprendra si la connexion revient.",
             "disconnectedBody": "Les tentatives automatiques sont interrompues. Reconnectez-vous pour reprendre cette session de terminal.",
@@ -4314,7 +4314,8 @@
             "access_revoked": "Access revoked",
             "access_revoked_summary": "This server revoked access for this computer",
             "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
-            "managed_access_revoked_explanation": "Orca couldn't pair with it again over SSH. Connect to try again.",
+            "managed_access_revoked_explanation": "Orca n'a pas pu s'associer de nouveau à lui via SSH. Connectez-vous pour réessayer.",
+            "connect_access_revoked_explanation": "Connectez-vous pour réessayer.",
             "update_required": "Update required",
             "update_required_summary": "Orca versions are not compatible",
             "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
@@ -8452,7 +8453,7 @@
           "e57dde9d93": "Modifications non enregistrées"
         },
         "RuntimeAccessGrantList": {
-          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
+          "sshAccessCaveat": "Révoquer l'accès ici n'empêche pas une personne ayant un accès SSH à cet ordinateur de s'associer de nouveau. Pour la bloquer, retirez son accès SSH.",
           "8b82879581": "Toute personne disposant d'une autorisation active peut se connecter jusqu'à sa révocation. Révoquer l'accès partagé déconnecte immédiatement les clients actifs.",
           "68ec21309f": "Révoquer l'accès",
           "6f6d5188ed": "Révoquer {{value0}}",
@@ -8563,7 +8564,8 @@
           "serverRuntimeUnavailableDescription": "Le transport SSH est connecté, mais le runtime Orca n'a pas répondu. L'hôte est peut-être toujours en cours d'exécution.",
           "serverReconnecting": "Reconnexion",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
-          "managedAccessRevoked": "{{value0}} no longer accepts this computer, and Orca couldn't pair with it again over SSH. Connect to try again.",
+          "managedAccessRevoked": "{{value0}} n'accepte plus cet ordinateur, et Orca n'a pas pu s'associer de nouveau à lui via SSH. Connectez-vous pour réessayer.",
+          "connectAccessRevoked": "{{value0}} n'accepte plus cet ordinateur. Connectez-vous pour réessayer.",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"

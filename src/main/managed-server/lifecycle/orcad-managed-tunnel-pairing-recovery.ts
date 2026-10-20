@@ -14,13 +14,21 @@ export type ManagedOrcadPairingRecovery = {
   ensure: (environment: KnownRuntimeEnvironment) => Promise<void>
 }
 
-/** Builds once; a refused pairing re-pairs over SSH and forwards once more on the new one. */
+/**
+ * Builds once; a refused pairing re-pairs over SSH and forwards once more on the new one. The
+ * repair gate decides first whether a build may run: while a failure stands for this pairing,
+ * every caller (each refused socket reopen included) gets it without reaching the host.
+ */
 export async function buildWithPairingRepair(
   recovery: ManagedOrcadPairingRecovery,
   environmentId: string,
   build: (environment: KnownRuntimeEnvironment) => Promise<void>
 ): Promise<'built' | 'repaired'> {
   const refused = recovery.resolve(environmentId)
+  const standing = recovery.repairs.standingFailure(environmentId, pairingRevisionOf(refused))
+  if (standing) {
+    throw standing
+  }
   try {
     await build(refused)
     return 'built'

@@ -242,6 +242,18 @@ export function isRepairableWithAccessLink(
   return !environment.orcadDeployment && isUserManagedRuntimeEnvironment(environment)
 }
 
+/** Who pairs a server that refused this desktop: the user with a link, Orca over SSH, or Orca on Connect. */
+export type RuntimePairingRepairRoute = 'access-link' | 'ssh' | 'connect'
+
+export function runtimePairingRepairRoute(
+  environment: Pick<PublicKnownRuntimeEnvironment, 'source' | 'orcadDeployment'>
+): RuntimePairingRepairRoute {
+  if (getOrcadSshDeployment(environment)) {
+    return 'ssh'
+  }
+  return isRepairableWithAccessLink(environment) ? 'access-link' : 'connect'
+}
+
 /** A WSL distro added as a host; keyed by its deployment record's kind, never by its name. */
 export function isWslHostRuntimeEnvironment<
   T extends { orcadDeployment?: OrcadDeploymentLink | null }

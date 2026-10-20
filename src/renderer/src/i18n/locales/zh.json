@@ -3415,8 +3415,8 @@
           },
           "TerminalRemoteRuntimeReconnectBanner": {
             "retryingTitle": "正在重新连接到远程运行时",
-            "pairingRefusedTitle": "This host no longer accepts this computer",
-            "pairingRefusedBody": "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again.",
+            "pairingRefusedTitle": "此主机不再接受这台电脑",
+            "pairingRefusedBody": "Orca 无法通过 SSH 重新与其配对。主机上没有任何内容被停止。请重新连接以重试。",
             "disconnectedTitle": "远程运行时已断开连接",
             "retryingBody": "Orca 正在自动重试。如果连接恢复，此终端将恢复。",
             "disconnectedBody": "自动重试已停止。重新连接以恢复此终端会话。",
@@ -4206,7 +4206,8 @@
             "access_revoked": "Access revoked",
             "access_revoked_summary": "This server revoked access for this computer",
             "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
-            "managed_access_revoked_explanation": "Orca couldn't pair with it again over SSH. Connect to try again.",
+            "managed_access_revoked_explanation": "Orca 无法通过 SSH 重新与其配对。请连接以重试。",
+            "connect_access_revoked_explanation": "请连接以重试。",
             "update_required": "Update required",
             "update_required_summary": "Orca versions are not compatible",
             "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
@@ -8291,7 +8292,7 @@
           "e57dde9d93": "未保存的更改"
         },
         "RuntimeAccessGrantList": {
-          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
+          "sshAccessCaveat": "在此撤销并不能阻止拥有这台电脑 SSH 访问权限的人重新配对。要彻底阻止，请移除其 SSH 访问权限。",
           "8b82879581": "任何拥有有效授权的人都可以连接，直到您撤销授权为止。撤销共享访问会立即断开活动客户端的连接。",
           "68ec21309f": "撤销访问权限",
           "6f6d5188ed": "撤销 {{value0}}",
@@ -8402,7 +8403,8 @@
           "serverRuntimeUnavailableDescription": "SSH 传输已连接，但 Orca 运行时未应答。主机可能仍在运行。",
           "serverReconnecting": "重新连接",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
-          "managedAccessRevoked": "{{value0}} no longer accepts this computer, and Orca couldn't pair with it again over SSH. Connect to try again.",
+          "managedAccessRevoked": "{{value0}} 不再接受这台电脑，且 Orca 无法通过 SSH 重新与其配对。请连接以重试。",
+          "connectAccessRevoked": "{{value0}} 不再接受这台电脑。请连接以重试。",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"

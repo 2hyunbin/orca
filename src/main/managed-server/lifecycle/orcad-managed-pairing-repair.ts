@@ -86,17 +86,34 @@ export function pairingRevisionOf(environment: KnownRuntimeEnvironment): number 
   return environment.pairingRevision ?? environment.createdAt
 }
 
+/** A failure that stands for one pairing until `until`; building under that pairing is refused again. */
+type StandingFailure = { error: Error; revision: number; until: number }
+
 /**
- * One repair per environment at a time and a capped number of attempts per window, with a failure
- * held briefly. Keyed by the refused revision: a refusal seen under an older pairing than the
+ * The gate for re-pairing a managed server: whether a build may run at all, one repair per
+ * environment at a time, a capped number of attempts per window, and a failure that stands for the
+ * refused pairing. Keyed by the refused revision: a refusal seen under an older pairing than the
  * stored one was already answered, so it gets the stored pairing without reaching the host.
  */
 export class ManagedOrcadPairingRepairs {
   private readonly inFlight = new Map<string, Promise<KnownRuntimeEnvironment>>()
   private readonly attemptedAt = new Map<string, number[]>()
-  private readonly heldFailures = new Map<string, { error: Error; at: number }>()
+  private readonly standing = new Map<string, StandingFailure>()
+  // Why: a repair that was already running when the user asked again must not undo that reset.
+  private readonly resets = new Map<string, number>()
 
   constructor(private readonly deps: ManagedOrcadPairingRepairDeps) {}
+
+  /**
+   * The failure that stands for this pairing now, or null. A build under it would cost SSH execs,
+   * a forward and a handshake only to be refused again, so callers check this before building.
+   */
+  standingFailure(environmentId: string, revision: number): Error | null {
+    const failure = this.standing.get(environmentId)
+    return failure && failure.revision === revision && this.deps.now() < failure.until
+      ? failure.error
+      : null
+  }
 
   repair(environmentId: string, refusedRevision: number): Promise<KnownRuntimeEnvironment> {
     const pending = this.inFlight.get(environmentId)
@@ -112,16 +129,19 @@ export class ManagedOrcadPairingRepairs {
 
   /** The new pairing was refused too, so it counts as a failed repair. */
   recordRefusedAfterRepair(environmentId: string): Error {
-    return this.hold(
+    return this.stand(
       environmentId,
+      pairingRevisionOf(this.deps.resolve(environmentId)),
+      this.resetsOf(environmentId),
       new OrcadManagedPairingRepairFailedError('the server refused the new pairing too')
     )
   }
 
-  /** An explicit connect is the user asking again: neither a held failure nor the cap answers it. */
+  /** An explicit connect is the user asking again: neither a standing failure nor the cap answers it. */
   forgetFailures(environmentId: string): void {
-    this.heldFailures.delete(environmentId)
+    this.standing.delete(environmentId)
     this.attemptedAt.delete(environmentId)
+    this.resets.set(environmentId, this.resetsOf(environmentId) + 1)
   }
 
   private async run(
@@ -132,22 +152,15 @@ export class ManagedOrcadPairingRepairs {
     if (pairingRevisionOf(environment) !== refusedRevision) {
       return environment
     }
-    const now = this.deps.now()
-    const held = this.heldFailures.get(environmentId)
-    if (held && now - held.at < PAIRING_REPAIR_FAILURE_HOLD_MS) {
-      throw held.error
+    const epoch = this.resetsOf(environmentId)
+    const fail = (error: Error): Error => this.stand(environmentId, refusedRevision, epoch, error)
+    const standing = this.standingFailure(environmentId, refusedRevision)
+    if (standing) {
+      throw standing
     }
-    const recent = (this.attemptedAt.get(environmentId) ?? []).filter(
-      (at) => now - at < PAIRING_REPAIR_WINDOW_MS
-    )
+    const recent = this.recentAttempts(environmentId)
     if (recent.length >= MAX_PAIRING_REPAIRS_PER_WINDOW) {
-      throw this.hold(
-        environmentId,
-        new OrcadManagedPairingRepairFailedError(
-          `it tried ${recent.length} times in ${PAIRING_REPAIR_WINDOW_MS / 60_000} minutes ` +
-            'without the server accepting a pairing'
-        )
-      )
+      throw fail(capSpentError(recent.length))
     }
     assertRuntimeEnvironmentNotReconciling(environment)
     const deployment = getOrcadSshDeployment(environment)
@@ -162,14 +175,15 @@ export class ManagedOrcadPairingRepairs {
     if (pairingRevisionOf(current) !== refusedRevision) {
       return current
     }
-    this.attemptedAt.set(environmentId, [...recent, now])
-    const pairingCode = this.publishedPairingCode(environmentId, readiness, deployment.localPort)
+    if (this.resetsOf(environmentId) === epoch) {
+      this.attemptedAt.set(environmentId, [...this.recentAttempts(environmentId), this.deps.now()])
+    }
+    const pairingCode = publishedPairingCode(readiness, deployment.localPort, fail)
     const offer = parsePairingCode(pairingCode)
     const pinned = getPreferredPairingOffer(environment)
     // Why refuse: a server with another key is not the one this desktop paired, whatever SSH says.
     if (!offer || offer.publicKeyB64 !== pinned.publicKeyB64) {
-      throw this.hold(
-        environmentId,
+      throw fail(
         new OrcadManagedIdentityError(
           deployment.remotePort,
           "the host's server now publishes a different host key than the one this desktop pinned"
@@ -177,8 +191,7 @@ export class ManagedOrcadPairingRepairs {
       )
     }
     if (offer.deviceToken === pinned.deviceToken) {
-      throw this.hold(
-        environmentId,
+      throw fail(
         new OrcadManagedPairingRepairFailedError(
           'the server still offers the pairing it refused; restarting it on the host issues a new one'
         )
@@ -188,43 +201,75 @@ export class ManagedOrcadPairingRepairs {
     try {
       repaired = this.deps.refresh(environmentId, pairingCode)
     } catch (error) {
-      throw this.hold(environmentId, new OrcadManagedPairingRepairFailedError(errorMessage(error)))
+      throw fail(new OrcadManagedPairingRepairFailedError(errorMessage(error)))
     }
-    this.heldFailures.delete(environmentId)
+    this.standing.delete(environmentId)
     await this.deps.repaired(environmentId)
     return repaired
   }
 
-  private publishedPairingCode(
-    environmentId: string,
-    readiness: ServeReadiness | null,
-    localPort: number
-  ): string {
-    if (!readiness) {
-      throw this.hold(
-        environmentId,
-        new OrcadManagedPairingRepairFailedError(
-          "the server hasn't published a pairing Orca can read"
-        )
-      )
-    }
-    if (!readiness.pairing.available) {
-      throw this.hold(
-        environmentId,
-        new OrcadManagedPairingRepairFailedError(
-          `the server isn't offering a pairing (${readiness.pairing.guidance})`
-        )
-      )
-    }
-    try {
-      return tunneledOrcadPairingCode(readiness, localPort)
-    } catch (error) {
-      throw this.hold(environmentId, new OrcadManagedPairingRepairFailedError(errorMessage(error)))
-    }
+  private recentAttempts(environmentId: string): number[] {
+    const now = this.deps.now()
+    return (this.attemptedAt.get(environmentId) ?? []).filter(
+      (at) => now - at < PAIRING_REPAIR_WINDOW_MS
+    )
   }
 
-  private hold(environmentId: string, error: Error): Error {
-    this.heldFailures.set(environmentId, { error, at: this.deps.now() })
+  private resetsOf(environmentId: string): number {
+    return this.resets.get(environmentId) ?? 0
+  }
+
+  /** Stands briefly, or through the window once the cap is spent, since no repair could run before. */
+  private stand(environmentId: string, revision: number, epoch: number, error: Error): Error {
+    if (this.resetsOf(environmentId) !== epoch) {
+      return error
+    }
+    const recent = this.recentAttempts(environmentId)
+    const capSpent = recent.length >= MAX_PAIRING_REPAIRS_PER_WINDOW
+    this.standing.set(environmentId, {
+      // Why the cap's reason for later callers: no repair can run again until the window ends.
+      error:
+        capSpent && error instanceof OrcadManagedPairingRepairFailedError
+          ? capSpentError(recent.length)
+          : error,
+      revision,
+      until: capSpent
+        ? recent[0] + PAIRING_REPAIR_WINDOW_MS
+        : this.deps.now() + PAIRING_REPAIR_FAILURE_HOLD_MS
+    })
     return error
+  }
+}
+
+function capSpentError(attempts: number): Error {
+  return new OrcadManagedPairingRepairFailedError(
+    `it tried ${attempts} times in ${PAIRING_REPAIR_WINDOW_MS / 60_000} minutes ` +
+      'without the server accepting a pairing'
+  )
+}
+
+function publishedPairingCode(
+  readiness: ServeReadiness | null,
+  localPort: number,
+  fail: (error: Error) => Error
+): string {
+  if (!readiness) {
+    throw fail(
+      new OrcadManagedPairingRepairFailedError(
+        "the server hasn't published a pairing Orca can read"
+      )
+    )
+  }
+  if (!readiness.pairing.available) {
+    throw fail(
+      new OrcadManagedPairingRepairFailedError(
+        `the server isn't offering a pairing (${readiness.pairing.guidance})`
+      )
+    )
+  }
+  try {
+    return tunneledOrcadPairingCode(readiness, localPort)
+  } catch (error) {
+    throw fail(new OrcadManagedPairingRepairFailedError(errorMessage(error)))
   }
 }

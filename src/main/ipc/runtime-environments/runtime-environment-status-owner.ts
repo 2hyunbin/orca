@@ -47,15 +47,17 @@ async function answerRefusedPairing(
   if (!recovery) {
     return refused
   }
+  let outcome: 'built' | 'repaired'
   try {
-    await recovery
+    outcome = await recovery
   } catch (error) {
     return error instanceof OrcadManagedPairingRepairFailedError
       ? runtimeHostStatusFailure('unauthorized', error.message)
       : runtimeHostStatusError(error)
   }
-  // Why changed, not the refusal: the re-pair retired this owner; its successor verifies anew.
-  return runtimeEnvironmentChangedFailure(environment, 'status.get', true)
+  // Why changed, not the refusal: the rebuild re-proved the server, so this answer is stale; only
+  // a re-pair changed the pairing (and retired this owner for a successor that verifies anew).
+  return runtimeEnvironmentChangedFailure(environment, 'status.get', outcome === 'repaired')
 }
 
 export function createRuntimeEnvironmentStatusOwner(
