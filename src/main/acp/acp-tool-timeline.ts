@@ -91,9 +91,15 @@ export class AcpToolTimeline {
   })
   // One latest snapshot per live call; the closing event takes ownership. Bytes are a ledger,
   // not an RSS ceiling: provider frame limits and the live-entry count bound this finite carry.
-  private readonly whole = new BoundedMap<string, {
-    input?: unknown; output?: string; inputBytes: number; outputBytes: number
-  }>({
+  private readonly whole = new BoundedMap<
+    string,
+    {
+      input?: unknown
+      output?: string
+      inputBytes: number
+      outputBytes: number
+    }
+  >({
     maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES,
     sizeOf: (value, key) => value.inputBytes + value.outputBytes + Buffer.byteLength(key) + 64
   })
@@ -126,13 +132,20 @@ export class AcpToolTimeline {
       if (!held && this.whole.size >= MAX_PROVIDER_TIMELINE_OPEN_ENTRIES) {
         throw new Error('ACP tool stream capacity exceeded')
       }
-      if (!this.whole.set(update.toolCallId, {
-        input, output,
-        inputBytes: update.rawInput === undefined ? (held?.inputBytes ?? 0)
-          : Buffer.byteLength(JSON.stringify(input) ?? ''),
-        outputBytes: suppliedOutput === undefined ? (held?.outputBytes ?? 0)
-          : Buffer.byteLength(JSON.stringify(output) ?? '')
-      })) {
+      if (
+        !this.whole.set(update.toolCallId, {
+          input,
+          output,
+          inputBytes:
+            update.rawInput === undefined
+              ? (held?.inputBytes ?? 0)
+              : Buffer.byteLength(JSON.stringify(input) ?? ''),
+          outputBytes:
+            suppliedOutput === undefined
+              ? (held?.outputBytes ?? 0)
+              : Buffer.byteLength(JSON.stringify(output) ?? '')
+        })
+      ) {
         throw new Error('ACP tool snapshot could not be retained')
       }
     } else {
