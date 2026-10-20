@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createStore, type StoreApi } from 'zustand/vanilla'
-import { createEditorSlice } from '@/store/slices/editor'
+import type { StoreApi } from 'zustand/vanilla'
+import { createEditorTabsStore } from '@/store/slices/editor-slice-test-harness'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { AppState } from '@/store'
 import { attachRestoredTabConflictScan } from './editor-restored-tab-conflict-scan'
@@ -20,14 +20,8 @@ vi.mock('@/lib/connection-context', () => ({
   getConnectionIdForFile: mocks.getConnectionIdForFile
 }))
 
-function createEditorStore(): StoreApi<AppState> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createStore<any>()((...args: any[]) => ({
-    settings: {},
-    unifiedTabsByWorktree: {},
-    ...createEditorSlice(...(args as Parameters<typeof createEditorSlice>))
-  })) as unknown as StoreApi<AppState>
-}
+// The tabs-aware harness: the switch-on open path records the file's tab.
+const createEditorStore = createEditorTabsStore
 
 function openRestoredDirtyTab(
   store: StoreApi<AppState>,
@@ -49,11 +43,11 @@ function openRestoredDirtyTab(
   store.getState().markFileDirty(fileId, true)
   store.getState().setLastKnownDiskSignature(fileId, getDiskBaselineSignature(baselineContent))
   // Why: hydration flags restored dirty tabs for verification; tests mimic it.
-  store.setState({
-    openFiles: store
-      .getState()
-      .openFiles.map((f) => (f.id === fileId ? { ...f, pendingDiskBaselineVerification: true } : f))
-  } as never)
+  store.setState((state) => ({
+    openFiles: state.openFiles.map((f) =>
+      f.id === fileId ? { ...f, pendingDiskBaselineVerification: true } : f
+    )
+  }))
 }
 
 describe('attachRestoredTabConflictScan', () => {
