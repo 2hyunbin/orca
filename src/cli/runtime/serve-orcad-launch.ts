@@ -2,7 +2,6 @@
  * `orca serve` on this machine's orcad slot. Whether to (and the slot itself) is decided
  * app-side by `src/main/orcad/orcad-local-serve-selection.ts`; the CLI only asks and runs.
  */
-import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { runProcess, spawnProcess } from '@orca/process-host'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
@@ -17,10 +16,7 @@ import { superviseForegroundServe } from './serve-update-supervisor'
 import { isSupervisedSpawnHeld } from './serve-supervised-stop'
 import { redactingSpawn, shouldRedactSupervisedStdout } from './serve-pairing-redaction'
 import { orcadServeArgs, type ServeOrcaAppArgs } from '../../shared/orcad-serve-argv'
-import {
-  SPEECH_RECOGNIZER_DIR_ENV,
-  speechRecognizerPackageName
-} from '../../shared/speech-recognizer-package'
+import { SPEECH_RECOGNIZER_DIR_ENV } from '../../shared/speech-recognizer-package'
 
 /** A first run may download and verify the pinned Node; bound it well past that. */
 const SELECTION_TIMEOUT_MS = 10 * 60_000
@@ -67,23 +63,6 @@ export async function resolveLocalServeRuntime(
       reason: `the app could not check orcad: ${error instanceof Error ? error.message : String(error)}`
     }
   }
-}
-
-/**
- * The installed app's on-device recognizer, for orcad's dictation (#31174). Packaged apps keep it
- * beside the asar (`resources/node_modules`) or unpacked from it; a dev checkout in node_modules.
- */
-export function findAppSpeechRecognizerDir(
-  appRoot: string,
-  platform: string = process.platform,
-  arch: string = process.arch
-): string | undefined {
-  const name = speechRecognizerPackageName(platform, arch)
-  return [
-    join(dirname(appRoot), 'node_modules', name),
-    join(`${appRoot}.unpacked`, 'node_modules', name),
-    join(appRoot, 'node_modules', name)
-  ].find((dir) => existsSync(join(dir, 'sherpa-onnx.node')))
 }
 
 /** Electron serve binds every interface (`exposeNetworkByDefault`); orcad does it on request. */

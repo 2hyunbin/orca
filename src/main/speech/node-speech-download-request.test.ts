@@ -18,7 +18,10 @@ class FakeClientRequest extends EventEmitter {
   }
 }
 
-const requests = vi.hoisted(() => ({ made: [] as { url: string; request: unknown }[] }))
+const requests = vi.hoisted(() => {
+  const made: { url: string; request: unknown }[] = []
+  return { made }
+})
 
 vi.mock('node:https', () => ({
   request: (url: string) => {

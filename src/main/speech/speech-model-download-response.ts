@@ -8,7 +8,7 @@ export type DownloadIncomingMessage = NodeJS.ReadableStream & {
 /** The request half both Electron's `net` and Node's `https` provide, through a host adapter. */
 export type SpeechDownloadRequest = {
   setHeader(name: string, value: string): void
-  /** Returns the detach; a host adapter must keep swallowing errors after it (abort raises one). */
+  /** Returns the detach. Node's request errors on abort, so its adapter keeps a no-op listener. */
   listen(listeners: {
     error: (error: Error) => void
     response: (response: DownloadIncomingMessage) => void

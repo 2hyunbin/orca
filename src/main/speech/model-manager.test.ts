@@ -47,6 +47,14 @@ type ModelManagerInternals = {
   ) => Promise<void>
 }
 
+function managerInternals(dir: string): ModelManagerInternals {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tests drive the download hooks the class keeps protected.
+  return new ModelManager(
+    dir,
+    openElectronSpeechDownloadRequest
+  ) as unknown as ModelManagerInternals
+}
+
 describe('ModelManager', () => {
   beforeEach(() => {
     netRequestMock.mockReset()
@@ -80,10 +88,7 @@ describe('ModelManager', () => {
       const filePath = join(dir, 'model.onnx')
       writeFileSync(filePath, 'known model bytes')
       const expected = createHash('sha256').update('known model bytes').digest('hex')
-      const manager = new ModelManager(
-        dir,
-        openElectronSpeechDownloadRequest
-      ) as unknown as ModelManagerInternals
+      const manager = managerInternals(dir)
 
       await expect(manager.verifyFileSha256(filePath, expected)).resolves.toBeUndefined()
       await expect(manager.verifyFileSha256(filePath, '0'.repeat(64))).rejects.toThrow(
@@ -97,10 +102,7 @@ describe('ModelManager', () => {
   it('rejects non-HTTPS model downloads', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'orca-model-manager-'))
     try {
-      const manager = new ModelManager(
-        dir,
-        openElectronSpeechDownloadRequest
-      ) as unknown as ModelManagerInternals
+      const manager = managerInternals(dir)
 
       await expect(
         manager.downloadFile(
@@ -343,10 +345,7 @@ describe('ModelManager', () => {
       }
       netRequestMock.mockReturnValue(request)
       const controller = new AbortController()
-      const manager = new ModelManager(
-        dir,
-        openElectronSpeechDownloadRequest
-      ) as unknown as ModelManagerInternals
+      const manager = managerInternals(dir)
 
       const download = manager.downloadFile(
         'https://example.com/model.bin',
@@ -428,10 +427,7 @@ describe('ModelManager', () => {
         end: vi.fn(() => request)
       }
       netRequestMock.mockReturnValue(request)
-      const manager = new ModelManager(
-        dir,
-        openElectronSpeechDownloadRequest
-      ) as unknown as ModelManagerInternals
+      const manager = managerInternals(dir)
 
       const download = manager.downloadFile(
         'https://example.com/model.bin',

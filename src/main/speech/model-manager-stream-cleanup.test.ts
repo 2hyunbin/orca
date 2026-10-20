@@ -30,6 +30,14 @@ type ModelManagerInternals = {
   ) => Promise<void>
 }
 
+function managerInternals(dir: string): ModelManagerInternals {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tests drive the download hooks the class keeps protected.
+  return new ModelManager(
+    dir,
+    openElectronSpeechDownloadRequest
+  ) as unknown as ModelManagerInternals
+}
+
 describe('ModelManager stream cleanup', () => {
   beforeEach(() => {
     netRequestMock.mockReset()
@@ -64,10 +72,7 @@ describe('ModelManager stream cleanup', () => {
         off: vi.fn(() => request)
       }
       netRequestMock.mockReturnValue(request)
-      const manager = new ModelManager(
-        dir,
-        openElectronSpeechDownloadRequest
-      ) as unknown as ModelManagerInternals
+      const manager = managerInternals(dir)
 
       const download = manager.downloadFile(
         'https://example.com/model.bin',

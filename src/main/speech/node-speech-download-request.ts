@@ -21,7 +21,7 @@ export const openNodeSpeechDownloadRequest: OpenSpeechDownloadRequest = (url) =>
         const status = incoming.statusCode ?? 0
         const location = incoming.headers.location
         if (status >= 300 && status < 400 && location) {
-          // Drained so the socket is released while the caller re-requests the new location.
+          // Drained so an unread redirect body cannot hold the socket before the caller aborts.
           incoming.resume()
           redirect(status, 'GET', location)
           return
