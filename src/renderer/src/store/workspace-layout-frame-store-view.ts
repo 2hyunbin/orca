@@ -1,7 +1,8 @@
 // This window's view and content facts for some workspaces, read from the store's records the way
 // the Loader reads them back from the window's save, so a workspace's frame slices build without
 // serializing the window's session (design phase E2a). The save's own writers trim what it keeps
-// (browser and scrollback state), so those run here too, over these workspaces' records only.
+// (editor selection, groups, browser and scrollback state), so those run here too, over these
+// workspaces' records only.
 
 import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import {
@@ -20,6 +21,8 @@ import {
   buildPersistedBrowserPagesByWorkspace,
   buildPersistedBrowserTabsByWorktree
 } from '@/lib/workspace-session-browser-tabs'
+import { buildEditorSessionData } from '@/lib/workspace-session'
+import { buildPersistedUnifiedTabSessionData } from '@/lib/workspace-session-unified-tabs'
 import type { AppState } from './types'
 
 export type LayoutFrameStoreViewState = Pick<
@@ -31,6 +34,9 @@ export type LayoutFrameStoreViewState = Pick<
   | 'tabsByWorktree'
   | 'unifiedTabsByWorktree'
   | 'groupsByWorktree'
+  | 'layoutByWorktree'
+  | 'openFiles'
+  | 'editorDrafts'
   | 'terminalLayoutsByTabId'
   | 'localOnlyScrollbackByTabId'
   | 'browserTabsByWorktree'
@@ -73,17 +79,35 @@ export function layoutViewAndFactsOfStore(
   state: LayoutFrameStoreViewState,
   keys: readonly string[]
 ): { view: DesktopLayoutView; facts: LayoutContentFacts } {
+  const keySet = new Set(keys)
+  const editor = buildEditorSessionData(
+    state.openFiles.filter((file) => keySet.has(file.worktreeId)),
+    state.editorDrafts,
+    state.markdownFrontmatterVisible,
+    pickKeys(state.activeFileIdByWorktree, keys),
+    pickKeys(state.activeTabTypeByWorktree, keys)
+  )
+  const unifiedTabsByWorktree = pickKeys(state.unifiedTabsByWorktree, keys)
+  const groupsByWorktree = pickKeys(state.groupsByWorktree, keys)
+  const layoutByWorktree = pickKeys(state.layoutByWorktree, keys)
+  const activeGroupIdByWorktree = pickKeys(state.activeGroupIdByWorktree, keys)
+  const tabBar = buildPersistedUnifiedTabSessionData({
+    unifiedTabsByWorktree,
+    groupsByWorktree,
+    layoutByWorktree,
+    activeGroupIdByWorktree
+  })
   // The builders read only these workspaces' entries of the selection maps.
   const view: DesktopLayoutView = {
     activeRepoId: state.activeRepoId,
     activeWorktreeId: state.activeWorktreeId,
     activeTabId: state.activeTabId,
     activeTabIdByWorktree: state.activeTabIdByWorktree,
-    activeGroupIdByWorktree: state.activeGroupIdByWorktree,
-    activeFileIdByWorktree: state.activeFileIdByWorktree,
+    activeGroupIdByWorktree: tabBar.activeGroupIdByWorktree,
+    activeFileIdByWorktree: editor.activeFileIdByWorktree,
     activeBrowserTabIdByWorktree: state.activeBrowserTabIdByWorktree,
-    activeTabTypeByWorktree: state.activeTabTypeByWorktree,
-    markdownFrontmatterVisible: state.markdownFrontmatterVisible,
+    activeTabTypeByWorktree: editor.activeTabTypeByWorktree,
+    markdownFrontmatterVisible: editor.markdownFrontmatterVisible,
     groups: {},
     lastFocusedAt: {},
     panes: {},
@@ -116,7 +140,7 @@ export function layoutViewAndFactsOfStore(
     browserTabs: {}
   }
   for (const key of keys) {
-    const entries = state.unifiedTabsByWorktree[key] ?? []
+    const entries = tabBar.unifiedTabs?.[key] ?? []
     const terminalEntries = new Map(
       entries.flatMap((entry) =>
         entry.contentType === 'terminal' ? [[entry.entityId, entry]] : []
@@ -130,8 +154,9 @@ export function layoutViewAndFactsOfStore(
         childRecord(view.lastFocusedAt, key)[entry.id] = entry.lastFocusedAt
       }
     }
-    for (const group of state.groupsByWorktree[key] ?? []) {
-      childRecord(view.groups, key)[group.id] = {
+    // The Loader keeps a repeated group id's first selection.
+    for (const group of tabBar.tabGroups?.[key] ?? []) {
+      childRecord(view.groups, key)[group.id] ??= {
         activeTabId: group.activeTabId,
         ...pickStoredFields(group, ['recentTabIds'])
       }

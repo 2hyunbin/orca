@@ -141,3 +141,72 @@ describe('main’s operations drawn record by record', () => {
     close()
   })
 })
+
+type Store = Awaited<ReturnType<typeof boot>>['store']
+
+const groupsOf = (store: Store) => store.getState().groupsByWorktree[GIT_KEY]!
+
+describe('a frame over view state the save trims', () => {
+  it.each<[string, (store: Store) => void]>([
+    [
+      'a focused diff tab, which the save does not keep',
+      (store) => {
+        const file = store.getState().openFiles.find((open) => open.worktreeId === GIT_KEY)!
+        const diff = { ...file, id: `${file.id}::diff`, mode: 'diff' as const }
+        store.setState({
+          openFiles: [...store.getState().openFiles, diff],
+          activeFileIdByWorktree: {
+            ...store.getState().activeFileIdByWorktree,
+            [GIT_KEY]: diff.id
+          },
+          activeTabTypeByWorktree: {
+            ...store.getState().activeTabTypeByWorktree,
+            [GIT_KEY]: 'editor'
+          }
+        })
+      }
+    ],
+    [
+      'a group whose shown tab is gone',
+      (store) =>
+        store.setState({
+          groupsByWorktree: {
+            [GIT_KEY]: groupsOf(store).map((group, index) =>
+              index === 0 ? { ...group, activeTabId: 'gone' } : group
+            )
+          }
+        })
+    ],
+    [
+      'an empty group, active',
+      (store) =>
+        store.setState({
+          groupsByWorktree: {
+            [GIT_KEY]: [
+              ...groupsOf(store),
+              { id: 'group-empty', worktreeId: GIT_KEY, activeTabId: null, tabOrder: [] }
+            ]
+          },
+          activeGroupIdByWorktree: { [GIT_KEY]: 'group-empty' }
+        })
+    ],
+    [
+      'a group id twice, where the Loader keeps the first',
+      (store) =>
+        store.setState({
+          groupsByWorktree: {
+            [GIT_KEY]: [...groupsOf(store), { ...groupsOf(store)[0]!, activeTabId: 'tab-shell' }]
+          }
+        })
+    ]
+  ])('shows a rename over %s as the full build does', async (_, drawState) => {
+    const { store, apply, close } = await boot()
+    drawState(store)
+
+    await apply({ ...on, type: 'renameTab', tabId: 'tab-shell', kind: 'custom', title: 'api' })
+
+    expect(check.fullBuilt).toEqual([])
+    expect(check.workspaceBuilt).toEqual([GIT_KEY])
+    close()
+  })
+})
