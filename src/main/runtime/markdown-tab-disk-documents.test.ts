@@ -12,14 +12,20 @@ import type {
   WorkspaceSessionState
 } from '../../shared/workspace-session-state-types'
 import {
-  readHeadlessMarkdownTab,
-  saveHeadlessMarkdownTab,
-  type HeadlessMarkdownTabHost
-} from './headless-markdown-tab-documents'
+  readMarkdownTabFromDisk,
+  saveMarkdownTabToDisk,
+  type ListedMarkdownTab,
+  type MarkdownTabDiskHost
+} from './markdown-tab-disk-documents'
 
 const WORKTREE = 'repo::/srv/repo'
 const FILE_PATH = '/srv/repo/README.md'
-const TAB = { id: FILE_PATH, filePath: FILE_PATH }
+const TAB: ListedMarkdownTab = {
+  id: FILE_PATH,
+  mode: 'edit',
+  sourceFilePath: FILE_PATH,
+  isDirty: false
+}
 
 function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile> = {}) {
   const file: PersistedOpenFile = {
@@ -40,14 +46,14 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
   const state = { disk }
   const host = {
     getWorkspaceSessionForWorktree: () => session,
-    readFile: vi.fn(async (_worktreeId: string, _filePath: string, maxBytes: number) => {
+    readFile: vi.fn(async (_worktreeId: string, _file: { filePath: string }, maxBytes: number) => {
       const bytes = Buffer.from(state.disk)
       return { content: bytes.subarray(0, maxBytes).toString('utf8'), byteLength: bytes.length }
     }),
     writeFileIfUnchanged: vi.fn(
       async (
         _worktreeId: string,
-        _filePath: string,
+        _file: { filePath: string },
         content: string,
         precondition: { expectedSignature: string }
       ) => {
@@ -58,15 +64,15 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
         return { ok: true as const }
       }
     )
-  } satisfies HeadlessMarkdownTabHost
+  } satisfies MarkdownTabDiskHost
   return { host, state }
 }
 
-describe('headless Markdown tab documents', () => {
+describe('Markdown tab documents on disk', () => {
   it('reads the file from disk when the tab has no saved draft', async () => {
     const { host } = makeHost('# Notes\n')
 
-    await expect(readHeadlessMarkdownTab(host, WORKTREE, TAB)).resolves.toEqual({
+    await expect(readMarkdownTabFromDisk(host, WORKTREE, TAB)).resolves.toEqual({
       tabId: FILE_PATH,
       filePath: FILE_PATH,
       relativePath: 'README.md',
@@ -78,27 +84,63 @@ describe('headless Markdown tab documents', () => {
     })
   })
 
-  it('reads the disk, never a draft a window left in the saved session', async () => {
+  it('reads the disk, never unsaved desktop text, and reports the tab dirty as it was listed', async () => {
     const { host } = makeHost('# Disk\n', '# Draft\n')
 
-    await expect(readHeadlessMarkdownTab(host, WORKTREE, TAB)).resolves.toMatchObject({
+    await expect(
+      readMarkdownTabFromDisk(host, WORKTREE, { ...TAB, isDirty: true })
+    ).resolves.toMatchObject({
       content: '# Disk\n',
-      isDirty: false,
+      isDirty: true,
       source: 'file',
+      editable: true,
       version: hashMarkdownContent('# Disk\n')
+    })
+  })
+
+  it("reads a preview tab's source file, read-only", async () => {
+    const { host } = makeHost('# Notes\n')
+    const preview: ListedMarkdownTab = {
+      ...TAB,
+      id: `markdown-preview::${FILE_PATH}`,
+      mode: 'markdown-preview'
+    }
+
+    await expect(readMarkdownTabFromDisk(host, WORKTREE, preview)).resolves.toMatchObject({
+      tabId: preview.id,
+      filePath: FILE_PATH,
+      content: '# Notes\n',
+      editable: false,
+      readOnlyReason: 'unsupported_preview'
+    })
+    await expect(
+      saveMarkdownTabToDisk(host, WORKTREE, preview, hashMarkdownContent('# Notes\n'), '# Edit\n')
+    ).rejects.toThrow('unsupported_preview')
+    expect(host.writeFileIfUnchanged).not.toHaveBeenCalled()
+  })
+
+  it('marks a read truncated when the host sent less than the whole file', async () => {
+    const { host } = makeHost('# Notes\n')
+    host.readFile.mockResolvedValueOnce({ content: 'a'.repeat(10), byteLength: 600_000 })
+
+    await expect(readMarkdownTabFromDisk(host, WORKTREE, TAB)).resolves.toMatchObject({
+      truncated: true,
+      byteLength: 600_000,
+      editable: false,
+      readOnlyReason: 'file_too_large'
     })
   })
 
   it('marks a file over the edit cap read-only, and a file over the read cap truncated', async () => {
     const editable = makeHost('a'.repeat(MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1))
-    await expect(readHeadlessMarkdownTab(editable.host, WORKTREE, TAB)).resolves.toMatchObject({
+    await expect(readMarkdownTabFromDisk(editable.host, WORKTREE, TAB)).resolves.toMatchObject({
       editable: false,
       readOnlyReason: 'file_too_large'
     })
 
     const size = MOBILE_MARKDOWN_READ_MAX_BYTES + 10
     const large = makeHost('a'.repeat(size))
-    const read = await readHeadlessMarkdownTab(large.host, WORKTREE, TAB)
+    const read = await readMarkdownTabFromDisk(large.host, WORKTREE, TAB)
     expect(read).toMatchObject({ truncated: true, byteLength: size, editable: false })
     expect(Buffer.byteLength(read.content)).toBe(MOBILE_MARKDOWN_READ_MAX_BYTES)
     expect(read.version).toBe(hashMarkdownContent(read.content))
@@ -108,7 +150,7 @@ describe('headless Markdown tab documents', () => {
     const { host, state } = makeHost('# Notes\n')
 
     await expect(
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# New\n')
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# New\n')
     ).resolves.toEqual({
       tabId: FILE_PATH,
       version: hashMarkdownContent('# New\n'),
@@ -116,16 +158,21 @@ describe('headless Markdown tab documents', () => {
       content: '# New\n'
     })
     expect(state.disk).toBe('# New\n')
-    expect(host.writeFileIfUnchanged).toHaveBeenCalledWith(WORKTREE, FILE_PATH, '# New\n', {
-      expectedSignature: getDiskBaselineSignature('# Notes\n')
-    })
+    expect(host.writeFileIfUnchanged).toHaveBeenCalledWith(
+      WORKTREE,
+      expect.objectContaining({ filePath: FILE_PATH }),
+      '# New\n',
+      {
+        expectedSignature: getDiskBaselineSignature('# Notes\n')
+      }
+    )
   })
 
   it('refuses a save from a stale version and leaves the disk alone', async () => {
     const { host, state } = makeHost('# Changed on the server\n')
 
     await expect(
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# Phone\n')
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# Phone\n')
     ).rejects.toThrow('conflict')
     expect(state.disk).toBe('# Changed on the server\n')
     expect(host.writeFileIfUnchanged).not.toHaveBeenCalled()
@@ -135,7 +182,7 @@ describe('headless Markdown tab documents', () => {
     const { host } = makeHost('# New\n')
 
     await expect(
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# New\n')
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# New\n')
     ).resolves.toMatchObject({ content: '# New\n', isDirty: false })
     expect(host.writeFileIfUnchanged).not.toHaveBeenCalled()
   })
@@ -149,7 +196,7 @@ describe('headless Markdown tab documents', () => {
     })
 
     await expect(
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# Phone\n')
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, hashMarkdownContent('# Notes\n'), '# Phone\n')
     ).rejects.toThrow('conflict')
     expect(state.disk).toBe('# Raced\n')
   })
@@ -157,7 +204,7 @@ describe('headless Markdown tab documents', () => {
   it("saves the disk, leaving a window's saved draft for that window", async () => {
     const { host, state } = makeHost('# Disk\n', '# Draft\n')
 
-    await saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Disk\n'), '# Phone\n')
+    await saveMarkdownTabToDisk(host, WORKTREE, TAB, hashMarkdownContent('# Disk\n'), '# Phone\n')
 
     expect(state.disk).toBe('# Phone\n')
   })
@@ -168,8 +215,8 @@ describe('headless Markdown tab documents', () => {
 
     // Run together, the second would pass the same version check and fail the disk precondition.
     const results = await Promise.all([
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Same\n'),
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Same\n')
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, base, '# Same\n'),
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, base, '# Same\n')
     ])
 
     expect(results.map((result) => result.content)).toEqual(['# Same\n', '# Same\n'])
@@ -182,10 +229,10 @@ describe('headless Markdown tab documents', () => {
     host.writeFileIfUnchanged.mockRejectedValueOnce(new Error('EACCES'))
     const base = hashMarkdownContent('# Notes\n')
 
-    await expect(saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# First\n')).rejects.toThrow(
+    await expect(saveMarkdownTabToDisk(host, WORKTREE, TAB, base, '# First\n')).rejects.toThrow(
       'EACCES'
     )
-    await saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Second\n')
+    await saveMarkdownTabToDisk(host, WORKTREE, TAB, base, '# Second\n')
 
     expect(state.disk).toBe('# Second\n')
   })
@@ -193,12 +240,12 @@ describe('headless Markdown tab documents', () => {
   it('never saves a read-only tab', async () => {
     const { host } = makeHost('# Log\n', undefined, { readOnly: true })
 
-    await expect(readHeadlessMarkdownTab(host, WORKTREE, TAB)).resolves.toMatchObject({
+    await expect(readMarkdownTabFromDisk(host, WORKTREE, TAB)).resolves.toMatchObject({
       editable: false,
       readOnlyReason: 'unsupported_tab'
     })
     await expect(
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Log\n'), '# Edit\n')
+      saveMarkdownTabToDisk(host, WORKTREE, TAB, hashMarkdownContent('# Log\n'), '# Edit\n')
     ).rejects.toThrow('unsupported_tab')
     expect(host.writeFileIfUnchanged).not.toHaveBeenCalled()
   })
@@ -207,7 +254,11 @@ describe('headless Markdown tab documents', () => {
     const { host } = makeHost('# Notes\n')
 
     await expect(
-      readHeadlessMarkdownTab(host, WORKTREE, { id: 'gone', filePath: '/srv/repo/GONE.md' })
+      readMarkdownTabFromDisk(host, WORKTREE, {
+        ...TAB,
+        id: 'gone',
+        sourceFilePath: '/srv/repo/GONE.md'
+      })
     ).rejects.toThrow('tab_not_found')
   })
 })

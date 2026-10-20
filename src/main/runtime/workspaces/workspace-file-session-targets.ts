@@ -19,14 +19,13 @@ import {
 import { getLocalProjectWorktreeGitOptions } from '../../project-runtime-git-options'
 import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
 import { isFloatingWorkspaceSelector } from '../../../shared/floating-workspace-worktree'
-import { isBinaryBuffer } from '../../../shared/binary-buffer'
-import { readLocalRuntimeFilePrefix } from '../files/file-reads'
-import { requireLocalRuntimeFileRoute, requireRuntimeFileProvider } from '../files/file-target'
 import {
-  readHeadlessMarkdownTab,
-  saveHeadlessMarkdownTab,
-  type HeadlessMarkdownTabHost
-} from '../headless-markdown-tab-documents'
+  readMarkdownTabFromDisk,
+  saveMarkdownTabToDisk,
+  type ListedMarkdownTab,
+  type MarkdownTabDiskHost
+} from '../markdown-tab-disk-documents'
+import { createMarkdownTabDiskHost } from '../markdown-tab-disk-host'
 
 export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends RuntimeHeadlessTabGroups {
   protected abstract getListedBrowserTabsByPageId(worktreeId: string): Map<string, BrowserTabInfo>
@@ -184,15 +183,11 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     tabId: string
   ): Promise<RuntimeMarkdownReadTabResult> {
     const worktreeId = await this.resolveMobileMarkdownWorktreeId(worktreeSelector, tabId)
-    if (!this.notifier?.readMobileMarkdownTab) {
-      // Why: a windowless host listed this tab from its own session, so it reads it from disk.
-      return await readHeadlessMarkdownTab(
-        this.headlessMarkdownTabHost(),
-        worktreeId,
-        this.listedMarkdownTab(worktreeId, tabId)
-      )
-    }
-    return await this.notifier.readMobileMarkdownTab(worktreeId, tabId)
+    return await readMarkdownTabFromDisk(
+      this.markdownTabDiskHost(),
+      worktreeId,
+      this.listedMarkdownTab(worktreeId, tabId)
+    )
   }
 
   async saveMobileMarkdownTab(
@@ -202,19 +197,16 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     content: string
   ): Promise<RuntimeMarkdownSaveTabResult> {
     const worktreeId = await this.resolveMobileMarkdownWorktreeId(worktreeSelector, tabId)
-    if (!this.notifier?.saveMobileMarkdownTab) {
-      return await saveHeadlessMarkdownTab(
-        this.headlessMarkdownTabHost(),
-        worktreeId,
-        this.listedMarkdownTab(worktreeId, tabId),
-        baseVersion,
-        content
-      )
-    }
-    return await this.notifier.saveMobileMarkdownTab(worktreeId, tabId, baseVersion, content)
+    return await saveMarkdownTabToDisk(
+      this.markdownTabDiskHost(),
+      worktreeId,
+      this.listedMarkdownTab(worktreeId, tabId),
+      baseVersion,
+      content
+    )
   }
 
-  private listedMarkdownTab(worktreeId: string, tabId: string): { id: string; filePath: string } {
+  private listedMarkdownTab(worktreeId: string, tabId: string): ListedMarkdownTab {
     const tab = this.mobileSessionTabsByWorktree
       .get(worktreeId)
       ?.tabs.find((candidate) => candidate.type === 'markdown' && candidate.id === tabId)
@@ -224,31 +216,15 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     return tab
   }
 
-  private headlessMarkdownTabHost(): HeadlessMarkdownTabHost {
-    return {
+  private markdownTabDiskHost(): MarkdownTabDiskHost {
+    return createMarkdownTabDiskHost({
+      requireStore: () => this.requireStore(),
       getWorkspaceSessionForWorktree: (worktreeId) =>
         this.getWorkspaceSessionForWorktree(worktreeId),
-      readFile: async (worktreeId, filePath, maxBytes) => {
-        requireLocalRuntimeFileRoute(await this.resolveRuntimeFileTarget(`id:${worktreeId}`))
-        const { bytes, size } = await readLocalRuntimeFilePrefix(
-          filePath,
-          this.requireStore(),
-          maxBytes
-        )
-        if (isBinaryBuffer(bytes)) {
-          throw new Error('binary_file')
-        }
-        return { content: bytes.toString('utf8'), byteLength: size }
-      },
-      writeFileIfUnchanged: async (worktreeId, filePath, content, precondition) => {
-        const target = await this.resolveRuntimeFileTarget(`id:${worktreeId}`)
-        return requireRuntimeFileProvider(target, this).writeFileWithDiskPrecondition(
-          filePath,
-          content,
-          precondition
-        )
-      }
-    }
+      resolveRuntimeFileTarget: (selector) => this.resolveRuntimeFileTarget(selector),
+      callEnvironment: (environmentId, method, params) =>
+        this.callOrchestrationWorkerServer(environmentId, method, params)
+    })
   }
 
   // Why: `getRepo(id)` is host-blind and never read `worktree.hostId`, which outranks every repo

@@ -39,10 +39,6 @@ import type {
   RuntimeTerminalCreateRequestPayload,
   RuntimeTerminalPresentation
 } from '../../shared/runtime-types'
-import type {
-  RuntimeMobileMarkdownRequest,
-  RuntimeMobileMarkdownResponse
-} from '../../shared/mobile-markdown-document'
 import type { TerminalTabCreateReply } from '../../shared/terminal-reveal-identity'
 import type {
   TerminalTabCloseRequest,
@@ -282,8 +278,6 @@ export type UiCommandEventApi = {
       navigation?: RuntimeNavigationTarget
     }) => void
   ) => () => void
-  onMobileMarkdownRequest: (callback: (request: RuntimeMobileMarkdownRequest) => void) => () => void
-  respondMobileMarkdownRequest: (response: RuntimeMobileMarkdownResponse) => void
   onCloseTerminal: (callback: (target: TerminalSurfaceCloseTarget) => void) => () => void
   onTerminalTabCloseRequest: (callback: (request: TerminalTabCloseRequest) => void) => () => void
   respondTerminalTabClose: (response: TerminalTabCloseResponse) => void

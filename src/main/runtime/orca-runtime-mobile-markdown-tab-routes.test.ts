@@ -1,0 +1,299 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../shared/execution-host'
+import { hashMarkdownContent } from '../../shared/mobile-markdown-document'
+import type { RuntimeMobileSessionMarkdownTab } from '../../shared/runtime-types'
+import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
+import { OrchestrationError } from './orchestration/orchestration-error'
+import { RpcDispatcher } from './rpc/dispatcher'
+import { FILE_METHODS } from './rpc/methods/files'
+import { SESSION_TAB_MARKDOWN_METHODS } from './rpc/methods/session-tab-markdown-methods'
+
+// Why: authorization is not under test; both runtimes read a temp workspace the store never registered.
+vi.mock('./files/chat-scratch-file-root', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  resolveRuntimeAuthorizedPath: async (path: string) => path
+}))
+
+const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
+await import('./orca-runtime-test-lifecycle.spec')
+const { TEST_WORKTREE_ID, makeRuntimeStoreWithWorkspaceSession } =
+  await import('./orca-runtime-test-fixtures.spec')
+
+type Runtime = InstanceType<typeof OrcaRuntimeService>
+
+let root = ''
+let readme = ''
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'orca-markdown-tab-routes-'))
+  readme = join(root, 'README.md')
+  await writeFile(readme, '# Notes\n')
+})
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true })
+})
+
+function sessionWithReadme(): WorkspaceSessionState {
+  return {
+    ...getDefaultWorkspaceSession(),
+    openFilesByWorktree: {
+      [TEST_WORKTREE_ID]: [
+        {
+          filePath: readme,
+          relativePath: 'README.md',
+          worktreeId: TEST_WORKTREE_ID,
+          language: 'markdown',
+          runtimeEnvironmentId: null
+        }
+      ]
+    },
+    activeTabTypeByWorktree: { [TEST_WORKTREE_ID]: 'editor' },
+    activeFileIdByWorktree: { [TEST_WORKTREE_ID]: readme }
+  }
+}
+
+async function runtimeOnHost(executionHostId: ExecutionHostId): Promise<Runtime> {
+  const harness = makeRuntimeStoreWithWorkspaceSession(sessionWithReadme())
+  const runtime = new OrcaRuntimeService(harness.runtimeStore)
+  runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+  await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+  const target = await runtime.resolveRuntimeFileTarget(`id:${TEST_WORKTREE_ID}`)
+  vi.spyOn(runtime, 'resolveRuntimeFileTarget').mockResolvedValue({
+    ...target,
+    worktree: { ...target.worktree, path: root },
+    executionHostId
+  })
+  return runtime
+}
+
+/** A desktop whose workspace runs on `env-a`, wired to that server's runtime the way the transport is. */
+async function desktopOnServer(serverHost: ExecutionHostId = 'local') {
+  const server = await runtimeOnHost(serverHost)
+  const serverDispatch = new RpcDispatcher({
+    runtime: server,
+    methods: [...FILE_METHODS, ...SESSION_TAB_MARKDOWN_METHODS]
+  })
+  const serverCalls: string[] = []
+  const serverForwards = vi.spyOn(server, 'callOrchestrationWorkerServer')
+  const desktop = await runtimeOnHost('runtime:env-a')
+  const call = vi
+    .spyOn(desktop, 'callOrchestrationWorkerServer')
+    .mockImplementation(async (environmentId, method, params) => {
+      expect(environmentId).toBe('env-a')
+      serverCalls.push(method)
+      const response = await serverDispatch.dispatch({
+        id: `call-${serverCalls.length}`,
+        authToken: 'tok',
+        method,
+        params
+      })
+      if (!response.ok) {
+        throw new OrchestrationError(response.error.code, response.error.message)
+      }
+      return response.result
+    })
+  return { desktop, call, serverCalls, serverForwards }
+}
+
+describe("a phone's Markdown tab on a paired server's workspace", () => {
+  it('reads the file on that server, which answers from its own disk', async () => {
+    const { desktop, serverCalls, serverForwards } = await desktopOnServer()
+
+    await expect(
+      desktop.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)
+    ).resolves.toMatchObject({
+      tabId: readme,
+      content: '# Notes\n',
+      version: hashMarkdownContent('# Notes\n'),
+      isDirty: false,
+      editable: true
+    })
+    expect(serverCalls).toEqual(['files.read'])
+    expect(serverForwards).not.toHaveBeenCalled()
+  })
+
+  it('never hops on from a server that does not run the workspace itself', async () => {
+    const { desktop, serverCalls, serverForwards } = await desktopOnServer('runtime:env-b')
+
+    await expect(desktop.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)).rejects.toThrow(
+      'runtime:env-b is not dispatched by this process'
+    )
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).rejects.toThrow()
+    expect(serverCalls).toEqual(['files.read', 'files.read'])
+    expect(serverForwards).not.toHaveBeenCalled()
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
+  })
+
+  it('saves through the server, which checks the precondition and writes', async () => {
+    const { desktop, serverCalls, serverForwards } = await desktopOnServer()
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+    expect(await readFile(readme, 'utf8')).toBe('# Phone\n')
+    expect(serverCalls).toEqual(['files.read', 'files.writeIfUnchanged'])
+    expect(serverForwards).not.toHaveBeenCalled()
+  })
+
+  it("refuses a save the server's disk moved under", async () => {
+    const { desktop, call } = await desktopOnServer()
+    const forward = call.getMockImplementation()!
+    call.mockImplementation(async (environmentId, method, params) => {
+      if (method === 'files.writeIfUnchanged') {
+        await writeFile(readme, '# Changed on the server\n')
+      }
+      return forward(environmentId, method, params)
+    })
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).rejects.toThrow('conflict')
+    expect(await readFile(readme, 'utf8')).toBe('# Changed on the server\n')
+  })
+
+  it('reports a lost server as unavailable, never as a missing or empty file', async () => {
+    const { desktop, call } = await desktopOnServer()
+    call.mockRejectedValue(new Error('socket closed'))
+
+    const read = desktop.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)
+    await expect(read).rejects.toBeInstanceOf(RemoteRuntimeClientError)
+    await expect(read).rejects.toMatchObject({ code: 'remote_runtime_unavailable' })
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).rejects.toMatchObject({ code: 'remote_runtime_unavailable' })
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
+  })
+})
+
+describe("a phone's Markdown tab on a raw ssh: host", () => {
+  it('refuses it with the same error on read and save', async () => {
+    const runtime = await runtimeOnHost('ssh:target-1')
+    const forwards = vi.spyOn(runtime, 'callOrchestrationWorkerServer')
+
+    await expect(
+      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)
+    ).rejects.toBeInstanceOf(SshHostNotServedError)
+    await expect(
+      runtime.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Changed\n'
+      )
+    ).rejects.toBeInstanceOf(SshHostNotServedError)
+    expect(forwards).not.toHaveBeenCalled()
+  })
+})
+
+describe("a phone's Markdown tab with a desktop window attached", () => {
+  function windowTab(
+    overrides: Partial<RuntimeMobileSessionMarkdownTab>
+  ): RuntimeMobileSessionMarkdownTab {
+    return {
+      type: 'markdown',
+      id: 'tab-readme',
+      title: 'README.md',
+      filePath: readme,
+      relativePath: 'README.md',
+      language: 'markdown',
+      mode: 'edit',
+      isDirty: false,
+      isActive: true,
+      sourceFileId: readme,
+      sourceFilePath: readme,
+      sourceRelativePath: 'README.md',
+      documentVersion: `file:${readme}`,
+      ...overrides
+    }
+  }
+
+  function runtimeWithWindowTabs(tabs: RuntimeMobileSessionMarkdownTab[]): Runtime {
+    const harness = makeRuntimeStoreWithWorkspaceSession(sessionWithReadme())
+    const runtime = new OrcaRuntimeService(harness.runtimeStore)
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      mobileSessionTabs: [
+        {
+          worktree: TEST_WORKTREE_ID,
+          publicationEpoch: 'renderer',
+          snapshotVersion: 1,
+          activeGroupId: null,
+          activeTabId: tabs[0]?.id ?? null,
+          activeTabType: 'markdown',
+          tabs
+        }
+      ]
+    })
+    return runtime
+  }
+
+  it("reads the disk, not the desktop's unsaved text, and says the desktop has some", async () => {
+    const runtime = runtimeWithWindowTabs([windowTab({ isDirty: true })])
+
+    await expect(
+      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, 'tab-readme')
+    ).resolves.toMatchObject({
+      tabId: 'tab-readme',
+      content: '# Notes\n',
+      isDirty: true,
+      source: 'file',
+      editable: true
+    })
+  })
+
+  it("reads a preview tab's source file, read-only", async () => {
+    const runtime = runtimeWithWindowTabs([
+      windowTab({ id: `markdown-preview::${readme}`, mode: 'markdown-preview' })
+    ])
+
+    await expect(
+      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, `markdown-preview::${readme}`)
+    ).resolves.toMatchObject({
+      content: '# Notes\n',
+      editable: false,
+      readOnlyReason: 'unsupported_preview'
+    })
+  })
+
+  it('finds no untitled tab, because the saved session holds only files with a path', async () => {
+    const untitled = join(root, 'untitled-1.md')
+    const runtime = runtimeWithWindowTabs([
+      windowTab({ id: untitled, filePath: untitled, sourceFilePath: untitled })
+    ])
+
+    await expect(runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)).rejects.toThrow(
+      'tab_not_found'
+    )
+  })
+})

@@ -1,8 +1,8 @@
 /**
- * A phone's Markdown read and save on a host with no window: main answers from the file on disk,
- * with the same result shapes the window's editor relay returns. An unsaved draft a window left in
- * the saved session is that window's view state: main never shows or edits it, and the desktop's
- * restore check reports any disk change it missed when it next opens the tab.
+ * A phone's Markdown read and save, window or not: main answers from the file on disk, through the
+ * workspace's own host. The desktop's unsaved text stays the desktop's: the phone sees the disk,
+ * with the listed tab's `isDirty` as its "changed on desktop" signal, and the desktop's editor
+ * reports a phone save as a change on disk.
  */
 import {
   hashMarkdownContent,
@@ -10,6 +10,7 @@ import {
   MOBILE_MARKDOWN_EDIT_MAX_BYTES,
   MOBILE_MARKDOWN_READ_MAX_BYTES,
   truncateMobileMarkdownRead,
+  utf8ByteLength,
   type RuntimeMarkdownReadTabResult,
   type RuntimeMarkdownSaveTabResult
 } from '../../shared/mobile-markdown-document'
@@ -25,45 +26,63 @@ import type {
 } from '../../shared/workspace-session-state-types'
 import { findListedEditorFile } from './mobile-session-editor-projection'
 
-export type HeadlessMarkdownFile = { content: string; byteLength: number }
+export type MarkdownDiskFile = { content: string; byteLength: number }
 
-export type HeadlessMarkdownTabHost = {
+type MarkdownFileAddress = Pick<PersistedOpenFile, 'filePath' | 'relativePath'>
+
+export type MarkdownTabDiskHost = {
   getWorkspaceSessionForWorktree(worktreeId: string): WorkspaceSessionState | null | undefined
-  /** At most `maxBytes` of the file decoded, and its full size; throws `binary_file` for binary. */
-  readFile(worktreeId: string, filePath: string, maxBytes: number): Promise<HeadlessMarkdownFile>
+  /** A prefix of the file decoded (at most `maxBytes`, the host may send less), and its full
+   *  size; throws `binary_file` for binary. */
+  readFile(
+    worktreeId: string,
+    file: MarkdownFileAddress,
+    maxBytes: number
+  ): Promise<MarkdownDiskFile>
   writeFileIfUnchanged(
     worktreeId: string,
-    filePath: string,
+    file: MarkdownFileAddress,
     content: string,
     precondition: FileWriteDiskPrecondition
   ): Promise<FileWriteResult>
 }
 
-type ListedMarkdownTab = Pick<RuntimeMobileSessionMarkdownTab, 'id' | 'filePath'>
+/** The tab as the phone was shown it; a preview names its source file in `sourceFilePath`. */
+export type ListedMarkdownTab = Pick<
+  RuntimeMobileSessionMarkdownTab,
+  'id' | 'mode' | 'sourceFilePath' | 'isDirty'
+>
 
 // Why up to 4 bytes over: a character straddling the cap still decodes whole before the cut.
 const READ_SLACK_BYTES = 4
 
 const saveQueues = new Map<string, Promise<unknown>>()
 
+// Why the saved session: it holds only files with a path, so an untitled tab is never found.
 function savedEditorFile(
-  host: HeadlessMarkdownTabHost,
+  host: MarkdownTabDiskHost,
   worktreeId: string,
   tab: ListedMarkdownTab
 ): PersistedOpenFile {
   const session = host.getWorkspaceSessionForWorktree(worktreeId)
   const files = session?.openFilesByWorktree?.[worktreeId] ?? []
-  const file = session ? findListedEditorFile(files, session, worktreeId, tab) : undefined
-  if (!file || file.language !== 'markdown') {
+  const file = session
+    ? findListedEditorFile(files, session, worktreeId, { id: tab.id, filePath: tab.sourceFilePath })
+    : undefined
+  if (!file || (file.language !== 'markdown' && tab.mode !== 'markdown-preview')) {
     throw new Error('tab_not_found')
   }
   return file
 }
 
 function readOnlyReason(
+  tab: ListedMarkdownTab,
   file: PersistedOpenFile,
   byteLength: number
 ): RuntimeMarkdownReadTabResult['readOnlyReason'] {
+  if (tab.mode === 'markdown-preview') {
+    return 'unsupported_preview'
+  }
   // Why: the editor never saves a read-only tab (a log view), so the phone may not either.
   if (file.readOnly) {
     return 'unsupported_tab'
@@ -71,37 +90,38 @@ function readOnlyReason(
   return byteLength > MOBILE_MARKDOWN_EDIT_MAX_BYTES ? 'file_too_large' : undefined
 }
 
-export async function readHeadlessMarkdownTab(
-  host: HeadlessMarkdownTabHost,
+export async function readMarkdownTabFromDisk(
+  host: MarkdownTabDiskHost,
   worktreeId: string,
   tab: ListedMarkdownTab
 ): Promise<RuntimeMarkdownReadTabResult> {
   const file = savedEditorFile(host, worktreeId, tab)
   const disk = await host.readFile(
     worktreeId,
-    file.filePath,
+    file,
     MOBILE_MARKDOWN_READ_MAX_BYTES + READ_SLACK_BYTES
   )
   const preview = truncateMobileMarkdownRead(disk.content)
-  const reason = readOnlyReason(file, disk.byteLength)
+  const reason = readOnlyReason(tab, file, disk.byteLength)
   return {
     tabId: tab.id,
     filePath: file.filePath,
     relativePath: file.relativePath,
     content: preview.content,
-    isDirty: false,
+    // Why the listed flag: unsaved desktop text is the desktop's; the phone only learns it exists.
+    isDirty: tab.isDirty,
     version: hashMarkdownContent(preview.content),
     source: 'file',
     editable: reason === undefined,
     ...(reason ? { readOnlyReason: reason } : {}),
-    ...(disk.byteLength > MOBILE_MARKDOWN_READ_MAX_BYTES
+    ...(disk.byteLength > utf8ByteLength(preview.content)
       ? { truncated: true, byteLength: disk.byteLength }
       : {})
   }
 }
 
-export async function saveHeadlessMarkdownTab(
-  host: HeadlessMarkdownTabHost,
+export async function saveMarkdownTabToDisk(
+  host: MarkdownTabDiskHost,
   worktreeId: string,
   tab: ListedMarkdownTab,
   baseVersion: string,
@@ -126,15 +146,15 @@ export async function saveHeadlessMarkdownTab(
 }
 
 async function saveOnce(
-  host: HeadlessMarkdownTabHost,
+  host: MarkdownTabDiskHost,
   worktreeId: string,
   tab: ListedMarkdownTab,
   baseVersion: string,
   content: string
 ): Promise<RuntimeMarkdownSaveTabResult> {
   const file = savedEditorFile(host, worktreeId, tab)
-  const disk = await host.readFile(worktreeId, file.filePath, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
-  const reason = readOnlyReason(file, disk.byteLength)
+  const disk = await host.readFile(worktreeId, file, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
+  const reason = readOnlyReason(tab, file, disk.byteLength)
   if (reason) {
     throw new Error(reason)
   }
@@ -146,7 +166,7 @@ async function saveOnce(
     }
     throw new Error('conflict')
   }
-  const written = await host.writeFileIfUnchanged(worktreeId, file.filePath, content, {
+  const written = await host.writeFileIfUnchanged(worktreeId, file, content, {
     expectedSignature: getDiskBaselineSignature(disk.content)
   })
   if (!written.ok) {
