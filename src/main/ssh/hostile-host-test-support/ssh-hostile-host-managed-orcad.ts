@@ -10,6 +10,7 @@ import { NODE_RUNTIME_ASSETS, pinnedNodeRuntimeAsset } from '../../../shared/nod
 import { ORCAD_MANAGED_REMOTE_PORT } from '../../../shared/orcad-managed-runtime'
 import { ORCAD_RUNTIMES_DIRNAME } from '../../../shared/orcad-artifacts'
 import type { SshTarget } from '../../../shared/ssh-types'
+import type { SshConnection } from '../connection/ssh-connection'
 import { readOrcadActivationRecord } from '../../managed-server/activation/orcad-activation-record-store'
 import { classifyOrcadHostUnavailable } from '../../orcad/orcad-host-unavailable'
 import { managedOrcadSlot } from '../../managed-server/lifecycle/orcad-managed-runtime-context'
@@ -65,7 +66,7 @@ export async function proveManagedOrcadCell(
       expect(deployed, JSON.stringify(deployed)).toMatchObject({
         outcome: 'installed-and-activated'
       })
-      await assertLiveThenDecommissioned(slot, slotDir, deployed.fullVersion)
+      await assertLiveThenDecommissioned(conn, slot, slotDir, deployed.fullVersion)
     }
     const toolLog = await hostExec(
       target,
@@ -97,6 +98,7 @@ async function assertOnlyRuntimeUploaded(
 }
 
 async function assertLiveThenDecommissioned(
+  conn: SshConnection,
   slot: OrcadSlotOptions,
   slotDir: string,
   version: string
@@ -104,7 +106,7 @@ async function assertLiveThenDecommissioned(
   const liveness = async (): Promise<string> =>
     parseOrcadLiveness(await execOrcadRemote(slot, orcadLivenessProbeCommand(slot.host, slotDir)))
   expect(await liveness()).toBe('LIVE')
-  await proveRecoveryStopsRefusingOrcad(slot, slotDir, version)
+  await proveRecoveryStopsRefusingOrcad(conn, slot, slotDir, version)
   const decommission = await decommissionRemoteOrcad({
     ...slot,
     record: await readOrcadActivationRecord(slot),

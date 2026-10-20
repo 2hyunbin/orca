@@ -28,12 +28,14 @@ import {
 } from '../orcad-recovery-slot'
 import { orcadRestartAdmissionPort } from '../orcad-restart-admission-client'
 import { tunneledOrcadPairingCode } from '../orcad-tunneled-pairing'
+import type { SshConnection } from '../connection/ssh-connection'
 import { joinRemotePath } from '../ssh-remote-platform'
 
 const REQUEST_CONSUMED_TIMEOUT_MS = 15_000
 
 /** Ends with the slot serving again, so the caller's decommission still has a live server. */
 export async function proveRecoveryStopsRefusingOrcad(
+  conn: SshConnection,
   slot: OrcadSlotOptions,
   slotDir: string,
   version: string
@@ -52,7 +54,7 @@ export async function proveRecoveryStopsRefusingOrcad(
   if (!activatedAt || remotePort === null) {
     throw new Error('The active orcad has no activation time or bound port.')
   }
-  const tunnel = await new OrcadManagedTunnelTransportProvider().start(slot.conn, {
+  const tunnel = await new OrcadManagedTunnelTransportProvider().start(conn, {
     id: 'recovery-stop-cell',
     connectionId: 'recovery-stop-cell',
     localHost: '127.0.0.1',
