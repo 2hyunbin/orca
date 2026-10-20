@@ -296,14 +296,26 @@ describe('codex wrapper --no-daemon rule', () => {
   describe('caller identity for commands Codex runs', () => {
     const identity = {
       ORCA_TERMINAL_HANDLE: 'term_abc',
-      ORCA_USER_DATA_PATH: "/Users/o'brien/Library/Application Support/orca"
+      ORCA_USER_DATA_PATH: '/Users/a b/Library/Application Support/orca $HOME \\x "q"'
     }
-    const identityArgs = [
-      '-c',
+    const identityOverrides = [
       "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='term_abc'",
-      '-c',
       `shell_environment_policy.set.ORCA_USER_DATA_PATH='${identity.ORCA_USER_DATA_PATH}'`
     ]
+    // Why unordered: the overrides set distinct keys, so only which ones arrive matters.
+    const splitOverrides = (line: string): { overrides: string[]; rest: string[] } => {
+      const [, ...words] = line.split('|')
+      const overrides: string[] = []
+      const rest: string[] = []
+      for (let i = 0; i < words.length; i++) {
+        if (words[i] === '-c') {
+          overrides.push(words[++i])
+        } else {
+          rest.push(words[i])
+        }
+      }
+      return { overrides: overrides.toSorted(), rest }
+    }
 
     for (const [shell, available] of shells) {
       it.skipIf(!available)(
@@ -323,11 +335,11 @@ describe('codex wrapper --no-daemon rule', () => {
           )
 
           expect(result.stderr).toBe('')
-          expect(lines(result.stdout)).toEqual([
-            ['ARGV', '--no-daemon', ...identityArgs, 'x'].join('|'),
-            ['ARGV', ...identityArgs, '--no-daemon', 'x'].join('|'),
-            'ARGV|agents',
-            'ARGV|--remote|ws://h'
+          expect(lines(result.stdout).map(splitOverrides)).toEqual([
+            { overrides: identityOverrides, rest: ['--no-daemon', 'x'] },
+            { overrides: identityOverrides, rest: ['--no-daemon', 'x'] },
+            { overrides: [], rest: ['agents'] },
+            { overrides: [], rest: ['--remote', 'ws://h'] }
           ])
         }
       )
@@ -336,7 +348,21 @@ describe('codex wrapper --no-daemon rule', () => {
         const sandbox = makeSandbox(HELP_WITHOUT_FLAG)
         const result = run(shell, codexCall(shell, ['x']), sandbox, identity)
 
-        expect(lines(result.stdout)).toEqual([['ARGV', ...identityArgs, 'x'].join('|')])
+        expect(lines(result.stdout).map(splitOverrides)).toEqual([
+          { overrides: identityOverrides, rest: ['x'] }
+        ])
+      })
+
+      it.skipIf(!available)(`${shell} skips a value holding an apostrophe`, () => {
+        const sandbox = makeSandbox(HELP_WITHOUT_FLAG)
+        const result = run(shell, codexCall(shell, ['x']), sandbox, {
+          ORCA_TERMINAL_HANDLE: 'term_abc',
+          ORCA_USER_DATA_PATH: "/Users/o'brien/orca'"
+        })
+
+        expect(lines(result.stdout).map(splitOverrides)).toEqual([
+          { overrides: [identityOverrides[0]], rest: ['x'] }
+        ])
       })
 
       it.skipIf(!available)(`${shell} forwards nothing with ORCA_CODEX_ISOLATE=0`, () => {

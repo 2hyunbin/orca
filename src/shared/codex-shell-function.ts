@@ -24,12 +24,10 @@ export const CODEX_COMMAND_IDENTITY_ENV_KEYS = [
   'ORCA_USER_DATA_PATH'
 ] as const
 
-// Why a TOML literal: a value holding `'` fails to parse, and Codex then takes the raw text minus
-// its outer quotes and whitespace, which is the same value for these keys.
+// Why values holding `'` are skipped: a TOML literal can't carry one, and Codex's fallback for the
+// failed parse truncates some (`/a'`, `/a' #b`) — a wrong path is worse than none.
 const identitySetArg = (key: string, value: string): string =>
   `shell_environment_policy.set.${key}='${value}'`
-// Why reversed: the POSIX and fish functions prepend each key, so this keeps every shell in list order.
-const PREPENDED_IDENTITY_KEYS = CODEX_COMMAND_IDENTITY_ENV_KEYS.toReversed()
 
 export function getPosixCodexShellLaunchPreflight(): string {
   return `# Why: a typed alias expands inside the shell, after pane launch prep.
@@ -54,7 +52,7 @@ if [[ -n "\${__orca_codex_binary:-}" && -x "\${__orca_codex_binary}" ]]; then
       esac
     done
     if [[ "$__orca_codex_identity" != 0 ]]; then
-${PREPENDED_IDENTITY_KEYS.map((key) => `      [[ -z "\${${key}:-}" ]] || set -- -c "${identitySetArg(key, `\${${key}}`)}" "$@"`).join('\n')}
+${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `      [[ -z "\${${key}:-}" || "\${${key}}" == *"'"* ]] || set -- -c "${identitySetArg(key, `\${${key}}`)}" "$@"`).join('\n')}
     fi
     # Why probe every launch: a cached answer goes stale across an upgrade, and 0.155 and older exit 2 on the flag.
     if [[ "$__orca_codex_isolate" != 0 ]]; then
@@ -78,7 +76,7 @@ if test "$__orca_codex_type" = file
       command "$ORCA_CODEX_LAUNCH_PREFLIGHT" agent hooks prepare-codex >/dev/null 2>&1; or true
     end
     if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_SHARED_SERVER_ARG_PATTERN}' $argv
-${PREPENDED_IDENTITY_KEYS.map((key) => `      test -n "$${key}"; and set argv -c "${identitySetArg(key, `$${key}`)}" $argv`).join('\n')}
+${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `      test -n "$${key}"; and not string match -q -- "*'*" "$${key}"; and set argv -c "${identitySetArg(key, `$${key}`)}" $argv`).join('\n')}
     end
     if test "$ORCA_CODEX_ISOLATE" != 0; and not string match -qr -- '${CODEX_NO_DAEMON_SKIP_ARG_PATTERN}' $argv; and command codex --help 2>/dev/null </dev/null | string match -q -- '*--no-daemon*'
       set argv --no-daemon $argv
@@ -120,7 +118,7 @@ if ($orcaCodexCommand -and
         }
         $orcaCodexIdentity = @()
         if ($env:ORCA_CODEX_ISOLATE -ne '0' -and -not (@($args) -cmatch '${CODEX_SHARED_SERVER_ARG_PATTERN}')) {
-            foreach ($k in ${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `'${key}'`).join(',')}) { $v = [Environment]::GetEnvironmentVariable($k); if ($v) { $orcaCodexIdentity += '-c', "${identitySetArg('$k', '$v')}" } }
+            foreach ($k in ${CODEX_COMMAND_IDENTITY_ENV_KEYS.map((key) => `'${key}'`).join(',')}) { $v = [Environment]::GetEnvironmentVariable($k); if ($v -and -not $v.Contains("'")) { $orcaCodexIdentity += '-c', "${identitySetArg('$k', '$v')}" } }
         }
         $orcaCodexArgs = @(__OrcaEscapeNativeArgs $orcaCodexExecutable.Source (@($orcaCodexIdentity) + @($args)))
         # Why: a native command inside a function never sees the function's pipeline input on its own.

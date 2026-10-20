@@ -6,7 +6,7 @@ import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
 import { CODEX_NO_DAEMON_SKIP_ARGS } from '../../shared/codex-shell-function'
 
 const CODEX_EXECUTABLE = /^codex(\.(exe|cmd|bat|ps1))?$/i
-const SHARED_SERVER_ARGS: ReadonlySet<string> = new Set(CODEX_NO_DAEMON_SKIP_ARGS)
+const NO_DAEMON_SKIP_ARGS: ReadonlySet<string> = new Set(CODEX_NO_DAEMON_SKIP_ARGS)
 // Why bounded: a hung binary must not hold the pane; a slow probe only costs the flag.
 const HELP_PROBE_TIMEOUT_MS = 5_000
 
@@ -61,7 +61,7 @@ export function planCodexNoDaemonLaunch(launch: LocalCodexLaunch): Promise<strin
   }
   if (
     env.ORCA_CODEX_ISOLATE === '0' ||
-    args.some((arg) => SHARED_SERVER_ARGS.has(arg) || arg.startsWith('--remote='))
+    args.some((arg) => NO_DAEMON_SKIP_ARGS.has(arg) || arg.startsWith('--remote='))
   ) {
     return null
   }

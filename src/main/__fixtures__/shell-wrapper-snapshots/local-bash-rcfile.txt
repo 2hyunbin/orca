@@ -144,11 +144,11 @@ if [[ -n "${__orca_codex_binary:-}" && -x "${__orca_codex_binary}" ]]; then
       esac
     done
     if [[ "$__orca_codex_identity" != 0 ]]; then
-      [[ -z "${ORCA_USER_DATA_PATH:-}" ]] || set -- -c "shell_environment_policy.set.ORCA_USER_DATA_PATH='${ORCA_USER_DATA_PATH}'" "$@"
-      [[ -z "${ORCA_WORKSPACE_ID:-}" ]] || set -- -c "shell_environment_policy.set.ORCA_WORKSPACE_ID='${ORCA_WORKSPACE_ID}'" "$@"
-      [[ -z "${ORCA_WORKTREE_ID:-}" ]] || set -- -c "shell_environment_policy.set.ORCA_WORKTREE_ID='${ORCA_WORKTREE_ID}'" "$@"
-      [[ -z "${ORCA_PANE_KEY:-}" ]] || set -- -c "shell_environment_policy.set.ORCA_PANE_KEY='${ORCA_PANE_KEY}'" "$@"
-      [[ -z "${ORCA_TERMINAL_HANDLE:-}" ]] || set -- -c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='${ORCA_TERMINAL_HANDLE}'" "$@"
+      [[ -z "${ORCA_TERMINAL_HANDLE:-}" || "${ORCA_TERMINAL_HANDLE}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_TERMINAL_HANDLE='${ORCA_TERMINAL_HANDLE}'" "$@"
+      [[ -z "${ORCA_PANE_KEY:-}" || "${ORCA_PANE_KEY}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_PANE_KEY='${ORCA_PANE_KEY}'" "$@"
+      [[ -z "${ORCA_WORKTREE_ID:-}" || "${ORCA_WORKTREE_ID}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_WORKTREE_ID='${ORCA_WORKTREE_ID}'" "$@"
+      [[ -z "${ORCA_WORKSPACE_ID:-}" || "${ORCA_WORKSPACE_ID}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_WORKSPACE_ID='${ORCA_WORKSPACE_ID}'" "$@"
+      [[ -z "${ORCA_USER_DATA_PATH:-}" || "${ORCA_USER_DATA_PATH}" == *"'"* ]] || set -- -c "shell_environment_policy.set.ORCA_USER_DATA_PATH='${ORCA_USER_DATA_PATH}'" "$@"
     fi
     # Why probe every launch: a cached answer goes stale across an upgrade, and 0.155 and older exit 2 on the flag.
     if [[ "$__orca_codex_isolate" != 0 ]]; then
