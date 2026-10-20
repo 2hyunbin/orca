@@ -44,17 +44,18 @@ export function stageSpeechRecognizerForOrcad(
     }
     // Copied aside then renamed, so a crash mid-copy never leaves a half recognizer in place.
     const staging = `${target}.staging-${process.pid}`
-    rmSync(staging, { recursive: true, force: true })
-    // Dereferenced: a linked package (pnpm) would otherwise still lock the app's own files.
-    cpSync(appRecognizerDir, staging, { recursive: true, dereference: true })
     try {
+      // Dereferenced: a linked package (pnpm) would otherwise still lock the app's own files.
+      cpSync(appRecognizerDir, staging, { recursive: true, dereference: true })
       renameSync(staging, target)
     } catch (error) {
-      rmSync(staging, { recursive: true, force: true })
       // Another serve staged the same version first.
       if (!existsSync(join(target, RECOGNIZER_ADDON))) {
         throw error
       }
+    } finally {
+      // A failed copy must not leave a partial one behind; after a rename this is a no-op.
+      rmSync(staging, { recursive: true, force: true })
     }
     return target
   } catch (error) {

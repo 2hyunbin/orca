@@ -1,8 +1,10 @@
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -95,4 +97,21 @@ describe('staging the recognizer for orcad', () => {
     writeFileSync(join(app, 'package.json'), '{}')
     expect(stageSpeechRecognizerForOrcad(app, tempRoot(), 'win32')).toBeUndefined()
   })
+
+  // POSIX file modes make one file unreadable, so the copy fails after it started.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'removes a partial copy when copying fails midway',
+    () => {
+      const app = recognizerAt(join(tempRoot(), 'sherpa-onnx-win-x64'))
+      writeFileSync(join(app, 'zz-unreadable.dll'), 'dll')
+      chmodSync(join(app, 'zz-unreadable.dll'), 0o000)
+      const profile = tempRoot()
+      try {
+        expect(stageSpeechRecognizerForOrcad(app, profile, 'win32')).toBeUndefined()
+        expect(readdirSync(join(profile, 'speech-recognizer'))).toEqual([])
+      } finally {
+        chmodSync(join(app, 'zz-unreadable.dll'), 0o600)
+      }
+    }
+  )
 })
