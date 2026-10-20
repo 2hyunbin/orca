@@ -576,6 +576,67 @@ describe('layout.apply', () => {
     })
   })
 
+  it('takes many tabs’ generated titles, of any workspaces, and no other title kind', () => {
+    const apply = eraseRpcMethods(LAYOUT_APPLY_METHODS).find(
+      (method) => method.name === 'layout.apply'
+    )
+    const parses = (command: Record<string, unknown>) =>
+      apply?.params?.safeParse({ command: { type: 'renameTabs', ...command } }).success
+    const titled = { workspace: WORKTREE, tabId: 'tab-1', title: 'Fix it' }
+
+    expect(parses({ kind: 'generated', renames: [titled, { ...titled, title: null }] })).toBe(true)
+    expect(parses({ kind: 'generated', renames: [] })).toBe(false)
+    expect(parses({ kind: 'custom', renames: [titled] })).toBe(false)
+    expect(parses({ kind: 'generated', renames: [{ ...titled, workspace: '' }] })).toBe(false)
+  })
+
+  it('gives each title in its tab’s partition in one write, naming a paired server’s tab', async () => {
+    const applyTabRenames = vi.fn(async (batches: { renames: { tabId: string }[] }[]) => [
+      { rename: batches[0]!.renames[0]!, code: 'tab_not_found' }
+    ])
+    const hosts: Record<string, string> = { 'tab-1': 'local', 'tab-2': 'ssh:target-1' }
+    const store = {
+      getRepo: () => undefined,
+      getWorkspaceSessionHostIds: () => ['local', 'ssh:target-1', 'runtime:env-1'],
+      getWorkspaceSession: (host: string) => ({
+        ...sessionListing('other'),
+        tabsByWorktree: {},
+        unifiedTabs: {
+          [WORKTREE]: Object.entries({ ...hosts, 'tab-3': 'runtime:env-1' })
+            .filter(([, owner]) => owner === host)
+            .map(([id]) => ({ id, entityId: id, contentType: 'terminal' }))
+        }
+      }),
+      applyTabRenames
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these store methods.
+    const runtime = new OrcaRuntimeService(store as never)
+    const titled = (tabId: string) => ({ workspace: WORKTREE, tabId, title: `Title ${tabId}` })
+
+    const reply = await runtime.applyLayoutCommand({
+      type: 'renameTabs',
+      kind: 'generated',
+      renames: [titled('tab-1'), titled('tab-2'), titled('tab-3')]
+    })
+
+    const renameOf = (tabId: string) => ({ type: 'renameTab', kind: 'generated', ...titled(tabId) })
+    expect(applyTabRenames).toHaveBeenCalledTimes(1)
+    expect(applyTabRenames).toHaveBeenCalledWith([
+      { hostId: 'local', renames: [renameOf('tab-1')] },
+      { hostId: 'ssh:target-1', renames: [renameOf('tab-2')] }
+    ])
+    expect(reply).toEqual({
+      ok: true,
+      result: {
+        untitled: [
+          { workspace: WORKTREE, tabId: 'tab-3', code: 'host_not_owned' },
+          { workspace: WORKTREE, tabId: 'tab-1', code: 'tab_not_found' }
+        ]
+      },
+      frameSeq: 0
+    })
+  })
+
   it('applies to the partition that holds the tab, such as an SSH host’s', async () => {
     const { runtime, applyLayoutCommand } = runtimeHolding('ssh:target-1')
 

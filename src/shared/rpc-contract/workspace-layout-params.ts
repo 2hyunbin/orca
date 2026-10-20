@@ -213,6 +213,13 @@ const RenameTabCommand = z.discriminatedUnion('kind', [
   })
 ])
 
+/** Agent-generated titles for many tabs, of any workspaces: main renames them in one write. */
+const RenameTabsCommand = z.object({
+  type: z.literal('renameTabs'),
+  kind: z.literal('generated'),
+  renames: z.array(z.object({ ...OnTab, title: z.union([z.string(), z.null()]) })).min(1)
+})
+
 const SetTabPropsCommand = z.object({
   type: z.literal('setTabProps'),
   ...OnTab,
@@ -365,6 +372,7 @@ export const LayoutApplyParams = z.object({
     SetGroupRatiosCommand,
     CloseTabsCommand,
     RenameTabCommand,
+    RenameTabsCommand,
     SetTabPropsCommand,
     MovePaneToNewTabCommand,
     OpenBrowserTabCommand,

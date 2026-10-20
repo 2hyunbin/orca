@@ -138,7 +138,7 @@ export type WindowLayoutCommand =
   | (Omit<CommandOf<'createTerminalTab'>, 'workspace'> & { tabId: string; leafId: string })
 
 /** `call_failed`: the call threw, and a thrown write is rolled back. */
-type WindowRefusalCode = Extract<LayoutApplyReply, { ok: false }>['code'] | 'call_failed'
+export type WindowRefusalCode = Extract<LayoutApplyReply, { ok: false }>['code'] | 'call_failed'
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
@@ -290,7 +290,7 @@ function handleReply(
 }
 
 /** A twin: main may route it to a paired server, whose layout the window still mirrors. */
-function mayBePairedServers(
+export function mayBePairedServers(
   state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
   worktreeId: string
 ): boolean {
