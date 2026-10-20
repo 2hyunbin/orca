@@ -136,9 +136,11 @@ export function captureLegacyRunTarget(
   const runContext = findLegacyAutomationRunContextStamp(store, automation, {
     allowRemoteHostScheduling
   })
-  if (!runContext || !store.stampLegacyAutomationRunContext(automation.id, runContext)) {
+  if (!runContext) {
     return automation
   }
+  // Why re-read even when the write is refused: another run may have captured it first.
+  store.stampLegacyAutomationRunContext(automation.id, runContext)
   return store.listAutomations().find((entry) => entry.id === automation.id) ?? automation
 }
 
