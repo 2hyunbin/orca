@@ -27,6 +27,9 @@ import { getTightestUsageSection, getUsageHeadlineSection } from './UsageRosterP
 import { formatBareUsagePercentage, formatUsagePercentageLabel } from './usage-percentage-label'
 import { translate } from '@/i18n/i18n'
 import { getStatusBarUsageSections } from './status-bar-usage-sections'
+import { GroupedPoolUsage } from './usage-grouped-pools'
+import { formatStatusBarSectionLabel, isGroupedUsagePool } from './usage-pool-label'
+import { useResetCountdownClock } from '@/hooks/useResetCountdownClock'
 
 function MiniBar({
   usedPct,
@@ -251,6 +254,21 @@ export function ProviderSegment({
   const statusLabel = p ? getProviderUsageStatusLabel(p) : ''
   // Why: not a problem; Claude updates its own login the next time it runs.
   const calm = p ? isClaudeUsageWaitingForClaude(p) : false
+  const tightest = p
+    ? mode === 'compact'
+      ? getUsageHeadlineSection(p)
+      : getTightestUsageSection(p)
+    : null
+  const sections = getStatusBarUsageSections(p, mode)
+  const groupedBuckets = sections.map((section) => section.window).filter(isGroupedUsagePool)
+  const showLabels = mode === 'verbose' || !compact
+  const now = useResetCountdownClock(
+    showLabels
+      ? groupedBuckets
+          .filter((bucket) => clampUsedPercent(bucket.usedPercent) >= USAGE_URGENT_PERCENT)
+          .map((bucket) => bucket.resetsAt)
+      : []
+  )
 
   // Idle / initial load
   if (!p || p.status === 'idle') {
@@ -261,8 +279,6 @@ export function ProviderSegment({
       </span>
     )
   }
-
-  const tightest = mode === 'compact' ? getUsageHeadlineSection(p) : getTightestUsageSection(p)
 
   // Fetching with no prior data
   if (p.status === 'fetching' && !tightest) {
@@ -311,7 +327,8 @@ export function ProviderSegment({
   // Has data (ok, fetching with stale data, or error with stale data)
   const isStale = p.status === 'error' && !calm
   const showBalance = isExtraUsageActive(p)
-  const sections = getStatusBarUsageSections(p, mode)
+  const showGroupedPools =
+    mode === 'verbose' && groupedBuckets.length > 0 && groupedBuckets.length === sections.length
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -319,18 +336,27 @@ export function ProviderSegment({
       {mode === 'verbose' && tightest && !compact ? (
         <MiniBar usedPct={clampUsedPercent(tightest.window.usedPercent)} display={display} />
       ) : null}
-      {sections.map((section, index) => (
-        <React.Fragment key={section.key}>
-          {index > 0 ? <span className="text-muted-foreground">·</span> : null}
-          <WindowLabel
-            w={section.window}
-            label={section.label}
-            display={display}
-            showLabel={mode === 'verbose' || !compact}
-            labelFirst={section.labelFirst}
-          />
-        </React.Fragment>
-      ))}
+      {showGroupedPools ? (
+        <GroupedPoolUsage
+          visibleBuckets={groupedBuckets}
+          allBuckets={p.buckets ?? []}
+          display={display}
+          now={now}
+        />
+      ) : (
+        sections.map((section, index) => (
+          <React.Fragment key={section.key}>
+            {index > 0 ? <span className="text-muted-foreground">·</span> : null}
+            <WindowLabel
+              w={section.window}
+              label={formatStatusBarSectionLabel(p, section, now)}
+              display={display}
+              showLabel={showLabels}
+              labelFirst={section.labelFirst}
+            />
+          </React.Fragment>
+        ))
+      )}
       {showBalance && p.extraUsage ? (
         <>
           <span className="text-muted-foreground">·</span>

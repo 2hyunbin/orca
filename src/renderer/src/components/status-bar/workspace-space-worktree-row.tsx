@@ -1,16 +1,11 @@
-import { AlertTriangle, FolderSearch, GitBranch, Server, Trash2 } from 'lucide-react'
+import { AlertTriangle, GitBranch, Server, Trash2 } from 'lucide-react'
 import type { WorkspaceSpaceWorktree } from '../../../../shared/workspace-space-types'
 import type { GitStatusEntry } from '../../../../shared/git-status-types'
 import { cn } from '@/lib/utils'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger
-} from '../ui/context-menu'
-import { getRevealInFileManagerLabel, revealInFileManager } from '@/lib/reveal-in-file-manager'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/context-menu'
+import { isPortaledRowMenuClick, isRowActivationKey } from '@/lib/list-row-interaction'
 import { HoverCard, HoverCardTrigger } from '../ui/hover-card'
 import {
   formatBytes,
@@ -30,6 +25,11 @@ import { WorkspaceSpaceStatusBadge } from './workspace-space-status-badge'
 import { describeWorktreeDeleteError } from '../sidebar/worktree-delete-error-display'
 import { formatShortTimeAgo } from '@/lib/short-time-ago'
 import { WorkspaceSpaceChanges } from './workspace-space-changes'
+import { WORKSPACE_SPACE_TABLE_GRID_CLASS } from './workspace-space-table-layout'
+import {
+  WorkspaceSpaceWorktreeActions,
+  WorkspaceSpaceWorktreeMenuItems
+} from './workspace-space-worktree-actions'
 
 export function WorkspaceSpaceWorktreeRow({
   worktree,
@@ -79,19 +79,21 @@ export function WorkspaceSpaceWorktreeRow({
       tabIndex={0}
       aria-busy={isDeleting}
       data-current={inspected ? 'true' : undefined}
-      onClick={onInspect}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) {
-          return
+      onClick={(event) => {
+        if (!isPortaledRowMenuClick(event)) {
+          onInspect()
         }
-        if (event.key !== 'Enter' && event.key !== ' ') {
+      }}
+      onKeyDown={(event) => {
+        if (!isRowActivationKey(event)) {
           return
         }
         event.preventDefault()
         onInspect()
       }}
       className={cn(
-        'grid w-full cursor-pointer grid-cols-[1.75rem_minmax(0,1.4fr)_minmax(5rem,0.55fr)_5.5rem_6rem_9.5rem] items-center gap-2 border-b border-border/45 px-3 py-1 text-left text-xs transition-colors last:border-b-0 hover:bg-accent/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        WORKSPACE_SPACE_TABLE_GRID_CLASS,
+        'w-full cursor-pointer items-center border-b border-border/45 px-3 py-1 text-left text-xs transition-colors last:border-b-0 hover:bg-accent/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         inspected && 'bg-accent/55',
         isDeleting && 'cursor-wait opacity-50 grayscale hover:bg-transparent'
       )}
@@ -167,26 +169,6 @@ export function WorkspaceSpaceWorktreeRow({
       </div>
 
       <div className="flex items-center justify-end gap-1">
-        {canDelete ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={translate('workspaceSpace.deleteOne', 'Delete {{value0}}', {
-              value0: worktree.displayName
-            })}
-            title={translate('workspaceSpace.deleteOne', 'Delete {{value0}}', {
-              value0: worktree.displayName
-            })}
-            onClick={(event) => {
-              event.stopPropagation()
-              onDelete()
-            }}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        ) : null}
         {!isDeleting && !deleteState?.error && changedFiles && changedFiles.length > 0 ? (
           <WorkspaceSpaceChanges
             worktree={worktree}
@@ -217,6 +199,15 @@ export function WorkspaceSpaceWorktreeRow({
           </HoverCard>
         )}
       </div>
+      <div className="flex justify-end">
+        <WorkspaceSpaceWorktreeActions
+          worktree={worktree}
+          canDelete={canDelete}
+          canOpenWorkspace={decisionDetails.canOpenWorkspace}
+          isDeleting={isDeleting}
+          onDelete={onDelete}
+        />
+      </div>
     </div>
   )
 
@@ -224,38 +215,14 @@ export function WorkspaceSpaceWorktreeRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem
-          onSelect={() =>
-            void revealInFileManager(worktree.path, worktree.executionHostId ?? 'unresolved')
-          }
-        >
-          <FolderSearch className="size-3.5" />
-          {getRevealInFileManagerLabel()}
-        </ContextMenuItem>
-        <ContextMenuItem variant="destructive" disabled={!canDelete} onSelect={onDelete}>
-          <Trash2 className="size-3.5" />
-          {translate(
-            'auto.components.status.bar.WorkspaceSpaceManagerPanel.792a214457',
-            'Delete workspace'
-          )}
-        </ContextMenuItem>
-        {!canDelete ? (
-          <div className="max-w-64 px-2 py-1.5 text-xs text-muted-foreground">
-            {isDeleting
-              ? translate('workspaceSpace.delete.pending', 'Deletion is in progress.')
-              : worktree.isMainWorktree
-                ? translate('workspaceSpace.delete.main', 'The main worktree is protected.')
-                : !decisionDetails.canOpenWorkspace
-                  ? translate(
-                      'workspaceSpace.delete.unmanaged',
-                      'This workspace is no longer managed by Orca.'
-                    )
-                  : translate(
-                      'workspaceSpace.delete.unavailable',
-                      'This workspace is protected or unavailable.'
-                    )}
-          </div>
-        ) : null}
+        <WorkspaceSpaceWorktreeMenuItems
+          context
+          worktree={worktree}
+          canDelete={canDelete}
+          canOpenWorkspace={decisionDetails.canOpenWorkspace}
+          isDeleting={isDeleting}
+          onDelete={onDelete}
+        />
       </ContextMenuContent>
     </ContextMenu>
   )

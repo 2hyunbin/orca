@@ -155,6 +155,38 @@ describe('UsageRow', () => {
     expect(markup).toContain('10%')
   })
 
+  it('keeps full Antigravity pool names in the click panel', () => {
+    const markup = renderToStaticMarkup(
+      <UsageRow
+        p={{
+          provider: 'antigravity',
+          session: null,
+          weekly: null,
+          buckets: [
+            {
+              name: 'Gemini Models · Weekly Limit Remaining',
+              group: 'Gemini Models',
+              windowName: 'Weekly Limit Remaining',
+              usedPercent: 4,
+              windowMinutes: 10_080,
+              resetsAt: null,
+              resetDescription: null
+            }
+          ],
+          updatedAt: 0,
+          status: 'ok',
+          error: null
+        }}
+        display="used"
+        state={{ kind: 'usage', statusLabel: null }}
+        showSignInAction={false}
+        now={mocks.now}
+      />
+    )
+
+    expect(markup).toContain('Gemini Models · Weekly Limit Remaining')
+  })
+
   it('renders the tightest window inline in compact mode', () => {
     const markup = renderToStaticMarkup(
       <UsageRow

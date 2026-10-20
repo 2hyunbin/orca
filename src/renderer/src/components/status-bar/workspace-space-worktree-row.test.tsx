@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render as renderComponent, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSpaceWorktree } from '../../../../shared/workspace-space-types'
 import type { WorkspaceDecisionDetails } from './workspace-space-decision-details'
 import { WorkspaceSpaceWorktreeRow } from './workspace-space-worktree-row'
+import { TooltipProvider } from '../ui/tooltip'
+
+const render = (element: ReactNode) => renderComponent(<TooltipProvider>{element}</TooltipProvider>)
 
 const revealInFileManager = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/reveal-in-file-manager', () => ({
@@ -180,7 +183,7 @@ describe('WorkspaceSpaceWorktreeRow context menu', () => {
     expect(onDelete).toHaveBeenCalledTimes(1)
   })
 
-  it('offers a direct delete control without opening or selecting the row', () => {
+  it('offers deletion in the actions menu without opening or selecting the row', async () => {
     const onDelete = vi.fn()
     const onInspect = vi.fn()
     render(
@@ -197,8 +200,38 @@ describe('WorkspaceSpaceWorktreeRow context menu', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }))
+    expect(screen.queryByRole('button', { name: 'Delete workspace' })).toBeNull()
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Actions for workspace' }), {
+      key: 'Enter'
+    })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete workspace' }))
     expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(onInspect).not.toHaveBeenCalled()
+  })
+
+  it('keeps the actions menu available for protected rows and explains deletion', async () => {
+    const onInspect = vi.fn()
+    render(
+      <WorkspaceSpaceWorktreeRow
+        worktree={worktree}
+        selected={false}
+        inspected={false}
+        decisionDetails={decisionDetails}
+        onToggleSelected={() => {}}
+        onInspect={onInspect}
+        onOpenWorkspace={() => {}}
+        onDelete={() => {}}
+        onForceDelete={() => {}}
+      />
+    )
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Actions for workspace' }), {
+      key: 'Enter'
+    })
+    expect(await screen.findByRole('menuitem', { name: 'Reveal in Finder' })).toBeTruthy()
+    expect(
+      screen.getByRole('menuitem', { name: 'Delete workspace' }).getAttribute('data-disabled')
+    ).toBe('')
+    expect(screen.getByText('The main worktree is protected.')).toBeTruthy()
     expect(onInspect).not.toHaveBeenCalled()
   })
 })
