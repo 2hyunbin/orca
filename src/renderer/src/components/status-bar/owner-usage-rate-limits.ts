@@ -2,7 +2,8 @@ import type {
   OwnerNotSetUpPlaceholder,
   ProviderRateLimits,
   RateLimitState,
-  UsageRateLimitFailureKind
+  UsageRateLimitFailureKind,
+  UsageRateLimitMetadata
 } from '../../../../shared/rate-limit-types'
 import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
 import { translate } from '@/i18n/i18n'
@@ -137,7 +138,7 @@ const NOT_SET_UP_NEEDS_REASON: ReadonlySet<UsageProviderKey> = new Set([
  */
 function isMissingOnHost(remote: RateLimitState, key: UsageProviderKey): boolean {
   const provider = remote[key]
-  if (provider?.status !== 'unavailable' || key === 'claude') {
+  if (provider?.status !== 'unavailable') {
     return false
   }
   const failureKind = provider.usageMetadata?.failureKind
@@ -178,6 +179,20 @@ function describePlaceholder(
     : null
 }
 
+/** A numberless stand-in for a provider slot, carrying why it shows no usage. */
+function ownerPlaceholderSnapshot(
+  key: UsageProviderKey,
+  error: string,
+  usageMetadata: UsageRateLimitMetadata
+): ProviderRateLimits {
+  return {
+    ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
+    error,
+    usageMetadata,
+    status: 'error'
+  }
+}
+
 // Why: hiding a provider set up here reads as "usage broke"; a numberless placeholder
 // keeps it visible without passing this device's numbers off as the host's.
 function addNotSetUpPlaceholders(
@@ -192,12 +207,9 @@ function addNotSetUpPlaceholders(
       if (!ownerNotSetUp) {
         return remote[key]
       }
-      return {
-        ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
-        error: describeOwnerNotSetUp(ownerNotSetUp),
-        usageMetadata: { ownerNotSetUp },
-        status: 'error'
-      }
+      return ownerPlaceholderSnapshot(key, describeOwnerNotSetUp(ownerNotSetUp), {
+        ownerNotSetUp
+      })
     })
   }
 }
@@ -223,12 +235,8 @@ export function resolveOwnerUsageRateLimits(
   }
   const message = describeUnverifiableOwner(owner.ownerLabel, owner.reason)
   const base = owner.lastKnown ? adoptRemoteRateLimits(owner.lastKnown) : null
-  const stamp = (key: UsageProviderKey): ProviderRateLimits => ({
-    ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
-    error: message,
-    usageMetadata: { unverifiableOwner: true },
-    status: 'error'
-  })
+  const stamp = (key: UsageProviderKey): ProviderRateLimits =>
+    ownerPlaceholderSnapshot(key, message, { unverifiableOwner: true })
   if (!base) {
     return createEmptyRateLimitState(
       mapProviders((key) => (ACCOUNT_OWNED_PROVIDERS.has(key) ? stamp(key) : null))

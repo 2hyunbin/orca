@@ -186,10 +186,7 @@ export function getProviderUsageErrorMessage(p: ProviderRateLimits): string {
   if (!p.error) {
     return fallback
   }
-  if (p.usageMetadata?.unverifiableOwner) {
-    return p.error
-  }
-  if (p.usageMetadata?.ownerNotSetUp) {
+  if (p.usageMetadata?.unverifiableOwner || p.usageMetadata?.ownerNotSetUp) {
     return p.error
   }
   const delegatedCliProvider = getDelegatedCliRefreshProvider(p)
