@@ -156,7 +156,8 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
               ...(this.notifier?.revealEditorTab
                 ? { revealEditorTab: (shown) => this.notifier?.revealEditorTab?.(shown) }
                 : {}),
-              openInWindow: (inWindow) => openEditorFileInWindow(this.notifier, inWindow)
+              openInWindow: (inWindow) => openEditorFileInWindow(this.notifier, inWindow),
+              republishSessionTabs: (id) => this.republishHeadlessSessionTabs(id)
             },
             open
           )
@@ -181,6 +182,8 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
   })
 
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
+
+  protected abstract republishHeadlessSessionTabs(worktreeId: string): void
 
   /** The group a file main opens lands in: the window's live one, else the saved view's. */
   protected abstract editorOpenGroupFor(worktreeId: string): string | undefined

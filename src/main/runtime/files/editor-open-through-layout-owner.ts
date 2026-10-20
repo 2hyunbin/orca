@@ -22,6 +22,8 @@ export type EditorOpenHost = {
   revealEditorTab?: (reveal: RuntimeEditorTabReveal) => void
   /** Today's open, through the window: a paired server owns the workspace's layout. */
   openInWindow: (open: EditorFileOpen) => void
+  /** Lists main's tab on clients now (session.tabs); a no-op where a window's view lists it. */
+  republishSessionTabs: (worktreeId: string) => void
 }
 
 export async function openEditorFileThroughLayoutOwner(
@@ -56,6 +58,8 @@ export async function openEditorFileThroughLayoutOwner(
     }
     throw new Error(`editor_open_refused: ${reply.code}`)
   }
+  // After the apply's commit: the reply follows the operation's end flush.
+  host.republishSessionTabs(open.worktreeId)
   const tabId = reply.result.tabId
   if (tabId) {
     host.revealEditorTab?.({ ...open, tabId, frameSeq: reply.frameSeq })
