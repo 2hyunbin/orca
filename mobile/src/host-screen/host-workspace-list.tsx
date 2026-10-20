@@ -225,7 +225,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                     <ActivityIndicator
                       size="small"
                       color={colors.textMuted}
-                      style={styles.sectionIcon}
+                      style={styles.sectionPendingSpinner}
                     />
                   )}
                 </Pressable>
