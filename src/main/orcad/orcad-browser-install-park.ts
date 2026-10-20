@@ -41,7 +41,8 @@ export function watchOrcadBrowserInstallPark(
   let restartAt = 0
   let restartDelayMs = RESTART_RETRY_MIN_MS
   let closed = false
-  const closing = new AbortController()
+  /** The running restart's abort: close() and a new park both cancel it. */
+  let restarting: AbortController | null = null
   let inFlight: Promise<void> | null = null
   let lastBeat: { pid: number | null | undefined; at: number } = { pid: undefined, at: 0 }
 
@@ -64,15 +65,22 @@ export function watchOrcadBrowserInstallPark(
   }
 
   const restart = async (): Promise<void> => {
+    const controller = new AbortController()
+    restarting = controller
     try {
       // Same executable path: after a completed install this is the new bundle's helper.
-      await helper.start(closing.signal)
+      await helper.start(controller.signal)
       parked = false
       restartDelayMs = RESTART_RETRY_MIN_MS
     } catch (error) {
+      if (controller.signal.aborted) {
+        return
+      }
       restartAt = now() + restartDelayMs
       restartDelayMs = Math.min(restartDelayMs * 2, RESTART_RETRY_MAX_MS)
       throw error
+    } finally {
+      restarting = null
     }
   }
 
@@ -81,6 +89,10 @@ export function watchOrcadBrowserInstallPark(
       return
     }
     if (inFlight) {
+      // Why: a start can outlast the installer's ack wait; give way so the next tick stops and acks.
+      if (restarting && park.pendingPark()) {
+        restarting.abort()
+      }
       // Why beat mid-step: a slow stop must not let the registration go stale and look abandoned.
       beat(helper.pid())
       return
@@ -90,6 +102,9 @@ export function watchOrcadBrowserInstallPark(
     // Why holds() too: an install committed by an attempt this orcad never acked still needs it stopped.
     if (attemptId !== null || (!parked && park.holds())) {
       parked = true
+      // A new install restarts from its own bundle; an older failure's backoff does not apply.
+      restartAt = 0
+      restartDelayMs = RESTART_RETRY_MIN_MS
       run(async () => {
         await helper.stop()
         beat(null)
@@ -113,7 +128,7 @@ export function watchOrcadBrowserInstallPark(
     close: async () => {
       closed = true
       cancel()
-      closing.abort()
+      restarting?.abort()
       await inFlight
       park.unregister()
     }

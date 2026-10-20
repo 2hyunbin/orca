@@ -27,6 +27,7 @@ describe('orcad browser helper in the desktop install park', () => {
   let running: boolean
   let starts: AbortSignal[]
   let failStarts: number
+  let hangStarts: boolean
   let clock: number
 
   beforeEach(async () => {
@@ -40,6 +41,7 @@ describe('orcad browser helper in the desktop install park', () => {
     running = true
     starts = []
     failStarts = 0
+    hangStarts = false
     clock = 1_000
   })
 
@@ -65,6 +67,13 @@ describe('orcad browser helper in the desktop install park', () => {
         },
         start: async (signal) => {
           starts.push(signal)
+          if (hangStarts) {
+            // A starting helper already runs and blocks the install.
+            running = true
+            await new Promise((_resolve, reject) =>
+              signal.addEventListener('abort', () => reject(new Error('aborted')))
+            )
+          }
           if (failStarts > 0) {
             failStarts--
             throw new Error('helper did not become ready')
@@ -148,6 +157,22 @@ describe('orcad browser helper in the desktop install park', () => {
     await step()
     expect(starts).toHaveLength(2)
     expect(running).toBe(true)
+    await parkWatch.close()
+  })
+
+  it('gives up a slow restart so a new install can still park the helper', async () => {
+    const parkWatch = watch()
+    await parkServeSupervisorsForInstall(executable, [HELPER], installerDeps())
+    await releaseServeSupervisorPark()
+    hangStarts = true
+    await step()
+    // The next heartbeat names the starting helper.
+    await step()
+    expect(starts).toHaveLength(1)
+    await expect(
+      parkServeSupervisorsForInstall(executable, [HELPER], installerDeps())
+    ).resolves.toEqual({ kind: 'parked' })
+    expect(starts[0]?.aborted).toBe(true)
     await parkWatch.close()
   })
 

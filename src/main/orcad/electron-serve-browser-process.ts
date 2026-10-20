@@ -98,7 +98,7 @@ export class ElectronServeBrowserProcess {
     this.child = child
     let spawnError: unknown = null
     // Why: a restart can race the bundle swap after an install; ENOENT must fail start, not orcad.
-    child.once('error', (error) => {
+    child.on('error', (error) => {
       spawnError = error
     })
     for (const stream of [child.stdout, child.stderr]) {
