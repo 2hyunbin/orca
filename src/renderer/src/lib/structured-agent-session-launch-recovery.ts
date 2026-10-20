@@ -78,12 +78,7 @@ export async function recoverPublishedSessionReceipt(
       )
     : undefined
   if (state.intent.params.firstMessage && !firstMessage) {
-    return launchStructuredAgentSession(
-      state.intent,
-      state.onHostSeed,
-      true,
-      () => state.cancelled
-    )
+    return launchStructuredAgentSession(state.intent, state.onHostSeed, true, () => state.cancelled)
   }
   if (state.intent.createMessageSupport === true) {
     publishStructuredAgentSessionCreateHydration(state.intent, history.page, fence)

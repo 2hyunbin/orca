@@ -7,12 +7,13 @@ import type * as LaunchIntentModule from '@/lib/launch-structured-agent-session'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn<(target: unknown, method: string, params?: unknown) => Promise<unknown>>(),
-  launch: vi.fn<
-    (
-      intent: { sessionId: string },
-      onSeed?: LaunchIntentModule.StructuredLaunchHostSeedListener
-    ) => Promise<{ sessionId: string; fence: number }>
-  >(),
+  launch:
+    vi.fn<
+      (
+        intent: { sessionId: string },
+        onSeed?: LaunchIntentModule.StructuredLaunchHostSeedListener
+      ) => Promise<{ sessionId: string; fence: number }>
+    >(),
   toastError: vi.fn()
 }))
 
@@ -209,7 +210,9 @@ describe('a chat pane over its own launch', () => {
           setOption: restored.result.current.setStructuredOption
         })
       await waitFor(() =>
-        expect(restored.result.current.optionSnapshot.find((entry) => entry.id === 'model')).toMatchObject({
+        expect(
+          restored.result.current.optionSnapshot.find((entry) => entry.id === 'model')
+        ).toMatchObject({
           settable: false,
           kind: { choices: expect.arrayContaining([expect.objectContaining({ value: 'gpt-5.5' })]) }
         })

@@ -117,7 +117,10 @@ export function useNativeChatComposerRevealFocus({
       const siblingComposer = [...mountedComposers].some(
         (ownerRef) => ownerRef !== composerRef && ownerRef.current?.contains(active)
       )
-      if ((!shouldPreserveEditableFocus(active) || siblingComposer) && composerRef.current?.focus()) {
+      if (
+        (!shouldPreserveEditableFocus(active) || siblingComposer) &&
+        composerRef.current?.focus()
+      ) {
         explicitRef.current = false
       }
       setReclaimCount((count) => count + 1)
