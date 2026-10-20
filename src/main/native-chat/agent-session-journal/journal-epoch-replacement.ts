@@ -7,6 +7,7 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 
 import type {
+  AgentJournalCursor,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
   AgentJournalProducerLinkage,
@@ -42,7 +43,6 @@ import {
 import type { AgentJournalEpochReason, JournalRow } from './journal-row-schema'
 import { assertJournalFence } from './journal-write-guards'
 import type { JournalOperationReceipt } from './journal-row-writer'
-import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 
 export type JournalReplacementItem = AgentJournalProducerLinkage & {
   identity: AgentJournalItemIdentity
