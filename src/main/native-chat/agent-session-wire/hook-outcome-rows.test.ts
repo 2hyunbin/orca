@@ -8,10 +8,12 @@ import {
   claudeProviderHandle,
   codexProviderHandle
 } from '../../../shared/agent-session-provider-handle-encoding'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
 import { nativeChatRowTurnKeys } from '../../../shared/native-chat-turn-grouping'
 import { nativeChatTurnFold, nativeChatTurnFoldRow } from '../../../shared/native-chat-turn-fold'
+import { nativeChatTurnMembership } from '../../../shared/native-chat-turn-membership'
 import { projectStructuredItemsToNativeChat } from '../../../shared/structured-agent-session-projection'
 import { GROK_ACP_DIALECT } from '../../acp/acp-dialects/grok-dialect'
 import { readAcpFixture } from '../../acp/acp-timeline-fixture.test-support'
@@ -73,7 +75,7 @@ async function blockedChat(
   write(rig)
   const { items, submissions } = (await rig.reopenJournal()).snapshot()
   expect(submissions).toEqual(sent)
-  return items
+  return { items, submissions }
 }
 
 describe('a prompt hook that blocked the message', () => {
@@ -84,15 +86,23 @@ describe('a prompt hook that blocked the message', () => {
     ['blocked-tool', []]
   ])('Codex %s', async (scenario, rows) => {
     const frames = await captured<Captured>('codex', scenario)
-    const items = await blockedChat(CODEX_CHAT, (rig) => {
-      const sink = rig.eventSink
-      const lane = createCodexJournalTranslator({ sink, schedule: (run) => (run(), () => {}) })
+    const { items, submissions } = await blockedChat(CODEX_CHAT, (rig) => {
+      const deps = { sessionId: 's', primaryThreadId: () => 't', sink: rig.eventSink }
+      const lane = createCodexJournalTranslator({ ...deps, schedule: (run) => (run(), () => {}) })
       for (const { method, params } of frames) {
         const frame = { method, params: { ...params, threadId: 't' } }
         lane.handle({ type: 'notification', sessionId: 's', threadId: 't', ...frame })
       }
     })
     expect(settledRows(items)).toEqual(rows)
+    // Unechoed when its turn ends, the send reads in doubt, and every row stays in its turn.
+    const inDoubt = submissions.map((sent) => ({ ...sent, dispatchState: 'unknown' as const }))
+    const journal = { items, submissions: inDoubt }
+    const { turnKeys } = nativeChatTurnMembership(
+      projectStructuredItemsToNativeChat(items),
+      journal
+    )
+    expect(new Set(turnKeys)).toEqual(new Set([agentJournalSubmissionKey(SEND.clientMessageId)]))
   })
 
   it.each([
@@ -107,7 +117,7 @@ describe('a prompt hook that blocked the message', () => {
     ['older, no reason', undefined, '', row('Blocked by hook.')]
   ])('Claude %s', async (_, outcome, hooks, expected) => {
     const frames = await captured<Captured>('claude', 'blocked-prompt')
-    const items = await blockedChat(CLAUDE_CHAT, (rig) => {
+    const { items } = await blockedChat(CLAUDE_CHAT, (rig) => {
       const lane = createClaudeJournalTranslator({ sink: rig.eventSink, fallbackIdPrefix: '1' })
       for (const { frame } of frames) {
         const message: Record<string, unknown> = { ...frame, prompt_submit_outcome: outcome }
@@ -132,7 +142,7 @@ describe('a prompt hook that blocked the message', () => {
     const notices = frames.filter((frame) => frame.message.id === undefined && !isEnd(frame))
     const steps = order.flatMap((step) => (step === 'answer' ? [answer!] : frames.filter(isEnd)))
     const events: ProviderTimelineEvent[] = []
-    const items = await blockedChat({}, (rig) => {
+    const { items } = await blockedChat({}, (rig) => {
       const lane = new AcpTimelineTranslator({ sessionId: 'session-1', dialect: GROK_ACP_DIALECT })
       const apply = (next: ProviderTimelineEvent[]) => {
         events.push(...next)

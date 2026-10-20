@@ -86,16 +86,17 @@ export function structuredAgentTurnAnchors(
       aliases.set(submission.providerItemId, agentJournalSubmissionKey(submission.clientMessageId))
     }
   }
-  // Handed over and not echoed yet; a send still queued opens nothing ahead of a turn record.
-  const inFlight = new Set(
+  // Handed over and not echoed: in flight, or in doubt once its turn ended unechoed (a prompt hook
+  // refused it), which it still opened. A send still queued opens nothing ahead of a turn record.
+  const unechoed = new Map(
     submissions
       .filter(
         (submission) =>
-          submission.dispatchState === 'pending' &&
+          (submission.dispatchState === 'pending' || submission.dispatchState === 'unknown') &&
           !submission.providerItemId &&
           !isQueuedAgentJournalSubmission(submission)
       )
-      .map((submission) => agentJournalSubmissionKey(submission.clientMessageId))
+      .map((sent) => [agentJournalSubmissionKey(sent.clientMessageId), sent.dispatchState] as const)
   )
   // A send a Stop took back after its turn opened but before the provider echoed it: the record
   // still names the provider's key, and the host names the turn the send was answered into, or
@@ -126,7 +127,8 @@ export function structuredAgentTurnAnchors(
   for (const item of items) {
     if (userItemIds.has(item.itemId)) {
       precedingUserItemId = item.itemId
-      if (inFlightSinceLastTurn === null && inFlight.has(item.itemId)) {
+      // The first send in flight, else the newest in doubt.
+      if (unechoed.has(item.itemId) && unechoed.get(inFlightSinceLastTurn ?? '') !== 'pending') {
         inFlightSinceLastTurn = item.itemId
       }
       continue
