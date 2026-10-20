@@ -13,6 +13,9 @@ const OMP_TRANSCRIPT = readFileSync(
   'utf8'
 )
 
+const D0 = '\x1b]133;D;0\x07'
+const BUBBLE_CLOSE = `\x1b]133;B\x07\x1b]133;C\x07${D0}`
+
 vi.mock('../git/worktree', () => {
   const worktrees = [
     { path: '/tmp/worktree-omp', head: 'abc', branch: 'omp', isBare: false, isMainWorktree: false }
@@ -59,6 +62,17 @@ describe('OMP user bubbles and launch authority (#10923)', () => {
     for (let index = 0; index < OMP_TRANSCRIPT.length; index += 512) {
       runtime.onPtyData('pty-omp', OMP_TRANSCRIPT.slice(index, index + 512), at++)
     }
+    expect(retire).not.toHaveBeenCalled()
+  })
+
+  it("keeps it when the pane is shown between a bubble's B C and its D", async () => {
+    const { runtime, retire } = await launchOmpPane()
+    const zoneEnd = OMP_TRANSCRIPT.indexOf(BUBBLE_CLOSE) + BUBBLE_CLOSE.length - D0.length
+    runtime.setPtyTransientFactDelegation('pty-omp', true)
+    runtime.onPtyData('pty-omp', OMP_TRANSCRIPT.slice(0, zoneEnd), 100)
+    runtime.setPtyTransientFactDelegation('pty-omp', false)
+    runtime.onPtyData('pty-omp', OMP_TRANSCRIPT.slice(zoneEnd), 101)
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(retire).not.toHaveBeenCalled()
   })
 
