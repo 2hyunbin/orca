@@ -128,16 +128,24 @@ async function pickExistingWorktreeAgent(worktreeId: string): Promise<TuiAgent |
   const choices = await acquireAgentLaunchChoices(workspace, () =>
     ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId)
   )
-  const detectedAgents = [...(choices.detected ?? [])]
   const state = useAppStore.getState()
   const repoId = state.allWorktrees().find((entry) => entry.id === worktreeId)?.repoId
-  const agent = resolveChecksActionAgent(state, 'fixChecks', repoId, workspace, detectedAgents)
+  const agent = resolveChecksActionAgent(state, 'fixChecks', repoId, workspace, choices.detected)
   if (!agent) {
+    const repo = state.repos.find((entry) => entry.id === repoId)
+    const savedAgent = readSourceControlLaunchRecipeAgentId(
+      resolveSourceControlActionRecipe({ settings: state.settings, repo, actionId: 'fixChecks' })
+    )
     toast.error(
-      translate(
-        'auto.lib.fix.checks.agent.launch.2ebf794906',
-        'No enabled AI agent was detected on this workspace host.'
-      )
+      savedAgent
+        ? translate(
+            'auto.lib.fix.checks.agent.launch.4c7f783a7a',
+            'Saved checks agent is not available on this workspace host.'
+          )
+        : translate(
+            'auto.lib.fix.checks.agent.launch.2ebf794906',
+            'No enabled AI agent was detected on this workspace host.'
+          )
     )
   }
   return agent
