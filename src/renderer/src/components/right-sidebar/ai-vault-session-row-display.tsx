@@ -65,6 +65,7 @@ export function SessionMetadata({
         {sourceHostLabel ? (
           <WorktreeHostContextBadge
             label={sourceHostLabel}
+            className="min-w-0 shrink"
             title={translate('aiVault.searchHitSourceHost', 'Found on {{value0}}', {
               value0: sourceHostLabel
             })}
