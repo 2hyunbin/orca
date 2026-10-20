@@ -112,6 +112,26 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
     })
   })
 
+  it('splits the deadline over the URLs left, so a stalled mirror leaves time for the release', () => {
+    const { bin, stage } = fakeHost({
+      date: 'echo 1000',
+      curl:
+        `prev=; for a in "$@"; do [ "$prev" = --max-time ] && echo "$a" >> "\${0%/*}/max-times"; prev=$a; done\n` +
+        `ulimit -f >> "\${0%/*}/file-limit"\n` +
+        `for a in "$@"; do case "$a" in https://nodejs.org/*) ${writeTo('-o', PAYLOAD)}; exit 0;; esac; done\n` +
+        "echo 'curl: (28) Operation timed out' >&2; exit 28"
+    })
+    const output = runOnHost(bin, stage, { mirror: 'https://desk.example/dist' })
+    expect(readHostNodeDownload(output)).toEqual({ ok: true })
+    const read = (name: string): string[] =>
+      runProcessSync({ program: '/bin/cat', args: [join(bin, name)] })
+        .stdout.trim()
+        .split('\n')
+    expect(read('max-times')).toEqual(['420', '840'])
+    // 200 MiB in 512-byte blocks: an endless response can't fill the host's disk.
+    expect(read('file-limit')[0]).toBe('409600')
+  })
+
   it('stops starting downloads once the shared deadline has passed', () => {
     // The first reading sets the deadline; every later one is already past it.
     const { bin, stage } = fakeHost({

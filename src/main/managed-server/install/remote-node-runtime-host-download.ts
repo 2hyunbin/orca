@@ -33,6 +33,8 @@ export const HOST_NODE_DOWNLOAD_NO_TOOL = 'ORCA_NODE_HOST_DOWNLOAD_NO_TOOL'
 const HOST_DOWNLOAD_BUDGET_SECONDS = 840
 /** Below this a new attempt can't finish, so the loop stops and reports instead. */
 const HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS = 30
+/** The desktop downloader's 200 MiB limit, in the 512-byte blocks `ulimit -f` counts. */
+const HOST_DOWNLOAD_MAX_BLOCKS = (200 * 1024 * 1024) / 512
 /** The budget plus the hash and the report, so the script always answers before the exec gives up. */
 export const HOST_NODE_DOWNLOAD_TIMEOUT_MS = (HOST_DOWNLOAD_BUDGET_SECONDS + 120) * 1000
 
@@ -66,8 +68,10 @@ export function hostDownloadNodeRuntimeCommand(
       : null,
     quotePosixShell(hostNodeRuntimeUrl(args.target))
   ].filter((url): url is string => url !== null)
-  const curl = `curl -fsSL --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$orca_dl_url"`
-  const wget = `$orca_dl_timeout wget -q -T 20 -t 2 -O ${file} "$orca_dl_url"`
+  // Why ulimit: a proxy or mirror serving endless bytes would otherwise fill the host's disk.
+  const sizeCap = `ulimit -f ${HOST_DOWNLOAD_MAX_BLOCKS} 2>/dev/null;`
+  const curl = `${sizeCap} curl -fsSL --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$orca_dl_url"`
+  const wget = `${sizeCap} $orca_dl_timeout wget -q -T 20 -t 2 -O ${file} "$orca_dl_url"`
   const hostMirror = NODE_DIST_MIRROR_ENV_KEYS.reduceRight(
     (fallback, key) => `\${${key}:-${fallback}}`,
     ''
@@ -75,18 +79,25 @@ export function hostDownloadNodeRuntimeCommand(
   const min = HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS
   // Without a clock each of the (up to) two tools per URL gets an equal share of the budget.
   const share = Math.floor(HOST_DOWNLOAD_BUDGET_SECONDS / (2 * urls.length))
+  const urlList = urls.join(' ')
   return [
     'orca_dl_status=127; orca_dl_out=; orca_dl_ok=; orca_dl_t=',
     `orca_dl_mirror="${hostMirror}"; orca_dl_mirror="\${orca_dl_mirror%/}"`,
-    // One deadline for the whole loop, so an unreachable mirror can't starve the release URL.
-    'orca_dl_end=$(date +%s 2>/dev/null)',
+    // One deadline for the loop, split evenly over the URLs still to try, so a stalled mirror
+    // can't starve the release URL and the last URL inherits whatever the others left.
+    'orca_dl_n=0',
+    `for orca_dl_url in ${urlList}; do [ -n "$orca_dl_url" ] && orca_dl_n=$((orca_dl_n + 1)); done`,
+    'orca_dl_end=$(date +%s 2>/dev/null); orca_dl_slot_end=',
     `case "$orca_dl_end" in ''|*[!0-9]*) orca_dl_end= ;; *) orca_dl_end=$((orca_dl_end + ${HOST_DOWNLOAD_BUDGET_SECONDS})) ;; esac`,
-    `orca_dl_left() { if [ -n "$orca_dl_end" ]; then orca_dl_t=$((orca_dl_end - $(date +%s))); else orca_dl_t=${share}; fi; [ "$orca_dl_t" -ge ${min} ]; }`,
+    `orca_dl_left() { if [ -n "$orca_dl_end" ]; then orca_dl_t=$((\${orca_dl_slot_end:-$orca_dl_end} - $(date +%s))); else orca_dl_t=${share}; fi; [ "$orca_dl_t" -ge ${min} ]; }`,
     // wget has no total-time limit of its own. Probed by running it: old busybox wants `-t SECS`.
     'orca_dl_timeout=; timeout 5 true >/dev/null 2>&1 && orca_dl_timeout=timeout',
-    `for orca_dl_url in ${urls.join(' ')}; do`,
+    `for orca_dl_url in ${urlList}; do`,
     '[ -n "$orca_dl_url" ] || continue',
+    'orca_dl_slot_end=',
     `orca_dl_left || { orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$orca_dl_url: not tried, out of time"; break; }`,
+    '[ -n "$orca_dl_end" ] && orca_dl_slot_end=$(($(date +%s) + orca_dl_t / orca_dl_n)) && orca_dl_left',
+    'orca_dl_n=$((orca_dl_n - 1))',
     'orca_dl_try=127; orca_dl_said=',
     `if command -v curl >/dev/null 2>&1; then orca_dl_said=$(${curl} 2>&1); orca_dl_try=$?; fi`,
     // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget works.
