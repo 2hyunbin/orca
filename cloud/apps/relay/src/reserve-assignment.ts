@@ -4,7 +4,7 @@ import {
   RELAY_DEFAULT_REGION,
   type RelayRegion
 } from '@orca-cloud/relay-contract'
-import type { RelayAssignment } from './assignment-store.js'
+import type { AssignOptions, RelayAssignment } from './assignment-store.js'
 import { CELL_RESERVE_TTL_MS } from './cell-reserve-contract.js'
 import type { CellReserveClient } from './cell-reserve-client.js'
 import { relayHostLogDigest } from './relay-host-log-digest.js'
@@ -45,11 +45,7 @@ type Identity = { userId: string; relayHostId: string }
 export type ReservePlan =
   | { kind: 'answer'; assignment: RelayAssignment; lane: 'sticky' | 'placement' }
   | { kind: 'retry'; retryAfterSeconds: number; reason: 'map-incomplete' | 'database' | 'paced' }
-  | {
-      kind: 'database'
-      epochFloor?: number
-      placeFresh?: () => Promise<RelayAssignment | null>
-    }
+  | ({ kind: 'database' } & Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve'>)
 
 // A host whose seat the ledger reconcile demoted mints above its row for this long, so the
 // re-assign does not collide with the row again (the mirror refuses an equal epoch).
@@ -209,15 +205,36 @@ export class ReserveAssignment {
     }
     const placeFresh = async (): Promise<RelayAssignment | null> =>
       await this.placeFresh(identity, request.region, epochFloor, seats)
+    const regionReserve = this.regionReserve(identity, request.region, epochFloor, seats, now)
     // Where the host was last seen decides who owns it: a database-mode cell keeps today's
     // path, sticky included; only a fresh placement may be booked on a reserve-mode cell.
     const lastOnReserve = lastCellId !== undefined && directory.placementModeOf(lastCellId) === 'reserve'
     if (!lastOnReserve && (seats.length > 0 || left !== undefined || row !== null)) {
-      return { kind: 'database', epochFloor, placeFresh }
+      return { kind: 'database', epochFloor, placeFresh, regionReserve }
     }
     const placed = await placeFresh()
     if (placed) return { kind: 'answer', assignment: placed, lane: 'placement' }
-    return { kind: 'database', epochFloor }
+    return { kind: 'database', epochFloor, regionReserve }
+  }
+
+  // For the share draw's losers: the database lane tries the region first, then this, then spills.
+  // Undefined while no in-region reserve cell has a seat, so the database lane runs as today.
+  private regionReserve(
+    identity: Identity,
+    region: RelayRegion,
+    epochFloor: number,
+    seats: readonly ShadowSeat[],
+    now: number
+  ): AssignOptions['regionReserve'] {
+    const hasRoom = this.placementCells().some(
+      (cell) => this.input.placer.isCandidate(cell, region, now) && this.input.placer.hasSeat(cell)
+    )
+    if (!hasRoom) return undefined
+    return async () => {
+      const placed = await this.placeFresh(identity, region, epochFloor, seats, true)
+      if (placed) this.summary.regionKept += 1
+      return placed
+    }
   }
 
   // The same epoch on the same cell: no booking, no database, no row lock. A cell that
@@ -288,16 +305,19 @@ export class ReserveAssignment {
     identity: Identity,
     region: RelayRegion,
     epochFloor: number,
-    seats: readonly ShadowSeat[] = []
+    seats: readonly ShadowSeat[] = [],
+    // The database lane found the region full: no share draw, and no other region.
+    regionFull = false
   ): Promise<RelayAssignment | null> {
     const placements = this.placementCells()
-    if (this.random() >= this.input.placer.reservePoolShare(placements, region)) return null
-    const regions = region === RELAY_DEFAULT_REGION ? [region] : [region, RELAY_DEFAULT_REGION]
+    if (!regionFull && this.random() >= this.input.placer.reservePoolShare(placements, region)) return null
+    const regions = regionFull || region === RELAY_DEFAULT_REGION ? [region] : [region, RELAY_DEFAULT_REGION]
     for (const target of regions) {
       const result = await this.input.placer.place({
         cells: placements,
         region: target,
         epoch: mintEpoch([epochFloor]),
+        regionFull,
         reserve: async (cellId, epoch) => {
           const cell = this.input.cells().find((entry) => entry.cellId === cellId)
           if (!cell) return { outcome: 'unreachable' }
@@ -463,6 +483,8 @@ type PlacementSummary = {
   sticky: number
   stickyReserves: number
   placed: number
+  // Placements the database lane would have sent out of the region.
+  regionKept: number
   calls: number
   database: number
   supersedes: number
@@ -488,6 +510,7 @@ function emptySummary(): PlacementSummary {
     sticky: 0,
     stickyReserves: 0,
     placed: 0,
+    regionKept: 0,
     calls: 0,
     database: 0,
     supersedes: 0,

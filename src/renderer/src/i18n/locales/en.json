@@ -192,7 +192,7 @@
   "settings": {
     "chat": {
       "permissionsTitle": "Permissions for new chats",
-      "permissionsDescription": "Applies to new chats only. Agents you open in a terminal use Settings → Agents → Agent Permissions.",
+      "permissionsDescription": "New chats only. Agent-specific defaults are in Settings → Agents.",
       "description": "Choose how chats look and behave.",
       "names": {
         "title": "Chat names",
@@ -388,7 +388,25 @@
       "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
       "hostDefaults": "Defaults for new agents on the selected host.",
       "save": "Save",
-      "clearDefault": "Clear default agent"
+      "clearDefault": "Clear default agent",
+      "autoPermissions": "Auto",
+      "autoUnsupported": "Auto needs a newer Orca on this host.",
+      "permissionsDescription": "How much agents can do without asking you. Agents with custom launch arguments keep them.",
+      "permissionsAutoDescription": "<agents>Supported agents</agents> approve safe actions on their own.",
+      "permissionsMixed": "Most agents use {{mode}}. Choosing a mode resets the marked exceptions, except custom arguments.",
+      "permissionsMixedNoMajority": "Agents use different settings. Choosing a mode applies to all.",
+      "permissionsSearchDescription": "Launch agents with Manual, Auto, or Yolo permissions.",
+      "otherAgentsPermissions": "Other agents",
+      "otherAgentsPermissionsLabel": "Permissions for other agents",
+      "customArgsBadge": "Custom",
+      "customArgsTooltip": "Uses its own launch arguments.",
+      "editRowPermissions": "{{agent}} permissions: {{mode}}",
+      "rowPermissions": "Permissions",
+      "rowPermissionsLabel": "{{agent}} permissions",
+      "customPermissions": "Custom arguments",
+      "replaceWithPermissionMode": "Replace with {{mode}}",
+      "expandAgentSettings": "Expand agent settings",
+      "collapseAgentSettings": "Collapse agent settings"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -2371,6 +2389,8 @@
         "851017590d": "Add Linear access",
         "228b25028f": "Browse and start work on your assigned Linear issues directly from here.",
         "6d56559467": "Connect your Linear account",
+        "linearLoginUnreadableTitle": "Reconnect Linear",
+        "linearLoginUnreadableBody": "Unable to read saved Linear login. Reconnect it in Settings.",
         "eee68073b2": "Open in Jira",
         "9497f2787c": "Start workspace",
         "eba87f2edb": "No Jira issues found",
@@ -3130,6 +3150,7 @@
               "93e1f6bfca": "Loading",
               "98730088a6": ". Search or open Linear for the full set.",
               "06b887d622": "Showing first",
+              "linearLoginUnreadable": "Unable to read saved Linear login. Reconnect it in Settings.",
               "2c4b1c2c08": "number",
               "f2cc1e0ff6": "Linear / Projects",
               "906b5e4cb8": "Linear / Projects / {{value0}}",
@@ -3675,6 +3696,8 @@
           },
           "TerminalRemoteRuntimeReconnectBanner": {
             "retryingTitle": "Reconnecting to remote runtime",
+            "pairingRefusedTitle": "This host no longer accepts this computer",
+            "pairingRefusedBody": "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again.",
             "disconnectedTitle": "Remote runtime disconnected",
             "retryingBody": "Orca is retrying automatically. This terminal will resume if the connection returns.",
             "disconnectedBody": "Automatic retries stopped. Reconnect to resume this terminal session.",
@@ -4148,7 +4171,11 @@
             "97957ad3a3": "Connect your AI provider accounts to see their usage in real time and easily switch between accounts.",
             "9a542f46c7": "Hide from status bar",
             "84c3b15dca": "Agent usage limits",
-            "d663430cf9": "Configure usage tracking"
+            "d663430cf9": "Configure usage tracking",
+            "remoteLabel": "No usage on {{host}}",
+            "remoteTitle": "Usage on {{host}}",
+            "remoteBody": "This workspace runs on {{host}}, so the bar shows that host's usage. Sign in to an agent there, or focus a local workspace to see this computer's usage.",
+            "remoteOpenAccounts": "Open {{host}} accounts"
           },
           "SkillUpdateStatusSegment": {
             "runningLabel": "Updating skills",
@@ -4326,6 +4353,10 @@
             "f8b8dbed85": "Usage unavailable",
             "remoteOwnerUnreachable": "Usage unavailable — cannot reach {{server}}",
             "remoteOwnerNoUsage": "Usage unavailable — {{server}} does not report usage. Update Orca on that host.",
+            "remoteOwnerNotConfigured": "Not configured on {{server}}",
+            "claudeNoUsageFromHost": "No usage from {{server}}",
+            "claudeUnknownOnHost": "Claude usage isn't available from {{server}}. It may not be signed in there, or it may use API-key billing.",
+            "remoteOwnerSignInSavedHere": "Its sign-in is saved on this computer only.",
             "3d3c9c0c1f": "Claude usage will refresh after the live Claude terminal rotates its credentials.",
             "42fdd4da1d": "Claude sign-in is being refreshed. Agent sessions may still be signed in.",
             "c06c1d215d": "Claude usage could not be refreshed because the network request failed.",
@@ -4459,6 +4490,8 @@
             "access_revoked": "Access revoked",
             "access_revoked_summary": "This server revoked access for this computer",
             "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
+            "managed_access_revoked_explanation": "Orca couldn't pair with it again over SSH. Connect to try again.",
+            "connect_access_revoked_explanation": "Connect to try again.",
             "update_required": "Update required",
             "update_required_summary": "Orca versions are not compatible",
             "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
@@ -7141,7 +7174,8 @@
               "help": "Used for OpenCode Go usage in the status bar. The session cookie below is only needed for legacy console (OpenCode Black) accounts."
             }
           },
-          "remoteScopeLocalAccountsKeptHostPicker": "Accounts managed on this desktop are unchanged. Choose this computer in the Host menu at the top of Settings to view them."
+          "remoteScopeLocalAccountsKeptHostPicker": "Accounts managed on this desktop are unchanged. Choose this computer in the Host menu at the top of Settings to view them.",
+          "apiKeyUpdateFailed": "MiniMax API key update failed."
         },
         "AdvancedPane": {
           "40b29e0bf3": "Restart",
@@ -7212,8 +7246,6 @@
           "0d9e293a02": "Refresh",
           "c9b33eb5c0": "Refreshing…",
           "13647f9f80": "Re-read your shell PATH and re-detect installed agents",
-          "dc4a2ffdc0": "Expand command override",
-          "cea7d97be1": "Collapse command override",
           "db9e9e5887": "Customize command",
           "959b67385b": "Set default",
           "24e032fa34": "Default",
@@ -7223,9 +7255,6 @@
           "8fbe1f37c1": "Environment",
           "2d133152fa": "No default environment",
           "agentPermissions": "Agent Permissions",
-          "agentPermissionsInfo": "Agent permissions info",
-          "agentPermissionsTooltip": "Doesn't apply to agents where you've overridden launch arguments.",
-          "agentPermissionsDescription": "Choose whether Orca launches agents with fewer permission prompts or with manual checks.",
           "agentPermissionsYolo": "Yolo",
           "agentPermissionsManual": "Manual",
           "3f1bdf3cb4": "Environment text is too large to parse safely.",
@@ -7759,6 +7788,9 @@
           "823e0f15b1": "Proxy URL for Orca network requests and local terminal children.",
           "d93c7cd531": "Configure app-level network routing.",
           "c46cdbbd4e": "Network",
+          "nodeDistMirrorLabel": "Node.js Download Mirror",
+          "nodeDistMirrorPlaceholder": "https://mirror.example.com/nodejs/dist",
+          "nodeDistMirrorDescription": "Optional. A copy of nodejs.org/dist that Orca uses first when it installs Node on SSH and WSL servers. Each file is still checked against the release Orca expects.",
           "configureProxy": "Configure proxy"
         },
         "GeneralPane": {
@@ -8612,6 +8644,7 @@
           "e57dde9d93": "Unsaved changes"
         },
         "RuntimeAccessGrantList": {
+          "sshAccessCaveat": "Revoking here doesn't stop someone with SSH access to this computer from pairing again. To cut them off, remove their SSH access.",
           "8b82879581": "Anyone with an active grant can connect until you revoke it. Revoking shared access disconnects active clients immediately.",
           "68ec21309f": "Revoke access",
           "6f6d5188ed": "Revoke {{value0}}",
@@ -8722,6 +8755,8 @@
           "cloudVmWorkflow": "Cloud VM",
           "cloudVmWorkflowHelp": "Manage recipe-created cloud machines",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
+          "managedAccessRevoked": "{{value0}} no longer accepts this computer, and Orca couldn't pair with it again over SSH. Connect to try again.",
+          "connectAccessRevoked": "{{value0}} no longer accepts this computer. Connect to try again.",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"
@@ -9631,7 +9666,6 @@
             "a79d266f71": "session",
             "afbf35be68": "stable session",
             "agentPermissions": "Agent Permissions",
-            "agentPermissionsDescription": "Switch agent permission defaults between Yolo and Manual.",
             "agentRuntime": "Agent Runtime",
             "agentRuntimeDescription": "Choose whether agents are detected and launched on Windows or in WSL by default.",
             "runtime": "runtime",
@@ -10287,6 +10321,8 @@
             "e9d948d3c3": "Save editor and editable diff changes automatically after a short pause.",
             "ae21e806ce": "Auto Save Files",
             "c56cb6f1c2": "network",
+            "nodeDistMirror": "mirror",
+            "nodeDistNodejs": "nodejs",
             "3566fce83f": "localhost",
             "91a46caafc": "no_proxy",
             "3a73054565": "bypass",
@@ -12893,7 +12929,11 @@
           "planLevel": "Plan: {{value0}}",
           "hostOnly": "Change the plan site and API key in the desktop app on the computer running Orca.",
           "detailsUnavailable": "Plan credential details are only readable on the computer running Orca.",
-          "siteUnavailable": "Host plan site unavailable"
+          "siteUnavailable": "Host plan site unavailable",
+          "keyStoredOnHostHelp": "Stored on {{host}} and sent from there only to the selected site for usage refreshes. It takes priority over the ZCode CLI sign-in.",
+          "usingCliOnHostHelp": "Orca reads the selected Coding Plan from the ZCode CLI credential store on {{host}}. Save an API key below to link the plan there instead.",
+          "notConfiguredOnHostHelp": "Save the plan API key below, or sign in with the ZCode CLI on {{host}}.",
+          "keyOnHostDescription": "Paste the API key from the selected console’s API Keys page. Stored on {{host}} and sent from there only to that site for usage refreshes."
         },
         "deltaMove": {
           "action": "Move the new projects…",
@@ -12968,6 +13008,20 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "Update Orca on {{host}} to save this key there.",
+          "unreachable": "Could not reach {{host}}, so whether a key is saved there is unknown.",
+          "storedOnHost": "Stored on {{host}}",
+          "miniMaxStorage": "Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes.",
+          "cookieNeedsDesktop": "{{host}} has no Orca desktop app to send a session cookie from. Save an API key instead.",
+          "checking": "Checking {{host}}…",
+          "sealedElsewhereForgettable": "Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app, or forget it here.",
+          "unreadableKey": "Orca on {{host}} cannot read the saved key. Replace it or forget it.",
+          "miniMaxApiKeyDescription": "Paste the API key from your MiniMax console → API keys. Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes. The API key takes priority over the cookie."
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "Could not update the setting on {{host}}."
         }
       },
       "right": {
@@ -14795,7 +14849,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Loading Linear issue…"
+            "loadingLinearIssue": "Loading Linear issue…",
+            "linearLoginUnreadableTitle": "Reconnect Linear",
+            "linearLoginUnreadableBody": "Unable to read saved Linear login. Reconnect it in Settings."
           },
           "ProjectCombobox": {
             "empty": "No projects match your search.",
@@ -18090,6 +18146,16 @@
           "confirmLink": "Open link",
           "cancel": "Cancel",
           "launchFailed": "Couldn't open an app for this {{scheme}} link. It may not be installed."
+        },
+        "httpAuth": {
+          "title": "Sign in",
+          "description": "{{origin}} is asking for a username and password.",
+          "insecure": "Your connection to this site isn't private.",
+          "retry": "That username or password didn't work.",
+          "username": "Username",
+          "password": "Password",
+          "confirm": "Sign in",
+          "cancel": "Cancel"
         }
       },
       "HostedReviewUnlinkMenuItem": {
@@ -18341,13 +18407,15 @@
         "sendAgainToTryOnceMore": "Send your message again to try once more.",
         "couldNotStart": "{{agent}} couldn't start.",
         "couldNotRestart": "{{agent}} couldn't restart.",
+        "startTimedOut": "{{agent}} took too long to start (no response to {{method}} after {{seconds}}s).",
+        "startTimedOutKeepsHappening": "If this keeps happening, the computer running this chat may be overloaded.",
         "codexCliTooOld": "Codex {{installedVersion}} is too old for chats. Update to {{minimumVersion}} or newer.",
         "notSignedIn": "{{agent}} is not signed in.",
         "claudeSystemNotSignedIn": "Claude isn't signed in. Run `{{loginCommand}}`, or choose an account in Claude Accounts settings.",
         "claudeManagedNotSignedIn": "This Claude account isn't signed in. Sign in again in Claude Accounts settings.",
         "codexSystemNotSignedIn": "Codex isn't signed in. Run `{{loginCommand}}`.",
         "codexManagedNotSignedIn": "This Codex account isn't signed in. Sign in again in Codex Accounts settings.",
-        "antigravityNotSignedIn": "Antigravity isn't signed in. Sign in under Settings → Accounts → Antigravity.",
+        "antigravityNotSignedIn": "Antigravity isn't signed in. Sign in under Settings → Accounts → Antigravity. Then send your message again.",
         "cliMissing": "{{agent}} wasn't found on the computer running this chat. Install it, or check its Command in Settings → Agents.",
         "signInFirst": "Sign in first.",
         "signInThenRunCommand": "Sign in, then run /{{command}} again.",
@@ -19068,6 +19136,9 @@
         "explanation": "Continue, and the agent first checks whether its last step finished.",
         "unconfirmed": "Couldn't confirm whether {{agent}} received Continue. Check the chat before trying again.",
         "usageLimitExplanation": "Asks the agent to continue where it left off. Use it once the limit resets."
+      },
+      "antigravitySignIn": {
+        "sentence": "Antigravity isn't signed in. Sign in under <settings>Settings → Accounts → Antigravity</settings>. Then send your message again."
       },
       "claudeSignIn": {
         "signingIn": "Signing in…"
@@ -20445,9 +20516,9 @@
     }
   },
   "workspaceSpace": {
-    "deleteOne": "Delete {{value0}}",
     "table": {
-      "lastActive": "Last active"
+      "lastActive": "Last active",
+      "actions": "Actions"
     },
     "breakdown": {
       "viewAll": "Show more folder details"
@@ -20482,6 +20553,26 @@
     "window": {
       "errorTitle": "Space hit an error.",
       "errorDescription": "Close and reopen Space to try again."
-    }
+    },
+    "changes": {
+      "count": "Changed files ({{count}})",
+      "description": "Uncommitted files · Click a file to view its changes in Orca.",
+      "search": "Filter changed files",
+      "conflict": "Conflict",
+      "staged": "Staged",
+      "untracked": "Untracked",
+      "unstaged": "Unstaged",
+      "empty": "No matching files.",
+      "unavailable": "The workspace owner is no longer available.",
+      "stale": "This file is no longer in the uncommitted changes. Refresh Space to update the list.",
+      "openFailed": "Could not open changes"
+    },
+    "delete": {
+      "pending": "Deletion is in progress.",
+      "main": "The main worktree is protected.",
+      "unmanaged": "This workspace is no longer managed by Orca.",
+      "unavailable": "This workspace is protected or unavailable."
+    },
+    "rowActions": "Actions for {{name}}"
   }
 }
