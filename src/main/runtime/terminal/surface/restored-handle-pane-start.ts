@@ -6,35 +6,59 @@ import { OrcaRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-inte
 import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
 
 export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntimeWithGetTerminalInteractiveWait {
-  /** Starts the saved pane a handle names when it has no terminal yet; the handle then names it. */
-  async startRestoredHandlePane(handle: string): Promise<void> {
+  /**
+   * The handle to act on: the caller's, or, while the saved pane it names has just been started
+   * here and main's layout has not yet bound it, the started terminal's own handle. The caller's
+   * handle adopts the terminal when the binding lands (adoptFirstPtyForLeafHandle).
+   */
+  async startRestoredHandlePane(
+    handle: string,
+    bounds: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<string> {
     if (!ORCA_LAYOUT_OWNER_IS_MAIN || this.getLivePtyForHandle(handle)) {
-      return
+      return handle
     }
     const { leaf } = this.getLiveLeafForHandle(handle)
     if (leaf.ptyId || !startedMainTerminalSurfaces(this)?.ownsWorkspace(leaf.worktreeId)) {
-      return
+      return handle
     }
-    const ptyId = await this.ensureRestoredPaneStarted({
-      worktreeId: leaf.worktreeId,
-      tabId: leaf.tabId,
-      leafId: leaf.leafId
-    })
+    const ptyId = await withinCallerBounds(
+      this.ensureRestoredPaneStarted({
+        worktreeId: leaf.worktreeId,
+        tabId: leaf.tabId,
+        leafId: leaf.leafId
+      }),
+      bounds
+    )
     const pty = ptyId === null ? undefined : this.ptysById.get(ptyId)
-    if (!ptyId || !pty) {
+    if (!pty) {
       throw new Error('terminal_not_found')
     }
-    // Why: the caller's handle names the started terminal, beside any handle its start minted,
-    // so this call and later ones reach it before main's layout records the pane's binding.
-    this.handles.set(handle, {
-      handle,
-      runtimeId: this.runtimeId,
-      rendererGraphEpoch: this.rendererGraphEpoch,
-      worktreeId: pty.worktreeId,
-      tabId: `pty:${ptyId}`,
-      leafId: `pty:${ptyId}`,
-      ptyId,
-      ptyGeneration: 0
-    })
+    return this.issuePtyHandle(pty)
   }
+}
+
+/** The start, or the caller's abort or deadline first; the shared start itself runs on. */
+function withinCallerBounds<T>(
+  start: Promise<T>,
+  { signal, timeoutMs }: { signal?: AbortSignal; timeoutMs?: number }
+): Promise<T> {
+  if (!signal && !(timeoutMs && timeoutMs > 0)) {
+    return start
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => reject(new Error('request_aborted'))
+    const timer =
+      timeoutMs && timeoutMs > 0 ? setTimeout(() => reject(new Error('timeout')), timeoutMs) : null
+    if (signal?.aborted) {
+      abort()
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    start.then(resolve, reject).finally(() => {
+      if (timer) {
+        clearTimeout(timer)
+      }
+      signal?.removeEventListener('abort', abort)
+    })
+  })
 }

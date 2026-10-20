@@ -20,8 +20,11 @@ await import('./rpc/unused-default-rpc-methods.test-fixture')
 const { RpcDispatcher } = await import('./rpc/dispatcher')
 const { TERMINAL_METHODS } = await import('./rpc/methods/terminal')
 
-/** A windowless host whose saved tab gained a third pane no terminal is bound to yet. */
-async function restoredPane() {
+/**
+ * A windowless host whose saved tab gained a third pane no terminal is bound to yet. Its start
+ * records the binding as the host's controller does, unless `bindsOnStart` is false (a late bind).
+ */
+async function restoredPane({ bindsOnStart = true } = {}) {
   const { runtime, store, setSession } = surfaceRuntime()
   runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
   const session = store.getSession()
@@ -41,7 +44,26 @@ async function restoredPane() {
     }
   })
   const started = deferred<{ id: string }>()
-  const spawn = vi.fn(() => started.promise)
+  const bindThirdPane = (ptyId: string): void => {
+    const current = store.getSession()
+    const tab = current.terminalLayoutsByTabId[SURFACE_TAB_ID]!
+    setSession({
+      ...current,
+      terminalLayoutsByTabId: {
+        [SURFACE_TAB_ID]: {
+          ...tab,
+          ptyIdsByLeafId: { ...tab.ptyIdsByLeafId, [THIRD_LEAF_ID]: ptyId }
+        }
+      }
+    })
+  }
+  const spawn = vi.fn(async () => {
+    const result = await started.promise
+    if (bindsOnStart) {
+      bindThirdPane(result.id)
+    }
+    return result
+  })
   const write = vi.fn(() => true)
   runtime.setPtyController({
     spawn,
@@ -55,7 +77,7 @@ async function restoredPane() {
   await new Promise((resolve) => setTimeout(resolve, 0))
   const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
   const handle = listed.terminals.find((terminal) => terminal.leafId === THIRD_LEAF_ID)!.handle
-  return { runtime, handle, spawn, started, write }
+  return { runtime, handle, spawn, started, write, bindThirdPane }
 }
 
 const DRIVING = { inputKind: 'driving' } as const
@@ -139,7 +161,7 @@ describe('a CLI trigger on a saved pane with no terminal (layout-owner build)', 
     started.resolve({ id: 'pty-c' })
 
     await expect(send).resolves.toMatchObject({ accepted: true })
-    await phone
+    await expect(phone).resolves.toBeDefined()
     expect(spawn).toHaveBeenCalledOnce()
     expect(write).toHaveBeenCalledWith('pty-c', 'echo hi', 'driving')
   })
@@ -150,7 +172,36 @@ describe('a CLI trigger on a saved pane with no terminal (layout-owner build)', 
     const send = runtime.sendTerminal(handle, { text: 'echo hi', enter: true }, DRIVING)
     started.reject(new Error('spawn failed'))
 
-    await expect(send).rejects.toThrow()
+    await expect(send).rejects.toThrow('spawn failed')
     expect(write).not.toHaveBeenCalled()
+  })
+
+  it('a wait that started the pane survives main binding it, and answers under the caller handle', async () => {
+    const { runtime, handle, spawn, started, write, bindThirdPane } = await restoredPane({
+      bindsOnStart: false
+    })
+
+    const wait = runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 5_000 })
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+    started.resolve({ id: 'pty-c' })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    bindThirdPane('pty-c')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    await expect(
+      runtime.sendTerminal(handle, { text: 'echo bound', enter: true }, DRIVING)
+    ).resolves.toMatchObject({ handle, accepted: true })
+    expect(write).toHaveBeenCalledWith('pty-c', 'echo bound', 'driving')
+    runtime.onPtyExit('pty-c', 0)
+
+    await expect(wait).resolves.toMatchObject({ handle, condition: 'exit', satisfied: true })
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it("a wait's timeout covers a start that never finishes", async () => {
+    const { runtime, handle } = await restoredPane()
+
+    await expect(
+      runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 50 })
+    ).rejects.toThrow('timeout')
   })
 })

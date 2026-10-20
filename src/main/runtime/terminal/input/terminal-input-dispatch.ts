@@ -141,8 +141,11 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
     }
   ): Promise<RuntimeTerminalSend> {
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      await this.startRestoredHandlePane(handle)
+    const target = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? await this.startRestoredHandlePane(handle, { signal: options.signal })
+      : handle
+    if (target !== handle) {
+      return { ...(await this.sendTerminal(target, action, options)), handle }
     }
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {
@@ -220,8 +223,11 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
       )
     }
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      await this.startRestoredHandlePane(handle)
+    const target = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? await this.startRestoredHandlePane(handle, { signal: options.signal })
+      : handle
+    if (target !== handle) {
+      return { ...(await this.sendTerminalAgentPrompt(target, prompt, options)), handle }
     }
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {

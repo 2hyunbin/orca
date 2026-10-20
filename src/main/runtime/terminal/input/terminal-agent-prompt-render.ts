@@ -142,8 +142,10 @@ export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRun
   ): Promise<RuntimeTerminalWait> {
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      return this.startRestoredHandlePane(handle).then(() =>
-        this.terminalWait.wait(handle, options)
+      return this.startRestoredHandlePane(handle, options ?? {}).then(async (target) =>
+        target === handle
+          ? this.terminalWait.wait(handle, options)
+          : { ...(await this.terminalWait.wait(target, options)), handle }
       )
     }
     return this.terminalWait.wait(handle, options)
