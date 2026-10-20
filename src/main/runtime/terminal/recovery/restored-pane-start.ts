@@ -44,6 +44,8 @@ export function restoredPaneStartPlan(
 
 export class RestoredPaneStarter {
   private readonly inFlight = new Map<string, Promise<string | null>>()
+  /** Each pane's last started terminal: its bind write can land after the start resolves. */
+  private readonly started = new Map<string, string>()
 
   constructor(private readonly ports: RestoredPaneStartPorts) {}
 
@@ -60,13 +62,25 @@ export class RestoredPaneStarter {
     }
     const bound = this.ports.boundPtyId(pane)
     if (bound === null) {
+      this.started.delete(key)
       return Promise.resolve(null)
     }
     if (this.isOwnLive(pane, bound)) {
+      this.started.delete(key)
       return Promise.resolve(bound)
     }
+    const started = this.started.get(key)
+    // Why: until the started terminal's binding is written, the stored layout still names the old one.
+    if (started && this.ports.isLive(started)) {
+      return Promise.resolve(started)
+    }
+    this.started.delete(key)
     const start = this.ports
       .start(pane, restoredPaneStartPlan(pane, bound), trigger)
+      .then((ptyId) => {
+        this.started.set(key, ptyId)
+        return ptyId
+      })
       .catch((error: unknown) => {
         const winner = this.ports.boundPtyId(pane)
         if (this.isOwnLive(pane, winner)) {

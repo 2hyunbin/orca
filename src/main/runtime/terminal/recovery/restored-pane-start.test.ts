@@ -49,6 +49,29 @@ describe('restoredPaneStartPlan', () => {
 })
 
 describe('RestoredPaneStarter', () => {
+  it('starts once for a trigger that arrives after the start but before its binding is written', async () => {
+    const live = new Set<string>()
+    const start = vi.fn(async () => {
+      live.add('pty-new')
+      return 'pty-new'
+    })
+    // The stored layout still names the old terminal: the bind write has not landed.
+    const starter = new RestoredPaneStarter({
+      boundPtyId: () => OWN,
+      isLive: (ptyId) => live.has(ptyId),
+      start
+    })
+
+    await expect(starter.ensureStarted(PANE)).resolves.toBe('pty-new')
+    await expect(starter.ensureStarted(PANE)).resolves.toBe('pty-new')
+    expect(start).toHaveBeenCalledOnce()
+
+    // Once that terminal is gone, the next trigger starts the pane again.
+    live.delete('pty-new')
+    await starter.ensureStarted(PANE)
+    expect(start).toHaveBeenCalledTimes(2)
+  })
+
   it('starts a pane with no live terminal once for concurrent triggers, all bound to it', async () => {
     const { ports: p, start } = ports()
     const starter = new RestoredPaneStarter(p)
