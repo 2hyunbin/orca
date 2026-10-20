@@ -3,6 +3,7 @@ import '../unused-default-rpc-methods.test-fixture'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../../shared/structured-agent-session-surface-capabilities'
 import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
 import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-session-wire'
 import { agentSessionRecordFixture } from '../../../../shared/agent-session-record.test-fixture'
@@ -12,8 +13,16 @@ import {
   clearStructuredHostStub,
   hostStub,
   SESSION,
-  STRUCTURED_CLIENT
+  STRUCTURED_CLIENT as LEGACY_CLIENT
 } from './structured-agent-session-rpc.test-fixture'
+
+const STRUCTURED_CLIENT = {
+  ...LEGACY_CLIENT,
+  clientCapabilities: [
+    ...LEGACY_CLIENT.clientCapabilities,
+    AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
+  ]
+}
 
 afterEach(() => {
   clearStructuredHostStub()
@@ -95,7 +104,7 @@ describe('agentSession.modelCatalog', () => {
     await call(
       'agentSession.modelCatalog',
       { agent: 'codex', sessionId: SESSION, waitForListing: true },
-      STRUCTURED_CLIENT
+      STRUCTURED_CLIENT as LEGACY_CLIENT
     )
     expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION, waitForListing: true })
   })
@@ -187,7 +196,7 @@ describe('agentSession.modelCatalog for a chat on a model its CLI stopped listin
   it("lists the chat's own model, so an older client that replaces an unlisted one keeps it", async () => {
     const own = { id: 'opus[1m]', label: 'opus[1m]', isDefault: false, efforts: [] }
     const forChat = { agent: 'claude', sessionId: record.sessionId }
-    expect(await call('agentSession.modelCatalog', forChat, STRUCTURED_CLIENT)).toMatchObject({
+    expect(await call('agentSession.modelCatalog', forChat, LEGACY_CLIENT)).toMatchObject({
       ok: true,
       result: { models: [opus, own] }
     })

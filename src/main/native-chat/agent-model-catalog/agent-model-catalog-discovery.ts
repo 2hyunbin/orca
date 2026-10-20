@@ -14,9 +14,7 @@ export type AgentModelCatalogProbe = ((
   resolve?: (home: AgentSessionAccountHome, cwd: string) => Promise<AgentModelCatalogResolvedProbe>
 }
 
-export function independentAgentModelCatalog(agent: string): boolean {
-  return agent === 'claude' || agent === 'codex'
-}
+export { independentAgentModelCatalog } from '../../../shared/agent-model-catalog-ownership'
 
 /**
  * What every agent registration must say about its models: a probe that lists them without

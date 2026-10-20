@@ -75,7 +75,11 @@ async function readStructuredAgentSessionOptionsAtRest(
         agent: record.provider,
         sessionId,
         savedOnly: true,
-        ...(inSessionWorkspace ? { inSessionWorkspace: true as const } : {})
+        ...(inSessionWorkspace
+          ? { inSessionWorkspace: true as const }
+          : independentAgentModelCatalog(record.provider)
+            ? { workspacePath: null }
+            : {})
       })
       .catch(() => null)) ?? { origin: 'unknown' }
   const saved = record.options ?? {}

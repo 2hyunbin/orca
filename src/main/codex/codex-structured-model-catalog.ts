@@ -155,7 +155,7 @@ export async function fetchCodexModelCatalogListing(input: {
     input.cwd
   )
   return {
-    models: parsedModels,
+    models: applyCodexConfiguredLaunchDefaults(parsedModels, configured),
     complete: complete && cursor === null,
     ...(configured
       ? {

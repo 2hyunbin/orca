@@ -10,6 +10,7 @@ import {
   STRUCTURED_LAUNCH_SEED_OPTION_IDS
 } from './native-chat-session-option-defaults'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
+import { independentAgentModelCatalog } from './agent-model-catalog-ownership'
 import {
   structuredAgentSessionDescribedModel,
   structuredAgentSessionShownModel
@@ -125,6 +126,9 @@ export function applyStructuredAgentSessionModelCatalog(
   catalog: AgentSessionModelCatalogResult,
   options: { newLaunch: boolean }
 ): StructuredAgentSessionOptionState {
+  if (state.catalogSource === 'live' && !independentAgentModelCatalog(state.record.agent)) {
+    return state
+  }
   const models =
     catalog.origin === 'unknown'
       ? []

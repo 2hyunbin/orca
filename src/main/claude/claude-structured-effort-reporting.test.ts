@@ -148,7 +148,12 @@ describe('Claude effort readback', () => {
 })
 
 describe('Claude effort against the model that must run it', () => {
-  const HAIKU = { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku' }
+  const HAIKU = {
+    value: 'haiku',
+    resolvedModel: 'claude-haiku-4-5-20251001',
+    displayName: 'Haiku',
+    supportsEffort: false
+  }
   const SONNET = {
     value: 'sonnet',
     resolvedModel: 'claude-sonnet-5',

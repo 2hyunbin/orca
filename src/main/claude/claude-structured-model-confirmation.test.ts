@@ -24,7 +24,12 @@ const CATALOG = [
     supportsEffort: true,
     supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max']
   },
-  { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku' }
+  {
+    value: 'haiku',
+    resolvedModel: 'claude-haiku-4-5-20251001',
+    displayName: 'Haiku',
+    supportsEffort: false
+  }
 ]
 
 function initFrame(model: string): Record<string, unknown> {

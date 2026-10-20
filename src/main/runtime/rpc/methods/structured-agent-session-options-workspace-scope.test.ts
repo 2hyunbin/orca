@@ -62,7 +62,7 @@ async function readOptions(client: typeof OLDER_CLIENT | typeof CURRENT_CLIENT) 
 
 /** A Codex chat with no pick, at rest in a repo; `configured` gives the repo a `.codex/config.toml`
  *  that sets the effort. */
-async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
+async function chatAtRest(repoConfig: { configured: boolean; complete?: boolean }): Promise<void> {
   await foundRestTestChat(rig)
   // The chat never picked: its next start runs whatever its config resolves.
   await rig.store.replaceSessionOptions({
@@ -106,11 +106,30 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
     getRecord: (sessionId) => rig.store.getRecord(sessionId) ?? undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => rig.store.getRecord(SESSION)!.accountHome,
+    ...(repoConfig.complete
+      ? {
+          probes: {
+            codex: async () => ({
+              ...listing,
+              complete: true,
+              configured: { model: 'gpt-5.5', effort: repoConfig.configured ? 'high' : 'medium' }
+            })
+          }
+        }
+      : {}),
     listingNamesConfiguredModel: new Set(['codex']),
     recordWorkspacePath: async () => repo,
     agentReadsProjectModelConfig,
     workspaceMayOverrideDefaultModel
   })
+  if (repoConfig.complete) {
+    await modelCatalog.read({
+      agent: 'codex',
+      sessionId: SESSION,
+      inSessionWorkspace: true,
+      waitForListing: true
+    })
+  }
   await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
   rig.adapter.acquire.mockClear()
@@ -168,4 +187,18 @@ describe('options at rest in a repo with no config of its own', () => {
       result: { current: { model: 'gpt-5.5', effort: 'medium' } }
     })
   })
+})
+
+describe('completed discovery in the exact project scope', () => {
+  it.each([OLDER_CLIENT, CURRENT_CLIENT])(
+    'shows what the project actually runs to $clientId',
+    async (client) => {
+      await chatAtRest({ configured: true, complete: true })
+      expect(await readOptions(client)).toMatchObject({
+        ok: true,
+        result: { current: { model: 'gpt-5.5', effort: 'high' } }
+      })
+      expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    }
+  )
 })

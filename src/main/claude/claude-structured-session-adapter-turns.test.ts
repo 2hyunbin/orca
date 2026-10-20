@@ -262,20 +262,27 @@ describe('ClaudeStructuredSessionAdapter turns and controls', () => {
       sessionId: 'session-1',
       fence: 7
     })
-    // The listing the host saves for the account: the CLI's rows, none of this session's state.
-    expect(catalogListing?.models.map((model) => model.id)).toEqual(['opus', 'sonnet'])
+    expect(catalogListing).toBeUndefined()
     expect(options).toEqual({
       models: [
         {
           id: 'opus',
           label: 'Opus',
+          resolvedModel: 'claude-opus-5',
           isDefault: true,
           efforts: [
             { value: 'low', label: 'Low' },
             { value: 'high', label: 'High' }
           ]
         },
-        { id: 'sonnet', label: 'Sonnet', isDefault: false, efforts: [] }
+        {
+          id: 'sonnet',
+          label: 'Sonnet',
+          resolvedModel: 'claude-sonnet-5',
+          isDefault: false,
+          efforts: [],
+          effortsKnown: false
+        }
       ],
       current: { model: 'sonnet', effort: 'high', confirmed: ['model', 'effort'] }
     })

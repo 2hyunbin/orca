@@ -128,16 +128,17 @@ export type AgentModelCatalogEntry = {
 export function agentModelCatalogResultFromEntry(
   entry: AgentModelCatalogEntry,
   namesDefault: boolean,
-  listingNamesConfiguredModel: boolean
+  listingNamesConfiguredModel: boolean,
+  useConfigured = true
 ): Exclude<AgentSessionModelCatalogResult, { origin: 'unknown' }> {
   // A CLI-resolved default names the configured model even where the listing names none.
-  const namesConfigured = listingNamesConfiguredModel || entry.configured !== null
+  const namesConfigured =
+    listingNamesConfiguredModel || (useConfigured && entry.configured !== null)
+  const models = useConfigured ? entry.models : (entry.discovered?.models ?? entry.models)
   return {
     origin: entry.origin,
     // Without a default the picker names nothing until the chat reports its model.
-    models: entry.models.map((model) =>
-      namesDefault ? { ...model } : { ...model, isDefault: false }
-    ),
+    models: models.map((model) => (namesDefault ? { ...model } : { ...model, isDefault: false })),
     ...(entry.fastModeSupport ? { fastModeSupport: entry.fastModeSupport } : {}),
     fetchedAt: entry.fetchedAt,
     listingNamesConfiguredModel: namesDefault && namesConfigured

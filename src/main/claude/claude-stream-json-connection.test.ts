@@ -571,6 +571,7 @@ describe('Claude stream-json connection', () => {
       id: 'opus',
       label: 'Opus 5',
       description: 'The live row, not the seed',
+      resolvedModel: 'claude-opus-5',
       isDefault: true,
       efforts: [
         { value: 'low', label: 'Low' },

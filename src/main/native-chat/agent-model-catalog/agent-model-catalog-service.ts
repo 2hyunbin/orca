@@ -174,17 +174,16 @@ export function createAgentModelCatalogService(
       await recordingDefaults.get(fingerprint)
       let entry = deps.store.get(fingerprint)
       const probe = deps.probes?.[params.agent]
-      const home = probeHome
       const list = async (): Promise<AgentModelCatalogSuccess> => {
         const release = await admission.acquire(0, lifetime.signal)
         try {
           if (resolved) {
             return await resolved.run(lifetime.signal)
           }
-          if (!probe || !home) {
+          if (!probe || !probeHome) {
             throw new AgentModelCatalogListingStoppedError('catalog scope unavailable')
           }
-          return await listWith(probe, home, cwd ?? folder)()
+          return await listWith(probe, probeHome, cwd ?? folder)()
         } finally {
           release()
         }
@@ -204,18 +203,26 @@ export function createAgentModelCatalogService(
           return { origin: 'unknown' }
         }
         const display = listed ?? (exact && !params.verifiedOnly ? deps.store.get(base) : null)
+        const independent = independentAgentModelCatalog(params.agent)
+        const accountFallback =
+          independent &&
+          scoped &&
+          params.savedOnly &&
+          params.workspacePath === null &&
+          !params.inSessionWorkspace
         const result = display
           ? agentModelCatalogResultFromEntry(
               display,
-              exact
-                ? listed !== null
+              exact && listed?.discovered?.complete === true
+                ? true
                 : await workspaceKeepsListedDefault(
                     deps,
                     params.agent,
-                    workspacePath,
+                    accountFallback ? undefined : workspacePath,
                     accountHomePath
                   ),
-              deps.listingNamesConfiguredModel?.has(params.agent) === true
+              deps.listingNamesConfiguredModel?.has(params.agent) === true,
+              !independent || (exact && listed !== null)
             )
           : null
         const holdsEverywhere =
@@ -241,7 +248,7 @@ export function createAgentModelCatalogService(
       }
       // Past its TTL, only the probe re-derives a held reason. The reason is served meanwhile;
       // only a read that asks waits for the probe's answer.
-      if (probe && home && !lifetime.signal.aborted && deps.store.heldReasonDue(fingerprint)) {
+      if (probe && probeHome && !lifetime.signal.aborted && deps.store.heldReasonDue(fingerprint)) {
         const probing = deps.store.refresh(fingerprint, params.agent, probe, list)
         if (!params.waitForListing) {
           return answer(entry, { listingInProgress: true })
@@ -250,8 +257,8 @@ export function createAgentModelCatalogService(
         return answer(deps.store.get(fingerprint))
       }
       // Without an entry, answer from any running listing instead of starting a second one.
-      let listing = !entry && home ? deps.store.pendingListing(fingerprint) : null
-      if (probe && home && !lifetime.signal.aborted) {
+      let listing = !entry && probeHome ? deps.store.pendingListing(fingerprint) : null
+      if (probe && probeHome && !lifetime.signal.aborted) {
         if (entry && deps.store.shouldRefresh(fingerprint)) {
           void deps.store.refresh(fingerprint, params.agent, probe, list)
         } else if (!entry && !listing && !deps.store.hasActiveFailure(fingerprint)) {
