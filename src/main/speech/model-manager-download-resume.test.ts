@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelManager } from './model-manager'
+import { openElectronSpeechDownloadRequest } from '../host/electron-speech-services'
 
 const { netRequestMock } = vi.hoisted(() => ({
   netRequestMock: vi.fn()
@@ -163,7 +164,10 @@ describe('ModelManager download resume', () => {
           chunks: [PAYLOAD.subarray(10)]
         }
       })
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       const attempt = vi.spyOn(manager, 'downloadFile')
 
@@ -204,7 +208,10 @@ describe('ModelManager download resume', () => {
         chunks: [PAYLOAD],
         failWith: 'net::ERR_CONNECTION_RESET'
       }))
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
 
       await manager.downloadFileWithRetry(
@@ -248,7 +255,10 @@ describe('ModelManager download resume', () => {
           chunks: [PAYLOAD.subarray(15)]
         }
       })
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       writeFileSync(filePath, PAYLOAD.subarray(0, 10))
 
@@ -297,7 +307,10 @@ describe('ModelManager download resume', () => {
           chunks: [PAYLOAD.subarray(10)]
         }
       })
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       writeFileSync(filePath, PAYLOAD.subarray(0, 1))
 
@@ -320,7 +333,10 @@ describe('ModelManager download resume', () => {
   it('bounds a server that advances by pathologically tiny segments forever', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'orca-model-resume-'))
     try {
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       let bytesWritten = 0
       // Why: the ceiling costs 4096 iterations, so read progress from memory —
@@ -360,7 +376,10 @@ describe('ModelManager download resume', () => {
       // forward progress, the download must complete no matter how many drops
       // it takes (regression guard: a fixed failure budget used to abandon a
       // still-advancing large download around attempt 8).
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       const SLICE = 2
       let delivered = 0
@@ -420,7 +439,10 @@ describe('ModelManager download resume', () => {
           chunks: [PAYLOAD.subarray(15)]
         }
       })
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       writeFileSync(filePath, PAYLOAD.subarray(0, 10))
 
@@ -451,7 +473,10 @@ describe('ModelManager download resume', () => {
         },
         chunks: [PAYLOAD.subarray(0, 10)]
       }))
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       writeFileSync(filePath, PAYLOAD.subarray(0, 10))
 
@@ -494,7 +519,10 @@ describe('ModelManager download resume', () => {
         headers: { 'content-length': String(PAYLOAD.length) },
         chunks: [PAYLOAD]
       }))
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       const attempt = vi.spyOn(manager, 'downloadFile')
 
@@ -529,7 +557,10 @@ describe('ModelManager download resume', () => {
     const dir = mkdtempSync(join(tmpdir(), 'orca-model-resume-'))
     try {
       scriptRequest(() => ({ statusCode: 404 }))
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
 
       await expect(
         manager.downloadFileWithRetry(
@@ -555,7 +586,10 @@ describe('ModelManager download resume', () => {
         statusCode: 429,
         headers: { 'retry-after': '3' }
       }))
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
 
       const error = await manager
         .downloadFile(
@@ -578,7 +612,10 @@ describe('ModelManager download resume', () => {
     vi.useFakeTimers()
     const dir = mkdtempSync(join(tmpdir(), 'orca-model-resume-'))
     try {
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const filePath = join(dir, 'model.bin')
       const rateLimitError = Object.assign(new Error('HTTP 429'), {
         httpStatusCode: 429,
@@ -614,7 +651,10 @@ describe('ModelManager download resume', () => {
   it('does not retry before an excessively long Retry-After window', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'orca-model-resume-'))
     try {
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const rateLimitError = Object.assign(new Error('HTTP 429'), {
         httpStatusCode: 429,
         retryAfterMs: 300_000
@@ -642,7 +682,10 @@ describe('ModelManager download resume', () => {
     vi.useFakeTimers()
     const dir = mkdtempSync(join(tmpdir(), 'orca-model-resume-'))
     try {
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
       const downloadFileMock = vi
         .spyOn(manager, 'downloadFile')
         .mockRejectedValue(new Error('net::ERR_CONNECTION_RESET'))
@@ -693,7 +736,10 @@ describe('ModelManager download resume', () => {
         failWith: 'net::ERR_CONNECTION_RESET'
       }))
       const controller = new AbortController()
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
 
       const download = manager.downloadFileWithRetry(
         'https://example.com/model.bin',

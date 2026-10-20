@@ -170,6 +170,19 @@ describe('rpc wrappers', () => {
     )
   })
 
+  it('maps a headless server with no speech to update guidance (#31174)', async () => {
+    const client = clientWith([
+      malformedFailure({
+        code: 'runtime_error',
+        message: 'speech_unavailable: this host has no speech services'
+      })
+    ])
+
+    await expect(fetchDictationSetup(client)).rejects.toThrow(
+      'Update Orca on this server to use voice dictation.'
+    )
+  })
+
   it('keeps unrelated speech model failures specific', async () => {
     const client = clientWith([
       malformedFailure({

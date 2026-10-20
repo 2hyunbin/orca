@@ -1,7 +1,10 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { formatServeRuntimeSelection } from '../../shared/orcad-local-serve-selection'
 import type { runProcess } from '@orca/process-host'
-import { resolveLocalServeRuntime } from './serve-orcad-launch'
+import { findAppSpeechRecognizerDir, resolveLocalServeRuntime } from './serve-orcad-launch'
 import { orcadServeArgs, serveOptionArgs } from '../../shared/orcad-serve-argv'
 
 type RunProcess = typeof runProcess
@@ -145,5 +148,46 @@ describe('orca serve asking the app which host to run', () => {
       '/work/app'
     ])
     expect(serveOptionArgs({ recipeJson: true }, '--serve-')).toEqual([])
+  })
+})
+
+describe("handing orcad the app's speech recognizer (#31174)", () => {
+  function appLayout(place: (resources: string, appRoot: string) => string) {
+    const resources = mkdtempSync(join(tmpdir(), 'orca-serve-speech-'))
+    const appRoot = join(resources, 'app.asar')
+    const dir = place(resources, appRoot)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'sherpa-onnx.node'), '')
+    return { resources, appRoot, dir }
+  }
+
+  it.each([
+    {
+      where: 'beside the asar',
+      platform: 'linux',
+      place: (resources: string) => join(resources, 'node_modules', 'sherpa-onnx-linux-x64')
+    },
+    {
+      where: 'unpacked from the asar',
+      platform: 'win32',
+      place: (_resources: string, appRoot: string) =>
+        join(`${appRoot}.unpacked`, 'node_modules', 'sherpa-onnx-win-x64')
+    }
+  ])('finds the copy a packaged app ships $where', ({ platform, place }) => {
+    const app = appLayout(place)
+    try {
+      expect(findAppSpeechRecognizerDir(app.appRoot, platform, 'x64')).toBe(app.dir)
+    } finally {
+      rmSync(app.resources, { recursive: true, force: true })
+    }
+  })
+
+  it('answers nothing when the app ships no recognizer for this platform', () => {
+    const app = appLayout((resources) => join(resources, 'node_modules', 'sherpa-onnx-linux-arm64'))
+    try {
+      expect(findAppSpeechRecognizerDir(app.appRoot, 'linux', 'x64')).toBeUndefined()
+    } finally {
+      rmSync(app.resources, { recursive: true, force: true })
+    }
   })
 })

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelManager } from './model-manager'
+import { openElectronSpeechDownloadRequest } from '../host/electron-speech-services'
 
 const { netRequestMock } = vi.hoisted(() => ({
   netRequestMock: vi.fn()
@@ -63,7 +64,10 @@ describe('ModelManager stream cleanup', () => {
         off: vi.fn(() => request)
       }
       netRequestMock.mockReturnValue(request)
-      const manager = new ModelManager(dir) as unknown as ModelManagerInternals
+      const manager = new ModelManager(
+        dir,
+        openElectronSpeechDownloadRequest
+      ) as unknown as ModelManagerInternals
 
       const download = manager.downloadFile(
         'https://example.com/model.bin',
