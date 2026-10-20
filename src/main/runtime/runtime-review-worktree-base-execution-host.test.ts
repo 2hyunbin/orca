@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
+import { ExecutionHostNotDispatchableError } from '../providers/execution-host-provider-dispatch'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
 const { gitExecFileAsyncMock } = vi.hoisted(() => ({ gitExecFileAsyncMock: vi.fn() }))
@@ -26,49 +27,63 @@ function repoOn(fields: Pick<Repo, 'connectionId' | 'executionHostId'>): Repo {
   }
 }
 
-describe('runtime PR/MR worktree base on an SSH project', () => {
-  beforeEach(() => {
-    gitExecFileAsyncMock.mockReset()
-    gitExecFileAsyncMock.mockResolvedValue({ stdout: 'local-sha\n', stderr: '' })
-  })
-
-  // Why: rows written by the unified-host code carry only `ssh:<target>`, no legacy connectionId.
-  it.each([
-    ['executionHostId only', { executionHostId: 'ssh:gpu' as const }],
-    ['legacy connectionId', { connectionId: 'gpu' }]
-  ])('GitHub refuses instead of running local git (%s)', async (_label, fields) => {
-    const resolveRepo = vi.fn(async () => repoOn(fields))
-    await expect(
+const PROVIDERS = [
+  [
+    'GitHub',
+    (resolveRepo: () => Promise<Repo>) =>
       resolveRuntimeGitHubWorktreeBase(
         { repoSelector: 'id:repo-1', prNumber: 7, headRefName: 'feature' },
         { store, resolveRepo }
       )
-    ).rejects.toEqual(new SshHostNotServedError('gpu'))
-    expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    ['executionHostId only', { executionHostId: 'ssh:gpu' as const }],
-    ['legacy connectionId', { connectionId: 'gpu' }]
-  ])('GitLab refuses instead of running local git (%s)', async (_label, fields) => {
-    const resolveRepo = vi.fn(async () => repoOn(fields))
-    await expect(
+  ],
+  [
+    'GitLab',
+    (resolveRepo: () => Promise<Repo>) =>
       resolveRuntimeGitLabWorktreeBase(
         { repoSelector: 'id:repo-1', mrIid: 7, sourceBranch: 'feature', targetBranch: 'main' },
         { store, resolveRepo }
       )
-    ).rejects.toEqual(new SshHostNotServedError('gpu'))
-    expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
+  ]
+] as const
+
+// Why each row: rows written by unified-host code carry only `executionHostId`; `runtime:` rows are
+// created by their own server (create refuses them here too); a `local` row with a leftover
+// `connectionId` contradicts itself and must not run here either.
+const REFUSED_ROWS = [
+  ['executionHostId only', { executionHostId: 'ssh:gpu' }, new SshHostNotServedError('gpu')],
+  ['legacy connectionId', { connectionId: 'gpu' }, new SshHostNotServedError('gpu')],
+  [
+    'local with a stale connectionId',
+    { executionHostId: 'local', connectionId: 'gpu' },
+    new SshHostNotServedError('gpu')
+  ],
+  [
+    'runtime host',
+    { executionHostId: 'runtime:env' },
+    new ExecutionHostNotDispatchableError('runtime:env')
+  ],
+  [
+    'runtime host with a nested SSH target',
+    { executionHostId: 'runtime:env', connectionId: 'gpu' },
+    new ExecutionHostNotDispatchableError('runtime:env')
+  ]
+] as const
+
+describe('runtime PR/MR worktree base runs Git only for rows on this machine', () => {
+  beforeEach(() => {
+    gitExecFileAsyncMock.mockReset()
+    gitExecFileAsyncMock.mockResolvedValue({ stdout: 'origin\n', stderr: '' })
   })
 
-  it('a runtime-stamped row registered on this host still resolves locally', async () => {
-    const resolveRepo = vi.fn(async () => repoOn({ executionHostId: 'runtime:self' }))
-    await expect(
-      resolveRuntimeGitLabWorktreeBase(
-        { repoSelector: 'id:repo-1', mrIid: 7, sourceBranch: 'feature', targetBranch: 'main' },
-        { store, resolveRepo }
-      )
-    ).resolves.toMatchObject({ baseBranch: expect.any(String) })
-    expect(gitExecFileAsyncMock).toHaveBeenCalled()
-  })
+  for (const [provider, resolveBase] of PROVIDERS) {
+    it.each(REFUSED_ROWS)(`${provider} refuses a row: %s`, async (_label, fields, expected) => {
+      await expect(resolveBase(async () => repoOn(fields))).rejects.toEqual(expected)
+      expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
+    })
+
+    it(`${provider} runs local Git for a local row`, async () => {
+      await resolveBase(async () => repoOn({ executionHostId: 'local' })).catch(() => {})
+      expect(gitExecFileAsyncMock).toHaveBeenCalled()
+    })
+  }
 })

@@ -11,9 +11,8 @@ import {
   getLocalProjectGitExecOptions,
   getLocalProjectGhExecOptions
 } from '../project-runtime-git-options'
-import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import { isFolderRepo } from '../../shared/repo-kind'
-import { getRepoSshConnectionId } from '../../shared/execution-host'
+import { requireRepoLocalGitRoute } from '../repo-execution-host'
 import type { ProjectRuntimeResolutionStore } from '../local-project-runtime-resolution'
 
 export type RuntimeGitHubWorktreeBaseArgs = {
@@ -43,11 +42,9 @@ export async function resolveRuntimeGitHubWorktreeBase(
   if (isFolderRepo(repo)) {
     return { error: 'Folder mode does not support creating worktrees.' }
   }
-  // Why the resolver: a row may name its SSH host only as `executionHostId: 'ssh:<target>'`.
-  const sshTargetId = getRepoSshConnectionId(repo)
-  if (sshTargetId) {
-    throw new SshHostNotServedError(sshTargetId)
-  }
+  // Why the shared gate: a row may name its host only as `executionHostId`, and create refuses the
+  // same rows, so base resolution never runs Git a create would not.
+  requireRepoLocalGitRoute(repo)
   const localGitExecOptions = getLocalProjectGitExecOptions(deps.store, repo)
   const localGhOptions = getLocalProjectGhExecOptions(deps.store, repo)
   const gitExec = (gitArgs: string[]) => gitExecFileAsync(gitArgs, localGitExecOptions)

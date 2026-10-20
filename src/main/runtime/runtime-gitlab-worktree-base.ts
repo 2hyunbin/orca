@@ -1,7 +1,7 @@
 import type { GitPushTarget } from '../../shared/worktree/types'
 import type { Repo } from '../../shared/repo-types'
 import { isFolderRepo } from '../../shared/repo-kind'
-import { getRepoSshConnectionId } from '../../shared/execution-host'
+import { requireRepoLocalGitRoute } from '../repo-execution-host'
 import { fetchCompareBaseRefWithLocalFallback } from '../git/compare-base-ref-fetch'
 import { gitExecFileAsync } from '../git/runner'
 import { getProjectRefForRemote, getWorkItemByProjectRef } from '../gitlab/client'
@@ -10,7 +10,6 @@ import {
   getLocalProjectGitExecOptions,
   getLocalProjectWorktreeGitOptions
 } from '../project-runtime-git-options'
-import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import type { ProjectRuntimeResolutionStore } from '../local-project-runtime-resolution'
 import { resolveRuntimeGitLabForkMrBase } from './runtime-gitlab-fork-mr-base'
 import { resolveRuntimeGitLabIssueSourceRemote } from './runtime-gitlab-issue-source-remote'
@@ -46,11 +45,9 @@ export async function resolveRuntimeGitLabWorktreeBase(
   if (isFolderRepo(repo)) {
     return { error: 'Folder mode does not support creating worktrees.' }
   }
-  // Why the resolver: a row may name its SSH host only as `executionHostId: 'ssh:<target>'`.
-  const sshTargetId = getRepoSshConnectionId(repo)
-  if (sshTargetId) {
-    throw new SshHostNotServedError(sshTargetId)
-  }
+  // Why the shared gate: a row may name its host only as `executionHostId`, and create refuses the
+  // same rows, so base resolution never runs Git a create would not.
+  requireRepoLocalGitRoute(repo)
   const localGitExecOptions = getLocalProjectGitExecOptions(deps.store, repo)
   const localWorktreeGitOptions = getLocalProjectWorktreeGitOptions(deps.store, repo)
   const gitExec = (gitArgs: string[]) => gitExecFileAsync(gitArgs, localGitExecOptions)
