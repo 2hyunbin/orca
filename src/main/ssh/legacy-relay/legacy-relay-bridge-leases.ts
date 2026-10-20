@@ -147,8 +147,9 @@ export function relistedPane(
   const listed = replaced && !lease.pendingKill ? undefined : (ownRow ?? adopted)
   // The owner's relay answering without it proves the exit; a replacement's silence proves nothing.
   const ownerSilent = owner ? !owners.isReplaced(relayPtyId) : rows.length === 0
-  // A listing taken before the new owner's exit report must not bring the pane back live.
-  const exitedFirst = adopted && owners.exitBeforeAdoption(relayPtyId, adopted.endpoint)
+  // A listing taken before its relay's exit report must not bring the pane back live.
+  const exitedFirst =
+    listed && !replaced ? owners.exitBeforeListing(relayPtyId, listed.endpoint) : undefined
   if (exitedFirst !== undefined || (!listed && complete && ownerSilent)) {
     owners.forget(relayPtyId)
     return { exited: exitedFirst ?? null }

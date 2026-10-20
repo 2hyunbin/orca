@@ -21,8 +21,8 @@ export type LegacyRelayOwnerRow = { endpoint: string; incarnationId?: string | u
 export class LegacyRelayPaneOwners {
   /** `null`: two relays claimed the id before either was known to own it, so neither ever does. */
   private readonly owners = new Map<string, Owner | null>()
-  /** Exits reported for an id no relay owns yet, by relay; the listing that adopts one reads them. */
-  private readonly unownedExits = new Map<string, number>()
+  /** Exits no live pane took, by relay: the listing that next binds one to that relay reads them. */
+  private readonly unclaimedExits = new Map<string, number>()
 
   owner(relayPtyId: string): string | null | undefined {
     const owner = this.owners.get(relayPtyId)
@@ -67,19 +67,17 @@ export class LegacyRelayPaneOwners {
     this.owners.delete(relayPtyId)
   }
 
-  /** An exit report from a relay that does not own the id; kept only while nobody does. */
+  /** An exit report before any listing bound the id to that relay's process, kept until one does. */
   noteExit(relayPtyId: string, endpoint: string, code: number): void {
-    if (!this.owners.has(relayPtyId)) {
-      this.unownedExits.set(`${endpoint}\n${relayPtyId}`, code)
-    }
+    this.unclaimedExits.set(`${endpoint}\n${relayPtyId}`, code)
   }
 
-  exitBeforeAdoption(relayPtyId: string, endpoint: string): number | undefined {
-    return this.unownedExits.get(`${endpoint}\n${relayPtyId}`)
+  exitBeforeListing(relayPtyId: string, endpoint: string): number | undefined {
+    return this.unclaimedExits.get(`${endpoint}\n${relayPtyId}`)
   }
 
-  /** After each listing: an exit it did not use came from a relay it did not adopt. */
+  /** After each listing: an exit it did not use came from a process it did not bind. */
   clearExits(): void {
-    this.unownedExits.clear()
+    this.unclaimedExits.clear()
   }
 }

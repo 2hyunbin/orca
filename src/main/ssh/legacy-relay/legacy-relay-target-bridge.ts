@@ -278,9 +278,10 @@ export class LegacyRelayTargetBridge {
     client.onExit((relayPtyId, code) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
       const pane = this.panes.get(ptyId)
-      this.deps.owners.noteExit(relayPtyId, endpoint, code)
       if (this.deps.owners.speaksFor(pane, endpoint)) {
         this.retire(ptyId, pane, code)
+      } else {
+        this.deps.owners.noteExit(relayPtyId, endpoint, code)
       }
     })
     client.onClose(() => {

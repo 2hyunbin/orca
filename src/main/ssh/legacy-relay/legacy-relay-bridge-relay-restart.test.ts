@@ -136,6 +136,32 @@ describe('a relay restarted at the same socket', () => {
     expect(leases[0].state).toBe('detached')
   })
 
+  it('keeps the same relay’s exit report that raced its reconnect listing', async () => {
+    relay.incarnations.set('pty-1', 'inc-1')
+    const subject = bridge({
+      openClient: async () => {
+        const client = fakeClient(relay)
+        const list = client.list.bind(client)
+        client.list = async () => {
+          const rows = await list()
+          // The shell exits after the reconnected relay answered, before its listing lands.
+          if (relay.clients.length > 1) {
+            client.emitExit('pty-1', 3)
+          }
+          return rows
+        }
+        relay.clients.push(client)
+        return client
+      }
+    })
+    await subject.refresh()
+    relay.clients[0].drop()
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(events.exits).toEqual([PTY])
+    expect(leases[0].state).toBe('terminated')
+    expect(subject.snapshot()).toEqual([])
+  })
+
   it('reattaches the same shell when the relay lists its incarnation again', async () => {
     relay.incarnations.set('pty-1', 'inc-1')
     const subject = bridge()
