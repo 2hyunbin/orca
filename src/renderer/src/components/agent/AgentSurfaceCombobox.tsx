@@ -7,7 +7,10 @@ import {
 import AgentCombobox from './AgentCombobox'
 import type { AgentComboboxSurfaceRows } from './agent-combobox-surface-items'
 
-type AgentSurfaceComboboxProps = Omit<React.ComponentProps<typeof AgentCombobox>, 'surfaceRows'> & {
+// Distributes over the picker's Blank Terminal union so each arm keeps its own onValueChange.
+type WithoutSurfaceRows<T> = T extends unknown ? Omit<T, 'surfaceRows'> : never
+
+type AgentSurfaceComboboxProps = WithoutSurfaceRows<React.ComponentProps<typeof AgentCombobox>> & {
   rowsTarget: AgentMenuRowsTarget
   detectionTarget: AgentDetectionTarget | undefined
   surface?: AgentComboboxSurfaceRows['surface']
