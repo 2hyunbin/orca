@@ -103,14 +103,10 @@ export async function importNestedProjectsOnWslHost(
       })
     }
   }
-  const hasNew = () => selected.some((entry) => !entry.admission.findSaved())
-  const allSaved = () => {
-    if (hasNew()) return false
-    const failure = results.values().next().value
-    if (failure) throw new Error(failure.error)
-    return true
-  }
-  if (allSaved()) return null
+  // An uninspectable selection has no proven Windows claim; never send it to local fallback.
+  const inspectionFailed = results.size > 0
+  const hasNew = () => inspectionFailed || selected.some((entry) => !entry.admission.findSaved())
+  if (!hasNew()) return null
   const refuseMixedGroup = () => {
     if (args.mode === 'group' && hasNew() && selected.some((entry) => entry.admission.findSaved())) {
       throw new Error('Some of these projects are already saved on Windows. Import them separately instead of as a group.')
@@ -120,7 +116,7 @@ export async function importNestedProjectsOnWslHost(
   const owner = await resolveNewWslProjectHost(store, args.parentPath, options)
   if (!owner) return null
   refuseMixedGroup()
-  if (allSaved()) return null
+  if (!hasNew()) return null
   const executionHostId = toRuntimeExecutionHostId(owner.environmentId)
   const knownIds = new Set((await listWslOwnerRepos(owner.environmentId)).map((repo) => repo.id))
   const registered = new Map<string, ProjectGroupImportResult['projects'][number]>()

@@ -256,6 +256,11 @@ describe('new WSL project ownership', () => {
 
   it('returns a failed nested item with its saved owner row when setup fails after Add', async () => {
     const path = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
+    const broken = path + '-removed'
+    mocks.target = (selected) => {
+      if (selected === broken) throw new Error('repository disappeared')
+      return selected
+    }
     const normal = mocks.call.getMockImplementation()
     if (!normal) throw new Error('fixture requires an owner implementation')
     mocks.call.mockImplementation(async (env, method, params) => {
@@ -263,10 +268,11 @@ describe('new WSL project ownership', () => {
       return normal(env, method, params)
     })
     const result = await importNestedProjectsOnWslHost({ getRepos: () => [] }, {
-      parentPath: scan([]).selectedPath, projectPaths: [path], mode: 'separate'
-    }, { scan: scan([path]) })
-    expect(result).toMatchObject({ importedCount: 0, failedCount: 1, projects: [
-      { path, projectId: guest.id, executionHostId: 'runtime:wsl%3Aubuntu', status: 'failed', error: 'setup failed' }
+      parentPath: scan([]).selectedPath, projectPaths: [path, broken], mode: 'separate'
+    }, { scan: scan([path, broken]) })
+    expect(result).toMatchObject({ importedCount: 0, failedCount: 2, projects: [
+      { path, projectId: guest.id, executionHostId: 'runtime:wsl%3Aubuntu', status: 'failed', error: 'setup failed' },
+      { path: broken, status: 'failed', error: 'repository disappeared' }
     ] })
     expect(mocks.ownerRepos).toHaveLength(1)
   })
