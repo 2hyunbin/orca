@@ -110,7 +110,7 @@ describe('a prompt hook that blocked the message', () => {
     const items = await blockedChat(CLAUDE_CHAT, (rig) => {
       const lane = createClaudeJournalTranslator({ sink: rig.eventSink, fallbackIdPrefix: '1' })
       for (const { frame } of frames) {
-        const message = { ...frame, prompt_submit_outcome: outcome }
+        const message: Record<string, unknown> = { ...frame, prompt_submit_outcome: outcome }
         if (hooks !== null && typeof frame.content === 'string') {
           message.content = frame.content.replace(/\[.*\]: .*/, hooks)
         }
