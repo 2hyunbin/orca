@@ -1,5 +1,4 @@
-// Paste, drop and Attach into a queued card's edit, through the chat box's own intake with the
-// edit's in-memory images as the sink, so the chat box's draft and chips are never touched.
+// The edit reuses the chat intake with its own images so paste never changes the chat draft.
 
 import {
   useCallback,
@@ -72,14 +71,14 @@ export function useNativeChatQueuedEditImageIntake(
   const insertText = useCallback(
     (insertion: string): boolean => {
       const input = field.current
-      if (!input || liveIntake.current !== intake) {
+      if (!input || busy || liveIntake.current !== intake) {
         return false
       }
-      const { value, selectionStart, selectionEnd } = input
-      change(value.slice(0, selectionStart) + insertion + value.slice(selectionEnd))
+      input.setRangeText(insertion, input.selectionStart, input.selectionEnd, 'end')
+      change(input.value)
       return true
     },
-    [change, field, intake]
+    [busy, change, field, intake]
   )
   const insertReferences = useCallback(
     (paths: string[]) => {
@@ -161,16 +160,18 @@ export function useNativeChatQueuedEditImageIntake(
     setNotice
   })
   const onPasteCapture = useCallback(
-    (event: ClipboardEventLike) => {
-      // Text alone pastes natively; a picture or copied files take the chat box's paste flow.
+    (event: ClipboardEventLike & { target: EventTarget | null }) => {
+      // Only text already aimed at the writable field keeps the browser's native insertion.
       if (
         editable &&
-        Array.from(event.clipboardData?.items ?? []).some((item) => item.kind === 'file')
+        (Array.from(event.clipboardData?.items ?? []).some((item) => item.kind === 'file') ||
+          (document.activeElement === field.current && (busy || event.target !== field.current)))
       ) {
         handlePaste(event)
+        event.preventDefault()
       }
     },
-    [editable, handlePaste]
+    [busy, editable, field, handlePaste]
   )
   // The editing card is the nearest drop owner, so a drop on it never reaches the chat box's.
   const ownerRef = useRef<HTMLElement | null>(null)
@@ -194,15 +195,16 @@ export function useNativeChatQueuedEditImageIntake(
     attachOwner(owner)
     const paste = (event: Event): void => {
       if (event instanceof NativeChatPasteRequest) {
+        event.preventDefault()
         if (event.clipboardEvent) {
           onPasteCapture(event.clipboardEvent)
-          return
+        } else {
+          pasteFromClipboard()
         }
-        event.preventDefault()
-        pasteFromClipboard(event.onTextOnlyPaste)
       }
     }
-    owner?.addEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
+    const input = owner ? field.current : null
+    input?.addEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
     // A file dragged from Orca's own tree: the chat box's claim checks it, then hands it here.
     const hover = (active: boolean): void => setIsDragActive(active && !disabled)
     const unregister = owner
@@ -214,7 +216,7 @@ export function useNativeChatQueuedEditImageIntake(
     document.addEventListener('dragend', clear, true)
     return () => {
       attachOwner(null)
-      owner?.removeEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
+      input?.removeEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
       unregister?.()
       document.removeEventListener('drop', clear, true)
       document.removeEventListener('dragend', clear, true)

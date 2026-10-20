@@ -4,7 +4,7 @@ import { nativeChatAttachmentOwnerUnchanged } from './native-chat-resolved-path-
 import { assertClipboardTextWithinLimit } from '../../../../shared/clipboard-text'
 import { setNativeChatPasteFailure } from './native-chat-composer-notice'
 import { NATIVE_CHAT_CONTEXT_PASTE_MAX_BYTES } from './native-chat-composer-target'
-import { nativeChatPasteUnavailableNotice, type TextPaste } from '@/lib/native-chat-paste-request'
+import { nativeChatPasteUnavailableNotice } from '@/lib/native-chat-paste-request'
 import { isMacPlatform } from './native-chat-shortcut'
 import {
   clipboardEventCopiedFilePaths,
@@ -42,7 +42,10 @@ export function useNativeChatComposerPaste({
   insertTypedText,
   setCaret,
   setNotice
-}: UseNativeChatComposerPasteArgs) {
+}: UseNativeChatComposerPasteArgs): {
+  handlePaste: (event: ClipboardEventLike) => void
+  pasteFromClipboard: () => void
+} {
   const disabledRef = useRef(disabled)
   useLayoutEffect(() => {
     disabledRef.current = disabled
@@ -242,84 +245,78 @@ export function useNativeChatComposerPaste({
     ]
   )
 
-  const pasteFromClipboard = useCallback(
-    (onTextOnlyPaste?: TextPaste) => {
-      if (!canPaste() && !onTextOnlyPaste) {
+  const pasteFromClipboard = useCallback(() => {
+    if (!canPaste()) {
+      showPasteUnavailable()
+      return
+    }
+    setNotice(null)
+    const insertText = (text: string): void => {
+      if (text && !(canPaste() && insertTypedText(text))) {
         showPasteUnavailable()
+      }
+    }
+    void (async () => {
+      const read = await readClipboardPasteText(NATIVE_CHAT_CONTEXT_PASTE_MAX_BYTES).catch(
+        (error) => {
+          if (canPaste()) {
+            setNativeChatPasteFailure(setNotice, error)
+          }
+          return null
+        }
+      )
+      // A file manager's copy pastes the files themselves, exactly as dropping them does.
+      if (read && read.copiedFilePaths.length > 0) {
+        if (canPaste()) {
+          attachCopiedFiles(read.copiedFilePaths, { focus: false })
+        }
         return
       }
-      setNotice(null)
-      const pasteFailed = (error: unknown): null => {
+      // Text belongs to the editor even when the attachment host is unavailable.
+      insertText(read?.text ?? '')
+      const owner = resolveAttachmentOwner()
+      if (!ownerAcceptsClipboardImage(owner)) {
+        // Probe only when no text was typed: in a browser each clipboard read can prompt the user.
+        if (!read || read.text !== '') {
+          return
+        }
+        const hasImage = await window.api.ui.clipboardHasImage().catch(() => null)
+        if (hasImage && canPaste()) {
+          setNotice(
+            owner.kind === 'remote'
+              ? nativeChatLocalAttachmentUnsupportedNotice()
+              : nativeChatWorktreeNotReadyNotice()
+          )
+        }
+        return
+      }
+      const hasImage = await window.api.ui.clipboardHasImage().catch((error) => {
         if (canPaste()) {
           setNativeChatPasteFailure(setNotice, error)
         }
         return null
+      })
+      if (hasImage !== true) {
+        return
       }
-      void (async () => {
-        const read = await readClipboardPasteText(NATIVE_CHAT_CONTEXT_PASTE_MAX_BYTES).catch(
-          pasteFailed
-        )
-        const copiesFiles = read !== null && read.copiedFilePaths.length > 0
-        const readHasImage = () => window.api.ui.clipboardHasImage().catch(pasteFailed)
-        const routedImage = onTextOnlyPaste && !copiesFiles ? await readHasImage() : undefined
-        // A card's buttons keep the pane's text destination; files and pictures belong to the card.
-        if (onTextOnlyPaste && read && !copiesFiles && routedImage !== true) {
-          if (lifetime.active) {
-            onTextOnlyPaste(read.text)
-          }
-          return
-        }
-        if (!canPaste()) {
-          showPasteUnavailable()
-          return
-        }
-        // A file manager's copy pastes the files themselves, exactly as dropping them does.
-        if (copiesFiles) {
-          attachCopiedFiles(read.copiedFilePaths, { focus: false })
-          return
-        }
-        // Text belongs to the editor even when the attachment host is unavailable.
-        if (read?.text && !(canPaste() && insertTypedText(read.text))) {
-          showPasteUnavailable()
-        }
-        const owner = resolveAttachmentOwner()
-        if (!ownerAcceptsClipboardImage(owner)) {
-          // Probe only when no text was typed: in a browser each clipboard read can prompt the user.
-          if (!read || read.text !== '') {
-            return
-          }
-          const hasImage = await window.api.ui.clipboardHasImage().catch(() => null)
-          if (hasImage && canPaste()) {
-            setNotice(
-              owner.kind === 'remote'
-                ? nativeChatLocalAttachmentUnsupportedNotice()
-                : nativeChatWorktreeNotReadyNotice()
-            )
-          }
-          return
-        }
-        const hasImage = routedImage === undefined ? await readHasImage() : routedImage
-        if (hasImage !== true || !canPaste()) {
-          return
-        }
-        // Ownership starts before saving; a thumbnail only supplies its preview.
-        const { id: pendingId, reveal } = startClipboardImageChip(owner)
-        reveal()
-        await saveClipboardImage(owner, pendingId, Boolean(read?.text))
-      })()
-    },
-    [
-      attachCopiedFiles,
-      canPaste,
-      insertTypedText,
-      lifetime,
-      startClipboardImageChip,
-      saveClipboardImage,
-      showPasteUnavailable,
-      resolveAttachmentOwner,
-      setNotice
-    ]
-  )
+      if (!canPaste()) {
+        return
+      }
+      // Ownership starts before saving; a thumbnail only supplies its preview.
+      const { id: pendingId, reveal } = startClipboardImageChip(owner)
+      reveal()
+      await saveClipboardImage(owner, pendingId, Boolean(read?.text))
+    })()
+  }, [
+    attachCopiedFiles,
+    canPaste,
+    insertTypedText,
+    startClipboardImageChip,
+    saveClipboardImage,
+    showPasteUnavailable,
+    resolveAttachmentOwner,
+    setNotice
+  ])
 
   return { handlePaste, pasteFromClipboard }
 }
