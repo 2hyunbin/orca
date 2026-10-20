@@ -32,7 +32,7 @@ export function launchStructuredAgentFromNewTab(args: {
   focusIntent?: NativeChatComposerFocusIntent
   beforeSurfaceOpen?: LaunchAgentInNewTabArgs['beforeSurfaceOpen']
   onHostDeclined?: () => StructuredLaunchTerminal
-  openTerminal: (terminalPlan: AgentSessionLaunchPlan) => AgentTabLaunchOutcome
+  openTerminal: (terminalPlan: AgentSessionLaunchPlan, activate?: false) => AgentTabLaunchOutcome
 }): StructuredFromNewTab | null {
   const { plan, beforeSurfaceOpen } = args
   if (beforeSurfaceOpen?.({ kind: 'host-published' }) === false) {
@@ -44,7 +44,7 @@ export function launchStructuredAgentFromNewTab(args: {
     ...(args.focusIntent ? { focusIntent: args.focusIntent } : {}),
     target: { worktreeId: args.worktreeId },
     ...(args.groupId ? { targetGroupId: args.groupId } : {}),
-    onHostDeclined: () => {
+    onHostDeclined: (_target, activate) => {
       if (args.onHostDeclined) {
         return args.onHostDeclined()
       }
@@ -54,13 +54,16 @@ export function launchStructuredAgentFromNewTab(args: {
           requestId: plan.requestId,
           agent: plan.agent,
           worktreeId: args.worktreeId
-        })
+        }),
+        activate
       )
       if (terminal && 'refused' in terminal) {
         return { opened: false, promptDeliveryResult: Promise.resolve(terminal.refused) }
       }
       return {
         opened: terminal !== null,
+        ...(terminal?.surface.kind === 'local-terminal' ? { tabId: terminal.surface.tabId } : {}),
+        ...(terminal?.terminalCompletion ? { completion: terminal.terminalCompletion } : {}),
         ...(terminal?.promptDeliveryResult
           ? { promptDeliveryResult: terminal.promptDeliveryResult }
           : {})
@@ -69,7 +72,9 @@ export function launchStructuredAgentFromNewTab(args: {
   })
   return (
     launch && {
-      surface: { kind: 'host-published' },
+      surface: launch.tab
+        ? { kind: 'local-chat', tabId: launch.tab.id }
+        : { kind: 'host-published' },
       pasteDraftAfterLaunch: false,
       structuredSettlement: launch.settlement,
       ...(launch.promptDeliveryResult ? { promptDeliveryResult: launch.promptDeliveryResult } : {})

@@ -19,7 +19,7 @@ import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../../share
 import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
-import { cloneNativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
+import { cloneStructuredAgentSessionOptionRecord } from '../../../../shared/structured-agent-session-option-state'
 import {
   createCoalescedPollRunner,
   type CoalescedPollRunner
@@ -115,6 +115,14 @@ export function useStructuredAgentSessionOptionState(args: {
     },
     []
   )
+  // A chat this view started names the default it runs until its first send pins it.
+  const applyOptionsAnswer = useCallback(
+    (current: StructuredAgentSessionOptionState, result: AgentSessionOptionsResult) =>
+      optionCatalog
+        ? applyStructuredAgentSessionOptions(current, optionCatalog, result, { newLaunch })
+        : current,
+    [newLaunch, optionCatalog]
+  )
   const optionIdentityRef = useRef(identity)
   useEffect(() => {
     const previous = optionStateRef.current
@@ -132,7 +140,7 @@ export function useStructuredAgentSessionOptionState(args: {
       sameSession && previous.catalogSource !== 'seed' && previous.catalogSource !== null
         ? {
             ...previous,
-            record: cloneNativeChatSessionOptionRecord(previous.record),
+            record: cloneStructuredAgentSessionOptionRecord(previous.record),
             pendingId: null
           }
         : seeded
@@ -174,7 +182,7 @@ export function useStructuredAgentSessionOptionState(args: {
         })
         updateOptionState((current) =>
           current.record === activeOptionRecordRef.current
-            ? applyStructuredAgentSessionOptions(current, optionCatalog, result)
+            ? applyOptionsAnswer(current, result)
             : current
         )
       }
@@ -186,6 +194,7 @@ export function useStructuredAgentSessionOptionState(args: {
       runner.dispose()
     }
   }, [
+    applyOptionsAnswer,
     fence,
     optionCatalog,
     // Another device's pick moves it.
@@ -227,7 +236,8 @@ export function useStructuredAgentSessionOptionState(args: {
     activeOptionRecordRef,
     pendingOptionsRef,
     optionMutationGeneration,
-    updateOptionState
+    updateOptionState,
+    applyOptionsAnswer
   }
 }
 

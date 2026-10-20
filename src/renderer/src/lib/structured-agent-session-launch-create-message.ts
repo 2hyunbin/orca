@@ -16,13 +16,15 @@ import {
   structuredAgentSessionOptionView,
   structuredAgentSessionSendSelection
 } from '../../../shared/structured-agent-session-option-view'
-import { structuredAgentSessionOptionSnapshot } from '../../../shared/structured-agent-session-options'
 import { firstFrameOptionState } from '@/components/native-chat/use-structured-agent-session-option-state'
 import {
   applyStructuredLaunchHeldOptions,
   applyStructuredLaunchExplicitOptions,
+  holdStructuredLaunchCreatePicks,
   settleStructuredLaunchCreateOptions
 } from './structured-agent-session-launch-options'
+import { structuredAgentSessionDrawnValues } from '../../../shared/structured-agent-session-option-snapshot'
+import { encodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
 
 /** Freeze what create carries once; an ambiguous reply always replays the same payload.
  *  `hostTakesExplicitOptions`: the host advertises the create options-mode capability. */
@@ -87,16 +89,13 @@ function omitStructuredLaunchPermissionMode(state: StructuredLaunchState): void 
   state.selection = { ...state.selection, explicit: kept }
 }
 
-/** Picks held so far, the launch's own permission mode, and the model and effort the chat shows:
- *  a first message starts its turn on them, as a later send does. */
+/** Picks held so far, the launch's own permission mode, and the chat's own model and effort: a
+ *  first message starts its turn on them, as a later send does. */
 function structuredLaunchCreateOptions(
   state: StructuredLaunchState
 ): Readonly<Record<string, string>> | undefined {
   const { intent, selection } = state
   const requested = structuredLaunchRequestedOptions(selection)
-  if (requested?.model !== undefined) {
-    return requested
-  }
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
     worktree: intent.params.worktree,
@@ -104,9 +103,23 @@ function structuredLaunchCreateOptions(
   })
   // Create has always carried options, so any host takes what the chat shows.
   const view = structuredAgentSessionOptionView(firstFrame, intent.seedOptions, selection.held)
+  const drawn = structuredAgentSessionDrawnValues(view)
+  // Each held value as the picker draws it; the held picks themselves stay as the user made them.
+  const held = Object.fromEntries(
+    Object.entries(selection.held).map(([id, encoded]) => {
+      const value = id === 'model' ? undefined : drawn[id]?.value
+      const shown = value === undefined ? null : encodeStructuredAgentSessionOptionValue(id, value)
+      return [id, shown ?? encoded]
+    })
+  )
+  holdStructuredLaunchCreatePicks(state, selection.held)
+  if (requested?.model !== undefined) {
+    // The view draws under a re-picked model only; an action's own model keeps picks as made.
+    return requested.model === selection.held.model ? { ...requested, ...held } : requested
+  }
   const options = {
-    ...(requested ?? selection.held),
-    ...structuredAgentSessionSendSelection(intent.agent, structuredAgentSessionOptionSnapshot(view))
+    ...(requested ? { ...requested, ...held } : held),
+    ...structuredAgentSessionSendSelection(view)
   }
   return Object.keys(options).length ? options : undefined
 }

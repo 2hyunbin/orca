@@ -10,6 +10,7 @@ import {
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
 import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-session-launch-prompt'
 import type { LaunchAgentInNewTabArgs } from '@/lib/launch-agent-in-new-tab'
+import type { StructuredLaunchTerminal } from '@/lib/structured-agent-session-launch-admission'
 
 /** The user action this launch serves: minted where that action is handled, or carried by the
  *  route the caller already planned for it. */
@@ -21,9 +22,10 @@ export type LaunchAgentInNewTabRequest =
       requestId?: undefined
     }
 
-/** `host-published`: the surface opens once its host answers, a structured chat's included. */
+/** `host-published`: the surface opens once its host answers; `local-chat` opened before it did. */
 export type AgentLaunchSurface =
   | { kind: 'local-terminal'; tabId: string }
+  | { kind: 'local-chat'; tabId: string }
   | { kind: 'host-published' }
 
 export type LaunchAgentInNewTabResult = {
@@ -32,6 +34,7 @@ export type LaunchAgentInNewTabResult = {
   pasteDraftAfterLaunch: boolean
   promptDeliveryResult?: Promise<{ delivered: boolean; failureNotified: boolean }>
   /** Structured route only: what the launch did once it settled. The call stays synchronous. */
+  terminalCompletion?: StructuredLaunchTerminal['completion']
   structuredSettlement?: Promise<StructuredAgentLaunchSettlement>
 } | null
 

@@ -21,6 +21,8 @@ export type StructuredAgentSessionLaunchView = {
   heldOptions: Readonly<Record<string, string>>
   /** Where the chat runs; its own config may replace the listed default. */
   worktree?: string
+  /** Its paired server has not said what create seeds yet; picks wait for it. */
+  seedPending?: true
 }
 
 const NO_HELD_OPTIONS: Readonly<Record<string, string>> = {}
@@ -37,7 +39,7 @@ function useLaunchView(
       if (current) {
         snapshot = current
       } else if (snapshot && snapshot.held !== NO_HELD_OPTIONS) {
-        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS }
+        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS, seedPending: true }
       }
       return snapshot
     }
@@ -70,18 +72,20 @@ function useLaunchView(
     })
   }
   const held = selection?.held ?? NO_HELD_OPTIONS
+  const seedPending = launching && (!selection || selection.seedPending === true)
   return useMemo(
     () =>
       intent.kind
         ? {
             kind: intent.kind,
             ...(selection?.seed ? { seedOptions: selection.seed } : {}),
+            ...(seedPending ? { seedPending: true as const } : {}),
             heldOptions: held,
             ...(selection?.explicit ? { explicitOptions: selection.explicit } : {}),
             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
           }
         : undefined,
-    [held, intent.kind, selection?.seed, selection?.explicit, worktreeId]
+    [held, intent.kind, selection?.seed, selection?.explicit, seedPending, worktreeId]
   )
 }
 

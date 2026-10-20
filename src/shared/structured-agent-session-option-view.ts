@@ -5,7 +5,12 @@ import {
   type StructuredAgentSessionOptionState
 } from './structured-agent-session-options'
 import type { SessionOptionDescriptor } from './native-chat-session-options'
-import { cloneNativeChatSessionOptionRecord } from './native-chat-session-option-state'
+import {
+  cloneStructuredAgentSessionOptionRecord,
+  createStructuredAgentSessionOptionRecord,
+  structuredAgentSessionModelId,
+  structuredAgentSessionOwnValue
+} from './structured-agent-session-option-state'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
 
 function catalogListsSeedModel(
@@ -19,7 +24,7 @@ function catalogListsSeedModel(
 /**
  * What the picker shows before the host has confirmed this session's values:
  * `seed` (the selection a launch seeds) stands in until the record names a
- * model, and `held` picks outrank both until the host settles them. All show as `dispatched`;
+ * model of the chat's own, and `held` picks outrank both until the host settles them. All show as `dispatched`;
  * derived on every read, never written into the record. A model the list lacks is kept: a list
  * is no evidence the chat's own model cannot run.
  *
@@ -36,7 +41,7 @@ export function structuredAgentSessionOptionView(
   // Only a requested model replaces the shown selection; a permission mode alone overlays it.
   if (requested?.model !== undefined) {
     return commitStructuredAgentSessionOptionValues(
-      { ...state, record: { agent: state.record.agent, valuesByModel: {} } },
+      { ...state, record: createStructuredAgentSessionOptionRecord(state.record.agent) },
       requested
     )
   }
@@ -65,7 +70,8 @@ function modelOptionView(
   seed: Readonly<Record<string, string>> | undefined,
   held: Readonly<Record<string, string>>
 ): StructuredAgentSessionOptionState {
-  const unconfirmedSeed = seed !== undefined && state.record.model === undefined
+  const unconfirmedSeed =
+    seed !== undefined && structuredAgentSessionModelId(state.record, 'own') === null
   const hasHeld = Object.keys(held).length > 0
   // A saved pick the host's list does not name would show its raw id or another model's label.
   if (
@@ -86,7 +92,7 @@ function modelOptionView(
   }
   let view: StructuredAgentSessionOptionState = {
     ...state,
-    record: cloneNativeChatSessionOptionRecord(state.record)
+    record: cloneStructuredAgentSessionOptionRecord(state.record)
   }
   if (seeded) {
     view = commitStructuredAgentSessionOptionValues(view, seed)
@@ -94,19 +100,26 @@ function modelOptionView(
   return { ...commitStructuredAgentSessionOptionValues(view, held), pendingId: state.pendingId }
 }
 
-/** The Claude model and effort the composer shows (`snapshot`), which every send carries. */
+/** The Claude model and effort a send carries: the chat's own and the picks over them in `view`.
+ *  A new chat (or an older host's answer) sends the defaults it shows, so a new chat's first send
+ *  pins them; a resumed chat shows its host's defaults but never sends them. */
 export function structuredAgentSessionSendSelection(
-  agent: string,
-  snapshot: readonly SessionOptionDescriptor[]
+  view: StructuredAgentSessionOptionState
 ): Record<string, string> | undefined {
-  if (agent !== 'claude') {
+  if (view.record.agent !== 'claude') {
     return undefined
   }
+  const snapshot =
+    view.catalog?.defaultModelIsCliDefault === true && !view.defaultsUnsent
+      ? structuredAgentSessionOptionSnapshot(view)
+      : []
   const shown = (id: string): string | undefined => {
     const kind = snapshot.find((descriptor) => descriptor.id === id)?.kind
     return kind?.type === 'select' ? kind.currentValue : undefined
   }
-  const model = shown('model')
-  const effort = shown('effort')
-  return model ? { model, ...(effort ? { effort } : {}) } : undefined
+  const model = structuredAgentSessionOwnValue(view.record, 'model') ?? shown('model')
+  const effort = structuredAgentSessionOwnValue(view.record, 'effort') ?? shown('effort')
+  return model || effort
+    ? { ...(model ? { model } : {}), ...(effort ? { effort } : {}) }
+    : undefined
 }
