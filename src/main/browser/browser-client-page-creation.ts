@@ -28,7 +28,7 @@ type BrowserClientPageCreationDependencies = {
   orcaProfileId: string
   authorityConnectionIdentity: string
   adoptableAuthorityConnectionIdentities: readonly string[]
-  legacyAuthorityConnectionIdentity: string
+  legacyAuthorityConnectionIdentity: string | null
   storageScope: string
   retainNetworkRoute(executionHostKey: string, signal: AbortSignal): Promise<RetainedNetworkRoute>
   retireSupersededExecutionHostPages(route: RetainedNetworkRoute): Promise<void>

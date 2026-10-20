@@ -35,8 +35,10 @@ const bindingStore = {
   touch: (partition: string): void => currentBindingStore().touch(partition),
   findPartitionByFingerprint: (fingerprint: string): string | null =>
     currentBindingStore().findPartitionByFingerprint(fingerprint),
-  rebind: (partition: string, fingerprint: string, storageScope: string): void =>
-    currentBindingStore().rebind(partition, fingerprint, storageScope)
+  holds: (partition: string, fingerprint: string): boolean =>
+    currentBindingStore().holds(partition, fingerprint),
+  alias: (partition: string, fingerprint: string, storageScope: string): void =>
+    currentBindingStore().alias(partition, fingerprint, storageScope)
 }
 
 export const browserRouteSessionRegistry = new BrowserRouteSessionRegistry({

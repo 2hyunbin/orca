@@ -99,11 +99,7 @@ export class BrowserClientPageCommandExecutor {
           signal,
           switches: this.profileSwitches,
           pages: this.pages,
-          dependencies: {
-            ...this.dependencies,
-            authorityConnectionIdentity: this.authorityConnectionIdentity,
-            legacyAuthorityConnectionIdentity: this.legacyAuthorityConnectionIdentity
-          },
+          dependencies: { ...this.dependencies, ...this.authorityIdentity },
           assertAvailable: () =>
             this.navigationFence.assertAvailable(this.closed || this.authorityTransitioning),
           commit: (page) => publishBrowserClientRetainedPage(this.dependencies, this.pages, page),

@@ -5,9 +5,11 @@ import {
   type PairedRuntimeConnection
 } from './paired-runtime-connection'
 import { classifyRemotePairingHostname } from './remote-pairing-address'
+import { RuntimeEnvironmentPreviousPairingsSchema } from './runtime-environment-pairing-history'
 import { RuntimeEnvironmentReconciliationRecordSchema } from './runtime-environment-reconciliation-record'
 import {
   OrcadWslDeploymentLinkSchema,
+  WslDistroIdSchema,
   type OrcadWslDeploymentLink
 } from './wsl-host-deployment-link'
 
@@ -90,13 +92,10 @@ export const PersistedRuntimeEnvironmentSchema = z.object({
   updatedAt: z.number().finite(),
   pairingRevision: z.number().finite().optional(),
   pairedDeviceId: z.string().min(1).optional(),
-  /** The pairing an Orca-driven re-pair replaced; older builds strip it, losing only a fallback. */
-  previousPairing: z
-    .object({
-      pairingRevision: z.number().finite(),
-      pairedDeviceId: z.string().min(1).optional()
-    })
-    .optional(),
+  /** WSL registration GUID the current pairing was made under; absent when it was unknown. */
+  pairingWslDistroId: WslDistroIdSchema.optional().catch(undefined),
+  // Why catch: fallback-only fields must never make a newer build's record unreadable.
+  previousPairings: RuntimeEnvironmentPreviousPairingsSchema.optional().catch(undefined),
   lastUsedAt: z.number().finite().nullable(),
   runtimeId: z.string().min(1).nullable(),
   source: RuntimeEnvironmentSourceSchema.optional(),
@@ -106,19 +105,6 @@ export const PersistedRuntimeEnvironmentSchema = z.object({
 })
 
 export type PersistedRuntimeEnvironment = z.infer<typeof PersistedRuntimeEnvironmentSchema>
-export type RuntimeEnvironmentPreviousPairing = NonNullable<
-  PersistedRuntimeEnvironment['previousPairing']
->
-
-/** What an Orca-driven re-pair records about the pairing it replaces. */
-export function runtimeEnvironmentPreviousPairing(
-  environment: Pick<KnownRuntimeEnvironment, 'pairingRevision' | 'createdAt' | 'pairedDeviceId'>
-): RuntimeEnvironmentPreviousPairing {
-  return {
-    pairingRevision: environment.pairingRevision ?? environment.createdAt,
-    ...(environment.pairedDeviceId ? { pairedDeviceId: environment.pairedDeviceId } : {})
-  }
-}
 
 /**
  * A persisted environment with its sidecar state overlaid (runtime-environment-sidecar). These

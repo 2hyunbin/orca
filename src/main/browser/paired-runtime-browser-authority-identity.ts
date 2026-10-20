@@ -5,6 +5,8 @@ import {
   getOrcadSshDeployment,
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
+import { MAX_RUNTIME_ENVIRONMENT_PREVIOUS_PAIRINGS } from '../../shared/runtime-environment-pairing-history'
+import { wslHostRegistration } from '../../shared/wsl-host-deployment-link'
 
 export type PairedRuntimeBrowserAuthorityIdentities = {
   /** Storage identity of the connection to the paired server; names its partitions. */
@@ -14,8 +16,11 @@ export type PairedRuntimeBrowserAuthorityIdentities = {
    * execution-host identity. A partition one of them owns is adopted instead of starting empty.
    */
   adoptableAuthorityConnectionIdentities: readonly string[]
-  /** Superseded per-process identity, paired with the legacy execution-host identity. */
-  legacyAuthorityConnectionIdentity: string
+  /**
+   * Superseded per-process identity, paired with the legacy execution-host identity; null when
+   * its partition must not be adopted.
+   */
+  legacyAuthorityConnectionIdentity: string | null
 }
 
 export type PairedRuntimeBrowserAuthorityIdentityInput = {
@@ -23,6 +28,12 @@ export type PairedRuntimeBrowserAuthorityIdentityInput = {
   environment: KnownRuntimeEnvironment
   connection: PairedRuntimeConnection
   authorityRuntimeId: string
+}
+
+type PairingRecord = {
+  pairingRevision: number
+  pairedDeviceId?: string
+  wslDistroId?: string
 }
 
 /**
@@ -38,36 +49,38 @@ export function derivePairedRuntimeBrowserAuthorityIdentities(
   input: PairedRuntimeBrowserAuthorityIdentityInput
 ): PairedRuntimeBrowserAuthorityIdentities {
   const { orcaProfileId, environment, connection } = input
-  const pairingRevision = environment.pairingRevision ?? environment.createdAt
-  const revisionScoped = revisionScopedAuthorityConnectionIdentity(orcaProfileId, environment.id, {
-    pairingRevision,
-    hostPublicKeyB64: connection.hostPublicKeyB64,
-    pairedDeviceId: connection.pairedDeviceId
-  })
-  const previous = environment.previousPairing
-  // Why: a re-pair before the first page opened on this build still owns the user's jar. The
+  const current: PairingRecord = {
+    pairingRevision: environment.pairingRevision ?? environment.createdAt,
+    pairedDeviceId: connection.pairedDeviceId,
+    wslDistroId: environment.pairingWslDistroId
+  }
+  const revisionScopedOf = (pairing: PairingRecord): string =>
+    revisionScopedAuthorityConnectionIdentity(orcaProfileId, environment.id, {
+      pairingRevision: pairing.pairingRevision,
+      hostPublicKeyB64: connection.hostPublicKeyB64,
+      pairedDeviceId: pairing.pairedDeviceId
+    })
+  const revisionScopedFor = (pairings: readonly PairingRecord[]): string[] =>
+    pairings.map(revisionScopedOf)
+  const revisionScoped = revisionScopedOf(current)
+  // Why: re-pairs before the first page opened on this build still own the user's jar. The
   // current key keeps it to this host: a re-pair that changed keys derives an unbound identity.
-  const revisionScopedHistory = previous
-    ? [
-        revisionScoped,
-        revisionScopedAuthorityConnectionIdentity(orcaProfileId, environment.id, {
-          pairingRevision: previous.pairingRevision,
-          hostPublicKeyB64: connection.hostPublicKeyB64,
-          pairedDeviceId: previous.pairedDeviceId
-        })
-      ]
-    : [revisionScoped]
+  const pairingHistory: readonly PairingRecord[] = [
+    current,
+    ...(environment.previousPairings ?? []).slice(0, MAX_RUNTIME_ENVIRONMENT_PREVIOUS_PAIRINGS)
+  ]
   const legacyAuthorityConnectionIdentity = runtimeScopedAuthorityConnectionIdentity(
     orcaProfileId,
     environment.id,
-    pairingRevision,
+    current.pairingRevision,
     input.authorityRuntimeId,
     connection
   )
   const host = classifyRuntimeEnvironmentHost(environment)
   switch (host.kind) {
     case 'wsl': {
-      const distroId = host.deployment.distroId
+      const registration = wslHostRegistration(host.deployment)
+      const distroId = registration.current
       // Why: without the registration GUID a re-imported distro is indistinguishable, so fail
       // closed to the revision-scoped identity rather than risk sharing a partition across hosts.
       if (!distroId) {
@@ -77,6 +90,11 @@ export function derivePairedRuntimeBrowserAuthorityIdentities(
           legacyAuthorityConnectionIdentity
         }
       }
+      // Why: a re-imported distro can keep the server key, so only a pairing made under this
+      // exact registration may hand over its jar -- never one made before the GUID was known.
+      const madeUnder = (pairing: PairingRecord): string | undefined =>
+        pairing.wslDistroId ?? registration.unrecordedPairing
+      const sameRegistration = pairingHistory.filter((pairing) => madeUnder(pairing) === distroId)
       return {
         authorityConnectionIdentity: rePairStableAuthorityConnectionIdentity(
           orcaProfileId,
@@ -84,8 +102,9 @@ export function derivePairedRuntimeBrowserAuthorityIdentities(
           connection,
           ['wsl', distroId]
         ),
-        adoptableAuthorityConnectionIdentities: revisionScopedHistory,
-        legacyAuthorityConnectionIdentity
+        adoptableAuthorityConnectionIdentities: revisionScopedFor(sameRegistration),
+        legacyAuthorityConnectionIdentity:
+          madeUnder(current) === distroId ? legacyAuthorityConnectionIdentity : null
       }
     }
     case 'network': {
@@ -98,7 +117,7 @@ export function derivePairedRuntimeBrowserAuthorityIdentities(
       if (getOrcadSshDeployment(environment)) {
         return {
           authorityConnectionIdentity: managedSsh,
-          adoptableAuthorityConnectionIdentities: revisionScopedHistory,
+          adoptableAuthorityConnectionIdentities: revisionScopedFor(pairingHistory),
           legacyAuthorityConnectionIdentity
         }
       }

@@ -1,6 +1,6 @@
 /** What a WSL host's connection change writes to its records, and how the UI sees its status. */
 import {
-  backfillWslHostDistroId,
+  observeWslHostDistroId,
   refreshWslHostPairing
 } from '../../shared/runtime-environment-wsl-host-store'
 import type { WslHostDeploymentRecord } from '../../shared/wsl-host-deployment-store'
@@ -16,7 +16,7 @@ export function persistWslHostConnection(
   connection: WslOrcadConnection
 ): boolean {
   // Why fire-and-forget: a reg.exe read must not delay saving the pairing.
-  void backfillWslHostRegistration(userDataPath, record)
+  void observeWslHostRegistration(userDataPath, record)
   try {
     return refreshWslHostPairing(userDataPath, record.environmentId, {
       pairingCode: connection.pairingOffer,
@@ -30,22 +30,20 @@ export function persistWslHostConnection(
 }
 
 /**
- * Fills the registration GUID of a host added before it was captured, which lets its browser
- * logins survive orcad relaunches. An unreadable registry leaves it absent, so identity fails closed.
+ * Records the distro's live registration GUID when the record lacks it or names an older one
+ * (a re-import under the same name), so browser logins follow the registration actually running.
+ * An unreadable registry changes nothing, so identity fails closed.
  */
-export async function backfillWslHostRegistration(
+export async function observeWslHostRegistration(
   userDataPath: string,
   record: WslHostDeploymentRecord,
   readRegistryId: (distro: string) => Promise<string | null> = readWslDistroRegistryIdShared
 ): Promise<boolean> {
-  if (record.distroId) {
-    return false
-  }
   try {
     const distroId = await readRegistryId(record.distro)
     return (
       distroId !== null &&
-      backfillWslHostDistroId(userDataPath, record.environmentId, {
+      observeWslHostDistroId(userDataPath, record.environmentId, {
         distro: record.distro,
         distroId
       })

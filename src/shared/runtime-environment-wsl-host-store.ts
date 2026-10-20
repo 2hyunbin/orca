@@ -8,9 +8,9 @@ import {
   getPreferredLoopbackRuntimePort,
   getPreferredPairingOffer,
   PersistedRuntimeEnvironmentSchema,
-  runtimeEnvironmentPreviousPairing,
   type KnownRuntimeEnvironment
 } from './runtime-environments'
+import { runtimeEnvironmentPreviousPairings } from './runtime-environment-pairing-history'
 import {
   readEnvironmentStore,
   readPersistedEnvironmentStore,
@@ -24,6 +24,7 @@ import {
   writeWslHostDeployment,
   type WslHostDeploymentRecord
 } from './wsl-host-deployment-store'
+import { wslHostRegistration } from './wsl-host-deployment-link'
 
 type WslHostPorts = Pick<WslHostDeploymentRecord, 'localPort' | 'remotePort'>
 
@@ -96,7 +97,10 @@ export function addWslHostEnvironment(
     environmentId: args.id,
     createdAt: now
   })
-  const persisted = PersistedRuntimeEnvironmentSchema.parse(environment)
+  const persisted = PersistedRuntimeEnvironmentSchema.parse({
+    ...environment,
+    ...pairingWslDistroId(args.record)
+  })
   writeEnvironmentStore(userDataPath, {
     version: 1,
     environments: [...readPersistedEnvironmentStore(userDataPath).environments, persisted].sort(
@@ -144,8 +148,9 @@ export function refreshWslHostPairing(
     }),
     updatedAt: now,
     pairingRevision: Math.max(now, (existing.pairingRevision ?? existing.createdAt) + 1),
-    // Why: the in-app browser adopts this pairing's jar if no page opened before the re-pair.
-    previousPairing: runtimeEnvironmentPreviousPairing(current),
+    // Why: the in-app browser adopts these pairings' jar if no page opened before the re-pairs.
+    previousPairings: runtimeEnvironmentPreviousPairings(current),
+    ...pairingWslDistroId(record),
     lastUsedAt: existing.lastUsedAt
   })
   assertPairingUsesBridge(next, args.localPort)
@@ -161,22 +166,35 @@ export function refreshWslHostPairing(
   }
 }
 
+// Why: a GUID read later never vouches for a pairing made without it, so record it per pairing.
+function pairingWslDistroId(record: { distroId?: string; observedDistroId?: string }): {
+  pairingWslDistroId?: string
+} {
+  const current = wslHostRegistration(record).current
+  return current ? { pairingWslDistroId: current } : {}
+}
+
 /**
- * Records the registration GUID a host added before it was captured. Skipped when the record
- * already has one or now names another distro, so a stale read never overwrites a newer record.
+ * Records the registration GUID just read from the registry when it is missing from the record
+ * or differs (a re-import under the same name). Skipped when the record now names another
+ * distro, so a stale read never overwrites a newer record.
  */
-export function backfillWslHostDistroId(
+export function observeWslHostDistroId(
   userDataPath: string,
   environmentId: string,
   registration: { distro: string; distroId: string }
 ): boolean {
   const record = findWslHostDeployment(userDataPath, environmentId)
-  if (!record || record.distroId || record.distro !== registration.distro) {
+  if (
+    !record ||
+    record.distro !== registration.distro ||
+    wslHostRegistration(record).current === registration.distroId
+  ) {
     return false
   }
   writeWslHostDeployment(userDataPath, environmentId, {
     ...record,
-    distroId: registration.distroId
+    observedDistroId: registration.distroId
   })
   return true
 }

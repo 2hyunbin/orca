@@ -6,6 +6,8 @@ import {
   assertBinding,
   assertStorageScope,
   BINDING_STORE_VERSION,
+  bindingHoldsFingerprint,
+  MAX_BINDING_ALIAS_FINGERPRINTS,
   parseBindings,
   readBoundedUtf8File,
   type BrowserRoutePartitionBinding
@@ -77,26 +79,55 @@ export class BrowserRoutePartitionBindingStore {
 
   /** Partition already bound to `fingerprint`: where that identity's storage already lives. */
   findPartitionByFingerprint(fingerprint: string): string | null {
-    for (const [partition, binding] of Object.entries(this.load().bindings)) {
+    const bindings = Object.entries(this.load().bindings)
+    for (const [partition, binding] of bindings) {
       if (binding.fingerprint === fingerprint) {
+        return partition
+      }
+    }
+    for (const [partition, binding] of bindings) {
+      if (bindingHoldsFingerprint(binding, fingerprint)) {
         return partition
       }
     }
     return null
   }
 
-  /** Re-points a bound partition at a new fingerprint, so an identity-scheme change keeps its storage. */
-  rebind(partition: string, fingerprint: string, storageScope: string): void {
+  /** Whether `partition` is bound to `fingerprint`, as its own name or an adopted alias. */
+  holds(partition: string, fingerprint: string): boolean {
+    const binding = this.load().bindings[partition]
+    return binding !== undefined && bindingHoldsFingerprint(binding, fingerprint)
+  }
+
+  /**
+   * Lets `fingerprint` resolve a bound partition too, so an identity-scheme change keeps its
+   * storage. The original fingerprint stays, so an older build still finds the same partition.
+   */
+  alias(partition: string, fingerprint: string, storageScope: string): void {
     assertBinding(partition, fingerprint)
     assertStorageScope(storageScope)
     const state = this.load()
-    if (state.bindings[partition] === undefined) {
+    const existing = state.bindings[partition]
+    if (existing === undefined) {
       throw new Error('browser_route_partition_binding_invalid')
     }
+    const previousAliases = existing.aliasFingerprints ?? []
+    const aliases =
+      existing.fingerprint === fingerprint
+        ? previousAliases
+        : [fingerprint, ...previousAliases.filter((alias) => alias !== fingerprint)].slice(
+            0,
+            MAX_BINDING_ALIAS_FINGERPRINTS
+          )
     this.persist({
       bindings: {
         ...state.bindings,
-        [partition]: { fingerprint, storageScope, lastUsedAt: Date.now() }
+        [partition]: {
+          fingerprint: existing.fingerprint,
+          storageScope,
+          lastUsedAt: Date.now(),
+          ...(aliases.length > 0 ? { aliasFingerprints: aliases } : {})
+        }
       }
     })
   }
@@ -122,11 +153,12 @@ export class BrowserRoutePartitionBindingStore {
     const state = this.load()
     this.assertMetadataPrecedesPartitionData(partition, state)
     const existing = state.bindings[partition]
-    if (existing?.fingerprint === fingerprint && existing.storageScope === storageScope) {
+    const held = existing !== undefined && bindingHoldsFingerprint(existing, fingerprint)
+    if (held && existing.storageScope === storageScope) {
       this.refreshIfStale(state, partition, existing)
       return []
     }
-    if (existing !== undefined && existing.fingerprint !== fingerprint) {
+    if (existing !== undefined && !held) {
       throw new Error('browser_route_partition_binding_conflict')
     }
     const bindings = { ...state.bindings }
@@ -139,7 +171,9 @@ export class BrowserRoutePartitionBindingStore {
       delete bindings[victim]
       evicted.push(victim)
     }
-    bindings[partition] = { fingerprint, storageScope, lastUsedAt: Date.now() }
+    bindings[partition] = existing
+      ? { ...existing, storageScope, lastUsedAt: Date.now() }
+      : { fingerprint, storageScope, lastUsedAt: Date.now() }
     this.persist({ bindings })
     return evicted
   }

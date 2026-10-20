@@ -20,7 +20,10 @@ export function resolveBrowserRouteSessionPartition(
     derivePartition
   })
   const persisted = dependencies.bindingStore.get(derived.partition)
-  if (persisted !== null && persisted !== derived.bindingFingerprint) {
+  if (
+    persisted !== null &&
+    !dependencies.bindingStore.holds(derived.partition, derived.bindingFingerprint)
+  ) {
     throw new Error('browser_route_partition_binding_conflict')
   }
   return derived

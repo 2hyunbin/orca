@@ -22,6 +22,11 @@ export const OrcadWslDeploymentLinkSchema = z.object({
   kind: z.literal('wsl'),
   distro: WslDistroNameSchema,
   distroId: WslDistroIdSchema.optional(),
+  /**
+   * The GUID last read from the registry when it was absent from or differs from `distroId`
+   * (a backfill or a re-import). Older builds strip it, falling back to `distroId`.
+   */
+  observedDistroId: WslDistroIdSchema.optional().catch(undefined),
   /** The desktop loopback port the bridge listens on; the pairing endpoint points here. */
   localPort: PortSchema,
   /** orcad's listen port inside the distro, which each bridge connection dials. */
@@ -29,3 +34,26 @@ export const OrcadWslDeploymentLinkSchema = z.object({
 })
 
 export type OrcadWslDeploymentLink = z.infer<typeof OrcadWslDeploymentLinkSchema>
+
+export type WslHostRegistration = {
+  /** The registration the host runs now; absent when it was never read. */
+  current?: string
+  /** What a pairing with no recorded GUID was made under; absent when that is unknown. */
+  unrecordedPairing?: string
+}
+
+/**
+ * Only a GUID captured when the host was added vouches for pairings that recorded none: one
+ * backfilled or changed later may name a registration those pairings never saw.
+ */
+export function wslHostRegistration(
+  link: Pick<OrcadWslDeploymentLink, 'distroId' | 'observedDistroId'>
+): WslHostRegistration {
+  const current = link.observedDistroId ?? link.distroId
+  const addedUnchanged =
+    link.observedDistroId === undefined || link.observedDistroId === link.distroId
+  return {
+    ...(current ? { current } : {}),
+    ...(addedUnchanged && link.distroId ? { unrecordedPairing: link.distroId } : {})
+  }
+}

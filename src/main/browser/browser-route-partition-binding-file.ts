@@ -15,12 +15,18 @@ const FINGERPRINT_RE = /^[a-f0-9]{64}$/
  * partition name can no longer be derived and is therefore always an orphan.
  * `lastUsedAt` orders capacity eviction; 0 marks an entry written before the
  * store recorded it, which is therefore evicted first.
+ * `aliasFingerprints` are identities that adopted the partition. `fingerprint` keeps the
+ * name older builds look up, which ignore the extra field, so a downgrade finds the same jar.
  */
 export type BrowserRoutePartitionBinding = {
   fingerprint: string
   storageScope: string | null
   lastUsedAt: number
+  aliasFingerprints?: readonly string[]
 }
+
+// Why 2: one adoption per scheme change; more would risk the file cap at full capacity.
+export const MAX_BINDING_ALIAS_FINGERPRINTS = 2
 
 export function assertBinding(partition: string, fingerprint: string): void {
   if (!isBrowserRoutePartition(partition) || !FINGERPRINT_RE.test(fingerprint)) {
@@ -106,18 +112,59 @@ function parseBinding(legacy: boolean, entry: unknown): BrowserRoutePartitionBin
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
     return null
   }
-  const candidate = entry as { fingerprint?: unknown; storageScope?: unknown; lastUsedAt?: unknown }
+  const candidate = {
+    fingerprint: 'fingerprint' in entry ? entry.fingerprint : undefined,
+    storageScope: 'storageScope' in entry ? entry.storageScope : undefined,
+    lastUsedAt: 'lastUsedAt' in entry ? entry.lastUsedAt : undefined,
+    aliasFingerprints: 'aliasFingerprints' in entry ? entry.aliasFingerprints : undefined
+  }
   if (typeof candidate.fingerprint !== 'string') {
     return null
   }
   const lastUsedAt = parseLastUsedAt(candidate.lastUsedAt)
+  const aliases = parseAliasFingerprints(candidate.aliasFingerprints, candidate.fingerprint)
+  const aliasField = aliases.length > 0 ? { aliasFingerprints: aliases } : {}
   if (candidate.storageScope === null) {
-    return { fingerprint: candidate.fingerprint, storageScope: null, lastUsedAt }
+    return { fingerprint: candidate.fingerprint, storageScope: null, lastUsedAt, ...aliasField }
   }
   if (typeof candidate.storageScope !== 'string' || !FINGERPRINT_RE.test(candidate.storageScope)) {
     return null
   }
-  return { fingerprint: candidate.fingerprint, storageScope: candidate.storageScope, lastUsedAt }
+  return {
+    fingerprint: candidate.fingerprint,
+    storageScope: candidate.storageScope,
+    lastUsedAt,
+    ...aliasField
+  }
+}
+
+// Why lenient: aliases only add a lookup, so a malformed list is dropped rather than failing the file.
+function parseAliasFingerprints(value: unknown, fingerprint: string): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const aliases: string[] = []
+  for (const alias of value) {
+    if (
+      typeof alias === 'string' &&
+      FINGERPRINT_RE.test(alias) &&
+      alias !== fingerprint &&
+      !aliases.includes(alias)
+    ) {
+      aliases.push(alias)
+    }
+  }
+  return aliases.slice(0, MAX_BINDING_ALIAS_FINGERPRINTS)
+}
+
+/** Whether `binding` resolves `fingerprint`, as its own name or an adopted alias. */
+export function bindingHoldsFingerprint(
+  binding: BrowserRoutePartitionBinding,
+  fingerprint: string
+): boolean {
+  return (
+    binding.fingerprint === fingerprint || (binding.aliasFingerprints ?? []).includes(fingerprint)
+  )
 }
 
 // Why: absent on entries written before eviction existed, which must evict first.

@@ -56,7 +56,8 @@ function createSessionRegistry(filePath: string): BrowserRouteSessionRegistry {
       set: (partition, fingerprint, scope) => store.set(partition, fingerprint, scope),
       touch: (partition) => store.touch(partition),
       findPartitionByFingerprint: (fingerprint) => store.findPartitionByFingerprint(fingerprint),
-      rebind: (partition, fingerprint, scope) => store.rebind(partition, fingerprint, scope)
+      holds: (partition, fingerprint) => store.holds(partition, fingerprint),
+      alias: (partition, fingerprint, scope) => store.alias(partition, fingerprint, scope)
     }
   })
 }
@@ -107,9 +108,14 @@ describe('route partition identity migration', () => {
 
     expect(prepared).toBe(legacyPartition)
     expect(bindings(filePath).size).toBe(1)
-    // The binding now answers to the durable fingerprint, so the legacy name is never needed again.
-    expect(bindings(filePath).get(legacyPartition)?.fingerprint).toBe(
+    // The binding now also answers to the durable fingerprint, so the legacy name is never needed
+    // again, while keeping its own so an older build still resolves it.
+    const binding = bindings(filePath).get(legacyPartition)
+    expect(binding?.aliasFingerprints).toEqual([
       deriveBrowserRoutePartition(identity).bindingFingerprint
+    ])
+    expect(binding?.fingerprint).toBe(
+      deriveBrowserRoutePartition(legacyIdentityFor('runtime-before-upgrade')).bindingFingerprint
     )
   })
 
@@ -155,7 +161,10 @@ describe('route partition identity migration', () => {
               ? legacy.bindingFingerprint
               : null,
         findPartitionByFingerprint: () => null,
-        rebind: (partition) => rebound.push(partition)
+        holds: (partition, fingerprint) =>
+          (partition === derived.partition && fingerprint === 'f'.repeat(64)) ||
+          (partition === legacy.partition && fingerprint === legacy.bindingFingerprint),
+        alias: (partition) => rebound.push(partition)
       },
       identity,
       legacyIdentities: [legacyIdentity],

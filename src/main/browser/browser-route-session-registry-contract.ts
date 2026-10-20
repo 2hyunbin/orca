@@ -12,7 +12,9 @@ export type BrowserRoutePartitionBindingStore = {
   set(partition: string, fingerprint: string, storageScope: string): readonly string[]
   touch(partition: string): void
   findPartitionByFingerprint(fingerprint: string): string | null
-  rebind(partition: string, fingerprint: string, storageScope: string): void
+  /** Whether `partition` is bound to `fingerprint`, as its own name or an adopted alias. */
+  holds(partition: string, fingerprint: string): boolean
+  alias(partition: string, fingerprint: string, storageScope: string): void
 }
 
 export type BrowserRouteSessionRegistryDependencies = {

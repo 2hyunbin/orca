@@ -6,7 +6,7 @@ import { encodePairingOffer } from './pairing'
 import { listEnvironments } from './runtime-environment-store'
 import {
   addWslHostEnvironment,
-  backfillWslHostDistroId,
+  observeWslHostDistroId,
   findWslHostDeployment,
   refreshWslHostPairing,
   removeWslHostEnvironment
@@ -98,14 +98,17 @@ describe('WSL host environment store', () => {
     expect(refreshed.pairingChanged).toBe(true)
     expect(getPreferredPairingOffer(refreshed.environment).deviceToken).toBe('token-2')
     expect(refreshed.environment.pairingRevision).toBe(500)
-    expect(refreshed.environment.previousPairing).toEqual({ pairingRevision: 100 })
+    expect(refreshed.environment.pairingWslDistroId).toBe(record.distroId)
+    expect(refreshed.environment.previousPairings).toEqual([
+      { pairingRevision: 100, wslDistroId: record.distroId }
+    ])
     expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')).toMatchObject({
       localPort: 42001,
       remotePort: 6770
     })
   })
 
-  it('backfills a missing registration GUID once, and only for the same distro', () => {
+  it('observes the registration GUID only for the same distro, and only when it changed', () => {
     const { distroId: _absent, ...legacyRecord } = record
     addWslHostEnvironment(userDataPath, {
       id: 'wsl:ubuntu',
@@ -116,27 +119,59 @@ describe('WSL host environment store', () => {
     const otherDistroId = '1a2b3c4d-5e6f-4a1b-8c9d-0e1f2a3b4c5d'
 
     expect(
-      backfillWslHostDistroId(userDataPath, 'wsl:ubuntu', {
+      observeWslHostDistroId(userDataPath, 'wsl:ubuntu', {
         distro: 'Debian',
         distroId: otherDistroId
       })
     ).toBe(false)
-    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.distroId).toBeUndefined()
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.observedDistroId).toBeUndefined()
     expect(
-      backfillWslHostDistroId(userDataPath, 'wsl:ubuntu', {
+      observeWslHostDistroId(userDataPath, 'wsl:ubuntu', {
         distro: 'Ubuntu',
         distroId: record.distroId
       })
     ).toBe(true)
     expect(
-      backfillWslHostDistroId(userDataPath, 'wsl:ubuntu', {
+      observeWslHostDistroId(userDataPath, 'wsl:ubuntu', {
         distro: 'Ubuntu',
-        distroId: otherDistroId
+        distroId: record.distroId
       })
     ).toBe(false)
     expect(listEnvironments(userDataPath)[0]?.orcadDeployment).toMatchObject({
-      distroId: record.distroId
+      observedDistroId: record.distroId
     })
+    // Why: the pairing was made before the GUID was known, so it must never vouch for it.
+    expect(listEnvironments(userDataPath)[0]?.pairingWslDistroId).toBeUndefined()
+    const refreshed = refreshWslHostPairing(
+      userDataPath,
+      'wsl:ubuntu',
+      { pairingCode: code(42000, 'token-2'), localPort: 42000, remotePort: 6768 },
+      500
+    ).environment
+    expect(refreshed.pairingWslDistroId).toBe(record.distroId)
+    expect(refreshed.previousPairings).toEqual([{ pairingRevision: refreshed.createdAt }])
+  })
+
+  it('keeps a bounded history of replaced pairings, most recent first', () => {
+    addWslHostEnvironment(userDataPath, {
+      id: 'wsl:ubuntu',
+      name: 'Ubuntu (WSL)',
+      pairingCode: code(42000),
+      record,
+      now: 100
+    })
+    for (const [index, revision] of [200, 300, 400, 500, 600].entries()) {
+      refreshWslHostPairing(
+        userDataPath,
+        'wsl:ubuntu',
+        { pairingCode: code(42000, `token-${index + 2}`), localPort: 42000, remotePort: 6768 },
+        revision
+      )
+    }
+
+    expect(
+      listEnvironments(userDataPath)[0]?.previousPairings?.map((entry) => entry.pairingRevision)
+    ).toEqual([500, 400, 300, 200])
   })
 
   it('removes the environment and its record', () => {

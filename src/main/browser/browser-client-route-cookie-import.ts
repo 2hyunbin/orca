@@ -117,7 +117,7 @@ function bindRoutePartition(
   const persisted = bindings.get(derived.partition)
   if (persisted === null) {
     bindings.set(derived.partition, derived.bindingFingerprint, routeIdentity.storageScope)
-  } else if (persisted !== derived.bindingFingerprint) {
+  } else if (!bindings.holds(derived.partition, derived.bindingFingerprint)) {
     throw new Error('browser_route_partition_binding_conflict')
   }
   return derived.partition

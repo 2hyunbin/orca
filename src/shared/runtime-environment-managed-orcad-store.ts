@@ -5,10 +5,10 @@ import {
   getOrcadSshDeployment,
   getPreferredPairingOffer,
   PersistedRuntimeEnvironmentSchema,
-  runtimeEnvironmentPreviousPairing,
   type KnownRuntimeEnvironment,
   type OrcadSshDeploymentLink
 } from './runtime-environments'
+import { runtimeEnvironmentPreviousPairings } from './runtime-environment-pairing-history'
 import {
   readEnvironmentStore,
   readPersistedEnvironmentStore,
@@ -143,8 +143,8 @@ export function refreshManagedOrcadPairing(
     }),
     updatedAt: now,
     pairingRevision: Math.max(now, (existing.pairingRevision ?? existing.createdAt) + 1),
-    // Why: the in-app browser adopts this pairing's jar if no page opened before the re-pair.
-    previousPairing: runtimeEnvironmentPreviousPairing(current),
+    // Why: the in-app browser adopts these pairings' jar if no page opened before the re-pairs.
+    previousPairings: runtimeEnvironmentPreviousPairings(current),
     lastUsedAt: existing.lastUsedAt
   })
   if (getPreferredLoopbackRuntimePort(next) !== deployment.localPort) {

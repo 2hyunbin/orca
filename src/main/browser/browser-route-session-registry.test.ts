@@ -98,7 +98,10 @@ function createHarness(
       }),
       touch: vi.fn(),
       findPartitionByFingerprint: vi.fn(() => null),
-      rebind: vi.fn()
+      holds: vi.fn(
+        (partition: string, fingerprint: string) => bindings.get(partition) === fingerprint
+      ),
+      alias: vi.fn()
     },
     maxLivePartitions: options.maxLivePartitions,
     maxPagesPerPartition: options.maxPagesPerPartition

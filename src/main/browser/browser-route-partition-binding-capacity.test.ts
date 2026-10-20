@@ -63,11 +63,11 @@ describe('browser route partition binding capacity', () => {
     store.set(partitionAt(2), 'b'.repeat(64), storageScope)
 
     vi.setSystemTime(3_000)
-    store.rebind(partitionAt(1), 'c'.repeat(64), storageScope)
+    store.alias(partitionAt(1), 'c'.repeat(64), storageScope)
     const evicted = store.set(partitionAt(3), 'd'.repeat(64), storageScope)
 
     expect(evicted).toEqual([partitionAt(2)])
-    expect(store.get(partitionAt(1))).toBe('c'.repeat(64))
+    expect(store.holds(partitionAt(1), 'c'.repeat(64))).toBe(true)
   })
 
   // Why: an entry written before the store recorded recency has no claim on being fresh,

@@ -77,7 +77,7 @@ function pairedEnvironment(
 async function connectionIdentity(
   environment: KnownRuntimeEnvironment,
   authorityRuntimeId: string
-): Promise<{ current: string; legacy: string }> {
+): Promise<{ current: string; legacy: string | null }> {
   await startPairedRuntimeBrowserClientHost({ environment, authorityRuntimeId })
   const identity = getPairedRuntimeBrowserClientRouteIdentity(environment.id)
   if (!identity) {

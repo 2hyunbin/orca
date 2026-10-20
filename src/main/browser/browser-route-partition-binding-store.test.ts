@@ -213,19 +213,57 @@ describe('BrowserRoutePartitionBindingStore', () => {
     expect(store.get(partition)).toBe(fingerprint)
   })
 
-  it('resolves an existing partition by fingerprint and re-points it on rebind', () => {
+  it('resolves an existing partition by fingerprint or alias, keeping its own fingerprint', () => {
     const store = new BrowserRoutePartitionBindingStore({ filePath: createPath() })
     store.set(partition, fingerprint, 'e'.repeat(64))
 
     expect(store.findPartitionByFingerprint(fingerprint)).toBe(partition)
     expect(store.findPartitionByFingerprint('b'.repeat(64))).toBeNull()
 
-    store.rebind(partition, 'b'.repeat(64), 'e'.repeat(64))
+    store.alias(partition, 'b'.repeat(64), 'e'.repeat(64))
 
     expect(store.findPartitionByFingerprint('b'.repeat(64))).toBe(partition)
-    expect(store.get(partition)).toBe('b'.repeat(64))
-    expect(() => store.rebind(otherPartition, 'c'.repeat(64), 'e'.repeat(64))).toThrow(
+    expect(store.findPartitionByFingerprint(fingerprint)).toBe(partition)
+    expect(store.get(partition)).toBe(fingerprint)
+    expect(store.holds(partition, 'b'.repeat(64))).toBe(true)
+    expect(store.holds(partition, 'c'.repeat(64))).toBe(false)
+    expect(store.set(partition, 'b'.repeat(64), 'e'.repeat(64))).toEqual([])
+    expect(() => store.set(partition, 'c'.repeat(64), 'e'.repeat(64))).toThrow(
+      'browser_route_partition_binding_conflict'
+    )
+    expect(() => store.alias(otherPartition, 'c'.repeat(64), 'e'.repeat(64))).toThrow(
       'browser_route_partition_binding_invalid'
     )
+  })
+
+  it('keeps only the newest aliases and ignores a malformed alias list', () => {
+    const path = createPath()
+    const store = new BrowserRoutePartitionBindingStore({ filePath: path })
+    store.set(partition, fingerprint, 'e'.repeat(64))
+
+    for (const alias of ['b', 'c', 'd']) {
+      store.alias(partition, alias.repeat(64), 'e'.repeat(64))
+    }
+
+    expect(store.listBindings().get(partition)?.aliasFingerprints).toEqual([
+      'd'.repeat(64),
+      'c'.repeat(64)
+    ])
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 2,
+        bindings: {
+          [partition]: {
+            fingerprint,
+            storageScope: 'e'.repeat(64),
+            lastUsedAt: 1,
+            aliasFingerprints: 'not-a-list'
+          }
+        }
+      })
+    )
+    expect(store.get(partition)).toBe(fingerprint)
+    expect(store.listBindings().get(partition)?.aliasFingerprints).toBeUndefined()
   })
 })

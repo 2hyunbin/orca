@@ -15,7 +15,8 @@ const {
     set: vi.fn(() => [] as readonly string[]),
     touch: vi.fn(),
     findPartitionByFingerprint: vi.fn(() => null as string | null),
-    rebind: vi.fn()
+    holds: vi.fn(() => false),
+    alias: vi.fn()
   },
   detectInstalledBrowsersMock: vi.fn(),
   getProfileMock: vi.fn(),

@@ -1,137 +1,30 @@
-import { mkdtempSync, realpathSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   getPreferredPairedRuntimeConnection,
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
-import {
-  browserAuthorityExecutionHostStorageIdentity,
-  legacyBrowserNativeExecutionHostStorageIdentity
-} from './browser-execution-host-storage-identity'
-import {
-  deriveBrowserRoutePartition,
-  deriveBrowserRoutePartitionStorageScope,
-  type BrowserRoutePartitionIdentity
-} from './browser-route-identity'
+import { legacyBrowserNativeExecutionHostStorageIdentity } from './browser-execution-host-storage-identity'
+import { deriveBrowserRoutePartition } from './browser-route-identity'
 import { BrowserRoutePartitionBindingStore } from './browser-route-partition-binding-store'
-import { supersededBrowserRoutePartitionIdentities } from './browser-route-partition-migration'
-import { BrowserRouteSessionRegistry } from './browser-route-session-registry'
-import type { BrowserRouteElectronSession } from './browser-route-session-policy'
+import {
+  createDesktop,
+  launchAndOpenPage,
+  openPage,
+  orcaProfileId,
+  preW1RouteIdentity,
+  seedLogin,
+  seedPreW1Login,
+  storageScopeOf
+} from './browser-route-partition-re-pair-harness'
 import { derivePairedRuntimeBrowserAuthorityIdentities } from './paired-runtime-browser-authority-identity'
 import {
   pairedRuntimeHostEnvironment,
-  preW1AuthorityConnectionIdentity,
+  WSL_DISTRO_ID_A,
   WSL_DISTRO_ID_B,
   type PairedRuntimeHostKind
 } from './paired-runtime-browser-host-environment-fixture'
 
-const orcaProfileId = 'orca-profile-a'
 const browserProfileId = 'default'
-
-/** One desktop's persisted binding file plus the cookie jar Chromium keeps per partition. */
-type Desktop = { bindingsPath: string; cookies: Map<string, string[]> }
-
-function createDesktop(): Desktop {
-  const directory = realpathSync(
-    mkdtempSync(join(realpathSync(tmpdir()), 'orca-browser-re-pair-migration-'))
-  )
-  return { bindingsPath: join(directory, 'bindings.json'), cookies: new Map() }
-}
-
-function storageScopeOf(environment: KnownRuntimeEnvironment): string {
-  return deriveBrowserRoutePartitionStorageScope({ orcaProfileId, environmentId: environment.id })
-}
-
-/** Partition an app launch places a page on the server's own machine in, persisting the binding. */
-async function launchAndOpenPage(
-  desktop: Desktop,
-  environment: KnownRuntimeEnvironment,
-  authorityRuntimeId: string
-): Promise<string> {
-  const storageScope = storageScopeOf(environment)
-  const authority = derivePairedRuntimeBrowserAuthorityIdentities({
-    orcaProfileId,
-    environment,
-    connection: getPreferredPairedRuntimeConnection(environment),
-    authorityRuntimeId
-  })
-  const executionHostIdentity = browserAuthorityExecutionHostStorageIdentity(storageScope)
-  const store = new BrowserRoutePartitionBindingStore({ filePath: desktop.bindingsPath })
-  const session: BrowserRouteElectronSession = {
-    setProxy: vi.fn(async () => {}),
-    closeAllConnections: vi.fn(async () => {}),
-    resolveProxy: vi.fn(async () => 'SOCKS5 127.0.0.1:43123')
-  }
-  const registry = new BrowserRouteSessionRegistry({
-    validateProfile: vi.fn(),
-    getSession: () => session,
-    setupPolicies: vi.fn(),
-    clearPolicies: vi.fn(),
-    retirePageAuthority: vi.fn(() => true),
-    bindingStore: {
-      get: (partition) => store.get(partition),
-      set: (partition, fingerprint, scope) => store.set(partition, fingerprint, scope),
-      touch: (partition) => store.touch(partition),
-      findPartitionByFingerprint: (fingerprint) => store.findPartitionByFingerprint(fingerprint),
-      rebind: (partition, fingerprint, scope) => store.rebind(partition, fingerprint, scope)
-    }
-  })
-  const handle = await registry.preparePage({
-    identity: {
-      orcaProfileId,
-      browserProfileId,
-      authorityConnectionIdentity: authority.authorityConnectionIdentity,
-      executionHostIdentity
-    },
-    legacyIdentities: supersededBrowserRoutePartitionIdentities({
-      ...authority,
-      orcaProfileId,
-      browserProfileId,
-      executionHostIdentity,
-      legacyExecutionHostIdentity:
-        legacyBrowserNativeExecutionHostStorageIdentity(authorityRuntimeId)
-    }),
-    storageScope,
-    browserPageId: 'page-a',
-    pageHostGeneration: 1,
-    rendererWebContentsId: 11,
-    proxyEndpoint: { host: '127.0.0.1', port: 43123 }
-  })
-  handle.release()
-  return handle.partition
-}
-
-/** What a build before W1 persisted for `environment`, with the user signed in to a site. */
-function seedPreW1Login(desktop: Desktop, environment: KnownRuntimeEnvironment): string {
-  const storageScope = storageScopeOf(environment)
-  return seedLogin(desktop, storageScope, {
-    orcaProfileId,
-    browserProfileId,
-    authorityConnectionIdentity: preW1AuthorityConnectionIdentity(
-      orcaProfileId,
-      environment,
-      getPreferredPairedRuntimeConnection(environment)
-    ),
-    executionHostIdentity: browserAuthorityExecutionHostStorageIdentity(storageScope)
-  })
-}
-
-function seedLogin(
-  desktop: Desktop,
-  storageScope: string,
-  identity: BrowserRoutePartitionIdentity
-): string {
-  const derived = deriveBrowserRoutePartition(identity)
-  new BrowserRoutePartitionBindingStore({ filePath: desktop.bindingsPath }).set(
-    derived.partition,
-    derived.bindingFingerprint,
-    storageScope
-  )
-  desktop.cookies.set(derived.partition, ['session=signed-in'])
-  return derived.partition
-}
 
 function rotatingHost(
   kind: PairedRuntimeHostKind,
@@ -139,6 +32,11 @@ function rotatingHost(
   device: string
 ): KnownRuntimeEnvironment {
   return pairedRuntimeHostEnvironment({ kind, pairingRevision: revision, pairedDeviceId: device })
+}
+
+/** The registration a WSL pairing records it was made under. */
+function madeUnder(kind: PairedRuntimeHostKind): { wslDistroId?: string } {
+  return kind === 'wsl' ? { wslDistroId: WSL_DISTRO_ID_A } : {}
 }
 
 describe('browser logins across a managed host re-pair', () => {
@@ -175,7 +73,9 @@ describe('browser logins across a managed host re-pair', () => {
         kind,
         pairingRevision: 2_000,
         pairedDeviceId: 'device-b',
-        previousPairing: { pairingRevision: 1_000, pairedDeviceId: 'device-a' }
+        previousPairings: [
+          { pairingRevision: 1_000, pairedDeviceId: 'device-a', ...madeUnder(kind) }
+        ]
       })
 
       const partition = await launchAndOpenPage(desktop, rePairedBeforeFirstPage, 'runtime-b')
@@ -185,7 +85,9 @@ describe('browser logins across a managed host re-pair', () => {
           kind,
           pairingRevision: 3_000,
           pairedDeviceId: 'device-c',
-          previousPairing: { pairingRevision: 2_000, pairedDeviceId: 'device-b' }
+          previousPairings: [
+            { pairingRevision: 2_000, pairedDeviceId: 'device-b', ...madeUnder(kind) }
+          ]
         }),
         'runtime-c'
       )
@@ -205,11 +107,42 @@ describe('browser logins across a managed host re-pair', () => {
       pairingRevision: 2_000,
       pairedDeviceId: 'device-b',
       publicKeyB64: 'host-key-b',
-      previousPairing: { pairingRevision: 1_000, pairedDeviceId: 'device-a' }
+      previousPairings: [{ pairingRevision: 1_000, pairedDeviceId: 'device-a' }]
     })
 
     expect(await launchAndOpenPage(desktop, reKeyed, 'runtime-b')).not.toBe(preW1Partition)
   })
+
+  // Why: an update then a rollback (or a WSL relaunch loop) can re-pair repeatedly before any page.
+  it.each([
+    { kind: 'managed-ssh', rePairs: 2 },
+    { kind: 'managed-ssh', rePairs: 3 },
+    { kind: 'wsl', rePairs: 2 },
+    { kind: 'wsl', rePairs: 3 }
+  ] as const)(
+    'adopts the original jar of a $kind host after $rePairs re-pairs before first use',
+    async ({ kind, rePairs }) => {
+      const desktop = createDesktop()
+      const preW1Partition = seedPreW1Login(desktop, rotatingHost(kind, 1_000, 'device-0'))
+      // Most recent first, exactly as successive Orca-driven re-pairs record them.
+      const replaced = Array.from({ length: rePairs }, (_, index) => ({
+        pairingRevision: 1_000 * (rePairs - index),
+        pairedDeviceId: `device-${rePairs - 1 - index}`,
+        ...madeUnder(kind)
+      }))
+      const current = pairedRuntimeHostEnvironment({
+        kind,
+        pairingRevision: 1_000 * (rePairs + 1),
+        pairedDeviceId: `device-${rePairs}`,
+        previousPairings: replaced
+      })
+
+      const opened = await openPage(desktop, current, 'runtime-latest')
+
+      expect(opened.partition).toBe(preW1Partition)
+      expect(opened.readCookies()).toEqual(['session=signed-in'])
+    }
+  )
 
   it.each(['manual', 'plain-ssh'] as const)(
     'leaves a %s host on its pre-W1 partition',
@@ -235,6 +168,9 @@ describe('browser logins across a managed host re-pair', () => {
       connection,
       authorityRuntimeId: 'runtime-old'
     }).legacyAuthorityConnectionIdentity
+    if (runtimeScoped === null) {
+      throw new Error('managed SSH always keeps its runtimeId-era identity')
+    }
     const oldPartition = seedLogin(desktop, storageScopeOf(environment), {
       orcaProfileId,
       browserProfileId,
@@ -253,16 +189,9 @@ describe('browser logins across a managed host re-pair', () => {
     const desktop = createDesktop()
     const environment = rotatingHost('wsl', 1_000, 'device-a')
     const storageScope = storageScopeOf(environment)
-    const preW1Fingerprint = deriveBrowserRoutePartition({
-      orcaProfileId,
-      browserProfileId,
-      authorityConnectionIdentity: preW1AuthorityConnectionIdentity(
-        orcaProfileId,
-        environment,
-        getPreferredPairedRuntimeConnection(environment)
-      ),
-      executionHostIdentity: browserAuthorityExecutionHostStorageIdentity(storageScope)
-    }).bindingFingerprint
+    const preW1Fingerprint = deriveBrowserRoutePartition(
+      preW1RouteIdentity(environment)
+    ).bindingFingerprint
     const runtimeEraName = `persist:orca-browser-v1-${'a'.repeat(64)}`
     new BrowserRoutePartitionBindingStore({ filePath: desktop.bindingsPath }).set(
       runtimeEraName,

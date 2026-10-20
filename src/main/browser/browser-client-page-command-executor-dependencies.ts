@@ -21,7 +21,7 @@ import type {
 export type BrowserClientPageAuthorityIdentity = {
   authorityConnectionIdentity: string
   adoptableAuthorityConnectionIdentities: readonly string[]
-  legacyAuthorityConnectionIdentity: string
+  legacyAuthorityConnectionIdentity: string | null
 }
 
 export type BrowserClientPageCommandExecutorDependencies = BrowserClientPageAuthorityIdentity & {
