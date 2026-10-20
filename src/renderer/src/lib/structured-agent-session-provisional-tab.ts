@@ -143,7 +143,7 @@ export function beginStructuredAgentSessionProvisionalLaunch(
       return {
         ...launch,
         settlement: launch.settlement.then((settlement) =>
-          openTerminalForDeclinedChat(args, worktreeId, owner.target, tab, settlement)
+          openTerminalForDeclinedChat(args, worktreeId, owner, tab, settlement)
         )
       }
     }

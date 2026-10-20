@@ -33,7 +33,6 @@ export type ManagedRuntimeInstallationDeps = {
 type Run = { id: string; controller: AbortController; committed: boolean }
 
 const releaseChangeListeners = new Set<() => void>()
-
 /** Runs after any install or removal on this host ends, which can change what a start runs. */
 export function onManagedRuntimeReleasesChanged(listener: () => void): () => void {
   releaseChangeListeners.add(listener)

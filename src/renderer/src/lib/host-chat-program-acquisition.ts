@@ -32,7 +32,6 @@ export function useChatProgramFactsVersion(): number {
 
 /** A hold owns one resolved resource; its consumer owns reconciliation. */
 export function holdChatProgramFacts(context: ReturnType<typeof resolveChatProgramContext>) {
-  let release = (): void => {}
   if (!context.target || context.runtimeId === undefined || !context.hostCapabilities) {
     const catalog =
       !context.target && context.executionHostId
@@ -40,7 +39,7 @@ export function holdChatProgramFacts(context: ReturnType<typeof resolveChatProgr
         : context.runtimeId === null
           ? ensureLocalRuntimeCapabilities()
           : new Promise<void>(() => {})
-    return { catalog, first: () => catalog, release }
+    return { catalog, first: () => catalog, release: (): void => {} }
   }
   const owner = { ...context, target: context.target, runtimeId: context.runtimeId }
   const catalog = loadHostStructuredAgents(
@@ -49,9 +48,7 @@ export function holdChatProgramFacts(context: ReturnType<typeof resolveChatProgr
     context.runtimeId
   )
   const health = context.hostCapabilities.includes(AVAILABILITY)
-  if (health) {
-    release = acquireHostStructuredAgentAvailability(owner)
-  }
+  const release = health ? acquireHostStructuredAgentAvailability(owner) : (): void => {}
   return {
     catalog,
     first: () => (health ? firstHostStructuredAgentAvailability(owner) : catalog),

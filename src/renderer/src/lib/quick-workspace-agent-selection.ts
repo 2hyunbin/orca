@@ -6,8 +6,7 @@ import {
   TUI_AGENT_AUTO_PICK_ORDER
 } from '../../../shared/tui-agent-selection'
 
-/** `offeredAgentIds` adds agents a chosen default may open as a chat without their CLI; automatic
- *  picks stay on detected agents. */
+/** `offeredAgentIds`: chosen agents that open as a chat without a CLI; auto-picks stay detected. */
 export function pickQuickWorkspaceAgent(
   preferred: TuiAgent | 'blank' | null | undefined,
   detectedAgentIds: Iterable<TuiAgent> | null,
@@ -15,11 +14,9 @@ export function pickQuickWorkspaceAgent(
   offeredAgentIds?: ReadonlySet<TuiAgent> | null,
   chosenUsable?: (agent: TuiAgent) => boolean
 ): TuiAgent | null {
-  return pickTuiAgent(
-    preferred,
-    detectedAgentIds ?? TUI_AGENT_AUTO_PICK_ORDER,
-    disabledTuiAgents,
-    (agent) => offeredAgentIds?.has(agent) === true || chosenUsable?.(agent) === true
+  const candidates = detectedAgentIds ?? TUI_AGENT_AUTO_PICK_ORDER
+  return pickTuiAgent(preferred, candidates, disabledTuiAgents, (agent) =>
+    Boolean(offeredAgentIds?.has(agent) || chosenUsable?.(agent))
   )
 }
 

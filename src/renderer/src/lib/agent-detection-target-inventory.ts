@@ -152,20 +152,14 @@ export function readAgentInventoryForTarget(state: AppState, target: AgentDetect
     return state.readLocalAgentInventory(target.worktreeId)
   }
   const ids = readDetectedAgentsForTarget(state, target)
-  const key =
-    target.kind === 'runtime'
-      ? getRuntimeAgentInventoryKey(target.environmentId, target.worktreeId)
-      : target.connectionId
-  const outcome =
-    target.kind === 'runtime'
-      ? state.runtimeAgentInventoryOutcome(key)
-      : state.remoteAgentInventoryOutcome(key)
+  if (target.kind !== 'runtime') {
+    return { ids, state: state.remoteAgentInventoryOutcome(target.connectionId) }
+  }
+  const key = getRuntimeAgentInventoryKey(target.environmentId, target.worktreeId)
+  const unsupported = state.runtimeAgentDetectionNeedsServerUpdate[key]
   return {
     ids,
-    state:
-      target.kind === 'runtime' && state.runtimeAgentDetectionNeedsServerUpdate[key]
-        ? ('unsupported' as const)
-        : outcome
+    state: unsupported ? ('unsupported' as const) : state.runtimeAgentInventoryOutcome(key)
   }
 }
 export function readAgentInventoryForWorktree(state: AppState, worktreeId: string) {

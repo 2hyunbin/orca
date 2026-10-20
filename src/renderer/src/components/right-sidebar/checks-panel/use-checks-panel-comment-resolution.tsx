@@ -156,15 +156,10 @@ export function useChecksPanelCommentResolution(model: ChecksPanelCommentResolut
     : 'Commenting requires a GitHub PR repository target.'
   const workspace = worktreeLaunchWorkspace(activeWorktreeId ?? '')
   useChatProgramFacts(workspace, Boolean(activeWorktreeId) && sourceControlAiActionsVisible)
+  const launchState = useAppStore.getState()
   const noAgentFor = (actionId: SourceControlActionId): boolean =>
     detectedAgentIds != null &&
-    resolveChecksActionAgent(
-      useAppStore.getState(),
-      actionId,
-      repo?.id,
-      workspace,
-      detectedAgentIds
-    ) == null
+    resolveChecksActionAgent(launchState, actionId, repo?.id, workspace, detectedAgentIds) == null
   const noEnabledAgentKnown = noAgentFor('resolveConflicts')
   const actionDisabledReason = (actionId: SourceControlActionId): string | undefined =>
     !activeWorktreeId

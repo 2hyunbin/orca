@@ -126,11 +126,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
         Date.now(),
         // Why: unchanged worktrees reuse their row pipeline; card assembly still runs
         // fresh against the review/host/status slices this memo subscribes to.
-        {
-          rowsCache: rowsCacheRef.current,
-          rowsGeneration: agentStatusEpoch,
-          launchRouteStore
-        }
+        { rowsCache: rowsCacheRef.current, rowsGeneration: agentStatusEpoch, launchRouteStore }
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [

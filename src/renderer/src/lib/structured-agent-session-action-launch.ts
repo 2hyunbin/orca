@@ -11,10 +11,12 @@ import type { ProvisionalLaunchArgs } from './structured-agent-session-provision
 import { insertUnifiedTabAfterAnchor } from './unified-tab-anchor-insertion'
 import { useAppStore } from '@/store'
 import {
+  declinedTerminalCanOpen,
   notifyHostDeclined,
   openDeclinedStructuredLaunchTerminal,
   type StructuredLaunchTerminal
 } from '@/lib/structured-agent-session-launch-admission'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { structuredAgentSessionDraftScopeKey } from '@/components/native-chat/native-chat-composer-draft-store'
 import { nativeChatComposerHasUserContent } from '@/components/native-chat/native-chat-pending-attachment-cache'
@@ -53,12 +55,18 @@ export function opensAtAction(args: ProvisionalLaunchArgs): boolean {
 export async function openTerminalForDeclinedChat(
   args: ProvisionalLaunchArgs,
   worktreeId: string,
-  target: RuntimeClientTarget,
+  { executionHostId, target }: { executionHostId: ExecutionHostId; target: RuntimeClientTarget },
   tab: Tab,
   settlement: StructuredAgentLaunchSettlement
 ): Promise<StructuredAgentLaunchSettlement> {
   if (
     args.plan.requestedSurface === 'chat' ||
+    !declinedTerminalCanOpen(
+      args.plan.agent,
+      worktreeId,
+      executionHostId,
+      args.declinedOpensCallerSurface
+    ) ||
     settlement.kind !== 'failed' ||
     !(settlement.error instanceof StructuredAgentSessionCreateRefusalError) ||
     settlement.error.code !== 'structured_agent_session_unsupported'

@@ -25,8 +25,7 @@ type LaunchAgentSessionContinuationArgs = {
   signal?: AbortSignal
 }
 
-/** The agents a continuation can start here: detected ones, then those that open as a chat on
- *  the workspace's host without their CLI. */
+/** Detected agents, then those that open as a chat on the workspace's host without their CLI. */
 export async function detectAgentSessionContinuationAgents(
   worktreeId: string,
   signal?: AbortSignal

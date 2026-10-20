@@ -93,8 +93,7 @@ function detectedAgentsForWorktree(
     : (state.detectedAgentIds ?? [])
 }
 
-/** Host-detected choices, agents that open as a chat there, and providers already proven to run
- *  in the workspace. */
+/** Host-detected choices, agents that open as a chat there, and providers proven to run there. */
 export function buildDashboardWorktreeLaunchOptions(
   state: DashboardLaunchOptionState,
   cards: readonly DashboardCard[],
@@ -125,7 +124,6 @@ export function buildDashboardWorktreeLaunchOptions(
     }
     const worktreeCards = cardsByWorktreeId.get(worktreeId) ?? []
     const detected = detectedAgentsForWorktree(state, worktreeId, repoId, catalog)
-    // Agents that open as a chat there without their CLI launch from the board too.
     const available = new Set<TuiAgent>(
       launchRouteStore
         ? agentsOfferedForLaunch(launchRouteStore, worktreeLaunchWorkspace(worktreeId), detected)

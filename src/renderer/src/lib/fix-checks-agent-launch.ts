@@ -6,10 +6,9 @@ import {
   type RepoHostFields
 } from '@/lib/agent-detection-target-inventory'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import type { ProspectiveWorkspace } from '@/lib/agent-launch-route-input'
+import { type ProspectiveWorkspace, worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
-import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { findGithubPrWorkspaceAttachment } from '@/lib/github-work-item-workspace-attachment'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
@@ -94,8 +93,8 @@ async function resolveSavedAgentOverride(
   }
   // Why: a paired server answers per workspace, so only the enabled check can run before it exists;
   // the direct launch checks installation on the new workspace.
-  const choices = pendingAgents
-    ? await acquireAgentLaunchChoices(workspace, () => pendingAgents)
+  const detected = pendingAgents
+    ? (await acquireAgentLaunchChoices(workspace, () => pendingAgents)).detected
     : null
   const current = useAppStore.getState()
   const savedAgent = savedAgentId()
@@ -103,13 +102,7 @@ async function resolveSavedAgentOverride(
     return { kind: 'launch-default' }
   }
   const available = pendingAgents
-    ? resolveChecksActionAgent(
-        current,
-        'fixChecks',
-        repo?.id,
-        workspace,
-        choices?.detected ?? null
-      ) === savedAgent
+    ? resolveChecksActionAgent(current, 'fixChecks', repo?.id, workspace, detected) === savedAgent
     : isTuiAgentEnabled(savedAgent, current.settings?.disabledTuiAgents)
   if (!available) {
     toast.error(

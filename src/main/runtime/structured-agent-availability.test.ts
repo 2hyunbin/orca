@@ -46,6 +46,7 @@ vi.mock('./structured-agent-runtime-metadata', () => ({
 
 import { installStructuredAgentAvailability } from './structured-agent-availability'
 
+const opencodeAvailable = expect.objectContaining({ agent: 'opencode', state: 'available' })
 const found =
   (command: string, PATH = '/usr/bin') =>
   () => ({ command, env: { PATH } })
@@ -132,9 +133,7 @@ it('recaptures for settings and uses the completed capture on Refresh', async ()
   version = 'supported'
   capture.resolve()
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3))
-  expect(read.mock.lastCall?.[0]).toContainEqual(
-    expect.objectContaining({ agent: 'opencode', state: 'available' })
-  )
+  expect(read.mock.lastCall?.[0]).toContainEqual(opencodeAvailable)
 })
 
 it('captures fresh shell facts for a first subscriber even when Refresh had no listener', async () => {
@@ -151,9 +150,7 @@ it('captures fresh shell facts for a first subscriber even when Refresh had no l
   version = 'supported'
   capture.resolve()
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1))
-  expect(read.mock.lastCall?.[0]).toContainEqual(
-    expect.objectContaining({ agent: 'opencode', state: 'available' })
-  )
+  expect(read.mock.lastCall?.[0]).toContainEqual(opencodeAvailable)
 })
 
 it('reads a missing program as missing, a workspace-relative PATH as unknown, and re-reads after an install', async () => {

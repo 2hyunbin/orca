@@ -109,10 +109,9 @@ export function useSourceControlAgentActionDialog({
     // Why: whether CLI arguments apply is read synchronously from the local runtime's
     // capabilities; settling them alongside detection keeps the field from appearing for a
     // frame on a launch that turns out to be structured.
-    const isCurrent = (): boolean => !stale && openCycleRef.current === cycle
     void refreshAgents().then(
       ({ detected, launchable }) => {
-        if (!isCurrent()) {
+        if (stale || openCycleRef.current !== cycle) {
           return
         }
         setSelectedAgent(
@@ -129,7 +128,7 @@ export function useSourceControlAgentActionDialog({
         setDiscovery({ cycle, outcome: 'success' })
       },
       (error: unknown) => {
-        if (isCurrent()) {
+        if (!stale && openCycleRef.current === cycle) {
           const cancelled = error instanceof AgentLaunchChoiceCancelled
           setDiscovery({ cycle, outcome: cancelled ? 'cancelled' : 'failed' })
         }

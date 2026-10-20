@@ -34,23 +34,16 @@ function defaultChatDetectionTarget(
   return parseAgentDetectionTargetKey(getAgentDetectionTargetKeyForWorktree(state, worktreeId))
 }
 
-/** True when the default chat could open here but the workspace host's agent list, or for a
- *  default whose CLI is not detected, whether its chat program runs there, has not loaded. */
+/** True when the default chat could open here but its agent list or chat facts have not loaded. */
 export function emptyWorkspaceDefaultChatAwaitsDetection(worktreeId: string): boolean {
   const state = useAppStore.getState()
   const target = defaultChatDetectionTarget(state, worktreeId)
-  if (!target) {
-    return false
-  }
-  const detected = readDetectedAgentsForTarget(state, target)
+  const detected = target && readDetectedAgentsForTarget(state, target)
+  const workspace = worktreeLaunchWorkspace(worktreeId)
+  const chosen = state.settings?.defaultTuiAgent
   return (
     detected === null ||
-    chosenAgentChatUnlearned(
-      state,
-      state.settings?.defaultTuiAgent,
-      detected,
-      worktreeLaunchWorkspace(worktreeId)
-    )
+    (!!detected && chosenAgentChatUnlearned(state, chosen, detected, workspace))
   )
 }
 

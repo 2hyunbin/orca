@@ -165,6 +165,14 @@ describe('a structured chat launch on a paired server', () => {
       })
     direct()
     await vi.waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(2))
+    // The action-first chat tab never swaps to a CLI terminal the host lacks.
+    const actionFirst = beginStructuredAgentSessionProvisionalLaunch({
+      plan: adoptAgentSessionLaunchVerdict({ ...plan(), prompt: '' }),
+      hooks: {},
+      focusIntent: { request: vi.fn(), cancel: vi.fn() }
+    })
+    expect(actionFirst?.tab).not.toBeNull()
+    await expect(actionFirst?.settlement).resolves.toMatchObject({ kind: 'failed' })
     expect(openTerminal).not.toHaveBeenCalled()
     expect(mocks.launchAgentInNewTab).not.toHaveBeenCalled()
     await useAppStore.getState().refreshDetectedAgents(worktreeId)

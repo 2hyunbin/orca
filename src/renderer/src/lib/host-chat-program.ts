@@ -7,6 +7,7 @@ import {
 } from '../../../shared/protocol-version'
 import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 import type { TuiAgent } from '../../../shared/tui-agent'
+import type { AgentSessionChatProgram } from '../../../shared/agent-session-agent-availability'
 import { chatProviderAgents } from './chat-provider-agents'
 import { resolveAgentLaunchRoute, structuredAgentLaunchSupport } from './agent-launch-routing'
 import {
@@ -33,12 +34,7 @@ import {
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import { getResolvedExecutionHostIdForWorktree } from './resolved-worktree-execution-host'
 
-export type ChatProgramObservation =
-  | 'available'
-  | 'installable'
-  | 'missing'
-  | 'unknown'
-  | 'unlearned'
+export type ChatProgramObservation = AgentSessionChatProgram | 'unlearned'
 type HostFactsStore = Pick<AgentLaunchRouteStore, 'runtimeStatusByEnvironmentId'>
 
 function hostContext(

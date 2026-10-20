@@ -158,7 +158,15 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
 
 /** A declined chat falls back to its agent's terminal only where that CLI may be installed: a chat
  *  can be offered without it, and its terminal would only fail to start. */
-function declinedAgentTerminalHasCli(agent: TuiAgent, worktreeId: string, host: ExecutionHostId) {
+export function declinedTerminalCanOpen(
+  agent: TuiAgent,
+  worktreeId: string,
+  host: ExecutionHostId,
+  opensCallerSurface?: true
+): boolean {
+  if (opensCallerSurface) {
+    return true
+  }
   const parsed = parseExecutionHostId(host)
   const inventory = readAgentInventoryForTarget(
     useAppStore.getState(),
@@ -252,9 +260,12 @@ export function beginHostAdmittedStructuredLaunch(args: {
         }
       }
       if (admission.kind === 'declined') {
-        const noCli =
-          !args.declinedOpensCallerSurface &&
-          !declinedAgentTerminalHasCli(plan.agent, args.worktreeId, args.executionHostId)
+        const noCli = !declinedTerminalCanOpen(
+          plan.agent,
+          args.worktreeId,
+          args.executionHostId,
+          args.declinedOpensCallerSurface
+        )
         if (plan.resumeFrom || plan.requestedSurface === 'chat' || noCli) {
           return failBeforeSurface(
             new StructuredAgentSessionCreateRefusalError('structured_agent_session_unsupported'),

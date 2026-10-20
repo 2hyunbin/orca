@@ -12,8 +12,7 @@ import {
   loadDetectedAgentsForWorktree,
   type WorktreeAgentInventoryState
 } from '@/lib/agent-detection-target-inventory'
-import type { AgentLaunchRouteStore } from '@/lib/agent-launch-route-input'
-import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
+import { type AgentLaunchRouteStore, worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { readAgentLaunchChoice } from '@/lib/host-chat-program'
 
 export type BoundAgentTabAction = {

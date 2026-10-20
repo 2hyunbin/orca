@@ -195,8 +195,7 @@ export function useNewTabAgentMenuRows(
     )
   useChatProgramFacts(workspace, (open || worktreeShown) && !plain)
   useChatProgramFacts({ kind: 'floating' }, (open || worktreeShown) && !plain && !local)
-  // Only dependencies that can enable an action hold the cold fill; a failed inventory ends only
-  // its own wait, since chat rows do not need it.
+  // Only dependencies that can enable an action hold the cold fill; failed inventory ends its own.
   if (
     (detection.detectedIds === null && detectionTarget !== undefined && !inventoryFailed) ||
     (!plain &&
