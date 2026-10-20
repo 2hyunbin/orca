@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { keptExitedPaneSession } from './exited-split-pane-layout-close'
+import { keepsExitedPane } from './exited-split-pane-layout-close'
 
 const WORKTREE = 'repo-1::/w'
 const TAB = 'tab-1'
@@ -43,28 +43,35 @@ function splitSession(): WorkspaceSessionState {
   }
 }
 
-const cleanExit = { exitCode: 0, freshSpawn: false, inputSeen: true, outputSeen: true, shown: true }
+const cleanExit = {
+  exitCode: 0,
+  freshSpawn: false,
+  inputSeen: true,
+  outputSeen: true,
+  shown: true,
+  endVouched: true
+}
 const right = { worktreeId: WORKTREE, parentTabId: TAB, leafId: RIGHT, ptyId: 'pty-right' }
 
-describe('keptExitedPaneSession', () => {
+describe('keepsExitedPane', () => {
   it('leaves a split pane whose shell exited cleanly, or that main stopped, to the retirement', () => {
-    expect(keptExitedPaneSession(splitSession(), right, cleanExit)).toBeNull()
-    expect(keptExitedPaneSession(splitSession(), right, { ...cleanExit, exitCode: -1 })).toBeNull()
+    expect(keepsExitedPane(splitSession(), right, cleanExit)).toBe(false)
+    expect(keepsExitedPane(splitSession(), right, { ...cleanExit, exitCode: -1 })).toBe(false)
   })
 
-  it('keeps the session as it is for a pane the rule keeps (a failed process’s card)', () => {
+  it('keeps a split pane whose process failed behind its card', () => {
     const session = splitSession()
     expect(
-      keptExitedPaneSession(session, right, {
+      keepsExitedPane(session, right, {
         ...cleanExit,
         exitCode: 1
       })
-    ).toBe(session)
+    ).toBe(true)
   })
 
   it('leaves a tab’s last pane, and a pane another terminal took, to the retirement', () => {
     const session = splitSession()
-    expect(keptExitedPaneSession(session, { ...right, ptyId: 'pty-old' }, cleanExit)).toBeNull()
+    expect(keepsExitedPane(session, { ...right, ptyId: 'pty-old' }, cleanExit)).toBe(false)
     const lone: WorkspaceSessionState = {
       ...session,
       terminalLayoutsByTabId: {
@@ -76,7 +83,7 @@ describe('keptExitedPaneSession', () => {
         }
       }
     }
-    expect(keptExitedPaneSession(lone, right, cleanExit)).toBeNull()
+    expect(keepsExitedPane(lone, right, cleanExit)).toBe(false)
   })
 
   it('keeps a tab’s last pane behind its card when its process failed or died unused', () => {
@@ -93,12 +100,12 @@ describe('keptExitedPaneSession', () => {
       }
     }
     const exit = (facts: Partial<typeof cleanExit>) =>
-      keptExitedPaneSession(lone, right, {
+      keepsExitedPane(lone, right, {
         ...cleanExit,
         ...facts
       })
-    expect(exit({ exitCode: 1 })).toBe(lone)
-    expect(exit({ freshSpawn: true, inputSeen: false, shown: false })).toBe(lone)
-    expect(exit({ freshSpawn: true, inputSeen: true })).toBeNull()
+    expect(exit({ exitCode: 1 })).toBe(true)
+    expect(exit({ freshSpawn: true, inputSeen: false, shown: false })).toBe(true)
+    expect(exit({ freshSpawn: true, inputSeen: true })).toBe(false)
   })
 })

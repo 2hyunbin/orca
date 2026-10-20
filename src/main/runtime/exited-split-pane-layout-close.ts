@@ -9,14 +9,14 @@ import {
 } from './terminal/lifecycle/exited-split-pane-rule'
 
 /**
- * The same session when the rule keeps the pane (its "Terminal exited" card stays), else null: the
- * persistence retirement then removes the pane, or a last pane's tab, as it did before.
+ * Whether the rule keeps the pane (its "Terminal exited" card stays); otherwise the persistence
+ * retirement removes the pane, or a last pane's tab, as it did before.
  */
-export function keptExitedPaneSession(
+export function keepsExitedPane(
   session: WorkspaceSessionState,
   surface: RetiredTerminalSurface,
   facts: ExitedSplitPaneFacts
-): WorkspaceSessionState | null {
+): boolean {
   const layout = session.terminalLayoutsByTabId?.[surface.parentTabId]
   const leafIds = collectLeafIds(layout?.root)
   const paneKey = `${surface.parentTabId}:${surface.leafId}`
@@ -26,7 +26,7 @@ export function keptExitedPaneSession(
     layout?.ptyIdsByLeafId?.[surface.leafId] !== surface.ptyId ||
     (surface.incarnationId && boundIncarnationId && boundIncarnationId !== surface.incarnationId)
   ) {
-    return null
+    return false
   }
-  return exitedSplitPaneOutcome(facts, leafIds.length < 2) === 'keep' ? session : null
+  return exitedSplitPaneOutcome(facts, leafIds.length < 2) === 'keep'
 }

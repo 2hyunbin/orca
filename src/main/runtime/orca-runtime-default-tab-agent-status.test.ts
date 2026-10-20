@@ -148,6 +148,19 @@ async function dressAgentTab(runtime: DefaultTabRuntime, handle: string): Promis
   })
 }
 
+/** The window's title: from main's layout in a layout-owner build, else main's rename to it. */
+function expectWindowTitledDev(
+  renameTerminal: ReturnType<typeof vi.fn>,
+  session: WorkspaceSessionState
+): void {
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    const row = session.tabsByWorktree[WORKTREE_ID]?.find((tab) => tab.id === AGENT_TAB_ID)
+    expect(row?.customTitle).toBe('Dev')
+    return
+  }
+  expect(renameTerminal).toHaveBeenCalledWith(AGENT_TAB_ID, 'Dev', { recordInteraction: false })
+}
+
 async function agentTab(runtime: OrcaRuntimeService) {
   const result = await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
   const tab = result.tabs.find(
@@ -207,7 +220,7 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
 
     await dressAgentTab(runtime, handle)
 
-    expect(renameTerminal).toHaveBeenCalledWith(AGENT_TAB_ID, 'Dev', { recordInteraction: false })
+    expectWindowTitledDev(renameTerminal, getSession())
     expect(runtime.ptyTitle(AGENT_PTY_ID)).toBeNull()
     // A restarted headless host rebuilds the phone's tabs from the saved session.
     const session = getSession()
@@ -223,7 +236,8 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
   })
 
   it("still titles the tab once the window's graph has taken over the handle", async () => {
-    const { runtime, handle } = await createHeadlessRuntimeWithAgent()
+    const { store, getSession } = sessionStore(getDefaultWorkspaceSession())
+    const { runtime, handle } = await createHeadlessRuntimeWithAgent(null, store)
     const renameTerminal = vi.fn()
     runtime.setNotifier(notifierWithRename(renameTerminal))
     runtime.attachWindow(1)
@@ -250,6 +264,6 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
 
     await runtime.provisioningHost().setTabTitle(handle, 'Dev')
 
-    expect(renameTerminal).toHaveBeenCalledWith(AGENT_TAB_ID, 'Dev', { recordInteraction: false })
+    expectWindowTitledDev(renameTerminal, getSession())
   })
 })

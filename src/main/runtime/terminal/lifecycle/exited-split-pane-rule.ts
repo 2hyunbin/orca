@@ -12,13 +12,14 @@ export type ExitedSplitPaneFacts = {
   outputSeen: boolean
   /** A client's view of the pane was showing when it ended. */
   shown: boolean
+  /** The process is known to have ended (the host saw it) or was asked to stop, not contact lost. */
+  endVouched: boolean
 }
 
 /**
  * 'close' takes the pane out of its tab (a tab's last pane, the tab). 'keep' leaves it: a failed
- * process (its "Terminal exited" card stays), or a newborn that died before anyone used it (a split
- * only while shown), so the failure stays visible. A negative code (a stop main reports itself,
- * such as the terminal service ending) closes, as main's retirement always did.
+ * process (its "Terminal exited" card stays), a newborn that died before anyone used it (a split
+ * only while shown), or a negative code nothing vouches for (lost contact), as the window keeps it.
  */
 export function exitedSplitPaneOutcome(
   facts: ExitedSplitPaneFacts,
@@ -28,7 +29,7 @@ export function exitedSplitPaneOutcome(
     return 'keep'
   }
   if (facts.exitCode < 0) {
-    return 'close'
+    return facts.endVouched ? 'close' : 'keep'
   }
   if (lastPane) {
     return facts.freshSpawn && !facts.inputSeen ? 'keep' : 'close'
@@ -43,7 +44,7 @@ export function exitedSplitPaneFacts(
   pty: Pick<RuntimePtyWorktreeRecord, 'incarnationId' | 'lastOutputAt'> | undefined,
   ptyId: string,
   exitCode: number,
-  options: { viewShown?: boolean }
+  options: { viewShown?: boolean; endVouched: boolean }
 ): ExitedSplitPaneFacts {
   const run = runs.read(ptyId, pty?.incarnationId)
   return {
@@ -51,6 +52,7 @@ export function exitedSplitPaneFacts(
     freshSpawn: run.freshSpawn,
     inputSeen: run.firstUserInputAt !== null || runs.readLastInputAt(ptyId) !== null,
     outputSeen: pty?.lastOutputAt != null,
-    shown: options.viewShown === true
+    shown: options.viewShown === true,
+    endVouched: options.endVouched
   }
 }

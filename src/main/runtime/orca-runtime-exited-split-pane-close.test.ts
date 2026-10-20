@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { RuntimeMobileSessionTabsSnapshot } from '../../shared/runtime-types'
 import { OrcaRuntimeService } from './orca-runtime'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -52,6 +53,31 @@ function splitSession(): WorkspaceSessionState {
   }
 }
 
+/** The phone's tabs for the split, as the window publishes them. */
+function phoneSnapshot(session: WorkspaceSessionState): RuntimeMobileSessionTabsSnapshot {
+  const parentLayout = session.terminalLayoutsByTabId.tab!
+  const pane = (leafId: string, ptyId: string, isActive: boolean) => ({
+    type: 'terminal' as const,
+    id: `tab::${leafId}`,
+    parentTabId: 'tab',
+    leafId,
+    ptyId,
+    title: 'Terminal 1',
+    parentLayout,
+    isActive
+  })
+  return {
+    worktree: WORKTREE_ID,
+    publicationEpoch: 'renderer',
+    snapshotVersion: 1,
+    activeGroupId: 'group',
+    activeTabId: `tab::${RIGHT}`,
+    activeTabType: 'terminal',
+    tabGroups: [{ id: 'group', activeTabId: 'tab', tabOrder: ['tab'] }],
+    tabs: [pane(LEFT, 'pty-left', false), pane(RIGHT, 'pty-right', true)]
+  }
+}
+
 /** A runtime over one stored session, with the window's two split panes registered. */
 function splitRuntime(): { runtime: OrcaRuntimeService; session: () => WorkspaceSessionState } {
   let session = splitSession()
@@ -77,7 +103,8 @@ function splitRuntime(): { runtime: OrcaRuntimeService; session: () => Workspace
     leaves: [
       { tabId: 'tab', worktreeId: WORKTREE_ID, leafId: LEFT, paneRuntimeId: 1, ptyId: 'pty-left' },
       { tabId: 'tab', worktreeId: WORKTREE_ID, leafId: RIGHT, paneRuntimeId: 2, ptyId: 'pty-right' }
-    ]
+    ],
+    mobileSessionTabs: [phoneSnapshot(session)]
   })
   return { runtime, session: () => session }
 }
@@ -96,6 +123,45 @@ describe('layout-owner build: main closes an exited split pane itself', () => {
     const { runtime, session } = splitRuntime()
     await runtime.onPtyExit('pty-right', 1, undefined, { providerExitObserved: true })
     expect(panes(session())).toEqual([LEFT, RIGHT])
+  })
+
+  it('keeps a split pane on a -1 nothing vouches for, as the window does on lost contact', async () => {
+    const { runtime, session } = splitRuntime()
+    await runtime.onPtyExit('pty-right', -1)
+    expect(panes(session())).toEqual([LEFT, RIGHT])
+  })
+
+  it('closes a split pane on a -1 after a stop was asked for', async () => {
+    const { runtime, session } = splitRuntime()
+    runtime.markPtyStopRequested('pty-right')
+    await runtime.onPtyExit('pty-right', -1)
+    expect(panes(session())).toEqual([LEFT])
+  })
+
+  it('closes a split pane on a -1 the host saw end', async () => {
+    const { runtime, session } = splitRuntime()
+    await runtime.onPtyExit('pty-right', -1, undefined, { providerExitObserved: true })
+    expect(panes(session())).toEqual([LEFT])
+  })
+
+  it('tells the phone a closed pane retired, and sends it nothing for a pane main keeps', async () => {
+    const phone = async (runtime: OrcaRuntimeService) => {
+      const tabs = await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
+      return {
+        version: tabs.snapshotVersion,
+        retired: (tabs.retiredTerminalSurfaces ?? []).map((surface) => surface.leafId)
+      }
+    }
+    // Listing mints the panes' handles, which a retirement notice names.
+    const closed = splitRuntime().runtime
+    await phone(closed)
+    await closed.onPtyExit('pty-right', 0, undefined, { providerExitObserved: true })
+    expect(await phone(closed)).toEqual({ version: 2, retired: [RIGHT] })
+
+    const kept = splitRuntime().runtime
+    await phone(kept)
+    await kept.onPtyExit('pty-right', 1, undefined, { providerExitObserved: true })
+    expect(await phone(kept)).toEqual({ version: 1, retired: [] })
   })
 
   it('keeps a newborn split that died while shown before any input or output', async () => {

@@ -102,15 +102,12 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
             title
           })
         )
-        // Main's write saves the title; the window and the phone's live tabs still read their own copies.
-        if (ok) {
-          this.notifier?.renameTerminal(tabId, title, { recordInteraction: false })
-          if (!this.getAvailableAuthoritativeWindow()) {
-            this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, tabId, {
-              title,
-              customTitle: title.trim() || null
-            })
-          }
+        // The window draws the title from main's frame; a headless phone still reads its snapshot (L238).
+        if (ok && !this.getAvailableAuthoritativeWindow()) {
+          this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, tabId, {
+            title,
+            customTitle: title.trim() || null
+          })
         }
       },
       setTabColor: async (handle, color) => {

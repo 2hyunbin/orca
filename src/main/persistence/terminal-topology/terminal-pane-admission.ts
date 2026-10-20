@@ -96,17 +96,6 @@ export function applyCommandToSession(
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const taken =
-    command.type === 'createTerminalTab'
-      ? takenTabId(loaded.layout, command)
-      : command.type === 'splitPane'
-        ? takenLeafId(loaded.layout, command)
-        : command.type === 'applyDefaultTabs'
-          ? takenDefaultTabId(loaded.layout, command)
-          : null
-  if (taken) {
-    return { value: taken, session: null }
-  }
   return applyToSession(loaded, command, (after) => {
     const patched = touchedRecords(session, loaded, after)
     return patched
@@ -146,11 +135,16 @@ export function applyRenamesToSession(
 
 const RENAME_CONTEXT = { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
 
+/** Every write of a pane goes through here, so no create path skips the taken and closed-id guard. */
 function applyToSession(
   loaded: LoadedWorkspaceLayout,
   command: LayoutCommand,
   write: (after: WorkspaceSessionState) => WorkspaceSessionState | null = (after) => after
 ): PaneLayoutChange<LayoutApplyOutcome> {
+  const taken = takenIds(loaded.layout, command)
+  if (taken) {
+    return { value: taken, session: null }
+  }
   const applied = applyLayoutCommand(loaded.layout, command, {
     mintId: randomUUID,
     mintLeafId: randomUUID,
@@ -178,6 +172,19 @@ function prunedOnRecord(
         )
       }
     : session
+}
+
+function takenIds(layout: WorkspaceLayoutModel, command: LayoutCommand): LayoutApplyOutcome | null {
+  switch (command.type) {
+    case 'createTerminalTab':
+      return takenTabId(layout, command)
+    case 'splitPane':
+      return takenLeafId(layout, command)
+    case 'applyDefaultTabs':
+      return takenDefaultTabId(layout, command)
+    default:
+      return null
+  }
 }
 
 /**

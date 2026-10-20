@@ -62,10 +62,9 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     const observedCause = options.cause ?? resolveUnreportedExitCause(exitCode)
     const stopNeverConfirmed =
       observedCause.kind === 'unknown' && observedCause.reason === 'stop_unverified'
+    const stopRequested = this.stopRequestedPtyIds.has(ptyId)
     const exitCause: TerminalExitCause =
-      this.stopRequestedPtyIds.has(ptyId) && !stopNeverConfirmed
-        ? OPERATOR_CLOSE_EXIT_CAUSE
-        : observedCause
+      stopRequested && !stopNeverConfirmed ? OPERATOR_CLOSE_EXIT_CAUSE : observedCause
     this.stopRequestedPtyIds.delete(ptyId)
     const preservesAbnormalSshSurface =
       this.isSshOwnedPtyId(ptyId) &&
@@ -263,7 +262,10 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
             exactSurfaces,
             // Switch point: main decides an exited split pane's close.
             ORCA_LAYOUT_OWNER_IS_MAIN
-              ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, options)
+              ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, {
+                  ...options,
+                  endVouched: processDeathCertified || stopRequested
+                })
               : undefined
           )
         } catch (error) {
