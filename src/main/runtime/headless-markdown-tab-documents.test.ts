@@ -21,14 +21,17 @@ const WORKTREE = 'repo::/srv/repo'
 const FILE_PATH = '/srv/repo/README.md'
 const TAB = { id: FILE_PATH, filePath: FILE_PATH }
 
-function makeHost(disk: string, draft?: string) {
+function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile> = {}) {
   const file: PersistedOpenFile = {
     filePath: FILE_PATH,
     relativePath: 'README.md',
     worktreeId: WORKTREE,
     language: 'markdown',
     runtimeEnvironmentId: null,
-    ...(draft === undefined ? {} : { dirtyDraftContent: draft, lastKnownDiskSignature: 'sig' })
+    ...(draft === undefined
+      ? {}
+      : { dirtyDraftContent: draft, lastKnownDiskSignature: getDiskBaselineSignature(disk) }),
+    ...saved
   }
   let session: WorkspaceSessionState = {
     ...getDefaultWorkspaceSession(),
@@ -178,13 +181,52 @@ describe('headless Markdown tab documents', () => {
     const { host, state } = makeHost('# Notes\n')
     const base = hashMarkdownContent('# Notes\n')
 
-    const results = await Promise.allSettled([
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# First\n'),
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Second\n')
+    // Run together, the second would pass the same version check and fail the disk precondition.
+    const results = await Promise.all([
+      saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Same\n'),
+      saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Same\n')
     ])
 
-    expect(results.map((result) => result.status)).toEqual(['fulfilled', 'rejected'])
-    expect(state.disk).toBe('# First\n')
+    expect(results.map((result) => result.content)).toEqual(['# Same\n', '# Same\n'])
+    expect(host.writeFileIfUnchanged).toHaveBeenCalledTimes(1)
+    expect(state.disk).toBe('# Same\n')
+  })
+
+  it('keeps saving after a failed save of the same file', async () => {
+    const { host, state } = makeHost('# Notes\n')
+    host.writeFileIfUnchanged.mockRejectedValueOnce(new Error('EACCES'))
+    const base = hashMarkdownContent('# Notes\n')
+
+    await expect(saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# First\n')).rejects.toThrow(
+      'EACCES'
+    )
+    await saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Second\n')
+
+    expect(state.disk).toBe('# Second\n')
+  })
+
+  it('refuses to save a draft over a disk edit made after the draft', async () => {
+    const { host, state, session } = makeHost('# Disk\n', '# Draft\n')
+    state.disk = '# Edited on the server\n'
+
+    await expect(
+      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Draft\n'), '# Phone\n')
+    ).rejects.toThrow('conflict')
+    expect(state.disk).toBe('# Edited on the server\n')
+    expect(session().openFilesByWorktree?.[WORKTREE]?.[0]?.dirtyDraftContent).toBe('# Draft\n')
+  })
+
+  it('never saves a read-only tab', async () => {
+    const { host } = makeHost('# Log\n', undefined, { readOnly: true })
+
+    await expect(readHeadlessMarkdownTab(host, WORKTREE, TAB)).resolves.toMatchObject({
+      editable: false,
+      readOnlyReason: 'unsupported_tab'
+    })
+    await expect(
+      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Log\n'), '# Edit\n')
+    ).rejects.toThrow('unsupported_tab')
+    expect(host.writeFileIfUnchanged).not.toHaveBeenCalled()
   })
 
   it('refuses a tab the saved session no longer holds', async () => {

@@ -78,7 +78,7 @@ export async function readHeadlessMarkdownTab(
         )
       : { content: draft, byteLength: utf8ByteLength(draft) }
   const preview = truncateMobileMarkdownRead(text.content)
-  const tooLarge = text.byteLength > MOBILE_MARKDOWN_EDIT_MAX_BYTES
+  const readOnlyReason = savedReadOnlyReason(file, text.byteLength)
   return {
     tabId: tab.id,
     filePath: file.filePath,
@@ -87,12 +87,23 @@ export async function readHeadlessMarkdownTab(
     isDirty: draft !== undefined,
     version: hashMarkdownContent(preview.content),
     source: draft === undefined ? 'file' : 'draft',
-    editable: !tooLarge,
-    ...(tooLarge ? { readOnlyReason: 'file_too_large' as const } : {}),
+    editable: readOnlyReason === undefined,
+    ...(readOnlyReason ? { readOnlyReason } : {}),
     ...(text.byteLength > MOBILE_MARKDOWN_READ_MAX_BYTES
       ? { truncated: true, byteLength: text.byteLength }
       : {})
   }
+}
+
+function savedReadOnlyReason(
+  file: PersistedOpenFile,
+  byteLength: number
+): RuntimeMarkdownReadTabResult['readOnlyReason'] {
+  // Why: the editor never saves a read-only tab (a log view), so the phone may not either.
+  if (file.readOnly) {
+    return 'unsupported_tab'
+  }
+  return byteLength > MOBILE_MARKDOWN_EDIT_MAX_BYTES ? 'file_too_large' : undefined
 }
 
 export async function saveHeadlessMarkdownTab(
@@ -128,27 +139,34 @@ async function saveOnce(
   content: string
 ): Promise<RuntimeMarkdownSaveTabResult> {
   const file = savedEditorFile(host, worktreeId, tab)
-  const disk = await host.readFile(worktreeId, file.filePath, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
-  if (disk.byteLength > MOBILE_MARKDOWN_EDIT_MAX_BYTES) {
-    throw new Error('file_too_large')
+  const draft = file.dirtyDraftContent
+  const disk =
+    draft === undefined || !file.lastKnownDiskSignature
+      ? await host.readFile(worktreeId, file.filePath, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
+      : null
+  const reason = savedReadOnlyReason(file, disk?.byteLength ?? 0)
+  if (reason) {
+    throw new Error(reason)
   }
-  const current = file.dirtyDraftContent ?? disk.content
+  const current = draft ?? disk?.content ?? ''
   const saved = { tabId: tab.id, isDirty: false as const }
   if (hashMarkdownContent(current) !== baseVersion) {
     // Why: a repeated save tap that already landed is a success, not a conflict.
-    if (current === content && file.dirtyDraftContent === undefined) {
+    if (current === content && draft === undefined) {
       return { ...saved, version: hashMarkdownContent(content), content }
     }
     throw new Error('conflict')
   }
+  // Why the draft's own baseline: a disk edit made after the draft must refuse, not be overwritten.
   const written = await host.writeFileIfUnchanged(worktreeId, file.filePath, content, {
-    expectedSignature: getDiskBaselineSignature(disk.content)
+    expectedSignature: file.lastKnownDiskSignature ?? getDiskBaselineSignature(disk?.content ?? ''),
+    ...(draft === undefined ? {} : { allowMissing: true })
   })
   if (!written.ok) {
     throw new Error('conflict')
   }
-  if (file.dirtyDraftContent !== undefined) {
-    clearSavedDraft(host, worktreeId, file)
+  if (draft !== undefined) {
+    clearSavedDraft(host, worktreeId, tab, draft)
   }
   return { ...saved, version: hashMarkdownContent(content), content }
 }
@@ -157,23 +175,23 @@ async function saveOnce(
 function clearSavedDraft(
   host: HeadlessMarkdownTabHost,
   worktreeId: string,
-  file: PersistedOpenFile
+  tab: ListedMarkdownTab,
+  savedOver: string
 ): void {
   const session = host.getWorkspaceSessionForWorktree(worktreeId)
   const files = session?.openFilesByWorktree?.[worktreeId]
-  if (!session || !files) {
+  const file = session && files ? findListedEditorFile(files, session, worktreeId, tab) : undefined
+  // A draft written since is newer than this save, so it stays.
+  if (!session || !files || file?.dirtyDraftContent !== savedOver) {
     return
   }
-  const cleared = files.map((candidate) => {
-    if (candidate !== file) {
-      return candidate
-    }
-    const { dirtyDraftContent: _draft, lastKnownDiskSignature: _signature, ...rest } = candidate
-    return rest
-  })
+  const { dirtyDraftContent: _draft, lastKnownDiskSignature: _signature, ...cleared } = file
   host.setWorkspaceSessionForWorktree(worktreeId, {
     ...session,
-    openFilesByWorktree: { ...session.openFilesByWorktree, [worktreeId]: cleared }
+    openFilesByWorktree: {
+      ...session.openFilesByWorktree,
+      [worktreeId]: files.map((candidate) => (candidate === file ? cleared : candidate))
+    }
   })
   host.republishMobileSessionTabs(worktreeId)
 }
