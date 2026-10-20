@@ -3,23 +3,20 @@ import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../shared/constants'
 import {
-  getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
-import { isFolderRepo } from '../../shared/repo-kind'
-import { gitExecFileAsync, awaitWindowsHostGitEnvironmentReady } from '../git/runner'
-import { getGitRepoRootAsync, getRepoName, inspectGitRepoForRegistrationAsync } from '../git/repo'
+import { gitExecFileAsync } from '../git/runner'
+import { getRepoName } from '../git/repo'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import { isENOENT } from '../ipc/filesystem-path-containment'
-import { findProjectAtSameRealPath } from '../project-realpath-identity'
+import { admitRepositoryCheckout } from '../repository-checkout-admission'
 import { detectRepoIconAndUpstream } from '../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
-import { runtimeRepoMatchesExecutionHost } from './runtime-worktree-selection'
 import {
   registerProjectOnWslHost,
   type WslProjectRoutingOptions
@@ -46,36 +43,9 @@ export class RuntimeRepositoryRegistrationController {
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
-    if (kind === 'git') {
-      await awaitWindowsHostGitEnvironmentReady({ cwd: path })
-    }
-    const gitInfo = kind === 'git' ? await inspectGitRepoForRegistrationAsync(path) : null
-    if (gitInfo && !gitInfo.isRepo) {
-      throw new Error(`Not a valid git repository: ${path}`)
-    }
-    // Why: git lists the main checkout at its resolved toplevel; storing a symlink alias or a
-    // subdirectory instead hides that checkout as external, so the project shows no workspaces.
-    const repoPath = gitInfo?.rootPath ?? path
-    // Why: a linked worktree reports itself as its own toplevel; its project is the main checkout's.
-    const mainRepoPath = gitInfo?.mainRepoPath
-      ? await getGitRepoRootAsync(gitInfo.mainRepoPath)
-      : null
-    const sameHostRepos = () =>
-      store.getRepos().filter((repo) => runtimeRepoMatchesExecutionHost(repo, executionHostId))
-    const sameProject = (repo: Repo): boolean =>
-      runtimePathsEqual(repo.path, path) ||
-      runtimePathsEqual(repo.path, repoPath) ||
-      (mainRepoPath !== null && !isFolderRepo(repo) && runtimePathsEqual(repo.path, mainRepoPath))
-    // Why: git's toplevel is already resolved through symlinks, so an alias of a tracked checkout finds it.
-    const existing =
-      sameHostRepos().find(sameProject) ??
-      (await findProjectAtSameRealPath(
-        // Why: SSH rows name paths on another machine; resolving them here could match an unrelated local dir.
-        sameHostRepos().filter(
-          (repo) => parseExecutionHostId(getRepoExecutionHostId(repo))?.kind !== 'ssh'
-        ),
-        repoPath
-      ))
+    const admission = await admitRepositoryCheckout(store, path, kind, executionHostId)
+    const repoPath = admission.registrationPath
+    const existing = admission.findSaved()
     if (existing) {
       if (
         existing.executionHostId == null &&
@@ -92,8 +62,8 @@ export class RuntimeRepositoryRegistrationController {
     // Why here: a saved Windows row for this checkout stays its owner; only a new one goes to WSL.
     const hosted = await registerProjectOnWslHost(
       store,
-      { kind: 'add', path, repoKind: kind, displayName },
-      { ...wslRouting, executionHostId }
+      { kind: 'add', path: repoPath, repoKind: kind, displayName },
+      { ...wslRouting, executionHostId, admission }
     )
     if (hosted) {
       return hosted
@@ -107,7 +77,7 @@ export class RuntimeRepositoryRegistrationController {
       executionHostId: LOCAL_EXECUTION_HOST_ID
     })
     // Another registration of the same checkout can finish while icon discovery is pending.
-    const raceWinner = sameHostRepos().find(sameProject)
+    const raceWinner = admission.findSaved()
     if (raceWinner) {
       return raceWinner
     }

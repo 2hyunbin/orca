@@ -17,7 +17,7 @@ import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
 import { warnIfProjectKnownInAnotherProfile } from '../projects/project-profile-presence'
 import { warnIfProjectCrossesWslFilesystemBoundary } from '../projects/project-wsl-filesystem-boundary-advisory'
-import { awaitRepoOwnerHostKnown } from './repo-owner-host-readiness'
+import { awaitRepoOwnerHostKnown, refreshWslRegistrationAfterFailure } from './repo-owner-host-readiness'
 
 export function createRepoAddActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -132,6 +132,7 @@ export function createRepoAddActions(
         }
         return repo
       } catch (err) {
+        await refreshWslRegistrationAfterFailure(get, path)
         console.error('Failed to add project:', err)
         const message = err instanceof Error ? err.message : String(err)
         const duration = ERROR_TOAST_DURATION

@@ -13,6 +13,7 @@ import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { upsertAddedRepoWithProjectHostSetup } from './add-repo-store-upsert'
 import { addedRepoRefreshOptions, resolveAddRepoRuntimeTarget } from './add-repo-runtime-owner'
+import { refreshWslRegistrationAfterFailure } from '@/store/repos/repo-owner-host-readiness'
 import { getWorktreeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 
 export function useCreateRepo(
@@ -181,6 +182,7 @@ export function useCreateRepo(
         closeModal()
       }
     } catch (err) {
+      await refreshWslRegistrationAfterFailure(useAppStore.getState, createParent)
       if (!isCurrent()) {
         return
       }

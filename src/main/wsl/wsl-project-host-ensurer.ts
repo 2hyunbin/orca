@@ -51,7 +51,7 @@ export class WslProjectHostEnsurer {
     const named = records.find((entry) => sameWslDistro(entry.distro, distro.name))
     if ((named && named !== record) || (record && !sameWslDistro(record.distro, distro.name))) {
       throw new Error(
-        `The saved WSL host for ${distro.name} does not match its registration. Reconnect it in Settings → Remote Orca Servers before adding this project.`
+        `The WSL registration for ${distro.name} changed, so Orca cannot reuse its saved server. Open Settings → Orca servers to review the old server; reconnecting it will not repair the registration.`
       )
     }
     if (record) {

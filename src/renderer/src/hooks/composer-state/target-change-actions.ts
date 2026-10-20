@@ -1,3 +1,4 @@
+import { buildComposerHostOptions } from './composer-target-store'
 import type { ComposerModel } from './composer-model'
 
 type TargetChangeActionsInput = Pick<
@@ -7,8 +8,8 @@ type TargetChangeActionsInput = Pick<
   | 'decisions'
   | 'folderSourceRepos'
   | 'hostOptions'
-  | 'linkedWorkItem'
   | 'projectHostSetupOptions'
+  | 'linkedWorkItem'
   | 'repoId'
   | 'selectedRepoProjectId'
   | 'setBaseBranch'
@@ -57,9 +58,7 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
     branchAutoNameRef,
     decisions,
     folderSourceRepos,
-    hostOptions,
     linkedWorkItem,
-    projectHostSetupOptions,
     repoId,
     selectedRepoProjectId,
     setBaseBranch,
@@ -241,24 +240,17 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
         candidate: Pick<ProjectHostSetupOption, 'id' | 'hostId'>
       ): boolean =>
         candidate.id === setupId || getProjectHostSetupSelectionKey(candidate) === setupId
-      const option = projectHostSetupOptions.find(matchesSelection)
-      // Why: a just-created setup lands in the store before the memoized picker
-      // options refresh. Rebuild through the same builder rather than reading the
-      // raw record — repo eligibility, ephemeral-VM/runtime-owned host exclusion,
-      // and one-setup-per-host dedupe all decide which setup creation resolves to.
-      // Skipping them can retarget to a location other than the one just chosen.
-      const target =
-        option?.kind === 'ready'
-          ? option
-          : buildProjectHostSetupOptions({
-              projectId: selectedRepoProjectId,
-              projectHostSetups: useAppStore.getState().projectHostSetups,
-              eligibleRepos: getComposerEligibleRepos(useAppStore.getState().repos),
-              hosts: hostOptions
-            }).find(
-              (candidate): candidate is ReadyProjectHostSetupOption =>
-                matchesSelection(candidate) && candidate.kind === 'ready'
-            )
+      // Pairing can add a host while the dialog awaits setup; use one live eligibility snapshot.
+      const state = useAppStore.getState()
+      const target = buildProjectHostSetupOptions({
+        projectId: selectedRepoProjectId,
+        projectHostSetups: state.projectHostSetups,
+        eligibleRepos: getComposerEligibleRepos(state.repos),
+        hosts: buildComposerHostOptions(state)
+      }).find(
+        (candidate): candidate is ReadyProjectHostSetupOption =>
+          matchesSelection(candidate) && candidate.kind === 'ready'
+      )
       if (!target) {
         return
       }
@@ -272,8 +264,6 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
     },
     [
       handleRepoChange,
-      hostOptions,
-      projectHostSetupOptions,
       selectedRepoProjectId,
       setSelectedProjectHostSetupOverrideId,
       setSelectedProjectHostSetupOverrideHostId

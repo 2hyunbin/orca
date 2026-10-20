@@ -38,11 +38,6 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
         'invalid_project_group_import_nested_args'
       )
       const requestedPaths = args.projectPaths
-      const hosted = await importNestedProjectsOnWslHost(store, args)
-      if (hosted) {
-        notifyReposChanged(mainWindow)
-        return hosted
-      }
       const completedScan = getCompletedNestedRepoScan(args)
       const scan =
         completedScan ??
@@ -52,6 +47,11 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
           options: { timeoutMs: 15_000 }
         }))
       const selection = resolveNestedRepoSelection({ scan, projectPaths: requestedPaths })
+      const hosted = await importNestedProjectsOnWslHost(store, args, { scan })
+      if (hosted) {
+        notifyReposChanged(mainWindow)
+        return hosted
+      }
       const groupResolver = createNestedProjectGroupResolver({
         parentPath: scan.selectedPath,
         groupName: args.groupName ?? '',

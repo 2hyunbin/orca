@@ -18,7 +18,7 @@ export const REPO_HANDLERS: Record<string, CommandHandler> = {
     }
     // First use can install the selected distro's server before it registers the project.
     const result =
-      parseWslUncPath(repoPath) && !client.isRemote
+      parseWslUncPath(params.path) && !client.isRemote
         ? await client.call<{ repo: Record<string, unknown> }>('repo.add', params, {
             timeoutMs: 10 * 60_000
           })

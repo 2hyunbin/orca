@@ -9,8 +9,10 @@ import type {
   ProjectHostSetupExistingFolderArgs,
   ProjectHostSetupResult
 } from '../../shared/project-types'
+import { parseWslUncPath } from '../../shared/wsl-paths'
+import { admitRepositoryCheckout } from '../repository-checkout-admission'
 import type { Repo } from '../../shared/repo-types'
-import { callWslProjectHost, resolveNewWslProjectHost } from './wsl-project-registration'
+import { callWslProjectHost, resolveNewWslProjectHost, wslProjectRoutingEnabled } from './wsl-project-registration'
 
 const SetupReply = z.object({
   result: z.object({
@@ -57,13 +59,13 @@ export async function setupProjectOnWslHost(
   args: ProjectHostSetupExistingFolderArgs,
   options: { fromPairedClient?: boolean } = {}
 ): Promise<ProjectHostSetupResult | null> {
-  const owner = await resolveNewWslProjectHost(store, args.path, {
-    ...options,
-    executionHostId: args.hostId
+  if (!parseWslUncPath(args.path) || !wslProjectRoutingEnabled(store, args.hostId)) return null
+  const admission = await admitRepositoryCheckout(store, args.path, args.kind ?? 'git', LOCAL_EXECUTION_HOST_ID)
+  if (admission.findSaved()) return null
+  const owner = await resolveNewWslProjectHost(store, admission.registrationPath, {
+    ...options, executionHostId: args.hostId
   })
-  if (!owner || 'repo' in owner) {
-    return null
-  }
+  if (!owner || admission.findSaved()) return null
   // Why: the guest has never seen this desktop's project, so its identity travels with the link.
   const projectProviderIdentity =
     args.projectProviderIdentity ??

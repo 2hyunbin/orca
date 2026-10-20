@@ -1,17 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type { Store } from '../../persistence'
 import type { Repo } from '../../../shared/repo-types'
-import { isFolderRepo } from '../../../shared/repo-kind'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../../shared/constants'
-import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
-import { awaitWindowsHostGitEnvironmentReady } from '../../git/runner'
-import {
-  inspectGitRepoForRegistrationAsync,
-  getGitRepoRootAsync,
-  getRepoName
-} from '../../git/repo'
-import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
-import { findProjectAtSameRealPath } from '../../project-realpath-identity'
+import { getRepoName } from '../../git/repo'
+import { admitRepositoryCheckout } from '../../repository-checkout-admission'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { registerProjectOnWslHost } from '../../wsl/wsl-project-registration'
@@ -23,74 +16,19 @@ export async function addLocalRepoFromPath(
   displayName?: string
 ): Promise<{ repo: Repo; alreadyExisted: boolean } | { error: string }> {
   const repoKind = kind === 'folder' ? 'folder' : 'git'
-  if (repoKind === 'git') {
-    await awaitWindowsHostGitEnvironmentReady({ cwd: path })
+  let admission
+  try {
+    admission = await admitRepositoryCheckout(store, path, repoKind, LOCAL_EXECUTION_HOST_ID)
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
   }
-  const gitInfo = repoKind === 'git' ? await inspectGitRepoForRegistrationAsync(path) : null
-  if (gitInfo && !gitInfo.isRepo) {
-    return { error: `Not a valid git repository: ${path}` }
-  }
-
-  const resolvedPath = gitInfo?.rootPath ?? path
-  const pathKey = normalizeRuntimePathForComparison(path)
-  const existing = store
-    .getRepos()
-    .find((repo) => !repo.connectionId && normalizeRuntimePathForComparison(repo.path) === pathKey)
-  if (existing) {
-    return { repo: existing, alreadyExisted: true }
-  }
-
-  const resolvedPathKey = normalizeRuntimePathForComparison(resolvedPath)
-  if (resolvedPathKey !== pathKey) {
-    const existingAfterRootResolve = store
-      .getRepos()
-      .find(
-        (repo) =>
-          !repo.connectionId && normalizeRuntimePathForComparison(repo.path) === resolvedPathKey
-      )
-    if (existingAfterRootResolve) {
-      return { repo: existingAfterRootResolve, alreadyExisted: true }
-    }
-  }
-  const existingAtRealPath = await findProjectAtSameRealPath(
-    store.getRepos().filter((repo) => getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID),
-    resolvedPath
+  const existing = admission.findSaved()
+  if (existing) return { repo: existing, alreadyExisted: true }
+  const resolvedPath = admission.registrationPath
+  const hosted = await registerProjectOnWslHost(
+    store, { kind: 'add', path: resolvedPath, repoKind, displayName }, { admission }
   )
-  if (existingAtRealPath) {
-    return { repo: existingAtRealPath, alreadyExisted: true }
-  }
-
-  // Why: a linked worktree reports itself as its own toplevel, so the path checks above can't see that
-  // it belongs to an already-tracked repo. Adding it anyway yields a second "ready" host setup on the
-  // same project and host — a duplicate run-target row that resolves to a transient worktree path.
-  let mainRepoKey: string | null = null
-  if (repoKind === 'git') {
-    const mainRepoRoot = gitInfo?.mainRepoPath
-      ? await getGitRepoRootAsync(gitInfo.mainRepoPath)
-      : null
-    if (mainRepoRoot) {
-      mainRepoKey = normalizeRuntimePathForComparison(mainRepoRoot)
-      // Why !isFolderRepo: only a git-kind main checkout projects onto the same project as its
-      // worktree, so matching a folder record would suppress the add without deduping anything.
-      const trackedMainRepo = store
-        .getRepos()
-        .find(
-          (repo) =>
-            !repo.connectionId &&
-            !isFolderRepo(repo) &&
-            normalizeRuntimePathForComparison(repo.path) === mainRepoKey
-        )
-      if (trackedMainRepo) {
-        return { repo: trackedMainRepo, alreadyExisted: true }
-      }
-    }
-  }
-
-  // Why here: a saved Windows row for this checkout stays its owner; only a new one goes to WSL.
-  const hosted = await registerProjectOnWslHost(store, { kind: 'add', path, repoKind, displayName })
-  if (hosted) {
-    return { repo: hosted, alreadyExisted: false }
-  }
+  if (hosted) return { repo: hosted, alreadyExisted: false }
 
   const detected = await detectRepoIconAndUpstream({
     repoPath: resolvedPath,
@@ -98,17 +36,7 @@ export async function addLocalRepoFromPath(
     executionHostId: LOCAL_EXECUTION_HOST_ID
   })
   // Another registration can finish while icon discovery is pending.
-  const raceWinner = store.getRepos().find((repo) => {
-    if (repo.connectionId) {
-      return false
-    }
-    const repoPathKey = normalizeRuntimePathForComparison(repo.path)
-    return (
-      repoPathKey === pathKey ||
-      repoPathKey === resolvedPathKey ||
-      (mainRepoKey !== null && !isFolderRepo(repo) && repoPathKey === mainRepoKey)
-    )
-  })
+  const raceWinner = admission.findSaved()
   if (raceWinner) {
     return { repo: raceWinner, alreadyExisted: true }
   }

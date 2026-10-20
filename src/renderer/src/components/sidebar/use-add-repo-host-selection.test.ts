@@ -288,6 +288,16 @@ describe('useAddRepoHostSelection', () => {
     expect(mocks.stateSetters[0]).toHaveBeenCalledWith('local')
   })
 
+  it('pins a dropped UNC action locally even when an already-open picker still holds a server', async () => {
+    mocks.stateValues = ['runtime:env-1', false]
+    mocks.refValues = [true]
+    const { useAddRepoHostSelection } = await import('./use-add-repo-host-selection')
+    const result = useAddRepoHostSelection({ isOpen: true, setStep: vi.fn(), preferredHostId: 'local', pinLocalHost: true })
+    expect(result.selectedParsedHost?.kind).toBe('local')
+    expect(result.selectedHostId).toBe('local')
+    expect(mocks.storeState.setActiveRuntimeEnvironmentPreference).not.toHaveBeenCalled()
+  })
+
   it('hides ephemeral VM runtime hosts from Add Project selection', async () => {
     mocks.stateValues = ['runtime:env-vm', false]
     mocks.hostOptions.push({

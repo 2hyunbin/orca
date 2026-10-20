@@ -56,16 +56,16 @@ export class RuntimeNestedRepoImport {
     if (!store?.createProjectGroup || !store.moveProjectToGroup) {
       throw new Error('runtime_unavailable')
     }
-    const hosted = await importNestedProjectsOnWslHost(store, args, wslRouting)
-    if (hosted) {
-      return hosted
-    }
     await awaitWindowsHostGitEnvironmentReady({ cwd: args.parentPath })
     if (!isAbsolute(args.parentPath)) {
       throw new Error('Project path must be an absolute path')
     }
     const scan = await scanNestedRepos({ path: args.parentPath, options: { timeoutMs: 15_000 } })
     const selection = resolveNestedRepoSelection({ scan, projectPaths: args.projectPaths })
+    const hosted = await importNestedProjectsOnWslHost(store, args, { ...wslRouting, scan })
+    if (hosted) {
+      return hosted
+    }
     const groupResolver = createNestedProjectGroupResolver({
       parentPath: args.parentPath,
       groupName: args.groupName,

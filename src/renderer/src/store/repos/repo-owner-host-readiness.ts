@@ -1,3 +1,4 @@
+import { parseWslUncPath } from '../../../../shared/wsl-paths'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { lastVerifiedRuntimeStatus } from '../../../../shared/runtime-host-status'
 import type { AppState } from '../types'
@@ -36,5 +37,24 @@ export async function awaitRepoOwnerHostKnown(
     }
   } catch (error) {
     console.warn('[add-project] could not read the new project host', error)
+  }
+}
+
+/** A failed multi-method registration can still have saved a usable row on its owner. */
+export async function refreshWslRegistrationAfterFailure(getState: () => AppState, path: string): Promise<void> {
+  const parsed = parseWslUncPath(path)
+  if (!parsed || !getState().settings?.experimentalWslHosts || !window.api.runtimeEnvironments?.wslHosts) return
+  try {
+    await readRuntimeHostCatalog(getState())
+  } catch (error) {
+    console.warn('[add-project] could not read the partial registration owner', error)
+  }
+  const environment = getState().runtimeEnvironments.find((row) =>
+    row.orcadDeployment?.kind === 'wsl' && row.orcadDeployment.distro.toLowerCase() === parsed.distro.toLowerCase())
+  if (!environment) return
+  try {
+    await getState().fetchRepos({ runtimeEnvironmentId: environment.id })
+  } catch (error) {
+    console.warn('[add-project] could not refresh a partial WSL registration', error)
   }
 }

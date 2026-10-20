@@ -90,6 +90,16 @@ describe('project sidebar OS folder drops', () => {
     })
   })
 
+  it('admits an unpaired UNC drop through desktop admission while another server is focused', async () => {
+    mocks.state.settings = { activeRuntimeEnvironmentId: 'ssh-server', experimentalWslHosts: true }
+    Object.assign(window.api, { runtimeEnvironments: { wslHosts: {} } })
+    mocks.droppedPath = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
+    const view = render(<SidebarProbe />)
+    expect(drag(view.getByTestId('worktree-card'), 'dragover').dropEffect).toBe('copy')
+    drag(view.getByTestId('worktree-card'), 'drop')
+    await waitFor(() => expect(mocks.state.openModal).toHaveBeenCalledWith('add-repo', { droppedLocalPath: mocks.droppedPath }))
+  })
+
   it('refuses the drop while a remote runtime is active', () => {
     mocks.state.settings = { activeRuntimeEnvironmentId: 'env-1' }
     const legacyRoute = vi.fn()
