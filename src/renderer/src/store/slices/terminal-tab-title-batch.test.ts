@@ -228,20 +228,29 @@ describe('terminal tab title batches', () => {
       'Final live title',
       'Final live title'
     ])
+    // The live title is the window's own write in both builds.
+    expect(store.getState().unifiedTabsByWorktree.owner?.map((tab) => tab.label)).toEqual([
+      'Final live title',
+      'Second visible'
+    ])
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      // Main takes the title for the tab's first row; its frame draws the duplicates.
+      // Main takes the generated title for the tab's first row; its frame draws it, so the window
+      // writes none of its own.
       await vi.waitFor(() =>
         expect(Object.values(titlesSentToMain())).toContain('Generated duplicate title for remote')
       )
+      expect(store.getState().tabsByWorktree.owner?.map((tab) => tab.generatedTitle)).toEqual([
+        undefined,
+        undefined
+      ])
+      expect(
+        store.getState().unifiedTabsByWorktree.owner?.map((tab) => tab.generatedLabel)
+      ).toEqual([undefined, undefined])
       return
     }
     expect(store.getState().tabsByWorktree.owner?.map((tab) => tab.generatedTitle)).toEqual([
       'Generated duplicate title for remote',
       'Generated duplicate title for remote'
-    ])
-    expect(store.getState().unifiedTabsByWorktree.owner?.map((tab) => tab.label)).toEqual([
-      'Final live title',
-      'Second visible'
     ])
     expect(store.getState().unifiedTabsByWorktree.owner?.map((tab) => tab.generatedLabel)).toEqual([
       'Generated duplicate title for remote',
