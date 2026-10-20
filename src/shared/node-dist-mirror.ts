@@ -37,7 +37,8 @@ export function normalizeNodeDistMirrorUrl(value: unknown): NodeDistMirrorValida
   if (parsed.search || parsed.hash) {
     return { ok: false, value: '', message: 'Mirror URL cannot have a query or fragment.' }
   }
-  return { ok: true, value: parsed.href.replace(/\/+$/u, '') }
+  // Why origin + pathname: href keeps an empty `?` or `#`, which would swallow the archive path.
+  return { ok: true, value: `${parsed.origin}${parsed.pathname}`.replace(/\/+$/u, '') }
 }
 
 /** The first valid mirror among Orca's setting and the conventional environment variables. */

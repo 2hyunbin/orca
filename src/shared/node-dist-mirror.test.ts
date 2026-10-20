@@ -8,6 +8,16 @@ describe('Node dist mirror URL', () => {
       value: 'https://npmmirror.com/mirrors/node'
     })
     expect(normalizeNodeDistMirrorUrl('')).toEqual({ ok: true, value: '' })
+    for (const empty of [
+      'https://m.example/dist?',
+      'https://m.example/dist#',
+      'https://m.example/dist/?#'
+    ]) {
+      expect(normalizeNodeDistMirrorUrl(empty)).toEqual({
+        ok: true,
+        value: 'https://m.example/dist'
+      })
+    }
   })
 
   it.each([
