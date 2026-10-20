@@ -6,11 +6,8 @@ import type {
 } from '../../../../shared/rate-limit-types'
 import { createEmptyRateLimitState } from '../../../../shared/rate-limit-state-factory'
 import { isOwnerNotSetUpPlaceholder, resolveOwnerUsageRateLimits } from './owner-usage-rate-limits'
-import {
-  getOwnerNotSetUpNote,
-  getProviderUsageErrorMessage,
-  getProviderUsageStatusLabel
-} from './usage-error-copy'
+import { getOwnerNotSetUpNote } from './owner-not-set-up-copy'
+import { getProviderUsageErrorMessage, getProviderUsageStatusLabel } from './usage-error-copy'
 import { isUsageEmptyState } from './status-bar-provider-visibility'
 
 function provider(id: ProviderRateLimits['provider'], usedPercent: number): ProviderRateLimits {
@@ -172,9 +169,8 @@ describe('resolveOwnerUsageRateLimits', () => {
       const minimax = resolved.minimax!
       expect(isOwnerNotSetUpPlaceholder(minimax)).toBe(true)
       expect(hasNoNumbers(minimax)).toBe(true)
-      expect(minimax.error).toBe('Not configured on devbox')
-      expect(getProviderUsageStatusLabel(minimax)).toBe('Not configured on remote host')
-      expect(getOwnerNotSetUpNote(minimax)).toBe('Its sign-in is saved on this computer only.')
+      expect(getProviderUsageStatusLabel(minimax)).toBe('Not configured on devbox')
+      expect(noteOf(minimax)).toBe('Its sign-in is saved on this computer only.')
       expect(getProviderUsageErrorMessage(minimax)).toBe(
         'Not configured on devbox\nIts sign-in is saved on this computer only.'
       )
@@ -189,7 +185,7 @@ describe('resolveOwnerUsageRateLimits', () => {
       const here = createEmptyRateLimitState({ zcodePlanApiKeyConfigured: true })
       const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(hostWithout()))
       expect(isOwnerNotSetUpPlaceholder(resolved.zcode!)).toBe(true)
-      expect(getOwnerNotSetUpNote(resolved.zcode!)).not.toBeNull()
+      expect(noteOf(resolved.zcode!)).not.toBeNull()
     })
 
     it('adds the sign-in note only for a sign-in this device saved', () => {
@@ -200,9 +196,9 @@ describe('resolveOwnerUsageRateLimits', () => {
       })
       const resolved = resolveOwnerUsageRateLimits(here, remoteOwner(hostWithout()))
       expect(isOwnerNotSetUpPlaceholder(resolved.minimax!)).toBe(true)
-      expect(getOwnerNotSetUpNote(resolved.minimax!)).toBeNull()
+      expect(noteOf(resolved.minimax!)).toBeNull()
       expect(isOwnerNotSetUpPlaceholder(resolved.grok!)).toBe(true)
-      expect(getOwnerNotSetUpNote(resolved.grok!)).toBeNull()
+      expect(noteOf(resolved.grok!)).toBeNull()
     })
 
     it('never reads an empty host slot as "not set up there"', () => {
@@ -213,10 +209,37 @@ describe('resolveOwnerUsageRateLimits', () => {
       expect(resolved.grok).toBeNull()
     })
 
-    it("never labels the host's Claude not set up: API-key billing reads the same", () => {
+    it("keeps Claude as 'no usage from the host', never 'not configured'", () => {
+      // The host reports API-key billing and no login alike (unavailable + missing-credentials).
       const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(hostWithout()))
-      expect(resolved.claude?.status).toBe('unavailable')
+      const claude = resolved.claude!
+      expect(claude.usageMetadata?.ownerNotSetUp).toEqual({
+        kind: 'claude-unknown',
+        ownerLabel: 'devbox'
+      })
+      expect(hasNoNumbers(claude)).toBe(true)
+      expect(getProviderUsageStatusLabel(claude)).toBe('No usage from devbox')
+      expect(getProviderUsageErrorMessage(claude)).toBe(
+        "Claude usage isn't available from devbox. It may not be signed in there, or it may use API-key billing."
+      )
+      expect(noteOf(claude)).not.toContain('saved on this computer')
       expect(isOwnerNotSetUpPlaceholder(resolved.codex!)).toBe(true)
+    })
+
+    it('adds no Claude placeholder for any other host answer, or when Claude is not set up here', () => {
+      for (const claude of [
+        unavailable('claude', 'cli-unavailable'),
+        unavailable('claude', null),
+        { ...provider('claude', 0), session: null, status: 'error' as const, error: 'offline' }
+      ]) {
+        const resolved = resolveOwnerUsageRateLimits(local, remoteOwner(hostWithout({ claude })))
+        expect(isOwnerNotSetUpPlaceholder(resolved.claude!)).toBe(false)
+      }
+      const nothingHere = resolveOwnerUsageRateLimits(
+        createEmptyRateLimitState(),
+        remoteOwner(hostWithout())
+      )
+      expect(nothingHere.claude?.status).toBe('unavailable')
     })
 
     it('keeps an unavailable host slot whose reason is not "not set up"', () => {
@@ -305,6 +328,10 @@ function unavailable(
     error: 'not signed in',
     ...(failureKind ? { usageMetadata: { failureKind } } : {})
   }
+}
+
+function noteOf(p: ProviderRateLimits): string | null {
+  return p.usageMetadata?.ownerNotSetUp ? getOwnerNotSetUpNote(p.usageMetadata.ownerNotSetUp) : null
 }
 
 function hasNoNumbers(p: ProviderRateLimits): boolean {

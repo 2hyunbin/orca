@@ -8,14 +8,30 @@ import {
 } from './helpers/paired-electron-client'
 
 const HOST_NAME = 'Build server'
+const LONG_HOST_NAME = 'Shared GPU build server in us-east-1'
+const STATUS_BAR_HEIGHT = 28
 
 // Why: screenshots are the proof artifact; ORCA_E2E_SCREENSHOT_DIR collects them outside test output.
-async function shoot(
+// Why cropped: the full window shows the terminal prompt, which carries the machine's user name.
+async function shootStatusBar(
   page: Page,
   name: string,
-  outputPath: (name: string) => string
+  outputPath: (name: string) => string,
+  width = 520
 ): Promise<void> {
-  await page.screenshot({ path: outputPathFor(name, outputPath) })
+  const viewport = page.viewportSize()
+  if (!viewport) {
+    throw new Error('Client page has no viewport')
+  }
+  await page.screenshot({
+    path: outputPathFor(name, outputPath),
+    clip: {
+      x: 0,
+      y: viewport.height - STATUS_BAR_HEIGHT,
+      width: Math.min(width, viewport.width),
+      height: STATUS_BAR_HEIGHT
+    }
+  })
 }
 
 function outputPathFor(name: string, outputPath: (name: string) => string): string {
@@ -63,7 +79,7 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
     await page.evaluate(() => window.__store?.getState().setActiveWorktree(null))
     await expect(minimaxChip(page)).toBeVisible({ timeout: 30_000 })
     await expect(minimaxChip(page).locator('[title]')).toHaveCount(0)
-    await shoot(page, '1-local-owner-minimax-meter.png', outputPath)
+    await shootStatusBar(page, '1-local-owner-minimax-meter.png', outputPath)
 
     // 2. Focus a workspace on the paired server: MiniMax becomes a host-named placeholder.
     // Why: a fresh client profile has no repos of its own, so every worktree it lists is the server's.
@@ -90,31 +106,45 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       'title',
       `Not configured on ${HOST_NAME}\nIts sign-in is saved on this computer only.`
     )
-    await expect(placeholder).toHaveText('Not configured on remote host')
+    await expect(placeholder).toHaveText(`Not configured on ${HOST_NAME}`)
     await expect(page.getByText('Configure usage tracking')).toHaveCount(0)
     await expect(page.getByText(`No usage on ${HOST_NAME}`)).toHaveCount(0)
-    await shoot(page, '2-server-owner-minimax-placeholder.png', outputPath)
-    await page.screenshot({
-      path: outputPathFor('2b-server-owner-status-bar-closeup.png', outputPath),
-      clip: { x: 0, y: 740, width: 480, height: 60 }
-    })
+    await shootStatusBar(page, '2-server-owner-chip-short-host.png', outputPath)
 
-    // Why no assertion: shows how the longer label behaves just before the bar turns compact.
-    await page.setViewportSize({ width: 560, height: 800 })
+    // A long host name truncates in the chip only; the tooltip keeps it whole.
+    const renameHost = (name: string) =>
+      page.evaluate(
+        ({ env, name }) =>
+          window.__store?.setState((state) => ({
+            runtimeEnvironments: state.runtimeEnvironments.map((environment) =>
+              environment.id === env ? { ...environment, name } : environment
+            )
+          })),
+        { env: environmentId, name }
+      )
+    await renameHost(LONG_HOST_NAME)
+    const longPlaceholder = minimaxChip(page).locator(
+      `[title^="Not configured on ${LONG_HOST_NAME}"]`
+    )
+    await expect(longPlaceholder).toBeVisible()
+    const hostName = longPlaceholder.locator('[data-owner-host]')
+    await expect(hostName).toHaveText(LONG_HOST_NAME)
+    const hostBox = await hostName.evaluate((node) => ({
+      clientWidth: node.clientWidth,
+      scrollWidth: node.scrollWidth
+    }))
+    expect(hostBox.clientWidth).toBeLessThanOrEqual(112)
+    expect(hostBox.scrollWidth).toBeGreaterThan(hostBox.clientWidth)
+    await shootStatusBar(page, '2b-server-owner-chip-long-host-truncated.png', outputPath)
+    await renameHost(HOST_NAME)
     await expect(placeholder).toBeVisible()
-    await page.screenshot({
-      path: outputPathFor('2d-server-owner-medium-status-bar-closeup.png', outputPath),
-      clip: { x: 0, y: 740, width: 560, height: 60 }
-    })
+
     // A narrow bar drops chip labels; the placeholder keeps "--" so it never reads as healthy.
     await page.setViewportSize({ width: 360, height: 800 })
     await expect(placeholder).toHaveText('--', { timeout: 10_000 })
-    await page.screenshot({
-      path: outputPathFor('2c-server-owner-compact-status-bar-closeup.png', outputPath),
-      clip: { x: 0, y: 740, width: 360, height: 60 }
-    })
+    await shootStatusBar(page, '2c-server-owner-compact-chip.png', outputPath)
     await page.setViewportSize({ width: 1280, height: 800 })
-    await expect(placeholder).toHaveText('Not configured on remote host')
+    await expect(placeholder).toHaveText(`Not configured on ${HOST_NAME}`)
 
     await page.getByRole('button', { name: 'Usage', exact: true }).click()
     const row = page.getByRole('menuitem').filter({ hasText: `Not configured on ${HOST_NAME}` })
@@ -125,14 +155,39 @@ test('a provider set up only on this computer stays visible, greyed, under a ser
       .evaluate((menu) =>
         Promise.all(menu.getAnimations({ subtree: true }).map((animation) => animation.finished))
       )
-    await shoot(page, '3-server-owner-usage-popover.png', outputPath)
+    const menuBox = await page.getByRole('menu').boundingBox()
+    if (!menuBox) {
+      throw new Error('Usage popover has no box')
+    }
+    // Why down to the bottom edge: keeps the status bar under the popover in frame.
+    await page.screenshot({
+      path: outputPathFor('3-server-owner-usage-popover.png', outputPath),
+      clip: {
+        x: Math.max(0, menuBox.x - 8),
+        y: menuBox.y - 8,
+        width: menuBox.width + 16,
+        height: 800 - menuBox.y + 8
+      }
+    })
 
     // 3. The row opens Settings on the server's accounts.
     await row.click()
     const hostPicker = page.getByRole('combobox', { name: 'Host' })
     await expect(hostPicker).toBeVisible({ timeout: 30_000 })
     await expect(hostPicker).toContainText(HOST_NAME)
-    await shoot(page, '4-settings-opened-on-server-accounts.png', outputPath)
+    const pickerBox = await hostPicker.boundingBox()
+    if (!pickerBox) {
+      throw new Error('Host picker has no box')
+    }
+    await page.screenshot({
+      path: outputPathFor('4-settings-opened-on-server-accounts.png', outputPath),
+      clip: {
+        x: Math.max(0, pickerBox.x - 320),
+        y: Math.max(0, pickerBox.y - 80),
+        width: 760,
+        height: 360
+      }
+    })
   } finally {
     await client?.dispose()
   }

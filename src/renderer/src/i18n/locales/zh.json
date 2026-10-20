@@ -4094,7 +4094,8 @@
             },
             "remoteOwnerNotConfigured": "未在 {{server}} 上配置",
             "remoteOwnerSignInSavedHere": "其登录信息仅保存在此电脑上。",
-            "notConfiguredOnRemoteHost": "未在远程主机上配置"
+            "claudeNoUsageFromHost": "{{server}} 无用量数据",
+            "claudeUnknownOnHost": "无法从 {{server}} 获取 Claude 用量。可能未在那里登录，或使用的是 API 密钥计费。"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH 主机"

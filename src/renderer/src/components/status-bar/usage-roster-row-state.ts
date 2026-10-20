@@ -1,6 +1,7 @@
 import { translate } from '@/i18n/i18n'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
-import { getOwnerNotSetUpNote, getProviderUsageStatusLabel } from './usage-error-copy'
+import { getOwnerNotSetUpLabel, getOwnerNotSetUpNote } from './owner-not-set-up-copy'
+import { getProviderUsageStatusLabel } from './usage-error-copy'
 
 export type UsageRosterRowState = {
   kind: 'usage' | 'loading' | 'sign-in' | 'unavailable' | 'error' | 'empty'
@@ -39,11 +40,12 @@ export function getUsageRosterRowState(
   if (hasUsage) {
     return { kind: 'usage', statusLabel: null }
   }
-  if (provider.usageMetadata?.ownerNotSetUp) {
+  const placeholder = provider.usageMetadata?.ownerNotSetUp
+  if (placeholder) {
     return {
       kind: 'unavailable',
-      statusLabel: provider.error,
-      detail: getOwnerNotSetUpNote(provider)
+      statusLabel: getOwnerNotSetUpLabel(placeholder),
+      detail: getOwnerNotSetUpNote(placeholder)
     }
   }
   if (provider.status === 'idle' || provider.status === 'fetching') {

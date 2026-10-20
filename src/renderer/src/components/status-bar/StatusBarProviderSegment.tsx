@@ -1,6 +1,10 @@
 import { AlertTriangle } from 'lucide-react'
 import React from 'react'
-import type { ProviderRateLimits, RateLimitWindow } from '../../../../shared/rate-limit-types'
+import type {
+  OwnerNotSetUpPlaceholder,
+  ProviderRateLimits,
+  RateLimitWindow
+} from '../../../../shared/rate-limit-types'
 import {
   getDisplayedUsagePercentage,
   type UsagePercentageDisplay
@@ -17,6 +21,7 @@ import {
   getProviderUsageErrorMessage,
   getProviderUsageStatusLabel
 } from './tooltip'
+import { getOwnerNotSetUpLabelParts } from './owner-not-set-up-copy'
 import { isClaudeUsageWaitingForClaude } from './usage-error-copy'
 import { getTightestUsageSection, getUsageHeadlineSection } from './UsageRosterPanel'
 import { formatBareUsagePercentage, formatUsagePercentageLabel } from './usage-percentage-label'
@@ -76,6 +81,26 @@ export function ProviderLetterBadge({ p }: { p: ProviderRateLimits }): React.JSX
         className={`inline-block h-2 w-2 rounded-full ${hasData ? 'bg-muted-foreground/60' : 'bg-muted-foreground/30'}`}
       />
       {getProviderLetter(p.provider)}
+    </span>
+  )
+}
+
+// Why only the host name truncates: the phrase around it must stay readable in every locale.
+function OwnerNotSetUpLabel({
+  placeholder
+}: {
+  placeholder: OwnerNotSetUpPlaceholder
+}): React.JSX.Element {
+  const { before, host, after } = getOwnerNotSetUpLabelParts(placeholder)
+  return (
+    <span className="text-[11px] font-medium">
+      {before}
+      {host ? (
+        <span data-owner-host className="inline-block max-w-28 truncate align-bottom">
+          {host}
+        </span>
+      ) : null}
+      {after}
     </span>
   )
 }
@@ -267,7 +292,7 @@ export function ProviderSegment({
       >
         <ProviderIcon provider={provider} />
         {/* Why "--" when compact: an icon alone would read as a healthy chip. */}
-        {compact ? '--' : <span className="text-[11px] font-medium">{statusLabel}</span>}
+        {compact ? '--' : <OwnerNotSetUpLabel placeholder={p.usageMetadata.ownerNotSetUp} />}
       </span>
     )
   }

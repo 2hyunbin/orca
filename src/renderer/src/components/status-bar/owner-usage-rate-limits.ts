@@ -1,4 +1,5 @@
 import type {
+  OwnerNotSetUpPlaceholder,
   ProviderRateLimits,
   RateLimitState,
   UsageRateLimitFailureKind
@@ -11,6 +12,7 @@ import {
   hasUsageProviderSettingsForProvider,
   isProviderConfigured
 } from './status-bar-provider-visibility'
+import { describeOwnerNotSetUp } from './owner-not-set-up-copy'
 
 /** Whose usage the status bar shows: this device, or the remote host that owns the accounts. */
 export type OwnerUsageState =
@@ -135,17 +137,45 @@ const NOT_SET_UP_NEEDS_REASON: ReadonlySet<UsageProviderKey> = new Set([
  */
 function isMissingOnHost(remote: RateLimitState, key: UsageProviderKey): boolean {
   const provider = remote[key]
-  if (provider?.status !== 'unavailable') {
+  if (provider?.status !== 'unavailable' || key === 'claude') {
     return false
   }
   const failureKind = provider.usageMetadata?.failureKind
   return (
     (failureKind ? NOT_SET_UP_FAILURE_KINDS.has(failureKind) : !NOT_SET_UP_NEEDS_REASON.has(key)) &&
-    // Why: the host reports Claude on API-key billing exactly like no Claude login.
-    key !== 'claude' &&
     // Why: a signed-in Grok account with no quota is also `unavailable`; its flag is not.
     !hasUsageProviderSettingsForProvider(USAGE_PROVIDER_IDS[key], remote)
   )
+}
+
+// Why: the host reports Claude on API-key billing exactly like no Claude login, so this
+// placeholder only says the host shows no usage, never that Claude is not set up there.
+function isClaudeUnknownOnHost(remote: RateLimitState): boolean {
+  return (
+    remote.claude?.status === 'unavailable' &&
+    remote.claude.usageMetadata?.failureKind === 'missing-credentials'
+  )
+}
+
+function describePlaceholder(
+  local: RateLimitState,
+  remote: RateLimitState,
+  key: UsageProviderKey,
+  ownerLabel: string
+): OwnerNotSetUpPlaceholder | null {
+  if (!isSetUpHere(local, key)) {
+    return null
+  }
+  if (key === 'claude') {
+    return isClaudeUnknownOnHost(remote) ? { kind: 'claude-unknown', ownerLabel } : null
+  }
+  return isMissingOnHost(remote, key)
+    ? {
+        kind: 'not-configured',
+        ownerLabel,
+        signInSavedHereOnly: isSignInSavedHereOnly(local, key)
+      }
+    : null
 }
 
 // Why: hiding a provider set up here reads as "usage broke"; a numberless placeholder
@@ -158,19 +188,14 @@ function addNotSetUpPlaceholders(
   return {
     ...remote,
     ...mapProviders((key) => {
-      if (!isMissingOnHost(remote, key) || !isSetUpHere(local, key)) {
+      const ownerNotSetUp = describePlaceholder(local, remote, key, ownerLabel)
+      if (!ownerNotSetUp) {
         return remote[key]
       }
       return {
         ...createPendingProviderSnapshot(USAGE_PROVIDER_IDS[key]),
-        error: translate(
-          'auto.components.status.bar.tooltip.remoteOwnerNotConfigured',
-          'Not configured on {{server}}',
-          { server: ownerLabel }
-        ),
-        usageMetadata: {
-          ownerNotSetUp: { signInSavedHereOnly: isSignInSavedHereOnly(local, key) }
-        },
+        error: describeOwnerNotSetUp(ownerNotSetUp),
+        usageMetadata: { ownerNotSetUp },
         status: 'error'
       }
     })

@@ -4089,7 +4089,8 @@
             },
             "remoteOwnerNotConfigured": "No configurado en {{server}}",
             "remoteOwnerSignInSavedHere": "Su inicio de sesión solo está guardado en este equipo.",
-            "notConfiguredOnRemoteHost": "No configurado en el host remoto"
+            "claudeNoUsageFromHost": "Sin uso desde {{server}}",
+            "claudeUnknownOnHost": "El uso de Claude no está disponible desde {{server}}. Puede que no haya una sesión iniciada allí o que use facturación por clave de API."
           },
           "SshTargetStatusRow": {
             "sshHost": "Host SSH"

@@ -2,9 +2,20 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 
+const messages = vi.hoisted(() => ({ notConfigured: '' }))
+
 vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
-  translate: (_key: string, fallback: string) => fallback
+  translate: (key: string, fallback: string, values?: Record<string, string>) => {
+    let result =
+      key.endsWith('remoteOwnerNotConfigured') && messages.notConfigured
+        ? messages.notConfigured
+        : fallback
+    for (const [name, value] of Object.entries(values ?? {})) {
+      result = result.replace(`{{${name}}}`, value)
+    }
+    return result
+  }
 }))
 vi.mock('@/lib/agent-catalog', () => ({ AgentIcon: () => null }))
 vi.mock('../../store', () => ({
@@ -14,22 +25,28 @@ vi.mock('../../store', () => ({
 
 const { ProviderSegment } = await import('./StatusBarProviderSegment')
 
-const placeholder: ProviderRateLimits = {
-  provider: 'minimax',
-  session: null,
-  weekly: null,
-  updatedAt: 0,
-  error: 'Not configured on devbox',
-  status: 'error',
-  usageMetadata: { ownerNotSetUp: { signInSavedHereOnly: true } }
+function placeholder(ownerLabel: string): ProviderRateLimits {
+  return {
+    provider: 'minimax',
+    session: null,
+    weekly: null,
+    updatedAt: 0,
+    error: `Not configured on ${ownerLabel}\nIts sign-in is saved on this computer only.`,
+    status: 'error',
+    usageMetadata: {
+      ownerNotSetUp: { kind: 'not-configured', ownerLabel, signInSavedHereOnly: true }
+    }
+  }
 }
 
 describe('ProviderSegment owner placeholder', () => {
-  it('labels the chip "Not configured on remote host", with the host in its tooltip and no warning glyph', () => {
+  it('names the host in the chip, truncating only the name, with no warning glyph', () => {
     const markup = renderToStaticMarkup(
-      <ProviderSegment p={placeholder} compact={false} display="used" />
+      <ProviderSegment p={placeholder('devbox')} compact={false} display="used" />
     )
-    expect(markup).toContain('>Not configured on remote host</span>')
+    expect(markup).toContain(
+      'Not configured on <span data-owner-host="true" class="inline-block max-w-28 truncate align-bottom">devbox</span>'
+    )
     expect(markup).toContain(
       'title="Not configured on devbox\nIts sign-in is saved on this computer only."'
     )
@@ -38,9 +55,23 @@ describe('ProviderSegment owner placeholder', () => {
     expect(markup).not.toContain('Refresh failed')
   })
 
+  it('keeps the phrase around a mid-sentence host name and renders a "<" in it as text', () => {
+    messages.notConfigured = '{{server}} では未構成'
+    try {
+      const markup = renderToStaticMarkup(
+        <ProviderSegment p={placeholder('<prod>')} compact={false} display="used" />
+      )
+      expect(markup).toContain('truncate align-bottom">&lt;prod&gt;</span> では未構成')
+    } finally {
+      messages.notConfigured = ''
+    }
+  })
+
   it('shows "--" instead of the label in compact density, keeping the tooltip', () => {
-    const markup = renderToStaticMarkup(<ProviderSegment p={placeholder} compact display="used" />)
-    expect(markup).not.toContain('Not configured on remote host</span>')
+    const markup = renderToStaticMarkup(
+      <ProviderSegment p={placeholder('devbox')} compact display="used" />
+    )
+    expect(markup).not.toContain('data-owner-host')
     // Why: an icon alone would read as a healthy chip.
     expect(markup).toContain('--')
     expect(markup).toContain('title="Not configured on devbox')

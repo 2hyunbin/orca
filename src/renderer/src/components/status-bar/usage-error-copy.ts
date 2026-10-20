@@ -1,5 +1,6 @@
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import { translate } from '@/i18n/i18n'
+import { getOwnerNotSetUpLabel } from './owner-not-set-up-copy'
 
 export function getProviderDisplayName(provider: ProviderRateLimits['provider']): string {
   if (provider === 'claude') {
@@ -97,22 +98,9 @@ export function isClaudeUsageWaitingForClaude(p: ProviderRateLimits): boolean {
   )
 }
 
-/** Why a placeholder's provider is missing on the host, beyond its "Not configured on" label. */
-export function getOwnerNotSetUpNote(p: ProviderRateLimits): string | null {
-  return p.usageMetadata?.ownerNotSetUp?.signInSavedHereOnly
-    ? translate(
-        'auto.components.status.bar.tooltip.remoteOwnerSignInSavedHere',
-        'Its sign-in is saved on this computer only.'
-      )
-    : null
-}
-
 export function getProviderUsageStatusLabel(p: ProviderRateLimits): string {
   if (p.usageMetadata?.ownerNotSetUp) {
-    return translate(
-      'auto.components.status.bar.tooltip.notConfiguredOnRemoteHost',
-      'Not configured on remote host'
-    )
+    return getOwnerNotSetUpLabel(p.usageMetadata.ownerNotSetUp)
   }
   // Why: no refresh fixes an owner that cannot vouch for its usage, so never say "Refresh failed".
   if (p.usageMetadata?.unverifiableOwner) {
@@ -202,8 +190,7 @@ export function getProviderUsageErrorMessage(p: ProviderRateLimits): string {
     return p.error
   }
   if (p.usageMetadata?.ownerNotSetUp) {
-    const note = getOwnerNotSetUpNote(p)
-    return note ? `${p.error}\n${note}` : p.error
+    return p.error
   }
   const delegatedCliProvider = getDelegatedCliRefreshProvider(p)
   if (delegatedCliProvider === 'grok') {

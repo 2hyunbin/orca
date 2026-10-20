@@ -4094,7 +4094,8 @@
             },
             "remoteOwnerNotConfigured": "{{server}} では未構成",
             "remoteOwnerSignInSavedHere": "サインイン情報はこのコンピュータにのみ保存されています。",
-            "notConfiguredOnRemoteHost": "リモートホストでは未構成"
+            "claudeNoUsageFromHost": "{{server}} から使用状況なし",
+            "claudeUnknownOnHost": "{{server}} から Claude の使用状況を取得できません。そこでサインインしていないか、API キー課金を使用している可能性があります。"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH ホスト"

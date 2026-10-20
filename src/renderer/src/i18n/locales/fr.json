@@ -4210,7 +4210,8 @@
             },
             "remoteOwnerNotConfigured": "Non configuré sur {{server}}",
             "remoteOwnerSignInSavedHere": "Sa connexion est enregistrée uniquement sur cet ordinateur.",
-            "notConfiguredOnRemoteHost": "Non configuré sur l’hôte distant"
+            "claudeNoUsageFromHost": "Aucun usage depuis {{server}}",
+            "claudeUnknownOnHost": "L’usage de Claude n’est pas disponible depuis {{server}}. Il n’y est peut-être pas connecté, ou il utilise peut-être la facturation par clé API."
           },
           "SshTargetStatusRow": {
             "sshHost": "Hôte SSH"

@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 
 vi.mock('@/i18n/i18n', () => ({
-  translate: (_key: string, fallback: string) => fallback
+  translate: (_key: string, fallback: string, values?: Record<string, string>) =>
+    Object.entries(values ?? {}).reduce(
+      (text, [name, value]) => text.replace(`{{${name}}}`, value),
+      fallback
+    )
 }))
 
 import { getUsageRosterRowState } from './usage-roster-row-state'
@@ -109,7 +113,13 @@ describe('getUsageRosterRowState', () => {
           provider: 'minimax',
           status: 'error',
           error: 'Not configured on devbox',
-          usageMetadata: { ownerNotSetUp: { signInSavedHereOnly: true } }
+          usageMetadata: {
+            ownerNotSetUp: {
+              kind: 'not-configured',
+              ownerLabel: 'devbox',
+              signInSavedHereOnly: true
+            }
+          }
         }),
         false
       )
