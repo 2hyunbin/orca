@@ -60,6 +60,17 @@ describe('OSC 133 zone an app closes for itself', () => {
     expect(scanChunks([`${A}$ ${B}`, 'ls\r\n', `${C}${D0}${A}`]).finished).toEqual([0])
   })
 
+  it('does not let an Orca status frame between the markers hide the zone close', () => {
+    const status = '\x1b]9999;{"state":"working"}\x07'
+    expect(scanChunks([`${B}${C}${status}${D0}OMP reply`]).finished).toEqual([])
+    expect(
+      scanChunks([`${B}${C}${status.slice(0, 9)}`, `${status.slice(9)}${D0}OMP`]).finished
+    ).toEqual([])
+    expect(scanChunks([`${status}${D0}OMP reply`]).finished).toEqual([])
+    expect(scanChunks([`${status}${D0}${A}`]).finished).toEqual([0])
+    expect(scanChunks([`$ ${C}${status}${D0}${A}`]).finished).toEqual([0])
+  })
+
   it('finishes a failed command even straight after a zone end', () => {
     expect(scanChunks([`${B}${C}\x1b]133;D;1\x07`]).finished).toEqual([1])
   })

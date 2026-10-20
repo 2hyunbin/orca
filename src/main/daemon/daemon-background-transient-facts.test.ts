@@ -46,6 +46,8 @@ describe('BackgroundTransientFactRelay', () => {
     relay.setSessionBackground('s1', false)
     relay.setSessionBackground('s1', true)
     relay.onSessionData('s1', '\x1b]133;C\x07\x1b]133;D;0\x07OMP reply')
+    relay.onSessionData('s1', '\x1b]133;B\x07\x1b]133;C\x07\x1b]9999;{"state":"working"}\x07')
+    relay.onSessionData('s1', '\x1b]133;D;0\x07OMP reply')
     expect(emitted).toEqual([])
   })
 

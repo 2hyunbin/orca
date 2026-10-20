@@ -1,5 +1,13 @@
 import { buildProcessBoundaryGround } from '../../shared/terminal-mode-reset-profiles'
-import { closesAppOsc133Zone } from '../../shared/terminal-osc133-command-finished'
+import {
+  closesAppOsc133Zone,
+  mayCloseUnseenAppZone,
+  UNSEEN_OSC133_MARKERS
+} from '../../shared/terminal-osc133-command-finished'
+import {
+  couldBecomeAgentStatusFrame,
+  leadingAgentStatusFramesLength
+} from '../../shared/agent-status-osc'
 import type { TerminalOwner } from '../../shared/terminal-owner'
 import { TerminalArmedInputModes } from './terminal-armed-input-modes'
 
@@ -62,8 +70,15 @@ export class TerminalShellLifecycleScanner {
   private altActive = false
   private commandEnteredAlternateScreen = false
   // OSC 133 markers seen back to back since the last other output.
-  private adjacentMarkers = ''
+  private adjacentMarkers: string
+  // A `D;0` a mid-stream reader cannot place yet; the shell's adjacent next prompt confirms it.
+  private heldUnseenCommandEnd = false
   private readonly inputModes = new TerminalArmedInputModes()
+
+  /** `joinsMidStream`: a mirror adopted from a snapshot or after a gap, not born with the PTY. */
+  constructor(opts: { joinsMidStream?: boolean } = {}) {
+    this.adjacentMarkers = opts.joinsMidStream ? UNSEEN_OSC133_MARKERS : ''
+  }
 
   get owner(): TerminalOwner | undefined {
     return this.ownerState
@@ -114,6 +129,7 @@ export class TerminalShellLifecycleScanner {
     if (this.scanTail.length === 0 && !chunk.includes('\x1b') && !chunk.includes('\x9b')) {
       if (chunk.length > 0) {
         this.adjacentMarkers = ''
+        this.heldUnseenCommandEnd = false
       }
       return events
     }
@@ -126,8 +142,22 @@ export class TerminalShellLifecycleScanner {
     let outputEnd = 0
     while ((match = SEQUENCE_RE.exec(input)) !== null) {
       const oscPayload = match[1]
-      const markersBefore = match.index > outputEnd ? '' : this.adjacentMarkers
+      const markersBefore = this.isOutputBetween(input, outputEnd, match.index)
+        ? ''
+        : this.adjacentMarkers
       outputEnd = match.index + match[0].length
+      if (this.heldUnseenCommandEnd) {
+        this.heldUnseenCommandEnd = false
+        // Why the prompt's own start: the held D sits in already-scanned bytes; repair goes before A.
+        const promptStart = Math.max(0, match.index - previousTailLength)
+        if (
+          oscPayload?.[0] === 'A' &&
+          markersBefore !== '' &&
+          this.endCommand(events, promptStart, promptStart)
+        ) {
+          return events
+        }
+      }
       this.adjacentMarkers =
         oscPayload === undefined ? '' : (markersBefore + oscPayload.slice(0, 1)).slice(-2)
       if (match[0] === '\x1bc') {
@@ -152,28 +182,22 @@ export class TerminalShellLifecycleScanner {
         if (marker !== 'D' || closesAppOsc133Zone(markersBefore, oscPayload)) {
           continue
         }
-        // An alternate screen or a command's input mode still up at command-finished
-        // means the app died without its own teardown; the caller must repair first.
-        // Every D re-asks: a refuted one may be a nested shell's while the app lives.
-        const uncleanDeath = this.inputModes.markCommandEnd() || this.altActive
-        const cleanExit = !uncleanDeath && this.commandEnteredAlternateScreen && !this.altActive
-        this.revoke()
-        this.commandEnteredAlternateScreen = false
-        if (uncleanDeath) {
-          this.scanTail = ''
-          // Why the clamp: a complete OSC can never sit wholly inside the
-          // carried tail (extractScanTail keeps incomplete ones only), so this
-          // is > 0 by construction — the clamp only guards that invariant
-          // against a future loosening of the tail extractor.
-          events.uncleanDeathTriggerEnd = Math.max(
-            0,
-            match.index + match[0].length - previousTailLength
-          )
-          events.uncleanDeathTriggerStart = Math.max(0, match.index - previousTailLength)
-          return events
+        if (mayCloseUnseenAppZone(markersBefore, oscPayload)) {
+          this.heldUnseenCommandEnd = true
+          continue
         }
-        if (cleanExit) {
-          events.cleanExitCandidate = { generation: this.generationState }
+        // Why the clamp: a complete OSC can never sit wholly inside the
+        // carried tail (extractScanTail keeps incomplete ones only), so this
+        // is > 0 by construction — the clamp only guards that invariant
+        // against a future loosening of the tail extractor.
+        if (
+          this.endCommand(
+            events,
+            Math.max(0, match.index - previousTailLength),
+            Math.max(0, match.index + match[0].length - previousTailLength)
+          )
+        ) {
+          return events
         }
         continue
       }
@@ -220,10 +244,41 @@ export class TerminalShellLifecycleScanner {
         }
       }
     }
-    if (input.length - this.scanTail.length > outputEnd) {
+    if (this.isOutputBetween(input, outputEnd, input.length - this.scanTail.length)) {
       this.adjacentMarkers = ''
+      this.heldUnseenCommandEnd = false
     }
     return events
+  }
+
+  /** Bytes other than OSC 9999 status frames, which main strips before its own scanners. */
+  private isOutputBetween(input: string, start: number, end: number): boolean {
+    return end > start && leadingAgentStatusFramesLength(input.slice(start, end)) < end - start
+  }
+
+  /** Command finished; true when the app died with its modes up and the caller must repair first. */
+  private endCommand(
+    events: ShellLifecycleScanEvents,
+    triggerStart: number,
+    triggerEnd: number
+  ): boolean {
+    // An alternate screen or a command's input mode still up at command-finished
+    // means the app died without its own teardown; the caller must repair first.
+    // Every D re-asks: a refuted one may be a nested shell's while the app lives.
+    const uncleanDeath = this.inputModes.markCommandEnd() || this.altActive
+    const cleanExit = !uncleanDeath && this.commandEnteredAlternateScreen && !this.altActive
+    this.revoke()
+    this.commandEnteredAlternateScreen = false
+    if (uncleanDeath) {
+      this.scanTail = ''
+      events.uncleanDeathTriggerEnd = triggerEnd
+      events.uncleanDeathTriggerStart = triggerStart
+      return true
+    }
+    if (cleanExit) {
+      events.cleanExitCandidate = { generation: this.generationState }
+    }
+    return false
   }
 
   private revoke(): void {
@@ -233,7 +288,11 @@ export class TerminalShellLifecycleScanner {
 
   private extractScanTail(input: string): string {
     const oscStart = input.lastIndexOf('\x1b]')
-    if (oscStart !== -1 && isIncompleteLifecycleOsc(input.slice(oscStart))) {
+    if (
+      oscStart !== -1 &&
+      (isIncompleteLifecycleOsc(input.slice(oscStart)) ||
+        couldBecomeAgentStatusFrame(input.slice(oscStart)))
+    ) {
       return boundTail(input.slice(oscStart))
     }
     const start = Math.max(input.lastIndexOf('\x1b'), input.lastIndexOf('\x9b'))

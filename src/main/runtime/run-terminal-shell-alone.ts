@@ -11,7 +11,7 @@ import {
   getFirstCommandToken
 } from '../../shared/command-token-scanner'
 import { getFreshProcessTableSnapshot } from '../../shared/process-table-snapshot-reader'
-import { getProcessTableIndex } from '../../shared/process-table-index'
+import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
 import { isShellProcess } from '../../shared/shell-process-detection'
 import type { TerminalProcessInspection } from '../../shared/terminal-process-inspection'
 
@@ -40,16 +40,24 @@ export function inspectionShowsShellAlone(inspection: TerminalProcessInspection 
   )
 }
 
-/** POSIX: nothing but the PTY's root shell lives in its tree, background and stopped jobs included. */
+/**
+ * POSIX: nothing but the PTY's shell and its launch wrapper (macOS `login`) lives in its tree,
+ * background and stopped jobs included. A malformed capture proves nothing.
+ */
 export async function confirmRootShellHasNoChildrenFromProcessTable(
   rootPid: number
 ): Promise<boolean> {
   try {
-    const rows = await getFreshProcessTableSnapshot()
-    const command = getProcessTableIndex(rows).byPid.get(rootPid)?.command ?? ''
-    const shell = getCommandTokenPathBasename(getFirstCommandToken(command)).replace(/^-/, '')
+    const rows = await getFreshProcessTableSnapshot(true)
+    const index = getProcessTableIndex(rows)
+    const root = index.byPid.get(rootPid)
+    const shell = (root ? [root, ...collectDescendantsFromIndex(index, rootPid)] : [])
+      .map((row) =>
+        getCommandTokenPathBasename(getFirstCommandToken(row.command)).replace(/^-/, '')
+      )
+      .find(isShellProcess)
     return (
-      isShellProcess(shell) &&
+      shell !== undefined &&
       inspectSpawnFileChildProcessesFromRows(rows, rootPid, shell) === 'no-children'
     )
   } catch {

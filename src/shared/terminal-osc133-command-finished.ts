@@ -9,6 +9,7 @@
  */
 
 import { ownRetainedString } from './own-retained-string'
+import { couldBecomeAgentStatusFrame, leadingAgentStatusFramesLength } from './agent-status-osc'
 
 type OscTerminator = {
   index: number
@@ -61,17 +62,17 @@ export function closesAppOsc133Zone(adjacentMarkers: string, payload: string): b
 }
 
 // Adjacency of a scanner that joined the stream mid-flight (new reader, scan handoff, reset).
-const UNSEEN_MARKERS = '?'
+export const UNSEEN_OSC133_MARKERS = '?'
 
 /**
  * A `D;0` a mid-flight scanner sees before any other output may end a `B C` it never saw. Orca's
  * shell hooks print the next prompt's `A` straight after a real `D`, while OMP follows its zone
  * close with output, so the next thing seen decides.
  */
-function mayCloseUnseenAppZone(adjacentMarkers: string, payload: string): boolean {
+export function mayCloseUnseenAppZone(adjacentMarkers: string, payload: string): boolean {
   return (
     closesAppOsc133Zone('BC', payload) &&
-    (adjacentMarkers === UNSEEN_MARKERS || adjacentMarkers === `${UNSEEN_MARKERS}C`)
+    (adjacentMarkers === UNSEEN_OSC133_MARKERS || adjacentMarkers === `${UNSEEN_OSC133_MARKERS}C`)
   )
 }
 
@@ -93,7 +94,7 @@ export function createOsc133CommandFinishedScanner(
 ): Osc133CommandFinishedScanner {
   let carry = ''
   // OSC 133 markers seen back to back since the last other output, e.g. 'BC'.
-  let adjacentMarkers = UNSEEN_MARKERS
+  let adjacentMarkers = UNSEEN_OSC133_MARKERS
   let unseenZoneFinishPending = false
 
   const noteOutput = (): void => {
@@ -134,13 +135,18 @@ export function createOsc133CommandFinishedScanner(
     while (combined.length > 0) {
       const start = combined.indexOf(OSC_133_PREFIX)
       if (start === -1) {
-        carry = findPrefixCarry(combined)
-        if (carry.length < combined.length) {
+        const rest = combined.slice(leadingAgentStatusFramesLength(combined))
+        if (couldBecomeAgentStatusFrame(rest) && rest.length <= MAX_OSC_CARRY_LENGTH) {
+          carry = ownRetainedString(rest)
+          break
+        }
+        carry = findPrefixCarry(rest)
+        if (carry.length < rest.length) {
           noteOutput()
         }
         break
       }
-      if (start > 0) {
+      if (start > leadingAgentStatusFramesLength(combined.slice(0, start))) {
         noteOutput()
       }
 
@@ -169,7 +175,7 @@ export function createOsc133CommandFinishedScanner(
     scan,
     reset() {
       carry = ''
-      adjacentMarkers = UNSEEN_MARKERS
+      adjacentMarkers = UNSEEN_OSC133_MARKERS
       unseenZoneFinishPending = false
     }
   }
