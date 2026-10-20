@@ -22,11 +22,15 @@ vi.mock('node:os', async (importOriginal) => ({
 const CREDS = { access_token: 'access', refresh_token: 'refresh', expiry_date: 1 }
 
 describe.skipIf(process.platform === 'win32')('saveGeminiCredentials', () => {
+  let previousUmask = 0
+
   beforeAll(() => {
+    previousUmask = process.umask(0o022)
     state.home = mkdtempSync(join(tmpdir(), 'gemini-oauth-sources-'))
   })
 
   afterAll(() => {
+    process.umask(previousUmask)
     rmSync(state.home, { recursive: true, force: true })
   })
 

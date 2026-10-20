@@ -310,8 +310,10 @@ export function writeHooksJson(
   // Why randomUUID: avoids tmp-path collisions when two install() calls fire in the same millisecond.
   const tmpPath = join(dir, `.${Date.now()}-${randomUUID()}.tmp`)
   const serialized = options?.serialized ?? `${JSON.stringify(config, null, 2)}\n`
+  // Why preserve by default: a rewrite must not widen an owner-only config (settings.json can
+  // hold API keys) to the process umask, which on SSH hosts is the login's (#31125).
   const existingMode =
-    options?.preserveMode === true && existsSync(writePath)
+    options?.preserveMode !== false && existsSync(writePath)
       ? statSync(writePath).mode & 0o777
       : options?.defaultMode
 

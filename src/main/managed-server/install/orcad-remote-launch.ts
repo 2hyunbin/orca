@@ -126,10 +126,11 @@ export function orcadLaunchCommand(
   return [
     ...(recordSession ? [captureOrcadLaunchSshSessionCommand()] : []),
     // The daemon gets this back: the git, terminals and agents it spawns create the user's files.
-    'orcad_login_umask=$(umask) &&',
+    'orcad_login_umask=$(umask);',
     // Why before anything is created: the readiness file carries the pairing offer's device token,
-    // so every file this launch creates must be owner-only from birth.
-    'umask 077 &&',
+    // so every file this launch creates must be owner-only from birth. Why `;`: a nohup launch
+    // backgrounds the `&&` list below, and the PID file is written outside it.
+    'umask 077;',
     // Best effort: directories and files an earlier build left 0755/0644 keep their old modes.
     `{ chmod 700 ${privateDirs.map(quotePosixShell).join(' ')} 2>/dev/null || :; } &&`,
     `cd ${dir} &&`,
