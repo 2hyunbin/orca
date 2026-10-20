@@ -1,4 +1,6 @@
-import { useAppStore } from '@/store'
+import { useAppStore, type AppState } from '@/store'
+import type { OpenFile } from '@/store/slices/editor'
+import { isEditorContentUnchanged } from './editor-content-dirty-state'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import type { FileContent } from './editor-panel-content-types'
 import {
@@ -8,6 +10,19 @@ import {
 } from './editor-save-disk-precondition'
 import { setModelExternalMutation } from './editor-save-rebaseline'
 import { notifyEditorFileCacheStale } from './editor-autosave'
+
+function clearDraftUnlessWhitespaceOnly(state: AppState, tab: OpenFile, diskContent: string): void {
+  const draft = state.editorDrafts[tab.id]
+  if (
+    draft !== undefined &&
+    draft !== diskContent &&
+    tab.language === 'markdown' &&
+    isEditorContentUnchanged(draft, diskContent, true)
+  ) {
+    return
+  }
+  state.clearEditorDraft(tab.id)
+}
 
 // Why: a clean load re-baselines what this tab's future edits are based on; a
 // dirty tab keeps its baseline (its draft still derives from the older content
@@ -36,10 +51,11 @@ export function stampCleanTabDiskBaseline(id: string, result: FileContent): void
     }
     if (loadedFile) {
       const moved = setEditorDiskBaseline(state, id, getDiskBaselineSignature(result.content))
-      // Why: the model is clean, so any draft left on its tabs is stale text from an older version.
-      state.clearEditorDraft(id)
+      // Why: the model is clean, so any draft left on its tabs is stale text from an older version,
+      // except a Markdown draft that differs from this disk text only in trailing whitespace.
+      clearDraftUnlessWhitespaceOnly(state, loadedFile, result.content)
       for (const tab of moved) {
-        state.clearEditorDraft(tab.id)
+        clearDraftUnlessWhitespaceOnly(state, tab, result.content)
         notifyEditorFileCacheStale(tab.id)
       }
     }

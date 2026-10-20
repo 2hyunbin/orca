@@ -77,7 +77,8 @@ export function reloadTabContentFromDisk(
           const liveSiblings = siblings.flatMap(
             (tab) => current.openFiles.find((openFile) => openFile.id === tab.id) ?? []
           )
-          if (!liveFile || liveSiblings.some((tab) => tab.isDirty)) {
+          // Why re-read: a tab that joined the model since the reload (another workspace) counts too.
+          if (!liveFile || editorModelSiblingTabs(current, liveFile).some((tab) => tab.isDirty)) {
             return
           }
           if (discardedDiskSignature !== undefined) {

@@ -7,6 +7,7 @@ import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
 import { createEditorStore } from './editor-autosave-controller-test-fixture'
 import { reloadTabContentFromDisk } from './ExternalFileChangeBanner'
 import { mayPushTabTextIntoModel } from './editor-stale-mount-guard'
+import { stampCleanTabDiskBaseline } from './editor-clean-tab-disk-baseline'
 import { rollBackFailedMobileSave } from '@/runtime/mobile-markdown-save-rollback'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 import { GUARDED_PATH, stubGuardedDisk } from './editor-save-guarded-disk-fixture'
@@ -19,14 +20,14 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 vi.mock('@/lib/connection-context', () => ({ getConnectionIdForFile: () => undefined }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => storeRef.current?.getState() } }))
 
-function openCleanTab(disk: string) {
+function openCleanTab(disk: string, language = 'typescript') {
   const store = createEditorStore()
   storeRef.current = store
   store.getState().openFile({
     filePath: GUARDED_PATH,
     relativePath: 'file.ts',
     worktreeId: 'wt-1',
-    language: 'typescript',
+    language,
     mode: 'edit'
   })
   const id = store.getState().openFiles[0].id
@@ -111,4 +112,14 @@ it("never restores a clean tab's leftover draft into the model", () => {
   expect(mayPushTabTextIntoModel(id)).toBe(false)
   store.getState().markFileDirty(id, true)
   expect(mayPushTabTextIntoModel(id)).toBe(true)
+})
+
+it("a reload keeps a clean Markdown tab's trailing-whitespace draft, but not one over older text", () => {
+  const { store, id } = openCleanTab('# notes', 'markdown')
+  store.getState().setEditorDraft(id, '# notes\n\n')
+  stampCleanTabDiskBaseline(id, { content: '# notes', isBinary: false })
+  expect(store.getState().editorDrafts[id]).toBe('# notes\n\n')
+
+  stampCleanTabDiskBaseline(id, { content: '# newer notes', isBinary: false })
+  expect(store.getState().editorDrafts[id]).toBeUndefined()
 })
