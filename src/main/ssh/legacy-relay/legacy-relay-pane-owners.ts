@@ -7,17 +7,23 @@
  * relay at the same socket, so an owner is its endpoint plus the incarnation it listed. Once known,
  * no other process under that id is ever served for it.
  */
-import type { Pane } from './legacy-relay-bridge-leases'
 import type { LegacyRelayClient } from './legacy-relay-client'
+import { isEpochScopedRelayPtyId } from '../../../shared/ssh-pending-pty-kill'
 
 type Owner = {
   endpoint: string
   incarnationId: string | undefined
   /** Its endpoint listed another process under the id, so that relay's silence proves nothing. */
   replaced?: true
+  /** The connection whose listing last showed the owner's process; its reports are the owner's. */
+  client?: LegacyRelayClient
 }
 
-export type LegacyRelayOwnerRow = { endpoint: string; incarnationId?: string | undefined }
+export type LegacyRelayOwnerRow = {
+  endpoint: string
+  incarnationId?: string | undefined
+  client?: LegacyRelayClient
+}
 
 export class LegacyRelayPaneOwners {
   /** `null`: two relays claimed the id before either was known to own it, so neither ever does. */
@@ -37,18 +43,29 @@ export class LegacyRelayPaneOwners {
   }
 
   /**
-   * Whether a connection's report is about this pane's process: the one whose listing bound it.
-   * Why not by endpoint: a relay reopened at the same socket may be a restart reusing the id.
+   * Whether a connection's report is about the owner's process: the connection that last listed
+   * it, which stays bound until it closes. Why not any connection to the endpoint: a reopened
+   * socket may be a restart reusing the id. An epoch-scoped id names one process, so any does.
    */
-  speaksFor(pane: Pane | undefined, client: LegacyRelayClient): pane is Pane {
-    const listed = pane?.listed
-    return Boolean(
-      listed && listed.client === client && this.isOwnerProcess(pane.relayPtyId, listed)
-    )
+  speaksFor(relayPtyId: string, endpoint: string, client: LegacyRelayClient): boolean {
+    const owner = this.owners.get(relayPtyId)
+    if (!owner || owner.replaced || owner.endpoint !== endpoint) {
+      return false
+    }
+    return isEpochScopedRelayPtyId(relayPtyId) || owner.client === client
   }
 
-  claim(relayPtyId: string, row: LegacyRelayOwnerRow | null): void {
-    this.owners.set(relayPtyId, row && { endpoint: row.endpoint, incarnationId: row.incarnationId })
+  /** A listing showed the owner's own process (or adopted it): that connection now speaks for it. */
+  bind(relayPtyId: string, row: LegacyRelayOwnerRow): void {
+    const owner = this.owners.get(relayPtyId) ?? {
+      endpoint: row.endpoint,
+      incarnationId: row.incarnationId
+    }
+    this.owners.set(relayPtyId, row.client ? { ...owner, client: row.client } : owner)
+  }
+
+  claimContested(relayPtyId: string): void {
+    this.owners.set(relayPtyId, null)
   }
 
   /** The owner's endpoint now runs another process under the id; the owner's own fate is unknown. */

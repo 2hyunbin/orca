@@ -134,7 +134,7 @@ export function relistedPane(
 ): Pane | { exited: number | null } {
   const rows = listedRows.filter((row) => row.relayPtyId === relayPtyId)
   if (owners.owner(relayPtyId) === undefined && rows.length > 1) {
-    owners.claim(relayPtyId, null)
+    owners.claimContested(relayPtyId)
   }
   const owner = owners.owner(relayPtyId)
   // Why only on a complete listing: a relay that could not be asked, or that the host's census
@@ -162,8 +162,8 @@ export function relistedPane(
     return { exited: exitedFirst ?? null }
   }
   if (listed) {
-    if (adopted) {
-      owners.claim(relayPtyId, adopted)
+    if (!replaced) {
+      owners.bind(relayPtyId, listed)
     }
     return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
   }

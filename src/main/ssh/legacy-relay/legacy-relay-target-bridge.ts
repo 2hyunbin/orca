@@ -273,7 +273,7 @@ export class LegacyRelayTargetBridge {
   private wireClient(endpoint: string, client: LegacyRelayClient): void {
     client.onData((relayPtyId, data) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      if (this.attached.has(ptyId) && this.deps.owners.speaksFor(this.panes.get(ptyId), client)) {
+      if (this.attached.has(ptyId) && this.deps.owners.speaksFor(relayPtyId, endpoint, client)) {
         this.deps.onData(ptyId, data)
       }
     })
@@ -281,7 +281,7 @@ export class LegacyRelayTargetBridge {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
       const pane = this.panes.get(ptyId)
       this.deps.owners.noteExit(relayPtyId, endpoint, code)
-      if (this.deps.owners.speaksFor(pane, client)) {
+      if (pane && this.deps.owners.speaksFor(relayPtyId, endpoint, client)) {
         this.retire(ptyId, pane, code)
       }
     })

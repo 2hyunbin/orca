@@ -181,6 +181,28 @@ describe('a relay restarted at the same socket', () => {
     expect(leases[0].state).toBe('terminated')
   })
 
+  it('takes an exit report on the connection that listed the pane after a listing missed it', async () => {
+    relay.incarnations.set('pty-1', 'inc-1')
+    // A second pane keeps the connection open.
+    leases = [lease(), lease({ ptyId: 'pty-2', tabId: 'tab-2', leafId: 'leaf-2' })]
+    relay.ptys.add('pty-2')
+    let exhaustive = true
+    const subject = bridge({
+      listEndpoints: async () => ({ kind: 'listed', endpoints: [ENDPOINT], exhaustive })
+    })
+    await subject.refresh()
+    // The relay answers without the pane while the census is incomplete: not yet proof.
+    exhaustive = false
+    relay.ptys.delete('pty-1')
+    await subject.refresh()
+    expect(subject.snapshot()).toContainEqual(expect.objectContaining({ state: 'unverifiable' }))
+    expect(relay.clients[0].closed).toBe(false)
+    relay.clients[0].emitExit('pty-1', 6)
+    expect(events.exits).toEqual([PTY])
+    expect(leases[0].state).toBe('terminated')
+    expect(leases[1].state).toBe('detached')
+  })
+
   it('reattaches the same shell when the relay lists its incarnation again', async () => {
     relay.incarnations.set('pty-1', 'inc-1')
     const subject = bridge()
