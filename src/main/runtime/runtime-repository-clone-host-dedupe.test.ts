@@ -74,6 +74,8 @@ describe('clone reuses only a project on this machine', () => {
       'user.name=t',
       '-c',
       'user.email=t@t',
+      '-c',
+      'commit.gpgsign=false',
       'commit',
       '-q',
       '--allow-empty',
