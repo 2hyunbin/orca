@@ -10,7 +10,7 @@ import {
   requireRuntimeTargetForFileOwner
 } from '@/lib/file-owner-runtime-target'
 import { canAutoSaveOpenFile } from './editor-autosave'
-import { getDiskBaselineSignature } from './diff-content-signature'
+import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
 import { runtimePathsExist } from '@/runtime/runtime-path-existence-batch'
 
@@ -125,12 +125,20 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
   }
 
   // Why: a newer check was requested mid-read; this answer may predate it, so keep the flag and read once more.
-  const rereadIfSuperseded = (fileId: string, requestGeneration: number): boolean => {
-    if (verifyRequestGeneration(fileId) === requestGeneration) {
+  const rereadIfSuperseded = (file: OpenFile, requestGeneration: number): boolean => {
+    if (verifyRequestGeneration(file.id) === requestGeneration) {
       return false
     }
+    // Why counted: a read slower than the re-verify interval is superseded every time and would loop forever.
+    const attempts = (attemptsByFileId.get(file.id) ?? 0) + 1
+    attemptsByFileId.set(file.id, attempts)
+    if (attempts >= MAX_VERIFY_ATTEMPTS) {
+      giveUp(file)
+      inFlightFileIds.delete(file.id)
+      return true
+    }
     queueMicrotask(() => {
-      inFlightFileIds.delete(fileId)
+      inFlightFileIds.delete(file.id)
       scan()
     })
     return true
@@ -158,7 +166,7 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
       if (!liveFile) {
         return
       }
-      if (rereadIfSuperseded(file.id, requestGeneration)) {
+      if (rereadIfSuperseded(file, requestGeneration)) {
         retryScheduled = true
         return
       }
@@ -188,7 +196,7 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
         if (disposed) {
           return
         }
-        if (rereadIfSuperseded(file.id, requestGeneration)) {
+        if (rereadIfSuperseded(file, requestGeneration)) {
           retryScheduled = true
           return
         }

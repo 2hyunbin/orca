@@ -27,7 +27,7 @@ import {
   MAX_VERIFY_ATTEMPTS,
   requestRestoredTabReverification
 } from './editor-restored-tab-conflict-scan'
-import { getDiskBaselineSignature } from './diff-content-signature'
+import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 
 const FILE = '/repo/a.ts'
 let store: ReturnType<typeof createTestStore>
@@ -80,6 +80,27 @@ it('reads once more when a new check is requested while a read is in flight', as
   await vi.advanceTimersByTimeAsync(0)
   expect(tab().externalMutation).toBe('changed')
   expect(tab().pendingDiskBaselineVerification).toBeFalsy()
+})
+
+it('gives up when every read is superseded by a newer check before it lands', async () => {
+  const replies: ((content: string) => void)[] = []
+  mocks.readRuntimeFileContent.mockImplementation(
+    () => new Promise((resolve) => replies.push((content) => resolve({ content, isBinary: false })))
+  )
+  store.getState().setPendingDiskBaselineVerification(FILE, true)
+  detach = attachRestoredTabConflictScan(store)
+  await vi.advanceTimersByTimeAsync(0)
+
+  // Each read is slower than the re-verify interval, so a newer check always lands first.
+  for (let i = 0; i < MAX_VERIFY_ATTEMPTS * 2 && replies.length > i; i += 1) {
+    requestRestoredTabReverification(FILE)
+    replies[i]('v1')
+    await vi.advanceTimersByTimeAsync(0)
+  }
+
+  expect(replies).toHaveLength(MAX_VERIFY_ATTEMPTS)
+  expect(tab().pendingDiskBaselineVerification).toBeFalsy()
+  expect(tab().externalMutation).toBe('changed')
 })
 
 it('marks a dirty runtime-owned tab deleted when its host says the file is gone', async () => {
