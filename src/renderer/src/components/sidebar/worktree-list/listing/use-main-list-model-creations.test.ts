@@ -25,7 +25,7 @@ describe('withWindowCreations', () => {
         ['from-phone', { repoId: 'repo' }]
       ])
     )
-    const listed = withWindowCreations(domains, ['ran-here repo', 'preflight repo'])
+    const listed = withWindowCreations(domains, ['ran-here repo', 'preflight repo'], new Set())
     expect([...listed.creations]).toEqual([
       ['ran-here', { repoId: 'repo', worktreeId: 'wt' }],
       ['from-phone', { repoId: 'repo' }],
@@ -35,6 +35,6 @@ describe('withWindowCreations', () => {
 
   it('keeps the same domains when the window adds no creation', () => {
     const domains = domainsWith(new Map([['from-phone', { repoId: 'repo' }]]))
-    expect(withWindowCreations(domains, [])).toBe(domains)
+    expect(withWindowCreations(domains, [], new Set())).toBe(domains)
   })
 })
