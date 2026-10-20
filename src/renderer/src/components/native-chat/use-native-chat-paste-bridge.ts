@@ -3,17 +3,12 @@ import type { RefObject } from 'react'
 import { isEditableTarget } from '@/lib/editable-target'
 import {
   NativeChatPasteRequest,
+  findNativeChatPasteOwner,
   NATIVE_CHAT_PASTE_REQUEST_EVENT
 } from '@/lib/native-chat-paste-request'
 import { APP_MENU_PASTE_EVENT } from '@/lib/app-menu-paste'
 import { pasteTextIntoTextControl, TEXT_CONTROL_PASTE_MAX_BYTES } from '@/lib/text-control-paste'
-import { OS_FILE_DROP_OWNER_ATTRIBUTE } from '../../../../shared/native-file-drop-preparation'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
-
-function imageQueuedEditor(element: Element): Element | null {
-  const card = element.closest('[data-queued-message-editor]')
-  return card?.hasAttribute(OS_FILE_DROP_OWNER_ATTRIBUTE) ? card : null
-}
 
 type NativeChatPasteBridgeRefs = {
   rootRef: RefObject<HTMLDivElement | null>
@@ -58,6 +53,14 @@ export function useNativeChatPasteBridge({
       return
     }
     const onPaste = (event: ClipboardEvent): void => {
+      if (event.defaultPrevented) {
+        return
+      }
+      const activeElement = document.activeElement
+      const owner = findNativeChatPasteOwner(
+        root.contains(activeElement) ? activeElement : event.target
+      )
+      owner?.dispatchEvent(new NativeChatPasteRequest(undefined, event))
       if (event.defaultPrevented) {
         return
       }
@@ -115,12 +118,17 @@ export function useNativeChatPasteBridge({
       if (!root || !(activeElement instanceof Element) || !root.contains(activeElement)) {
         return
       }
-      const card = imageQueuedEditor(activeElement)
+      const card = findNativeChatPasteOwner(activeElement)
       if (card) {
         // Native paste follows Chromium's selection, which can still be in the chat box.
         const request = new NativeChatPasteRequest(
-          isEditableTarget(activeElement)
-            ? undefined
+          activeElement instanceof HTMLTextAreaElement
+            ? (text) => {
+                void pasteTextIntoTextControl(activeElement, text, {
+                  source: 'app-menu',
+                  canContinue: () => document.activeElement === activeElement
+                })
+              }
             : (text) => {
                 const data = new DataTransfer()
                 data.setData('text/plain', text)

@@ -18,6 +18,7 @@ import {
   NATIVE_CHAT_PASTE_REQUEST_EVENT
 } from '@/lib/native-chat-paste-request'
 import { formatNativeChatFileReference } from './native-chat-composer-target'
+import type { ClipboardEventLike } from './native-chat-clipboard-payload'
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
 import type { NativeChatResolvedPathOptions } from './native-chat-resolved-path-ownership'
 import type { NativeChatPendingAttachmentChips } from './native-chat-session-attachment-drop'
@@ -160,9 +161,12 @@ export function useNativeChatQueuedEditImageIntake(
     setNotice
   })
   const onPasteCapture = useCallback(
-    (event: ClipboardEvent<HTMLDivElement>) => {
+    (event: ClipboardEventLike) => {
       // Text alone pastes natively; a picture or copied files take the chat box's paste flow.
-      if (editable && Array.from(event.clipboardData.items).some((item) => item.kind === 'file')) {
+      if (
+        editable &&
+        Array.from(event.clipboardData?.items ?? []).some((item) => item.kind === 'file')
+      ) {
         handlePaste(event)
       }
     },
@@ -190,6 +194,10 @@ export function useNativeChatQueuedEditImageIntake(
     attachOwner(owner)
     const paste = (event: Event): void => {
       if (event instanceof NativeChatPasteRequest) {
+        if (event.clipboardEvent) {
+          onPasteCapture(event.clipboardEvent)
+          return
+        }
         event.preventDefault()
         pasteFromClipboard(event.onTextOnlyPaste)
       }
@@ -211,7 +219,15 @@ export function useNativeChatQueuedEditImageIntake(
       document.removeEventListener('drop', clear, true)
       document.removeEventListener('dragend', clear, true)
     }
-  }, [attachOwner, attachResolvedPaths, disabled, editable, field, pasteFromClipboard])
+  }, [
+    attachOwner,
+    attachResolvedPaths,
+    disabled,
+    editable,
+    field,
+    onPasteCapture,
+    pasteFromClipboard
+  ])
   const { pickAttachments } = useNativeChatFileAttachmentActions(external.attachExternalPaths)
   return {
     editable,

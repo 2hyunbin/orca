@@ -1,4 +1,6 @@
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
+import { findNativeChatPasteOwner } from '@/lib/native-chat-paste-request'
+import { dispatchAppMenuPasteEvent } from '@/lib/app-menu-paste'
 import type { NativeChatComposerHandle } from './native-chat-composer-types'
 import {
   shouldFocusNativeChatComposerFromEditingKey,
@@ -37,6 +39,14 @@ export function routeNativeChatRootKeyToInput(
   // cannot take focus (disabled), the paste reaches the bridge, which explains why.
   const isMac = getShortcutPlatform() === 'darwin'
   if (shouldFocusNativeChatInputForPaste(event, isMac)) {
+    if (findNativeChatPasteOwner(event.target)) {
+      // Native paste may follow a selection outside the focused card.
+      if (dispatchAppMenuPasteEvent()) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      return
+    }
     const input = composer ?? questionAnswerInput
     input?.focus()
     return

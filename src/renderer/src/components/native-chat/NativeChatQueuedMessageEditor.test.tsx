@@ -31,6 +31,7 @@ import { imageReferenceToken } from '../../../../shared/native-chat-image-refere
 import { handleAppMenuPasteRequest } from '@/lib/app-menu-paste'
 import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
 import type { NativeChatComposerHandle } from './native-chat-composer-types'
+import { routeNativeChatRootKeyToInput } from './native-chat-root-key-routing'
 
 const externalAttachments = ExternalAttachments.useNativeChatExternalAttachments
 let chips: Parameters<typeof externalAttachments>[0]['pendingChips']
@@ -317,26 +318,43 @@ function PastePane({
   const rootRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef(composer)
   useNativeChatPasteBridge({ rootRef, composerRef })
-  return <div ref={rootRef}>{children}</div>
+  return (
+    <div
+      ref={rootRef}
+      onKeyDownCapture={(event) => routeNativeChatRootKeyToInput(event, composer, null)}
+    >
+      {children}
+    </div>
+  )
 }
 
 describe('queued card image edit', () => {
-  it('routes a menu image paste from an edit button to its owner and text to the chat box', async () => {
+  it('routes menu and keyboard attachments to the edit, button text to chat and textarea text at its caret', async () => {
     const ui = {
       readClipboardText: vi.fn().mockResolvedValue(''),
       readClipboardFilePaths: vi.fn().mockResolvedValue([]),
       clipboardHasImage: vi.fn().mockResolvedValue(true),
       readClipboardImageThumbnail: vi.fn().mockResolvedValue(null)
     }
-    vi.stubGlobal('api', { ui })
+    vi.stubGlobal('api', {
+      ui,
+      fs: {
+        stat: vi.fn().mockResolvedValue({}),
+        getPathForFile: vi.fn().mockReturnValue('')
+      }
+    })
+    const chatField = document.createElement('textarea')
     const composer: NativeChatComposerHandle = {
-      focus: () => true,
+      focus: () => {
+        chatField.focus()
+        return true
+      },
       insertTypedText: () => true,
       acceptsText: () => true,
       appendText: vi.fn(),
       handlePasteEvent: vi.fn(),
       pasteFromClipboard: vi.fn(),
-      contains: () => false
+      contains: (node) => node === chatField
     }
     const nativePaste = vi.fn()
     const paste = () =>
@@ -349,6 +367,7 @@ describe('queued card image edit', () => {
         <EditedCard imagesCapable />
       </PastePane>
     )
+    view.container.firstElementChild?.append(chatField)
     try {
       const attach = await screen.findByRole('button', { name: 'Attach file' })
       const field = screen.getByRole('textbox', { name: 'Edit message' })
@@ -363,6 +382,13 @@ describe('queued card image edit', () => {
       expect(nativePaste).not.toHaveBeenCalled()
       expect(document.activeElement).toBe(attach)
 
+      ui.readClipboardFilePaths.mockResolvedValue(['/tmp/copied.png'])
+      ui.clipboardHasImage.mockResolvedValue(false)
+      await act(async () => void (await paste()))
+      await waitFor(() =>
+        expect(screen.getAllByRole('button', { name: 'Remove attachment' })).toHaveLength(4)
+      )
+      ui.readClipboardFilePaths.mockResolvedValue([])
       ui.readClipboardText.mockResolvedValue('chat text')
       ui.clipboardHasImage.mockResolvedValue(false)
       await act(async () => void (await paste()))
@@ -371,6 +397,68 @@ describe('queued card image edit', () => {
         vi.mocked(composer.handlePasteEvent).mock.calls[0]?.[0].clipboardData?.getData('text/plain')
       ).toBe('chat text')
       expect(field).toHaveProperty('value', 'replace WORD please [Image #1] and [Image #2]')
+
+      for (const platform of ['Windows', 'Linux']) {
+        vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(platform)
+        for (const route of ['keyboard', 'dom'] as const) {
+          const count = screen.getAllByRole('button', { name: 'Remove attachment' }).length
+          attach.focus()
+          ui.readClipboardText.mockResolvedValue('')
+          ui.readClipboardFilePaths.mockResolvedValue(
+            platform === 'Linux' ? ['/tmp/copied.png'] : []
+          )
+          ui.clipboardHasImage.mockResolvedValue(true)
+          await act(async () => {
+            if (route === 'keyboard') {
+              fireEvent.keyDown(attach, { key: 'v', ctrlKey: true })
+            } else {
+              const data = new DataTransfer()
+              data.items.add(new File(['png'], 'pasted.png', { type: 'image/png' }))
+              chatField.dispatchEvent(
+                new ClipboardEvent('paste', {
+                  clipboardData: data,
+                  bubbles: true,
+                  cancelable: true
+                })
+              )
+            }
+          })
+          expect(document.activeElement).toBe(attach)
+          await waitFor(() =>
+            expect(screen.getAllByRole('button', { name: 'Remove attachment' })).toHaveLength(
+              count + 1
+            )
+          )
+          ui.readClipboardText.mockResolvedValue('chat text')
+          ui.readClipboardFilePaths.mockResolvedValue([])
+          ui.clipboardHasImage.mockResolvedValue(false)
+          await act(async () => {
+            fireEvent.keyDown(attach, { key: 'Insert', shiftKey: true })
+          })
+        }
+      }
+      expect(composer.handlePasteEvent).toHaveBeenCalledTimes(5)
+      expect(composer.pasteFromClipboard).not.toHaveBeenCalled()
+
+      if (!(field instanceof HTMLTextAreaElement)) {
+        throw new Error('Expected edit textarea')
+      }
+      // happy-dom's end mode uses the whole value length instead of the inserted text length.
+      const setRangeText = field.setRangeText.bind(field)
+      vi.spyOn(field, 'setRangeText').mockImplementation(
+        (text, start = field.selectionStart, end = field.selectionEnd, mode) => {
+          setRangeText(text, start, end, mode)
+          if (mode === 'end') {
+            field.setSelectionRange(start + text.length, start + text.length)
+          }
+        }
+      )
+      field.focus()
+      field.setSelectionRange(8, 12)
+      ui.readClipboardText.mockResolvedValue('NEW')
+      await act(async () => void (await paste()))
+      expect(field.value).toBe('replace NEW please [Image #1] and [Image #2]')
+      expect([field.selectionStart, field.selectionEnd]).toEqual([11, 11])
 
       ui.readClipboardText.mockResolvedValue('')
       ui.clipboardHasImage.mockResolvedValue(true)
@@ -384,11 +472,14 @@ describe('queued card image edit', () => {
           </PastePane>
         )
         screen.getByRole('button', { name: 'Cancel editing' }).focus()
+        fireEvent.keyDown(document.activeElement!, { key: 'v', ctrlKey: true })
+        expect(document.activeElement).toBe(chatField)
         await act(async () => void (await paste()))
       }
       expect(composer.pasteFromClipboard).toHaveBeenCalledTimes(2)
       expect(nativePaste).not.toHaveBeenCalled()
     } finally {
+      vi.restoreAllMocks()
       vi.unstubAllGlobals()
     }
   })
