@@ -77,7 +77,8 @@ export function windowCatalogFromServerAnswers(base: Partial<AppState>): Partial
 }
 
 function answer(method: string): Promise<RuntimeRpcResponse<unknown>> {
-  const result = method in SERVER_ANSWERS ? Reflect.get(SERVER_ANSWERS, method) : null
+  const result =
+    method === 'repo.list' || method === 'projectGroup.list' ? SERVER_ANSWERS[method] : null
   return Promise.resolve(
     result
       ? { id: method, ok: true, result, _meta: { runtimeId: 'runtime-a' } }

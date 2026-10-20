@@ -12,12 +12,8 @@ import { salvagingArray } from '../zod-salvage'
 
 // The server's own rows as it sends them; the adoption and projection steps normalize the rest.
 function rowWith<T>(...keys: string[]) {
-  return z.custom<T>(
-    (value) =>
-      typeof value === 'object' &&
-      value !== null &&
-      keys.every((key) => typeof Reflect.get(value, key) === 'string')
-  )
+  const identity = z.looseObject(Object.fromEntries(keys.map((key) => [key, z.string()])))
+  return z.custom<T>((value) => identity.safeParse(value).success)
 }
 
 const RepoListReplySchema = z.object({
