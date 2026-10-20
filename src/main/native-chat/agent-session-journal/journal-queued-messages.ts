@@ -29,10 +29,7 @@ import {
 } from './queued-message-table'
 import { QueuedMessageNotConsumableError } from './queued-message-consume-error'
 import { QueuedMessageEditLeases } from './queued-message-edit-leases'
-import {
-  queuedMessageTextUpdateDecision,
-  type QueuedMessageTextUpdate
-} from './queued-message-text-update'
+import { queuedMessageUpdateDecision, type QueuedMessageUpdate } from './queued-message-update'
 
 /** Card rows to write in one transaction, with what must commit beside them. */
 export type JournalQueuePlan = {
@@ -129,14 +126,22 @@ export class JournalQueuedMessages {
     })
   }
 
-  /** An in-place text edit; a changed card spends every edit lease on its old text. */
-  update(input: QueuedMessageTextUpdate): Promise<AgentSessionQueuedMessageUpdateResult> {
-    const leases: JournalOperationReceipt = {
-      write: () => {},
+  /** An in-place edit; a changed card spends every edit lease on its old body. Only uploads the
+   *  old body did not name must still be stored, so a swept kept image never blocks a text fix;
+   *  they are claimed in the edit's own transaction, which a gone one rolls back. */
+  update(input: QueuedMessageUpdate): Promise<AgentSessionQueuedMessageUpdateResult> {
+    let edit: { body: AgentJournalMessageItem; previous: AgentJournalMessageItem } | undefined
+    const receipt: JournalOperationReceipt = {
+      write: (db) => {
+        if (edit) {
+          this.deps.claimAttachments(db, edit.body, true, edit.previous)
+        }
+      },
       committed: () => this.editLeases.retire(input.messageId)
     }
     return this.write<AgentSessionQueuedMessageUpdateResult>(() => {
-      const decision = queuedMessageTextUpdateDecision(
+      edit = undefined
+      const decision = queuedMessageUpdateDecision(
         this.get(input.messageId),
         this.deps.sessionId,
         input
@@ -144,12 +149,13 @@ export class JournalQueuedMessages {
       if (decision.status !== 'ready') {
         return { changes: [], result: decision }
       }
+      edit = { body: decision.body, previous: decision.previous }
       const { messageId } = input
       return {
         changes: [{ messageId, change: { op: 'edited', body: decision.body } }],
         result: { status: 'updated', messageId, fingerprint: decision.fingerprint }
       }
-    }, leases)
+    }, receipt)
   }
 
   /** Hold waiting cards whose conversion failed; an explicit Send releases one. */

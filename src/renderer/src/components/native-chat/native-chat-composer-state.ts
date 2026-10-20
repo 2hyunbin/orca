@@ -138,9 +138,16 @@ function deriveSlashAutocomplete(
   // inserts differs. The caller owns catalog policy (e.g. Grok ships skills-only
   // until a verified catalog lands), so this derivation must not re-gate per agent.
   const skillsEnabled = profile !== null
+  const namePrefix = profile?.skillNamePrefix
+  // Scanned names take the agent's prefix so they match the names its session reports.
+  const scannedSkills = !skillsEnabled
+    ? []
+    : namePrefix
+      ? discovery.skills.map((skill) => ({ ...skill, name: `${namePrefix}${skill.name}` }))
+      : discovery.skills
   const items = buildNativeChatPickerItems(
     agentCommands,
-    skillsEnabled ? discovery.skills : [],
+    scannedSkills,
     query,
     profile?.skillPrefix ?? '/',
     skillsEnabled ? sessionSkills : [],
@@ -157,12 +164,15 @@ function deriveSlashAutocomplete(
     commandsEnabled: agentCommands.length > 0,
     skillsEnabled,
     items,
-    skillStatus: skillsEnabled
-      ? discovery.status === 'idle'
-        ? 'loading'
-        : discovery.status
-      : 'ready',
-    ...(skillsEnabled && discovery.errorKind ? { skillErrorKind: discovery.errorKind } : {})
+    skillStatus:
+      skillsEnabled && sessionSkills === undefined
+        ? discovery.status === 'idle'
+          ? 'loading'
+          : discovery.status
+        : 'ready',
+    ...(skillsEnabled && sessionSkills === undefined && discovery.errorKind
+      ? { skillErrorKind: discovery.errorKind }
+      : {})
   }
 }
 

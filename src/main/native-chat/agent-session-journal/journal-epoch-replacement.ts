@@ -8,6 +8,7 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 
 import type {
+  AgentJournalCursor,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
   AgentJournalProducerLinkage,
@@ -44,6 +45,7 @@ import {
 } from './journal-row-table'
 import type { AgentJournalEpochReason, JournalRow } from './journal-row-schema'
 import { assertJournalFence } from './journal-write-guards'
+import type { JournalOperationReceipt } from './journal-row-writer'
 
 export type JournalReplacementItem = AgentJournalProducerLinkage & {
   identity: AgentJournalItemIdentity
@@ -65,6 +67,7 @@ export function replaceJournalEpoch(input: {
   reason: AgentJournalEpochReason
   fence: number
   items: readonly JournalReplacementItem[]
+  receipt?: (cursor: AgentJournalCursor) => JournalOperationReceipt
   previous?: JournalReducerState
   /** Restated in the new epoch, or the rewind would release cards the person stopped, or bring
    *  back a /clear pause they already lifted. */
@@ -163,6 +166,7 @@ export function replaceJournalEpoch(input: {
   }
 
   const { sessionId } = input.identity
+  const receipt = input.receipt?.({ epoch, sequence: state.lastSequence })
   input.database.transaction((db) => {
     const retired = readJournalSessionEpoch(db, sessionId)
     if (retired !== null) {
@@ -173,6 +177,7 @@ export function replaceJournalEpoch(input: {
     }
     input.queue.receipt.write(db)
     publishJournalSessionEpoch(db, input.identity, epoch)
+    receipt?.write(db)
   })
   input.queue.receipt.committed()
 
@@ -181,4 +186,5 @@ export function replaceJournalEpoch(input: {
   // live store writing into an epoch whose rows were just deleted.
   state.oldestSequence = 1
   input.onPublished({ state, newer: null, damage: null })
+  receipt?.committed()
 }
