@@ -9,9 +9,10 @@
  */
 import { createHash } from 'node:crypto'
 import { getAppEnvironment } from '../../shared/app-environment'
-import { parseExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
+import type { ProjectHostSetup } from '../../shared/project-types'
 import type { OrcadMigrationCatalogPayload } from '../../shared/orcad-migration/orcad-migration-manifest'
 import {
   isRetainedOrcadMigrationSourceCutover,
@@ -137,6 +138,38 @@ export function visibleFolderWorkspaces(
     hidden.flatMap((targetId) => [...orcadSourceFolderWorkspaceIds(state, targetId)])
   )
   return folderWorkspaces.filter((workspace) => !hiddenIds.has(workspace.id))
+}
+
+/**
+ * A setup is listed only while its repo row is: the server that took a hidden row lists its own
+ * setup under the same id, so leaking ours shows every moved project's host twice (#30859).
+ */
+export function visibleProjectHostSetups(
+  store: CatalogStore & Pick<Store, 'getProjectHostSetups' | 'getSshTargets'>,
+  getUserDataPath = appUserDataPath
+): ProjectHostSetup[] {
+  const setups = store.getProjectHostSetups()
+  const allRepos = store.getRepos()
+  const shownRepos = visibleRepos(store, getUserDataPath)
+  if (setups.length === 0 || shownRepos.length === allRepos.length) {
+    return setups
+  }
+  const rowKey = (hostId: string, repoId: string): string => `${hostId}\0${repoId}`
+  const shownKeys = new Set(shownRepos.map((repo) => rowKey(getRepoExecutionHostId(repo), repo.id)))
+  const hiddenKeys = new Set(
+    allRepos
+      .map((repo) => rowKey(getRepoExecutionHostId(repo), repo.id))
+      .filter((key) => !shownKeys.has(key))
+  )
+  const hiddenTargets = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
+  return setups.filter((setup) => {
+    if (setup.repoId && hiddenKeys.has(rowKey(setup.hostId, setup.repoId))) {
+      return false
+    }
+    // A repo-less placeholder on a hidden host has no row to follow; the host decides.
+    const host = parseExecutionHostId(setup.hostId)
+    return !(host?.kind === 'ssh' && hiddenTargets.includes(host.targetId))
+  })
 }
 
 /**

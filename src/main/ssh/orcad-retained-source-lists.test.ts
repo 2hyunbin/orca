@@ -2,8 +2,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
+import type { ProjectHostSetup } from '../../shared/project-types'
 import type { Repo } from '../../shared/repo-types'
 import type { SshTarget } from '../../shared/ssh-types'
 import type { Store } from '../persistence'
@@ -15,7 +17,7 @@ vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getPath: () => userData.dir })
 }))
 
-const { isFrozenOrcadSourceSessionPartition, visibleProjectGroups } =
+const { isFrozenOrcadSourceSessionPartition, visibleProjectGroups, visibleProjectHostSetups } =
   await import('./orcad-retained-source')
 
 const FENCED: SshTarget = {
@@ -119,5 +121,61 @@ describe('lists while a converted host keeps its source rows', () => {
     } finally {
       rmSync(userDataPath, { recursive: true, force: true })
     }
+  })
+})
+
+function setup(id: string, hostId: ExecutionHostId, repoId: string): ProjectHostSetup {
+  return {
+    id,
+    projectId: 'github:acme/app',
+    hostId,
+    repoId,
+    path: '/srv/app',
+    displayName: 'App',
+    setupState: repoId ? 'ready' : 'not-set-up',
+    setupMethod: 'legacy-repo',
+    createdAt: 1,
+    updatedAt: 1
+  }
+}
+
+describe('project host setups of a converted host', () => {
+  const localRepo: Repo = { ...sourceRepo, id: 'repo-local', path: '/work/app' }
+  delete localRepo.connectionId
+  const setups = [
+    setup('repo-1', 'ssh:ssh-box', 'repo-1'),
+    setup('placeholder', 'ssh:ssh-box', ''),
+    setup('repo-local', 'local', 'repo-local')
+  ]
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the list reads only these getters.
+  const store = (targets: SshTarget[]): Store =>
+    ({
+      getSshTargets: () => targets,
+      getRepos: () => [sourceRepo, localRepo],
+      getProjectGroups: () => [],
+      getFolderWorkspaces: () => [],
+      getProjectHostSetups: () => setups
+    }) as unknown as Store
+  let dir = ''
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'orcad-retained-setups-'))
+    userData.dir = dir
+    writeOrcadMigrationSourceCutover(dir, {
+      ...orcadMigrationCutoverFixture('m-0', FENCED.id),
+      phase: 'destination-committed'
+    })
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  // #30859: the server lists its own setup under the same id, so ours made every host show twice.
+  it('hides the setups the hidden source rows own, and keeps local ones', () => {
+    expect(visibleProjectHostSetups(store([FENCED])).map((entry) => entry.id)).toEqual([
+      'repo-local'
+    ])
+  })
+
+  it('lists them again once an older build changed the host', () => {
+    const changed = { ...FENCED, orcadFence: { environmentId: 'env-1', sourceChangedAt: 'x' } }
+    expect(visibleProjectHostSetups(store([changed]))).toHaveLength(3)
   })
 })
