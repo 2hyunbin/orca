@@ -20495,6 +20495,25 @@
     "window": {
       "errorTitle": "Space hit an error.",
       "errorDescription": "Close and reopen Space to try again."
+    },
+    "changes": {
+      "count": "Changed files ({{count}})",
+      "description": "Uncommitted files · Click a file to view its changes in Orca.",
+      "search": "Filter changed files",
+      "conflict": "Conflict",
+      "staged": "Staged",
+      "untracked": "Untracked",
+      "unstaged": "Unstaged",
+      "empty": "No matching files.",
+      "unavailable": "The workspace owner is no longer available.",
+      "stale": "This file is no longer in the uncommitted changes. Refresh Space to update the list.",
+      "openFailed": "Could not open changes"
+    },
+    "delete": {
+      "pending": "Deletion is in progress.",
+      "main": "The main worktree is protected.",
+      "unmanaged": "This workspace is no longer managed by Orca.",
+      "unavailable": "This workspace is protected or unavailable."
     }
   }
 }
