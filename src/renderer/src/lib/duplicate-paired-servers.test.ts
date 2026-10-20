@@ -53,6 +53,16 @@ describe('a server paired twice', () => {
     expect(findDuplicatePairedServersForWorkspace(withLocal, WORKSPACE)).toBeNull()
   })
 
+  it('keeps the generic message when the twins proxy two targets holding the same id', () => {
+    const state = stateWith([studio, studioRelay], [])
+    for (const hostId of ['ssh:box', 'ssh:other-box']) {
+      for (const runtimeOwnerEnvironmentId of ['env-a', 'env-b']) {
+        state.worktreesByRepo['repo-1'].push({ id: WORKSPACE, hostId, runtimeOwnerEnvironmentId })
+      }
+    }
+    expect(findDuplicatePairedServersForWorkspace(state, WORKSPACE)).toBeNull()
+  })
+
   it('reads an unstamped folder through the project group both twins publish', () => {
     const state = {
       runtimeEnvironments: [studio, studioRelay],

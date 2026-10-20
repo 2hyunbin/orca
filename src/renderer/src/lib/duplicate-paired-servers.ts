@@ -47,18 +47,35 @@ export function duplicatePairedServerNames(
 
 type PublisherRow = { hostId?: string | null; runtimeOwnerEnvironmentId?: string }
 
-/** A paired server's id, or a distinct marker for any other host, so it can never match a twin. */
-function publisherOf(row: PublisherRow): string {
+type Publisher = {
+  /** A paired server's id, or a distinct marker for any other host, so it can never match a twin. */
+  publisher: string
+  /** Where the workspace lives behind the publisher: the server itself, or a target it proxies. */
+  place: string
+}
+
+function publisherOf(row: PublisherRow): Publisher {
   const host = parseExecutionHostId(row.hostId ?? undefined)
   const environmentId =
     row.runtimeOwnerEnvironmentId ?? (host?.kind === 'runtime' ? host.environmentId : undefined)
-  return environmentId ? `env:${environmentId}` : `host:${row.hostId ?? 'unstamped'}`
+  const place = host?.kind === 'runtime' ? 'server' : (row.hostId ?? 'unstamped')
+  return environmentId
+    ? { publisher: `env:${environmentId}`, place }
+    : { publisher: `host:${row.hostId ?? 'unstamped'}`, place }
 }
 
-/** Every host whose rows publish this workspace. */
-function workspacePublishers(state: DuplicateServerState, workspaceId: string): Set<string> {
+/** Every host whose rows publish this workspace, and the places they publish it at. */
+function workspacePublishers(
+  state: DuplicateServerState,
+  workspaceId: string
+): { publishers: Set<string>; places: Set<string> } {
   const publishers = new Set<string>()
-  const add = (row: PublisherRow) => publishers.add(publisherOf(row))
+  const places = new Set<string>()
+  const add = (row: PublisherRow) => {
+    const entry = publisherOf(row)
+    publishers.add(entry.publisher)
+    places.add(entry.place)
+  }
   for (const rows of Object.values(state.worktreesByRepo ?? {})) {
     rows.filter((row) => row.id === workspaceId).forEach(add)
   }
@@ -83,20 +100,23 @@ function workspacePublishers(state: DuplicateServerState, workspaceId: string): 
       }
     }
   }
-  return publishers
+  return { publishers, places }
 }
 
 /**
  * The two names when every host publishing this workspace is a saved server with one host key, or
- * null. Why every host: if any other host also publishes it, removing a twin would not end the
- * refusal, so naming the twins would mislead.
+ * null. Why every host and one place: if another host publishes it, or the twins proxy two targets
+ * holding the same id, removing a twin would not end the refusal, so naming them would mislead.
  */
 export function findDuplicatePairedServersForWorkspace(
   state: DuplicateServerState,
   workspaceId: string
 ): [string, string] | null {
-  const publishers = [...workspacePublishers(state, workspaceId)]
-  const environments = publishers.map((publisher) =>
+  const { publishers, places } = workspacePublishers(state, workspaceId)
+  if (places.size !== 1) {
+    return null
+  }
+  const environments = [...publishers].map((publisher) =>
     (state.runtimeEnvironments ?? []).find((environment) => `env:${environment.id}` === publisher)
   )
   const [first, second] = environments
