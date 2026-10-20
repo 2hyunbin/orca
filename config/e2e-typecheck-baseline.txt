@@ -96,7 +96,6 @@
 1 tests/e2e/tab-rename-paste-ownership.spec.ts
 1 tests/e2e/tab-rename.spec.ts
 3 tests/e2e/tasks-page.spec.ts
-5 tests/e2e/terminal-account-restart.unit.test.ts
 1 tests/e2e/terminal-codex-cursor-jitter-repro.spec.ts
 4 tests/e2e/terminal-codex-hidden-startup-background.spec.ts
 1 tests/e2e/terminal-codex-local-typing-latency.spec.ts
@@ -118,8 +117,6 @@
 2 tests/e2e/terminal-tui-wheel-reports.spec.ts
 1 tests/e2e/terminal-warm-reattach-split-live-output.spec.ts
 1 tests/e2e/workspace-space-git-status.spec.ts
-1 tests/e2e/worktree-parent-reorder.spec.ts
-1 tests/e2e/worktree-scroll-to-current.spec.ts
 1 tests/tools/omp-child-history-rendered/fixture.tsx
 1 tests/tools/omp-fresh-launch-windows-smoke.ts
 1 tests/tools/omp-remote-sidebar-rendered/fixture.tsx

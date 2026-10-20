@@ -5,6 +5,7 @@
   "include": [
     "../src/cli/**/*",
     "../src/shared/**/*",
+    "../src/shared/editor-language/monaco-language-associations.json",
     "../src/packages/process-host/src/__fixtures__/**/*",
     // Loaded by path beside its launcher, so no import reaches it.
     "../src/main/persistence/profile-state/profile-state-backup-worker-entry.ts"

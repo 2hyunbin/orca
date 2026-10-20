@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import { enablePageFocusEmulation, type AgentInputFocusGuard } from './agent-input-focus-guard'
-import { assertAgentInputAdmitted, withAgentInputInjection } from './agent-input-injection'
+import { withAgentInputInjection } from './agent-input-injection'
 import {
   resolveFocusedFrameRoute,
   settleWithin,
@@ -12,7 +12,11 @@ import { sendGuestCdpCommand } from './guest-cdp-command'
 import { acquireElectronDebugger } from './electron-debugger-lease'
 import { normalizeCdpPointerButton } from './agent-browser-bridge-mouse'
 import { cdpPointerStateFor, releaseCdpPointerButton } from './cdp-pointer-input'
-import type { HeldInputRelease } from './remote-cli-page-admission'
+import {
+  assertRemoteCliPageAccess,
+  trackRemoteCliInput,
+  type HeldInputRelease
+} from './remote-cli-page-admission'
 
 // Why: Chromium routes main-session CDP key and text input on a <webview> guest by the
 // window's focus, so it lands in whatever the user is typing into (#20595). Events sent to
@@ -43,7 +47,7 @@ async function waitForPageToHandleInput(send: GuestCdpSender): Promise<void> {
 
 function runEditCommand(webContents: WebContents, command: GuestEditCommand): void {
   // Why: it runs after awaiting the page, so a host's access may have been revoked meanwhile.
-  assertAgentInputAdmitted(webContents)
+  assertRemoteCliPageAccess(webContents.id)
   switch (command) {
     case 'selectAll':
       webContents.selectAll()
@@ -91,10 +95,8 @@ async function sendToFrameSession(
   method: string,
   params: Record<string, unknown>
 ): Promise<unknown> {
-  return await withAgentInputInjection(
-    webContents,
-    () => sendFrameSessionInput(webContents, send, sessionId, method, params),
-    { method, params }
+  return await withAgentInputInjection(webContents, () =>
+    sendFrameSessionInput(webContents, send, sessionId, method, params)
   )
 }
 
@@ -111,7 +113,6 @@ export async function dispatchPageKeyEvent(
   if (!isEmbeddedGuest(webContents)) {
     return await send('Input.dispatchKeyEvent', params)
   }
-  const keyInput = { method: 'Input.dispatchKeyEvent', params }
   const route = await resolveFocusedFrameRoute(webContents, send)
   if (route.kind === 'session') {
     // Why: Tab from a frame's last field can move focus out of the guest into Orca's window.
@@ -137,9 +138,9 @@ export async function dispatchPageKeyEvent(
       ? await guardFocus()
       : () => {}
     try {
-      await withAgentInputInjection(
-        webContents,
-        async () => {
+      await withAgentInputInjection(webContents, () =>
+        // Why: widget events skip the CDP send, so this key is recorded on the page's hold here.
+        trackRemoteCliInput(webContents.id, 'Input.dispatchKeyEvent', params, async () => {
           for (const event of plan.events) {
             webContents.sendInputEvent(event)
           }
@@ -149,8 +150,7 @@ export async function dispatchPageKeyEvent(
           for (const command of plan.commands) {
             runEditCommand(webContents, command)
           }
-        },
-        keyInput
+        })
       )
     } finally {
       release()
@@ -159,11 +159,7 @@ export async function dispatchPageKeyEvent(
   }
   const release = await focusGuestForCdpInput(webContents, send, guardFocus)
   try {
-    return await withAgentInputInjection(
-      webContents,
-      () => send('Input.dispatchKeyEvent', params),
-      keyInput
-    )
+    return await withAgentInputInjection(webContents, () => send('Input.dispatchKeyEvent', params))
   } finally {
     release()
   }
@@ -183,11 +179,16 @@ export async function releaseHeldPageInput(
     if (release.method === 'Input.dispatchKeyEvent') {
       return await dispatchPageKeyEvent(webContents, release.params, send, guardFocus)
     }
-    const result = await send(release.method, release.params)
-    if (release.method === 'Input.dispatchMouseEvent') {
-      const button = normalizeCdpPointerButton(String(release.params.button))
-      releaseCdpPointerButton(cdpPointerStateFor(webContents), button)
+    if (release.method !== 'Input.dispatchMouseEvent') {
+      return await send(release.method, release.params)
     }
+    const button = normalizeCdpPointerButton(String(release.params.button))
+    const state = cdpPointerStateFor(webContents)
+    const remaining = { ...state }
+    releaseCdpPointerButton(remaining, button)
+    // Why the live mask: another caller's button may still be down; reporting none would drop it.
+    const result = await send(release.method, { ...release.params, buttons: remaining.buttons })
+    releaseCdpPointerButton(state, button)
     return result
   } finally {
     lease.release()

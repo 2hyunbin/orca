@@ -19,6 +19,7 @@ import type { AgentSessionContextUsage } from './agent-session-context-usage'
 import type { AgentSessionProviderHandle } from './agent-session-provider-handle'
 import type { NativeChatBlock, NativeChatRole } from './native-chat-types'
 import type { AgentMessageSource } from './agent-session-message-source'
+import type { AgentSessionExecutionOptions } from './agent-session-execution-options'
 
 export { type AgentType }
 
@@ -81,15 +82,14 @@ export type AgentJournalItemIdentity =
 
 // ─── Bounded payloads ───────────────────────────────────────────────────────
 
-/** A tool output or diff body clipped to a head. The remainder is DISCARDED,
- *  never stored: crossing a bound sets `truncated` and the two fields below
- *  describe what was dropped, so it is marked rather than silently lost. */
+/** A tool output or diff body. A row keeps the whole value (`truncated: false`). `truncated: true`
+ *  marks a head: the copy sent to a client (fetch the whole item with `agentSession.item`), a
+ *  call still running, or a row an older build saved, whose remainder is gone. */
 export type AgentJournalBoundedPayload = {
   head: string
   /** Byte length of the ORIGINAL payload, not of `head`. */
   byteLength: number
-  /** sha256 of the original payload — identification only; nothing stores or
-   *  retrieves the discarded remainder by it. */
+  /** sha256 of the original payload, for identification only. */
   digest: string
   truncated: boolean
 }
@@ -443,6 +443,9 @@ export type AgentJournalRenderItem = AgentJournalProducerLinkage & {
   recoveredAt?: number
   /** Absent only from a host that predates it. */
   turnScope?: AgentJournalTurnScope
+  /** Set on the copy sent to a client when text in it was shortened to fit; never saved. The whole
+   *  item comes from `agentSession.item`. A cut tool output or diff also says so in `truncated`. */
+  shortened?: true
 }
 
 // ─── Submissions ────────────────────────────────────────────────────────────
@@ -517,9 +520,9 @@ export type AgentJournalSubmission = {
    *  card, so no surface draws this send, before or after the card is sent, edited or deleted.
    *  Recorded in the rejection's own transaction (`journal-unsent-send-hold.ts`). */
   keptAsQueuedMessageId?: string
-  /** The model and effort the person's composer sent it with, applied when it is handed over.
-   *  The host's alone: clients ignore it. */
-  options?: Readonly<Record<string, string>>
+  /** Immutable choices captured on acceptance and applied when the agent is handed the message;
+   *  absent on older submissions. The host's alone: clients ignore it. */
+  options?: AgentSessionExecutionOptions
 }
 
 /** Durable answer to "did my send land?", keyed by client message id. Only an
