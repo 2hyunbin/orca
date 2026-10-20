@@ -136,7 +136,8 @@ describe('launchAgentInNewTab initial cwd', () => {
     expect(store.createTab).not.toHaveBeenCalled()
     await expect(result?.promptDeliveryResult).resolves.toEqual({
       delivered: true,
-      failureNotified: false
+      failureNotified: false,
+      outcome: { status: 'created' }
     })
   })
 })
