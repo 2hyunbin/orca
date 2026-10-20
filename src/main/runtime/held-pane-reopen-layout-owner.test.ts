@@ -2,6 +2,7 @@
 // service stops that service, then starts the pane; its published status clears as it binds.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NEWER_DAEMON_HOLD_ERROR } from '../../shared/newer-daemon-hold'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import type * as DaemonHoldModule from '../daemon/daemon-newer-protocol-hold'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -28,7 +29,13 @@ async function heldPaneRuntime() {
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
-  const runtime = new StatusProbe(runtimeStore)
+  const runtime = new OrcaRuntimeService(
+    Object.assign(runtimeStore, {
+      getWorkspaceSessionHostIds: (): ExecutionHostId[] => [LOCAL_EXECUTION_HOST_ID]
+    })
+  )
+  // A paired desktop's layout stream: what main publishes is what it reads.
+  runtime.subscribeWorkspaceLayouts(() => {})
   const spawn = vi.fn(async (_args: { sessionId?: string }) => ({ id: 'pty-reopened' }))
   spawn.mockRejectedValueOnce(new Error(NEWER_DAEMON_HOLD_ERROR))
   runtime.setPtyController({
@@ -44,13 +51,14 @@ async function heldPaneRuntime() {
   return { runtime, spawn }
 }
 
-const PANE_KEY = `${PANE.tabId}:${PANE.leafId}`
-
-/** The start status main publishes on the pane. */
-class StatusProbe extends OrcaRuntimeService {
-  startStatusOf(paneKey: string) {
-    return this.paneStartStatuses?.peek(paneKey)?.status
-  }
+/** The pane's start status as main publishes it to a paired desktop. */
+function publishedStatus(runtime: InstanceType<typeof OrcaRuntimeService>) {
+  const { snapshot, unsubscribe } = runtime.subscribeWorkspaceLayouts(() => {})
+  unsubscribe()
+  return snapshot
+    .find((entry) => entry.key === TEST_WORKTREE_ID)
+    ?.layout.tabs.flatMap((tab) => tab.terminal?.panes ?? [])
+    .find((pane) => pane.leafId === HEADLESS_LEAF_ID)?.status
 }
 
 beforeEach(() => {
@@ -61,14 +69,14 @@ beforeEach(() => {
 describe("a paired desktop's Reopen of a held pane (layout-owner build)", () => {
   it('stops the newer build, then starts the pane, whose held status clears', async () => {
     const { runtime, spawn } = await heldPaneRuntime()
-    expect(runtime.startStatusOf(PANE_KEY)).toBe('held')
+    expect(publishedStatus(runtime)).toBe('held')
 
     await expect(runtime.reopenHeldTerminalPanes([PANE])).resolves.toEqual({ reopened: true })
 
     expect(daemonHold.reopen).toHaveBeenCalledOnce()
     expect(spawn).toHaveBeenCalledTimes(2)
     expect(spawn).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: 'persisted-pty' }))
-    expect(runtime.startStatusOf(PANE_KEY)).toBeUndefined()
+    expect(publishedStatus(runtime)).toBeUndefined()
   })
 
   it('starts nothing and stays held while the newer build may still run', async () => {
@@ -78,7 +86,7 @@ describe("a paired desktop's Reopen of a held pane (layout-owner build)", () => 
     await expect(runtime.reopenHeldTerminalPanes([PANE])).resolves.toEqual({ reopened: false })
 
     expect(spawn).toHaveBeenCalledOnce()
-    expect(runtime.startStatusOf(PANE_KEY)).toBe('held')
+    expect(publishedStatus(runtime)).toBe('held')
   })
 
   it('stops nothing for a pane main does not hold', async () => {

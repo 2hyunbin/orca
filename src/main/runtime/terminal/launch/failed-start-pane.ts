@@ -7,10 +7,6 @@ import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
 import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
-import { reopenHeldPanes } from '../recovery/held-pane-reopen'
-import type { RestoredPane } from '../recovery/restored-pane-start'
-import { reopenNewerDaemonTerminals } from '../../../daemon/daemon-newer-protocol-hold'
-import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 
 export type FailedStartPane = { tabId: string; leafId: string }
 
@@ -69,15 +65,6 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       )
     }
     return super.createTerminal(worktreeSelector, opts, created)
-  }
-
-  /** A paired desktop's Reopen of the panes main holds for a newer build. */
-  reopenHeldTerminalPanes(panes: readonly RestoredPane[]): Promise<NewerDaemonReopenResult> {
-    return reopenHeldPanes(panes, {
-      isHeld: (paneKey) => this.paneStartStatuses?.peek(paneKey)?.status === 'held',
-      stopNewerDaemons: () => reopenNewerDaemonTerminals().then((result) => result.reopened),
-      start: (pane) => this.ensureRestoredPaneStarted(pane)
-    })
   }
 
   protected notePaneSleeping(paneKey: string): void {

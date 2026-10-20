@@ -142,9 +142,13 @@ export function showServerHeldPanes(
 }
 
 /** Stops the newer build holding this pane, then lets each of that host's held panes start. */
-export async function reopenHeldTerminals(paneKey?: string): Promise<void> {
+export async function reopenHeldTerminals(paneKey: string): Promise<void> {
   const { panes } = newerDaemonHoldStore.getState()
-  const host = (paneKey ? panes[paneKey]?.host : undefined) ?? LOCAL_HOLD_HOST
+  // Why no fallback host: a server pane that just left must never stop this machine's service.
+  const host = panes[paneKey]?.host
+  if (host === undefined) {
+    return
+  }
   const attempt = Object.entries(panes).filter(([, pane]) => pane.host === host)
   const reopen = hostReopens.get(host)
   if (!reopen || attempt.some(([, pane]) => pane.phase === 'reopening')) {
@@ -158,13 +162,16 @@ export async function reopenHeldTerminals(paneKey?: string): Promise<void> {
     return
   }
   // A server's panes stay Reopening until its frames stop holding them.
+  if (host !== LOCAL_HOLD_HOST) {
+    return
+  }
   const current = newerDaemonHoldStore.getState().panes
   const releases = Object.values(current).flatMap((pane) =>
-    pane.host === host && pane.release ? [pane.release] : []
+    pane.host === LOCAL_HOLD_HOST && pane.release ? [pane.release] : []
   )
   newerDaemonHoldStore.setState({
     panes: Object.fromEntries(
-      Object.entries(current).filter(([, pane]) => pane.host !== host || !pane.release)
+      Object.entries(current).filter(([, pane]) => pane.host !== LOCAL_HOLD_HOST)
     )
   })
   const outcomes = await Promise.all(

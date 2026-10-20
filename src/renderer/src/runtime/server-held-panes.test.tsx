@@ -17,7 +17,10 @@ import type {
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { _resetLayoutFramePositionForTests } from './layout-frame-position'
 import { NewerDaemonHoldBanner } from '@/components/terminal-pane/NewerDaemonHoldBanner'
-import { newerDaemonHoldStore } from '@/components/terminal-pane/newer-daemon-hold-state'
+import {
+  newerDaemonHoldStore,
+  reopenHeldTerminals
+} from '@/components/terminal-pane/newer-daemon-hold-state'
 import {
   CAPABLE,
   ENV,
@@ -226,6 +229,16 @@ describe("a layout-owner server's held pane on a paired desktop", () => {
     await render()
     expect(paneElement.textContent).toContain(FAILED_TITLE)
     expect(newerDaemonHoldStore.getState().panes[PANE_KEY]?.phase).toBe('failed')
+  })
+
+  it("stops nothing, here or on the server, for a Reopen of a pane the server's frames just dropped", async () => {
+    await heldServerPane()
+    await publish(layoutWith(undefined))
+
+    await act(async () => reopenHeldTerminals(PANE_KEY))
+
+    expect(pty.reopenNewerDaemonTerminals).not.toHaveBeenCalled()
+    expect(hoisted.callRuntimeRpc).not.toHaveBeenCalled()
   })
 
   it('shows no banner for an older server that publishes no status', async () => {
