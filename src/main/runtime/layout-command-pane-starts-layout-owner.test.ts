@@ -86,8 +86,9 @@ describe('a client’s startPane in the layout-owner build', () => {
     runtime.setStartStatus(PANE_KEY, 'sleeping')
 
     const reply = await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
-    const cliSend = runtime.ensureRestoredPaneStarted(PANE)
+    // The command's start is under way before any other trigger; a CLI send joins it.
     await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+    const cliSend = runtime.ensureRestoredPaneStarted(PANE)
     started.resolve({ id: 'persisted-pty' })
 
     await expect(cliSend).resolves.toBe('persisted-pty')
