@@ -10,6 +10,10 @@ type PhoneSession = { clientKey: string | null; worktreeId: string }
  * phones by the session they hold open while present. The host's unread flag skips what someone is
  * looking at.
  * Workspaces are keyed by identity, so path spellings of one checkout match.
+ *
+ * A phone's held session counts by its connection's latest report. None (an older page): always.
+ * Presence only, naming no workspace (an earlier page): while present. Naming its focused session
+ * route: only that one, while present, so a route left behind another screen is not on screen.
  */
 export class WorkspaceViewers {
   private readonly clients = new Map<string, ClientView>()
@@ -56,16 +60,22 @@ export class WorkspaceViewers {
     }
   }
 
-  /** The workspaces this client's phone sessions show. */
-  phoneSessionWorktrees(clientKey: string): string[] {
+  /** The workspaces this client's held phone sessions show now. */
+  shownPhoneSessions(clientKey: string): string[] {
+    const now = this.now()
     const worktreeIds: string[] = []
-    for (const sessions of this.phoneSessions.values()) {
+    for (const [key, sessions] of this.phoneSessions) {
       const held = [...sessions].find((session) => session.clientKey === clientKey)
-      if (held) {
+      if (held && this.showsPhoneSession(clientKey, key, now)) {
         worktreeIds.push(held.worktreeId)
       }
     }
     return worktreeIds
+  }
+
+  /** Whether a phone session this client opens on the workspace is on screen. */
+  showsWorkspace(clientKey: string, worktreeId: string): boolean {
+    return this.showsPhoneSession(clientKey, worktreeIdentityKey(worktreeId), this.now())
   }
 
   /** As the window's own rule: a pane is seen when its tab is on screen, else the workspace. */
@@ -89,16 +99,20 @@ export class WorkspaceViewers {
 
   private holdsPresentPhoneSession(workspaceKey: string, now: number): boolean {
     for (const session of this.phoneSessions.get(workspaceKey) ?? []) {
-      if (session.clientKey === null || this.isClientPresent(session.clientKey, now)) {
+      if (this.showsPhoneSession(session.clientKey, workspaceKey, now)) {
         return true
       }
     }
     return false
   }
 
-  /** A client that never reported is present, as before reports existed. */
-  isClientPresent(clientKey: string, now = this.now()): boolean {
-    const view = this.clients.get(clientKey)
-    return view === undefined || now < view.presentUntil
+  private showsPhoneSession(clientKey: string | null, workspaceKey: string, now: number): boolean {
+    // A connection with no id (in-process) cannot report.
+    const view = clientKey === null ? undefined : this.clients.get(clientKey)
+    return (
+      view === undefined ||
+      (now < view.presentUntil &&
+        (view.workspaceKeys.size === 0 || view.workspaceKeys.has(workspaceKey)))
+    )
   }
 }

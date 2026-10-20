@@ -55,13 +55,30 @@ describe('WorkspaceViewers', () => {
     const { viewers: v } = viewers()
     v.openPhoneSession('phone', WT)
     v.openPhoneSession('phone', 'repo-1::/tmp/a/')
-    expect(v.isClientPresent('phone')).toBe(true)
+    expect(v.showsWorkspace('phone', WT)).toBe(true)
     v.reportClientView('phone', { workspaceIds: [], tabIds: [], presentForMs: 0 })
     expect(v.isViewing(WT, PANE)).toBe(false)
-    expect(v.isClientPresent('phone')).toBe(false)
+    expect(v.showsWorkspace('phone', WT)).toBe(false)
+    expect(v.shownPhoneSessions('phone')).toEqual([])
     v.reportClientView('phone', { workspaceIds: [], tabIds: [], presentForMs: null })
     expect(v.isViewing(WT, PANE)).toBe(true)
-    expect(v.phoneSessionWorktrees('phone')).toEqual([WT])
+    expect(v.shownPhoneSessions('phone')).toEqual([WT])
+  })
+
+  it('sees only the session a phone names as focused, not one it left behind another screen', () => {
+    const { viewers: v } = viewers()
+    const OTHER = 'repo-1::/tmp/b'
+    v.openPhoneSession('phone', WT)
+    v.openPhoneSession('phone', OTHER)
+    v.reportClientView('phone', { workspaceIds: [OTHER], tabIds: [], presentForMs: null })
+    expect(v.isViewing(WT, PANE)).toBe(false)
+    // Every pane of the named session's workspace, not just tabs a window would list.
+    expect(v.isViewing(OTHER, PANE)).toBe(true)
+    expect(v.shownPhoneSessions('phone')).toEqual([OTHER])
+    expect(v.showsWorkspace('phone', 'repo-1::/tmp/a/')).toBe(false)
+    // The session route behind settings: away, though the app is in the foreground.
+    v.reportClientView('phone', { workspaceIds: [], tabIds: [], presentForMs: 0 })
+    expect(v.isViewing(OTHER, PANE)).toBe(false)
   })
 
   it('keeps an older phone that never reports as looking until its session closes', () => {
