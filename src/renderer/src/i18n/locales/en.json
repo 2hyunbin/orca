@@ -4084,7 +4084,9 @@
             "runtime_workspace_window_closed": "Workspace window closed",
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
-            "connecting": "Connecting…"
+            "connecting": "Connecting…",
+            "moreSshHosts_one": "{{count}} more SSH host…",
+            "moreSshHosts_other": "{{count}} more SSH hosts…"
           },
           "StatusBar": {
             "9659e38343": "Ports",

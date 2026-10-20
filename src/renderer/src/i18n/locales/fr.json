@@ -3936,6 +3936,8 @@
             "connectedHostCount_one": "{{count}} hôte",
             "connectedHostCount_other": "{{count}} hôtes",
             "connecting": "Connexion…",
+            "moreSshHosts_one": "{{count}} autre hôte SSH…",
+            "moreSshHosts_other": "{{count}} autres hôtes SSH…",
             "runtime_unavailable_transport_up": "Orque indisponible"
           },
           "StatusBar": {

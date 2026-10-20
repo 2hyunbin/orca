@@ -24,7 +24,12 @@ import {
   runtimePairingRepairRoute
 } from '../../../../shared/runtime-environments'
 import { RuntimeHostStatusRow } from './RuntimeHostStatusRow'
-import { connectedHostCountLabel, connectingHostsLabel } from './ssh-status-segment-copy'
+import {
+  connectedHostCountLabel,
+  connectingHostsLabel,
+  moreSshHostsLabel
+} from './ssh-status-segment-copy'
+import { splitSshStatusMenuRows } from './ssh-status-menu-rows'
 import { SshTargetStatusRow } from './SshTargetStatusRow'
 import { syncSshConfigTargetsPassively } from '../../lib/ssh-config-passive-sync'
 import { connectRuntimeHostAndReloadProjects } from './runtime-environment-explicit-connect'
@@ -128,8 +133,11 @@ export function SshStatusSegment({
   const inactiveRuntimeHosts = runtimeHostRows.filter(
     (host) => !isConnectedRuntimeHostState(host.state)
   )
-  const connectedTargets = targets.filter((target) => target.status === 'connected')
-  const disconnectedTargets = targets.filter((target) => target.status !== 'connected')
+  const {
+    connected: connectedTargets,
+    inactive: disconnectedTargets,
+    hiddenIdleCount
+  } = splitSshStatusMenuRows(targets)
   const connectRuntimeHost = useCallback(
     async (environmentId: string): Promise<void> => {
       if (await connectRuntimeHostAndReloadProjects(environmentId)) {
@@ -280,6 +288,17 @@ export function SshStatusSegment({
         {disconnectedTargets.map((t) => (
           <SshTargetStatusRow key={t.id} targetId={t.id} label={t.label} status={t.status} />
         ))}
+        {hiddenIdleCount > 0 && (
+          <DropdownMenuItem
+            onSelect={() => {
+              recordFeatureInteraction('ssh')
+              openSettingsTarget({ pane: 'ssh', repoId: null, sectionId: 'ssh' })
+              setActiveView('settings')
+            }}
+          >
+            {moreSshHostsLabel(hiddenIdleCount)}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {

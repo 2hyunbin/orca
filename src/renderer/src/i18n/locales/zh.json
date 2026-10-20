@@ -3827,6 +3827,8 @@
             "connectedHostCount_one": "{{count}} 个主机",
             "connectedHostCount_other": "{{count}} 个主机",
             "connecting": "正在连接…",
+            "moreSshHosts_one": "另外 {{count}} 个 SSH 主机…",
+            "moreSshHosts_other": "另外 {{count}} 个 SSH 主机…",
             "runtime_unavailable_transport_up": "Orca 不可用",
             "runtime_workspace_window_closed": "工作区窗口已关闭"
           },

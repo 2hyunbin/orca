@@ -3827,6 +3827,8 @@
             "connectedHostCount_one": "{{count}} 台のホスト",
             "connectedHostCount_other": "{{count}} 台のホスト",
             "connecting": "接続中…",
+            "moreSshHosts_one": "他 {{count}} 台の SSH ホスト…",
+            "moreSshHosts_other": "他 {{count}} 台の SSH ホスト…",
             "runtime_unavailable_transport_up": "Orca は利用できません",
             "runtime_workspace_window_closed": "ワークスペースウィンドウを閉じた"
           },
