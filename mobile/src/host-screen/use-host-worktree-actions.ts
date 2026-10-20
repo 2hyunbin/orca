@@ -257,7 +257,7 @@ export function useHostWorktreeActions(args: {
       if (routeHost === null) {
         return
       }
-      // Switch point: a feed-built list highlights only what the desktop has open.
+      // Switch point: a feed-built list highlights the session route's own visit record instead.
       if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
         setOptimisticActiveWorktreeIdentity(getWorktreeRowIdentity(item))
       }

@@ -125,6 +125,7 @@ export function useHostScreenController({
   const feed = sidebarFeed?.feed ?? null
   const sectionsResult = useHostListSections({
     client,
+    hostId,
     feed,
     displayWorktrees,
     hostPlatform,

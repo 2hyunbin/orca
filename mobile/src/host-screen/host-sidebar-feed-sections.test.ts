@@ -18,6 +18,7 @@ import {
 import type { MobileViewState } from '../worktree/workspace-view-settings'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 import { readServedProjectSections } from '../worktree/project-sections-operations'
+import type { LastVisitedWorktreeOnHost } from '../worktree/last-visited-worktree-by-host'
 
 const catalog = buildHostFeedCatalog(SERVED_SECTIONS, [], [])
 
@@ -40,6 +41,7 @@ function sectionsFor(
     showPinnedInGroups?: boolean
     live?: ReturnType<typeof liveRow>[]
     search?: string
+    lastVisited?: LastVisitedWorktreeOnHost | null
   } = {}
 ) {
   const built = buildSidebarFeedRows(
@@ -49,18 +51,23 @@ function sectionsFor(
   )
   return buildHostFeedSections({
     rows: built.sectionRows,
-    activeRowKeys: built.activeRowKeys,
+    lastVisited: options.lastVisited ?? null,
     liveRows: options.live ?? [],
     repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
     search: options.search ?? ''
   })
 }
 
-function sectionsFromDomains(domains: SidebarFeedDomains, view: MobileViewState, search = '') {
+function sectionsFromDomains(
+  domains: SidebarFeedDomains,
+  view: MobileViewState,
+  search = '',
+  lastVisited: LastVisitedWorktreeOnHost | null = null
+) {
   const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
   return buildHostFeedSections({
     rows: built.sectionRows,
-    activeRowKeys: built.activeRowKeys,
+    lastVisited,
     liveRows: [],
     repoHostIdByRepoId: new Map(),
     search
@@ -78,11 +85,10 @@ function outline(sections: ReturnType<typeof sectionsFor>): string[] {
 }
 
 describe('the phone list from the sidebar feed', () => {
-  it('draws the shared builder’s headers, order, nesting and single highlight', () => {
+  it('draws the shared builder’s headers, order and nesting', () => {
     const lines = outline(sectionsFor(phoneView()))
     // The pinned parent carries its nested child.
     expect(lines[0]).toMatch(/ "Pinned" 2 pin$/)
-    expect(lines.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
     expect(lines.some((line) => line.includes('orca::/w/child depth=1'))).toBe(true)
     expect(lines.some((line) => line.includes('"lab"'))).toBe(true)
   })
@@ -130,7 +136,7 @@ describe('the phone list from the sidebar feed', () => {
     const built = buildSidebarFeedRows(domains, grouped, phoneFeedView(phoneView()))
     const sections = buildHostFeedSections({
       rows: built.sectionRows,
-      activeRowKeys: built.activeRowKeys,
+      lastVisited: null,
       liveRows: [],
       repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
       search: ''
@@ -157,9 +163,60 @@ describe('the phone list from the sidebar feed', () => {
     expect(sections.at(-2)?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
   })
 
-  it('highlights every occurrence when pinned rows also show in their groups', () => {
-    const lines = outline(sectionsFor(phoneView(), { showPinnedInGroups: true }))
-    expect(lines.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(2)
+  describe('the highlight: the workspace this phone last opened on the host', () => {
+    const active = (sections: ReturnType<typeof sectionsFor>) =>
+      outline(sections).filter((line) => line.endsWith(' ACTIVE'))
+
+    it('never takes the desktop’s selected workspace, so a phone that opened nothing has none', () => {
+      // The fixture's desktop has the pinned parent selected.
+      expect(active(sectionsFor(phoneView()))).toEqual([])
+    })
+
+    it('highlights the listed row this phone opened, and only it', () => {
+      const lines = active(
+        sectionsFor(phoneView(), { lastVisited: { worktreeId: 'orca::/w/child' } })
+      )
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('orca::/w/child')
+    })
+
+    it('highlights an SSH row by its id, as the session route names it', () => {
+      const lines = active(sectionsFor(phoneView(), { lastVisited: { worktreeId: 'lab::/w/gpu' } }))
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('lab::/w/gpu')
+    })
+
+    it('never matches a desktop row for a visit on a server of the same id', () => {
+      const lastVisited = { worktreeId: 'orca::/w/child', executionHost: 'runtime:env-1' as const }
+      expect(active(sectionsFor(phoneView(), { lastVisited }))).toEqual([])
+    })
+
+    it('highlights nothing while the row is not listed, and the row again once it is', () => {
+      const lastVisited = { worktreeId: 'orca::/w/child' }
+      const hidden = sectionsFor(phoneView(), { lastVisited, search: 'gpu' })
+      expect(active(hidden)).toEqual([])
+      expect(active(sectionsFor(phoneView(), { lastVisited }))).toHaveLength(1)
+    })
+
+    it('highlights nothing once the row is deleted, rather than another row', () => {
+      const workspaces = new Map(feedDomains().workspaces)
+      workspaces.delete('|orca::/w/child')
+      const domains = feedDomains({ workspaces })
+      const sections = sectionsFromDomains(domains, phoneView(), '', {
+        worktreeId: 'orca::/w/child'
+      })
+      expect(active(sections)).toEqual([])
+    })
+
+    it('highlights every occurrence when pinned rows also show in their groups', () => {
+      const lines = active(
+        sectionsFor(phoneView(), {
+          showPinnedInGroups: true,
+          lastVisited: { worktreeId: 'orca::/w/parent' }
+        })
+      )
+      expect(lines).toHaveLength(2)
+    })
   })
 
   // The phone sends its host list resolved with an "all" scope; the desktop keeps its legacy scope.
@@ -206,7 +263,7 @@ describe('the phone list from the sidebar feed', () => {
       )
       const sections = buildHostFeedSections({
         rows: built.sectionRows,
-        activeRowKeys: built.activeRowKeys,
+        lastVisited: null,
         liveRows: [],
         repoHostIdByRepoId: new Map(),
         search: ''
@@ -313,11 +370,37 @@ describe('the phone list before the first feed read', () => {
     liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' }),
     liveRow({ worktreeId: 'orca::/w/old', displayName: 'old', isArchived: true })
   ]
-  const preFeed = (search: string, rows = cached) =>
-    buildPreFeedSections({ rows, view: phoneView(), search, repoHostIdByRepoId: new Map() })
+  const preFeed = (
+    search: string,
+    rows = cached,
+    lastVisited: LastVisitedWorktreeOnHost | null = null
+  ) =>
+    buildPreFeedSections({
+      rows,
+      view: phoneView(),
+      search,
+      repoHostIdByRepoId: new Map(),
+      lastVisited
+    })
 
   it('shows the rows the page last listed, in their order under no header, filtered as the view is', () => {
-    expect(preFeed('')).toEqual([{ key: 'all', title: '', data: cached.slice(0, 2) }])
+    expect(preFeed('')).toEqual([
+      {
+        key: 'all',
+        title: '',
+        data: cached.slice(0, 2).map((row) => ({ ...row, isActive: false }))
+      }
+    ])
+  })
+
+  it('highlights the row this phone opened, never the one the desktop marked active', () => {
+    const rows = [{ ...cached[0]!, isActive: true }, cached[1]!]
+    const highlighted = (lastVisited: LastVisitedWorktreeOnHost | null) =>
+      preFeed('', rows, lastVisited)[0]
+        ?.data.filter((row) => row.isActive)
+        .map((row) => row.worktreeId)
+    expect(highlighted(null)).toEqual([])
+    expect(highlighted({ worktreeId: 'orca::/w/a' })).toEqual(['orca::/w/a'])
   })
 
   it('narrows them by search, and draws nothing with none', () => {

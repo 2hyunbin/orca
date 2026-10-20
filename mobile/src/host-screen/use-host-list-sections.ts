@@ -8,6 +8,7 @@ import { buildProjectSectionCatalog } from '../worktree/project-section-catalog'
 import { useWorkspaceSections } from '../worktree/use-workspace-sections'
 import { buildFilterRepos, type WorkspaceSectionRepo } from '../worktree/workspace-filter-repos'
 import type { Section, SectionRepo, Worktree } from '../worktree/workspace-list-types'
+import { useLastVisitedWorktreeOnHost } from '../worktree/use-last-visited-worktree-on-host'
 import { rowFiltersForView } from '../worktree/workspace-view-settings'
 import { buildHostFeedCatalog, buildHostFeedView } from './host-sidebar-feed-inputs'
 import { buildHostFeedSections, buildPreFeedSections } from './host-sidebar-feed-sections'
@@ -17,6 +18,8 @@ import type { HostScreenState } from './use-host-screen-state'
 
 export type HostListSectionsInputs = {
   client: RpcClient | null
+  /** The paired host whose list this is. */
+  hostId: string | undefined
   /** Null in a build that lists without the feed. */
   feed: HostSidebarFeed | null
   /** The rows worktree.ps and the desktop's server lists served, with display state applied. */
@@ -97,6 +100,7 @@ const NO_SECTIONS: Section[] = []
 /** The desktop sidebar's own list, built by the shared builder from the host's feed. */
 function useFeedHostListSections({
   client,
+  hostId,
   feed,
   displayWorktrees,
   hostPlatform,
@@ -130,6 +134,7 @@ function useFeedHostListSections({
     () => (domains ? buildSidebarFeedRows(domains, catalog, view) : null),
     [domains, catalog, view]
   )
+  const lastVisited = useLastVisitedWorktreeOnHost(hostId)
   // Before the first read, and under a feed this page cannot read, the rows it already holds.
   const preFeed = feed?.kind === 'loading' || feed?.kind === 'reopen'
   const sections = useMemo(
@@ -137,7 +142,7 @@ function useFeedHostListSections({
       built
         ? buildHostFeedSections({
             rows: built.sectionRows,
-            activeRowKeys: built.activeRowKeys,
+            lastVisited,
             liveRows: displayWorktrees,
             repoHostIdByRepoId: state.repoHostIdByRepoId,
             search: state.search
@@ -147,10 +152,19 @@ function useFeedHostListSections({
               rows: displayWorktrees,
               view: state.view,
               search: state.search,
-              repoHostIdByRepoId: state.repoHostIdByRepoId
+              repoHostIdByRepoId: state.repoHostIdByRepoId,
+              lastVisited
             })
           : NO_SECTIONS,
-    [built, preFeed, displayWorktrees, state.view, state.repoHostIdByRepoId, state.search]
+    [
+      built,
+      preFeed,
+      displayWorktrees,
+      state.view,
+      state.repoHostIdByRepoId,
+      state.search,
+      lastVisited
+    ]
   )
 
   const iconIds = useMemo(() => [...new Set(domains?.repoIcons.values() ?? [])], [domains])
