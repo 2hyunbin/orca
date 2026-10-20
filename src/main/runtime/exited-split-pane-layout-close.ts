@@ -1,9 +1,7 @@
-// A pane whose terminal ended, in a workspace main owns (layout-owner build): main closes or keeps
-// it by the rule the window used to apply to its own panes.
-import type { ExecutionHostId } from '../../shared/execution-host'
+// A pane whose terminal ended, in a workspace main owns (layout-owner build): main keeps it by the
+// rule the window used to apply to its own panes; any other exit retires as it always has.
 import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 import type { RetiredTerminalSurface } from './mobile-session-terminal-retirement'
 import {
   exitedSplitPaneOutcome,
@@ -11,12 +9,10 @@ import {
 } from './terminal/lifecycle/exited-split-pane-rule'
 
 /**
- * The session with the split pane closed, the same session when the rule keeps the pane, or null:
- * a tab's last pane the rule closes, or a pane no longer bound to this terminal. Null leaves the
- * exit to the persistence retirement, which removes a last pane's tab as the window did.
+ * The same session when the rule keeps the pane (its "Terminal exited" card stays), else null: the
+ * persistence retirement then removes the pane, or a last pane's tab, as it did before.
  */
-export function closeExitedSplitPaneInSession(
-  hostId: ExecutionHostId,
+export function keptExitedPaneSession(
   session: WorkspaceSessionState,
   surface: RetiredTerminalSurface,
   facts: ExitedSplitPaneFacts
@@ -32,19 +28,5 @@ export function closeExitedSplitPaneInSession(
   ) {
     return null
   }
-  const lastPane = leafIds.length < 2
-  if (exitedSplitPaneOutcome(facts, lastPane) === 'keep') {
-    return session
-  }
-  if (lastPane) {
-    return null
-  }
-  return (
-    applyCommandToSession(hostId, session, {
-      type: 'closePane',
-      workspace: surface.worktreeId,
-      tabId: surface.parentTabId,
-      leafId: surface.leafId
-    }).session ?? session
-  )
+  return exitedSplitPaneOutcome(facts, leafIds.length < 2) === 'keep' ? session : null
 }

@@ -11,6 +11,10 @@ import type { RuntimeNotifier } from './runtime-notifier-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
 import { provisionWorktreeTerminals } from './runtime-worktree-terminal-provisioning'
+import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
+import { resolveHostId } from '../persistence/loading-store/session-host-partitions'
+import { withRuntimePaneAdmission } from './runtime-durable-store-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -70,6 +74,12 @@ function sessionStore(initial: WorkspaceSessionState): {
     setWorkspaceSession: (next) => {
       session = next
     },
+    // Main's own layout writes, as the Store applies them (a layout-owner build sends these).
+    applyLayoutCommand: async (command, hostIds = []) => {
+      const change = applyCommandToSession(resolveHostId(hostIds[0]), session, command)
+      session = change.session ?? session
+      return change.value
+    },
     getSettings: () => ({
       workspaceDir: '/workspaces',
       nestWorkspaces: false,
@@ -78,7 +88,11 @@ function sessionStore(initial: WorkspaceSessionState): {
       branchPrefixCustom: ''
     })
   }
-  return { store, getSession: () => session }
+  // Switch-on, the default tab writes target main's copy, so main's pane write must be there.
+  return {
+    store: ORCA_LAYOUT_OWNER_IS_MAIN ? withRuntimePaneAdmission(store) : store,
+    getSession: () => session
+  }
 }
 
 function notifierWithRename(renameTerminal: RuntimeNotifier['renameTerminal']): RuntimeNotifier {

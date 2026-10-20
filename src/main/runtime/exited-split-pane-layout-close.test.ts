@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
-import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
-import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { closeExitedSplitPaneInSession } from './exited-split-pane-layout-close'
+import { keptExitedPaneSession } from './exited-split-pane-layout-close'
 
 const WORKTREE = 'repo-1::/w'
 const TAB = 'tab-1'
@@ -48,22 +46,16 @@ function splitSession(): WorkspaceSessionState {
 const cleanExit = { exitCode: 0, freshSpawn: false, inputSeen: true, outputSeen: true, shown: true }
 const right = { worktreeId: WORKTREE, parentTabId: TAB, leafId: RIGHT, ptyId: 'pty-right' }
 
-describe('closeExitedSplitPaneInSession', () => {
-  it('closes a split pane whose shell exited, leaving its sibling', () => {
-    const next = closeExitedSplitPaneInSession(
-      LOCAL_EXECUTION_HOST_ID,
-      splitSession(),
-      right,
-      cleanExit
-    )
-    expect(collectLeafIds(next?.terminalLayoutsByTabId[TAB]?.root)).toEqual([LEFT])
-    expect(next?.terminalLayoutsByTabId[TAB]?.ptyIdsByLeafId).toEqual({ [LEFT]: 'pty-left' })
+describe('keptExitedPaneSession', () => {
+  it('leaves a split pane whose shell exited cleanly, or that main stopped, to the retirement', () => {
+    expect(keptExitedPaneSession(splitSession(), right, cleanExit)).toBeNull()
+    expect(keptExitedPaneSession(splitSession(), right, { ...cleanExit, exitCode: -1 })).toBeNull()
   })
 
   it('keeps the session as it is for a pane the rule keeps (a failed process’s card)', () => {
     const session = splitSession()
     expect(
-      closeExitedSplitPaneInSession(LOCAL_EXECUTION_HOST_ID, session, right, {
+      keptExitedPaneSession(session, right, {
         ...cleanExit,
         exitCode: 1
       })
@@ -72,14 +64,7 @@ describe('closeExitedSplitPaneInSession', () => {
 
   it('leaves a tab’s last pane, and a pane another terminal took, to the retirement', () => {
     const session = splitSession()
-    expect(
-      closeExitedSplitPaneInSession(
-        LOCAL_EXECUTION_HOST_ID,
-        session,
-        { ...right, ptyId: 'pty-old' },
-        cleanExit
-      )
-    ).toBeNull()
+    expect(keptExitedPaneSession(session, { ...right, ptyId: 'pty-old' }, cleanExit)).toBeNull()
     const lone: WorkspaceSessionState = {
       ...session,
       terminalLayoutsByTabId: {
@@ -91,9 +76,7 @@ describe('closeExitedSplitPaneInSession', () => {
         }
       }
     }
-    expect(
-      closeExitedSplitPaneInSession(LOCAL_EXECUTION_HOST_ID, lone, right, cleanExit)
-    ).toBeNull()
+    expect(keptExitedPaneSession(lone, right, cleanExit)).toBeNull()
   })
 
   it('keeps a tab’s last pane behind its card when its process failed or died unused', () => {
@@ -110,7 +93,7 @@ describe('closeExitedSplitPaneInSession', () => {
       }
     }
     const exit = (facts: Partial<typeof cleanExit>) =>
-      closeExitedSplitPaneInSession(LOCAL_EXECUTION_HOST_ID, lone, right, {
+      keptExitedPaneSession(lone, right, {
         ...cleanExit,
         ...facts
       })

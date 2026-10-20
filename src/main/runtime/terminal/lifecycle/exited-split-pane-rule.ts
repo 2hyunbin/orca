@@ -15,17 +15,20 @@ export type ExitedSplitPaneFacts = {
 }
 
 /**
- * 'close' takes the pane out of its tab (a tab's last pane, the tab). 'keep' leaves it: an exit no
- * host confirmed, a failed process (its "Terminal exited" card stays), or a newborn that died before
- * anyone used it (a split only while shown), so the failure stays visible.
+ * 'close' takes the pane out of its tab (a tab's last pane, the tab). 'keep' leaves it: a failed
+ * process (its "Terminal exited" card stays), or a newborn that died before anyone used it (a split
+ * only while shown), so the failure stays visible. A negative code (a stop main reports itself,
+ * such as the terminal service ending) closes, as main's retirement always did.
  */
 export function exitedSplitPaneOutcome(
   facts: ExitedSplitPaneFacts,
   lastPane = false
 ): 'close' | 'keep' {
-  // A negative code is an unconfirmed stop; a positive one a failed process.
-  if (facts.exitCode !== 0) {
+  if (facts.exitCode > 0) {
     return 'keep'
+  }
+  if (facts.exitCode < 0) {
+    return 'close'
   }
   if (lastPane) {
     return facts.freshSpawn && !facts.inputSeen ? 'keep' : 'close'

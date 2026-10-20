@@ -14,9 +14,9 @@ describe('exitedSplitPaneOutcome', () => {
     expect(exitedSplitPaneOutcome(used)).toBe('close')
   })
 
-  it('keeps a failed process behind its card, and an exit no host confirmed', () => {
+  it('keeps a failed process behind its card; a stop main reports itself closes', () => {
     expect(exitedSplitPaneOutcome({ ...used, exitCode: 1 })).toBe('keep')
-    expect(exitedSplitPaneOutcome({ ...used, exitCode: -1 })).toBe('keep')
+    expect(exitedSplitPaneOutcome({ ...used, exitCode: -1 })).toBe('close')
   })
 
   it('keeps a newborn split that died while shown before any input or output', () => {

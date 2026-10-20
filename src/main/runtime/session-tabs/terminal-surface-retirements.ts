@@ -4,7 +4,7 @@ import type { RetiredTerminalSurface } from '../mobile-session-terminal-retireme
 import type { RuntimeMobileSessionRetiredTerminalSurface } from '../../../shared/runtime-types'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../../shared/execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { closeExitedSplitPaneInSession } from '../exited-split-pane-layout-close'
+import { keptExitedPaneSession } from '../exited-split-pane-layout-close'
 import type { ExitedSplitPaneFacts } from '../terminal/lifecycle/exited-split-pane-rule'
 import { retireTerminalSurfaceFromPersistence } from '../mobile-session-terminal-persistence-retirement'
 import { retireTerminalSurfacesFromSnapshot } from '../mobile-session-terminal-retirement'
@@ -39,10 +39,10 @@ export abstract class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends O
         unpersisted.push(surface)
         continue
       }
-      // Switch point: main closes or keeps an exited split pane by the layout model's rule.
+      // Switch point: main keeps an exited pane the window's rule keeps; others retire as before.
       const next =
         ORCA_LAYOUT_OWNER_IS_MAIN && exit && parseExecutionHostId(hostId)?.kind !== 'runtime'
-          ? (closeExitedSplitPaneInSession(hostId, current, surface, exit) ??
+          ? (keptExitedPaneSession(current, surface, exit) ??
             retireTerminalSurfaceFromPersistence(current, surface))
           : retireTerminalSurfaceFromPersistence(current, surface)
       if (next === current) {

@@ -93,7 +93,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
         this.createTerminal(selector, options, createdWorktree),
       setTabTitle: async (handle, title) => {
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
-        applied(
+        const ok = applied(
           await this.applyLayoutCommand({
             type: 'renameTab',
             workspace: worktreeId,
@@ -102,10 +102,20 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
             title
           })
         )
+        // Main's write saves the title; the window and the phone's live tabs still read their own copies.
+        if (ok) {
+          this.notifier?.renameTerminal(tabId, title, { recordInteraction: false })
+          if (!this.getAvailableAuthoritativeWindow()) {
+            this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, tabId, {
+              title,
+              customTitle: title.trim() || null
+            })
+          }
+        }
       },
       setTabColor: async (handle, color) => {
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
-        applied(
+        const ok = applied(
           await this.applyLayoutCommand({
             type: 'setTabProps',
             workspace: worktreeId,
@@ -113,6 +123,9 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
             color
           })
         )
+        if (ok && !this.getAvailableAuthoritativeWindow()) {
+          this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, tabId, { color })
+        }
       },
       applyDefaultTabs: async (worktreeId, tabs) => {
         const reply = await this.applyLayoutCommand({
