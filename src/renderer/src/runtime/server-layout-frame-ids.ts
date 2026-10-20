@@ -204,6 +204,8 @@ export type ServerLayoutFrameTranslator = {
   translate: (frame: WorkspaceLayoutChangeFrame) => WorkspaceLayoutChangeFrame
   /** A records frame binding the panes whose handle session.tabs changed; null when none did. */
   rebind: (key: string) => WorkspaceLayoutRecordsFrame | null
+  /** The workspaces the server's stream holds now. */
+  keys: () => string[]
 }
 
 /**
@@ -274,6 +276,7 @@ export function createServerLayoutFrameTranslator(
           return { ...frame, workspaces: frame.workspaces.flatMap(recordChange) }
       }
     },
+    keys: () => [...server.keys()],
     rebind: (key) => {
       const layout = server.get(key)
       const workspaces = layout ? changeTo(key, layout) : []
