@@ -28,6 +28,11 @@ vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
     await import('@/runtime/layout-apply-test-transport.test-fixture')
   ).runtimeLayoutClientWithTestFrames(await importOriginal())
 )
+// The test opens its own stream: boot's document-long one would outlive the test's transport.
+vi.mock('@/runtime/workspace-layout-frame-sync', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  showStartupLayoutFrames: () => {}
+}))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()

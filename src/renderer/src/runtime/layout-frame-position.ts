@@ -71,3 +71,9 @@ export function _resetLayoutFramePositionForTests(): void {
   stream = 'none'
   waiters = []
 }
+
+/** Main's answer to a change its frame draws: the window draws it itself only while no frame will
+ *  come (a closed stream's cache is frozen). */
+export function shownByFrames(local: () => void, shown?: () => void): () => void {
+  return () => (layoutFramesFlowing() ? shown?.() : local())
+}

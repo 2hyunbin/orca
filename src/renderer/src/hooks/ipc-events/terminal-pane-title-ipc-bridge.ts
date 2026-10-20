@@ -5,6 +5,7 @@ import {
 import { collectLeafIdsInOrder } from '@/components/terminal-pane/terminal-layout-leaf-ids'
 import { findTerminalTabWorktreeId } from '@/components/native-chat/native-chat-file-link'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { shownByFrames } from '@/runtime/layout-frame-position'
 import { useAppStore } from '../../store'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
@@ -51,14 +52,14 @@ export function applyRuntimePaneTitle({ tabId, leafId, title }: SetTerminalPaneT
   }
   const show = (): void => showRuntimePaneTitle(tabId, leafId, normalizedTitle)
   const worktreeId = findTerminalTabWorktreeId(store.tabsByWorktree, tabId)
-  // Switch point: a main-owned layout takes the rename first, as the GUI's rename does.
+  // Switch point: a main-owned layout takes the rename, and main's frame draws it.
   if (
     ORCA_LAYOUT_OWNER_IS_MAIN &&
     worktreeId &&
     sendLayoutCommandToOwner(
       worktreeId,
       { type: 'renamePane', tabId, leafId, title: normalizedTitle },
-      { apply: show, asToday: show }
+      { apply: shownByFrames(show), asToday: show }
     )
   ) {
     return

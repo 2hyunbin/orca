@@ -24,6 +24,7 @@ import { createTestStore } from '../store/slices/store-test-helpers'
 import type { AppState } from '../store/types'
 import { layoutApplyTestTransport } from './layout-apply-test-transport.test-fixture'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
+import { endLayoutFramePositions } from './layout-frame-position'
 import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
@@ -243,8 +244,9 @@ describe('tab properties through main', () => {
     async (_, entry) => {
       const stored = (entry.session ?? localDesktopSession)()
 
-      // Today: the window acts on its own copy.
+      // Today: the window acts on its own copy, with no stream open.
       const today = await boot(stored)
+      endLayoutFramePositions()
       entry.windowAction(today.getState())
       await layoutApplyTestTransport.settle()
       const todayTabs = shownTabs(today.getState())
@@ -262,7 +264,8 @@ describe('tab properties through main', () => {
       const mainCopy = { ...expected, ...entry.mainCopyLags }
       expect(shownTabs(drawn.getState())).toEqual(mainCopy)
 
-      // Main's answer then runs the window's own action, which leaves what today's action shows.
+      // Main's answer then runs the window's action: its frame drew the change, so only what the
+      // window still owns (a preview's end) changes, which leaves what today's action shows.
       entry.windowAction(drawn.getState())
       await layoutApplyTestTransport.settle()
       expect(shownTabs(drawn.getState())).toEqual(expected)
