@@ -170,6 +170,9 @@ async function startOrcadRuntime(
   uninstallObservedStatusIdentity = agentHookServer.subscribeEnrichedStatus((enriched) =>
     observedStatusCapture.observe(enriched)
   )
+  // Before the hook server starts: a turn that begins before the feed subscribes is never counted.
+  const { startOrcadStats } = await import('./orcad-stats')
+  const stats = startOrcadStats(runtimeUserDataPath, agentHookServer, registerCleanup)
   await agentHookServer.start({
     env: 'production',
     userDataPath: runtimeUserDataPath,
@@ -210,8 +213,6 @@ async function startOrcadRuntime(
   })
 
   const { loadAgentSessionClaimSigner } = await import('../runtime/agent-session-claim-identity')
-  const { startOrcadStats } = await import('./orcad-stats')
-  const stats = startOrcadStats(runtimeUserDataPath, agentHookServer, registerCleanup)
   const runtime = new OrcaRuntimeService(profileStore, stats, {
     // Why persistent: the terminal daemon outlives orcad, so a per-process key would make a
     // restarted orcad unable to recognise (and adopt) the agent PTYs it already owns.

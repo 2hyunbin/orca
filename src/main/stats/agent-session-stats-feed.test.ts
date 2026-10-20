@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { setAppEnvironment, type AppEnvironment } from '../../shared/app-environment'
+import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 import type {
   AgentSessionClearEvent,
   AgentSessionStatusEvent
@@ -50,8 +50,7 @@ describe('feedAgentSessionStats', () => {
   it('counts hook sessions on a Node host and the totals survive a restart', async () => {
     const userData = mkdtempSync(join(tmpdir(), 'orca-stats-feed-'))
     roots.push(userData)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the collector reads only getPath.
-    setAppEnvironment({ getPath: () => userData } as unknown as AppEnvironment)
+    installFakeAppEnvironment({ getPath: () => userData })
     initStatsPath()
     const hooks = hookSource()
     const stats = new StatsCollector()

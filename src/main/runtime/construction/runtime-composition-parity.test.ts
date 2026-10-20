@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RUNTIME_CAPABILITIES } from '../../../shared/protocol-version'
 import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from '../../../shared/ssh-target-management'
@@ -386,13 +386,30 @@ function recordWiring(root: Root): Set<string> {
     }
   }
   for (const file of HOST_PORT_SOURCES[root]) {
-    for (const [, setter] of read(file).matchAll(/(?<![\w$.])(?<!function\s+)(set[A-Z]\w*)\(/g)) {
-      if (!NOT_HOST_PORTS.has(setter)) {
-        wired.add(`host:${setter}`)
-      }
+    for (const setter of hostPortCalls(read(file))) {
+      wired.add(`host:${setter}`)
     }
   }
   return wired
+}
+
+/** Host-port installs in a source; a teardown reset (`null`, `undefined`, `false`) installs nothing. */
+function hostPortCalls(source: string): string[] {
+  const installs: string[] = []
+  for (const match of source.matchAll(/(?<![\w$.])(?<!function\s+)(set[A-Z]\w*)\(/g)) {
+    const setter = match[1]
+    const argument = parenGroup(source, match.index + setter.length).trim()
+    if (!NOT_HOST_PORTS.has(setter) && !['null', 'undefined', 'false'].includes(argument)) {
+      installs.push(setter)
+    }
+  }
+  return installs
+}
+
+function sourceFilesUnder(dir: string): string[] {
+  return readdirSync(join(repoRoot, dir), { recursive: true, encoding: 'utf8' })
+    .filter((file) => file.endsWith('.ts') && !/\.(test|spec)\.ts$|fixture/.test(file))
+    .map((file) => join(dir, file).split(sep).join('/'))
 }
 
 /** Every option `RuntimeConstructionDependencies` declares. */
@@ -451,6 +468,17 @@ describe('runtime composition parity (Electron vs orcad)', () => {
       unaccounted,
       'wire these on a root or list them in UNWIRED_CONSTRUCTION_OPTIONS'
     ).toEqual([])
+  })
+
+  it('finds every host-port install in the files it reads', () => {
+    const known = new Set(
+      [...electron, ...orcad].filter((w) => w.startsWith('host:')).map((w) => w.slice(5))
+    )
+    const listed = new Set(Object.values(HOST_PORT_SOURCES).flat())
+    const unlisted = ['src/main/startup', 'src/main/orcad']
+      .flatMap(sourceFilesUnder)
+      .filter((file) => !listed.has(file) && hostPortCalls(read(file)).some((s) => known.has(s)))
+    expect(unlisted, 'add these files to HOST_PORT_SOURCES').toEqual([])
   })
 
   // #30731: orcad once installed a browser factory that could not place pages on a desktop.

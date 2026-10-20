@@ -10,7 +10,7 @@ export function startOrcadStats(
 ): StatsCollector {
   initStatsPath(userDataPath)
   const stats = new StatsCollector()
-  // Registered before the RPC server's stop, so it runs after it: no session starts mid-flush.
+  // Registered first so it runs last: the feed and RPC stop before the final write.
   registerCleanup(() => stats.flushAsync())
   registerCleanup(feedAgentSessionStats(stats, hooks))
   return stats
