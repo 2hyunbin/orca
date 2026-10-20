@@ -177,9 +177,10 @@ function installRestartHarness(
     pendingWrite: null,
     quitFlushStarted: false,
     writeGeneration: 0,
-    lastDurableWriteGeneration: 0
+    lastDurableWriteGeneration: 0,
+    ptyBindingGenerations: new Map<string, number>()
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: binding writes read only state, write bookkeeping, durable mutation and the session partitions from these fakes.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: binding writes read only state, write bookkeeping, durable mutation, the per-pane binding generations and the session partitions from these fakes.
   const bindingArgs = [bindingRuntime, store] as unknown as ConstructorParameters<
     typeof PtyBindingPersistenceOperations
   >
