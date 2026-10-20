@@ -105,6 +105,8 @@ export type TerminalTitleTracker = {
    * Titles are unaffected; un-suppressing resets the scanners' cross-chunk carry.
    */
   setTransientFactScanningSuppressed: (suppressed: boolean) => void
+  /** Dropped output: the OSC 133 scanner no longer knows which markers came just before. */
+  forgetCommandFinishedContext: () => void
   /** Enable consumer-only bell, PR-link, and mode-2031 scans without resetting title state. */
   setTransientSideEffectScanningEnabled: (enabled: boolean) => void
   /** Cancel the stale-title timer and clear accumulated tracker state. */
@@ -318,6 +320,9 @@ export function createTerminalTitleTracker(
       return agentTracker?.restoreLastExit(confirmedStatus) ?? null
     },
     getLastNormalizedTitle: () => lastEmittedTitle,
+    forgetCommandFinishedContext(): void {
+      commandFinishedScanner?.reset()
+    },
     setTransientFactScanningSuppressed(suppressed: boolean): void {
       if (suppressed === transientFactScanningSuppressed) {
         return

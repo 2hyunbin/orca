@@ -104,6 +104,21 @@ describe('OMP user bubbles and launch authority (#10923)', () => {
     expect(retire).not.toHaveBeenCalled()
   })
 
+  it("keeps it when the dropped output held a bubble's B C", async () => {
+    const { runtime, retire } = await launchOmpPane()
+    const zoneStart = OMP_TRANSCRIPT.indexOf(BUBBLE_CLOSE)
+    runtime.onPtyData('pty-omp', OMP_TRANSCRIPT.slice(0, zoneStart), 100)
+    runtime.notePtyDataGap('pty-omp', BUBBLE_CLOSE.length - D0.length)
+    runtime.onPtyData(
+      'pty-omp',
+      OMP_TRANSCRIPT.slice(zoneStart + BUBBLE_CLOSE.length - D0.length),
+      101
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(retire).not.toHaveBeenCalled()
+    expect(shellAlone).not.toHaveBeenCalled()
+  })
+
   it('still retires it when the shell reports OMP exited', async () => {
     const { runtime, retire, paneKey } = await launchOmpPane()
     runtime.onPtyData('pty-omp', OMP_TRANSCRIPT, 100)
