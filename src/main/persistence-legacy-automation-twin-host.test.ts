@@ -7,6 +7,7 @@ import type { Automation } from '../shared/automations-types'
 import type { Repo } from '../shared/repo-types'
 import { getDefaultPersistedState } from '../shared/constants'
 import { resolveAutomationRunTarget } from './automations/run-target-resolution'
+import { AutomationService } from './automations/service'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -112,22 +113,58 @@ describe('legacy automation on a repo id two hosts share', () => {
     expect(storedAutomation(store).runContext ?? null).toBeNull()
   })
 
-  it('stamps the only host once, durably, so a later twin cannot make it ambiguous', async () => {
+  it('captures the only host on its first run, which still launches, and keeps it', async () => {
     seed([localRow], legacyAutomation({ runContext: null }))
     const store = createStore()
+    const send = vi.fn()
+    const service = new AutomationService(store, { tickMs: 60_000 })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatch reads only isDestroyed and send.
+    service.setWebContents({ isDestroyed: () => false, send } as never)
+    service.setRendererReady()
 
-    const target = resolveAutomationRunTarget(store, storedAutomation(store))
+    const run = await service.runNow('legacy-1')
 
-    expect(target).toMatchObject({ ok: true, cwd: '/laptop/twin' })
+    expect(run.status).toBe('dispatching')
+    expect(send).toHaveBeenCalledWith('automations:dispatchRequested', expect.any(Object))
     const stamped = storedAutomation(store).runContext
     expect(stamped).toMatchObject({ hostId: 'local', repoId: 'twin', path: '/laptop/twin' })
 
     await closeTestStores()
     const reloaded = createStore()
     expect(storedAutomation(reloaded).runContext).toEqual(stamped)
-    expect(resolveAutomationRunTarget(reloaded, storedAutomation(reloaded))).toMatchObject({
+  })
+
+  it('does not capture a host from a path that only reports a refusal', async () => {
+    seed([localRow], legacyAutomation({ runContext: null }))
+    const store = createStore()
+    const service = new AutomationService(store, { tickMs: 60_000 })
+
+    await service.recordRefusedRun('legacy-1')
+
+    expect(storedAutomation(store).runContext ?? null).toBeNull()
+  })
+
+  it('keeps an existing-workspace record uncaptured when capture would move its folder', async () => {
+    seed(
+      [localRow],
+      legacyAutomation({
+        runContext: null,
+        workspaceMode: 'existing',
+        workspaceId: 'twin::/laptop/twin-feature'
+      })
+    )
+    const store = createStore()
+    const service = new AutomationService(store, { tickMs: 60_000 })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatch reads only isDestroyed and send.
+    service.setWebContents({ isDestroyed: () => false, send: vi.fn() } as never)
+    service.setRendererReady()
+
+    await service.runNow('legacy-1')
+
+    expect(storedAutomation(store).runContext ?? null).toBeNull()
+    expect(resolveAutomationRunTarget(store, storedAutomation(store))).toMatchObject({
       ok: true,
-      cwd: '/laptop/twin'
+      cwd: '/laptop/twin-feature'
     })
   })
 })

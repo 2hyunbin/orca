@@ -157,10 +157,10 @@ export class AutomationPersistence {
     return updateAutomationOperation(getAutomationDefinitionOperations(this), id, updates, options)
   }
 
-  stampLegacyAutomationRunContext(id: string, runContext: WorkspaceRunContext): boolean {
+  stampLegacyAutomationRunContext(automationId: string, runContext: WorkspaceRunContext): boolean {
     return stampLegacyAutomationRunContextOperation(
       getAutomationDefinitionOperations(this),
-      id,
+      automationId,
       runContext
     )
   }
