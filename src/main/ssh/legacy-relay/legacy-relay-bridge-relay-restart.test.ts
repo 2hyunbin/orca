@@ -102,8 +102,9 @@ describe('a relay restarted at the same socket', () => {
     relay.ptys.delete('pty-1')
     const opened = relay.clients.length
     await vi.advanceTimersByTimeAsync(60_000)
-    // The waiting pane keeps its relay's connection rather than reclaiming it on every retry.
+    // Nothing can resolve it, so it never reconnects to take the owner role from the relay's own client.
     expect(relay.clients).toHaveLength(opened)
+    expect(relay.clients.every((client) => client.closed)).toBe(true)
     expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
     expect(leases[0].state).toBe('detached')
     // Closing the tab never stops the replacement.

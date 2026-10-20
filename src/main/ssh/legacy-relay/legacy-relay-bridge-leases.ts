@@ -83,6 +83,8 @@ export type Pane = {
   listed?: ListedRow
   /** Its tab closed and its stop is still owed: listed for the stop, never served. */
   stopping?: true
+  /** Its relay's socket now runs another relay: no later listing can bring it back or prove it gone. */
+  replaced?: true
 }
 
 export function toPane(
@@ -163,14 +165,9 @@ export function relistedPane(
     }
     return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
   }
-  // Unreachable, contested or replaced: loss of contact is never exit, so the pane waits. A replaced
-  // owner's endpoint stays named, so its connection is kept rather than reopened every listing.
-  return toPane(
-    lease,
-    relayPtyId,
-    owners.isReplaced(relayPtyId) ? (owner ?? null) : null,
-    'unverifiable'
-  )
+  // Unreachable, contested or replaced: loss of contact is never exit, so the pane waits.
+  const waiting = toPane(lease, relayPtyId, null, 'unverifiable')
+  return owners.isReplaced(relayPtyId) ? { ...waiting, replaced: true } : waiting
 }
 
 /** The panes a bridge serves; a closed tab's pane, its stop owed or its lease ended, is not one. */
