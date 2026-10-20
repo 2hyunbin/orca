@@ -6,6 +6,7 @@ import { applyCommandToSession } from '../persistence/terminal-topology/terminal
 import { resolveHostId } from '../persistence/loading-store/session-host-partitions'
 import { withDurableRuntimeStore, withRuntimePaneAdmission } from './runtime-durable-store-fixture'
 import { OrcaRuntimeService } from './orca-runtime'
+import type { RuntimeNotifier } from './runtime-notifier-contract'
 import { createWorktreeDefaultTabTerminals } from './runtime-worktree-terminal-provisioning'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -66,8 +67,20 @@ function setup() {
     kill: () => true,
     getForegroundProcess: async () => null
   })
-  const renameTerminal = vi.fn()
-  runtime.setNotifier({ renameTerminal } as never)
+  const renameTerminal = vi.fn<RuntimeNotifier['renameTerminal']>()
+  runtime.setNotifier({
+    worktreesChanged: vi.fn(),
+    reposChanged: vi.fn(),
+    activateWorktree: vi.fn(),
+    createTerminal: vi.fn(),
+    splitTerminal: vi.fn(),
+    renameTerminal,
+    focusTerminal: vi.fn(),
+    closeTerminal: vi.fn(),
+    sleepWorktree: vi.fn(),
+    terminalFitOverrideChanged: vi.fn(),
+    terminalDriverChanged: vi.fn()
+  })
   return { runtime, spawn, renameTerminal, session: () => session }
 }
 
