@@ -1,14 +1,13 @@
-import { setTimeout as delay } from 'node:timers/promises'
-import { runProcess } from '@orca/process-host'
-import { parseProcessTable, type ProcessTableRow } from '../pty-process-table-parser'
 import { hasUnambiguousStartTime } from '../pty-descendant-termination'
 import { recordSelfInitiatedTreeKill } from '../crash-reporting/self-initiated-tree-kill-log'
+import { readPosixProcessRow, type ProcessRowRead } from './provider-process-row-read'
+
+export type { ProcessRowRead } from './provider-process-row-read'
 
 // Covers the one stop the supervisor cannot make itself: its own SIGKILL leaves the provider's
 // detached group running, so Orca, which outlives it, finishes the stop. POSIX only: Windows
 // providers have no supervisor.
 
-const PROCESS_ROW_TIMEOUT_MS = 2_000
 // The supervisor disconnects right after reporting, so this bounds only a wedged channel.
 const REPORT_END_WAIT_MS = 1_000
 const IDENTITY_READ_ATTEMPTS = 3
@@ -17,13 +16,12 @@ const SECOND_BOUNDARY_MARGIN_MS = 50
 /** A provider group proven ours while its supervisor still parented the leader. */
 export type ProviderGroupIdentity = { pgid: number; startedAt: string }
 
-/** `null`: no such process. `'unverifiable'`: the read failed, which proves nothing. */
-export type ProcessRowRead = ProcessTableRow | null | 'unverifiable'
-
 export type ProviderGroupSweepVerdict = 'absent' | 'killed' | 'refused'
 
 export type ProviderGroupGuardDeps = {
   site: string
+  /** Only a supervised POSIX spawn has a group to guard. */
+  supervised: boolean
   readProcessRow?: (pid: number) => Promise<ProcessRowRead>
   signalGroup?: (pgid: number, signal: NodeJS.Signals | 0) => void
   now?: () => number
@@ -33,32 +31,13 @@ export type ProviderGroupGuardDeps = {
   onSwept?: (verdict: ProviderGroupSweepVerdict | 'unproven') => void
 }
 
+let warnedMissingChannel = false
+
 type GuardedChild = {
   readonly pid?: number
   readonly connected: boolean
   once(event: 'exit' | 'disconnect', listener: () => void): unknown
   once(event: 'message', listener: (message: unknown) => void): unknown
-}
-
-export async function readPosixProcessRow(pid: number): Promise<ProcessRowRead> {
-  try {
-    const result = await runProcess({
-      program: 'ps',
-      args: ['-o', 'pid=,ppid=,pgid=,lstart=', '-p', String(pid)],
-      // The same locale on every read, so two reads of one process compare equal.
-      env: { ...process.env, LANG: 'C', LC_ALL: 'C' },
-      timeoutMs: PROCESS_ROW_TIMEOUT_MS,
-      maxOutputBytes: 4096
-    })
-    const row = parseProcessTable(result.stdout).find((entry) => entry.pid === pid) ?? null
-    if (row) {
-      return row
-    }
-    // ps exits 1 with no rows for a pid that does not exist; anything else is a failed read.
-    return !result.timedOut && result.code === 1 ? null : 'unverifiable'
-  } catch {
-    return 'unverifiable'
-  }
 }
 
 function defaultSignalGroup(pgid: number, signal: NodeJS.Signals | 0): void {
@@ -101,47 +80,76 @@ export async function sweepOrphanedProviderGroup(
 
 /**
  * Reads the group a supervisor reports on its IPC channel, proves it by the leader's parent and
- * start time, and sweeps that group once the supervisor exits. A no-op without the channel.
+ * start time, and sweeps that group once the supervisor exits. True when it is watching.
  */
 export function guardSupervisedProviderGroup(
   child: GuardedChild,
   deps: ProviderGroupGuardDeps
-): void {
+): boolean {
   const supervisorPid = child.pid
-  if (!supervisorPid || !hasReportChannel(child)) {
-    return
+  if (!supervisorPid || !deps.supervised) {
+    return false
+  }
+  if (!hasReportChannel(child)) {
+    // A launch adapter that rewrites stdio drops the channel; say so once instead of silently.
+    if (!warnedMissingChannel) {
+      warnedMissingChannel = true
+      console.warn(`[provider-group-guard] ${deps.site}: supervised spawn has no report channel`)
+    }
+    return false
   }
   let identity: Promise<ProviderGroupIdentity | null> = Promise.resolve(null)
-  const reportEnded = new Promise<void>((resolve) => child.once('disconnect', resolve))
+  // A gone supervisor parents nothing, so a re-read it would wait for can only fail; skip it.
+  const proof = createProofWait(deps.sleep)
+  let channelClosed = false
+  let onChannelClosed = (): void => {}
+  child.once('disconnect', () => {
+    channelClosed = true
+    onChannelClosed()
+  })
   child.once('message', (message: unknown) => {
     const pgid = reportedGroup(message)
     if (pgid !== null) {
-      identity = proveReportedGroup(pgid, supervisorPid, deps)
+      identity = proveReportedGroup(pgid, supervisorPid, deps, proof)
       void identity.then((proven) => proven && deps.onProven?.(proven))
     }
   })
+  const untilChannelClosed = (): Promise<void> =>
+    channelClosed
+      ? Promise.resolve()
+      : new Promise((resolve) => {
+          const timer = setTimeout(resolve, REPORT_END_WAIT_MS)
+          timer.unref?.()
+          onChannelClosed = () => {
+            clearTimeout(timer)
+            resolve()
+          }
+        })
   child.once('exit', () => {
+    proof.stop()
     // Exit can be observed before the report is delivered.
-    void Promise.race([reportEnded, delay(REPORT_END_WAIT_MS, undefined, { ref: false })])
+    void untilChannelClosed()
       .then(() => identity)
       .then((proven) => (proven ? sweepOrphanedProviderGroup(proven, deps) : ('unproven' as const)))
       .then(deps.onSwept, () => deps.onSwept?.('refused'))
   })
+  return true
 }
 
 /**
  * The leader's identity, read while this supervisor still parents it (so its pid was not reused).
- * lstart has one-second resolution, so a start in the read's own second is read again after that
- * second ends; otherwise a pid reused within that second would carry the same start time.
+ * lstart has one-second resolution, so a start in the read's own second is re-proven after that
+ * second ends; otherwise a pid reused within that second would carry the same start time. A
+ * supervisor gone by then no longer parents it, so nothing is armed.
  */
 async function proveReportedGroup(
   pgid: number,
   supervisorPid: number,
-  deps: ProviderGroupGuardDeps
+  deps: ProviderGroupGuardDeps,
+  proof: ProofWait
 ): Promise<ProviderGroupIdentity | null> {
   const readRow = deps.readProcessRow ?? readPosixProcessRow
   const now = deps.now ?? Date.now
-  const sleep = deps.sleep ?? ((ms: number) => delay(ms, undefined, { ref: false }))
   for (let attempt = 0; attempt < IDENTITY_READ_ATTEMPTS; attempt += 1) {
     // The boundary before ps starts, as the descendant sweep takes it.
     const capturedAtMs = now()
@@ -149,12 +157,48 @@ async function proveReportedGroup(
     if (!row || row === 'unverifiable' || row.ppid !== supervisorPid || row.pgid !== pgid) {
       return null
     }
-    if (hasUnambiguousStartTime(row.startedAt, capturedAtMs)) {
+    if (
+      row.startResolution === 'clock-tick' ||
+      hasUnambiguousStartTime(row.startedAt, capturedAtMs)
+    ) {
       return { pgid, startedAt: row.startedAt }
     }
-    await sleep(1_000 - (now() % 1_000) + SECOND_BOUNDARY_MARGIN_MS)
+    if (!(await proof.wait(1_000 - (now() % 1_000) + SECOND_BOUNDARY_MARGIN_MS))) {
+      return null
+    }
   }
   return null
+}
+
+type ProofWait = { wait(ms: number): Promise<boolean>; stop(): void }
+
+/** Waits that end early, false, once stopped; their timers never outlive the stop. */
+function createProofWait(sleep?: (ms: number) => Promise<void>): ProofWait {
+  let stopped = false
+  let cancel = (): void => {}
+  return {
+    async wait(ms) {
+      if (stopped) {
+        return false
+      }
+      if (sleep) {
+        await sleep(ms)
+        return !stopped
+      }
+      return new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(!stopped), ms)
+        timer.unref?.()
+        cancel = () => {
+          clearTimeout(timer)
+          resolve(false)
+        }
+      })
+    },
+    stop() {
+      stopped = true
+      cancel()
+    }
+  }
 }
 
 function hasReportChannel(child: GuardedChild): boolean {

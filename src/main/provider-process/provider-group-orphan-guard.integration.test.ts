@@ -70,6 +70,7 @@ function launch(): {
   const swept = new Promise<ProviderGroupSweepVerdict | 'unproven'>((resolve) =>
     guardSupervisedProviderGroup(supervisor, {
       site: 'test',
+      supervised: spec.supervised,
       onProven: () => {
         identityProven = true
       },

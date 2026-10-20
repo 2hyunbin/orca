@@ -15,7 +15,14 @@ function errno(code: string): Error {
 }
 
 function row(overrides: Partial<Exclude<ProcessRowRead, null | 'unverifiable'>> = {}) {
-  return { pid: 4242, ppid: 1, pgid: 4242, startedAt: STARTED, ...overrides }
+  return {
+    pid: 4242,
+    ppid: 1,
+    pgid: 4242,
+    startedAt: STARTED,
+    startResolution: 'second' as const,
+    ...overrides
+  }
 }
 
 describe('sweepOrphanedProviderGroup', () => {
@@ -27,6 +34,7 @@ describe('sweepOrphanedProviderGroup', () => {
     await expect(
       sweepOrphanedProviderGroup(identity, {
         site: 'test',
+        supervised: true,
         signalGroup,
         readProcessRow
       })
@@ -39,6 +47,7 @@ describe('sweepOrphanedProviderGroup', () => {
     await expect(
       sweepOrphanedProviderGroup(identity, {
         site: 'test',
+        supervised: true,
         signalGroup,
         readProcessRow: async () => row()
       })
@@ -51,6 +60,7 @@ describe('sweepOrphanedProviderGroup', () => {
     await expect(
       sweepOrphanedProviderGroup(identity, {
         site: 'test',
+        supervised: true,
         signalGroup,
         readProcessRow: async () => null
       })
@@ -67,6 +77,7 @@ describe('sweepOrphanedProviderGroup', () => {
     await expect(
       sweepOrphanedProviderGroup(identity, {
         site: 'test',
+        supervised: true,
         signalGroup,
         readProcessRow: async () => leader
       })
@@ -78,9 +89,9 @@ describe('sweepOrphanedProviderGroup', () => {
     const signalGroup = vi.fn(() => {
       throw errno('EPERM')
     })
-    await expect(sweepOrphanedProviderGroup(identity, { site: 'test', signalGroup })).resolves.toBe(
-      'refused'
-    )
+    await expect(
+      sweepOrphanedProviderGroup(identity, { site: 'test', supervised: true, signalGroup })
+    ).resolves.toBe('refused')
   })
 })
 
@@ -102,6 +113,7 @@ function guard(
   return new Promise((resolve) =>
     guardSupervisedProviderGroup(child, {
       site: 'test',
+      supervised: true,
       readProcessRow,
       signalGroup,
       onSwept: resolve
@@ -141,6 +153,7 @@ describe('guardSupervisedProviderGroup', () => {
     const proven = new Promise((resolve) =>
       guardSupervisedProviderGroup(child, {
         site: 'test',
+        supervised: true,
         readProcessRow,
         now: () => clock.now,
         sleep,
@@ -153,6 +166,57 @@ describe('guardSupervisedProviderGroup', () => {
     expect(clock.now).toBeGreaterThanOrEqual(startedAtMs + 1_000)
   })
 
+  it('arms nothing when a same-second replacement holds the pid once the second ends', async () => {
+    const child = new FakeSupervisor()
+    const clock = { now: Date.parse(STARTED) + 300 }
+    // The first read is our leader; by the re-read its pid names a stranger with the same lstart.
+    const readProcessRow = vi
+      .fn<(pid: number) => Promise<ProcessRowRead>>()
+      .mockResolvedValueOnce(row({ ppid: 777 }))
+      .mockResolvedValueOnce(row({ ppid: 1 }))
+    const signalGroup = vi.fn()
+    const swept = new Promise((resolve) =>
+      guardSupervisedProviderGroup(child, {
+        site: 'test',
+        supervised: true,
+        readProcessRow,
+        signalGroup,
+        now: () => clock.now,
+        sleep: async (ms) => {
+          clock.now += ms
+        },
+        onSwept: resolve
+      })
+    )
+    child.report({ pgid: 4242 })
+    await vi.waitFor(() => expect(readProcessRow).toHaveBeenCalledTimes(2))
+    child.emit('exit', null, 'SIGKILL')
+    await expect(swept).resolves.toBe('unproven')
+    expect(signalGroup).not.toHaveBeenCalled()
+  })
+
+  it('trusts a Linux clock-tick start without waiting out the second', async () => {
+    const child = new FakeSupervisor()
+    const startedAt = 'clock-tick:123456'
+    const readProcessRow = vi.fn(async () =>
+      row({ ppid: 777, startedAt, startResolution: 'clock-tick' })
+    )
+    const sleep = vi.fn(async () => {})
+    const proven = new Promise((resolve) =>
+      guardSupervisedProviderGroup(child, {
+        site: 'test',
+        supervised: true,
+        readProcessRow,
+        now: () => Date.now(),
+        sleep,
+        onProven: resolve
+      })
+    )
+    child.report({ pgid: 4242 })
+    await expect(proven).resolves.toEqual({ pgid: 4242, startedAt })
+    expect(sleep).not.toHaveBeenCalled()
+  })
+
   it('records nothing when every read stays inside the start second', async () => {
     const child = new FakeSupervisor()
     const now = Date.parse(STARTED) + 100
@@ -160,6 +224,7 @@ describe('guardSupervisedProviderGroup', () => {
     const swept = new Promise((resolve) =>
       guardSupervisedProviderGroup(child, {
         site: 'test',
+        supervised: true,
         readProcessRow: async () => row({ ppid: 777 }),
         signalGroup,
         now: () => now,
@@ -173,11 +238,24 @@ describe('guardSupervisedProviderGroup', () => {
     expect(signalGroup).not.toHaveBeenCalled()
   })
 
-  it('does nothing for a spawn without the report channel', () => {
+  it('warns once and watches nothing for a supervised spawn without the report channel', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const child = new FakeSupervisor()
     child.connected = false
-    guardSupervisedProviderGroup(child, { site: 'test' })
+    expect(guardSupervisedProviderGroup(child, { site: 'test', supervised: true })).toBe(false)
+    expect(guardSupervisedProviderGroup(child, { site: 'test', supervised: true })).toBe(false)
     expect(child.listenerCount('exit')).toBe(0)
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it('stays quiet for an unsupervised spawn', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      guardSupervisedProviderGroup(new FakeSupervisor(), { site: 'test', supervised: false })
+    ).toBe(false)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('ignores a malformed report', async () => {

@@ -111,6 +111,9 @@ function spawnSupervisedAgent(
     detached: spec.detached,
     stdio: ['pipe', 'pipe', 'pipe', ...spec.groupReportStdio]
   })
-  guardSupervisedProviderGroup(child, { site: SOURCE_CONTROL_KILL_SITE })
+  guardSupervisedProviderGroup(child, {
+    site: SOURCE_CONTROL_KILL_SITE,
+    supervised: spec.supervised
+  })
   return Object.assign(child, { supervised: spec.supervised })
 }

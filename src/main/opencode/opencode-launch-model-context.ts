@@ -128,7 +128,10 @@ export async function probeOpenCodeLaunchModelContext(options: {
     detached: true,
     stdio: ['pipe', 'pipe', 'pipe', ...spawnSpec.groupReportStdio]
   })
-  guardSupervisedProviderGroup(child, { site: OPENCODE_PREFLIGHT_KILL_SITE })
+  guardSupervisedProviderGroup(child, {
+    site: OPENCODE_PREFLIGHT_KILL_SITE,
+    supervised: spawnSpec.supervised
+  })
   const output = createOutputSink(4096)
   let childClosed = false
   let rootExited = false

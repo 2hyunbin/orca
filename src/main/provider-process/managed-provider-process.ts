@@ -99,7 +99,7 @@ export function spawnManagedProviderProcess(
     detached: spec.detached,
     stdio: ['pipe', 'pipe', 'pipe', ...spec.groupReportStdio]
   })
-  guardSupervisedProviderGroup(child, { site: options.site })
+  guardSupervisedProviderGroup(child, { site: options.site, supervised: spec.supervised })
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
   let observed: ProviderProcessExit | null = null
   let spawnFailed = false

@@ -65,7 +65,10 @@ export function spawnCodexBackfillRecoveryProcess(
     env: spawnSpec.env,
     ...(spawnSpec.supervised ? { detached: true } : {})
   })
-  guardSupervisedProviderGroup(child, { site: BACKFILL_RECOVERY_KILL_SITE })
+  guardSupervisedProviderGroup(child, {
+    site: BACKFILL_RECOVERY_KILL_SITE,
+    supervised: spawnSpec.supervised
+  })
   return { child, supervised: spawnSpec.supervised }
 }
 
