@@ -102,22 +102,38 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
           return saved ? getPreferredPairingOffer(saved) : null
         },
         deployAndLaunch: async () => ({
-          outcome: 'ready', distro: 'Ubuntu', distroId: null, fullVersion: '1', pid: null,
-          holder: 'adopted', port: Number(new URL(server.getWebSocketEndpoint()!).port),
-          readiness: { runtimeId: server['runtime'].getRuntimeId(),
+          outcome: 'ready',
+          distro: 'Ubuntu',
+          distroId: null,
+          fullVersion: '1',
+          pid: null,
+          holder: 'adopted',
+          port: Number(new URL(server.getWebSocketEndpoint()!).port),
+          readiness: {
+            runtimeId: server['runtime'].getRuntimeId(),
             managedWslCliReconciliation: 'settled',
-            ...await buildServePairingReadiness({ pairingAddress: '127.0.0.1' }, server) }
+            ...(await buildServePairingReadiness({ pairingAddress: '127.0.0.1' }, server))
+          }
         }),
         listen: async (_transport, { remotePort }) => ({
-          entry: { id: 'bridge', connectionId: 'wsl:ubuntu', localPort: remotePort,
-            remoteHost: '127.0.0.1', remotePort },
-          close: async () => {}, dispose: () => {}
+          entry: {
+            id: 'bridge',
+            connectionId: 'wsl:ubuntu',
+            localPort: remotePort,
+            remoteHost: '127.0.0.1',
+            remotePort
+          },
+          close: async () => {},
+          dispose: () => {}
         })
       })
       const dispatch = vi.spyOn(server['dispatcher'], 'dispatchStreaming')
       try {
         const connection = await manager.ensure('Ubuntu')
-        return { connection, caller: dispatch.mock.calls.at(-1)?.[2]?.authenticatedCallerFingerprint }
+        return {
+          connection,
+          caller: dispatch.mock.calls.at(-1)?.[2]?.authenticatedCallerFingerprint
+        }
       } finally {
         dispatch.mockRestore()
         await manager.dispose()
@@ -126,9 +142,15 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
     const first = await connect()
     expect(first.caller).toBeTruthy()
     addWslHostEnvironment(desktopProfile, {
-      id: 'wsl:ubuntu', name: 'Ubuntu', pairingCode: first.connection.pairingOffer,
-      record: { kind: 'wsl', distro: 'Ubuntu',
-        localPort: first.connection.localPort, remotePort: first.connection.remotePort }
+      id: 'wsl:ubuntu',
+      name: 'Ubuntu',
+      pairingCode: first.connection.pairingOffer,
+      record: {
+        kind: 'wsl',
+        distro: 'Ubuntu',
+        localPort: first.connection.localPort,
+        remotePort: first.connection.remotePort
+      }
     })
     await server.stop()
     server = await startOrcad(hostProfile)
@@ -136,10 +158,11 @@ describe('reopening a managed tunnel after orcad restarted elsewhere', () => {
     expect(restarted.caller).toBe(first.caller)
     const paired = parsePairingCode(first.connection.pairingOffer)!
     server.getDeviceRegistry()!.removeDevice(paired.pairedDeviceId!)
-    await expect(connect()).rejects.toThrow('orcad_identity_mismatch')
+    await expect(connect()).rejects.toThrow('orcad_pairing_rejected')
     refreshWslHostPairing(desktopProfile, 'wsl:ubuntu', {
       pairingCode: encodePairingOffer(pairingOffer(server)),
-      localPort: restarted.connection.localPort, remotePort: restarted.connection.remotePort
+      localPort: restarted.connection.localPort,
+      remotePort: restarted.connection.remotePort
     })
     const rePaired = await connect()
     expect(rePaired.caller).toBeTruthy()

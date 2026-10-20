@@ -605,6 +605,10 @@ import {
 } from './terminal-viewport-schemas-params'
 import { UpdaterCheckParams } from './updater-params'
 import {
+  UsageCredentialApiKeyParams,
+  UsageCredentialSessionCookieParams
+} from './usage-credentials-params'
+import {
   LayoutApplyParams,
   LayoutSubscribeParams,
   LayoutUnsubscribeParams
@@ -668,6 +672,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.finishClaudeSignIn': FinishClaudeSignInParams,
   'accounts.list': ListAccountsParams,
   'accounts.listData': null,
+  'accounts.minimaxClearApiKey': null,
+  'accounts.minimaxClearSessionCookie': null,
+  'accounts.minimaxCredentialsStatus': null,
+  'accounts.minimaxSaveApiKey': UsageCredentialApiKeyParams,
+  'accounts.minimaxSaveSessionCookie': UsageCredentialSessionCookieParams,
   'accounts.removeClaude': RemoveAccountParams,
   'accounts.removeCodex': RemoveAccountParams,
   'accounts.removeData': RemoveDataAccountParams,
@@ -678,6 +687,9 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.setHostLaunchEnv': HostAccountLaunchEnvParams,
   'accounts.subscribe': null,
   'accounts.unsubscribe': AccountsUnsubscribeParams,
+  'accounts.zcodePlanClearApiKey': null,
+  'accounts.zcodePlanCredentialsStatus': null,
+  'accounts.zcodePlanSaveApiKey': UsageCredentialApiKeyParams,
   'agent.launch': AgentLaunch,
   'agent.launchReplay': AgentLaunchReplay,
   'agentHooks.prepareCodexForWslPane': PrepareCodexForWslPaneParams,

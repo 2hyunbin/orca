@@ -2,7 +2,7 @@ import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-co
 import { parsePairingCode, type PairingOffer } from '../../shared/pairing'
 import type { ServeReadiness } from '../server/serve-readiness'
 import {
-  OrcadManagedIdentityError,
+  orcadIdentityRefusal,
   verifyOrcadPairingIdentity,
   type OrcadTunnelIdentity
 } from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
@@ -18,11 +18,13 @@ export async function resolveWslOrcadPairing(
 ): Promise<string> {
   const pairingOffer = tunneledOrcadPairingCode(launch.readiness, localPort, paired)
   const identity = await verifyIdentity(pairingOffer, launch.readiness)
-  if (identity.verdict === 'foreign') {
-    throw new OrcadManagedIdentityError(launch.port, identity.detail)
+  if (identity.verdict === 'foreign' || identity.verdict === 'unpaired') {
+    throw orcadIdentityRefusal(launch.port, identity)
   }
   if (identity.verdict === 'unreachable') {
-    console.warn(`[wsl] Orca server in ${launch.distro} did not answer its bridge: ${identity.detail}`)
+    console.warn(
+      `[wsl] Orca server in ${launch.distro} did not answer its bridge: ${identity.detail}`
+    )
   }
   return pairingOffer
 }
