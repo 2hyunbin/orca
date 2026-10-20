@@ -140,8 +140,9 @@ async function saveOnce(
 ): Promise<RuntimeMarkdownSaveTabResult> {
   const file = savedEditorFile(host, worktreeId, tab)
   const draft = file.dirtyDraftContent
+  const draftBaseline = draft === undefined ? undefined : file.lastKnownDiskSignature
   const disk =
-    draft === undefined || !file.lastKnownDiskSignature
+    draftBaseline === undefined
       ? await host.readFile(worktreeId, file.filePath, MOBILE_MARKDOWN_EDIT_MAX_BYTES + 1)
       : null
   const reason = savedReadOnlyReason(file, disk?.byteLength ?? 0)
@@ -159,7 +160,7 @@ async function saveOnce(
   }
   // Why the draft's own baseline: a disk edit made after the draft must refuse, not be overwritten.
   const written = await host.writeFileIfUnchanged(worktreeId, file.filePath, content, {
-    expectedSignature: file.lastKnownDiskSignature ?? getDiskBaselineSignature(disk?.content ?? ''),
+    expectedSignature: draftBaseline ?? getDiskBaselineSignature(disk?.content ?? ''),
     ...(draft === undefined ? {} : { allowMissing: true })
   })
   if (!written.ok) {
