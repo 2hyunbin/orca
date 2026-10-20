@@ -108,12 +108,16 @@ export async function interruptOpeningCodexTurn(
   turnId: string,
   interrupt: () => Promise<AgentSessionCancelOutcome>,
   /** Whether the session the Stop began on still runs it, read after the wait. */
-  stillCurrent: () => boolean
+  stillCurrent: () => boolean,
+  deadline?: number
 ): Promise<AgentSessionCancelOutcome> {
   const open = (): ReadonlySet<string> => session.activeTurnIds ?? new Set<string>()
   const first = await interrupt()
   if (first.cancelled || first.refusal?.detail?.text !== CODEX_NO_ACTIVE_TURN_TO_INTERRUPT) {
     return first
+  }
+  if (!stillCurrent()) {
+    return { cancelled: false }
   }
   const opened = (): boolean => open().has(turnId)
   const stillOpening = (): boolean => {
@@ -121,7 +125,10 @@ export async function interruptOpeningCodexTurn(
     return target !== null && 'opening' in target && target.opening === turnId
   }
   if (!opened() && stillOpening()) {
-    await session.turnOpenWaits.wait(turnId, CODEX_TURN_OPEN_WAIT_MS)
+    const remaining = Math.min(CODEX_TURN_OPEN_WAIT_MS, (deadline ?? Infinity) - Date.now())
+    if (remaining > 0) {
+      await session.turnOpenWaits.wait(turnId, remaining)
+    }
     if (!stillCurrent()) {
       return { cancelled: false }
     }

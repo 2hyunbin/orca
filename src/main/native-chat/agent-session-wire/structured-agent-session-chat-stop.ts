@@ -39,6 +39,7 @@ import {
 import { performCancel } from './structured-agent-session-turns-cancel'
 import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
+import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 
 type ChatStopOutcome = TurnOutcome<AgentSessionCancelResult>
 
@@ -81,6 +82,17 @@ export function mutateWithChatStop<TValue>(
       const accepted = await acceptStopTarget(ctx)
       return accepted.ok ? { ok: true, value: { settled: false, turnId: null } } : accepted
     }
+    const sinceStop = ctx.journal.queuedMessages.userStopInForce()?.sequence
+    const handed = ctx.journal
+      .submissions()
+      .some(
+        (entry) =>
+          entry.fence === ctx.fence &&
+          !isQueuedAgentJournalSubmission(entry) &&
+          (entry.dispatchState === 'pending' ||
+            (entry.dispatchState === 'unknown' && !entry.recovered)) &&
+          (sinceStop === undefined || (entry.submittedSequence ?? -1) > sinceStop)
+      )
     const accepted = await acceptChatStop(ctx, {
       event: {
         reason: 'user-stop',
@@ -93,7 +105,7 @@ export function mutateWithChatStop<TValue>(
       ? {
           ok: true,
           value: {
-            settled: target.queued || reached,
+            settled: (accepted.value.withdrawn?.length ?? (target.queued ? 1 : 0)) > 0 || handed,
             turnId: accepted.value.turnId
           }
         }
@@ -169,11 +181,8 @@ export function mutateWithChatStop<TValue>(
     if (flight && (target.queued || target.reach === 'withdraw' || target.reach === 'starting')) {
       flight.abort()
     }
-    if (
-      target.reach === 'starting' ||
-      (target.reach === 'withdraw' && (target.queued || reached))
-    ) {
-      await writeStructuredAgentSessionStopNote(
+    if ((target.reach === 'starting' || target.reach === 'withdraw') && accepted.value.settled) {
+      void writeStructuredAgentSessionStopNote(
         ctx,
         accepted.value.turnId ?? envelope.clientOperationId,
         { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED },

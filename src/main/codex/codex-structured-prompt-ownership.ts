@@ -13,6 +13,7 @@ import {
 import { requireLiveCodexSession, type CodexSession } from './codex-structured-session-state'
 import { interruptCodexTurn } from './codex-structured-turn-cancellation'
 import { codexStopTarget, interruptOpeningCodexTurn } from './codex-structured-turn-open-wait'
+import { CODEX_STOP_GRACE_MS } from './codex-request-end-wait'
 
 type CancelInput = Parameters<StructuredAgentSessionAdapter['cancelTurn']>[0]
 type AnswerInput = Parameters<StructuredAgentSessionAdapter['answerPrompt']>[0]
@@ -47,12 +48,17 @@ async function cancelCodexConversation(
   session: CodexSession
 ): Promise<AgentSessionCancelOutcome> {
   const { request, sessions, requestTimeoutMs } = input
+  const stoppedAt = request.stoppedAt ?? Date.now()
+  const generation = session.acquisitionGeneration
   const liveTurnId = request.resolveLiveTurnId?.() ?? null
   // A turn the journal shows that Codex has not started yet (a compaction's) has nothing to stop.
   const target = liveTurnId === null ? codexStopTarget(session) : { turnId: liveTurnId }
   // Read again after any wait for the turn to open, which can outlive the session it began on.
   const current = (): boolean =>
-    sessions.get(request.sessionId) === session && !session.ended && session.fence === request.fence
+    sessions.get(request.sessionId) === session &&
+    !session.ended &&
+    session.fence === request.fence &&
+    session.acquisitionGeneration === generation
   if (!current()) {
     return { cancelled: false }
   }
@@ -67,12 +73,18 @@ async function cancelCodexConversation(
     return { cancelled: false }
   }
   const interrupt = () =>
-    interruptCodexTurn({ session, threadId: session.threadId, turnId, requestTimeoutMs })
+    interruptCodexTurn({ session, threadId: session.threadId, turnId, requestTimeoutMs, stoppedAt })
   if (!('opening' in target)) {
     return stoppedTurn(await interrupt(), journalTurnId)
   }
   return stoppedTurn(
-    await interruptOpeningCodexTurn(session, turnId, interrupt, current),
+    await interruptOpeningCodexTurn(
+      session,
+      turnId,
+      interrupt,
+      current,
+      stoppedAt + CODEX_STOP_GRACE_MS
+    ),
     journalTurnId
   )
 }
@@ -95,7 +107,13 @@ export async function cancelCodexStructuredTurn(input: {
   }
   if (!prompt) {
     return stoppedTurn(
-      await interruptCodexTurn({ session, threadId: session.threadId, turnId, requestTimeoutMs }),
+      await interruptCodexTurn({
+        session,
+        threadId: session.threadId,
+        turnId,
+        requestTimeoutMs,
+        stoppedAt: request.stoppedAt ?? Date.now()
+      }),
       requestedTurnId
     )
   }

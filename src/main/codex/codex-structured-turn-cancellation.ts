@@ -4,6 +4,7 @@ import { providerDiagnosticOf } from '../../shared/agent-session-failure'
 import type { AgentSessionCancelOutcome } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { CodexSession } from './codex-structured-session-state'
 import type { CodexJournalTranslationAdmission } from './codex-structured-journal-contracts'
+import { CODEX_STOP_GRACE_MS } from './codex-request-end-wait'
 
 /**
  * Codex's interrupt handler answers -32600 when the named turn is not its running one (no turn,
@@ -26,14 +27,21 @@ export async function interruptCodexTurn(input: {
   threadId: string
   turnId: string
   requestTimeoutMs?: number
+  stoppedAt?: number
   onConfirmed?: () => CodexJournalTranslationAdmission
 }): Promise<AgentSessionCancelOutcome> {
   const { session, threadId, turnId } = input
+  const remaining =
+    input.stoppedAt === undefined ? Infinity : input.stoppedAt + CODEX_STOP_GRACE_MS - Date.now()
+  if (remaining <= 0) {
+    return { cancelled: false, refusal: { turnMayOpen: true } }
+  }
+  const timeoutMs = Math.min(input.requestTimeoutMs ?? Infinity, remaining)
   try {
     await session.connection.request(
       'turn/interrupt',
       { threadId, turnId },
-      { timeoutMs: input.requestTimeoutMs }
+      { timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined }
     )
   } catch (error) {
     if (!isCodexAppServerRequestError(error) && !isCodexAppServerUnsupportedError(error)) {

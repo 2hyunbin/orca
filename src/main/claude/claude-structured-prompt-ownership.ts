@@ -48,10 +48,16 @@ function cancelClaudeConversation(
     session.fence === request.fence &&
     session.acquisitionGeneration === acquisitionGeneration &&
     (claudeLiveTurnId(session, request) !== null || session.dispatchWaiters.length > 0)
-  return cancelClaudeTurn(session, timeoutMs, isCurrent, onDispatchSettledLate)
+  return cancelClaudeTurn(
+    session,
+    timeoutMs,
+    isCurrent,
+    onDispatchSettledLate,
+    request.stoppedAt ?? Date.now()
+  )
 }
 
-/** A Stop's interrupt. A card's own Cancel never comes here: `claudePromptCancelRoute` routes it. */
+/** Session-ending interruption, including a current question card routed through chat Stop. */
 export async function cancelClaudeStructuredTurn(input: {
   request: CancelInput
   sessions: Map<string, ClaudeSession>
@@ -124,7 +130,8 @@ export async function cancelClaudeStructuredTurn(input: {
       }
       return current
     },
-    input.onDispatchSettledLate
+    input.onDispatchSettledLate,
+    request.stoppedAt ?? Date.now()
   )
 }
 

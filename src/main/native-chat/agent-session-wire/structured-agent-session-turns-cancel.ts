@@ -190,6 +190,7 @@ async function cancelAndNote(
           sessionId: ctx.sessionId,
           ...(input.turnId !== undefined ? { turnId: input.turnId } : {}),
           fence: ctx.fence,
+          ...(endsSession ? { stoppedAt } : {}),
           // The journal is what the client read to name a turn, so it is what judges the request.
           resolveLiveTurnId: () => work().activeTurnId(),
           ...(dispatchStatus ? { dispatchStatus } : {}),

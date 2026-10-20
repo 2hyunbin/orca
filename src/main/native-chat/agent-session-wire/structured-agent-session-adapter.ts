@@ -317,6 +317,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     turnId?: string
     fence: number
     prompt?: { itemId: string }
+    /** Original host Stop time; in-process only, for a Stop that ends the session. */
+    stoppedAt?: number
     /** Latest journal submission for this fence, when the host has one. */
     dispatchStatus?: { state: AgentJournalDispatchState; recovered: boolean } | null
     /** Re-reads the turn the published journal says is running — the only turn a client

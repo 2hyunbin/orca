@@ -55,6 +55,18 @@ function receipt(id: string) {
   return rig.store.readCommandReceipt(CALLER_SCOPE, id)
 }
 
+it('does not treat completed submission history as a send in an empty reinitialization', async () => {
+  const id = await rig.workingSend()
+  await rig.settleAccepted(id, 'old')
+  await turnRow('turn-old', 'interrupted')
+  const child = rig.host.collaboratorsForTests().sessions.get(SESSION)!.child!
+  child.phase = 'starting'
+  expect(await rig.stop()).toMatchObject({ ok: true })
+  expect(
+    (await rig.host.journalSnapshot(SESSION)).items.filter((item) => item.body.kind === 'status')
+  ).toEqual([])
+})
+
 /** Every Stop event in the live epoch, with where it landed, oldest first. */
 function stopEvents(): { sequence: number; event: JournalStopEvent }[] {
   const since = journal().readSince({ epoch: journal().epoch, sequence: 0 })

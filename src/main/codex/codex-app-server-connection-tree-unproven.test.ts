@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { spawnProcess } from '@orca/process-host'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import { openCodexAppServerConnection } from './codex-app-server-connection'
+import { codexTurnLifecycleRig } from './codex-structured-dispatch-test-support'
 
 const teardown = vi.hoisted(() => {
   const state: { verdict: DescendantTreeVerdict; rootExits: () => void } = {
@@ -47,6 +48,51 @@ function stubChild() {
 }
 
 describe('Codex process-tree diagnostic after a forced close', () => {
+  it.each([undefined, 'turn-1'])(
+    'bounds unanswered Stop %s and ignores its late reply after replacement',
+    async (turnId) => {
+      const rig = await codexTurnLifecycleRig()
+      const session = rig.adapter['sessions'].get('session-1')!
+      session.activeTurnIds?.add('turn-1')
+      vi.useFakeTimers()
+      const { child, spawnImpl } = stubChild()
+      const connection = await openCodexAppServerConnection(
+        { command: 'codex', args: [] },
+        {},
+        spawnImpl
+      )
+      const original = session.connection
+      session.connection = connection
+      const stopping = rig.adapter.cancelTurn({
+        sessionId: 'session-1',
+        fence: 7,
+        turnId,
+        stoppedAt: Date.now() - 4_900
+      })
+      const timedOut = expect(stopping).rejects.toThrow('exceeded 100ms')
+      await vi.advanceTimersByTimeAsync(100)
+      await timedOut
+      const replacement = {
+        ...session,
+        connection: original,
+        fence: 8,
+        abortedTurnIds: new Set<string>()
+      }
+      rig.adapter['sessions'].set('session-1', replacement)
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      child.stdout.write(`${JSON.stringify({ id: 2, result: {} })}\n`)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(replacement.abortedTurnIds.size).toBe(0)
+      expect(warning).toHaveBeenCalled()
+      warning.mockRestore()
+      teardown.rootExits = () => child.emit('exit', 0, null)
+      const closing = connection.close()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await closing
+      await rig.adapter.closeAll()
+    }
+  )
+
   // The flag keeps its meaning: a forced teardown that did not prove the descendants gone.
   it.each([
     ['unverifiable', true],

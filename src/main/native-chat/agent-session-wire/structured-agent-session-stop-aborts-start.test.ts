@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { JournalStopAcceptor } from '../agent-session-journal/journal-stop-acceptance'
 import {
   HOST_TEST_SESSION as SESSION,
+  hostTestAttachParams,
   hostTestOperationId
 } from './structured-agent-session-host-test-data'
 import {
@@ -66,6 +67,19 @@ it('starts a Codex chat afresh for a message sent right after a Stop reached its
   expect(await rig.submission(first.id)).toMatchObject({ rejection: { kind: 'cancelled' } })
   expect((await rig.submission(second!.id))?.rejection).toBeUndefined()
   expect(rig.dispatch).toHaveBeenCalledTimes(1)
+})
+
+it('writes no request for an empty unpublished acquisition', async () => {
+  let stopping: ReturnType<QueuedMessageTestRig['stop']> | undefined
+  await duringStart(() => {
+    stopping = rig.stop()
+  })
+  await expect(rig.host.attach(CALLER, hostTestAttachParams())).rejects.toThrow("couldn't restart")
+  await eventually(() => expect(stopping).toBeDefined())
+  await stopping
+  expect(
+    (await rig.host.journalSnapshot(SESSION)).items.filter((item) => item.body.kind === 'status')
+  ).toEqual([])
 })
 
 // The round-2 repro: a Stop at a start whose save is slow, while the person picks an option. The
@@ -128,4 +142,7 @@ it('answers that it stopped the queued message even when its write throws after 
 
   expect(await stopping).toMatchObject({ ok: true, value: { cancelled: true } })
   expect(await rig.submission(first.id)).toMatchObject({ rejection: { kind: 'cancelled' } })
+  expect(
+    (await rig.host.journalSnapshot(SESSION)).items.filter((item) => item.body.kind === 'status')
+  ).toHaveLength(1)
 })
