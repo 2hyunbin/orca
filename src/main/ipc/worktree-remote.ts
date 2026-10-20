@@ -81,7 +81,6 @@ import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import {
   getConnectionExecutionHostId,
   getRepoExecutionHostId,
-  LOCAL_EXECUTION_HOST_ID,
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { BranchPrefixSettings } from '../../shared/branch-prefix'
@@ -156,6 +155,7 @@ import {
 } from '../../shared/worktree/host-qualified-identity'
 import {
   hostWorktreeTargetForRepo,
+  readAllWorktreeMetaForHost,
   readWorktreeMetaForHost,
   worktreeRowTarget
 } from '../persistence/host-qualified-worktree-meta'
@@ -865,11 +865,9 @@ function isPushTargetRemoteCreatedByKnownWorktree(
   // A same-id twin's remote on another host proves nothing about this host's remote.
   hostId?: ExecutionHostId
 ): boolean {
-  return Object.entries(store.getAllWorktreeMeta()).some(([worktreeId, meta]) => {
+  const rows = hostId ? readAllWorktreeMetaForHost(store, hostId) : store.getAllWorktreeMeta()
+  return Object.entries(rows).some(([worktreeId, meta]) => {
     if (repoId && getRepoIdFromWorktreeId(worktreeId) !== repoId) {
-      return false
-    }
-    if (hostId && (meta.hostId ?? LOCAL_EXECUTION_HOST_ID) !== hostId) {
       return false
     }
     if (!meta.pushTarget?.remoteCreated) {
