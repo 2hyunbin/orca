@@ -6,11 +6,14 @@ import { readTrackedSources, runCountRatchet } from './ratchet-baseline.mjs'
 // Ratchet on host decisions read off a repo row's legacy `connectionId` (Codex review 6 #4). A row
 // may name its SSH host only as `executionHostId: 'ssh:<target>'`, so a raw `repo.connectionId`
 // check answers "local" for it and runs remote work on this machine. Counts may only shrink.
+// A lower bound, not a proof: destructuring, indexed access and rows not named `*repo*`/`*Repo*`
+// are not seen, and the renderer is out of scope.
 
 const BASELINE_PATH = 'config/repo-host-read-baseline.txt'
 const SCAN_ROOTS = ['src/main/', 'src/shared/', 'src/cli/']
 // A property read on a repo-named receiver; an assignment target is a write, not a decision.
-const RAW_READ = /\b\w*[rR]epo\w*\??\.connectionId\b(?!\s*=(?!=))/g
+// `repo`, `sourceRepo`, `repoRow`; not `report` or `repos`.
+const RAW_READ = /\b(?:repo|\w*Repo)(?:[A-Z]\w*)?!?\??\.connectionId\b(?!\s*=(?!=))/g
 
 /** Files that define what the two spellings mean, with the reason. Keep each reason true. */
 export const RESOLVER_FILES = new Map([
@@ -56,6 +59,7 @@ export function main(root = process.cwd(), arg = undefined) {
       header: [
         "# Raw reads of a repo row's legacy `connectionId` (Codex review 6 #4), as `<count> <file>`.",
         '# This is a RATCHET: counts may only go DOWN. Resolve the host instead (see fix text).',
+        '# A lower bound: destructured and differently named rows are not counted.',
         '# Prune after a fix: pnpm check:repo-host-read-ratchet --prune'
       ],
       collect: collectRepoHostReads,

@@ -1,5 +1,6 @@
 # Raw reads of a repo row's legacy `connectionId` (Codex review 6 #4), as `<count> <file>`.
 # This is a RATCHET: counts may only go DOWN. Resolve the host instead (see fix text).
+# A lower bound: destructured and differently named rows are not counted.
 # Prune after a fix: pnpm check:repo-host-read-ratchet --prune
 1 src/cli/automation-destination.ts
 1 src/main/folder-repo-git-conversion.ts
@@ -19,7 +20,6 @@
 1 src/main/ipc/workspace-cleanup-disconnected-ssh.ts
 2 src/main/ipc/worktree-base-directory-watch-targets.ts
 1 src/main/ipc/worktrees-test-metadata-pruning-store.ts
-5 src/main/ipc/worktrees/create/register-review-base-handlers.ts
 1 src/main/ipc/worktrees/listing/authoritative-local-worktree-metadata-pruning.ts
 1 src/main/ipc/worktrees/listing/register-host-catalog-handlers.ts
 2 src/main/ipc/worktrees/removal/execute-worktree-removal.ts

@@ -280,9 +280,9 @@ export function getRepoSshConnectionId(
 }
 
 /**
- * Drop-in for a raw `repo.connectionId` in a routing or "is this SSH?" check. It returns what the
- * raw field holds on every consistent row, and also the target of a row that names its SSH host
- * only as `executionHostId: 'ssh:<target>'`, which the raw field reports as local.
+ * Replaces a raw `repo.connectionId` in a routing or "is this SSH?" check. Never answers local for
+ * a row whose raw field is set, and also finds a row that names SSH only as `ssh:<target>`. On a
+ * contradictory `ssh:B` row with `connectionId: 'A'`, B wins, as in `getRepoExecutionHostId`.
  */
 export function getRepoRoutingConnectionId(
   repo: Pick<Repo, 'connectionId' | 'executionHostId'>

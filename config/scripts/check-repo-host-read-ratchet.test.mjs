@@ -12,9 +12,10 @@ describe('countRawRepoHostReads', () => {
       'if (repo.connectionId) {',
       'const id = sourceRepo?.connectionId ?? null',
       'repos.filter((repo) => !repo.connectionId)',
-      'if (existingRepo.connectionId === targetId) {'
+      'if (existingRepo.connectionId === targetId) {',
+      'const id = repoRow!.connectionId'
     ].join('\n')
-    expect(countRawRepoHostReads(text)).toBe(4)
+    expect(countRawRepoHostReads(text)).toBe(5)
   })
 
   it('ignores writes, comments, type positions and non-repo receivers', () => {
@@ -24,7 +25,9 @@ describe('countRawRepoHostReads', () => {
       "type T = Repo['connectionId']",
       'if (pty.connectionId) {',
       'const repoConnectionId = args.connectionId',
-      'if (getRepoRoutingConnectionId(repo)) {'
+      'if (getRepoRoutingConnectionId(repo)) {',
+      'if (report.connectionId) {',
+      'for (const r of repos) r.connectionId'
     ].join('\n')
     expect(countRawRepoHostReads(text)).toBe(0)
   })
