@@ -7,13 +7,16 @@ const idle = () => vi.fn()
 const stopAgentHookServer = idle()
 const stopStructuredAgentSessionRuntime = settled()
 const beginSshShutdown = settled()
+const killAllPty = idle()
+/** Final-save calls seen by the first microtask after the SSH shutdown began. */
+let flushesByNextMicrotask = -1
 
 // Every teardown member settles except the profile store, so only the writer can hold quit.
 const dependencies: Record<string, Record<string, unknown>> = {
   '../ipc/filesystem-watcher': { closeAllWatchers: settled() },
   '../ipc/worktree-base-directory-watcher': { disposeWorktreeBaseDirectoryWatchers: settled() },
   '../ipc/folder-repo-git-upgrade': { stopFolderRepoGitUpgradeWatch: idle() },
-  '../ipc/pty/kill-all': { killAllPty: idle() },
+  '../ipc/pty/kill-all': { killAllPty },
   '../daemon/daemon-provider-state': { disconnectDaemon: settled(), shutdownDaemon: settled() },
   '../ipc/ssh/ssh-shutdown-drain': { beginSshShutdown },
   '../agent-hooks/server': { agentHookServer: { stop: stopAgentHookServer } },
@@ -65,6 +68,8 @@ async function startQuit(
   services: Record<string, unknown> = {}
 ) {
   beginSshShutdown.mockClear()
+  killAllPty.mockClear()
+  flushesByNextMicrotask = -1
   vi.resetModules()
   vi.useFakeTimers()
   const app = Object.assign(new EventEmitter(), { quit: vi.fn() })
@@ -73,6 +78,11 @@ async function startQuit(
     flushFinalOrThrowAsync: vi.fn(flushFinalOrThrowAsync),
     freezeWritesAsync: settled()
   }
+  beginSshShutdown.mockImplementation(async () => {
+    void Promise.resolve().then(() => {
+      flushesByNextMicrotask = store.flushFinalOrThrowAsync.mock.calls.length
+    })
+  })
   const profileStateAdmission: typeof admission | undefined = admission
   const state = {
     isQuitting: false,
@@ -143,12 +153,20 @@ it('writes a pane grid still inside its write burst before the final flush', asy
   expect(beginSshShutdown.mock.invocationCallOrder[0]).toBeLessThan(
     store.flushFinalOrThrowAsync.mock.invocationCallOrder[0]!
   )
+  // Nothing awaited between them: the save started in the same turn as the SSH shutdown.
+  expect(flushesByNextMicrotask).toBe(1)
 })
 
 it('starts the SSH shutdown and the final save at once when no pane grid waits', async () => {
   const { store } = await startQuit(async () => {})
   expect(beginSshShutdown).toHaveBeenCalledOnce()
   expect(store.flushFinalOrThrowAsync).toHaveBeenCalledOnce()
+  const order = [beginSshShutdown, killAllPty, store.flushFinalOrThrowAsync].map(
+    (step) => step.mock.invocationCallOrder[0]!
+  )
+  expect(order).toEqual([...order].sort((a, b) => a - b))
+  await vi.advanceTimersByTimeAsync(0)
+  expect(flushesByNextMicrotask).toBe(1)
 })
 
 // The chat teardown decides which chats to offer to resume from the hook server's status store,
