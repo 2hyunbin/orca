@@ -110,6 +110,8 @@ export class ReservePlacer {
     regionFull?: boolean
   }): Promise<PlacementResult> {
     const tried = new Set<string>()
+    // Refused for a reason other than intake: no seat to wait for this time.
+    const refused = new Set<string>()
     let epoch = input.epoch
     let calls = 0
     while (calls < RESERVE_MAX_TRIES) {
@@ -122,23 +124,30 @@ export class ReservePlacer {
       if (answer.outcome === 'ok') return { kind: 'placed', cellId: cell.cellId, epoch, calls }
       this.uncountBooking(cell, countedAt)
       if (answer.outcome === 'intake') this.drain(cell)
+      else refused.add(cell.cellId)
       if (answer.outcome === 'seated-newer' && 'epoch' in answer && typeof answer.epoch === 'number') {
         epoch = Math.max(epoch, answer.epoch + 1)
       }
     }
-    return this.fallback(input.cells, input.region, calls, input.regionFull)
+    return this.fallback(input.cells, input.region, calls, { regionFull: input.regionFull, refused })
   }
 
-  // Database cells in the region come first, then pacing; a region with neither falls to the
-  // database path too, which spills to another region as today.
-  fallback(cells: readonly PlacementCell[], region: RelayRegion, calls: number, regionFull = false): PlacementResult {
+  // Database cells in the region come first (unless known full), then pacing on a cell that
+  // only lacks budget; anything else falls to the database path, which spills as today.
+  fallback(
+    cells: readonly PlacementCell[],
+    region: RelayRegion,
+    calls: number,
+    options: { regionFull?: boolean; refused?: ReadonlySet<string> } = {}
+  ): PlacementResult {
     const now = this.now()
     const databaseCells =
-      !regionFull &&
+      !options.regionFull &&
       cells.some((cell) => !cell.reserve && cell.region === region && cell.general && !cell.draining)
     if (databaseCells) return { kind: 'database', calls }
     let refillMs: number | null = null
     for (const cell of cells) {
+      if (options.refused?.has(cell.cellId)) continue
       if (!this.isCandidate(cell, region, now) || !this.hasSeat(cell)) continue
       const estimate = this.refill(cell, now)
       const rate = this.ratePerSec(cell)

@@ -326,8 +326,9 @@ describe('reserve assignment on a director', () => {
   describe('for a share-draw loser', () => {
     const ASIA = 'asia-east2' as const
     const OTHER = { ...HOST, relayHostId: 'qrstuvwxyzabcdef' }
-    const setupAsia = (reserveCell = feed('c1')) =>
+    const setupAsia = (reserveCell = feed('c1'), reserve?: (cellId: string) => ReserveAttempt) =>
       setup({
+        ...(reserve ? { reserve } : {}),
         cells: [...cellList(['c1', 'c2'], ASIA), ...cellList(['c3'])],
         feeds: [
           reserveCell,
@@ -360,6 +361,18 @@ describe('reserve assignment on a director', () => {
       const regionReserve = await regionReserveOf(assignment)
       await expect(regionReserve?.()).rejects.toBeInstanceOf(ReservePaceError)
       expect(reserved).toEqual([])
+    })
+
+    it('gives the region up when the reserve cell refuses with a seat still on the map', async () => {
+      for (const outcome of ['full', 'unreachable']) {
+        const { assignment, reserved } = setupAsia(feed('c1'), (cellId) =>
+          cellId === 'c1' ? { outcome } : { outcome: 'ok' }
+        )
+        const regionReserve = await regionReserveOf(assignment)
+        // Null sends the host to the database lane's cross-region fallback, not a 1 s retry.
+        await expect(regionReserve?.()).resolves.toBeNull()
+        expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
+      }
     })
   })
 
