@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { getDefaultWorkspaceSession } from '../../../../shared/constants'
-import { PaneGridRecorder, PANE_GRID_RECORD_DELAY_MS } from './pane-grid-recording'
+import {
+  PaneGridRecorder,
+  PANE_GRID_FLUSH_BUDGET_MS,
+  PANE_GRID_RECORD_DELAY_MS
+} from './pane-grid-recording'
 
 const WORKSPACE = 'repo-1::/repo'
 
@@ -82,6 +86,23 @@ describe('PaneGridRecorder', () => {
     expect(apply).toHaveBeenCalledTimes(1)
     expect(recorder.flush()).toBeNull()
     await vi.advanceTimersByTimeAsync(PANE_GRID_RECORD_DELAY_MS)
+    expect(apply).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets a quit go on once its budget is spent while a grid write hangs', async () => {
+    vi.useFakeTimers()
+    const apply = vi.fn(() => new Promise<never>(() => {}))
+    const recorder = new PaneGridRecorder({ sessions: () => [sessionBinding('pty-1')], apply })
+    recorder.record('pty-1', { cols: 90, rows: 20 })
+    let settled = false
+    void recorder.flush()?.then(() => {
+      settled = true
+    })
+
+    await vi.advanceTimersByTimeAsync(PANE_GRID_FLUSH_BUDGET_MS - 1)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(settled).toBe(true)
     expect(apply).toHaveBeenCalledTimes(1)
   })
 })

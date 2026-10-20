@@ -6,6 +6,8 @@ import type { WorkspaceSessionState } from '../../../../shared/workspace-session
 import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 
 export const PANE_GRID_RECORD_DELAY_MS = 1_000
+/** A quit's grid writes never hold the stop longer than this; a grid missed restarts at the default size. */
+export const PANE_GRID_FLUSH_BUDGET_MS = 1_000
 
 type ShownPane = { workspace: string; tabId: string; leafId: string }
 
@@ -49,12 +51,18 @@ export class PaneGridRecorder {
     this.pending.set(ptyId, { grid, timer })
   }
 
-  /** Writes every grid still waiting, for a quit's final save; null when none waits. */
-  flush(): Promise<void> | null {
+  /** Writes every grid still waiting, for a quit's final save, within the budget; null when none waits. */
+  flush(budgetMs = PANE_GRID_FLUSH_BUDGET_MS): Promise<void> | null {
     if (this.pending.size === 0) {
       return null
     }
-    return Promise.all([...this.pending.keys()].map((ptyId) => this.write(ptyId))).then(() => {})
+    let timer: NodeJS.Timeout | undefined
+    const writes = Promise.all([...this.pending.keys()].map((ptyId) => this.write(ptyId)))
+    const budget = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, budgetMs)
+      timer.unref?.()
+    })
+    return Promise.race([writes.then(() => {}), budget]).finally(() => clearTimeout(timer))
   }
 
   private async write(ptyId: string): Promise<void> {

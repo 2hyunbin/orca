@@ -146,7 +146,10 @@ async function startOrcadRuntime(
     // A SQLite-backed orcad has no JSON mirror to absorb a debounced write after SIGTERM.
     if (profileStoreForShutdown) {
       // Layout-owner build: a pane's grid still inside its write burst joins the final save.
-      await paneGridsForShutdown?.flushPaneGrids()
+      const paneGrids = paneGridsForShutdown?.flushPaneGrids()
+      if (paneGrids) {
+        await paneGrids
+      }
       await flushOrcadProfileStoreForShutdown(profileStoreForShutdown)
     }
   })
