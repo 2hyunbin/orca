@@ -129,7 +129,7 @@ export function isLastVisitedWorktreeRow(
 type Listener = (hostId: string, visited: LastVisitedWorktreeOnHost) => void
 const listeners = new Set<Listener>()
 
-/** Visits written in this JS context, told as they are written so an open list moves at once. */
+/** Visits noted in this JS context, told at once so an open list moves without a re-read. */
 export function subscribeLastVisitedWorktree(listener: Listener): () => void {
   listeners.add(listener)
   return () => {
@@ -137,23 +137,32 @@ export function subscribeLastVisitedWorktree(listener: Listener): () => void {
   }
 }
 
-// Serialized: each write merges into what the last one stored.
-let writeChain: Promise<void> = Promise.resolve()
-
 /**
- * The one writer of this key, so the hybrid shell's mirror sees it as it is written.
- *
- * The page is handed this key on every `init`, built from that mirror; a write that went straight
- * to the store would reach the page one `init` later, and the New Workspace drawer would open on
- * the repo the user left rather than the one they just came from.
+ * Tells this context's open lists about a visit without storing it. The list's tap uses this: the
+ * shell's session page is another page that stores the visit itself, and a long-lived list page's
+ * load-time copy of the key could overwrite newer visits to other hosts.
  */
-export function writeLastVisitedWorktree(
+export function noteLastVisitedWorktree(
   record: LastVisitedWorktreeRecord & { executionHost?: ExecutionHostId }
-): Promise<void> {
+): void {
   const visited = visitOf(record.worktreeId, record.executionHost)
   for (const listener of listeners) {
     listener(record.hostId, visited)
   }
+}
+
+// Serialized: each write merges into what the last one stored.
+let writeChain: Promise<void> = Promise.resolve()
+
+/**
+ * The one writer of this key (the session route), so the hybrid shell's mirror sees it as it is
+ * written. The page is handed this key on every `init`, built from that mirror; a write that went
+ * straight to the store would reach the page one `init` later.
+ */
+export function writeLastVisitedWorktree(
+  record: LastVisitedWorktreeRecord & { executionHost?: ExecutionHostId }
+): Promise<void> {
+  noteLastVisitedWorktree(record)
   // Through the path that notes on an accepted write (ruling 35); the page's adapter may refuse,
   // and nothing is owed a caller that cannot act on one, so a refusal is the adapter's log.
   writeChain = writeChain

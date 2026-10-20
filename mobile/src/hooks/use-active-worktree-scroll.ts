@@ -5,9 +5,9 @@ type WithId = { worktreeId: string; isActive?: boolean }
 
 // Scrolls the highlighted (isActive) worktree into view when the highlight
 // changes. Fires only on a *change* of active id (not every re-render) so it
-// never yanks the list while the user scrolls or searches. Returns the ref to attach to the
-// SectionList and the onScrollToIndexFailed handler it needs for rows that
-// aren't measured yet (variable heights from the inline agent list).
+// never yanks the list while the user scrolls or searches. Returns the ref to
+// attach to the SectionList and the onScrollToIndexFailed handler it needs for
+// rows that aren't measured yet (variable heights from the inline agent list).
 export function useActiveWorktreeScroll<T extends WithId, S>(
   sections: ReadonlyArray<SectionListData<T, S> & { data: readonly T[] }>
 ): {
