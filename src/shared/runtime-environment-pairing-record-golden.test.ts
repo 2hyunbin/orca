@@ -152,6 +152,7 @@ describe('pairing record golden files', () => {
     capture('add', () => add({}))
     capture('add duplicate id', () => add({ name: 'Other' }))
     capture('add duplicate name', () => add({ id: 'managed-2' }))
+    capture('add name differing only by case', () => add({ id: 'managed-3', name: 'MANAGED' }))
     capture('add bad code with a taken id', () => add({ pairingCode: 'nope' }))
     capture('add taken id and name with the wrong port', () => add({ pairingCode: code(1234) }))
     capture('add taken name with the wrong port', () =>
@@ -231,6 +232,9 @@ describe('pairing record golden files', () => {
     capture('add', () => add({}))
     capture('add duplicate id', () => add({ name: 'Other' }))
     capture('add duplicate name', () => add({ id: 'wsl:debian' }))
+    capture('add name differing only by case', () =>
+      add({ id: 'wsl:debian', name: 'ubuntu (wsl)' })
+    )
     capture('refresh invalid code', () =>
       refresh('nope', { localPort: 42_000, remotePort: 6_768 }, 200)
     )
