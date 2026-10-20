@@ -8,6 +8,7 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import { hashMarkdownContent } from '../../shared/mobile-markdown-document'
 import type { RuntimeMobileSessionMarkdownTab } from '../../shared/runtime-types'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE } from '../../shared/runtime-capability-constants'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import { OrchestrationError } from './orchestration/orchestration-error'
 import { RpcDispatcher } from './rpc/dispatcher'
@@ -74,11 +75,16 @@ async function runtimeOnHost(executionHostId: ExecutionHostId): Promise<Runtime>
 }
 
 /** A desktop whose workspace runs on `env-a`, wired to that server's runtime the way the transport is. */
-async function desktopOnServer(serverHost: ExecutionHostId = 'local') {
+async function desktopOnServer(
+  serverHost: ExecutionHostId = 'local',
+  serves: (method: string) => boolean = () => true
+) {
   const server = await runtimeOnHost(serverHost)
   const serverDispatch = new RpcDispatcher({
     runtime: server,
-    methods: [...FILE_METHODS, ...SESSION_TAB_MARKDOWN_METHODS]
+    methods: [...FILE_METHODS, ...SESSION_TAB_MARKDOWN_METHODS].filter((method) =>
+      serves(method.name)
+    )
   })
   const serverCalls: string[] = []
   const serverForwards = vi.spyOn(server, 'callOrchestrationWorkerServer')
@@ -173,6 +179,25 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
       )
     ).rejects.toThrow('conflict')
     expect(await readFile(readme, 'utf8')).toBe('# Changed on the server\n')
+  })
+
+  it('refuses a save on a server too old to check the disk, never writing unchecked', async () => {
+    // A server before #30605 has neither `files.writeIfUnchanged` nor its disk check.
+    const { desktop, serverCalls } = await desktopOnServer(
+      'local',
+      (method) => method !== 'files.writeIfUnchanged'
+    )
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).rejects.toThrow(FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE)
+    expect(serverCalls).toEqual(['files.read', 'files.writeIfUnchanged'])
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
   })
 
   it('reports a lost server as unavailable, never as a missing or empty file', async () => {
@@ -286,13 +311,13 @@ describe("a phone's Markdown tab with a desktop window attached", () => {
     })
   })
 
-  it('finds no untitled tab, because the saved session holds only files with a path', async () => {
-    const untitled = join(root, 'untitled-1.md')
+  it('refuses a listed tab whose file the saved session does not hold', async () => {
+    const unsaved = join(root, 'not-in-session.md')
     const runtime = runtimeWithWindowTabs([
-      windowTab({ id: untitled, filePath: untitled, sourceFilePath: untitled })
+      windowTab({ id: unsaved, filePath: unsaved, sourceFilePath: unsaved })
     ])
 
-    await expect(runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)).rejects.toThrow(
+    await expect(runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, unsaved)).rejects.toThrow(
       'tab_not_found'
     )
   })

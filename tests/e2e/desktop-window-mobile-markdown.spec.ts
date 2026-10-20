@@ -130,3 +130,84 @@ test('a phone saves a Markdown tab the desktop has unsaved edits in, without tou
     await cleanupMarkdownFixture(filePath)
   }
 })
+
+test("a phone opens the desktop's unsaved untitled Markdown tab", async ({ orcaPage }) => {
+  test.setTimeout(180_000)
+  await waitForSessionReady(orcaPage)
+  await waitForActiveWorktree(orcaPage)
+  const context = await getActiveWorktreeContext(orcaPage)
+  const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+  let untitledPath = ''
+  try {
+    untitledPath = await orcaPage.evaluate(async (worktreeId) => {
+      const store = window.__store!
+      const before = new Set(store.getState().openFiles.map((file) => file.id))
+      const groupId = store.getState().activeGroupIdByWorktree[worktreeId] ?? ''
+      await store.getState().openNewMarkdownInActiveWorkspace(groupId)
+      const created = store
+        .getState()
+        .openFiles.find((file) => !before.has(file.id) && file.isUntitled === true)
+      if (!created) {
+        throw new Error('No untitled Markdown tab was created')
+      }
+      return created.filePath
+    }, context.worktreeId)
+    const editor = await waitForRichMarkdownEditor(orcaPage)
+    await editor.click()
+    await orcaPage.keyboard.insertText(DRAFT_LINE)
+    await expect
+      .poll(() =>
+        orcaPage.evaluate((path) => {
+          const state = window.__store!.getState()
+          const file = state.openFiles.find((entry) => entry.filePath === path)
+          return file?.isDirty === true && file.isUntitled === true
+        }, untitledPath)
+      )
+      .toBe(true)
+
+    const worktree = `id:${context.worktreeId}`
+    let tabId = ''
+    await expect
+      .poll(async () => {
+        const listed = await phone.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
+          worktree
+        })
+        tabId =
+          listed.tabs.find(
+            (entry) => entry.type === 'markdown' && entry.sourceFilePath === untitledPath
+          )?.id ?? ''
+        return tabId
+      })
+      .not.toBe('')
+
+    // Why poll: the desktop persists its session (which names the file) on a debounce.
+    let answer: unknown = null
+    await expect
+      .poll(
+        async () => {
+          const response = await phone.request<RuntimeMarkdownReadTabResult>('markdown.readTab', {
+            worktree,
+            tabId
+          })
+          answer = response.ok ? response.result : response.error
+          return response.ok
+        },
+        { timeout: 30_000 }
+      )
+      .toBe(true)
+    console.log('UNTITLED_AFTER_READ', JSON.stringify(answer))
+    expect(answer).toMatchObject({
+      tabId,
+      filePath: untitledPath,
+      content: readFileSync(untitledPath, 'utf8'),
+      source: 'file',
+      isDirty: true
+    })
+    expect(JSON.stringify(answer)).not.toContain(DRAFT_LINE)
+  } finally {
+    phone.dispose()
+    if (untitledPath) {
+      await cleanupMarkdownFixture(untitledPath)
+    }
+  }
+})

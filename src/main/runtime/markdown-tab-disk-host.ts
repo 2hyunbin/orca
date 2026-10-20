@@ -7,12 +7,14 @@
 import { isBinaryBuffer } from '../../shared/binary-buffer'
 import { parseExecutionHostId } from '../../shared/execution-host'
 import {
+  FILE_WRITE_IF_UNCHANGED_METHOD,
   parseFileWriteResult,
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../shared/file-write-disk-precondition'
 import { utf8ByteLength } from '../../shared/mobile-markdown-document'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE } from '../../shared/runtime-capability-constants'
 import type { PersistedOpenFile } from '../../shared/workspace-session-state-types'
 import { readLocalRuntimeFilePrefix } from './files/file-reads'
 import {
@@ -136,8 +138,9 @@ async function writeFileOnEnvironment(
   content: string,
   diskPrecondition: FileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
-  return parseFileWriteResult(
-    await callEnvironment(call, environmentId, 'files.writeIfUnchanged', {
+  let written: unknown
+  try {
+    written = await callEnvironment(call, environmentId, FILE_WRITE_IF_UNCHANGED_METHOD, {
       worktree: `id:${worktreeId}`,
       relativePath: file.relativePath,
       content,
@@ -145,5 +148,12 @@ async function writeFileOnEnvironment(
       expectedExecutionHostId: 'local',
       diskPrecondition
     })
-  )
+  } catch (error) {
+    // Why no plain `files.write` fallback: a server before #30605 cannot check the disk, so it may not write.
+    if (error instanceof OrchestrationError && error.code === 'method_not_found') {
+      throw new Error(FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE)
+    }
+    throw error
+  }
+  return parseFileWriteResult(written)
 }

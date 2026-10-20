@@ -58,7 +58,7 @@ const READ_SLACK_BYTES = 4
 
 const saveQueues = new Map<string, Promise<unknown>>()
 
-// Why the saved session: it holds only files with a path, so an untitled tab is never found.
+// Why the saved session: it names the file behind the listed tab, window or not.
 function savedEditorFile(
   host: MarkdownTabDiskHost,
   worktreeId: string,
