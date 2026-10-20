@@ -9,12 +9,37 @@ import {
 } from '@/components/editor/editor-autosave-controller-test-fixture'
 import { createEditorSaveQueue, type EditorSaveQueue } from '@/components/editor/editor-save-queue'
 import { attachEditorAutosaveController } from '@/components/editor/editor-autosave-controller'
-import { ORCA_EDITOR_SAVE_AND_CLOSE_EVENT } from '@/components/editor/editor-autosave'
+import {
+  ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
+  requestEditorSaveQuiesce
+} from '@/components/editor/editor-autosave'
 import { trackKeepEditsBaselineRead } from '@/components/editor/editor-keep-edits-baseline'
 import { __clearSelfWriteRegistryForTests } from '@/components/editor/editor-self-write-registry'
 import { assertEditorBufferInvariant } from '@/store/editor-buffer-record-lifecycle'
 import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
 import { editorBufferIdOf } from './editor-buffer-record'
+import { reloadTabContentFromDisk } from '@/components/editor/ExternalFileChangeBanner'
+import type * as RuntimeFileReadClient from '@/runtime/runtime-file-read-client'
+
+type HeldRead = { filePath: string; resolve: (content: string) => void }
+const fixture = vi.hoisted((): { store: StoreApi<AppState> | null; reads: HeldRead[] } => ({
+  store: null,
+  reads: []
+}))
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => fixture.store?.getState() }
+}))
+// Why a held read: the races need a disk read that lands after a write from the other side.
+vi.mock('@/runtime/runtime-file-read-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof RuntimeFileReadClient>()),
+  readRuntimeFileContent: ({ filePath }: { filePath: string }) =>
+    new Promise((resolve) => {
+      fixture.reads.push({
+        filePath,
+        resolve: (content) => resolve({ content, isBinary: false })
+      })
+    })
+}))
 
 const FILE = '/repo/a.ts'
 const sig = getDiskBaselineSignature
@@ -50,7 +75,7 @@ describe('records of one file kept apart by different drafts', () => {
     expect(Object.keys(store.getState().editorBuffers)).toHaveLength(2)
     return ['wt-1:a', 'wt-2:a']
   }
-  /** Reload from Disk: read first, then replace the text and clear dirty in one step. */
+  /** The disk text a Reload from Disk finds, landed in the same step that drops the draft. */
   function reload(id: string): void {
     store.getState().clearEditorDraft(id)
     store.getState().setExternalMutation(id, null)
@@ -61,6 +86,8 @@ describe('records of one file kept apart by different drafts', () => {
   beforeEach(() => {
     disk = stubEditorWindowWithDisk()
     store = createEditorStore()
+    fixture.store = store
+    fixture.reads = []
     store.setState({
       browserTabsByWorktree: {},
       tabsByWorktree: {},
@@ -204,5 +231,93 @@ describe('records of one file kept apart by different drafts', () => {
     expect(tab(b)).toBeDefined()
     expect(store.getState().editorDrafts[b]).toBe('draft two')
     expect(disk.files.get(FILE)).toBe('draft one')
+  })
+
+  it('a save queued before the other side wrote keeps its precondition', async () => {
+    const [a, b] = restoreDivergent()
+
+    const [first, second] = await Promise.all([
+      queue.queueSave(tab(a)!, 'draft one', 'user'),
+      // Asked for before A wrote: A's write then marks B changed, which is not consent.
+      queue.queueSave(tab(b)!, 'draft two', 'user')
+    ])
+
+    expect([first, second]).toEqual(['written', 'blocked-stale'])
+    expect(disk.files.get(FILE)).toBe('draft one')
+    expect(store.getState().editorDrafts[b]).toBe('draft two')
+  })
+
+  it("Reload through the banner reads first, and a read older than the other side's write is dropped", async () => {
+    const [a, b] = restoreDivergent()
+    await queue.queueSave(tab(a)!, 'draft one', 'user')
+    type(a, 'A again')
+
+    reloadTabContentFromDisk(tab(b)!, vi.fn())
+    // Read first: B keeps its draft until the disk text is in hand.
+    expect(store.getState().editorDrafts[b]).toBe('draft two')
+    const staleRead = fixture.reads.at(-1)!
+    expect(await queue.queueSave(tab(a)!, 'A again', 'autosave')).toBe('written')
+    staleRead.resolve('draft one')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.getState().editorDrafts[b]).toBe('draft two')
+    expect(tab(b)?.isDirty).toBe(true)
+    expect(editorBufferIdOf(store.getState(), b)).not.toBe(editorBufferIdOf(store.getState(), a))
+
+    reloadTabContentFromDisk(tab(b)!, vi.fn())
+    fixture.reads.at(-1)!.resolve('A again')
+    await vi.waitFor(() => expect(tab(b)?.isDirty).toBe(false))
+    expect(store.getState().editorDrafts[b]).toBeUndefined()
+    expect(tab(b)?.lastKnownDiskSignature).toBe(sig('A again'))
+    expect(editorBufferIdOf(store.getState(), b)).toBe(editorBufferIdOf(store.getState(), a))
+  })
+
+  it('save-and-close superseded while it waits keeps the tab and its draft', async () => {
+    const [, b] = restoreDivergent()
+    queue.dispose()
+    let landRead = (): void => {}
+    trackKeepEditsBaselineRead(
+      b,
+      new Promise<void>((resolve) => {
+        landRead = resolve
+      })
+    )
+    const detach = attachEditorAutosaveController(store)
+
+    window.dispatchEvent(
+      new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: b } })
+    )
+    // Staging the file quiesces its saves while this one waits.
+    const quiesced = requestEditorSaveQuiesce({ fileId: b })
+    landRead()
+    await quiesced
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    detach()
+
+    expect(tab(b)).toBeDefined()
+    expect(store.getState().editorDrafts[b]).toBe('draft two')
+  })
+
+  it('a save superseded mid-write still rebaselines to the written text', async () => {
+    const [a] = restoreDivergent()
+    let finishWrite = (): void => {}
+    disk.fs.writeFile.mockImplementationOnce(
+      async ({ filePath, content }: { filePath: string; content: string }) => {
+        await new Promise<void>((resolve) => {
+          finishWrite = resolve
+        })
+        disk.files.set(filePath, content)
+        return { ok: true }
+      }
+    )
+
+    const save = queue.queueSave(tab(a)!, 'draft one', 'user')
+    await vi.waitFor(() => expect(disk.fs.writeFile).toHaveBeenCalled())
+    queue.bumpSaveGeneration(a)
+    finishWrite()
+
+    expect(await save).toBe('written')
+    expect(tab(a)?.lastKnownDiskSignature).toBe(sig('draft one'))
   })
 })

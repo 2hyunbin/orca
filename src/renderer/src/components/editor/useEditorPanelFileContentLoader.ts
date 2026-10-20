@@ -2,9 +2,9 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import type { OpenFile } from '@/store/slices/editor'
 import { getConnectionIdForFile, isWorktreeConnectionResolved } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
-import { editorBufferIdOf } from '@/store/slices/editor/buffers/editor-buffer-record'
 import {
   beginEditorBufferRead,
+  editorBufferFreshnessKeyOf,
   isEditorBufferReadCurrent
 } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 import { getDiskBaselineSignature } from './diff-content-signature'
@@ -32,6 +32,7 @@ import type { RuntimeWorkspaceFileRoute } from '@/lib/runtime-workspace-file-rou
 import { editorTabFileAccess, isClientLocalReadOnlyTab } from '@/lib/local-file-access'
 import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
+import { publishEditorBufferContent } from './use-editor-buffer-content-sync'
 
 const inFlightFileReads = new Map<string, InFlightContentRead<FileContent>>()
 
@@ -95,12 +96,11 @@ export function useEditorPanelFileContentLoader({
       fileReadGenerationCounterRef.current = generation
       fileReadGenerationRef.current[id] = generation
       outstandingFileReadsRef.current[id] = generation
-      // Why the record: another panel's newer read, save or reload of the same file supersedes this one.
-      const bufferId = editorBufferIdOf(useAppStore.getState(), id)
-      const bufferReadToken = beginEditorBufferRead(bufferId)
-      const isCurrentRead = (): boolean =>
-        fileReadGenerationRef.current[id] === generation &&
-        isEditorBufferReadCurrent(bufferId, bufferReadToken)
+      // Why the record owns freshness: any panel's newer read, save or reload of the file
+      // supersedes this read, and closing a panel never cancels it.
+      const fileKey = editorBufferFreshnessKeyOf(useAppStore.getState(), id)
+      const bufferReadToken = beginEditorBufferRead(fileKey)
+      const isCurrentRead = (): boolean => isEditorBufferReadCurrent(fileKey, bufferReadToken)
       let readConnectionId: string | undefined
       try {
         const resolvedConnectionId = getConnectionIdForFile(worktreeId ?? null, filePath)
@@ -269,6 +269,9 @@ export function useEditorPanelFileContentLoader({
           useAppStore.getState().setCsvPreviewOnly(id, Boolean(result.csvPreview))
         }
         delete fileLoadRetryAttemptsRef.current[id]
+        // Why publish: the result belongs to the record, so it reaches every panel showing the
+        // file even if this panel has closed.
+        publishEditorBufferContent(id, result)
         setFileContents((prev) => ({ ...prev, [id]: result }))
         stampCleanTabDiskBaseline(id, result)
       } catch (err) {

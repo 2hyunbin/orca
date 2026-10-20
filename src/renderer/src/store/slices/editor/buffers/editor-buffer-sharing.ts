@@ -8,6 +8,7 @@ import {
   type EditorBufferRecords
 } from './editor-buffer-record'
 import { isSameEditorBuffer, type EditorBufferIdentity } from './editor-buffer-identity'
+import { markEditorBufferNewer } from './editor-buffer-read-freshness'
 
 export type EditorBufferSharingInput = {
   openFiles: OpenFile[]
@@ -61,6 +62,28 @@ export function reconcileEditorBufferSharing(
   const keyByRecordId: Record<string, EditorBufferKey> = { ...input.index.keyByRecordId }
   const drafts = { ...input.drafts }
   const viewsByRecord = new Map<string, string[]>()
+  // Why an index: joins look up same-file records per tab, which must stay O(1) for many tabs.
+  const idsByIdentityKey = new Map<string, string[]>()
+  const indexIdentity = (recordId: string, identityKey: string): void => {
+    const ids = idsByIdentityKey.get(identityKey)
+    if (ids) {
+      ids.push(recordId)
+    } else {
+      idsByIdentityKey.set(identityKey, [recordId])
+    }
+  }
+  for (const [recordId, key] of Object.entries(keyByRecordId)) {
+    indexIdentity(recordId, key.identity.key)
+  }
+  const sameFile = (identity: EditorBufferIdentity, excludeId?: string) =>
+    findSharedRecord(
+      (idsByIdentityKey.get(identity.key) ?? []).flatMap((id) => {
+        const key = keyByRecordId[id]
+        return id !== excludeId && key !== undefined ? [[id, key] as const] : []
+      }),
+      viewsByRecord,
+      identity
+    )
   let draftsChanged = false
 
   const claim = (fileId: string, recordId: string): void => {
@@ -126,8 +149,7 @@ export function reconcileEditorBufferSharing(
   // Pass 2: new tabs and tabs whose file changed find or create their record.
   for (const { file, identity, state } of pending) {
     const ownRecordId = input.index.recordIdByFileId[file.id] ?? file.id
-    const target =
-      identity === null ? undefined : findSharedRecord(keyByRecordId, viewsByRecord, identity)
+    const target = identity === null ? undefined : sameFile(identity)
     if (target !== undefined) {
       const targetRecord = records[target.id]
       const draft = drafts[file.id]
@@ -161,13 +183,13 @@ export function reconcileEditorBufferSharing(
       delete keyByRecordId[recordId]
     } else {
       // Why: a same-file record kept apart (divergent edits, a retired host) holds the default URI.
-      const uriTaken = Object.entries(keyByRecordId).some(
-        ([otherId, key]) =>
+      const uriTaken = (idsByIdentityKey.get(identity.key) ?? []).some(
+        (otherId) =>
           otherId !== recordId &&
           viewsByRecord.has(otherId) &&
-          key.identity.key === identity.key &&
-          key.modelOwnerKey === identity.modelOwnerKey
+          keyByRecordId[otherId]?.modelOwnerKey === identity.modelOwnerKey
       )
+      indexIdentity(recordId, identity.key)
       keyByRecordId[recordId] = {
         identity,
         modelOwnerKey: uriTaken
@@ -195,16 +217,16 @@ export function reconcileEditorBufferSharing(
   for (const [recordId, key] of Object.entries(keyByRecordId)) {
     const views = viewsByRecord.get(recordId)
     const record = records[recordId]
-    if (views === undefined || hasEdits(record, drafts[views[0]])) {
+    // The side holding the default model stays; the other joins it.
+    if (
+      key.modelOwnerKey === key.identity.modelOwnerKey ||
+      views === undefined ||
+      hasEdits(record, drafts[views[0]])
+    ) {
       continue
     }
-    const target = findSharedRecord(keyByRecordId, viewsByRecord, key.identity, recordId)
-    if (
-      target === undefined ||
-      hasEdits(records[target.id], drafts[target.views[0]]) ||
-      // The side holding the default model stays; the other joins it.
-      key.modelOwnerKey === key.identity.modelOwnerKey
-    ) {
+    const target = sameFile(key.identity, recordId)
+    if (target === undefined || hasEdits(records[target.id], drafts[target.views[0]])) {
       continue
     }
     // The newest disk version is the one this write just recorded (a save or a read).
@@ -222,6 +244,8 @@ export function reconcileEditorBufferSharing(
     viewsByRecord.delete(recordId)
     delete records[recordId]
     delete keyByRecordId[recordId]
+    // Why: a read either side started before the rejoin may carry the other side's older text.
+    markEditorBufferNewer(key.identity.key)
   }
 
   return {
@@ -239,15 +263,14 @@ export function reconcileEditorBufferSharing(
 }
 
 function findSharedRecord(
-  keyByRecordId: Record<string, EditorBufferKey>,
+  candidates: readonly (readonly [string, EditorBufferKey])[],
   viewsByRecord: ReadonlyMap<string, string[]>,
-  identity: EditorBufferIdentity,
-  excludeId?: string
+  identity: EditorBufferIdentity
 ): { id: string; views: string[] } | undefined {
   let found: { id: string; views: string[] } | undefined
-  for (const [id, key] of Object.entries(keyByRecordId)) {
+  for (const [id, key] of candidates) {
     const views = viewsByRecord.get(id)
-    if (id === excludeId || views === undefined || !isSameEditorBuffer(key.identity, identity)) {
+    if (views === undefined || !isSameEditorBuffer(key.identity, identity)) {
       continue
     }
     // The record holding the default model wins over one kept apart from it.

@@ -8,7 +8,10 @@ import type { AppState } from '@/store'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { createEditorStore } from './editor-autosave-controller-test-fixture'
 import type { FileContent } from './editor-panel-content-types'
-import { useEditorBufferContentSync } from './use-editor-buffer-content-sync'
+import {
+  publishEditorBufferContent,
+  useEditorBufferContentSync
+} from './use-editor-buffer-content-sync'
 
 const fixture = vi.hoisted((): { store: StoreApi<AppState> | null } => ({ store: null }))
 vi.mock('@/store', () => ({
@@ -128,4 +131,25 @@ it("doesn't seed a tab another panel has no read for", () => {
   act(() => panelA.set(a, 'saved text'))
 
   expect(panelB.contents[b]).toBeUndefined()
+})
+
+it("a read started by a panel that has since closed still fills the other panel's tab", () => {
+  const a = openTab('wt-1')
+  const b = openTab('wt-2')
+  const panelA: PanelHandle = { contents: {}, set: () => {} }
+  const panelB: PanelHandle = { contents: {}, set: () => {} }
+  act(() =>
+    root.render(
+      <>
+        <Panel initial={{}} handle={panelA} tracksRead={(id) => id === a} />
+        <Panel initial={{}} handle={panelB} tracksRead={(id) => id === b} />
+      </>
+    )
+  )
+  // B started the newest read, then its panel closed.
+  act(() => root.render(<Panel initial={{}} handle={panelA} tracksRead={(id) => id === a} />))
+
+  act(() => publishEditorBufferContent(b, { content: 'disk text', isBinary: false }))
+
+  expect(panelA.contents[a]?.content).toBe('disk text')
 })

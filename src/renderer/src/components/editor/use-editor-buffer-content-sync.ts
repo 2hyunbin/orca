@@ -8,6 +8,16 @@ type BufferContentListener = (sourceFileId: string, content: FileContent) => voi
 
 const listeners = new Set<BufferContentListener>()
 
+/**
+ * Delivers a disk read or save to every mounted panel showing the file's record, whether or not
+ * the panel that started it is still mounted.
+ */
+export function publishEditorBufferContent(sourceFileId: string, content: FileContent): void {
+  for (const listener of listeners) {
+    listener(sourceFileId, content)
+  }
+}
+
 function isFreshText(content: FileContent | undefined): content is FileContent {
   return content !== undefined && !content.loadError && content.isStale !== true
 }
@@ -74,13 +84,11 @@ export function useEditorBufferContentSync(
       ) {
         continue
       }
-      for (const listener of listeners) {
-        listener(fileId, content)
-      }
+      publishEditorBufferContent(fileId, content)
     }
   }, [fileContents, openFilesRef])
 }
 
 function isSameText(a: FileContent, b: FileContent): boolean {
-  return a.isStale !== true && a.content === b.content && a.isBinary === b.isBinary
+  return a.isStale !== true && !a.loadError && a.content === b.content && a.isBinary === b.isBinary
 }

@@ -104,6 +104,12 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     const queuedGeneration = saveGeneration.get(recordId) ?? 0
     const queuedAfterWrites = completedWrites.get(recordId) ?? 0
     const fileKey = fileQueueKeyOf(recordId)
+    // Why at request time: only a save asked for while the banner showed consents to overwrite;
+    // a conflict raised while this save waited in the queue must keep its precondition.
+    const overwriteConsented =
+      trigger === 'user' &&
+      store.getState().openFiles.find((openFile) => openFile.id === file.id)?.externalMutation ===
+        'changed'
 
     const previousSave = saveQueue.get(fileKey) ?? Promise.resolve()
     const queuedSave = previousSave
@@ -144,7 +150,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         const draft = store.getState().editorDrafts[file.id]
         // Why: a write since this request queued already saved newer text than its fallback.
         if (draft === undefined && (completedWrites.get(recordId) ?? 0) !== queuedAfterWrites) {
-          return 'skipped'
+          return 'written'
         }
         const contentToSave = draft ?? fallbackContent
         if (
@@ -156,9 +162,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         }
         // Why: a record kept apart from another record of its file is compared on the host, so the
         // other record's write is never silently replaced. The banner's explicit save overwrites.
-        const guarded =
-          isEditorBufferKeptApart(state, recordId) &&
-          !(trigger === 'user' && liveFile.externalMutation === 'changed')
+        const guarded = isEditorBufferKeptApart(state, recordId) && !overwriteConsented
         const blockStale = (): EditorSaveResult => {
           store.getState().setExternalMutation(liveFile.id, 'changed')
           return 'blocked-stale'
@@ -205,11 +209,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
         completedWrites.set(recordId, (completedWrites.get(recordId) ?? 0) + 1)
         // Why: a read of this file that started before the write must not land after it.
-        markEditorBufferNewer(recordId)
-        if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
-          return 'written'
-        }
-
+        markEditorBufferNewer(fileKey)
         // Why the record: the tab that started the save may have closed while another still shows the file.
         const nextState = store.getState()
         const views = nextState.openFiles.filter(
@@ -217,6 +217,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         )
         const view = views.find(canAutoSaveOpenFile) ?? views[0]
         if (!view) {
+          return 'written'
+        }
+        if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
+          // Why: disk holds this text even though the save was superseded mid-write.
+          nextState.setLastKnownDiskSignature(view.id, getDiskBaselineSignature(contentToSave))
           return 'written'
         }
         const currentDraft = nextState.editorDrafts[view.id]

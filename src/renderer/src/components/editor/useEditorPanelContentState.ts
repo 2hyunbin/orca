@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { OpenFile } from '@/store/slices/editor'
-import type { useAppStore } from '@/store'
+import { useAppStore } from '@/store'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 import {
   useEditorPanelExternalContentEvents,
@@ -13,6 +13,10 @@ import { useEditorPanelDiffContentLoader } from './useEditorPanelDiffContentLoad
 import { useEditorPanelActiveTabContentLoad } from './useEditorPanelActiveTabContentLoad'
 import { useEditorPanelContentReloadTriggers } from './useEditorPanelContentReloadTriggers'
 import { useEditorBufferContentSync } from './use-editor-buffer-content-sync'
+import {
+  editorBufferFreshnessKeyOf,
+  markEditorBufferNewer
+} from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 
 type GitStatusByWorktree = ReturnType<typeof useAppStore.getState>['gitStatusByWorktree']
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
@@ -80,6 +84,10 @@ export function useEditorPanelContentState({
     const uniqueIds = new Set(fileIds)
     for (const fileId of uniqueIds) {
       fileReadGenerationRef.current[fileId] = ++fileReadGenerationCounterRef.current
+      // Why only an in-flight read: it predates this invalidation; a newer read elsewhere must stand.
+      if (outstandingFileReadsRef.current[fileId] !== undefined) {
+        markEditorBufferNewer(editorBufferFreshnessKeyOf(useAppStore.getState(), fileId))
+      }
       delete fileLoadRetryAttemptsRef.current[fileId]
     }
     setFileContents((prev) => {

@@ -23,6 +23,8 @@ import {
 const STALE_SAVE_MESSAGE =
   'This file changed on disk since your edits. Review the banner, then save again to overwrite.'
 
+const NOT_SAVED_MESSAGE = "The file wasn't saved. Try saving again."
+
 export function attachEditorAutosaveController(store: AppStoreApi): () => void {
   const saveQueue = createEditorSaveQueue(store)
   const { queueSave, quiesceFileSave, clearAutoSaveTimer, bumpSaveGeneration, syncAutoSave } =
@@ -51,8 +53,8 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
     const draft = store.getState().editorDrafts[fileId]
     if (draft !== undefined) {
       try {
-        // Why: a save the host refused as stale keeps the tab and its edits, with the banner.
-        if ((await queueSave(file, draft)) === 'blocked-stale') {
+        // Why: only a written save may close the tab; anything else keeps it and its edits.
+        if ((await queueSave(file, draft)) !== 'written') {
           return
         }
       } catch {
@@ -88,8 +90,9 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
         return
       }
 
-      if ((await queueSave(file, content)) === 'blocked-stale') {
-        detail.reject(STALE_SAVE_MESSAGE)
+      const result = await queueSave(file, content)
+      if (result !== 'written') {
+        detail.reject(result === 'blocked-stale' ? STALE_SAVE_MESSAGE : NOT_SAVED_MESSAGE)
         return
       }
       detail.resolve()

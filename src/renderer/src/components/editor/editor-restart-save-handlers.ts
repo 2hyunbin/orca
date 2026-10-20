@@ -84,8 +84,8 @@ export function createEditorRestartSaveHandlers({
           return queueSave(file, content)
         })
       )
-      if (results.includes('blocked-stale')) {
-        detail.reject('Some unsaved files changed on disk. Review them before restarting.')
+      if (results.some((result) => result !== 'written')) {
+        detail.reject('Some unsaved files were not saved. Review them before restarting.')
         return
       }
       detail.resolve()
