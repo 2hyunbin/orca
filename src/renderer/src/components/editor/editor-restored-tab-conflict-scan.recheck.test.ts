@@ -82,7 +82,10 @@ it('reads once more when a new check is requested while a read is in flight', as
   expect(tab().pendingDiskBaselineVerification).toBeFalsy()
 })
 
-it('gives up when every read is superseded by a newer check before it lands', async () => {
+it.each([
+  { disk: 'v1', banner: undefined },
+  { disk: 'v2 external write', banner: 'changed' }
+])('stops re-reading at the cap and keeps the last read ($disk)', async ({ disk, banner }) => {
   const replies: ((content: string) => void)[] = []
   mocks.readRuntimeFileContent.mockImplementation(
     () => new Promise((resolve) => replies.push((content) => resolve({ content, isBinary: false })))
@@ -94,13 +97,13 @@ it('gives up when every read is superseded by a newer check before it lands', as
   // Each read is slower than the re-verify interval, so a newer check always lands first.
   for (let i = 0; i < MAX_VERIFY_ATTEMPTS * 2 && replies.length > i; i += 1) {
     requestRestoredTabReverification(FILE)
-    replies[i]('v1')
+    replies[i](disk)
     await vi.advanceTimersByTimeAsync(0)
   }
 
   expect(replies).toHaveLength(MAX_VERIFY_ATTEMPTS)
   expect(tab().pendingDiskBaselineVerification).toBeFalsy()
-  expect(tab().externalMutation).toBe('changed')
+  expect(tab().externalMutation).toBe(banner)
 })
 
 it('marks a dirty runtime-owned tab deleted when its host says the file is gone', async () => {

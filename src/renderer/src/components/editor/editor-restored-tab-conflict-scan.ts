@@ -125,20 +125,18 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
   }
 
   // Why: a newer check was requested mid-read; this answer may predate it, so keep the flag and read once more.
-  const rereadIfSuperseded = (file: OpenFile, requestGeneration: number): boolean => {
-    if (verifyRequestGeneration(file.id) === requestGeneration) {
+  const rereadIfSuperseded = (fileId: string, requestGeneration: number): boolean => {
+    if (verifyRequestGeneration(fileId) === requestGeneration) {
       return false
     }
-    // Why counted: a read slower than the re-verify interval is superseded every time and would loop forever.
-    const attempts = (attemptsByFileId.get(file.id) ?? 0) + 1
-    attemptsByFileId.set(file.id, attempts)
+    // Why counted: a read slower than the re-verify interval is superseded every time; at the cap this answer stands.
+    const attempts = (attemptsByFileId.get(fileId) ?? 0) + 1
+    attemptsByFileId.set(fileId, attempts)
     if (attempts >= MAX_VERIFY_ATTEMPTS) {
-      giveUp(file)
-      inFlightFileIds.delete(file.id)
-      return true
+      return false
     }
     queueMicrotask(() => {
-      inFlightFileIds.delete(file.id)
+      inFlightFileIds.delete(fileId)
       scan()
     })
     return true
@@ -166,7 +164,7 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
       if (!liveFile) {
         return
       }
-      if (rereadIfSuperseded(file, requestGeneration)) {
+      if (rereadIfSuperseded(file.id, requestGeneration)) {
         retryScheduled = true
         return
       }
@@ -196,7 +194,7 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
         if (disposed) {
           return
         }
-        if (rereadIfSuperseded(file, requestGeneration)) {
+        if (rereadIfSuperseded(file.id, requestGeneration)) {
           retryScheduled = true
           return
         }
