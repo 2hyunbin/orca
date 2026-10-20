@@ -74,7 +74,10 @@ it('writes no request for an empty unpublished acquisition', async () => {
   await duringStart(() => {
     stopping = rig.stop()
   })
-  await expect(rig.host.attach(CALLER, hostTestAttachParams())).rejects.toThrow("couldn't restart")
+  const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
+  await expect(rig.host.attach(CALLER, hostTestAttachParams(fence))).rejects.toThrow(
+    "couldn't restart"
+  )
   await eventually(() => expect(stopping).toBeDefined())
   await stopping
   expect(
