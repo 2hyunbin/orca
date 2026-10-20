@@ -170,16 +170,23 @@ export type AgentSessionCommandAdmission =
   | AgentSessionDispatchOutcome
   | { state: 'accepted'; providerIdentity: null }
 
+/** In memory only: the model and options the provider took the message under, from its own
+ *  execution (a steer reports its running turn's), never a setting or a picker default. */
+export type AgentSessionRanOptionsEvidence = { ranOptions?: Readonly<Record<string, string>> }
+
 export type AgentSessionDispatchOutcome =
   /** The provider owns the turn now, under this identity. */
-  | { state: 'accepted'; providerIdentity: AgentJournalItemIdentity }
+  | ({
+      state: 'accepted'
+      providerIdentity: AgentJournalItemIdentity
+    } & AgentSessionRanOptionsEvidence)
   /**
    * The provider transport took the message; identity settles later, out of band.
    * The submission stays `pending`: a message queued behind a running turn is
    * acknowledged only when that turn starts, so elapsed time is not evidence of
    * anything and never promotes this to `unknown`.
    */
-  | { state: 'admitted' }
+  | ({ state: 'admitted' } & AgentSessionRanOptionsEvidence)
   /** Words from `agentSessionFailureWords`, never written by hand. `answeredInTurn`: the turn the
    *  provider answered the send into, which ended before the answer was read. */
   | ({
