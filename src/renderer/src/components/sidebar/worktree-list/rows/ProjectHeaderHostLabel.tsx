@@ -34,7 +34,7 @@ export function ProjectHeaderHostTooltip({
       <TooltipContent
         side="right"
         sideOffset={8}
-        className="max-w-80 whitespace-normal break-all text-left"
+        className="max-w-80 whitespace-normal break-words text-left"
       >
         {label} — {context.label}
         {context.detail !== context.label ? <div>{context.detail}</div> : null}
