@@ -43,7 +43,8 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       : {}
   }
 
-  override async createTerminal(
+  // Not async: with the switch off this adds no await to every create.
+  override createTerminal(
     worktreeSelector?: string,
     opts: dependencies.TerminalCreateOptions = {},
     created?: dependencies.Worktree
