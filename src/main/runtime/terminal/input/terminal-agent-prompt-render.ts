@@ -8,6 +8,8 @@ import type {
   RuntimeTerminalWait,
   RuntimeTerminalWaitCondition
 } from '../../../../shared/runtime-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { startRestoredHandlePane } from '../surface/main-handle-pane-start'
 
 export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRuntimeWithWriteTerminalAgentPrompt {
   protected createAgentPromptRenderGate(
@@ -139,6 +141,12 @@ export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRun
       launchReadiness?: boolean
     }
   ): Promise<RuntimeTerminalWait> {
+    // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
+    if (ORCA_LAYOUT_OWNER_IS_MAIN && !this.getLivePtyForHandle(handle)) {
+      return startRestoredHandlePane(this, this.getLiveLeafForHandle(handle).leaf).then(() =>
+        this.terminalWait.wait(handle, options)
+      )
+    }
     return this.terminalWait.wait(handle, options)
   }
 }

@@ -20,6 +20,8 @@ import {
   agentPromptTakesLeadLine,
   buildAgentPromptPasteBytes
 } from '../../../../shared/agent-prompt-injection'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { startRestoredHandlePane } from '../surface/main-handle-pane-start'
 
 export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntimeWithResolveTerminalPane {
   protected abstract writeTerminalAction(
@@ -139,6 +141,10 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
       requireWriteSettlement?: true
     }
   ): Promise<RuntimeTerminalSend> {
+    // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
+    if (ORCA_LAYOUT_OWNER_IS_MAIN && !this.getLivePtyForHandle(handle)) {
+      await startRestoredHandlePane(this, this.getLiveLeafForHandle(handle).leaf)
+    }
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {
       if (!pty.pty.connected) {
