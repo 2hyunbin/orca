@@ -3415,6 +3415,8 @@
           },
           "TerminalRemoteRuntimeReconnectBanner": {
             "retryingTitle": "リモートランタイムに再接続中",
+            "pairingRefusedTitle": "このホストはこのコンピューターを受け付けなくなりました",
+            "pairingRefusedBody": "Orca は SSH 経由で再ペアリングできませんでした。ホスト上では何も停止していません。再接続してもう一度お試しください。",
             "disconnectedTitle": "リモートランタイムが切断されました",
             "retryingBody": "Orca は自動的に再試行します。接続が復元されると、このターミナルが再開されます。",
             "disconnectedBody": "自動再試行が停止しました。このターミナルセッションを再開するには再接続してください。",
@@ -3905,7 +3907,11 @@
             "97957ad3a3": "AI プロバイダーアカウントに接続すると、その使用状況をリアルタイムで確認し、アカウント間を簡単に切り替えることができます。",
             "9a542f46c7": "ステータスバーから隠す",
             "84c3b15dca": "Agent の使用量制限",
-            "d663430cf9": "使用状況の追跡を設定"
+            "d663430cf9": "使用状況の追跡を設定",
+            "remoteLabel": "{{host}} の使用量はありません",
+            "remoteTitle": "{{host}} の使用量",
+            "remoteBody": "このワークスペースは {{host}} で実行されているため、バーにはそのホストの使用量が表示されます。そのホストで Agent にサインインするか、ローカルのワークスペースにフォーカスすると、このコンピュータの使用量が表示されます。",
+            "remoteOpenAccounts": "{{host}} のアカウントを開く"
           },
           "UpdateStatusSegment": {
             "5cd13105a3": "アップデートに失敗しました。クリックして展開します。",
@@ -4092,7 +4098,11 @@
                 "label": "サインインの有効期限切れ",
                 "message": "Claude の使用状況が期限切れです。このアカウントで Claude を起動して更新してください。"
               }
-            }
+            },
+            "remoteOwnerNotConfigured": "{{server}} では未構成",
+            "remoteOwnerSignInSavedHere": "サインイン情報はこのコンピュータにのみ保存されています。",
+            "claudeNoUsageFromHost": "{{server}} から使用状況なし",
+            "claudeUnknownOnHost": "{{server}} から Claude の使用状況を取得できません。そこでサインインしていないか、API キー課金を使用している可能性があります。"
           },
           "SshTargetStatusRow": {
             "sshHost": "SSH ホスト"
@@ -4196,6 +4206,8 @@
             "access_revoked": "Access revoked",
             "access_revoked_summary": "This server revoked access for this computer",
             "access_revoked_explanation": "Re-pair with a new pairing link from the server to reconnect.",
+            "managed_access_revoked_explanation": "Orca は SSH 経由で再ペアリングできませんでした。接続してもう一度お試しください。",
+            "connect_access_revoked_explanation": "接続してもう一度お試しください。",
             "update_required": "Update required",
             "update_required_summary": "Orca versions are not compatible",
             "update_required_explanation": "Update Orca on this computer or on the server, then connect again.",
@@ -6382,6 +6394,7 @@
           "sshSaveFailed": "SSH ホストの追加に失敗しました。",
           "serverFieldsRequired": "サーバー名とペアリングコードは必須です。",
           "serverSaved": "リモートサーバーが追加されました。",
+          "serverAlreadyPaired": "このサーバーは {{value0}} としてペアリング済みです。接続情報を更新しました。",
           "serverSaveFailed": "リモートサーバーの追加に失敗しました。",
           "serverTitle": "リモートサーバーを追加する",
           "sshTitle": "SSH ホストを追加",
@@ -6858,7 +6871,8 @@
               "help": "ステータスバーの OpenCode Go 使用状況表示に使います。下のセッション Cookie はレガシーコンソール (OpenCode Black) アカウントでのみ必要です。"
             }
           },
-          "remoteScopeLocalAccountsKeptHostPicker": "このデスクトップで管理されているアカウントは変更されていません。表示するには、設定の上部にあるホストメニューでこのコンピュータを選択してください。"
+          "remoteScopeLocalAccountsKeptHostPicker": "このデスクトップで管理されているアカウントは変更されていません。表示するには、設定の上部にあるホストメニューでこのコンピュータを選択してください。",
+          "apiKeyUpdateFailed": "MiniMax API キーを更新できませんでした。"
         },
         "AdvancedPane": {
           "40b29e0bf3": "再起動",
@@ -8316,6 +8330,7 @@
           "e57dde9d93": "未保存の変更"
         },
         "RuntimeAccessGrantList": {
+          "sshAccessCaveat": "ここで取り消しても、このコンピューターへの SSH アクセスを持つ人は再びペアリングできます。完全に遮断するには、その SSH アクセスを削除してください。",
           "8b82879581": "アクティブな許可を持っている人は誰でも、許可を取り消すまで接続できます。共有アクセスを取り消すと、アクティブなクライアントはただちに切断されます。",
           "68ec21309f": "アクセスを取り消す",
           "6f6d5188ed": "{{value0}}を取り消す",
@@ -8355,7 +8370,7 @@
           "b5b5114cb0": "{{value0}} を削除しました。",
           "6cb6eae14f": "実行環境の保存に失敗しました。",
           "7b5986c8df": "{{value0}} に接続しました。新規プロジェクトを既定でそこに作成するには、[詳細設定] > [新規プロジェクトの既定ホスト] で選択してください。",
-          "5ef712f407": "「{{value0}}」という名前のサーバーはすでに存在します。",
+          "serverAlreadyPaired": "このサーバーは {{value0}} としてペアリング済みです。接続情報を更新しました。",
           "0c55a47480": "名前とペアリングコードは必須です。",
           "e6410d72c3": "ランタイム環境の読み込みに失敗しました。",
           "6ef71985da": "エンドポイントなし",
@@ -8426,6 +8441,8 @@
           "serverRuntimeUnavailableDescription": "SSH トランスポートは接続されていますが、Orca ランタイムが応答しませんでした。ホストがまだ実行中の可能性があります。",
           "serverReconnecting": "再接続中",
           "accessRevoked": "{{value0}} no longer accepts this computer. Re-pair it with a new access link.",
+          "managedAccessRevoked": "{{value0}} はこのコンピューターを受け付けなくなり、Orca は SSH 経由で再ペアリングできませんでした。接続してもう一度お試しください。",
+          "connectAccessRevoked": "{{value0}} はこのコンピューターを受け付けなくなりました。接続してもう一度お試しください。",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"
@@ -12459,7 +12476,11 @@
           "planLevel": "計画: {{value0}}",
           "hostOnly": "Orca を実行しているコンピュータ上のデスクトップアプリでプランサイトと API キーを変更します。",
           "detailsUnavailable": "プランの認証情報の詳細は、Orca を実行しているコンピュータでのみ読み取ることができます。",
-          "siteUnavailable": "ホストプランサイトが利用できない"
+          "siteUnavailable": "ホストプランサイトが利用できない",
+          "keyStoredOnHostHelp": "{{host}} に保存され、使用量の更新時にそこから選択したサイトにのみ送信されます。ZCode CLI のサインインより優先されます。",
+          "usingCliOnHostHelp": "Orca は {{host}} の ZCode CLI 認証情報ストアから選択した Coding Plan を読み取ります。そこでプランを紐付けるには、下で API キーを保存してください。",
+          "notConfiguredOnHostHelp": "下でプランの API キーを保存するか、{{host}} で ZCode CLI にサインインしてください。",
+          "keyOnHostDescription": "選択したコンソールの API Keys ページから API キーを貼り付けてください。{{host}} に保存され、使用量の更新時にそこからそのサイトにのみ送信されます。"
         },
         "sshManagedHostRemove": {
           "description": "{{label}} では管理対象の Orca サーバーが実行されています。管理対象サーバーで「停止…」を使ってホストからサーバーを削除するか、ホストがもう存在しない場合は「登録を解除…」を使ってください。その後、この SSH ホストを削除できます。",
@@ -12600,7 +12621,10 @@
           "linkedProjects_one": "このホストの Orca サーバーには {{paths}} が既にあったため、このデスクトップはサーバーのコピーを使用します。このデスクトップのタブと {{count}} 件のオートメーションは移動されず、ここで作成したワークツリーは外部ワークツリーとして表示されます。",
           "linkedProjects_other": "このホストの Orca サーバーには {{paths}} が既にあったため、このデスクトップはサーバーのコピーを使用します。このデスクトップのタブと {{count}} 件のオートメーションは移動されず、ここで作成したワークツリーは外部ワークツリーとして表示されます。",
           "linkedProjects": "このホストの Orca サーバーには {{paths}} が既にあったため、このデスクトップはサーバーのコピーを使用します。このデスクトップのタブと {{count}} 件のオートメーションは移動されず、ここで作成したワークツリーは外部ワークツリーとして表示されます。",
-          "linkedProjectsNoAutomations": "このホストの Orca サーバーには {{paths}} が既にあったため、このデスクトップはサーバーのコピーを使用します。このデスクトップのタブは移動されず、ここで作成したワークツリーは外部ワークツリーとして表示されます。"
+          "linkedProjectsNoAutomations": "このホストの Orca サーバーには {{paths}} が既にあったため、このデスクトップはサーバーのコピーを使用します。このデスクトップのタブは移動されず、ここで作成したワークツリーは外部ワークツリーとして表示されます。",
+          "nodeDownloadBlocked": "Orca のサーバーに必要な Node.js を、このコンピュータとこのホストのどちらもダウンロードできませんでした。Node.js のミラーを使うか、両方のマシンのネットワークを確認してください。",
+          "nodeDownloadBlockedNoMirror": "Orca のサーバーに必要な Node.js を、このコンピュータとこのホストのどちらもダウンロードできませんでした。両方のマシンのネットワークまたはプロキシを確認してから、もう一度接続してください。",
+          "nodeDownloadBlockedMirrorTried": "このコンピュータとこのホストのどちらも、Node.js のダウンロードミラーを含めて Node.js をダウンロードできませんでした。ミラーの設定を確認してから、もう一度接続してください。"
         },
         "deltaMove": {
           "action": "新規プロジェクトを移動…",
@@ -12675,6 +12699,39 @@
           "submit": "Re-pair",
           "success": "Re-paired with {{name}}",
           "failed": "Re-pair failed"
+        },
+        "usageCredentialHost": {
+          "outdated": "このキーを {{host}} に保存するには、そのホストの Orca を更新してください。",
+          "unreachable": "{{host}} に接続できないため、キーが保存されているかどうかは不明です。",
+          "storedOnHost": "{{host}} に保存済み",
+          "miniMaxStorage": "{{host}} に保存され、使用量の更新時にそこから選択した MiniMax エンドポイントへ送信されます。",
+          "cookieNeedsDesktop": "{{host}} にはセッション Cookie を送信する Orca デスクトップアプリがありません。代わりに API キーを保存してください。",
+          "checking": "{{host}} を確認しています…",
+          "sealedElsewhereForgettable": "{{host}} の別の Orca アプリで保存されており、このアプリでは読み取れません。そのアプリで変更するか、ここで削除してください。",
+          "unreadableKey": "{{host}} の Orca は保存済みのキーを読み取れません。置き換えるか削除してください。",
+          "miniMaxApiKeyDescription": "MiniMax コンソールの API keys から API キーを貼り付けてください。{{host}} に保存され、使用量の更新時にそこから選択した MiniMax エンドポイントへ送信されます。API キーは Cookie より優先されます。"
+        },
+        "useUsageHostSettings": {
+          "updateFailed": "{{host}} の設定を更新できませんでした。"
+        },
+        "nodeDistMirrorDialog": {
+          "action": "Node.js のミラーを使う…",
+          "openSetting": "ミラーの設定を開く",
+          "title": "Node.js のミラーを使う",
+          "description": "Orca のサーバーには Node.js が必要ですが、このコンピュータとこのホストのどちらも nodejs.org からダウンロードできませんでした。ミラーは nodejs.org/dist のコピーで、Orca は両方のマシンでまずミラーを試します。",
+          "urlLabel": "ミラーの URL",
+          "checksum": "ダウンロードしたファイルは、引き続き Orca がこの Node.js リリースに固定しているチェックサムで検証されます。設定 > 詳細設定 > ネットワーク に保存されます。",
+          "cancel": "キャンセル",
+          "save": "保存して再試行",
+          "saveFailed": "Orca はミラーを保存できませんでした。",
+          "retryFailed": "接続に失敗しました",
+          "refusal": {
+            "tooLong": "ミラーの URL が長すぎます。",
+            "protocol": "http または https のミラー URL を使ってください。",
+            "credentials": "ミラーの URL にユーザー名やパスワードは含められません。",
+            "query": "ミラーの URL にクエリやフラグメントは含められません。",
+            "invalid": "有効なミラーの URL を入力してください。"
+          }
         }
       },
       "right": {
@@ -18080,13 +18137,15 @@
         "couldNotStart": "{{agent}} を起動できませんでした。",
         "editSavedArguments": "設定 > Agent > 引数で編集してください。",
         "couldNotRestart": "{{agent}} を再起動できませんでした。",
+        "startTimedOut": "{{agent}} の起動に時間がかかりすぎました ({{seconds}} 秒経っても {{method}} に応答がありません)。",
+        "startTimedOutKeepsHappening": "これが繰り返し起こる場合は、このチャットを実行しているコンピューターが過負荷になっている可能性があります。",
         "codexCliTooOld": "Codex {{installedVersion}} はチャットには古すぎます。{{minimumVersion}} 以降に更新してください。",
         "notSignedIn": "{{agent}} にサインインしていません。",
         "claudeSystemNotSignedIn": "Claude にサインインしていません。`{{loginCommand}}` を実行するか、Claude アカウント設定でアカウントを選択してください。",
         "claudeManagedNotSignedIn": "この Claude アカウントにサインインしていません。設定の Claude アカウントで再度サインインしてください。",
         "codexSystemNotSignedIn": "Codex にサインインしていません。`{{loginCommand}}` を実行してください。",
         "codexManagedNotSignedIn": "この Codex アカウントにサインインしていません。設定の Codex アカウントで再度サインインしてください。",
-        "antigravityNotSignedIn": "Antigravity にサインインしていません。[設定] → [アカウント] → [Antigravity] でサインインしてください。",
+        "antigravityNotSignedIn": "Antigravity にサインインしていません。設定 → アカウント → Antigravityでサインインしてから、メッセージをもう一度送信してください。",
         "cliMissing": "このチャットを実行しているコンピューターで {{agent}} が見つかりませんでした。インストールするか、[設定] → [Agent] の [コマンド] を確認してください。",
         "signInFirst": "先にサインインしてください。",
         "signInThenRunCommand": "サインインしてから、/{{command}} をもう一度実行してください。",
@@ -18803,6 +18862,9 @@
         "replaceTitle": "このチャットを置き換えますか？",
         "replaceDescription": "ここで「{{title}}」を再開すると、このチャットで {{agent}} が行っている処理が停止します。",
         "replace": "置き換える"
+      },
+      "antigravitySignIn": {
+        "sentence": "Antigravity にサインインしていません。<settings>設定 → アカウント → Antigravity</settings>でサインインしてから、メッセージをもう一度送信してください。"
       },
       "claudeSignIn": {
         "signingIn": "サインイン中…"
