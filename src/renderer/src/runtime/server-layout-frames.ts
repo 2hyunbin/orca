@@ -8,8 +8,10 @@ import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../../shared/workspace-layout/layout-intents-capability'
-import { getReachableRuntimeSessionMirrorTargets } from '@/lib/runtime-session-mirror-targets'
-import { selectRuntimeSessionMirrorTargetInputs } from './use-runtime-session-mirror-environment-key'
+import {
+  isDisconnectedRuntimeHostState,
+  runtimeHostConnectionStateForEntry
+} from './runtime-host-connection-state'
 import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
@@ -101,7 +103,7 @@ function openServerFrames(
   // gated, then drawn, as the routing that names it arrives.
   let routing: unknown[] = []
   const stopRouting = store.subscribe((state) => {
-    const next = Object.values(selectRuntimeSessionMirrorTargetInputs(state))
+    const next = routingInputs(state)
     if (sameValues(next, routing)) {
       return
     }
@@ -136,20 +138,23 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
   const open = new Map<string, { identity: string; frames: ServerFrames }>()
   let inputs: unknown[] = []
   const reconcile = (state: AppState): void => {
-    const next = Object.values(selectRuntimeSessionMirrorTargetInputs(state))
+    const next = [state.runtimeEnvironments, state.runtimeStatusByEnvironmentId]
     if (sameValues(next, inputs)) {
       return
     }
     inputs = next
     const wanted = new Map<string, string>()
-    for (const target of getReachableRuntimeSessionMirrorTargets(state)) {
-      const status = lastVerifiedRuntimeStatus(
-        state.runtimeStatusByEnvironmentId.get(target.environmentId)
-      )
-      if (status?.capabilities?.includes(LAYOUT_INTENTS_RUNTIME_CAPABILITY)) {
+    for (const environment of state.runtimeEnvironments) {
+      const entry = state.runtimeStatusByEnvironmentId.get(environment.id)
+      const status = lastVerifiedRuntimeStatus(entry)
+      // Why every paired server, not the focused one: each draws only the workspaces it owns.
+      if (
+        status?.capabilities?.includes(LAYOUT_INTENTS_RUNTIME_CAPABILITY) &&
+        !isDisconnectedRuntimeHostState(runtimeHostConnectionStateForEntry(entry))
+      ) {
         wanted.set(
-          target.environmentId,
-          `${target.runtimeId}|${target.pairingRevision}|${target.connectionGeneration}`
+          environment.id,
+          `${status.runtimeId}|${environment.pairingRevision ?? environment.createdAt}|${entry?.connectionGeneration ?? 0}`
         )
       }
     }
@@ -187,7 +192,20 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
   }
 }
 
-/** The store slices reachability and workspace routing derive from, compared by reference. */
+/** The store slices a workspace's owning server derives from. */
+function routingInputs(state: AppState): unknown[] {
+  return [
+    state.repos,
+    state.worktreesByRepo,
+    state.detectedWorktreesByRepo,
+    state.projectGroups,
+    state.restoredRuntimeHostIdByWorkspaceSessionKey,
+    state.runtimeEnvironments,
+    state.runtimeStatusByEnvironmentId
+  ]
+}
+
+/** Compared by reference: store slices are replaced, never edited in place. */
 function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index])
 }

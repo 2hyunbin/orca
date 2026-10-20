@@ -12,7 +12,7 @@ import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layou
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { AppState } from '@/store/types'
 import type { RuntimeLayoutStreamStatus } from './runtime-layout-client'
-import type { RuntimeSessionMirrorTarget } from '@/lib/runtime-session-mirror-targets'
+import type { PublicKnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 import { createTestStore } from '../store/slices/store-test-helpers'
 import { installServerLayoutFrames } from './server-layout-frames'
 import { applyWebSessionTabsSnapshotWithContext } from './web-session-tabs-sync/apply-snapshot'
@@ -91,7 +91,11 @@ export function serverLayout(tabs: PublishedTab[]): PublishedWorkspaceLayout {
   }
 }
 
-export function runtimeStatusEntry(runtimeId: string, capable: boolean): RuntimeEnvironmentStatus {
+export function runtimeStatusEntry(
+  runtimeId: string,
+  capable: boolean,
+  disconnected = false
+): RuntimeEnvironmentStatus {
   const status: RuntimeStatus = {
     runtimeId,
     rendererGraphEpoch: 0,
@@ -101,7 +105,43 @@ export function runtimeStatusEntry(runtimeId: string, capable: boolean): Runtime
     liveLeafCount: 0,
     ...(capable ? { capabilities: [LAYOUT_INTENTS_RUNTIME_CAPABILITY] } : {})
   }
-  return { status, checkedAt: 1 }
+  if (!disconnected) {
+    return { status, checkedAt: 1 }
+  }
+  // A retired pairing: the verified status stays, and the host reads disconnected.
+  return {
+    status,
+    checkedAt: 1,
+    snapshot: {
+      environmentId: 'unused',
+      pairingRevision: 1,
+      sequence: 1,
+      checkedAt: 1,
+      status,
+      verification: 'verified',
+      transport: 'ready',
+      retired: true
+    }
+  }
+}
+
+/** A paired server as the catalog lists it. */
+export function runtimeEnvironment(
+  id: string,
+  runtimeId: string,
+  pairingRevision: number
+): PublicKnownRuntimeEnvironment {
+  return {
+    id,
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    pairingRevision,
+    lastUsedAt: null,
+    runtimeId,
+    endpoints: [{ id: 'ws-1', kind: 'websocket', label: 'WebSocket', endpoint: 'ws://server' }],
+    preferredEndpointId: 'ws-1'
+  }
 }
 
 type MirrorStore = {
@@ -196,6 +236,8 @@ export type Server = {
   runtimeId: string
   pairingRevision?: number
   capable: boolean
+  /** Paired still, but the host's own verdict is that the pairing is over. */
+  disconnected?: boolean
 }
 
 export const CAPABLE: Server = { environmentId: ENV, runtimeId: 'runtime-1', capable: true }
@@ -208,27 +250,19 @@ export const SERVER_LAYOUT = serverLayout([
 export type TestStore = ReturnType<typeof createTestStore>
 
 /** The reachable servers and workspace owners a test's mocks read, and its installed managers. */
-export function createServerHarness(mocks: {
-  targets: RuntimeSessionMirrorTarget[]
-  owners: Map<string, string>
-}) {
+export function createServerHarness(mocks: { owners: Map<string, string> }) {
   const installs: (() => void)[] = []
   return {
-    /** Which servers are reachable, and what each one's verified status advertises. */
+    /** The paired servers, and what each one's verified status advertises. */
     setServers: (store: TestStore, servers: Server[]): void => {
-      mocks.targets = servers.map((server) => ({
-        environmentId: server.environmentId,
-        runtimeId: server.runtimeId,
-        connectionGeneration: 1,
-        pairingRevision: server.pairingRevision ?? 1,
-        hostContactEpoch: 0
-      }))
-      // A new map: the manager re-reads the reachable servers only when a status input moves.
       store.setState({
+        runtimeEnvironments: servers.map((server) =>
+          runtimeEnvironment(server.environmentId, server.runtimeId, server.pairingRevision ?? 1)
+        ),
         runtimeStatusByEnvironmentId: new Map(
           servers.map((server) => [
             server.environmentId,
-            runtimeStatusEntry(server.runtimeId, server.capable)
+            runtimeStatusEntry(server.runtimeId, server.capable, server.disconnected)
           ])
         )
       })

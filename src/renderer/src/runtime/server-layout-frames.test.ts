@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import type * as FrameDrawnModule from './web-session-tabs-sync/frame-drawn-server-workspaces'
-import type { RuntimeSessionMirrorTarget } from '@/lib/runtime-session-mirror-targets'
 import type { AppState } from '@/store/types'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
@@ -37,12 +36,18 @@ import {
 import { resetMirroredTerminalHandlesForTests } from './web-session-tabs-sync/mirrored-terminal-handle-index'
 import { resetWebSessionTabsSyncTestState } from './web-session-tabs-sync-test-harness'
 
-const hoisted = vi.hoisted(() => ({
-  targets: [] as RuntimeSessionMirrorTarget[],
-  owners: new Map<string, string>(),
-  resync: vi.fn<(environmentId: string, worktreeId: string) => Promise<void>>(),
-  subscribe: null as null | ((...args: never[]) => { close: () => void })
-}))
+type Subscribe = (...args: never[]) => { close: () => void }
+const hoisted = vi.hoisted(
+  (): {
+    owners: Map<string, string>
+    resync: Mock<(environmentId: string, worktreeId: string) => Promise<void>>
+    subscribe: Subscribe | null
+  } => ({
+    owners: new Map(),
+    resync: vi.fn(),
+    subscribe: null
+  })
+)
 
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -52,9 +57,6 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
 })
 vi.mock('./runtime-layout-client', () => ({
   subscribeRuntimeLayout: (...args: never[]) => hoisted.subscribe!(...args)
-}))
-vi.mock('@/lib/runtime-session-mirror-targets', () => ({
-  getReachableRuntimeSessionMirrorTargets: () => hoisted.targets
 }))
 vi.mock('./web-session-tabs-sync/mirrored-workspace-owner', () => ({
   mirroredRuntimeEnvironmentIdForWorkspace: (_state: unknown, key: string) =>
@@ -77,7 +79,6 @@ const OTHER_WT = 'repo::/other-worktree'
 const { setServers, mirroredStore, install, uninstallAll } = createServerHarness(hoisted)
 
 beforeEach(() => {
-  hoisted.targets = []
   hoisted.owners.clear()
   hoisted.resync.mockReset().mockResolvedValue(undefined)
   streams.all.length = 0

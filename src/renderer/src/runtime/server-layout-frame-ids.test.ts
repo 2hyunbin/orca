@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { toRemoteRuntimePtyId, parseRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
+import {
+  toRemoteRuntimePtyId,
+  parseRemoteRuntimePtyId
+} from '../../../shared/remote-runtime-pty-id'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { ownedEditorFileId } from '../../../shared/workspace-session-pane-ownership'
 import type {
@@ -45,7 +48,9 @@ function terminal(id: string, entityId: string, leaves: [string, string?][]): Pu
 function serverLayout(): PublishedWorkspaceLayout {
   return {
     worktreeId: WT,
-    groups: [{ id: 'g-1', tabIds: ['tab-1', 'entry-2', '/srv/app/a.ts', 'ed-2', 'br-1', 'chat-1'] }],
+    groups: [
+      { id: 'g-1', tabIds: ['tab-1', 'entry-2', '/srv/app/a.ts', 'ed-2', 'br-1', 'chat-1'] }
+    ],
     tabs: [
       terminal('tab-1', 'tab-1', [['leaf-1', 'pty-1'], ['leaf-2']]),
       terminal('entry-2', 'term-2', [['leaf-3', 'pty-3']]),
@@ -94,8 +99,18 @@ describe('a server layout under desktop ids', () => {
       new Set(['runtime:env-1'])
     )
     expect(desktop.editorFiles).toEqual([
-      { filePath: '/srv/app/a.ts', relativePath: 'a.ts', language: 'typescript', runtimeEnvironmentId: ENV },
-      { filePath: '/srv/app/b.ts', relativePath: 'b.ts', language: 'typescript', runtimeEnvironmentId: ENV }
+      {
+        filePath: '/srv/app/a.ts',
+        relativePath: 'a.ts',
+        language: 'typescript',
+        runtimeEnvironmentId: ENV
+      },
+      {
+        filePath: '/srv/app/b.ts',
+        relativePath: 'b.ts',
+        language: 'typescript',
+        runtimeEnvironmentId: ENV
+      }
     ])
     expect(desktop.browserTabs).toEqual(serverLayout().browserTabs)
   })
@@ -152,12 +167,19 @@ describe('one server stream translated in order', () => {
     const after = structuredClone(before)
     after.groups[0]!.tabIds.reverse()
     const translator = createServerLayoutFrameTranslator(ENV, () => handles)
-    translator.translate({ type: 'snapshot', workspaces: [{ key: WT, layout: before }], seq: 1, epoch: 'e' })
+    translator.translate({
+      type: 'snapshot',
+      workspaces: [{ key: WT, layout: before }],
+      seq: 1,
+      epoch: 'e'
+    })
     const frame = translator.translate({
       type: 'records',
       epoch: 'e',
       seq: 2,
-      workspaces: [{ key: WT, change: 'records', workspace: { worktreeId: WT, groups: after.groups } }]
+      workspaces: [
+        { key: WT, change: 'records', workspace: { worktreeId: WT, groups: after.groups } }
+      ]
     })
     expect(frame).toMatchObject({
       type: 'records',
@@ -167,20 +189,28 @@ describe('one server stream translated in order', () => {
           key: WT,
           change: 'records',
           workspace: {
-            groups: [{ id: 'g-1', tabIds: serverLayoutForDesktop(after, ENV, handles).groups[0]!.tabIds }]
+            groups: [
+              { id: 'g-1', tabIds: serverLayoutForDesktop(after, ENV, handles).groups[0]!.tabIds }
+            ]
           }
         }
       ]
     })
     const again = createServerLayoutFrameTranslator(ENV, () => handles)
-    again.translate({ type: 'snapshot', workspaces: [{ key: WT, layout: after }], seq: 2, epoch: 'e' })
+    again.translate({
+      type: 'snapshot',
+      workspaces: [{ key: WT, layout: after }],
+      seq: 2,
+      epoch: 'e'
+    })
     expect(again.rebind(WT)).toBeNull()
   })
 
   it('rebinds only the panes whose session.tabs handle changed', () => {
     let known = new Map<string, string>()
-    const translator = createServerLayoutFrameTranslator(ENV, () => (hostTabId, leafId) =>
-      known.get(`${hostTabId}/${leafId}`) ?? null
+    const translator = createServerLayoutFrameTranslator(
+      ENV,
+      () => (hostTabId, leafId) => known.get(`${hostTabId}/${leafId}`) ?? null
     )
     translator.translate({
       type: 'snapshot',

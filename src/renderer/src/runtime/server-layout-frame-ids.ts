@@ -46,8 +46,12 @@ const TAB_ID_RULES: Record<TabContentType, 'terminal' | 'kept'> = {
   simulator: 'kept'
 }
 
+function isKnownTabKind(kind: string): kind is TabContentType {
+  return Object.hasOwn(TAB_ID_RULES, kind)
+}
+
 function tabIdRule(kind: string): 'terminal' | 'kept' {
-  const rule = (TAB_ID_RULES as Record<string, 'terminal' | 'kept' | undefined>)[kind]
+  const rule = isKnownTabKind(kind) ? TAB_ID_RULES[kind] : undefined
   if (!rule) {
     // A newer server's tab kind: drawing it under raw ids would mix two id spaces.
     throw new Error(`server layout: unknown tab kind ${kind}`)
@@ -189,7 +193,9 @@ export function desktopLayoutForServer(layout: PublishedWorkspaceLayout): Publis
           ? {
               terminal: {
                 ...tab.terminal,
-                panes: tab.terminal.panes.map(({ ptyId: _handle, ptyGeneration: _g, ...pane }) => pane)
+                panes: tab.terminal.panes.map(
+                  ({ ptyId: _handle, ptyGeneration: _g, ...pane }) => pane
+                )
               }
             }
           : {})
@@ -233,7 +239,10 @@ export function createServerLayoutFrameTranslator(
     server.delete(key)
     desktop.delete(key)
   }
-  const changeTo = (key: string, layout: PublishedWorkspaceLayout): WorkspaceLayoutRecordChange[] => {
+  const changeTo = (
+    key: string,
+    layout: PublishedWorkspaceLayout
+  ): WorkspaceLayoutRecordChange[] => {
     const before = desktop.get(key)
     const after = show(key, layout)
     const diff = diffPublishedLayouts(key, before?.index ?? null, after.index, after.layout)

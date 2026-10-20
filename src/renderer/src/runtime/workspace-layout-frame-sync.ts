@@ -17,7 +17,10 @@ import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { applyLayoutFrame, EMPTY_WORKSPACE_LAYOUT_CACHE } from '@/store/workspace-layout-cache'
 import type { WorkspaceLayoutCache } from '@/store/workspace-layout-cache'
 import { terminalLayoutsPatch } from '@/store/workspace-layout-frame-store-patch'
-import { layoutHoldsBoundPane, onWorkspaceStartsDrawing } from './workspace-layout-frame-drawn-workspaces'
+import {
+  layoutHoldsBoundPane,
+  onWorkspaceStartsDrawing
+} from './workspace-layout-frame-drawn-workspaces'
 import type { TerminalTabTitleUpdate } from '@/store/slices/terminal-tab-title-batch'
 import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { liveTitleUpdates } from './workspace-layout-frame-changes'
@@ -318,8 +321,7 @@ export function openWorkspaceLayoutFrameSync(
     },
     // Only a pane flush draws: the same workspaces it shows.
     holdsTerminalPane: (worktreeId, pane) =>
-      source.draws(store.getState())(worktreeId) &&
-      layoutHoldsBoundPane(cache[worktreeId], pane),
+      source.draws(store.getState())(worktreeId) && layoutHoldsBoundPane(cache[worktreeId], pane),
     // A closed stream's cache is frozen: main may have closed the tab since.
     terminalTab: (worktreeId, tabId) =>
       streamOpen
