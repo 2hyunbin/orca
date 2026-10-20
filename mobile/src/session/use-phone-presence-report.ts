@@ -25,17 +25,15 @@ export function phonePresenceView(
   return { workspaceIds, tabIds: [], presentForMs: workspaceIds.length > 0 ? null : 0 }
 }
 
-const REPORT_VIEW = 'sidebarInputs.reportView'
-
 function report(client: RpcClient, view: HostView): void {
   const params = phonePresenceView(AppState.currentState, view.focused.values())
   // The transport says it first on every new session, before replaying any subscription, so the
   // host never reads a covered route's re-subscribe as one on screen. An older or switch-off host
   // refuses the method; it then holds the session until close as before.
   if (client.setSessionPreamble) {
-    client.setSessionPreamble(REPORT_VIEW, REPORT_VIEW, params)
+    client.setSessionPreamble('sidebarInputs.reportView', 'sidebarInputs.reportView', params)
   } else {
-    void client.sendRequest(REPORT_VIEW, params).catch(() => {})
+    void client.sendRequest('sidebarInputs.reportView', params).catch(() => {})
   }
 }
 
