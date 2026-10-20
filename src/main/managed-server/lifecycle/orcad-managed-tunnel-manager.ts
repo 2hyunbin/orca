@@ -20,8 +20,9 @@ import {
 } from './orcad-managed-tunnel-resume'
 import type { OrcadManagedServing } from './orcad-managed-serving'
 import {
+  activeTunnelMatches,
   dropActiveOrcadTunnel,
-  managedTunnelAccess,
+  managedTunnelStillPaired,
   recordActiveOrcadTunnel,
   resolveManagedTunnelBinding,
   supersededTunnelError,
@@ -259,31 +260,22 @@ export class OrcadManagedTunnelManager {
     const managerGeneration = this.managerGeneration
     const ownershipGeneration = this.ownershipGenerations.get(environment.id) ?? 0
     const expected = { environmentId: environment.id, ...deployment }
-    const stillOwned = (): boolean => {
-      const currentEnvironment = resolveCurrent()
-      return (
-        this.managerGeneration === managerGeneration &&
-        (this.ownershipGenerations.get(environment.id) ?? 0) === ownershipGeneration &&
-        currentEnvironment?.runtimeId === environment.runtimeId &&
-        (currentEnvironment.pairingRevision ?? currentEnvironment.createdAt) ===
-          (environment.pairingRevision ?? environment.createdAt) &&
-        managedTunnelAccess(currentEnvironment, targetStore.getTarget(target.id), expected) !== null
+    const stillOwned = (): boolean =>
+      this.managerGeneration === managerGeneration &&
+      (this.ownershipGenerations.get(environment.id) ?? 0) === ownershipGeneration &&
+      managedTunnelStillPaired(
+        environment,
+        resolveCurrent(),
+        targetStore.getTarget(target.id),
+        expected
       )
-    }
     const connection = await connectionManager.connect(target)
     if (!stillOwned()) {
       throw supersededTunnelError()
     }
     const transportGeneration = connection.getConnectGeneration()
     const active = this.active.get(environment.id)
-    if (
-      active?.connection === connection &&
-      active.transportGeneration === transportGeneration &&
-      active.targetId === target.id &&
-      active.sshTargetGeneration === target.generation &&
-      active.localPort === deployment.localPort &&
-      active.preferredPort === deployment.remotePort
-    ) {
+    if (activeTunnelMatches(active, { connection, transportGeneration, target, deployment })) {
       return
     }
     const checks = await environmentForwardChecks(this.targeting, {

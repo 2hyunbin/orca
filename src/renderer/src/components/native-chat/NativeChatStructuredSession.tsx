@@ -154,16 +154,9 @@ export function NativeChatStructuredSession(
   // already on screen: nothing in it can act, and its words say why once.
   const readFailedFinally = readFailure?.final === true
   const viewState = selectNativeChatViewState(session, { readRetries: !readFailedFinally })
-  useNativeChatFontSize(
-    viewState.kind === 'ready' && props.isVisible && props.isFocusedGroup,
-    rootRef
-  )
-  const find = useNativeChatFind(
-    props.isVisible && props.isFocusedGroup,
-    rootRef,
-    composerRef,
-    submits.messageListRef
-  )
+  const paneActive = props.isVisible && props.isFocusedGroup
+  useNativeChatFontSize(viewState.kind === 'ready' && paneActive, rootRef)
+  const find = useNativeChatFind(paneActive, rootRef, composerRef, submits.messageListRef)
   const appearanceStyle = useNativeChatStoreAppearanceStyle()
   const imageRuntimeContext = useNativeChatImageRuntimeContext(props.tabId)
   const { onLinkClick, linkActionRequest, closeLinkActions } = useNativeChatLinkActions(
@@ -213,7 +206,6 @@ export function NativeChatStructuredSession(
     composerReady: composerShown && install.slot.kind !== 'install'
   })
   const questionBody = prompt?.body.kind === 'question' ? prompt.body : null
-  const questions = questionBody ? agentSessionPromptQuestions(questionBody) : []
   const structuredTransport = useNativeChatStructuredComposerTransport({
     props,
     controller,
@@ -232,7 +224,8 @@ export function NativeChatStructuredSession(
     agent: props.agent,
     sessionId: props.sessionId,
     isWorking: controller.isWorking || hostHeld,
-    reportComposerError, focusComposer,
+    reportComposerError,
+    focusComposer,
     transport: structuredTransport
   })
 
@@ -384,7 +377,7 @@ export function NativeChatStructuredSession(
           {prompt && questionBody ? (
             <NativeChatStructuredQuestionCard
               key={`${prompt.itemId}:${prompt.revision}`}
-              questions={questions}
+              questions={agentSessionPromptQuestions(questionBody)}
               onAnswer={(response) => void promptResponse.respond(prompt, response)}
               isSubmitting={promptResponse.holds(prompt)}
               onCancel={cancelPrompt}
