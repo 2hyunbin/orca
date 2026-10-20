@@ -6,6 +6,7 @@ import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 import { SleepCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
+import { RenameTabsCommand } from './workspace-layout-rename-tabs-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -369,6 +370,7 @@ export const LayoutApplyParams = z.object({
     SetGroupRatiosCommand,
     CloseTabsCommand,
     RenameTabCommand,
+    RenameTabsCommand,
     SetTabPropsCommand,
     MovePaneToNewTabCommand,
     OpenBrowserTabCommand,
