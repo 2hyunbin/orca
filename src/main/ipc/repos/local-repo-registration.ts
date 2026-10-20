@@ -23,12 +23,16 @@ export async function addLocalRepoFromPath(
     return { error: error instanceof Error ? error.message : String(error) }
   }
   const existing = admission.findSaved()
-  if (existing) return { repo: existing, alreadyExisted: true }
+  if (existing) {
+    return { repo: existing, alreadyExisted: true }
+  }
   const resolvedPath = admission.registrationPath
   const hosted = await registerProjectOnWslHost(
     store, { kind: 'add', path: resolvedPath, repoKind, displayName }, { admission }
   )
-  if (hosted) return { repo: hosted, alreadyExisted: false }
+  if (hosted) {
+    return { repo: hosted, alreadyExisted: false }
+  }
 
   const detected = await detectRepoIconAndUpstream({
     repoPath: resolvedPath,

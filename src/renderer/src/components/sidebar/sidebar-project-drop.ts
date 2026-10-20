@@ -48,7 +48,9 @@ export function routeSidebarProjectDrop(args: {
   wslHosts: readonly WslHostWindowsPathAccess[]
   wslRoutingEnabled?: boolean
 }): SidebarProjectDropRoute {
-  if (args.wslRoutingEnabled && parseWslUncPath(args.path)) return { kind: 'local', path: args.path }
+  if (args.wslRoutingEnabled && parseWslUncPath(args.path)) {
+    return { kind: 'local', path: args.path }
+  }
   for (const host of args.wslHosts) {
     const linuxPath = host.access.fromWindows(args.path)
     if (linuxPath) {

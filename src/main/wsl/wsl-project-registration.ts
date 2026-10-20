@@ -83,13 +83,17 @@ export async function registerProjectOnWslHost(
           store, join(operation.path, operation.name), 'folder', LOCAL_EXECUTION_HOST_ID
         )
   const saved = admission.findSaved()
-  if (saved) return saved
+  if (saved) {
+    return saved
+  }
   const owner = await resolveNewWslProjectHost(store, admission.registrationPath, options)
   if (!owner) {
     return null
   }
   const winner = admission.findSaved()
-  if (winner) return winner
+  if (winner) {
+    return winner
+  }
   return registerOnWslOwner(
     owner.environmentId,
     operation.kind === 'add'

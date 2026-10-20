@@ -106,7 +106,9 @@ export async function importNestedProjectsOnWslHost(
   // An uninspectable selection has no proven Windows claim; never send it to local fallback.
   const inspectionFailed = results.size > 0
   const hasNew = () => inspectionFailed || selected.some((entry) => !entry.admission.findSaved())
-  if (!hasNew()) return null
+  if (!hasNew()) {
+    return null
+  }
   const refuseMixedGroup = () => {
     if (args.mode === 'group' && hasNew() && selected.some((entry) => entry.admission.findSaved())) {
       throw new Error('Some of these projects are already saved on Windows. Import them separately instead of as a group.')
@@ -114,9 +116,13 @@ export async function importNestedProjectsOnWslHost(
   }
   refuseMixedGroup()
   const owner = await resolveNewWslProjectHost(store, args.parentPath, options)
-  if (!owner) return null
+  if (!owner) {
+    return null
+  }
   refuseMixedGroup()
-  if (!hasNew()) return null
+  if (!hasNew()) {
+    return null
+  }
   const executionHostId = toRuntimeExecutionHostId(owner.environmentId)
   const knownIds = new Set((await listWslOwnerRepos(owner.environmentId)).map((repo) => repo.id))
   const registered = new Map<string, ProjectGroupImportResult['projects'][number]>()
@@ -172,7 +178,9 @@ export async function importNestedProjectsOnWslHost(
       group = grouped.group ? { ...grouped.group, executionHostId } : undefined
       for (const { path, selectedLinuxPath } of successful) {
         const expected = results.get(selectionKey(path))
-        if (!expected) continue
+        if (!expected) {
+          continue
+        }
         const groupedItem = grouped.projects.find((item) =>
           linuxPathKey(item.path) === linuxPathKey(selectedLinuxPath)
         )
@@ -186,23 +194,31 @@ export async function importNestedProjectsOnWslHost(
     } catch {
       for (const { path } of successful) {
         const result = results.get(selectionKey(path))
-        if (result) results.set(selectionKey(path), {
-          ...result, status: 'failed',
-          error: 'The project was added, but its group could not be completed.'
-        })
+        if (result) {
+          results.set(selectionKey(path), {
+            ...result, status: 'failed',
+            error: 'The project was added, but its group could not be completed.'
+          })
+        }
       }
     }
   }
   const seen = new Set<string>()
   const projects = args.projectPaths.flatMap((path) => {
-    if (seen.has(selectionKey(path))) return []
+    if (seen.has(selectionKey(path))) {
+      return []
+    }
     seen.add(selectionKey(path))
     const result = results.get(selectionKey(path))
-    if (result) return [{ ...result, path }]
-    if (selection.rejectedPaths.includes(path)) return [{
-      path, status: 'failed' as const,
-      error: 'Repository was not found in the nested repo scan result'
-    }]
+    if (result) {
+      return [{ ...result, path }]
+    }
+    if (selection.rejectedPaths.includes(path)) {
+      return [{
+        path, status: 'failed' as const,
+        error: 'Repository was not found in the nested repo scan result'
+      }]
+    }
     return []
   })
   return {

@@ -55,12 +55,20 @@ describe('new WSL project ownership', () => {
     mocks.setupMethod = 'legacy-repo'
     mocks.target = (path) => path
     mocks.call.mockReset().mockImplementation(async (_env, method, params) => {
-      if (method === 'repo.list') return { repos: [...mocks.ownerRepos] }
-      if (method === 'projectHostSetup.list') return { setups: mocks.ownerRepos.map((repo) => ({
-        projectId: 'owner-project', repoId: repo.id, path: repo.path, hostId: 'local', setupMethod: mocks.setupMethod
-      })) }
-      if (method === 'project.list') return { projects: [{ id: 'owner-project' }] }
-      if (method === 'projectHostSetup.setupExistingFolder') return { result: { repo: mocks.ownerRepos[0] } }
+      if (method === 'repo.list') {
+        return { repos: [...mocks.ownerRepos] }
+      }
+      if (method === 'projectHostSetup.list') {
+        return { setups: mocks.ownerRepos.map((repo) => ({
+          projectId: 'owner-project', repoId: repo.id, path: repo.path, hostId: 'local', setupMethod: mocks.setupMethod
+        })) }
+      }
+      if (method === 'project.list') {
+        return { projects: [{ id: 'owner-project' }] }
+      }
+      if (method === 'projectHostSetup.setupExistingFolder') {
+        return { result: { repo: mocks.ownerRepos[0] } }
+      }
       const path = method === 'repo.create' ? `${params.parentPath}/${params.name}` : params.path
       const repo = mocks.ownerRepos.find((row) => row.path === path) ?? { ...guest, path }
       mocks.ownerRepos.push(repo)
@@ -203,7 +211,7 @@ describe('new WSL project ownership', () => {
   it('leaves an all-saved selection to the local import and refuses a mixed group before any work', async () => {
     const store = { getRepos: () => [saved] }
     const parentPath = '\\\\wsl.localhost\\Ubuntu\\home\\me'
-    const linked = parentPath + '\\topic'
+    const linked = `${parentPath}\\topic`
     mocks.target = (path) => path === linked ? saved.path : path
     await expect(importNestedProjectsOnWslHost(store, { parentPath, mode: 'group',
       projectPaths: [linked] }, { scan: scan([linked]) })).resolves.toBeNull()
@@ -221,7 +229,7 @@ describe('new WSL project ownership', () => {
     expect(mocks.call).not.toHaveBeenCalled()
   })
   it('keeps a canonical Windows claim before paired refusal and preserves concurrent cloned provenance', async () => {
-    const child = saved.path + '\\packages\\web'
+    const child = `${saved.path}\\packages\\web`
     mocks.target = (path) => path === child ? saved.path : path
     await expect(registerProjectOnWslHost({ getRepos: () => [saved] }, { kind: 'add', path: child },
       { fromPairedClient: true })).resolves.toBe(saved)
@@ -239,7 +247,9 @@ describe('new WSL project ownership', () => {
     const outside = '\\\\wsl$\\Ubuntu\\elsewhere\\repo'
     mocks.target = (path) => path === linked ? outside : path
     const normal = mocks.call.getMockImplementation()
-    if (!normal) throw new Error('fixture requires an owner implementation')
+    if (!normal) {
+      throw new Error('fixture requires an owner implementation')
+    }
     mocks.call.mockImplementation(async (env, method, params) => method === 'projectGroup.importNested'
       ? { projects: [{ path: '/home/me/topic', projectId: 'changed-graph-row', status: 'imported' }], importedCount: 1, alreadyKnownCount: 0, failedCount: 0 }
       : normal(env, method, params))
@@ -256,15 +266,21 @@ describe('new WSL project ownership', () => {
 
   it('returns a failed nested item with its saved owner row when setup fails after Add', async () => {
     const path = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
-    const broken = path + '-removed'
+    const broken = `${path}-removed`
     mocks.target = (selected) => {
-      if (selected === broken) throw new Error('repository disappeared')
+      if (selected === broken) {
+        throw new Error('repository disappeared')
+      }
       return selected
     }
     const normal = mocks.call.getMockImplementation()
-    if (!normal) throw new Error('fixture requires an owner implementation')
+    if (!normal) {
+      throw new Error('fixture requires an owner implementation')
+    }
     mocks.call.mockImplementation(async (env, method, params) => {
-      if (method === 'projectHostSetup.setupExistingFolder') throw new Error('setup failed')
+      if (method === 'projectHostSetup.setupExistingFolder') {
+        throw new Error('setup failed')
+      }
       return normal(env, method, params)
     })
     const result = await importNestedProjectsOnWslHost({ getRepos: () => [] }, {

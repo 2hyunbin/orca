@@ -1,6 +1,3 @@
-import { parseWslUncPath } from '../../../../shared/wsl-paths'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
-import { useWslHostsEnabled } from './use-wsl-hosts-enabled'
 import React, { useCallback, useMemo, useState } from 'react'
 import { useAppStore } from '@/store'
 import { useRemoteRepo } from './AddRepoSteps'
@@ -58,13 +55,11 @@ export default React.memo(function AddRepoDialog({
     setHideDefaultBranchWorkspace,
     finishProjectAdd
   })
-  const wslRoutingEnabled = useWslHostsEnabled()
-  const pinLocalHost = Boolean(isOpen && droppedLocalPath && wslRoutingEnabled && parseWslUncPath(droppedLocalPath))
   const hostSelection = useAddRepoHostSelection({
     isOpen,
     setStep,
-    preferredHostId: pinLocalHost ? LOCAL_EXECUTION_HOST_ID : droppedHostPath?.hostId ?? null,
-    pinLocalHost
+    preferredHostId: droppedHostPath?.hostId ?? null,
+    droppedLocalPath
   })
   const selectedRuntimeEnvironmentId =
     hostSelection.selectedParsedHost?.kind === 'runtime'

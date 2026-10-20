@@ -26,9 +26,13 @@ export async function admitRepositoryCheckout(
   kind: 'git' | 'folder',
   executionHostId?: ExecutionHostId | null
 ): Promise<RepositoryCheckoutAdmission> {
-  if (kind === 'git') await awaitWindowsHostGitEnvironmentReady({ cwd: selectedPath })
+  if (kind === 'git') {
+    await awaitWindowsHostGitEnvironmentReady({ cwd: selectedPath })
+  }
   const info = kind === 'git' ? await inspectGitRepoForRegistrationAsync(selectedPath) : null
-  if (info && !info.isRepo) throw new Error(`Not a valid git repository: ${selectedPath}`)
+  if (info && !info.isRepo) {
+    throw new Error(`Not a valid git repository: ${selectedPath}`)
+  }
   const registrationPath = info?.rootPath ?? selectedPath
   const mainRepoPath = info?.mainRepoPath ? await getGitRepoRootAsync(info.mainRepoPath) : null
   const sameHostRepos = () => store.getRepos().filter((repo) =>

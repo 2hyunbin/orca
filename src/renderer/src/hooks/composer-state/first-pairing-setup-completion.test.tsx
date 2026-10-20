@@ -38,7 +38,9 @@ it('selects the returned setup when its host appears only after the setup await'
   const hosted = { ...local, path: '/home/me/repo', executionHostId: hostId }
   const live = projectHostSetupProjectionFromRepos([local, hosted])
   const setup = live.setups.find((row) => row.hostId === hostId)
-  if (!setup) throw new Error('fixture must contain the returned owner setup')
+  if (!setup) {
+    throw new Error('fixture must contain the returned owner setup')
+  }
   act(() => useAppStore.setState({ repos: [local, hosted], projectHostSetups: [...live.setups],
     runtimeEnvironments: [{ id: 'wsl:Ubuntu', name: 'Ubuntu', createdAt: 1, updatedAt: 1, lastUsedAt: null, runtimeId: null, endpoints: [], preferredEndpointId: 'local' }] }))
   act(() => submitted(getProjectHostSetupSelectionKey(setup)))
