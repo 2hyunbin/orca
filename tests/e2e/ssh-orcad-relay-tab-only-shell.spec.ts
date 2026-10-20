@@ -19,6 +19,7 @@ import { seedRelayEraProfile } from './helpers/orcad-upgrade-profile'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import { toRuntimeExecutionHostId, toSshExecutionHostId } from '../../src/shared/execution-host'
 import { toAppSshPtyId } from '../../src/shared/ssh-pty-id'
+import { getOrcadSshDeployment } from '../../src/shared/runtime-environments'
 import {
   cleanupDockerSshHostTarget,
   DOCKER_SSH_HOST_REMOTE_REPO_PATH,
@@ -183,7 +184,7 @@ test('an SSH host converts while a relay shell named only on its tab runs, and t
       .poll(() => bridgedPanes(page), { timeout: BRIDGE_TIMEOUT_MS })
       .toEqual([expect.objectContaining({ ptyId: bridgedPtyId, state: 'live' })])
     const environment = (await page.evaluate(() => window.api.runtimeEnvironments.list())).find(
-      (entry) => entry.orcadDeployment?.sshTargetId === targetId
+      (entry) => getOrcadSshDeployment(entry)?.sshTargetId === targetId
     )
     if (!environment) {
       throw new Error('Converted host is missing from the environment catalog')
