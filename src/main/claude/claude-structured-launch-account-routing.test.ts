@@ -161,8 +161,9 @@ it('refuses to resume a chat whose transcript is in another account instead of s
 
 it('refuses to resume a chat whose transcript is only in its saved custom home', async () => {
   const { root, record, transcriptHomes, launch } = routedResumeFixture()
-  record.accountHome.path = join(root, 'custom-claude-home')
-  transcriptHomes.add(record.accountHome.path)
+  const customHome = join(root, 'custom-claude-home')
+  record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: customHome }
+  transcriptHomes.add(customHome)
 
   await expect(launch()).rejects.toMatchObject({
     name: 'AgentSessionPreSpawnError',
