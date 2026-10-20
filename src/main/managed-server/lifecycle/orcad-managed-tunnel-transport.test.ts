@@ -158,6 +158,18 @@ describe('the managed tunnel’s transport', () => {
     expect(onUnexpectedClose).toHaveBeenCalledOnce()
   })
 
+  it('reports ssh’s own exit reason over a listener that never came up', async () => {
+    const chosen = select('unverifiable', 'not-listening', false)
+    chosen.checkForward.mockImplementation(async () => {
+      chosen.forward.start.mock.calls[0]?.[1].onUnexpectedClose?.(options, {
+        kind: 'unexpected-exit',
+        detail: 'Permission denied (publickey).'
+      })
+      return 'not-listening'
+    })
+    await expect(chosen.transport.start(conn, options)).rejects.toThrow(/Permission denied/)
+  })
+
   // Why: a ControlMaster can hold a login (MFA, a hardware key) the forward cannot repeat alone.
   it('takes the bridge when the forward fails to start at all', async () => {
     const chosen = select('unverifiable')

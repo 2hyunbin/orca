@@ -107,13 +107,15 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
     }
     // Why: system SSH's listener is up before sshd is asked for a channel, so it proves nothing.
     const verdict = await this.dependencies.checkForward(started)
-    // Why an exit counts: a forward that dies before it is handed over cannot be the route.
+    // Why an exit counts, and first: a forward that dies before it is handed over cannot be the
+    // route, and its exit carries ssh's own reason (a refused login) where not-listening has none.
     const failure =
       verdict === 'refused'
         ? 'sshd refused the forward channel'
-        : verdict === 'not-listening'
-          ? 'the forward never listened (its own login did not finish)'
-          : (exits[0] ?? null)
+        : (exits[0] ??
+          (verdict === 'not-listening'
+            ? 'the forward never listened (its own login did not finish)'
+            : null))
     if (failure === null) {
       return started
     }
