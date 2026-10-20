@@ -46,7 +46,9 @@ beforeEach(() => {
   useAppStore.setState({
     settings: { ...getDefaultSettings('/test'), experimentalNativeChat: true },
     repos: [{ id: 'repo-1', path: '/repo', displayName: 'repo', badgeColor: '', addedAt: 0 }],
-    worktreesByRepo: { 'repo-1': [makeWorktree({ id: 'wt-1', path: '/repo', hostId: 'local' })] }
+    worktreesByRepo: {
+      'repo-1': [makeWorktree({ id: 'wt-1', repoId: 'repo-1', path: '/repo', hostId: 'local' })]
+    }
   })
 })
 afterEach(() => {
