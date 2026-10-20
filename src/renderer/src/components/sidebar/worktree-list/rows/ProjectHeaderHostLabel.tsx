@@ -9,7 +9,7 @@ export function ProjectHeaderHostLabel({
   context: ProjectHeaderHostContext
 }): React.JSX.Element {
   return (
-    <span className="flex min-w-0 max-w-1/2 items-center gap-1 text-xs font-normal leading-4 text-muted-foreground">
+    <span className="flex min-w-0 max-w-1/2 shrink-0 items-center gap-1 text-xs font-normal leading-4 text-muted-foreground">
       <HostRowIcon hostId={context.hostId} className="size-3.5 shrink-0" />
       <span className="truncate">{context.label}</span>
     </span>
