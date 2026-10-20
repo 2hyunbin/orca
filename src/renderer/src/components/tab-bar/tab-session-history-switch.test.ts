@@ -442,13 +442,14 @@ describe('one pane of a terminal tab', () => {
   })
 
   it.each(Object.keys(exitedAgentRecords))(
-    'offers nothing once the agent exited and only a %s record remains, as the tab menu does',
+    'keeps the History move off once the agent exited and only a %s record remains',
     (kind) => {
       makeState()
       useAppStore.setState(exitedAgentRecords[kind])
       const exited = useAppStore.getState()
       expect(paneSubject(exited, claudePane)).toBeNull()
-      expect(paneGate(exited, claudePane)).toBe(false)
+      // The pane's switch to native chat stays offered after the agent exits: that is when it works.
+      expect(paneGate(exited, claudePane)).toBe(kind === 'retained')
       expect(
         resolveTabSessionHistorySubject(exited, { tab: { id: 'term-1', worktreeId: WORKTREE_ID } })
       ).toBeNull()

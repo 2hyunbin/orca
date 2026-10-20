@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
+import { agentSessionLeaseOwnerVerdict } from '../../../shared/agent-session-lease-adjudication'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
@@ -135,4 +136,47 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
   await vi.waitFor(() => expect(acquire.mock.calls.length).toBe(spawnsBefore + 1), {
     timeout: 10_000
   })
+})
+
+// The switch to a terminal: admitted only when idle, registers before it stops, proves the stop.
+it('switches an idle chat to its terminal and a racing send starts no second writer', async () => {
+  const order: string[] = []
+  const closeSession = vi.mocked(host.deps.adapter.closeSession)
+  closeSession.mockImplementation(async () => {
+    order.push('stop')
+    return true
+  })
+  await host.switchToTerminal(SESSION, () => {
+    order.push('claim')
+    terminalWriting = true
+  })
+  expect(order).toEqual(['claim', 'stop'])
+  expect(agentSessionLeaseOwnerVerdict(store.getRecord(SESSION)!.lease)).toBe('exited')
+  const spawnsBefore = acquire.mock.calls.length
+  const raced = await rejection(await send('from another window'))
+  expect(raced?.rejection).toMatchObject({ kind: 'conversationOpenInTerminal' })
+  expect(acquire.mock.calls.length).toBe(spawnsBefore)
+})
+
+it('refuses a switch while the chat is starting, without aborting that start', async () => {
+  await host.close(SESSION, 'evict')
+  let release = (): void => undefined
+  const started = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let signal: AbortSignal | undefined
+  acquire.mockImplementationOnce(async (attempt) => {
+    signal = attempt.signal
+    await started
+    return acquire.getMockImplementation()!(attempt)
+  })
+  await send('starts the agent')
+  await vi.waitFor(() => expect(signal).toBeDefined())
+  const admit = vi.fn()
+  await expect(host.switchToTerminal(SESSION, admit)).rejects.toMatchObject({
+    refusal: { details: { reason: 'turnActive' } }
+  })
+  expect(admit).not.toHaveBeenCalled()
+  expect(signal?.aborted).toBe(false)
+  release()
 })

@@ -198,7 +198,7 @@ describe('CLI identity resume through the existing launch owner', () => {
       ok: false,
       refusal: { code: 'agent_session_conflict', message: 'old host' }
     })
-    await runCliChatResume(SOURCE, true)
+    await runCliChatResume(SOURCE)
     expect(mocks.call.mock.calls[0][2].resumeFrom).toEqual({ providerSessionId: 'provider-1' })
     expect(tabs()).toHaveLength(1)
     expect(mocks.activate).not.toHaveBeenCalled()
@@ -227,7 +227,7 @@ describe('CLI identity resume through the existing launch owner', () => {
         createAttemptRefusedBeforeCommit: true
       }
     })
-    await runCliChatResume(SOURCE, true)
+    await runCliChatResume(SOURCE)
     expect(mocks.toast).toHaveBeenCalledTimes(1)
     expect(mocks.toast.mock.calls[0]?.[0]).toMatch(
       /^Orca can't confirm Claude.* has exited in its terminal\. Stop what's running there or close the terminal, then open this conversation from Session History\.$/
@@ -237,7 +237,7 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect([...structuredLaunchStates()]).toEqual([])
   })
 
-  it('opens a proved owner only for the header, on the initiating host, without importing', async () => {
+  it('reveals the chat that already holds the conversation in place and closes the terminal pane', async () => {
     const owner = { sessionId: 'owner-chat', workspaceId: 'owner-workspace' }
     mocks.call.mockResolvedValue({
       ok: false,
@@ -248,13 +248,18 @@ describe('CLI identity resume through the existing launch owner', () => {
         createAttemptRefusedBeforeCommit: true
       }
     })
-    await runCliChatResume(SOURCE)
-    expect(mocks.toast).toHaveBeenCalledWith('Another chat is already holding this conversation.')
-    expect(mocks.activate).not.toHaveBeenCalled()
-    await runCliChatResume(SOURCE, true)
+    const leafId = '11111111-1111-4111-8111-111111111111'
+    mocks.source = { ...SOURCE, paneKey: `tab-1:${leafId}` }
+    const closed = vi.fn()
+    window.addEventListener('orca-close-terminal-pane', closed)
+    await runCliChatResume(mocks.source)
+    window.removeEventListener('orca-close-terminal-pane', closed)
+    expect(mocks.toast).not.toHaveBeenCalled()
     expect(mocks.activate).toHaveBeenCalledWith({ structuredSession: owner }, undefined, {
       kind: 'local'
     })
+    expect(closed).toHaveBeenCalledOnce()
+    expect(closed.mock.calls[0]?.[0].detail).toEqual({ tabId: 'tab-1', leafId })
     expect(tabs()).toEqual([])
   })
 

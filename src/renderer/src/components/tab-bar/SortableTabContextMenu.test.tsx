@@ -264,8 +264,8 @@ describe('SortableTabContextMenu', () => {
   it('does not expose a native/terminal view switch', () => {
     const { container } = renderMenu()
 
-    expect(container.textContent).not.toContain('Switch to Terminal')
-    expect(container.textContent).not.toContain('Switch to Chat')
+    expect(container.textContent).not.toContain('Show as terminal')
+    expect(container.textContent).not.toContain('Show as chat')
   })
 
   it('hides switching a terminal-view tab into chat view', () => {
@@ -283,11 +283,11 @@ describe('SortableTabContextMenu', () => {
     })
     const marker = getSurfaceSwitchMarker(container)
 
-    expect(getButton(container, 'Switch to Terminal').compareDocumentPosition(marker)).toBe(
+    expect(getButton(container, 'Show as terminal').compareDocumentPosition(marker)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     )
     expect(marker.getAttribute('data-leading-separator')).toBe('false')
-    act(() => getButton(container, 'Switch to Terminal').click())
+    act(() => getButton(container, 'Show as terminal').click())
     expect(onToggleViewMode).toHaveBeenCalled()
   })
 

@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   pending: false
 }))
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: Record<string, unknown>) => unknown) => selector({})
+  useAppStore: (selector: (state: Record<string, unknown>) => unknown) =>
+    selector({ paneForegroundAgentByPaneKey: {}, agentStatusByPaneKey: {} })
 }))
 vi.mock('../tab-bar/cli-chat-resume-source', () => ({
   resolveCliChatResumeSource: (_state: unknown, args: unknown) => {
@@ -32,18 +33,18 @@ vi.mock('../tab-bar/cli-chat-resume-run', () => ({
 }))
 afterEach(cleanup)
 
-it('dispatches the exact pane with owner-opening intent and shares pending', () => {
+it('dispatches the exact pane and shares pending', () => {
   const { rerender } = render(
     <TooltipProvider>
       <TerminalPaneResumeInChatButton tabId="tab-1" worktreeId="wt-1" paneKey="tab-1:leaf" />
     </TooltipProvider>
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Switch to Chat' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Switch to native chat' }))
   expect(mocks.resolve).toHaveBeenCalledWith({
     tab: { id: 'tab-1', worktreeId: 'wt-1' },
     paneKey: 'tab-1:leaf'
   })
-  expect(mocks.run).toHaveBeenCalledWith(mocks.source, true)
+  expect(mocks.run).toHaveBeenCalledWith(mocks.source)
   mocks.pending = true
   rerender(
     <TooltipProvider>
