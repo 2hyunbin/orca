@@ -110,6 +110,8 @@ export type TerminalCreateOptions = {
   agentLaunchViewer?: () => AgentLaunchTabViewerRule
   tabId?: string
   leafId?: string
+  /** Layout-owner build: a pane this create writes stays when its start fails, showing why. */
+  keepPaneOnStartFailure?: true
   /** Refuse, rather than attach, when `tabId`/`leafId` name a pane whose PTY is already live. */
   requireFreshPane?: boolean
   sessionId?: string

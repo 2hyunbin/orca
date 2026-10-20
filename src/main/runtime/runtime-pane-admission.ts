@@ -6,8 +6,10 @@ import type {
 import type { LayoutRefusalCode } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
+import type { PaneStartStatuses } from './pane-start-statuses'
 
 type Spawn = NonNullable<RuntimePtyController['spawn']>
+type PaneStartStatusSink = Pick<PaneStartStatuses, 'set' | 'clear'>
 type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
   worktreeId: string
   tabId: string
@@ -98,19 +100,20 @@ export async function admitRuntimePane(
 
 /**
  * Writes a pane before what fills it starts (design 4.1), then runs `start`. A start that fails
- * takes back a pane this wrote.
+ * takes back a pane this wrote, unless `keepOnFailure`: the pane then stays to show the failure.
  */
 export async function startInAdmittedPane<T>(
   store: RuntimeStore | null | undefined,
   admission: TerminalPaneAdmission,
   hostId: string | undefined,
-  start: (outcome: TerminalPaneAdmissionOutcome | undefined) => Promise<T>
+  start: (outcome: TerminalPaneAdmissionOutcome | undefined) => Promise<T>,
+  keepOnFailure = false
 ): Promise<{ outcome: TerminalPaneAdmissionOutcome | undefined; result: T }> {
   const outcome = await admitRuntimePane(store, admission, hostId)
   try {
     return { outcome, result: await start(outcome) }
   } catch (error) {
-    if (outcome === 'admitted') {
+    if (outcome === 'admitted' && !keepOnFailure) {
       await withdrawAdmittedPane(store, admission, hostId)
     }
     throw error
@@ -125,7 +128,12 @@ export async function startInAdmittedPane<T>(
 export async function spawnInAdmittedPane(
   store: RuntimeStore | null | undefined,
   controller: Pick<RuntimePtyController, 'spawn'>,
-  args: AdmittedSpawnArgs
+  args: AdmittedSpawnArgs,
+  /**
+   * Layout-owner build: how a start goes, for a pane main already held or one that should stay
+   * when its start fails (`keepOnFailure`), so the pane shows the failure.
+   */
+  startStatus?: { sink: PaneStartStatusSink; keepOnFailure: boolean }
 ): ReturnType<Spawn> {
   const { groupId: _groupId, afterTabId: _afterTabId, ...spawnArgs } = args
   const { outcome, result } = await startInAdmittedPane(
@@ -137,9 +145,26 @@ export async function spawnInAdmittedPane(
         // Only a split is refused: its parent pane left the layout.
         throw new Error('terminal_split_source_not_found')
       }
-      // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
-      return controller.spawn!(spawnArgs)
-    }
+      if (!startStatus || (admitted !== 'exists' && !startStatus.keepOnFailure)) {
+        // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
+        return controller.spawn!(spawnArgs)
+      }
+      const { sink } = startStatus
+      const paneKey = `${args.tabId}:${args.leafId}`
+      sink.set(paneKey, { status: 'starting' })
+      try {
+        const started = await controller.spawn!(spawnArgs)
+        sink.clear(paneKey)
+        return started
+      } catch (error) {
+        sink.set(paneKey, {
+          status: 'failed',
+          reason: error instanceof Error ? error.message : String(error)
+        })
+        throw error
+      }
+    },
+    startStatus?.keepOnFailure
   )
   const started = result.agentSessionEnsure?.owner.surface ?? result.stablePaneOwner
   const elsewhere = started && (started.tabId !== args.tabId || started.leafId !== args.leafId)
