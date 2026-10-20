@@ -37,6 +37,9 @@ function withWindowFacts(row: Row, windowRow: Row | undefined): Row {
       ...row,
       ...(windowRow.terminalTheme ? { terminalTheme: windowRow.terminalTheme } : {}),
       ...(windowRow.agentStatus !== undefined ? { agentStatus: windowRow.agentStatus } : {}),
+      // A pane main has no binding for yet (an SSH restore before its terminal registers) keeps
+      // the terminal the window is reattaching, so it lists pending rather than vanishing.
+      ...(!row.ptyId && windowRow.ptyId ? { ptyId: windowRow.ptyId } : {}),
       ...(windowRow.launchDraft !== undefined ? { launchDraft: windowRow.launchDraft } : {}),
       ...(windowRow.launchDraftCreatedAt !== undefined
         ? { launchDraftCreatedAt: windowRow.launchDraftCreatedAt }
