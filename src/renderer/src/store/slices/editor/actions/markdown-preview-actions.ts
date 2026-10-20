@@ -20,6 +20,23 @@ import {
   recordPromotedEditorTabsInLayoutOwner
 } from '../tabs/editor-tab-layout-owner'
 
+type FileReadAuthority = Pick<
+  OpenFile,
+  'externalSshTargetId' | 'terminalArtifactGrantId' | 'readOnly'
+>
+
+/** A preview reads its source's file, so it must read with the same host, grant and client-local flag (#31034). */
+function inheritFileReadAuthority(
+  file: FileReadAuthority,
+  source: FileReadAuthority | undefined
+): FileReadAuthority {
+  return {
+    externalSshTargetId: file.externalSshTargetId ?? source?.externalSshTargetId,
+    terminalArtifactGrantId: file.terminalArtifactGrantId ?? source?.terminalArtifactGrantId,
+    readOnly: file.readOnly === true || source?.readOnly === true ? true : undefined
+  }
+}
+
 export function createMarkdownPreviewActions(
   set: EditorSet,
   get: EditorGet
@@ -96,9 +113,10 @@ export function createMarkdownPreviewActions(
           ['edit']
         )
       const id = `markdown-preview::${sourceFileId}`
-      const externalSshTargetId =
-        file.externalSshTargetId ??
-        initialState.openFiles.find((openFile) => openFile.id === sourceFileId)?.externalSshTargetId
+      const { externalSshTargetId, terminalArtifactGrantId, readOnly } = inheritFileReadAuthority(
+        file,
+        initialState.openFiles.find((openFile) => openFile.id === sourceFileId)
+      )
       const anchor = options?.anchor || undefined
       set((s) => {
         const existing = s.openFiles.find((openFile) => openFile.id === id)
@@ -112,6 +130,8 @@ export function createMarkdownPreviewActions(
             existing.filePath !== file.filePath ||
             existing.language !== file.language ||
             existing.externalSshTargetId !== externalSshTargetId ||
+            existing.terminalArtifactGrantId !== terminalArtifactGrantId ||
+            existing.readOnly !== readOnly ||
             existing.markdownPreviewSourceFileId !== sourceFileId ||
             existing.markdownPreviewAnchor !== anchor ||
             existing.mode !== 'markdown-preview'
@@ -127,6 +147,8 @@ export function createMarkdownPreviewActions(
                         language: file.language,
                         runtimeEnvironmentId,
                         externalSshTargetId,
+                        terminalArtifactGrantId,
+                        readOnly,
                         markdownPreviewSourceFileId: sourceFileId,
                         markdownPreviewAnchor: anchor,
                         mode: 'markdown-preview' as const
@@ -147,6 +169,8 @@ export function createMarkdownPreviewActions(
           isDirty: false,
           runtimeEnvironmentId,
           externalSshTargetId,
+          terminalArtifactGrantId,
+          readOnly,
           markdownPreviewSourceFileId: sourceFileId,
           markdownPreviewAnchor: anchor,
           mode: 'markdown-preview'

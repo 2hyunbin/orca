@@ -78,7 +78,8 @@ export type EditorFilesSlice = {
       | 'language'
       | 'runtimeEnvironmentId'
       | 'externalSshTargetId'
-    >,
+    > &
+      Partial<Pick<OpenFile, 'terminalArtifactGrantId' | 'readOnly'>>,
     options?: { anchor?: string | null; targetGroupId?: string; sourceFileId?: string }
   ) => void
   makePreviewFilePermanent: (fileId: string, tabId?: string) => void
