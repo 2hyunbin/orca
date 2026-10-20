@@ -60,7 +60,8 @@ describe('layout-owner build: a start main could not make keeps its pane, showin
       await runtime.applyLayoutCommand({
         type: 'closeTabs',
         workspace: WORKTREE_ID,
-        tabIds: [tabId!]
+        tabIds: [tabId!],
+        recordClose: 'user'
       })
       throw new Error('shell not found')
     })

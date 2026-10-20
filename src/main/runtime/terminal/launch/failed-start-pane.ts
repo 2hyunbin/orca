@@ -1,10 +1,10 @@
 // Layout-owner build: main's starts publish their status on the pane, and a start main could not
 // make leaves its pane showing why, whether it failed before the pane was written or after.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { toSshExecutionHostId } from '../../../../shared/execution-host'
+import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { PaneStartStatuses } from '../../pane-start-statuses'
-import { admitRuntimePane } from '../../runtime-pane-admission'
+import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
 
@@ -30,6 +30,7 @@ export async function startKeepingFailedPane<T>(
 
 export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCreateTerminal {
   protected abstract markPaneLiveTitlesDirty(): void
+  abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
 
   /** Switch point: main's starts into panes it already holds, published until each binds. */
   protected readonly paneStartStatuses = ORCA_LAYOUT_OWNER_IS_MAIN
@@ -67,6 +68,7 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     return super.createTerminal(worktreeSelector, opts, created)
   }
 
+  /** Through main's create rules, so a pane the user closed meanwhile is refused, not restored. */
   private async keepFailedStartPane(
     worktreeSelector: string,
     created: dependencies.Worktree | undefined,
@@ -74,21 +76,12 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     { title }: dependencies.TerminalCreateOptions,
     reason: string
   ): Promise<void> {
-    const paneKey = `${pane.tabId}:${pane.leafId}`
-    // A status means the start already wrote its pane and kept it (or the user has since closed it).
-    if (this.paneStartStatuses?.get(paneKey)) {
-      return
-    }
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector, created)
-    const hostId = workspace.connectionId ? toSshExecutionHostId(workspace.connectionId) : undefined
-    const admission = { type: 'createTerminalTab' as const, workspace: workspace.id, ...pane }
-    const outcome = await admitRuntimePane(
-      this.store,
-      title ? { ...admission, title } : admission,
-      hostId
-    )
-    if (outcome === 'admitted' || outcome === 'exists') {
-      this.paneStartStatuses?.set(paneKey, { status: 'failed', reason })
+    const create = { type: 'createTerminalTab' as const, workspace: workspace.id, ...pane }
+    const reply = await this.applyLayoutCommand(title ? { ...create, title } : create)
+    // `tab_exists`: the start wrote this pane before failing and kept it.
+    if (reply.ok || reply.code === 'tab_exists') {
+      this.paneStartStatuses?.set(`${pane.tabId}:${pane.leafId}`, { status: 'failed', reason })
     }
   }
 }
