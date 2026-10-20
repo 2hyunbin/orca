@@ -101,10 +101,9 @@ describe('a repo id set up on two hosts, named with repoHostId', () => {
 
     await expect(
       factory.createWorktree({
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the parsed AgentLaunch create payload; this test sets only the fields the lookup reads.
-        create: { repo: 'id:dup', repoHostId: 'ssh:gpu', name: 'x' } as never,
+        create: { repo: 'id:dup', repoHostId: 'ssh:gpu', name: 'x' },
         startupAgent: 'claude'
-      } as never)
+      })
     ).rejects.toThrow('stop after resolution')
 
     expect(reached.mock.calls[0]?.[1]).toMatchObject({ path: '/remote/dup' })

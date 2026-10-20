@@ -9,11 +9,11 @@ import { getRegisteredSshState } from '../../../ssh/targets/ssh-target-registry'
 import {
   getConnectionExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
-  toSshExecutionHostId
+  toSshExecutionHostId,
+  type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { resolveWorktreeLaunchHost } from '../../worktree-launch-host-repo'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
 
 export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithCreateAgentSession {
   async dedupeTerminalCreate(
