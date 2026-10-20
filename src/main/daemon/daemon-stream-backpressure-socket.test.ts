@@ -22,7 +22,8 @@ describe('daemon stream backpressure with a stalled Socket reader', () => {
     async ({ chunkSize, hidden }) => {
       // Why: the daemon stream runs over a Unix socket or named pipe. Linux TCP loopback autotunes its
       // kernel buffers to several MiB, enough to absorb the flood before the 4 MiB high-water mark.
-      const dir = mkdtempSync(join(tmpdir(), 'orca-dsbp-'))
+      // A fixed POSIX root keeps the full Unix socket path below the kernel's byte limit.
+      const dir = mkdtempSync(join(process.platform === 'win32' ? tmpdir() : '/tmp', 'orca-dsbp-'))
       const socketPath =
         process.platform === 'win32'
           ? `\\\\.\\pipe\\${basename(dir)}.sock`
