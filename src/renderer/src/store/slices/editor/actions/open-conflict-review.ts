@@ -5,17 +5,17 @@ import type { OpenFile } from '../types/open-file'
 import type { ConflictReviewState } from '../../../../../../shared/editor-tab-view-types'
 import { toOpenConflictMetadata } from '../git/git-status-reconciliation'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
-import { resolveEditorFileIdForOwner, runtimeOwnerKey } from '../file-ids/editor-file-ids'
+import { resolveEditorFileIdForOwner } from '../file-ids/editor-file-ids'
 import { captureEditorFileOperationProvenance } from '@/lib/editor-file-operation-owner'
 import type { AppState } from '../../../types'
 
-/** The runtime owner `openFile` would give a file opened in this workspace. */
+/** The runtime owner `openFile` gives a file opened in this workspace; null when it cannot tell. */
 function conflictFileRuntimeOwner(s: AppState, worktreeId: string): string | null {
   try {
     return captureEditorFileOperationProvenance(s, worktreeId, undefined, false).generation.route
       .runtimeEnvironmentId
   } catch {
-    return runtimeOwnerKey(s.settings?.activeRuntimeEnvironmentId)
+    return null
   }
 }
 

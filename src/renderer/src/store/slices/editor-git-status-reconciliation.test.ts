@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { createEditorStore } from './editor-slice-test-harness'
+import { makeFolderWorkspace } from './worktrees-slice-test-fixtures'
 
 const { toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn()
@@ -521,15 +522,28 @@ describe('createEditorSlice conflict status reconciliation', () => {
       if (onServer) {
         store.setState({
           folderWorkspaces: [
-            {
+            makeFolderWorkspace({
               id: 'server-folder',
               projectGroupId: 'server-group',
               folderPath: '/repo',
               connectionId: null
-            } as never
+            })
           ],
           projectGroups: [
-            { id: 'server-group', connectionId: null, executionHostId: 'runtime:env-1' } as never
+            {
+              id: 'server-group',
+              name: 'Server',
+              parentPath: '/repo',
+              connectionId: null,
+              executionHostId: 'runtime:env-1',
+              parentGroupId: null,
+              createdFrom: 'folder-scan',
+              tabOrder: 0,
+              isCollapsed: false,
+              color: null,
+              createdAt: 1,
+              updatedAt: 1
+            }
           ]
         })
       }

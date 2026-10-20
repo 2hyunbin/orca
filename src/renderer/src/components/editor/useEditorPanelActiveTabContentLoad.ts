@@ -14,7 +14,7 @@ type GitStatusByWorktree = ReturnType<typeof useAppStore.getState>['gitStatusByW
 type UseEditorPanelActiveTabContentLoadParams = {
   activeFile: OpenFile | null
   selectedConflictReviewFile: OpenFile | null
-  openFiles: OpenFile[]
+  openFiles: readonly OpenFile[]
   isVisible: boolean
   isChangesMode: boolean
   gitStatusEntries: GitStatusByWorktree[string] | undefined
