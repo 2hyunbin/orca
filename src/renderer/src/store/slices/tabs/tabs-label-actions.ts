@@ -16,7 +16,7 @@ import {
 import { sendTabChangeToLayoutOwner } from '../../terminals/tab-change-through-layout-owner'
 import { recordTabOrderInLayoutOwner } from './tab-order-layout-owner'
 import { withPreviewEnded } from './tab-preview-flag'
-import { promotePreviewTabsThroughLayoutOwner } from './preview-tab-promotion'
+import { endsPreviewHere, promotePreviewTabsThroughLayoutOwner } from './preview-tab-promotion'
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
@@ -229,9 +229,9 @@ export function createTabsLabelActions(
         const tabs = (state.unifiedTabsByWorktree[worktreeId] ?? []).map((candidate) =>
           candidate.id !== tabId
             ? candidate
-            : ORCA_LAYOUT_OWNER_IS_MAIN
-              ? { ...candidate, isPinned: true }
-              : withPreviewEnded({ ...candidate, isPinned: true })
+            : endsPreviewHere(state, worktreeId)
+              ? withPreviewEnded({ ...candidate, isPinned: true })
+              : { ...candidate, isPinned: true }
         )
         if (ORCA_LAYOUT_OWNER_IS_MAIN && tab.isPreview) {
           promoted.push(tab)
@@ -259,7 +259,7 @@ export function createTabsLabelActions(
       })
       mirrorTabPinnedToHost(get(), tabId, true)
       if (promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), promoted)
       }
       if (exists) {
         get().recordFeatureInteraction?.('terminal-tabs')

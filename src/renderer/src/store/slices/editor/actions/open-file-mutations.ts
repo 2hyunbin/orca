@@ -5,7 +5,10 @@ import type { Tab } from '../../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
 import { previewEditorTabsOf } from '../tabs/editor-tab-layout-owner'
-import { promotePreviewTabsThroughLayoutOwner } from '../../tabs/preview-tab-promotion'
+import {
+  endsPreviewHere,
+  promotePreviewTabsThroughLayoutOwner
+} from '../../tabs/preview-tab-promotion'
 import { writeEditorBuffer } from '../buffers/editor-buffer-record'
 import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
 
@@ -107,14 +110,16 @@ export function createOpenFileMutations(
             needsPreviewClear ? { isPreview: undefined } : undefined
           ),
           ...(dropDraft ? { editorDrafts: withoutKey(s.editorDrafts, fileId) } : {}),
-          // Switch point: main's frame ends the tabs' preview.
-          ...(needsPreviewClear && !ORCA_LAYOUT_OWNER_IS_MAIN
+          ...(needsPreviewClear
             ? {
                 unifiedTabsByWorktree: Object.fromEntries(
                   Object.entries(s.unifiedTabsByWorktree ?? {}).map(([worktreeId, tabs]) => [
                     worktreeId,
                     tabs.map((tab) =>
-                      tab.entityId === fileId && isEditorTabContentType(tab.contentType)
+                      tab.entityId === fileId &&
+                      isEditorTabContentType(tab.contentType) &&
+                      // Switch point: main's frame ends a preview main owns.
+                      endsPreviewHere(s, worktreeId)
                         ? withPreviewEnded(tab)
                         : tab
                     )
@@ -126,7 +131,7 @@ export function createOpenFileMutations(
       })
       // Switch point: main makes the edited preview tabs permanent.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), promoted)
       }
     },
 

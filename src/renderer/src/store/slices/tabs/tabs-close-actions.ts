@@ -219,7 +219,7 @@ export function createTabsCloseActions(
       // Switch point: main closes an editor tab first; its frame drops it.
       if (
         ORCA_LAYOUT_OWNER_IS_MAIN &&
-        closeEditorTabThroughLayoutOwner(get(), set, tab, nextActiveTabId, closeHere)
+        closeEditorTabThroughLayoutOwner(get, tab, nextActiveTabId, closeHere)
       ) {
         if (opts?.recordInteraction !== false) {
           get().recordFeatureInteraction?.('terminal-tabs')

@@ -4,7 +4,13 @@
 /** The tab main's frame shows (its own id for a repeat open), or null when main refused. */
 type Outcome = string | null
 
-type PendingTab = { worktreeId: string; entityId: string; waiters: ((outcome: Outcome) => void)[] }
+type PendingTab = {
+  worktreeId: string
+  entityId: string
+  /** The group an open asked for; none for a close. */
+  groupId?: string
+  waiters: ((outcome: Outcome) => void)[]
+}
 
 const pending = new Map<string, PendingTab>()
 
@@ -12,9 +18,10 @@ const pending = new Map<string, PendingTab>()
 export function beginPendingTab(
   tabId: string,
   worktreeId: string,
-  entityId: string
+  entityId: string,
+  groupId?: string
 ): (outcome: Outcome) => void {
-  const entry: PendingTab = { worktreeId, entityId, waiters: [] }
+  const entry: PendingTab = { worktreeId, entityId, ...(groupId ? { groupId } : {}), waiters: [] }
   pending.set(tabId, entry)
   return (outcome) => {
     if (pending.get(tabId) !== entry) {
@@ -39,6 +46,18 @@ export function afterPendingTab(tabId: string, run: (outcome: Outcome) => void):
   } else {
     run(tabId)
   }
+}
+
+/** The group a pending open asked for. */
+export function pendingTabGroupId(tabId: string): string | undefined {
+  return pending.get(tabId)?.groupId
+}
+
+/** Whether a tab showing this entity is still being opened or closed. */
+export function hasPendingEntityTab(worktreeId: string, entityId: string): boolean {
+  return [...pending.values()].some(
+    (entry) => entry.worktreeId === worktreeId && entry.entityId === entityId
+  )
 }
 
 /** Runs `run` once every pending tab showing this entity is answered; at once when none is. */

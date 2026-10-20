@@ -85,10 +85,10 @@ export function openEditorTabThroughLayoutOwner(
     ...editorTabContent(file),
     ...(groupId ? { groupId, ...newGroupSplitOf(state, worktreeId, groupId, tabId) } : {}),
     ...(open.index !== undefined ? { index: open.index } : {}),
-    ...(open.isPreview ? { preview: true } : {}),
-    createdAt: Date.now()
+    // Main stamps the tab's time (ledger L186); the frame draws it.
+    ...(open.isPreview ? { preview: true } : {})
   }
-  const settle = beginPendingTab(tabId, worktreeId, fileId)
+  const settle = beginPendingTab(tabId, worktreeId, fileId, groupId)
   const sent = sendLayoutApply(state, worktreeId, command, {
     apply: (result) => {
       const shownId = result.tabId ?? tabId
@@ -125,7 +125,7 @@ function selectDrawnEditorTab(
 /** An open the window answered with a tab it already shows: main takes its current record and view. */
 export function sendReusedEditorTabToLayoutOwner(
   state: AppState,
-  tab: Pick<Tab, 'id' | 'entityId' | 'worktreeId' | 'groupId' | 'contentType' | 'createdAt'>
+  tab: Pick<Tab, 'id' | 'entityId' | 'worktreeId' | 'groupId' | 'contentType'>
 ): void {
   const file = openFileOf(state, tab.worktreeId, tab.entityId)
   if (!file || !isEditorTabContentType(tab.contentType)) {
@@ -145,8 +145,7 @@ export function sendReusedEditorTabToLayoutOwner(
       fileId: tab.entityId,
       contentType: tab.contentType,
       ...content,
-      groupId: tab.groupId,
-      createdAt: tab.createdAt
+      groupId: tab.groupId
     },
     { apply: keep, asToday: keep }
   )

@@ -99,7 +99,6 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('editor tabs drawn from main’s frame
       contentType: 'editor',
       groupId: g1,
       preview: true,
-      createdAt: expect.any(Number),
       file: { filePath: '/a.ts', relativePath: 'a.ts', language: 'ts' }
     })
     // The open file is the window's at once; the tab is not, until main's frame.
@@ -107,7 +106,12 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('editor tabs drawn from main’s frame
     expect(tabFor(fileId)).toBeUndefined()
 
     await main.settle()
-    expect(tabFor(fileId)).toMatchObject({ id: command!.tabId, isPreview: true })
+    // Main stamps the tab's time; the frame draws it.
+    expect(tabFor(fileId)).toMatchObject({
+      id: command!.tabId,
+      isPreview: true,
+      createdAt: expect.any(Number)
+    })
   })
 
   it('selects a new tab only once its frame draws it, in that update or right after (c)', async () => {

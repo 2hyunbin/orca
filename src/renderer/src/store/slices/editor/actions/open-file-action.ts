@@ -11,7 +11,7 @@ import {
   takeNextEditorFocusRequestToken
 } from '../focus/editor-focus-reveal'
 import { applyOpenFileToState, type OpenFileApplyScratch } from './open-file-apply'
-import { afterPendingTab } from '@/runtime/layout-owner-pending-tabs'
+import { afterPendingTab, pendingTabGroupId } from '@/runtime/layout-owner-pending-tabs'
 
 export function createOpenFileAction(
   set: EditorSet,
@@ -83,11 +83,13 @@ export function createOpenFileAction(
       onShown?.(settled.result)
     })
     // A tab main has yet to draw: the view the window proposed, shown once its frame is in.
-    const proposed = scratch.editorItemTargetGroupId
+    const proposedGroupId =
+      pendingTabGroupId(editorItemViewStateId) ?? scratch.editorItemTargetGroupId
+    const proposed = proposedGroupId
       ? {
           fileId: scratch.editorItemFileId,
           viewStateId: editorItemViewStateId,
-          groupId: scratch.editorItemTargetGroupId
+          groupId: proposedGroupId
         }
       : null
     return { fileId: scratch.editorItemFileId, result: settled.ran ? settled.result : proposed }

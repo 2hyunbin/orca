@@ -5,53 +5,40 @@
 import type { Tab } from '../../../../../../shared/tab-types'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
 import { beginPendingTab } from '@/runtime/layout-owner-pending-tabs'
-import { ownsGlobalSelection } from '../../../global-selection-owner'
 import type { AppState } from '../../../types'
 import type { OpenFile } from '../types/open-file'
-import { pushRecentTabId, sanitizeRecentTabIds } from '../../tab-group-state'
-import type { TabsSliceSet } from '../../tabs/tabs-slice-contract'
-import { buildActiveSurfacePatch } from '../../tabs/tabs-surface'
+import { pickNextActiveTab } from '../../tab-group-state'
 import { isEditorTabContentType } from './editor-tab-content-type'
 
-/** The group's next tab once main's frame dropped the closed one; nothing while it still shows. */
-function selectionAfterClose(
-  current: AppState,
+/**
+ * Once main's frame dropped the closed tab, its group shows the tab today's close picks (one
+ * picked before that is itself gone falls back to the group's history), and the workspace's
+ * surface follows its active group. Nothing while the tab still shows.
+ */
+function selectAfterClose(
+  get: () => AppState,
   tab: Pick<Tab, 'id' | 'worktreeId' | 'groupId'>,
   nextActiveTabId: string | null
-): Partial<AppState> | AppState {
+): void {
+  const state = get()
   const worktreeId = tab.worktreeId
-  if ((current.unifiedTabsByWorktree[worktreeId] ?? []).some((entry) => entry.id === tab.id)) {
-    return current
+  if ((state.unifiedTabsByWorktree[worktreeId] ?? []).some((entry) => entry.id === tab.id)) {
+    return
   }
-  const groups = current.groupsByWorktree[worktreeId] ?? []
-  const group = groups.find((entry) => entry.id === tab.groupId)
-  if (!group || !nextActiveTabId || !group.tabOrder.includes(nextActiveTabId)) {
-    return current
+  const activeGroupId = state.activeGroupIdByWorktree[worktreeId]
+  const group = state.groupsByWorktree[worktreeId]?.find((entry) => entry.id === tab.groupId)
+  const next =
+    group && nextActiveTabId && group.tabOrder.includes(nextActiveTabId)
+      ? nextActiveTabId
+      : group
+        ? pickNextActiveTab(group.tabOrder, group.recentTabIds, tab.id)
+        : null
+  if (next && group?.activeTabId !== next) {
+    state.activateTab(next, { worktreeId, preservePreview: true, recordFocus: false })
   }
-  const groupsByWorktree = {
-    ...current.groupsByWorktree,
-    [worktreeId]: groups.map((entry) =>
-      entry.id === group.id
-        ? {
-            ...entry,
-            activeTabId: nextActiveTabId,
-            recentTabIds: pushRecentTabId(
-              sanitizeRecentTabIds(entry.recentTabIds, entry.tabOrder),
-              nextActiveTabId
-            )
-          }
-        : entry
-    )
-  }
-  return {
-    groupsByWorktree,
-    ...(ownsGlobalSelection(current, worktreeId)
-      ? buildActiveSurfacePatch(
-          { ...current, groupsByWorktree },
-          worktreeId,
-          current.activeGroupIdByWorktree[worktreeId] ?? null
-        )
-      : {})
+  // Activation focuses the tab's group; the user's focused group stays, and shows its surface.
+  if (activeGroupId) {
+    get().focusGroup(worktreeId, activeGroupId)
   }
 }
 
@@ -61,8 +48,7 @@ function selectionAfterClose(
  * close, for a twin main may route to a paired server.
  */
 export function closeEditorTabThroughLayoutOwner(
-  state: AppState,
-  set: TabsSliceSet,
+  get: () => AppState,
   tab: Pick<Tab, 'id' | 'entityId' | 'worktreeId' | 'groupId' | 'contentType'>,
   /** The tab today's close would show next in the group, picked before the close. */
   nextActiveTabId: string | null,
@@ -73,16 +59,17 @@ export function closeEditorTabThroughLayoutOwner(
   }
   const settle = beginPendingTab(tab.id, tab.worktreeId, tab.entityId)
   const sent = sendLayoutApply(
-    state,
+    get(),
     tab.worktreeId,
     { type: 'closeTabs', tabIds: [tab.id] },
     {
       apply: (result) => {
         const closed = result.closed?.includes(tab.id) ?? true
-        if (closed) {
-          set((current) => selectionAfterClose(current, tab, nextActiveTabId))
-        }
+        // Waiters first: a closeFile's content cleanup must not undo the selection.
         settle(closed ? tab.id : null)
+        if (closed) {
+          selectAfterClose(get, tab, nextActiveTabId)
+        }
       },
       asToday: () => {
         closeHere()

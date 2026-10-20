@@ -7,14 +7,15 @@ import {
 } from '../tab-group-state'
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
-import { promotePreviewTabsThroughLayoutOwner } from './preview-tab-promotion'
+import { withPreviewEnded } from './tab-preview-flag'
+import { endsPreviewHere, promotePreviewTabsThroughLayoutOwner } from './preview-tab-promotion'
 
-/** Activation ends a preview unless it preserves it; in a layout-owner build main's frame ends it. */
-function withPreviewOnActivation(tab: Tab, preservePreview: boolean): Tab {
+/** Activation ends a preview unless it preserves it; main's frame ends one main owns. */
+function withPreviewOnActivation(tab: Tab, preservePreview: boolean, endsHere: boolean): Tab {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return { ...tab, isPreview: preservePreview ? tab.isPreview : false }
   }
-  return tab
+  return preservePreview || !endsHere ? tab : withPreviewEnded(tab)
 }
 
 export function createTabsFocusActions(
@@ -77,7 +78,11 @@ export function createTabsFocusActions(
             [worktreeId]: (state.unifiedTabsByWorktree[worktreeId] ?? []).map((item) =>
               item.id === tabId
                 ? {
-                    ...withPreviewOnActivation(item, opts?.preservePreview === true),
+                    ...withPreviewOnActivation(
+                      item,
+                      opts?.preservePreview === true,
+                      endsPreviewHere(state, worktreeId)
+                    ),
                     ...(opts?.recordFocus === false ? {} : { lastFocusedAt: Date.now() })
                   }
                 : item
@@ -107,7 +112,7 @@ export function createTabsFocusActions(
       })
       // Switch point: main makes the activated preview permanent; its frame clears the flag.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), promoted)
       }
     }
   }

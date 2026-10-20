@@ -17,7 +17,7 @@ import { mayShareEditorBackingFile } from '../file-ids/editor-file-ids'
 import { isSameOwnedDocument } from '../file-ids/same-owned-editor-document'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
-import { afterPendingTabs } from '@/runtime/layout-owner-pending-tabs'
+import { afterPendingTabs, hasPendingEntityTab } from '@/runtime/layout-owner-pending-tabs'
 
 function findAdjacentOpenFileId(
   files: readonly OpenFile[],
@@ -307,7 +307,12 @@ export function createCloseFileAction(
           get().closeUnifiedTab(unifiedTabId)
         }
         afterPendingTabs(unifiedTabIdsToClose, (outcomes) => {
-          if (outcomes.every((outcome) => outcome !== null)) {
+          // A reopen while the close was in flight keeps the file.
+          const worktreeId = preClose?.worktreeId ?? ''
+          const reopened =
+            hasPendingEntityTab(worktreeId, fileId) ||
+            (get().unifiedTabsByWorktree[worktreeId] ?? []).some((tab) => tab.entityId === fileId)
+          if (outcomes.every((outcome) => outcome !== null) && !reopened) {
             cleanUp()
           }
         })

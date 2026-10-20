@@ -16,7 +16,10 @@ import type { Tab } from '../../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
 import { previewEditorTabsOf } from '../tabs/editor-tab-layout-owner'
-import { promotePreviewTabsThroughLayoutOwner } from '../../tabs/preview-tab-promotion'
+import {
+  endsPreviewHere,
+  promotePreviewTabsThroughLayoutOwner
+} from '../../tabs/preview-tab-promotion'
 
 type FileReadAuthority = Pick<
   OpenFile,
@@ -213,14 +216,14 @@ export function createMarkdownPreviewActions(
           changed = true
           return { ...file, isPreview: undefined }
         })
-        // Switch point: main's frame ends the tabs' preview.
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-          return changed ? { openFiles } : s
-        }
         const unifiedTabsByWorktree: typeof s.unifiedTabsByWorktree = {}
         for (const [worktreeId, tabs] of Object.entries(s.unifiedTabsByWorktree ?? {})) {
           unifiedTabsByWorktree[worktreeId] = tabs.map((tab) => {
             if (tab.entityId !== fileId || (tabId && tab.id !== tabId) || !tab.isPreview) {
+              return tab
+            }
+            // Switch point: main's frame ends a preview main owns.
+            if (!endsPreviewHere(s, worktreeId)) {
               return tab
             }
             changed = true
@@ -231,7 +234,7 @@ export function createMarkdownPreviewActions(
       })
       // Switch point: main makes the preview tabs the user kept permanent.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), promoted)
       }
     },
 

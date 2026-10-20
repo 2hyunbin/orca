@@ -94,7 +94,8 @@ export type WindowLayoutCommand =
       groupId?: string
       index?: number
       preview?: true
-      createdAt: number
+      /** Absent from a switch-on open: main stamps the tab's time (ledger L186). */
+      createdAt?: number
       split?: NewGroupSplit
     }
   | {
