@@ -75,10 +75,11 @@ const withDevelopmentStoreProbes = (createState: StateCreator<AppState, [], []>)
     ? withStoreIdentityChurnProbe(createState)
     : createState
 
+// Why buffer records outermost: the probes must see each caller's own partial and frame.
 export const useAppStore = create<AppState>()(
-  withDevelopmentStoreProbes(
-    withReactCommitCascadeWriteProbe(
-      withEditorBufferRecords((...a) => {
+  withEditorBufferRecords(
+    withDevelopmentStoreProbes(
+      withReactCommitCascadeWriteProbe((...a) => {
         // Why: the inner api is only reachable here, before create() copies subscribe onto the hook.
         installStoreListenerCensus(a[2])
         return {

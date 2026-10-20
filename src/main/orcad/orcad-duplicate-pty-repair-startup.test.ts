@@ -159,6 +159,9 @@ vi.mock('../runtime/orca-runtime', () => ({
     }
     async installPendingOrcadMigrationShellHistory() {}
     async stopLegacyWorkerTerminalRecovery() {}
+    flushPaneGrids() {
+      return null
+    }
     async closeNotificationDismissals() {}
     syncWindowGraph() {}
   }
