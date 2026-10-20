@@ -204,9 +204,18 @@ export function materializeNodeRuntimeArchive(
 ): Promise<string> {
   return materializeVerifiedRuntimeArchive(
     nodeRuntimeArchive(target),
-    join(cacheRoot, 'node', 'archives'),
+    nodeRuntimeArchiveDir(cacheRoot),
     options
   )
+}
+
+/** Where a hand-copied archive with the pinned hash is used without any download. */
+export function nodeRuntimeArchiveCachePath(target: NodeRuntimeTarget, cacheRoot: string): string {
+  return join(nodeRuntimeArchiveDir(cacheRoot), pinnedNodeRuntimeAsset(target).archive)
+}
+
+function nodeRuntimeArchiveDir(cacheRoot: string): string {
+  return join(cacheRoot, 'node', 'archives')
 }
 
 /**
