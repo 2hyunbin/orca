@@ -174,9 +174,7 @@ beforeEach(() => {
   mocks.probe.mockResolvedValue(readiness())
   mocks.startTunnel.mockResolvedValue(46_768)
   mocks.closeTunnel.mockResolvedValue(undefined)
-  mocks.ensureTunnel.mockImplementation(async (path: string, id: string) =>
-    resolveEnvironment(path, id)
-  )
+  mocks.ensureTunnel.mockImplementation(resolveEnvironment)
   mocks.localVersion.mockReturnValue(VERSION)
   mocks.wake.mockResolvedValue({ outcome: 'serving' })
 })

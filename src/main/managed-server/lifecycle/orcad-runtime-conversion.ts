@@ -90,12 +90,14 @@ export async function convertSshTargetToManagedOrcad(
     throw new Error('orcad_migration_destination_environment_mismatch')
   }
   // Before any commit can land, so a crash after it still blocks rollbacks across it.
-  const marked = recordManagedOrcadMigration(
+  recordManagedOrcadMigration(
     userDataPath,
     environment.id,
     (args.now ?? (() => new Date()))().toISOString()
   )
-  await ensureOrcadManagedTunnel(userDataPath, environment.id)
+  // Why the record ensure returns: a re-pair while the tunnel stands replaces the credentials
+  // every request below must carry; it keeps the migration mark recorded above.
+  const marked = await ensureOrcadManagedTunnel(userDataPath, environment.id)
   const { claims, targetStore } = requireManagedOrcadInfrastructure()
   const store = targetStore.getOrcadMigrationSource()
   const destination = args.destinationFor(marked)

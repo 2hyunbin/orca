@@ -25,6 +25,7 @@ export async function buildWithPairingRepair(
   build: (environment: KnownRuntimeEnvironment) => Promise<void>
 ): Promise<'built' | 'repaired'> {
   const refused = recovery.resolve(environmentId)
+  const epoch = recovery.repairs.resetEpoch(environmentId)
   const standing = recovery.repairs.standingFailure(environmentId, pairingRevisionOf(refused))
   if (standing) {
     throw standing
@@ -44,7 +45,7 @@ export async function buildWithPairingRepair(
     await recovery.ensure(repaired)
   } catch (error) {
     throw error instanceof OrcadManagedPairingRejectedError
-      ? recovery.repairs.recordRefusedAfterRepair(environmentId, pairingRevisionOf(repaired))
+      ? recovery.repairs.recordRefusedAfterRepair(environmentId, pairingRevisionOf(repaired), epoch)
       : error
   }
   return 'repaired'

@@ -342,6 +342,21 @@ describe('buildWithPairingRepair', () => {
     expect(build).toHaveBeenCalledWith(newer)
   })
 
+  it('keeps a connect pressed during the post-repair handshake from being undone', async () => {
+    const { state, recovery: deps } = recovery()
+    deps.ensure.mockImplementationOnce(async () => {
+      // The user presses Connect while the handshake on the new pairing is still running.
+      state.repairs.forgetFailures('env-1')
+      throw refusal()
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(
+      buildWithPairingRepair(deps, 'env-1', vi.fn().mockRejectedValue(refusal()))
+    ).rejects.toThrow(/refused the new pairing too/)
+    warn.mockRestore()
+    expect(state.repairs.standingFailure('env-1', state.refuseCurrent())).toBeNull()
+  })
+
   it('fails clearly, without looping, when the new pairing is refused too', async () => {
     const { state, recovery: deps } = recovery()
     deps.ensure.mockRejectedValue(refusal())

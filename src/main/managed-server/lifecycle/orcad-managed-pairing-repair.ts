@@ -131,11 +131,11 @@ export class ManagedOrcadPairingRepairs {
    * The new pairing was refused too, so it counts as a failed repair. Stands under that pairing's
    * revision: a newer one stored meanwhile was never tried, so it must not be blocked.
    */
-  recordRefusedAfterRepair(environmentId: string, repairedRevision: number): Error {
+  recordRefusedAfterRepair(environmentId: string, repairedRevision: number, epoch: number): Error {
     return this.stand(
       environmentId,
       repairedRevision,
-      this.resetsOf(environmentId),
+      epoch,
       new OrcadManagedPairingRepairFailedError('the server refused the new pairing too')
     )
   }
@@ -216,6 +216,11 @@ export class ManagedOrcadPairingRepairs {
     return (this.attemptedAt.get(environmentId) ?? []).filter(
       (at) => now - at < PAIRING_REPAIR_WINDOW_MS
     )
+  }
+
+  /** Taken when a build starts; a failure from before the user's latest Connect must not stand. */
+  resetEpoch(environmentId: string): number {
+    return this.resetsOf(environmentId)
   }
 
   private resetsOf(environmentId: string): number {
