@@ -36,6 +36,8 @@ export const DIRECTOR_STAGED_TRAFFIC_PERCENT = 20
 // Floor instances have started up to ~220 s after the revision and taken ~110 s more to route.
 const DIRECTOR_SPREAD_TIMEOUT_MS = 6 * 60 * 1000
 const DIRECTOR_SPREAD_POLL_INTERVAL_MS = 15_000
+// A hung read must not hold the 20/80 split past the deadline.
+const DIRECTOR_SPREAD_READ_TIMEOUT_MS = 30_000
 
 export function taggedRevisionOrigin(serviceOrigin, tag) {
   const url = new URL(serviceOrigin)
@@ -467,8 +469,13 @@ export function parseArguments(argv) {
   return values
 }
 
-function commandJson(args) {
-  const result = spawnSync('gcloud', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+function commandJson(args, { timeoutMs } = {}) {
+  const result = spawnSync('gcloud', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: timeoutMs
+  })
+  if (result.error) throw new Error(`gcloud ${args.slice(0, 4).join(' ')} failed: ${result.error.message}`)
   if (result.status !== 0) {
     throw new Error(`gcloud ${args.slice(0, 4).join(' ')} failed: ${result.stderr.trim()}`)
   }
@@ -751,7 +758,7 @@ function servingInstanceIds(config, revision, since) {
     '--limit',
     '1000',
     '--format=json(labels.instanceId)'
-  ])
+  ], { timeoutMs: DIRECTOR_SPREAD_READ_TIMEOUT_MS })
   return new Set(entries.map((entry) => entry.labels?.instanceId).filter(Boolean))
 }
 
@@ -778,6 +785,8 @@ export async function waitForServingInstances(
       console.warn(JSON.stringify({ event: 'director_candidate_spread_unread', revision, error: String(error) }))
     }
     if (Date.now() >= deadline) {
+      // Fewer than the floor here can mean Cloud Run packs the partial share onto fewer instances.
+      console.warn(JSON.stringify({ event: 'director_candidate_spread_timeout', revision, instances, required }))
       throw new Error(`candidate ${revision} served from ${instances} of ${required} instances before the deadline`)
     }
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
