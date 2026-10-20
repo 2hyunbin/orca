@@ -92,13 +92,14 @@ it.each([
   mocks.readRuntimeFileContent.mockImplementation(
     () => new Promise((resolve) => replies.push((content) => resolve({ content, isBinary: false })))
   )
-  store.getState().setPendingDiskBaselineVerification(FILE, true)
+  store.getState().setPendingDiskBaselineVerification(fileId, true)
   detach = attachRestoredTabConflictScan(store)
   await vi.advanceTimersByTimeAsync(0)
+  expect(replies).toHaveLength(1)
 
   // Every read is slower than the re-verify interval, so a newer check always lands first.
   for (let i = 0; i < MAX_VERIFY_ATTEMPTS + 5; i += 1) {
-    requestRestoredTabReverification(FILE)
+    requestRestoredTabReverification(fileId)
     replies[i]('v1')
     await vi.advanceTimersByTimeAsync(60_000)
     expect(replies).toHaveLength(i + 2)
