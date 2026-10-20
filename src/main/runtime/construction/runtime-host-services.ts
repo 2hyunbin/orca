@@ -296,7 +296,7 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
 
   protected readonly projectGroups = new RuntimeProjectGroupController({
     getStore: () => this.store,
-    resolveRepo: (selector) => this.resolveRepoSelector(selector),
+    resolveRepo: (...args) => this.managedWorktreeQueries.resolveRepoForConnection(...args),
     notifyReposChanged: () => this.notifyReposChanged(),
     resolveFolderConnectionId: (workspace) => this.resolveFolderWorkspaceConnectionId(workspace),
     teardownFolderWorkspacePtys: (worktreeId, connectionId) =>
@@ -339,7 +339,7 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     getStore: () => this.store,
     resolveRepo: (selector) => this.resolveRepoSelector(selector),
     forgetTerminalTopology: (repoId) => this.terminalTopologyRevisionByRepoId.delete(repoId),
-    stopProjectTerminals: (repo, deadline) => this.stopTerminalsForProject(repo, { deadline }),
+    stopProjectTerminals: (repo, options) => this.stopTerminalsForProject(repo, options),
     invalidateResolvedWorktrees: () => this.invalidateResolvedWorktreeCache(),
     invalidateWorktreeScan: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
     notifyReposChanged: () => this.notifyReposChanged()
