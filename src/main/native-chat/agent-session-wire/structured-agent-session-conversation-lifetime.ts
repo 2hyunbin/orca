@@ -233,15 +233,25 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     failStartingChild: (
       sessionId: string,
       failed: StructuredAgentSessionProviderChildIdentity,
-      error: unknown
-    ): Promise<void> =>
-      serialize(sessionId, async () => {
+      error: unknown,
+      openMs?: number
+    ): Promise<void> => {
+      const failure = providerStartupFailureFact(error)
+      // The journal keeps only the fact; the original error is otherwise lost.
+      deps().logger.warn('a provider could not finish starting', {
+        scope: 'provider-open-failed',
+        sessionId,
+        failure: failure.kind,
+        ...failure.requestTimeout,
+        ...(openMs === undefined ? {} : { openMs }),
+        error
+      })
+      return serialize(sessionId, async () => {
         const session = sessions.get(sessionId)
         const child = session?.child
         if (!session || !child || child.close || !sameProviderChild(child, failed)) {
           return
         }
-        const failure = providerStartupFailureFact(error)
         try {
           await recordStructuredAgentSessionStartFailure(
             { journal: session.journal, fence: child.fence },
@@ -267,7 +277,8 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         } finally {
           host.context().runtimeState.startupAttempts.childEnded(sessionId, child)
         }
-      }),
+      })
+    },
     /** Quit has begun: nothing opens a conversation or sweeps one after this. */
     dispose: (): void => {
       disposed = true
