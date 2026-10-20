@@ -90,7 +90,6 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
 
   const show = (patch: LayoutFrameBuildPatch): void => {
     if (Object.keys(patch).length > 0) {
-      // A tab the user moved is selected in the update that shows it moved.
       store.setState(withMovedTabSelections(store.getState(), patch))
     }
   }
