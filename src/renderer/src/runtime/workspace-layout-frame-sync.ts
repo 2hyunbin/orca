@@ -11,7 +11,7 @@
 // store does not show from frames yet (startup, a reopened stream, a first visit, one sent whole)
 // takes the full build, whose view the window reads back through its save and the Loader.
 
-import { showFramePatch } from '@/store/slices/tabs/moved-tab-selection'
+import { showFramePatch, withMovedTabsSelected } from '@/store/slices/tabs/moved-tab-selection'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
@@ -46,7 +46,8 @@ import {
 import {
   isTabPaneTreeHeld,
   onTabPaneTreeRedraw,
-  takeTabRowFields
+  takeTabRowFields,
+  type MovedTabSelection
 } from './layout-owner-pane-intents'
 import {
   isDrawnGroupLayoutHeld,
@@ -93,7 +94,11 @@ export function openWorkspaceLayoutFrameSync(
    *  window's own command held skipped one. */
   let paneTreeKeys = new Set<string>()
 
-  const show = (patch: LayoutFrameBuildPatch): void => showFramePatch(store, patch)
+  /** The moved tabs' selections this flush's writes took. */
+  let selectionsTaken: MovedTabSelection[] = []
+  const show = (patch: LayoutFrameBuildPatch): void => {
+    selectionsTaken.push(...showFramePatch(store, patch))
+  }
 
   // Each change against the cache's copy it applies to, before the frame replaces it.
   const noteFrame = (before: WorkspaceLayoutCache, frame: WorkspaceLayoutChangeFrame): void => {
@@ -145,6 +150,7 @@ export function openWorkspaceLayoutFrameSync(
 
   const flush = (): void => {
     flushQueued = false
+    selectionsTaken = []
     if (!live) {
       pending.clear()
       return
@@ -235,7 +241,8 @@ export function openWorkspaceLayoutFrameSync(
       changed,
       fullBuilt,
       workspaceBuilt,
-      rowFieldsTaken
+      rowFieldsTaken,
+      selectTakenMovedTabs: (state) => withMovedTabsSelected(state, selectionsTaken)
     })
   }
 
