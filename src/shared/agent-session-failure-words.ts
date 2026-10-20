@@ -160,8 +160,9 @@ function couldNot(verb: 'couldNotStart' | 'couldNotRestart'): Sentence {
           method: fact.requestTimeout.method,
           seconds: requestTimeoutSeconds(fact.requestTimeout)
         }),
-        say('startTimedOutBusy'),
-        ...startRetry(say, context)
+        ...startRetry(say, context),
+        // No cause named: MCP startup, the network or config can stall a start too.
+        say('startTimedOutKeepsHappening')
       ])
     }
     // Only a terminal agent an older build recorded holds a claim; quitting it frees the chat.

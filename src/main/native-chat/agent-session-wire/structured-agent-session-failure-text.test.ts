@@ -37,7 +37,7 @@ describe('structuredAgentSessionStartFailure', () => {
     const wrapped = new Error('codex open failed', { cause: timedOut })
     expect(structuredAgentSessionStartFailure({ error: wrapped }, { agentName: 'Codex' })).toEqual({
       reason:
-        'Codex took too long to start (no response to thread/start after 30s). The computer running this chat may be busy watching files. Send your message to try again.',
+        'Codex took too long to start (no response to thread/start after 30s). Send your message to try again. If this keeps happening, the computer running this chat may be overloaded.',
       rejection: {
         kind: 'startFailed',
         requestTimeout: { method: 'thread/start', timeoutMs: 30_000 }
@@ -49,7 +49,7 @@ describe('structuredAgentSessionStartFailure', () => {
         { agentName: 'Codex', retryControl: true }
       ).reason
     ).toBe(
-      'Codex took too long to start (no response to thread/start after 30s). The computer running this chat may be busy watching files.'
+      'Codex took too long to start (no response to thread/start after 30s). If this keeps happening, the computer running this chat may be overloaded.'
     )
     expect(
       structuredAgentSessionStartFailure({ error: withObservedProviderExit(wrapped) }).rejection

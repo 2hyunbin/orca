@@ -18169,7 +18169,7 @@
         "editSavedArguments": "Modifiez-les dans Paramètres > Agents > Arguments.",
         "couldNotRestart": "{{agent}} n'a pas pu redémarrer.",
         "startTimedOut": "{{agent}} a mis trop de temps à démarrer (aucune réponse à {{method}} après {{seconds}} s).",
-        "startTimedOutBusy": "L'ordinateur qui exécute ce chat est peut-être occupé à surveiller des fichiers.",
+        "startTimedOutKeepsHappening": "Si cela se reproduit, l'ordinateur qui exécute ce chat est peut-être surchargé.",
         "codexCliTooOld": "Codex {{installedVersion}} est trop ancien pour les conversations. Mettez-le à jour vers {{minimumVersion}} ou une version ultérieure.",
         "notSignedIn": "{{agent}} n’est pas connecté.",
         "claudeSystemNotSignedIn": "Claude n’est pas connecté. Exécutez `{{loginCommand}}`, ou choisissez un compte dans les paramètres des Comptes Claude.",

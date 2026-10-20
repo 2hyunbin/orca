@@ -159,7 +159,7 @@ it('names the request that ran out of time, in the chat and in the log, when thr
       requestTimeout
     })
     expect(held?.reason).toBe(
-      'Codex took too long to start (no response to thread/start after 30s). The computer running this chat may be busy watching files. Send your message to try again.'
+      'Codex took too long to start (no response to thread/start after 30s). Send your message to try again. If this keeps happening, the computer running this chat may be overloaded.'
     )
   })
   const rows = (await host.journalSnapshot(HOST_TEST_SESSION)).items.filter(
@@ -170,9 +170,11 @@ it('names the request that ran out of time, in the chat and in the log, when thr
   expect(rows).toHaveLength(1)
   await vi.waitFor(() => expect(child.closes()).toBe(1))
 
-  const logged = logger.warn.mock.calls.find(
+  const failures = logger.warn.mock.calls.filter(
     ([, fields]) => fields.scope === 'provider-open-failed'
   )
+  expect(failures).toHaveLength(1)
+  const logged = failures[0]
   expect(logged?.[1]).toMatchObject({
     sessionId: HOST_TEST_SESSION,
     failure: 'startFailed',

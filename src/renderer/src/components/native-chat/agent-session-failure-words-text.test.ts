@@ -223,7 +223,7 @@ describe('desktop words for a failure fact', () => {
         sayAgentSessionFailureTranslated
       )
     ).toBe(
-      "Codex a mis trop de temps à démarrer (aucune réponse à thread/start après 30 s). L'ordinateur qui exécute ce chat est peut-être occupé à surveiller des fichiers."
+      "Codex a mis trop de temps à démarrer (aucune réponse à thread/start après 30 s). Si cela se reproduit, l'ordinateur qui exécute ce chat est peut-être surchargé."
     )
   })
 

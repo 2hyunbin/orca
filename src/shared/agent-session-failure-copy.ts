@@ -29,7 +29,8 @@ export const AGENT_SESSION_FAILURE_COPY = {
   couldNotStart: "{{agent}} couldn't start.",
   couldNotRestart: "{{agent}} couldn't restart.",
   startTimedOut: '{{agent}} took too long to start (no response to {{method}} after {{seconds}}s).',
-  startTimedOutBusy: 'The computer running this chat may be busy watching files.',
+  startTimedOutKeepsHappening:
+    'If this keeps happening, the computer running this chat may be overloaded.',
   codexCliTooOld:
     'Codex {{installedVersion}} is too old for chats. Update to {{minimumVersion}} or newer.',
   argumentsUnsupportedOption: 'Saved Arguments contain an unsupported option ({{option}}).',
