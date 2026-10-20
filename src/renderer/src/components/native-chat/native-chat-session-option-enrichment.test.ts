@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseGrokModelList } from '../../../../shared/grok-model-list-probe'
+import { parseClaudeModels } from '../../../../shared/commit-message-model-parsers'
 import { createNativeChatPtySessionOptions } from './native-chat-pty-session-options'
 import { readNativeChatSessionOptionCache } from './native-chat-session-option-cache'
 import type { CatalogModel } from '../../../../shared/agent-session-option-catalog'
@@ -293,6 +294,45 @@ describe('native chat session option enrichment', () => {
       ]
     })
     expect(readNativeChatEnrichedModels('claude', 'local')).toBeNull()
+    const liveArgs = {
+      agent: 'claude' as const,
+      scopeKey: 'claude-definitions',
+      mode: 'live' as const,
+      initialModels: models,
+      reportedValues: { model: 'opus[1m]', effort: 'low' },
+      dispatchCommand: vi.fn()
+    }
+    const live = createNativeChatPtySessionOptions(liveArgs)!
+    const probe = async (json: string) => {
+      mocks.discoverRuntimeCommitMessageModels.mockResolvedValue({
+        success: true,
+        catalogOrigin: 'probe',
+        models: parseClaudeModels(json)
+      })
+      return (await discover())!
+    }
+    const withdrawn = await probe(
+      '{"type":"control_response","response":{"subtype":"success","response":{"models":[{"value":"opus[1m]","supportsEffort":false}]}}}'
+    )
+    live.replaceModels(withdrawn)
+    expect(withdrawn[0].options).toEqual([])
+    expect(live.getSnapshot().find(({ id }) => id === 'effort')?.kind).toMatchObject({
+      choices: [{ value: 'low' }, { value: 'high' }]
+    })
+    const fresh = createNativeChatPtySessionOptions({
+      ...liveArgs,
+      scopeKey: 'fresh',
+      initialModels: withdrawn
+    })!
+    expect(fresh.getSnapshot().map(({ id }) => id)).toEqual(['model'])
+    live.replaceModels(
+      await probe(
+        '{"type":"control_response","response":{"subtype":"success","response":{"models":[{"value":"opus[1m]","supportsEffort":true,"supportedEffortLevels":["medium","high"]}]}}}'
+      )
+    )
+    expect(live.getSnapshot().find(({ id }) => id === 'effort')?.kind).toMatchObject({
+      choices: [{ value: 'medium' }, { value: 'high' }, { value: 'low' }]
+    })
   })
 
   it('carries grok’s probed default through discovery to the published rows', async () => {
@@ -340,11 +380,15 @@ describe('native chat session option enrichment', () => {
       ['effort']
     ])
     await surface.setOption('effort', 'low')
+    const explicit = create('grok-explicit')
+    await explicit.setOption('model', 'grok-build')
+    await explicit.setOption('effort', 'low')
+    subscribeNativeChatEnrichedModels('grok', 'ssh:host', (rows) => explicit.replaceModels(rows))
     dispatchCommand.mockClear()
     mocks.discoverRuntimeCommitMessageModels.mockResolvedValue({
       success: true,
       catalogOrigin: 'probe',
-      models: parseGrokModelList('Available models:\n * grok-next (default)\n - grok-build')
+      models: parseGrokModelList('Available models:\n * grok-next (default)\n - grok-new')
     })
     const staleAt = Date.now() + NATIVE_CHAT_MODEL_LIST_STALE_MS
     const clock = vi.spyOn(Date, 'now').mockReturnValue(staleAt)
@@ -360,12 +404,27 @@ describe('native chat session option enrichment', () => {
     }
     expect(create('new-grok').getSnapshot()[0].kind).toMatchObject({ currentValue: 'grok-next' })
     expect(readNativeChatSessionOptionCache('grok-default')?.model).toBeUndefined()
-    await surface.setOption('effort', 'high')
-    surface.recordOutgoingCommand('/effort medium')
-    expect(persistSelection.mock.lastCall?.[0]).toMatchObject({
-      modelId: 'grok-5',
-      adoptModelAsLaunchDefault: false
-    })
+    for (const current of [explicit, create('grok-explicit'), create('copy', 'grok-explicit')]) {
+      expect(current.getSnapshot()[0].kind).toMatchObject({ currentValue: 'grok-build' })
+      expect(current.getSnapshot().find(({ id }) => id === 'effort')?.kind).toMatchObject({
+        currentValue: 'low',
+        choices: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }]
+      })
+    }
+    for (const [current, modelId] of [
+      [surface, 'grok-5'],
+      [explicit, 'grok-build']
+    ] as const) {
+      await current.setOption('effort', 'high')
+      current.recordOutgoingCommand('/effort medium')
+      expect(current.getSnapshot().find(({ id }) => id === 'effort')?.kind).toMatchObject({
+        currentValue: 'medium'
+      })
+      expect(persistSelection.mock.lastCall?.[0]).toMatchObject({
+        modelId,
+        adoptModelAsLaunchDefault: false
+      })
+    }
     surface.reportSessionOptions({ model: 'grok-next' })
     expect(create().getSnapshot()[0]).toMatchObject({ valueSource: 'reported' })
     dispatchCommand.mockResolvedValue({ outcome: 'unknown' })

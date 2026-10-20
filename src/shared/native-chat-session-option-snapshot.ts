@@ -177,14 +177,29 @@ export function withTrackedNativeChatModel(
   record: NativeChatSessionOptionRecord
 ): CatalogModel[] {
   const trackedId = resolveEffectiveNativeChatModelId(catalog, models, record)
-  if (!trackedId || models.some((model) => model.id === trackedId)) {
+  if (!trackedId) {
     return [...models]
+  }
+  const held = record.currentModel?.id === trackedId ? record.currentModel : undefined
+  const offered = models.find((model) => model.id === trackedId)
+  if (offered) {
+    return models.map((model) =>
+      model.id === trackedId && held
+        ? {
+            ...model,
+            options: [
+              ...model.options,
+              ...held.options.filter((old) => !model.options.some((fresh) => fresh.id === old.id))
+            ]
+          }
+        : model
+    )
   }
   const seeded =
     record.defaultContext?.model?.id === trackedId
       ? record.defaultContext.model
       : catalog.models.find((model) => model.id === trackedId)
-  return [...models, seeded ?? { id: trackedId, label: trackedId, options: [] }]
+  return [...models, held ?? seeded ?? { id: trackedId, label: trackedId, options: [] }]
 }
 
 /** Why: no tracked model means no `-m` was ever emitted, so the CLI is running its

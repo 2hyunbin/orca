@@ -16,6 +16,8 @@ export type NativeChatSessionOptionRecord = {
   model?: TrackedNativeChatSessionOption
   /** Terminal-only renderer memory; an inferred default never proves runtime identity. */
   defaultContext?: { resolved: boolean; model: CatalogModel | null; provisionalOptions: string[] }
+  /** Known current terminal definitions outlive independently refreshed inventory. */
+  currentModel?: CatalogModel | null
   valuesByModel: Record<string, Record<string, TrackedNativeChatSessionOption>>
 }
 
@@ -31,6 +33,7 @@ export function cloneNativeChatSessionOptionRecord(
   return {
     agent: record.agent,
     ...(record.model ? { model: { ...record.model } } : {}),
+    ...(record.currentModel ? { currentModel: cloneDefaultModel(record.currentModel) } : {}),
     ...(record.defaultContext
       ? {
           defaultContext: {
@@ -106,6 +109,7 @@ export function clearTrackedSessionOption(
 export function clearNativeChatSessionModel(record: NativeChatSessionOptionRecord): void {
   const modelId = typeof record.model?.value === 'string' ? record.model.value : null
   record.model = undefined
+  record.currentModel = undefined
   if (record.defaultContext) {
     record.defaultContext = { resolved: true, model: null, provisionalOptions: [] }
   }

@@ -110,14 +110,14 @@ export function createNativeChatPtySessionOptions(
       model: cloneDefaultModel(model),
       provisionalOptions: []
     }
+    if (!record.model) {
+      record.currentModel = undefined
+    }
   }
   resolveDefaultContext()
-  if (record.defaultContext) {
-    writeNativeChatSessionOptionCache(args.scopeKey, record)
-  }
 
-  if (args.reportedValues && applyNativeChatReportedSessionOptions(record, args.reportedValues)) {
-    writeNativeChatSessionOptionCache(args.scopeKey, record)
+  if (args.reportedValues) {
+    applyNativeChatReportedSessionOptions(record, args.reportedValues)
   }
   // Drafts validate a future launch; inventory cannot invalidate a running session.
   const untrackRetiredDraftModel = (): boolean => {
@@ -139,6 +139,26 @@ export function createNativeChatPtySessionOptions(
     writeNativeChatSessionOptionCache(args.scopeKey, record)
   }
   const activeModels = (): CatalogModel[] => withTrackedNativeChatModel(catalog, models, record)
+  const retainCurrentModel = (target?: CatalogModel): void => {
+    if (args.mode !== 'live') {
+      return
+    }
+    const id = resolveEffectiveNativeChatModelId(catalog, models, record)
+    record.currentModel =
+      target?.id === id ? target : record.currentModel?.id === id ? record.currentModel : undefined
+    const known =
+      models.some((model) => model.id === id) ||
+      record.currentModel ||
+      record.defaultContext?.model?.id === id ||
+      catalog.models.some((model) => model.id === id)
+    record.currentModel = cloneDefaultModel(
+      known ? (activeModels().find((model) => model.id === id) ?? null) : null
+    )
+  }
+  retainCurrentModel()
+  if (args.mode === 'live' || args.reportedValues) {
+    writeNativeChatSessionOptionCache(args.scopeKey, record)
+  }
   let snapshot = buildNativeChatSessionOptionSnapshot({
     catalog,
     models: activeModels(),
@@ -149,6 +169,7 @@ export function createNativeChatPtySessionOptions(
   const listeners = new Set<(value: SessionOptionDescriptor[]) => void>()
 
   const publish = (): SessionOptionDescriptor[] => {
+    retainCurrentModel()
     writeNativeChatSessionOptionCache(args.scopeKey, record)
     snapshot = buildNativeChatSessionOptionSnapshot({
       catalog,
@@ -171,15 +192,21 @@ export function createNativeChatPtySessionOptions(
   const setTrackedValue = (
     optionId: string,
     value: SessionOptionValue,
-    source: 'applied' | 'dispatched'
-  ): string | null =>
-    setTrackedSessionOption(
+    source: 'applied' | 'dispatched',
+    target?: CatalogModel
+  ): string | null => {
+    const modelId = setTrackedSessionOption(
       record,
       optionId,
       value,
       source,
       resolveEffectiveNativeChatModelId(catalog, activeModels(), record)
     )
+    if (optionId === 'model') {
+      retainCurrentModel(target)
+    }
+    return modelId
+  }
 
   /** The sole answer to "may this id become the persisted `-m` launch flag?", read at
    *  persist time because a probe can settle mid-pick. Before one, `isDefault` is just
@@ -263,6 +290,6 @@ export function createNativeChatPtySessionOptions(
       publish()
     },
     contextWindowTokens: (modelId) =>
-      models.find((model) => model.id === modelId)?.contextWindowTokens ?? null
+      activeModels().find((model) => model.id === modelId)?.contextWindowTokens ?? null
   }
 }
