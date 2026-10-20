@@ -172,7 +172,7 @@ describe('SSH import count notices', () => {
 
 // #28901: main refuses to remove a managed server's host, which surfaced as a raw IPC error.
 describe('removing a managed server host', () => {
-  it('points to Managed servers instead of a removal main refuses', async () => {
+  it('points to the host’s Orca server row instead of a removal main refuses', async () => {
     const removeTarget = vi.fn()
     const managed: SshTarget = {
       id: 'box',
@@ -213,7 +213,7 @@ describe('removing a managed server host', () => {
     expect(removeTarget).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('Orca runs on Build box')
     const open = Array.from(document.body.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Open Orca on your SSH hosts'
+      (button) => button.textContent === 'Open Remote Orca Servers'
     )
     await act(async () => {
       open?.click()

@@ -39,6 +39,25 @@ describe('runtime server problem line', () => {
   })
 })
 
+describe('a server paired twice', () => {
+  it('names the twin ahead of reachability, since one entry must go', () => {
+    expect(
+      getRuntimeServerProblemLine({
+        environment: { lastUsedAt: null },
+        row: quietRow,
+        remoteUpdate: undefined,
+        managedStatusError: null,
+        managedSummary: null,
+        address: '100.88.12.5:6768',
+        duplicateOfNames: ['Studio relay']
+      })
+    ).toEqual({
+      text: 'Same server as Studio relay, paired twice. Remove one so its projects can be edited.',
+      destructive: true
+    })
+  })
+})
+
 describe('network address label', () => {
   it('names Tailscale and LAN addresses instead of the interface', () => {
     expect(describeNetworkAddress('utun6', '100.108.226.109')).toBe('Tailscale · 100.108.226.109')

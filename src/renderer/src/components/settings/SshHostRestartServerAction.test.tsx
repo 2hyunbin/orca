@@ -50,7 +50,7 @@ function Harness({
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button onClick={() => setOpen(true)}>Restart managed server…</button>
+      <button onClick={() => setOpen(true)}>Restart Orca’s server…</button>
       <SshHostRestartServerDialog
         status={status}
         open={open}
@@ -76,7 +76,7 @@ function button(container: HTMLElement, text: string): HTMLButtonElement {
   return [...container.querySelectorAll('button')].find((entry) => entry.textContent === text)!
 }
 
-describe('Restart managed server', () => {
+describe('Restart Orca’s server', () => {
   it('is offered only when the launching SSH session proved ended', async () => {
     expect(canRestartSshHostServer({ kind: 'managed', environmentId: 'env-1' })).toBe(false)
     expect(canRestartSshHostServer(ended)).toBe(true)

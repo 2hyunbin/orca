@@ -17,11 +17,8 @@ export function getRuntimeServerRoute(
     targets.find((target) => target.id === targetId)?.label ?? targetId
   const deployment = getOrcadSshDeployment(environment)
   if (deployment) {
-    return translate(
-      'auto.components.settings.serverList.installedOver',
-      'Installed on {{host}} over SSH',
-      { host: targetLabel(deployment.sshTargetId) }
-    )
+    // Why not the host: the row's title already says "Orca on <host>".
+    return translate('auto.components.settings.serverList.overYourSsh', 'Over your SSH connection')
   }
   if (environment.sshAccess) {
     return translate(
@@ -52,6 +49,7 @@ export function getRuntimeServerProblemLine({
   managedStatusError,
   managedSummary,
   address,
+  duplicateOfNames = [],
   now = Date.now()
 }: {
   environment: Pick<PublicKnownRuntimeEnvironment, 'lastUsedAt'>
@@ -63,10 +61,23 @@ export function getRuntimeServerProblemLine({
   managedStatusError: string | null
   managedSummary: string | null
   address: string | null
+  /** Other saved servers with this one's host key: the same machine paired twice. */
+  duplicateOfNames?: readonly string[]
   now?: number
 }): RuntimeServerProblemLine | null {
   if (row.accessRevoked) {
     return { text: row.problem ?? '', destructive: true }
+  }
+  // Why before other problems: the twin makes this server's projects uneditable until one goes.
+  if (duplicateOfNames.length > 0) {
+    return {
+      text: translate(
+        'auto.components.settings.RuntimeEnvironmentsPane.pairedTwice',
+        'Same server as {{value0}}, paired twice. Remove one so its projects can be edited.',
+        { value0: duplicateOfNames[0] }
+      ),
+      destructive: true
+    }
   }
   if (managedStatusError) {
     return { text: managedStatusError, destructive: true }

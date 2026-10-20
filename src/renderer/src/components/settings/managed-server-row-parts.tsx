@@ -12,6 +12,13 @@ import {
 } from './managed-server-copy'
 import type { ManagedServerLifecycle } from './use-managed-server-lifecycle'
 
+/** What a server Orca installed over SSH is called: where it runs, not "managed server". */
+export function managedServerTitle(hostLabel: string): string {
+  return translate('auto.components.settings.managedServers.row.title', 'Orca on {{host}}', {
+    host: hostLabel
+  })
+}
+
 // Why: a status that never loaded is unknown, not exited; only a loaded status may say "Not running".
 export function managedServerVersionLabel(
   status: OrcadManagedRuntimeStatus | null,
@@ -63,8 +70,8 @@ export function ManagedServerDetailLines({
     <div className="space-y-0.5 text-xs text-muted-foreground">
       <p>
         {translate(
-          'auto.components.settings.managedServers.row.version',
-          'Managed server: {{version}}',
+          'auto.components.settings.managedServers.row.orcaVersion',
+          'Orca on this host: {{version}}',
           {
             version: managedServerVersionLabel(status, statusError)
           }
@@ -190,8 +197,8 @@ export function ManagedServerConfirmations({
     return (
       <ConfirmStrip
         message={translate(
-          'auto.components.settings.managedServers.row.stopDescription',
-          'Stops the server on its SSH host and removes it from Orca.'
+          'auto.components.settings.managedServers.row.stopOrcaDescription',
+          'Stops Orca on the SSH host and removes it from this list.'
         )}
         confirmLabel={translate(
           'auto.components.settings.managedServers.row.confirmStop',
@@ -269,8 +276,8 @@ export function ManagedServerMenuItems({
       <DropdownMenuItem disabled={disabled} onSelect={() => void run('update')}>
         <ArrowUpCircle />
         {translate(
-          'auto.components.settings.managedServers.row.updateManaged',
-          'Update managed server'
+          'auto.components.settings.managedServers.row.updateOrcaOnHost',
+          'Update Orca on this host'
         )}
       </DropdownMenuItem>
       {status?.rollbackAvailable ? (

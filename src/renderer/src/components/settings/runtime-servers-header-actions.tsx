@@ -117,12 +117,12 @@ export function RuntimeServersHeaderActions(): React.JSX.Element | null {
                 <AddServerMenuItem
                   icon={<TerminalSquare />}
                   label={translate(
-                    'auto.components.settings.serverList.installTitle',
-                    'Install on an SSH host'
+                    'auto.components.settings.serverList.setUpOnSshHost',
+                    'Set up Orca on an SSH host'
                   )}
                   description={translate(
-                    'auto.components.settings.serverList.installHelp',
-                    'Orca installs a server on the host and keeps it updated.'
+                    'auto.components.settings.managedServers.description',
+                    'Orca installs itself on an empty SSH host and keeps itself up to date.'
                   )}
                   onSelect={() => setDialog('install')}
                 />

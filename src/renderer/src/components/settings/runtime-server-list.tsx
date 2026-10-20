@@ -8,12 +8,14 @@ import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orc
 import type { RemoteServerUpdateEntry } from '@/runtime/remote-server-update-coordinator'
 import type { UpdateCheckOptions } from '../../../../shared/update-status-types'
 import { translate } from '@/i18n/i18n'
+import { duplicatePairedServerNames } from '@/lib/duplicate-paired-servers'
 import { LoadingSpinner } from '../LoadingSpinner'
 import { Button } from '../ui/button'
 import { migrationPhaseLabel } from './managed-server-copy'
+import { managedServerTitle } from './managed-server-row-parts'
 import type { RuntimeHostDetails } from './runtime-environment-host-details'
 import { RuntimeServerRow } from './runtime-server-row'
-import { ServerListRow, ServerRowChip } from './runtime-server-list-row'
+import { ServerListRow } from './runtime-server-list-row'
 import type { ManagedServerCatalog } from './use-managed-server-catalog'
 import { useManagedServerLifecycle } from './use-managed-server-lifecycle'
 
@@ -109,8 +111,8 @@ export function RuntimeServerList({
             <Button type="button" variant="outline" size="sm" onClick={onInstallServer}>
               <TerminalSquare />
               {translate(
-                'auto.components.settings.serverList.installTitle',
-                'Install on an SSH host'
+                'auto.components.settings.serverList.setUpOnSshHost',
+                'Set up Orca on an SSH host'
               )}
             </Button>
           ) : null}
@@ -128,6 +130,7 @@ export function RuntimeServerList({
       {environments.map((environment) => {
         const rowProps = {
           environment,
+          duplicateOfNames: duplicatePairedServerNames(environments, environment.id),
           details: detailsByEnvironmentId[environment.id],
           isActive: activeRuntimeEnvironmentId === environment.id,
           remoteUpdate: remoteServerUpdates.get(environment.id),
@@ -167,12 +170,9 @@ export function RuntimeServerList({
       {pending.map((row) => (
         <ServerListRow
           key={row.migrationId}
-          name={row.name}
-          chips={
-            <ServerRowChip>
-              {translate('auto.components.settings.serverList.managedChip', 'Managed')}
-            </ServerRowChip>
-          }
+          name={managedServerTitle(
+            targets.find((target) => target.id === row.sshTargetId)?.label ?? row.name
+          )}
           meta={<span className="truncate">{migrationPhaseLabel(row.phase)}</span>}
           status={{
             label: translate('auto.components.settings.serverList.movePaused', 'Move paused'),

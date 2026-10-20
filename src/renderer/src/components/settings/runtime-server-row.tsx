@@ -40,14 +40,18 @@ import {
   managedServerHasConfirmation,
   ManagedServerMenuItems,
   managedServerHasPrimaryAction,
-  ManagedServerPrimaryAction
+  ManagedServerPrimaryAction,
+  managedServerTitle
 } from './managed-server-row-parts'
 import type { ManagedServerLifecycle } from './use-managed-server-lifecycle'
 
 const NO_SSH_TARGETS: SshTarget[] = []
+const NO_DUPLICATES: readonly string[] = []
 
 type RuntimeServerRowProps = {
   environment: PublicKnownRuntimeEnvironment
+  /** Other saved servers with this one's host key: the same machine paired twice. */
+  duplicateOfNames?: readonly string[]
   details: RuntimeHostDetails | undefined
   isActive: boolean
   remoteUpdate: RemoteServerUpdateEntry | undefined
@@ -77,6 +81,7 @@ type RuntimeServerRowProps = {
 
 export function RuntimeServerRow({
   environment,
+  duplicateOfNames = NO_DUPLICATES,
   details,
   isActive,
   remoteUpdate,
@@ -156,7 +161,8 @@ export function RuntimeServerRow({
     remoteUpdate,
     managedStatusError: managed?.statusError ?? null,
     managedSummary: managed ? getManagedServerSummary(managed) : null,
-    address
+    address,
+    duplicateOfNames
   })
 
   const versionText = getRuntimeServerVersionText(
@@ -275,7 +281,14 @@ export function RuntimeServerRow({
     <>
       <ServerListRow
         sectionId={environment.id}
-        name={row.title}
+        name={
+          deployment
+            ? managedServerTitle(
+                sshTargets.find((target) => target.id === deployment.sshTargetId)?.label ??
+                  environment.name
+              )
+            : row.title
+        }
         descriptor={row.hostDescriptorText}
         chips={
           <>
@@ -284,11 +297,7 @@ export function RuntimeServerRow({
                 {translate('auto.components.settings.serverList.defaultChip', 'Default')}
               </ServerRowChip>
             ) : null}
-            {deployment ? (
-              <ServerRowChip>
-                {translate('auto.components.settings.serverList.managedChip', 'Managed')}
-              </ServerRowChip>
-            ) : sshAccess || environment.connectionDependency === 'ssh-tunnel' ? (
+            {!deployment && (sshAccess || environment.connectionDependency === 'ssh-tunnel') ? (
               <ServerRowChip>
                 {translate('auto.components.settings.serverList.sshTunnelChip', 'SSH tunnel')}
               </ServerRowChip>

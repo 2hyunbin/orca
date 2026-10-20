@@ -1285,6 +1285,9 @@
         "preparingWorkspace": "Preparing workspace…",
         "creatingWorktree": "Creating worktree…",
         "fetchingBaseBranch": "Fetching base branch…"
+      },
+      "duplicatePairedServers": {
+        "ambiguousSameServer": "{{value0}} and {{value1}} are the same server paired twice. Remove one in Settings > Remote Orca Servers."
       }
     },
     "hooks": {
@@ -1465,7 +1468,7 @@
       },
       "ipcEvents": {
         "sshManagedServer": {
-          "refusedBlocked": "This SSH host could not move to a managed Orca server. SSH Hosts in Settings shows why."
+          "refusedBlocked": "Orca couldn’t set itself up on this SSH host. SSH Hosts in Settings shows why."
         }
       }
     },
@@ -8753,6 +8756,7 @@
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
           "orcaVersionLastSeen": "Orca v{{value0}} (last seen)",
+          "pairedTwice": "Same server as {{value0}}, paired twice. Remove one so its projects can be edited.",
           "removeDefaultServerDescription": "This server is the default host for new projects. Choose another one under New projects open on before removing it. Existing host sessions are left alone.",
           "connectedNewProjectsHint": "Connected to {{value0}}. To create new projects there by default, choose it under New projects open on.",
           "removeDefaultServerBlocked": "This server is the default host for new projects. Choose another one under New projects open on before removing it."
@@ -12770,8 +12774,10 @@
           "body": "{{credential}} is stored unencrypted — this system has no OS keyring Orca can use. Anyone who can read your disk or a backup of it can read the credential. Install and unlock gnome-keyring or kwallet, then save it again to seal it."
         },
         "sshManagedHostRemove": {
-          "description": "{{label}} runs a managed Orca server. Under Managed servers, use Stop… to remove the server from the host, or Forget… if the host is gone. Then you can remove this SSH host.",
-          "open": "Open Managed servers"
+          "description": "Orca runs on {{label}}. Under Orca on your SSH hosts, use Stop… to remove Orca from the host, or Forget… if the host is gone. Then you can remove this SSH host.",
+          "open": "Open Orca on your SSH hosts",
+          "descriptionServers": "Orca runs on {{label}}. In Remote Orca Servers, open the ⋯ menu on Orca on {{label}} and choose Stop… to remove Orca from the host, or Forget… if the host is gone. Then you can remove this SSH host.",
+          "openServers": "Open Remote Orca Servers"
         },
         "managedServers": {
           "row": {
@@ -12794,12 +12800,13 @@
             "confirmForget": "Forget on this desktop",
             "keepLinked": "Keep linked",
             "forgetDescription": "Unlinks this server here without contacting its host. If the host comes back, the server may still be running there.",
-            "version": "Managed server: {{version}}",
-            "stopDescription": "Stops the server on its SSH host and removes it from Orca.",
-            "updateManaged": "Update managed server"
+            "title": "Orca on {{host}}",
+            "orcaVersion": "Orca on this host: {{version}}",
+            "stopOrcaDescription": "Stops Orca on the SSH host and removes it from this list.",
+            "updateOrcaOnHost": "Update Orca on this host"
           },
-          "title": "Managed servers",
-          "description": "Orca installs and runs a server on an empty SSH host and keeps it up to date.",
+          "title": "Orca on your SSH hosts",
+          "description": "Orca installs itself on an empty SSH host and keeps itself up to date.",
           "deploy": {
             "host": "SSH host",
             "hostPlaceholder": "Choose an empty SSH host",
@@ -12827,8 +12834,9 @@
             "chooseHost": "Choose a host"
           },
           "search": {
-            "title": "Managed servers",
-            "keywordSsh": "ssh"
+            "title": "Orca on your SSH hosts",
+            "keywordSsh": "ssh",
+            "keywordFormerName": "managed servers"
           },
           "phase": {
             "fenced": "Host locked",
@@ -12847,7 +12855,7 @@
           },
           "blocker": {
             "notFound": "The SSH host is gone.",
-            "owned": "This SSH host already belongs to a managed server.",
+            "owned": "Orca already runs on this SSH host.",
             "catalog": "Projects on this host cannot move yet.",
             "terminals": "Terminals on this host are still running ({{count}}). Close them first.",
             "portForwards": "Saved port forwards stay with the SSH host.",
@@ -12878,17 +12886,18 @@
             "deferred": "Not done yet: the server isn’t ready for this. Try again later.",
             "failed": "Orca couldn’t finish this on the server. Try again.",
             "defaultServer": "Not done: this server is the default host for new projects. Choose another one under New projects open on before stopping it."
-          }
+          },
+          "reassurance": "Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host."
         },
         "sshHostServer": {
-          "sourceChanged": "An older version of Orca changed this host’s projects. Move those changes to its managed server, or keep the server’s version, to connect again.",
-          "deploying": "Setting up a managed Orca server…",
-          "converting": "Moving this host’s projects to its managed Orca server…",
-          "connecting": "Connecting to the managed Orca server…",
-          "updating": "Updating managed server…",
-          "starting": "Starting managed server…",
-          "notServing": "Orca couldn’t confirm that the managed server is answering.",
-          "hostNewer": "Runs a managed Orca server from a newer Orca; it keeps that version.",
+          "sourceChanged": "An older version of Orca changed this host’s projects. Move those changes to this host’s Orca server, or keep the server’s version, to connect again.",
+          "deploying": "Setting up Orca on {{host}}…",
+          "converting": "Moving to Orca on {{host}}…",
+          "connecting": "Connecting to Orca on {{host}}…",
+          "updating": "Updating Orca on {{host}}…",
+          "starting": "Starting Orca on {{host}}…",
+          "notServing": "Orca couldn’t confirm that its server on {{host}} is answering.",
+          "hostNewer": "Runs a newer version of Orca’s server than this app; it keeps that version.",
           "failureDetails": "Details",
           "cause": {
             "unsupportedHost": "Orca has no server build for this system",
@@ -12898,15 +12907,15 @@
             "securitySoftware": "security software changed the server’s runtime",
             "nativePreflight": "the host is missing system libraries the server needs"
           },
-          "updateDeferredLater": "Runs a managed Orca server; it updates on a later connect.",
-          "updateFailedPrevious": "Runs a managed Orca server on its previous version; updating it failed.",
-          "refusedBlocked": "Not moved to a managed server: something on this host stops the move.",
+          "updateDeferredLater": "Runs Orca’s server; it updates on a later connect.",
+          "updateFailedPrevious": "Runs Orca’s server on its previous version; updating it failed.",
+          "refusedBlocked": "Orca isn’t set up on this host yet: something on the host stops the move.",
           "unsupported": "This host isn’t supported by this version of Orca ({{reason}}). To keep using it, install an older version of Orca.",
           "unsupportedUnknown": "This host isn’t supported by this version of Orca. To keep using it, install an older version of Orca.",
           "tunnelUnsupported": "This host isn’t supported by this version of Orca: its SSH server doesn’t allow port forwarding, and Orca couldn’t reach its server through the SSH session either. To keep using it, install an older version of Orca.",
           "setupRetry": "Orca couldn’t start its server on this host. Try connecting again.",
-          "moveHeld": "Orca paused moving this host’s projects to its managed server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Managed servers.",
-          "olderTerminalsBridged": "Not moved to a managed server yet: terminals started by an older version of Orca are still running in this host’s projects. They keep working here. Close them or end them on the host, then reconnect.",
+          "moveHeld": "Orca paused moving this host’s projects to its Orca server because it couldn’t confirm the server’s copy. Nothing is lost: the host keeps its projects and stays locked until the move finishes. Connect again to resume. If the server can’t come back, stop or forget it in Settings > Orca on your SSH hosts.",
+          "olderTerminalsBridged": "Orca isn’t set up on this host yet: terminals started by an older version of Orca are still running in this host’s projects. They keep working here. Close them or end them on the host, then reconnect.",
           "olderTerminalsUncounted": "Terminals started by an older version of Orca are still running on this host, and they don’t stop on their own. Close them in that version of Orca or end them on the host, then reconnect.",
           "olderTerminalsUnverifiable": "Orca couldn’t confirm that terminals started by an older version of Orca have exited. Reconnect to try again.",
           "olderTerminals_one": "{{count}} terminal started by an older version of Orca is still running on this host, and it doesn’t stop on its own. Close it in that version of Orca or end it on the host, then reconnect.",
@@ -12916,16 +12925,17 @@
           "linkedProjects_other": "This host’s Orca server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs and {{count}} automations there were not moved, and worktrees it created there show as external worktrees.",
           "linkedProjects": "This host’s Orca server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs and {{count}} automations there were not moved, and worktrees it created there show as external worktrees.",
           "linkedProjectsNoAutomations": "This host’s Orca server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs there were not moved, and worktrees it created there show as external worktrees.",
-          "launchSessionEnded": "Terminals on this Mac may have lost local network access because the SSH session that started the managed server ended. Restart the managed server to restore it.",
-          "behindRolledBack": "Runs an older managed Orca server than this app; the last update was rolled back. Use Update server to try again.",
-          "behindNoTemplate": "Runs a managed Orca server this app can’t update; this build has no server for this host.",
-          "behindMigrating": "Runs a managed Orca server that updates after its project move finishes.",
-          "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app.",
+          "launchSessionEnded": "Terminals on this Mac may have lost local network access because the SSH session that started this host’s Orca server ended. Restart Orca’s server to restore it.",
+          "behindRolledBack": "Runs an older version of Orca’s server than this app; the last update was rolled back. Use Update server to try again.",
+          "behindNoTemplate": "Runs a version of Orca’s server this app can’t update; this build has no server for this host.",
+          "behindMigrating": "Runs Orca’s server, which updates after its project move finishes.",
+          "behindCheckFailed": "Runs Orca’s server; Orca couldn’t check whether it is behind this app.",
           "runtimeNoexec": "This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.",
           "setupContactLost": "Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.",
           "nodeDownloadBlocked": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Use a Node.js mirror, or check the network on both machines.",
           "nodeDownloadBlockedNoMirror": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.",
-          "nodeDownloadBlockedMirrorTried": "Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror setting, then connect again."
+          "nodeDownloadBlockedMirrorTried": "Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror setting, then connect again.",
+          "reassurance": "Runs on {{host}}, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to {{host}}."
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -12990,7 +13000,7 @@
         "deltaMove": {
           "action": "Move the new projects…",
           "title": "Move the new projects",
-          "description": "An older version of Orca changed this host after it moved to its managed server. This adds what it created to the server; it never merges over what the server already has.",
+          "description": "An older version of Orca changed this host after its projects moved to Orca on the host. This adds what it created to the server; it never merges over what the server already has.",
           "added": "Added to the server",
           "nothingNew": "Nothing new to add.",
           "notReflected": "Changed or removed on the older version; the server keeps its own copy",
@@ -13005,14 +13015,14 @@
         "keepServer": {
           "action": "Keep the server’s version…",
           "title": "Keep the server’s version",
-          "description": "This host goes back to its managed server as it is. What the older version of Orca added or changed here is not moved; it stays only in this computer’s saved settings until they are cleaned up.",
+          "description": "This host keeps using its Orca server as it is. What the older version of Orca added or changed here is not moved; it stays only in this computer’s saved settings until they are cleaned up.",
           "cancel": "Cancel",
           "confirm": "Keep the server’s version"
         },
         "moveAnyway": {
           "action": "Move anyway…",
           "title": "Move this host anyway",
-          "description": "Orca moves this host to its managed server without the saved items below. They stay on this computer and don’t appear on the managed server. Unsaved edits are kept, never deleted.",
+          "description": "Orca sets itself up on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.",
           "cancel": "Cancel",
           "confirm": "Move anyway"
         },
@@ -13047,13 +13057,13 @@
           "chip": "WSL"
         },
         "restartServer": {
-          "action": "Restart managed server…",
-          "title": "Restart managed server",
-          "description": "Orca restarts this host’s managed server from your current connection. It restarts only when no terminals are running on the host, because terminals that are still open keep the lost access. Close them first.",
+          "action": "Restart Orca’s server…",
+          "title": "Restart Orca’s server",
+          "description": "Orca restarts its server on this host from your current connection. It restarts only when no terminals are running on the host, because terminals that are still open stay cut off. Close them first.",
           "cancel": "Cancel",
           "confirm": "Restart",
-          "terminalsUnknown": "Orca couldn’t confirm whether terminals are running on this host, so it didn’t restart the managed server.",
-          "terminalsRunning": "{{count}} terminals are still running on this host. Close them, then restart the managed server."
+          "terminalsUnknown": "Orca couldn’t confirm whether terminals are running on this host, so it didn’t restart Orca’s server.",
+          "terminalsRunning": "{{count}} terminals are still running on this host. Close them, then restart Orca’s server."
         },
         "RuntimeRepairDialog": {
           "title": "Re-pair {{name}}",
@@ -13131,12 +13141,10 @@
         },
         "serverList": {
           "addTitle": "Add server",
-          "installTitle": "Install on an SSH host",
           "installNoHosts": "No SSH hosts without an Orca server.",
           "installHostHelp": "Only hosts without an Orca server.",
           "addSshHost": "Add an SSH host",
           "cancel": "Cancel",
-          "install": "Install",
           "moreActions": "More actions for {{name}}",
           "moreActionsTooltip": "More actions",
           "hideDetails": "Hide details",
@@ -13159,11 +13167,9 @@
           "unreachable": "Unreachable",
           "version": "v{{version}}",
           "updateAvailable": "v{{version}} available",
-          "installedOver": "Installed on {{host}} over SSH",
           "throughSsh": "Through {{host}} → port {{port}}",
           "manualUpdate": "Update Orca on the server host",
           "defaultChip": "Default",
-          "managedChip": "Managed",
           "sshTunnelChip": "SSH tunnel",
           "sshDialogTitle": "Connect {{name}} through SSH",
           "sshDialogDescription": "Use this when the server isn’t reachable directly. Orca opens a tunnel through an SSH host.",
@@ -13191,26 +13197,27 @@
           "lastSeen": "Last seen {{when}}",
           "retry": "Retry",
           "pasteAccessLinkHelp": "Pair with Orca already running on another machine.",
-          "installHelp": "Orca installs a server on the host and keeps it updated.",
           "cloudVm": "Cloud VM",
           "cloudVmHelp": "Created per workspace from an environment recipe.",
           "addDescriptionShort": "Paste the access link from Share this computer on the other machine.",
-          "installDescription": "Orca installs a server on the host, starts it, and keeps it updated.",
           "installHostPlaceholder": "Choose an SSH host without Orca",
           "oneActiveLink": "1 active link",
           "activeLinks": "{{value0}} active links",
           "shareDialogDescriptionRuns": "Anyone with the link can run commands as you on this computer until you revoke it.",
           "shownAs": "Shown to others as {{name}}",
           "editName": "Edit",
-          "installed": "Installed {{name}}.",
-          "installingInBackground": "Installing {{name}} in the background. It appears in the list when it’s ready.",
           "close": "Close",
           "noSavedServers": "No saved servers",
           "hideError": "Hide error",
           "showError": "Show error",
           "neverConnected": "Never connected",
           "defaultHostEmptyLine": "New projects open on this computer until you add a server.",
-          "installNamePlaceholder": "Same as the SSH host"
+          "installNamePlaceholder": "Same as the SSH host",
+          "setUpDone": "Orca is set up on {{name}}.",
+          "settingUpInBackground": "Setting up Orca on {{name}} in the background. It appears in the list when it’s ready.",
+          "setUpOnSshHost": "Set up Orca on an SSH host",
+          "setUp": "Set up",
+          "overYourSsh": "Over your SSH connection"
         },
         "sshBulkRemove": {
           "removedCount": "{{count}} removed",

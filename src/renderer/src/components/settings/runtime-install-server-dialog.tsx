@@ -67,9 +67,13 @@ export function RuntimeInstallServerDialog({
         toast.message(managedServerOutcomeLabel(result))
       } else {
         toast.success(
-          translate('auto.components.settings.serverList.installed', 'Installed {{name}}.', {
-            name: result.environment.name
-          })
+          translate(
+            'auto.components.settings.serverList.setUpDone',
+            'Orca is set up on {{name}}.',
+            {
+              name: result.environment.name
+            }
+          )
         )
         // Why: leave a form the user reopened since this install started alone.
         const sameSession = session === sessionRef.current
@@ -95,8 +99,8 @@ export function RuntimeInstallServerDialog({
     if (!next && deploying) {
       toast.message(
         translate(
-          'auto.components.settings.serverList.installingInBackground',
-          'Installing {{name}} in the background. It appears in the list when it’s ready.',
+          'auto.components.settings.serverList.settingUpInBackground',
+          'Setting up Orca on {{name}} in the background. It appears in the list when it’s ready.',
           { name: serverName }
         )
       )
@@ -120,15 +124,26 @@ export function RuntimeInstallServerDialog({
           <DialogHeader>
             <DialogTitle>
               {translate(
-                'auto.components.settings.serverList.installTitle',
-                'Install on an SSH host'
+                'auto.components.settings.serverList.setUpOnSshHost',
+                'Set up Orca on an SSH host'
               )}
             </DialogTitle>
-            <DialogDescription>
-              {translate(
-                'auto.components.settings.serverList.installDescription',
-                'Orca installs a server on the host, starts it, and keeps it updated.'
-              )}
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {translate(
+                    'auto.components.settings.managedServers.description',
+                    'Orca installs itself on an empty SSH host and keeps itself up to date.'
+                  )}
+                </p>
+                {/* Why: this is the moment something moves, so say what does and doesn't. */}
+                <p>
+                  {translate(
+                    'auto.components.settings.managedServers.reassurance',
+                    'Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host.'
+                  )}
+                </p>
+              </div>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -204,8 +219,14 @@ export function RuntimeInstallServerDialog({
             <Button type="submit" size="sm" disabled={!canSubmit}>
               {deploying ? <LoadingSpinner className="size-3.5" /> : null}
               {deploying
-                ? translate('auto.components.settings.managedServers.deploy.running', 'Deploying…')
-                : translate('auto.components.settings.serverList.install', 'Install')}
+                ? translate(
+                    'auto.components.settings.sshHostServer.deploying',
+                    'Setting up Orca on {{host}}…',
+                    {
+                      host: targetLabel
+                    }
+                  )
+                : translate('auto.components.settings.serverList.setUp', 'Set up')}
             </Button>
           </DialogFooter>
         </form>

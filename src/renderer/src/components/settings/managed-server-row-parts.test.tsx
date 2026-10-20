@@ -10,7 +10,8 @@ import {
   ManagedServerConfirmations,
   ManagedServerDetailLines,
   ManagedServerMenuItems,
-  ManagedServerPrimaryAction
+  ManagedServerPrimaryAction,
+  managedServerTitle
 } from './managed-server-row-parts'
 import { useManagedServerLifecycle } from './use-managed-server-lifecycle'
 
@@ -41,6 +42,7 @@ function ManagedRowHarness({
   })
   return (
     <>
+      <span>{managedServerTitle(environment.name)}</span>
       <ManagedServerDetailLines lifecycle={lifecycle} />
       <ManagedServerPrimaryAction lifecycle={lifecycle} />
       <ManagedServerConfirmations lifecycle={lifecycle} />

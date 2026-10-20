@@ -79,11 +79,15 @@ function setEntry(entry: RuntimeEnvironmentStatus): void {
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([[ENVIRONMENT_ID, entry]]) })
 }
 
-function renderRow(remoteUpdate?: RemoteServerUpdateEntry): void {
+function renderRow(
+  remoteUpdate?: RemoteServerUpdateEntry,
+  duplicateOfNames: readonly string[] = []
+): void {
   render(
     <TooltipProvider>
       <RuntimeServerRow
         environment={environment}
+        duplicateOfNames={duplicateOfNames}
         details={undefined}
         isActive={false}
         remoteUpdate={remoteUpdate}
@@ -242,4 +246,13 @@ it('tells one revoked story instead of a disconnected one', () => {
   expect(screen.queryByText(/Re-pair it with a new access link/)).not.toBeNull()
   expect(screen.queryByRole('button', { name: /re-pair/i })).not.toBeNull()
   expect(screen.queryByRole('button', { name: /^connect$/i })).toBeNull()
+})
+
+it('marks a server paired twice and names its twin', () => {
+  renderRow(undefined, ['Studio relay'])
+  expect(
+    screen.queryByText(
+      'Same server as Studio relay, paired twice. Remove one so its projects can be edited.'
+    )
+  ).not.toBeNull()
 })

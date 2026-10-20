@@ -21,7 +21,7 @@ export type SshTargetServerDialog =
   | 'restart'
   | 'move-anyway'
 
-/** Whether this SSH host's managed Orca server serves it, and why not when it doesn't. */
+/** Whether Orca on this SSH host serves it, and why not when it doesn't. */
 export function SshTargetServerStatusLine({
   target,
   state
@@ -85,7 +85,7 @@ export function SshTargetServerMenuItems({
       ) : null}
       {canRestart ? (
         <DropdownMenuItem onSelect={() => onOpenDialog('restart')}>
-          {translate('auto.components.settings.restartServer.action', 'Restart managed server…')}
+          {translate('auto.components.settings.restartServer.action', 'Restart Orca’s server…')}
         </DropdownMenuItem>
       ) : null}
       {canMoveAnyway ? (
