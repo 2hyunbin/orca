@@ -130,8 +130,12 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
     })
   }
 
-  async closeTerminal(handle: string): Promise<RuntimeTerminalClose> {
+  async closeTerminal(handle: string, incarnation?: string): Promise<RuntimeTerminalClose> {
     const pty = this.getLivePtyForHandle(handle)
+    // The handle's fence: a replacement execution under the same handle is never closed.
+    if (incarnation && pty?.pty.incarnationId !== incarnation) {
+      throw new Error('terminal_handle_stale')
+    }
     this.claudeAgentTeams.removeTeamForLeaderHandle(handle)
     if (pty) {
       const closeAuthority: RuntimePtyTabCloseAuthority = {

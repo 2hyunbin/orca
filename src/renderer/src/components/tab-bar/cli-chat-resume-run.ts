@@ -18,6 +18,8 @@ import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in
 import { panePtyId } from '@/lib/ai-vault-tab-title-requests'
 import { subscribeToPtyExit } from '../terminal-pane/pty-dispatcher'
 import { inspectRuntimeTerminalProcess } from '@/runtime/runtime-terminal-inspection'
+import { getRemoteRuntimePtyOwner } from '@/runtime/runtime-terminal-stream'
+import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 
 /** The incarnation the execution host reports for a PTY; null when it reports none. */
@@ -28,8 +30,9 @@ const hostPtyIncarnation = (ptyId: string): Promise<string | null> =>
   )
 
 /** The chat took the conversation, so the terminal pane it came from closes (its tab with it):
- *  only while the host still reports the execution it came from, never a sibling or replacement.
- *  A local PTY whose host reports no incarnation is fenced by its exit, which precedes reuse. */
+ *  only that execution, never a sibling or replacement. A paired host closes it under its own
+ *  incarnation fence; a local PTY, whose host may report none, is fenced by its exit, which
+ *  precedes any reuse of its id. */
 async function retireSwitchedTerminalPane(
   source: CliChatResumeSource,
   sourceExited: () => boolean,
@@ -37,12 +40,18 @@ async function retireSwitchedTerminalPane(
 ): Promise<void> {
   const pane = parsePaneKey(source.paneKey)
   const incarnation = await expected
+  const owner = source.ptyId ? getRemoteRuntimePtyOwner(source.ptyId) : null
+  if (owner || isRemoteRuntimePtyId(source.ptyId)) {
+    if (owner && incarnation) {
+      const params = { terminal: owner.terminal, expectedIncarnationId: incarnation }
+      await callRuntimeRpc(owner.target, 'terminal.close', params).catch(() => undefined)
+    }
+    return
+  }
   if (
     pane &&
     source.ptyId &&
-    (incarnation
-      ? (await hostPtyIncarnation(source.ptyId)) === incarnation
-      : !isRemoteRuntimePtyId(source.ptyId)) &&
+    (!incarnation || (await hostPtyIncarnation(source.ptyId)) === incarnation) &&
     !sourceExited() &&
     panePtyId(useAppStore.getState(), source.paneKey) === source.ptyId
   ) {

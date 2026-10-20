@@ -611,8 +611,9 @@ describe('LocalPtyProvider', () => {
       expect(committed).toHaveBeenCalledOnce()
     })
 
-    it('keeps a switch start bound to its process past a failed commit callback, until it exits', async () => {
+    it('stops the process of a switch start whose commit callback fails, and ends on its exit', async () => {
       spawnMock.mockClear()
+      const { kill } = mockProc
       const switchOwner = (await provider.terminalSwitches.owner()) ?? ''
       const seen = async () => (await provider.terminalSwitches.observe('g-local', true))[0]
       const start = () =>
@@ -626,11 +627,11 @@ describe('LocalPtyProvider', () => {
           }
         })
       await expect(start()).rejects.toThrow('commit callback failed')
-      expect((await seen())?.observation).toMatchObject({ state: 'bound', shellPid: mockProc.pid })
+      // The failure stops that exact process, and its own exit (not the throw) ends the switch.
+      expect(kill).toHaveBeenCalledWith('SIGKILL')
+      expect((await seen())?.observation).toEqual({ state: 'ended' })
       await expect(start()).rejects.toThrow('terminal_switch_generation_refused')
       expect(spawnMock).toHaveBeenCalledOnce()
-      exitCb?.({ exitCode: 0 })
-      expect((await seen())?.observation).toEqual({ state: 'ended' })
     })
   })
 })

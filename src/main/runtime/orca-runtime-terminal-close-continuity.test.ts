@@ -284,6 +284,16 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(canary.ptyId).toBe(survivor.ptyId)
   })
 
+  it('closes nothing when its handle now runs a later incarnation than the caller expected', async () => {
+    const harness = createHarness()
+    const [{ handle }] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
+    await expect(harness.runtime.closeTerminal(handle, 'earlier-incarnation')).rejects.toThrow(
+      'terminal_handle_stale'
+    )
+    expect(harness.kill).not.toHaveBeenCalled()
+    expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
+  })
+
   it('does not kill the final PTY when durable tab retirement is rejected', async () => {
     const harness = createHarness()
     const [{ handle }] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals

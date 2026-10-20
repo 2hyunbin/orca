@@ -150,7 +150,19 @@ export async function spawnLocalPty(
         }
         throw error
       }
-      args.onPtySpawnCommitted?.()
+      try {
+        args.onPtySpawnCommitted?.()
+      } catch (error) {
+        // A switch keeps its claim until this exact process exits; stop it so that exit comes.
+        if (args.switchGeneration !== undefined) {
+          try {
+            spawnResult.process.kill('SIGKILL')
+          } finally {
+            destroyPtyProcess(spawnResult.process)
+          }
+        }
+        throw error
+      }
       plan.shellPath = spawnResult.shellPath
       // Why: a Windows fallback embeds its startup command in argv; honor the winning shell's delivery flag to avoid a double write.
       if (spawnResult.startupCommandDeliveredInShellArgs !== undefined) {

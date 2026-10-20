@@ -16,11 +16,16 @@ const mocks = vi.hoisted(() => {
     activateVerified: vi.fn(async () => 'activated'),
     switchCapability: vi.fn(async () => false),
     exitWatchers: new Map<string, () => void>(),
+    rpc: vi.fn(async (..._args: unknown[]) => ({})),
     inspect: vi.fn(async (_ptyId: string): Promise<{ foregroundProcessEvidence?: unknown }> => ({}))
   }
 })
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
   inspectRuntimeTerminalProcess: mocks.inspect
+}))
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  callRuntimeRpc: mocks.rpc
 }))
 vi.mock('../terminal-pane/pty-dispatcher', () => ({
   subscribeToPtyExit: (ptyId: string, watcher: () => void) => {
@@ -322,31 +327,20 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(closed.mock.calls[0]?.[0].detail).toEqual({ tabId: 'tab-1', leafId })
     expect(tabs()).toEqual([])
 
-    // A paired source retires only while its host still reports the incarnation it started with.
+    // A paired source is closed by its host, fenced on the incarnation it started with, so a
+    // replacement under the same handle stays open; the renderer never closes it by tab.
     const remote = 'remote:env@@handle-1'
     mocks.source = { ...mocks.source, ptyId: remote }
-    useAppStore.setState({
-      terminalLayoutsByTabId: {
-        'tab-1': {
-          root: null,
-          activeLeafId: leafId,
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [leafId]: remote }
-        }
-      }
-    })
-    const host = (...incarnations: string[]) =>
-      incarnations.forEach((ptyIncarnationId) =>
-        mocks.inspect.mockResolvedValueOnce({ foregroundProcessEvidence: { ptyIncarnationId } })
-      )
+    mocks.inspect.mockResolvedValueOnce({ foregroundProcessEvidence: { ptyIncarnationId: 'i1' } })
     window.addEventListener('orca-close-terminal-pane', closed)
-    host('i1', 'i2')
-    await runCliChatResume(mocks.source)
-    expect(closed).toHaveBeenCalledOnce()
-    host('i1', 'i1')
     await runCliChatResume(mocks.source)
     window.removeEventListener('orca-close-terminal-pane', closed)
-    expect(closed).toHaveBeenCalledTimes(2)
+    expect(closed).toHaveBeenCalledOnce()
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'env' },
+      'terminal.close',
+      { terminal: 'handle-1', expectedIncarnationId: 'i1' }
+    )
   })
 
   it('keeps the eager History joiner failed and retryable after the hidden starter is refused', async () => {
