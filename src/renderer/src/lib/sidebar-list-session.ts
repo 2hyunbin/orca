@@ -20,7 +20,8 @@ export function useSidebarListSession(): void {
 
 /**
  * Switch point. The window's own sleep stops PTYs without main's sleep map, so main hears which
- * workspaces it holds asleep. Sent before any kill, so main never mistakes the exits for a rebind.
+ * workspaces it holds asleep. Fire-and-forget: it usually lands before the exits, and a later one
+ * still ends the reconnect grace when main re-runs retention.
  */
 export function reportWindowSleptWorkspaces(worktreeIds: readonly string[]): void {
   // Store tests run the sleep flow without a window bridge.

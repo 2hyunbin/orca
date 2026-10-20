@@ -106,8 +106,16 @@ export const SIDEBAR_INPUT_METHODS = [
     name: 'sidebarSession.sleptWorkspaces',
     permission: 'workspace',
     params: SidebarSessionSleptWorkspacesParams,
-    // Held until the window's connection closes; a reload starts with none.
-    handler: async ({ worktreeIds }, { runtime, connectionId, signal }) => {
+    // Only this host's own window: the set skips the reconnect grace. Held until its connection closes.
+    handler: async ({ worktreeIds }, { runtime, connectionId, signal, caller }) => {
+      if (caller?.kind !== 'desktop') {
+        throw Object.assign(
+          new Error('Only this host’s own window reports its slept workspaces.'),
+          {
+            code: 'forbidden'
+          }
+        )
+      }
       if (connectionId === undefined || signal?.aborted) {
         throw new Error('client_disconnected')
       }
