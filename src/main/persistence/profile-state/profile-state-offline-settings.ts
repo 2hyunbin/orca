@@ -32,7 +32,7 @@ export type AgentHookSettings = Pick<
 >
 
 export type AgentHookSettingsUpdate = {
-  settings: Pick<GlobalSettings, 'agentCmdOverrides' | 'disabledTuiAgents'>
+  settings: Pick<GlobalSettings, 'agentCmdOverrides'> & { disabledTuiAgents: string[] }
   settingsPath: string
 }
 

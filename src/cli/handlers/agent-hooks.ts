@@ -13,6 +13,7 @@ import {
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
 import { DEFAULT_LOCAL_ORCA_PROFILE_ID } from '../../shared/orca-profiles'
 import type { GlobalSettings } from '../../shared/global-settings-types'
+import { normalizeDisabledTuiAgents } from '../../shared/tui-agent-selection'
 import type { ProfileStateOfflineLocation } from '../../main/persistence/profile-state/profile-state-offline-settings'
 
 type AgentHookCommandResult = {
@@ -113,7 +114,14 @@ async function updateAdmittedEnabledOnDisk(enabled: boolean): Promise<{
       profileId: profile.profile.id
     }
   }
-  return updateAgentHookSettingsFromProfileState(location, enabled)
+  const updated = updateAgentHookSettingsFromProfileState(location, enabled)
+  return {
+    ...updated,
+    settings: {
+      ...updated.settings,
+      disabledTuiAgents: normalizeDisabledTuiAgents(updated.settings.disabledTuiAgents)
+    }
+  }
 }
 
 async function updateRunningRuntime(

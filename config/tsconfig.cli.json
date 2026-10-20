@@ -11,6 +11,10 @@
     "../src/main/claude/hook-script.ts",
     "../src/main/claude/claude-hook-event-versions.ts",
     "../src/main/claude/claude-managed-hook-events.ts",
+    "../src/main/claude/claude-hook-target.ts",
+    "../src/main/claude/claude-hook-removal.ts",
+    "../src/main/claude-accounts/claude-profile-paths.ts",
+    "../src/main/claude-accounts/claude-profile-report.ts",
     "../src/main/qoder/hook-service.ts",
     "../src/main/qwen-code/hook-service.ts",
     "../src/main/codebuddy/hook-service.ts",
@@ -281,6 +285,7 @@
     "../src/main/openclaude/hook-service.ts",
     "../src/main/rolling-file-backup.ts",
     "../src/main/startup/hydrate-shell-path.ts",
+    "../src/main/startup/login-shell-environment.ts",
     "../src/main/startup/shell-path-probe.ts",
     "../src/main/startup/windows-shell-path-ownership.ts",
     // Why: serve-electron-flag-parity.test.ts checks the Electron-side serve argv rewrite against this
