@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import { BrowserError } from './browser-error'
-import { assertRemoteCliPageAccess, trackRemoteCliInput } from './remote-cli-page-admission'
+import { readRemoteCliAdmittedPage, trackRemoteCliInput } from './remote-cli-page-admission'
 
 // Why: Chromium resizes the page's view for these without checking the view still exists
 // (WebContentsImpl::SetDeviceEmulationSize). A crashed renderer takes its view with it until the
@@ -26,27 +26,24 @@ export function sendGuestCdpCommand(
   params?: Record<string, unknown>,
   sessionId?: string
 ): Promise<unknown> {
-  try {
-    // Why: only a host's own work carries its scope; desktop-owned sends are never refused here.
-    assertRemoteCliPageAccess(guest.id)
-  } catch (error) {
-    return Promise.reject(error)
-  }
-  // Why same task as the send: isCrashed() flips in the same Chromium task that drops the view,
-  // so checking right before sendCommand leaves no gap for the renderer to die in between.
-  if (VIEW_RESIZING_CDP_METHODS.has(method) && (guest.isDestroyed() || guest.isCrashed())) {
-    return Promise.reject(
-      new BrowserError(
-        'browser_cdp_error',
-        'The page crashed; its viewport can be changed again once it reloads.'
+  // Why: only a host's own work carries its scope; desktop-owned sends are never refused here.
+  return readRemoteCliAdmittedPage(guest.id, () => {
+    // Why same task as the send: isCrashed() flips in the same Chromium task that drops the view,
+    // so checking right before sendCommand leaves no gap for the renderer to die in between.
+    if (VIEW_RESIZING_CDP_METHODS.has(method) && (guest.isDestroyed() || guest.isCrashed())) {
+      return Promise.reject(
+        new BrowserError(
+          'browser_cdp_error',
+          'The page crashed; its viewport can be changed again once it reloads.'
+        )
+      )
+    }
+    return trackRemoteCliInput(guest.id, method, params, () =>
+      Promise.resolve(
+        sessionId === undefined
+          ? guest.debugger.sendCommand(method, params)
+          : guest.debugger.sendCommand(method, params, sessionId)
       )
     )
-  }
-  return trackRemoteCliInput(guest.id, method, params, () =>
-    Promise.resolve(
-      sessionId === undefined
-        ? guest.debugger.sendCommand(method, params)
-        : guest.debugger.sendCommand(method, params, sessionId)
-    )
-  )
+  })
 }
