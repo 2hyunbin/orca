@@ -12,6 +12,7 @@ import {
   type RegionalRehomePollGate
 } from './regional-rehome-poll-telemetry.js'
 import { readRegionCorrectionOutcomes } from './region-correction-outcomes.js'
+import { ReservePaceError } from './reserve-assignment.js'
 import {
   previewRegionalRehomeEligibility,
   type RegionCorrectionPreview
@@ -536,6 +537,9 @@ class AssignmentInventoryScopeChanged extends Error {
   }
 }
 
+// Sticky's "re-place me": the host's pin is on a cell isolated for a roll.
+type IsolatedPin = { isolatedFrom: { cellId: string; region: RelayRegion } }
+
 // The placement region has no database cell with room; nothing was written.
 class AssignmentRegionFull extends Error {
   // Set when the host is leaving a roll-isolated cell in that region.
@@ -1013,8 +1017,34 @@ export class RelayAssignmentStore {
     step5: AssignOptions = {}
   ): Promise<RelayAssignment> {
     const sticky = await this.assignStickyWithLockRetry(identity, lockMode, preferredRegion)
-    if (sticky) return sticky
-    const booked = await step5.placeFresh?.()
+    if (sticky && !('isolatedFrom' in sticky)) return sticky
+    let isolatedFrom = sticky?.isolatedFrom
+    // Off a roll-isolated cell: the canary counts the move whichever pool takes it, and a
+    // throttled reserve cell is no room, so the drain does not wait on reserve intake.
+    const bookReserve = async (book: () => Promise<RelayAssignment | null>) => {
+      let reserved: RelayAssignment | null
+      try {
+        reserved = await book()
+      } catch (error) {
+        if (!(isolatedFrom && error instanceof ReservePaceError)) throw error
+        reserved = null
+      }
+      if (reserved && isolatedFrom) {
+        console.warn(
+          JSON.stringify({
+            event: 'orca_relay_sticky_replaced_off_isolated_cell',
+            fromCellId: isolatedFrom.cellId,
+            fromRegion: isolatedFrom.region,
+            admissionState: ROLL_ISOLATED_ADMISSION,
+            toCellId: reserved.cellId,
+            region: reserved.region,
+            via: 'reserve'
+          })
+        )
+      }
+      return reserved
+    }
+    const booked = step5.placeFresh ? await bookReserve(step5.placeFresh) : null
     if (booked) return booked
     // Only placement needs the global inventory critical section; queueing those
     // attempts locally avoids turning true placement bursts into NOWAIT storms.
@@ -1034,37 +1064,20 @@ export class RelayAssignmentStore {
       )
     const regionReserve = step5.regionReserve
     if (!regionReserve) return await placeOnDatabase(false)
-    let isolatedSource: AssignmentRegionFull['isolatedSource']
     try {
       return await placeOnDatabase(true)
     } catch (error) {
       if (!(error instanceof AssignmentRegionFull)) throw error
-      isolatedSource = error.isolatedSource
+      isolatedFrom ??= error.isolatedSource
     }
-    const reserved = await regionReserve()
-    if (!reserved) return await placeOnDatabase(false)
-    if (isolatedSource) {
-      // The roll canary counts these against the drained cell's hosts, whichever pool took them.
-      console.warn(
-        JSON.stringify({
-          event: 'orca_relay_sticky_replaced_off_isolated_cell',
-          fromCellId: isolatedSource.cellId,
-          fromRegion: isolatedSource.region,
-          admissionState: ROLL_ISOLATED_ADMISSION,
-          toCellId: reserved.cellId,
-          region: reserved.region,
-          via: 'reserve'
-        })
-      )
-    }
-    return reserved
+    return (await bookReserve(regionReserve)) ?? (await placeOnDatabase(false))
   }
 
   private async assignStickyWithLockRetry(
     identity: AssignmentIdentity,
     lockMode: CellInventoryLockMode,
     preferredRegion?: RelayRegion
-  ): Promise<RelayAssignment | null> {
+  ): Promise<RelayAssignment | IsolatedPin | null> {
     return await this.withAssignmentLockRetry(
       async (inventoryFirst) =>
         await this.assignStickyOnce(identity, inventoryFirst, lockMode, preferredRegion)
@@ -1141,7 +1154,7 @@ export class RelayAssignmentStore {
     inventoryFirst: boolean,
     lockMode: CellInventoryLockMode,
     preferredRegion?: RelayRegion
-  ): Promise<RelayAssignment | null> {
+  ): Promise<RelayAssignment | IsolatedPin | null> {
     const now = this.now()
     await this.reserveModeCells()
     return await this.database.transaction(async (transaction) => {
@@ -1221,7 +1234,8 @@ export class RelayAssignmentStore {
           pinnedAdmission
         )
       ) {
-        return null
+        const cellId = text(existing, 'cell_id')
+        return { isolatedFrom: { cellId, region: await this.cellRegion(transaction, cellId) } }
       }
 
       const currentCellId = text(existing, 'cell_id')

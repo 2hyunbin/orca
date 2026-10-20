@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RelayAssignmentStore, RelayHomeCellUnavailableError } from './assignment-store.js'
+import { ReservePaceError } from './reserve-assignment.js'
 import {
   encodeMembership,
   type CellAdmissionMembership,
@@ -614,6 +615,33 @@ describe('re-placing a host off a cell isolated for a roll', () => {
       expect(regionReserve).toHaveBeenCalledOnce()
       expect(jsonEvents(warn, 'orca_relay_sticky_replaced_off_isolated_cell')).toMatchObject([
         { fromCellId: first.cellId, region: 'us-central1' }
+      ])
+    })
+
+    it('treats a throttled reserve cell as no room, so the drain does not wait on its intake', async () => {
+      const { store, isolateForRoll } = await setup()
+      const first = await store.assign(IDENTITY, 'asia-east2')
+      await isolateForRoll(first.cellId)
+      const regionReserve = vi.fn(async () => {
+        throw new ReservePaceError(4)
+      })
+      await expect(
+        store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { regionReserve })
+      ).resolves.toMatchObject({ region: 'us-central1', assignmentEpoch: first.assignmentEpoch + 1 })
+      expect(regionReserve).toHaveBeenCalledOnce()
+    })
+
+    it('counts a share-draw booking off the isolated cell for the canary', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { store, isolateForRoll } = await setup()
+      const first = await store.assign(IDENTITY, 'asia-east2')
+      await isolateForRoll(first.cellId)
+      warn.mockClear()
+      await expect(
+        store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { placeFresh: async () => onReserve })
+      ).resolves.toEqual(onReserve)
+      expect(jsonEvents(warn, 'orca_relay_sticky_replaced_off_isolated_cell')).toMatchObject([
+        { fromCellId: first.cellId, toCellId: 'asia-reserve', via: 'reserve' }
       ])
     })
 
