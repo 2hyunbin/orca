@@ -12,6 +12,7 @@ import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { getIndexedWorktreesById } from '../../../worktree-repo-index'
+import { worktreeOwnerHostIds } from '@/lib/worktree-runtime-owner-index'
 
 type WorktreeWithEmbeddedLineage = Worktree & { lineage?: WorktreeLineage | null }
 function getProjectedLineage(get: WorktreeSliceGet, worktree: Worktree): WorktreeLineage | null {
@@ -86,7 +87,11 @@ export function createSetWorktreesPinnedAndReveal(
       }
       const executionHostId = target.hostId ?? current.hostId ?? 'local'
       didChange = true
-      const onFocusedHost = !activeHostId || executionHostId === activeHostId
+      // A server-proxied row answers to its own SSH host and to its server's runtime alias.
+      const onFocusedHost =
+        !activeHostId ||
+        target.hostId === activeHostId ||
+        worktreeOwnerHostIds(current).includes(activeHostId)
       if (onFocusedHost) {
         changedWorktreeIds.add(worktreeId)
       }
@@ -125,10 +130,14 @@ export function createSetWorktreesPinnedAndReveal(
       void get().updateWorktreesMeta(updates)
     }
     if (revealWorktreeId !== null) {
+      // The focused row's own sidebar host, not the logical runtime alias the selection may hold.
+      const revealHostId = activeHostId
+        ? (get().getKnownWorktreeById(revealWorktreeId, activeHostId)?.hostId ?? activeHostId)
+        : null
       get().revealWorktreeInSidebar(revealWorktreeId, {
         behavior: 'smooth',
         highlight: true,
-        ...(activeHostId ? { executionHostId: activeHostId } : {})
+        ...(revealHostId ? { executionHostId: revealHostId } : {})
       })
     }
   }

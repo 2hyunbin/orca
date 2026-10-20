@@ -480,6 +480,32 @@ describe('setWorktreesPinnedAndReveal', () => {
     }
   )
 
+  it("follows a server-proxied focused row selected by its server's runtime alias", () => {
+    const store = createTestStore()
+    const proxied = makeWorktree({
+      id: 'repo1::/a',
+      repoId: 'repo1',
+      path: '/a',
+      hostId: 'ssh:box',
+      runtimeOwnerEnvironmentId: 'hub'
+    })
+    const reveal = vi.fn()
+    store.setState({
+      worktreesByRepo: { repo1: [proxied] },
+      activeWorktreeId: proxied.id,
+      activeWorkspaceExecutionHostId: 'runtime:hub',
+      revealWorktreeInSidebar: reveal
+    })
+
+    store.getState().setWorktreesPinnedAndReveal([proxied], true)
+
+    expect(reveal).toHaveBeenCalledWith(proxied.id, {
+      behavior: 'smooth',
+      highlight: true,
+      executionHostId: 'ssh:box'
+    })
+  })
+
   it("does not reveal the focused descendant for its ancestor's twin on another host", () => {
     const store = createTestStore()
     const parent = makeWorktree({
