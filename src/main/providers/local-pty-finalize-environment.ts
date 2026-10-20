@@ -1,5 +1,4 @@
 import { win32 as pathWin32 } from 'node:path'
-import { shouldUseShellReadyStartupDelivery } from '../../shared/codex-startup-delivery'
 import { expandWindowsPathEnvironmentVariables } from '../../shared/windows-environment-expansion'
 import { dropInheritedOrcaFishHistory } from '../fish-history-session'
 import { dropIncoherentCondaActivationEnv } from '../pty/conda-activation-env'
@@ -9,6 +8,7 @@ import {
   seedPowerlevel10kWizardEnv
 } from '../pty/powerlevel10k-wizard-env'
 import {
+  assertPosixShellStartupCommandPrepared,
   POSIX_SHELL_STARTUP_COMMAND_ENV,
   supportsPosixShellStartupCommand
 } from '../pty/posix-shell-startup-command'
@@ -92,14 +92,6 @@ export function finalizeLocalPtySpawnEnvironment(args: {
     // Why after history injection: the wrapper is what repairs a worktree
     // HISTFILE that the system zshrc clobbers, so the decision to wrap has to
     // see whether this spawn actually injected one.
-    const isCodexStartupCommand = plan.startupAgentRecognition?.agent === 'codex'
-    const codexStartupCommand = isCodexStartupCommand ? spawn.command : undefined
-    const codexRequiresShellReady =
-      codexStartupCommand !== undefined &&
-      shouldUseShellReadyStartupDelivery({
-        command: codexStartupCommand,
-        startupCommandDelivery: spawn.startupCommandDelivery
-      })
     // Why delete: ORCA_SHELL_FEATURES is Orca-owned, and only the launch
     // config below may name features for this shell.
     delete env.ORCA_SHELL_FEATURES
@@ -111,15 +103,11 @@ export function finalizeLocalPtySpawnEnvironment(args: {
     }
     plan.getFallbackShellReadyConfig = (shell) => {
       const wrapperStartupCommand =
-        codexStartupCommand !== undefined && supportsPosixShellStartupCommand(shell)
-          ? codexStartupCommand
+        spawn.command !== undefined && supportsPosixShellStartupCommand(shell)
+          ? spawn.command
           : undefined
-      // Why no line-editor widening here (unlike the daemon and relay): a Codex
-      // startup command this provider wraps is run by the wrapper's own prompt
-      // hook, never written into the PTY, so there is no early write to double-echo.
-      const waitsForShellReady =
-        Boolean(spawn.command) && (!isCodexStartupCommand || codexRequiresShellReady)
-      return getShellLaunchConfig(
+      const waitsForShellReady = Boolean(spawn.command)
+      const config = getShellLaunchConfig(
         shell,
         selectShellStartupFeatures({
           shellPath: shell,
@@ -133,6 +121,8 @@ export function finalizeLocalPtySpawnEnvironment(args: {
         wrapperStartupCommand,
         fishLaunch
       )
+      assertPosixShellStartupCommandPrepared(spawn.command, shell, config.env)
+      return config
     }
     const shellLaunch = plan.getFallbackShellReadyConfig(plan.shellPath)
     plan.primaryPreLaunchEnv = Object.fromEntries(

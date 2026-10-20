@@ -161,7 +161,7 @@ export function getZshShellReadyMarkerRegistrationBlock(
     : `  printf "${escapedMarker}"`
   const startupCommandBlock = supportsStartupCommand
     ? `
-  if (( \${+${POSIX_SHELL_STARTUP_COMMAND_ENV}} )); then
+  if [[ "\${CONTEXT-}" == start ]] && (( \${+${POSIX_SHELL_STARTUP_COMMAND_ENV}} )); then
     BUFFER="\$${POSIX_SHELL_STARTUP_COMMAND_ENV}"
     CURSOR=\${#BUFFER}
     builtin unset ${POSIX_SHELL_STARTUP_COMMAND_ENV}

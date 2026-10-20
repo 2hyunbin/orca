@@ -108,6 +108,7 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
     env,
     startupCommandDeliveredInShellArgs:
       spawned.startupCommandDeliveredInShellArgs ?? launch.startupCommandDeliveredInShellArgs,
+    startupCommandDeliveredByWrapper: launch.startupCommandDeliveredByWrapper,
     reportsChildExitStatus: spawned.reportsChildExitStatus,
     requestedCwd: opts.cwd,
     sessionId: opts.sessionId,

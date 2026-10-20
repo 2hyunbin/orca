@@ -23,6 +23,7 @@ export function createDaemonPtySubprocessHandle(args: {
   spawnCwd: string
   env: Record<string, string>
   startupCommandDeliveredInShellArgs: boolean
+  startupCommandDeliveredByWrapper: boolean
   reportsChildExitStatus: boolean
   requestedCwd?: string
   sessionId: string
@@ -84,6 +85,7 @@ export function createDaemonPtySubprocessHandle(args: {
     ...(args.startupCommandDeliveredInShellArgs
       ? { startupCommandDeliveredInShellArgs: true }
       : {}),
+    ...(args.startupCommandDeliveredByWrapper ? { startupCommandDeliveredByWrapper: true } : {}),
     getForegroundProcess: foreground.getForegroundProcess,
     confirmForegroundProcess: foreground.confirmForegroundProcess,
     confirmShellForeground: foreground.confirmShellForeground,

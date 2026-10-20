@@ -187,7 +187,9 @@ async function startFixture(
       },
       onExit: () => {}
     })
-    session.write(fixture.command)
+    if (!subprocess.startupCommandDeliveredByWrapper) {
+      session.writeStartupCommand(fixture.command)
+    }
     const runningSubprocess = subprocess
     const runningSession = session
     const activeConsoleWarnSpy = consoleWarnSpy
@@ -275,7 +277,7 @@ async function runReadOracle(fixture: ShellFixture, child: boolean): Promise<voi
     expect(running.session.shellState).toBe('pending')
     expect(running.output()).not.toContain(COMMAND_OUTPUT)
 
-    running.subprocess.write('x\r')
+    running.session.write('x\r')
     await waitForOutput(running.subscribe, () => running.output().includes(COMMAND_OUTPUT))
     expect(count(running.output(), COMMAND_OUTPUT)).toBe(1)
     expect(running.output()).not.toContain('orca-shell-start')
@@ -353,7 +355,7 @@ zle -N zle-line-init
         expect(running.session.shellState).toBe('pending')
         expect(running.output()).not.toContain(COMMAND_OUTPUT)
 
-        running.subprocess.write('x')
+        running.session.write('x')
         try {
           await waitForOutput(running.subscribe, () => running.output().includes(COMMAND_OUTPUT))
         } catch (error) {

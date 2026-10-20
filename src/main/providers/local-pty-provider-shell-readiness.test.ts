@@ -159,7 +159,7 @@ describe('LocalPtyProvider', () => {
   })
 
   describe('spawn', () => {
-    it('delegates markerless Codex startup to the shell wrapper without a PTY write', async () => {
+    it('delegates startup commands to the shell wrapper without a PTY write', async () => {
       process.env.SHELL = '/bin/zsh'
       const command = "codex '--dangerously-bypass-approvals-and-sandbox'"
 
@@ -168,7 +168,7 @@ describe('LocalPtyProvider', () => {
       const spawnEnv = spawnMock.mock.calls.at(-1)?.[2].env
       expect(spawnEnv[POSIX_SHELL_STARTUP_COMMAND_ENV]).toBe(command)
       expect(spawnEnv.ORCA_SHELL_FEATURES).toContain('startup')
-      expect(spawnEnv.ORCA_SHELL_FEATURES).not.toContain('ready')
+      expect(spawnEnv.ORCA_SHELL_FEATURES).toContain('ready')
       expect(mockProc.write).not.toHaveBeenCalled()
     })
 
@@ -266,7 +266,7 @@ describe('LocalPtyProvider', () => {
       }
     })
 
-    it('verifies shell identity against the exact spawn PATH', async () => {
+    it('keeps the spawn PATH without probing a wrapper-owned command recipient', async () => {
       provider.configure({
         buildSpawnEnv: (_id, env) => ({ ...env, PATH: '/post-hook/bin' })
       })
@@ -279,9 +279,7 @@ describe('LocalPtyProvider', () => {
       })
 
       expect(spawnMock.mock.calls.at(-1)?.[2].env.PATH).toBe('/post-hook/bin')
-      expect(createShellPromptReadinessProbeMock).toHaveBeenCalledWith(
-        expect.objectContaining({ shellPathEnv: '/post-hook/bin' })
-      )
+      expect(createShellPromptReadinessProbeMock).not.toHaveBeenCalled()
     })
 
     // Order matters: this case reads spawnMock.mock.calls[0], which the preceding
@@ -312,13 +310,16 @@ describe('LocalPtyProvider', () => {
 
         vi.advanceTimersByTime(1)
         await Promise.resolve()
-        expect(mockProc.write).toHaveBeenCalledWith("printf 'linked issue context'\r")
+        expect(spawnMock.mock.calls.at(-1)?.[2].env[POSIX_SHELL_STARTUP_COMMAND_ENV]).toBe(
+          "printf 'linked issue context'"
+        )
+        expect(mockProc.write).not.toHaveBeenCalled()
       } finally {
         vi.useRealTimers()
       }
     })
 
-    it('releases held marker-prefix bytes when local shell readiness times out', async () => {
+    it('recognizes a late wrapper marker without typing a command at the deadline', async () => {
       vi.useFakeTimers()
       const onData = vi.fn()
       provider.configure({ onData })
@@ -332,16 +333,14 @@ describe('LocalPtyProvider', () => {
         vi.advanceTimersByTime(1500)
         await Promise.resolve()
 
-        expect(onData).toHaveBeenCalledWith(
-          expect.any(String),
-          '\x1b]777;orca-shell-ready',
-          expect.any(Number)
-        )
+        expect(onData).not.toHaveBeenCalled()
+        dataCallback('\x07late prompt')
+        expect(onData).toHaveBeenCalledWith(expect.any(String), 'late prompt', expect.any(Number))
         expect(mockProc.write).not.toHaveBeenCalled()
 
         vi.advanceTimersByTime(200)
         await Promise.resolve()
-        expect(mockProc.write).toHaveBeenCalledWith('printf ready\r')
+        expect(mockProc.write).not.toHaveBeenCalled()
       } finally {
         vi.useRealTimers()
       }

@@ -4,6 +4,8 @@ import { MANAGED_DATA_ACCOUNT_POSIX_RESTORE } from '../../shared/managed-data-ac
 import { getPosixCodexShellLaunchPreflight } from '../../shared/codex-shell-function'
 import { getPosixClaudeShellFunction } from '../../shared/claude-shell-function'
 import { BASH_PROMPT_COMMAND_COMPOSITION_BLOCK } from '../bash-prompt-command-composition'
+import { getBashStartupCommandPromptBlock } from '../pty/posix-shell-startup-command'
+import { SHELL_READY_MARKER } from './daemon-shell-ready-marker'
 import { BASH_FEATURE_CHANNEL_BLOCK, SHELL_STARTUP_IDENTITY_MARKER_BLOCK } from '../shell-templates'
 
 export function getDaemonBashShellReadyRcfileContent(): string {
@@ -126,6 +128,7 @@ __orca_osc133_epilogue() {
 ${BASH_PROMPT_COMMAND_COMPOSITION_BLOCK}
 __orca_prepend_prompt_command "__orca_osc133_precmd"
 __orca_append_prompt_command '__orca_in_debug_capture=1; __orca_prompt_had_functrace=""; if [[ -o functrace ]]; then __orca_prompt_had_functrace=1; set +T; fi; __orca_outer_debug_trap_spec="$(trap -p DEBUG)"; [[ -z "$__orca_prompt_had_functrace" ]] || set -T; unset __orca_prompt_had_functrace __orca_in_debug_capture'
+${getBashStartupCommandPromptBlock(SHELL_READY_MARKER)}
 __orca_append_prompt_command "__orca_osc133_epilogue"
 __orca_had_functrace=""
 [[ -o functrace ]] && __orca_had_functrace=1

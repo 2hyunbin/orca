@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createPtySubprocess } from './pty-subprocess'
 import { Session } from './session'
@@ -13,8 +13,24 @@ const SECRET = 'hunter2'
 const PASSPHRASE_PROMPT = `printf 'Enter passphrase: '; read -rs PASS; printf '\\nRC_GOT:%s\\n' "$PASS"\n`
 
 const SHELLS = [
-  { shellPath: '/bin/zsh', startupFile: '.zshrc' },
-  { shellPath: '/bin/bash', startupFile: '.bash_profile' }
+  { shellPath: '/bin/zsh', startupFile: '.zshrc', prompt: PASSPHRASE_PROMPT },
+  { shellPath: '/bin/bash', startupFile: '.bash_profile', prompt: PASSPHRASE_PROMPT },
+  {
+    shellPath: '/bin/zsh',
+    startupFile: '.zshrc',
+    prompt: `PASS=''; vared -p 'Enter passphrase: ' PASS; print -r -- "RC_GOT:$PASS"\n`
+  },
+  { shellPath: '/bin/zsh', startupFile: '.zshrc', prompt: `unsetopt zle\n${PASSPHRASE_PROMPT}` },
+  {
+    shellPath: '/bin/bash',
+    startupFile: '.bash_profile',
+    prompt: `read -erp 'Enter passphrase: ' PASS; printf '\\nRC_GOT:%s\\n' "$PASS"\n`
+  },
+  {
+    shellPath: process.platform === 'darwin' ? '/opt/homebrew/bin/fish' : '/usr/bin/fish',
+    startupFile: '.config/fish/config.fish',
+    prompt: `read -s -P 'Enter passphrase: ' PASS; printf '\\nRC_GOT:%s\\n' "$PASS"\n`
+  }
 ].filter(
   ({ shellPath }) =>
     process.platform !== 'win32' && spawnSync(shellPath, ['--version']).status === 0
@@ -33,10 +49,12 @@ async function waitFor(isDone: () => boolean, timeoutMs: number): Promise<void> 
 async function startShell(
   shellPath: string,
   startupFile: string,
-  shellReadyTimeoutMs: number
+  shellReadyTimeoutMs: number,
+  prompt: string
 ): Promise<{ session: Session; output: () => string; cleanup: () => Promise<void> }> {
   const tempHome = mkdtempSync(join(tmpdir(), 'orca-zsh-interactive-init-restore-'))
-  writeFileSync(join(tempHome, startupFile), PASSPHRASE_PROMPT)
+  mkdirSync(dirname(join(tempHome, startupFile)), { recursive: true })
+  writeFileSync(join(tempHome, startupFile), prompt)
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const command = `printf 'ORCA_STARTUP_%s\\n' COMMAND_RAN\r`
   const subprocess = await createPtySubprocess({
@@ -48,6 +66,7 @@ async function startShell(
     shellOverride: shellPath,
     env: {
       HOME: tempHome,
+      XDG_CONFIG_HOME: join(tempHome, '.config'),
       PATH: process.env.PATH ?? '/usr/bin:/bin',
       SHELL: shellPath,
       TERM: 'xterm-256color'
@@ -64,7 +83,7 @@ async function startShell(
   })
   let output = ''
   session.attachClient({ onData: (data) => (output += data), onExit: () => {} })
-  session.writeStartupCommand(command)
+  expect(subprocess.startupCommandDeliveredByWrapper).toBe(true)
   return {
     session,
     output: () => output,
@@ -80,10 +99,10 @@ async function startShell(
 }
 
 describe.each(SHELLS)(
-  'startup file that prompts before the shell is ready ($startupFile)',
-  ({ shellPath, startupFile }) => {
+  'startup file that prompts before the shell is ready ($shellPath $prompt)',
+  ({ shellPath, startupFile, prompt }) => {
     it('the passphrase typed into the prompt reaches it, and the startup command runs once after', async () => {
-      const running = await startShell(shellPath, startupFile, 15_000)
+      const running = await startShell(shellPath, startupFile, 15_000, prompt)
       try {
         await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
         running.session.write(`${SECRET}\r`)
@@ -93,13 +112,15 @@ describe.each(SHELLS)(
           )
         })
         expect(running.output()).toContain(`RC_GOT:${SECRET}`)
+        expect(running.session.shellState).toBe('ready')
+        expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
       } finally {
         await running.cleanup()
       }
     }, 20_000)
 
     it('a prompt left unanswered past the ready timeout does not receive the startup command', async () => {
-      const running = await startShell(shellPath, startupFile, 500)
+      const running = await startShell(shellPath, startupFile, 500, prompt)
       try {
         await waitFor(() => running.output().includes('Enter passphrase:'), 5_000)
         await new Promise((resolve) => setTimeout(resolve, 1_000))
@@ -110,6 +131,8 @@ describe.each(SHELLS)(
           )
         })
         expect(running.output()).toContain(`RC_GOT:${SECRET}`)
+        expect(running.session.shellState).toBe('ready')
+        expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
       } finally {
         await running.cleanup()
       }

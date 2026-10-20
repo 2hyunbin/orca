@@ -1,6 +1,10 @@
 // Why: stock zshrc can replace line-init after the user clears the prompt-hook array.
 export const ZSH_DEFERRED_LINE_INIT_BLOCK = `__orca_deferred_line_init() {
   builtin emulate -L zsh
+  if [[ "\${CONTEXT-}" != start ]]; then
+    (( \${+widgets[__orca_saved_line_init]} )) && zle __orca_saved_line_init "$@"
+    return 0
+  fi
   (( \${+functions[__orca_deferred_init]} )) || return 0
   local __orca_direct_line_init=0
   [[ "\${widgets[zle-line-init]:-}" == user:__orca_deferred_line_init ]] && __orca_direct_line_init=1
@@ -18,7 +22,7 @@ __orca_deferred_sched_init() {
   builtin emulate -L zsh
   (( \${+functions[__orca_deferred_init]} )) && __orca_deferred_init
   builtin unset __orca_deferred_sched_armed
-  builtin unfunction __orca_deferred_sched_init
+  (( \${+functions[__orca_deferred_sched_init]} )) && builtin unfunction __orca_deferred_sched_init
   return $__orca_prompt_status
 }
 __orca_arm_deferred_line_init() {

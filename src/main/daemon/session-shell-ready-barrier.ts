@@ -86,7 +86,7 @@ export class SessionShellReadyBarrier {
 
   /** Started after the startup ingress exists, matching the order the probe's callbacks assume. */
   startPromptReadinessProbe(): void {
-    if (this._state !== 'pending') {
+    if (this._state !== 'pending' || this.deps.subprocess.startupCommandDeliveredByWrapper) {
       return
     }
     this.promptReadinessProbe = createShellPromptReadinessProbe({
@@ -110,7 +110,10 @@ export class SessionShellReadyBarrier {
 
   ingestSubprocessData(data: string): void {
     let releaseStartupDeviceAttributes = false
-    if (this._state === 'pending' && this.scanState) {
+    if (
+      this.scanState &&
+      (this._state === 'pending' || this.deps.subprocess.startupCommandDeliveredByWrapper)
+    ) {
       const scanned = scanShellStartupOutput(this.scanState, data)
       data = scanned.output
       if (scanned.shellPid) {
@@ -225,6 +228,10 @@ export class SessionShellReadyBarrier {
     this._state = 'timed_out'
     this.disposePromptReadinessProbe()
     this.releaseDeviceAttributes()
+    // A late integrated prompt remains authoritative; a deadline cannot transfer command ownership.
+    if (this.deps.subprocess.startupCommandDeliveredByWrapper) {
+      return
+    }
     this.releaseHeldBytes()
     this.flushPreReadyQueue()
   }
