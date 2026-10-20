@@ -58,6 +58,7 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
     branchAutoNameRef,
     decisions,
     folderSourceRepos,
+    hostOptions,
     linkedWorkItem,
     repoId,
     selectedRepoProjectId,
@@ -240,13 +241,17 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
         candidate: Pick<ProjectHostSetupOption, 'id' | 'hostId'>
       ): boolean =>
         candidate.id === setupId || getProjectHostSetupSelectionKey(candidate) === setupId
-      // Pairing can add a host while the dialog awaits setup; use one live eligibility snapshot.
+      // Pairing can add a host while the dialog awaits setup; the live registry adds it to ours.
       const state = useAppStore.getState()
+      const liveHosts = buildComposerHostOptions(state)
       const target = buildProjectHostSetupOptions({
         projectId: selectedRepoProjectId,
         projectHostSetups: state.projectHostSetups,
         eligibleRepos: getComposerEligibleRepos(state.repos),
-        hosts: buildComposerHostOptions(state)
+        hosts: [
+          ...liveHosts,
+          ...hostOptions.filter((host) => !liveHosts.some((live) => live.id === host.id))
+        ]
       }).find(
         (candidate): candidate is ReadyProjectHostSetupOption =>
           matchesSelection(candidate) && candidate.kind === 'ready'
@@ -264,6 +269,7 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
     },
     [
       handleRepoChange,
+      hostOptions,
       selectedRepoProjectId,
       setSelectedProjectHostSetupOverrideId,
       setSelectedProjectHostSetupOverrideHostId
