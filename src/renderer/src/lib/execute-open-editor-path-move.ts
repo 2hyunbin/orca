@@ -40,7 +40,7 @@ export async function executeOpenEditorPathMove(args: {
   // Host-scoped: the same abs path on another host (2nd SSH connection, local vs
   // runtime) is a distinct file the rename never touched — keep it out of the move.
   const moveState = useAppStore.getState()
-  const owner = editorMoveOwnerFromContext(moveState, context, worktreeId)
+  const owner = editorMoveOwnerFromContext(context, worktreeId)
   const affected = moveState.openFiles.filter(
     (f) => isPathInsideOrEqual(fromPath, f.filePath) && isOpenFileOnMoveOwner(moveState, f, owner)
   )

@@ -121,6 +121,26 @@ describe('executeOpenEditorPathMove', () => {
     expect(useAppStore.getState().editorDrafts[localId]).toBeUndefined()
   })
 
+  it('still moves its own tab when the workspace host focus changes while the rename runs', async () => {
+    openDirtyTab()
+    mocks.renameRuntimePath.mockImplementation(async () => {
+      useAppStore.setState({
+        activeWorktreeId: 'wt-1',
+        activeWorkspaceExecutionHostId: 'runtime:env-other'
+      })
+    })
+
+    await executeOpenEditorPathMove({
+      context: { ...CONTEXT, expectedExecutionHostId: 'local' },
+      fromPath: '/repo/a.md',
+      toPath: '/repo/b.md',
+      worktreeId: 'wt-1',
+      worktreePath: '/repo'
+    })
+
+    expect(useAppStore.getState().openFiles[0]!.filePath).toBe('/repo/b.md')
+  })
+
   it('declares the moved file as the document for a document-scoped rename', async () => {
     openDirtyTab()
 

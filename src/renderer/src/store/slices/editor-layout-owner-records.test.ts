@@ -173,11 +173,7 @@ function openEdit(worktreeId: string, filePath: string, relativePath: string): s
 }
 
 function localMoveOwner(worktreeId: string | undefined): EditorMoveOwner {
-  return editorMoveOwnerFromContext(
-    useAppStore.getState(),
-    { target: { kind: 'local' } },
-    worktreeId
-  )
+  return editorMoveOwnerFromContext({ target: { kind: 'local' } }, worktreeId)
 }
 
 describe('editor records under frames, layout-owner build', () => {

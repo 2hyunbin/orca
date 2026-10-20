@@ -35,12 +35,10 @@ describe('isOpenFileOnMoveOwner', () => {
     const local = tab(captured({ executionHostId: 'local', runtimeEnvironmentId: null }))
     const ssh = tab(captured({ executionHostId: 'ssh:box', runtimeEnvironmentId: null }))
     const fromLocal = editorMoveOwnerFromContext(
-      state,
       { target: { kind: 'local' }, expectedExecutionHostId: 'local' },
       'wt-1'
     )
     const fromSsh = editorMoveOwnerFromContext(
-      state,
       { target: { kind: 'local' }, expectedExecutionHostId: 'ssh:box' },
       'wt-1'
     )
@@ -56,7 +54,6 @@ describe('isOpenFileOnMoveOwner', () => {
     // An unstamped folder of SSH repos: the tab's route says this app, its rename goes to the host.
     const folderTab = tab(captured({ executionHostId: 'local', runtimeEnvironmentId: null }))
     const owner = editorMoveOwnerFromContext(
-      state,
       { target: { kind: 'local' }, expectedExecutionHostId: 'ssh:box' },
       'wt-1'
     )
@@ -69,7 +66,6 @@ describe('isOpenFileOnMoveOwner', () => {
       captured({ executionHostId: 'runtime:env-a', runtimeEnvironmentId: 'env-a' })
     )
     const owner = editorMoveOwnerFromContext(
-      state,
       {
         target: { kind: 'environment', environmentId: 'env-a' },
         expectedExecutionHostId: 'ssh:box'
@@ -82,7 +78,6 @@ describe('isOpenFileOnMoveOwner', () => {
   it('never moves another server’s tab for the same workspace id', () => {
     const state = useAppStore.getState()
     const owner = editorMoveOwnerFromContext(
-      state,
       { target: { kind: 'environment', environmentId: 'env-a' }, expectedExecutionHostId: 'local' },
       'wt-1'
     )

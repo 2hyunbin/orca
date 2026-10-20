@@ -15,12 +15,11 @@ type FileOwner = { runtimeEnvironmentId: string | null; sshHostId: string | null
 
 /** The host a move ran on, from the route its rename was sent through. */
 export type EditorMoveOwner = FileOwner & {
-  /** The worktree's resolved host, for tabs that recorded no owner of their own. */
-  worktreeHostId: string
+  /** The renamed workspace, for tabs that recorded no decisive owner of their own. */
+  worktreeId: string | undefined
 }
 
 export function editorMoveOwnerFromContext(
-  state: WorktreeRuntimeOwnerState,
   context: Pick<RuntimeFileOperationArgs, 'target' | 'expectedExecutionHostId'>,
   worktreeId: string | undefined
 ): EditorMoveOwner {
@@ -30,7 +29,7 @@ export function editorMoveOwnerFromContext(
       context.target.kind === 'environment' ? context.target.environmentId : null,
     sshHostId:
       expected?.kind === 'ssh' ? expected.id : expected?.kind === 'local' ? null : undefined,
-    worktreeHostId: getExecutionHostIdForWorktree(state, worktreeId)
+    worktreeId
   }
 }
 
@@ -84,5 +83,10 @@ export function isOpenFileOnMoveOwner(
   if (own.sshHostId !== undefined && owner.sshHostId !== undefined) {
     return own.sshHostId === owner.sshHostId
   }
-  return getExecutionHostIdForWorktree(state, file.worktreeId) === owner.worktreeHostId
+  // Why both read now: a host lookup taken before the rename can disagree with one after it.
+  return (
+    file.worktreeId === owner.worktreeId ||
+    getExecutionHostIdForWorktree(state, file.worktreeId) ===
+      getExecutionHostIdForWorktree(state, owner.worktreeId)
+  )
 }

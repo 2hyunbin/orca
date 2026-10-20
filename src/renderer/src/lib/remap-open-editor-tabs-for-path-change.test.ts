@@ -14,11 +14,7 @@ function ownedEditorFileId(
 }
 
 function localMoveOwner(worktreeId: string | undefined): EditorMoveOwner {
-  return editorMoveOwnerFromContext(
-    useAppStore.getState(),
-    { target: { kind: 'local' } },
-    worktreeId
-  )
+  return editorMoveOwnerFromContext({ target: { kind: 'local' } }, worktreeId)
 }
 
 describe('remapOpenEditorTabsForPathChange', () => {
@@ -86,7 +82,6 @@ describe('remapOpenEditorTabsForPathChange', () => {
       worktreePath,
       worktreeId,
       owner: editorMoveOwnerFromContext(
-        useAppStore.getState(),
         {
           target: { kind: 'environment', environmentId: 'env-remote' },
           expectedExecutionHostId: 'local'
