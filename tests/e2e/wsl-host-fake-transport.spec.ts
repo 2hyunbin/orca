@@ -394,7 +394,7 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
       state?.openSettingsTarget({ pane: 'servers', repoId: null })
     })
     // A WSL host is listed only as a WSL host, never among the generic remote servers.
-    await expect(page.getByText('No saved servers.')).toBeVisible()
+    await expect(page.getByText('No saved servers', { exact: true })).toBeVisible()
     const section = page.locator('[data-settings-section="wsl-hosts"]')
     await section.scrollIntoViewIfNeeded()
     await expect(section).toContainText('WSL hosts are turned off in Settings → Experimental')
@@ -404,7 +404,8 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
 
     // Remove asks first, with WSL-specific copy, then drops the host.
     await setWslHostsEnabled(page, true)
-    await section.getByRole('button', { name: 'Remove' }).click()
+    await section.getByRole('button', { name: `More actions for ${WSL_HOST_LABEL}` }).click()
+    await page.getByRole('menuitem', { name: 'Remove…' }).click()
     const confirm = page.getByRole('dialog', { name: `Remove ${WSL_HOST_LABEL}?` })
     await expect(confirm).toContainText(
       'ends its open terminals and stops Orca’s server in that distro'
@@ -548,7 +549,7 @@ test('with the internal gate closed, no WSL host surface shows and a saved host 
     await page.evaluate(() =>
       window.__store?.getState().openSettingsTarget({ pane: 'servers', repoId: null })
     )
-    await expect(page.getByText('No saved servers.')).toBeVisible()
+    await expect(page.getByText('No saved servers', { exact: true })).toBeVisible()
     await expect(page.locator('[data-settings-section="wsl-hosts"]')).toHaveCount(0)
     await expect(page.getByText(WSL_HOST_LABEL)).toHaveCount(0)
 

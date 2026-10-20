@@ -6,9 +6,48 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OrcadManagedRuntimeStatus } from '../../../../shared/orcad-managed-runtime'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
-import { ManagedServerRow } from './ManagedServerRow'
+import {
+  ManagedServerConfirmations,
+  ManagedServerDetailLines,
+  ManagedServerMenuItems,
+  ManagedServerPrimaryAction
+} from './managed-server-row-parts'
+import { useManagedServerLifecycle } from './use-managed-server-lifecycle'
 
 vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: vi.fn() } }))
+// Why: menu items render inline as buttons so the row's actions can be clicked directly.
+vi.mock('../ui/dropdown-menu', () => ({
+  DropdownMenuSeparator: () => null,
+  DropdownMenuItem: ({
+    children,
+    onSelect
+  }: {
+    children: React.ReactNode
+    onSelect?: () => void
+  }) => <button onClick={onSelect}>{children}</button>
+}))
+
+function ManagedRowHarness({
+  api,
+  environment
+}: {
+  api: ManagedOrcadPreloadApi
+  environment: PublicKnownRuntimeEnvironment
+}): React.JSX.Element {
+  const lifecycle = useManagedServerLifecycle({
+    api,
+    environment,
+    onChanged: () => {}
+  })
+  return (
+    <>
+      <ManagedServerDetailLines lifecycle={lifecycle} />
+      <ManagedServerPrimaryAction lifecycle={lifecycle} />
+      <ManagedServerConfirmations lifecycle={lifecycle} />
+      <ManagedServerMenuItems lifecycle={lifecycle} />
+    </>
+  )
+}
 
 const roots: Root[] = []
 afterEach(() => {
@@ -46,7 +85,11 @@ async function render(
   const recover = vi.fn(async (args: { acceptChangedState?: boolean }) =>
     args.acceptChangedState
       ? { outcome: 'none' }
-      : { outcome: 'refused', verdict: 'unverifiable', code: 'orcad_recovery_changed_state' }
+      : {
+          outcome: 'refused',
+          verdict: 'unverifiable',
+          code: 'orcad_recovery_changed_state'
+        }
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the row calls only getStatus, stop, forget and recover here.
   const api = {
@@ -62,13 +105,13 @@ async function render(
   const root = createRoot(container)
   roots.push(root)
   await act(async () => {
-    root.render(<ManagedServerRow api={api} environment={environment} onChanged={() => {}} />)
+    root.render(<ManagedRowHarness api={api} environment={environment} />)
   })
   return { container, stop, forget, recover }
 }
 
 const button = (container: HTMLElement, label: string) =>
-  [...container.querySelectorAll('button')].find((entry) => entry.textContent === label)
+  [...container.querySelectorAll('button')].find((entry) => entry.textContent?.trim() === label)
 
 describe('managed server row', () => {
   it('reports unknown terminals, the running migration and the deferred update', async () => {
