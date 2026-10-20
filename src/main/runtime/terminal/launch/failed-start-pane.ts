@@ -74,6 +74,11 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     { title }: dependencies.TerminalCreateOptions,
     reason: string
   ): Promise<void> {
+    const paneKey = `${pane.tabId}:${pane.leafId}`
+    // A status means the start already wrote its pane and kept it (or the user has since closed it).
+    if (this.paneStartStatuses?.get(paneKey)) {
+      return
+    }
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector, created)
     const hostId = workspace.connectionId ? toSshExecutionHostId(workspace.connectionId) : undefined
     const admission = { type: 'createTerminalTab' as const, workspace: workspace.id, ...pane }
@@ -83,7 +88,7 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       hostId
     )
     if (outcome === 'admitted' || outcome === 'exists') {
-      this.paneStartStatuses?.set(`${pane.tabId}:${pane.leafId}`, { status: 'failed', reason })
+      this.paneStartStatuses?.set(paneKey, { status: 'failed', reason })
     }
   }
 }

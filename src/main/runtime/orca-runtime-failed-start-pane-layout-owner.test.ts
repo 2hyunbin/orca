@@ -53,4 +53,22 @@ describe('layout-owner build: a start main could not make keeps its pane, showin
 
     expect(session().tabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
   })
+
+  it('does not bring back a pane the user closed while its start was failing', async () => {
+    const { runtime, spawn, session } = setupLayoutOwnerRuntime()
+    spawn.mockImplementationOnce(async ({ tabId }) => {
+      await runtime.applyLayoutCommand({
+        type: 'closeTabs',
+        workspace: WORKTREE_ID,
+        tabIds: [tabId!]
+      })
+      throw new Error('shell not found')
+    })
+
+    await expect(
+      runtime.createTerminal(`id:${WORKTREE_ID}`, { keepPaneOnStartFailure: true })
+    ).rejects.toThrow('shell not found')
+
+    expect(session().tabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
+  })
 })
