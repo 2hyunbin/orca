@@ -153,8 +153,10 @@ export function relistedPane(
   // The owner's relay answering without it proves the exit; a replacement's silence proves nothing.
   const ownerSilent = owner ? !owners.isReplaced(relayPtyId) : rows.length === 0
   // A listing taken before its relay's exit report must not bring the pane back live.
-  const exitedFirst =
-    listed && !replaced ? owners.exitBeforeListing(relayPtyId, listed.endpoint) : undefined
+  // An epoch-scoped id names one process, so its owner's report counts without a listing row.
+  const exitEndpoint =
+    listed && !replaced ? listed.endpoint : isEpochScopedRelayPtyId(relayPtyId) ? owner : null
+  const exitedFirst = exitEndpoint ? owners.exitBeforeListing(relayPtyId, exitEndpoint) : undefined
   if (exitedFirst !== undefined || (!listed && complete && ownerSilent)) {
     owners.forget(relayPtyId)
     return { exited: exitedFirst ?? null }

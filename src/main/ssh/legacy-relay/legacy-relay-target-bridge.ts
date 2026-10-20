@@ -232,7 +232,7 @@ export class LegacyRelayTargetBridge {
     this.closeIdleClients(new Set([...next.values()].map((pane) => pane.endpoint ?? '')))
     this.replacePanes(next)
     // A contested pane is unverifiable under a complete listing too; only a later one resolves it.
-    // A replaced pane is not retried: each look would take the owner role from the relay's own client.
+    // A replaced pane schedules no retry of its own: no listing can resolve it.
     if (!complete || [...next.values()].some((p) => p.state === 'unverifiable' && !p.replaced)) {
       this.retry.schedule()
     } else if (!this.attachFailing) {

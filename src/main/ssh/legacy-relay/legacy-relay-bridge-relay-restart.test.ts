@@ -102,7 +102,7 @@ describe('a relay restarted at the same socket', () => {
     relay.ptys.delete('pty-1')
     const opened = relay.clients.length
     await vi.advanceTimersByTimeAsync(60_000)
-    // Nothing can resolve it, so it never reconnects to take the owner role from the relay's own client.
+    // Nothing can resolve it, so it schedules no reconnect of its own.
     expect(relay.clients).toHaveLength(opened)
     expect(relay.clients.every((client) => client.closed)).toBe(true)
     expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
@@ -190,6 +190,34 @@ describe('a relay restarted at the same socket', () => {
     expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'live' })])
     subject.write(PTY, 'ls\r')
     expect(relay.clients.at(-1)!.writes).toEqual(['ls\r'])
+  })
+
+  it('keeps an epoch-scoped exit reported before the reconnect listing, even when incomplete', async () => {
+    leases = [lease({ ptyId: 'pty2:epoch-a:1' })]
+    relay.ptys = new Set(['pty2:epoch-a:1'])
+    let exhaustive = true
+    const subject = bridge({
+      listEndpoints: async () => ({ kind: 'listed', endpoints: [ENDPOINT], exhaustive }),
+      openClient: async () => {
+        const client = fakeClient(relay)
+        const list = client.list.bind(client)
+        client.list = async () => {
+          if (relay.clients.length > 1) {
+            client.emitExit('pty2:epoch-a:1', 5)
+            relay.ptys.clear()
+          }
+          return list()
+        }
+        relay.clients.push(client)
+        return client
+      }
+    })
+    await subject.refresh()
+    exhaustive = false
+    relay.clients[0].drop()
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(events.exits).toEqual([toAppSshPtyId(TARGET, 'pty2:epoch-a:1')])
+    expect(leases[0].state).toBe('terminated')
   })
 
   it('never binds an epoch-scoped id to a restart, whose ids carry a new epoch', async () => {
