@@ -21,35 +21,34 @@ export function markWorkspaceUnreadFlag(
   worktreeId: string
 ): void {
   // The owning host raises the flag from the same news, unless it is older.
-  const clearsBefore = clearsByWorkspace.get(worktreeId) ?? 0
-  void ownerRaisesUnreadFlag(get(), worktreeId).then((ownerRaises) => {
-    // A read while the owner was being asked already covers this news.
-    if (!ownerRaises && (clearsByWorkspace.get(worktreeId) ?? 0) === clearsBefore) {
-      raiseWorkspaceUnreadFlag(set, get, worktreeId)
-    }
-  })
-}
-
-/** Reads seen per workspace, so a raise still waiting on its owner check yields to a read. */
-const clearsByWorkspace = new Map<string, number>()
-
-/** A read of the workspace by any path; a raise still waiting on its owner check drops. */
-export function noteWorkspaceRead(worktreeId: string): void {
-  clearsByWorkspace.set(worktreeId, (clearsByWorkspace.get(worktreeId) ?? 0) + 1)
-}
-
-/** Whether the owning host raises the flag itself; a folder row names its own host. */
-function ownerRaisesUnreadFlag(state: AppState, worktreeId: string): Promise<boolean> {
+  // Why the row's host now: same-id folder rows differ by host, and the screen can move to the
+  // other row while the owner is asked.
+  const state = get()
   const workspaceScope = parseWorkspaceKey(worktreeId)
   const folderRow =
     workspaceScope?.type === 'folder'
       ? folderRowToMark(state, worktreeId, workspaceScope.folderWorkspaceId)
       : undefined
-  return ownerHostOwnsSidebarInputs(
-    state,
-    worktreeId,
-    folderRow ? getFolderWorkspaceHostId(folderRow, state.projectGroups) : undefined
-  )
+  const folderHostId = folderRow
+    ? getFolderWorkspaceHostId(folderRow, state.projectGroups)
+    : undefined
+  const readsBefore = readsByWorkspace.get(worktreeId) ?? 0
+  void ownerHostOwnsSidebarInputs(state, worktreeId, folderHostId).then((ownerRaises) => {
+    // A read while the owner was being asked already covers this news.
+    if (!ownerRaises && (readsByWorkspace.get(worktreeId) ?? 0) === readsBefore) {
+      raiseWorkspaceUnreadFlag(set, get, worktreeId, folderHostId)
+    }
+  })
+}
+
+/** Reads seen per workspace, so a raise still waiting on its owner check yields to a read. Why
+ *  not per host: a read names its row's host differently from the row's own host lookup (a
+ *  group-hosted folder reads as 'local'), so a per-host count could miss the read it must see. */
+const readsByWorkspace = new Map<string, number>()
+
+/** A read of the workspace by any path; a raise still waiting on its owner check drops. */
+export function noteWorkspaceRead(worktreeId: string): void {
+  readsByWorkspace.set(worktreeId, (readsByWorkspace.get(worktreeId) ?? 0) + 1)
 }
 
 /** Same-id folder rows: the on-screen host's, else the first. */
@@ -58,7 +57,15 @@ function folderRowToMark(
   worktreeId: string,
   folderWorkspaceId: string
 ): FolderWorkspace | undefined {
-  const host = onScreenHostId(state, worktreeId)
+  return folderRowOnHost(state, folderWorkspaceId, onScreenHostId(state, worktreeId))
+}
+
+/** The folder row on `host`, or the first same-id row when no host is named. */
+function folderRowOnHost(
+  state: AppState,
+  folderWorkspaceId: string,
+  host: ExecutionHostId | null
+): FolderWorkspace | undefined {
   return state.folderWorkspaces.find(
     (workspace) =>
       workspace.id === folderWorkspaceId &&
@@ -69,14 +76,18 @@ function folderRowToMark(
 function raiseWorkspaceUnreadFlag(
   set: WorkspaceAttentionSet,
   get: WorkspaceAttentionGet,
-  worktreeId: string
+  worktreeId: string,
+  /** The folder row's host when the news arrived; unset picks the on-screen row now. */
+  folderHostId?: ExecutionHostId
 ): void {
   const stamp = { lastActivityAt: Date.now() }
   const workspaceScope = parseWorkspaceKey(worktreeId)
   if (workspaceScope?.type === 'folder') {
     const folderWorkspaceId = workspaceScope.folderWorkspaceId
     const state = get()
-    const marked = folderRowToMark(state, worktreeId, folderWorkspaceId)
+    const marked = folderHostId
+      ? folderRowOnHost(state, folderWorkspaceId, folderHostId)
+      : folderRowToMark(state, worktreeId, folderWorkspaceId)
     if (!marked || marked.isUnread) {
       return
     }

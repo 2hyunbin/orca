@@ -162,6 +162,25 @@ describe('the window raises the unread flag only where its host does not', () =>
     )
   })
 
+  it('raises the folder row it decided for, even if the screen moves to the other row meanwhile', async () => {
+    const { store, mark, updateFolderWorkspace } = createStore()
+    const folder = folderWorkspaceKey(FOLDER_ID)
+    let answer: (capabilities: readonly string[]) => void = () => {}
+    hostCapabilities.set('old', new Promise((resolve) => (answer = resolve)))
+    store.setState({ activeWorktreeId: folder, activeWorkspaceExecutionHostId: 'runtime:old' })
+    await mark(folder)
+    store.setState({ activeWorkspaceExecutionHostId: 'runtime:new' })
+    answer([])
+    await vi.waitFor(() =>
+      expect(updateFolderWorkspace).toHaveBeenCalledWith(
+        FOLDER_ID,
+        expect.objectContaining({ isUnread: true }),
+        { executionHostId: 'runtime:old' }
+      )
+    )
+    expect(updateFolderWorkspace).toHaveBeenCalledTimes(1)
+  })
+
   it('clears a flag on every owner, whichever side raised it', () => {
     const { store, isUnread } = createStore()
     for (const id of [LOCAL_WT, NEW_SERVER_WT, OLD_SERVER_WT]) {
