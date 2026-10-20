@@ -28,6 +28,13 @@ function isEngaged(): boolean {
   return pointerInside || pressedInside || dragging
 }
 
+// Why after the event: the list commits a drop in its own listener for this same event, against
+// the rows the user dropped on. Releasing first re-lays them under that commit, so it misplaces or
+// drops the move.
+function releaseAfterDrop(): void {
+  setTimeout(() => update({ drag: false, inside: false }), 0)
+}
+
 const DOCUMENT_HANDLERS: [string, (event: Event) => void][] = [
   ['pointerover', (event) => update({ inside: inList(event.target) })],
   [
@@ -43,8 +50,8 @@ const DOCUMENT_HANDLERS: [string, (event: Event) => void][] = [
   ['pointercancel', () => update({ pressed: false })],
   ['dragstart', (event) => update({ drag: inList(event.target) })],
   // Pointer events pause during a drag, so its end also ends the hover hold.
-  ['dragend', () => update({ drag: false, inside: false })],
-  ['drop', () => update({ drag: false, inside: false })]
+  ['dragend', releaseAfterDrop],
+  ['drop', releaseAfterDrop]
 ]
 
 function subscribe(listener: () => void): () => void {
