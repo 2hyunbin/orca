@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import { createAgentModelCatalogService } from './agent-model-catalog-service'
 import {
   AgentModelCatalogStore,
@@ -16,8 +17,7 @@ const listing = (id: string, model?: string): AgentModelCatalogSuccess => ({
 })
 
 function record(sessionId: string, model: string): AgentSessionRecord {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the only record fields the catalog service reads.
-  return {
+  return agentSessionRecordFixture({
     sessionId,
     provider: 'claude',
     accountHome: HOME,
@@ -28,7 +28,7 @@ function record(sessionId: string, model: string): AgentSessionRecord {
       workspaceId: 'folder',
       workspaceKind: 'folder'
     }
-  } as AgentSessionRecord
+  })
 }
 
 function harness() {
