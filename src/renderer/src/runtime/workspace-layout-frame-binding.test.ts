@@ -188,7 +188,7 @@ describe('a frame that changes only panes’ terminal bindings', () => {
     sync.close()
   })
 
-  it('keeps a tab the window’s own pane command holds as the store has it', async () => {
+  it('keeps a tab the window’s own pane command holds as the store has it, then shows its binding', async () => {
     const { store, sync, first, send } = await boot()
     const before = store.getState().terminalLayoutsByTabId['tab-shell']
     const release = holdTabPaneTree('tab-shell')
@@ -197,10 +197,15 @@ describe('a frame that changes only panes’ terminal bindings', () => {
 
     expect(store.getState().terminalLayoutsByTabId['tab-shell']).toBe(before)
     release()
+    await settle()
+    // Released, the tab shows the binding main wrote meanwhile.
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.ptyIdsByLeafId?.[leaf(1)]).toBe(
+      'pty-fresh'
+    )
     sync.close()
   })
 
-  it('keeps a tab the window drew before main answered as the store has it', async () => {
+  it('keeps a tab the window drew before main answered as the store has it, then shows its binding', async () => {
     const { store, sync, first, send } = await boot()
     const before = store.getState().terminalLayoutsByTabId['tab-shell']
     const release = holdDrawnTabs([{ workspace: GIT_KEY, ids: ['tab-shell'] }])
@@ -209,6 +214,11 @@ describe('a frame that changes only panes’ terminal bindings', () => {
 
     expect(store.getState().terminalLayoutsByTabId['tab-shell']).toBe(before)
     release()
+    await settle()
+    // Released, the tab shows the binding main wrote meanwhile.
+    expect(store.getState().terminalLayoutsByTabId['tab-shell']!.ptyIdsByLeafId?.[leaf(1)]).toBe(
+      'pty-fresh'
+    )
     sync.close()
   })
 
