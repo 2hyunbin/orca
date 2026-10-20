@@ -104,15 +104,14 @@ export async function fetchClaudeOAuthUsage(
   }
   const session = mapClaudeUsageWindow(data.five_hour, 300)
   const weekly = mapClaudeUsageWindow(data.seven_day, 10080)
-  const extraUsage = mapClaudeExtraUsage(data)
   return {
     provider: 'claude',
     session,
     weekly,
     fableWeekly: mapFableWeeklyWindow(data),
     // Why only without plan windows: there, spend is overage after a cap, not the account's limit.
-    monthly: session || weekly ? null : mapClaudeSpendLimitWindow(extraUsage),
-    extraUsage,
+    monthly: session || weekly ? null : mapClaudeSpendLimitWindow(data),
+    extraUsage: mapClaudeExtraUsage(data),
     updatedAt: Date.now(),
     error: null,
     status: 'ok'

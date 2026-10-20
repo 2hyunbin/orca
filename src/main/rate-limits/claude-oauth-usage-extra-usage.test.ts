@@ -248,6 +248,33 @@ describe('Claude OAuth usage extra usage', () => {
     expect(result.monthly).toMatchObject({ usedPercent: 80, windowMinutes: 43_200 })
   })
 
+  it('falls back to the legacy cap when spend carries only a balance', async () => {
+    const result = await fetchUsageResponse(
+      JSON.stringify({
+        five_hour: null,
+        seven_day: null,
+        spend: { balance: { amount_minor: 1000, currency: 'USD' }, enabled: true },
+        extra_usage: {
+          monthly_limit: 50000,
+          used_credits: 40000,
+          utilization: 80,
+          currency: 'USD',
+          is_enabled: true
+        }
+      })
+    )
+    expect(result.extraUsage).toMatchObject({ balance: 10, spendLimit: null })
+    expect(result.monthly).toMatchObject({ usedPercent: 80, windowMinutes: 43_200 })
+  })
+
+  it('derives legacy percentage from the amounts when utilization is a fraction', async () => {
+    const result = await fetchUsageResponse(
+      '{"five_hour":null,"seven_day":null,"extra_usage":{"monthly_limit":5000,"used_credits":479,"utilization":0.0958,"currency":"USD","is_enabled":true}}'
+    )
+    expect(result.extraUsage).toMatchObject({ spentPercent: expect.closeTo(9.58) })
+    expect(result.monthly?.usedPercent).toBeCloseTo(9.58)
+  })
+
   it('keeps spend out of the monthly window when a plan window exists', async () => {
     const result = await fetchUsageResponse(
       '{"five_hour":{"utilization":10},"seven_day":null,"spend":{"used":{"amount_minor":5000},"limit":{"amount_minor":200000},"percent":2.5,"enabled":true}}'

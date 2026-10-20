@@ -56,9 +56,18 @@ export function mapClaudeExtraUsage(data: {
 }
 
 // Why: Enterprise seats have no 5h/7d windows; their monthly spend cap is the only limit that binds.
-export function mapClaudeSpendLimitWindow(
-  extraUsage: ExtraUsageBalance | null
-): RateLimitWindow | null {
+// Falls back to legacy `extra_usage` when `spend` carries only a balance.
+export function mapClaudeSpendLimitWindow(data: {
+  spend?: ClaudeOAuthSpend
+  extra_usage?: ClaudeOAuthExtraUsage
+}): RateLimitWindow | null {
+  return (
+    toSpendLimitWindow(mapSpend(data.spend)) ??
+    toSpendLimitWindow(mapLegacyExtraUsage(data.extra_usage))
+  )
+}
+
+function toSpendLimitWindow(extraUsage: ExtraUsageBalance | null): RateLimitWindow | null {
   if (
     extraUsage?.unit !== 'currency' ||
     extraUsage.spentPercent === null ||
@@ -126,11 +135,12 @@ function mapLegacyExtraUsage(extra: ClaudeOAuthExtraUsage | undefined): ExtraUsa
     amount_minor: extra.used_credits ?? undefined,
     exponent: extra.decimal_places
   })
+  // Why amounts first: `utilization` has been seen as a 0–1 fraction as well as a percentage.
   const spentPercent =
-    typeof extra.utilization === 'number' && Number.isFinite(extra.utilization)
-      ? clampPercent(extra.utilization)
-      : spendLimit > 0 && spent !== null
-        ? clampPercent((spent / spendLimit) * 100)
+    spendLimit > 0 && spent !== null
+      ? clampPercent((spent / spendLimit) * 100)
+      : typeof extra.utilization === 'number' && Number.isFinite(extra.utilization)
+        ? clampPercent(extra.utilization)
         : null
   return {
     balance: null,
