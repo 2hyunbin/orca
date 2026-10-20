@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
+import type * as WorkspaceSessionModule from '@/lib/workspace-session'
+import type * as WorkspaceLayoutLoadModule from '../../../shared/workspace-layout/workspace-layout-load'
+import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
@@ -26,6 +29,19 @@ vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.f
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
+})
+
+// The full build reads the window's session back and runs the Loader: a call means it ran.
+vi.mock('@/lib/workspace-session', async (importOriginal) => {
+  const actual = await importOriginal<typeof WorkspaceSessionModule>()
+  return { ...actual, buildWorkspaceSessionPayload: vi.fn(actual.buildWorkspaceSessionPayload) }
+})
+vi.mock('../../../shared/workspace-layout/workspace-layout-load', async (importOriginal) => {
+  const actual = await importOriginal<typeof WorkspaceLayoutLoadModule>()
+  return {
+    ...actual,
+    loadWorkspaceLayoutWithoutReport: vi.fn(actual.loadWorkspaceLayoutWithoutReport)
+  }
 })
 
 const stream = vi.hoisted(
@@ -126,6 +142,27 @@ describe('a records frame in the window', () => {
     expect(store.getState().tabsByWorktree[GIT_KEY]!.map((tab) => tab.generatedTitle)).toEqual(
       titled.tabs.map((tab) => tab.generatedTitle)
     )
+    close()
+  })
+
+  it('shows a frame of only tab rows without reading the window’s session back', async () => {
+    const { store, first, writes, send, close } = await boot()
+    // The apply check runs the full build itself; this counts only the window's own calls.
+    check.uninstall()
+    vi.mocked(buildWorkspaceSessionPayload).mockClear()
+    vi.mocked(loadWorkspaceLayoutWithoutReport).mockClear()
+    const titled = structuredClone(first)
+    titled.tabs.forEach((tab, index) => {
+      tab.generatedTitle = `Title ${index}`
+    })
+
+    await send(titled)
+
+    expect(writes).toHaveBeenCalledTimes(1)
+    expect(buildWorkspaceSessionPayload).not.toHaveBeenCalled()
+    expect(loadWorkspaceLayoutWithoutReport).not.toHaveBeenCalled()
+    // Presence: the rows changed.
+    expect(store.getState().tabsByWorktree[GIT_KEY]![99]!.generatedTitle).toBe('Title 99')
     close()
   })
 
