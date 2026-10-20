@@ -1,4 +1,5 @@
 import { paneIdentity } from './runtime-terminal-pane-identity'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { shouldSeedWorktreePrimaryTerminal } from '../../shared/worktree-first-surface'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { Repo } from '../../shared/repo-types'
@@ -139,7 +140,8 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
     // Why: a failed agent start hands the whole create to the window, which seeds the agent's tab
     // first and lays setup and default tabs around it; main provisioning first would leave it no tab.
     const agentStartFailed = Boolean(sequencedStartup && ports.canSpawn && !didSpawnStartup)
-    if (agentStartFailed && !provisionInBackground) {
+    // Switch point: main provisions whether or not a window is open; no window takes over.
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN && agentStartFailed && !provisionInBackground) {
       ports.activate(repo.id, worktree.id, startup, setup, defaultTabs)
     } else {
       let failedSetup: CreateWorktreeResult['setup']
@@ -165,8 +167,9 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
       ports.activate(
         repo.id,
         worktree.id,
-        startup && !didSpawnStartup ? startup : undefined,
-        failedSetup,
+        // Switch point: a start main could not make stays main's to show, never the window's.
+        ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : startup && !didSpawnStartup ? startup : undefined,
+        ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : failedSetup,
         undefined,
         ...(args.promisedAgentChat && !startup ? ([true] as const) : [])
       )
