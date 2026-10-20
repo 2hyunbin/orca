@@ -140,10 +140,14 @@ function createHeadlessHost() {
         () => {},
         PHONE
       ),
-    reportView: (params: unknown, connectionId: string | undefined) =>
+    reportView: (
+      params: unknown,
+      connectionId: string | undefined,
+      clientKind: 'mobile' | 'runtime' = 'runtime'
+    ) =>
       dispatcher.dispatch(
         { id: `view-${++requestId}`, authToken: 'tok', method: 'sidebarInputs.reportView', params },
-        { clientKind: 'runtime', connectionId }
+        { clientKind, connectionId }
       )
   }
 }
@@ -170,6 +174,29 @@ describe('workspace unread flag on a headless host', () => {
     // Leaving the session (its stream closes with the connection) makes the next finish news.
     host.runtime.cleanupSubscriptionsForConnection('phone-1')
     host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
+  })
+
+  it('stops counting a backgrounded phone as looking, and reads the workspace when it returns', async () => {
+    const host = createHeadlessHost()
+    await host.openOnPhone(WT)
+    const away = { workspaceIds: [], tabIds: [], presentForMs: 0 }
+    expect(await host.reportView(away, 'phone-1', 'mobile')).toMatchObject({ ok: true })
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
+
+    // A page still running in the background re-subscribes; the dot no one saw stays up.
+    await host.openOnPhone(WT)
+    expect(host.meta[WT].isUnread).toBe(true)
+
+    await host.reportView({ ...away, presentForMs: null }, 'phone-1', 'mobile')
+    expect(host.meta[WT].isUnread).toBe(false)
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(false)
+
+    // A repeated foreground report is no return: a dot set by hand since then stays.
+    host.meta[WT].isUnread = true
+    await host.reportView({ ...away, presentForMs: null }, 'phone-1', 'mobile')
     expect(host.meta[WT].isUnread).toBe(true)
   })
 
