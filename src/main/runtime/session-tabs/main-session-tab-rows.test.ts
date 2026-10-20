@@ -84,15 +84,28 @@ function mainProjection(
 }
 
 describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
-  it("takes main's terminal rows with the window's theme and draft, and keeps the stamps", () => {
+  it("takes main's terminal rows and name, with the window's theme, status and draft", () => {
     const theme = { mode: 'dark' as const, theme: {} }
+    const agentStatus = null
     const merged = withMainSessionTabRows(
       windowSnapshot(
-        [terminal('t::a', { title: 'Old', terminalTheme: theme, launchDraft: 'ls' })],
+        [
+          terminal('t::a', {
+            title: 'Old',
+            customTitle: 'Old',
+            terminalTheme: theme,
+            agentStatus,
+            launchDraft: 'ls'
+          })
+        ],
         ['t'],
         't::a'
       ),
-      mainProjection([terminal('t::a', { title: 'Renamed' }), terminal('t::b')], ['t'], 't::a')
+      mainProjection(
+        [terminal('t::a', { title: 'Renamed', customTitle: 'Renamed' }), terminal('t::b')],
+        ['t'],
+        't::a'
+      )
     )
 
     expect(merged.publicationEpoch).toBe('renderer')
@@ -100,7 +113,9 @@ describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
     expect(merged.tabs).toEqual([
       terminal('t::a', {
         title: 'Renamed',
+        customTitle: 'Renamed',
         terminalTheme: theme,
+        agentStatus,
         launchDraft: 'ls',
         isActive: true
       }),
@@ -118,7 +133,7 @@ describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
       mainProjection([terminal('t::a'), browser('b1'), file('f1')], ['t', 'b1', 'f1'], 't::a')
     )
 
-    expect(merged.tabs.map((tab) => tab.id)).toEqual(['t::a', 'b1', 'f1', 'd1'])
+    expect(merged.tabs.map((tab) => tab.id)).toEqual(['t::a', 'b1', 'd1', 'f1'])
     expect(merged.tabGroups?.[0]?.tabOrder).toEqual(['t', 'b1', 'd1', 'f1'])
   })
 
@@ -142,6 +157,7 @@ describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
     )
 
     expect(merged).toMatchObject({ activeTabId: 'd1', activeTabType: 'file' })
+    expect(merged.tabGroups?.[0]?.activeTabId).toBe('d1')
     expect(merged.tabs.filter((tab) => tab.isActive).map((tab) => tab.id)).toEqual(['d1'])
   })
 })

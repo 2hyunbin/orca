@@ -1,8 +1,8 @@
 // Layout-owner builds, before main holds browser and chat records (D3b): a workspace main owns
 // publishes its terminal and editor rows from main's layout (projectSessionTabs). The window's
 // snapshot still supplies the rows main's model does not hold (browser, chat, diff and other
-// view-only editor rows) and the facts only the window has (terminal theme, launch drafts, a
-// markdown view's mode and draft version).
+// view-only editor rows) and the facts only the window has (terminal theme, agent status, launch
+// drafts, a markdown view's mode, file id and draft version).
 
 import type { RuntimeMobileSessionSnapshotTab } from '../../../shared/runtime-mobile-session-tab-contracts'
 import type {
@@ -36,6 +36,7 @@ function withWindowFacts(row: Row, windowRow: Row | undefined): Row {
     return {
       ...row,
       ...(windowRow.terminalTheme ? { terminalTheme: windowRow.terminalTheme } : {}),
+      ...(windowRow.agentStatus !== undefined ? { agentStatus: windowRow.agentStatus } : {}),
       ...(windowRow.launchDraft !== undefined ? { launchDraft: windowRow.launchDraft } : {}),
       ...(windowRow.launchDraftCreatedAt !== undefined
         ? { launchDraftCreatedAt: windowRow.launchDraftCreatedAt }
@@ -43,7 +44,12 @@ function withWindowFacts(row: Row, windowRow: Row | undefined): Row {
     }
   }
   if (row.type === 'markdown' && windowRow?.type === 'markdown') {
-    return { ...row, mode: windowRow.mode, documentVersion: windowRow.documentVersion }
+    return {
+      ...row,
+      mode: windowRow.mode,
+      sourceFileId: windowRow.sourceFileId,
+      documentVersion: windowRow.documentVersion
+    }
   }
   return row
 }
@@ -66,6 +72,16 @@ function withWindowOnlyIds(
     order.splice(after === undefined ? 0 : order.indexOf(after) + 1, 0, id)
   })
   return order
+}
+
+/** Rows in their groups' tab order (a terminal row by its tab), as the window lists them. */
+function inTabOrder(rows: Row[], groups: readonly RuntimeMobileSessionTabGroup[]): Row[] {
+  const position = new Map(
+    groups.flatMap((group) => group.tabOrder).map((id, index) => [id, index])
+  )
+  const at = (row: Row): number =>
+    position.get(row.type === 'terminal' ? row.parentTabId : row.id) ?? Number.MAX_SAFE_INTEGER
+  return rows.toSorted((a, b) => at(a) - at(b))
 }
 
 /**
@@ -94,27 +110,36 @@ export function withMainSessionTabRows(
     )
   }))
   const placed = new Set(tabGroups.flatMap((group) => group.tabOrder))
-  // A window-only row in a group main does not list keeps the window's group.
-  for (const group of published.tabGroups ?? []) {
-    const stray = group.tabOrder.filter((id) => windowOnlyIds.has(id) && !placed.has(id))
-    if (stray.length > 0 && !tabGroups.some((entry) => entry.id === group.id)) {
-      tabGroups.push({ ...group, tabOrder: stray })
-    }
+  // A window-only row in a group main does not hold joins main's first group: groups and their
+  // layout are main's, so the phone gets no group the layout lacks.
+  const stray = (published.tabGroups ?? []).flatMap((group) =>
+    group.tabOrder.filter((id) => windowOnlyIds.has(id) && !placed.has(id))
+  )
+  if (stray.length > 0 && tabGroups[0]) {
+    tabGroups[0] = { ...tabGroups[0], tabOrder: [...tabGroups[0].tabOrder, ...stray] }
   }
   // The window's selection stands only when it shows a row main does not list.
   const windowActive = published.activeTabId ? windowRows.get(published.activeTabId) : undefined
-  const selection =
-    windowActive && windowOnlyIds.has(windowActive.id)
-      ? {
-          activeGroupId: published.activeGroupId,
-          activeTabId: published.activeTabId,
-          activeTabType: published.activeTabType
-        }
-      : {
-          activeGroupId: projected.activeGroupId,
-          activeTabId: projected.activeTabId,
-          activeTabType: projected.activeTabType
-        }
+  const keepsWindowSelection = !!windowActive && windowOnlyIds.has(windowActive.id)
+  const selection = keepsWindowSelection
+    ? {
+        activeGroupId: published.activeGroupId,
+        activeTabId: published.activeTabId,
+        activeTabType: published.activeTabType
+      }
+    : {
+        activeGroupId: projected.activeGroupId,
+        activeTabId: projected.activeTabId,
+        activeTabType: projected.activeTabType
+      }
+  if (keepsWindowSelection) {
+    // The window's active group shows the window's active tab, as its top-level selection says.
+    const index = tabGroups.findIndex((group) => group.id === published.activeGroupId)
+    const shown = windowGroups.get(published.activeGroupId ?? '')?.activeTabId ?? null
+    if (index >= 0) {
+      tabGroups[index] = { ...tabGroups[index]!, activeTabId: shown }
+    }
+  }
   const activeId = selection.activeTabId
   const { tabGroups: _windowGroups, tabGroupLayout: _windowLayout, ...stamps } = published
   return {
@@ -122,7 +147,7 @@ export function withMainSessionTabRows(
     ...selection,
     ...(tabGroups.length > 0 ? { tabGroups } : {}),
     ...(projected.tabGroupLayout ? { tabGroupLayout: projected.tabGroupLayout } : {}),
-    tabs: [...rows, ...windowOnly].map((row) =>
+    tabs: inTabOrder([...rows, ...windowOnly], tabGroups).map((row) =>
       row.isActive === (row.id === activeId) ? row : { ...row, isActive: row.id === activeId }
     )
   }

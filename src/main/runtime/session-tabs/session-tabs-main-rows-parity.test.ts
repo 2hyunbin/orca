@@ -1,6 +1,7 @@
 // Phone-mirror parity (flip step 7) against main's projection: with the switch on, the rows a
 // phone or paired desktop reads for a workspace main owns follow main's layout after a create, a
-// close and a rename, even when the window's last publication still shows the old rows.
+// close and a rename, whatever rows the window's next publication still carries. Main's rows land
+// with that publication (the window republishes after each layout frame), not before it.
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
 import {
@@ -41,7 +42,11 @@ function stalePublication(version: number): RuntimeMobileSessionTabsSnapshot {
 
 async function phoneRows(runtime: ReturnType<typeof surfaceRuntime>['runtime']) {
   const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-  return listed.tabs.map((tab) => ({ id: tab.id, title: tab.title }))
+  return listed.tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    customTitle: tab.type === 'terminal' ? tab.customTitle : undefined
+  }))
 }
 
 describe('session.tabs rows follow main’s layout (switch on)', () => {
@@ -87,6 +92,9 @@ describe('session.tabs rows follow main’s layout (switch on)', () => {
     runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [stalePublication(2)] })
 
     const rows = await phoneRows(runtime)
-    expect(rows.map((entry) => entry.title)).toEqual(['Build', 'Build'])
+    expect(rows.map((entry) => [entry.title, entry.customTitle])).toEqual([
+      ['Build', 'Build'],
+      ['Build', 'Build']
+    ])
   })
 })

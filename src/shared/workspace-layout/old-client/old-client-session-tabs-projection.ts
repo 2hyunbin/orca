@@ -225,6 +225,8 @@ function terminalRows(tab: LayoutTerminalTab, scope: Scope): RuntimeMobileSessio
       type: 'terminal',
       id: terminalRowId(tab.entityId, leafId),
       title,
+      // A paired desktop reads an absent name as "keep mine", so a cleared name is sent as null.
+      customTitle: tab.customTitle?.trim() || null,
       ...(tabWide && tab.quickCommandLabel?.trim()
         ? { quickCommandLabel: tab.quickCommandLabel.trim() }
         : {}),
