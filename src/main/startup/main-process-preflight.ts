@@ -84,8 +84,7 @@ import { initCodexUsagePath } from '../codex-usage/store'
 import { initOpenCodeUsagePath } from '../opencode-usage/store'
 import { initMuseUsagePath } from '../muse-usage/store'
 import { registerDocPreviewSchemePrivileges } from '../browser/doc-preview-protocol'
-import { MEDIA_PREVIEW_CUSTOM_SCHEME } from '../media/media-preview-protocol'
-import { JIRA_IMAGE_CUSTOM_SCHEME } from '../jira/attachments/image-protocol'
+import { PRIVILEGED_IMAGE_SCHEMES } from './privileged-image-schemes'
 import { startCrashpadCapture } from '../crash-reporting/crashpad-capture'
 import { CrashReportStore } from '../crash-reporting/crash-report-store'
 import { recordCrashBreadcrumb } from '../crash-reporting/crash-breadcrumb-store'
@@ -308,9 +307,11 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   initCodexUsagePath()
   initOpenCodeUsagePath()
   initMuseUsagePath()
-  // Register preview privileges before ready freezes the table or webviews lose fetch/secure-origin access.
-  registerDocPreviewSchemePrivileges([MEDIA_PREVIEW_CUSTOM_SCHEME, JIRA_IMAGE_CUSTOM_SCHEME])
-  // Install Crashpad before first renderer; earlier CHECK failures have exit-code evidence only.
+  // Why: Electron freezes the privileged scheme table at ready, so the doc-preview
+  // scheme must be declared here or its webview loses fetch/secure-origin privileges.
+  registerDocPreviewSchemePrivileges(PRIVILEGED_IMAGE_SCHEMES)
+  // Why: must precede app.whenReady() so Crashpad is installed before the
+  // first renderer spawns; a CHECK before this point is still exit-code-only.
   startCrashpadCapture()
   state.crashReports = CrashReportStore.fromUserData()
   state.gpuCrashDiagnostics = createGpuCrashDiagnosticsRecorder()
