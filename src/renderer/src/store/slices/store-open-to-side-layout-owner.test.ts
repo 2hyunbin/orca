@@ -134,11 +134,15 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open to the side in a layout-owner bu
       split: { sourceGroupId: editorGroup, splitDirection: 'down' }
     })
     const terminalGroup = store.getState().groupsByWorktree[WT]!.at(-1)!.id
-    store.getState().createBrowserTab(WT, 'about:blank', {
+    // The browser tab and its split are drawn from main's frame.
+    const browser = store.getState().createBrowserTab(WT, 'about:blank', {
       split: { sourceGroupId: ROOT, splitDirection: 'left' }
     })
-    const browserGroup = store.getState().groupsByWorktree[WT]!.at(-1)!.id
-    expect(await settledSent()).toEqual([
+    const sentNow = await settledSent()
+    const browserGroup = store
+      .getState()
+      .unifiedTabsByWorktree[WT]!.find((tab) => tab.entityId === browser.id)!.groupId
+    expect(sentNow).toEqual([
       expect.objectContaining({
         type: 'createTerminalTab',
         tabId: onlyTabOf(terminalGroup),

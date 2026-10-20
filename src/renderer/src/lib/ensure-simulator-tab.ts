@@ -104,7 +104,9 @@ export function ensureSimulatorTab(
   const sourceGroupId =
     options?.targetGroupId ??
     store.activeGroupIdByWorktree[worktreeId] ??
-    store.groupsByWorktree[worktreeId]?.[0]?.id
+    store.groupsByWorktree[worktreeId]?.[0]?.id ??
+    // Main's frames draw no empty group: a layout-owner build opens into the workspace's root one.
+    (ORCA_LAYOUT_OWNER_IS_MAIN ? store.ensureWorktreeRootGroup(worktreeId) : undefined)
   if (!sourceGroupId) {
     return null
   }

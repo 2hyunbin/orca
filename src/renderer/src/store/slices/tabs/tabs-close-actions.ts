@@ -25,6 +25,12 @@ import { removeTabsAttention } from '../workspace-attention/subject-attention-tr
 import { settleAttentionRemovedBy } from '../workspace-attention/attention-removal-follow-up'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { closeContentTabThroughLayoutOwner } from './content-tab-close-through-layout-owner'
+import { isEditorTabContentType } from '../editor/tabs/editor-tab-content-type'
+import {
+  emptiedWorktreeLandingPatch,
+  landOnEmptiedWorktree,
+  landsOnEmptiedWorktree
+} from './emptied-workspace-landing'
 
 export function createTabsCloseActions(
   set: TabsSliceSet,
@@ -146,11 +152,7 @@ export function createTabsCloseActions(
             // never added a tab, so it must leave the selection exactly as the click found it.
             const shouldDeactivateWorktree =
               !opts?.preserveWorktreeSelection &&
-              current.activeWorktreeId === worktreeId &&
-              nextTabs.length === 0 &&
-              (current.tabsByWorktree[worktreeId] ?? []).length === 0 &&
-              (current.browserTabsByWorktree[worktreeId] ?? []).length === 0 &&
-              !current.openFiles.some((file) => file.worktreeId === worktreeId)
+              landsOnEmptiedWorktree(current, worktreeId, nextTabs.length)
             return {
               unifiedTabsByWorktree: { ...current.unifiedTabsByWorktree, [worktreeId]: nextTabs },
               groupsByWorktree: {
@@ -165,33 +167,7 @@ export function createTabsCloseActions(
                 : {}),
               ...structuredAttention,
               // Why: closing the last tab can leave the worktree selected but render-empty, so write the landing-state fallback directly.
-              ...(shouldDeactivateWorktree
-                ? {
-                    activeWorktreeId: null,
-                    activeWorkspaceKey: null,
-                    activeWorkspaceExecutionHostId: null,
-                    activeTabId: null,
-                    activeBrowserTabId: null,
-                    activeFileId: null,
-                    activeTabType: 'terminal' as const,
-                    activeTabIdByWorktree: {
-                      ...current.activeTabIdByWorktree,
-                      [worktreeId]: null
-                    },
-                    activeBrowserTabIdByWorktree: {
-                      ...current.activeBrowserTabIdByWorktree,
-                      [worktreeId]: null
-                    },
-                    activeFileIdByWorktree: {
-                      ...current.activeFileIdByWorktree,
-                      [worktreeId]: null
-                    },
-                    activeTabTypeByWorktree: {
-                      ...current.activeTabTypeByWorktree,
-                      [worktreeId]: 'terminal'
-                    }
-                  }
-                : {}),
+              ...(shouldDeactivateWorktree ? emptiedWorktreeLandingPatch(current, worktreeId) : {}),
               ...(!shouldDeactivateWorktree && ownsGlobalSelection(current, worktreeId)
                 ? buildActiveSurfacePatch(
                     {
@@ -220,6 +196,10 @@ export function createTabsCloseActions(
         closeContentTabThroughLayoutOwner(get, tab, {
           nextActiveTabId,
           closeHere,
+          // An editor close lands through closeFile, which owns its content.
+          ...(isEditorTabContentType(tab.contentType) || opts?.preserveWorktreeSelection
+            ? {}
+            : { landIfEmptied: () => landOnEmptiedWorktree(set, get, worktreeId) }),
           // A chat tab owns its markers; nothing else retires them.
           ...(tab.contentType === 'agent-session'
             ? {

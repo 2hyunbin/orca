@@ -3,7 +3,7 @@
 
 import { createBrowserUuid } from './browser-uuid'
 import { openContentTabThroughLayoutOwner } from '@/runtime/layout-owner-content-tab-open'
-import { afterPendingTab } from '@/runtime/layout-owner-pending-tabs'
+import { afterPendingTab, isPendingTab } from '@/runtime/layout-owner-pending-tabs'
 import type { AppState } from '@/store/types'
 
 export type SimulatorTabOpen = {
@@ -22,7 +22,8 @@ export type SimulatorTabOpen = {
 const opening = new Map<string, string>()
 
 export function openingSimulatorTabId(worktreeId: string): string | undefined {
-  return opening.get(worktreeId)
+  const tabId = opening.get(worktreeId)
+  return tabId && isPendingTab(tabId) ? tabId : undefined
 }
 
 /** The proposed tab id, or null when main is not asked and the caller draws as today. */

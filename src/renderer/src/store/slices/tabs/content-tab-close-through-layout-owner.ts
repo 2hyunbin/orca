@@ -52,6 +52,9 @@ function selectAfterClose(
   }
 }
 
+/** Tabs whose twin close main answered as today, while today's close runs. */
+const closingAsToday = new Set<string>()
+
 export type ContentTabClose = {
   /** The tab today's close would show next in the group, picked before the close. */
   nextActiveTabId: string | null
@@ -61,6 +64,8 @@ export type ContentTabClose = {
   recordClose?: 'user' | 'cleanup'
   /** The window's own cleanup once main's frame dropped the tab, before the selection moves. */
   closed?: () => void
+  /** Lands an emptied active worktree on the welcome screen; true when it did. */
+  landIfEmptied?: () => boolean
 }
 
 /**
@@ -72,7 +77,8 @@ export function closeContentTabThroughLayoutOwner(
   tab: Pick<Tab, 'id' | 'entityId' | 'worktreeId' | 'groupId' | 'contentType'>,
   close: ContentTabClose
 ): boolean {
-  if (!closesThroughLayoutOwner(tab.contentType)) {
+  // Today's close of a twin's tab closes its tab-bar entry as today too.
+  if (!closesThroughLayoutOwner(tab.contentType) || closingAsToday.has(tab.id)) {
     return false
   }
   // A second close, or a close of a tab still opening, goes once main answered the first ask.
@@ -90,7 +96,9 @@ export function closeContentTabThroughLayoutOwner(
     // Waiters first: a closeFile's content cleanup must not undo the selection.
     settle(tab.id)
     close.closed?.()
-    selectAfterClose(get, tab, close.nextActiveTabId)
+    if (!close.landIfEmptied?.()) {
+      selectAfterClose(get, tab, close.nextActiveTabId)
+    }
   }
   const sent = sendLayoutApply(
     get(),
@@ -109,7 +117,12 @@ export function closeContentTabThroughLayoutOwner(
         }
       },
       asToday: () => {
-        close.closeHere()
+        closingAsToday.add(tab.id)
+        try {
+          close.closeHere()
+        } finally {
+          closingAsToday.delete(tab.id)
+        }
         settle(tab.id)
       },
       // A tab main no longer holds was closed there first (a host's chat close).

@@ -1,4 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+
+// A layout-owner build asks main to open the tab; its frame draws it (the window draws nothing).
+const sendLayoutApply = vi.hoisted(() => vi.fn((..._args: unknown[]) => true))
+vi.mock('@/runtime/layout-apply-send', () => ({ sendLayoutApply }))
+
+/** The open a layout-owner build sent main, which places the tab as the window would have. */
+function expectOpenSentToMain(placement: Record<string, unknown>): void {
+  expect(sendLayoutApply).toHaveBeenCalledWith(
+    expect.anything(),
+    'wt-1',
+    expect.objectContaining({ type: 'openSimulatorTab', ...placement }),
+    expect.anything()
+  )
+  expect(mockStoreState.createUnifiedTab).not.toHaveBeenCalled()
+  expect(mockStoreState.createUnifiedTabInSplit).not.toHaveBeenCalled()
+}
 
 const mockStoreState = vi.hoisted(() => ({
   activeGroupIdByWorktree: {} as Record<string, string>,
@@ -89,6 +106,7 @@ describe('ensureSimulatorTab', () => {
     mockStoreState.focusGroup.mockReset()
     mockStoreState.setActiveTab.mockReset()
     mockStoreState.setActiveTabType.mockReset()
+    sendLayoutApply.mockClear()
     vi.resetModules()
   })
 
@@ -123,6 +141,11 @@ describe('ensureSimulatorTab', () => {
     stubCreatedSimulatorTab('group-1')
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      expect(ensureSimulatorTab('wt-1')).not.toBe('sim-local')
+      expectOpenSentToMain({ groupId: 'group-1' })
+      return
+    }
     expect(ensureSimulatorTab('wt-1')).toBe(createdSimulatorTabId())
     expect(mockStoreState.createUnifiedTab).toHaveBeenCalled()
   })
@@ -232,6 +255,11 @@ describe('ensureSimulatorTab', () => {
     })
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      ensureSimulatorTab('wt-1', { placement: 'rightSplit' })
+      expectOpenSentToMain({ split: { besideGroupId: 'group-1', direction: 'right' } })
+      return
+    }
     expect(ensureSimulatorTab('wt-1', { placement: 'rightSplit' })).toBe('sim-2')
 
     expect(mockStoreState.createEmptySplitGroup).not.toHaveBeenCalled()
@@ -268,6 +296,11 @@ describe('ensureSimulatorTab', () => {
     stubCreatedSimulatorTab('group-2')
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      ensureSimulatorTab('wt-1', { placement: 'rightSplit' })
+      expectOpenSentToMain({ groupId: 'group-2' })
+      return
+    }
     expect(ensureSimulatorTab('wt-1', { placement: 'rightSplit' })).toBe(createdSimulatorTabId())
 
     expect(mockStoreState.createUnifiedTabInSplit).not.toHaveBeenCalled()
@@ -288,6 +321,12 @@ describe('ensureSimulatorTab', () => {
     stubCreatedSimulatorTab('group-1')
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Main makes the split with the tab in one apply: no half-made split to fall back from.
+      ensureSimulatorTab('wt-1', { placement: 'rightSplit' })
+      expectOpenSentToMain({ split: { besideGroupId: 'group-1', direction: 'right' } })
+      return
+    }
     expect(ensureSimulatorTab('wt-1', { placement: 'rightSplit' })).toBe(createdSimulatorTabId())
 
     expect(mockStoreState.createUnifiedTabInSplit).toHaveBeenCalledWith(
@@ -317,6 +356,12 @@ describe('ensureSimulatorTab', () => {
     stubCreatedSimulatorTab('group-1')
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      ensureSimulatorTab('wt-1', { placement: 'rightSplit', surfacePane: false })
+      expectOpenSentToMain({ groupId: 'group-1' })
+      expect(sendLayoutApply.mock.calls[0]![2]).not.toHaveProperty('split')
+      return
+    }
     expect(ensureSimulatorTab('wt-1', { placement: 'rightSplit', surfacePane: false })).toBe(
       createdSimulatorTabId()
     )
@@ -345,6 +390,12 @@ describe('ensureSimulatorTab', () => {
     stubCreatedSimulatorTab('group-1')
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Main's frame names the tab's host from its workspace.
+      ensureSimulatorTab('wt-1', { surfacePane: false, executionHostId: 'local' })
+      expectOpenSentToMain({ groupId: 'group-1' })
+      return
+    }
     expect(ensureSimulatorTab('wt-1', { surfacePane: false, executionHostId: 'local' })).toBe(
       createdSimulatorTabId()
     )
@@ -374,6 +425,11 @@ describe('ensureSimulatorTab', () => {
     stubCreatedSimulatorTab('group-1')
     const { ensureSimulatorTab } = await import('./ensure-simulator-tab')
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      ensureSimulatorTab('wt-1', { surfacePane: false, executionHostId: 'local' })
+      expectOpenSentToMain({ groupId: 'group-1' })
+      return
+    }
     expect(ensureSimulatorTab('wt-1', { surfacePane: false, executionHostId: 'local' })).toBe(
       createdSimulatorTabId()
     )

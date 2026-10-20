@@ -13,6 +13,7 @@ import { closeRemoteBrowserPageInOwningEnvironment } from './browser-remote-clos
 import { releaseDocPreviewGrant } from '@/lib/doc-preview-grants'
 import { destroyWorkspaceWebviews } from '../browser-webview-cleanup'
 import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
+import { landOnEmptiedWorktree } from '../tabs/emptied-workspace-landing'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import {
   closeBrowserTabThroughLayoutOwner,
@@ -244,12 +245,25 @@ export function createBrowserCloseActions(
         }
       }
       // Switch point: main closes the tab first; today's close then runs over the tab as drawn.
+      const owningWorktreeId = ORCA_LAYOUT_OWNER_IS_MAIN
+        ? findWorkspace(get().browserTabsByWorktree, tabId)?.worktreeId
+        : undefined
       if (
         ORCA_LAYOUT_OWNER_IS_MAIN &&
-        closeBrowserTabThroughLayoutOwner(get, tabId, isCleanup ? 'cleanup' : 'user', (drawn) =>
-          closeHere(drawn)
+        closeBrowserTabThroughLayoutOwner(
+          get,
+          tabId,
+          isCleanup ? 'cleanup' : 'user',
+          (drawn) => closeHere(drawn),
+          // As today's tab-bar close: a cleanup keeps the selection and counts no interaction.
+          isCleanup || options?.preserveWorktreeSelection || !owningWorktreeId
+            ? undefined
+            : () => landOnEmptiedWorktree(set, get, owningWorktreeId)
         )
       ) {
+        if (!isCleanup) {
+          get().recordFeatureInteraction?.('terminal-tabs')
+        }
         return
       }
       closeHere()

@@ -48,6 +48,7 @@ import {
   restoreRecentlyClosedTabPosition
 } from './recently-closed-tabs'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
+import { drawTabsFromMain } from './tabs-drawn-from-main.test-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
@@ -55,6 +56,11 @@ vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
   ).runtimeRpcClientWithLayoutApply(await importOriginal())
+)
+vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeLayoutClientWithTestFrames(await importOriginal())
 )
 
 const WT = 'repo1::/path/wt1'
@@ -399,6 +405,8 @@ describe('restoreRecentlyClosedTabPosition', () => {
 describe('reopenClosedTab cross-type MRU', () => {
   it('reopens closed tabs of mixed kinds in most-recent-first order', async () => {
     const store = makeSeededStore()
+    // A layout-owner build draws the browser tab from main's frames.
+    const main = await drawTabsFromMain(store)
 
     // Close order: editor → terminal → browser.
     store.setState({ openFiles: [makeOpenFile({ id: '/repo/a.ts', worktreeId: WT })] })
@@ -409,7 +417,9 @@ describe('reopenClosedTab cross-type MRU', () => {
     store.getState().closeTab(terminal.id)
     await layoutApplyTestTransport.settle()
     const browser = store.getState().createBrowserTab(WT, 'https://example.com', { title: 'Ex' })
+    await main.settle()
     store.getState().closeBrowserTab(browser.id)
+    await main.settle()
 
     expect(store.getState().recentlyClosedTabKindsByWorktree[WT]).toEqual([
       'browser',
@@ -419,6 +429,7 @@ describe('reopenClosedTab cross-type MRU', () => {
 
     // First press: browser comes back.
     expect(store.getState().reopenClosedTab(WT)).toBe(true)
+    await main.settle()
     expect(store.getState().browserTabsByWorktree[WT]?.[0]?.url).toBe('https://example.com')
     expect(store.getState().tabsByWorktree[WT] ?? []).toHaveLength(0)
 
@@ -433,6 +444,7 @@ describe('reopenClosedTab cross-type MRU', () => {
 
     // Nothing left.
     expect(store.getState().reopenClosedTab(WT)).toBe(false)
+    main.close()
   })
 
   it('skips kind entries whose per-type snapshot has drained', () => {
