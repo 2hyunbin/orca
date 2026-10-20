@@ -59,7 +59,9 @@ describe('markdown preview read authority (#31034)', () => {
     const previews = store
       .getState()
       .openFiles.filter((file) => file.id === 'markdown-preview::brief-source')
-    expect(previews).toEqual([expect.objectContaining({ terminalArtifactGrantId: 'grant-2' })])
+    expect(previews).toEqual([
+      expect.objectContaining({ terminalArtifactGrantId: 'grant-2', fileContentReloadNonce: 1 })
+    ])
   })
 
   it('keeps a client-local file preview on this computer in an SSH workspace', () => {
@@ -113,6 +115,8 @@ describe('markdown preview read authority (#31034)', () => {
       .getState()
       .openMarkdownPreview(PREVIEW_INPUT, { sourceFileId: 'brief-source', anchor: 'plan' })
 
+    const [retargeted] = store.getState().openFiles
+    expect(retargeted?.fileContentReloadNonce).toBeUndefined()
     expect(store.getState().openFiles).toEqual([
       expect.objectContaining({
         id: 'markdown-preview::brief-source',

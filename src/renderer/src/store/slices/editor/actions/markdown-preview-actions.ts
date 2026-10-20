@@ -127,6 +127,10 @@ export function createMarkdownPreviewActions(
         const activeResult = buildEditorActiveResult(s, worktreeId, id)
 
         if (existing) {
+          // Why: a fresh grant means the file was re-resolved; cached bytes may predate it.
+          const grantChanged =
+            terminalArtifactGrantId !== undefined &&
+            existing.terminalArtifactGrantId !== terminalArtifactGrantId
           const needsUpdate =
             existing.relativePath !== file.relativePath ||
             existing.filePath !== file.filePath ||
@@ -151,6 +155,9 @@ export function createMarkdownPreviewActions(
                         externalSshTargetId,
                         terminalArtifactGrantId,
                         readOnly,
+                        ...(grantChanged
+                          ? { fileContentReloadNonce: (openFile.fileContentReloadNonce ?? 0) + 1 }
+                          : {}),
                         markdownPreviewSourceFileId: sourceFileId,
                         markdownPreviewAnchor: anchor,
                         mode: 'markdown-preview' as const
