@@ -93,6 +93,7 @@ export async function dispatchClaudeMessage(
         await applyClaudeMessageOptions(session, messageOptions, timeoutMs, input.signal)
       }
       input.signal?.throwIfAborted()
+      input.onExecutionSnapshot?.()
       ranOptions = claudeExecutionObservations(session)
       if (messageOptions?.model && ranOptions.model !== messageOptions.model) {
         delete ranOptions.model

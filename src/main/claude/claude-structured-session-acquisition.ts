@@ -81,7 +81,6 @@ export async function acquireClaudeSession({
         ? liveSession.backgroundTasks.goalBackgroundWork
         : 'unverifiable'
   )
-
   const onMessage = (message: Record<string, unknown>): void => {
     const init = readClaudeInit(message)
     if (readClaudeFrameString(message, 'session_id') !== expectedProviderSessionId) {
@@ -133,6 +132,8 @@ export async function acquireClaudeSession({
         callbacks.emit(liveSession, input.events, {
           type: 'options-reported',
           sessionId,
+          fence: liveSession.fence,
+          acquisitionGeneration: liveSession.acquisitionGeneration,
           reportedOptions: { model: init.model }
         })
       }

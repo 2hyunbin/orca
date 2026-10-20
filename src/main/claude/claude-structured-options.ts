@@ -175,6 +175,9 @@ export async function setClaudeStructuredOption(
   }
   if (settings !== null) {
     observeClaudeSettingsApplied(session, settings)
+    if (readClaudeSettingsFastMode(settings) === false) {
+      delete session.fastModeReportedMutation
+    }
   }
   const adopted =
     input.key === 'fastMode'

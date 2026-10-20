@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest'
-import { acquired, fakeClaude, USER_MESSAGE } from './claude-structured-session-test-support'
+import {
+  acquired,
+  claudeFrame,
+  fakeClaude,
+  USER_MESSAGE
+} from './claude-structured-session-test-support'
 import { recordAgentSessionRanOptions } from '../runtime/agent-session-record-options'
 import {
   createQueuedMessageTestRig,
@@ -28,7 +33,7 @@ it.each(['low', 'high', undefined])(
     })
     const adapter = await acquired(claude)
     const rig = await createQueuedMessageTestRig()
-    const choices = { model: 'sonnet', effort: 'high', fastMode: 'true' }
+    const choices = { model: 'sonnet', effort: 'high', fastMode: 'true' } as const
     try {
       rig.dispatch.mockImplementation(async () =>
         adapter.dispatch({
@@ -87,3 +92,47 @@ it.each(['low', 'high', undefined])(
     }
   }
 )
+
+it('retires earlier Fast routing when an effort read reports Fast off', async () => {
+  let fastMode = true
+  const models = [
+    {
+      value: 'sonnet',
+      supportsEffort: true,
+      supportedEffortLevels: ['low', 'high'],
+      supportsFastMode: true
+    }
+  ]
+  const claude = fakeClaude({
+    initModels: models,
+    routes: { list_models: () => models },
+    settings: {
+      applied: { model: 'sonnet', effort: 'low' },
+      get effective() {
+        return { effortLevel: 'high', fastMode }
+      }
+    }
+  })
+  const adapter = await acquired(claude)
+  const send = (effort: string) =>
+    adapter.dispatch({
+      sessionId: 'session-1',
+      clientMessageId: effort,
+      body: USER_MESSAGE,
+      executionOptions: { model: 'sonnet', effort, fastMode: 'true' },
+      fence: 7
+    })
+  try {
+    await send('high')
+    claudeFrame(claude.connections[0]!, {
+      type: 'system',
+      subtype: 'status',
+      fast_mode_state: 'on'
+    })
+    fastMode = false
+    expect(await send('low')).toMatchObject({ state: 'admitted', ranOptions: { effort: 'low' } })
+    expect((await send('low')).ranOptions).not.toHaveProperty('fastMode')
+  } finally {
+    await adapter.closeAll()
+  }
+})

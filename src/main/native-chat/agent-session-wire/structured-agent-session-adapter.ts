@@ -287,6 +287,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     requestedAt?: number
     /** Revalidate after preparation, immediately before writing to the provider. */
     beforeDispatch?: () => Promise<void>
+    /** In-process checkpoint after applying choices, before capturing execution evidence. */
+    onExecutionSnapshot?: () => void
   }): Promise<AgentSessionDispatchOutcome>
   /** How this session narrows its agent's declared rewind; `agent` answers for one with no child
    *  running. The router applies the declaration first, so an adapter's answer never widens it. */
