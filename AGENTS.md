@@ -1,3 +1,10 @@
+# Useful Commands
+
+- **Typecheck**: `pnpm tc` (or `tc:node` / `tc:cli` / `tc:web`)
+- **Test**: `pnpm test [path/to/file.test.ts]`
+- **Lint**: `oxlint`, or `pnpm run check:code-quality:changed` for changed files (full `pnpm lint` is slow); format with `pnpm format`
+- **Design system**: `pnpm run lint:design-system` for the full renderer report (not a gate); the changed-lines gate above is what CI enforces
+
 # Design System
 
 All UI work — layout, color, typography, spacing, component selection, UX behavior — must follow [`docs/STYLEGUIDE.md`](./docs/STYLEGUIDE.md). Use the tokens defined in `src/renderer/src/assets/main.css` (the canonical source) and the shadcn primitives in `src/renderer/src/components/ui/`. Don't invent new color values, font sizes, or shadow tiers when a documented one already covers the role. When STYLEGUIDE.md is silent, follow the resolution order in its final section.
@@ -29,13 +36,6 @@ Never use vague names like `helpers`, `utils`, `common`, `misc`, or `shared-stuf
 ## Type Assertions: Prefer Checked Types
 
 Avoid type assertions except `as const`. Unavoidable casts need a line-specific `SAFETY:` explanation:
-
-# Verifying Changes
-
-- **Typecheck**: `pnpm tc` (or `tc:node` / `tc:cli` / `tc:web`)
-- **Test**: `pnpm test [path/to/file.test.ts]`
-- **Lint**: `oxlint`, or `pnpm run check:code-quality:changed` for changed files (full `pnpm lint` is slow); format with `pnpm format`
-- **Design system**: `pnpm run lint:design-system` for the full renderer report (not a gate); the changed-lines gate above is what CI enforces
 
 # Considerations
 
