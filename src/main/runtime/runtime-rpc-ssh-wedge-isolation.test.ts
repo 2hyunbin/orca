@@ -64,7 +64,7 @@ async function startServer(): Promise<{ endpoint: string; token: string }> {
 
 type RpcResponseFrame = Record<string, unknown> & { id: string }
 
-/** Validates a server line at the socket boundary; keepalive and malformed lines are skipped. */
+/** Validates a server line at the socket boundary; frames without an id (keepalives) are skipped. */
 function parseResponseFrame(line: string): RpcResponseFrame | null {
   const parsed: unknown = JSON.parse(line)
   if (typeof parsed !== 'object' || parsed === null || !('id' in parsed)) {
