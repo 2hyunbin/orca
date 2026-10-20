@@ -72,7 +72,12 @@ export type UsageRateLimitMetadata = {
   retryAtMs?: number
   /** Renderer-only: the remote host that owns this usage cannot vouch for it. Hosts never set it. */
   unverifiableOwner?: boolean
+  /** Claude with no login only: how the host's Claude authenticates; absent when it cannot tell. */
+  claudeAuth?: ClaudeNoLoginAuth
 }
+
+/** 'api-key' when a key source exists; 'none' when Claude has no credential at all. */
+export type ClaudeNoLoginAuth = 'api-key' | 'none'
 
 export type ProviderRateLimits = {
   provider:

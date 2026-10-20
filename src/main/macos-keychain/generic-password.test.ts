@@ -4,7 +4,7 @@ const execFileMock = vi.hoisted(() => vi.fn())
 
 vi.mock('node:child_process', () => ({ execFile: execFileMock }))
 
-import { isKeychainNotFoundError, readKeychainPassword } from './generic-password'
+import { hasKeychainItem, isKeychainNotFoundError, readKeychainPassword } from './generic-password'
 
 const originalPlatform = process.platform
 
@@ -75,5 +75,32 @@ describe('isKeychainNotFoundError', () => {
     expect(isKeychainNotFoundError({ code: 44 })).toBe(true)
     expect(isKeychainNotFoundError(new Error('The specified item could not be found'))).toBe(true)
     expect(isKeychainNotFoundError(new Error('User interaction is not allowed'))).toBe(false)
+  })
+})
+
+describe('hasKeychainItem', () => {
+  it('asks for attributes only, never the secret', async () => {
+    respond('attributes:\n')
+    await expect(hasKeychainItem('Claude Code', 'user')).resolves.toBe(true)
+    expect(execFileMock.mock.calls[0]?.[1]).toEqual([
+      'find-generic-password',
+      '-s',
+      'Claude Code',
+      '-a',
+      'user'
+    ])
+  })
+
+  it('reports a missing item as absent and rethrows a locked keychain', async () => {
+    fail(Object.assign(new Error('The specified item could not be found'), { code: 44 }))
+    await expect(hasKeychainItem('svc', 'acct')).resolves.toBe(false)
+    fail(new Error('User interaction is not allowed'))
+    await expect(hasKeychainItem('svc', 'acct')).rejects.toThrow('User interaction is not allowed')
+  })
+
+  it('never shells out off macOS', async () => {
+    setPlatform('linux')
+    await expect(hasKeychainItem('svc', 'acct')).resolves.toBe(false)
+    expect(execFileMock).not.toHaveBeenCalled()
   })
 })

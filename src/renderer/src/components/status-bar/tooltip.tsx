@@ -297,7 +297,14 @@ export function ProviderPanel({
           {name}
         </div>
         <div className={mutedClass}>
-          {p.error ?? translate('auto.components.status.bar.tooltip.1292d4f2ee', 'Unavailable')}
+          {/* Why: a host with no Claude credential still sends the API-key copy for older clients. */}
+          {p.usageMetadata?.claudeAuth === 'none'
+            ? translate(
+                'auto.components.status.bar.tooltip.claudeNotSignedIn',
+                'Not signed in to Claude'
+              )
+            : (p.error ??
+              translate('auto.components.status.bar.tooltip.1292d4f2ee', 'Unavailable'))}
         </div>
       </div>
     )

@@ -9,6 +9,8 @@ import { OAuthUsageError } from './claude-oauth-usage-error'
 import type { ClaudeRateLimitFetchOptions } from './claude-usage-fetch-options'
 import { abortedClaudeRateLimitResult, makeClaudeUsageResult } from './claude-usage-result'
 import { CLAUDE_PROFILE_MISSING_MESSAGE } from '../../shared/claude-profile-routing'
+import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
+import { readClaudeNoLoginAuth } from './claude-api-key-auth'
 
 /** Usage observes the account; only a user-started Claude process may refresh its login. */
 export async function fetchActiveClaudeRateLimits(
@@ -25,9 +27,8 @@ export async function fetchActiveClaudeRateLimits(
   if (options?.signal?.aborted) {
     return abortedClaudeRateLimitResult()
   }
-  const credentials = await readClaudeOAuthCredentials(
-    resolveClaudeOAuthCredentialReadOptions(options?.authPreparation)
-  )
+  const readOptions = resolveClaudeOAuthCredentialReadOptions(options?.authPreparation)
+  const credentials = await readClaudeOAuthCredentials(readOptions)
   const metadata = {
     credentialSource: credentials.source,
     authProvenance: options?.authPreparation?.provenance ?? 'system'
@@ -39,10 +40,16 @@ export async function fetchActiveClaudeRateLimits(
     !credentials.hasRefreshableCredentials &&
     metadata.authProvenance === 'system'
   ) {
+    // Why the copy is unchanged: older clients show it; claudeAuth tells newer ones which case this is.
+    const claudeAuth = await readClaudeNoLoginAuth({
+      ...readOptions,
+      env: getClaudeProfileRouter()?.claudeLaunchEnv() ?? process.env
+    })
     return makeClaudeUsageResult('unavailable', 'No subscription plan — API key billing', {
       ...metadata,
       failureKind: 'missing-credentials',
-      attemptedSources: []
+      attemptedSources: [],
+      ...(claudeAuth ? { claudeAuth } : {})
     })
   }
   if (!credentials.token) {

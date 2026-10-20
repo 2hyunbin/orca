@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto'
 import { lstatSync, realpathSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { basename, dirname, join } from 'node:path'
-import { readKeychainPassword } from '../macos-keychain/generic-password'
+import { hasKeychainItem, readKeychainPassword } from '../macos-keychain/generic-password'
 
 const ACTIVE_CLAUDE_SERVICE = 'Claude Code-credentials'
+const CLAUDE_API_KEY_SERVICE = 'Claude Code'
 export async function readActiveClaudeKeychainCredentialsStrict(
   configDir?: string
 ): Promise<string | null> {
@@ -37,13 +38,33 @@ function getKeychainUser(): string {
 }
 
 export function claudeKeychainService(configDir?: string): string {
+  return scopedClaudeKeychainService(ACTIVE_CLAUDE_SERVICE, configDir)
+}
+
+function scopedClaudeKeychainService(service: string, configDir?: string): string {
   if (!configDir) {
-    return ACTIVE_CLAUDE_SERVICE
+    return service
   }
   // Why: Claude Code 2.1+ scopes macOS Keychain credentials by config dir
   // using the first 8 hex chars of sha256(NFC(CLAUDE_CONFIG_DIR)).
   const suffix = createHash('sha256').update(configDir.normalize('NFC')).digest('hex').slice(0, 8)
-  return `${ACTIVE_CLAUDE_SERVICE}-${suffix}`
+  return `${service}-${suffix}`
+}
+
+/** Whether a Claude Console login stored its API key here; the key itself is never read. */
+export async function hasClaudeApiKeyKeychainItem(configDir?: string): Promise<boolean> {
+  const dirs = configDir ? claudeConfigDirKeychainAliases(configDir) : [undefined]
+  for (const dir of dirs) {
+    if (
+      await hasKeychainItem(
+        scopedClaudeKeychainService(CLAUDE_API_KEY_SERVICE, dir),
+        getKeychainUser()
+      )
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 export function claudeConfigDirKeychainAliases(configDir: string): string[] {

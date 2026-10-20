@@ -4,6 +4,7 @@ import {
   CLAUDE_PROFILE_POINTER_ENV,
   CLAUDE_USER_CONFIG_DIR_ENV
 } from '../../shared/claude-profile-routing'
+import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults'
 
 export const CLAUDE_AUTH_ENV_VARS = [
   'ANTHROPIC_API_KEY',
@@ -11,6 +12,14 @@ export const CLAUDE_AUTH_ENV_VARS = [
   'CLAUDE_CODE_OAUTH_TOKEN',
   'AWS_BEARER_TOKEN_BEDROCK'
 ] as const
+
+/** `baseEnv` with the Claude env setting over it, as an Orca-started Claude gets it. */
+export function resolveClaudeLaunchEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  agentDefaultEnv: Parameters<typeof resolveTuiAgentLaunchEnv>[1]
+): NodeJS.ProcessEnv {
+  return { ...baseEnv, ...resolveTuiAgentLaunchEnv('claude', agentDefaultEnv) }
+}
 
 export type ClaudeEnvPatch = {
   [CLAUDE_PROFILE_POINTER_ENV]?: string

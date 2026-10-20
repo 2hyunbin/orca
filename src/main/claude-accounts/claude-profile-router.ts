@@ -23,7 +23,7 @@ import {
 } from './claude-profile-paths'
 import type { ClaudeProfileSetupReport } from './claude-profile-setup'
 import { runClaudeProfileSetupInWorker } from './claude-profile-setup-worker'
-import type { ClaudeEnvPatch } from './environment'
+import { resolveClaudeLaunchEnv, type ClaudeEnvPatch } from './environment'
 import type { ClaudeRuntimeAuthPreparation } from './runtime-auth/runtime-auth-types'
 import {
   findClaudeAccount,
@@ -50,6 +50,7 @@ export type ClaudeProfileRouterSettings = Pick<
   | 'activeClaudeManagedAccountIdsByRuntime'
   | 'agentStatusHooksEnabled'
   | 'disabledTuiAgents'
+  | 'agentDefaultEnv'
 >
 
 /**
@@ -239,6 +240,11 @@ export class ClaudeProfileRouter {
   /** The user's own CLAUDE_CONFIG_DIR: System default's folder. */
   userConfigDir(): string | undefined {
     return readUserClaudeConfigDir(this.env)
+  }
+
+  /** The env Orca starts Claude with here: the login shell's, then the Claude env setting. */
+  claudeLaunchEnv(): NodeJS.ProcessEnv {
+    return resolveClaudeLaunchEnv(this.env, this.args.getSettings().agentDefaultEnv)
   }
 
   private describe(accountId: string): ClaudeProfileDescriptor {

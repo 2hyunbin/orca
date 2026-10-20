@@ -106,3 +106,19 @@ export async function readKeychainPassword(
     throw error
   }
 }
+
+/** Presence only: without `-w`/`-g`, `security` prints the item's attributes, never its secret. */
+export async function hasKeychainItem(service: string, account: string): Promise<boolean> {
+  if (process.platform !== 'darwin') {
+    return false
+  }
+  try {
+    await execSecurityCommand(['find-generic-password', '-s', service, '-a', account])
+    return true
+  } catch (error) {
+    if (isKeychainNotFoundError(error)) {
+      return false
+    }
+    throw error
+  }
+}

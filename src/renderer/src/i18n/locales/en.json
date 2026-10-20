@@ -4294,6 +4294,7 @@
             "94038ad2fa": "Session",
             "2c35eca8d4": "Unable to fetch usage",
             "1292d4f2ee": "Unavailable",
+            "claudeNotSignedIn": "Not signed in to Claude",
             "7567cd1c6b": "Usage unavailable",
             "a9a318b7a3": "Refresh failed — showing cached data",
             "7ad719c4bf": "Limited",
