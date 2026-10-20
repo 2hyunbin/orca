@@ -4,7 +4,7 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 
-export type ChatAccountAction = { target: RuntimeClientTarget }
+export type ChatAccountAction = { target: RuntimeClientTarget; canSwitch: () => Promise<boolean> }
 
 export function ProviderAccountChatButton({
   provider,
@@ -26,6 +26,7 @@ export function ProviderAccountChatButton({
       type="button"
       variant="outline"
       size="xs"
+      className="w-full"
       disabled={disabled}
       onClick={
         add

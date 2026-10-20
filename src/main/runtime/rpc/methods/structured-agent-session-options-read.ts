@@ -8,6 +8,7 @@
 // `method_not_found` (or `forbidden` through the mobile allowlist gate), and
 // the client keeps its static seed.
 
+import { structuredSessionRecoveryOptions } from '../../structured-session-recovery-options'
 import { defineMethod } from '../core'
 import {
   requireInstalledStructuredHost,
@@ -47,15 +48,19 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
     params: OptionsParams,
     handler: async (params, ctx) => {
       const readsWithoutModel = clientReadsOptionsWithoutModel(ctx)
-      const result = await (
-        await requireInstalledStructuredHost(ctx, params.sessionId)
-      ).readOptions(params.sessionId, { readsWithoutModel })
+      const host = await requireInstalledStructuredHost(ctx, params.sessionId)
+      const result = await host.readOptions(params.sessionId, { readsWithoutModel })
       if (result.current.model === undefined && !readsWithoutModel) {
         throw agentSessionRefusalError('structured_agent_session_unsupported', {
           reason: 'clientCapabilityMissing'
         })
       }
-      return result
+      const record = host.deps.store.getRecord(params.sessionId)
+      const launchEnv = {
+        ...process.env,
+        ...(record ? await host.deps.resolveLaunchEnv?.(record.provider) : {})
+      }
+      return { ...result, ...(await structuredSessionRecoveryOptions(record, launchEnv)) }
     }
   }),
   defineMethod({

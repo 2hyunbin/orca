@@ -3161,7 +3161,8 @@
         "continueNow": "Continue Now",
         "leadIn": "Continue this chat without waiting:",
         "switchAccount": "Switch Account",
-        "addAccount": "Add Account…"
+        "addAccount": "Add Account…",
+        "accountUnavailable": "This chat cannot move to another account. Hand it off to another agent instead."
       }
     },
     "onboarding": {

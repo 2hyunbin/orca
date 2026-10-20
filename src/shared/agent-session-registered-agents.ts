@@ -21,8 +21,6 @@ export type AgentSessionRegisteredAgent = {
   /** Orca provides this chat's program on this host, so it needs no installed CLI. Absent from
    *  older hosts, whose chats are offered only where the agent's CLI was detected. */
   managedRuntime?: true
-  /** Existing chats launch under the selected account; absent from older hosts. */
-  followsAccountSelection?: true
 }
 
 export type AgentSessionAgentsResult = {
@@ -53,8 +51,7 @@ const registeredAgentSchema = z.object({
       .default('orca')
   }),
   // A false from a host reads as absent, so the row keeps the detection-based offer.
-  managedRuntime: z.literal(true).optional().catch(undefined),
-  followsAccountSelection: z.literal(true).optional().catch(undefined)
+  managedRuntime: z.literal(true).optional().catch(undefined)
 })
 
 /** The host's agents as this build reads them, or null when the reply is not an agent list. */

@@ -1,3 +1,4 @@
+import { claudeProfileSelectionHomes } from './claude-profile-selection-homes'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -368,6 +369,10 @@ export class ClaudeProfileRouter {
       envPatch: { CLAUDE_CONFIG_DIR: home },
       provenance: `profile:${accountId}`
     }
+  }
+
+  async accountSelectionHomes(): Promise<string[]> {
+    return claudeProfileSelectionHomes(this, this.args.getSettings(), this.envReady)
   }
 
   /** Every account folder on this host, selected or not. */

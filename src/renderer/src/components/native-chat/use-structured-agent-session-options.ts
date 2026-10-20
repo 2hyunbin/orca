@@ -77,8 +77,10 @@ export function useStructuredAgentSessionOptions(args: {
     optionMutationGeneration,
     updateOptionState,
     rereadOptions,
-    conversationSupport
+    conversationSupport: support,
+    sessionSupport
   } = useStructuredAgentSessionOptionState({
+    transportEnabled,
     agent,
     optionCatalog,
     identity: `${agent}:${sessionId}`,
@@ -297,8 +299,6 @@ export function useStructuredAgentSessionOptions(args: {
     [setOption, optionSnapshot]
   )
 
-  const support =
-    transportEnabled && conversationSupport?.sessionId === sessionId ? conversationSupport : null
   return {
     conversationCommands: support?.commands ?? [],
     /** Absent unless this host and session can change the goal. */
@@ -308,7 +308,7 @@ export function useStructuredAgentSessionOptions(args: {
     /** Absent from a host that predates it or a session that writes no context facts. */
     contextUsage: support?.contextUsage,
     /** Absent from a host that predates it, and until the options read answers. */
-    acceptsImages: support?.acceptsImages,
+    sessionSupport,
     /** Undefined until this fence's options read answers. */
     rewind: support?.fence === fence ? support.rewind : undefined,
     optionSnapshot,

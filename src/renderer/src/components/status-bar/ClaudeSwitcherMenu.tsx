@@ -159,6 +159,15 @@ export function ClaudeSwitcherMenu({
     const previousActiveAccountId = getClaudeStatusActiveId(accountState, target)
     setIsSwitching(true)
     try {
+      if (chatAction && !(await chatAction.canSwitch())) {
+        toast.error(
+          translate(
+            'components.native-chat.usageLimitActions.accountUnavailable',
+            'This chat cannot move to another account. Hand it off to another agent instead.'
+          )
+        )
+        return
+      }
       const next = await selectClaudeProviderAccount(runtimeTarget, {
         accountId,
         runtime: target.runtime,

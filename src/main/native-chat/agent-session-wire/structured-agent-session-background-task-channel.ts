@@ -8,10 +8,7 @@ import type {
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { structuredChildWorkLegacyTasks } from '../../../shared/structured-agent-session-child-work-legacy'
 import { structuredRunningChildWork } from '../../../shared/agent-child-work-listing'
-import {
-  readStructuredAgentSessionHistoryResult,
-  structuredAgentSessionTranscriptMetadata
-} from './structured-agent-session-history-result'
+import { readStructuredAgentSessionHistoryResult } from './structured-agent-session-history-result'
 import { hostStructuredAgentSessionCurrentWork } from './structured-agent-session-host-current-work'
 import type { AgentSessionHistoryScope } from './agent-session-history-page'
 import type {
@@ -59,15 +56,11 @@ export class StructuredAgentSessionBackgroundTaskChannel {
       scope,
       ...(work ? { work } : {})
     })
-    const providerSession = await structuredAgentSessionTranscriptMetadata(
-      this.deps.store.getRecord(request.sessionId)
-    )
     const backgroundTasks = this.read(request.sessionId)
     const queue = this.subscribers.readQueuePublication(request.sessionId)
     const hostNow = this.deps.now?.() ?? Date.now()
     return {
       ...result,
-      ...(providerSession ? { providerSession } : {}),
       page: {
         ...result.page,
         hostNow,

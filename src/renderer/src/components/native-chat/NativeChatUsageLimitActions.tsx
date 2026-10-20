@@ -1,10 +1,9 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { useStructuredChatTabConversationName } from '@/runtime/structured-conversation-name'
-import { useHostStructuredAgent } from '@/runtime/use-host-structured-agent'
 import { AgentSessionContinuationDialog } from '@/components/agent-session-continuation/AgentSessionContinuationDialog'
 import {
   buildAgentSessionContinuationPrompt,
@@ -14,7 +13,8 @@ import { ClaudeSwitcherMenu } from '@/components/status-bar/ClaudeSwitcherMenu'
 import { ProviderAccountChatButton } from '@/components/status-bar/ProviderAccountChatButton'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
-import type { AgentSessionHistoryResult } from '../../../../shared/agent-session-wire'
+import type { AgentSessionOptionsResult } from '../../../../shared/agent-session-wire'
+import { executionHostIdForStructuredTarget } from '@/runtime/structured-agent-session-owner'
 import {
   NativeChatOrcaStopContext,
   type NativeChatOrcaStopView
@@ -24,7 +24,12 @@ import type { NativeChatStructuredViewProps } from './native-chat-view-types'
 import type { NativeChatFileLinkContext } from './native-chat-file-link'
 import { nativeChatMessageCopyText } from './native-chat-message-copy-text'
 
-type UsageLimitActions = { account: ReactNode; handOff?: () => void; disabled: boolean }
+type UsageLimitActions = {
+  account: ReactNode
+  reserveAccount: boolean
+  handOff?: () => void
+  disabled: boolean
+}
 const UsageLimitActionsContext = createContext<UsageLimitActions | null>(null)
 
 export function NativeChatUsageLimitActionsProvider({
@@ -32,16 +37,18 @@ export function NativeChatUsageLimitActionsProvider({
   directory,
   messages,
   view,
-  loading,
+  recovery,
   children
 }: {
   pane: Omit<NativeChatStructuredViewProps, 'mode'>
   directory: NativeChatFileLinkContext | null
   messages: readonly NativeChatMessage[]
   view: NativeChatOrcaStopView
-  loading: boolean
+  recovery: { readCurrent: boolean; canSwitchAccount: boolean | undefined }
   children: ReactNode
 }): React.JSX.Element {
+  const loading = !recovery.readCurrent
+  const canSwitchAccount = recovery.canSwitchAccount
   const active = view.usageLimitTurnItemId !== null
   const disabled = loading
   const chatTab = useAppStore((state) =>
@@ -50,7 +57,6 @@ export function NativeChatUsageLimitActionsProvider({
       : undefined
   )
   const conversationName = useStructuredChatTabConversationName(chatTab)
-  const declared = useHostStructuredAgent(pane.target, pane.agent)
   const [request, setRequest] = useState<AgentSessionContinuationRequest | null>(null)
   const canHandOff =
     active &&
@@ -60,11 +66,27 @@ export function NativeChatUsageLimitActionsProvider({
       (pane.target.kind === 'environment' ? pane.target.environmentId : null)
   let account: ReactNode = null
   if (pane.agent === 'claude') {
-    if (declared === undefined) {
+    if (canSwitchAccount === undefined) {
       account = <ProviderAccountChatButton provider="claude" target={pane.target} disabled />
-    } else if (declared.followsAccountSelection) {
+    } else if (canSwitchAccount) {
       account = (
-        <ClaudeSwitcherMenu claude={null} compact iconOnly chatAction={{ target: pane.target }} />
+        <ClaudeSwitcherMenu
+          key={executionHostIdForStructuredTarget(pane.target)}
+          claude={null}
+          compact
+          iconOnly
+          chatAction={{
+            target: pane.target,
+            canSwitch: async () => {
+              const result = await callStructuredAgentSession<AgentSessionOptionsResult>(
+                pane.target,
+                'agentSession.options',
+                { sessionId: pane.sessionId }
+              )
+              return result.canSwitchAccount === true
+            }
+          }}
+        />
       )
     }
   }
@@ -72,15 +94,15 @@ export function NativeChatUsageLimitActionsProvider({
     if (!canHandOff || !directory || !isTuiAgent(pane.agent)) {
       return
     }
-    const history = await callStructuredAgentSession<AgentSessionHistoryResult>(
+    const options = await callStructuredAgentSession<AgentSessionOptionsResult>(
       pane.target,
-      'agentSession.history',
-      { sessionId: pane.sessionId, direction: 'tail', limit: 1 }
+      'agentSession.options',
+      { sessionId: pane.sessionId }
     ).catch((error: unknown) => {
       console.warn('Could not read saved chat context for hand-off', error)
       return null
     })
-    const transcriptPath = history?.providerSession?.transcriptPath
+    const transcriptPath = options?.transcriptPath
     const source = {
       sourceKind: 'chat' as const,
       sourceAgent: pane.agent,
@@ -118,6 +140,7 @@ export function NativeChatUsageLimitActionsProvider({
   const actions = useMemo<UsageLimitActions>(
     () => ({
       account,
+      reserveAccount: pane.agent === 'claude',
       disabled,
       ...(canHandOff || (loading && isTuiAgent(pane.agent))
         ? {
@@ -163,7 +186,11 @@ export function NativeChatUsageLimitActions(): React.JSX.Element | null {
         )}
       </p>
       <div className="flex flex-wrap gap-2">
-        {actions.account}
+        {actions.reserveAccount ? (
+          <div className="w-32 shrink-0">{actions.account}</div>
+        ) : (
+          actions.account
+        )}
         {actions.handOff ? (
           <Button
             type="button"

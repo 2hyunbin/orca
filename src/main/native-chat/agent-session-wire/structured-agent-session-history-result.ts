@@ -1,6 +1,3 @@
-import { join } from 'node:path'
-import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
-import { resolveSessionFilePath } from '../session-file-resolver'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { agentSessionProviderHandleChainHead } from '../../../shared/agent-session-provider-handle'
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
@@ -47,29 +44,5 @@ export function readStructuredAgentSessionHistoryResult(input: {
     page: { ...result.page, fence },
     ...(result.ok ? {} : { fence }),
     ...(providerSession ? { providerSession } : {})
-  }
-}
-
-/** Resolve on the execution host, using the same account-scoped lookup as session history. */
-export async function structuredAgentSessionTranscriptMetadata(
-  record: AgentSessionRecord | null
-): Promise<AgentProviderSessionMetadata | undefined> {
-  const metadata = structuredAgentSessionProviderSessionMetadata(record)
-  const head = record ? agentSessionProviderHandleChainHead(record.providerHandleChain) : null
-  if (!record || !metadata || !head || !isLegacyAgentSessionAccountHome(record.accountHome)) {
-    return metadata
-  }
-  const home = record.accountHome.path
-  try {
-    const transcriptPath = await resolveSessionFilePath(head.handle.agent, metadata.id, {
-      ...(head.handle.agent === 'claude' ? { claudeProjectsDir: join(home, 'projects') } : {}),
-      ...(head.handle.agent === 'codex' ? { codexSessionsDirs: [join(home, 'sessions')] } : {}),
-      ...(head.handle.agent === 'grok' ? { grokSessionsDir: join(home, 'sessions') } : {}),
-      ...(head.handle.agent === 'omp' ? { ompSessionsDir: join(home, 'sessions') } : {})
-    })
-    return transcriptPath ? { ...metadata, transcriptPath } : metadata
-  } catch (error) {
-    console.warn('[agent-session] transcript path lookup failed', error)
-    return metadata
   }
 }

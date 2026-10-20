@@ -12,7 +12,8 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 
 const mocks = vi.hoisted(() => ({
   readSnapshot: {
-    providerSession: { key: 'session_id', id: 'provider-chat', transcriptPath: '/work/chat.jsonl' }
+    canSwitchAccount: true,
+    transcriptPath: '/work/chat.jsonl'
   },
   follows: true,
   snapshot: vi.fn(),
@@ -24,9 +25,6 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 }))
 vi.mock('@/runtime/structured-conversation-name', () => ({
   useStructuredChatTabConversationName: () => 'My chat'
-}))
-vi.mock('@/runtime/use-host-structured-agent', () => ({
-  useHostStructuredAgent: () => ({ followsAccountSelection: mocks.follows })
 }))
 vi.mock('@/runtime/use-worktree-runtime-target', () => ({
   useActiveAccountOwner: () => ({
@@ -74,8 +72,8 @@ function row(
   return (
     <TooltipProvider>
       <NativeChatUsageLimitActionsProvider
+        recovery={{ readCurrent: true, canSwitchAccount: mocks.follows }}
         view={view}
-        loading={false}
         pane={{
           tabId: 'tab',
           sessionId: 'chat',

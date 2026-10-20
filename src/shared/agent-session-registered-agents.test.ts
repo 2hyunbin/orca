@@ -73,13 +73,3 @@ describe('decodeAgentSessionAgentsResult', () => {
     expect(decodeAgentSessionAgentsResult({ agents: 'claude' })).toBeNull()
   })
 })
-
-it('reads account following only when explicitly declared by the host', () => {
-  for (const value of [undefined, false, 'true', true]) {
-    const [agent] =
-      decodeAgentSessionAgentsResult({
-        agents: [{ ...CODEX, followsAccountSelection: value }]
-      }) ?? []
-    expect(agent?.followsAccountSelection).toBe(value === true ? true : undefined)
-  }
-})

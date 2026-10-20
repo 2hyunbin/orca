@@ -300,7 +300,7 @@ export function NativeChatStructuredSession(
         ) : (
           <NativeChatRewindContext.Provider value={controller.rewind.surface}>
             <NativeChatUsageLimitActionsProvider
-              loading={!controller.readCurrent}
+              recovery={controller}
               pane={props}
               directory={fileLinkContext}
               messages={controller.messages}
