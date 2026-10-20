@@ -299,6 +299,38 @@ describe('a terminal handle and the frame that binds its pane, in either order',
   })
 })
 
+describe('a workspace handed back to the mirror', () => {
+  it('is not drawn from the stopped stream’s frames while the stream reconnects', async () => {
+    const other = 'repo::/other-worktree'
+    hoisted.owners.set(other, ENV)
+    const store = mirroredStore()
+    install(store)
+    setServers(store, [CAPABLE])
+    const stream = streams.openTo(ENV)
+    const frames = mainLayoutFrameSender()
+    const otherLayout = {
+      ...serverLayout([serverTerminalTab('host-tab-9', LEAF_ID, 'server-pty-9')]),
+      worktreeId: other
+    }
+    streams.send(stream, senderSnapshot(frames, { [WT]: SERVER_LAYOUT, [other]: otherLayout }, 1))
+    await settle()
+    stream.onStatus({ state: 'lost' })
+    stream.onStatus({ state: 'connecting' })
+    await settle()
+
+    // The mirror's first snapshot of the other workspace, after it took it back.
+    mirrorSnapshot(store, ENV, {
+      ...sessionTabs([surface('host-tab-8', LEAF_ID, 'terminal-8')], 1),
+      worktree: other
+    })
+    await settle()
+
+    expect((store.getState().tabsByWorktree[other] ?? []).map((tab) => tab.id)).toEqual([
+      toWebTerminalSurfaceTabId('host-tab-8')
+    ])
+  })
+})
+
 describe('two desktop windows', () => {
   it('bind identical ptyIds from the same server frames and handles', async () => {
     const first = mirroredStore()

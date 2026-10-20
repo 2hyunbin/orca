@@ -59,9 +59,17 @@ function openServerFrames(
   let gated = inherited
   /** From the stream's snapshot until it stops: only then do its frames draw. */
   let live = false
+  /** Gates `keys`; a workspace leaving the gate that is still this server's returns to the mirror. */
   const gate = (keys: ReadonlySet<string>): void => {
+    const returned = [...gated].filter((key) => !keys.has(key) && owns(key))
     gated = keys
     setFrameDrawnServerWorkspaces(environmentId, keys)
+    for (const key of returned) {
+      // The frame tree stays until the fresh snapshot replaces it: never an empty tree between.
+      resyncMirroredServerWorkspace(environmentId, key).catch((error: unknown) => {
+        console.warn('[layout-owner] a server workspace could not return to the mirror:', error)
+      })
+    }
   }
   const regate = (): boolean => {
     const keys = new Set(translator.keys().filter(owns))
@@ -73,19 +81,17 @@ function openServerFrames(
   }
   const handBack = (): void => {
     live = false
-    const keys = [...gated]
     gate(new Set())
-    for (const key of keys) {
-      // The frame tree stays until the fresh snapshot replaces it: never an empty tree between.
-      resyncMirroredServerWorkspace(environmentId, key).catch((error: unknown) => {
-        console.warn('[layout-owner] a server workspace could not return to the mirror:', error)
-      })
-    }
   }
+  const draws = serverDraws(environmentId)
 
   const sync = openWorkspaceLayoutFrameSync(store, {
     target: { kind: 'environment', environmentId },
-    draws: serverDraws(environmentId),
+    // Only gated workspaces: a handed-back one is the mirror's, whatever the frozen frames still hold.
+    draws: (state) => {
+      const ours = draws(state)
+      return (key) => gated.has(key) && ours(key)
+    },
     translate: (frame) => {
       const translated = translator.translate(frame)
       live ||= frame.type === 'snapshot'
