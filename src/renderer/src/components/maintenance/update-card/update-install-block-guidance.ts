@@ -32,6 +32,20 @@ export function getUpdateInstallBlockGuidance(block: UpdateInstallBlock): {
       )
     }
   }
+  if (block.instances.length > 0 && block.instances.every(({ kind }) => kind === 'browser')) {
+    // A live server's browser helper: on this Mac it is usually orcad, kept alive by another computer.
+    return {
+      title: translate('updates.installBlock.readyTitle', 'Your update is ready'),
+      summary: translate(
+        'updates.installBlock.browserSummary',
+        "A background Orca server's browser is still using this app."
+      ),
+      explainer: translate(
+        'updates.installBlock.browserGuidance',
+        'If another computer uses this Mac as an SSH host, update Orca on that computer and reconnect, so the browser can pause for updates. Or end the process below: the server keeps running without its browser. Then retry.'
+      )
+    }
+  }
   const hasServers = block.instances.some(({ kind }) => kind === 'server' || kind === 'browser')
   const onlyServers =
     block.instances.length > 0 &&

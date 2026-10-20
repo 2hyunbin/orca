@@ -8,6 +8,8 @@ import { join } from 'node:path'
 /** launchd label prefix `orca serve service install` writes; only those supervisors register. */
 export const SERVE_LAUNCHD_LABEL_PREFIX = 'com.stablyai.orca.serve'
 export const SERVE_COORDINATION_PROTOCOL = 1
+/** orcad restarts its own browser helper; under the serve prefix so older installers park it too. */
+export const ORCAD_BROWSER_PARK_LABEL = `${SERVE_LAUNCHD_LABEL_PREFIX}.orcad-browser`
 /** A registration this stale belongs to a supervisor that is gone or wedged. */
 export const SERVE_SUPERVISOR_HEARTBEAT_STALE_MS = 15_000
 export const SERVE_SUPERVISOR_HEARTBEAT_MS = 3_000

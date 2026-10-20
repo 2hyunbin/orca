@@ -24,7 +24,7 @@ import {
   SERVE_COORDINATION_PROTOCOL,
   type ServeParkRecord,
   type ServeSupervisorRegistration
-} from '../../shared/serve-bundle-coordination'
+} from './serve-bundle-coordination'
 import { homedir } from 'node:os'
 
 /** The supervisor's half of the desktop-install park protocol. */
@@ -64,17 +64,18 @@ function readBundleIdentity(bundlePath: string): string {
 /**
  * Only a launchd service whose label `orca serve service install` wrote takes part: the installer
  * stops a server only when a service manager it can name keeps the supervisor running. Everyone
- * else keeps today's refusal.
+ * else keeps today's refusal. `label` is for an owner that restarts its own child, like orcad.
  */
 export function openServeBundlePark(input: {
   executable: string
+  label?: string
   env?: NodeJS.ProcessEnv
   platform?: NodeJS.Platform
   userDataRoot?: string
   now?: () => number
 }): ServeBundlePark | null {
   const env = input.env ?? process.env
-  const label = env.XPC_SERVICE_NAME
+  const label = input.label ?? env.XPC_SERVICE_NAME
   if ((input.platform ?? process.platform) !== 'darwin' || !isServeSupervisorLabel(label)) {
     return null
   }
