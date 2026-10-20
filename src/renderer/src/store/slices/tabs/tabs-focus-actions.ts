@@ -1,10 +1,6 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import {
-  findTabAndWorktree,
-  findTabByEntityInGroup,
-  pushRecentTabId,
-  sanitizeRecentTabIds
-} from '../tab-group-state'
+import { findTabAndWorktree, findTabByEntityInGroup } from '../tab-group-state'
+import { withTabActiveInGroup } from './moved-tab-selection'
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordPromotedEditorTabsInLayoutOwner } from '../editor/tabs/editor-tab-layout-owner'
@@ -86,19 +82,7 @@ export function createTabsFocusActions(
           },
           groupsByWorktree: {
             ...state.groupsByWorktree,
-            [worktreeId]: (state.groupsByWorktree[worktreeId] ?? []).map((group) =>
-              group.id === tab.groupId
-                ? {
-                    ...group,
-                    activeTabId: tabId,
-                    // Why: track every activation in the group's MRU so closeUnifiedTab returns to the previous tab; sanitize to prune removed ids.
-                    recentTabIds: pushRecentTabId(
-                      sanitizeRecentTabIds(group.recentTabIds, group.tabOrder),
-                      tabId
-                    )
-                  }
-                : group
-            )
+            [worktreeId]: withTabActiveInGroup(state.groupsByWorktree[worktreeId] ?? [], tab)
           },
           activeGroupIdByWorktree: {
             ...state.activeGroupIdByWorktree,

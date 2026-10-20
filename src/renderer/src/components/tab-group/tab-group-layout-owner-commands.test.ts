@@ -86,34 +86,30 @@ describe('dropTabThroughLayoutOwner', () => {
     expect(orderOf(right)).toEqual(['c'])
   })
 
-  it('selects the tab in its new group once main’s frame moved it', () => {
+  it('selects nothing on main’s answer: the frame that shows the move selects the tab (L120)', () => {
     const { left, right } = seeded()
     beginLayoutFramePositions()
     dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right })
-    // Main's frame lands first: the tab is in its group, the window's selection unchanged.
+    // Main's frame lands first (drawn here without frame sync); the user selects meanwhile.
     store().getState().dropUnifiedTab('a', { groupId: right, index: 1 })
     store().getState().focusGroup(WT, left)
 
     lastHandlers().apply({})
 
     expect(orderOf(right)).toEqual(['c', 'a'])
-    expect(store().getState().activeGroupIdByWorktree[WT]).toBe(right)
-    expect(
-      store()
-        .getState()
-        .groupsByWorktree[WT]!.find((g) => g.id === right)?.activeTabId
-    ).toBe('a')
+    expect(store().getState().activeGroupIdByWorktree[WT]).toBe(left)
   })
 
   it('leaves placing a lone tab’s group to main’s frame while frames flow', () => {
     const { left, right } = seeded()
     const layout = store().getState().layoutByWorktree[WT]
     beginLayoutFramePositions()
+    const selectedBefore = store().getState().activeGroupIdByWorktree[WT]
     dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'c', groupId: left, direction: 'left' })
     lastHandlers().apply({ groupId: right })
 
     expect(store().getState().layoutByWorktree[WT]).toBe(layout)
-    expect(store().getState().activeGroupIdByWorktree[WT]).toBe(right)
+    expect(store().getState().activeGroupIdByWorktree[WT]).toBe(selectedBefore)
   })
 
   it('leaves a drop the window would skip to today’s path, sending nothing', () => {

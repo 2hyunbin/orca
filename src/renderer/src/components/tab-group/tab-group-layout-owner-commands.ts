@@ -1,6 +1,6 @@
 // A layout-owner build's tab moves and group sizes. A move: main places the tab first and its frame
-// shows the move, or while its stream is down, the reconnect's snapshot does; on main's answer the
-// window selects the tab once it shows there.
+// shows the move, or while its stream is down, the reconnect's snapshot does; the flush that shows
+// it selects the tab, unless the user chose another selection since (L120).
 // Group sizes: drawn while dragging, main saves the ratio when the drag ends.
 
 import { useAppStore } from '@/store'
@@ -9,6 +9,11 @@ import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import type { WindowLayoutCommand } from '@/runtime/layout-apply-send'
 import { isPaneColumnSplitDropNoOp } from '@/store/slices/pane-column-split-drop-no-op'
 import { mirrorWebRuntimeTabMove } from '../tab-bar/web-runtime-tab-move-mirror'
+import {
+  expectMovedTabSelection,
+  type MovedTabSelection
+} from '@/runtime/layout-owner-pane-intents'
+import { tabSelectionKey } from '@/store/slices/tabs/moved-tab-selection'
 
 /** A tab drop as the window resolved it: within its group, into another, or beside a group. */
 export type TabDrop =
@@ -26,10 +31,38 @@ export function dropTabThroughLayoutOwner(worktreeId: string, drop: TabDrop): bo
   if (!command) {
     return false
   }
-  return sendLayoutCommandToOwner(worktreeId, command, {
-    apply: ({ groupId }) => selectMovedTab(worktreeId, drop, groupId),
-    asToday: () => moveAsToday(worktreeId, drop)
+  const forget = expectSelectionAfterMove(worktreeId, drop)
+  const sent = sendLayoutCommandToOwner(worktreeId, command, {
+    // The frame the answer waits for showed the move, and with it the selection, if any.
+    apply: forget,
+    asToday: () => {
+      forget()
+      moveAsToday(worktreeId, drop)
+    },
+    refused: forget
   })
+  if (!sent) {
+    forget()
+  }
+  return sent
+}
+
+/** Records that the moved tab is selected once a frame shows it out of its group. */
+function expectSelectionAfterMove(worktreeId: string, drop: TabDrop): () => void {
+  const state = useAppStore.getState()
+  const fromGroupId = state.unifiedTabsByWorktree[worktreeId]?.find(
+    (tab) => tab.id === drop.tabId
+  )?.groupId
+  if (drop.kind === 'reorder' || !fromGroupId) {
+    return () => {}
+  }
+  const intent: MovedTabSelection = { worktreeId, tabId: drop.tabId, fromGroupId, selection: null }
+  const forget = expectMovedTabSelection(intent)
+  // Why a microtask: a drag's end restores its pre-drag selection right after the drop returns.
+  queueMicrotask(() => {
+    intent.selection = tabSelectionKey(useAppStore.getState(), worktreeId)
+  })
+  return forget
 }
 
 function commandFor(worktreeId: string, drop: TabDrop): WindowLayoutCommand | null {
@@ -98,20 +131,6 @@ function moveAsToday(worktreeId: string, drop: TabDrop): boolean {
     mirrorWebRuntimeTabMove({ kind: 'move-to-group', worktreeId, tabId, targetGroupId, index })
   }
   return moved
-}
-
-/** Main's frame shows the move; the window selects the tab in its new group, a view choice. */
-function selectMovedTab(worktreeId: string, drop: TabDrop, mainGroupId: string | undefined): void {
-  const groupId = drop.kind === 'split' ? mainGroupId : drop.groupId
-  const state = useAppStore.getState()
-  const tab = state.unifiedTabsByWorktree[worktreeId]?.find(
-    (candidate) => candidate.id === drop.tabId
-  )
-  if (drop.kind === 'reorder' || !groupId || tab?.groupId !== groupId) {
-    return
-  }
-  state.activateTab(drop.tabId, { worktreeId, preservePreview: true, recordFocus: false })
-  useAppStore.getState().focusGroup(worktreeId, groupId)
 }
 
 /** Sets a group divider's ratio here, as today, then has main save that divider's ratio. */

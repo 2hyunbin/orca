@@ -93,6 +93,52 @@ describe('a tab move drawn from main’s frame', () => {
     expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe('group-a')
   })
 
+  it('selects the moved tab in the same store update that shows the move (L120)', async () => {
+    const updates: { groupId: string; activeGroupId?: string; activeTabId?: string | null }[] = []
+    const stop = useAppStore.subscribe((state, previous) => {
+      const tab = state.unifiedTabsByWorktree[GIT_KEY]!.find((entry) => entry.id === 'tab-unbound')
+      const before = previous.unifiedTabsByWorktree[GIT_KEY]!.find(
+        (entry) => entry.id === 'tab-unbound'
+      )
+      if (tab && tab.groupId !== before?.groupId) {
+        updates.push({
+          groupId: tab.groupId,
+          activeGroupId: state.activeGroupIdByWorktree[GIT_KEY],
+          activeTabId: state.groupsByWorktree[GIT_KEY]!.find((group) => group.id === tab.groupId)
+            ?.activeTabId
+        })
+      }
+    })
+    dropTabThroughLayoutOwner(GIT_KEY, { kind: 'move', tabId: 'tab-unbound', groupId: 'group-a' })
+    await settle()
+    stop()
+
+    expect(updates).toEqual([
+      { groupId: 'group-a', activeGroupId: 'group-a', activeTabId: 'tab-unbound' }
+    ])
+  })
+
+  it('keeps a selection the user made before main’s answer to an earlier drag (L120)', async () => {
+    layoutApplyTestTransport.answerWith('pending')
+    dropTabThroughLayoutOwner(GIT_KEY, { kind: 'move', tabId: 'tab-unbound', groupId: 'group-a' })
+    await Promise.resolve()
+    // A second drag starts and selects elsewhere before main answers the first.
+    useAppStore.getState().focusGroup(GIT_KEY, 'group-b')
+    const selected = useAppStore.getState().groupsByWorktree[GIT_KEY]!.map((group) => [
+      group.id,
+      group.activeTabId
+    ])
+    layoutApplyTestTransport.answerWith('apply')
+    layoutApplyTestTransport.answerPending()
+    await settle()
+
+    expect(tabOf('tab-unbound').groupId).toBe('group-a')
+    expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe('group-b')
+    expect(groupOf('group-a')!.activeTabId).toBe(
+      selected.find(([id]) => id === 'group-a')![1]
+    )
+  })
+
   it('splits the tab into the group main made beside its target, and selects it there', async () => {
     const groupsBefore = useAppStore.getState().groupsByWorktree[GIT_KEY]!.map((group) => group.id)
     dropTabThroughLayoutOwner(GIT_KEY, {

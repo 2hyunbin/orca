@@ -11,6 +11,7 @@
 // store does not show from frames yet (startup, a reopened stream, a first visit, one sent whole)
 // takes the full build, whose view the window reads back through its save and the Loader.
 
+import { withMovedTabSelections } from '@/store/slices/tabs/moved-tab-selection'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
@@ -89,7 +90,8 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
 
   const show = (patch: LayoutFrameBuildPatch): void => {
     if (Object.keys(patch).length > 0) {
-      store.setState(patch)
+      // A tab the user moved is selected in the update that shows it moved.
+      store.setState(withMovedTabSelections(store.getState(), patch))
     }
   }
 
