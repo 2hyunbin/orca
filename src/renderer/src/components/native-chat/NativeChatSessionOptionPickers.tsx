@@ -138,7 +138,7 @@ function SessionOptionPopover(props: {
   onAction: (descriptor: SessionOptionDescriptor) => void
   focusComposer?: () => void
 }): React.JSX.Element {
-  const { model, options, pendingIds } = props
+  const { model, options, pendingIds, demandModelCatalog } = props
   // Why here: this unmounts with the pill, so a picker that went away comes back closed.
   const [open, setOpen] = useState(false)
   const [seenRequest, setSeenRequest] = useState<NativeChatOptionPickerRequest | null>(null)
@@ -154,10 +154,10 @@ function SessionOptionPopover(props: {
   const wasOpen = useRef(false)
   useEffect(() => {
     if (open && !wasOpen.current) {
-      props.demandModelCatalog?.()
+      demandModelCatalog?.()
     }
     wasOpen.current = open
-  }, [open, props.demandModelCatalog])
+  }, [open, demandModelCatalog])
   const focusReturn = useNativeChatPickerFocusReturn(props.focusComposer)
   const modelTitle = translate('components.native-chat.composer.model', 'Model')
   const modelLabel = nativeChatModelPillLabel(model)
