@@ -225,14 +225,10 @@ export async function commitStructuredAgentSessionCreate(args: {
         : {})
     })
   }
-  const attachOptions = {
+  const result = await prepared.host.attach(args.caller, prepared.attachParams, {
     ...(prepared.hostLaunchDirectory ? { hostLaunchDirectory: prepared.hostLaunchDirectory } : {}),
     ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {})
-  }
-  const result =
-    attachOptions.hostLaunchDirectory || attachOptions.catalogModels
-      ? await prepared.host.attach(args.caller, prepared.attachParams, attachOptions)
-      : await prepared.host.attach(args.caller, prepared.attachParams)
+  })
   if (!result.ok || !prepared.tab) {
     return result
   }
