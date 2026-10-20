@@ -364,9 +364,9 @@ describe('the explicit owner environment (resolveOwner)', () => {
   })
 
   it('does not treat the focused runtime as ownership for legacy-local worktrees', () => {
-    expect(runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, 'legacy-repo::wt-legacy')).toBe(
-      'focused-env'
-    )
+    expect(
+      runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, 'legacy-repo::wt-legacy')
+    ).toBeNull()
     expect(ownerEnvironmentId(state, 'legacy-repo::wt-legacy')).toBeNull()
   })
 

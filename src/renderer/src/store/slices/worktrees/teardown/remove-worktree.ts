@@ -10,7 +10,7 @@ import { forgetWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { readIpcErrorDetail } from '@/lib/ipc-error'
 import { isArchiveHookRemovalError } from '../../../../../../shared/worktree/archive-hook-removal-gate'
 import { resolveWorktreeOperationRouteResultForHost } from '@/lib/worktree-operation-route'
-import { resolveWriteRouteResult } from '@/lib/resolve-owner'
+import { resolveWorktreeOperationRouteResult } from '@/lib/worktree-operation-route'
 import {
   beginHostQualifiedRemoval,
   completeSameIdHostScopedRemoval,
@@ -139,7 +139,7 @@ export function createRemoveWorktree(
           // Missing means stale mirror; ambiguous or changed ownership must fail closed.
           const currentResolution = requiredExecutionHostId
             ? resolveWorktreeOperationRouteResultForHost(get(), worktreeId, requiredExecutionHostId)
-            : resolveWriteRouteResult(get(), worktreeId)
+            : resolveWorktreeOperationRouteResult(get(), worktreeId)
           if (currentResolution.kind === 'ambiguous') {
             throw error
           }
