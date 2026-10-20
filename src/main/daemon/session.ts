@@ -140,19 +140,20 @@ export class Session {
   }
 
   write(data: string): void {
-    if (this._state === 'exited' || this._disposed) {
-      return
-    }
-
     // Daemon POSIX PTYs need the local provider's cooked-echo containment (#13137).
     // DA1/CPR stay immediate unless an echo-risk reply is already held (#13892, #15559).
-    // Why the queue: keep queuing during the post-ready flush-gate window ('ready' but not yet
-    // flushed); a direct write would race fresh input ahead of the buffered startup command.
-    if (this.startupIngress.answerLiveQueryReply(data) || this.shellReady.tryEnqueue(data)) {
-      return
+    // Why never queued behind the startup command: before the shell is ready the reader may be an
+    // rc-file prompt (a keychain passphrase) that only the user's keys can answer.
+    if (this.isAlive && !this._disposed && !this.startupIngress.answerLiveQueryReply(data)) {
+      this.subprocess.write(data)
     }
+  }
 
-    this.subprocess.write(data)
+  /** Orca's own startup command: held by the shell-ready barrier until the shell can read it. */
+  writeStartupCommand(data: string): void {
+    if (this._state !== 'exited' && !this._disposed && !this.shellReady.tryEnqueue(data)) {
+      this.subprocess.write(data)
+    }
   }
 
   resize(cols: number, rows: number): void {
