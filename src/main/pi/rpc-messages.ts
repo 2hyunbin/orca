@@ -22,15 +22,9 @@ export class PiRpcMessages {
   private readonly text = new Map<string, { index: number; channel: 'assistant' | 'reasoning' }>()
   private readonly tools = new Map<string, AgentJournalToolCallItem>()
   // Closing events take these latest full fields; running journal rows retain only previews.
-  private readonly whole = new BoundedMap<
-    string,
-    {
-      input?: unknown
-      output?: string
-      inputBytes: number
-      outputBytes: number
-    }
-  >({
+  private readonly whole = new BoundedMap<string, {
+    input?: unknown; output?: string; inputBytes: number; outputBytes: number
+  }>({
     maxEntries: MAX_PROVIDER_TIMELINE_OPEN_ENTRIES,
     sizeOf: (value, key) => value.inputBytes + value.outputBytes + Buffer.byteLength(key) + 64
   })
@@ -167,20 +161,13 @@ export class PiRpcMessages {
       if (!held && this.whole.size >= MAX_PROVIDER_TIMELINE_OPEN_ENTRIES) {
         throw new Error('Pi tool stream capacity exceeded')
       }
-      if (
-        !this.whole.set(event.toolCallId, {
-          input,
-          output,
-          inputBytes:
-            event.args === undefined
-              ? (held?.inputBytes ?? 0)
-              : Buffer.byteLength(JSON.stringify(input) ?? ''),
-          outputBytes:
-            result === undefined
-              ? (held?.outputBytes ?? 0)
-              : Buffer.byteLength(JSON.stringify(output) ?? '')
-        })
-      ) {
+      if (!this.whole.set(event.toolCallId, {
+        input, output,
+        inputBytes: event.args === undefined ? (held?.inputBytes ?? 0)
+          : Buffer.byteLength(JSON.stringify(input) ?? ''),
+        outputBytes: result === undefined ? (held?.outputBytes ?? 0)
+          : Buffer.byteLength(JSON.stringify(output) ?? '')
+      })) {
         throw new Error('Pi tool snapshot could not be retained')
       }
       if (

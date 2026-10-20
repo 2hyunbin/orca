@@ -92,13 +92,7 @@ describe('Pi final tail before host eviction', () => {
       }
     ])
     lane.finalize({ type: 'session.ended', verdict: { state: 'interrupted', completedAt: 2 } })
-    lane.apply([
-      {
-        type: 'item.close',
-        item: 'after-seal',
-        body: { kind: 'status', tone: 'info', text: 'must not land' }
-      }
-    ])
+    lane.apply([{ type: 'item.close', item: 'after-seal', body: { kind: 'status', tone: 'info', text: 'must not land' } }])
     let landed = false
     const barrier = deferred.drained().then((result) => {
       landed = true
@@ -120,11 +114,7 @@ describe('Pi final tail before host eviction', () => {
       discardSink: vi.fn()
     })
     expect(acknowledgeRelease).toHaveBeenCalledOnce()
-    expect(
-      journal
-        .snapshot()
-        .items.some((item) => item.body.kind === 'status' && item.body.text === 'must not land')
-    ).toBe(false)
+    expect(journal.snapshot().items.some((item) => item.body.kind === 'status' && item.body.text === 'must not land')).toBe(false)
     expect(journal.snapshot().items.map((item) => item.body)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -150,21 +140,10 @@ describe('Pi final tail before host eviction', () => {
     })
     cleanups.push(() => deferred.close())
     for (let index = 0; index <= 512; index += 1) {
-      expect(
-        deferred.sink.tryAppendTransition?.({
-          finalTail: true,
-          lifecycle: true,
-          publish: false,
-          steps: [
-            {
-              kind: 'settlement',
-              settlementId: `tail:${index}`,
-              reservedBytes: 1,
-              resolve: () => []
-            }
-          ]
-        })
-      ).toEqual(index < 512 ? { accepted: true } : { accepted: false, reason: 'failed' })
+      expect(deferred.sink.tryAppendTransition?.({
+        finalTail: true, lifecycle: true, publish: false,
+        steps: [{ kind: 'settlement', settlementId: `tail:${index}`, reservedBytes: 1, resolve: () => [] }]
+      })).toEqual(index < 512 ? { accepted: true } : { accepted: false, reason: 'failed' })
     }
     expect(failures).toEqual([
       expect.objectContaining({

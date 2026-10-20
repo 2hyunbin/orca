@@ -10,11 +10,7 @@ import type {
   AgentJournalItemBody,
   AgentJournalRenderItem
 } from '../../../shared/agent-session-journal-types'
-import {
-  boundToolInput,
-  JOURNAL_RUNNING_PREVIEW_LIMITS,
-  utf8Head
-} from '../agent-session-journal/journal-payload-bounds'
+import { boundToolInput, JOURNAL_RUNNING_PREVIEW_LIMITS, utf8Head } from '../agent-session-journal/journal-payload-bounds'
 import {
   HISTORY_PAGE_CONTENT_BUDGET_BYTES,
   type HistoryItemForm,

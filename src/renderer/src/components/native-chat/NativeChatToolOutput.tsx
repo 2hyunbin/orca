@@ -36,24 +36,17 @@ export function NativeChatToolOutput({
   const owner = useNativeChatVisualOwner()
   const [expanded, setExpanded] = useState(false)
   const [detail, setDetail] = useState<{
-    body: NativeChatToolResultBlock
-    owner: typeof owner
-    full?: FullOutput
-    loading?: boolean
-    failed?: boolean
+    body: NativeChatToolResultBlock; owner: typeof owner; full?: FullOutput;
+    loading?: boolean; failed?: boolean
   } | null>(null)
-  useEffect(
-    () => () => setDetail((held) => (held?.body === body && held.owner === owner ? null : held)),
-    [body, owner]
-  )
+  useEffect(() => () => setDetail((held) => held?.body === body && held.owner === owner ? null : held), [body, owner])
   const current = detail?.body === body && detail.owner === owner ? detail : null
   const full = current?.full
   const loading = current?.loading === true
   const failed = current?.failed === true
   const clipped =
     !full &&
-    (body.fullOutputItemId !== undefined ||
-      (!expanded && body.output.length > MAX_TOOL_DETAIL_LENGTH))
+    (body.fullOutputItemId !== undefined || (!expanded && body.output.length > MAX_TOOL_DETAIL_LENGTH))
 
   const showFull = async (): Promise<void> => {
     const itemId = body.fullOutputItemId
@@ -63,9 +56,7 @@ export function NativeChatToolOutput({
     }
     setDetail({ body, owner, loading: true })
     const finish = (result: { full?: FullOutput; failed?: boolean }): void => {
-      setDetail((held) =>
-        held?.body === body && held.owner === owner ? { body, owner, ...result } : held
-      )
+      setDetail((held) => held?.body === body && held.owner === owner ? { body, owner, ...result } : held)
     }
     try {
       if (!(await supportsStructuredAgentSessionItemDetail(owner.target))) {
@@ -78,17 +69,12 @@ export function NativeChatToolOutput({
       if (!payload) {
         throw new Error('Output is unavailable')
       }
-      finish({
-        full: {
-          text: payload.head,
-          partial: payload.truncated
-            ? {
-                shown: new TextEncoder().encode(payload.head).length,
-                total: payload.byteLength
-              }
-            : null
-        }
-      })
+      finish({ full: {
+        text: payload.head,
+        partial: payload.truncated ? {
+          shown: new TextEncoder().encode(payload.head).length, total: payload.byteLength
+        } : null
+      } })
     } catch {
       finish({ failed: true })
     }
