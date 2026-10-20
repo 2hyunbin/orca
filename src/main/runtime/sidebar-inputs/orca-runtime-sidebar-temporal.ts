@@ -161,9 +161,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   /** A phone holding the workspace's session open has it on screen: its flag is read and stays down. */
   readAndHoldPhoneSession(worktreeId: string): () => void {
     const hostId = this.workspaceHostId(worktreeId)
+    // Any named host qualifies the record: reading `runtime:` as "this machine" picks the local twin.
     const workspace = {
       worktreeId,
-      sshHostId: hostId && parseExecutionHostId(hostId)?.kind === 'ssh' ? hostId : null
+      sshHostId: hostId && parseExecutionHostId(hostId)?.kind !== 'local' ? hostId : null
     }
     if (writeUnreadFlag(this.store, workspace, false)) {
       this.sortStampNotices.cancel(worktreeId)
