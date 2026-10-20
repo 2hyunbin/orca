@@ -7,6 +7,7 @@ import { createCodexBackfillErrorDetector } from '../codex-backfill-error-detect
 import { hasWorktreeSleepIntent, onWorktreeSleepIntentCleared } from '@/lib/worktree-sleep-intent'
 
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
+import { waitsForMainPaneStart } from './main-pane-start-wait'
 import { findTerminalTabForPane } from './terminal-tab-id'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -110,6 +111,14 @@ export function installRunDeferredConnect(session: ConnectPanePtySession): void 
         session.startupGridSettledForConnect = true
         session.runDeferredConnect()
       })
+      return
+    }
+    if (waitsForMainPaneStart(session, session.runDeferredConnect)) {
+      session.cancelScheduledConnectFrame()
+      if (session.connectFallbackTimer !== null) {
+        clearTimeout(session.connectFallbackTimer)
+        session.connectFallbackTimer = null
+      }
       return
     }
     session.connectStarted = true
