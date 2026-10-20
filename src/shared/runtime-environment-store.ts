@@ -82,11 +82,20 @@ function saveEnvironmentFromPairingCode(
 ): AddEnvironmentOutcome {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const now = args.now ?? Date.now()
-  // Why the overlaid read: an unreadable sidecar fails the add closed rather than risk a duplicate.
-  const samePaired = findEnvironmentWithHostKey(
-    readEnvironmentStore(userDataPath).environments,
+  const samePersisted = findEnvironmentWithHostKey(
+    readPersistedEnvironmentStore(userDataPath).environments,
     offer.publicKeyB64
   )
+  // Why the overlaid entry: SSH access or a deployment lives only there, and the guard reads it.
+  const samePaired =
+    samePersisted &&
+    readEnvironmentStore(userDataPath).environments.find((entry) => entry.id === samePersisted.id)
+  if (samePersisted && !samePaired) {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      `This server is already paired as "${samePersisted.name}", whose saved settings this version of Orca cannot read.`
+    )
+  }
   if (samePaired) {
     assertPairingReplaceableByAdd(samePaired, args.source, refreshSameServer)
     const environment = replaceEnvironmentPairing(userDataPath, samePaired.id, offer, {

@@ -21,9 +21,9 @@ import type { Store } from '../../persistence'
 import { retireRemovedRuntimeEnvironment } from './runtime-environment-removal-cleanup'
 import { readSettingsWithRuntimeEnvironmentPreference } from './runtime-environment-preference'
 import { verifyAndAddRuntimeEnvironmentFromPairingCode } from './runtime-environment-pairing-verification'
+import { publishVerifiedPairing } from './runtime-environment-repair-handler'
 import {
   closeRemoteRuntimeRequestConnection,
-  getRuntimeEnvironmentStatusOwner,
   getRuntimeEnvironmentStatusSnapshots,
   retryRemoteRuntimeSharedControlConnectionNow
 } from './runtime-environment-request-connections'
@@ -103,15 +103,11 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
     async (_event, args: { name: string; pairingCode: string; allowLoopback?: boolean }) => {
       const result = await verifyAndAddRuntimeEnvironmentFromPairingCode(getUserDataPath(), args)
       if (result.ok) {
-        clearRuntimeEnvironmentManualDisconnect(result.environment.id)
-        // Why after clearing: a manually disconnected server would not get a fresh owner.
-        await (result.updatedExisting ? invalidateTransport(result.environment.id) : undefined)
-        getRuntimeEnvironmentStatusOwner(getUserDataPath(), result.environment.id).acceptVerified({
-          id: 'status.get',
-          ok: true,
-          result: result.runtimeStatus,
-          _meta: { runtimeId: result.runtimeStatus.runtimeId }
-        })
+        await publishVerifiedPairing(
+          getUserDataPath(),
+          result,
+          result.updatedExisting ? { invalidateTransport } : null
+        )
       }
       return result
     }

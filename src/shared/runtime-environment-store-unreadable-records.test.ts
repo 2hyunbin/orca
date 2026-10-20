@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer } from './pairing'
 import {
   addEnvironmentFromPairingCode,
+  addOrUpdateEnvironmentFromPairingCode,
   getEnvironmentStorePath,
   listEnvironments,
   markEnvironmentUsed,
@@ -188,6 +189,17 @@ describe('runtime environment store with records this build cannot read', () => 
         'newer version of Orca'
       )
       expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Hiding 1 server'))
+    })
+
+    it('refuses a second entry for its server even though it is hidden', () => {
+      const { other } = setup()
+      expect(() =>
+        addOrUpdateEnvironmentFromPairingCode(userDataPath, {
+          name: 'Pinned again',
+          pairingCode: encodePairingOffer({ ...pairing, endpoint: 'ws://192.0.2.10:6768' })
+        })
+      ).toThrow('already paired as "Pinned"')
+      expect(listEnvironments(userDataPath)).toEqual([other])
     })
 
     it('is never replaced, pruned, or orphaned by writes', () => {
