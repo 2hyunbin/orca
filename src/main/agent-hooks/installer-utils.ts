@@ -332,7 +332,9 @@ export function writeHooksJson(
   }
 
   try {
-    writeFileSync(tmpPath, serialized, { encoding: 'utf-8', mode: existingMode, flag: 'wx' })
+    // Why not on Windows: a read-only config's mode would make the temp file undeletable on failure.
+    const tmpMode = process.platform === 'win32' ? undefined : existingMode
+    writeFileSync(tmpPath, serialized, { encoding: 'utf-8', mode: tmpMode, flag: 'wx' })
     if (existingMode !== undefined && process.platform !== 'win32') {
       // Preserve requested permissions even with a stricter process umask.
       chmodSync(tmpPath, existingMode)
