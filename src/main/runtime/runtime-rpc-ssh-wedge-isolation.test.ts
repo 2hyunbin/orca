@@ -62,15 +62,26 @@ async function startServer(): Promise<{ endpoint: string; token: string }> {
   return { endpoint: metadata.transports[0]!.endpoint, token: metadata.authToken ?? '' }
 }
 
+type RpcResponseFrame = Record<string, unknown> & { id: string }
+
+/** Validates a server line at the socket boundary; keepalive and malformed lines are skipped. */
+function parseResponseFrame(line: string): RpcResponseFrame | null {
+  const parsed: unknown = JSON.parse(line)
+  if (typeof parsed !== 'object' || parsed === null || !('id' in parsed)) {
+    return null
+  }
+  return { ...Object.fromEntries(Object.entries(parsed)), id: String(parsed.id) }
+}
+
 /** Writes every frame on one connection and collects responses by id. */
 function openPipelinedSocket(endpoint: string): {
   write: (frame: Record<string, unknown>) => void
-  next: (id: string) => Promise<object>
+  next: (id: string) => Promise<RpcResponseFrame>
 } {
   const socket = createConnection(endpoint)
   sockets.push(socket)
-  const responses = new Map<string, object>()
-  const waiters = new Map<string, (frame: object) => void>()
+  const responses = new Map<string, RpcResponseFrame>()
+  const waiters = new Map<string, (frame: RpcResponseFrame) => void>()
   let buffer = ''
   socket.setEncoding('utf8')
   // Why: a reset on a wedged socket must fail the probe assertions, not crash the worker.
@@ -79,15 +90,13 @@ function openPipelinedSocket(endpoint: string): {
     buffer += chunk
     let newline = buffer.indexOf('\n')
     while (newline !== -1) {
-      const frame: unknown = JSON.parse(buffer.slice(0, newline))
+      const frame = parseResponseFrame(buffer.slice(0, newline))
       buffer = buffer.slice(newline + 1)
       newline = buffer.indexOf('\n')
-      if (typeof frame !== 'object' || frame === null || !('id' in frame)) {
-        continue
+      if (frame) {
+        responses.set(frame.id, frame)
+        waiters.get(frame.id)?.(frame)
       }
-      const id = String(frame.id)
-      responses.set(id, frame)
-      waiters.get(id)?.(frame)
     }
   })
   return {
