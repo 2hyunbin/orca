@@ -12851,6 +12851,7 @@
         "SshTargetList": {
           "addedInOrca": "在 Orca 中添加",
           "fromConfig": "来自 ~/.ssh/config",
+          "showMore": "显示 {{count}} 更多",
           "selectGroup": "选择此组中的全部",
           "filteredCount": "{{count}} / {{total}}",
           "selectManualGroup": "选择所有在 Orca 中添加的主机",

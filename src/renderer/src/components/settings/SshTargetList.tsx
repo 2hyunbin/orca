@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import type { SshConnectionState, SshTarget } from '../../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
+import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
 import type { SshTargetBusyAction } from './ssh-target-action-state'
 import {
@@ -33,6 +35,9 @@ function groupTitle(group: SshTargetGroup): React.JSX.Element {
   }
   return <>{translate('auto.components.settings.SshTargetList.fromConfig', 'From ~/.ssh/config')}</>
 }
+
+// Why: a generated ~/.ssh/config can import >10k hosts; rendering every card cost GBs of DOM.
+export const SSH_TARGET_LIST_PAGE_SIZE = 100
 
 const NOT_LIST_CONTEXT = '[role="dialog"], [role="alertdialog"], [role="menu"], pre, textarea'
 
@@ -69,6 +74,7 @@ export function SshTargetList({
   onServerChanged
 }: SshTargetListProps): React.JSX.Element {
   const groups = groupSshTargetsBySource(targets)
+  const [shownByGroup, setShownByGroup] = useState<Partial<Record<SshTargetGroupId, number>>>({})
   const isMac = navigator.userAgent.includes('Mac')
 
   return (
@@ -92,6 +98,8 @@ export function SshTargetList({
       {groups.map((group) => {
         const ids = group.targets.map((target) => target.id)
         const checkState = sshTargetGroupCheckState(selection.selected, ids)
+        const shownCount = shownByGroup[group.id] ?? SSH_TARGET_LIST_PAGE_SIZE
+        const hiddenCount = group.targets.length - shownCount
         return (
           <section
             key={group.id}
@@ -129,7 +137,7 @@ export function SshTargetList({
               </span>
             </div>
             <div className="divide-y divide-border/40">
-              {group.targets.map((target) => (
+              {group.targets.slice(0, shownCount).map((target) => (
                 <SshTargetCard
                   key={target.id}
                   target={target}
@@ -147,6 +155,30 @@ export function SshTargetList({
                 />
               ))}
             </div>
+            {hiddenCount > 0 ? (
+              <div className="border-t border-border/40 p-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() =>
+                    setShownByGroup((prev) => ({
+                      ...prev,
+                      [group.id]: shownCount + SSH_TARGET_LIST_PAGE_SIZE
+                    }))
+                  }
+                >
+                  {translate(
+                    'auto.components.settings.SshTargetList.showMore',
+                    'Show {{count}} more',
+                    {
+                      count: Math.min(hiddenCount, SSH_TARGET_LIST_PAGE_SIZE)
+                    }
+                  )}
+                </Button>
+              </div>
+            ) : null}
           </section>
         )
       })}

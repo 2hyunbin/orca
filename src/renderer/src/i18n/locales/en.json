@@ -13136,6 +13136,7 @@
         "SshTargetList": {
           "addedInOrca": "Added in Orca",
           "fromConfig": "From ~/.ssh/config",
+          "showMore": "Show {{count}} more",
           "selectGroup": "Select all in this group",
           "filteredCount": "{{count}} of {{total}}",
           "selectManualGroup": "Select all hosts added in Orca",
