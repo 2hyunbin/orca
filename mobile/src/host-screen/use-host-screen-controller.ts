@@ -140,6 +140,7 @@ export function useHostScreenController({
   const { feed } = sidebarFeed
   const sectionsResult = useHostListSections({
     client,
+    hostId,
     feed,
     displayWorktrees,
     hostPlatform,
@@ -156,7 +157,10 @@ export function useHostScreenController({
     [state.view.filters, uniqueRepos]
   )
   const existingWorktreePaths = useMemo(() => state.worktrees.map((w) => w.path), [state.worktrees])
-  const activeWorktreeScroll = useActiveWorktreeScroll(sectionsResult.sections)
+  const activeWorktreeScroll = useActiveWorktreeScroll(
+    sectionsResult.sections,
+    state.search.trim() !== ''
+  )
 
   return {
     actions,

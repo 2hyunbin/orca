@@ -18,6 +18,7 @@ import {
   isSameWorktreeRow,
   removeWorktreeRow
 } from '../worktree/worktree-host-row-identity'
+import { noteLastVisitedWorktree } from '../worktree/last-visited-worktree-by-host'
 import type { Worktree } from '../worktree/workspace-list-types'
 import {
   worktreeActivate,
@@ -224,6 +225,11 @@ export function useHostWorktreeActions(args: {
       const routeHost = workspaceRouteExecutionHost(client, hostCapabilities, item.hostId)
       if (routeHost === null) {
         return
+      }
+      // A feed-built list highlights this phone's last visit, noted here because the session may
+      // open as another page whose stored write this list never sees.
+      if (hostId) {
+        noteLastVisitedWorktree({ hostId, worktreeId: item.worktreeId, executionHost: routeHost })
       }
       const rowClient = clientForRow(item)
       if (rowClient && connState === 'connected') {
