@@ -23,7 +23,11 @@ function renderReview(): ReturnType<typeof vi.fn> {
     useCombinedDiffSectionRevalidation({
       file: review,
       gitStatusEntries: [],
-      registry: { loadedIndicesRef: { current: new Set([0, 2]) } },
+      // Why: index 3 is mid-read; that read may predate the missed write.
+      registry: {
+        loadedIndicesRef: { current: new Set([0, 2]) },
+        loadingIndicesRef: { current: new Set([2, 3]) }
+      },
       requestSectionReload,
       sectionIndexByKeyRef: { current: new Map() },
       sectionEntries: [],
@@ -47,10 +51,10 @@ function dispatch(payload: FsChangedPayload, runtimeEnvironmentId: string | null
 
 afterEach(cleanup)
 
-it('re-reads every loaded section of a mounted review when its workspace catches up', () => {
+it('re-reads every loaded and in-flight section of a mounted review when its workspace catches up', () => {
   const requestSectionReload = renderReview()
   dispatch({ worktreePath: '/repo', events: [{ kind: 'overflow', absolutePath: '/repo' }] })
-  expect(requestSectionReload.mock.calls).toEqual([[0], [2]])
+  expect(requestSectionReload.mock.calls).toEqual([[0], [2], [3]])
 })
 
 it('ignores other workspaces, other hosts and ordinary path events', () => {

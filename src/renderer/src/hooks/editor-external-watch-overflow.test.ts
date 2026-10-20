@@ -24,7 +24,11 @@ vi.mock('@/components/editor/combined-diff/remember-view/combined-diff-view-cach
   forgetCombinedDiffViewBodiesForWorktree: harness.forgetCombinedBodies
 }))
 
-import { reconcileEditorTabsAfterOverflow } from './editor-external-watch-overflow'
+import type { OpenFile } from '@/store/slices/editor'
+import {
+  reconcileEditorTabsAfterOverflow,
+  supersedeOverflowProbesForBatch
+} from './editor-external-watch-overflow'
 
 const setExternalMutation = vi.fn()
 const setPendingDiskBaselineVerification = vi.fn()
@@ -121,6 +125,61 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     await vi.waitFor(() => expect(harness.scheduleReload).toHaveBeenCalledTimes(1))
 
     expect(harness.scheduleReload).toHaveBeenCalledWith(notification('runtime.md', 'env-1'))
-    expect(harness.runtimePathsExist).toHaveBeenCalledWith(expect.anything(), ['/repo/runtime.md'])
+    expect(harness.runtimePathsExist).toHaveBeenCalledWith(
+      expect.anything(),
+      ['/repo/runtime.md'],
+      undefined,
+      // Why: only a per-path ENOENT may mark a tab deleted, never a whole-request "not found".
+      { codedAbsenceOnly: true }
+    )
+  })
+
+  it('drops an older existence answer once a newer probe for the tab has answered', async () => {
+    setTabs(tab('a.ts'))
+    let answerFirst: (rows: unknown) => void = () => {}
+    harness.runtimePathsExist
+      .mockImplementationOnce(() => new Promise((resolve) => (answerFirst = resolve)))
+      .mockResolvedValueOnce([{ exists: false }])
+    reconcileEditorTabsAfterOverflow(target)
+    reconcileEditorTabsAfterOverflow(target)
+    await vi.waitFor(() => expect(setExternalMutation).toHaveBeenCalledWith('a.ts', 'deleted'))
+
+    answerFirst([{ exists: true }])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(setExternalMutation).not.toHaveBeenCalledWith('a.ts', null)
+    expect(harness.scheduleReload).not.toHaveBeenCalled()
+  })
+
+  it('drops a pending existence answer when a watch event for the tab arrives first', async () => {
+    const touched: OpenFile = {
+      id: 'a.ts',
+      worktreeId: 'wt-1',
+      filePath: '/repo/a.ts',
+      relativePath: 'a.ts',
+      language: 'typescript',
+      mode: 'edit',
+      isDirty: false
+    }
+    setTabs(touched)
+    let answer: (rows: unknown) => void = () => {}
+    harness.runtimePathsExist.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve))
+    )
+    reconcileEditorTabsAfterOverflow(target)
+    supersedeOverflowProbesForBatch(
+      {
+        createOrUpdatePaths: new Map(),
+        changes: [],
+        deletedOpenEditors: [{ file: touched, normalizedDeletePath: '/repo/a.ts' }],
+        hasCombinedDiffConsumer: false,
+        matchesCreateOrUpdate: () => false,
+        matchingOpenFiles: () => []
+      },
+      [touched]
+    )
+
+    answer([{ exists: true }])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(harness.scheduleReload).not.toHaveBeenCalled()
   })
 })

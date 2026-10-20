@@ -28,7 +28,7 @@ export function useCombinedDiffSectionRevalidation({
 }: {
   file: OpenFile
   gitStatusEntries: GitStatusEntry[]
-  registry: Pick<CombinedDiffSectionLoadRegistry, 'loadedIndicesRef'>
+  registry: Pick<CombinedDiffSectionLoadRegistry, 'loadedIndicesRef' | 'loadingIndicesRef'>
   requestSectionReload: (index: number) => void
   sectionIndexByKeyRef: React.RefObject<ReadonlyMap<string, number>>
   // The entry set is structurally stable while individual section content/loading state changes.
@@ -37,7 +37,7 @@ export function useCombinedDiffSectionRevalidation({
   shouldAutoReloadFromGitStatus: boolean
   treeMode: CombinedDiffFileTreeMode
 }): string {
-  const { loadedIndicesRef } = registry
+  const { loadedIndicesRef, loadingIndicesRef } = registry
   const combinedGitStatusSignature = React.useMemo(() => {
     if (!shouldAutoReloadFromGitStatus) {
       return ''
@@ -123,13 +123,21 @@ export function useCombinedDiffSectionRevalidation({
       ) {
         return
       }
-      for (const index of loadedIndicesRef.current) {
+      // Why: an in-flight read may have started before the missed write, so retry it too.
+      for (const index of new Set([...loadedIndicesRef.current, ...loadingIndicesRef.current])) {
         requestSectionReload(index)
       }
     }
     window.addEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handler)
     return () => window.removeEventListener(ORCA_WORKTREE_FILE_CHANGE_EVENT, handler)
-  }, [file.filePath, file.runtimeEnvironmentId, loadedIndicesRef, requestSectionReload, treeMode])
+  }, [
+    file.filePath,
+    file.runtimeEnvironmentId,
+    loadedIndicesRef,
+    loadingIndicesRef,
+    requestSectionReload,
+    treeMode
+  ])
 
   return combinedGitStatusSignature
 }

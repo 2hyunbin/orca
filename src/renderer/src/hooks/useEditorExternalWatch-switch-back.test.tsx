@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
@@ -90,7 +90,7 @@ describe('switching back to a workspace that was not watched', () => {
   let detachScan: () => void
   let settleWatch: () => void
   let emitIpc: (payload: unknown) => void
-  let pathExists: ReturnType<typeof vi.fn>
+  let pathExists: Mock<(args: { filePath: string }) => Promise<boolean>>
   let reloads: string[]
   let fileChangeEvents: number
   const onReload = (event: Event): void => {
@@ -130,7 +130,7 @@ describe('switching back to a workspace that was not watched', () => {
     openTab(DIRTY)
     store.getState().setEditorDraft(DIRTY, 'unsaved edit')
     store.getState().markFileDirty(DIRTY, true)
-    pathExists = vi.fn().mockResolvedValue(true)
+    pathExists = vi.fn(async (_args: { filePath: string }) => true)
     previousApi = (window as unknown as { api?: unknown }).api
     ;(window as unknown as { api: unknown }).api = {
       fs: {
@@ -145,7 +145,12 @@ describe('switching back to a workspace that was not watched', () => {
           emitIpc = listener
           return vi.fn()
         }),
-        pathExists
+        pathExists,
+        pathsExist: vi.fn(async ({ filePaths }: { filePaths: string[] }) =>
+          Promise.all(
+            filePaths.map(async (filePath) => ({ exists: await pathExists({ filePath }) }))
+          )
+        )
       }
     }
     reloads = []
@@ -232,7 +237,19 @@ describe('switching back to a workspace that was not watched', () => {
     expect(reloads).toEqual([])
   })
 
-  it('drops cached bodies of an unmounted combined-diff tab so a remount reloads them', async () => {
+  it('reloads clean sections of an unmounted combined-diff tab and keeps unsaved section edits', async () => {
+    const section = (path: string, dirty: boolean) => ({
+      key: path,
+      path,
+      status: 'modified',
+      originalContent: 'base',
+      modifiedContent: dirty ? 'unsaved section edit' : 'old disk',
+      collapsed: false,
+      loading: false,
+      dirty,
+      diffResult: null,
+      largeDiffRenderLimit: null
+    })
     const viewKey = 'background::all-diffs::uncommitted::tab-1'
     const lease = claimCombinedDiffView(viewKey, 'background')
     releaseCombinedDiffView(lease)
@@ -241,16 +258,23 @@ describe('switching back to a workspace that was not watched', () => {
       view: {
         entrySignature: 'e',
         gitStatusSignature: 'g',
-        sections: [],
+        sections: [section('clean.ts', false), section('dirty.ts', true)],
         sectionHeights: {},
-        loadedIndices: [],
+        loadedIndices: [0, 1],
         sideBySide: false
       }
     })
     harness.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
     await switchBack()
 
-    expect(readCombinedDiffViewMemory(viewKey)?.view).toBeUndefined()
+    const view = readCombinedDiffViewMemory(viewKey)?.view
+    expect(view?.sections[0]).toMatchObject({ loading: true, modifiedContent: '' })
+    expect(view?.sections[1]).toMatchObject({
+      dirty: true,
+      originalContent: 'base',
+      modifiedContent: 'unsaved section edit'
+    })
+    expect(view?.loadedIndices).toEqual([1])
     expect(readCombinedDiffViewMemory(viewKey)?.scrollTop).toBe(120)
   })
 

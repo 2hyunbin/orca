@@ -26,7 +26,10 @@ import {
   scheduleSelfWriteAwareEditorExternalReload,
   type EditorExternalWatchNotification
 } from './editor-external-watch-disk-verification'
-import { reconcileEditorTabsAfterOverflow } from './editor-external-watch-overflow'
+import {
+  reconcileEditorTabsAfterOverflow,
+  supersedeOverflowProbesForBatch
+} from './editor-external-watch-overflow'
 import { WATCH_BATCH_INTERVAL_MS } from '../../../shared/filesystem-watch-batch-window'
 
 function isTargetList(
@@ -100,6 +103,7 @@ export function buildEditorExternalWatchEventHandler(
       runtimeEnvironmentId: target.runtimeEnvironmentId,
       ...getLocalWindowsWslAliasOption(target)
     })
+    supersedeOverflowProbesForBatch(batchPaths, openFilesAtStart)
     const createOrUpdatePaths = batchPaths.createOrUpdatePaths
     for (const createdPath of createOrUpdatePaths.keys()) {
       const key = pendingKey(target.worktreeId, target.runtimeEnvironmentId, createdPath)

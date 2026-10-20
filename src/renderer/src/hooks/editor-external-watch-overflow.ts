@@ -1,4 +1,6 @@
 import { useAppStore } from '@/store'
+import type { OpenFile } from '@/store/slices/editor'
+import type { EditorExternalWatchBatchPathIndex } from '@/components/editor/editor-external-watch-path-index'
 import {
   canAutoSaveOpenFile,
   isExternalReloadableEditorTab
@@ -17,6 +19,42 @@ import {
   type EditorExternalWatchNotification
 } from './editor-external-watch-disk-verification'
 
+// Why: an existence answer is stale once a newer probe or watch event for that tab arrives.
+const probeGenerationByFileId = new Map<string, number>()
+let probeGenerationSeq = 0
+
+function claimProbeGeneration(fileId: string): number {
+  probeGenerationSeq += 1
+  probeGenerationByFileId.set(fileId, probeGenerationSeq)
+  return probeGenerationSeq
+}
+
+/** Drops pending existence answers for tabs this watch batch touched. */
+export function supersedeOverflowProbesForBatch(
+  batchPaths: EditorExternalWatchBatchPathIndex,
+  openFiles: readonly OpenFile[]
+): void {
+  if (probeGenerationByFileId.size === 0) {
+    return
+  }
+  const touched = new Set(batchPaths.deletedOpenEditors.map(({ file }) => file.id))
+  for (const change of batchPaths.changes) {
+    for (const file of batchPaths.matchingOpenFiles(change)) {
+      touched.add(file.id)
+    }
+  }
+  for (const file of openFiles) {
+    if (probeGenerationByFileId.has(file.id) && batchPaths.matchesCreateOrUpdate(file)) {
+      touched.add(file.id)
+    }
+  }
+  for (const fileId of touched) {
+    if (probeGenerationByFileId.has(fileId)) {
+      claimProbeGeneration(fileId)
+    }
+  }
+}
+
 type OverflowTarget = Pick<EditorExternalWatchTarget, 'worktreeId' | 'worktreePath'> &
   Partial<
     Pick<
@@ -27,6 +65,7 @@ type OverflowTarget = Pick<EditorExternalWatchTarget, 'worktreeId' | 'worktreePa
 
 type EditTabProbe = {
   fileId: string
+  generation: number
   filePath: string
   runtimeEnvironmentId: string | null | undefined
   notification: EditorExternalWatchNotification
@@ -77,6 +116,7 @@ export function reconcileEditorTabsAfterOverflow(target: OverflowTarget): void {
     }
     probes.push({
       fileId: file.id,
+      generation: claimProbeGeneration(file.id),
       filePath: file.filePath,
       runtimeEnvironmentId: file.runtimeEnvironmentId,
       notification
@@ -107,7 +147,10 @@ async function probeEditTabs(
         worktreePath: target.worktreePath,
         connectionId: target.connectionId
       },
-      probes.map((probe) => probe.filePath)
+      probes.map((probe) => probe.filePath),
+      undefined,
+      // Why: a whole-request "not found" (worktree re-pairing) must never mark every tab deleted.
+      { codedAbsenceOnly: true }
     )
   } catch {
     // Why: a failed probe cannot prove absence; reload as before.
@@ -123,6 +166,10 @@ async function reloadEditTabsUnlessGone(
   const results = await probeEditTabs(target, probes)
   const state = useAppStore.getState()
   probes.forEach((probe, index) => {
+    if (probeGenerationByFileId.get(probe.fileId) !== probe.generation) {
+      return
+    }
+    probeGenerationByFileId.delete(probe.fileId)
     const live = state.openFiles.find((file) => file.id === probe.fileId)
     if (!live || live.isDirty || live.mode !== 'edit') {
       return
