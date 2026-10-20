@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import type { RuntimeMobileSessionSnapshotTab } from '../../../shared/runtime-mobile-session-tab-contracts'
+import type {
+  RuntimeMobileSessionSnapshotTab,
+  RuntimeMobileSessionTerminalTab
+} from '../../../shared/runtime-mobile-session-tab-contracts'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
 import type { ProjectedSessionTabs } from '../../../shared/workspace-layout/old-client/old-client-session-tabs-projection'
 import { withMainSessionTabRows } from './main-session-tab-rows'
 
 const WT = 'repo::/wt'
 
-function terminal(id: string, extra: Partial<RuntimeMobileSessionSnapshotTab> = {}) {
+function terminal(
+  id: string,
+  extra: Partial<RuntimeMobileSessionTerminalTab> = {}
+): RuntimeMobileSessionTerminalTab {
   return {
     type: 'terminal' as const,
     id,
@@ -80,7 +86,7 @@ function mainProjection(
 
 describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
   it("takes main's terminal rows with the window's theme and draft, and keeps the stamps", () => {
-    const theme = { background: '#000', foreground: '#fff' }
+    const theme = { mode: 'dark' as const, theme: {} }
     const merged = withMainSessionTabRows(
       windowSnapshot(
         [terminal('t::a', { title: 'Old', terminalTheme: theme, launchDraft: 'ls' })],
