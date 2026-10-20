@@ -115,8 +115,9 @@ export type LayoutCommand =
       type: 'openEditorTab'
       /** The window's id for a tab it drew first; minted when absent. */
       tabId?: string
-      /** The editor's file id: the tab's entity. */
-      fileId: string
+      /** The editor's file id: the tab's entity. Absent (main's own opens only; the wire still
+       *  requires it): main picks it for `file`. */
+      fileId?: string
       contentType: Exclude<TabContentType, 'terminal' | 'browser' | 'agent-session' | 'simulator'>
       /** Present for edit-mode files, which are restored after restart. */
       file?: LayoutEditorFile
