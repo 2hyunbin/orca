@@ -1,8 +1,6 @@
 /**
- * A forward made through a ControlMaster leaves its local listener on that master: the `-N` client
- * exits at once and the master keeps the port, long after the Orca that asked for it is gone. No
- * process of Orca's holds the port then, so the orphan sweep finds nothing to stop and a managed
- * tunnel's fixed port stays bound until the master is asked to drop that one forward.
+ * A forward made through a ControlMaster leaves its listener on that master after its `-N` client
+ * exits, so no process holds the port for the orphan sweep to stop; only the master can drop it.
  */
 import { runProcess } from '@orca/process-host'
 import { buildSshArgs, type SystemSshBuildArgsOptions } from './system-ssh-args'
@@ -11,33 +9,59 @@ import type { SshTarget } from '../../../shared/ssh-types'
 
 export const SYSTEM_SSH_MUXED_FORWARD_CANCEL_TIMEOUT_MS = 5_000
 
-/** Multiplexed on purpose: `-O` speaks to the control socket a forward's own `-S none` drops. */
-export function buildMuxedLocalForwardCancelArgs(
+/** `ssh -G` with the target's own args: the control socket its commands multiplex through. */
+export function buildControlPathQueryArgs(
   target: SshTarget,
-  localPort: number,
-  remoteHost: string,
-  remotePort: number,
   options?: SystemSshBuildArgsOptions
 ): string[] {
-  const args = buildSshArgs(target, options)
-  const destinationIndex = args.lastIndexOf('--')
-  const cancelArgs = ['-O', 'cancel', '-L', `127.0.0.1:${localPort}:${remoteHost}:${remotePort}`]
-  args.splice(destinationIndex === -1 ? 0 : destinationIndex, 0, ...cancelArgs)
-  return args
+  return ['-G', ...buildSshArgs(target, options)]
+}
+
+/** The expanded ControlPath `ssh -G` reports, or null where the target does not multiplex. */
+export function parseControlPath(stdout: string): string | null {
+  const path = /^controlpath (.+)$/im.exec(stdout)?.[1]?.trim()
+  return path && path.toLowerCase() !== 'none' ? path : null
 }
 
 /**
- * A refused `-O cancel` still exits 0, reporting `master cancel forward request failed` on stderr,
- * so a spec no master registered would otherwise read as a release that freed the port.
+ * No config file: `-O cancel` cancels every forward the loaded config declares as well as this
+ * `-L`, so reading the host's config would also drop its LocalForward/RemoteForward entries.
  */
+export function buildMuxedLocalForwardCancelArgs(
+  controlPath: string,
+  localPort: number,
+  remoteHost: string,
+  remotePort: number
+): string[] {
+  return [
+    '-F',
+    '/dev/null',
+    '-o',
+    // Why doubled: ssh expands `%` tokens again in an -o ControlPath.
+    `ControlPath=${controlPath.replaceAll('%', '%%')}`,
+    '-O',
+    'cancel',
+    '-L',
+    `127.0.0.1:${localPort}:${remoteHost}:${remotePort}`,
+    '--',
+    'orca-muxed-forward-cancel'
+  ]
+}
+
+/** A refused `-O cancel` still exits 0, reporting `master cancel forward request failed`. */
 function refusedMuxedForwardCancel(stderr: string): boolean {
   return stderr.includes('request failed')
 }
 
-/**
- * True when a master released this exact forward. OpenSSH refuses a spec no master registered, so
- * someone else's forward on this port, and a port held by anything but a master, are left alone.
- */
+async function runSsh(sshPath: string, args: string[]) {
+  return runProcess({
+    program: sshPath,
+    args,
+    timeoutMs: SYSTEM_SSH_MUXED_FORWARD_CANCEL_TIMEOUT_MS
+  }).catch(() => null)
+}
+
+/** True when the target's master released exactly this forward; OpenSSH refuses any other spec. */
 export async function cancelMuxedLocalForward(
   target: SshTarget,
   localPort: number,
@@ -50,12 +74,15 @@ export async function cancelMuxedLocalForward(
   if (!sshPath) {
     return false
   }
-  const args = buildMuxedLocalForwardCancelArgs(target, localPort, remoteHost, remotePort, options)
-  const result = await runProcess({
-    program: sshPath,
-    args,
-    timeoutMs: SYSTEM_SSH_MUXED_FORWARD_CANCEL_TIMEOUT_MS
-  }).catch(() => null)
+  const query = await runSsh(sshPath, buildControlPathQueryArgs(target, options))
+  const controlPath = query?.code === 0 ? parseControlPath(query.stdout) : null
+  if (!controlPath) {
+    return false
+  }
+  const result = await runSsh(
+    sshPath,
+    buildMuxedLocalForwardCancelArgs(controlPath, localPort, remoteHost, remotePort)
+  )
   if (result?.code !== 0 || refusedMuxedForwardCancel(result.stderr)) {
     return false
   }

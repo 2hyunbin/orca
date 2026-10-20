@@ -56,6 +56,8 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
     let orcad: Server
     const orcadSockets = new Set<Socket>()
     let orcadPort = 0
+    // The user's own LocalForward in their ssh_config, which the master opened and must keep.
+    let configuredForwardPort = 0
     let conn: SshConnection
 
     const options = (localPort: number): PortForwardStartOptions => ({
@@ -70,14 +72,6 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
       fixture.ssh(['-O', request, '-L', `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`])
 
     beforeEach(async () => {
-      fixture = await startRealOpenSshFixture()
-      // The host's pinned Node, where the stdio bridge looks for it under the session's HOME.
-      const nodeBin = join(fixture.remoteHome, '.orca-remote', 'runtimes', 'node-fixture', 'bin')
-      mkdirSync(nodeBin, { recursive: true })
-      symlinkSync(
-        execFileSync('node', ['-p', 'process.execPath'], { encoding: 'utf8' }).trim(),
-        join(nodeBin, 'node')
-      )
       orcad = createServer((socket) => {
         orcadSockets.add(socket)
         socket.on('close', () => orcadSockets.delete(socket))
@@ -87,6 +81,17 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
       await new Promise<void>((resolve) => orcad.listen(0, '127.0.0.1', resolve))
       const address = orcad.address()
       orcadPort = typeof address === 'object' && address ? address.port : 0
+      configuredForwardPort = await freePort()
+      fixture = await startRealOpenSshFixture({
+        client: [`LocalForward 127.0.0.1:${configuredForwardPort} 127.0.0.1:${orcadPort}`]
+      })
+      // The host's pinned Node, where the stdio bridge looks for it under the session's HOME.
+      const nodeBin = join(fixture.remoteHome, '.orca-remote', 'runtimes', 'node-fixture', 'bin')
+      mkdirSync(nodeBin, { recursive: true })
+      symlinkSync(
+        execFileSync('node', ['-p', 'process.execPath'], { encoding: 'utf8' }).trim(),
+        join(nodeBin, 'node')
+      )
       const stub = {
         getTarget: () => fixture.target,
         getSystemSshBuildArgsOptions: fixture.buildOptions,
@@ -148,8 +153,9 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
       } finally {
         await tunnel.close()
       }
-      // The master is still up for the user's own sessions; only that forward went.
-      expect(fixture.ssh(['-O', 'check'])).toBeDefined()
+      // The master and the user's own forward on it stay up; only Orca's stale forward went.
+      expect(() => fixture.ssh(['-O', 'check'])).not.toThrow()
+      expect(await readGreeting(configuredForwardPort)).toBe(GREETING)
       expect(await dial(persisted)).toBe(false)
     }, 30_000)
 
@@ -166,6 +172,7 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
       } finally {
         await tunnel.close()
       }
+      expect(await readGreeting(configuredForwardPort)).toBe(GREETING)
     }, 30_000)
 
     it('leaves a master’s forward to anywhere else alone', async () => {

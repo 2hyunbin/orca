@@ -15,6 +15,7 @@ import type {
 import {
   checkForwardChannel,
   probeTcpForwarding,
+  type ForwardChannelVerdict,
   type TcpForwardingVerdict
 } from '../../ssh/ssh-tcp-forwarding-probe'
 import { Ssh2PortForwardProvider } from '../../ssh/port-forwarding/ssh2-port-forward-provider'
@@ -30,7 +31,7 @@ type OrcadManagedTunnelTransportDependencies = {
   forwards: SshPortForwardProvider[]
   stdio: SshPortForwardProvider
   probe: (conn: SshConnection, port: number) => Promise<TcpForwardingVerdict>
-  checkForward: (forward: StartedPortForward) => Promise<TcpForwardingVerdict>
+  checkForward: (forward: StartedPortForward) => Promise<ForwardChannelVerdict>
   /** Frees the persisted local port from a forward an earlier Orca left on it, before either binds. */
   reserveLocalPort: (conn: SshConnection, options: PortForwardStartOptions) => Promise<unknown>
 }
@@ -75,7 +76,7 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
       return outcome
     }
     console.warn(`[ssh] Managed Orca server tunnel takes the stdio bridge: ${outcome.failure}`)
-    return this.startBridge(conn, options, generation)
+    return this.startBridge(conn, options, generation, outcome.failure)
   }
 
   /** The one place a forward is judged started; every way it is not leads to the same bridge. */
@@ -106,8 +107,13 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
     }
     // Why: system SSH's listener is up before sshd is asked for a channel, so it proves nothing.
     const verdict = await this.dependencies.checkForward(started)
-    // Why an exit counts: this early it is the forward's own login refused, not a dropped tunnel.
-    const failure = verdict === 'refused' ? 'sshd refused the forward channel' : (exits[0] ?? null)
+    // Why an exit counts: a forward that dies before it is handed over cannot be the route.
+    const failure =
+      verdict === 'refused'
+        ? 'sshd refused the forward channel'
+        : verdict === 'not-listening'
+          ? 'the forward never listened (its own login did not finish)'
+          : (exits[0] ?? null)
     if (failure === null) {
       return started
     }
@@ -119,12 +125,14 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
   private async startBridge(
     conn: SshConnection,
     options: PortForwardStartOptions,
-    generation: number
+    generation: number,
+    forwardFailure = 'this SSH host refuses TCP forwarding'
   ): Promise<StartedPortForward> {
+    // Why for the whole generation: a login the forward could not repeat stays unrepeatable.
     this.bridgedGenerations.set(conn, generation)
     if (!this.dependencies.stdio.canHandle(conn)) {
       throw new Error(
-        'The managed Orca server tunnel could not forward through this SSH host and has no other route.'
+        `The managed Orca server tunnel has no route: ${forwardFailure}, and there is no stdio bridge.`
       )
     }
     // Why: a closed `ssh -L` (ours, or one an earlier Orca orphaned) may still hold the port.
@@ -145,10 +153,8 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
 }
 
 /**
- * Only system SSH ever forwarded this port, so only there can a forward be left holding it: an
- * `ssh -L` process, or a ControlMaster an older Orca's forward went through (it keeps the listener
- * after its client exits). The master is asked to cancel only this exact spec — the persisted port
- * Orca chose, to orcad — so a master's other forwards and sessions stay up.
+ * Only system SSH ever forwarded this port: an orphaned `ssh -L`, or the ControlMaster an older
+ * Orca's forward went through. That master cancels only this spec, the port Orca persisted to orcad.
  */
 export function reserveManagedTunnelLocalPort(
   conn: SshConnection,

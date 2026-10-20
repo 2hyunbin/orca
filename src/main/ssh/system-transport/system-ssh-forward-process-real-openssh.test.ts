@@ -26,7 +26,7 @@ describe.skipIf(!REAL_OPENSSH_TEST_ENABLED)(
 
     beforeAll(async () => {
       prohibitedPort = await freePort()
-      fixture = await startRealOpenSshFixture(['PermitOpen 127.0.0.1:1'])
+      fixture = await startRealOpenSshFixture({ sshd: ['PermitOpen 127.0.0.1:1'] })
     }, 30_000)
 
     afterAll(() => {

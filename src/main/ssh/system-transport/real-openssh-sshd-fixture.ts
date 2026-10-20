@@ -71,7 +71,7 @@ export type RealOpenSshFixture = {
 }
 
 export async function startRealOpenSshFixture(
-  extraSshdConfig: readonly string[] = []
+  extra: { sshd?: readonly string[]; client?: readonly string[] } = {}
 ): Promise<RealOpenSshFixture> {
   // Why /tmp: a ControlPath under macOS's long TMPDIR overflows the unix socket path limit.
   const dir = mkdtempSync(join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'orca-ros-'))
@@ -96,7 +96,7 @@ export async function startRealOpenSshFixture(
       'StrictModes no',
       `PidFile ${join(dir, 'sshd.pid')}`,
       `SetEnv HOME=${remoteHome}`,
-      ...extraSshdConfig
+      ...(extra.sshd ?? [])
     ].join('\n')
   )
   const controlPath = join(dir, 'cm-%C')
@@ -124,7 +124,8 @@ export async function startRealOpenSshFixture(
       '  StrictHostKeyChecking no',
       '  ControlMaster auto',
       `  ControlPath ${controlPath}`,
-      '  ControlPersist 600'
+      '  ControlPersist 600',
+      ...(extra.client ?? []).map((line) => `  ${line}`)
     ].join('\n')
   )
   const sshd: ChildProcess = spawn(SSHD, ['-D', '-e', '-f', join(dir, 'sshd_config')], {

@@ -7,7 +7,10 @@ import type {
   SshPortForwardProvider,
   StartedPortForward
 } from '../../ssh/port-forwarding/ssh-port-forward-provider'
-import type { TcpForwardingVerdict } from '../../ssh/ssh-tcp-forwarding-probe'
+import type {
+  ForwardChannelVerdict,
+  TcpForwardingVerdict
+} from '../../ssh/ssh-tcp-forwarding-probe'
 
 let generation = 1
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the selector reads only the transport generation.
@@ -36,7 +39,7 @@ function provider(name: string, canHandle = true) {
 
 function select(
   verdict: TcpForwardingVerdict,
-  channel: TcpForwardingVerdict = 'unverifiable',
+  channel: ForwardChannelVerdict = 'unverifiable',
   stdioCanHandle = true
 ) {
   const forward = provider('forward')
@@ -102,7 +105,9 @@ describe('the managed tunnel’s transport', () => {
 
   it('fails loudly, never with the dead forward, when a refused host has no bridge route', async () => {
     const chosen = select('unverifiable', 'refused', false)
-    await expect(chosen.transport.start(conn, options)).rejects.toThrow(/has no other route/)
+    await expect(chosen.transport.start(conn, options)).rejects.toThrow(
+      /has no route: sshd refused/
+    )
     expect(chosen.forward.close).toHaveBeenCalledOnce()
   })
 
@@ -167,6 +172,15 @@ describe('the managed tunnel’s transport', () => {
     expect(knownOrcadTunnelTransport('ssh-1')).toBe('stdio_bridge')
     await chosen.transport.start(conn, options)
     expect(chosen.forward.start).toHaveBeenCalledOnce()
+  })
+
+  // Why: a forward still waiting on a key touch or a prompt never binds, yet has not exited.
+  it('takes the bridge when the forward never listened', async () => {
+    const chosen = select('unverifiable', 'not-listening')
+    await expect(chosen.transport.start(conn, options)).resolves.toMatchObject({
+      entry: { id: 'stdio' }
+    })
+    expect(chosen.forward.close).toHaveBeenCalledOnce()
   })
 
   it('frees the persisted port before the forward binds it, not only before the bridge', async () => {
