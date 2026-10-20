@@ -25,16 +25,16 @@ export function projectCatalogFromWindowState(state: AppState) {
       (projectGroup) => projectGroup.executionHostId === SERVER_HOST_ID
     ),
     projection: {
-      projects: state.projects,
-      setups: state.projectHostSetups.filter((setup) => setup.hostId === SERVER_HOST_ID)
+      projects: state.projects ?? [],
+      setups: (state.projectHostSetups ?? []).filter((setup) => setup.hostId === SERVER_HOST_ID)
     }
   }
   return buildSidebarProjectCatalog(
     {
       repos: own(state.repos),
       projectGroups: own(state.projectGroups ?? []),
-      projects: state.projects,
-      setups: state.projectHostSetups.filter((setup) => !isServerHost(setup.hostId))
+      projects: state.projects ?? [],
+      setups: (state.projectHostSetups ?? []).filter((setup) => !isServerHost(setup.hostId))
     },
     [server],
     { manualRepoOrder: getManualRepoOrder(state.repos), projectOrderBy: state.projectOrderBy }
