@@ -140,6 +140,19 @@ describe('useNativeChatSessionOptions model reporting', () => {
       expect(modelDescriptor(result.current.snapshot).choices).toContainEqual(
         expect.objectContaining({ value: reportedModel })
       )
+      discoverModels.mockResolvedValue([
+        ...OMP_DISCOVERED,
+        { id: 'provider/new', label: 'New model', options: [] }
+      ])
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + NATIVE_CHAT_MODEL_LIST_STALE_MS)
+      result.current.surface!.refreshModels?.()
+      await waitFor(() => expect(modelDescriptor(result.current.snapshot).choices).toHaveLength(4))
+      expect(modelDescriptor(result.current.snapshot).currentValue).toBe(reportedModel)
+      expect(modelDescriptor(result.current.snapshot).choices).toContainEqual(
+        expect.objectContaining({ value: 'provider/new' })
+      )
+      expect(dispatchCommand).not.toHaveBeenCalled()
+      vi.restoreAllMocks()
     }
   )
 

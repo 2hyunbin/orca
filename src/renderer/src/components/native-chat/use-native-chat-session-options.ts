@@ -46,12 +46,7 @@ function ensureHostModels(agent: AgentType, terminalTabId: string, hostKey: stri
   })
 }
 
-/**
- * Why: the picker drops a retired model, but the persisted default is what launches
- * become `-m <id>` — every launch site reads it, including the ones that never show
- * the picker. Left alone the id is invisible and still fatal, so an authoritative
- * probe that no longer lists it must retire it here too.
- */
+// Retire omitted future launch flags independently of a running session's selection.
 export async function retirePersistedModelMissingFromDiscovery(
   agent: AgentType,
   models: readonly CatalogModel[]
