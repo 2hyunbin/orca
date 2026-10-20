@@ -28,17 +28,22 @@ export type NativeChatPaneDropClaim = {
   ) => void
 }
 
-const nestedWorkspaceDropSinks = new WeakMap<Element, NativeChatResolvedPathSink>()
+const nestedWorkspaceDropSinks = new WeakMap<
+  Element,
+  { sink: NativeChatResolvedPathSink; hover?: (active: boolean) => void }
+>()
 
 /** A nested drop owner's destination for in-app files, which the composer's claim checks and
  *  routes by the chat's owner, then hands to it. */
 export function registerNestedWorkspaceDropSink(
   owner: Element,
-  sink: NativeChatResolvedPathSink
+  sink: NativeChatResolvedPathSink,
+  hover?: (active: boolean) => void
 ): () => void {
-  nestedWorkspaceDropSinks.set(owner, sink)
+  const registration = { sink, hover }
+  nestedWorkspaceDropSinks.set(owner, registration)
   return () => {
-    if (nestedWorkspaceDropSinks.get(owner) === sink) {
+    if (nestedWorkspaceDropSinks.get(owner) === registration) {
       nestedWorkspaceDropSinks.delete(owner)
     }
   }
@@ -87,6 +92,25 @@ export function makeNativeChatPaneFileDropHandlers(host: {
   onDragOverCapture: (event: React.DragEvent<HTMLDivElement>) => void
   onDropCapture: (event: React.DragEvent<HTMLDivElement>) => void
 } {
+  let hoveredOwner: Element | null = null
+  let hover: ((active: boolean) => void) | undefined
+  const clearNestedHover = (): void => {
+    hover?.(false)
+    hoveredOwner = null
+    hover = undefined
+  }
+  const updateNestedHover = (event: NativeChatPaneDragEvent): void => {
+    const owner = nestedOwner(event)
+    const next = owner ? nestedWorkspaceDropSinks.get(owner)?.hover : undefined
+    if (next !== hover) {
+      clearNestedHover()
+    }
+    hoveredOwner = owner
+    hover = next
+    const kind = nativeChatPaneDragKind(event.dataTransfer)
+    const claim = host.getClaim()
+    hover?.(kind === 'os' || (kind === 'workspace' && claim !== null && !claim.disabled))
+  }
   const showsDropTarget = (event: NativeChatPaneDragEvent): boolean => {
     const kind = nativeChatPaneDragKind(event.dataTransfer)
     if (kind === null || overNestedOwner(event)) {
@@ -98,11 +122,13 @@ export function makeNativeChatPaneFileDropHandlers(host: {
 
   return {
     onDragEnterCapture(event) {
+      updateNestedHover(event)
       if (showsDropTarget(event)) {
         host.setDragActive(true)
       }
     },
     onDragOverCapture(event) {
+      updateNestedHover(event)
       if (showsDropTarget(event)) {
         host.setDragActive(true)
       } else if (overNestedOwner(event)) {
@@ -113,18 +139,22 @@ export function makeNativeChatPaneFileDropHandlers(host: {
       }
     },
     onDragLeaveCapture(event) {
+      if (!(event.relatedTarget instanceof Node) || !hoveredOwner?.contains(event.relatedTarget)) {
+        clearNestedHover()
+      }
       if (nativeChatPaneDragKind(event.dataTransfer) === null || movedWithinDropSurface(event)) {
         return
       }
       host.setDragActive(false)
     },
     onDropCapture(event) {
+      clearNestedHover()
       host.setDragActive(false)
       if (nativeChatPaneDragKind(event.dataTransfer) === 'workspace') {
         const owner = nestedOwner(event)
         host
           .getClaim()
-          ?.onDropCapture(event, owner ? nestedWorkspaceDropSinks.get(owner) : undefined)
+          ?.onDropCapture(event, owner ? nestedWorkspaceDropSinks.get(owner)?.sink : undefined)
       }
     }
   }

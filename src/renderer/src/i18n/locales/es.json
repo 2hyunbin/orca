@@ -18694,6 +18694,7 @@
         "pendingWork": "Espera a que terminen el trabajo y los mensajes pendientes antes de usar este comando."
       },
       "drop": {
+        "messageTitle": "Suelta para adjuntar a este mensaje",
         "title": "Suelta para adjuntar a este chat",
         "subtitle": "Los archivos se añaden a tu mensaje como rutas que el agente puede leer."
       },

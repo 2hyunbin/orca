@@ -78,11 +78,17 @@ function replaceSentImagePromptMarkers(
 }
 
 /** The inverse, for a sent message put back in the composer: `[Image #k]` becomes a chip for its
- *  k-th image. A number past its images is left as typed. */
-export function promptMarkersToImageReferences(text: string, imageIds: readonly string[]): string {
+ *  k-th image. Excluded images keep their markers so a partial hand-off can strip them. */
+export function promptMarkersToImageReferences(
+  text: string,
+  imageIds: readonly string[],
+  includedImageIds: readonly string[] = imageIds
+): string {
   return replaceSentImagePromptMarkers(text, (number, marker) => {
     const attachmentId = imageIds[number - 1]
-    return attachmentId === undefined ? marker : imageReferenceToken(attachmentId)
+    return attachmentId === undefined || !includedImageIds.includes(attachmentId)
+      ? marker
+      : imageReferenceToken(attachmentId)
   })
 }
 

@@ -22,6 +22,7 @@ import { useNativeChatExternalAttachments } from './use-native-chat-external-att
 import { useNativeChatFileAttachmentActions } from './use-native-chat-file-attachment-actions'
 import { registerNestedWorkspaceDropSink } from './native-chat-pane-file-drop'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
+import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
 
 /** The chat a queued list sits in, which its edits attach files to as its chat box does. */
 export type QueuedEditAttachTarget = {
@@ -45,6 +46,7 @@ export function useNativeChatQueuedEditImageIntake(
   /** On the whole card, so a paste with focus on its buttons lands in the edit too. */
   onPasteCapture: (event: ClipboardEvent<HTMLDivElement>) => void
   hostEnvironmentId: string | undefined
+  isDragActive: boolean
 } {
   const intake = editor.images?.intake
   const transport = attachTo?.transport
@@ -52,6 +54,28 @@ export function useNativeChatQueuedEditImageIntake(
   const { change, saving, acquiring } = editor
   // Nothing joins an edit until its lease is held, nor while a Save sends the images it read.
   const busy = saving || acquiring
+  const [isDragActive, setIsDragActive] = useState(false)
+  const pendingCaret = useRef<{ end: number; length: number } | null>(null)
+  const imageSelection = useCallback(
+    (requireFocus = true) => {
+      const input = field.current
+      if (!input || (requireFocus && input !== document.activeElement)) {
+        return undefined
+      }
+      pendingCaret.current = { end: input.selectionEnd, length: input.value.length }
+      return { start: input.selectionStart, end: input.selectionEnd }
+    },
+    [field]
+  )
+  useLayoutEffect(() => {
+    const caret = pendingCaret.current
+    pendingCaret.current = null
+    const input = field.current
+    if (caret && input === document.activeElement) {
+      const position = caret.end + editor.text.length - caret.length
+      input?.setSelectionRange(position, position)
+    }
+  }, [editor.text, field])
   const liveIntake = useRef(intake)
   useLayoutEffect(() => {
     liveIntake.current = intake
@@ -84,17 +108,22 @@ export function useNativeChatQueuedEditImageIntake(
   )
   const pendingChips = useMemo(
     (): NativeChatPendingAttachmentChips => ({
-      begin: (previewUrl, pendingName) => intake?.begin(previewUrl, pendingName) ?? null,
+      begin: (previewUrl, pendingName) =>
+        intake?.begin(previewUrl, pendingName, imageSelection()) ?? null,
       resolve: (id, path, connectionId) => intake?.resolve(id, path, connectionId) ?? false,
       drop: (id) => intake?.drop(id) ?? false,
       // A stored file that is not an image is referenced in the text, as the chat box does.
       attachReferences: (references) => {
         const kept = references.filter(({ id }) => intake?.drop(id))
-        insertReferences(kept.map(({ path }) => path))
+        intake?.append(
+          kept.map(({ path }) => path),
+          undefined,
+          imageSelection(false)
+        )
         return kept.length > 0
       }
     }),
-    [insertReferences, intake]
+    [imageSelection, intake]
   )
   const attachResolvedPaths = useCallback(
     (
@@ -112,13 +141,17 @@ export function useNativeChatQueuedEditImageIntake(
         if (operation) {
           operation.apply(insertReferences)
         } else {
-          insertReferences(intake.append(paths, connectionId))
+          intake.append(
+            paths,
+            connectionId,
+            imageSelection(paths.some(isNativeChatImageAttachmentPath))
+          )
         }
       } finally {
         operation?.cancel()
       }
     },
-    [busy, insertReferences, intake]
+    [busy, imageSelection, insertReferences, intake]
   )
   const disabled = !editable || busy
   const external = useNativeChatExternalAttachments({
@@ -183,17 +216,27 @@ export function useNativeChatQueuedEditImageIntake(
     const owner = editable && card instanceof HTMLElement ? card : null
     attachOwner(owner)
     // A file dragged from Orca's own tree: the chat box's claim checks it, then hands it here.
-    const unregister = owner ? registerNestedWorkspaceDropSink(owner, attachResolvedPaths) : null
+    const hover = (active: boolean): void => setIsDragActive(active && !disabled)
+    const unregister = owner
+      ? registerNestedWorkspaceDropSink(owner, attachResolvedPaths, hover)
+      : null
+    const clear = (): void => setIsDragActive(false)
+    clear()
+    document.addEventListener('drop', clear, true)
+    document.addEventListener('dragend', clear, true)
     return () => {
       attachOwner(null)
       unregister?.()
+      document.removeEventListener('drop', clear, true)
+      document.removeEventListener('dragend', clear, true)
     }
-  }, [attachOwner, attachResolvedPaths, editable, field])
+  }, [attachOwner, attachResolvedPaths, disabled, editable, field])
   const { pickAttachments } = useNativeChatFileAttachmentActions(external.attachExternalPaths)
   return {
     editable,
     attach: pickAttachments,
     onPasteCapture,
+    isDragActive: isDragActive && !disabled,
     hostEnvironmentId: transport?.runtimeEnvironmentId ?? undefined
   }
 }

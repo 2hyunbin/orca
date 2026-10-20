@@ -14,6 +14,13 @@ import { projectQueuedMessageCards } from './structured-agent-session-queued-car
 import type { AgentSessionQueuedMessage } from '../../../../shared/agent-session-wire'
 import type { StructuredAgentSessionWrite } from './use-structured-agent-session-mutate'
 import type * as NativeChatAttachmentUpload from './native-chat-attachment-upload'
+import {
+  handOffQueuedEdit,
+  queuedEditImageFields,
+  type QueuedEditImageState
+} from './structured-agent-session-queued-edit-images'
+import { readNativeChatAttachmentCache, readNativeChatDraftCache } from './native-chat-draft-cache'
+import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string, values?: Record<string, string>) =>
@@ -289,21 +296,63 @@ describe('queued card image edit', () => {
     expect(field).toHaveProperty('value', 'see and [Image #1]')
     const data = new DataTransfer()
     data.items.add(new File(['png'], 'new.png', { type: 'image/png' }))
+    if (!(field instanceof HTMLTextAreaElement)) {
+      throw new Error('Expected the edit textarea')
+    }
+    field.focus()
+    field.setSelectionRange(4, 4)
+    act(() => {
+      field.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
+    })
+    await waitFor(() => expect(field.value).toBe('see [Image #2] and [Image #1]'))
+    expect(field.selectionStart).toBe('see [Image #2] '.length)
     // With focus on the card's Attach button, as after a cancelled picker: the paste is the edit's.
     const attach = screen.getByRole('button', { name: 'Attach file' })
     act(() => {
+      attach.focus()
       attach.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
     })
-    await waitFor(() => expect(screen.getByRole('button', { name: /View image/ })).toBeTruthy())
+    await waitFor(() => expect(field.value).toBe('see [Image #2] and [Image #1] [Image #3] '))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove attachment' })[1]!)
+    expect(field.value).toBe('see and [Image #1] [Image #2] ')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(writeSpy).toHaveBeenCalledOnce())
     expect(savedParams()).toMatchObject({
-      text: 'see and [Image #1]',
+      text: 'see and [Image #1] [Image #2] ',
       images: [
         { type: 'image-ref', path: '/host/kept.png' },
         { type: 'image-ref', path: '/tmp/new.png' }
       ]
     })
+    const edit: QueuedEditImageState = {
+      draftKey: 'r6-handoff',
+      body: card.body,
+      text: 'see [Image #1] and [Image #2]',
+      ...queuedEditImageFields(
+        card.body,
+        () => edit,
+        () => true,
+        () => {}
+      )
+    }
+    edit.intake.append(['/tmp/new.png'])
+    const moved = edit.added[0]!
+    const pending = edit.intake.begin()!
+    edit.intake.remove(edit.kept[0]!.id)
+    expect(edit.text).toBe('see and [Image #1] [Image #2] [Image #3] ')
+    expect(handOffQueuedEdit(edit)).toBe(true)
+    expect(readNativeChatAttachmentCache(edit.draftKey)).toEqual([
+      { id: moved.id, path: moved.path }
+    ])
+    expect(readNativeChatDraftCache(edit.draftKey)).toBe(
+      `see and  ${imageReferenceToken(moved.id)}`
+    )
+    expect(edit.intake.drop(pending)).toBe(true)
+    expect(edit.text).toBe('see and [Image #1] [Image #2] ')
+    edit.intake.remove(moved.id)
+    expect(edit.text).toBe('see and [Image #1] ')
+    edit.intake.append(['/tmp/other.png', '/repo/context.ts'], undefined, { start: 0, end: 0 })
+    expect(edit.text).toBe('[Image #2] @/repo/context.ts see and [Image #1] ')
   })
 
   it('never saves an image change as text alone once the host stops reading as taking images', async () => {

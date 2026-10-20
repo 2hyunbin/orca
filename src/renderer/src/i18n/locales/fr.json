@@ -18743,6 +18743,7 @@
         "pendingWork": "Attendez la fin du travail et des messages en attente avant d'utiliser cette commande."
       },
       "drop": {
+        "messageTitle": "Déposez pour joindre à ce message",
         "title": "Déposer pour joindre à ce chat",
         "subtitle": "Les fichiers sont ajoutés à votre message sous forme de chemins que l'agent peut lire."
       },

@@ -7,6 +7,7 @@ import { translate } from '@/i18n/i18n'
 import { ButtonKeyHint } from '@/components/ButtonKeyHint'
 import { isMacPlatform } from './native-chat-shortcut'
 import { NativeChatImageAttachmentPreview } from './NativeChatImageAttachmentPreview'
+import { NativeChatPaneFileDropOverlay } from './NativeChatPaneFileDropSurface'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
 import {
   useNativeChatQueuedEditImageIntake,
@@ -54,9 +55,10 @@ export function NativeChatQueuedMessageEditor({
   return (
     <div
       data-queued-message-editor
-      className="px-2.5 py-1.5"
+      className="relative px-2.5 py-1.5"
       onPasteCapture={intake.onPasteCapture}
     >
+      {intake.isDragActive ? <NativeChatPaneFileDropOverlay queuedMessage /> : null}
       <div className="flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground">
         <Pencil className="size-3.5 shrink-0" aria-hidden />
         <span className="shrink-0">

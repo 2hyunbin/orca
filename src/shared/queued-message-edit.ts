@@ -1,6 +1,6 @@
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
 import { MAX_BLOCKS, MAX_PROMPT_BYTES } from './rpc-contract/structured-agent-session-params'
-import { imageReferenceToken } from './native-chat-image-reference'
+import { imageReferenceInsertion, imageReferenceToken } from './native-chat-image-reference'
 import {
   imageReferencesToPromptMarkers,
   promptMarkersToImageReferences
@@ -62,10 +62,7 @@ export function queuedEditKeptImages(
   )
 }
 
-/** The text with its `[Image #k]` markers renumbered from one ordered set of kept images to
- *  another: a marker of an image that left goes, as the chat box drops a removed image's chip, and
- *  a number past the images stays as typed. Added images carry no marker, as an image without a
- *  chip is sent, so they never shift a kept image's number. */
+/** Markers follow the complete image order; references to removed images go with their chips. */
 export function queuedEditTextForKeptImages(
   text: string,
   from: readonly string[],
@@ -78,6 +75,25 @@ export function queuedEditTextForKeptImages(
     chips = chips.replaceAll(`${token} `, '').replaceAll(token, '')
   }
   return imageReferencesToPromptMarkers(chips, to)
+}
+
+export type QueuedEditImageSelection = { start: number; end: number }
+
+/** A plain field uses the composer's chip insertion, numbered by the eventual saved image order. */
+export function queuedEditTextWithAddedImages(
+  text: string,
+  imageIds: readonly string[],
+  addedIds: readonly string[],
+  selection: QueuedEditImageSelection = { start: text.length, end: text.length },
+  fileReferences = ''
+): string {
+  const before = text.slice(0, selection.start)
+  const after = text.slice(selection.end)
+  const insertion = imageReferencesToPromptMarkers(
+    imageReferenceInsertion(before, after, addedIds),
+    imageIds
+  )
+  return before + insertion + fileReferences + after
 }
 
 /** The text an edit's typing is measured against: the card's own, its markers following the
