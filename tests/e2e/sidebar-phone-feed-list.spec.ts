@@ -193,9 +193,16 @@ test.describe('switch on', () => {
         if (!group) {
           throw new Error('Expected a project group')
         }
+        const repoById = (id: string) => {
+          const found = state().repos.find((entry) => entry.id === id)
+          if (!found) {
+            throw new Error(`Expected repo ${id}`)
+          }
+          return found
+        }
         return [
-          await state().moveProjectToGroup(folderId, group.id, 0),
-          await state().moveProjectToGroup(repoId, group.id, 1)
+          await state().moveProjectToGroup(repoById(folderId), group.id, 0),
+          await state().moveProjectToGroup(repoById(repoId), group.id, 1)
         ]
       },
       { repoId, folderId: folder.repo.id }

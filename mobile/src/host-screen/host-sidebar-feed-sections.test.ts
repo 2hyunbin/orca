@@ -124,9 +124,14 @@ describe('the phone list from the sidebar feed', () => {
       throw new Error('expected a served catalog')
     }
     const grouped = buildHostFeedCatalog(served.value, [], [])
-    const domains = feedDomains()
+    const base = feedDomains()
     // An unpinned orca workspace, so orca draws its own header beside lab.
-    domains.workspaces.set('|orca::/w/solo', feedRow({ id: 'orca::/w/solo', manualOrder: 4 }))
+    const domains = feedDomains({
+      workspaces: new Map([
+        ...base.workspaces,
+        ['|orca::/w/solo', feedRow({ id: 'orca::/w/solo', manualOrder: 4 })]
+      ])
+    })
     const built = buildSidebarFeedRows(domains, grouped, phoneFeedView(phoneView()))
     const sections = buildHostFeedSections({
       rows: built.sectionRows,

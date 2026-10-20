@@ -89,6 +89,8 @@ function servedRepo(fields: Pick<ServedRepo, 'id' | 'path'> & Partial<ServedRepo
     addedAt: undefined,
     connectionId: undefined,
     executionHostId: undefined,
+    projectGroupId: undefined,
+    projectGroupOrder: undefined,
     ...fields
   }
 }
