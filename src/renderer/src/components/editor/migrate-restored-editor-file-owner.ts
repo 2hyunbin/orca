@@ -10,6 +10,8 @@ import {
 } from '@/lib/editor-file-operation-owner'
 import { requestEditorSaveQuiesce } from './editor-autosave'
 import type { RestoredEditorOwnerResult } from '@/store/slices/editor'
+import { contentRekeyOutcome } from '@/runtime/layout-owner-content-rekeys'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 export type RestoredEditorOwnerMigrationResult = RestoredEditorOwnerResult
 
@@ -65,7 +67,7 @@ export async function migrateRestoredEditorFileOwner(
     currentState.setRestoredEditorOwnerMigrationPending(fileId, false)
     return { ok: false, reason: 'owner-changed' }
   }
-  return currentState.reparentRestoredEditorFileOwner({
+  const result = currentState.reparentRestoredEditorFileOwner({
     fileId,
     targetWorktreeId: route.worktreeId,
     targetRelativePath: route.relativePath,
@@ -73,6 +75,11 @@ export async function migrateRestoredEditorFileOwner(
     targetRuntimeEnvironmentId: runtimeEnvironmentId,
     targetOperationProvenance
   })
+  // Switch point: the move is main's; its frame moves the file, or main refused it.
+  if (ORCA_LAYOUT_OWNER_IS_MAIN && result.ok && !(await contentRekeyOutcome([result.fileId]))) {
+    return { ok: false, reason: 'owner-changed' }
+  }
+  return result
 }
 
 function routesMatch(

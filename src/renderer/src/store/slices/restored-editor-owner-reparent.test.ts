@@ -18,6 +18,7 @@ import {
 import type { AppState } from '@/store/types'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -157,6 +158,8 @@ describe('restored editor owner reparent', () => {
     }))
 
     const result = reparent(oldId)
+    // Switch on: main's frame shows the move, with the content rekeyed in the same update.
+    await main.settle()
 
     expect(result.ok).toBe(true)
     if (!result.ok) {
@@ -300,8 +303,8 @@ describe('restored editor owner reparent', () => {
         [TARGET]: 'target-group'
       },
       browserTabsByWorktree: {
-        [SOURCE]: [{ id: 'source-browser' }],
-        [TARGET]: [{ id: 'target-browser' }]
+        [SOURCE]: [{ id: 'source-browser', url: 'about:blank' }],
+        [TARGET]: [{ id: 'target-browser', url: 'about:blank' }]
       },
       activeBrowserTabIdByWorktree: {
         [SOURCE]: 'source-browser',
@@ -310,6 +313,9 @@ describe('restored editor owner reparent', () => {
       everActivatedWorktreeIds: new Set([SOURCE]),
       refreshGitHubForWorktreeIfStale
     } as unknown as Partial<AppState>)
+    // Switch on: main holds the target's tabs too, as a window's frames would have drawn them.
+    main.close()
+    main = await drawTabsFromMain(useAppStore)
     const targetSnapshots: AppState[] = []
     const unsubscribe = useAppStore.subscribe((state) => {
       if (state.activeWorktreeId === TARGET) {
@@ -318,6 +324,7 @@ describe('restored editor owner reparent', () => {
     })
 
     const result = reparent(oldId)
+    await main.settle()
     unsubscribe()
 
     expect(result.ok).toBe(true)
@@ -401,9 +408,21 @@ describe('restored editor owner reparent', () => {
       activeGroupIdByWorktree: { ...state.activeGroupIdByWorktree, [TARGET]: 'target-group' }
     }))
 
+    const before = useAppStore.getState()
     expect(reparent(oldId).ok).toBe(true)
+    await main.settle()
 
     const next = useAppStore.getState()
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Main holds no such group, so it refuses the move and the window changes nothing.
+      expect(next.openFiles.find((file) => file.id === oldId)).toMatchObject({
+        worktreeId: SOURCE,
+        pendingOwnerMigration: undefined
+      })
+      expect(next.groupsByWorktree[TARGET]).toEqual(before.groupsByWorktree[TARGET])
+      expect(next.unifiedTabsByWorktree).toEqual(before.unifiedTabsByWorktree)
+      return
+    }
     const groups = next.groupsByWorktree[TARGET]!
     const otherGroup = groups.find((group) => group.id === 'other-group')!
     expect(otherGroup).toMatchObject({

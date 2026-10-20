@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
 // A restored editor tab moved to its owning workspace in a layout-owner build (ORCA_LAYOUT_OWNER=main):
-// main's frames draw its tabs, and the move still reaches main under the window's ids.
+// the window asks main to move it under the ids it proposes, and main's frame draws the move with
+// the file's content rekeyed in the same update.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { captureEditorFileOperationProvenance } from '@/lib/editor-file-operation-owner'
@@ -10,6 +11,7 @@ import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
+import { contentRekeyOutcome } from '@/runtime/layout-owner-content-rekeys'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -235,6 +237,94 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       expect(mainWorkspace(SOURCE)!.editorFiles).toEqual([
         expect.objectContaining({ filePath: inSourcePath, relativePath: 'notes.md' })
       ])
+    })
+
+    it('moves the content in the same store update as the frame that shows the move', async () => {
+      const oldId = openRestoredSource()
+      await settledSent()
+      useAppStore.getState().setEditorDraft(oldId, 'unsaved')
+      useAppStore.getState().markFileDirty(oldId, true)
+      const torn: string[] = []
+      const unsubscribe = useAppStore.subscribe((state) => {
+        const fileIds = new Set(state.openFiles.map((file) => file.id))
+        for (const tab of Object.values(state.unifiedTabsByWorktree).flat()) {
+          if (tab.contentType === 'editor' && !fileIds.has(tab.entityId)) {
+            torn.push(`tab for ${tab.entityId} without its file`)
+          }
+        }
+        for (const fileId of Object.keys(state.editorDrafts)) {
+          if (!fileIds.has(fileId)) {
+            torn.push(`draft for ${fileId} without its file`)
+          }
+        }
+      })
+
+      const result = reparent(oldId)
+
+      // Nothing moves before main's frame.
+      expect(windowView(SOURCE)[0]!.tabs).toEqual([expect.objectContaining({ entity: oldId })])
+      expect(useAppStore.getState().openFiles.map((file) => file.id)).toEqual([oldId])
+      await settledSent()
+      unsubscribe()
+      expect(torn).toEqual([])
+      const newId = result.ok ? result.fileId : ''
+      expect(windowView(TARGET)[0]!.tabs).toEqual([expect.objectContaining({ entity: newId })])
+      expect(useAppStore.getState().openFiles).toEqual([
+        expect.objectContaining({ id: newId, worktreeId: TARGET, isDirty: true })
+      ])
+      expect(useAppStore.getState().editorDrafts).toEqual({ [newId]: 'unsaved' })
+    })
+
+    it('changes nothing when main refuses the move', async () => {
+      const oldId = openRestoredSource()
+      await settledSent()
+      useAppStore.getState().setEditorDraft(oldId, 'unsaved')
+      const before = useAppStore.getState()
+      layoutApplyTestTransport.answerWith({ refuse: 'group_not_found' })
+
+      const result = reparent(oldId)
+
+      expect(result.ok).toBe(true)
+      expect(await contentRekeyOutcome([oldId])).toBe(false)
+      expect(await settledSent()).toEqual([expect.objectContaining({ type: 'moveTabToWorkspace' })])
+      const after = useAppStore.getState()
+      expect(after.unifiedTabsByWorktree).toEqual(before.unifiedTabsByWorktree)
+      expect(after.groupsByWorktree).toEqual(before.groupsByWorktree)
+      expect(after.editorDrafts).toEqual({ [oldId]: 'unsaved' })
+      expect(after.openFiles).toEqual([
+        expect.objectContaining({ id: oldId, worktreeId: SOURCE, pendingOwnerMigration: undefined })
+      ])
+    })
+
+    it("keeps a moved view tab's view, under the file's new owner", async () => {
+      const oldId = openRestoredSource()
+      useAppStore.getState().openMarkdownPreview(
+        {
+          filePath: FILE_PATH,
+          relativePath: FILE_PATH,
+          worktreeId: SOURCE,
+          runtimeEnvironmentId: null,
+          language: 'markdown'
+        },
+        { sourceFileId: oldId }
+      )
+      await settledSent()
+
+      expect(reparent(oldId).ok).toBe(true)
+      await settledSent()
+
+      const views = Object.values(mainWorkspace(TARGET)!.editorViews ?? {})
+      expect(views).toEqual([
+        expect.objectContaining({
+          view: expect.objectContaining({ mode: 'markdown-preview' }),
+          file: expect.objectContaining({ filePath: FILE_PATH, relativePath: 'docs/readme.md' })
+        })
+      ])
+      expect(mainWorkspace(SOURCE)?.editorViews ?? {}).toEqual({})
+      const preview = useAppStore
+        .getState()
+        .openFiles.find((file) => file.mode === 'markdown-preview')
+      expect(preview).toMatchObject({ worktreeId: TARGET, relativePath: 'docs/readme.md' })
     })
 
     it('sends nothing when the move fails', async () => {

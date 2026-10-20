@@ -10,6 +10,7 @@ import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { editorMoveOwnerFromContext, type EditorMoveOwner } from '@/lib/open-editor-move-owner'
 import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
+import { contentRekeyOutcome } from '@/runtime/layout-owner-content-rekeys'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -183,6 +184,82 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('editor records under frames, layout-o
   })
 })
 
+describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('tabs only a frame drew, layout-owner build', () => {
+  it("labels them as the window's own open would, from the file", async () => {
+    openEdit(WT, '/repo-a/own.ts', 'own.ts')
+    await main.settle()
+    // Another client's opens: this window never opened either tab.
+    for (const command of [
+      {
+        type: 'openEditorTab',
+        workspace: WT,
+        tabId: 'other-edit',
+        fileId: '/repo-a/x.md',
+        contentType: 'editor',
+        file: { filePath: '/repo-a/x.md', relativePath: 'x.md', language: 'markdown' }
+      },
+      {
+        type: 'openEditorTab',
+        workspace: WT,
+        tabId: 'other-preview',
+        fileId: 'markdown-preview::/repo-a/x.md',
+        contentType: 'editor',
+        view: {
+          view: { mode: 'markdown-preview', markdownPreviewSourceFileId: '/repo-a/x.md' },
+          file: { filePath: '/repo-a/x.md', relativePath: 'x.md', language: 'markdown' }
+        }
+      }
+    ]) {
+      await layoutApplyTestTransport.call({ command })
+    }
+    await main.settle()
+
+    expect(
+      (useAppStore.getState().unifiedTabsByWorktree[WT] ?? []).map((tab) => [tab.id, tab.label])
+    ).toEqual([
+      [expect.any(String), 'own.ts'],
+      ['other-edit', 'x.md'],
+      ['other-preview', 'x.md (preview)']
+    ])
+  })
+})
+
+describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('closing every editor, layout-owner build', () => {
+  it("keeps the files' content until main's frame drops their tabs", async () => {
+    const a = openEdit(WT, '/repo-a/a.ts', 'a.ts')
+    openEdit(WT, '/repo-a/b.ts', 'b.ts')
+    await main.settle()
+    useAppStore.getState().setEditorDraft(a, 'unsaved')
+
+    useAppStore.getState().closeAllFiles()
+
+    expect(useAppStore.getState().openFiles.map((file) => file.id)).toEqual([a, '/repo-a/b.ts'])
+    expect(useAppStore.getState().editorDrafts).toEqual({ [a]: 'unsaved' })
+    await main.settle()
+    const state = useAppStore.getState()
+    expect(editorTabsAndFiles()).toEqual([])
+    expect(state.openFiles).toEqual([])
+    expect(state.editorDrafts).toEqual({})
+    expect(state.recentlyClosedEditorTabsByWorktree[WT]?.map((entry) => entry.filePath)).toEqual([
+      '/repo-a/a.ts',
+      '/repo-a/b.ts'
+    ])
+  })
+
+  it('keeps every file whose close main refused', async () => {
+    const a = openEdit(WT, '/repo-a/a.ts', 'a.ts')
+    await main.settle()
+    useAppStore.getState().setEditorDraft(a, 'unsaved')
+    layoutApplyTestTransport.answerWith({ refuse: 'tab_not_found' })
+
+    useAppStore.getState().closeAllFiles()
+    await main.settle()
+
+    expect(editorTabsAndFiles()).toEqual([{ kind: 'editor', entity: a, hasFile: true }])
+    expect(useAppStore.getState().editorDrafts).toEqual({ [a]: 'unsaved' })
+  })
+})
+
 describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, layout-owner build', () => {
   it("rekeys main's tabs and file records under the window's ids", async () => {
     const plain = openEdit(WT, '/repo-a/src/a.ts', 'src/a.ts')
@@ -217,6 +294,106 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, layout-ow
     }
     expect(editorTabsAndFiles(WT).every((tab) => tab.hasFile)).toBe(true)
     expect(editorTabsAndFiles(SIBLING).every((tab) => tab.hasFile)).toBe(true)
+  })
+
+  it('rekeys a dirty draft and the autosave gate in the same update as the frame', async () => {
+    const oldId = openEdit(WT, '/repo-a/src/a.ts', 'src/a.ts')
+    await main.settle()
+    useAppStore.getState().setEditorDraft(oldId, 'unsaved')
+    useAppStore.getState().markFileDirty(oldId, true)
+    const torn: string[] = []
+    const unsubscribe = useAppStore.subscribe((state) => {
+      const files = new Map(state.openFiles.map((file) => [file.id, file]))
+      for (const tab of state.unifiedTabsByWorktree[WT] ?? []) {
+        if (!files.has(tab.entityId)) {
+          torn.push(`tab for ${tab.entityId} without its file`)
+        }
+      }
+      for (const fileId of Object.keys(state.editorDrafts)) {
+        if (!files.has(fileId)) {
+          torn.push(`draft for ${fileId} without its file`)
+        }
+      }
+    })
+
+    expect(
+      remapOpenEditorTabsForPathChange({
+        fromPath: '/repo-a/src',
+        toPath: '/repo-a/lib',
+        worktreePath: '/repo-a',
+        worktreeId: WT,
+        owner: localMoveOwner(WT),
+        moveOperationId: 'move-1'
+      })
+    ).toEqual({ ok: true })
+    // Nothing is rekeyed before main's frame.
+    expect(useAppStore.getState().editorDrafts).toEqual({ [oldId]: 'unsaved' })
+    expect(await contentRekeyOutcome([oldId])).toBe(true)
+    await main.settle()
+    unsubscribe()
+
+    expect(torn).toEqual([])
+    const state = useAppStore.getState()
+    expect(state.openFiles).toEqual([
+      expect.objectContaining({
+        id: '/repo-a/lib/a.ts',
+        isDirty: true,
+        pendingLiveDiskVerification: true,
+        pendingSelfMoveEcho: { operationId: 'move-1', targetPath: '/repo-a/lib/a.ts' }
+      })
+    ])
+    expect(state.editorDrafts).toEqual({ '/repo-a/lib/a.ts': 'unsaved' })
+    expect(state.editorBuffers['/repo-a/lib/a.ts']).toMatchObject({
+      pendingLiveDiskVerification: true
+    })
+  })
+
+  it('changes nothing when main refuses the rename', async () => {
+    const oldId = openEdit(WT, '/repo-a/src/a.ts', 'src/a.ts')
+    await main.settle()
+    useAppStore.getState().setEditorDraft(oldId, 'unsaved')
+    const before = useAppStore.getState()
+    layoutApplyTestTransport.answerWith({ refuse: 'invalid_params' })
+
+    remapOpenEditorTabsForPathChange({
+      fromPath: '/repo-a/src',
+      toPath: '/repo-a/lib',
+      worktreePath: '/repo-a',
+      worktreeId: WT,
+      owner: localMoveOwner(WT),
+      moveOperationId: 'move-1'
+    })
+
+    expect(await contentRekeyOutcome([oldId])).toBe(false)
+    await main.settle()
+    const after = useAppStore.getState()
+    expect(after.openFiles).toEqual(before.openFiles)
+    expect(after.editorDrafts).toEqual({ [oldId]: 'unsaved' })
+    expect(after.unifiedTabsByWorktree).toEqual(before.unifiedTabsByWorktree)
+  })
+
+  it("gives a renamed view tab's published view the file's new path", async () => {
+    useAppStore.getState().openDiff(WT, '/repo-a/src/a.ts', 'src/a.ts', 'typescript', false)
+    await main.settle()
+
+    remapOpenEditorTabsForPathChange({
+      fromPath: '/repo-a/src',
+      toPath: '/repo-a/lib',
+      worktreePath: '/repo-a',
+      worktreeId: WT,
+      owner: localMoveOwner(WT)
+    })
+    await main.settle()
+
+    const views = Object.values(layoutApplyTestTransport.mainModel!.workspaces[WT]!.editorViews!)
+    expect(views).toEqual([
+      expect.objectContaining({
+        file: expect.objectContaining({ filePath: '/repo-a/lib/a.ts', relativePath: 'lib/a.ts' })
+      })
+    ])
+    expect(editorTabsAndFiles()).toEqual([
+      { kind: 'diff', entity: expect.stringContaining('lib/a.ts'), hasFile: true }
+    ])
   })
 
   it('sends nothing for a refused rekey', async () => {

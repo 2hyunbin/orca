@@ -112,7 +112,7 @@ export function createTabsFocusActions(
       })
       // Switch point: main makes the activated preview permanent; its frame clears the flag.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
       }
     }
   }

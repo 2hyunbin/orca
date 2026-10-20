@@ -259,7 +259,7 @@ export function createTabsLabelActions(
       })
       mirrorTabPinnedToHost(get(), tabId, true)
       if (promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
       }
       if (exists) {
         get().recordFeatureInteraction?.('terminal-tabs')

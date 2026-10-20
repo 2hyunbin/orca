@@ -131,7 +131,7 @@ export function createOpenFileMutations(
       })
       // Switch point: main makes the edited preview tabs permanent.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
       }
     },
 

@@ -273,7 +273,10 @@ describe('closing duplicate document records', () => {
       if (draft !== undefined) {
         store.setState({ editorDrafts: { [sibling.id]: draft } })
       }
+      // Switch on: the files go once main's frame dropped their tabs.
+      const drawn = await mainHoldsStore()
       store.getState().closeAllFiles()
+      await drawn.settle()
       await new Promise<void>((resolve) => setImmediate(resolve))
       expect(stat).not.toHaveBeenCalled()
       expect(deletePath).not.toHaveBeenCalled()

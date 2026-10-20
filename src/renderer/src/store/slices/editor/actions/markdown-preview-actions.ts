@@ -234,7 +234,7 @@ export function createMarkdownPreviewActions(
       })
       // Switch point: main makes the preview tabs the user kept permanent.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        promotePreviewTabsThroughLayoutOwner(get(), promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
       }
     },
 

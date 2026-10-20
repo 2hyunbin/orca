@@ -24,6 +24,8 @@ import { projectHydratedBrowserSession } from './slices/browser/browser-hydratio
 import { buildHydratedEditorSessionState } from './slices/editor/actions/hydrated-editor-session-state'
 import { openFileOfLayoutEditorView } from './slices/editor/tabs/open-file-layout-view'
 import type { OpenFile } from './slices/editor/types/open-file'
+import { editorTabLabelOf } from './slices/editor/tabs/editor-tab-label'
+import { isEditorTabContentType } from './slices/editor/tabs/editor-tab-content-type'
 import type { EditorTabView } from '../../../shared/editor-tab-view-types'
 import { migrateHydratedEditorTabsAndGroups } from './slices/editor/file-ids/hydrated-editor-file-ids'
 import { buildHydratedTabState } from './slices/tabs-hydration'
@@ -180,6 +182,25 @@ function withFramedViewFiles(
   return [...files, ...rebuilt]
 }
 
+/** A tab only a frame drew (the window never opened it) takes the label the window's open gives. */
+function withEditorTabLabels(
+  tabsByWorktree: AppState['unifiedTabsByWorktree'],
+  openFiles: readonly OpenFile[]
+): AppState['unifiedTabsByWorktree'] {
+  const files = new Map(openFiles.map((file) => [fileKey(file.worktreeId, file.id), file]))
+  return Object.fromEntries(
+    Object.entries(tabsByWorktree).map(([key, tabs]) => [
+      key,
+      tabs.map((tab) => {
+        const file = tab.label ? undefined : files.get(fileKey(key, tab.entityId))
+        return file && isEditorTabContentType(tab.contentType)
+          ? { ...tab, label: editorTabLabelOf(file) }
+          : tab
+      })
+    ])
+  )
+}
+
 export function buildLayoutFrameSlices({
   layouts,
   facts,
@@ -243,6 +264,10 @@ export function buildLayoutFrameSlices({
     ...tabs,
     ...migrateHydratedEditorTabsAndGroups(tabs, editor.editorFileIdMigrationsByWorktree)
   }
+  editorTabs.unifiedTabsByWorktree = withEditorTabLabels(
+    editorTabs.unifiedTabsByWorktree,
+    openFiles
+  )
   return {
     tabsByWorktree: rows.tabsByWorktree,
     terminalLayoutsByTabId,

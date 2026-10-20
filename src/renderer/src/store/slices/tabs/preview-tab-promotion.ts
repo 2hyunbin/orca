@@ -1,13 +1,30 @@
 // Making preview tabs permanent in a layout-owner build: main promotes each tab and its frame
 // clears the flag; the window changes no tab itself. A workspace whose layout a paired server
-// owns is not main's to change, so the window ends its tabs' previews there, as today.
+// owns is not main's to change, so the window ends its tabs' previews there, as today; so it does
+// for a twin's tab main routes to a paired server, as the switch-off window does.
 
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
+import type { AppState } from '../../types'
+import { withPreviewEnded } from './tab-preview-flag'
 
 type OwnerState = Parameters<typeof sendLayoutApply>[0]
+type TabsState = Pick<AppState, 'unifiedTabsByWorktree'>
+type SetTabs = (update: (state: TabsState) => TabsState) => void
+
+/** Ends a tab's preview in the window's own copy. */
+function endPreviewHere(set: SetTabs, tabId: string): void {
+  set((state) => ({
+    unifiedTabsByWorktree: Object.fromEntries(
+      Object.entries(state.unifiedTabsByWorktree).map(([worktreeId, tabs]) => [
+        worktreeId,
+        tabs.map((tab) => (tab.id === tabId && tab.isPreview ? withPreviewEnded(tab) : tab))
+      ])
+    )
+  }))
+}
 
 /** Whether the window ends a preview in its own copy: always with the switch off. */
 export function endsPreviewHere(state: OwnerState, worktreeId: string): boolean {
@@ -20,6 +37,7 @@ const promoting = new Set<string>()
 /** Asks main to promote the tabs it owns; the frame that answers clears their flag. */
 export function promotePreviewTabsThroughLayoutOwner(
   state: OwnerState,
+  set: SetTabs,
   tabs: readonly Pick<Tab, 'id' | 'worktreeId'>[]
 ): void {
   for (const tab of tabs) {
@@ -31,12 +49,18 @@ export function promotePreviewTabsThroughLayoutOwner(
     const done = (): void => {
       promoting.delete(key)
     }
-    // asToday: main routed a twin's tab to a paired server, whose mirror shows its flag.
     sendLayoutApply(
       state,
       tab.worktreeId,
       { type: 'promotePreviewTab', tabId: tab.id },
-      { apply: done, asToday: done, refused: done }
+      {
+        apply: done,
+        asToday: () => {
+          done()
+          endPreviewHere(set, tab.id)
+        },
+        refused: done
+      }
     )
   }
 }

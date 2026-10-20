@@ -235,6 +235,8 @@ describe('createEditorSlice recently closed editor tabs', () => {
       reads = 0
 
       store.getState().closeAllFiles()
+      // Switch on: the files go once main's frame dropped their tabs.
+      await main.settle()
 
       expect(store.getState().openFiles).toHaveLength(0)
       expect(store.getState().recentlyClosedEditorTabsByWorktree['wt-1']?.[0]?.position).toEqual({

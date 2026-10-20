@@ -122,7 +122,7 @@ export type WindowLayoutCommand =
   | {
       type: 'moveTabToWorkspace'
       toWorkspace: string
-      tabs: { tabId: string; newTabId: string; newEntityId: string }[]
+      tabs: { tabId: string; newTabId: string; newEntityId: string; view?: LayoutEditorView }[]
       groupId: string
       file?: LayoutEditorFile
     }
@@ -185,27 +185,14 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
     case 'replaceBrowserPage':
     case 'setBrowserTabProfile':
       return [{ workspace: worktreeId, ids: [command.browserTabId] }]
-    case 'renameEditorFiles':
-      return [
-        {
-          workspace: worktreeId,
-          ids: command.renames.flatMap((rename) => [rename.fileId, rename.newFileId])
-        }
-      ]
-    case 'moveTabToWorkspace':
-      return [
-        { workspace: worktreeId, ids: command.tabs.map((tab) => tab.tabId) },
-        {
-          workspace: command.toWorkspace,
-          ids: command.tabs.flatMap((tab) => [tab.newTabId, tab.newEntityId])
-        }
-      ]
     case 'setGroupRatios':
       return [{ workspace: worktreeId, ids: [], groupLayout: true }]
-    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor opens
-    // and promotions are sent before the window draws them.
+    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor opens,
+    // promotions, moves and renames are sent before the window draws them.
     case 'openEditorTab':
     case 'promotePreviewTab':
+    case 'moveTabToWorkspace':
+    case 'renameEditorFiles':
     case 'splitPane':
     case 'closePane':
     case 'renamePane':
