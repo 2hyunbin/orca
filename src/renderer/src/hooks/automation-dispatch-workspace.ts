@@ -213,8 +213,8 @@ export async function prepareAutomationDispatchWorkspace(args: {
           undefined,
           undefined,
           {
-            // Why: a project two hosts publish refuses a host-less create; the run's host is captured.
-            executionHostId: runHostId,
+            // Why: only a captured host; with none, a project two hosts publish refuses, never guesses.
+            executionHostId: parseExecutionHostId(automation.runContext?.hostId)?.id,
             automationProvenanceRequest: {
               automationId: automation.id,
               automationRunId: run.id,
