@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationRun } from '../shared/automations-types'
 
 const {
@@ -89,6 +89,16 @@ describe('automation run command output', () => {
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
     spawnMock
+  })
+
+  beforeEach(() => {
+    vi.stubEnv('ORCA_ENVIRONMENT', undefined)
+    vi.stubEnv('ORCA_PAIRING_CODE', undefined)
+    vi.stubEnv('ORCA_REMOTE_PAIRING', undefined)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it.each([

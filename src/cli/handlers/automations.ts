@@ -148,10 +148,7 @@ async function resolveExpectedOwner(
   client: Parameters<CommandHandler>[0]['client'],
   id: string
 ): Promise<AutomationOwnerPrecondition | undefined> {
-  const result = await client.call<{ automation: Automation; owner?: AutomationOwnerPrecondition }>(
-    'automation.show',
-    { id }
-  )
+  const result = await client.call<AutomationShowPayload>('automation.show', { id })
   return result.result.owner
 }
 
@@ -286,16 +283,13 @@ export const AUTOMATION_HANDLERS: Record<string, CommandHandler> = {
       ...(expectedOwner ? { expectedOwner } : {})
     })
     const environment = getOptionalStringFlag(flags, 'environment') ?? process.env.ORCA_ENVIRONMENT
+    const preserveConnectionSettings = Boolean(
+      (client.isRemote && !environment) || process.env.ORCA_USER_DATA_PATH
+    )
     printResult(
       { ...result, result: { ...result.result, runId: result.result.run.id } },
       json,
-      (value) =>
-        formatAutomationRun(value, {
-          environment,
-          preserveConnectionSettings: Boolean(
-            (client.isRemote && !environment) || process.env.ORCA_USER_DATA_PATH
-          )
-        })
+      (value) => formatAutomationRun(value, { environment, preserveConnectionSettings })
     )
   },
   'automations runs': async ({ flags, client, json }) => {
