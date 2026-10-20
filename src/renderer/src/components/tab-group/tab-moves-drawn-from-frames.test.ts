@@ -48,6 +48,16 @@ const settle = async (): Promise<void> => {
 
 let close = (): void => {}
 
+/** The window's own tab moves and selections; main's frame does both, so each stays 0. */
+const WINDOW_TAB_WRITERS = [
+  'dropUnifiedTab',
+  'reorderUnifiedTabs',
+  'moveUnifiedTabToGroup',
+  'activateTab',
+  'focusGroup'
+] as const
+let windowTabWrites = (): number => 0
+
 beforeEach(async () => {
   layoutApplyTestTransport.reset()
   const session = localDesktopSession()
@@ -58,6 +68,14 @@ beforeEach(async () => {
   sync.start()
   await settle()
   close = () => sync.close()
+  const state = useAppStore.getState()
+  // Store actions are copied into each new state, so a spy outlives its test; count from here.
+  const spies = WINDOW_TAB_WRITERS.map((name) =>
+    vi.isMockFunction(state[name]) ? state[name] : vi.spyOn(state, name)
+  )
+  const before = spies.map((spy) => spy.mock.calls.length)
+  windowTabWrites = () =>
+    spies.reduce((count, spy, index) => count + spy.mock.calls.length - before[index]!, 0)
 })
 
 afterEach(() => {
@@ -91,6 +109,7 @@ describe('a tab move drawn from main’s frame', () => {
     expect(groupOf('group-a')!.tabOrder[0]).toBe('tab-unbound')
     expect(groupOf('group-a')!.activeTabId).toBe('tab-unbound')
     expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe('group-a')
+    expect(windowTabWrites()).toBe(0)
   })
 
   it('selects the moved tab in the same store update that shows the move (L120)', async () => {
@@ -154,6 +173,7 @@ describe('a tab move drawn from main’s frame', () => {
       layoutApplyTestTransport.mainModel!.workspaces[GIT_KEY]!.groupLayout
     )
     expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe(mainGroup.id)
+    expect(windowTabWrites()).toBe(0)
   })
 
   it('moves a tab to a split from its menu where main placed it', async () => {
@@ -169,6 +189,7 @@ describe('a tab move drawn from main’s frame', () => {
     expect(mainGroup.id).not.toBe('group-a')
     expect(tabOf('tab-shell').groupId).toBe(mainGroup.id)
     expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe(mainGroup.id)
+    expect(windowTabWrites()).toBe(0)
   })
 
   it('reorders the tab within its group as main ordered it', async () => {
@@ -181,5 +202,6 @@ describe('a tab move drawn from main’s frame', () => {
     await settle()
 
     expect(groupOf('group-a')!.tabOrder).toEqual(['tab-agent', 'tab-shell', 'editor:src/app.ts'])
+    expect(windowTabWrites()).toBe(0)
   })
 })
