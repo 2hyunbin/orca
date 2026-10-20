@@ -179,7 +179,7 @@ export abstract class RuntimeConstructionServices {
     hostIds: ExecutionHostId[]
     omittedHostIds: ExecutionHostId[]
   }
-  protected abstract resolveRepoSelector(selector: string): Promise<Repo>
+  protected abstract resolveRepoSelector(selector: string, hostId?: ExecutionHostId): Promise<Repo>
   protected abstract selectReposBySelector(selector: string): Repo[]
   protected abstract listRepoWorktreesForListing(
     repo: Repo,

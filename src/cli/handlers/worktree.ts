@@ -34,7 +34,7 @@ import { projectWorktreePsTerminalVerdict } from '../worktree-ps-terminal-verdic
 import {
   assertWorkspaceTargetFlagsCompatible,
   hasWorkspaceProjectTarget,
-  getCreateRepoSelector
+  getCreateRepoTarget
 } from '../worktree-project-target'
 import {
   assertWorktreeParentFlagsCompatible,
@@ -176,7 +176,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     const linearIssueLink = getOptionalLinearIssueLinkFlag(flags, 'linear-issue')
     const activate = flags.get('activate') === true || flags.get('run-hooks') === true
     const name = getRequiredStringFlag(flags, 'name')
-    const repo = await getCreateRepoSelector(flags, cwdParentWorktree, client)
+    const { repo, repoHostId } = await getCreateRepoTarget(flags, cwdParentWorktree, client)
     await assertGitLabLinkFlagProjectsMatch(flags, client, { repo })
     const linkedItems = referenceInputs
       ? await resolveReferenceInputs(context, referenceInputs)
@@ -186,6 +186,8 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     }
     const create = {
       repo,
+      // Older hosts drop the unknown field and keep refusing an id on several hosts, as before.
+      ...(repoHostId ? { repoHostId } : {}),
       name,
       displayName: name,
       displayNameKind: 'user',
