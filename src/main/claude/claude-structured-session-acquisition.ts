@@ -97,14 +97,6 @@ export async function acquireClaudeSession({
       // running; set_model answers success for a model it never resolves, so this
       // report is the session's only adoption evidence.
       if (liveSession && init.model) {
-        if (liveSession.reusableOptions.get('model') !== init.model) {
-          liveSession.reusableOptions.delete('model')
-          liveSession.reusableOptions.delete('effort')
-          liveSession.reusableOptions.delete('fastMode')
-        }
-        if (liveSession.optionMutationSequence === 0) {
-          liveSession.reusableOptions.set('model', init.model)
-        }
         liveSession.reportedOptions.model = init.model
         liveSession.reportedModelMutation = liveSession.optionMutationSequence
       }

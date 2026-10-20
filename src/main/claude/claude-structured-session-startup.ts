@@ -21,7 +21,6 @@ import {
   claudeResolvedCatalogListing,
   claudeStructuredSessionOptionsFrom,
   observeClaudeSettingsApplied,
-  observeClaudeSettingsExecutionEffort,
   readClaudeSettingsApplied,
   readClaudeFastModeFacts,
   readClaudeSettingsEffort
@@ -120,13 +119,6 @@ function applyClaudeInitializeFacts(session: ClaudeSession, facts: ClaudeInitial
   const { init, initialization } = facts
   // A turn's own init frame may already have reported the running model.
   if (init?.model && session.reportedOptions.model === undefined) {
-    if (session.optionMutationSequence === 0) {
-      session.reusableOptions.set('model', init.model)
-    } else if (session.reusableOptions.get('model') !== init.model) {
-      session.reusableOptions.delete('model')
-      session.reusableOptions.delete('effort')
-      session.reusableOptions.delete('fastMode')
-    }
     session.reportedOptions.model = init.model
     session.reportedModelMutation = session.optionMutationSequence
   }
@@ -165,7 +157,6 @@ function applyClaudeSettingsFacts(
     session.events?.publish()
     return
   }
-  observeClaudeSettingsExecutionEffort(session, settings)
   // The readback vouches for a value the child was launched with only when it reports that value.
   const agrees = (key: string, reported: string): boolean =>
     !session.options.has(key) || session.options.get(key) === reported
@@ -181,7 +172,6 @@ function applyClaudeSettingsFacts(
     session.confirmedOptions.add('effort')
   }
   if (published.fastMode !== null) {
-    session.reusableOptions.set('fastMode', String(published.fastMode))
     session.reportedOptions.fastMode = published.fastMode
     if (agrees('fastMode', String(published.fastMode))) {
       session.confirmedOptions.add('fastMode')

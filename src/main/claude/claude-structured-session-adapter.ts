@@ -164,7 +164,12 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   }
 
   dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) =>
-    dispatchClaudeMessage(this.session(input.sessionId), input, this.deps.requestTimeoutMs)
+    dispatchClaudeMessage(
+      this.session(input.sessionId),
+      input,
+      this.deps.requestTimeoutMs,
+      this.deps.logger
+    )
 
   compact: NonNullable<StructuredAgentSessionAdapter['compact']> = (input) =>
     dispatchClaudeCommand(this.session(input.sessionId), input.command)

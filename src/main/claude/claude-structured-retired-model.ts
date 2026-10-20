@@ -37,7 +37,8 @@ export function resetClaudeRetiredModel(
   sessionId: string,
   retired: string
 ): void {
-  const sequence = session.optionMutationSequence
+  session.appliedInputOptions.delete('model')
+  const sequence = ++session.optionMutationSequence
   void session.connection.setModel(undefined, { timeoutMs: deps.requestTimeoutMs }).then(
     () => {
       if (sequence !== session.optionMutationSequence) {
