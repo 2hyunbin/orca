@@ -10,7 +10,7 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: Ref to check out (defaults to the calling workflow's ref)
+        description: Ref to check out (defaults to the triggering commit SHA)
         required: false
         type: string
       test_files:
@@ -47,7 +47,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Ref to check out (defaults to the workflow ref)
+        description: Ref to check out (defaults to the triggering commit SHA)
         required: false
         type: string
       test_files:
@@ -77,7 +77,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install native build tools
         env:
@@ -235,7 +235,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       # Native cache misses need the compiler, Electron needs Xvfb, and paired
       # Quick Open needs ripgrep. Install them in one apt transaction per shard.
@@ -327,7 +327,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install native build and headless UI tools
         # Why ripgrep: Quick Open's bounded host-side search requires rg instead of an
@@ -425,7 +425,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: node
@@ -451,7 +451,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - name: Install headless tools
         run: sudo apt-get update && sudo apt-get install -y build-essential ripgrep xvfb openbox x11-utils
@@ -542,7 +542,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       # COMPAT(legacy-relay-bridge): the bridge spec builds 1.4.224's relay from its tagged sources.
       - name: Fetch the 1.4.224 relay sources
@@ -633,7 +633,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
         with:
