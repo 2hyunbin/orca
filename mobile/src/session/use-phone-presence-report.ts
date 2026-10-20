@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import type { RpcClient } from '../transport/rpc-client'
+import type { ConnectionState } from '../transport/types'
 
 /** The session routes one host's client has in focus, by screen. */
 type HostView = { focused: Map<object, string>; holders: number; stopAppState: () => void }
@@ -71,8 +72,15 @@ function releaseHostView(client: RpcClient, view: HostView): void {
  * the foreground. A route covered by another screen, a locked phone, or a backgrounded app is away,
  * so the host's unread dot is not muted for what nobody sees.
  */
-export function usePhonePresenceReport(client: RpcClient | null, worktreeId: string): void {
-  const reportingClient = ORCA_SIDEBAR_INPUTS_IS_MAIN ? client : null
+export function usePhonePresenceReport(
+  client: RpcClient | null,
+  connState: ConnectionState,
+  worktreeId: string
+): void {
+  // A transport that holds the view resends it on every session itself. One that cannot (the web
+  // page's shell bridge, whose client outlives native reconnects) is told again on each connect.
+  const reportsNow = !!client?.setSessionPreamble || connState === 'connected'
+  const reportingClient = ORCA_SIDEBAR_INPUTS_IS_MAIN && reportsNow ? client : null
   // Held ahead of this screen's session subscription (hook order), including on a new client.
   useEffect(() => {
     if (!reportingClient) {

@@ -2,6 +2,7 @@ import { createElement, Fragment, useContext, useEffect } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
+import type { ConnectionState } from '../transport/types'
 import { usePhonePresenceReport } from './use-phone-presence-report'
 
 const lifecycle = vi.hoisted(() => ({
@@ -63,10 +64,11 @@ function makeClient(holdsPreamble = true) {
 }
 
 function harness(screens: Screen[], first = makeClient()) {
-  function Probe(props: { worktreeId: string; client: RpcClient }) {
-    usePhonePresenceReport(props.client, props.worktreeId)
+  function Probe(props: { worktreeId: string; client: RpcClient; state: ConnectionState }) {
+    usePhonePresenceReport(props.client, props.state, props.worktreeId)
     return null
   }
+  let state: ConnectionState = 'connected'
   const tree = (next: Screen[], client: RpcClient) =>
     createElement(
       Fragment,
@@ -75,7 +77,7 @@ function harness(screens: Screen[], first = makeClient()) {
         createElement(
           RouteFocus.Provider,
           { key: screen.worktreeId, value: screen.focused },
-          createElement(Probe, { worktreeId: screen.worktreeId, client })
+          createElement(Probe, { worktreeId: screen.worktreeId, client, state })
         )
       )
     )
@@ -87,8 +89,9 @@ function harness(screens: Screen[], first = makeClient()) {
   return {
     reports: () => current.views(),
     last: () => current.views().at(-1),
-    update: (next: Screen[], client = current) => {
+    update: (next: Screen[], client = current, connState: ConnectionState = 'connected') => {
       current = client
+      state = connState
       act(() => renderer.update(tree(next, client.client)))
     },
     unmount: () => act(() => renderer.unmount())
@@ -169,5 +172,31 @@ describe('usePhonePresenceReport', () => {
     await Promise.resolve()
     expect(h.last()).toEqual(AWAY)
     expect(older.sendRequest).toHaveBeenCalledWith('sidebarInputs.reportView', AWAY)
+  })
+
+  // The web page's shell bridge client survives native reconnects and holds no preamble.
+  it('says the view again on every connect to a client that holds no preamble', () => {
+    const bridge = makeClient(false)
+    const screens = [{ worktreeId: A, focused: true }]
+    const h = harness(screens, bridge)
+    expect(h.reports()).toEqual([AWAY, shows(A)])
+    h.update(screens, bridge, 'reconnecting')
+    const sent = h.reports().length
+    h.update(screens, bridge, 'connected')
+    expect(h.reports().slice(sent).at(-1)).toEqual(shows(A))
+    // Backgrounded across the drop: the new connection hears away, not the stale view.
+    h.update(screens, bridge, 'reconnecting')
+    changeAppState('background')
+    h.update(screens, bridge, 'connected')
+    expect(h.last()).toEqual(AWAY)
+  })
+
+  it('leaves resending to a transport that holds the view as a preamble', () => {
+    const screens = [{ worktreeId: A, focused: true }]
+    const h = harness(screens)
+    const sent = h.reports().length
+    h.update(screens, undefined, 'reconnecting')
+    h.update(screens, undefined, 'connected')
+    expect(h.reports()).toHaveLength(sent)
   })
 })
