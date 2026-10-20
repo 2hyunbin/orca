@@ -16,8 +16,7 @@ export type LineageRenderInfo =
   | { state: 'valid'; lineage: WorktreeLineage; parent: Worktree }
   | { state: 'missing'; lineage: WorktreeLineage }
 
-/** A row that carries its own lineage edge, as a host that resolved it publishes it. */
-export type WorktreeWithInlineLineage = Worktree & { lineage?: WorktreeLineage | null }
+type WorktreeWithResolvedLineage = Worktree & { lineage?: WorktreeLineage | null }
 
 export function getProjectedWorktreeLineage(
   worktree: Worktree,
@@ -26,7 +25,7 @@ export function getProjectedWorktreeLineage(
   if (Object.hasOwn(lineageById, worktree.id)) {
     return lineageById[worktree.id]
   }
-  return (worktree as WorktreeWithInlineLineage).lineage
+  return (worktree as WorktreeWithResolvedLineage).lineage
 }
 
 type LineageProjection = {
@@ -151,7 +150,7 @@ export function getHostScopedWorktreeLineageInputs(
     worktreeMap.set(worktree.id, worktree)
     const projected = lineageById[worktree.id]
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolved rows may carry an inline lineage the Worktree type omits; it is only read, never trusted over a matching projection.
-    const inline = (worktree as WorktreeWithInlineLineage).lineage
+    const inline = (worktree as WorktreeWithResolvedLineage).lineage
     const lineage = projected?.worktreeInstanceId === worktree.instanceId ? projected : inline
     if (lineage) {
       hostLineageById[worktree.id] = lineage
@@ -192,7 +191,7 @@ export function getSidebarLineageParent(
 ): Worktree | undefined {
   const projected = getProjectedWorktreeLineage(worktree, lineageById)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolved rows may carry an inline lineage the Worktree type omits; it is only read, never trusted over a matching projection.
-  const inline = (worktree as WorktreeWithInlineLineage).lineage
+  const inline = (worktree as WorktreeWithResolvedLineage).lineage
   const lineage = projected?.worktreeInstanceId === worktree.instanceId ? projected : inline
   if (!lineage) {
     return undefined

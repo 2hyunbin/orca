@@ -7,8 +7,8 @@ import type { FolderWorkspace } from '../folder-workspace-types'
 import { projectGroupIdFromRepoId } from '../folder-workspace-worktree'
 import { parseWorkspaceKey } from '../workspace-scope'
 import { getExecutionHostIdFromWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
-import type { WorktreeWithInlineLineage } from './worktree-lineage-projection'
 import type { PairedServerWorkspaceRow } from './paired-server-rows'
 import type { WorkspaceRow } from './workspace-rows'
 
@@ -75,7 +75,8 @@ function readFeedRow(
   const hostId = getExecutionHostIdFromWorktreeHostIdentity(identity)
   const owner = parseExecutionHostId(ownerHostId)
   const { defaultBranch, automationCreated, cliCreated, detachedHead, creatorProvenance } = row
-  const worktree: WorktreeWithInlineLineage = {
+  // The inline edge the lineage projection reads off a resolved row (worktree-lineage-projection.ts).
+  const worktree: Worktree & { lineage: WorktreeLineage | null } = {
     id,
     ...(hostId ? { hostId } : {}),
     ...(owner?.kind === 'runtime' ? { runtimeOwnerEnvironmentId: owner.environmentId } : {}),
