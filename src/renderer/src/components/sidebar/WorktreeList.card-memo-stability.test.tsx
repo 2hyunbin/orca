@@ -186,6 +186,7 @@ function setFlatWorktreeState(): void {
     makeWorktree({ id: 'wt-b', displayName: 'beta', sortOrder: 10 })
   ]
   mockStore.state = {
+    startupLocalCatalogHydrated: true,
     ...makeFolderWorkspacePathStatusState(),
     activeModal: '',
     activeView: 'terminal',

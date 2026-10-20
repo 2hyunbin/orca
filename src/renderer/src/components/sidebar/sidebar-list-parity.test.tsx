@@ -133,7 +133,7 @@ async function windowFeedList(state: Partial<AppState>): Promise<string[]> {
   const { installed } = await installFeed(state)
   windowFeed = { domains: readSidebarFeedDomains(installed), readId: 1 }
   try {
-    return desktopList(state, useMainSidebarListModel)
+    return desktopList({ ...state, startupLocalCatalogHydrated: true }, useMainSidebarListModel)
   } finally {
     windowFeed = null
   }
@@ -211,6 +211,37 @@ describe('sidebar list parity: desktop window and feed reader', () => {
       }
     })
   }
+
+  it('the window draws nothing until both main’s rows and its own startup catalog are in', async () => {
+    const view: GoldenView = {
+      groupBy: 'repo',
+      sortBy: 'smart',
+      projectOrderBy: 'manual',
+      pinnedInGroups: false,
+      collapsedGroups: new Set()
+    }
+    const state = worldState(view)
+    const { installed } = await installFeed(state)
+    useAppStore.setState(initialState, true)
+    const feed = { domains: readSidebarFeedDomains(installed), readId: 1 }
+    const listWith = (installedFeed: typeof feed | null, catalogHydrated: boolean) => {
+      windowFeed = installedFeed
+      try {
+        return desktopList(
+          { ...state, startupLocalCatalogHydrated: catalogHydrated },
+          useMainSidebarListModel
+        )
+      } finally {
+        windowFeed = null
+        useAppStore.setState(initialState, true)
+      }
+    }
+    // Main's rows before the catalog would draw under default grouping and unnamed headers.
+    expect(listWith(feed, false)).toEqual([])
+    // The catalog before main's rows would draw headers that rows then fill and push apart.
+    expect(listWith(null, true)).toEqual([])
+    expect(listWith(feed, true).length).toBeGreaterThan(0)
+  })
 
   // Each scenario with a line its expanded list must hold, so an empty list cannot pass.
   const SCENARIOS: Record<string, [Partial<AppState>, RegExp]> = {

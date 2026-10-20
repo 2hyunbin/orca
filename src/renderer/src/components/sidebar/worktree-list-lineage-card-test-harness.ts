@@ -54,6 +54,8 @@ export function createAppStoreModuleMock(): Record<string, unknown> {
     detectedWorktreesByRepo: {},
     // Read by the list's mount effects, which a client render runs.
     setVisibleReviewCardWorktreeIds: () => {},
+    // The list draws main's rows only once startup has the window's catalog.
+    startupLocalCatalogHydrated: true,
     ...mockStore.state
   })
   const useAppStore = ((selector: (state: Record<string, unknown>) => unknown) =>
