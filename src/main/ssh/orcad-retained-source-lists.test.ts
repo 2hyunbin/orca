@@ -11,6 +11,12 @@ import type { SshTarget } from '../../shared/ssh-types'
 import type { Store } from '../persistence'
 import { orcadMigrationCutoverFixture } from './orcad-migration-cutover-fixture'
 import { writeOrcadMigrationSourceCutover } from './orcad-migration-cutover-journal'
+import { wslMoveCutoverFixture } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
+import { seedWslMoveCutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
+import {
+  loadWslMoveFence,
+  resetWslMoveFenceForTests
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 const userData = vi.hoisted(() => ({ dir: '' }))
 vi.mock('../../shared/app-environment', () => ({
@@ -184,6 +190,23 @@ describe('project host setups of a converted host', () => {
       getProjectHostSetups: () => setups.slice(1)
     } as unknown as Store
     expect(visibleProjectHostSetups(folderOnly).map((entry) => entry.id)).toEqual(['repo-local'])
+  })
+
+  it('hides the local setup of a project a WSL move took, by its repo row alone', () => {
+    loadWslMoveFence(dir)
+    try {
+      seedWslMoveCutover(
+        dir,
+        wslMoveCutoverFixture('move-1', 'destination-committed', {}, { repoIds: ['repo-local'] })
+      )
+      // No SSH host is fenced here, so only the repo-row match can drop the setup.
+      expect(visibleProjectHostSetups(store([])).map((entry) => entry.id)).toEqual([
+        'repo-1',
+        'placeholder'
+      ])
+    } finally {
+      resetWslMoveFenceForTests()
+    }
   })
 
   it('lists them again once an older build changed the host', () => {

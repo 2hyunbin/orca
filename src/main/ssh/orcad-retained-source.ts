@@ -95,13 +95,19 @@ export function visibleRepos(
   store: CatalogStore & Pick<Store, 'getSshTargets'>,
   getUserDataPath = appUserDataPath
 ): Repo[] {
-  const hidden = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
-  const repos = withoutWslMovedRepos(store.getRepos())
-  if (hidden.length === 0) {
+  return reposShownWith(
+    store.getRepos(),
+    hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
+  )
+}
+
+function reposShownWith(allRepos: Repo[], hiddenTargets: readonly string[]): Repo[] {
+  const repos = withoutWslMovedRepos(allRepos)
+  if (hiddenTargets.length === 0) {
     return repos
   }
   return repos.filter(
-    (repo) => !hidden.some((targetId) => repoBelongsToOrcadSource(repo, targetId))
+    (repo) => !hiddenTargets.some((targetId) => repoBelongsToOrcadSource(repo, targetId))
   )
 }
 
@@ -154,7 +160,7 @@ export function visibleProjectHostSetups(
   }
   const hiddenTargets = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
   const allRepos = store.getRepos()
-  const shownRepos = visibleRepos(store, getUserDataPath)
+  const shownRepos = reposShownWith(allRepos, hiddenTargets)
   if (hiddenTargets.length === 0 && shownRepos.length === allRepos.length) {
     return setups
   }
