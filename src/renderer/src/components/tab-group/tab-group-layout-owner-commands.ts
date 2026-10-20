@@ -14,6 +14,7 @@ import {
   type MovedTabSelection
 } from '@/runtime/layout-owner-pane-intents'
 import { tabSelectionKey } from '@/store/slices/tabs/moved-tab-selection'
+import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 
 /** A tab drop as the window resolved it: within its group, into another, or beside a group. */
 export type TabDrop =
@@ -33,8 +34,13 @@ export function dropTabThroughLayoutOwner(worktreeId: string, drop: TabDrop): bo
   }
   const forget = expectSelectionAfterMove(worktreeId, drop)
   const sent = sendLayoutCommandToOwner(worktreeId, command, {
-    // The frame the answer waits for showed the move, and with it the selection, if any.
-    apply: forget,
+    // The frame the answer waits for showed the move and the selection; with no stream, the
+    // reconnect's snapshot will.
+    apply: () => {
+      if (layoutFramesFlowing()) {
+        forget()
+      }
+    },
     asToday: () => {
       forget()
       moveAsToday(worktreeId, drop)

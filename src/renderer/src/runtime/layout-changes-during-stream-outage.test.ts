@@ -164,5 +164,11 @@ describe('changes made while main’s layout stream is down', () => {
     expect(terminalRow('tab-unbound').color).toBe('#22c55e')
     expect(paneTitles()?.[leaf(1)]).toBe('REVIEWER')
     expect(tabEntry('tab-unbound').groupId).toBe('group-a')
+    // The move's selection waited for the snapshot that shows it (L120).
+    expect(useAppStore.getState().activeGroupIdByWorktree[GIT_KEY]).toBe('group-a')
+    expect(
+      useAppStore.getState().groupsByWorktree[GIT_KEY]!.find((group) => group.id === 'group-a')
+        ?.activeTabId
+    ).toBe('tab-unbound')
   })
 })
