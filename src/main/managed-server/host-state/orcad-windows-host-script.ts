@@ -164,22 +164,33 @@ const ops = {
     // "Stop now", renamed in whole: the listener only reacts to the request's own name.
     const request = path.join(dir, ${text(ORCAD_STOP_REQUEST_FILENAME)})
     const temp = request + '.' + process.pid + '.tmp'
-    try {
-      fs.writeFileSync(temp, ${text(ORCAD_STOP_NOW_REQUEST)}, { mode: 0o600 })
-      fs.renameSync(temp, request)
-    } catch {
-      try { fs.rmSync(temp, { force: true }) } catch {}
-      return answer('SIGNAL_FAILED')
+    try { fs.writeFileSync(temp, ${text(ORCAD_STOP_NOW_REQUEST)}, { mode: 0o600 }) } catch { return answer('SIGNAL_FAILED') }
+    const waitForExit = () => {
+      process.stdout.write('SIGNALED\\n')
+      const end = Date.now() + Number(waitArg) * 1000
+      const tick = () => {
+        const state = orcadState(dir, record)
+        if (state === 'dead') return answer('STOPPED')
+        if (Date.now() >= end) return answer(state === 'alive' ? 'STILL_RUNNING' : 'UNKNOWN')
+        setTimeout(tick, 250)
+      }
+      tick()
     }
-    process.stdout.write('SIGNALED\\n')
-    const end = Date.now() + Number(waitArg) * 1000
-    const tick = () => {
-      const state = orcadState(dir, record)
-      if (state === 'dead') return answer('STOPPED')
-      if (Date.now() >= end) return answer(state === 'alive' ? 'STILL_RUNNING' : 'UNKNOWN')
-      setTimeout(tick, 250)
+    // Antivirus holding the new file open shows up as EPERM/EACCES/EBUSY; retry briefly.
+    const delays = [50, 100, 150, 200, 250]
+    let attempt = 0
+    const publish = () => {
+      try { fs.renameSync(temp, request) } catch (error) {
+        if (['EPERM', 'EACCES', 'EBUSY'].includes(error.code) && attempt < delays.length) {
+          setTimeout(publish, delays[attempt++])
+          return
+        }
+        try { fs.rmSync(temp, { force: true }) } catch {}
+        return answer('SIGNAL_FAILED')
+      }
+      waitForExit()
     }
-    tick()
+    publish()
   },
 
   // Settles on a finished line or an oversized file; both are final for the client's parser.
