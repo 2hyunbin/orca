@@ -83,9 +83,11 @@ type IdlePollSample = {
 
 const IDLE_ENTRY_FLAGS = { foregroundPollInFlight: false, screenReadInFlight: false }
 
+type IdlePollRecord = RuntimeLeafRecord | RuntimePtyWorktreeRecord
+
 /** One sweep's readings, shared by every waiter on the same terminal. */
 type SweepReadings = {
-  verdicts: Map<object, Map<boolean | undefined, TuiIdleVerdict>>
+  verdicts: Map<IdlePollRecord, Map<boolean | undefined, TuiIdleVerdict>>
   screenReads: Map<string, Promise<RuntimeTerminalWaitBlockedReason | null> | null>
   foregroundReads: Map<string, Promise<string | null> | null>
 }
@@ -144,7 +146,7 @@ export class RuntimeTerminalIdlePolls {
   }
 
   private evaluate(
-    record: object,
+    record: IdlePollRecord,
     launchReadiness: boolean | undefined,
     readings: SweepReadings | undefined,
     evaluateOnce: () => TuiIdleVerdict
