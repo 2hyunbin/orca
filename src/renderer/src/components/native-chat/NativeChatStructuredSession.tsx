@@ -154,16 +154,9 @@ export function NativeChatStructuredSession(
   // already on screen: nothing in it can act, and its words say why once.
   const readFailedFinally = readFailure?.final === true
   const viewState = selectNativeChatViewState(session, { readRetries: !readFailedFinally })
-  useNativeChatFontSize(
-    viewState.kind === 'ready' && props.isVisible && props.isFocusedGroup,
-    rootRef
-  )
-  const find = useNativeChatFind(
-    props.isVisible && props.isFocusedGroup,
-    rootRef,
-    composerRef,
-    submits.messageListRef
-  )
+  const paneActive = props.isVisible && props.isFocusedGroup
+  useNativeChatFontSize(viewState.kind === 'ready' && paneActive, rootRef)
+  const find = useNativeChatFind(paneActive, rootRef, composerRef, submits.messageListRef)
   const appearanceStyle = useNativeChatStoreAppearanceStyle()
   const imageRuntimeContext = useNativeChatImageRuntimeContext(props.tabId)
   const { onLinkClick, linkActionRequest, closeLinkActions } = useNativeChatLinkActions(
