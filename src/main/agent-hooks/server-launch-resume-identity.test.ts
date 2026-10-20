@@ -64,6 +64,27 @@ describe('a resume launch seeds the pane identity', () => {
     ])
   })
 
+  it('names a switch start’s exact execution, and a new incarnation there re-seeds it', async () => {
+    const server = await startServer()
+    const published = vi.fn()
+    server.setListener(published)
+    const seed = (incarnationId: string) =>
+      server.recordLaunchResumeIdentity({
+        paneKey: PANE,
+        agentType: 'codex',
+        providerSession: RESUMED,
+        launchedAt: Date.now(),
+        execution: { ptyId: 'pty-1', incarnationId }
+      })
+    seed('i1')
+    seed('i1')
+    seed('i2')
+    expect(published.mock.calls.map(([row]) => row.launchExecution)).toEqual([
+      { ptyId: 'pty-1', incarnationId: 'i1' },
+      { ptyId: 'pty-1', incarnationId: 'i2' }
+    ])
+  })
+
   it("yields to the agent's own report and is replaced by its first hook", async () => {
     const server = await startServer()
     const launchedAt = Date.now() - 1_000

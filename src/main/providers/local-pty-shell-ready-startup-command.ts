@@ -18,13 +18,16 @@ export function writeStartupCommandWhenShellReady(
   startupCommand: string,
   onExit: (cleanup: () => void) => void,
   // Why: only shells with bracketed-paste active (see isBracketedPasteSafeShell) accept the wrapper; others use the raw path so ESC[200~ isn't echoed.
-  options: { bracketedPasteSafe?: boolean } = {}
+  options: { bracketedPasteSafe?: boolean; onSettled?: () => void } = {}
 ): void {
   let sent = false
   let postReadyTimer: ReturnType<typeof setTimeout> | null = null
   let postReadyDataDisposable: { dispose: () => void } | null = null
 
   const cleanup = (): void => {
+    if (!sent) {
+      options.onSettled?.()
+    }
     sent = true
     if (postReadyTimer !== null) {
       clearTimeout(postReadyTimer)
@@ -52,6 +55,7 @@ export function writeStartupCommandWhenShellReady(
         bracketedPasteSafe: options.bracketedPasteSafe === true
       })
     )
+    options.onSettled?.()
   }
 
   const schedulePostReadyFlush = (): void => {

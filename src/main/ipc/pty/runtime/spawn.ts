@@ -4,8 +4,7 @@ import {
   savedResumeRecord,
   savedResumeResult,
   resumeSpawnRefusal,
-  forgetRefusedResume,
-  settleSwitchSpawn
+  forgetRefusedResume
 } from '../host-env/saved-resume-admission'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
@@ -133,13 +132,8 @@ export async function spawnPtyFromRuntimeController(
     if (!ctx.result.isReattach) {
       deps.runtime?.rememberSavedTerminalLaunchResult?.(committed.id, committed)
     }
-    settleSwitchSpawn(deps.runtime, ctx.switchAttempt, { ptyId: committed.id })
     return committed
   } catch (err) {
-    settleSwitchSpawn(deps.runtime, ctx.switchAttempt, {
-      // A daemon session may exist even with no reply; an in-process spawn that returned none made none.
-      unknown: ctx.result.id || ctx.effectiveSessionAppId
-    })
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(

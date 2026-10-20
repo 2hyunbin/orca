@@ -10,10 +10,8 @@ import type {
   RefusedPaneResume
 } from '../../../../shared/agent-status-types'
 import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
-import type {
-  SwitchClaim,
-  SwitchSpawnOutcome
-} from '../../../runtime/session-tabs/structured-session-switch-claims'
+import type { SwitchClaim } from '../../../runtime/session-tabs/structured-session-switch-claims'
+import { TERMINAL_SWITCH_GENERATION_ENV } from '../../../../shared/terminal-switch'
 import {
   agentSessionLeasePossiblyWriting,
   listStructuredProviderSessionOwnership
@@ -42,13 +40,16 @@ export type AdmissionRuntime = {
     paneKey: string
   ): Promise<SleepingAgentSessionRecord | undefined>
   openAgentSessionRecordStore(): Promise<AgentSessionRecordStore>
-  acceptSwitchStart?(
-    agent: string,
-    id: string,
-    attempt: string,
-    sessionId?: string
-  ): SwitchClaim | null
-  settleSwitchAttempt?(attempt: string, outcome: SwitchSpawnOutcome): void
+  acceptSwitchStart?(generation: string, paneKey: string): SwitchClaim | null
+  saveSwitchClaim?(claim: SwitchClaim): Promise<boolean>
+  dispatchSwitchStart?(claim: SwitchClaim): { switchGeneration: string; switchOwner: string }
+}
+
+/** The spawn options a switch admission reads its generation from and hands its owner fields to. */
+export type SwitchSpawnOptions = {
+  env?: Record<string, string>
+  switchGeneration?: string
+  switchOwner?: string
 }
 
 /** `chat-home`: an automatic restore of a conversation an open chat continues; `chat-writing`:
@@ -115,31 +116,37 @@ export async function judgeResumes(
   return admitted()
 }
 
-/** The terminal half of a chat's switch: refused into a plain shell where Orca can't judge the pane,
- *  or while a chat may be writing the conversation; otherwise its claim settles with this spawn. */
+/** The terminal half of a chat's switch. Its generation takes this pane and is saved on the chat
+ *  before the owner gets it; a refusal sends nothing, and only the owner then says it never started. */
 export async function admitSwitchResumeSpawn(
   runtime: AdmissionRuntime | undefined,
   args: ResumeSpawnArgs,
   wslDistro: string | null,
-  spawn?: { attempt?: string; sessionId?: string }
+  spawn?: { paneKey: string | null; options: SwitchSpawnOptions }
 ): Promise<ResumeSpawnAdmission> {
+  const generation = args.env?.[TERMINAL_SWITCH_GENERATION_ENV]
+  delete args.env?.[TERMINAL_SWITCH_GENERATION_ENV]
+  delete spawn?.options.env?.[TERMINAL_SWITCH_GENERATION_ENV]
   const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
   const agent = args.launchAgent
   if (!providerSession || !agent) {
     throw new Error('switch_start_missing_conversation')
   }
   const refused = { agent, providerSession }
-  const attempt = spawn?.attempt
-  if (args.connectionId || wslDistro !== null || !runtime?.acceptSwitchStart || !attempt) {
+  if (args.connectionId || wslDistro !== null || !generation || !spawn?.paneKey) {
     return { verdict: 'unverifiable', refused }
   }
   // Before any await: a chat start whose census ends after this point sees the claim.
-  if (!runtime.acceptSwitchStart(agent, providerSession.id, attempt, spawn.sessionId)) {
+  const claim = runtime?.acceptSwitchStart?.(generation, spawn.paneKey)
+  if (!claim || claim.providerSessionId !== providerSession.id) {
     return { verdict: 'chat-writing', refused }
   }
+  if (!(await runtime?.saveSwitchClaim?.(claim))) {
+    return { verdict: 'unverifiable', refused }
+  }
   const admission = await judgeResumes(runtime, [refused], true)
-  if (admission.verdict !== 'admitted') {
-    runtime.settleSwitchAttempt?.(attempt, 'not-started')
+  if (admission.verdict === 'admitted' && runtime?.dispatchSwitchStart) {
+    Object.assign(spawn.options, runtime.dispatchSwitchStart(claim))
   }
   return admission
 }

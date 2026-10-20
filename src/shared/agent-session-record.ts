@@ -1,4 +1,5 @@
 import { isAgentSessionRewindRecord, type AgentSessionRewindRecord } from './agent-session-rewind'
+import { isTerminalSwitchDescriptor, type TerminalSwitchDescriptor } from './terminal-switch'
 import { isAgentSessionLaunchArgs } from './agent-session-launch-args'
 import { isAgentSessionConversationName } from './agent-session-conversation-name'
 import {
@@ -164,6 +165,8 @@ export type AgentSessionRecord = {
   /** The name Orca gave this conversation, so a later acquisition need not name it again. */
   conversationName?: string
   launchArgs?: AgentSessionLaunchArgs
+  /** A switch of this chat's conversation into a terminal whose start its owner has not proved over. */
+  terminalSwitch?: TerminalSwitchDescriptor
   lease: AgentSessionLease
   createdAt: number
   updatedAt: number
@@ -184,9 +187,8 @@ const MAX_LAUNCH_ENV_ENTRIES = 256
 const MAX_LAUNCH_ENV_VALUE_LENGTH = 65_536
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/
 
-function isBoundedString(value: unknown, max: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= max
-}
+const isBoundedString = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= max
 
 export function isAgentSessionId(value: unknown): value is string {
   return typeof value === 'string' && SESSION_ID_PATTERN.test(value)
@@ -200,9 +202,8 @@ const SCOPE_KEY_SEPARATOR = '\u0000'
  * different sessions; collapsing them would let one host adjudicate another host's lease.
  */
 export function agentSessionScopeKey(location: AgentSessionExecutionLocation): string {
-  return [location.executionHostId, location.wslDistro ?? '', location.workspaceId].join(
-    SCOPE_KEY_SEPARATOR
-  )
+  const { executionHostId, wslDistro, workspaceId } = location
+  return [executionHostId, wslDistro ?? '', workspaceId].join(SCOPE_KEY_SEPARATOR)
 }
 
 export function agentSessionExecutionLocationsEqual(
@@ -373,6 +374,7 @@ export function isPersistedAgentSessionRecord(
     (record.conversationName === undefined ||
       isAgentSessionConversationName(record.conversationName)) &&
     (record.launchArgs === undefined || isAgentSessionLaunchArgs(record.launchArgs)) &&
+    (record.terminalSwitch === undefined || isTerminalSwitchDescriptor(record.terminalSwitch)) &&
     !Object.hasOwn(record, 'launchEnv') &&
     isPersistedAgentSessionLease(record.lease) &&
     record.lease.sessionId === record.sessionId &&

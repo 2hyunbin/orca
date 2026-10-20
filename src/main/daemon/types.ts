@@ -107,6 +107,9 @@ export type CreateOrAttachRequest = {
       claim: AgentSessionExecutionClaim
       surface: AgentSessionSurfaceBinding
     }
+    /** A switch start; sent only to a daemon that answered `observeTerminalSwitch`. */
+    switchGeneration?: string
+    switchOwner?: string
   }
 }
 
@@ -324,6 +327,7 @@ export type DaemonRequest =
   | TakePendingOutputRequest
   | PtyOwnerQueryProtocol.CloseStartupQueryAuthorityRequest
   | PtyOwnerQueryProtocol.SetColorQueryReplyColorsRequest
+  | PtyOwnerQueryProtocol.ObserveTerminalSwitchRequest
 
 // ─── RPC Responses (Daemon → Client, on control socket) ────────────
 

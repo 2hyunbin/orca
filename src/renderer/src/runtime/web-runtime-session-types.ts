@@ -11,8 +11,8 @@ import type { RuntimeTerminalCreate } from '../../../shared/runtime-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
 
 export type WebRuntimeTerminalCreateOutcome =
-  /** `tabId`: this client's tab for the host's new terminal, when the host named it. */
-  { status: 'created'; tabId?: string } | { status: 'failed'; message: string }
+  | { status: 'created' }
+  | { status: 'failed'; message: string }
 
 export type CreateWebRuntimeSessionTerminalArgs = {
   worktreeId: string

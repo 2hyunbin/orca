@@ -168,8 +168,14 @@ export function resolvePaneAgentConversation<Agent extends AgentType>(
   return request
 }
 
-/** As above, or the conversation the pane's agent last reported once it exited: a switch is
- *  offered when the agent is gone, which is when it can succeed. */
+/** The PTY a pane is bound to now. */
+export function panePtyId(state: AppState, paneKey: string): string | undefined {
+  const pane = parsePaneKey(paneKey)
+  return pane ? state.terminalLayoutsByTabId[pane.tabId]?.ptyIdsByLeafId?.[pane.leafId] : undefined
+}
+
+/** As above, or the conversation the pane's agent last reported once it exited, or the one the
+ *  host launched in this exact PTY: a switch is offered when the agent is gone. */
 export function resolvePaneLastAgentConversation<Agent extends AgentType>(
   state: AppState,
   pane: { worktreeId: string; paneKey: string },
@@ -177,18 +183,28 @@ export function resolvePaneLastAgentConversation<Agent extends AgentType>(
 ): AgentPaneConversation<Agent> | null {
   const live = resolvePaneAgentConversation(state, pane, isAgent)
   const retained = state.retainedAgentsByPaneKey[pane.paneKey]
-  if (live || retained?.entry.paneKey !== pane.paneKey || retained.worktreeId !== pane.worktreeId) {
+  const launch = state.launchConversationByPaneKey[pane.paneKey]
+  const tab = (state.tabsByWorktree[pane.worktreeId] ?? []).find(
+    (candidate) => candidate.id === parsePaneKey(pane.paneKey)?.tabId
+  )
+  const source =
+    retained?.entry.paneKey === pane.paneKey && retained.worktreeId === pane.worktreeId
+      ? retained
+      : tab && launch && launch.execution.ptyId === panePtyId(state, pane.paneKey)
+        ? { tab, agentType: launch.agent, entry: launch }
+        : null
+  if (live || !source) {
     return live
   }
   const candidates = new Map<string, RequestCandidate<Agent>>()
-  registerCandidate(state, new Map([[retained.tab.id, retained.tab]]), candidates, isAgent, {
-    agent: retained.agentType,
+  registerCandidate(state, new Map([[source.tab.id, source.tab]]), candidates, isAgent, {
+    agent: source.agentType,
     paneKey: pane.paneKey,
     priority: 10,
-    providerSession: retained.entry.providerSession,
+    providerSession: source.entry.providerSession,
     refresh: false,
-    tabId: retained.tab.id,
-    worktreeId: retained.worktreeId
+    tabId: source.tab.id,
+    worktreeId: pane.worktreeId
   })
   const [candidate] = candidates.values()
   if (!candidate) {

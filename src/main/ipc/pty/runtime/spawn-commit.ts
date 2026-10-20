@@ -244,7 +244,8 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     worktreeId: args.worktreeId,
     launchedAt: ctx.codexHomeLaunchStartedAt,
     resumeArgvDropped: ctx.codexResumeArgvDropped,
-    result: ctx.result
+    result: ctx.result,
+    switchGeneration: ctx.spawnOptions.switchGeneration
   })
   // Why: runtime-owned/background spawns bypass mounted-pane state, so inventory consumers need an explicit signal.
   ctx.deps.sendPtySpawnedToRenderer(ctx.result.id)

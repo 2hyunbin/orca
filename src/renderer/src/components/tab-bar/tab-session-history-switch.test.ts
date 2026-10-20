@@ -5,6 +5,7 @@ import { makeRepo, makeTerminalTab, makeWorktree } from '../worktree-jump-palett
 import { makeAgentStatusEntry } from '@/runtime/sync-runtime-graph-test-harness'
 import { collectAiVaultTitleRequests } from '@/lib/ai-vault-tab-title-requests'
 import { resolveCliChatResumeSource } from './cli-chat-resume-source'
+import { applyProviderSessionOnlyUpdate } from '@/hooks/ipc-events/agent-status-partial-updates'
 import type { AiVaultListArgs, AiVaultSession } from '../../../../shared/ai-vault-types'
 import { getDefaultSettings } from '../../../../shared/constants'
 import {
@@ -503,6 +504,56 @@ describe('one pane of a terminal tab', () => {
     expect(paneGate(makeState(liveClaudeEntry, { connectionId: 'dev-box' }), claudePane)).toBe(
       false
     )
+  })
+  it('presents a switched terminal’s host identity before any prompt, for its own PTY only', () => {
+    makeState()
+    const [L1, L2] = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222'
+    ]
+    const pane = `term-1:${L1}`
+    const layout = (ptyIdsByLeafId: Record<string, string>) =>
+      useAppStore.setState({
+        terminalLayoutsByTabId: {
+          'term-1': { root: null, activeLeafId: L1, expandedLeafId: null, ptyIdsByLeafId }
+        }
+      })
+    layout({ [L1]: 'pty-1', [L2]: 'pty-2' })
+    applyProviderSessionOnlyUpdate({
+      store: useAppStore.getState(),
+      batch: undefined,
+      paneKey: pane,
+      routing: { tabId: 'term-1', worktreeId: WORKTREE_ID },
+      data: {
+        paneKey: pane,
+        connectionId: null,
+        receivedAt: 1,
+        stateStartedAt: 1,
+        state: 'done',
+        prompt: '',
+        agentType: 'codex',
+        providerSession: { key: 'session_id', id: 'thread-c' },
+        providerSessionOnly: true,
+        launchExecution: { ptyId: 'pty-1', incarnationId: 'i1' }
+      }
+    })
+    const state = useAppStore.getState()
+    // Presentation only: no status row and no sleeping recovery record.
+    expect(state.sleepingAgentSessionsByPaneKey).toEqual({})
+    expect(state.agentStatusByPaneKey).toEqual({})
+    expect(
+      resolveCliChatResumeSource(state, {
+        tab: { id: 'term-1', worktreeId: WORKTREE_ID },
+        paneKey: pane
+      })
+    ).toMatchObject({ agent: 'codex', providerSessionId: 'thread-c', ptyId: 'pty-1' })
+    expect(paneGate(state, `term-1:${L2}`)).toBe(false)
+    layout({ [L1]: 'pty-9' })
+    expect(paneGate(useAppStore.getState(), pane)).toBe(false)
+    // Its PTY exiting ends it, so a later incarnation under the same id never inherits it.
+    layout({ [L1]: 'pty-1' })
+    useAppStore.getState().setLaunchConversation(pane, null)
+    expect(paneGate(useAppStore.getState(), pane)).toBe(false)
   })
 })
 

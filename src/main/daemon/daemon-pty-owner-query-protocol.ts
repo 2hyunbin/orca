@@ -10,3 +10,10 @@ export type SetColorQueryReplyColorsRequest = {
   type: 'setColorQueryReplyColors'
   payload: { colors: unknown }
 }
+
+/** The daemon's own answer about one chat → terminal switch generation; an unseen one is fenced. */
+export type ObserveTerminalSwitchRequest = {
+  id: string
+  type: 'observeTerminalSwitch'
+  payload: { generation: string; fence?: boolean }
+}

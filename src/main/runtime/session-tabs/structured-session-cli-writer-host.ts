@@ -4,9 +4,12 @@ import {
 } from '../../../shared/agent-session-resume'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
-import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
-import { OrcaRuntimeWithStructuredSessionSwitchClaims } from './structured-session-switch-claims'
 import { switchStartProcessVerdict } from './structured-session-switch-observation'
+import {
+  OrcaRuntimeWithStructuredSessionSwitchClaims,
+  switchHeldRefusal,
+  switchMovingRefusal
+} from './structured-session-switch-claims'
 import { getProviderForPty } from '../../ipc/pty/provider/registry'
 import { LocalPtyProvider } from '../../providers/local-pty-provider'
 import { inspectPtyProviderProcess } from '../../providers/pty-process-inspection'
@@ -132,7 +135,7 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
     providerSessionId: string,
     source?: { workspaceId: string; paneKey: string }
   ): Promise<void> {
-    await this.reconcileSwitchAttempts()
+    await this.loadSwitchClaims()
     this.assertNoPendingSwitch(agent, providerSessionId)
     await this.assertSwitchStartsEnded(agent, providerSessionId)
     await assertCliConversationWritersExited(
@@ -179,31 +182,42 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
       source && { paneKey: source.paneKey, worktreeId: source.workspaceId }
     )
     // A switch spawn admitted during the census either registered first or read this chat's reservation.
-    this.assertNoPendingSwitch(agent, providerSessionId)
+    this.assertNoPendingSwitch(agent, providerSessionId, true)
   }
 
   async releaseEndedSwitchStarts(agent: string, id: string): Promise<void> {
-    await this.reconcileSwitchAttempts()
+    await this.loadSwitchClaims()
     await this.assertSwitchStartsEnded(agent, id).catch(() => undefined)
   }
 
-  /** A switch's terminal holds its conversation until the agent it started there is proven gone. */
+  /** A switch's start holds its conversation until its owner proves it over, or its startup has
+   *  settled, every agent recorded there is proved exited and that exact shell is alone. */
   private async assertSwitchStartsEnded(agent: string, id: string): Promise<void> {
-    for (const { ptyId, proof } of this.boundSwitchStarts(agent, id)) {
-      const pane = this.cliWriterPtyPane(ptyId)
-      const verdicts = await Promise.all(proof.processes.map(switchStartProcessVerdict))
-      if (
-        !pane ||
-        verdicts.length === 0 ||
-        verdicts.some((verdict) => verdict !== 'exited') ||
-        !(await this.cliWriterShellAlone(pane)) ||
-        this.ptysById.get(ptyId)?.switchStart !== proof
-      ) {
-        throw agentSessionRefusalError('agent_session_conflict', {
-          reason: 'conversationHeldElsewhere'
-        })
+    for (const claim of this.switchClaimsFor(agent, id)) {
+      if (!claim.accepted) {
+        throw switchMovingRefusal()
       }
-      delete this.ptysById.get(ptyId)?.switchStart
+      const seen = await this.observeSwitch(claim, true)
+      if (seen.state === 'bound') {
+        await this.noteSwitchBound(claim, seen)
+      }
+      const pane = seen.state === 'bound' ? this.cliWriterPtyPane(seen.ptyId) : null
+      const agentsEnded =
+        seen.state === 'bound' &&
+        seen.startupSettled &&
+        claim.processes.length > 0 &&
+        pane?.incarnationId === seen.incarnationId &&
+        (await Promise.all(claim.processes.map(switchStartProcessVerdict))).every(
+          (verdict) => verdict === 'exited'
+        ) &&
+        (await this.cliWriterShellAlone(pane))
+      if (seen.state === 'ended' || agentsEnded) {
+        await this.releaseSwitchClaim(claim)
+        continue
+      }
+      throw seen.state === 'pending' || (seen.state === 'bound' && !seen.startupSettled)
+        ? switchMovingRefusal()
+        : switchHeldRefusal()
     }
   }
 

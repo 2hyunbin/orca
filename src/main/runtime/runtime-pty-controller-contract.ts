@@ -1,4 +1,5 @@
 import type { AgentLaunchRuntime } from '../../shared/agent-launch-runtime'
+import type { TerminalSwitchOwners } from '../../shared/terminal-switch'
 import type {
   AutomaticWorkResumeOutcome,
   AutomaticWorkStatus,
@@ -149,6 +150,8 @@ export type RuntimePtyController = {
   resize?(ptyId: string, cols: number, rows: number): boolean
   // Why: exact-id mobile polls should not enumerate every local and SSH PTY.
   hasPty?(ptyId: string): boolean | null
+  /** This machine's terminal owners, for a chat → terminal switch start. */
+  terminalSwitches?: TerminalSwitchOwners
   /** Omitting the host lists every registered host. */
   listProcesses?(
     hostId?: ExecutionHostId,

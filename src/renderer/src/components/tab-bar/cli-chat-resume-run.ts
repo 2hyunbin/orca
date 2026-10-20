@@ -15,13 +15,19 @@ import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../../shared/structured-
 import { resolveCliChatResumeSource, type CliChatResumeSource } from './cli-chat-resume-source'
 import { reportCliChatResumeFailure } from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
-import { forgetSwitchedTerminalConversation } from './switched-terminal-conversation'
+import { panePtyId } from '@/lib/ai-vault-tab-title-requests'
+import { subscribeToPtyExit } from '../terminal-pane/pty-dispatcher'
 
-/** The chat took the conversation, so the terminal pane it came from closes (its tab with it). */
-function retireSwitchedTerminalPane(source: CliChatResumeSource): void {
+/** The chat took the conversation, so the terminal pane it came from closes (its tab with it):
+ *  only while that pane still holds the execution it came from, never a sibling or replacement. */
+function retireSwitchedTerminalPane(source: CliChatResumeSource, sourceExited: boolean): void {
   const pane = parsePaneKey(source.paneKey)
-  forgetSwitchedTerminalConversation(source.tabId)
-  if (pane) {
+  if (
+    pane &&
+    !sourceExited &&
+    source.ptyId &&
+    panePtyId(useAppStore.getState(), source.paneKey) === source.ptyId
+  ) {
     const detail: CloseTerminalPaneDetail = { tabId: pane.tabId, leafId: pane.leafId }
     window.dispatchEvent(new CustomEvent(CLOSE_TERMINAL_PANE_EVENT, { detail }))
   }
@@ -71,6 +77,7 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
     })
     return (
       !!current &&
+      current.ptyId === source.ptyId &&
       current.executionHostId === source.executionHostId &&
       current.providerSessionId === source.providerSessionId &&
       CLI_CONVERSATION_ADOPTING_AGENTS[current.agent] ===
@@ -88,6 +95,13 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   }
   pending.set(key, controller)
   changed()
+  // Why any exit: a reused id's next incarnation starts only after this one exits.
+  let sourceExited = false
+  const stopExitWatch = source.ptyId
+    ? subscribeToPtyExit(source.ptyId, () => {
+        sourceExited = true
+      })
+    : () => {}
   const stopSource = useAppStore.subscribe(() => {
     if (!isCurrent()) {
       controller.abort()
@@ -159,25 +173,26 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
     }
     const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
     if (result.kind === 'structured') {
-      retireSwitchedTerminalPane(source)
+      retireSwitchedTerminalPane(source, sourceExited)
     } else if (
       result.kind === 'failed' &&
       !result.notified &&
       pending.get(key) === controller &&
       (await reportCliChatResumeFailure(source, result.error, target))
     ) {
-      retireSwitchedTerminalPane(source)
+      retireSwitchedTerminalPane(source, sourceExited)
     }
   } catch (error) {
     if (
       pending.get(key) === controller &&
       (await reportCliChatResumeFailure(source, error, target))
     ) {
-      retireSwitchedTerminalPane(source)
+      retireSwitchedTerminalPane(source, sourceExited)
     }
   } finally {
     clearTimeout(timer)
     stopSource()
+    stopExitWatch()
     release()
   }
 }

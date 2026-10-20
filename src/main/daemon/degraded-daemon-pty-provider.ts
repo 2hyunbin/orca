@@ -1,4 +1,5 @@
 import type { DaemonPtyAdapter } from './daemon-pty-adapter'
+import { routedTerminalSwitchOwners } from '../providers/terminal-switch-owners'
 import { combineUnsubscribes } from './combine-unsubscribes'
 import { shutdownDegradedFallbackSessions } from './degraded-daemon-fallback-shutdown'
 import { inspectPtyProviderProcess } from '../providers/pty-process-inspection'
@@ -86,6 +87,10 @@ export class DegradedDaemonPtyProvider implements IPtyProvider {
     this.freshSpawns.canProvideSnapshot(id)
 
   spawn = (opts: PtySpawnOptions): Promise<PtySpawnResult> => this.ownerRecovery.spawn(opts)
+  readonly terminalSwitches = routedTerminalSwitchOwners(
+    () => (this.freshSpawns.routesToFallback ? this.fallback : this.current),
+    () => this.allProviders()
+  )
 
   // Why refuse the fallback route (unknown ids resolve to it): see attachDaemonOwnedSession.
   attach = (id: string): ReturnType<IPtyProvider['attach']> =>
@@ -144,17 +149,12 @@ export class DegradedDaemonPtyProvider implements IPtyProvider {
     }
   }
 
-  async sendSignal(id: string, signal: string): Promise<void> {
-    await this.providerFor(id).sendSignal(id, signal)
-  }
+  sendSignal = (id: string, signal: string): Promise<void> =>
+    this.providerFor(id).sendSignal(id, signal)
 
-  async getCwd(id: string): Promise<string> {
-    return this.providerFor(id).getCwd(id)
-  }
+  getCwd = (id: string): Promise<string> => this.providerFor(id).getCwd(id)
 
-  async getInitialCwd(id: string): Promise<string> {
-    return this.providerFor(id).getInitialCwd(id)
-  }
+  getInitialCwd = (id: string): Promise<string> => this.providerFor(id).getInitialCwd(id)
 
   async getAppliedSize(id: string): Promise<{ cols: number; rows: number } | null> {
     return (await this.providerFor(id).getAppliedSize?.(id)) ?? null

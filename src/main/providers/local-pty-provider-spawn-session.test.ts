@@ -610,5 +610,24 @@ describe('LocalPtyProvider', () => {
       expect(spawnMock).toHaveBeenCalledOnce()
       expect(committed).toHaveBeenCalledOnce()
     })
+
+    it('keeps a switch start bound to its process past a failed publication, until it exits', async () => {
+      spawnMock.mockClear()
+      const switchOwner = (await provider.terminalSwitches.owner()) ?? ''
+      const seen = async () => (await provider.terminalSwitches.observe('g-local', true))[0]
+      provider.configure({
+        onSpawned: () => {
+          throw new Error('post-spawn publication failed')
+        }
+      })
+      const start = () =>
+        provider.spawn({ cols: 80, rows: 24, switchGeneration: 'g-local', switchOwner })
+      await expect(start()).rejects.toThrow('post-spawn publication failed')
+      expect((await seen())?.observation).toMatchObject({ state: 'bound', shellPid: mockProc.pid })
+      await expect(start()).rejects.toThrow('terminal_switch_generation_refused')
+      expect(spawnMock).toHaveBeenCalledOnce()
+      exitCb?.({ exitCode: 0 })
+      expect((await seen())?.observation).toEqual({ state: 'ended' })
+    })
   })
 })

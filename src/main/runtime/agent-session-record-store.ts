@@ -1,6 +1,8 @@
 /** Durable single-writer session records and their operation ledger, as rows in the host's chat
  *  journal database. */
 
+import { setAgentSessionRecordTerminalSwitch } from './agent-session-record-terminal-switch'
+import type { TerminalSwitchWrite } from '../../shared/terminal-switch'
 import { backfillAgentSessionPermissionModes } from './agent-session-permission-backfill'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { createAgentSessionConversationReceipts } from './agent-session-conversation-receipts'
@@ -180,6 +182,9 @@ export class AgentSessionRecordStore {
 
   compareAndSetConversationName: CompareAndSetConversationName = (sessionId, name, expected) =>
     compareAndSetAgentSessionRecordName((apply) => this.mutate(sessionId, apply), name, expected)
+
+  setTerminalSwitch = (sessionId: string, write: TerminalSwitchWrite) =>
+    this.mutate(sessionId, (r) => setAgentSessionRecordTerminalSwitch(r, write, Date.now()))
 
   /** Unfenced like the name: it records where a launch ran and never contends with the lease. */
   pinLaunchDirectory = (sessionId: string, launchDirectory: string): Promise<AgentSessionRecord> =>

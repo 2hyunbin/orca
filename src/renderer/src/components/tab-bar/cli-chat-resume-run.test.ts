@@ -14,9 +14,16 @@ const mocks = vi.hoisted(() => {
     toast: vi.fn(),
     activate: vi.fn(async () => true),
     activateVerified: vi.fn(async () => 'activated'),
-    switchCapability: vi.fn(async () => false)
+    switchCapability: vi.fn(async () => false),
+    exitWatchers: new Map<string, () => void>()
   }
 })
+vi.mock('../terminal-pane/pty-dispatcher', () => ({
+  subscribeToPtyExit: (ptyId: string, watcher: () => void) => {
+    mocks.exitWatchers.set(ptyId, watcher)
+    return () => mocks.exitWatchers.delete(ptyId)
+  }
+}))
 vi.mock('./cli-chat-resume-source', () => ({ resolveCliChatResumeSource: () => mocks.source }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   supportsStructuredAgentSessionCliSource: mocks.sourceCapability,
@@ -86,7 +93,8 @@ const SOURCE: CliChatResumeSource = {
   paneKey: 'tab-1:leaf',
   agent: 'claude',
   providerSessionId: 'provider-1',
-  executionHostId: 'local'
+  executionHostId: 'local',
+  ptyId: 'pty-1'
 }
 const tabs = () => useAppStore.getState().unifiedTabsByWorktree['wt-1'] ?? []
 afterEach(() => vi.unstubAllGlobals())
@@ -266,6 +274,16 @@ describe('CLI identity resume through the existing launch owner', () => {
     )
     const leafId = '11111111-1111-4111-8111-111111111111'
     mocks.source = { ...SOURCE, paneKey: `tab-1:${leafId}` }
+    useAppStore.setState({
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: null,
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: 'pty-1' }
+        }
+      }
+    })
     const closed = vi.fn()
     window.addEventListener('orca-close-terminal-pane', closed)
     // A host without the switch only shows the chat; it never receives the switch.
@@ -280,15 +298,19 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(closed).not.toHaveBeenCalled()
 
     switched = { ok: true, sessionId: 'owner-chat' }
+    // The source PTY exits during the chat's readiness: a reused id is another execution, so it stays.
+    mocks.activateVerified.mockImplementationOnce(async () => {
+      mocks.exitWatchers.get('pty-1')?.()
+      return 'activated'
+    })
+    await runCliChatResume(mocks.source)
+    expect(closed).not.toHaveBeenCalled()
     await runCliChatResume(mocks.source)
     window.removeEventListener('orca-close-terminal-pane', closed)
     const switches = mocks.call.mock.calls.filter(
       ([, method]) => method === 'agentSession.switchToChat'
     )
-    expect(switches).toEqual([
-      [{ kind: 'local' }, 'agentSession.switchToChat', { sessionId: 'owner-chat' }],
-      [{ kind: 'local' }, 'agentSession.switchToChat', { sessionId: 'owner-chat' }]
-    ])
+    expect(switches).toHaveLength(3)
     expect(mocks.activateVerified).toHaveBeenCalledWith({ structuredSession: owner }, undefined, {
       kind: 'local'
     })

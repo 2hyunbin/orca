@@ -54,6 +54,22 @@ export async function readSwitchPaneAgentProcesses(
   return identities.flat()
 }
 
+/** The shell's own identity, so a later owner loss can still be judged by its process. */
+export async function readSwitchShellProcess(pid: number): Promise<AgentProcessIdentity | null> {
+  if (process.platform === 'win32') {
+    const created = isWindowsProcessStartTimeAvailable()
+      ? readWindowsProcessCreationTime(pid)
+      : null
+    return created === null ? null : { pid, platform: 'win32', startTime: String(created) }
+  }
+  const platform = process.platform
+  if (platform !== 'darwin' && platform !== 'linux') {
+    return null
+  }
+  const observed = await readAgentProcess(pid)
+  return observed.verdict === 'live' ? { pid, platform, startTime: observed.startTime } : null
+}
+
 /** `exited` only on proof: the pid is gone or now names a different process. */
 export async function switchStartProcessVerdict(
   identity: AgentProcessIdentity

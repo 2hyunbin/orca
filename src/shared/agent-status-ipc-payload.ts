@@ -5,6 +5,7 @@
 
 import type { StructuredHostStatus } from './agent-hook-listener/listener-event'
 import type { ProgramStatusFacet } from './program-status/facet'
+import type { TerminalExecutionStamp } from './terminal-switch'
 import type { AgentProviderSessionMetadata } from './agent-session-resume'
 import type { WithAgentStatusObservation } from './agent-status-observation'
 import type {
@@ -64,6 +65,8 @@ export type AgentStatusIpcPayload = ParsedAgentStatusPayload & {
   providerSession?: AgentProviderSessionMetadata
   /** Resume identity update only; the status-shaped fields are transport placeholders. */
   providerSessionOnly?: boolean
+  /** The switched terminal execution an identity-only row describes. */
+  launchExecution?: TerminalExecutionStamp
   /** Live-only Command Code turn boundary key; not persisted to last-status.json. */
   promptInteractionKey?: string
   /** See AgentStatusEntry.programStatus. Live-only; older peers ignore it. */

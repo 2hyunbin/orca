@@ -1,4 +1,6 @@
 import { emitPtyListeners, createPtyExitPayload } from './daemon-pty-listener-emission'
+import { randomUUID } from 'node:crypto'
+import type { TerminalSwitchOwnerAnswer, TerminalSwitchOwners } from '../../shared/terminal-switch'
 import { DaemonPtyDaemonRecovery } from './daemon-pty-daemon-recovery'
 import type { DaemonPtyAdapterOptions } from './daemon-pty-runtime-state'
 import { supportsMode2031UnsubscribeFact, type DaemonEvent } from './types'
@@ -16,6 +18,29 @@ import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
 
 export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyProvider {
+  /** Asked of this daemon only; a daemon without the request answers nothing, so it owns no switch. */
+  readonly terminalSwitches: TerminalSwitchOwners = {
+    owner: async () => (await this.terminalSwitches.observe(randomUUID(), false))[0]?.owner ?? null,
+    observe: async (generation, fence) => {
+      if (!this.client.isConnected()) {
+        return []
+      }
+      try {
+        const answer = await this.client.request<TerminalSwitchOwnerAnswer>(
+          'observeTerminalSwitch',
+          { generation, fence },
+          5_000
+        )
+        return typeof answer?.owner === 'string' ? [answer] : []
+      } catch (error) {
+        if (isUnknownRequestTypeError(error)) {
+          return []
+        }
+        throw error
+      }
+    }
+  }
+
   constructor(opts: DaemonPtyAdapterOptions) {
     super(opts)
     // Registered after the base listener, which marks the sessions awaiting recovery first.

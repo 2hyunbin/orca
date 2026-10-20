@@ -3,6 +3,7 @@ import type { ParsedAgentStatusPayload } from '../agent-status-types'
 import type { AgentHookSource } from '../agent-hook-relay'
 import type { AgentProviderSessionMetadata } from '../agent-session-resume'
 import type { ClaudeSettledRequest } from './claude-settled-permission-requests'
+import type { TerminalExecutionStamp } from '../terminal-switch'
 
 export type AgentHookEventPayload = {
   paneKey: string
@@ -46,6 +47,8 @@ export type AgentHookEventPayload = {
   providerSession?: AgentProviderSessionMetadata
   /** Session identity update with no turn-state transition; refreshes durable resume metadata without a fake status row. */
   providerSessionOnly?: boolean
+  /** The switched terminal execution an identity-only row was seeded for. Never persisted. */
+  launchExecution?: TerminalExecutionStamp
   /** True when this event is a relay cache replay rather than a live hook. */
   isReplay?: boolean
   /** Claude live work the child list does not show (a shell, a cron, an owed task notification); rejects false input-based interrupts. */

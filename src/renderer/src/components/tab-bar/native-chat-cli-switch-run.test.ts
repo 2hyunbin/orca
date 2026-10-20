@@ -29,7 +29,6 @@ vi.mock('@/lib/ai-vault-resume-command', () => ({
 }))
 
 import { runNativeChatCliSwitch } from './native-chat-cli-switch-run'
-import { switchedTerminalConversation } from './switched-terminal-conversation'
 
 const SWITCH = {
   sessionId: 'chat-1',
@@ -51,7 +50,7 @@ const SOURCE = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.supported = true
-  mocks.call.mockResolvedValue({ source: SOURCE })
+  mocks.call.mockResolvedValue({ source: SOURCE, generation: 'g1' })
 })
 
 it('stops the chat on its host, opens the same-id resume in its slot, then closes the chat tab', async () => {
@@ -64,7 +63,8 @@ it('stops the chat on its host, opens the same-id resume in its slot, then close
       agent: 'codex',
       worktreeId: 'wt-1',
       command: 'codex resume thread-c',
-      env: { CODEX_HOME: '/accounts/a/home' },
+      // The host's switch generation rides the launch to the owner that creates the terminal.
+      env: { CODEX_HOME: '/accounts/a/home', ORCA_TERMINAL_SWITCH_GENERATION: 'g1' },
       providerSession: { key: 'session_id', id: 'thread-c' },
       afterTabId: 'chat-tab',
       resumeOrigin: 'switch'
@@ -95,28 +95,4 @@ it('keeps the chat when the host refuses a busy chat, and says why', async () =>
   expect(mocks.launch).not.toHaveBeenCalled()
   expect(mocks.closeUnifiedTab).not.toHaveBeenCalled()
   expect(mocks.toast).toHaveBeenCalledWith('Wait for the reply to finish or stop it, then switch.')
-})
-
-it('offers the switch back on a paired terminal before any prompt, for its own pane only', async () => {
-  mocks.launch.mockReturnValueOnce({
-    tabId: null,
-    runtimeLaunch: Promise.resolve({ status: 'created', tabId: 'web-terminal-t' })
-  })
-  await runNativeChatCliSwitch({ ...SWITCH, executionHostId: 'runtime:server-1' })
-  const layout = (ptyIdsByLeafId: Record<string, string>) => ({
-    root: null,
-    activeLeafId: 'L1',
-    expandedLeafId: null,
-    ptyIdsByLeafId
-  })
-  expect(switchedTerminalConversation('web-terminal-t', 'L1', layout({ L1: 'p1' }))).toMatchObject({
-    providerSessionId: 'thread-c'
-  })
-  // A split's new plain shell never takes the switched pane's conversation.
-  expect(switchedTerminalConversation('web-terminal-t', 'L2', layout({ L1: 'p1', L2: 'p2' }))).toBe(
-    undefined
-  )
-  // A replaced PTY in the switched pane ends it.
-  expect(switchedTerminalConversation('web-terminal-t', 'L1', layout({ L1: 'p9' }))).toBe(undefined)
-  expect(switchedTerminalConversation('web-terminal-t', 'L1', layout({ L1: 'p1' }))).toBe(undefined)
 })

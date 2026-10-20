@@ -1,4 +1,5 @@
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
+import type { TerminalSwitchOwners } from '../../shared/terminal-switch'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentWorkspaceTrustSpawnRequest } from '../../shared/agent-workspace-trust-spawn-request'
 import type { PtyStartupIngressIntent } from '../../shared/pty-startup-ingress'
@@ -118,6 +119,10 @@ export type PtySpawnOptions = {
   onPtySpawnCommitted?: () => void
   /** Cancels only before physical dispatch; operation identity fences later ambiguity. */
   signal?: AbortSignal
+  /** A chat → terminal switch's start: the owner binds this generation to this one fresh spawn and
+   *  refuses it when `switchOwner` names another owner or the generation was already used. */
+  switchGeneration?: string
+  switchOwner?: string
 }
 
 export type { PtyProcessInfo, PtySpawnResult }
@@ -137,6 +142,8 @@ export type IPtyProvider = {
   /** Re-probes a degraded durable host before main commits to fallback spawn semantics. */
   recoverFreshSpawnRouting?: () => Promise<boolean>
   spawn(opts: PtySpawnOptions): Promise<PtySpawnResult>
+  /** Present only where an owner can hold and observe a chat → terminal switch start. */
+  terminalSwitches?: TerminalSwitchOwners
   /** Process-owner cleanup for history stored outside the workspace tree. */
   deleteWorktreeHistory?: (worktreeId: string) => Promise<void>
   /** Whether this spawn target can append the Git guard after its final env merge. */

@@ -1,4 +1,5 @@
 import { buildStartupCommandSubmission } from '../../shared/startup-command-submission'
+import type { TerminalHostSwitches } from './terminal-host-switches'
 import {
   discardStagedStartupCommand,
   stageStartupCommand,
@@ -32,6 +33,7 @@ type TerminalHostSessionCreateDependencies = {
   killedTombstones: TerminalHostTombstones
   spawnSubprocess: TerminalHostOptions['spawnSubprocess']
   spawnGate: TerminalSpawnGate | undefined
+  switches?: TerminalHostSwitches
   onDeadSessionRemoved: (sessionId: string) => void
   onSessionCreated: (sessionId: string, generation: string | undefined, isAlive: boolean) => void
   onSessionExit: (sessionId: string, generation: string | undefined) => void
@@ -151,23 +153,31 @@ async function spawnAndPublishSession(
   // Why before the fork: the shell's own cwd may already have fallen back, so probe the requested path.
   const cwdReadableByDaemon =
     opts.cwd && !wslDistro ? await isCwdReadableByThisProcess(opts.cwd) : null
-  const subprocess = await deps.spawnSubprocess({
-    sessionId: opts.sessionId,
-    cols: size.cols,
-    rows: size.rows,
-    cwd: opts.cwd,
-    env: opts.env,
-    envToDelete: opts.envToDelete,
-    command: opts.command,
-    startupCommandDelivery: opts.startupCommandDelivery,
-    ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
-    shellOverride: opts.shellOverride,
-    terminalShellArgs: opts.terminalShellArgs,
-    terminalWindowsWslDistro: opts.terminalWindowsWslDistro,
-    terminalWindowsPowerShellImplementation: opts.terminalWindowsPowerShellImplementation,
-    isCanceled: opts.isCanceled,
-    ...(opts.cancelSignal ? { cancelSignal: opts.cancelSignal } : {})
-  })
+  deps.switches?.begin(opts.switchGeneration, opts.switchOwner)
+  let subprocess: Awaited<ReturnType<TerminalHostSessionCreateDependencies['spawnSubprocess']>>
+  try {
+    subprocess = await deps.spawnSubprocess({
+      sessionId: opts.sessionId,
+      cols: size.cols,
+      rows: size.rows,
+      cwd: opts.cwd,
+      env: opts.env,
+      envToDelete: opts.envToDelete,
+      command: opts.command,
+      startupCommandDelivery: opts.startupCommandDelivery,
+      ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
+      shellOverride: opts.shellOverride,
+      terminalShellArgs: opts.terminalShellArgs,
+      terminalWindowsWslDistro: opts.terminalWindowsWslDistro,
+      terminalWindowsPowerShellImplementation: opts.terminalWindowsPowerShellImplementation,
+      isCanceled: opts.isCanceled,
+      ...(opts.cancelSignal ? { cancelSignal: opts.cancelSignal } : {})
+    })
+  } catch (error) {
+    // A spawn that threw left no subprocess, so nothing can start under this generation.
+    deps.switches?.endUnstarted(opts.switchGeneration)
+    throw error
+  }
 
   let staging: StartupCommandStaging | undefined
   // Why: a fallback shell does not emit the preferred shell's ready marker;
@@ -204,6 +214,8 @@ async function spawnAndPublishSession(
       ? { shellReadyTimeoutMs: opts.shellReadyTimeoutMs }
       : {})
   })
+  // From here only this session's own end ends the switch, canceled or not.
+  deps.switches?.bind(opts.switchGeneration, session)
 
   if (opts.isCanceled?.()) {
     // Retain cleanup ownership if the native child refuses to exit.

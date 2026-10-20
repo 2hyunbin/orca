@@ -26,9 +26,19 @@ import { settleAttentionRemovedBy } from './workspace-attention/attention-remova
 
 export function createAgentStatusProviderSessionActions(
   runtime: AgentStatusRuntime
-): Pick<AgentStatusSlice, 'recordAgentProviderSession'> {
+): Pick<AgentStatusSlice, 'recordAgentProviderSession' | 'setLaunchConversation'> {
   const { get, set, requestFreshness } = runtime
   return {
+    setLaunchConversation: (paneKey, conversation) => {
+      if (conversation || paneKey in get().launchConversationByPaneKey) {
+        set((s) => {
+          const { [paneKey]: _old, ...rest } = s.launchConversationByPaneKey
+          return {
+            launchConversationByPaneKey: conversation ? { ...rest, [paneKey]: conversation } : rest
+          }
+        })
+      }
+    },
     recordAgentProviderSession: (
       paneKey: string,
       agent: ResumableTuiAgent,

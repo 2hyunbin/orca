@@ -7,14 +7,14 @@ import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-type
 import { agentHookServer } from '../../../agent-hooks/server'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
-import type { SwitchSpawnOutcome } from '../../../runtime/session-tabs/structured-session-switch-claims'
 import {
   admitSwitchResumeSpawn,
   judgeResumes,
   type AdmissionRuntime,
   type ResumeSpawnAdmission,
   type ResumeSpawnArgs,
-  type ResumeSpawnRefusal
+  type ResumeSpawnRefusal,
+  type SwitchSpawnOptions
 } from './resume-spawn-judgement'
 
 export type {
@@ -28,7 +28,7 @@ export async function admitResumeSpawn(
   runtime: AdmissionRuntime | undefined,
   args: ResumeSpawnArgs,
   wslDistro: string | null,
-  spawn?: { attempt?: string; sessionId?: string }
+  spawn?: { paneKey: string | null; options: SwitchSpawnOptions }
 ): Promise<ResumeSpawnAdmission | null> {
   if (args.resumeOrigin === 'switch') {
     return admitSwitchResumeSpawn(runtime, args, wslDistro, spawn)
@@ -107,17 +107,6 @@ export function dropAgentLaunch(args: ResumeSpawnArgs): void {
   delete args.resumeProviderSession
 }
 
-/** Every exit of a switch spawn settles its attempt's claim; `admitSwitchResumeSpawn` explains how. */
-export function settleSwitchSpawn(
-  runtime: AdmissionRuntime | undefined,
-  attempt: string | undefined,
-  outcome: SwitchSpawnOutcome
-): void {
-  if (attempt) {
-    runtime?.settleSwitchAttempt?.(attempt, outcome)
-  }
-}
-
 export function resumeSpawnRefusal(
   admission: ResumeSpawnAdmission | null
 ): ResumeSpawnRefusal | null {
@@ -161,24 +150,20 @@ export function savedResumeRecord(
     : undefined
 }
 
-/** Runs only in the fresh branch, after stable/claimed owner adoption has settled. A switch's claim
- *  is owned by this spawn attempt: its host session id, else its pane. */
+/** Runs only in the fresh branch, after stable/claimed owner adoption has settled. */
 export async function chooseSavedResumeFreshLaunch(
   spawn: {
     deps: { runtime?: AdmissionRuntime }
     expectedWslDistro: string | null
-    spawnOptions: ResumeSpawnArgs & { startupCommandDelivery?: unknown; startupIngress?: unknown }
-    effectiveSessionAppId: string | undefined
-    switchAttempt?: string
+    spawnOptions: ResumeSpawnArgs &
+      SwitchSpawnOptions & { startupCommandDelivery?: unknown; startupIngress?: unknown }
   },
   args: ResumeSpawnArgs,
   paneKey: string | null
 ): Promise<ResumeSpawnAdmission | null> {
-  const sessionId = spawn.effectiveSessionAppId
-  spawn.switchAttempt = sessionId ?? paneKey ?? undefined
   const admission = await admitResumeSpawn(spawn.deps.runtime, args, spawn.expectedWslDistro, {
-    attempt: spawn.switchAttempt,
-    sessionId
+    paneKey,
+    options: spawn.spawnOptions
   })
   if (resumeSpawnRefusal(admission)) {
     suppressSavedResumeLaunch(args, spawn.spawnOptions)

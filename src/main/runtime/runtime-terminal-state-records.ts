@@ -16,7 +16,6 @@ import type { RetainedTailRedrawCursor } from './terminal-tail-redraw-buffer'
 import type { TerminalTailWaitState } from './terminal-wait-tail-state'
 import type { TerminalCommandPaint } from './terminal-command-paint'
 import type { CliWriterConversation } from './structured-agent-cli-writers'
-import type { SwitchStartProof } from './session-tabs/structured-session-switch-claims'
 import type { PtyShellOwnershipMirror } from './pty-shell-ownership-mirror'
 import type { TerminalExitCause } from '../../shared/terminal-exit-cause'
 import type { AgentSessionOwnerBinding } from '../../shared/agent-session-host-authority'
@@ -82,8 +81,6 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
     incarnationId: PtyIncarnationId | null
     byKey: Map<string, CliWriterConversation>
   }
-  /** The switch's own start of a conversation in this execution; ends only on an observed exit. */
-  switchStart?: SwitchStartProof
   foregroundAgent: TerminalAgent | null
   connected: boolean
   disconnectedAt: number | null

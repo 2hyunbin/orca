@@ -17,6 +17,7 @@ import {
   programStatusYieldsToHookRow
 } from './program-status/hook-precedence'
 import type { ProgramStatusFacet } from '../../../shared/program-status/facet'
+import type { TerminalExecutionStamp } from '../../../shared/terminal-switch'
 
 const PROGRAM_STATUS_FACET_REPUBLISH_MS = 250
 
@@ -33,6 +34,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
     providerSession: AgentProviderSessionMetadata
     /** When the pane's process launched; a row reported since then is the agent's own. */
     launchedAt: number
+    execution?: TerminalExecutionStamp
   }): void {
     const paneKey = this.resolvePaneKeyAlias(event.paneKey.trim())
     const parsedPaneKey = parsePaneKey(paneKey)
@@ -47,7 +49,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
             event.agentType,
             previous.providerSession,
             event.providerSession
-          )
+          ) && previous.launchExecution?.incarnationId === event.execution?.incarnationId
         : 'receivedAt' in previous &&
           typeof previous.receivedAt === 'number' &&
           previous.receivedAt >= event.launchedAt)
@@ -62,6 +64,7 @@ export abstract class AgentHookServerIngestTerminal extends AgentHookServerInges
       connectionId: null,
       providerSession: event.providerSession,
       providerSessionOnly: true,
+      ...(event.execution ? { launchExecution: event.execution } : {}),
       // Why: hydration keeps only marked identity rows; a host restart before the first turn must not lose it.
       retainedForLiveness: true,
       payload: { state: 'done', prompt: '', agentType: event.agentType }

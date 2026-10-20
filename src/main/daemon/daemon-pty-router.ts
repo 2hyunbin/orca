@@ -1,4 +1,5 @@
 import { reconcileDaemonRouterSessions } from './daemon-router-session-reconciliation'
+import { routedTerminalSwitchOwners } from '../providers/terminal-switch-owners'
 import type { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { DaemonPtyAdapterSubscriptionFanout } from './daemon-pty-adapter-subscription-fanout'
 import type {
@@ -30,6 +31,10 @@ export class DaemonPtyRouter implements IPtyProvider {
   private readonly subscriptions: DaemonPtyAdapterSubscriptionFanout
   private readonly legacyExitProof = new LegacyDaemonExitProof()
   readonly retirement = new DaemonRouterRetirement(() => this.allAdapters())
+  readonly terminalSwitches = routedTerminalSwitchOwners(
+    () => this.current,
+    () => this.allAdapters()
+  )
 
   constructor(opts: { current: DaemonPtyAdapter; legacy: DaemonPtyAdapter[] }) {
     this.current = opts.current
@@ -110,9 +115,7 @@ export class DaemonPtyRouter implements IPtyProvider {
     return this.current.supportsAgentSessionCreateOperations()
   }
 
-  async attach(id: string): ReturnType<IPtyProvider['attach']> {
-    return await this.adapterFor(id).attach(id)
-  }
+  attach = (id: string): ReturnType<IPtyProvider['attach']> => this.adapterFor(id).attach(id)
 
   hasPty(id: string): boolean {
     const routed = this.sessionAdapters.get(id)
@@ -171,13 +174,9 @@ export class DaemonPtyRouter implements IPtyProvider {
     await this.adapterFor(id).sendSignal(id, signal)
   }
 
-  async getCwd(id: string): Promise<string> {
-    return this.adapterFor(id).getCwd(id)
-  }
+  getCwd = (id: string): Promise<string> => this.adapterFor(id).getCwd(id)
 
-  async getInitialCwd(id: string): Promise<string> {
-    return this.adapterFor(id).getInitialCwd(id)
-  }
+  getInitialCwd = (id: string): Promise<string> => this.adapterFor(id).getInitialCwd(id)
 
   async getAppliedSize(id: string): Promise<{ cols: number; rows: number } | null> {
     return (await this.adapterFor(id).getAppliedSize?.(id)) ?? null

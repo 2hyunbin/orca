@@ -1,206 +1,239 @@
+// The conversation index of chat → terminal switch starts. It projects the owner's own answer and
+// never settles a start from a caller's success, exception or a session list's absence.
+import { randomUUID } from 'node:crypto'
 import type { AgentProcessIdentity } from '../../../shared/agent-process-presence'
 import { isSameAgentProcess } from '../../../shared/agent-process-presence'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
-import type { PtyIncarnationId } from '../../../shared/pty-incarnation'
 import { chatAgentsShareConversations } from '../../../shared/structured-agent-cli-conversation-adoption'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
+import {
+  isTerminalSwitchDescriptor,
+  type TerminalSwitchDescriptor,
+  type TerminalSwitchObservation
+} from '../../../shared/terminal-switch'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
-import { readSwitchPaneAgentProcesses } from './structured-session-switch-observation'
+import {
+  readSwitchPaneAgentProcesses,
+  readSwitchShellProcess,
+  switchStartProcessVerdict
+} from './structured-session-switch-observation'
 
-/** A recipe no terminal took yet may lapse; expiry only ends a refusal, the spawn re-checks the chat. */
+/** A recipe no terminal took may lapse; once taken, only its owner ends it. */
 const UNACCEPTED_SWITCH_CLAIM_MS = 60_000
 const SWITCH_START_WATCH_POLLS = 120
 const SWITCH_START_WATCH_INTERVAL_MS = 1_000
 
-/** A chat → terminal switch from the chat's stop until its terminal execution exists. */
-export type SwitchClaim = {
-  agent: string
-  id: string
+/** One switch, from the chat's stop. Accepted, it is saved on the chat it left. */
+export type SwitchClaim = TerminalSwitchDescriptor & {
+  chatSessionId: string
   at: number
-  /** A spawn took it: it never lapses, and settles only with that spawn. */
   accepted: boolean
-  /** The accepting spawn's identity (its host session, else its pane); only it joins or settles. */
-  attempt?: string
-  /** The host session to reconcile when the spawn ended without a result. */
-  sessionId?: string
-  unsettled?: true
 }
 
-/** A switch spawn's end: its PTY, a proved non-start, or a session the host may still hold. */
-export type SwitchSpawnOutcome = { ptyId: string } | 'not-started' | { unknown: string | undefined }
-
-/** The switch's start bound to the execution it spawned. */
-export type SwitchStartProof = {
-  incarnationId: PtyIncarnationId
-  agent: string
-  id: string
-  /** The agent processes seen in the pane; none seen keeps the proof until the pane goes. */
-  processes: AgentProcessIdentity[]
-}
-
-const moving = () =>
+export const switchMovingRefusal = () =>
   agentSessionRefusalError('agent_session_operation_invalid', {
     reason: 'conversationMovingToTerminal'
   })
+export const switchHeldRefusal = () =>
+  agentSessionRefusalError('agent_session_conflict', { reason: 'conversationHeldElsewhere' })
 
 export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaRuntimeWithGetWorktreePs {
-  private readonly switchClaims = new Set<SwitchClaim>()
+  private readonly switchClaims = new Map<string, SwitchClaim>()
+  private switchClaimsLoaded: Promise<void> | null = null
 
-  private liveSwitchClaim(agent: string, id: string): SwitchClaim | undefined {
-    let live: SwitchClaim | undefined
-    for (const claim of this.switchClaims) {
+  protected switchClaimsFor(agent: string, id: string): SwitchClaim[] {
+    return [...this.switchClaims.values()].filter((claim) => {
       if (!claim.accepted && Date.now() - claim.at >= UNACCEPTED_SWITCH_CLAIM_MS) {
-        this.switchClaims.delete(claim)
-      } else if (claim.id === id && chatAgentsShareConversations(claim.agent, agent)) {
-        live ??= claim
+        this.switchClaims.delete(claim.generation)
+        return false
       }
-    }
-    return live
-  }
-
-  /** Throws while a switch of this conversation has not started its terminal yet. */
-  protected assertNoPendingSwitch(agent: string, id: string): void {
-    if (this.liveSwitchClaim(agent, id)) {
-      throw moving()
-    }
-  }
-
-  protected boundSwitchStarts(agent: string, id: string) {
-    return [...this.ptysById.values()].flatMap((pty) => {
-      const proof = pty.switchStart
-      return proof &&
-        proof.incarnationId === pty.incarnationId &&
-        proof.id === id &&
-        chatAgentsShareConversations(proof.agent, agent) &&
-        this.getPtyLivenessVerdict(pty.ptyId)?.status !== 'exited'
-        ? [{ ptyId: pty.ptyId, proof }]
-        : []
+      return claim.providerSessionId === id && chatAgentsShareConversations(claim.agent, agent)
     })
   }
 
-  /** Synchronous, in the chat's ordered step before its stop: a second switch of the same
-   *  conversation, from any client, refuses while the first may still hold it. */
-  registerSwitchClaim(agent: string, id: string): SwitchClaim {
-    if (this.liveSwitchClaim(agent, id) || this.boundSwitchStarts(agent, id).length > 0) {
-      throw agentSessionRefusalError('agent_session_conflict', {
-        reason: 'conversationHeldElsewhere'
-      })
+  /** Accepted switches saved before a restart stay owed until their owner proves them over. */
+  protected loadSwitchClaims(): Promise<void> {
+    this.switchClaimsLoaded ??= this.openAgentSessionRecordStore().then(
+      (store) => {
+        for (const { sessionId, terminalSwitch } of store.listRecords()) {
+          if (isTerminalSwitchDescriptor(terminalSwitch)) {
+            const claim = { ...terminalSwitch, chatSessionId: sessionId, at: 0, accepted: true }
+            this.switchClaims.set(
+              terminalSwitch.generation,
+              this.switchClaims.get(claim.generation) ?? claim
+            )
+          }
+        }
+      },
+      (error: unknown) => {
+        this.switchClaimsLoaded = null
+        throw error
+      }
+    )
+    return this.switchClaimsLoaded
+  }
+
+  /** Throws while a switch of this conversation exists: one no terminal took yet, or with `all`, any. */
+  protected assertNoPendingSwitch(agent: string, id: string, all = false): void {
+    if (this.switchClaimsFor(agent, id).some((claim) => all || !claim.accepted)) {
+      throw switchMovingRefusal()
     }
-    const claim = { agent, id, at: Date.now(), accepted: false }
-    this.switchClaims.add(claim)
-    return claim
   }
 
-  dropSwitchClaim(claim: SwitchClaim): void {
-    this.switchClaims.delete(claim)
+  /** The owner a fresh switch start here would go to; null when this route cannot hold one. */
+  async terminalSwitchOwner(): Promise<string | null> {
+    return (await this.ptyController?.terminalSwitches?.owner().catch(() => null)) ?? null
   }
 
-  /** Synchronous, before the switch spawn's first await, so a chat start censusing after it refuses.
-   *  Null refuses: another attempt took this conversation, or a switched terminal may hold it. */
-  acceptSwitchStart(
+  /** In the chat's ordered step before its stop: one switch of a conversation at a time. */
+  registerSwitchClaim(
     agent: string,
     id: string,
-    attempt: string,
-    sessionId: string | undefined
-  ): SwitchClaim | null {
-    const live = this.liveSwitchClaim(agent, id)
-    if (live?.accepted ? live.attempt !== attempt : !live && this.boundSwitchStarts(agent, id)[0]) {
-      return null
+    chatSessionId: string,
+    owner: string
+  ): SwitchClaim {
+    if (this.switchClaimsFor(agent, id).length > 0) {
+      throw switchHeldRefusal()
     }
-    const claim = live ?? { agent, id, at: Date.now(), accepted: true }
-    Object.assign(claim, { accepted: true, attempt, sessionId: sessionId ?? claim.sessionId })
-    delete claim.unsettled
-    this.switchClaims.add(claim)
+    const claim: SwitchClaim = {
+      generation: randomUUID(),
+      agent,
+      providerSessionId: id,
+      owner,
+      paneKey: '',
+      processes: [],
+      chatSessionId,
+      at: Date.now(),
+      accepted: false
+    }
+    this.switchClaims.set(claim.generation, claim)
     return claim
   }
 
-  /** Only a PTY binds and only a proved non-start drops; an unknown end waits for the host. */
-  settleSwitchAttempt(attempt: string, outcome: SwitchSpawnOutcome): void {
-    const claim = [...this.switchClaims].find((c) => c.accepted && c.attempt === attempt)
-    const sessionId =
-      outcome === 'not-started' ? undefined : 'ptyId' in outcome ? outcome.ptyId : outcome.unknown
-    if (claim && !sessionId) {
-      this.switchClaims.delete(claim)
-    } else if (claim) {
-      Object.assign(claim, { sessionId, unsettled: true })
-      this.bindSwitchStart(claim)
+  /** Only a recipe no terminal took can be withdrawn. */
+  dropSwitchClaim(claim: SwitchClaim): void {
+    if (!claim.accepted) {
+      this.switchClaims.delete(claim.generation)
     }
   }
 
-  /** Unsettled attempts against the host's own session list; a failed read keeps them. */
-  protected async reconcileSwitchAttempts(): Promise<void> {
-    const open = [...this.switchClaims].filter((c) => c.unsettled && !this.bindSwitchStart(c))
-    if (open.length === 0) {
-      return
+  /** Synchronous, before the switch spawn's first await. A generation takes one pane; a retry there
+   *  joins it, and an expired or unknown recipe is refused, never reminted. */
+  acceptSwitchStart(generation: string, paneKey: string): SwitchClaim | null {
+    const claim = this.switchClaims.get(generation)
+    if (
+      !claim ||
+      (claim.accepted
+        ? claim.paneKey !== paneKey
+        : Date.now() - claim.at >= UNACCEPTED_SWITCH_CLAIM_MS)
+    ) {
+      return null
     }
-    const listed = await this.ptyController
-      ?.listProcesses?.(LOCAL_EXECUTION_HOST_ID)
-      .catch(() => null)
-    for (const claim of open) {
-      if (listed && !this.bindSwitchStart(claim) && !listed.some((p) => p.id === claim.sessionId)) {
-        this.switchClaims.delete(claim)
-      }
-    }
+    Object.assign(claim, { accepted: true, paneKey })
+    return claim
   }
 
-  private bindSwitchStart(claim: SwitchClaim): boolean {
-    const pty = claim.sessionId ? this.ptysById.get(claim.sessionId) : undefined
-    if (!pty?.incarnationId || !this.switchClaims.delete(claim)) {
-      return false
-    }
-    const key = `${claim.agent}\0${claim.id}`
-    const reported =
-      pty.cliConversations?.incarnationId === pty.incarnationId
-        ? pty.cliConversations.byKey.get(key)?.process
-        : undefined
-    const proof: SwitchStartProof = {
-      incarnationId: pty.incarnationId,
-      agent: claim.agent,
-      id: claim.id,
-      processes: reported ? [reported] : []
-    }
-    pty.switchStart = proof
-    void this.watchSwitchStart(pty.ptyId, proof).catch((error: unknown) =>
+  /** Saved before dispatch, so a restart still knows the start may exist. */
+  async saveSwitchClaim(claim: SwitchClaim): Promise<boolean> {
+    const { chatSessionId, at: _at, accepted: _accepted, ...descriptor } = claim
+    const store = await this.openAgentSessionRecordStore()
+    return store.setTerminalSwitch(chatSessionId, descriptor).then(
+      () => true,
+      () => false
+    )
+  }
+
+  /** The owner's fields for the dispatch; evidence collection starts with it and decides nothing. */
+  dispatchSwitchStart(claim: SwitchClaim): { switchGeneration: string; switchOwner: string } {
+    void this.watchSwitchStart(claim).catch((error: unknown) =>
       console.warn('[agent-session] could not watch a switched terminal start', error)
     )
-    return true
+    return { switchGeneration: claim.generation, switchOwner: claim.owner }
   }
 
-  /** An authentic hook's process joins the proof; identity-only rows carry none. */
+  /** The owner's word; when it is gone, only the execution it recorded can prove the start over.
+   *  `fence` makes an unseen generation unusable, so its absence is a proved non-start. */
+  protected async observeSwitch(
+    claim: SwitchClaim,
+    fence: boolean
+  ): Promise<TerminalSwitchObservation> {
+    const answers = await this.ptyController?.terminalSwitches
+      ?.observe(claim.generation, fence)
+      .catch(() => null)
+    const own = answers?.find((answer) => answer.owner === claim.owner)
+    if (own || !answers) {
+      return own?.observation ?? { state: 'unverifiable' }
+    }
+    const recorded = claim.shell ? [claim.shell, ...claim.processes] : []
+    const verdicts = await Promise.all(recorded.map(switchStartProcessVerdict))
+    return recorded.length > 0 && verdicts.every((verdict) => verdict === 'exited')
+      ? { state: 'ended' }
+      : { state: 'unverifiable' }
+  }
+
+  /** The exact execution the owner bound, saved with its shell's identity. */
+  protected async noteSwitchBound(
+    claim: SwitchClaim,
+    bound: Extract<TerminalSwitchObservation, { state: 'bound' }>
+  ): Promise<void> {
+    if (claim.ptyId === bound.ptyId && claim.incarnationId === bound.incarnationId) {
+      return
+    }
+    const shell = bound.shellPid ? await readSwitchShellProcess(bound.shellPid) : null
+    Object.assign(claim, { ptyId: bound.ptyId, incarnationId: bound.incarnationId })
+    if (shell) {
+      claim.shell = shell
+    }
+    await this.saveSwitchClaim(claim)
+  }
+
+  protected async releaseSwitchClaim(claim: SwitchClaim): Promise<void> {
+    if (this.switchClaims.get(claim.generation) !== claim) {
+      return
+    }
+    this.switchClaims.delete(claim.generation)
+    const store = await this.openAgentSessionRecordStore()
+    await store
+      .setTerminalSwitch(claim.chatSessionId, { clear: claim.generation })
+      .catch((error: unknown) =>
+        console.warn('[agent-session] could not clear a finished switch', error)
+      )
+  }
+
+  /** An authentic hook's process joins the evidence; identity-only rows carry none. */
   protected noteSwitchStartProcess(
     ptyId: string,
     conversation: { agent: string; id: string },
     process: AgentProcessIdentity
   ): void {
-    const pty = this.ptysById.get(ptyId)
-    const proof = pty?.switchStart
-    if (
-      proof &&
-      proof.incarnationId === pty.incarnationId &&
-      proof.id === conversation.id &&
-      chatAgentsShareConversations(proof.agent, conversation.agent) &&
-      !proof.processes.some((known) => isSameAgentProcess(known, process))
-    ) {
-      proof.processes.push(process)
+    for (const claim of this.switchClaimsFor(conversation.agent, conversation.id)) {
+      if (
+        claim.ptyId === ptyId &&
+        !claim.processes.some((known) => isSameAgentProcess(known, process))
+      ) {
+        claim.processes.push(process)
+        void this.saveSwitchClaim(claim)
+      }
     }
   }
 
-  /** Bounded evidence collection only: it records the agent's identity and never admits anything. */
-  private async watchSwitchStart(ptyId: string, proof: SwitchStartProof): Promise<void> {
-    for (let poll = 0; poll < SWITCH_START_WATCH_POLLS; poll++) {
+  /** Bounded evidence collection only: it records identities and never fences or releases. */
+  private async watchSwitchStart(claim: SwitchClaim): Promise<void> {
+    for (let poll = 0; poll < SWITCH_START_WATCH_POLLS && claim.processes.length === 0; poll++) {
       await new Promise((resolve) => setTimeout(resolve, SWITCH_START_WATCH_INTERVAL_MS).unref?.())
-      if (this.ptysById.get(ptyId)?.switchStart !== proof || proof.processes.length > 0) {
+      if (this.switchClaims.get(claim.generation) !== claim) {
         return
       }
-      const entry = (await this.ptyController?.listProcesses?.(LOCAL_EXECUTION_HOST_ID))?.find(
-        (candidate) => candidate.id === ptyId
-      )
-      if (!entry?.rootProcessId || entry.incarnationId !== proof.incarnationId) {
-        continue
+      const seen = await this.observeSwitch(claim, false)
+      if (seen.state === 'ended') {
+        return
       }
-      const seen = await readSwitchPaneAgentProcesses(entry.rootProcessId, proof.id)
-      if (this.ptysById.get(ptyId)?.switchStart === proof && proof.processes.length === 0) {
-        proof.processes.push(...seen)
+      if (seen.state === 'bound' && seen.shellPid) {
+        await this.noteSwitchBound(claim, seen)
+        const found = await readSwitchPaneAgentProcesses(seen.shellPid, claim.providerSessionId)
+        if (found.length > 0 && claim.processes.length === 0) {
+          claim.processes.push(...found)
+          await this.saveSwitchClaim(claim)
+        }
       }
     }
   }
