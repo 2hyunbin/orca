@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitStatusEntry } from '../../../../shared/git-status-types'
 
 const mocks = vi.hoisted(() => ({
-  state: { repos: [], settings: null },
+  state: {
+    repos: [
+      { id: 'repo', connectionId: null, executionHostId: 'local' },
+      { id: 'repo', connectionId: 'host', executionHostId: 'ssh:host' },
+      { id: 'repo', connectionId: null, executionHostId: 'runtime:server' }
+    ],
+    settings: { activeRuntimeEnvironmentId: 'other-server' }
+  },
   worktree: { id: 'same-id', repoId: 'repo', path: '/server/workspace' },
   getWorktree: vi.fn(),
-  findRepo: vi.fn(),
   activate: vi.fn(),
   gitStatus: vi.fn(),
   openEntry: vi.fn(),
@@ -13,7 +19,6 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.state } }))
 vi.mock('@/store/selectors', () => ({ getWorktreeOnHostFromState: mocks.getWorktree }))
-vi.mock('@/store/slices/repo-host-identity', () => ({ findRepoForHost: mocks.findRepo }))
 vi.mock('@/lib/worktree-activation', () => ({ activateAndRevealWorktree: mocks.activate }))
 vi.mock('@/runtime/runtime-git-status-client', () => ({ getRuntimeGitStatus: mocks.gitStatus }))
 vi.mock('../right-sidebar/source-control/listing/open-uncommitted-entry', () => ({
@@ -28,7 +33,6 @@ const entry: GitStatusEntry = { path: 'src/app.ts', area: 'staged', status: 'mod
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getWorktree.mockReturnValue(mocks.worktree)
-  mocks.findRepo.mockReturnValue({ connectionId: null })
   mocks.gitStatus.mockResolvedValue({ entries: [entry] })
   mocks.activate.mockReturnValue({ primaryTabId: null })
 })
@@ -41,9 +45,6 @@ describe('Space change inspection', () => {
   ] as const)(
     'opens the diff on the selected host %s',
     async (hostId, target, runtimeEnvironmentId) => {
-      if (hostId === 'ssh:host') {
-        mocks.findRepo.mockReturnValue({ connectionId: 'host' })
-      }
       await revealWorkspaceSpaceChange('same-id', hostId, entry)
       expect(mocks.getWorktree).toHaveBeenCalledWith(mocks.state, 'same-id', hostId)
       expect(mocks.gitStatus).toHaveBeenCalledWith(
@@ -69,6 +70,19 @@ describe('Space change inspection', () => {
       )
     }
   )
+
+  it('uses the workspace owner when a legacy reveal omits the host', async () => {
+    mocks.getWorktree.mockReturnValue({ ...mocks.worktree, hostId: 'runtime:server' })
+    await revealWorkspaceSpaceChange('same-id', undefined, entry)
+    expect(mocks.gitStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { kind: 'environment', environmentId: 'server' } }),
+      { includeLineStats: false }
+    )
+    expect(mocks.activate).toHaveBeenCalledWith(
+      'same-id',
+      expect.objectContaining({ executionHostId: 'runtime:server' })
+    )
+  })
 
   it('uses current conflict metadata from the execution host', async () => {
     const conflict = { ...entry, conflictKind: 'both_deleted', conflictStatus: 'unresolved' }

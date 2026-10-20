@@ -1,11 +1,11 @@
 import { toast } from 'sonner'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
 import type { GitStatusEntry } from '../../../../shared/git-status-types'
 import type { WorkspaceSpaceWorktree } from '../../../../shared/workspace-space-types'
 import type { WorkspaceSpaceChange } from '../../../../shared/workspace-space-change'
 import { useAppStore } from '@/store'
 import { getWorktreeOnHostFromState } from '@/store/selectors'
-import { findRepoForHost } from '@/store/slices/repo-host-identity'
+import { repoMatchesHostIdentity } from '@/store/slices/repo-host-identity'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
@@ -36,15 +36,11 @@ export async function revealWorkspaceSpaceChange(
   try {
     const state = useAppStore.getState()
     const worktree = getWorktreeOnHostFromState(state, worktreeId, executionHostId)
+    const ownerHostId = executionHostId ?? worktree?.hostId ?? LOCAL_EXECUTION_HOST_ID
     const repo =
       worktree &&
-      findRepoForHost(state.repos, worktree.repoId, {
-        hostId: executionHostId,
-        settings: state.settings
-      })
-    const target = executionHostId
-      ? ipcOrRuntimeTargetForHostId(executionHostId)
-      : ({ kind: 'local' } as const)
+      state.repos.find((repo) => repoMatchesHostIdentity(repo, worktree.repoId, ownerHostId))
+    const target = ipcOrRuntimeTargetForHostId(ownerHostId)
     if (!worktree || !repo || !target) {
       throw new Error(
         translate(
@@ -76,7 +72,7 @@ export async function revealWorkspaceSpaceChange(
     const activated = activateAndRevealWorktree(worktreeId, {
       navigationIntent: 'user-open',
       providesInitialSurface: true,
-      executionHostId
+      executionHostId: ownerHostId
     })
     if (activated === false) {
       return
