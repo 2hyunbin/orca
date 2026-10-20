@@ -135,7 +135,7 @@ describe('getExplicitRuntimeOwnerEnvironmentId', () => {
     ).toBeNull()
   })
 
-  it('never lets focus pick between duplicate repo ids', () => {
+  it('routes duplicate repo ids to the runtime row that focus selects unambiguously', () => {
     expect(
       getExplicitRuntimeOwnerEnvironmentId(
         {
@@ -147,7 +147,7 @@ describe('getExplicitRuntimeOwnerEnvironmentId', () => {
         },
         'repo-1'
       )
-    ).toBeNull()
+    ).toBe('owner-runtime')
   })
 
   it('returns null for ambiguous duplicate repo ids when focus matches no row', () => {

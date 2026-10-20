@@ -1,4 +1,8 @@
-import { getRepoExecutionHostId, parseExecutionHostId } from '../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  getSettingsFocusedExecutionHostId,
+  parseExecutionHostId
+} from '../../../shared/execution-host'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { Repo } from '../../../shared/repo-types'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
@@ -16,6 +20,25 @@ function findRepoOwner(
 ): Pick<Repo, 'id' | 'connectionId' | 'executionHostId'> | null {
   const matchingRepos = state.repos?.filter((entry) => entry.id === repoId) ?? []
   return matchingRepos.length === 1 ? matchingRepos[0] : null
+}
+
+/**
+ * GitHub routing's twin pick, kept until `getGitHubRepoRoutingTarget` can refuse: dropping it would
+ * send a twin on two servers to local IPC with this machine's credentials.
+ */
+function findFocusedTwinRepoOwner(
+  state: RepoRuntimeOwnerState,
+  repoId: string
+): Pick<Repo, 'id' | 'connectionId' | 'executionHostId'> | null {
+  const matchingRepos = state.repos?.filter((entry) => entry.id === repoId) ?? []
+  if (matchingRepos.length < 2) {
+    return matchingRepos[0] ?? null
+  }
+  const focusedHostId = getSettingsFocusedExecutionHostId(state.settings)
+  const focusedMatches = matchingRepos.filter(
+    (entry) => getRepoExecutionHostId(entry) === focusedHostId
+  )
+  return focusedMatches.length === 1 ? focusedMatches[0] : null
 }
 
 /**
@@ -59,7 +82,7 @@ export function getExplicitRuntimeOwnerEnvironmentId(
   if (!repoId) {
     return null
   }
-  const repo = findRepoOwner(state, repoId)
+  const repo = findFocusedTwinRepoOwner(state, repoId)
   const hasExplicitOwner = Boolean(repo?.executionHostId?.trim() || repo?.connectionId?.trim())
   if (!repo || !hasExplicitOwner) {
     return null

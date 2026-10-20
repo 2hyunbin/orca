@@ -27,7 +27,7 @@ const store = {
   },
   worktreesByRepo: {} as Record<
     string,
-    { id: string; repoId: string; path?: string; projectId?: string }[]
+    { id: string; repoId: string; path?: string; projectId?: string; hostId?: 'local' }[]
   >,
   agentStatusByPaneKey: {} as Record<string, { agentType?: string }>,
   tabsByWorktree: {} as Record<string, { id: string; launchAgent?: string | null }[]>,
@@ -79,7 +79,9 @@ describe('forkAgentSessionFromPane', () => {
     store.repos = [{ id: 'repo-1', kind: 'git' }]
     store.settings = { localWindowsRuntimeDefault: { kind: 'windows-host' } }
     store.worktreesByRepo = {
-      'repo-1': [{ id: 'wt-1', repoId: 'repo-1', path: 'C:\\repo', projectId: 'repo-1' }]
+      'repo-1': [
+        { id: 'wt-1', repoId: 'repo-1', path: 'C:\\repo', projectId: 'repo-1', hostId: 'local' }
+      ]
     }
     store.agentStatusByPaneKey = {}
     store.tabsByWorktree = { 'wt-1': [{ id: 'tab-1' }] }
@@ -139,7 +141,9 @@ describe('forkAgentSessionFromPane', () => {
       undefined,
       undefined,
       undefined,
-      'codex'
+      'codex',
+      ...Array(14).fill(undefined),
+      { executionHostId: 'local' }
     )
 
     expect(mockLaunchAgentInNewTab).toHaveBeenCalledWith(
@@ -383,7 +387,9 @@ describe('forkAgentSessionFromPane', () => {
       undefined,
       undefined,
       undefined,
-      undefined
+      undefined,
+      ...Array(14).fill(undefined),
+      { executionHostId: 'local' }
     )
     expect(mockLaunchAgentInNewTab).not.toHaveBeenCalled()
     expect(mockActivateAndRevealWorktree).toHaveBeenCalledWith('wt-fork', {

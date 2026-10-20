@@ -65,7 +65,7 @@ export function repoHostId(
   if (hostId && parseExecutionHostId(hostId)) {
     return hostId
   }
-  // Why: a repo with no row is this app's (a web client's only server), never the focused server's.
+  // Why: no row (or twins) names a host, so this app (a web client's only server), never focus.
   const webHost = getPairedWebClientEnvironmentId(state)
   return webHost ? toRuntimeExecutionHostId(webHost) : LOCAL_EXECUTION_HOST_ID
 }

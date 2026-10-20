@@ -6,6 +6,7 @@ import {
   buildBoundedSessionTranscript
 } from '@/lib/agent-session-fork-context'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
+import { getKnownExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { useAppStore } from '@/store'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
@@ -211,7 +212,23 @@ export async function startAgentSessionFork(fork: PreparedAgentSessionFork): Pro
       undefined,
       undefined,
       undefined,
-      fork.agent ?? undefined
+      fork.agent ?? undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      // Why: a project two hosts publish refuses a host-less create; the fork belongs on its source's host.
+      { executionHostId: getKnownExecutionHostIdForWorktree(store, fork.worktreeId) ?? undefined }
     )
   } catch (error) {
     toast.error(
