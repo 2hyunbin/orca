@@ -20,7 +20,10 @@ import {
   mainLayoutFrameSender,
   publishedLayoutsOf
 } from './main-loaded-layout-frames.test-fixture'
-import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
+import {
+  installLayoutFrameApplyCheck,
+  layoutFrameApplyErrors
+} from './workspace-layout-frame-apply-check.test-fixture'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -207,6 +210,39 @@ describe('a frame over view state the save trims', () => {
 
     expect(check.fullBuilt).toEqual([])
     expect(check.workspaceBuilt).toEqual([GIT_KEY])
+    close()
+  })
+})
+
+describe('the apply check on a flush that built one workspace in full', () => {
+  it('still checks the workspace built from the store view', async () => {
+    const { store, close } = await boot()
+    const shown = store.getState()
+    const cache = publishedLayoutsOf(loadMainLayoutModel('local', localDesktopSession()))
+    const observe = (after: typeof shown) =>
+      layoutFrameApplyErrors({
+        before: shown,
+        after,
+        cache,
+        changed: [GIT_KEY, 'repo-other::/elsewhere'],
+        fullBuilt: ['repo-other::/elsewhere'],
+        workspaceBuilt: [GIT_KEY],
+        rowFieldsTaken: new Map()
+      })
+    // Precondition: the store as booted is what the full build shows.
+    expect(observe(shown)).toEqual([])
+
+    const wrong = {
+      ...shown,
+      unifiedTabsByWorktree: {
+        ...shown.unifiedTabsByWorktree,
+        [GIT_KEY]: shown.unifiedTabsByWorktree[GIT_KEY]!.map((tab) => ({
+          ...tab,
+          customTitle: 'drawn wrong'
+        }))
+      }
+    }
+    expect(observe(wrong)).toEqual([expect.stringContaining('unifiedTabsByWorktree')])
     close()
   })
 })

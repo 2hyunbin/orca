@@ -323,7 +323,8 @@ export function runtimeLayoutClientWithTestFrames(actual: LayoutClientModule): L
     // Every flush of the window's frames must show what the full build shows; a test's own
     // installed check keeps reporting it.
     const previousCheck = layoutFrameApplyObserver()
-    observeLayoutFrameApply(previousCheck ?? throwLayoutFrameApplyErrors)
+    const installedCheck = previousCheck ?? throwLayoutFrameApplyErrors
+    observeLayoutFrameApply(installedCheck)
     onStatus({ state: 'connecting' })
     queueMicrotask(() => {
       if (!state.sinks.has(sink)) {
@@ -336,7 +337,10 @@ export function runtimeLayoutClientWithTestFrames(actual: LayoutClientModule): L
     return {
       close: () => {
         state.sinks.delete(sink)
-        observeLayoutFrameApply(previousCheck)
+        // A check installed after this one (another stream or test) stays in place.
+        if (layoutFrameApplyObserver() === installedCheck) {
+          observeLayoutFrameApply(previousCheck)
+        }
         onStatus({ state: 'closed' })
       }
     }
