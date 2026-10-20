@@ -10,6 +10,8 @@ import {
 } from './profile-state-backup-path'
 import { writeProfileStateBackup } from './profile-state-backup-job'
 import { openWritableProfileStateDatabase } from './profile-state-database'
+import { profileProjectMoveIntentPath } from '../../orca-profiles/profile-project-move-record'
+import { hashProfileStatePayload } from './profile-state-document-validation'
 import { writeProfileStateDomains } from './profile-state-domain-writes'
 import { migrateProfileStateToSqlite } from './profile-state-migration'
 import { rollbackProfileState } from './profile-state-recovery-command'
@@ -31,7 +33,7 @@ afterEach(() => {
 })
 
 /** A profile with a backup at revision 1, then newer saves to two sections at revision 2. */
-async function profileWithNewerSaves() {
+async function profileWithNewerSaves(extra: Record<string, unknown> = {}) {
   const root = mkdtempSync(join(tmpdir(), 'orca-section-repair-'))
   roots.push(root)
   const directory = join(root, 'profiles', profileId)
@@ -43,6 +45,7 @@ async function profileWithNewerSaves() {
   const dataFile = join(directory, 'orca-data.json')
   const databaseFile = join(directory, 'profile-state.db')
   const initialJson = JSON.stringify({
+    ...extra,
     repos: ['a'],
     ui: { width: 1 },
     automationRuns: [{ id: 'r1', n: 1 }]
@@ -70,7 +73,7 @@ async function profileWithNewerSaves() {
       ]
     })
   )
-  return { root, dataFile, databaseFile, profileId, backupId }
+  return { root, userDataPath: root, dataFile, databaseFile, profileId, backupId }
 }
 
 function withDatabase<T>(
@@ -85,7 +88,7 @@ function withDatabase<T>(
   }
 }
 
-function startupFailure(profile: Awaited<ReturnType<typeof profileWithNewerSaves>>) {
+function startupFailure(profile: Parameters<typeof bootstrapProfileStateAuthority>[0]) {
   try {
     bootstrapProfileStateAuthority(profile).authority?.close()
   } catch (error) {
@@ -110,7 +113,6 @@ function rollback(
 }
 
 describe('repairing damaged profile-state sections', () => {
-  // Each damage keeps the stored hash of a value the backup also holds, so no "unchanged" shortcut may skip it.
   it.each([
     {
       section: 'repos',
@@ -122,15 +124,42 @@ describe('repairing damaged profile-state sections', () => {
       section: 'automationRuns',
       damage: `UPDATE profile_state_automation_runs SET payload = '{"id":"r1","n":9}' WHERE run_id = 'r1'`,
       repaired: { repos: ['a', 'b'], ui: { width: 2 }, automationRuns: [{ id: 'r1', n: 1 }] }
+    },
+    ...[
+      "updated_at = 'broken'",
+      "revision = '999999999999999999999x'",
+      'revision = 2.5',
+      'revision = -1',
+      "revision = X'33'"
+    ].map((metadata) => ({
+      section: 'repos',
+      damage: `UPDATE profile_state_documents SET ${metadata} WHERE domain = 'repos'`,
+      repaired: { repos: ['a'], ui: { width: 2 }, automationRuns: [{ id: 'r1', n: 1 }] }
+    })),
+    {
+      section: '__proto__',
+      damage: `UPDATE profile_state_documents SET payload = '{}' WHERE domain = '__proto__'`,
+      repaired: JSON.parse(
+        '{"__proto__":{"saved":true},"repos":["a","b"],"ui":{"width":2},"automationRuns":[{"id":"r1","n":1}]}'
+      )
     }
   ])(
     'replaces only damaged $section from a backup and keeps newer intact sections',
     async ({ section, damage, repaired }) => {
-      const profile = await profileWithNewerSaves()
+      const profile = await profileWithNewerSaves(
+        section === '__proto__' ? JSON.parse('{"__proto__":{"saved":true}}') : {}
+      )
       withDatabase(profile.databaseFile, (db) => db.exec(damage))
       const damagedBytes = readFileSync(profile.databaseFile)
 
       const failure = startupFailure(profile)
+      expect(failure.message).toContain(
+        section === 'repos'
+          ? 'Projects'
+          : section === 'automationRuns'
+            ? 'Automation history'
+            : 'Other saved app state'
+      )
       expect(failure.repairableSections).toEqual([
         { domain: section, backupId: profile.backupId, backupCreatedAtMs: expect.any(Number) }
       ])
@@ -161,14 +190,88 @@ describe('repairing damaged profile-state sections', () => {
     }
   )
 
-  it('leaves a profile whose revision counter disagrees with its rows on whole-file recovery', async () => {
+  it.each([
+    "UPDATE profile_state_meta SET value = '1' WHERE key = 'revision'",
+    "DELETE FROM profile_state_meta WHERE key = 'revision'",
+    "UPDATE profile_state_documents SET revision = 3, payload = 'bad' WHERE domain = 'repos'",
+    "UPDATE profile_state_documents SET payload = 'bad' WHERE domain = 'repos'; UPDATE profile_state_documents SET revision = 3 WHERE domain = 'ui'",
+    'UPDATE profile_state_automation_runs SET revision = 3',
+    "INSERT INTO profile_state_automation_runs SELECT 'r2', 1, payload, content_hash, 3, updated_at FROM profile_state_automation_runs; UPDATE profile_state_automation_runs SET payload = 'bad' WHERE run_id = 'r1'",
+    'UPDATE profile_state_automation_runs_meta SET revision = 3'
+  ])(
+    'keeps revision ambiguity on whole-file recovery regardless of payload faults: %s',
+    async (damage) => {
+      const profile = await profileWithNewerSaves()
+      withDatabase(profile.databaseFile, (db) => db.exec(damage))
+      const before = readFileSync(profile.databaseFile)
+      expect(startupFailure(profile).repairableSections).toBeUndefined()
+      expect(() => rollback(profile, { kind: 'repair' })).toThrow(
+        "Orca can't repair this profile one section at a time"
+      )
+      expect(readFileSync(profile.databaseFile)).toEqual(before)
+    }
+  )
+
+  it.each(['pending', 'unreadable', 'no-root'])(
+    'does not offer a repair without move admission: %s',
+    async (kind) => {
+      const profile = await profileWithNewerSaves()
+      withDatabase(profile.databaseFile, (db) =>
+        db.exec("UPDATE profile_state_documents SET payload = 'bad' WHERE domain = 'repos'")
+      )
+      if (kind !== 'no-root') {
+        const id = '11111111-1111-1111-1111-111111111111'
+        mkdirSync(join(profile.root, 'profile-move-intents'))
+        const hash = hashProfileStatePayload('{}')
+        writeFileSync(
+          profileProjectMoveIntentPath(profile.root, id),
+          kind === 'unreadable'
+            ? 'bad'
+            : JSON.stringify({
+                version: 1,
+                id,
+                sourceProfileId: profileId,
+                targetProfileId: 'other',
+                expectedSourceRevision: 2,
+                expectedTargetRevision: 0,
+                sourceBeforeHash: hash,
+                targetBeforeHash: hash,
+                sourceAfterHash: hash,
+                targetAfterHash: hash,
+                sourceAfterJson: '{}',
+                targetAfterJson: '{}'
+              })
+        )
+      }
+      const before = readFileSync(profile.databaseFile)
+      const failure = startupFailure({
+        ...profile,
+        userDataPath: kind === 'no-root' ? undefined : profile.root
+      })
+      expect(failure.repairableSections).toBeUndefined()
+      expect(failure.message).not.toContain('--repair')
+      if (kind !== 'no-root') {
+        expect(() => rollback(profile, { kind: 'repair' })).toThrow('pending project move')
+      }
+      expect(readFileSync(profile.databaseFile)).toEqual(before)
+    }
+  )
+
+  it('chooses the newest readable section over an older backup matching the stored hash', async () => {
     const profile = await profileWithNewerSaves()
+    const newest = createProfileStateDatabaseBackupId(Date.now())
+    await writeProfileStateBackup({
+      databasePath: profile.databaseFile,
+      profileId,
+      targetPath: profileStateDatabaseBackupPath(profile.databaseFile, newest)
+    })
     withDatabase(profile.databaseFile, (db) =>
-      db.prepare("UPDATE profile_state_meta SET value = '1' WHERE key = 'revision'").run()
+      db
+        .prepare(
+          "UPDATE profile_state_documents SET payload = 'bad', content_hash = ? WHERE domain = 'repos'"
+        )
+        .run(hashProfileStatePayload('["a"]'))
     )
-    expect(startupFailure(profile).repairableSections).toBeUndefined()
-    expect(() => rollback(profile, { kind: 'repair' })).toThrow(
-      "Orca can't repair this profile one section at a time"
-    )
+    expect(startupFailure(profile).repairableSections?.[0].backupId).toBe(newest)
   })
 })

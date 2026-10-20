@@ -29,7 +29,7 @@ import {
 } from './persistence/profile-state/profile-state-startup-recovery-dialog'
 import { profileStateDesktopRecoveryArgs } from './startup/profile-state-recovery-preflight'
 import { ProfileStateRecoveryRequiredError } from './persistence/profile-state/profile-state-recovery-required'
-import { profileHasPendingProjectMove } from './orca-profiles/profile-project-move-record'
+import { getProfileUserDataPath } from './orca-profiles/profile-storage-paths'
 import { leaseAppImageGenerationForCurrentProcess } from './cli/appimage-generation-lease'
 
 function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}): BrowserWindow {
@@ -153,8 +153,8 @@ if (preflightReady) {
       console.error(`[profile-state] ${message}`)
       if (!state.isServeMode && !isBackgroundLaunch()) {
         try {
+          const userDataPath = getProfileUserDataPath()
           if (isDivergedProfileStateFailure(error)) {
-            const userDataPath = app.getPath('userData')
             const choice = await chooseProfileStateCopy({
               ...readProfileStateCopySavedTimes(userDataPath),
               showMessageBox: (options) => dialog.showMessageBox(options)
@@ -171,12 +171,9 @@ if (preflightReady) {
             app.exit(1)
             return
           }
-          const userDataPath = app.getPath('userData')
-          // A pending project move refuses every rollback, so never offer a repair it would refuse.
           if (
             error instanceof ProfileStateRecoveryRequiredError &&
-            error.repairableSections !== undefined &&
-            !profileHasPendingProjectMove(error.profileId, userDataPath)
+            error.repairableSections !== undefined
           ) {
             const sections = error.repairableSections
             if (

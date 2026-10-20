@@ -291,6 +291,18 @@ describe('Electron recovery preflight', () => {
   })
 
   describe('desktop choice relaunch', () => {
+    it('carries the captured root, failing profile and approved repair sources unchanged', () => {
+      const request = {
+        userDataPath: '/captured/orca',
+        profileId: 'damaged-profile',
+        selector: { kind: 'repair', sections: [{ domain: 'repos', backupId: null }] }
+      } as const
+      const args = profileStateDesktopRecoveryArgs(['Orca', '--inspect'], request)
+      expect(JSON.parse(args[args.indexOf(PROFILE_STATE_DESKTOP_RECOVERY_FLAG) + 1])).toEqual(
+        request
+      )
+    })
+
     function desktopArgv(item: ReturnType<typeof fixture>) {
       writeFileSync(item.dataFile, JSON.stringify(item.restored))
       return [

@@ -4,6 +4,7 @@ import { profileStateJsonExportPaths } from './legacy-json/profile-state-export-
 import { profileStateDatabaseBackups } from './profile-state-backup-path'
 import { hasProfileStateAuthorityMarker } from './profile-state-authority-marker'
 import type { ProfileStateRepairSection } from './profile-state-section-repair'
+import { profileStateSectionLabels } from './profile-state-section-labels'
 
 type ProfileStateRecoveryLocation = {
   dataFile: string
@@ -52,7 +53,7 @@ export class ProfileStateRecoveryRequiredError extends Error {
   ) {
     super(
       repairableSections
-        ? `Some sections of the SQLite profile state are damaged; run \`orca profile state rollback --repair --profile-id ${options.profileId}\` to replace only those sections from backups`
+        ? `Damaged profile sections: ${profileStateSectionLabels(repairableSections.map(({ domain }) => domain)).join(', ')}; run \`orca profile state rollback --repair --profile-id ${options.profileId}\` to replace only those sections from backups`
         : `SQLite profile state could not be read; choose a retained backup or JSON export to recover the profile`,
       { cause }
     )

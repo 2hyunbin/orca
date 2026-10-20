@@ -13,6 +13,7 @@ import { getAppEnvironment } from '../../shared/app-environment'
 import { loadWslMoveFence } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { runGatedWslMoveDesktopRewritePass } from '../persistence/moving-wsl-projects/wsl-move-desktop-rewrite'
 import { createProfileStateStoreForStartup } from '../persistence/profile-state/profile-state-startup-authority'
+import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import { initializeBrowserClientHostId } from '../browser/browser-client-host-id'
 import { scheduleSecretProtectionGapReport } from '../host/deferred-secret-protection-report'
 import { withholdUnreachableKeychainForServe } from '../host/serve-keychain-guard'
@@ -131,6 +132,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   // read has to have happened by then or the renderer and the browser-host lease disagree.
   initializeBrowserClientHostId(profile.profileDirectory)
   const profileState = await createProfileStateStoreForStartup({
+    userDataPath: getProfileUserDataPath(),
     dataFile: profile.dataFile,
     databaseFile: profile.stateDatabaseFile,
     profileId: profile.profile.id,

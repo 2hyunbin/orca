@@ -5,6 +5,7 @@ import {
   type ProfileStateRecoveryRepairSection
 } from '../../../shared/profile-state-recovery-command'
 import type { ProfileStateMaintenance } from './profile-state-access'
+import { profileHasPendingProjectMove } from '../../orca-profiles/profile-project-move-record'
 import { readProfileStateAutomationRunsDocument } from './profile-state-automation-runs'
 import { profileStateDatabaseBackups } from './profile-state-backup-path'
 import {
@@ -15,6 +16,7 @@ import { quarantineProfileStateDatabase } from './profile-state-database-quarant
 import { importProfileStateJson } from './profile-state-documents'
 import {
   ProfileStateDocumentCorruptionError,
+  isRecord,
   validateProfileStateDocumentRow,
   type ProfileStateParsedDocument
 } from './profile-state-document-validation'
@@ -22,8 +24,7 @@ import { readProfileStateDomain } from './profile-state-domain-reader'
 import { withProfileStateReadSnapshot } from './profile-state-read-snapshot'
 import { ProfileStateSqliteAuthority } from './profile-state-sqlite-authority'
 import {
-  assertProfileStateDocumentRevision,
-  ProfileStateRevisionAheadError,
+  assertProfileStateRepairRevision,
   readProfileStateRevision
 } from './profile-state-revision'
 
@@ -42,7 +43,7 @@ export type ProfileStateSectionRepairPlan = {
   repairedState: Record<string, unknown>
 }
 
-type ProfileStateLocation = { databaseFile: string; profileId: string }
+type ProfileStateLocation = { databaseFile: string; profileId: string; userDataPath?: string }
 
 export type ProfileStateSectionRepairResult = {
   revision: number
@@ -141,6 +142,12 @@ function sameSections(
 export function planProfileStateSectionRepair(
   location: ProfileStateLocation
 ): ProfileStateSectionRepairPlan | undefined {
+  if (
+    location.userDataPath === undefined ||
+    profileHasPendingProjectMove(location.profileId, location.userDataPath)
+  ) {
+    return undefined
+  }
   const opened = openProfileStateDatabaseReadOnly(location.databaseFile, location.profileId)
   let scan: SectionScan | undefined
   try {
@@ -151,7 +158,7 @@ export function planProfileStateSectionRepair(
   if (scan === undefined || scan.damaged.size === 0) {
     return undefined
   }
-  const repairedState = Object.fromEntries(scan.intact)
+  const repairedState = scan.intact
   const backups = profileStateDatabaseBackups(location.databaseFile)
   const sections = [...scan.damaged].map((domain): ProfileStateRepairSection => {
     for (const backup of backups) {
@@ -160,13 +167,18 @@ export function planProfileStateSectionRepair(
         continue
       }
       if (read.kind === 'value') {
-        repairedState[domain] = read.value
+        repairedState.set(domain, read.value)
       }
       return { domain, backupId: backup.id, backupCreatedAtMs: backup.createdAtMs }
     }
     return { domain, backupId: null }
   })
-  return { profileId: location.profileId, revision: scan.revision, sections, repairedState }
+  return {
+    profileId: location.profileId,
+    revision: scan.revision,
+    sections,
+    repairedState: Object.fromEntries(repairedState)
+  }
 }
 
 type SectionScan = { revision: number; intact: Map<string, unknown>; damaged: Set<string> }
@@ -177,6 +189,7 @@ function scanProfileStateSections(db: Database.Database): SectionScan | undefine
   if (revision === 0) {
     return undefined
   }
+  assertProfileStateRepairRevision(db, revision)
   const intact = new Map<string, unknown>()
   const damaged = new Set<string>()
   // Undefined: history is stored in its document row. Null: absent, or damaged.
@@ -184,7 +197,9 @@ function scanProfileStateSections(db: Database.Database): SectionScan | undefine
   try {
     normalizedRuns = readProfileStateAutomationRunsDocument(db, revision, 'parsed')
   } catch (error) {
-    rethrowUnlessSectionDamage(error)
+    if (!(error instanceof ProfileStateDocumentCorruptionError)) {
+      throw error
+    }
     damaged.add('automationRuns')
     normalizedRuns = null
   }
@@ -195,15 +210,17 @@ function scanProfileStateSections(db: Database.Database): SectionScan | undefine
     )
     .iterate()
   for (const row of rows) {
+    const domain = isRecord(row) && typeof row.domain === 'string' ? row.domain : undefined
     let document: ReturnType<typeof validateProfileStateDocumentRow>
     try {
       document = validateProfileStateDocumentRow(row, { retainParsedValue: true })
     } catch (error) {
-      rethrowUnlessSectionDamage(error)
-      damaged.add(error.domain)
+      if (!(error instanceof ProfileStateDocumentCorruptionError) || domain === undefined) {
+        throw error
+      }
+      damaged.add(domain)
       continue
     }
-    assertProfileStateDocumentRevision(document.revision, revision, document.domain)
     if (document.domain === 'automationRuns' && normalizedRuns !== undefined) {
       // Normalized history is authoritative; its document row is only a 'null' placeholder.
       if (document.payload !== 'null') {
@@ -217,16 +234,4 @@ function scanProfileStateSections(db: Database.Database): SectionScan | undefine
     intact.set('automationRuns', normalizedRuns.value)
   }
   return { revision, intact, damaged }
-}
-
-function rethrowUnlessSectionDamage(
-  error: unknown
-): asserts error is ProfileStateDocumentCorruptionError & { domain: string } {
-  if (
-    !(error instanceof ProfileStateDocumentCorruptionError) ||
-    error instanceof ProfileStateRevisionAheadError ||
-    error.domain === null
-  ) {
-    throw error
-  }
 }

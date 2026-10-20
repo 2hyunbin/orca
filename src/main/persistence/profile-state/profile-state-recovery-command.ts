@@ -77,7 +77,7 @@ export function rollbackProfileState(
   if (selector.kind === 'repair') {
     const repaired = repairProfileStateSections({
       maintenance,
-      location: result,
+      location: { ...result, userDataPath },
       approved: selector.sections,
       beforeRepair: () => invalidateActiveProfileMarker(userDataPath, result.profileId)
     })

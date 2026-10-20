@@ -44,6 +44,7 @@ export type ProfileStateAuthorityBootstrapResult = {
 )
 
 export type ProfileStateAuthorityBootstrapOptions = {
+  userDataPath?: string
   dataFile: string
   databaseFile: string
   profileId: string
