@@ -546,6 +546,52 @@ describe('one editor buffer record per physical file', () => {
       expect(tab(store, `${b}-restored`)?.externalMutation).toBe('changed')
     })
 
+    function restoreDivergent(): [string, string] {
+      const a = openTab(store, 'wt-1')
+      const b = openTab(store, 'wt-2')
+      store.setState({
+        editorDrafts: { [`${a}-restored`]: 'draft one', [`${b}-restored`]: 'draft two' },
+        openFiles: store
+          .getState()
+          .openFiles.map((file) => ({ ...file, id: `${file.id}-restored`, isDirty: true }))
+      })
+      return [`${a}-restored`, `${b}-restored`]
+    }
+
+    it("a stale side can't overwrite the newer side's later writes", async () => {
+      const [ra, rb] = restoreDivergent()
+      const queue = createEditorSaveQueue(store)
+      await queue.queueSave(tab(store, ra)!, 'draft one', 'user')
+      type(store, ra, 'A again')
+      await queue.queueSave(tab(store, ra)!, 'A again', 'autosave')
+      // Even with its banner dismissed, B's disk version predates A's writes.
+      store.getState().setExternalMutation(rb, null)
+      await queue.queueSave(tab(store, rb)!, 'draft two', 'autosave')
+      queue.dispose()
+
+      expect(disk.files.get(FILE)).toBe('A again')
+      expect(tab(store, rb)?.externalMutation).toBe('changed')
+      expect(store.getState().editorDrafts[rb]).toBe('draft two')
+    })
+
+    it('after Keep My Edits, the clean side rejoins and shows the kept draft', async () => {
+      const [ra, rb] = restoreDivergent()
+      const queue = createEditorSaveQueue(store)
+      await queue.queueSave(tab(store, ra)!, 'draft one', 'user')
+      queue.dispose()
+      expect(tab(store, rb)?.externalMutation).toBe('changed')
+
+      // Keep My Edits restamps B's baseline to the current disk version and clears the banner.
+      store.getState().setLastKnownDiskSignature(rb, tab(store, ra)?.lastKnownDiskSignature ?? '')
+      store.getState().setExternalMutation(rb, null)
+
+      const state = store.getState()
+      expect(editorBufferIdOf(state, ra)).toBe(editorBufferIdOf(state, rb))
+      expect(modelOwnerOf(store, ra)).toBe(modelOwnerOf(store, rb))
+      expect(state.editorDrafts[ra]).toBe('draft two')
+      expect(tab(store, ra)?.isDirty).toBe(true)
+    })
+
     it('on a rename onto a file with other unsaved edits', () => {
       const target = openTab(store, 'wt-2', { filePath: '/repo/b.ts', relativePath: 'b.ts' })
       type(store, target, 'unsaved b')
