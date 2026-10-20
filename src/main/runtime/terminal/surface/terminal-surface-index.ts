@@ -29,6 +29,7 @@ export class TerminalSurfaceIndex {
   private currentJson = ''
   /** The loaded partitions `current` was projected from: the projection's own cached objects. */
   private projectedFrom: (LoadedWorkspaceLayout | null)[] = []
+  private projectedHomes = ''
 
   constructor(
     private readonly deps: {
@@ -62,18 +63,26 @@ export class TerminalSurfaceIndex {
   /** Main's surfaces now: re-projected only when a partition the projection holds was rewritten. */
   surfaces(): MainTerminalSurfaces {
     const reads = this.deps.reads()
-    const hostIds = this.deps.hostIds().filter(
-      (hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime'
-    )
+    const hostIds = this.deps
+      .hostIds()
+      .filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
     const loaded = hostIds.map((hostId) => reads?.readPartition(hostId) ?? null)
+    // Which partition owns a workspace can change with no write (an SSH terminal registering).
+    const homes = JSON.stringify(
+      loaded.map((partition) =>
+        Object.keys(partition?.layout.workspaces ?? {}).map((key) => this.homeOf(key))
+      )
+    )
     if (
       this.current &&
+      homes === this.projectedHomes &&
       loaded.length === this.projectedFrom.length &&
       loaded.every((partition, index) => partition === this.projectedFrom[index])
     ) {
       return this.current
     }
     this.projectedFrom = loaded
+    this.projectedHomes = homes
     const next = this.project(hostIds, loaded)
     const json = JSON.stringify({ tabs: next.tabs, leaves: next.leaves })
     // The same object when nothing changed, so a write that moves no pane installs nothing.
@@ -133,11 +142,14 @@ export class TerminalSurfaceIndex {
 /**
  * The window's graph with main's panes in place of the window's own list for every workspace main
  * owns. A pane the window shows takes its renderer pane id and title; any other is parked, as a
- * live pane the window does not mount is today.
+ * live pane the window does not mount is today. A pane lists its terminal once that terminal has
+ * registered, as the window lists one once its transport attaches.
  */
 export function composeMainTerminalSurfaces(
   graph: RuntimeSyncWindowGraph,
-  main: MainTerminalSurfaces
+  main: MainTerminalSurfaces,
+  /** Whether the PTY registry holds the terminal: a saved binding alone is not a live one. */
+  registered: (ptyId: string) => boolean
 ): RuntimeSyncWindowGraph {
   const mounted = new Map(
     (graph.mountedLeaves ?? []).map((leaf) => [`${leaf.tabId}::${leaf.leafId}`, leaf])
@@ -149,7 +161,8 @@ export function composeMainTerminalSurfaces(
     tabs: [...graph.tabs.filter(notMain), ...main.tabs],
     leaves: [
       ...graph.leaves.filter(notMain),
-      ...main.leaves.map((leaf) => {
+      ...main.leaves.map((bound) => {
+        const leaf = bound.ptyId && !registered(bound.ptyId) ? { ...bound, ptyId: null } : bound
         const shown = mounted.get(`${leaf.tabId}::${leaf.leafId}`)
         if (!shown) {
           return { ...leaf, parked: true }
