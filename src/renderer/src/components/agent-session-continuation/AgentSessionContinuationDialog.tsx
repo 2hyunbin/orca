@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, MessageSquarePlus } from 'lucide-react'
-import AgentCombobox from '@/components/agent/AgentCombobox'
+import AgentSurfaceCombobox from '@/components/agent/AgentSurfaceCombobox'
+import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
+import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
+import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -53,6 +56,8 @@ export function AgentSessionContinuationDialog({
   const settings = useAppStore((state) => state.settings)
   const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<TuiAgent | null>(null)
+  const [selectedSurface, setSelectedSurface] = useState<AgentLaunchSurface | undefined>()
+  const detectionTarget = useAgentDetectionTargetForWorktree(request?.worktreeId ?? null)
   const [contextMode, setContextMode] = useState<AgentSessionContinuationContextMode>('focused')
   const [detecting, setDetecting] = useState(true)
   const [detectionFailed, setDetectionFailed] = useState(false)
@@ -78,6 +83,7 @@ export function AgentSessionContinuationDialog({
     setDetectionFailed(false)
     setDetectedAgents([])
     setSelectedAgent(null)
+    setSelectedSurface(undefined)
     setContextMode('focused')
     void detectAgentSessionContinuationAgents(request.worktreeId)
       .then((detected) => {
@@ -138,6 +144,7 @@ export function AgentSessionContinuationDialog({
       worktreeId: request.worktreeId,
       groupId: request.groupId,
       initialCwd: request.initialCwd,
+      surface: selectedSurface,
       launchSource: request.launchSource
     })
     setStarting(false)
@@ -200,13 +207,28 @@ export function AgentSessionContinuationDialog({
             <label className="text-xs font-medium">
               {translate('components.agentSessionContinuation.agent', 'Agent')}
             </label>
-            <AgentCombobox
-              agents={agents}
-              value={selectedAgent}
-              onValueChange={setSelectedAgent}
-              allowNarrowTrigger
-              triggerClassName="min-w-0 w-full"
-            />
+            {request ? (
+              <AgentSurfaceCombobox
+                agents={agents}
+                value={selectedAgent}
+                onValueChange={setSelectedAgent}
+                rowsTarget={{
+                  workspace: {
+                    kind: workspaceKindForWorktreeId(request.worktreeId),
+                    worktreeId: request.worktreeId
+                  },
+                  launchCwd: request.initialCwd
+                }}
+                detectionTarget={detectionTarget}
+                surface={selectedSurface}
+                onPick={(agent, surface) => {
+                  setSelectedAgent(agent)
+                  setSelectedSurface(surface)
+                }}
+                allowNarrowTrigger
+                triggerClassName="min-w-0 w-full"
+              />
+            ) : null}
             {detecting ? (
               <p className="text-[11px] text-muted-foreground">
                 {translate(

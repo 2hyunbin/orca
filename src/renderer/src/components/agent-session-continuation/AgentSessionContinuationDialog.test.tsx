@@ -22,7 +22,7 @@ vi.mock('@/lib/agent-catalog', () => ({
   getAgentCatalog: () => [{ id: 'codex', label: 'Codex' }],
   getAgentLabel: () => 'Codex'
 }))
-vi.mock('@/components/agent/AgentCombobox', () => ({
+vi.mock('@/components/agent/AgentSurfaceCombobox', () => ({
   default: ({
     value,
     allowBlankTerminal

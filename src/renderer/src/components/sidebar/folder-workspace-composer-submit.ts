@@ -15,7 +15,7 @@ import {
   getLinkedItemDisplayName,
   toFolderWorkspaceLinkedTask
 } from './folder-workspace-composer-helpers'
-import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
+import { planAgentSessionLaunch, type AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { beginStructuredAgentSessionProvisionalLaunch } from '@/lib/structured-agent-session-provisional-tab'
 import { getNewWorkspaceProjectGroupHostId } from '@/lib/new-workspace-project-options'
@@ -51,6 +51,7 @@ type SubmitFolderWorkspaceCreateParams = {
   linkedTaskSourceContext?: TaskSourceContext | null
   note: string
   quickAgent: TuiAgent | null
+  quickSurface?: AgentLaunchSurface
   autoRenameBranchFromWork: boolean | undefined
   agentCmdOverrides: Record<string, string> | undefined
   agentArgs?: string | null
@@ -71,6 +72,7 @@ export async function submitFolderWorkspaceCreate({
   linkedTaskSourceContext,
   note,
   quickAgent,
+  quickSurface,
   autoRenameBranchFromWork,
   agentCmdOverrides,
   agentArgs,
@@ -140,7 +142,9 @@ export async function submitFolderWorkspaceCreate({
           executionHostId: getNewWorkspaceProjectGroupHostId(projectGroup)
         },
         prompt: launchDraftPrompt ?? note,
-        promptDelivery: launchDraftPrompt ? 'draft' : 'auto-submit'
+        promptDelivery: launchDraftPrompt ? 'draft' : 'auto-submit',
+        // Only a terminal pick is explicit: a chat refusal after the folder exists must fall back.
+        ...(quickSurface === 'terminal' ? { requestedSurface: 'terminal' as const } : {})
       })
     : null
   const structuredLaunch = plan?.route === 'structured-native-chat'

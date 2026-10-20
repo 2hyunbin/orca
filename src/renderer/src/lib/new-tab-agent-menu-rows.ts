@@ -10,9 +10,22 @@ import { filterEnabledTuiAgents } from '../../../shared/tui-agent-selection'
 import { orderTabLaunchAgents as orderAgents } from '@/components/tab-bar/tab-agent-launch-options'
 
 /** What the workspace's machine says about opening an agent as a chat, installation aside. */
-export type HostChatAnswer = 'yes' | 'not-yet-known' | 'ssh' | 'wsl' | 'not-on-host' | 'no-chats'
+export type HostChatAnswer =
+  | 'yes'
+  | 'not-yet-known'
+  | 'ssh'
+  | 'wsl'
+  | 'subfolder'
+  | 'not-on-host'
+  | 'no-chats'
 
-export type ChatUnavailableReason = 'check-failed' | 'not-installed' | 'ssh' | 'wsl' | 'not-on-host'
+export type ChatUnavailableReason =
+  | 'check-failed'
+  | 'not-installed'
+  | 'ssh'
+  | 'wsl'
+  | 'subfolder'
+  | 'not-on-host'
 
 export type NewTabAgentMenuRow = (
   | { kind: 'chat'; agent: TuiAgent }

@@ -1,3 +1,4 @@
+import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { lazyWithRetry } from '@/lib/lazy-with-retry'
@@ -190,10 +191,21 @@ function QuickTabBody({
   const [quickSelectionCleared, setQuickSelectionCleared] = useState(false)
   const quickSetupOnly = quickAgent === null && quickSelectionCleared
 
-  const handleQuickAgentChange = useCallback((agent: TuiAgent | null) => {
-    setQuickAgentOverride(agent)
-    setQuickSelectionCleared(false)
-  }, [])
+  // Why keyed by agent: a pick repaired to another agent must not carry the old one's surface.
+  const [quickAgentPick, setQuickAgentPick] = useState<{
+    agent: TuiAgent | null
+    surface?: AgentLaunchSurface
+  }>({ agent: null })
+  const quickAgentSurface = quickAgentPick.agent === quickAgent ? quickAgentPick.surface : undefined
+
+  const handleQuickAgentChange = useCallback(
+    (agent: TuiAgent | null, surface?: AgentLaunchSurface) => {
+      setQuickAgentOverride(agent)
+      setQuickAgentPick({ agent, surface })
+      setQuickSelectionCleared(false)
+    },
+    []
+  )
 
   const handleQuickSetupOnlySelect = useCallback(() => {
     setQuickAgentOverride(null)
@@ -201,8 +213,8 @@ function QuickTabBody({
   }, [])
 
   const handleCreate = useCallback(async (): Promise<void> => {
-    await submitQuick(quickAgent, { setupOnly: quickSetupOnly })
-  }, [quickAgent, quickSetupOnly, submitQuick])
+    await submitQuick(quickAgent, { setupOnly: quickSetupOnly, surface: quickAgentSurface })
+  }, [quickAgent, quickAgentSurface, quickSetupOnly, submitQuick])
   // Why: Add Project layers over the composer as a nested dialog instead of
   // replacing it in the activeModal slot — closing the composer mid-flow (and
   // losing the typed name/prompt) was the old, abrupt behavior. Once opened it
@@ -315,6 +327,7 @@ function QuickTabBody({
         onComposerNodeChange={onComposerNodeChange}
         nameInputRef={nameInputRef}
         quickAgent={quickAgent}
+        quickAgentSurface={quickAgentSurface}
         onQuickAgentChange={handleQuickAgentChange}
         quickSetupOnly={quickSetupOnly}
         onQuickSetupOnlySelect={handleQuickSetupOnlySelect}

@@ -1,16 +1,20 @@
 import React from 'react'
 import { ChevronDown, Settings2 } from 'lucide-react'
 import AgentCombobox from '@/components/agent/AgentCombobox'
+import AgentSurfaceCombobox from '@/components/agent/AgentSurfaceCombobox'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import type { NewWorkspaceComposerCardProps } from './new-workspace-composer-card-props'
+import type { TuiAgent } from '../../../../shared/tui-agent'
 
 type NewWorkspaceComposerAgentSectionProps = Pick<
   NewWorkspaceComposerCardProps,
   | 'quickAgent'
+  | 'quickAgentSurface'
   | 'onQuickAgentChange'
+  | 'agentRows'
   | 'quickSetupOnly'
   | 'onQuickSetupOnlySelect'
   | 'onOpenAgentSettings'
@@ -29,7 +33,9 @@ type NewWorkspaceComposerAgentSectionProps = Pick<
 
 export function NewWorkspaceComposerAgentSection({
   quickAgent,
+  quickAgentSurface,
   onQuickAgentChange,
+  agentRows,
   quickSetupOnly = false,
   onQuickSetupOnlySelect,
   onOpenAgentSettings,
@@ -42,6 +48,22 @@ export function NewWorkspaceComposerAgentSection({
   defaultTuiAgent,
   handleSetDefaultAgent
 }: NewWorkspaceComposerAgentSectionProps): React.JSX.Element {
+  const comboboxProps = {
+    agents: visibleQuickAgents,
+    value: quickAgent,
+    onValueChange: (agent: TuiAgent | null) => onQuickAgentChange(agent),
+    allowBlankTerminal: true as const,
+    onOpenManageAgents: onOpenAgentSettings,
+    defaultAgent: defaultTuiAgent,
+    onSetDefault: handleSetDefaultAgent,
+    clearSelection: onQuickSetupOnlySelect
+      ? { cleared: quickSetupOnly, onClear: onQuickSetupOnlySelect }
+      : undefined,
+    allowNarrowTrigger: true,
+    triggerClassName:
+      'h-9 w-full min-w-0 border-input text-sm focus:border-ring focus:ring-[3px] focus:ring-ring/50',
+    onTriggerEnter: createDisabled ? undefined : onCreate
+  }
   return (
     <>
       <div className="min-w-0 space-y-1" data-contextual-tour-target="workspace-creation-agent">
@@ -71,26 +93,17 @@ export function NewWorkspaceComposerAgentSection({
             </TooltipContent>
           </Tooltip>
         </div>
-        <AgentCombobox
-          agents={visibleQuickAgents}
-          value={quickAgent}
-          onValueChange={onQuickAgentChange}
-          allowBlankTerminal
-          onOpenManageAgents={onOpenAgentSettings}
-          defaultAgent={defaultTuiAgent}
-          onSetDefault={handleSetDefaultAgent}
-          clearSelection={
-            onQuickSetupOnlySelect
-              ? {
-                  cleared: quickSetupOnly,
-                  onClear: onQuickSetupOnlySelect
-                }
-              : undefined
-          }
-          allowNarrowTrigger
-          triggerClassName="h-9 w-full min-w-0 border-input text-sm focus:border-ring focus:ring-[3px] focus:ring-ring/50"
-          onTriggerEnter={createDisabled ? undefined : onCreate}
-        />
+        {agentRows ? (
+          <AgentSurfaceCombobox
+            {...comboboxProps}
+            rowsTarget={agentRows.target}
+            detectionTarget={agentRows.detectionTarget}
+            surface={quickAgentSurface}
+            onPick={onQuickAgentChange}
+          />
+        ) : (
+          <AgentCombobox {...comboboxProps} />
+        )}
       </div>
 
       <div className="!mb-2">

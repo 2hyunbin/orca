@@ -16,7 +16,8 @@ import {
 } from '@/lib/agent-launch-routing'
 import {
   buildAgentLaunchRouteInput,
-  workspaceKindForWorktreeId
+  workspaceKindForWorktreeId,
+  type ProspectiveWorkspace
 } from '@/lib/agent-launch-route-input'
 import { useHostStructuredAgentsVersion } from '@/lib/chat-provider-agents'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
@@ -65,6 +66,7 @@ function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
     case 'client-capability':
       return 'no-chats'
     case 'custom-start-directory':
+      return 'subfolder'
     case 'reused-terminal':
       return 'yes'
   }
@@ -87,14 +89,25 @@ function catalogUnlearned(
   )
 }
 
+/** A launch whose workspace may not exist yet, or that starts in a directory of its own. */
+export type AgentMenuRowsTarget = {
+  workspace: ProspectiveWorkspace
+  /** Only a terminal can start here, so chat rows say so instead of dropping the directory. */
+  launchCwd?: string | null
+}
+
 /** `detectionTarget` is the workspace's agent-inventory host, resolved by the caller. */
 export function useNewTabAgentMenuRows(
-  worktreeId: string,
+  target: string | AgentMenuRowsTarget,
   open: boolean,
   detectionTarget: AgentDetectionTarget | undefined
 ): NewTabAgentMenuModel {
+  const worktreeId = typeof target === 'string' ? target : target.workspace.worktreeId
+  const launchCwd = typeof target === 'string' ? undefined : target.launchCwd
   // Why: hidden worktrees stay mounted, so only the shown one holds its host's streams.
-  const worktreeShown = useAppStore((state) => state.activeWorktreeId === worktreeId)
+  const worktreeShown = useAppStore(
+    (state) => typeof target === 'string' && state.activeWorktreeId === worktreeId
+  )
   // Why: acquiring while the workspace is shown means the first open already knows its agents.
   const acquired = useDetectedAgents(open || worktreeShown ? detectionTarget : undefined)
   // Closing the menu or leaving the workspace must not erase the known inventory.
@@ -109,7 +122,10 @@ export function useNewTabAgentMenuRows(
     readLocalRuntimeCapabilityObservation
   )
   const settings = useAppStore((state) => state.settings)
-  const workspace = { kind: workspaceKindForWorktreeId(worktreeId), worktreeId }
+  const workspace =
+    typeof target === 'string'
+      ? { kind: workspaceKindForWorktreeId(target), worktreeId: target }
+      : target.workspace
   const facts = useAppStore(
     useShallow((state) => {
       const input = buildAgentLaunchRouteInput(state, { agent: 'claude', workspace })
@@ -238,7 +254,11 @@ export function useNewTabAgentMenuRows(
     detectedOnHost: detection.detectedIds,
     chatAgents,
     hostChatAnswer: (agent) => {
-      const route = buildAgentLaunchRouteInput(state, { agent, workspace })
+      const route = buildAgentLaunchRouteInput(state, {
+        agent,
+        workspace,
+        ...(launchCwd ? { tuiCustomization: { cwd: launchCwd } } : {})
+      })
       const preliminary = hostChatAnswer(
         roster ? { ...route, hostStructuredAgents: roster } : route
       )

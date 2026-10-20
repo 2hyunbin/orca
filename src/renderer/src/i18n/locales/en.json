@@ -3794,6 +3794,7 @@
             "chatNotInstalled": "Not installed",
             "chatNotOverSsh": "No chat over SSH",
             "chatNotInWsl": "No chat in WSL",
+            "chatNotInSubfolder": "No chat in a subfolder",
             "chatNotOnHost": "No chat on this host",
             "chatCheckFailed": "Couldn’t check chat availability",
             "chatLoading": "Checking chat support…",
@@ -19789,7 +19790,8 @@
       "runTerminalUnavailable": "Run terminal is unavailable."
     },
     "agentCombobox": {
-      "clearSelection": "Clear agent selection"
+      "clearSelection": "Clear agent selection",
+      "startInTerminal": "Start {{value0}} in a terminal"
     },
     "newWorkspace": {
       "agentOptional": "Agent [Optional]",

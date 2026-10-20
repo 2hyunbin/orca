@@ -7,6 +7,7 @@ import { useAppStore } from '@/store'
 import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import type { LaunchSource } from '../../../shared/telemetry-events'
 import type { TuiAgent } from '../../../shared/tui-agent'
+import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 import { translate } from '@/i18n/i18n'
 
 type LaunchAgentSessionContinuationArgs = {
@@ -15,6 +16,8 @@ type LaunchAgentSessionContinuationArgs = {
   worktreeId: string
   groupId?: string | null
   initialCwd?: string | null
+  /** Only a terminal pick is explicit; otherwise the settings route keeps the directory's verdict. */
+  surface?: AgentLaunchSurface
   launchSource: LaunchSource
 }
 
@@ -65,6 +68,7 @@ export async function launchAgentSessionContinuation({
   worktreeId,
   groupId,
   initialCwd,
+  surface,
   launchSource
 }: LaunchAgentSessionContinuationArgs): Promise<boolean> {
   if (!(await ensureAgentAvailable(agent, worktreeId))) {
@@ -85,6 +89,7 @@ export async function launchAgentSessionContinuation({
     promptDelivery: agent === 'claude' ? 'draft' : 'submit-after-ready',
     launchSource,
     ...(initialCwd ? { initialCwd } : {}),
+    ...(surface === 'terminal' ? { requestedSurface: 'terminal' as const } : {}),
     onPromptDeliveryUnconfirmed: () => {
       deliveryUnconfirmed = true
     },
