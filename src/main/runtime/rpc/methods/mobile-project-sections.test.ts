@@ -5,6 +5,10 @@ import type { OrcaRuntimeService } from '../../orca-runtime'
 import { MOBILE_PROJECT_SECTIONS_METHOD } from '../../../../shared/mobile-project-sections-contract'
 import { PROJECT_SECTION_PARITY_SERVED } from '../../../../shared/project-section-parity.test-fixture'
 
+// The window-published catalog this file covers is served only with the switch off; the switched-on
+// answer from main's own catalog is in orca-runtime-project-catalog.test.ts.
+vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: false }))
+
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the method reads no runtime member; the dispatcher only stamps the runtime id.
 const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
 
