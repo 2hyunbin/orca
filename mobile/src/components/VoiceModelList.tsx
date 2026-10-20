@@ -103,7 +103,7 @@ export function VoiceModelList({
                       style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
                       disabled={anyBusy}
                       onPress={() => onDelete(model)}
-                      accessibilityLabel={'Delete ' + model.label}
+                      accessibilityLabel={`Delete ${model.label}`}
                     >
                       {deleteBusy ? (
                         <ActivityIndicator size="small" color={colors.statusRed} />
