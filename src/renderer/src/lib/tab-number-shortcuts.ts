@@ -61,6 +61,7 @@ export function activateTabNumberShortcut(index: number): boolean {
 
   const worktreeId = target.worktreeId
   const runtimeEnvironmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(store, worktreeId)
+  store.recordDesktopTabChoice(worktreeId)
   store.focusGroup(worktreeId, target.groupId)
   store.activateTab(target.id)
 

@@ -84,9 +84,15 @@ export function createOpenFileAction(
     }
   }
 
+  // Why: every file open (explorer, search, links, quick open) is the user's; it is this window's
+  // choice of tab in that workspace (desktop-tab-choice).
   return {
-    openFile: (file, options) => open(file, options, null).fileId,
+    openFile: (file, options) => {
+      get().recordDesktopTabChoice?.(file.worktreeId)
+      return open(file, options, null).fileId
+    },
     openFileForLink: (file, options, intent) => {
+      get().recordDesktopTabChoice?.(file.worktreeId)
       const { result } = open(file, { ...options, focusEditor: true }, intent)
       // Why: created and reused views must land identically; creating in another group leaves focus behind.
       if (result) {

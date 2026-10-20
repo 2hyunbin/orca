@@ -54,6 +54,7 @@ export function createMarkdownPreviewActions(
       if (!worktreeId) {
         return
       }
+      state.recordDesktopTabChoice?.(worktreeId)
       const worktree = state.getKnownWorktreeById(worktreeId)
       if (!worktree) {
         return

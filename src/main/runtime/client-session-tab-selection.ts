@@ -10,6 +10,10 @@ import {
 } from './client-session-tab-closed-selection'
 import type { StoredClientSessionTabSelection } from './client-session-tab-closed-selection'
 import { normalizePersistedMobileClientTabSelections } from './client-session-tab-selection-persistence'
+import {
+  resolveWorkspaceViewerTab,
+  SESSION_TAB_IDENTITY
+} from '../../shared/workspace-creation-tab'
 
 export type ClientSessionTabSelection = {
   activeTabId: string | null
@@ -19,6 +23,12 @@ export type ClientSessionTabSelection = {
 
 function emptyClientSessionTabSelection(): ClientSessionTabSelection {
   return { activeTabId: null, activeGroupId: null, activeTabIdByGroupId: {} }
+}
+
+// Why: host focus is private navigation; a new paired device starts from deterministic topology instead of inheriting it.
+function unpickedClientSessionTabState(): StoredClientSessionTabSelection {
+  const selection = emptyClientSessionTabSelection()
+  return { selection, revision: 0, shouldPersist: false, closedTabIds: new Set() }
 }
 
 function topLevelTabId(tab: RuntimeMobileSessionClientTab): string {
@@ -185,20 +195,15 @@ export class ClientSessionTabSelectionStore {
 
   project(
     snapshot: RuntimeMobileSessionTabsResult,
-    clientNavigationId?: string
+    clientNavigationId?: string,
+    createdWithAgent?: string
   ): RuntimeMobileSessionTabsResult {
     if (!clientNavigationId) {
       return snapshot
     }
     const statesByWorktree = this.getStatesByWorktree(clientNavigationId)
     const existingState = statesByWorktree.get(snapshot.worktree)
-    const state = existingState ?? {
-      // Why: host focus is private navigation; a new paired device starts from deterministic topology instead of inheriting it.
-      selection: emptyClientSessionTabSelection(),
-      revision: 0,
-      shouldPersist: false,
-      closedTabIds: new Set<string>()
-    }
+    const state = existingState ?? unpickedClientSessionTabState()
     const closed = projectWithoutClosedClientSessionTabs(snapshot, state.closedTabIds)
     if (closed.snapshot.tabs.length === 0) {
       if (existingState) {
@@ -214,7 +219,16 @@ export class ClientSessionTabSelectionStore {
         snapshotVersion: snapshot.snapshotVersion + state.revision
       }
     }
-    const projected = projectClientSessionTabSelection(closed.snapshot, state.selection)
+    // Why: only `shouldPersist` marks a pick; a cached fallback is never one, nor promoted to one.
+    const viewerTab = resolveWorkspaceViewerTab(
+      closed.snapshot.tabs,
+      { chosenTabId: state.shouldPersist ? state.selection.activeTabId : null, createdWithAgent },
+      SESSION_TAB_IDENTITY
+    )
+    const projected = projectClientSessionTabSelection(
+      closed.snapshot,
+      viewerTab ? { ...state.selection, activeTabId: viewerTab.id } : state.selection
+    )
     // Why: a browser guest process swap drops its tab for one snapshot; the topology fallback
     // must not overwrite (and persist) the device's explicit pick, or focus never returns.
     const selectionSurvived =
@@ -239,12 +253,7 @@ export class ClientSessionTabSelectionStore {
     activeTabId: string
   ): RuntimeMobileSessionTabsResult {
     const statesByWorktree = this.getStatesByWorktree(clientNavigationId)
-    const state = statesByWorktree.get(snapshot.worktree) ?? {
-      selection: emptyClientSessionTabSelection(),
-      revision: 0,
-      shouldPersist: false,
-      closedTabIds: new Set<string>()
-    }
+    const state = statesByWorktree.get(snapshot.worktree) ?? unpickedClientSessionTabState()
     const nextSelection = activateClientSessionTabSelection(snapshot, state.selection, activeTabId)
     const activeTab = snapshot.tabs.find((tab) => tab.id === activeTabId)
     const closedTabIds = new Set(state.closedTabIds)

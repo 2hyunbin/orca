@@ -15,7 +15,8 @@ import {
 import {
   acceptSessionSnapshot,
   applyClosedTabTombstones,
-  confirmsMirroredTabSelection
+  confirmsMirroredTabSelection,
+  isViewerProjectedSnapshot
 } from './session-tab-snapshot-gate'
 import type { SessionTabsApplyOutcome } from './mobile-session-tabs-stream-health'
 import { getActiveTabIdForHandle } from './mobile-session-route-helpers'
@@ -147,7 +148,8 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
       const resolved = resolveActiveSessionTab(nextTabs, {
         pendingActiveSessionTabId,
         selectedSessionTabId: selectedSessionTabIdRef.current,
-        navigationIntent: result.navigationIntent
+        navigationIntent: result.navigationIntent,
+        viewerProjection: isViewerProjectedSnapshot(result.publicationEpoch)
       })
       let active = resolved.activeTab
       let selectionSource: string = resolved.selectionSource

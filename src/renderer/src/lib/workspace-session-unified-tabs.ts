@@ -2,6 +2,8 @@ import { structuredLaunchSlotIds } from './structured-agent-session-launch-persi
 import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { WorkspaceSessionSnapshot } from './workspace-session'
+import type { AppState } from '../store'
+import { unchosenCreationAgent } from '../store/slices/tabs/desktop-tab-choice'
 
 type PersistedUnifiedTabSessionData = Pick<
   WorkspaceSessionState,
@@ -32,7 +34,8 @@ function prunePersistedLayoutForGroups(
 function buildPersistedGroupsForWorktree(
   tabs: Tab[],
   groups: TabGroup[],
-  worktreeId: string
+  worktreeId: string,
+  savesShownTab: boolean
 ): TabGroup[] {
   const validTabIds = new Set(tabs.map((tab) => tab.id))
   const tabIdsByGroup = new Map<string, string[]>()
@@ -51,7 +54,9 @@ function buildPersistedGroupsForWorktree(
       ])
       const tabOrder = Array.from(orderedTabIds)
       const activeTabId =
-        group.activeTabId && validTabIds.has(group.activeTabId) ? group.activeTabId : null
+        savesShownTab && group.activeTabId && validTabIds.has(group.activeTabId)
+          ? group.activeTabId
+          : null
       return {
         ...group,
         activeTabId,
@@ -66,7 +71,10 @@ export function buildPersistedUnifiedTabSessionData(
   snapshot: Pick<
     WorkspaceSessionSnapshot,
     'activeGroupIdByWorktree' | 'groupsByWorktree' | 'layoutByWorktree' | 'unifiedTabsByWorktree'
-  >
+  > &
+    // Read from the live store the payload is built from; every pick also activates its tab,
+    // which is what schedules the write.
+    Partial<Pick<AppState, 'desktopTabChoices' | 'folderWorkspaces' | 'worktreesByRepo'>>
 ): PersistedUnifiedTabSessionData {
   const unifiedTabs: WorkspaceSessionState['unifiedTabs'] = {}
   const tabGroups: WorkspaceSessionState['tabGroups'] = {}
@@ -88,7 +96,14 @@ export function buildPersistedUnifiedTabSessionData(
       continue
     }
 
-    const groups = buildPersistedGroupsForWorktree(tabs, sourceGroups[worktreeId] ?? [], worktreeId)
+    // Why: a derived default is not this window's choice; saved, it would restore as one and
+    // pin an interim Setup over the agent that arrives after a reload.
+    const groups = buildPersistedGroupsForWorktree(
+      tabs,
+      sourceGroups[worktreeId] ?? [],
+      worktreeId,
+      !unchosenCreationAgent(snapshot, worktreeId)
+    )
     if (groups.length === 0) {
       continue
     }

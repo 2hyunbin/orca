@@ -17,6 +17,7 @@ export function createActiveWorkspaceTerminalActions(
       if (!worktreeId) {
         return
       }
+      state.recordDesktopTabChoice?.(worktreeId)
       const workspaceScope = parseWorkspaceKey(worktreeId)
       const worktreeRoute =
         worktreeId === FLOATING_TERMINAL_WORKTREE_ID || workspaceScope?.type === 'folder'

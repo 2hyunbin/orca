@@ -44,7 +44,8 @@ function patchFromSlices(
     layouts: Object.fromEntries(keys.map((key) => [key, cache[key]!])),
     facts,
     view,
-    holdsEditorFile: (worktreeId, fileId) => heldFiles.has(`${worktreeId}\0${fileId}`)
+    holdsEditorFile: (worktreeId, fileId) => heldFiles.has(`${worktreeId}\0${fileId}`),
+    choices: state
   })
   return buildLayoutFrameStorePatch(
     state,

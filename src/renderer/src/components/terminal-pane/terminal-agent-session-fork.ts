@@ -273,6 +273,8 @@ export async function startAgentSessionFork(fork: PreparedAgentSessionFork): Pro
     worktreePath: created.worktree.path,
     projectRuntime: sourceProjectRuntime
   })
+  // An agent the user launches is this window's choice of tab (desktop-tab-choice).
+  useAppStore.getState().recordDesktopTabChoice?.(forkWorktreeId)
   const result = launchAgentInNewTab({
     agent: fork.agent,
     worktreeId: forkWorktreeId,

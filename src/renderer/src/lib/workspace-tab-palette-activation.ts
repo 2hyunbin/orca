@@ -123,6 +123,7 @@ export function activateWorkspaceTabPaletteResult(
     state,
     result.worktreeId
   )
+  state.recordDesktopTabChoice(result.worktreeId)
   state.focusGroup(result.worktreeId, result.groupId)
   state.activateTab(result.tabId, { worktreeId: result.worktreeId })
 

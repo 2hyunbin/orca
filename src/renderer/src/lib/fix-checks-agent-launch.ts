@@ -184,6 +184,8 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       return false
     }
     let revealFailed = false
+    // An agent the user launches is this window's choice of tab (desktop-tab-choice).
+    useAppStore.getState().recordDesktopTabChoice?.(targetWorktreeId)
     const result = launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),
       agent,

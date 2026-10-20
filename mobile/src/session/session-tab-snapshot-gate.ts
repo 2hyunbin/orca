@@ -4,6 +4,8 @@
 // post-mutation refetch) and the brief window after a local close before the
 // publisher's snapshot reflects it.
 
+import { CLIENT_NAVIGATION_PUBLICATION_EPOCH_SUFFIX } from '../../../src/shared/runtime-session-contracts'
+
 /** The last snapshot applied from a publisher, used to reject older ones. */
 export type AppliedSnapshotMarker = { epoch: string | null; version: number }
 
@@ -31,6 +33,11 @@ export function acceptSessionSnapshot(
   }
   marker.version = incoming.snapshotVersion
   return true
+}
+
+/** Hosts without per-device selection publish no suffix, so the phone keeps its legacy reader. */
+export function isViewerProjectedSnapshot(publicationEpoch?: string): boolean {
+  return publicationEpoch?.endsWith(CLIENT_NAVIGATION_PUBLICATION_EPOCH_SUFFIX) === true
 }
 
 export function confirmsMirroredTabSelection(publicationEpoch?: string): boolean {
