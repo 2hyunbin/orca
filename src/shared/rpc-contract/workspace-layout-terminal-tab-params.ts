@@ -46,12 +46,17 @@ export const CreateTerminalTabCommand = z.object({
   split: NewGroupSplit
 })
 
-/** A workspace's default terminal tabs, in order; main makes none once the workspace is marked. */
+/**
+ * A workspace's default terminal tabs, in order, under the ids the window proposes; main makes none
+ * once the workspace is marked, and refuses an id another tab holds.
+ */
 export const ApplyDefaultTabsCommand = z.object({
   type: z.literal('applyDefaultTabs'),
   workspace,
   tabs: z.array(
     z.object({
+      tabId: z.string().refine(isValidHostTerminalTabId),
+      leafId: z.string().refine(isTerminalLeafId),
       title: z.string().trim().min(1).optional(),
       color: z.string().min(1).optional(),
       creation: TerminalCreation.optional()

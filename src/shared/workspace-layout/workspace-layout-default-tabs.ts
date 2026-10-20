@@ -23,8 +23,7 @@ export function applyDefaultTabs(
   const createdTabs: NonNullable<LayoutCommandResult['createdTabs']> = []
   const startPaneKeys: string[] = []
   for (const template of command.tabs) {
-    const tabId = context.mintId()
-    const leafId = context.mintLeafId()
+    const { tabId, leafId } = template
     const created = createTerminalTab(
       next,
       {

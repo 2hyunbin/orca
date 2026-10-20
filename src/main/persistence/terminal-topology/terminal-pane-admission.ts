@@ -101,7 +101,9 @@ export function applyCommandToSession(
       ? takenTabId(loaded.layout, command)
       : command.type === 'splitPane'
         ? takenLeafId(loaded.layout, command)
-        : null
+        : command.type === 'applyDefaultTabs'
+          ? takenDefaultTabId(loaded.layout, command)
+          : null
   if (taken) {
     return { value: taken, session: null }
   }
@@ -198,6 +200,18 @@ function takenTabId(
   }
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
+  )
+  return holds ? { ok: false, code: 'tab_exists' } : null
+}
+
+/** Default tabs come once, so any proposed id another tab holds refuses them all. */
+function takenDefaultTabId(
+  layout: WorkspaceLayoutModel,
+  command: CommandOf<'applyDefaultTabs'>
+): LayoutApplyOutcome | null {
+  const ids = new Set(command.tabs.map((tab) => tab.tabId))
+  const holds = Object.values(layout.workspaces).some((entry) =>
+    entry.tabs.some((tab) => ids.has(tab.id) || ids.has(tab.entityId))
   )
   return holds ? { ok: false, code: 'tab_exists' } : null
 }
