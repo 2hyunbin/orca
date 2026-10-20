@@ -41,9 +41,8 @@ export class WorkspaceViewers {
     this.selfRaisingClients.delete(clientKey)
   }
 
-  /** A phone's open session on the workspace, until the returned release. It counts while the
-   *  phone's connection is present: a phone reports away (presentForMs 0) when it leaves the
-   *  foreground, and an older one that never reports counts until its socket closes. */
+  /** A phone's open session on the workspace, until the returned release; counted while its
+   *  connection is present (an older phone never reports away, so until its socket closes). */
   openPhoneSession(clientKey: string | null, worktreeId: string): () => void {
     const key = worktreeIdentityKey(worktreeId)
     const session: PhoneSession = { clientKey, worktreeId }
@@ -57,12 +56,8 @@ export class WorkspaceViewers {
     }
   }
 
-  /** The workspaces this client's present phone sessions show. */
-  presentPhoneSessionWorktrees(clientKey: string): string[] {
-    const now = this.now()
-    if (!this.isPresent(clientKey, now)) {
-      return []
-    }
+  /** The workspaces this client's phone sessions show. */
+  phoneSessionWorktrees(clientKey: string): string[] {
     const worktreeIds: string[] = []
     for (const sessions of this.phoneSessions.values()) {
       const held = [...sessions].find((session) => session.clientKey === clientKey)
@@ -94,7 +89,7 @@ export class WorkspaceViewers {
 
   private holdsPresentPhoneSession(workspaceKey: string, now: number): boolean {
     for (const session of this.phoneSessions.get(workspaceKey) ?? []) {
-      if (session.clientKey === null || this.isPresent(session.clientKey, now)) {
+      if (session.clientKey === null || this.isClientPresent(session.clientKey, now)) {
         return true
       }
     }
@@ -102,7 +97,7 @@ export class WorkspaceViewers {
   }
 
   /** A client that never reported is present, as before reports existed. */
-  private isPresent(clientKey: string, now: number): boolean {
+  isClientPresent(clientKey: string, now = this.now()): boolean {
     const view = this.clients.get(clientKey)
     return view === undefined || now < view.presentUntil
   }

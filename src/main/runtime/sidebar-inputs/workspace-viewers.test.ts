@@ -54,13 +54,14 @@ describe('WorkspaceViewers', () => {
   it('stops seeing a phone’s session while it reports away, and again when it returns', () => {
     const { viewers: v } = viewers()
     v.openPhoneSession('phone', WT)
-    expect(v.presentPhoneSessionWorktrees('phone')).toEqual([WT])
+    v.openPhoneSession('phone', 'repo-1::/tmp/a/')
+    expect(v.isClientPresent('phone')).toBe(true)
     v.reportClientView('phone', { workspaceIds: [], tabIds: [], presentForMs: 0 })
     expect(v.isViewing(WT, PANE)).toBe(false)
-    expect(v.presentPhoneSessionWorktrees('phone')).toEqual([])
+    expect(v.isClientPresent('phone')).toBe(false)
     v.reportClientView('phone', { workspaceIds: [], tabIds: [], presentForMs: null })
     expect(v.isViewing(WT, PANE)).toBe(true)
-    expect(v.presentPhoneSessionWorktrees('phone')).toEqual([WT])
+    expect(v.phoneSessionWorktrees('phone')).toEqual([WT])
   })
 
   it('keeps an older phone that never reports as looking until its session closes', () => {

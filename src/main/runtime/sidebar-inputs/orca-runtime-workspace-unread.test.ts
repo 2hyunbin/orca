@@ -171,10 +171,19 @@ describe('workspace unread flag on a headless host', () => {
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(true)
 
+    // A page still running in the background re-subscribes; the dot no one saw stays up.
+    await host.openOnPhone(WT)
+    expect(host.meta[WT].isUnread).toBe(true)
+
     await host.reportView({ ...away, presentForMs: null }, 'phone-1', 'mobile')
     expect(host.meta[WT].isUnread).toBe(false)
     host.finishTurn()
     expect(host.meta[WT].isUnread).toBe(false)
+
+    // A repeated foreground report is no return: a dot set by hand since then stays.
+    host.meta[WT].isUnread = true
+    await host.reportView({ ...away, presentForMs: null }, 'phone-1', 'mobile')
+    expect(host.meta[WT].isUnread).toBe(true)
   })
 
   it('clears a folder workspace and an SSH worktree on their own records when the phone opens them', async () => {
