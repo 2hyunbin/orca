@@ -48,7 +48,12 @@ export async function persistPtyIpcSpawnCommit(ctx: PtyIpcSpawnState): Promise<P
         ? await ctx.deps.store.persistPtyBinding(
             swapReplacedPaneBinding(ctx.deps.store, binding, ctx.replacedPaneOwner)
           )
-        : await persistFreshPaneBinding(ctx.deps.store, binding, args.connectionId)
+        : await persistFreshPaneBinding(
+            ctx.deps.store,
+            binding,
+            args.connectionId,
+            ctx.paneSpawnOperation?.absentOwner
+          )
       if (persisted === false) {
         throw new Error('terminal_pane_owner_changed')
       }

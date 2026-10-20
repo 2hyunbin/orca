@@ -1,7 +1,11 @@
 import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
-import { assertPaneStillExists, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import {
+  assertPaneStillExists,
+  excludeAbsentOwnerReplay,
+  PaneOwnerContentionError
+} from '../pane/pane-spawn-operation'
 import { excludeReplacedPaneOwner } from '../pane/pane-owner-replacement'
 import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
@@ -26,7 +30,10 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
         ),
         ctx.replacedPaneOwner
       )
-    const stablePaneOwnerCandidate = resolveOwner()
+    const stablePaneOwnerCandidate = excludeAbsentOwnerReplay(
+      resolveOwner(),
+      ctx.paneSpawnOperation?.absentOwner
+    )
     if (stablePaneOwnerCandidate) {
       throw new PaneOwnerContentionError()
     }

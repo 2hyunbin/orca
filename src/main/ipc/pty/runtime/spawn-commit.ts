@@ -3,7 +3,11 @@ import type { Store } from '../../../persistence'
 import type { PersistPtyBindingArgs } from '../../../persistence/loading-store/pty-binding-persistence'
 import { ptyBindingIsRefused } from '../../../persistence/loading-store/pty-binding-refusals'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import { PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import {
+  isAbsentBindingReplay,
+  PaneOwnerContentionError,
+  type AbsentPaneBinding
+} from '../pane/pane-spawn-operation'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { ptySizes } from '../delivery/visibility-state'
 import { commitRuntimePtySize } from './spawn-commit-pty-size'
@@ -133,7 +137,12 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         ...(placement ? { placement } : {}),
         origin: spawnCommitBindingOrigin(ctx.result, expectedSourceBinding)
       }
-      const persisted = await persistFreshPaneBinding(store, binding, args.connectionId)
+      const persisted = await persistFreshPaneBinding(
+        store,
+        binding,
+        args.connectionId,
+        args.paneSpawnOperation?.absentOwner
+      )
       if (persisted === false) {
         throw new Error('terminal_split_source_not_found')
       }
@@ -274,7 +283,8 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
 export async function persistFreshPaneBinding(
   store: Store,
   binding: PersistPtyBindingArgs,
-  connectionId?: string | null
+  connectionId?: string | null,
+  absentOwner?: AbsentPaneBinding
 ): Promise<boolean> {
   let targetChanged = false
   const hostId = connectionId ? toSshExecutionHostId(connectionId) : undefined
@@ -286,7 +296,11 @@ export async function persistFreshPaneBinding(
     }
     const bound = session.terminalLayoutsByTabId[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
     const stamp = session.terminalPtyIncarnationsByPaneKey?.[paneKey]
-    if (bound && (bound !== binding.ptyId || stamp !== binding.incarnationId)) {
+    if (
+      bound &&
+      (bound !== binding.ptyId || stamp !== binding.incarnationId) &&
+      !isAbsentBindingReplay(absentOwner, bound, stamp)
+    ) {
       targetChanged = true
       return null
     }

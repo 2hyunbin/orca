@@ -292,8 +292,8 @@ describe('launch facts outside the tables', () => {
   const suite = setupPtyIpcSuite()
   afterEach(() => restoreMainPlatform())
 
-  it.each(['ipc', 'runtime', 'ipc-reentry', 'ipc-reentry-refused'] as const)(
-    '%s reconciles the saved winner with balanced preparation resources',
+  it.each(['ipc', 'runtime', 'ipc-replay', 'ipc-reentry', 'ipc-reentry-refused'] as const)(
+    '%s settles a contested recovery on one owner with balanced preparation resources',
     async (lane) => {
       const workspace =
         lane === 'ipc' || lane === 'runtime'
@@ -467,20 +467,30 @@ describe('launch facts outside the tables', () => {
         ).resolves.toMatchObject({ stopped: 0, postStopVerified: true })
         return
       }
+      // Replay: a stale window save re-adds the binding the host just proved dead before the commit.
+      const replay = lane === 'ipc-replay'
+      const owner = replay ? 'fresh' : 'winner'
       await lanes.store.persistPtyBinding({ ...pane, ptyId: 'old' })
-      lanes.provider
-        .mockImplementationOnce(async () => {
+      lanes.provider.mockImplementation(async (args) => {
+        if (!args.attachOnly) {
+          await lanes.store.persistPtyBinding({ ...pane, ptyId: 'old' })
+          return { id: 'fresh', incarnationId: 'fresh-inc' }
+        }
+        if (args.sessionId !== 'old') {
+          return { id: 'winner', incarnationId: 'winner-inc', isReattach: true }
+        }
+        if (!replay) {
           await lanes.store.persistPtyBinding({
             ...pane,
             ptyId: 'winner',
             incarnationId: 'winner-inc'
           })
-          throw new SessionNotFoundError('old')
-        })
-        .mockResolvedValueOnce({ id: 'winner', incarnationId: 'winner-inc', isReattach: true })
-      await (lane === 'ipc'
+        }
+        throw new SessionNotFoundError('old')
+      })
+      await (lane.startsWith('ipc')
         ? expect(lanes.spawnWindow({ ...pane, cols: 80, rows: 24 })).resolves.toMatchObject({
-            id: 'winner'
+            id: owner
           })
         : lanes.runtime.createTerminal(`id:${pane.worktreeId}`, {
             tabId: pane.tabId,
@@ -488,16 +498,16 @@ describe('launch facts outside the tables', () => {
           }))
       expect(
         lanes.runtime.resolveTerminalPane(`${pane.tabId}:${pane.leafId}`, pane.worktreeId)
-      ).toMatchObject({ ptyId: 'winner', connected: true })
-      expect(lanes.provider.mock.calls.map(([args]) => args.sessionId)).toEqual(['old', 'winner'])
-      expect(
-        lanes.provider.mock.calls.every(([args]) => args.attachOnly && args.command === undefined)
-      ).toBe(true)
+      ).toMatchObject({ ptyId: owner, connected: true })
+      expect(lanes.provider.mock.calls.map(([args]) => args.attachOnly === true)).toEqual([
+        true,
+        !replay
+      ])
       expect(
         lanes.store.getWorkspaceSession().terminalLayoutsByTabId[pane.tabId]?.ptyIdsByLeafId?.[
           pane.leafId
         ]
-      ).toBe('winner')
+      ).toBe(owner)
     }
   )
 

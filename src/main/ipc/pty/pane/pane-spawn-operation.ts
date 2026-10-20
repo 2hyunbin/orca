@@ -9,8 +9,34 @@ export class PaneOwnerContentionError extends Error {
   }
 }
 
+/** A binding the operation's host answer proved dead, with every incarnation it was known by. */
+export type AbsentPaneBinding = { ptyId: string; incarnationIds: readonly string[] }
+
 /** In-process authority of the enclosing operation; never sent over IPC/RPC or saved. */
-export type PaneSpawnOperation = { mustExist: boolean }
+export type PaneSpawnOperation = { mustExist: boolean; absentOwner?: AbsentPaneBinding }
+
+// Why: a window save can replay the binding the operation just proved dead; that is not an owner.
+export function isAbsentBindingReplay(
+  absent: AbsentPaneBinding | undefined,
+  ptyId: string,
+  incarnationId: string | undefined
+): boolean {
+  return (
+    absent?.ptyId === ptyId &&
+    (incarnationId === undefined || absent.incarnationIds.includes(incarnationId))
+  )
+}
+
+/** Null when the resolved owner is only that replay. */
+export function excludeAbsentOwnerReplay<
+  T extends { ptyId: string; persistedIncarnationId?: string; runtimeIncarnationId?: string }
+>(owner: T | null, absent: AbsentPaneBinding | undefined): T | null {
+  return owner &&
+    isAbsentBindingReplay(absent, owner.ptyId, owner.persistedIncarnationId) &&
+    isAbsentBindingReplay(absent, owner.ptyId, owner.runtimeIncarnationId)
+    ? null
+    : owner
+}
 
 export function assertPaneStillExists(
   store: Store | undefined,

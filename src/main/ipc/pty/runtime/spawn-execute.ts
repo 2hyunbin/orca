@@ -9,7 +9,11 @@ import {
   reconcileAgentSessionOwnerListings
 } from '../pane/agent-session-owners'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
-import { assertPaneStillExists, PaneOwnerContentionError } from '../pane/pane-spawn-operation'
+import {
+  assertPaneStillExists,
+  excludeAbsentOwnerReplay,
+  PaneOwnerContentionError
+} from '../pane/pane-spawn-operation'
 import { isProviderAgentSessionOwnerLive } from '../provider/liveness'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { RuntimePtySpawnState } from './spawn-state'
@@ -34,12 +38,15 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       ? ctx.preAdoptedStablePane.owner
       : args.agentSessionEnsure
         ? null
-        : resolveStablePaneOwner(
-            ctx.deps.runtime,
-            ctx.deps.store,
-            ctx.spawnIdentityPaneKey,
-            args.worktreeId,
-            args.connectionId
+        : excludeAbsentOwnerReplay(
+            resolveStablePaneOwner(
+              ctx.deps.runtime,
+              ctx.deps.store,
+              ctx.spawnIdentityPaneKey,
+              args.worktreeId,
+              args.connectionId
+            ),
+            args.paneSpawnOperation?.absentOwner
           )
     if (stablePaneOwnerCandidate) {
       throw new PaneOwnerContentionError()

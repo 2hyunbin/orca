@@ -15,7 +15,7 @@ import {
 } from './spawn-reservation'
 import { resolveStablePaneOwner } from './stable-owner'
 import { completePaneAdoption } from './complete-pane-adoption'
-import { assertPaneStillExists } from './pane-spawn-operation'
+import { assertPaneStillExists, type AbsentPaneBinding } from './pane-spawn-operation'
 import type { AdoptStablePaneArgs, AdoptStablePaneResult } from '../ipc/spawn-types'
 
 /** Owns attachment through publication, including the lazy fresh path, under one reservation. */
@@ -110,6 +110,7 @@ export async function adoptStablePane(
     }
   }
   let mustExist = false
+  let absentOwner: AbsentPaneBinding | undefined
   try {
     if (args.signal?.aborted) {
       throw new Error('client_disconnected')
@@ -123,6 +124,7 @@ export async function adoptStablePane(
           throw new Error('terminal_pane_owner_changed')
         }
         mustExist = true
+        absentOwner = undefined
         if (args.worktreeId && typeof store?.getWorkspaceSession === 'function') {
           assertPaneStillExists(store, args.worktreeId, args.tabId, args.leafId, args.connectionId)
         }
@@ -141,6 +143,13 @@ export async function adoptStablePane(
         if (adopted) {
           args.onAdopted?.(adopted.result)
           resolvePaneSpawnReservation(key, reservation, adopted.result)
+        } else {
+          absentOwner = {
+            ptyId: owner.ptyId,
+            incarnationIds: [owner.runtimeIncarnationId, owner.persistedIncarnationId].filter(
+              (id): id is string => id !== undefined
+            )
+          }
         }
         return adopted
       },
@@ -155,7 +164,7 @@ export async function adoptStablePane(
           rejectPaneSpawnReservation(key, reservation, new Error('terminal_pane_unbound'))
           return null
         }
-        const result = await args.spawnFresh({ mustExist })
+        const result = await args.spawnFresh({ mustExist, ...(absentOwner ? { absentOwner } : {}) })
         resolvePaneSpawnReservation(key, reservation, result)
         return null
       }
