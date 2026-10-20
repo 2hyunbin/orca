@@ -10,31 +10,24 @@ const overlay = vi.hoisted(
     width: number
     height: number
     back: (() => boolean) | null
-    finish: (() => void) | null
+    motions: Array<() => () => void>
     measure: (() => void) | null
-    defer: boolean
-  } => ({ width: 667, height: 375, back: null, finish: null, measure: null, defer: false })
+    claims: number
+  } => ({ width: 667, height: 375, back: null, motions: [], measure: null, claims: 0 })
 )
 vi.mock('../layout/side-safe-area', () => ({
   useWindowSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 })
 }))
-vi.mock('../navigation/use-back-claim', async () => {
-  const { useEffect } = await import('react')
-  return {
-    useBackClaim: (claim: () => boolean) =>
-      useEffect(() => {
-        overlay.back = claim
-        return () => {
-          overlay.back = null
-        }
-      }, [claim])
-  }
-})
-
 vi.mock('react-native', () => {
   class Value {
+    value = 0
+    cancel = () => {}
     interpolate() {
       return this
+    }
+    stopAnimation(read?: (value: number) => void) {
+      this.cancel()
+      read?.(this.value)
     }
   }
   return {
@@ -42,6 +35,17 @@ vi.mock('react-native', () => {
     Text: 'Text',
     Pressable: 'Pressable',
     ScrollView: 'ScrollView',
+    BackHandler: {
+      addEventListener: (_event: string, claim: () => boolean) => {
+        overlay.back = claim
+        overlay.claims += 1
+        return {
+          remove: () => {
+            overlay.back = null
+          }
+        }
+      }
+    },
     Platform: { OS: 'ios', select: (choices: { ios?: string }) => choices.ios },
     StyleSheet: { create: (styles: unknown) => styles, absoluteFill: {} },
     useWindowDimensions: () => ({ width: overlay.width, height: overlay.height }),
@@ -49,21 +53,24 @@ vi.mock('react-native', () => {
     Animated: {
       View: 'AnimatedView',
       Value,
-      timing: (_value: unknown, config: { toValue: number }) => {
-        let stopped = false
-        return {
-          start: (done: (result: { finished: boolean }) => void) => {
-            if (config.toValue === 0) {
-              overlay.finish = () => done({ finished: !stopped })
-            } else {
-              done({ finished: true })
-            }
-          },
-          stop: () => {
-            stopped = true
+      timing: (value: Value, config: { toValue: number }) => ({
+        start: (done: (result: { finished: boolean }) => void) => {
+          let result: typeof done | undefined = done
+          const take = (finished: boolean) => {
+            const pending = result
+            result = undefined
+            return () => pending?.({ finished })
           }
+          value.cancel = () => take(false)()
+          overlay.motions.push(() => {
+            if (!result) {
+              return () => {}
+            }
+            value.value = config.toValue
+            return take(true)
+          })
         }
-      }
+      })
     }
   }
 })
@@ -72,22 +79,20 @@ vi.mock('../platform/use-reduced-motion', () => ({ useReducedMotionEnabled: () =
 function Fixture() {
   const details = useSessionTitleCard(true, false)
   return (
-    <View>
-      <View ref={details.barRef}>
-        <MobileSessionTitleBlock
-          title="workspace"
-          connState="connected"
-          details={details}
-          meta=""
-          showConnectionRetry={false}
-          onRetry={() => {}}
-        />
-      </View>
+    <View ref={details.barRef}>
+      <MobileSessionTitleBlock
+        title="workspace"
+        connState="connected"
+        details={details}
+        meta=""
+        showConnectionRetry={false}
+        onRetry={() => {}}
+      />
       <View ref={details.layerRef} testID="layer" onLayout={details.onLayout}>
-        {details.anchor ? (
+        {details.visual ? (
           <AnchoredDetailCard
             {...details}
-            anchor={details.anchor}
+            {...details.visual}
             onDismiss={details.dismiss}
             title="workspace"
           />
@@ -97,20 +102,17 @@ function Fixture() {
   )
 }
 
-it('retains one title target through reversal and completion, with root-relative geometry and Back', () => {
+it('preserves title identity and current request across queued results and Back', () => {
   let titleWidth = 40
   const mounted: { renderer?: ReactTestRenderer } = {}
   act(() => {
     mounted.renderer = create(<Fixture />, {
       createNodeMock: (node) => ({
         measureInWindow: (done: (x: number, y: number, w: number, h: number) => void) => {
-          const isLayer =
-            node.props !== null && typeof node.props === 'object' && 'testID' in node.props
-          const measure = () => (isLayer ? done(20, 10, 627, 365) : done(80, 20, titleWidth, 45))
-          if (overlay.defer && isLayer) {
-            overlay.measure = measure
+          if (node.props !== null && typeof node.props === 'object' && 'testID' in node.props) {
+            overlay.measure = () => done(20, 10, 627, 365)
           } else {
-            measure()
+            done(80, 20, titleWidth, 45)
           }
         }
       })
@@ -119,45 +121,84 @@ it('retains one title target through reversal and completion, with root-relative
   const renderer = mounted.renderer
   assert(renderer)
   const root = renderer.root
+  const opener = root.findByProps({ accessibilityRole: 'button' })
+  const card = () => root.findByType(AnchoredDetailCard)
+  const tap = () => act(() => opener.props.onPress())
+  const measure = () => act(() => overlay.measure?.())
+  const close = () => act(() => root.findAllByProps({ accessible: false })[0]?.props.onPress())
+  const finish = () => act(() => overlay.motions.at(-1)?.()())
+  const check = (expanded: boolean, present: boolean) => {
+    expect(opener.props['aria-expanded']).toBe(expanded)
+    expect(root.findAllByType(AnchoredDetailCard)).toHaveLength(Number(present))
+    expect(overlay.back !== null).toBe(present)
+  }
   const layout = (width: number, height: number) =>
     root
       .findByProps({ testID: 'layer' })
       .props.onLayout({ nativeEvent: { layout: { width, height } } })
-  const opener = root.findByProps({
-    accessibilityHint: 'Shows the full workspace name and where it is'
-  })
-  const card = () => root.findByType(Animated.View)
   act(() => layout(627, 365))
-  act(() => opener.props.onPress())
-  expect(card().props.style[1]).toMatchObject({ left: 60, top: 55, width: 256, maxHeight: 302 })
-  act(() => root.findAllByProps({ accessible: false })[0]?.props.onPress())
-  const cancelled = overlay.finish
-  act(() => opener.props.onPress())
-  act(() => cancelled?.())
-  expect(root.findAllByType(AnchoredDetailCard)).toHaveLength(1)
-  act(() => opener.props.onPress())
-  overlay.defer = true
-  act(() => opener.props.onPress())
-  act(() => overlay.finish?.())
-  expect(root.findAllByType(AnchoredDetailCard)).toHaveLength(0)
-  act(() => overlay.measure?.())
-  overlay.defer = false
-  expect(root.findByProps({ accessibilityHint: opener.props.accessibilityHint })).toBe(opener)
-  overlay.height = 300
+  check(false, false)
   act(() => {
-    renderer.update(<Fixture />)
-    layout(627, 290)
+    opener.props.onPress()
+    opener.props.onPress()
   })
-  expect(card().props.style[1].maxHeight).toBe(227)
+  expect(overlay.measure).toBeNull()
+  tap()
+  check(true, false)
+  const dismissed = overlay.measure
+  act(() => opener.props.onLayout())
+  act(() => dismissed?.())
+  check(false, false)
+  tap()
+  measure()
+  const originalCard = root.findByType(Animated.View)
+  expect(originalCard.props.style[1]).toMatchObject({ left: 60, top: 55, width: 256 })
+  finish()
+  close()
+  check(false, true)
+  const oldMotion = card().props.motion
+  const settle = card().props.onSettled
+  const queued = overlay.motions.at(-1)?.()
+  tap()
+  check(true, true)
+  act(() => {
+    overlay.measure?.()
+    queued?.()
+  })
+  check(true, true)
+  expect(root.findByType(Animated.View)).toBe(originalCard)
+  finish()
+  close()
+  act(() => settle(oldMotion))
+  check(false, true)
+  const motions = overlay.motions.length
+  close()
+  expect(overlay.motions).toHaveLength(motions)
+  expect(overlay.claims).toBe(1)
+  tap()
+  finish()
+  check(true, false)
+  measure()
+  close()
+  check(false, false)
+  expect(overlay.motions).toHaveLength(motions + 1)
+  tap()
+  measure()
+  finish()
+  overlay.height = 300
+  act(() => layout(627, 290))
+  expect(root.findByType(Animated.View).props.style[1].maxHeight).toBe(227)
   titleWidth = 160
   act(() => opener.props.onLayout())
   expect(root.findAllByProps({ accessible: false })[3]?.props.style.left).toBe(220)
-  act(() => opener.props.onPress())
-  expect(root.findByType(AnchoredDetailCard).props.open).toBe(true)
+  tap()
+  measure()
+  finish()
   overlay.width = 375
   act(() => renderer.update(<Fixture />))
   act(() => expect(overlay.back?.()).toBe(true))
-  act(() => overlay.finish?.())
-  expect(overlay.back).toBeNull()
+  finish()
+  check(false, false)
+  expect(root.findByProps({ accessibilityRole: 'button' })).toBe(opener)
   act(() => renderer.unmount())
 })

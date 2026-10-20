@@ -55,16 +55,15 @@ export function MobileSessionSurface({ controller }: { controller: MobileSession
           onLayout={details.onLayout}
           style={detailLayer}
         >
-          {details.anchor ? (
+          {details.visual ? (
             <AnchoredDetailCard
-              anchor={details.anchor}
+              {...details.visual}
               trigger={details.trigger}
               bounds={details.bounds}
               viewport={details.viewport}
               contentRef={details.contentRef}
-              open={details.open}
               onDismiss={details.dismiss}
-              onClosed={details.onClosed}
+              onSettled={details.onSettled}
               title={controller.worktreeName || 'Terminal'}
               detail={controller.worktreePath}
               footer={

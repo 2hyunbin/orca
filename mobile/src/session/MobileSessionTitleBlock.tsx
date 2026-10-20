@@ -27,7 +27,7 @@ export function MobileSessionTitleBlock({
       ref={details.openerRef}
       onLayout={details.onAnchorLayout}
       onPress={details.toggle}
-      accessibilityState={{ expanded: details.present }}
+      aria-expanded={details.requestedOpen}
       accessibilityRole="button"
       accessibilityHint="Shows the full workspace name and where it is"
     >

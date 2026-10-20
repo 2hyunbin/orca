@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { StyleSheet, View } from 'react-native'
 
 const DetailCardHostContext = createContext<HTMLElement | null>(null)
@@ -28,3 +28,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   outlet: { ...StyleSheet.absoluteFillObject, zIndex: 1000 }
 })
+
+export function commitDetailCardExit(settle: () => void) {
+  flushSync(settle)
+}

@@ -7,3 +7,7 @@ export function DetailCardHostProvider({ children }: { children: ReactNode }) {
 export function DetailCardLayer({ children }: { children: ReactNode }) {
   return children
 }
+
+export function commitDetailCardExit(settle: () => void) {
+  settle()
+}

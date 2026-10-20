@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useLayoutEffect, useState, type RefObject } from 'react'
 import {
   Animated,
   Easing,
@@ -10,6 +10,7 @@ import {
   View,
   type LayoutRectangle
 } from 'react-native'
+import { commitDetailCardExit } from './detail-card-host'
 import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
 import { useBackClaim } from '../navigation/use-back-claim'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
@@ -20,35 +21,35 @@ export type DetailCardAnchor = {
   origin: { x: number; y: number }
 }
 
-// Desktop's tab hover card: 256pt wide, under its anchor's left edge, 150ms ease-out entrance.
 const CARD_WIDTH = 256
 const EDGE_INSET = spacing.sm
 const TRANSITION_MS = 150
 const SLIDE_FROM = -6
 
-/** Desktop's tab hover card for touch: a tap opens it under the anchor and any tap outside
- *  closes it. The caller keeps it mounted until `onClosed` so the exit can animate. */
+/** Only the current motion may release the retained exit presentation. */
 export function AnchoredDetailCard({
   anchor,
   trigger,
-  open,
+  target,
+  motion,
   bounds,
   viewport,
   contentRef,
   onDismiss,
-  onClosed,
+  onSettled,
   title,
   detail,
   footer
 }: {
   anchor: DetailCardAnchor
   trigger: LayoutRectangle
-  open: boolean
+  target: 0 | 1
+  motion: number
   bounds: { left: number; top: number; right: number; bottom: number }
   viewport: LayoutRectangle
   contentRef: RefObject<View | null>
   onDismiss: () => void
-  onClosed: () => void
+  onSettled: (motion: number) => void
   title: string
   detail?: string | null
   footer?: React.ReactNode
@@ -60,20 +61,32 @@ export function AnchoredDetailCard({
     return true
   })
   const [progress] = useState(() => new Animated.Value(0))
-  useEffect(() => {
-    const animation = Animated.timing(progress, {
-      toValue: open ? 1 : 0,
-      duration: TRANSITION_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: Platform.OS !== 'web'
-    })
-    animation.start(({ finished }) => {
-      if (finished && !open) {
-        onClosed()
+  useLayoutEffect(() => {
+    let disposed = false
+    progress.stopAnimation((value) => {
+      if (disposed) {
+        return
       }
+      if (target === 0 && value === 0) {
+        onSettled(motion)
+        return
+      }
+      Animated.timing(progress, {
+        toValue: target,
+        duration: TRANSITION_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: Platform.OS !== 'web'
+      }).start(({ finished }) => {
+        if (!disposed && finished && target === 0) {
+          commitDetailCardExit(() => onSettled(motion))
+        }
+      })
     })
-    return () => animation.stop()
-  }, [open, progress, onClosed])
+    return () => {
+      disposed = true
+      progress.stopAnimation()
+    }
+  }, [motion, target, progress, onSettled])
 
   const width = Math.max(0, Math.min(CARD_WIDTH, bounds.right - bounds.left - EDGE_INSET * 2))
   const left = Math.min(
