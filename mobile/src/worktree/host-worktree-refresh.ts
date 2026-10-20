@@ -1,4 +1,3 @@
-import type { AppStateStatic } from 'react-native'
 import type { RuntimeClientEventStreamMessage } from '../../../src/shared/runtime-client-events'
 import type { RpcClient } from '../transport/rpc-client'
 import type { HostSidebarFeedTriggers } from '../host-screen/host-sidebar-feed-reader'
@@ -7,6 +6,12 @@ const WORKTREE_REFRESH_MS = 3000
 
 type WorktreeRefreshOptions = { allowDuringModal?: boolean; queueIfInFlight?: boolean }
 type RepoRefreshOptions = { force?: boolean; queueIfInFlight?: boolean }
+
+// The part of React Native's AppState this reads, spelled here so importers need no RN types.
+type HostAppState = {
+  currentState: string
+  addEventListener: (type: 'change', listener: (state: string) => void) => { remove: () => void }
+}
 
 type HostWorktreeRefreshArgs = {
   client: Pick<RpcClient, 'subscribe'>
@@ -17,7 +22,7 @@ type HostWorktreeRefreshArgs = {
   /** The host's sidebar feed, which replaces the poll: its notices say when anything changed. */
   sidebarFeed?: HostSidebarFeedTriggers | null
   /** React Native's AppState; passed in so the lifecycle also runs off the device. */
-  appState: Pick<AppStateStatic, 'currentState' | 'addEventListener'>
+  appState: HostAppState
 }
 
 export function startHostWorktreeRefresh({
