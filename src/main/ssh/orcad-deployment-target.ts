@@ -36,10 +36,13 @@ export type OrcadDeploymentTargetFacts = {
   glibc: GlibcVersion | null
 }
 
-/** `ldd --version`'s first line ends in the version; `getconf GNU_LIBC_VERSION` prints `glibc 2.31`. */
+/** Reads ldd, getconf and the GNU loader's release banner. */
 export function parseGlibcVersion(output: string): GlibcVersion | null {
   const firstLine = output.split('\n', 1)[0] ?? ''
-  const match = /(\d+)\.(\d+)\s*$/.exec(firstLine.trim()) ?? /\bglibc\s+(\d+)\.(\d+)/i.exec(output)
+  const match =
+    /(\d+)\.(\d+)\s*$/.exec(firstLine.trim()) ??
+    /\bglibc\s+(\d+)\.(\d+)/i.exec(output) ??
+    /\bGNU libc\b[^\n]*\brelease version (\d+)\.(\d+)/i.exec(firstLine)
   return match ? { major: Number(match[1]), minor: Number(match[2]) } : null
 }
 
@@ -56,16 +59,25 @@ export async function resolveOrcadDeploymentTargetFacts(options: {
   const exec =
     options.exec ??
     ((command: string) => execCommand(options.conn, command, { signal: options.signal }))
-  let output = await exec('ldd --version 2>&1 || true')
-  try {
-    return linuxTargetFacts(host, output)
-  } catch {
-    output = await exec(
-      'getconf GNU_LIBC_VERSION 2>/dev/null || ' +
-        'for loader in /lib/ld-musl-*.so.1; do [ ! -e "$loader" ] || { echo musl; break; }; done'
-    )
+  const probes = [
+    'ldd --version 2>&1 || true',
+    'getconf GNU_LIBC_VERSION 2>/dev/null || ' +
+      'for loader in /lib/ld-musl-*.so.1; do [ ! -e "$loader" ] || { echo musl; break; }; done',
+    // DSM ships the GNU loader without ldd or getconf.
+    'for loader in /lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-aarch64.so.1; do ' +
+      '[ ! -x "$loader" ] || { "$loader" --version 2>/dev/null && break; }; done || true'
+  ]
+  for (const probe of probes) {
+    const output = await exec(probe)
+    try {
+      return linuxTargetFacts(host, output)
+    } catch (error) {
+      if (!(error instanceof UnidentifiedHostLibcError)) {
+        throw error
+      }
+    }
   }
-  return linuxTargetFacts(host, output)
+  throw new UnidentifiedHostLibcError()
 }
 
 function linuxTargetFacts(host: RemoteHostPlatform, output: string): OrcadDeploymentTargetFacts {
