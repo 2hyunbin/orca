@@ -30,7 +30,7 @@ describe('packaged cloud source exclusion', () => {
       'out/main/runtime/push/push-host-proof.js',
       'out/shared/mobile-push-contract.js',
       'out/renderer/index.html',
-      'out/web/assets/cloud/client.js',
+      'out/renderer/assets/cloud/client.js',
       'resources/cloud/icon.png'
     ]
     try {
