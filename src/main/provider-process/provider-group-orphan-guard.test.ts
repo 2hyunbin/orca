@@ -130,6 +130,49 @@ describe('guardSupervisedProviderGroup', () => {
     expect(signalGroup).not.toHaveBeenCalled()
   })
 
+  it('re-reads a leader started in the read second, so a same-second reuse cannot match', async () => {
+    const child = new FakeSupervisor()
+    const startedAtMs = Date.parse(STARTED)
+    const clock = { now: startedAtMs + 300 }
+    const readProcessRow = vi.fn(async () => row({ ppid: 777 }))
+    const sleep = vi.fn(async (ms: number) => {
+      clock.now += ms
+    })
+    const proven = new Promise((resolve) =>
+      guardSupervisedProviderGroup(child, {
+        site: 'test',
+        readProcessRow,
+        now: () => clock.now,
+        sleep,
+        onProven: resolve
+      })
+    )
+    child.report({ pgid: 4242 })
+    await expect(proven).resolves.toEqual(identity)
+    expect(readProcessRow).toHaveBeenCalledTimes(2)
+    expect(clock.now).toBeGreaterThanOrEqual(startedAtMs + 1_000)
+  })
+
+  it('records nothing when every read stays inside the start second', async () => {
+    const child = new FakeSupervisor()
+    const now = Date.parse(STARTED) + 100
+    const signalGroup = vi.fn()
+    const swept = new Promise((resolve) =>
+      guardSupervisedProviderGroup(child, {
+        site: 'test',
+        readProcessRow: async () => row({ ppid: 777 }),
+        signalGroup,
+        now: () => now,
+        sleep: async () => {},
+        onSwept: resolve
+      })
+    )
+    child.report({ pgid: 4242 })
+    child.emit('exit', null, 'SIGKILL')
+    await expect(swept).resolves.toBe('unproven')
+    expect(signalGroup).not.toHaveBeenCalled()
+  })
+
   it('does nothing for a spawn without the report channel', () => {
     const child = new FakeSupervisor()
     child.connected = false

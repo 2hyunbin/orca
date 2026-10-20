@@ -22,6 +22,7 @@ const PROVIDER = String.raw`
   setInterval(() => {}, 60000)
 `
 
+const IDENTITY_TIMEOUT_MS = 15_000
 const recordedPids = new Set<number>()
 
 function alive(pid: number): boolean {
@@ -46,6 +47,7 @@ async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<boo
 
 function launch(): {
   supervisor: ChildProcess
+  proven: () => boolean
   swept: Promise<ProviderGroupSweepVerdict | 'unproven'>
   pids: Promise<{ provider: number; grandchild: number }>
 } {
@@ -64,9 +66,13 @@ function launch(): {
     stdio: ['pipe', 'pipe', 'ignore', ...spec.groupReportStdio]
   })
   recordedPids.add(supervisor.pid!)
+  let identityProven = false
   const swept = new Promise<ProviderGroupSweepVerdict | 'unproven'>((resolve) =>
     guardSupervisedProviderGroup(supervisor, {
       site: 'test',
+      onProven: () => {
+        identityProven = true
+      },
       onSwept: resolve
     })
   )
@@ -83,7 +89,7 @@ function launch(): {
       }
     })
   })
-  return { supervisor, swept, pids }
+  return { supervisor, proven: () => identityProven, swept, pids }
 }
 
 afterEach(() => {
@@ -97,21 +103,21 @@ afterEach(() => {
 
 describe.runIf(process.platform !== 'win32')('provider group orphan guard', () => {
   it('kills the provider group a SIGKILLed supervisor leaves behind', async () => {
-    const { supervisor, swept, pids } = launch()
+    const { supervisor, proven, swept, pids } = launch()
     const { provider, grandchild } = await pids
-    // The identity read races the report; give it the moment a real session would have.
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    // A start in the read's own second is re-read after it, so this can take over a second.
+    expect(await waitFor(proven, IDENTITY_TIMEOUT_MS)).toBe(true)
 
     supervisor.kill('SIGKILL')
 
     await expect(swept).resolves.toBe('killed')
-    expect(await waitFor(() => !alive(provider) && !alive(grandchild), 2_000)).toBe(true)
+    expect(await waitFor(() => !alive(provider) && !alive(grandchild), 10_000)).toBe(true)
   })
 
   it('leaves nothing to sweep when the supervisor stops its own group', async () => {
-    const { supervisor, swept, pids } = launch()
+    const { supervisor, proven, swept, pids } = launch()
     await pids
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(await waitFor(proven, IDENTITY_TIMEOUT_MS)).toBe(true)
 
     supervisor.kill('SIGTERM')
 

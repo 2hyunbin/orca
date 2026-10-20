@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import { runProcess } from '@orca/process-host'
 import { parseProcessTable, type ProcessTableRow } from '../pty-process-table-parser'
+import { hasUnambiguousStartTime } from '../pty-descendant-termination'
 import { recordSelfInitiatedTreeKill } from '../crash-reporting/self-initiated-tree-kill-log'
 
 // Covers the one stop the supervisor cannot make itself: its own SIGKILL leaves the provider's
@@ -10,6 +11,8 @@ import { recordSelfInitiatedTreeKill } from '../crash-reporting/self-initiated-t
 const PROCESS_ROW_TIMEOUT_MS = 2_000
 // The supervisor disconnects right after reporting, so this bounds only a wedged channel.
 const REPORT_END_WAIT_MS = 1_000
+const IDENTITY_READ_ATTEMPTS = 3
+const SECOND_BOUNDARY_MARGIN_MS = 50
 
 /** A provider group proven ours while its supervisor still parented the leader. */
 export type ProviderGroupIdentity = { pgid: number; startedAt: string }
@@ -23,6 +26,9 @@ export type ProviderGroupGuardDeps = {
   site: string
   readProcessRow?: (pid: number) => Promise<ProcessRowRead>
   signalGroup?: (pgid: number, signal: NodeJS.Signals | 0) => void
+  now?: () => number
+  sleep?: (ms: number) => Promise<void>
+  onProven?: (identity: ProviderGroupIdentity) => void
   /** `unproven`: no group was reported and proven ours, so nothing was swept. */
   onSwept?: (verdict: ProviderGroupSweepVerdict | 'unproven') => void
 }
@@ -76,6 +82,7 @@ export async function sweepOrphanedProviderGroup(
     return 'refused'
   }
   // A leaderless group is still ours: POSIX never reuses a pid while a group of that id exists.
+  // The recorded start predates its read's second, so a later reuse cannot share it.
   if (leader && (leader.pgid !== identity.pgid || leader.startedAt !== identity.startedAt)) {
     return 'refused'
   }
@@ -104,18 +111,13 @@ export function guardSupervisedProviderGroup(
   if (!supervisorPid || !hasReportChannel(child)) {
     return
   }
-  const readRow = deps.readProcessRow ?? readPosixProcessRow
   let identity: Promise<ProviderGroupIdentity | null> = Promise.resolve(null)
   const reportEnded = new Promise<void>((resolve) => child.once('disconnect', resolve))
   child.once('message', (message: unknown) => {
     const pgid = reportedGroup(message)
     if (pgid !== null) {
-      identity = readRow(pgid).then((row) =>
-        // Parented by this supervisor at the read, so the pid had not been reused.
-        row && row !== 'unverifiable' && row.ppid === supervisorPid && row.pgid === pgid
-          ? { pgid, startedAt: row.startedAt }
-          : null
-      )
+      identity = proveReportedGroup(pgid, supervisorPid, deps)
+      void identity.then((proven) => proven && deps.onProven?.(proven))
     }
   })
   child.once('exit', () => {
@@ -125,6 +127,34 @@ export function guardSupervisedProviderGroup(
       .then((proven) => (proven ? sweepOrphanedProviderGroup(proven, deps) : ('unproven' as const)))
       .then(deps.onSwept, () => deps.onSwept?.('refused'))
   })
+}
+
+/**
+ * The leader's identity, read while this supervisor still parents it (so its pid was not reused).
+ * lstart has one-second resolution, so a start in the read's own second is read again after that
+ * second ends; otherwise a pid reused within that second would carry the same start time.
+ */
+async function proveReportedGroup(
+  pgid: number,
+  supervisorPid: number,
+  deps: ProviderGroupGuardDeps
+): Promise<ProviderGroupIdentity | null> {
+  const readRow = deps.readProcessRow ?? readPosixProcessRow
+  const now = deps.now ?? Date.now
+  const sleep = deps.sleep ?? ((ms: number) => delay(ms, undefined, { ref: false }))
+  for (let attempt = 0; attempt < IDENTITY_READ_ATTEMPTS; attempt += 1) {
+    // The boundary before ps starts, as the descendant sweep takes it.
+    const capturedAtMs = now()
+    const row = await readRow(pgid)
+    if (!row || row === 'unverifiable' || row.ppid !== supervisorPid || row.pgid !== pgid) {
+      return null
+    }
+    if (hasUnambiguousStartTime(row.startedAt, capturedAtMs)) {
+      return { pgid, startedAt: row.startedAt }
+    }
+    await sleep(1_000 - (now() % 1_000) + SECOND_BOUNDARY_MARGIN_MS)
+  }
+  return null
 }
 
 function hasReportChannel(child: GuardedChild): boolean {
