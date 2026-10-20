@@ -230,12 +230,8 @@ it('publishes real chat options to main and popout, retaining card candidates an
   )
   expect(view.result.current.launchableAgentsByWorktreeId?.['wt-1']).toEqual(['claude', 'grok'])
   expect(view.result.current.launchableAgentsByWorktreeId?.['wt-2']).toEqual(['grok'])
-  await vi.waitFor(() =>
-    expect(publishSnapshot.mock.calls.at(-1)?.[0].launchableAgentsByWorktreeId?.['wt-1']).toEqual([
-      'claude',
-      'grok'
-    ])
-  )
+  const lastPublished = () => publishSnapshot.mock.calls.at(-1)?.[0].launchableAgentsByWorktreeId
+  await vi.waitFor(() => expect(lastPublished()?.['wt-1']).toEqual(['claude', 'grok']))
   // Route-only inputs (project runtime, selected host) rebuild both publishers' options.
   for (const route of [{ projects: [] }, { activeWorkspaceExecutionHostId: 'local' as const }]) {
     const [live, published] = [view.result.current, publishSnapshot.mock.calls.length]

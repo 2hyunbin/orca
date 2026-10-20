@@ -88,6 +88,10 @@ function makeSnapshotWatchState(): DashboardSnapshotWatchState {
     restoredRuntimeHostIdByWorkspaceSessionKey: {},
     runtimeEnvironments: [],
     runtimeEnvironmentCatalogHydrated: false,
+    activeWorktreeId: null,
+    activeWorkspaceExecutionHostId: null,
+    activeRepoId: null,
+    projects: [],
     removedRuntimeEnvironmentIds: new Set()
   } as DashboardSnapshotWatchState
 }
