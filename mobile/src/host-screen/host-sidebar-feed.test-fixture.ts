@@ -75,6 +75,7 @@ export function feedDomains(overrides: Partial<SidebarFeedDomains> = {}): Sideba
       sshHosts: { 'ssh:gpu': { label: 'GPU box', status: 'connected' } },
       wslHosts: {}
     },
+    projectCatalog: null,
     retention: null,
     ...overrides
   }

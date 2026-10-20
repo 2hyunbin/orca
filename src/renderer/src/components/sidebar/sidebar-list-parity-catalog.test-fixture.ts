@@ -1,6 +1,4 @@
 import type { AppState } from '@/store/types'
-import { getProjectSectionCatalogFromState } from '@/runtime/sync-runtime-graph/project-section-catalog'
-import type { SidebarFeedCatalog } from '../../../../shared/sidebar-list/sidebar-feed-rows'
 import { group, mainWt, repo, wt } from './sidebar-list-golden-factories.test-fixture'
 
 // A group ahead of every other holding a git project and a folder project, a child group of it holding
@@ -23,19 +21,3 @@ export const GROUPS_OF_GROUPED_REPOS = [
   group('pg-folder-only', 'Folder only', { tabOrder: 5, parentGroupId: 'pg-school' }),
   group('pg-empty', 'Empty group', { tabOrder: 6 })
 ]
-
-/**
- * The catalog the window publishes (mobileRelay.projectSections), which is all the phone knows of
- * its repos and groups. The phone's own read of it is held by host-sidebar-feed-inputs tests.
- */
-export function publishedCatalog(state: AppState): SidebarFeedCatalog {
-  const published = getProjectSectionCatalogFromState(state)
-  if (!published) {
-    throw new Error('the window published no catalog')
-  }
-  return {
-    repos: published.repos.map((entry) => ({ addedAt: 0, ...entry })),
-    projectGroups: published.projectGroups ?? [],
-    projectGrouping: { projects: published.projects, projectHostSetups: published.setups }
-  }
-}
