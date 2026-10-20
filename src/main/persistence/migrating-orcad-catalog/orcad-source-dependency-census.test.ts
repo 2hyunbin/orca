@@ -134,6 +134,7 @@ describe('orcad migration source dependency census', () => {
       counts: { 'terminal-lease': 1 }
     })
   })
+
   // A relay-era tab named its shell only on the tab; loading wrote one legacy key alias per leaf.
   it('does not count legacy pane-key aliases of a tab-only relay shell as terminals to reconnect', () => {
     const state = getDefaultPersistedState('/home/test')
