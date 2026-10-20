@@ -32,18 +32,34 @@ type SortOrderStore = {
   setWorktreeMeta: (target: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => unknown
 }
 
-/** The client's host for this id only when one of this store's repo rows lives there. */
+/**
+ * The client's host for this id as this store spells it, or null when no repo row lives there.
+ * The client names hosts relative to this endpoint, so its `local` is also a row this store
+ * stamped with its own `runtime:` id.
+ */
 function knownHost(
   store: SortOrderStore,
   worktreeId: string,
   hostId: string | undefined
 ): ExecutionHostId | null {
-  const parsed = parseExecutionHostId(hostId)?.id
+  const parsed = parseExecutionHostId(hostId)
+  if (!parsed) {
+    return null
+  }
   const repoId = getRepoIdFromWorktreeId(worktreeId)
-  return parsed &&
-    store.getRepos().some((repo) => repo.id === repoId && getRepoExecutionHostId(repo) === parsed)
-    ? parsed
-    : null
+  const matches = new Set(
+    store
+      .getRepos()
+      .filter((repo) => repo.id === repoId)
+      .map(getRepoExecutionHostId)
+      .filter(
+        (stored) =>
+          stored === parsed.id ||
+          (parsed.kind === 'local' && parseExecutionHostId(stored)?.kind === 'runtime')
+      )
+  )
+  const [only] = matches
+  return matches.size === 1 && only ? only : null
 }
 
 /**

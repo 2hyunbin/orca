@@ -244,6 +244,30 @@ describe('worktree meta and lineage writes for same-id twins', () => {
     ])
   })
 
+  it("reads a client's local as this server's own runtime stamp", async () => {
+    const stamped = (id: string, path: string): Repo => ({
+      ...twinRepos[0],
+      id,
+      path,
+      executionHostId: 'runtime:env-1'
+    })
+    const store = await createTwinStore({ repos: [stamped('a', '/a'), stamped('b', '/b')] })
+    const first = hostWorktreeTarget({ id: 'a::/a', hostId: 'runtime:env-1' })
+    const second = hostWorktreeTarget({ id: 'b::/b', hostId: 'runtime:env-1' })
+    store.setWorktreeMeta(first, { sortOrder: 1 })
+    store.setWorktreeMeta(second, { sortOrder: 5 })
+
+    const result = persistRuntimeManagedWorktreeSortOrder({
+      orderedIds: [first.id, second.id],
+      hostIds: ['local', 'local'],
+      store,
+      invalidateResolved: vi.fn(),
+      notifyChanged: vi.fn()
+    })
+
+    expect(result).toEqual({ updated: 2 })
+  })
+
   it('skips a client host no repo row of this store lives on, never redirecting it', async () => {
     const solo = hostWorktreeTarget({ id: 'solo::/a', hostId: 'local' })
     const store = await createTwinStore({
