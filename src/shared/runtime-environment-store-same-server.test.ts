@@ -113,6 +113,14 @@ describe('pairing a server that is already saved', () => {
         })
       ).toMatchObject({ updatedExisting: true, environment: { name: target } })
     }
+    // The saved spelling stays, so the host-key fingerprint the renderer compares is unchanged.
+    expect(resolveEnvironmentPairingOffer(userDataPath, first.id)).toMatchObject({
+      publicKeyB64: serverKey,
+      deviceToken: 'other-token'
+    })
+    expect(resolveEnvironmentPairingOffer(userDataPath, 'Wide').publicKeyB64).toBe(
+      Buffer.alloc(32, 0xfb).toString('base64')
+    )
     expect(listEnvironments(userDataPath).map((entry) => entry.id)).toContain(first.id)
     expect(listEnvironments(userDataPath)).toHaveLength(2)
   })

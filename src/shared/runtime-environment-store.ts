@@ -4,7 +4,6 @@ import { classifyRemotePairingHostname } from './remote-pairing-address'
 import { isProfileRuntimePublicKey } from './runtime-e2ee-keypair-file'
 import {
   createEnvironmentFromPairingOffer,
-  findEnvironmentWithHostKey,
   getPreferredPairingOffer,
   type KnownRuntimeEnvironment,
   type PersistedRuntimeEnvironment,
@@ -18,6 +17,10 @@ import {
 } from './runtime-environment-store-file'
 import { writeRuntimeEnvironmentSidecarEntry } from './runtime-environment-sidecar'
 import { findCollidingEnvironmentName } from './runtime-environment-name-collision'
+import {
+  findEnvironmentWithHostKey,
+  savedHostKeySpelling
+} from './runtime-environment-host-key-match'
 import {
   assertNoIndependentSshAccess,
   assertPairingReplaceableByAdd
@@ -82,10 +85,8 @@ function saveEnvironmentFromPairingCode(
 ): AddEnvironmentOutcome {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const now = args.now ?? Date.now()
-  const samePersisted = findEnvironmentWithHostKey(
-    readPersistedEnvironmentStore(userDataPath).environments,
-    offer.publicKeyB64
-  )
+  const store = readPersistedEnvironmentStore(userDataPath)
+  const samePersisted = findEnvironmentWithHostKey(store.environments, offer.publicKeyB64)
   // Why the overlaid entry: SSH access or a deployment lives only there, and the guard reads it.
   const samePaired =
     samePersisted &&
@@ -98,14 +99,14 @@ function saveEnvironmentFromPairingCode(
   }
   if (samePaired) {
     assertPairingReplaceableByAdd(samePaired, args.source, refreshSameServer)
-    const environment = replaceEnvironmentPairing(userDataPath, samePaired.id, offer, {
+    const sameSpelling = { ...offer, publicKeyB64: savedHostKeySpelling(samePaired, offer) }
+    const environment = replaceEnvironmentPairing(userDataPath, samePaired.id, sameSpelling, {
       now,
       runtimeId: args.runtimeId,
       connectionDependency: args.connectionDependency
     })
     return { environment, updatedExisting: true }
   }
-  const store = readPersistedEnvironmentStore(userDataPath)
   const existing = findCollidingEnvironmentName(store.environments, args.name)
   if (existing) {
     throw new RuntimeEnvironmentStoreError(
