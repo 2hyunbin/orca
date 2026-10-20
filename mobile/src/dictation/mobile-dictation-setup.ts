@@ -39,10 +39,14 @@ function isLegacyDesktopSpeechSetupReply(reply: RpcResponse): boolean {
 }
 
 // Why: headless servers from 1.4.229 until #31174 had no speech at all; name the fix, not the code.
-const SPEECHLESS_SERVER_MESSAGE = 'Update Orca on this server to use voice dictation.'
+export const SPEECHLESS_SERVER_MESSAGE = 'Update Orca on this server to use voice dictation.'
+
+export function isSpeechlessServerError(message: string): boolean {
+  return message.startsWith('speech_unavailable')
+}
 
 function isSpeechlessServerReply(reply: RpcResponse): boolean {
-  return !reply.ok && (reply.error?.message ?? '').startsWith('speech_unavailable')
+  return !reply.ok && isSpeechlessServerError(reply.error?.message ?? '')
 }
 
 export function isDictationSetupRequiredError(message: string): boolean {

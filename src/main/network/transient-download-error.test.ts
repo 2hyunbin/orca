@@ -16,6 +16,7 @@ describe('isRetryableDownloadError', () => {
     ['a reset socket', nodeError('socket hang up', 'ECONNRESET')],
     ['a timed-out connect', nodeError('connect ETIMEDOUT 1.2.3.4:443', 'ETIMEDOUT')],
     ['a DNS hiccup', nodeError('getaddrinfo EAI_AGAIN example.com', 'EAI_AGAIN')],
+    ['a DNS outage', nodeError('getaddrinfo ENOTFOUND example.com', 'ENOTFOUND')],
     ['a stream closed early', nodeError('Premature close', 'ERR_STREAM_PREMATURE_CLOSE')]
   ])("retries Node's %s", (_label, error) => {
     expect(isRetryableDownloadError(error)).toBe(true)

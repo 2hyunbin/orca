@@ -88,7 +88,8 @@ export function serveWithOrcad(
       // The desktop's profile: its instance lock makes the two refuse each other.
       ORCA_USER_DATA: userDataPath,
       ORCA_VERSION: selection.version,
-      ...(speechRecognizerDir ? { [SPEECH_RECOGNIZER_DIR_ENV]: speechRecognizerDir } : {})
+      // Always set: a value inherited from an Orca terminal would name another install's copy.
+      [SPEECH_RECOGNIZER_DIR_ENV]: speechRecognizerDir ?? ''
     }
   }
   const spawnChild = shouldRedactSupervisedStdout(args.supervise === true)
