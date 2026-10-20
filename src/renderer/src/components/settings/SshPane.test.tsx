@@ -347,6 +347,42 @@ describe('bulk removal from SSH settings', () => {
     expect(pane.textContent).toContain('1 hidden host deselected')
   })
 
+  it('keeps an active filter clearable when a reload drops the list under the threshold', async () => {
+    const names = ['alpha', 'beta', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9']
+    let listed = names.map((name) => host(name))
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        ssh: {
+          importConfig: async () => ({ targets: [], repoReadoptions: [] }),
+          listTargets: async () => listed
+        }
+      }
+    })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(<SshPane />)
+    })
+    const filter = () =>
+      container?.querySelector<HTMLInputElement>('input[aria-label="Filter hosts"]') ?? null
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        filter(),
+        'zzz'
+      )
+      filter()?.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    listed = listed.slice(0, 3)
+    const sync = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Sync ~/.ssh/config'
+    )
+    await act(async () => sync?.click())
+    expect(container.querySelectorAll('[data-ssh-target-card]')).toHaveLength(0)
+    expect(filter()?.value).toBe('zzz')
+  })
+
   it('groups hosts by where they came from', async () => {
     const pane = await renderPane([host('alpha'), host('mine', { source: 'manual' })])
     const groups = Array.from(pane.querySelectorAll('[data-ssh-target-group]')).map((group) => [

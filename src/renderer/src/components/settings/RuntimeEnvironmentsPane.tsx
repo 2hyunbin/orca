@@ -67,6 +67,7 @@ export function RuntimeEnvironmentsPane({
   const consumedAddServerIntentSignalRef = useRef(0)
   const {
     environments,
+    isLoading,
     detailsByEnvironmentId,
     setDetailsByEnvironmentId,
     mountedRef,
@@ -84,7 +85,11 @@ export function RuntimeEnvironmentsPane({
         'No server connected'
       )
     }
-    return environments.find((environment) => environment.id === value)?.name ?? 'remote server'
+    // Why the store: the default may be a WSL host, which the listed servers leave out.
+    return (
+      useAppStore.getState().runtimeEnvironments.find((environment) => environment.id === value)
+        ?.name ?? 'remote server'
+    )
   }
   const {
     connectingId,
@@ -140,6 +145,13 @@ export function RuntimeEnvironmentsPane({
     // Why: composer deep-links should land on the pairing form, not just the server list.
     setDialog('add')
   }, [addServerIntentSignal, setDialog])
+  const managedReload = managedCatalog.reload
+  useEffect(() => {
+    // Why: SSH hosts and unfinished moves change on the SSH Hosts page while this one is mounted.
+    if (dialog === 'install') {
+      void managedReload().catch(() => {})
+    }
+  }, [dialog, managedReload])
   const listEmpty = environments.length === 0 && managedCatalog.pending.length === 0
   useEffect(() => {
     setListEmpty(listEmpty)
@@ -225,6 +237,8 @@ export function RuntimeEnvironmentsPane({
           setRemoteServerUpdateDialogOpen(true)
           void refreshRemoteServerUpdates(options)
         }}
+        onRecheck={() => void loadEnvironments()}
+        rechecking={isLoading}
         onChanged={reloadAll}
       />
 

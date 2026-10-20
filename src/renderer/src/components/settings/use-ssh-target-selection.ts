@@ -25,11 +25,13 @@ export function useSshTargetSelection(visibleIds: readonly string[]): SshTargetS
 
   const click = useCallback(
     (targetId: string, shiftKey: boolean): void => {
+      // Why read first: the updater may run later (or twice in StrictMode), after the anchor moved.
+      const anchorId = anchorRef.current
       setRawSelected((prev) =>
         applySshTargetSelectionClick({
           selected: prev,
           orderedIds: visibleIds,
-          anchorId: anchorRef.current,
+          anchorId,
           clickedId: targetId,
           shiftKey
         })

@@ -292,7 +292,8 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
               visibleCount={visibleTargets.length}
               selectedCount={selection.selected.size}
               allVisibleSelected={visibleIds.every((id) => selection.selected.has(id))}
-              showFilter={targets.length > SSH_TARGET_FILTER_THRESHOLD}
+              // Why: a reload can drop the list under the threshold; an active filter must stay clearable.
+              showFilter={targets.length > SSH_TARGET_FILTER_THRESHOLD || filter !== ''}
               filter={filter}
               busy={[...selection.selected].some((id) => busyActionForTarget(id) === 'remove')}
               testing={bulkTesting}

@@ -1,6 +1,7 @@
 import { Monitor, Server } from 'lucide-react'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { getActiveServerModeDescription } from './runtime-environment-host-details'
 import { LOCAL_RUNTIME_VALUE, NO_RUNTIME_VALUE } from './runtime-environment-selection'
@@ -21,7 +22,16 @@ export function RuntimeDefaultHostRow({
   isBusy,
   onValueChange
 }: RuntimeDefaultHostRowProps): React.JSX.Element {
-  if (environments.length === 0 && allowLocalRuntime) {
+  const savedEnvironments = useAppStore((state) => state.runtimeEnvironments)
+  // Why: the default can be a host this list leaves out (a WSL distro); show it so it can be changed.
+  const unlistedActive =
+    activeValue !== LOCAL_RUNTIME_VALUE &&
+    activeValue !== NO_RUNTIME_VALUE &&
+    !environments.some((environment) => environment.id === activeValue)
+      ? savedEnvironments.find((environment) => environment.id === activeValue)
+      : undefined
+  const options = unlistedActive ? [...environments, unlistedActive] : environments
+  if (options.length === 0 && allowLocalRuntime) {
     // Why a quiet line, not the control: nothing to choose yet, but deep links still land here.
     return (
       <p
@@ -70,7 +80,7 @@ export function RuntimeDefaultHostRow({
                 <Monitor />
                 {translate('auto.components.settings.serverList.thisComputer', 'This computer')}
               </SelectItem>
-            ) : environments.length === 0 ? (
+            ) : options.length === 0 ? (
               <SelectItem value={NO_RUNTIME_VALUE} disabled>
                 {translate(
                   'auto.components.settings.RuntimeEnvironmentsPane.b07070ed3c',
@@ -78,7 +88,7 @@ export function RuntimeDefaultHostRow({
                 )}
               </SelectItem>
             ) : null}
-            {environments.map((environment) => (
+            {options.map((environment) => (
               <SelectItem key={environment.id} value={environment.id}>
                 <Server />
                 {environment.name}

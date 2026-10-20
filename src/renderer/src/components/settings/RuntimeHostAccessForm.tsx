@@ -20,8 +20,12 @@ import {
 // Why untranslated: a literal shell command.
 const HEADLESS_SERVE_COMMAND = 'orca serve --pairing-address <address>'
 
+const NO_TAKEN_NAMES: readonly { name: string }[] = []
+
 type RuntimeHostAccessFormProps = {
   name: string
+  /** Names already in use, so the blank-name default shown matches what will be saved. */
+  takenNames?: readonly { name: string }[]
   accessLink: string
   busy: boolean
   failure: RuntimeHostAccessFailure | null
@@ -33,6 +37,7 @@ type RuntimeHostAccessFormProps = {
 
 export function RuntimeHostAccessForm({
   name,
+  takenNames = NO_TAKEN_NAMES,
   accessLink,
   busy,
   failure,
@@ -56,7 +61,7 @@ export function RuntimeHostAccessForm({
         ? 'runtime-server-loopback-error'
         : 'runtime-server-access-link-help'
   const canSubmit = parsed.ok && !loopbackBlocked && !busy
-  const defaultName = defaultServerNameForAccessLink(accessLink)
+  const defaultName = defaultServerNameForAccessLink(accessLink, takenNames)
 
   return (
     <form

@@ -17,19 +17,28 @@ const host = (id: string, extra: Partial<SshTarget> = {}): SshTarget => ({
   host: `${id}.example.test`,
   port: 22,
   username: 'dev',
+  source: 'ssh-config',
   ...extra
 })
 
 describe('groupSshTargetsBySource', () => {
-  it('counts a legacy target without a source as imported from ~/.ssh/config', () => {
+  it('groups a legacy target without a source by the config-sync rule', () => {
     const groups = groupSshTargetsBySource([
-      host('legacy'),
+      // The old import shape: alias kept as label/configHost, host is the resolved HostName.
+      host('legacy-import', {
+        source: undefined,
+        label: 'box',
+        configHost: 'box',
+        host: '10.0.0.5'
+      }),
+      // A legacy manual target lacks `source` too, but doesn't match that shape.
+      host('legacy-manual', { source: undefined, label: 'My box', host: 'box.example.test' }),
       host('mine', { source: 'manual' }),
       host('synced', { source: 'ssh-config' })
     ])
     expect(groups.map((group) => [group.id, group.targets.map((t) => t.id)])).toEqual([
-      ['ssh-config', ['legacy', 'synced']],
-      ['manual', ['mine']]
+      ['ssh-config', ['legacy-import', 'synced']],
+      ['manual', ['legacy-manual', 'mine']]
     ])
   })
 

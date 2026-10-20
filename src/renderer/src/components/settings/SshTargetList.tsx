@@ -34,6 +34,25 @@ function groupTitle(group: SshTargetGroup): React.JSX.Element {
   return <>{translate('auto.components.settings.SshTargetList.fromConfig', 'From ~/.ssh/config')}</>
 }
 
+const NOT_LIST_CONTEXT = '[role="dialog"], [role="alertdialog"], [role="menu"], pre, textarea'
+
+/**
+ * ⌘/Ctrl-A selects hosts only from the list's own row controls. React bubbles keydown through
+ * portals, so a row's dialog, menu, or copyable detail text would otherwise lose select-all-text.
+ */
+export function isListOwnSelectAllTarget(list: Element, target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || !list.contains(target)) {
+    return false
+  }
+  if (
+    target instanceof HTMLInputElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  ) {
+    return false
+  }
+  return target.closest(NOT_LIST_CONTEXT) === null
+}
+
 /** Hosts grouped by where they came from, each group selectable as a whole. */
 export function SshTargetList({
   targets,
@@ -57,8 +76,11 @@ export function SshTargetList({
       className="space-y-3"
       onKeyDown={(event) => {
         const mod = isMac ? event.metaKey : event.ctrlKey
-        // Why: only while a row control has focus, so ⌘/Ctrl-A in a text field keeps selecting text.
-        if (mod && event.key.toLowerCase() === 'a' && !(event.target instanceof HTMLInputElement)) {
+        if (
+          mod &&
+          event.key.toLowerCase() === 'a' &&
+          isListOwnSelectAllTarget(event.currentTarget, event.target)
+        ) {
           event.preventDefault()
           selection.setGroup(
             targets.map((target) => target.id),

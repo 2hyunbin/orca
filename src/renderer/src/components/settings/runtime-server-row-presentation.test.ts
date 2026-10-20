@@ -84,6 +84,32 @@ describe('runtime server status indicator', () => {
   })
 })
 
+describe('managed server not running', () => {
+  it('says Not running only when nothing more specific applies', () => {
+    expect(getRuntimeServerStatusIndicator(statusInput({ managedNotRunning: true })).label).toBe(
+      'Not running'
+    )
+    expect(
+      getRuntimeServerStatusIndicator(statusInput({ managedNotRunning: true, connecting: true }))
+        .label
+    ).toBe('Connecting…')
+    expect(
+      getRuntimeServerStatusIndicator(statusInput({ managedNotRunning: true, accessRevoked: true }))
+        .label
+    ).toBe('Access revoked')
+    expect(
+      getRuntimeServerStatusIndicator(
+        statusInput({ managedNotRunning: true, compatibilityBlocked: true })
+      ).label
+    ).toBe('Needs update')
+    expect(
+      getRuntimeServerStatusIndicator(
+        statusInput({ managedNotRunning: true, remoteUpdate: updateEntry({ phase: 'restarting' }) })
+      ).label
+    ).toBe('Restarting…')
+  })
+})
+
 describe('runtime server meta line', () => {
   it('falls back to the last verified version when the probe failed', () => {
     expect(getRuntimeServerVersionText(updateEntry({}), '1.4.229')).toBe('v1.4.229')

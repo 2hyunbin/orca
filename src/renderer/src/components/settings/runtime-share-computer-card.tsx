@@ -39,6 +39,14 @@ export function RuntimeShareComputerCard(): React.JSX.Element {
     void loadActiveLinkCount()
   }, [loadActiveLinkCount])
 
+  const handleOpenChange = (next: boolean): void => {
+    setOpen(next)
+    if (!next) {
+      setEditingName(false)
+      void loadActiveLinkCount()
+    }
+  }
+
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
       <MonitorSmartphone className="size-4 shrink-0 text-muted-foreground" />
@@ -76,16 +84,7 @@ export function RuntimeShareComputerCard(): React.JSX.Element {
         <Share2 />
         {translate('auto.components.settings.serverList.shareButton', 'Share…')}
       </Button>
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next)
-          if (!next) {
-            setEditingName(false)
-            void loadActiveLinkCount()
-          }
-        }}
-      >
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-xl" scrollable>
           <DialogHeader>
             <DialogTitle>
@@ -125,7 +124,12 @@ export function RuntimeShareComputerCard(): React.JSX.Element {
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleOpenChange(false)}
+            >
               {translate('auto.components.settings.serverList.done', 'Done')}
             </Button>
           </DialogFooter>

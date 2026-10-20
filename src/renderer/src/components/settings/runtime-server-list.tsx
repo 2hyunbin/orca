@@ -51,6 +51,8 @@ type RuntimeServerListProps = {
   onRemove: (environment: PublicKnownRuntimeEnvironment) => void
   onMakeDefault: (environment: PublicKnownRuntimeEnvironment) => void
   onCheckForUpdates: (options: UpdateCheckOptions) => void
+  onRecheck: () => void
+  rechecking: boolean
   onChanged: () => void
 }
 
@@ -75,9 +77,11 @@ export function RuntimeServerList({
   onRemove,
   onMakeDefault,
   onCheckForUpdates,
+  onRecheck,
+  rechecking,
   onChanged
 }: RuntimeServerListProps): React.JSX.Element {
-  const { api, pending, targets, resumingId, resume } = managedCatalog
+  const { api, pending, targets, resumingId, resume, reload } = managedCatalog
 
   if (environments.length === 0 && pending.length === 0) {
     return (
@@ -140,7 +144,10 @@ export function RuntimeServerList({
           onDisconnect,
           onRemove,
           onMakeDefault,
-          onCheckForUpdates
+          onCheckForUpdates,
+          onRefreshSshTargets: () => void reload().catch(() => {}),
+          onRecheck,
+          rechecking
         }
         const row =
           api && getOrcadSshDeployment(environment) ? (

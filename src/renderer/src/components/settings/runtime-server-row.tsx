@@ -68,6 +68,11 @@ type RuntimeServerRowProps = {
   onMakeDefault?: (environment: PublicKnownRuntimeEnvironment) => void
   onCheckForUpdates?: (options: UpdateCheckOptions) => void
   onChanged?: () => void
+  /** Re-reads SSH hosts; the route dialog lists them. */
+  onRefreshSshTargets?: () => void
+  /** Re-probes every server; offered when the host answered but Orca didn't. */
+  onRecheck?: () => void
+  rechecking?: boolean
 }
 
 export function RuntimeServerRow({
@@ -90,7 +95,10 @@ export function RuntimeServerRow({
   onRemove,
   onMakeDefault,
   onCheckForUpdates,
-  onChanged
+  onChanged,
+  onRefreshSshTargets,
+  onRecheck,
+  rechecking = false
 }: RuntimeServerRowProps): React.JSX.Element {
   const [repairOpen, setRepairOpen] = useState(false)
   const [sshDialogOpen, setSshDialogOpen] = useState(false)
@@ -105,7 +113,11 @@ export function RuntimeServerRow({
   const sshAccess = environment.sshAccess
   const pendingSshAccess = environment.pendingSshAccessOperation
 
-  const primary: 'managed' | 'repair' | 'update' | 'connect' | 'retry' | null =
+  // Why: the transport is up but Orca didn't answer; only a fresh probe can tell more.
+  const needsRecheck =
+    row.connectionState === 'runtime-unavailable' ||
+    row.connectionState === 'workspace-window-closed'
+  const primary: 'managed' | 'repair' | 'update' | 'connect' | 'retry' | 'recheck' | null =
     managed && managedServerHasPrimaryAction(managed)
       ? 'managed'
       : row.accessRevoked && repairable
@@ -117,23 +129,20 @@ export function RuntimeServerRow({
             ? row.probeFailed
               ? 'retry'
               : 'connect'
-            : null
+            : needsRecheck && onRecheck
+              ? 'recheck'
+              : null
 
-  const status: ServerRowStatus =
-    managed?.status && !managed.status.activeVersion && !row.isReachable
-      ? {
-          label: translate('auto.components.settings.managedServers.row.notRunning', 'Not running'),
-          tone: 'muted'
-        }
-      : getRuntimeServerStatusIndicator({
-          connectionState: row.connectionState,
-          accessRevoked: row.accessRevoked,
-          compatibilityBlocked: row.compatibilityBlocked,
-          probeFailed: row.probeFailed,
-          connecting,
-          disconnecting,
-          remoteUpdate
-        })
+  const status: ServerRowStatus = getRuntimeServerStatusIndicator({
+    connectionState: row.connectionState,
+    accessRevoked: row.accessRevoked,
+    compatibilityBlocked: row.compatibilityBlocked,
+    probeFailed: row.probeFailed,
+    connecting,
+    disconnecting,
+    remoteUpdate,
+    managedNotRunning: Boolean(managed?.status && !managed.status.activeVersion)
+  })
 
   const endpoint =
     environment.endpoints.find((entry) => entry.id === environment.preferredEndpointId)?.endpoint ??
@@ -213,6 +222,11 @@ export function RuntimeServerRow({
         disabled={remoteServerUpdatesRunning || isRemoteServerUpdateInFlight(remoteUpdate)}
       >
         {translate('auto.components.settings.RuntimeEnvironmentsPane.updateServer', 'Update')}
+      </Button>
+    ) : primary === 'recheck' ? (
+      <Button type="button" variant="ghost" size="xs" onClick={onRecheck} disabled={rechecking}>
+        {rechecking ? <LoadingSpinner className="size-3" /> : null}
+        {translate('auto.components.settings.serverList.retry', 'Retry')}
       </Button>
     ) : primary === 'connect' || primary === 'retry' ? (
       <Button
@@ -303,7 +317,10 @@ export function RuntimeServerRow({
             onDisconnect={() => onDisconnect(environment)}
             onMakeDefault={() => onMakeDefault?.(environment)}
             onCheckForUpdates={onCheckForUpdates}
-            onSshAccess={() => setSshDialogOpen(true)}
+            onSshAccess={() => {
+              onRefreshSshTargets?.()
+              setSshDialogOpen(true)
+            }}
             onToggleDetails={() => setExpanded((v) => !v)}
             onRemove={() => onRemove(environment)}
           />

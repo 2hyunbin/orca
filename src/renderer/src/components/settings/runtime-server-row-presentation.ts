@@ -1,4 +1,5 @@
 import { translate } from '@/i18n/i18n'
+import { isConnectedRuntimeHostState } from '@/runtime/runtime-host-connection-state'
 import type {
   RemoteServerUpdateEntry,
   RemoteServerUpdatePhase
@@ -30,6 +31,8 @@ export type RuntimeServerStatusInput = {
   connecting: boolean
   disconnecting: boolean
   remoteUpdate: RemoteServerUpdateEntry | undefined
+  /** A managed server whose loaded status has no active version. */
+  managedNotRunning?: boolean
 }
 
 /** One status per row; it replaces the old stack of "Disconnected", "Offline" and "Status unavailable". */
@@ -69,6 +72,13 @@ export function getRuntimeServerStatusIndicator(input: RuntimeServerStatusInput)
     return {
       label: translate('auto.components.settings.serverList.needsUpdate', 'Needs update'),
       tone: 'destructive'
+    }
+  }
+  // Why after the states above: revoked, updating, connecting or incompatible say more than this.
+  if (input.managedNotRunning && !isConnectedRuntimeHostState(input.connectionState)) {
+    return {
+      label: translate('auto.components.settings.managedServers.row.notRunning', 'Not running'),
+      tone: 'muted'
     }
   }
   const label = getRuntimeServerConnectionLabel(input.connectionState)

@@ -1,4 +1,5 @@
 import type { SshTarget } from '../../../../shared/ssh-types'
+import { isSshConfigSourcedTarget } from '../../../../shared/ssh-target-source'
 
 export type SshTargetGroupId = 'ssh-config' | 'manual'
 
@@ -7,10 +8,10 @@ export type SshTargetGroup = { id: SshTargetGroupId; targets: SshTarget[] }
 /** Above this many hosts the list gets a filter field. */
 export const SSH_TARGET_FILTER_THRESHOLD = 8
 
-/** Config-synced hosts first; a legacy target without `source` came from an import. */
+/** Config-synced hosts first; a legacy target without `source` is grouped by config sync's rule. */
 export function groupSshTargetsBySource(targets: readonly SshTarget[]): SshTargetGroup[] {
-  const fromConfig = targets.filter((target) => target.source !== 'manual')
-  const manual = targets.filter((target) => target.source === 'manual')
+  const fromConfig = targets.filter((target) => isSshConfigSourcedTarget(target))
+  const manual = targets.filter((target) => !isSshConfigSourcedTarget(target))
   const groups: SshTargetGroup[] = [
     { id: 'ssh-config', targets: fromConfig },
     { id: 'manual', targets: manual }

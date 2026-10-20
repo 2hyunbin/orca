@@ -1,6 +1,7 @@
 import { useState, type MutableRefObject } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
@@ -48,7 +49,9 @@ export function useRuntimeEnvironmentMutationActions({
 
   const addEnvironment = async (allowLoopback: boolean): Promise<void> => {
     const trimmedPairingCode = pairingCode.trim()
-    const trimmedName = name.trim() || defaultServerNameForAccessLink(trimmedPairingCode)
+    const trimmedName =
+      name.trim() ||
+      defaultServerNameForAccessLink(trimmedPairingCode, useAppStore.getState().runtimeEnvironments)
     if (!trimmedName || !trimmedPairingCode) {
       toast.error(
         translate(

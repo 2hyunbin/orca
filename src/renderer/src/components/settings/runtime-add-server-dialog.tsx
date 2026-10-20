@@ -1,4 +1,5 @@
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog'
 import { RuntimeHostAccessForm } from './RuntimeHostAccessForm'
 import type { RuntimeHostAccessFailure } from './RuntimeHostAccessFailureAlert'
@@ -26,6 +27,7 @@ export function RuntimeAddServerDialog({
   onClose,
   onSubmit
 }: RuntimeAddServerDialogProps): React.JSX.Element {
+  const takenNames = useAppStore((state) => state.runtimeEnvironments)
   return (
     <Dialog
       open={open}
@@ -49,6 +51,7 @@ export function RuntimeAddServerDialog({
         </DialogHeader>
         <RuntimeHostAccessForm
           name={name}
+          takenNames={takenNames}
           accessLink={accessLink}
           busy={busy}
           failure={failure}
