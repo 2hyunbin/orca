@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdir, mkdtemp, rename, rm, utimes, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, rename, rm, utimes, writeFile } from 'node:fs/promises'
 import type * as NodeFsPromises from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
@@ -206,29 +206,127 @@ describe('startGitCommonPolling fan-out bounds (#17828)', () => {
     )
   })
 
-  it('still detects entry add/remove correctly with bounded concurrency', async () => {
-    const commonDir = await makeCommonDir(5)
+  it.each([{}, { reconciliationFullScanEveryTicks: 1_000 }])(
+    'still detects entry add/remove correctly with bounded concurrency (%o)',
+    async (options) => {
+      const commonDir = await makeCommonDir(5)
+      dirsToRemove.push(commonDir)
+      const events: WorktreeBasePollEvent[][] = []
+      const sub = await startGitCommonPolling(
+        commonDir,
+        (batch) => events.push(batch),
+        20,
+        alwaysVisible,
+        undefined,
+        true,
+        () => [],
+        options
+      )
+      cleanups.push(() => sub.unsubscribe())
+
+      const newEntry = join(commonDir, 'worktrees', 'wt-new')
+      await mkdir(join(newEntry, 'logs'), { recursive: true })
+      await writeFile(join(newEntry, 'HEAD'), 'ref: refs/heads/main\n')
+
+      await vi.waitFor(() => {
+        expect(events.flat()).toContainEqual({ type: 'create', path: newEntry })
+      })
+
+      await rm(newEntry, { recursive: true })
+      await vi.waitFor(() => {
+        expect(events.flat()).toContainEqual({ type: 'delete', path: newEntry })
+      })
+    }
+  )
+})
+
+describe('startGitCommonPolling reconciliation mode', () => {
+  const cleanups: (() => Promise<void>)[] = []
+  const dirsToRemove: string[] = []
+  const pollIntervalMs = 10
+
+  beforeEach(() => {
+    readdirCalls.count = 0
+    entryZeroStatCalls.count = 0
+  })
+
+  afterEach(async () => {
+    await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()))
+    await Promise.all(
+      dirsToRemove.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+    )
+  })
+
+  async function startReconciliation(fullScanEveryTicks: number) {
+    const commonDir = await makeCommonDir(1)
     dirsToRemove.push(commonDir)
     const events: WorktreeBasePollEvent[][] = []
+    const onFullScan = vi.fn()
     const sub = await startGitCommonPolling(
       commonDir,
       (batch) => events.push(batch),
-      20,
-      alwaysVisible
+      pollIntervalMs,
+      alwaysVisible,
+      onFullScan,
+      false,
+      () => [],
+      { reconciliationFullScanEveryTicks: fullScanEveryTicks }
     )
     cleanups.push(() => sub.unsubscribe())
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    return { entryDir: join(commonDir, 'worktrees', 'wt-0'), events, onFullScan }
+  }
 
-    const newEntry = join(commonDir, 'worktrees', 'wt-new')
-    await mkdir(join(newEntry, 'logs'), { recursive: true })
-    await writeFile(join(newEntry, 'HEAD'), 'ref: refs/heads/main\n')
-
-    await vi.waitFor(() => {
-      expect(events.flat()).toContainEqual({ type: 'create', path: newEntry })
+  it('stats only the entry dir and its in-place leaves for an unchanged entry', async () => {
+    const { onFullScan } = await startReconciliation(1_000)
+    readdirCalls.count = 0
+    entryZeroStatCalls.count = 0
+    await vi.waitFor(() => expect(readdirCalls.count).toBeGreaterThanOrEqual(5), {
+      timeout: 2_000
     })
+    // dir + gitdir + logs/HEAD per tick, versus 7 for an ungated sweep.
+    const ticks = readdirCalls.count
+    expect(entryZeroStatCalls.count).toBeLessThanOrEqual((ticks + 1) * 3)
+    expect(entryZeroStatCalls.count).toBeGreaterThanOrEqual((ticks - 1) * 3)
+    expect(onFullScan).not.toHaveBeenCalled()
+  })
 
-    await rm(newEntry, { recursive: true })
-    await vi.waitFor(() => {
-      expect(events.flat()).toContainEqual({ type: 'delete', path: newEntry })
+  it.each([
+    ['gitdir', (entryDir: string) => writeFile(join(entryDir, 'gitdir'), '/moved/.git\n')],
+    ['logs/HEAD', (entryDir: string) => appendFile(join(entryDir, 'logs', 'HEAD'), '1111 bbbb\n')]
+  ])('detects an in-place %s write before the full sweep', async (leaf, write) => {
+    const { entryDir, events, onFullScan } = await startReconciliation(1_000)
+    await write(entryDir)
+    await vi.waitFor(() =>
+      expect(events.flat()).toContainEqual({ type: 'update', path: join(entryDir, leaf) })
+    )
+    expect(onFullScan).not.toHaveBeenCalled()
+  })
+
+  it('runs the ungated sweep periodically and sweeps every tick once the dir gate misses', async () => {
+    const { entryDir, events, onFullScan } = await startReconciliation(4)
+    await vi.waitFor(() => expect(onFullScan).toHaveBeenCalled(), { timeout: 2_000 })
+    readdirCalls.count = 0
+    onFullScan.mockClear()
+    await vi.waitFor(() => expect(readdirCalls.count).toBeGreaterThanOrEqual(8), {
+      timeout: 2_000
     })
+    expect(onFullScan.mock.calls.length).toBeLessThanOrEqual(3)
+
+    // An in-place index rewrite leaves the dir signature alone, like a dir-mtime-blind filesystem.
+    const indexPath = join(entryDir, 'index')
+    await writeFile(indexPath, Buffer.from([1, 2]))
+    await vi.waitFor(
+      () => expect(events.flat()).toContainEqual({ type: 'update', path: indexPath }),
+      {
+        timeout: 2_000
+      }
+    )
+    readdirCalls.count = 0
+    onFullScan.mockClear()
+    await vi.waitFor(() => expect(readdirCalls.count).toBeGreaterThanOrEqual(5), {
+      timeout: 2_000
+    })
+    expect(onFullScan.mock.calls.length).toBeGreaterThanOrEqual(readdirCalls.count - 1)
   })
 })

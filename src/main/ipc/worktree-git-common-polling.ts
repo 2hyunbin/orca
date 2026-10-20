@@ -13,6 +13,7 @@ import type {
   WorktreePollerWindowVisibility
 } from './worktree-base-directory-poller'
 import {
+  entryDirGateMissedChange,
   gitCommonDirectorySignature,
   gitCommonFileSignature,
   snapshotGitCommonEntry,
@@ -67,7 +68,8 @@ async function snapshotGitCommon(
   previous?: GitCommonSnapshot,
   includePrimary = true,
   forceFullScan = false,
-  statusRefPaths = new Set<string>()
+  statusRefPaths = new Set<string>(),
+  statInPlaceLeaves = false
 ): Promise<GitCommonSnapshot> {
   const worktreesDir = join(commonDirPath, 'worktrees')
   const [worktreesDirSignature, primarySignatures, statusRefSignatures] = await Promise.all([
@@ -102,7 +104,10 @@ async function snapshotGitCommon(
   const entries = new Map<string, GitCommonEntrySnapshot>()
   await forEachWithConcurrency(entryPaths, GIT_COMMON_SNAPSHOT_CONCURRENCY, async (entryPath) => {
     const previousEntry = previous?.entries.get(entryPath)
-    entries.set(entryPath, await snapshotGitCommonEntry(entryPath, previousEntry, forceFullScan))
+    entries.set(
+      entryPath,
+      await snapshotGitCommonEntry(entryPath, previousEntry, forceFullScan, statInPlaceLeaves)
+    )
   })
   // Why: the expensive per-entry `index` read stays gated on each entry's own dir signature; onFullScan
   // now reflects an ungated index-metadata backstop fan-out (forceFullScan) — the real periodic cost —
@@ -119,8 +124,21 @@ async function snapshotGitCommon(
 }
 
 export type GitCommonPollingOptions = {
-  /** Reconciliation backstop: never trust the per-entry gate, re-stat every tick. */
-  forceFullScanEveryTick?: boolean
+  /**
+   * Native-watch reconciliation: gate entries on their dir signature plus the
+   * in-place leaves each tick, and run the ungated sweep every N ticks.
+   */
+  reconciliationFullScanEveryTicks?: number
+}
+
+function snapshotsShowEntryDirGateMiss(prev: GitCommonSnapshot, next: GitCommonSnapshot): boolean {
+  for (const [entryPath, entry] of next.entries) {
+    const prevEntry = prev.entries.get(entryPath)
+    if (prevEntry && entryDirGateMissedChange(prevEntry, entry)) {
+      return true
+    }
+  }
+  return false
 }
 
 export async function startGitCommonPolling(
@@ -136,6 +154,11 @@ export async function startGitCommonPolling(
   let disposed = false
   let ticking = false
   let tickCount = 0
+  const reconciliationFullScanEveryTicks = options.reconciliationFullScanEveryTicks
+  const isReconciliation = reconciliationFullScanEveryTicks !== undefined
+  // Why: a filesystem whose dir mtime ignores child renames (FAT/exFAT, some network
+  // mounts) would hide changes until the slow sweep; once one is seen, sweep every tick.
+  let entryDirGateTrusted = true
   let snapshot = await snapshotGitCommon(
     commonDirPath,
     undefined,
@@ -164,19 +187,28 @@ export async function startGitCommonPolling(
     const startedAt = Date.now()
     tickCount++
     const shouldForceFullScan =
-      options.forceFullScanEveryTick === true ||
+      (isReconciliation && !entryDirGateTrusted) ||
       forceFullScan ||
-      tickCount % INDEX_BACKSTOP_TICKS === 0
+      tickCount % (reconciliationFullScanEveryTicks ?? INDEX_BACKSTOP_TICKS) === 0
     try {
       const next = await snapshotGitCommon(
         commonDirPath,
         snapshot,
         includePrimary,
         shouldForceFullScan,
-        new Set(getStatusRefPaths())
+        new Set(getStatusRefPaths()),
+        isReconciliation
       )
       if (disposed) {
         return
+      }
+      if (
+        isReconciliation &&
+        next.didFullScan &&
+        entryDirGateTrusted &&
+        snapshotsShowEntryDirGateMiss(snapshot, next)
+      ) {
+        entryDirGateTrusted = false
       }
       if (next.didFullScan) {
         onFullScan?.()
