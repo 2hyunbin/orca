@@ -2,19 +2,22 @@ import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import type { TerminalSwitchWrite } from '../../shared/terminal-switch'
 
 /** Unfenced like the name: the descriptor is the switch owner's obligation, not the writer lease.
- *  A clear names its generation, so an old completion never clears a newer switch. */
+ *  Compare-and-set on generation, so a stale collector never resurrects or replaces another. */
 export function setAgentSessionRecordTerminalSwitch(
   record: AgentSessionRecord,
-  descriptor: TerminalSwitchWrite,
+  write: TerminalSwitchWrite,
   now: number
 ): AgentSessionRecord {
-  if ('clear' in descriptor) {
-    if (record.terminalSwitch?.generation !== descriptor.clear) {
+  const current = record.terminalSwitch?.generation
+  if ('clear' in write) {
+    if (current !== write.clear) {
       return record
     }
     const next = { ...record, updatedAt: now }
     delete next.terminalSwitch
     return next
   }
-  return { ...record, terminalSwitch: descriptor, updatedAt: now }
+  const descriptor = 'accept' in write ? write.accept : write.update
+  const applies = current === descriptor.generation || ('accept' in write && current === undefined)
+  return applies ? { ...record, terminalSwitch: descriptor, updatedAt: now } : record
 }

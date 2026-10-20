@@ -15,9 +15,13 @@ const mocks = vi.hoisted(() => {
     activate: vi.fn(async () => true),
     activateVerified: vi.fn(async () => 'activated'),
     switchCapability: vi.fn(async () => false),
-    exitWatchers: new Map<string, () => void>()
+    exitWatchers: new Map<string, () => void>(),
+    inspect: vi.fn(async (_ptyId: string): Promise<{ foregroundProcessEvidence?: unknown }> => ({}))
   }
 })
+vi.mock('@/runtime/runtime-terminal-inspection', () => ({
+  inspectRuntimeTerminalProcess: mocks.inspect
+}))
 vi.mock('../terminal-pane/pty-dispatcher', () => ({
   subscribeToPtyExit: (ptyId: string, watcher: () => void) => {
     mocks.exitWatchers.set(ptyId, watcher)
@@ -317,6 +321,32 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(closed).toHaveBeenCalledOnce()
     expect(closed.mock.calls[0]?.[0].detail).toEqual({ tabId: 'tab-1', leafId })
     expect(tabs()).toEqual([])
+
+    // A paired source retires only while its host still reports the incarnation it started with.
+    const remote = 'remote:env@@handle-1'
+    mocks.source = { ...mocks.source, ptyId: remote }
+    useAppStore.setState({
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: null,
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: remote }
+        }
+      }
+    })
+    const host = (...incarnations: string[]) =>
+      incarnations.forEach((ptyIncarnationId) =>
+        mocks.inspect.mockResolvedValueOnce({ foregroundProcessEvidence: { ptyIncarnationId } })
+      )
+    window.addEventListener('orca-close-terminal-pane', closed)
+    host('i1', 'i2')
+    await runCliChatResume(mocks.source)
+    expect(closed).toHaveBeenCalledOnce()
+    host('i1', 'i1')
+    await runCliChatResume(mocks.source)
+    window.removeEventListener('orca-close-terminal-pane', closed)
+    expect(closed).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the eager History joiner failed and retryable after the hidden starter is refused', async () => {

@@ -54,8 +54,8 @@ export class TerminalHostSwitches {
             ptyId: session.sessionId,
             incarnationId: session.incarnationId,
             shellPid: session.pid > 0 ? session.pid : null,
-            // The startup command is queued behind the shell-ready barrier until it settles.
-            startupSettled: session.shellState !== 'pending'
+            // The startup command is queued behind the shell-ready barrier until it flushes.
+            startupSettled: !session.shellReady.isGatingWrites
           }
         : { state: 'ended' }
     }

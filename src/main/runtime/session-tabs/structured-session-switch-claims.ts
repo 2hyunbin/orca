@@ -11,6 +11,7 @@ import {
   type TerminalSwitchObservation
 } from '../../../shared/terminal-switch'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
+import { readBootIdentity } from '../../agent-hooks/managed-hook-owner-identity'
 import {
   readSwitchPaneAgentProcesses,
   readSwitchShellProcess,
@@ -27,6 +28,10 @@ export type SwitchClaim = TerminalSwitchDescriptor & {
   chatSessionId: string
   at: number
   accepted: boolean
+  /** The descriptor holds this generation; later evidence only updates it. */
+  saved: boolean
+  /** Evidence learned but not yet saved; the next observation retries it. */
+  unsaved?: boolean
 }
 
 export const switchMovingRefusal = () =>
@@ -56,7 +61,13 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
       (store) => {
         for (const { sessionId, terminalSwitch } of store.listRecords()) {
           if (isTerminalSwitchDescriptor(terminalSwitch)) {
-            const claim = { ...terminalSwitch, chatSessionId: sessionId, at: 0, accepted: true }
+            const claim = {
+              ...terminalSwitch,
+              chatSessionId: sessionId,
+              at: 0,
+              accepted: true,
+              saved: true
+            }
             this.switchClaims.set(
               terminalSwitch.generation,
               this.switchClaims.get(claim.generation) ?? claim
@@ -103,7 +114,8 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
       processes: [],
       chatSessionId,
       at: Date.now(),
-      accepted: false
+      accepted: false,
+      saved: false
     }
     this.switchClaims.set(claim.generation, claim)
     return claim
@@ -132,14 +144,21 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     return claim
   }
 
-  /** Saved before dispatch, so a restart still knows the start may exist. */
+  /** Saved before dispatch, so a restart still knows the start may exist. A retired claim's
+   *  late evidence never writes, and the store only updates the generation it holds. */
   async saveSwitchClaim(claim: SwitchClaim): Promise<boolean> {
-    const { chatSessionId, at: _at, accepted: _accepted, ...descriptor } = claim
+    claim.boot ??= await readBootIdentity()
+    const { chatSessionId, at: _at, accepted: _a, saved, unsaved: _u, ...descriptor } = claim
+    if (saved && this.switchClaims.get(claim.generation) !== claim) {
+      return false
+    }
     const store = await this.openAgentSessionRecordStore()
-    return store.setTerminalSwitch(chatSessionId, descriptor).then(
-      () => true,
-      () => false
-    )
+    const next = await store
+      .setTerminalSwitch(chatSessionId, saved ? { update: descriptor } : { accept: descriptor })
+      .catch(() => null)
+    const ok = next?.terminalSwitch?.generation === claim.generation
+    Object.assign(claim, { saved: saved || ok, unsaved: !ok })
+    return ok
   }
 
   /** The owner's fields for the dispatch; evidence collection starts with it and decides nothing. */
@@ -160,8 +179,14 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
       ?.observe(claim.generation, fence)
       .catch(() => null)
     const own = answers?.find((answer) => answer.owner === claim.owner)
+    // An owner that could not answer is not a lost one.
     if (own || !answers) {
       return own?.observation ?? { state: 'unverifiable' }
+    }
+    // Every reachable owner answered and none is this one: only the execution can end it.
+    const boot = claim.boot ? await readBootIdentity() : undefined
+    if (boot && boot !== claim.boot) {
+      return { state: 'ended' }
     }
     const recorded = claim.shell ? [claim.shell, ...claim.processes] : []
     const verdicts = await Promise.all(recorded.map(switchStartProcessVerdict))
@@ -175,7 +200,12 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     claim: SwitchClaim,
     bound: Extract<TerminalSwitchObservation, { state: 'bound' }>
   ): Promise<void> {
-    if (claim.ptyId === bound.ptyId && claim.incarnationId === bound.incarnationId) {
+    if (
+      claim.ptyId === bound.ptyId &&
+      claim.incarnationId === bound.incarnationId &&
+      (claim.shell || !bound.shellPid) &&
+      !claim.unsaved
+    ) {
       return
     }
     const shell = bound.shellPid ? await readSwitchShellProcess(bound.shellPid) : null

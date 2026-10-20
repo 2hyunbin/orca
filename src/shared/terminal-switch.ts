@@ -41,13 +41,18 @@ export type TerminalSwitchDescriptor = {
   incarnationId?: string
   shell?: AgentProcessIdentity
   processes: AgentProcessIdentity[]
+  /** The execution host's boot when accepted: a later boot proves its processes gone. */
+  boot?: string
 }
 
 /** The exact execution a switch's launch identity row describes; presentation binds to it. */
 export type TerminalExecutionStamp = { ptyId: string; incarnationId: string }
 
-/** A save, or a clear that names the generation it ends. */
-export type TerminalSwitchWrite = TerminalSwitchDescriptor | { clear: string }
+/** Each names its generation: an acceptance takes an empty slot, an update or a clear only its own. */
+export type TerminalSwitchWrite =
+  | { accept: TerminalSwitchDescriptor }
+  | { update: TerminalSwitchDescriptor }
+  | { clear: string }
 
 const MAX = 512
 const bounded = (value: unknown): value is string =>
@@ -60,7 +65,7 @@ export function isTerminalSwitchDescriptor(value: unknown): value is TerminalSwi
   const d: Partial<Record<keyof TerminalSwitchDescriptor, unknown>> = value
   return (
     [d.generation, d.agent, d.providerSessionId, d.owner, d.paneKey].every(bounded) &&
-    [d.ptyId, d.incarnationId].every((field) => field === undefined || bounded(field)) &&
+    [d.ptyId, d.incarnationId, d.boot].every((field) => field === undefined || bounded(field)) &&
     (d.shell === undefined || readAgentProcessIdentity(d.shell) !== undefined) &&
     Array.isArray(d.processes) &&
     d.processes.length <= 16 &&

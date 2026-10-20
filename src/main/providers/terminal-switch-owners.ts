@@ -9,13 +9,11 @@ export function routedTerminalSwitchOwners(
 ): TerminalSwitchOwners {
   return {
     owner: async () => (await fresh().terminalSwitches?.owner()) ?? null,
-    // An owner that cannot answer is left out, so the caller reads the start as unverifiable.
+    // One owner that cannot answer fails the whole read: it may be the one that holds the start.
     observe: async (generation, fence) =>
       (
         await Promise.all(
-          all().map(
-            (owner) => owner.terminalSwitches?.observe(generation, fence).catch(() => []) ?? []
-          )
+          all().map((owner) => owner.terminalSwitches?.observe(generation, fence) ?? [])
         )
       ).flat()
   }

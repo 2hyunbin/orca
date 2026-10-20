@@ -133,6 +133,13 @@ export async function spawnLocalPty(
         windowsFallbackAttempts: plan.windowsFallbackAttempts
       })
       const spawnResult = pendingSpawn instanceof Promise ? await pendingSpawn : pendingSpawn
+      // The process exists: from here only its own exit ends the switch, whatever throws next.
+      committed = true
+      commitLocalTerminalSwitch(args.switchGeneration, {
+        id,
+        incarnationId,
+        proc: spawnResult.process
+      })
       try {
         checkCanceled()
       } catch (error) {
@@ -144,12 +151,6 @@ export async function spawnLocalPty(
         throw error
       }
       args.onPtySpawnCommitted?.()
-      committed = true
-      commitLocalTerminalSwitch(args.switchGeneration, {
-        id,
-        incarnationId,
-        proc: spawnResult.process
-      })
       plan.shellPath = spawnResult.shellPath
       // Why: a Windows fallback embeds its startup command in argv; honor the winning shell's delivery flag to avoid a double write.
       if (spawnResult.startupCommandDeliveredInShellArgs !== undefined) {

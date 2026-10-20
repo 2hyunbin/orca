@@ -12,6 +12,8 @@ import {
   type TerminalSwitchDescriptor,
   type TerminalSwitchWrite
 } from '../../../shared/terminal-switch'
+import { setAgentSessionRecordTerminalSwitch } from '../agent-session-record-terminal-switch'
+import { routedTerminalSwitchOwners } from '../../providers/terminal-switch-owners'
 import type { AgentProcessVerdict } from '../../../shared/agent-process-presence'
 import type { SwitchClaim } from './structured-session-switch-claims'
 
@@ -20,6 +22,9 @@ vi.mock('electron', () => ({
   webContents: { fromId: vi.fn(() => null) },
   ipcMain: { on: vi.fn(), removeListener: vi.fn() },
   app: { getPath: vi.fn(() => '/tmp') }
+}))
+vi.mock('../../agent-hooks/managed-hook-owner-identity', () => ({
+  readBootIdentity: async () => boot
 }))
 vi.mock('./structured-session-switch-observation', () => ({
   readSwitchPaneAgentProcesses: vi.fn(async () => []),
@@ -40,6 +45,7 @@ let runtime: OrcaRuntimeService
 let host: TerminalHostSwitches
 let shellAlone: boolean
 let ownerReachable: boolean
+let boot = 'boot-1'
 /** The chat records' saved switch descriptors, keyed by chat session id. */
 let saved: Map<string, TerminalSwitchDescriptor>
 
@@ -49,44 +55,60 @@ const reason = (promise: Promise<unknown>) =>
     () => 'admitted',
     (error: { refusal?: { details?: { reason?: string } } }) => error.refusal?.details?.reason
   )
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the owner reads only these four session facts.
-const session = (facts: Partial<Session>) => ({ ...facts }) as Session
+const session = (facts: Partial<Session>) =>
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the owner reads only these session facts.
+  ({ shellReady: { isGatingWrites: false }, ...facts }) as Session
+const live = () => session({ isAlive: true, sessionId: 'pty-1', incarnationId: 'i1', pid: 4242 })
 
 beforeEach(() => {
   shellAlone = true
   ownerReachable = true
+  boot = 'boot-1'
   saved = new Map()
   host = new TerminalHostSwitches()
   runtime = new OrcaRuntimeService()
   runtime.registerPty('pty-1', 'wt-1', null, { tabId: 'tab-1', leafId: LEAF, incarnationId: 'i1' })
-  runtime.setPtyController({
+  const reach = {
     terminalSwitches: {
       owner: async () => host.owner,
-      observe: async (generation, fence) => {
+      observe: async (generation: string, fence: boolean) => {
         if (!ownerReachable) {
-          throw new Error('host unreachable')
+          throw new Error('terminal_switch_owner_unreachable')
         }
         return [host.observe(generation, fence)]
       }
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the switch reads only its owner contract.
-  } as never)
+  }
+  // The production routing: an unreachable owner must stay unreachable through it.
+  const terminalSwitches = routedTerminalSwitchOwners(
+    () => reach,
+    () => [reach, {}]
+  )
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the switch reads only its owner contract.
+  runtime.setPtyController({ terminalSwitches } as never)
   vi.spyOn(runtime, 'openAgentSessionRecordStore').mockResolvedValue(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the switch reads records and writes descriptors only.
     {
       listRecords: () =>
         [...saved].map(([sessionId, terminalSwitch]) => ({ sessionId, terminalSwitch })),
       setTerminalSwitch: async (sessionId: string, write: TerminalSwitchWrite) => {
-        if (!('clear' in write)) {
-          saved.set(sessionId, write)
-        } else if (saved.get(sessionId)?.generation === write.clear) {
+        const current = saved.get(sessionId)
+        const record = {
+          ...codexChatHolding(sessionId, [C]),
+          ...(current ? { terminalSwitch: current } : {})
+        }
+        const next = setAgentSessionRecordTerminalSwitch(record, write, 0)
+        if (next.terminalSwitch) {
+          saved.set(sessionId, next.terminalSwitch)
+        } else {
           saved.delete(sessionId)
         }
+        return next
       }
     } as never
   )
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census's one process-table read, replaced by the pane's modeled state.
   vi.spyOn(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census's one process-table read, replaced by the pane's modeled state.
     runtime as never as { cliWriterShellAlone: () => Promise<boolean> },
     'cliWriterShellAlone'
   ).mockImplementation(async () => shellAlone)
@@ -118,12 +140,16 @@ describe('a chat → terminal switch start', () => {
       'terminal_switch_generation_refused'
     )
 
-    const shell = session({ isAlive: true, sessionId: 'pty-1', incarnationId: 'i1', pid: 4242 })
+    const shell = live()
     host.bind(claim.generation, shell)
     // Bound with no agent recorded: only the owner's end releases it.
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
     expect(saved.get('chat-1')).toMatchObject({ ptyId: 'pty-1', incarnationId: 'i1', shell: SHELL })
+    runtime['noteSwitchStartProcess']('pty-1', { agent: 'codex', id: C }, AGENT)
+    // The shell exiting is not its detached agent exiting.
     Object.assign(shell, { isAlive: false })
+    expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
+    vi.mocked(switchStartProcessVerdict).mockResolvedValue('exited')
     expect(await reason(chatStart())).toBe('admitted')
     expect(saved.has('chat-1')).toBe(false)
   })
@@ -131,10 +157,7 @@ describe('a chat → terminal switch start', () => {
   it('releases on a proved agent exit with that exact shell alone, keeping the shell', async () => {
     const claim = await acceptedSwitch()
     host.begin(claim.generation, host.owner)
-    host.bind(
-      claim.generation,
-      session({ isAlive: true, sessionId: 'pty-1', incarnationId: 'i1', pid: 4242 })
-    )
+    host.bind(claim.generation, live())
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
     runtime['noteSwitchStartProcess']('pty-1', { agent: 'codex', id: C }, AGENT)
     vi.mocked(switchStartProcessVerdict).mockResolvedValue('exited')
@@ -142,6 +165,15 @@ describe('a chat → terminal switch start', () => {
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
     shellAlone = true
     expect(await reason(chatStart())).toBe('admitted')
+  })
+
+  it('never lets a retired switch’s late evidence replace the next one', async () => {
+    const a = await acceptedSwitch()
+    expect(await reason(chatStart())).toBe('admitted')
+    const b = await acceptedSwitch()
+    a.processes.push(AGENT)
+    expect(await runtime.saveSwitchClaim(a)).toBe(false)
+    expect(saved.get('chat-1')?.generation).toBe(b.generation)
   })
 
   it('fences a saved start no terminal took, so it can never start later', async () => {
@@ -152,18 +184,19 @@ describe('a chat → terminal switch start', () => {
     )
   })
 
-  it('survives a restart: a lost owner never speaks, only the recorded execution can end it', async () => {
-    saved.set('chat-1', {
-      generation: 'g-old',
-      agent: 'codex',
-      providerSessionId: C,
-      owner: 'daemon:gone',
-      paneKey: PANE,
-      ptyId: 'pty-1',
-      incarnationId: 'i1',
-      shell: SHELL,
-      processes: [AGENT]
-    })
+  it('survives a restart: an unreachable owner holds; a lost one yields only to proof', async () => {
+    const lost = (extra: Partial<TerminalSwitchDescriptor>) =>
+      saved.set('chat-1', {
+        generation: 'g-old',
+        agent: 'codex',
+        providerSessionId: C,
+        owner: 'daemon:gone',
+        paneKey: PANE,
+        processes: [],
+        boot: 'boot-1',
+        ...extra
+      })
+    lost({ ptyId: 'pty-1', incarnationId: 'i1', shell: SHELL, processes: [AGENT] })
     ownerReachable = false
     vi.mocked(switchStartProcessVerdict).mockResolvedValue('exited')
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
@@ -171,6 +204,13 @@ describe('a chat → terminal switch start', () => {
     vi.mocked(switchStartProcessVerdict).mockResolvedValue('live')
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
     vi.mocked(switchStartProcessVerdict).mockResolvedValue('exited')
+    expect(await reason(chatStart())).toBe('admitted')
+
+    // A crash before any identity was learned stays held until the host has rebooted.
+    lost({})
+    runtime['switchClaimsLoaded'] = null
+    expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
+    boot = 'boot-2'
     expect(await reason(chatStart())).toBe('admitted')
     expect(saved.has('chat-1')).toBe(false)
   })

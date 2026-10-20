@@ -17,15 +17,33 @@ import { reportCliChatResumeFailure } from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
 import { panePtyId } from '@/lib/ai-vault-tab-title-requests'
 import { subscribeToPtyExit } from '../terminal-pane/pty-dispatcher'
+import { inspectRuntimeTerminalProcess } from '@/runtime/runtime-terminal-inspection'
+import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+
+/** The incarnation the execution host reports for a PTY; null when it reports none. */
+const hostPtyIncarnation = (ptyId: string): Promise<string | null> =>
+  inspectRuntimeTerminalProcess(ptyId).then(
+    (inspection) => inspection.foregroundProcessEvidence?.ptyIncarnationId ?? null,
+    () => null
+  )
 
 /** The chat took the conversation, so the terminal pane it came from closes (its tab with it):
- *  only while that pane still holds the execution it came from, never a sibling or replacement. */
-function retireSwitchedTerminalPane(source: CliChatResumeSource, sourceExited: boolean): void {
+ *  only while the host still reports the execution it came from, never a sibling or replacement.
+ *  A local PTY whose host reports no incarnation is fenced by its exit, which precedes reuse. */
+async function retireSwitchedTerminalPane(
+  source: CliChatResumeSource,
+  sourceExited: () => boolean,
+  expected: Promise<string | null>
+): Promise<void> {
   const pane = parsePaneKey(source.paneKey)
+  const incarnation = await expected
   if (
     pane &&
-    !sourceExited &&
     source.ptyId &&
+    (incarnation
+      ? (await hostPtyIncarnation(source.ptyId)) === incarnation
+      : !isRemoteRuntimePtyId(source.ptyId)) &&
+    !sourceExited() &&
     panePtyId(useAppStore.getState(), source.paneKey) === source.ptyId
   ) {
     const detail: CloseTerminalPaneDetail = { tabId: pane.tabId, leafId: pane.leafId }
@@ -97,6 +115,7 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   changed()
   // Why any exit: a reused id's next incarnation starts only after this one exits.
   let sourceExited = false
+  const sourceIncarnation = source.ptyId ? hostPtyIncarnation(source.ptyId) : Promise.resolve(null)
   const stopExitWatch = source.ptyId
     ? subscribeToPtyExit(source.ptyId, () => {
         sourceExited = true
@@ -173,21 +192,21 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
     }
     const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
     if (result.kind === 'structured') {
-      retireSwitchedTerminalPane(source, sourceExited)
+      await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
     } else if (
       result.kind === 'failed' &&
       !result.notified &&
       pending.get(key) === controller &&
       (await reportCliChatResumeFailure(source, result.error, target))
     ) {
-      retireSwitchedTerminalPane(source, sourceExited)
+      await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
     }
   } catch (error) {
     if (
       pending.get(key) === controller &&
       (await reportCliChatResumeFailure(source, error, target))
     ) {
-      retireSwitchedTerminalPane(source, sourceExited)
+      await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
     }
   } finally {
     clearTimeout(timer)

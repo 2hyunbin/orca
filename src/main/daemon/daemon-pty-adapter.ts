@@ -23,7 +23,7 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
     owner: async () => (await this.terminalSwitches.observe(randomUUID(), false))[0]?.owner ?? null,
     observe: async (generation, fence) => {
       if (!this.client.isConnected()) {
-        return []
+        throw new Error('terminal_switch_owner_unreachable')
       }
       try {
         const answer = await this.client.request<TerminalSwitchOwnerAnswer>(

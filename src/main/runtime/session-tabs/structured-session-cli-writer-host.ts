@@ -190,8 +190,8 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
     await this.assertSwitchStartsEnded(agent, id).catch(() => undefined)
   }
 
-  /** A switch's start holds its conversation until its owner proves it over, or its startup has
-   *  settled, every agent recorded there is proved exited and that exact shell is alone. */
+  /** A switch's start holds its conversation until every agent recorded there is proved exited and
+   *  either its owner proves the execution ended, or its startup settled with that exact shell alone. */
   private async assertSwitchStartsEnded(agent: string, id: string): Promise<void> {
     for (const claim of this.switchClaimsFor(agent, id)) {
       if (!claim.accepted) {
@@ -202,16 +202,19 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
         await this.noteSwitchBound(claim, seen)
       }
       const pane = seen.state === 'bound' ? this.cliWriterPtyPane(seen.ptyId) : null
-      const agentsEnded =
-        seen.state === 'bound' &&
-        seen.startupSettled &&
-        claim.processes.length > 0 &&
-        pane?.incarnationId === seen.incarnationId &&
-        (await Promise.all(claim.processes.map(switchStartProcessVerdict))).every(
-          (verdict) => verdict === 'exited'
-        ) &&
-        (await this.cliWriterShellAlone(pane))
-      if (seen.state === 'ended' || agentsEnded) {
+      // A root exit is not the agents' exit: a detached one outlives its shell.
+      const agentsExited = (
+        await Promise.all(claim.processes.map(switchStartProcessVerdict))
+      ).every((verdict) => verdict === 'exited')
+      const over =
+        agentsExited &&
+        (seen.state === 'ended' ||
+          (seen.state === 'bound' &&
+            seen.startupSettled &&
+            claim.processes.length > 0 &&
+            pane?.incarnationId === seen.incarnationId &&
+            (await this.cliWriterShellAlone(pane))))
+      if (over) {
         await this.releaseSwitchClaim(claim)
         continue
       }

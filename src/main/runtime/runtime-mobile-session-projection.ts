@@ -35,18 +35,21 @@ export function projectRuntimeMobileSessionTabs(
   // and embedders that have not adopted the narrow getter.
   let hookRowsByPaneKey: Map<string, AgentStatusIpcPayload[]> | null = null
   const hookRowsForPane = new Map<string, AgentStatusIpcPayload[]>()
+  // A switch's launch identity names one exact execution; a replacement there never wears it.
+  const current = ({ launchExecution: stamp }: AgentStatusIpcPayload) =>
+    !stamp || host.ptysById.get(stamp.ptyId)?.incarnationId === stamp.incarnationId
   const getHookRowsForPane = (paneKey: string): AgentStatusIpcPayload[] => {
     const cached = hookRowsForPane.get(paneKey)
     if (cached) {
       return cached
     }
-    const direct = host.getProviderSessionRows(paneKey)
-    if (direct) {
-      hookRowsForPane.set(paneKey, direct)
-      return direct
-    }
-    hookRowsByPaneKey ??= indexAgentStatusRowsByPaneKey(host.getProviderSessionSnapshot())
-    const rows = hookRowsByPaneKey.get(paneKey) ?? []
+    const rows = (
+      host.getProviderSessionRows(paneKey) ??
+      (hookRowsByPaneKey ??= indexAgentStatusRowsByPaneKey(host.getProviderSessionSnapshot())).get(
+        paneKey
+      ) ??
+      []
+    ).filter(current)
     hookRowsForPane.set(paneKey, rows)
     return rows
   }

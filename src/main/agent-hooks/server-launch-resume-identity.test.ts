@@ -83,6 +83,10 @@ describe('a resume launch seeds the pane identity', () => {
       { ptyId: 'pty-1', incarnationId: 'i1' },
       { ptyId: 'pty-1', incarnationId: 'i2' }
     ])
+    // A reloaded renderer reads the same stamp from the snapshot.
+    expect(server.getStatusSnapshotForPane(PANE)).toEqual([
+      expect.objectContaining({ launchExecution: { ptyId: 'pty-1', incarnationId: 'i2' } })
+    ])
   })
 
   it("yields to the agent's own report and is replaced by its first hook", async () => {
