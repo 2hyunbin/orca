@@ -108,14 +108,28 @@ function unreachableArchiveError(
     return error
   }
   const cause = error instanceof Error ? error.message : String(error)
-  return new Error(
+  return new DesktopDownloadUnreachableError(
     `This computer couldn't download ${archive.label} from ${archive.url} (${cause}). ` +
       `Orca uploads ${archive.label} to the host from this computer, so the host doesn't need ` +
       `internet access, but this computer must reach that address once. Check this computer's ` +
-      `network connection or proxy and connect again, or download that file on another machine ` +
+      `network connection or proxy and connect again, set a mirror in Settings > Advanced > ` +
+      `Network > Node.js download mirror, or download that file on another machine ` +
       `and copy it to ${cachePath}`,
-    { cause: error }
+    `${archive.url}: ${cause}`,
+    error
   )
+}
+
+/** This computer's download failed on the network; `reason` is the short form for combined errors. */
+export class DesktopDownloadUnreachableError extends Error {
+  constructor(
+    message: string,
+    readonly reason: string,
+    cause: unknown
+  ) {
+    super(message, { cause })
+    this.name = 'DesktopDownloadUnreachableError'
+  }
 }
 
 export async function materializeCachedRuntimeExecutable(
@@ -225,9 +239,11 @@ async function withNodeDistMirror<T>(
       throw mirrorError
     }
     return run(archive, options).catch((error: unknown) => {
-      throw new Error(
-        `${errorText(error)} (the mirror ${mirrorUrl} failed too: ${errorText(mirrorError)})`,
-        { cause: error }
+      const mirrorReason = `${mirrorUrl}: ${errorReason(mirrorError)}`
+      throw new DesktopDownloadUnreachableError(
+        `${errorText(error)} (the mirror ${mirrorReason} failed too)`,
+        `${mirrorReason}; ${errorReason(error)}`,
+        error
       )
     })
   }
@@ -235,6 +251,10 @@ async function withNodeDistMirror<T>(
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof DesktopDownloadUnreachableError ? error.reason : errorText(error)
 }
 
 /** The pinned official archive, uploaded to hosts as published (design D5). */

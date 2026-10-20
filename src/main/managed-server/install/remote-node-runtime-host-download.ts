@@ -20,6 +20,7 @@ import {
   type RemoteHostPlatform
 } from '../../ssh/ssh-remote-platform'
 import { configuredNodeDistMirror } from '../../node-runtime/node-dist-mirror-setting'
+import { DesktopDownloadUnreachableError } from '../../node-runtime/pinned-runtime-materializer'
 import { remoteSha256Command } from './remote-sha256-command'
 
 export const HOST_NODE_DOWNLOAD_OK = 'ORCA_NODE_HOST_DOWNLOAD_OK'
@@ -145,7 +146,12 @@ export class NodeRuntimeUnreachableError extends Error {
     cause: unknown,
     mirrorable = true
   ) {
-    const desktop = cause instanceof Error ? cause.message : String(cause)
+    const desktop =
+      cause instanceof DesktopDownloadUnreachableError
+        ? cause.reason
+        : cause instanceof Error
+          ? cause.message
+          : String(cause)
     const mirror = mirrorable
       ? ', set a mirror of nodejs.org/dist in Settings > Advanced > Network > Node.js download mirror ' +
         '(or NODEJS_ORG_MIRROR on the host)'
