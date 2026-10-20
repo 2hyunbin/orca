@@ -12742,7 +12742,7 @@
             "title": "Orca on {{host}}"
           },
           "title": "Orca on your SSH hosts",
-          "description": "Orca installs itself on an empty SSH host over your SSH connection and keeps it up to date.",
+          "description": "Orca installs itself on an empty SSH host and keeps itself up to date.",
           "deploy": {
             "host": "SSH host",
             "hostPlaceholder": "Choose an empty SSH host",
@@ -12824,12 +12824,12 @@
         "sshHostServer": {
           "sourceChanged": "An older version of Orca changed this host’s projects. Move those changes to this host’s Orca server, or keep the server’s version, to connect again.",
           "deploying": "Setting up Orca on {{host}}…",
-          "converting": "Moving Orca’s list of projects, tabs and terminals to {{host}}…",
+          "converting": "Moving to Orca on {{host}}…",
           "connecting": "Connecting to Orca on {{host}}…",
           "updating": "Updating Orca on {{host}}…",
           "starting": "Starting Orca on {{host}}…",
           "notServing": "Orca couldn’t confirm that its server on {{host}} is answering.",
-          "hostNewer": "Runs Orca’s server from a newer version of Orca; it keeps that version.",
+          "hostNewer": "Runs a newer version of Orca’s server than this app; it keeps that version.",
           "failureDetails": "Details",
           "cause": {
             "unsupportedHost": "Orca has no server build for this system",
@@ -12954,7 +12954,7 @@
         "moveAnyway": {
           "action": "Move anyway…",
           "title": "Move this host anyway",
-          "description": "Orca moves this host’s projects to Orca on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.",
+          "description": "Orca sets itself up on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.",
           "cancel": "Cancel",
           "confirm": "Move anyway"
         },
@@ -12990,7 +12990,7 @@
         "restartServer": {
           "action": "Restart Orca’s server…",
           "title": "Restart Orca’s server",
-          "description": "Orca restarts its server on this host from your current connection. It restarts only when no terminals are running on the host, because terminals that are still open keep the lost access. Close them first.",
+          "description": "Orca restarts its server on this host from your current connection. It restarts only when no terminals are running on the host, because terminals that are still open stay cut off. Close them first.",
           "cancel": "Cancel",
           "confirm": "Restart",
           "terminalsUnknown": "Orca couldn’t confirm whether terminals are running on this host, so it didn’t restart Orca’s server.",

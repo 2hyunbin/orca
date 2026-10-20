@@ -14,9 +14,13 @@ describe('SSH host server status line', () => {
       sshHostServerStatusLine(plain, { managedServer: { kind: 'setting-up', phase: 'converting' } })
     ).toEqual({
       tone: 'muted',
-      text: 'Moving Orca’s list of projects, tabs and terminals to Box…',
+      text: 'Moving to Orca on Box…',
       hint: 'Runs on Box, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to Box.'
     })
+    // A reconnect of a host that already moved starts its server; nothing moves then.
+    expect(
+      sshHostServerStatusLine(plain, { managedServer: { kind: 'setting-up', phase: 'starting' } })
+    ).toEqual({ tone: 'muted', text: 'Starting Orca on Box…' })
   })
 
   it('shows startup progress and preserves the cause of unverifiable server contact', () => {
@@ -81,7 +85,7 @@ describe('SSH host server status line', () => {
       sshHostServerStatusLine(plain, {
         managedServer: { kind: 'managed', environmentId: 'e', update }
       })
-    expect(managed({ state: 'host-newer' })?.text).toContain('from a newer version of Orca')
+    expect(managed({ state: 'host-newer' })?.text).toContain('newer version of Orca’s server')
     expect(managed({ state: 'deferred', detail: '2 terminals are running.' })).toMatchObject({
       tone: 'muted',
       detail: '2 terminals are running.'

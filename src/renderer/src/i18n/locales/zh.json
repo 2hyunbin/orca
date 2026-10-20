@@ -12524,7 +12524,7 @@
             "title": "{{host}} 上的 Orca"
           },
           "title": "SSH 主机上的 Orca",
-          "description": "Orca 会通过你的 SSH 连接将自身安装到空的 SSH 主机上，并使其保持最新。",
+          "description": "Orca 会将自身安装到空的 SSH 主机上，并自动保持最新。",
           "deploy": {
             "host": "SSH 主机",
             "hostPlaceholder": "选择一个空的 SSH 主机",
@@ -12606,12 +12606,12 @@
         "sshHostServer": {
           "sourceChanged": "较旧版本的 Orca 更改了此主机的项目。要重新连接，请将这些更改迁移到此主机上的 Orca 服务器，或保留服务器版本。",
           "deploying": "正在 {{host}} 上设置 Orca…",
-          "converting": "正在将 Orca 的项目、标签页和终端列表移到 {{host}}…",
+          "converting": "正在迁移到 {{host}} 上的 Orca…",
           "connecting": "正在连接到 {{host}} 上的 Orca…",
           "updating": "正在更新 {{host}} 上的 Orca…",
           "starting": "正在启动 {{host}} 上的 Orca…",
           "notServing": "Orca 无法确认其在 {{host}} 上的服务器是否正在响应。",
-          "hostNewer": "运行来自较新版本 Orca 的 Orca 服务器；它会保留该版本。",
+          "hostNewer": "运行的 Orca 服务器比此应用新；它会保留该版本。",
           "failureDetails": "详情",
           "cause": {
             "unsupportedHost": "Orca 没有适用于此系统的服务器构建",
@@ -12674,7 +12674,7 @@
         "moveAnyway": {
           "action": "仍要迁移…",
           "title": "仍要迁移此主机",
-          "description": "Orca 会将此主机的项目迁移到 {{host}} 上的 Orca，但不包含下列已保存的项目。它们会保留在这台电脑上，不会出现在 {{host}} 上。未保存的编辑会被保留，绝不会被删除。",
+          "description": "Orca 会在 {{host}} 上完成设置，但不包含下列已保存的项目。它们会保留在这台电脑上，不会出现在 {{host}} 上。未保存的编辑会被保留，绝不会被删除。",
           "cancel": "取消",
           "confirm": "仍要迁移"
         },
@@ -12745,9 +12745,11 @@
         "restartServer": {
           "action": "重启 Orca 服务器…",
           "title": "重启 Orca 服务器",
-          "description": "Orca 会通过你当前的连接重启此主机上的 Orca 服务器。只有在主机上没有正在运行的终端时才会重启，因为仍然打开的终端会保持失去的访问状态。请先关闭它们。",
+          "description": "Orca 会通过你当前的连接重启此主机上的 Orca 服务器。只有在主机上没有正在运行的终端时才会重启，因为仍然打开的终端会一直无法访问。请先关闭它们。",
           "terminalsUnknown": "Orca 无法确认此主机上是否有终端正在运行，因此没有重启 Orca 服务器。",
-          "terminalsRunning": "此主机上仍有 {{count}} 个终端在运行。请关闭它们，然后重启 Orca 服务器。"
+          "terminalsRunning": "此主机上仍有 {{count}} 个终端在运行。请关闭它们，然后重启 Orca 服务器。",
+          "cancel": "取消",
+          "confirm": "重启"
         }
       },
       "right": {

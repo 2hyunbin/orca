@@ -126,7 +126,7 @@ export function ManagedServersSection({
         <p className="text-xs text-muted-foreground">
           {translate(
             'auto.components.settings.managedServers.description',
-            'Orca installs itself on an empty SSH host over your SSH connection and keeps it up to date.'
+            'Orca installs itself on an empty SSH host and keeps itself up to date.'
           )}
         </p>
         <p className="text-xs text-muted-foreground">
@@ -209,6 +209,11 @@ export function ManagedServersSection({
               key={environment.id}
               api={api}
               environment={environment}
+              hostLabel={
+                targets.find(
+                  (target) => target.id === getOrcadSshDeployment(environment)?.sshTargetId
+                )?.label
+              }
               onChanged={onChanged}
             />
           ))}

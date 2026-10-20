@@ -57,7 +57,10 @@ export function sshHostServerStatusLine(
     return {
       tone: 'muted',
       text: settingUpLabel(status.phase, target.label),
-      hint: sshHostServerReassurance(target.label)
+      // Why only these phases: `starting` and `connecting` run on every reconnect, when nothing moves.
+      ...(status.phase === 'deploying' || status.phase === 'converting'
+        ? { hint: sshHostServerReassurance(target.label) }
+        : {})
     }
   }
   if (status?.kind === 'relay') {

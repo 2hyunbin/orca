@@ -10,7 +10,7 @@ export function managedUpdateLine(update: SshManagedServerUpdateNote): SshHostSe
         tone: 'muted',
         text: translate(
           'auto.components.settings.sshHostServer.hostNewer',
-          'Runs Orca’s server from a newer version of Orca; it keeps that version.'
+          'Runs a newer version of Orca’s server than this app; it keeps that version.'
         )
       }
     case 'deferred':

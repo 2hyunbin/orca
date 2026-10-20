@@ -78,7 +78,7 @@ export function SshHostRestartServerAction({
             <DialogDescription>
               {translate(
                 'auto.components.settings.restartServer.description',
-                'Orca restarts its server on this host from your current connection. It restarts only when no terminals are running on the host, because terminals that are still open keep the lost access. Close them first.'
+                'Orca restarts its server on this host from your current connection. It restarts only when no terminals are running on the host, because terminals that are still open stay cut off. Close them first.'
               )}
             </DialogDescription>
           </DialogHeader>

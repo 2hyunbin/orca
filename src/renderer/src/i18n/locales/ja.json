@@ -12510,7 +12510,7 @@
             "title": "{{host}} 上の Orca"
           },
           "title": "SSH ホスト上の Orca",
-          "description": "Orca は SSH 接続を通じて空の SSH ホストに自身をインストールし、最新の状態に保ちます。",
+          "description": "Orca は空の SSH ホストに自身をインストールし、常に最新の状態を保ちます。",
           "deploy": {
             "host": "SSH ホスト",
             "hostPlaceholder": "空の SSH ホストを選択",
@@ -12592,12 +12592,12 @@
         "sshHostServer": {
           "sourceChanged": "古いバージョンの Orca がこのホストのプロジェクトを変更しました。再接続するには、その変更をこのホストの Orca サーバーに移動するか、サーバーのバージョンを維持してください。",
           "deploying": "{{host}} に Orca をセットアップ中…",
-          "converting": "Orca のプロジェクト、タブ、ターミナルの一覧を {{host}} に移動中…",
+          "converting": "{{host}} 上の Orca に移行中…",
           "connecting": "{{host}} 上の Orca に接続中…",
           "updating": "{{host}} 上の Orca を更新中…",
           "starting": "{{host}} 上の Orca を起動中…",
           "notServing": "Orca は {{host}} 上のサーバーが応答していることを確認できませんでした。",
-          "hostNewer": "より新しいバージョンの Orca の Orca サーバーを実行しています。そのバージョンが維持されます。",
+          "hostNewer": "このアプリより新しい Orca サーバーを実行しています。そのバージョンが維持されます。",
           "failureDetails": "詳細",
           "cause": {
             "unsupportedHost": "Orca にはこのシステム用のサーバービルドがありません",
@@ -12660,7 +12660,7 @@
         "moveAnyway": {
           "action": "それでも移行…",
           "title": "このホストをそれでも移行",
-          "description": "Orca はこのホストのプロジェクトを {{host}} 上の Orca に移行しますが、以下の保存済み項目は含めません。これらはこのコンピューターに残り、{{host}} には表示されません。未保存の編集は保持され、削除されることはありません。",
+          "description": "Orca は以下の保存済み項目を含めずに {{host}} に自身をセットアップします。これらはこのコンピューターに残り、{{host}} には表示されません。未保存の編集は保持され、削除されることはありません。",
           "cancel": "キャンセル",
           "confirm": "それでも移行"
         },
@@ -12745,9 +12745,11 @@
         "restartServer": {
           "action": "Orca サーバーを再起動…",
           "title": "Orca サーバーを再起動",
-          "description": "Orca は現在の接続からこのホストの Orca サーバーを再起動します。開いたままのターミナルは失われたアクセスのままになるため、ホスト上でターミナルが実行されていない場合にのみ再起動します。先に閉じてください。",
+          "description": "Orca は現在の接続からこのホストの Orca サーバーを再起動します。開いたままのターミナルはアクセスが切れたままになるため、ホスト上でターミナルが実行されていない場合にのみ再起動します。先に閉じてください。",
           "terminalsUnknown": "このホストでターミナルが実行中かどうかを確認できなかったため、Orca サーバーを再起動しませんでした。",
-          "terminalsRunning": "このホストでは {{count}} 個のターミナルがまだ実行中です。閉じてから Orca サーバーを再起動してください。"
+          "terminalsRunning": "このホストでは {{count}} 個のターミナルがまだ実行中です。閉じてから Orca サーバーを再起動してください。",
+          "cancel": "キャンセル",
+          "confirm": "再起動"
         }
       },
       "right": {

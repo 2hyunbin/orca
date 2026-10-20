@@ -95,7 +95,7 @@ export async function createManagedOrcadEnvironment(
     await claims.flush(args.signal)
     const targetGeneration = claimed.generation
     if (targetGeneration === undefined) {
-      throw new Error('The managed Orca SSH registration has no durable generation.')
+      throw new Error('The SSH registration for this host’s Orca server has no durable generation.')
     }
     if (registered && getOrcadSshDeployment(registered)?.sshTargetGeneration !== targetGeneration) {
       throw new Error('The saved Orca server for this host has a stale SSH target generation.')

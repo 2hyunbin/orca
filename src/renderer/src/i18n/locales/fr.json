@@ -12618,7 +12618,7 @@
             "title": "Orca sur {{host}}"
           },
           "title": "Orca sur vos hôtes SSH",
-          "description": "Orca s’installe sur un hôte SSH vide via votre connexion SSH et le maintient à jour.",
+          "description": "Orca s’installe sur un hôte SSH vide et se maintient à jour.",
           "deploy": {
             "host": "Hôte SSH",
             "hostPlaceholder": "Choisissez un hôte SSH vide",
@@ -12695,17 +12695,17 @@
             "deferred": "Pas encore effectué : le serveur n'est pas prêt pour cela. Réessayez plus tard.",
             "failed": "Orca n'a pas pu terminer cette action sur le serveur. Réessayez."
           },
-          "reassurance": "S’exécute sur chaque hôte, joint via votre propre connexion SSH. Votre code et vos fichiers restent où ils sont. Seule la liste des projets, onglets et terminaux d’Orca passe sur l’hôte."
+          "reassurance": "S’exécute sur chaque hôte, accessible via votre propre connexion SSH. Votre code et vos fichiers restent où ils sont. Seule la liste des projets, onglets et terminaux d’Orca passe sur l’hôte."
         },
         "sshHostServer": {
           "sourceChanged": "Une version plus ancienne d’Orca a modifié les projets de cet hôte. Déplacez ces modifications vers le serveur Orca de cet hôte, ou conservez la version du serveur, pour vous reconnecter.",
           "deploying": "Configuration d’Orca sur {{host}}…",
-          "converting": "Transfert de la liste des projets, onglets et terminaux d’Orca vers {{host}}…",
+          "converting": "Passage à Orca sur {{host}}…",
           "connecting": "Connexion à Orca sur {{host}}…",
           "updating": "Mise à jour d’Orca sur {{host}}…",
           "starting": "Démarrage d’Orca sur {{host}}…",
           "notServing": "Orca n’a pas pu confirmer que son serveur sur {{host}} répond.",
-          "hostNewer": "Exécute le serveur Orca d’une version plus récente d’Orca ; il conserve cette version.",
+          "hostNewer": "Exécute une version du serveur Orca plus récente que cette app ; il conserve cette version.",
           "failureDetails": "Détails",
           "cause": {
             "unsupportedHost": "Orca n'a pas de build de serveur pour ce système",
@@ -12736,7 +12736,7 @@
           "nodeDownloadBlocked": "Ni cet ordinateur ni cet hôte n’ont pu télécharger Node.js, dont le serveur Orca a besoin. Utilisez un miroir Node.js ou vérifiez le réseau sur les deux machines.",
           "nodeDownloadBlockedNoMirror": "Ni cet ordinateur ni cet hôte n’ont pu télécharger Node.js, dont le serveur Orca a besoin. Vérifiez le réseau ou le proxy sur les deux machines, puis reconnectez-vous.",
           "nodeDownloadBlockedMirrorTried": "Ni cet ordinateur ni cet hôte n’ont pu télécharger Node.js, y compris depuis le miroir de téléchargement Node.js. Vérifiez le paramètre du miroir, puis reconnectez-vous.",
-          "reassurance": "S’exécute sur {{host}}, joint via votre propre connexion SSH. Votre code et vos fichiers restent où ils sont. Seule la liste des projets, onglets et terminaux d’Orca passe sur {{host}}.",
+          "reassurance": "S’exécute sur {{host}}, accessible via votre propre connexion SSH. Votre code et vos fichiers restent où ils sont. Seule la liste des projets, onglets et terminaux d’Orca passe sur {{host}}.",
           "launchSessionEnded": "Les terminaux de ce Mac ont peut-être perdu l’accès au réseau local, car la session SSH qui a démarré le serveur Orca de cet hôte s’est terminée. Redémarrez le serveur Orca pour le rétablir.",
           "behindRolledBack": "Exécute une version du serveur Orca plus ancienne que cette app ; la dernière mise à jour a été annulée. Utilisez Mettre à jour le serveur pour réessayer.",
           "behindNoTemplate": "Exécute une version du serveur Orca que cette app ne peut pas mettre à jour ; cette version d’Orca n’inclut pas de serveur pour cet hôte.",
@@ -12768,7 +12768,7 @@
         "moveAnyway": {
           "action": "Déplacer quand même…",
           "title": "Déplacer cet hôte quand même",
-          "description": "Orca transfère les projets de cet hôte vers Orca sur {{host}} sans les éléments enregistrés ci-dessous. Ils restent sur cet ordinateur et n’apparaissent pas sur {{host}}. Les modifications non enregistrées sont conservées, jamais supprimées.",
+          "description": "Orca s’installe sur {{host}} sans les éléments enregistrés ci-dessous. Ils restent sur cet ordinateur et n’apparaissent pas sur {{host}}. Les modifications non enregistrées sont conservées, jamais supprimées.",
           "cancel": "Annuler",
           "confirm": "Déplacer quand même"
         },
@@ -12853,9 +12853,11 @@
         "restartServer": {
           "action": "Redémarrer le serveur Orca…",
           "title": "Redémarrer le serveur Orca",
-          "description": "Orca redémarre son serveur sur cet hôte depuis votre connexion actuelle. Il ne redémarre que si aucun terminal n’est en cours d’exécution sur l’hôte, car les terminaux encore ouverts conservent l’accès perdu. Fermez-les d’abord.",
+          "description": "Orca redémarre son serveur sur cet hôte depuis votre connexion actuelle. Il ne redémarre que si aucun terminal n’est en cours d’exécution sur l’hôte, car les terminaux encore ouverts restent privés d’accès. Fermez-les d’abord.",
           "terminalsUnknown": "Orca n’a pas pu confirmer si des terminaux sont en cours d’exécution sur cet hôte, il n’a donc pas redémarré le serveur Orca.",
-          "terminalsRunning": "{{count}} terminaux sont toujours en cours d’exécution sur cet hôte. Fermez-les, puis redémarrez le serveur Orca."
+          "terminalsRunning": "{{count}} terminaux sont toujours en cours d’exécution sur cet hôte. Fermez-les, puis redémarrez le serveur Orca.",
+          "cancel": "Annuler",
+          "confirm": "Redémarrer"
         }
       },
       "right": {

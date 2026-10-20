@@ -25,7 +25,7 @@ export function settingUpLabel(
     case 'converting':
       return translate(
         'auto.components.settings.sshHostServer.converting',
-        'Moving Orca’s list of projects, tabs and terminals to {{host}}…',
+        'Moving to Orca on {{host}}…',
         { host }
       )
     case 'connecting':

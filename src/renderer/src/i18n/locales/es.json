@@ -12505,7 +12505,7 @@
             "title": "Orca en {{host}}"
           },
           "title": "Orca en tus hosts SSH",
-          "description": "Orca se instala en un host SSH vacío a través de tu conexión SSH y lo mantiene actualizado.",
+          "description": "Orca se instala en un host SSH vacío y se mantiene actualizado.",
           "deploy": {
             "host": "Host SSH",
             "hostPlaceholder": "Elige un host SSH vacío",
@@ -12587,12 +12587,12 @@
         "sshHostServer": {
           "sourceChanged": "Una versión anterior de Orca cambió los proyectos de este host. Mueve esos cambios al servidor de Orca de este host o conserva la versión del servidor para volver a conectarte.",
           "deploying": "Configurando Orca en {{host}}…",
-          "converting": "Moviendo la lista de proyectos, pestañas y terminales de Orca a {{host}}…",
+          "converting": "Pasando a Orca en {{host}}…",
           "connecting": "Conectando con Orca en {{host}}…",
           "updating": "Actualizando Orca en {{host}}…",
           "starting": "Iniciando Orca en {{host}}…",
           "notServing": "Orca no pudo confirmar que su servidor en {{host}} esté respondiendo.",
-          "hostNewer": "Ejecuta el servidor de Orca de una versión más reciente de Orca; conserva esa versión.",
+          "hostNewer": "Ejecuta una versión del servidor de Orca más reciente que esta app; conserva esa versión.",
           "failureDetails": "Detalles",
           "cause": {
             "unsupportedHost": "Orca no tiene una compilación de servidor para este sistema",
@@ -12655,7 +12655,7 @@
         "moveAnyway": {
           "action": "Mover de todos modos…",
           "title": "Mover este host de todos modos",
-          "description": "Orca mueve los proyectos de este host a Orca en {{host}} sin los elementos guardados que aparecen abajo. Se quedan en este equipo y no aparecen en {{host}}. Las ediciones sin guardar se conservan; nunca se eliminan.",
+          "description": "Orca se instala en {{host}} sin los elementos guardados que aparecen abajo. Se quedan en este equipo y no aparecen en {{host}}. Las ediciones sin guardar se conservan; nunca se eliminan.",
           "cancel": "Cancelar",
           "confirm": "Mover de todos modos"
         },
@@ -12740,9 +12740,11 @@
         "restartServer": {
           "action": "Reiniciar el servidor de Orca…",
           "title": "Reiniciar el servidor de Orca",
-          "description": "Orca reinicia su servidor en este host desde tu conexión actual. Solo se reinicia cuando no hay terminales en ejecución en el host, porque los terminales que siguen abiertos conservan el acceso perdido. Ciérralos primero.",
+          "description": "Orca reinicia su servidor en este host desde tu conexión actual. Solo se reinicia cuando no hay terminales en ejecución en el host, porque los terminales que siguen abiertos se quedan sin acceso. Ciérralos primero.",
           "terminalsUnknown": "Orca no pudo confirmar si hay terminales en ejecución en este host, así que no reinició el servidor de Orca.",
-          "terminalsRunning": "{{count}} terminales siguen en ejecución en este host. Ciérralos y luego reinicia el servidor de Orca."
+          "terminalsRunning": "{{count}} terminales siguen en ejecución en este host. Ciérralos y luego reinicia el servidor de Orca.",
+          "cancel": "Cancelar",
+          "confirm": "Reiniciar"
         }
       },
       "right": {

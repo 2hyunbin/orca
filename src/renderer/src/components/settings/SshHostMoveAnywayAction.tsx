@@ -73,16 +73,18 @@ export function SshHostMoveAnywayAction({
             <DialogTitle>
               {translate('auto.components.settings.moveAnyway.title', 'Move this host anyway')}
             </DialogTitle>
-            <DialogDescription>
-              {translate(
-                'auto.components.settings.moveAnyway.description',
-                'Orca moves this host’s projects to Orca on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.',
-                { host: target.label }
-              )}
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {translate(
+                    'auto.components.settings.moveAnyway.description',
+                    'Orca sets itself up on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.',
+                    { host: target.label }
+                  )}
+                </p>
+                <p>{sshHostServerReassurance(target.label)}</p>
+              </div>
             </DialogDescription>
-            <p className="text-sm text-muted-foreground">
-              {sshHostServerReassurance(target.label)}
-            </p>
           </DialogHeader>
           {status.detail ? (
             <pre className="scrollbar-sleek max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
