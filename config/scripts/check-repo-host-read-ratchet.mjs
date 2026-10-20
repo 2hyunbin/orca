@@ -34,9 +34,14 @@ export function isScannedFile(rel) {
   )
 }
 
+// Copying the field verbatim into a projected row decides nothing; that row's reader does.
+const VERBATIM_COPY =
+  /\.\.\.\(\s*(\w+)\.connectionId !== undefined \? \{ connectionId: \1\.connectionId \} : \{\}\s*\)/g
+
 /** Raw `<repo>.connectionId` reads in one file's code; comments are prose and do not count. */
 export function countRawRepoHostReads(text) {
-  return [...stripSlashComments(text).matchAll(RAW_READ)].length
+  const code = stripSlashComments(text).replace(VERBATIM_COPY, '')
+  return [...code.matchAll(RAW_READ)].length
 }
 
 export function collectRepoHostReads(root = process.cwd()) {

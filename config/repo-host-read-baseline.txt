@@ -61,9 +61,7 @@
 1 src/shared/endpoint-catalog-adoption.ts
 1 src/shared/folder-workspace-execution-host.ts
 1 src/shared/github/github-cache-key.ts
-2 src/shared/mobile-project-sections-contract.ts
 1 src/shared/new-workspace-dialog-repo.ts
-2 src/shared/project-host-setup-projection.ts
 1 src/shared/sidebar-list/host-section-rows.ts
 1 src/shared/sidebar-list/workspace-review-facts.ts
 1 src/shared/workspace-session-terminal-buffers.ts

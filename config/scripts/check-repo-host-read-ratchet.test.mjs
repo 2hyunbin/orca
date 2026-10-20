@@ -32,6 +32,15 @@ describe('countRawRepoHostReads', () => {
     expect(countRawRepoHostReads(text)).toBe(0)
   })
 
+  it('ignores a verbatim copy into a projected row, but not a decision beside it', () => {
+    const copy = '...(repo.connectionId !== undefined ? { connectionId: repo.connectionId } : {}),'
+    expect(countRawRepoHostReads(copy)).toBe(0)
+    expect(countRawRepoHostReads(`${copy}\nif (repo.connectionId) {}`)).toBe(1)
+    const mismatched =
+      '...(repo.connectionId !== undefined ? { connectionId: sourceRepo.connectionId } : {})'
+    expect(countRawRepoHostReads(mismatched)).toBe(2)
+  })
+
   it('still counts an equality comparison, which is not an assignment', () => {
     expect(countRawRepoHostReads('if (repo.connectionId == null) {}')).toBe(1)
   })
