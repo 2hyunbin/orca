@@ -50,7 +50,10 @@ function absentPaneReplacement(
   worktreeId: string,
   connectionId: string | null | undefined,
   owner: AbsentPaneOwner
-): ReplacedPaneOwner & { pane: NonNullable<ReplacedPaneOwner['pane']> } {
+): ReplacedPaneOwner & {
+  pane: NonNullable<ReplacedPaneOwner['pane']>
+  absenceFence: { incarnationId: string | undefined }
+} {
   return {
     ptyId: owner.ptyId,
     absenceFence: { incarnationId: owner.persistedIncarnationId },
