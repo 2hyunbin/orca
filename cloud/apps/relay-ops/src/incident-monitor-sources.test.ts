@@ -595,7 +595,15 @@ describe('incident monitor sources', () => {
     )
     const signals = result.source.signals
     expect(signals[`cell.${reserveCellId}.admission_state`]).toMatchObject({ value: 2 })
-    for (const suffix of ['heartbeat_fresh', 'heartbeat_age_ms', 'migration_blocked', 'connection_hard_cap']) {
+    // Why: 10-19 run 39225932592 froze reserve c7 at 731 connections against the 500 default.
+    const configuredCap = RELAY_OPS_ENVIRONMENTS.production.cells.find(
+      (cell) => cell.cellId === reserveCellId
+    )?.connectionHardCap
+    expect(configuredCap).toBe(1_000)
+    expect(signals[`cell.${reserveCellId}.connection_hard_cap`]).toMatchObject({
+      value: configuredCap
+    })
+    for (const suffix of ['heartbeat_fresh', 'heartbeat_age_ms', 'migration_blocked']) {
       expect(signals[`cell.${reserveCellId}.${suffix}`]).toBeUndefined()
     }
     expect(signals['cell.production-gce-c1.heartbeat_age_ms']).toMatchObject({ value: 1_000 })
