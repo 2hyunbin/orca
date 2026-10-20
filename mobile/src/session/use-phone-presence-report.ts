@@ -3,7 +3,6 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import type { RpcClient } from '../transport/rpc-client'
-import type { ConnectionState } from '../transport/types'
 
 /** The session routes one host's client has in focus, by screen. */
 type HostView = { focused: Map<object, string>; holders: number; stopAppState: () => void }
@@ -25,10 +24,18 @@ export function phonePresenceView(
   return { workspaceIds, tabIds: [], presentForMs: workspaceIds.length > 0 ? null : 0 }
 }
 
+const REPORT_VIEW = 'sidebarInputs.reportView'
+
 function report(client: RpcClient, view: HostView): void {
   const params = phonePresenceView(AppState.currentState, view.focused.values())
-  // An older or switch-off host refuses the method; it then holds the session until close as before.
-  void client.sendRequest('sidebarInputs.reportView', params).catch(() => {})
+  // The transport says it first on every new session, before replaying any subscription, so the
+  // host never reads a covered route's re-subscribe as one on screen. An older or switch-off host
+  // refuses the method; it then holds the session until close as before.
+  if (client.setSessionPreamble) {
+    client.setSessionPreamble(REPORT_VIEW, REPORT_VIEW, params)
+  } else {
+    void client.sendRequest(REPORT_VIEW, params).catch(() => {})
+  }
 }
 
 function holdHostView(client: RpcClient): HostView {
@@ -64,14 +71,9 @@ function releaseHostView(client: RpcClient, view: HostView): void {
  * the foreground. A route covered by another screen, a locked phone, or a backgrounded app is away,
  * so the host's unread dot is not muted for what nobody sees.
  */
-export function usePhonePresenceReport(
-  client: RpcClient | null,
-  connState: ConnectionState,
-  worktreeId: string
-): void {
-  const reportingClient = ORCA_SIDEBAR_INPUTS_IS_MAIN && connState === 'connected' ? client : null
-  // Said on every connect, ahead of this screen's session subscription (hook order), so a route
-  // re-subscribing behind another screen is never taken for the one on screen.
+export function usePhonePresenceReport(client: RpcClient | null, worktreeId: string): void {
+  const reportingClient = ORCA_SIDEBAR_INPUTS_IS_MAIN ? client : null
+  // Held ahead of this screen's session subscription (hook order), including on a new client.
   useEffect(() => {
     if (!reportingClient) {
       return

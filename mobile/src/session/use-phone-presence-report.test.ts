@@ -2,7 +2,6 @@ import { createElement, Fragment, useContext, useEffect } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
-import type { ConnectionState } from '../transport/types'
 import { usePhonePresenceReport } from './use-phone-presence-report'
 
 const lifecycle = vi.hoisted(() => ({
@@ -44,15 +43,31 @@ const shows = (...workspaceIds: string[]) => ({ workspaceIds, tabIds: [], presen
 
 type Screen = { worktreeId: string; focused: boolean }
 
-function harness(screens: Screen[], connState: ConnectionState = 'connected') {
+/** A client whose transport holds the view as a session preamble, or an older one without it. */
+function makeClient(holdsPreamble = true) {
+  const setSessionPreamble = vi.fn((_key: string, _method: string, _params: unknown) => undefined)
   const sendRequest = vi.fn(async (_method: string, _params: unknown) => ({ ok: true }))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook calls only sendRequest.
-  const client = { sendRequest } as unknown as RpcClient
-  function Probe(props: { worktreeId: string; state: ConnectionState }) {
-    usePhonePresenceReport(client, props.state, props.worktreeId)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook calls only these.
+  const client = (holdsPreamble
+    ? { setSessionPreamble, sendRequest }
+    : { sendRequest }) as unknown as RpcClient
+  return {
+    client,
+    setSessionPreamble,
+    sendRequest,
+    views: () =>
+      holdsPreamble
+        ? setSessionPreamble.mock.calls.map(([, , params]) => params)
+        : sendRequest.mock.calls.map(([, params]) => params)
+  }
+}
+
+function harness(screens: Screen[], first = makeClient()) {
+  function Probe(props: { worktreeId: string; client: RpcClient }) {
+    usePhonePresenceReport(props.client, props.worktreeId)
     return null
   }
-  const tree = (next: Screen[], state: ConnectionState) =>
+  const tree = (next: Screen[], client: RpcClient) =>
     createElement(
       Fragment,
       null,
@@ -60,20 +75,22 @@ function harness(screens: Screen[], connState: ConnectionState = 'connected') {
         createElement(
           RouteFocus.Provider,
           { key: screen.worktreeId, value: screen.focused },
-          createElement(Probe, { worktreeId: screen.worktreeId, state })
+          createElement(Probe, { worktreeId: screen.worktreeId, client })
         )
       )
     )
+  let current = first
   let renderer!: ReactTestRenderer
   act(() => {
-    renderer = create(tree(screens, connState))
+    renderer = create(tree(screens, current.client))
   })
   return {
-    sendRequest,
-    reports: () => sendRequest.mock.calls.map(([, params]) => params),
-    last: () => sendRequest.mock.lastCall?.[1],
-    update: (next: Screen[], state: ConnectionState = 'connected') =>
-      act(() => renderer.update(tree(next, state))),
+    reports: () => current.views(),
+    last: () => current.views().at(-1),
+    update: (next: Screen[], client = current) => {
+      current = client
+      act(() => renderer.update(tree(next, client.client)))
+    },
     unmount: () => act(() => renderer.unmount())
   }
 }
@@ -132,19 +149,25 @@ describe('usePhonePresenceReport', () => {
     expect(h.last()).toEqual(shows(A))
   })
 
-  it('says the view on connect before a covered route re-subscribes', () => {
-    lifecycle.appState = 'active'
-    const h = harness([{ worktreeId: A, focused: false }], 'connecting')
-    expect(h.sendRequest).not.toHaveBeenCalled()
-    h.update([{ worktreeId: A, focused: false }], 'connected')
-    expect(h.reports()).toEqual([AWAY])
+  it('holds the view on a new client before a covered route re-subscribes on it', () => {
+    const h = harness([{ worktreeId: A, focused: false }])
+    const fresh = makeClient()
+    h.update([{ worktreeId: A, focused: false }], fresh)
+    expect(fresh.views()).toEqual([AWAY])
+    expect(fresh.setSessionPreamble).toHaveBeenLastCalledWith(
+      'sidebarInputs.reportView',
+      'sidebarInputs.reportView',
+      AWAY
+    )
   })
 
-  it('ignores a host that refuses the report', async () => {
-    const h = harness([{ worktreeId: A, focused: true }])
-    h.sendRequest.mockRejectedValueOnce(new Error('method_not_found'))
+  it('sends a plain request to a client without a preamble, and ignores a refusal', async () => {
+    const older = makeClient(false)
+    older.sendRequest.mockRejectedValue(new Error('method_not_found'))
+    const h = harness([{ worktreeId: A, focused: true }], older)
     changeAppState('background')
     await Promise.resolve()
     expect(h.last()).toEqual(AWAY)
+    expect(older.sendRequest).toHaveBeenCalledWith('sidebarInputs.reportView', AWAY)
   })
 })

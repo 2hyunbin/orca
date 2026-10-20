@@ -154,7 +154,7 @@ export function useMobileSessionTabsReconciliation<Result, Tab>({
     [controller, suspendTerminalInventoryRecovery]
   )
 
-  usePhonePresenceReport(client, connState, worktreeId)
+  usePhonePresenceReport(client, worktreeId)
 
   useEffect(() => {
     if (!client || !controller || connState !== 'connected') {
