@@ -1,6 +1,6 @@
 import { link, mkdir, mkdtemp, rm, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AiVaultScanProgress, AiVaultScanWork } from '../../shared/ai-vault-scan-progress'
 import {
@@ -309,7 +309,7 @@ it.each(['cutoff', 'bucket', 'filtered'] as const)(
         )
         expect(
           attempts.map((path) =>
-            Number(path.split('/').at(-1)?.replace('rollout-', '').replace('.jsonl', ''))
+            Number(basename(path).replace('rollout-', '').replace('.jsonl', ''))
           )
         ).toEqual(ids)
         // Captured from the same generated corpus before the change; representatives move earlier.

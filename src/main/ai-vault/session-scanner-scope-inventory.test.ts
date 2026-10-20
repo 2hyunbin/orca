@@ -21,11 +21,17 @@ afterEach(async () => {
 
 it('replays tied selection, winner exclusion and evicted paths in original root order', async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-bucket-replay-'))
-  const paths = ['a', 'b', 'c', 'winner'].map((name) => join(root!, '--repo--', `${name}.jsonl`))
+  const paths = ['b', 'a', 'c', 'winner'].map((name) => join(root!, '--repo--', `${name}.jsonl`))
   for (const [index, path] of paths.entries()) {
     await writeJsonlFile(path, [{ type: 'session', cwd: '/repo' }])
     await utimes(path, index < 2 ? 1 : 2, index < 2 ? 1 : 2)
   }
+  const read = transcriptFs.wslGatedReaddir
+  vi.spyOn(transcriptFs, 'wslGatedReaddir').mockImplementation(async (path, ...args) =>
+    (await read(path, ...args)).sort(
+      (left, right) => paths.indexOf(join(path, left.name)) - paths.indexOf(join(path, right.name))
+    )
+  )
   const opened = vi.spyOn(transcriptFs, 'openTranscriptReadStream')
   const inventory = await inventoryCwdBucketFiles(PI_CWD_BUCKET_LAYOUT, {
     rootDirs: [root, root],
