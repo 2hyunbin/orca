@@ -113,9 +113,11 @@ export function createMarkdownPreviewActions(
           ['edit']
         )
       const id = `markdown-preview::${sourceFileId}`
+      // Why: with the source tab closed, a retarget keeps the authority the preview already reads with.
       const { externalSshTargetId, terminalArtifactGrantId, readOnly } = inheritFileReadAuthority(
         file,
-        initialState.openFiles.find((openFile) => openFile.id === sourceFileId)
+        initialState.openFiles.find((openFile) => openFile.id === sourceFileId) ??
+          initialState.openFiles.find((openFile) => openFile.id === id)
       )
       const anchor = options?.anchor || undefined
       set((s) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createEditorStore } from './editor-slice-test-harness'
 import type { OpenFile } from './editor'
+import { isClientLocalReadOnlyTab } from '@/lib/local-file-access'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/close-mirrored-editor-tab', () => ({
@@ -95,6 +96,30 @@ describe('markdown preview read authority (#31034)', () => {
       runtimeEnvironmentId: null,
       readOnly: true
     })
-    expect(store.getState().openFiles.at(-1)?.terminalArtifactGrantId).toBeUndefined()
+    const preview = store.getState().openFiles.at(-1)
+    expect(preview?.terminalArtifactGrantId).toBeUndefined()
+    expect(preview && isClientLocalReadOnlyTab(preview)).toBe(true)
+  })
+
+  it('keeps the grant when a preview is retargeted after its source tab closed', () => {
+    const store = createEditorStore()
+    store.setState({ openFiles: [grantedSourceTab('grant-1')] })
+    store.getState().openMarkdownPreview(PREVIEW_INPUT, { sourceFileId: 'brief-source' })
+    store.setState({
+      openFiles: store.getState().openFiles.filter((file) => file.id !== 'brief-source')
+    })
+
+    store
+      .getState()
+      .openMarkdownPreview(PREVIEW_INPUT, { sourceFileId: 'brief-source', anchor: 'plan' })
+
+    expect(store.getState().openFiles).toEqual([
+      expect.objectContaining({
+        id: 'markdown-preview::brief-source',
+        markdownPreviewAnchor: 'plan',
+        terminalArtifactGrantId: 'grant-1',
+        readOnly: true
+      })
+    ])
   })
 })
