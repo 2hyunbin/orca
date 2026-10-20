@@ -1,0 +1,128 @@
+name: TEMP mntc benchmark (throwaway, delete with branch)
+
+# One-off experiment: /mnt/c repos via the WSL bridge vs the WSL host vs native Windows vs ext4.
+on:
+  push:
+    branches: [nwparker/tmp-mntc-bench]
+
+permissions:
+  contents: read
+
+env:
+  WSL_UTF8: '1'
+  ROOTFS_URL: https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-wsl-amd64.wsl
+  ROOTFS_SHA256: 9b2f7730dc68227dd04a9f3e5eab86ad85caf556b8606ad94f1f29ff5c4fd3f5
+  WSL_MSI_URL: https://github.com/microsoft/WSL/releases/download/3.0.1/wsl.3.0.1.0.x64.msi
+  WSL_MSI_SHA256: 28b1a0d013640a2ac95898ea705fa186e5b4ff767a1c1b49257161bc106599c6
+  DISTRO: orca-mntc
+  LIN_NODE: /home/orca/node/bin/node
+  LIN_RG: /home/orca/rg
+  PARCEL_WATCHER: /home/orca/w/node_modules/@parcel/watcher
+  OUT: ${{ github.workspace }}\mntc-out
+
+jobs:
+  bench:
+    runs-on: windows-2025
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: Ensure WSL 3.0.1
+        run: |
+          $details = (wsl.exe --version) -join "`n"; $details
+          $m = [regex]::Match($details, '(?m)^WSL version:\s*(\d+(?:\.\d+){2,3})\s*$')
+          $v = if ($LASTEXITCODE -eq 0 -and $m.Success) { [version]$m.Groups[1].Value } else { [version]'0.0.0' }
+          if ($v -lt [version]'3.0.1') {
+            $msi = Join-Path $env:RUNNER_TEMP 'wsl.msi'
+            & "$env:WINDIR\System32\curl.exe" --fail --location --silent --show-error --output $msi $env:WSL_MSI_URL
+            if ((Get-FileHash $msi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:WSL_MSI_SHA256) { throw 'WSL package checksum mismatch' }
+            $p = Start-Process msiexec.exe -ArgumentList @('/i', $msi, '/qn', '/norestart') -Wait -PassThru
+            if ($p.ExitCode -notin 0, 3010) { throw "WSL install failed: $($p.ExitCode)" }
+            wsl.exe --shutdown
+          }
+      - name: Import and provision the distro (WSL2, systemd off)
+        run: |
+          $rootfs = Join-Path $env:RUNNER_TEMP 'ubuntu.wsl'
+          Invoke-WebRequest $env:ROOTFS_URL -OutFile $rootfs
+          if ((Get-FileHash $rootfs -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:ROOTFS_SHA256) { throw 'rootfs checksum mismatch' }
+          wsl.exe --import $env:DISTRO (Join-Path $env:RUNNER_TEMP $env:DISTRO) $rootfs --version 2
+          if ($LASTEXITCODE -ne 0) { throw "import failed" }
+          $setup = "set -e; id orca >/dev/null 2>&1 || useradd -m -s /bin/bash orca; printf '[boot]\nsystemd=false\n[user]\ndefault=orca\n' > /etc/wsl.conf; " +
+            "command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git); locale -a | grep -qi en_US.utf8 || (apt-get update -qq && apt-get install -y -qq locales && locale-gen en_US.UTF-8)"
+          wsl.exe -d $env:DISTRO -u root --exec sh -c $setup
+          if ($LASTEXITCODE -ne 0) { throw "provision failed" }
+          wsl.exe --terminate $env:DISTRO
+          $user = 'set -e; cd /home/orca; f=$(curl -fsSL https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt | grep -o "node-v[0-9.]*-linux-x64.tar.gz" | head -1); curl -fsSL "https://nodejs.org/dist/latest-v24.x/$f" | tar xz; mv node-v*-linux-x64 node; mkdir -p w; cd w; PATH=/home/orca/node/bin:$PATH npm i --silent @parcel/watcher@2.5.6; ls node_modules/@parcel'
+          wsl.exe -d $env:DISTRO -u orca --exec bash -c $user
+          if ($LASTEXITCODE -ne 0) { throw "node/watcher install failed" }
+      - name: Fetch Orca's bundled ripgrep (same package and version as the app)
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP 'tools'
+          npm i --silent --prefix $tools @vscode/ripgrep-universal@1.18.0
+          $bin = Join-Path $tools 'node_modules\@vscode\ripgrep-universal\bin'
+          "WIN_RG=$bin\win32-x64\rg.exe" >> $env:GITHUB_ENV
+          $lin = '/mnt/' + $bin.Substring(0,1).ToLower() + ($bin.Substring(2) -replace '\\','/') + '/linux-x64/rg'
+          wsl.exe -d $env:DISTRO -u orca --exec sh -c "cp '$lin' /home/orca/rg && chmod +x /home/orca/rg && /home/orca/rg --version | head -1"
+      - name: Generate the 50k-file repo, Windows CRLF clone on C:, ext4 baseline
+        run: |
+          New-Item -ItemType Directory -Force C:\bench, $env:OUT | Out-Null
+          "system autocrlf before: $(git config --system core.autocrlf)" | Tee-Object (Join-Path $env:OUT 'env.txt') -Append
+          git config --system core.autocrlf true
+          $here = '/mnt/' + $env:GITHUB_WORKSPACE.Substring(0,1).ToLower() + ($env:GITHUB_WORKSPACE.Substring(2) -replace '\\','/') + '/.github/mntc-bench'
+          $gen = "set -e; rm -rf ~/bench; mkdir -p ~/bench; $env:LIN_NODE $here/gen.js ~/bench/gen 40; cd ~/bench/gen; git init -q -b main; git -c user.name=b -c user.email=b@x add -A; git -c user.name=b -c user.email=b@x commit -qm init; git bundle create -q /mnt/c/bench/repo.bundle main; git clone -q ~/bench/gen ~/bench/base; rm -rf ~/bench/gen; du -sh ~/bench/base"
+          wsl.exe -d $env:DISTRO -u orca --exec bash -c $gen
+          if ($LASTEXITCODE -ne 0) { throw 'generate failed' }
+          git clone -q -b main C:\bench\repo.bundle C:\bench\repo
+          "crlf checkout: $((Get-Content C:\bench\repo\README.md -Raw).Contains([char]13))" | Tee-Object (Join-Path $env:OUT 'env.txt') -Append
+          "windows status entries: $((git -C C:\bench\repo status --porcelain | Measure-Object).Count)" | Tee-Object (Join-Path $env:OUT 'env.txt') -Append
+      - name: Record the environment
+        run: |
+          $f = Join-Path $env:OUT 'env.txt'
+          & {
+            "ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"
+            (Get-CimInstance Win32_OperatingSystem).Caption + ' ' + [Environment]::OSVersion.VersionString
+            (Get-CimInstance Win32_Processor | ForEach-Object Name) -join '; '
+            "logical cpus: $([Environment]::ProcessorCount)  ram GB: $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB,1))"
+            Get-PhysicalDisk | Format-Table FriendlyName, MediaType, BusType, Size -AutoSize | Out-String
+            Get-Volume | Where-Object DriveLetter | Format-Table DriveLetter, FileSystemType, SizeRemaining, Size -AutoSize | Out-String
+            try { Get-MpComputerStatus | Format-List AMRunningMode, RealTimeProtectionEnabled, OnAccessProtectionEnabled | Out-String } catch { "Defender status unavailable: $_" }
+            git --version; node --version
+            (wsl.exe --version) -join "`n"
+            wsl.exe -d $env:DISTRO --exec sh -c 'uname -r; git --version; nproc; free -m; /home/orca/node/bin/node --version; /home/orca/rg --version | head -1; mount | grep -E " /mnt/c | / "; df -h / /mnt/c'
+            & $env:WIN_RG --version | Select-Object -First 1
+          } 2>&1 | Tee-Object $f -Append
+      - name: 'Phase: unflagged status (bridge today)'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 90
+        run: node .github/mntc-bench/orch.js plain
+      - name: 'Phase: status with R23 flags'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 60
+        run: node .github/mntc-bench/orch.js status
+      - name: 'Phase: listing, 5 MB read, search'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 60
+        run: node .github/mntc-bench/orch.js fsops
+      - name: 'Phase: line endings (R23b, staging)'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        run: node .github/mntc-bench/orch.js lineendings
+      - name: 'Phase: watcher'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 15
+        run: node .github/mntc-bench/orch.js watcher
+      - name: 'Phase: stage, commit, diff, index thrash'
+        if: ${{ !cancelled() }}
+        timeout-minutes: 60
+        run: node .github/mntc-bench/orch.js writes
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mntc-bench-results
+          path: mntc-out/
+          retention-days: 7
