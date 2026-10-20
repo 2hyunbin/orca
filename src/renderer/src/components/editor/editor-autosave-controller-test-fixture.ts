@@ -5,10 +5,6 @@ import { vi } from 'vitest'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import { createEditorSlice } from '@/store/slices/editor'
 import { withEditorBufferRecords } from '@/store/editor-buffer-record-lifecycle'
-import {
-  compareDiskWritePrecondition,
-  type FileWriteDiskPrecondition
-} from '../../../../shared/file-write-disk-precondition'
 import type { AppState } from '@/store'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 
@@ -27,28 +23,9 @@ export function createFakeEditorDisk(initialFiles: Record<string, string> = {}):
   return {
     files,
     fs: {
-      // Honors a guarded write the way the host does: refused unless disk still matches.
-      writeFile: vi.fn(
-        async ({
-          filePath,
-          content,
-          diskPrecondition
-        }: {
-          filePath: string
-          content: string
-          diskPrecondition?: FileWriteDiskPrecondition
-        }) => {
-          const current = files.get(filePath)
-          if (diskPrecondition) {
-            const conflict = compareDiskWritePrecondition(diskPrecondition, current ?? null)
-            if (conflict) {
-              return { ok: false, diskConflict: conflict }
-            }
-          }
-          files.set(filePath, content)
-          return { ok: true }
-        }
-      ),
+      writeFile: vi.fn(async ({ filePath, content }: { filePath: string; content: string }) => {
+        files.set(filePath, content)
+      }),
       deletePath: vi.fn(async ({ targetPath }: { targetPath: string }) => {
         files.delete(targetPath)
       }),

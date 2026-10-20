@@ -42,6 +42,7 @@ vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
 
 import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
 import { useEditorPanelContentState } from './useEditorPanelContentState'
+import { markEditorBufferNewer } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -475,5 +476,41 @@ describe('useEditorPanelContentState visibility', () => {
       expect(snapshots.get('main')?.diffContents[file.id]?.modifiedContent).toBe('fresh diff')
     )
     expect(mocks.getRuntimeGitDiff).toHaveBeenCalledTimes(2)
+  })
+
+  // A newer read of the same file elsewhere (another record kept apart, an invalidation in another
+  // panel) supersedes this tab's first read without publishing any text to it.
+  it('reads again when a first read is superseded and nothing filled the tab', async () => {
+    const file = makeFile('superseded-first-read')
+    const first = createDeferred<FileContent>()
+    mocks.readRuntimeFileContent
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ content: 'fresh', isBinary: false })
+
+    await act(async () => root.render(<Probe activeFile={file} />))
+    await vi.waitFor(() => expect(mocks.readRuntimeFileContent).toHaveBeenCalledOnce())
+    markEditorBufferNewer(file.id)
+    await act(async () => first.resolve({ content: 'old', isBinary: false }))
+
+    await vi.waitFor(() =>
+      expect(snapshots.get('main')?.fileContents[file.id]?.content).toBe('fresh')
+    )
+    expect(mocks.readRuntimeFileContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops re-reading a file that keeps being superseded and shows a retryable error', async () => {
+    const file = makeFile('always-superseded')
+    mocks.readRuntimeFileContent.mockImplementation(async () => {
+      // Every read is overtaken before it lands.
+      markEditorBufferNewer(file.id)
+      return { content: 'never current', isBinary: false }
+    })
+
+    await act(async () => root.render(<Probe activeFile={file} />))
+
+    await vi.waitFor(() =>
+      expect(snapshots.get('main')?.fileContents[file.id]?.loadError).toMatch(/kept changing/)
+    )
+    expect(mocks.readRuntimeFileContent).toHaveBeenCalledTimes(4)
   })
 })

@@ -2,7 +2,8 @@ import { expect, it } from 'vitest'
 import {
   beginEditorBufferRead,
   isEditorBufferReadCurrent,
-  markEditorBufferNewer
+  markEditorBufferNewer,
+  peekEditorBufferFreshness
 } from './editor-buffer-read-freshness'
 
 it("an older read can't land after a newer reload of the same file from another panel", () => {
@@ -27,4 +28,12 @@ it("one file's reads don't supersede another's", () => {
   beginEditorBufferRead('record-4')
 
   expect(isEditorBufferReadCurrent('record-3', read)).toBe(true)
+})
+
+it("Keep's signature-only read doesn't supersede a panel's first content read", () => {
+  const panelRead = beginEditorBufferRead('record-5')
+  const keepToken = peekEditorBufferFreshness('record-5')
+
+  expect(isEditorBufferReadCurrent('record-5', panelRead)).toBe(true)
+  expect(isEditorBufferReadCurrent('record-5', keepToken)).toBe(true)
 })

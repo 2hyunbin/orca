@@ -22,6 +22,7 @@ import type {
   OpenFile
 } from './open-file'
 import type { EditorBufferIndex, EditorBufferRecords } from '../buffers/editor-buffer-record'
+import type { RecoveredEditorDraft } from '../../../../../../shared/workspace-session-state-types'
 import type { EditorOpenLinkIntent, EditorOpenResult } from './editor-open-link-intent'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from './open-file-path-rekey'
 import type {
@@ -47,6 +48,9 @@ export type EditorFilesSlice = {
   editorBuffers: EditorBufferRecords
   /** Which record each open tab shows; maintained by the store, never written by slices. */
   editorBufferIndex: EditorBufferIndex
+  /** Drafts an older session held in a second tab of a file, kept until dismissed. */
+  recoveredEditorDrafts: RecoveredEditorDraft[]
+  dismissRecoveredEditorDraft: (draft: RecoveredEditorDraft) => void
   activeFileId: string | null
   activeFileIdByWorktree: Record<string, string | null> // worktreeId -> last active file
   activeTabTypeByWorktree: Record<string, WorkspaceVisibleTabType> // worktreeId -> last active tab type

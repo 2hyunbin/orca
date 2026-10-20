@@ -8,7 +8,7 @@ import {
   type EditorBufferRecords
 } from './editor-buffer-record'
 import { isSameEditorBuffer, type EditorBufferIdentity } from './editor-buffer-identity'
-import { markEditorBufferNewer } from './editor-buffer-read-freshness'
+import type { RecoveredEditorDraft } from '../../../../../../shared/workspace-session-state-types'
 
 export type EditorBufferSharingInput = {
   openFiles: OpenFile[]
@@ -22,6 +22,9 @@ export type EditorBufferSharingInput = {
   identityOf: (file: OpenFile) => EditorBufferIdentity | null
   /** Called for a tab mirror written without its record; returning keeps the tab's values. */
   onMirrorDrift: (file: OpenFile, field: keyof EditorBufferRecord) => void
+  /** The tab whose draft wins when two tabs of one file restore different drafts. */
+  isPreferredDraft: (fileId: string) => boolean
+  now: () => number
 }
 
 export type EditorBufferSharingResult = {
@@ -29,6 +32,8 @@ export type EditorBufferSharingResult = {
   records: EditorBufferRecords
   index: EditorBufferIndex
   drafts: Record<string, string>
+  /** Drafts that lost a join, to be offered back to the user. */
+  recovered: RecoveredEditorDraft[]
 }
 
 function hasEdits(record: EditorBufferRecord, draft: string | undefined): boolean {
@@ -50,8 +55,9 @@ function joinPauses(into: EditorBufferRecord, from: EditorBufferRecord): EditorB
 /**
  * Keeps one record per physical file across every edit tab that shows it, in the same write that
  * changes the tabs. A tab that opens, re-keys or resolves its owner joins the record for its file:
- * the side with unsaved edits wins, and two sides whose edits differ stay apart (with their own
- * model) until there is a way to pick one. Read-only is a view permission, so it shares too.
+ * the side with unsaved edits wins. Two different drafts (only from an older session) keep the
+ * most recently active tab's, and the other is kept as a recovered draft. Read-only is a view
+ * permission, so it shares too.
  */
 export function reconcileEditorBufferSharing(
   input: EditorBufferSharingInput
@@ -61,6 +67,7 @@ export function reconcileEditorBufferSharing(
   const recordIdByFileId: Record<string, string> = {}
   const keyByRecordId: Record<string, EditorBufferKey> = { ...input.index.keyByRecordId }
   const drafts = { ...input.drafts }
+  const recovered: RecoveredEditorDraft[] = []
   const viewsByRecord = new Map<string, string[]>()
   // Why an index: joins look up same-file records per tab, which must stay O(1) for many tabs.
   const idsByIdentityKey = new Map<string, string[]>()
@@ -75,11 +82,11 @@ export function reconcileEditorBufferSharing(
   for (const [recordId, key] of Object.entries(keyByRecordId)) {
     indexIdentity(recordId, key.identity.key)
   }
-  const sameFile = (identity: EditorBufferIdentity, excludeId?: string) =>
+  const sameFile = (identity: EditorBufferIdentity) =>
     findSharedRecord(
       (idsByIdentityKey.get(identity.key) ?? []).flatMap((id) => {
         const key = keyByRecordId[id]
-        return id !== excludeId && key !== undefined ? [[id, key] as const] : []
+        return key !== undefined ? [[id, key] as const] : []
       }),
       viewsByRecord,
       identity
@@ -156,22 +163,40 @@ export function reconcileEditorBufferSharing(
       const targetDraft = drafts[target.views[0]]
       const viewEdited = hasEdits(state, draft)
       const targetEdited = hasEdits(targetRecord, targetDraft)
-      // Why: until a recovery UI exists, two different unsaved edits of one file both stay intact.
-      if (!(viewEdited && targetEdited && draft !== targetDraft)) {
-        records[target.id] =
-          viewEdited && !targetEdited
-            ? joinPauses(state, targetRecord)
-            : joinPauses(targetRecord, state)
-        if (viewEdited && !targetEdited) {
-          for (const viewId of target.views) {
-            setDraft(viewId, draft)
-          }
-        } else {
-          setDraft(file.id, targetDraft)
+      const divergent = viewEdited && targetEdited && draft !== targetDraft
+      const viewWins = divergent ? input.isPreferredDraft(file.id) : viewEdited && !targetEdited
+      if (divergent) {
+        const [loser, loserState, loserFile] = viewWins
+          ? [targetDraft, targetRecord, openFiles.find((f) => f.id === target.views[0]) ?? file]
+          : [draft, state, file]
+        if (loser !== undefined) {
+          recovered.push({
+            filePath: loserFile.filePath,
+            relativePath: loserFile.relativePath,
+            worktreeId: loserFile.worktreeId,
+            ...(loserFile.runtimeEnvironmentId !== undefined
+              ? { runtimeEnvironmentId: loserFile.runtimeEnvironmentId }
+              : {}),
+            draft: loser,
+            ...(loserState.lastKnownDiskSignature
+              ? { baselineSignature: loserState.lastKnownDiskSignature }
+              : {}),
+            recoveredAt: input.now()
+          })
         }
-        claim(file.id, target.id)
-        continue
       }
+      records[target.id] = viewWins
+        ? joinPauses(state, targetRecord)
+        : joinPauses(targetRecord, state)
+      if (viewWins) {
+        for (const viewId of target.views) {
+          setDraft(viewId, draft)
+        }
+      } else {
+        setDraft(file.id, targetDraft)
+      }
+      claim(file.id, target.id)
+      continue
     }
 
     const recordId =
@@ -182,7 +207,7 @@ export function reconcileEditorBufferSharing(
     if (identity === null) {
       delete keyByRecordId[recordId]
     } else {
-      // Why: a same-file record kept apart (divergent edits, a retired host) holds the default URI.
+      // Why: a same-path record on a retired host keeps the default URI; this one gets its own.
       const uriTaken = (idsByIdentityKey.get(identity.key) ?? []).some(
         (otherId) =>
           otherId !== recordId &&
@@ -212,42 +237,6 @@ export function reconcileEditorBufferSharing(
     }
   }
 
-  // Why: a split lasts only while a side holds unsaved edits; once both are clean they rejoin.
-  // A clean side never adopts the other side's draft: that draft was made against other disk text.
-  for (const [recordId, key] of Object.entries(keyByRecordId)) {
-    const views = viewsByRecord.get(recordId)
-    const record = records[recordId]
-    // The side holding the default model stays; the other joins it.
-    if (
-      key.modelOwnerKey === key.identity.modelOwnerKey ||
-      views === undefined ||
-      hasEdits(record, drafts[views[0]])
-    ) {
-      continue
-    }
-    const target = sameFile(key.identity, recordId)
-    if (target === undefined || hasEdits(records[target.id], drafts[target.views[0]])) {
-      continue
-    }
-    // The newest disk version is the one this write just recorded (a save or a read).
-    const recordIsNewer =
-      record !== input.previousRecords[recordId] &&
-      records[target.id] === input.previousRecords[target.id]
-    records[target.id] = {
-      ...joinPauses(records[target.id], record),
-      ...(recordIsNewer ? { lastKnownDiskSignature: record.lastKnownDiskSignature } : {})
-    }
-    for (const viewId of views) {
-      setDraft(viewId, undefined)
-      claim(viewId, target.id)
-    }
-    viewsByRecord.delete(recordId)
-    delete records[recordId]
-    delete keyByRecordId[recordId]
-    // Why: a read either side started before the rejoin may carry the other side's older text.
-    markEditorBufferNewer(key.identity.key)
-  }
-
   return {
     // Unchanged tabs keep their identity; the caller keeps the list when none changed.
     openFiles: openFiles.map((file) => {
@@ -258,7 +247,8 @@ export function reconcileEditorBufferSharing(
     index: sameIndex(recordIdByFileId, keyByRecordId, input.index)
       ? input.index
       : { recordIdByFileId, keyByRecordId },
-    drafts: draftsChanged ? drafts : input.drafts
+    drafts: draftsChanged ? drafts : input.drafts,
+    recovered
   }
 }
 

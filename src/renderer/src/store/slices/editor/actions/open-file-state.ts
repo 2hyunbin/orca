@@ -2,6 +2,7 @@ import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import { ownsGlobalSelection } from '../../../global-selection-owner'
 import { EMPTY_EDITOR_BUFFER_INDEX } from '../buffers/editor-buffer-record'
+import { isSameRecoveredEditorDraft } from '../buffers/recovered-editor-drafts'
 
 export function createOpenFileState(
   set: EditorSet,
@@ -11,6 +12,8 @@ export function createOpenFileState(
   | 'openFiles'
   | 'editorBuffers'
   | 'editorBufferIndex'
+  | 'recoveredEditorDrafts'
+  | 'dismissRecoveredEditorDraft'
   | 'activeFileId'
   | 'activeFileIdByWorktree'
   | 'activeTabTypeByWorktree'
@@ -22,6 +25,13 @@ export function createOpenFileState(
     openFiles: [],
     editorBuffers: {},
     editorBufferIndex: EMPTY_EDITOR_BUFFER_INDEX,
+    recoveredEditorDrafts: [],
+    dismissRecoveredEditorDraft: (draft) =>
+      set((s) => ({
+        recoveredEditorDrafts: s.recoveredEditorDrafts.filter(
+          (entry) => !isSameRecoveredEditorDraft(entry, draft)
+        )
+      })),
     activeFileId: null,
     activeFileIdByWorktree: {},
     activeTabTypeByWorktree: {},

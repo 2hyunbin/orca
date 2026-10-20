@@ -45,6 +45,9 @@ export function useEditorPanelContentState({
   editorViewMode
 }: UseEditorPanelContentStateParams): UseEditorPanelContentStateResult {
   const [fileContents, setFileContents] = useState<Record<string, FileContent>>({})
+  const fileContentsRef = useRef(fileContents)
+  // Why during render: a read landing after this render must see what the panel shows now.
+  fileContentsRef.current = fileContents
   const [diffContents, setDiffContents] = useState<Record<string, DiffContent>>({})
   const diffContentsRef = useRef(diffContents)
   const fileLoadRetryAttemptsRef = useRef<Record<string, number>>({})
@@ -136,6 +139,7 @@ export function useEditorPanelContentState({
   )
 
   const loadFileContent = useEditorPanelFileContentLoader({
+    fileContentsRef,
     fileLoadRetryAttemptsRef,
     fileReadGenerationCounterRef,
     fileReadGenerationRef,

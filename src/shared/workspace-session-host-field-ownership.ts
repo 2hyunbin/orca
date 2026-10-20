@@ -19,6 +19,8 @@ export const WORKSPACE_SESSION_FIELD_OWNERSHIP = {
   activeTabId: 'global',
   browserUrlHistory: 'global',
   workspaceDocHistory: 'global',
+  // Why global: a recovered draft is this client's notice, offered until the user dismisses it.
+  recoveredEditorDrafts: 'global',
   // Why global rather than per-partition: this is the client's own record of which connections it
   // owed work to at shutdown, not state belonging to any one workspace.
   activeConnectionIdsAtShutdown: 'global',

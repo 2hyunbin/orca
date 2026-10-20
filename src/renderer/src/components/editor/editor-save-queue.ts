@@ -3,7 +3,6 @@ import type { AppState } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
-import { parseFileWriteResult } from '../../../../shared/file-write-disk-precondition'
 import { getEditorFileOperationContext } from '@/lib/editor-file-operation-owner'
 import {
   canAutoSaveOpenFile,
@@ -13,7 +12,6 @@ import {
   type EditorFileSavedDetail
 } from './editor-autosave'
 import { flushPendingEditorChange, hasPendingEditorChange } from './editor-pending-flush'
-import { waitForKeepEditsBaselineReads } from './editor-keep-edits-baseline'
 import {
   clearSelfWrite,
   recordSelfWrite,
@@ -26,18 +24,14 @@ import {
   editorBufferIdOf,
   editorBufferViewIds
 } from '@/store/slices/editor/buffers/editor-buffer-record'
-import {
-  isEditorBufferKeptApart,
-  markKeptApartSiblingsChanged
-} from '@/store/slices/editor/buffers/editor-buffer-kept-apart'
 import { markEditorBufferNewer } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
 /**
- * `written`: disk holds the text. `blocked-stale`: the host refused it because another write landed
- * since the record's disk version; the banner now shows. `skipped`: nothing to write (read-only,
- * suspended autosave, superseded). A failed write rejects.
+ * `written`: disk holds the text. `blocked-stale`: a guarded write was refused because the disk
+ * moved on (reserved for guarded saves). `skipped`: nothing was written (read-only, suspended
+ * autosave, superseded). A failed write rejects. Callers treat anything but `written` as unsaved.
  */
 export type EditorSaveResult = 'written' | 'blocked-stale' | 'skipped'
 
@@ -65,8 +59,7 @@ function hasPendingBufferChange(state: AppState, fileId: string): boolean {
 }
 
 // Why: keeping the save queue, quiesce coordination, and the debounce timers that feed it together avoids split-brain saves.
-// Generation and autosave timer are keyed by buffer record, so every tab of a file shares them; the
-// queue is keyed by physical file, so records of one file kept apart never write at the same time.
+// Queue, generation and autosave timer are keyed by buffer record, so every tab of a file shares them.
 export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const autoSaveTimers = new Map<string, number>()
   const autoSaveScheduledContent = new Map<string, string>()
@@ -75,8 +68,6 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const completedWrites = new Map<string, number>()
 
   const recordIdOf = (fileId: string): string => editorBufferIdOf(store.getState(), fileId)
-  const fileQueueKeyOf = (recordId: string): string =>
-    store.getState().editorBufferIndex?.keyByRecordId[recordId]?.identity.key ?? recordId
 
   const clearRecordAutoSaveTimer = (recordId: string): void => {
     const timerId = autoSaveTimers.get(recordId)
@@ -103,19 +94,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     clearRecordAutoSaveTimer(recordId)
     const queuedGeneration = saveGeneration.get(recordId) ?? 0
     const queuedAfterWrites = completedWrites.get(recordId) ?? 0
-    const fileKey = fileQueueKeyOf(recordId)
-    // Why at request time: only a save asked for while the banner showed consents to overwrite;
-    // a conflict raised while this save waited in the queue must keep its precondition.
-    const overwriteConsented =
-      trigger === 'user' &&
-      store.getState().openFiles.find((openFile) => openFile.id === file.id)?.externalMutation ===
-        'changed'
 
-    const previousSave = saveQueue.get(fileKey) ?? Promise.resolve()
+    const previousSave = saveQueue.get(recordId) ?? Promise.resolve()
     const queuedSave = previousSave
       .catch(() => undefined)
       .then(async (): Promise<EditorSaveResult> => {
-        await waitForKeepEditsBaselineReads(editorBufferViewIds(store.getState(), file.id))
         if ((saveGeneration.get(recordId) ?? 0) !== queuedGeneration) {
           return 'skipped'
         }
@@ -160,16 +143,6 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         ) {
           return 'skipped'
         }
-        // Why: a record kept apart from another record of its file is compared on the host, so the
-        // other record's write is never silently replaced. The banner's explicit save overwrites.
-        const guarded = isEditorBufferKeptApart(state, recordId) && !overwriteConsented
-        const blockStale = (): EditorSaveResult => {
-          store.getState().setExternalMutation(liveFile.id, 'changed')
-          return 'blocked-stale'
-        }
-        if (guarded && liveFile.lastKnownDiskSignature === undefined) {
-          return blockStale()
-        }
         const worktree = liveFile.worktreeId
           ? findWorktreeById(state.worktreesByRepo ?? {}, liveFile.worktreeId)
           : null
@@ -184,32 +157,22 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
             ? SELF_WRITE_REMOTE_TTL_MS
             : undefined
         )
-        let written: boolean
         try {
-          const access = editorTabFileAccess(state, liveFile)
-          const baseline = liveFile.lastKnownDiskSignature
-          const result =
-            guarded && baseline !== undefined
-              ? await writeRuntimeFile(fileContext, liveFile.filePath, contentToSave, access, {
-                  expectedSignature: baseline,
-                  hostCompareRequired: true
-                })
-              : await writeRuntimeFile(fileContext, liveFile.filePath, contentToSave, access)
-          // Why parse: only an explicit refusal is one; older writers answer nothing.
-          written = parseFileWriteResult(result).ok
+          await writeRuntimeFile(
+            fileContext,
+            liveFile.filePath,
+            contentToSave,
+            editorTabFileAccess(state, liveFile)
+          )
         } catch (error) {
           // Why: the self-write stamp is only valid after a real write; clear on failure so it can't suppress a real update.
           clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
           throw error
         }
-        if (!written) {
-          clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
-          return blockStale()
-        }
 
         completedWrites.set(recordId, (completedWrites.get(recordId) ?? 0) + 1)
         // Why: a read of this file that started before the write must not land after it.
-        markEditorBufferNewer(fileKey)
+        markEditorBufferNewer(recordId)
         // Why the record: the tab that started the save may have closed while another still shows the file.
         const nextState = store.getState()
         const views = nextState.openFiles.filter(
@@ -235,7 +198,6 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         // Why: disk now holds contentToSave — rebaseline so our own save isn't flagged external; drop pending verification.
         nextState.setLastKnownDiskSignature(view.id, getDiskBaselineSignature(contentToSave))
         nextState.clearPendingDiskBaselineVerification(view.id)
-        markKeptApartSiblingsChanged(store.getState(), recordId)
         // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
         const savedFile = store.getState().openFiles.find((openFile) => openFile.id === view.id)
         if (savedFile?.externalMutation === 'changed') {
@@ -253,11 +215,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
     let trackedSave: Promise<EditorSaveResult>
     trackedSave = queuedSave.finally(() => {
-      if (saveQueue.get(fileKey) === trackedSave) {
-        saveQueue.delete(fileKey)
+      if (saveQueue.get(recordId) === trackedSave) {
+        saveQueue.delete(recordId)
       }
     })
-    saveQueue.set(fileKey, trackedSave)
+    saveQueue.set(recordId, trackedSave)
     return trackedSave
   }
 
@@ -265,7 +227,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     // Why: rich markdown debounces serialization, so force the pending draft out before we cancel timers.
     flushPendingBufferChanges(store.getState(), fileId)
     const recordId = recordIdOf(fileId)
-    const pendingSave = saveQueue.get(fileQueueKeyOf(recordId))
+    const pendingSave = saveQueue.get(recordId)
     clearRecordAutoSaveTimer(recordId)
     bumpSaveGeneration(fileId)
     await pendingSave?.catch(() => undefined)

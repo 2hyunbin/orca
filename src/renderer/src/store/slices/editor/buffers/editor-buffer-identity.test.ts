@@ -118,7 +118,9 @@ describe('editor buffer identity', () => {
       previousRecords: {},
       previousFiles: null,
       identityOf: () => identity(1),
-      onMirrorDrift: () => {}
+      onMirrorDrift: () => {},
+      isPreferredDraft: () => false,
+      now: () => 0
     })
     replaceRuntimeEnvironmentRevisions([{ id: 'env', createdAt: 0, pairingRevision: 2 }], {
       retired: ['env'],
@@ -134,7 +136,9 @@ describe('editor buffer identity', () => {
       previousRecords: first.records,
       previousFiles: new Map([['old', old]]),
       identityOf: (tab) => identity(tab.id === 'old' ? 1 : 2),
-      onMirrorDrift: () => {}
+      onMirrorDrift: () => {},
+      isPreferredDraft: () => false,
+      now: () => 0
     })
 
     const oldRecord = next.index.recordIdByFileId.old

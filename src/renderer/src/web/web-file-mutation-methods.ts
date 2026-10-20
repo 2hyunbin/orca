@@ -11,7 +11,6 @@ import {
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
-  toHostDiskPrecondition,
   parseFileWriteResult,
   type FileWriteDiskConflict,
   type FileWriteDiskPrecondition,
@@ -209,11 +208,8 @@ export function createWebFileMutationMethods(
             if (capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY)) {
               return {
                 method: FILE_WRITE_IF_UNCHANGED_METHOD,
-                params: { ...params, diskPrecondition: toHostDiskPrecondition(diskPrecondition) }
+                params: { ...params, diskPrecondition }
               }
-            }
-            if (diskPrecondition.hostCompareRequired) {
-              return { ok: false, diskConflict: 'changed' }
             }
             const diskConflict = await checkWebDiskPreconditionFromClient(
               session,

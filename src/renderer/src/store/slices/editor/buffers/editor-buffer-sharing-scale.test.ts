@@ -31,7 +31,9 @@ it(`reconciles ${TABS} tabs in one update without quadratic work`, () => {
     previousRecords: {},
     previousFiles: null,
     identityOf,
-    onMirrorDrift: () => {}
+    onMirrorDrift: () => {},
+    isPreferredDraft: () => false,
+    now: () => 0
   }
 
   const firstStart = performance.now()

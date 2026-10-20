@@ -8,11 +8,7 @@ import type { OpenFile } from '@/store/slices/editor'
 import { ExternalFileChangeCompareDialog } from './ExternalFileChangeCompareDialog'
 import { getDiskBaselineSignature } from './diff-content-signature'
 import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
-import { trackKeepEditsBaselineRead } from './editor-keep-edits-baseline'
-import { readEditorTabDisk } from './editor-tab-disk-read'
-import { publishEditorBufferContent } from './use-editor-buffer-content-sync'
-import { editorBufferIdOf } from '@/store/slices/editor/buffers/editor-buffer-record'
-import { isEditorBufferKeptApart } from '@/store/slices/editor/buffers/editor-buffer-kept-apart'
+import { readEditorTabDiskSignature } from './editor-tab-disk-read'
 
 // Why: when an external process (usually an agent) rewrites a file while the
 // tab holds unsaved edits, the reload pipeline preserves the buffer and marks
@@ -27,13 +23,6 @@ export function reloadTabContentFromDisk(
   reloadContent: (file: OpenFile) => void
 ): void {
   const state = useAppStore.getState()
-  if (
-    file.mode === 'edit' &&
-    isEditorBufferKeptApart(state, editorBufferIdOf(state, file.id)) &&
-    reloadKeptApartTabReadFirst(file)
-  ) {
-    return
-  }
   const discardedDraft = state.editorDrafts[file.id]
   const discardedDiskSignature = state.openFiles.find(
     (openFile) => openFile.id === file.id
@@ -87,32 +76,6 @@ export function reloadTabContentFromDisk(
   )
 }
 
-/**
- * Why read first: a tab kept apart from another tab of its file must not drop its draft until the
- * disk text is in hand, or a write from the other tab could land in between and the reload would
- * install, and later overwrite with, the older text. A stale read leaves the banner up.
- */
-function reloadKeptApartTabReadFirst(file: OpenFile): boolean {
-  const read = readEditorTabDisk(file)
-  if (!read) {
-    return false
-  }
-  void read.content
-    .then((result) => {
-      const state = useAppStore.getState()
-      if (result.isBinary || !read.isCurrent() || !state.openFiles.some((f) => f.id === file.id)) {
-        return
-      }
-      publishEditorBufferContent(file.id, { content: result.content, isBinary: false })
-      state.clearEditorDraft(file.id)
-      state.setExternalMutation(file.id, null)
-      state.markFileDirty(file.id, false)
-      state.setLastKnownDiskSignature(file.id, getDiskBaselineSignature(result.content))
-    })
-    .catch(() => undefined)
-  return true
-}
-
 export function keepTabEditsOverExternalChange(file: OpenFile): void {
   const state = useAppStore.getState()
   state.setExternalMutation(file.id, null)
@@ -121,11 +84,11 @@ export function keepTabEditsOverExternalChange(file: OpenFile): void {
   // the dismissed conflict from the stale signature on every launch.
   // Best-effort: a failed read leaves the old signature, which can only
   // re-surface the banner — never lose data.
-  const read = readEditorTabDisk(file)
+  const read = readEditorTabDiskSignature(file)
   if (!read) {
     return
   }
-  const baselineRead = read.content
+  void read.content
     .then((result) => {
       // Why current: a newer read or write of the file owns the baseline.
       if (result.isBinary || !read.isCurrent()) {
@@ -141,7 +104,6 @@ export function keepTabEditsOverExternalChange(file: OpenFile): void {
       current.setLastKnownDiskSignature(file.id, getDiskBaselineSignature(result.content))
     })
     .catch(() => undefined)
-  trackKeepEditsBaselineRead(file.id, baselineRead)
 }
 
 export function ExternalFileChangeBanner({

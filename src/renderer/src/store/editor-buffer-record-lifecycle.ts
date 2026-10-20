@@ -11,12 +11,17 @@ import {
 import { editorBufferIdentityOf } from './slices/editor/buffers/editor-buffer-identity'
 import { reconcileEditorBufferSharing } from './slices/editor/buffers/editor-buffer-sharing'
 import { editorModelOwnerInputsChanged } from '@/components/editor/editor-model-owner'
+import { appendRecoveredEditorDrafts } from './slices/editor/buffers/recovered-editor-drafts'
+import type { RecoveredEditorDraft } from '../../../shared/workspace-session-state-types'
 
 type EditorBufferState = WorktreeOperationRouteState & {
   openFiles: OpenFile[]
   editorBuffers: EditorBufferRecords
   editorBufferIndex?: EditorBufferIndex
   editorDrafts?: Record<string, string>
+  recoveredEditorDrafts?: RecoveredEditorDraft[]
+  activeFileId?: string | null
+  activeFileIdByWorktree?: Record<string, string | null>
 }
 
 /**
@@ -43,6 +48,7 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
     return write
   }
   let routeState: EditorBufferState | null = null
+  const merged = (): EditorBufferState => (routeState ??= { ...state, ...write })
   const drafts = write.editorDrafts ?? state.editorDrafts ?? {}
   const result = reconcileEditorBufferSharing({
     openFiles,
@@ -51,7 +57,17 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
     drafts,
     previousRecords: state.editorBuffers,
     previousFiles: ownersChanged ? null : new Map(state.openFiles.map((file) => [file.id, file])),
-    identityOf: (file) => editorBufferIdentityOf(file, (routeState ??= { ...state, ...write })),
+    identityOf: (file) => editorBufferIdentityOf(file, merged()),
+    // Why: the most recently active tab's draft is the one the user last worked in.
+    isPreferredDraft: (fileId) => {
+      const current = merged()
+      return (
+        current.activeFileId === fileId ||
+        (current.activeWorktreeId != null &&
+          current.activeFileIdByWorktree?.[current.activeWorktreeId] === fileId)
+      )
+    },
+    now: Date.now,
     onMirrorDrift: (file, field) => {
       // Why adopt outside dev: a missed writer must keep main's behaviour, not revert the tab.
       if (!adoptMirrorDrift && import.meta.env.DEV) {
@@ -68,7 +84,15 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
       : { openFiles: result.openFiles }),
     ...(result.records === records ? {} : { editorBuffers: result.records }),
     ...(result.index === index ? {} : { editorBufferIndex: result.index }),
-    ...(result.drafts === drafts ? {} : { editorDrafts: result.drafts })
+    ...(result.drafts === drafts ? {} : { editorDrafts: result.drafts }),
+    ...(result.recovered.length === 0
+      ? {}
+      : {
+          recoveredEditorDrafts: appendRecoveredEditorDrafts(
+            write.recoveredEditorDrafts ?? state.recoveredEditorDrafts ?? [],
+            result.recovered
+          )
+        })
   }
 }
 

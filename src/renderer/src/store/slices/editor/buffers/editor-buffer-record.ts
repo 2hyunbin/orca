@@ -41,6 +41,14 @@ export function editorBufferIdOf(state: EditorBufferIndexState, fileId: string):
   return state.editorBufferIndex?.recordIdByFileId[fileId] ?? fileId
 }
 
+/** Any open tab still showing the record, e.g. after the tab that started a read closed. */
+export function liveEditorBufferViewOf(
+  state: EditorBufferIndexState & { openFiles: readonly OpenFile[] },
+  recordId: string
+): string | undefined {
+  return state.openFiles.find((file) => editorBufferIdOf(state, file.id) === recordId)?.id
+}
+
 /** Every open tab sharing `fileId`'s record, `fileId` first. */
 export function editorBufferViewIds(
   state: EditorBufferIndexState & { openFiles: readonly OpenFile[] },

@@ -122,39 +122,6 @@ describe('writeRuntimeFile disk precondition', () => {
     expect(unguardedWrites).toHaveLength(0)
   })
 
-  it('fails closed on an older host when the caller requires a host-side compare', async () => {
-    let reads = 0
-    serveHost({ enforcesPrecondition: false, diskContent: 'original', onRead: () => (reads += 1) })
-
-    const result = await writeRuntimeFile(
-      remoteContext,
-      '/remote/repo/file.ts',
-      'edited',
-      undefined,
-      {
-        ...precondition,
-        hostCompareRequired: true
-      }
-    )
-
-    expect(result).toEqual({ ok: false, diskConflict: 'changed' })
-    expect(writeCalls()).toHaveLength(0)
-    expect(reads).toBe(0)
-  })
-
-  it('never sends the client-only compare requirement to the host', async () => {
-    serveHost({ enforcesPrecondition: true })
-    runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: true }))
-
-    await writeRuntimeFile(remoteContext, '/remote/repo/file.ts', 'edited', undefined, {
-      ...precondition,
-      hostCompareRequired: true
-    })
-
-    expect(writeCalls()[0]?.params).toMatchObject({ diskPrecondition: precondition })
-    expect(writeCalls()[0]?.params).not.toHaveProperty('diskPrecondition.hostCompareRequired')
-  })
-
   it('lets a host that enforces the precondition compare at write time', async () => {
     serveHost({ enforcesPrecondition: true })
     runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: false, diskConflict: 'missing' }))

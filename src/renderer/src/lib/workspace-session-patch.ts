@@ -171,6 +171,9 @@ export function buildWorkspaceSessionPatch(
   if (changed.has('browserUrlHistory')) {
     patch.browserUrlHistory = normalizeBrowserHistoryEntries(snapshot.browserUrlHistory)
   }
+  if (changed.has('recoveredEditorDrafts')) {
+    patch.recoveredEditorDrafts = snapshot.recoveredEditorDrafts
+  }
   if (changed.has('workspaceDocHistory')) {
     patch.workspaceDocHistory = normalizeWorkspaceDocHistoryEntries(snapshot.workspaceDocHistory)
   }

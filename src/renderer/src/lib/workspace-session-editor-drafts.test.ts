@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceSessionSnapshot } from './workspace-session'
 import { buildWorkspaceSessionPayload } from './workspace-session'
+import { parseWorkspaceSession } from '../../../shared/workspace-session-schema'
 
 function createSnapshot(
   overrides: Partial<WorkspaceSessionSnapshot> = {}
@@ -26,6 +27,7 @@ function createSnapshot(
     activeBrowserTabIdByWorktree: {},
     browserUrlHistory: [],
     workspaceDocHistory: [],
+    recoveredEditorDrafts: [],
     unifiedTabsByWorktree: {},
     groupsByWorktree: {},
     layoutByWorktree: {},
@@ -207,5 +209,27 @@ describe('workspace session editor drafts', () => {
     expect(payload.openFilesByWorktree?.['wt-1']?.[0]).toEqual(
       expect.not.objectContaining({ readOnly: expect.anything() })
     )
+  })
+
+  it('persists recovered drafts until dismissed, and a session without them still loads', () => {
+    const recovered = {
+      filePath: '/tmp/a.md',
+      worktreeId: 'wt-1',
+      draft: 'older draft',
+      recoveredAt: 1
+    }
+
+    const withDrafts = buildWorkspaceSessionPayload(
+      createSnapshot({ recoveredEditorDrafts: [recovered] })
+    )
+    const without = buildWorkspaceSessionPayload(createSnapshot())
+
+    expect(withDrafts.recoveredEditorDrafts).toEqual([recovered])
+    expect(without).not.toHaveProperty('recoveredEditorDrafts')
+    expect(parseWorkspaceSession(withDrafts)).toMatchObject({
+      ok: true,
+      value: { recoveredEditorDrafts: [recovered] }
+    })
+    expect(parseWorkspaceSession(without).ok).toBe(true)
   })
 })

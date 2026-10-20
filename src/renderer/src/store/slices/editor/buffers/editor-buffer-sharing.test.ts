@@ -13,7 +13,17 @@ import { __clearSelfWriteRegistryForTests } from '@/components/editor/editor-sel
 import { registerPendingEditorFlush } from '@/components/editor/editor-pending-flush'
 import { assertEditorBufferInvariant } from '@/store/editor-buffer-record-lifecycle'
 import { buildEditorSessionData } from '@/lib/workspace-session'
-import { editorBufferIdOf, editorBufferViewIds } from './editor-buffer-record'
+import {
+  editorBufferIdOf,
+  editorBufferViewIds,
+  liveEditorBufferViewOf
+} from './editor-buffer-record'
+import { attachEditorAutosaveController } from '@/components/editor/editor-autosave-controller'
+import {
+  ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
+  requestEditorSaveQuiesce
+} from '@/components/editor/editor-autosave'
+import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
 import { editorModelOwnerKeyOf } from './editor-buffer-identity'
 import { hasOtherSavingEditorView, needsSavePromptOnClose } from './editor-buffer-close-rule'
 import { getReplaceablePreviewFileId } from '../tabs/workspace-editor-item'
@@ -348,6 +358,64 @@ describe('one editor buffer record per physical file', () => {
     expect(needsSavePromptOnClose(store.getState, a)).toBe(false)
   })
 
+  function holdNextWrite(): () => void {
+    let finish = (): void => {}
+    disk.fs.writeFile.mockImplementationOnce(
+      async ({ filePath, content }: { filePath: string; content: string }) => {
+        await new Promise<void>((resolve) => {
+          finish = resolve
+        })
+        disk.files.set(filePath, content)
+      }
+    )
+    return () => finish()
+  }
+
+  it('save-and-close superseded before it writes keeps the tab and its draft', async () => {
+    openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, b, 'typed')
+    const detach = attachEditorAutosaveController(store)
+
+    window.dispatchEvent(
+      new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: b } })
+    )
+    // Staging the file quiesces its saves before the queued one runs.
+    await requestEditorSaveQuiesce({ fileId: b })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    detach()
+
+    expect(disk.fs.writeFile).not.toHaveBeenCalled()
+    expect(tab(store, b)).toBeDefined()
+    expect(store.getState().editorDrafts[b]).toBe('typed')
+  })
+
+  it('a save superseded mid-write still rebaselines to the written text', async () => {
+    const a = openTab(store, 'wt-1')
+    type(store, a, 'draft one')
+    const finishWrite = holdNextWrite()
+    const queue = createEditorSaveQueue(store)
+
+    const save = queue.queueSave(tab(store, a)!, 'draft one', 'user')
+    await vi.waitFor(() => expect(disk.fs.writeFile).toHaveBeenCalled())
+    queue.bumpSaveGeneration(a)
+    finishWrite()
+    queue.dispose()
+
+    expect(await save).toBe('written')
+    expect(tab(store, a)?.lastKnownDiskSignature).toBe(getDiskBaselineSignature('draft one'))
+  })
+
+  it("a read started by a tab that closed is delivered through the file's surviving tab", () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    const recordId = editorBufferIdOf(store.getState(), b)
+
+    store.getState().closeFile(b)
+
+    expect(liveEditorBufferViewOf(store.getState(), recordId)).toBe(a)
+  })
+
   it('keeps the same path on another host separate', () => {
     const a = openTab(store, 'wt-1')
     const remote = openTab(store, 'wt-ssh')
@@ -409,12 +477,13 @@ describe('one editor buffer record per physical file', () => {
     expect(tab(store, resolved)?.isDirty).toBe(true)
   })
 
-  describe('joins where both sides have different unsaved edits stay apart', () => {
-    it('on owner resolution', () => {
+  describe('two different drafts of one file (only an older session can hold them)', () => {
+    it("on owner resolution, the active tab's draft wins and the other is recovered", () => {
       const resolved = openTab(store, 'wt-1')
       type(store, resolved, 'edit in the resolved tab')
       const provisional = openTab(store, 'wt-late')
       type(store, provisional, 'edit in the provisional tab')
+      store.setState({ activeFileId: provisional })
 
       store.setState({
         worktreesByRepo: {
@@ -426,16 +495,17 @@ describe('one editor buffer record per physical file', () => {
       })
 
       const state = store.getState()
-      expect(editorBufferIdOf(state, provisional)).not.toBe(editorBufferIdOf(state, resolved))
-      expect(modelOwnerOf(store, provisional)).not.toBe(modelOwnerOf(store, resolved))
-      expect(state.editorDrafts[resolved]).toBe('edit in the resolved tab')
-      expect(state.editorDrafts[provisional]).toBe('edit in the provisional tab')
+      expect(editorBufferIdOf(state, provisional)).toBe(editorBufferIdOf(state, resolved))
+      expect(state.editorDrafts[resolved]).toBe('edit in the provisional tab')
+      expect(state.recoveredEditorDrafts).toMatchObject([
+        { filePath: FILE, draft: 'edit in the resolved tab' }
+      ])
     })
 
     it.each([
-      ['differ', 'draft in wt-1', 'draft in wt-2', 2],
-      ['match', 'same draft', 'same draft', 1]
-    ])('for restored legacy drafts that %s', (_label, first, second, records) => {
+      ['differ', 'draft in wt-1', 'draft in wt-2', 1],
+      ['match', 'same draft', 'same draft', 0]
+    ])('restored legacy drafts that %s share one record', (_label, first, second, recovered) => {
       const restore = (worktreeId: string, draft: string) => ({
         filePath: FILE,
         relativePath: 'a.ts',
@@ -459,12 +529,17 @@ describe('one editor buffer record per physical file', () => {
 
       const state = store.getState()
       const [a, b] = state.openFiles.map((file) => file.id)
-      expect(Object.keys(state.editorBuffers)).toHaveLength(records)
-      expect([state.editorDrafts[a], state.editorDrafts[b]]).toEqual([first, second])
-      expect(new Set([modelOwnerOf(store, a), modelOwnerOf(store, b)]).size).toBe(records)
+      expect(Object.keys(state.editorBuffers)).toHaveLength(1)
+      expect(state.editorDrafts[a]).toBe(state.editorDrafts[b])
+      expect(state.recoveredEditorDrafts).toHaveLength(recovered)
+      const kept = new Set([
+        state.editorDrafts[a],
+        ...state.recoveredEditorDrafts.map((entry) => entry.draft)
+      ])
+      expect(kept).toEqual(new Set([first, second]))
     })
 
-    it('on a rename onto a file with other unsaved edits', () => {
+    it('on a rename onto a file with other unsaved edits, the other draft is recovered', () => {
       const target = openTab(store, 'wt-2', { filePath: '/repo/b.ts', relativePath: 'b.ts' })
       type(store, target, 'unsaved b')
       const moved = openTab(store, 'wt-1')
@@ -484,9 +559,11 @@ describe('one editor buffer record per physical file', () => {
 
       const state = store.getState()
       expect(result).toEqual({ ok: true })
-      expect(editorBufferIdOf(state, `${moved}-renamed`)).not.toBe(editorBufferIdOf(state, target))
-      expect(state.editorDrafts[`${moved}-renamed`]).toBe('unsaved a')
-      expect(state.editorDrafts[target]).toBe('unsaved b')
+      expect(editorBufferIdOf(state, `${moved}-renamed`)).toBe(editorBufferIdOf(state, target))
+      expect(state.editorDrafts[target]).toBe('unsaved a')
+      expect(state.recoveredEditorDrafts).toMatchObject([
+        { filePath: '/repo/b.ts', draft: 'unsaved b' }
+      ])
     })
   })
 })

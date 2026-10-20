@@ -7,7 +7,7 @@ import type {
 import type { SshMutationExpectation } from '../../shared/ssh-types'
 import type { LocalFileAccess } from '../../shared/local-file-access'
 import type {
-  ClientFileWriteDiskPrecondition,
+  FileWriteDiskPrecondition,
   FileWriteResult
 } from '../../shared/file-write-disk-precondition'
 import type { RuntimeUploadFileStreamRequest } from '../../shared/runtime-upload-staging-contract'
@@ -117,7 +117,7 @@ export const fsApi = {
       content: string
       connectionId?: string
       access?: LocalFileAccess
-      diskPrecondition?: ClientFileWriteDiskPrecondition
+      diskPrecondition?: FileWriteDiskPrecondition
     } & SshMutationExpectation
   ): Promise<FileWriteResult> => ipcRenderer.invoke('fs:writeFile', args),
   createFile: (

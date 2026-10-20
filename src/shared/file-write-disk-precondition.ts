@@ -13,21 +13,6 @@ export type FileWriteDiskPrecondition = {
   allowMissing?: boolean
 }
 
-/**
- * Client-side form. `hostCompareRequired` fails the write closed on a host that can't compare at
- * write time, instead of the non-atomic client-side compare. It never goes over the wire.
- */
-export type ClientFileWriteDiskPrecondition = FileWriteDiskPrecondition & {
-  hostCompareRequired?: boolean
-}
-
-export function toHostDiskPrecondition(
-  precondition: ClientFileWriteDiskPrecondition
-): FileWriteDiskPrecondition {
-  const { hostCompareRequired: _clientOnly, ...host } = precondition
-  return host
-}
-
 export type FileWriteDiskConflict = 'changed' | 'missing'
 
 export type FileWriteResult = { ok: true } | { ok: false; diskConflict: FileWriteDiskConflict }

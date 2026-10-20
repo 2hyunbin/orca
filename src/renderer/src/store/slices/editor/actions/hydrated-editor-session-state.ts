@@ -18,6 +18,7 @@ export type HydratedEditorSessionState = Pick<
   | 'openFiles'
   | 'editorBuffers'
   | 'editorBufferIndex'
+  | 'recoveredEditorDrafts'
   | 'editorDrafts'
   | 'markdownFrontmatterVisible'
   | 'activeFileId'
@@ -161,6 +162,7 @@ export function buildHydratedEditorSessionState(
       // Why fresh: a restored tab's buffer state comes from the session, not a same-id tab it replaces.
       editorBuffers: {},
       editorBufferIndex: EMPTY_EDITOR_BUFFER_INDEX,
+      recoveredEditorDrafts: session.recoveredEditorDrafts ?? [],
       editorDrafts,
       markdownFrontmatterVisible,
       activeFileId: nextActiveFileId,
