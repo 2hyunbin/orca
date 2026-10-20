@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
-import { ExecutionHostNotDispatchableError } from '../providers/execution-host-provider-dispatch'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
 const { gitExecFileAsyncMock } = vi.hoisted(() => ({ gitExecFileAsyncMock: vi.fn() }))
@@ -46,9 +45,8 @@ const PROVIDERS = [
   ]
 ] as const
 
-// Why each row: rows written by unified-host code carry only `executionHostId`; `runtime:` rows are
-// created by their own server (create refuses them here too); a `local` row with a leftover
-// `connectionId` contradicts itself and must not run here either.
+// Why each row: rows written by unified-host code carry only `executionHostId`; a `connectionId`
+// beside `local` contradicts itself, and beside `runtime:` names a nested SSH target.
 const REFUSED_ROWS = [
   ['executionHostId only', { executionHostId: 'ssh:gpu' }, new SshHostNotServedError('gpu')],
   ['legacy connectionId', { connectionId: 'gpu' }, new SshHostNotServedError('gpu')],
@@ -58,14 +56,9 @@ const REFUSED_ROWS = [
     new SshHostNotServedError('gpu')
   ],
   [
-    'runtime host',
-    { executionHostId: 'runtime:env' },
-    new ExecutionHostNotDispatchableError('runtime:env')
-  ],
-  [
     'runtime host with a nested SSH target',
     { executionHostId: 'runtime:env', connectionId: 'gpu' },
-    new ExecutionHostNotDispatchableError('runtime:env')
+    new SshHostNotServedError('gpu')
   ]
 ] as const
 
@@ -81,8 +74,12 @@ describe('runtime PR/MR worktree base runs Git only for rows on this machine', (
       expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
     })
 
-    it(`${provider} runs local Git for a local row`, async () => {
-      await resolveBase(async () => repoOn({ executionHostId: 'local' })).catch(() => {})
+    // Why runtime: older servers kept the client-minted `runtime:<id>` stamp on rows they own.
+    it.each([
+      ['local', { executionHostId: 'local' }],
+      ['runtime-stamped on this server', { executionHostId: 'runtime:env' }]
+    ] as const)(`${provider} runs local Git for a row here: %s`, async (_label, fields) => {
+      await resolveBase(async () => repoOn(fields)).catch(() => {})
       expect(gitExecFileAsyncMock).toHaveBeenCalled()
     })
   }
