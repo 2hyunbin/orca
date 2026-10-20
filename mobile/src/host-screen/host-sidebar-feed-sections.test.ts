@@ -125,7 +125,7 @@ describe('the phone list from the sidebar feed', () => {
     if (served.kind !== 'answered' || !served.value) {
       throw new Error('expected a served catalog')
     }
-    const grouped = buildHostFeedCatalog(served.value, [], [])
+    const grouped = buildSidebarFeedCatalog(served.value, [], [])
     const base = feedDomains()
     // An unpinned orca workspace, so orca draws its own header beside lab.
     const domains = feedDomains({
