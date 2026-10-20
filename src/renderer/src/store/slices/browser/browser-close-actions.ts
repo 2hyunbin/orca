@@ -13,11 +13,11 @@ import { closeRemoteBrowserPageInOwningEnvironment } from './browser-remote-clos
 import { releaseDocPreviewGrant } from '@/lib/doc-preview-grants'
 import { destroyWorkspaceWebviews } from '../browser-webview-cleanup'
 import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
-import { landOnEmptiedWorktree } from '../tabs/emptied-workspace-landing'
+import { landOnEmptiedWorktree } from '../tabs/tabs-close-actions'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import {
   closeBrowserTabThroughLayoutOwner,
-  withDrawnBrowserTab,
+  withDrawnBrowserPages,
   type DrawnBrowserTab
 } from './browser-tab-close-through-layout-owner'
 
@@ -38,9 +38,10 @@ export function createBrowserCloseActions(
         let docPageIdsToRelease: string[] = []
         let activeBrowserWorktreeIdToNotify: string | null = null
         set((current) => {
-          const s = drawn ? withDrawnBrowserTab(current, drawn) : current
-          let owningWorktreeId: string | null = null
-          let closedWorkspace: BrowserWorkspace | null = null
+          const s = drawn ? withDrawnBrowserPages(current, drawn) : current
+          // Main's frame already dropped a drawn tab's record.
+          let owningWorktreeId: string | null = drawn?.worktreeId ?? null
+          let closedWorkspace: BrowserWorkspace | null = drawn?.record ?? null
           const nextBrowserTabsByWorktree: Record<string, BrowserWorkspace[]> = {}
           for (const [worktreeId, tabs] of Object.entries(s.browserTabsByWorktree)) {
             const removedTab = tabs.find((tab) => tab.id === tabId) ?? null
@@ -128,7 +129,9 @@ export function createBrowserCloseActions(
           if (!isCleanup) {
             const existingSnapshots =
               nextRecentlyClosedBrowserTabsByWorktree[owningWorktreeId] ?? []
-            const position = getRecentlyClosedTabPosition(s, owningWorktreeId, tabId)
+            const position = drawn
+              ? drawn.position
+              : getRecentlyClosedTabPosition(s, owningWorktreeId, tabId)
             nextRecentlyClosedBrowserTabsByWorktree[owningWorktreeId] = [
               {
                 workspace: closedWorkspace,

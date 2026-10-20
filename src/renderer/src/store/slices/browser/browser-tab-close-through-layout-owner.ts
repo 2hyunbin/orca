@@ -3,10 +3,13 @@
 // reopen list, host pages, document grants), since the frame already took the record away.
 
 import type { BrowserPage, BrowserWorkspace } from '../../../../../shared/browser-workspace-types'
-import type { Tab, TabGroup } from '../../../../../shared/tab-types'
 import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order'
 import type { AppState } from '../../types'
 import { pickNextActiveTab } from '../tab-group-state'
+import {
+  getRecentlyClosedTabPosition,
+  type RecentlyClosedTabPosition
+} from '../recently-closed-tab-position'
 import { closeContentTabThroughLayoutOwner } from '../tabs/content-tab-close-through-layout-owner'
 import type { BrowserSliceGet, RemoteBrowserPageHandle } from './browser-slice-contract'
 
@@ -16,20 +19,15 @@ export type DrawnBrowserTab = {
   record: BrowserWorkspace
   pages: BrowserPage[]
   handles: Record<string, RemoteBrowserPageHandle>
-  tabs: Tab[]
-  groups: TabGroup[]
+  /** Where it sat, for the reopen list; the frame has moved the rest on. */
+  position: RecentlyClosedTabPosition | undefined
 }
 
-/** `state` with the tab back as drawn, for today's close to read; it returns none of these. */
-export function withDrawnBrowserTab(state: AppState, drawn: DrawnBrowserTab): AppState {
-  const { worktreeId, record } = drawn
-  const records = state.browserTabsByWorktree[worktreeId] ?? []
+/** `state` with the tab's pages and host handles back as drawn, for today's close to read. */
+export function withDrawnBrowserPages(state: AppState, drawn: DrawnBrowserTab): AppState {
+  const { record } = drawn
   return {
     ...state,
-    browserTabsByWorktree: {
-      ...state.browserTabsByWorktree,
-      [worktreeId]: records.some((tab) => tab.id === record.id) ? records : [...records, record]
-    },
     browserPagesByWorkspace: {
       ...state.browserPagesByWorkspace,
       [record.id]: state.browserPagesByWorkspace[record.id] ?? drawn.pages
@@ -37,9 +35,7 @@ export function withDrawnBrowserTab(state: AppState, drawn: DrawnBrowserTab): Ap
     remoteBrowserPageHandlesByPageId: {
       ...drawn.handles,
       ...state.remoteBrowserPageHandlesByPageId
-    },
-    unifiedTabsByWorktree: { ...state.unifiedTabsByWorktree, [worktreeId]: drawn.tabs },
-    groupsByWorktree: { ...state.groupsByWorktree, [worktreeId]: drawn.groups }
+    }
   }
 }
 
@@ -76,13 +72,13 @@ export function closeBrowserTabThroughLayoutOwner(
         return handle ? [[page.id, handle] as const] : []
       })
     ),
-    tabs: state.unifiedTabsByWorktree[entry.worktreeId] ?? [],
-    groups: state.groupsByWorktree[entry.worktreeId] ?? []
+    position: getRecentlyClosedTabPosition(state, entry.worktreeId, browserTabId)
   }
-  const group = drawn.groups.find((candidate) => candidate.id === entry.groupId)
+  const tabs = state.unifiedTabsByWorktree[entry.worktreeId] ?? []
+  const group = state.groupsByWorktree[entry.worktreeId]?.find((g) => g.id === entry.groupId)
   const nextActiveTabId =
     group?.activeTabId === entry.id
-      ? pickNextActiveTab(dedupeTabOrder(group.tabOrder), group.recentTabIds, entry.id, drawn.tabs)
+      ? pickNextActiveTab(dedupeTabOrder(group.tabOrder), group.recentTabIds, entry.id, tabs)
       : (group?.activeTabId ?? null)
   return closeContentTabThroughLayoutOwner(get, entry, {
     nextActiveTabId,
