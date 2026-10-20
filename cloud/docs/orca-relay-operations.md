@@ -241,7 +241,10 @@ Every later change must use the selector CAS.
 Deploy the selector-compatible director before cutover. Blue/green deployment
 creates a separate `selector-rollback` revision at minimum instances zero,
 promotes a second compatible revision, and retains older revisions through the
-stabilization window. Cutover removes every older revision and refuses to
+stabilization window. With a floor above one, promotion first moves 20% of
+traffic and waits (up to six minutes) until every floor instance has served a
+request, because Cloud Run routes new floor instances only ~100 s after they
+start; a timeout returns all traffic to the previous serving revision. Cutover removes every older revision and refuses to
 proceed unless only the compatible active and rollback revisions remain.
 
 First inspect the current generation and exact membership:
