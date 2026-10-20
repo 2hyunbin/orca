@@ -333,6 +333,26 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(sent()).toHaveLength(2)
   })
 
+  it('shows no title when the batch’s call fails, and sends the tab’s next title again', async () => {
+    const { store, tabId } = storeWithTab()
+    mocks.callRuntimeRpc.mockRejectedValueOnce(new Error('main is gone'))
+    const update = { paneKey: makePaneKey(tabId, LEAF), prompt: 'Refactor the auth middleware' }
+
+    store.getState().setGeneratedTabTitlesFromAgentPrompts([update])
+
+    await vi.waitFor(() =>
+      expect(console.warn).toHaveBeenCalledWith(
+        '[layout-owner] renameTabs refused:',
+        'call_failed',
+        'main is gone'
+      )
+    )
+    expect(row(store).generatedTitle).toBeFalsy()
+    store.getState().setGeneratedTabTitlesFromAgentPrompts([update])
+    expect(sent()).toHaveLength(2)
+    await vi.waitFor(() => expect(row(store).generatedTitle).toBeTruthy())
+  })
+
   it('acts as today at once for a paired server’s workspace', () => {
     const store = createTestStore()
     const worktree = makeRuntimeOwnedWorktree({ id: WORKTREE, repoId: 'repo1' }, 'env-1')

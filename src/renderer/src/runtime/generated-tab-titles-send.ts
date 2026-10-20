@@ -1,7 +1,7 @@
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { afterLayoutFrame } from '@/runtime/layout-frame-position'
-import { mayBePairedServers, type WindowRefusalCode } from '@/runtime/layout-apply-send'
+import { refusalActsAsToday, type WindowRefusalCode } from '@/runtime/layout-apply-send'
 import { errorMessage } from '../../../shared/error-message'
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
@@ -40,10 +40,7 @@ export function sendGeneratedTabTitles(
         return false
       }
       const code = reply ? refusalOf(reply, title) : 'call_failed'
-      if (
-        code === undefined ||
-        (code === 'host_not_owned' && mayBePairedServers(state, title.worktreeId))
-      ) {
+      if (code === undefined || refusalActsAsToday(state, title.worktreeId, code)) {
         return true
       }
       refused.add(code)

@@ -281,7 +281,7 @@ function handleReply(
 ): void {
   if (reply.ok) {
     handlers.apply(reply.result)
-  } else if (reply.code === 'host_not_owned' && mayBePairedServers(state, worktreeId)) {
+  } else if (refusalActsAsToday(state, worktreeId, reply.code)) {
     handlers.asToday()
   } else {
     console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
@@ -289,8 +289,17 @@ function handleReply(
   }
 }
 
+/** A refusal the window answers as today: a twin's, which main may route to a paired server. */
+export function refusalActsAsToday(
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  worktreeId: string,
+  code: WindowRefusalCode
+): boolean {
+  return code === 'host_not_owned' && mayBePairedServers(state, worktreeId)
+}
+
 /** A twin: main may route it to a paired server, whose layout the window still mirrors. */
-export function mayBePairedServers(
+function mayBePairedServers(
   state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
   worktreeId: string
 ): boolean {

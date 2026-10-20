@@ -6,6 +6,15 @@ import { OrcaRuntimeService } from '../../orca-runtime'
 import { eraseRpcMethods, isStreamingMethod, type RpcContext } from '../core'
 import { LAYOUT_APPLY_METHODS } from './workspace-layout'
 
+const frozen = vi.hoisted(() => ({ workspaces: new Set<string>() }))
+vi.mock(
+  '../../../persistence/moving-wsl-projects/wsl-move-scope-guard',
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    isWslMoveWorkspaceSessionFrozen: (workspace: string) => frozen.workspaces.has(workspace)
+  })
+)
+
 const WORKTREE = 'repo-1::/work/one'
 const SPLIT = {
   type: 'splitPane',
@@ -49,18 +58,21 @@ function sessionListing(tabId: string): WorkspaceSessionState {
 
 function runtimeHolding(hostId: string) {
   const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: { leafId: 'minted' } }))
+  const applyTabRenames = vi.fn(async () => [])
   const empty: WorkspaceSessionState = { ...sessionListing('other'), tabsByWorktree: {} }
   const store = {
     getRepo: () => undefined,
     getWorkspaceSessionHostIds: () => ['local', hostId],
     getWorkspaceSession: (host: string) => (host === hostId ? sessionListing('tab-1') : empty),
-    applyLayoutCommand
+    applyLayoutCommand,
+    applyTabRenames
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only these store methods.
-  return { runtime: new OrcaRuntimeService(store as never), applyLayoutCommand }
+  return { runtime: new OrcaRuntimeService(store as never), applyLayoutCommand, applyTabRenames }
 }
 
 afterEach(() => {
+  frozen.workspaces.clear()
   vi.doUnmock('../../../../shared/layout-owner-switch')
   vi.resetModules()
 })
@@ -634,6 +646,40 @@ describe('layout.apply', () => {
         ]
       },
       frameSeq: 0
+    })
+  })
+
+  it('names a title of a workspace a WSL move paused, and gives the others', async () => {
+    const { runtime, applyTabRenames } = runtimeHolding('local')
+    const paused = 'repo-1::/work/paused'
+    frozen.workspaces.add(paused)
+
+    const reply = await runtime.applyLayoutCommand({
+      type: 'renameTabs',
+      kind: 'generated',
+      renames: [
+        { workspace: WORKTREE, tabId: 'tab-1', title: 'Fix it' },
+        { workspace: paused, tabId: 'tab-9', title: 'Paused' }
+      ]
+    })
+
+    expect(applyTabRenames).toHaveBeenCalledWith([
+      {
+        hostId: 'local',
+        renames: [
+          {
+            type: 'renameTab',
+            kind: 'generated',
+            workspace: WORKTREE,
+            tabId: 'tab-1',
+            title: 'Fix it'
+          }
+        ]
+      }
+    ])
+    expect(reply).toMatchObject({
+      ok: true,
+      result: { untitled: [{ workspace: paused, tabId: 'tab-9', code: 'wsl_move_in_progress' }] }
     })
   })
 
