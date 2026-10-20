@@ -131,6 +131,8 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
           count: row.count,
           ...(row.icon.kind === 'pinned' ? { icon: 'pin' as const } : {}),
           ...(row.repo ? { repo: row.repo } : {}),
+          ...(row.projectGroup && !row.repo ? { isProjectGroup: true } : {}),
+          ...(row.projectGroupDepth ? { projectGroupDepth: row.projectGroupDepth } : {}),
           data: []
         })
         break

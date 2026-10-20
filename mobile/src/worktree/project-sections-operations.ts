@@ -39,6 +39,9 @@ const repoSchema = z.object({
   addedAt: salvagedOptional('addedAt', z.number()),
   connectionId: salvagedOptional('connectionId', z.string().nullable()),
   executionHostId: salvagedOptional('executionHostId', hostIdSchema),
+  // Older desktops omit both; the project then lists ungrouped, as it did.
+  projectGroupId: salvagedOptional('projectGroupId', z.string().nullable()),
+  projectGroupOrder: salvagedOptional('projectGroupOrder', z.number()),
   // Decoded where drawn (readMobileRepoIcon), so an arm this build lacks still keeps the row.
   repoIcon: z.unknown().optional()
 }) satisfies z.ZodType<SectionRepo, unknown>

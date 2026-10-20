@@ -62,7 +62,9 @@ function catalogRepo(repo: SectionRepo): Repo {
     badgeColor: repo.badgeColor ?? '',
     addedAt: repo.addedAt ?? 0,
     ...(repo.connectionId !== undefined ? { connectionId: repo.connectionId } : {}),
-    ...(repo.executionHostId ? { executionHostId: repo.executionHostId } : {})
+    ...(repo.executionHostId ? { executionHostId: repo.executionHostId } : {}),
+    ...(repo.projectGroupId ? { projectGroupId: repo.projectGroupId } : {}),
+    ...(repo.projectGroupOrder !== undefined ? { projectGroupOrder: repo.projectGroupOrder } : {})
   }
 }
 
