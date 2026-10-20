@@ -21,7 +21,7 @@ import type { Store } from '../../persistence'
 import { retireRemovedRuntimeEnvironment } from './runtime-environment-removal-cleanup'
 import { readSettingsWithRuntimeEnvironmentPreference } from './runtime-environment-preference'
 import { verifyAndAddRuntimeEnvironmentFromPairingCode } from './runtime-environment-pairing-verification'
-import { publishVerifiedPairing } from './runtime-environment-repair-handler'
+import { publishVerifiedPairing } from './runtime-environment-verified-pairing-publish'
 import {
   closeRemoteRuntimeRequestConnection,
   getRuntimeEnvironmentStatusSnapshots,

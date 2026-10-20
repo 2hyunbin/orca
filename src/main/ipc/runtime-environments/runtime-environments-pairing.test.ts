@@ -507,11 +507,11 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     })
 
     expect(overtaken).toBe(true)
-    await new Promise((resolve) => setTimeout(resolve, 0))
     const snapshot = getRuntimeEnvironmentStatusSnapshots().find(
       (entry) => entry.environmentId === saved.id
     )
-    expect(snapshot?.status?.runtimeId).not.toBe('runtime-a')
+    expect(snapshot).toBeDefined()
+    expect(['runtime-b', undefined]).toContain(snapshot?.status?.runtimeId)
   })
 
   it('requires an explicit Advanced selection before removing the Active Server', async () => {
