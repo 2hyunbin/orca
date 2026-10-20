@@ -23,10 +23,16 @@ import {
   type ShutdownReconnectFacts
 } from '../../terminal/recovery/shutdown-reconnect-facts'
 import { OrcaRuntimeWithAutomationOperations } from './automation-operations'
-import { panesBoundToAnotherWorkspace } from '../../terminal/recovery/foreign-pane-bindings'
+import {
+  panesBoundToAnotherWorkspace,
+  panesBoundToGoneLocalTerminals
+} from '../../terminal/recovery/foreign-pane-bindings'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 
 export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRuntimeWithAutomationOperations {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
+  /** Shows a restored pane whose terminal is gone as sleeping, unless it already has a status. */
+  protected abstract notePaneSleeping(paneKey: string): void
 
   private placementRun: Promise<LiveTerminalPlacement> | null = null
   private placementAgain = false
@@ -63,9 +69,11 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
     await this.unbindPanesFromOtherWorkspacesTerminals()
     // A host that keeps no local terminals across restarts has none to find.
     if (!this.canRecoverPersistentLocalPtysFn()) {
+      this.markDeadBoundPanesSleeping()
       return { placed: [], declined: [] }
     }
-    return placeUnshownLiveTerminals({
+    let censusRead = false
+    const placement = await placeUnshownLiveTerminals({
       refreshInventory: async () => {
         // Project-group folder workspaces are not in the worktree map; they resolve on their own.
         const workspaces = [
@@ -81,6 +89,7 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
           null
         )
         const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
+        censusRead = inventory !== null
         return inventory && { ...inventory, workspaceIds }
       },
       ptys: () => this.ptysById.values(),
@@ -99,6 +108,24 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
         }
       }
     })
+    // Only a census that answered proves a terminal gone; an unread one leaves panes as they are.
+    if (censusRead) {
+      this.markDeadBoundPanesSleeping()
+    }
+    return placement
+  }
+
+  /** Each local pane bound to a terminal the host no longer runs restores from it when started. */
+  private markDeadBoundPanesSleeping(): void {
+    const session = this.store?.getWorkspaceSession?.(LOCAL_EXECUTION_HOST_ID)
+    for (const paneKey of session
+      ? panesBoundToGoneLocalTerminals(
+          session,
+          (ptyId) => this.ptysById.get(ptyId)?.connected === true
+        )
+      : []) {
+      this.notePaneSleeping(paneKey)
+    }
   }
 
   /** A pane bound to a terminal another workspace owns starts fresh; that terminal is placed home. */

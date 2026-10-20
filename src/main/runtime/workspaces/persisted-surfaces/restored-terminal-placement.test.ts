@@ -5,6 +5,8 @@ import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { notifyLocalPtyProviderRebound } from '../../../ipc/pty/provider/local-provider-rebound'
 
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+
 const FOLDER: FolderWorkspace = {
   id: 'notes-1',
   projectGroupId: 'group-1',
@@ -21,6 +23,8 @@ const FOLDER: FolderWorkspace = {
   updatedAt: 1
 }
 const FOLDER_KEY = folderWorkspaceKey(FOLDER.id)
+const LIVE_LEAF = '11111111-1111-4111-8111-111111111111'
+const GONE_LEAF = '22222222-2222-4222-8222-222222222222'
 const LIVE_PTY = (worktreeId: string) => ({
   id: 'pty-agent',
   cwd: FOLDER.folderPath,
@@ -28,6 +32,12 @@ const LIVE_PTY = (worktreeId: string) => ({
   worktreeId,
   incarnationId: 'inc-1'
 })
+
+class PlacementRuntime extends OrcaRuntimeService {
+  statusOf(paneKey: string) {
+    return this.paneStartStatuses?.peek(paneKey) ?? null
+  }
+}
 
 function runtimeWithLiveTerminal(
   worktreeId: string,
@@ -49,7 +59,7 @@ function runtimeWithLiveTerminal(
     applyLayoutCommand
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup pass reads only these store methods.
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new PlacementRuntime(store as never)
   runtime.setPtyController({
     write: () => true,
     kill: () => true,
@@ -173,5 +183,39 @@ describe('main’s startup pass over the host census, layout-owner build', () =>
         ptyId: other
       }
     ])
+  })
+
+  it('shows a pane whose local terminal is gone as sleeping, and a live one as nothing', async () => {
+    const row = (id: string, ptyId: string) => ({
+      id,
+      ptyId,
+      worktreeId: FOLDER_KEY,
+      title: id,
+      customTitle: null,
+      color: null,
+      sortOrder: 0,
+      createdAt: 1
+    })
+    const layout = (leafId: string, ptyId: string) => ({
+      root: { type: 'leaf' as const, leafId },
+      activeLeafId: leafId,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [leafId]: ptyId }
+    })
+    const session = {
+      ...getDefaultWorkspaceSession(),
+      tabsByWorktree: {
+        [FOLDER_KEY]: [row('tab-live', 'pty-agent'), row('tab-gone', `${FOLDER_KEY}@@gone`)]
+      },
+      terminalLayoutsByTabId: {
+        'tab-live': layout(LIVE_LEAF, 'pty-agent'),
+        'tab-gone': layout(GONE_LEAF, `${FOLDER_KEY}@@gone`)
+      }
+    }
+    const { runtime } = runtimeWithLiveTerminal(FOLDER_KEY, [LIVE_PTY(FOLDER_KEY)], session)
+    await runtime.placeUnshownLiveTerminals()
+
+    expect(runtime.statusOf(`tab-gone:${GONE_LEAF}`)).toEqual({ status: 'sleeping' })
+    expect(runtime.statusOf(`tab-live:${LIVE_LEAF}`)).toBeNull()
   })
 })

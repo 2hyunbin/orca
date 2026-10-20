@@ -45,12 +45,22 @@ export function structureJson(layout: PublishedWorkspaceLayout): string {
   return cached(structureJsonByLayout, layout, ({ liveTitle: _liveTitle, ...pane }) => pane)
 }
 
-/** A frame's JSON without live titles or terminal bindings: a pane's binding is its status. */
+/**
+ * A frame's JSON without live titles or terminal bindings. A pane's start status goes with its
+ * binding: it says whether the bound terminal is live yet, so it changes no pane tree.
+ */
 export function unboundStructureJson(layout: PublishedWorkspaceLayout): string {
   return cached(
     unboundJsonByLayout,
     layout,
-    ({ liveTitle: _liveTitle, ptyId: _ptyId, ptyGeneration: _ptyGeneration, ...pane }) => pane
+    ({
+      liveTitle: _liveTitle,
+      ptyId: _ptyId,
+      ptyGeneration: _ptyGeneration,
+      status: _status,
+      statusReason: _statusReason,
+      ...pane
+    }) => pane
   )
 }
 

@@ -67,6 +67,12 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     return super.createTerminal(worktreeSelector, opts, created)
   }
 
+  protected notePaneSleeping(paneKey: string): void {
+    if (this.paneStartStatuses && !this.paneStartStatuses.peek(paneKey)) {
+      this.paneStartStatuses.set(paneKey, { status: 'sleeping' })
+    }
+  }
+
   /** Through main's create rules, so a pane the user closed meanwhile is refused, not restored. */
   private async keepFailedStartPane(
     worktreeSelector: string,
