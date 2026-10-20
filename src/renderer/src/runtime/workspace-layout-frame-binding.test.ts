@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
-import type * as WorkspaceSessionModule from '@/lib/workspace-session'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
@@ -14,7 +13,6 @@ import {
   GIT_KEY,
   leaf
 } from '../../../shared/workspace-layout/workspace-layout-session.test-fixture'
-import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { bootWindowFromPartitions } from '../app-shell/startup-window-view.test-fixture'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
@@ -23,16 +21,13 @@ import { endLayoutFramePositions } from './layout-frame-position'
 import { holdTabPaneTree } from './layout-owner-pane-intents'
 import { holdDrawnTabs } from './layout-owner-drawn-tab-holds'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
+import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
+import { mainLayoutFrameSender } from './main-loaded-layout-frames.test-fixture'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
-})
-// The rebuild reads the window's session back first: a call means a workspace rebuild ran.
-vi.mock('@/lib/workspace-session', async (importOriginal) => {
-  const actual = await importOriginal<typeof WorkspaceSessionModule>()
-  return { ...actual, buildWorkspaceSessionPayload: vi.fn(actual.buildWorkspaceSessionPayload) }
 })
 
 const stream = vi.hoisted(
@@ -99,15 +94,14 @@ async function boot() {
   await bootWindowFromPartitions(store, [{ hostId: 'local', session }])
   const sync = openWorkspaceLayoutFrameSync(store)
   const first = publishedOf(session)
-  stream.onFrame!({ type: 'snapshot', workspaces: [{ key: GIT_KEY, layout: first }] })
+  const frames = mainLayoutFrameSender()
+  stream.onFrame!(frames.snapshot({ [GIT_KEY]: first }))
   sync.start()
   await settle()
-  vi.mocked(buildWorkspaceSessionPayload).mockClear()
+  check.forgetBuilds()
   const send = async (layout: PublishedWorkspaceLayout, asSnapshot = false): Promise<void> => {
     stream.onFrame!(
-      asSnapshot
-        ? { type: 'snapshot', workspaces: [{ key: GIT_KEY, layout }] }
-        : { type: 'workspace', key: GIT_KEY, layout }
+      asSnapshot ? frames.snapshot({ [GIT_KEY]: layout }) : frames.records(GIT_KEY, layout)
     )
     await settle()
   }
@@ -127,7 +121,15 @@ async function rebuiltState(frames: PublishedWorkspaceLayout[]) {
 const slicesOf = (state: Record<string, unknown>) =>
   Object.fromEntries(SLICES.map((slice) => [slice, state[slice]]))
 
-afterEach(() => endLayoutFramePositions())
+let check: ReturnType<typeof installLayoutFrameApplyCheck>
+beforeEach(() => {
+  check = installLayoutFrameApplyCheck()
+})
+afterEach(() => {
+  endLayoutFramePositions()
+  check.uninstall()
+  expect(check.failures).toEqual([])
+})
 
 describe('a frame that changes only panes’ terminal bindings', () => {
   // A respawn of a gone process: its pane is unbound, then bound again.
@@ -154,9 +156,9 @@ describe('a frame that changes only panes’ terminal bindings', () => {
     const shown = store.getState()
     sync.close()
 
-    expect(buildWorkspaceSessionPayload).not.toHaveBeenCalled()
+    expect([...check.fullBuilt, ...check.workspaceBuilt]).toEqual([])
     const rebuilt = await rebuiltState(frames)
-    expect(buildWorkspaceSessionPayload).toHaveBeenCalled()
+    expect(check.fullBuilt).not.toEqual([])
     expect(slicesOf(shown)).toEqual(slicesOf(rebuilt))
     // Presence: the binding the frame names is the store's.
     const [leafId, ptyId] = steps.at(-1)!
@@ -182,7 +184,7 @@ describe('a frame that changes only panes’ terminal bindings', () => {
 
     stop()
     expect(writes).not.toHaveBeenCalled()
-    expect(buildWorkspaceSessionPayload).not.toHaveBeenCalled()
+    expect([...check.fullBuilt, ...check.workspaceBuilt]).toEqual([])
     sync.close()
   })
 
@@ -210,14 +212,15 @@ describe('a frame that changes only panes’ terminal bindings', () => {
     sync.close()
   })
 
-  it('still rebuilds a frame that also changes structure', async () => {
+  it('builds only its workspace, from the store’s view, for a frame that also renames', async () => {
     const { store, sync, first, send } = await boot()
     const renamed = rebound(first, 'tab-shell', leaf(1), 'pty-fresh')
     renamed.tabs.find((tab) => tab.entityId === 'tab-shell')!.customTitle = 'renamed'
 
     await send(renamed)
 
-    expect(buildWorkspaceSessionPayload).toHaveBeenCalled()
+    expect(check.fullBuilt).toEqual([])
+    expect(check.workspaceBuilt).toEqual([GIT_KEY])
     expect(
       store.getState().tabsByWorktree[GIT_KEY]!.find((tab) => tab.id === 'tab-shell')
     ).toMatchObject({ customTitle: 'renamed' })
