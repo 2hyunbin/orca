@@ -109,3 +109,29 @@ export function isDictationReady(setup: MobileSpeechSetup): boolean {
   const selected = setup.models.find((m) => m.id === setup.selectedModelId)
   return selected?.status === 'ready'
 }
+
+// Why "this computer": the paired host may be a headless server, where "desktop" misleads.
+export const CLOUD_MODEL_NEEDS_KEY = 'Add an OpenAI API key on this computer'
+
+/** What a model row in the setup sheet and Voice settings offers. */
+export type DictationModelRowAction =
+  | 'in-use'
+  | 'use'
+  | 'download'
+  | 'downloading'
+  | 'needs-api-key'
+
+// Why cloud rows are selectable: a host with no on-device recognizer (Windows or a managed SSH
+// server) lists only cloud models, so a read-only row left the sheet with nothing to pick.
+export function dictationModelRowAction(
+  model: MobileSpeechModel,
+  selectedModelId: string | undefined
+): DictationModelRowAction {
+  if (model.status === 'ready') {
+    return model.id === selectedModelId ? 'in-use' : 'use'
+  }
+  if (model.provider === 'openai') {
+    return 'needs-api-key'
+  }
+  return isModelInFlight(model) ? 'downloading' : 'download'
+}
