@@ -197,10 +197,17 @@ describe("a layout-owner server's held pane on a paired desktop", () => {
     // The server's frames, not the answer, end the hold.
     expect(button('Reopening…')).toBeTruthy()
     expect(treeOf(store.getState(), WT)).toEqual(before)
+    await publish(layoutWith('held'))
+    await render()
+    expect(button('Reopening…')).toBeTruthy()
 
+    // The reattach frame: status cleared, pane bound to its terminal.
     await publish(layoutWith(undefined))
     await render()
     expect(paneElement.textContent).toBe('')
+    expect(store.getState().terminalLayoutsByTabId[TAB_1]?.ptyIdsByLeafId?.[LEAF_ID]).toMatch(
+      /^remote:/
+    )
   })
 
   it.each([
@@ -214,6 +221,11 @@ describe("a layout-owner server's held pane on a paired desktop", () => {
 
     expect(paneElement.textContent).toContain(FAILED_TITLE)
     expect(button('Try again').disabled).toBe(false)
+    // The banner stays on the failed path while the server still holds the pane.
+    await publish(layoutWith('held'))
+    await render()
+    expect(paneElement.textContent).toContain(FAILED_TITLE)
+    expect(newerDaemonHoldStore.getState().panes[PANE_KEY]?.phase).toBe('failed')
   })
 
   it('shows no banner for an older server that publishes no status', async () => {
@@ -227,7 +239,8 @@ describe("a layout-owner server's held pane on a paired desktop", () => {
     expect(newerDaemonHoldStore.getState().panes).toEqual({})
   })
 
-  it('shows no banner for a server that cannot reopen held panes', async () => {
+  it('shows no banner for a server with layout intents that cannot reopen held panes', async () => {
+    // CAPABLE advertises layout.intents.v1 only; heldServerPane publishes the pane 'held'.
     await heldServerPane(CAPABLE)
 
     expect(paneElement.textContent).toBe('')
