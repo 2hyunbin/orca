@@ -72,4 +72,23 @@ describe('sendGuestCdpCommand', () => {
     await expect(sent).rejects.toMatchObject({ code: 'desktop_browser_bridge_unrouted' })
     expect(sendCommand).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps a host input that landed even when the host is revoked before it answers', async () => {
+    const revoked = new AbortController()
+    const { guest, sendCommand } = makeGuest()
+    sendCommand.mockImplementation(async () => {
+      revoked.abort()
+      return { ok: true }
+    })
+    const sent = runInRemoteCliBrowserScope(
+      'wt-1',
+      () =>
+        sendGuestCdpCommand({ ...guest, id: 7 }, 'Input.dispatchKeyEvent', {
+          type: 'keyDown',
+          key: 'a'
+        }),
+      revoked.signal
+    )
+    await expect(sent).resolves.toEqual({ ok: true })
+  })
 })

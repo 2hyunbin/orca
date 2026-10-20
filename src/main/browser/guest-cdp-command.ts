@@ -30,7 +30,6 @@ export function sendGuestCdpCommand(
   params?: Record<string, unknown>,
   sessionId?: string
 ): Promise<unknown> {
-  // Why: only a host's own work carries its scope; desktop-owned sends are never refused here.
   const send = (): Promise<unknown> => {
     // Why same task as the send: isCrashed() flips in the same Chromium task that drops the view,
     // so checking right before sendCommand leaves no gap for the renderer to die in between.
@@ -50,6 +49,7 @@ export function sendGuestCdpCommand(
       )
     )
   }
+  // Why: only a host's own work carries its scope; desktop-owned sends are never refused here.
   // Why inputs are checked only as sent: a press that landed counts even if the host is revoked
   // before it answers, and its answer carries nothing from the page.
   if (method.startsWith('Input.')) {
