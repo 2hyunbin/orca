@@ -219,6 +219,6 @@ describe('Claude effort the settings readback cannot report', () => {
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'max' }, undefined)
     ).resolves.toEqual({ model: 'sonnet', effort: 'max' })
-    expect(calls).toEqual(['list_models', 'apply:max', 'get_settings'])
+    expect(calls).toEqual(['list_models', 'apply:max'])
   })
 })
