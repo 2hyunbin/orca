@@ -5,9 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
-import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { holdLane } from './structured-agent-session-delivery-hold.test-fixture'
-import { structuredAgentSessionHostInstance } from './structured-agent-session-queued-pause'
 import { AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS } from '../../../shared/agent-session-host-authority'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import {
@@ -617,12 +615,9 @@ describe('source-bound ordinary Continue', () => {
     const current = await limitedTurn('current')
     const release = holdLane(rig.host, SESSION)
     try {
-      const body = hostTestMessage('backlog')
       const row = await journal.queuedMessages.insert({
         messageId: opId(),
-        body,
-        fingerprint: agentSessionSendBodyFingerprint(SESSION, body),
-        hostInstance: structuredAgentSessionHostInstance()
+        body: hostTestMessage('backlog')
       })
       journal.queuedMessages.editLeases.acquire(
         { callerKey: CALLER.callerKey, editId: 'edit' },
