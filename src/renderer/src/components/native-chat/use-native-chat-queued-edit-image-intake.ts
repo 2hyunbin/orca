@@ -13,6 +13,10 @@ import {
 import { toast } from 'sonner'
 import { createOsFileDropSequence, useOsFileDropOwner } from '@/hooks/use-os-file-drop-owner'
 import { getNativeFileDropRejectionMessage } from '@/lib/native-file-drop-rejection-message'
+import {
+  NativeChatPasteRequest,
+  NATIVE_CHAT_PASTE_REQUEST_EVENT
+} from '@/lib/native-chat-paste-request'
 import { formatNativeChatFileReference } from './native-chat-composer-target'
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
 import type { NativeChatResolvedPathOptions } from './native-chat-resolved-path-ownership'
@@ -139,7 +143,7 @@ export function useNativeChatQueuedEditImageIntake(
     (options?: { focus?: boolean }) => captureReservedAttachments(undefined, options),
     [captureReservedAttachments]
   )
-  const { handlePaste } = useNativeChatComposerPaste({
+  const { handlePaste, pasteFromClipboard } = useNativeChatComposerPaste({
     targetKey: editor.messageId,
     disabled,
     caret: 0,
@@ -184,6 +188,13 @@ export function useNativeChatQueuedEditImageIntake(
     const card = field.current?.closest('[data-queued-message-editor]')
     const owner = editable && card instanceof HTMLElement ? card : null
     attachOwner(owner)
+    const paste = (event: Event): void => {
+      if (event instanceof NativeChatPasteRequest) {
+        event.preventDefault()
+        pasteFromClipboard(event.onTextOnlyPaste)
+      }
+    }
+    owner?.addEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
     // A file dragged from Orca's own tree: the chat box's claim checks it, then hands it here.
     const hover = (active: boolean): void => setIsDragActive(active && !disabled)
     const unregister = owner
@@ -195,11 +206,12 @@ export function useNativeChatQueuedEditImageIntake(
     document.addEventListener('dragend', clear, true)
     return () => {
       attachOwner(null)
+      owner?.removeEventListener(NATIVE_CHAT_PASTE_REQUEST_EVENT, paste)
       unregister?.()
       document.removeEventListener('drop', clear, true)
       document.removeEventListener('dragend', clear, true)
     }
-  }, [attachOwner, attachResolvedPaths, disabled, editable, field])
+  }, [attachOwner, attachResolvedPaths, disabled, editable, field, pasteFromClipboard])
   const { pickAttachments } = useNativeChatFileAttachmentActions(external.attachExternalPaths)
   return {
     editable,

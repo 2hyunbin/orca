@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useEffect } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
 import { NativeChatApprovalCard } from './NativeChatApprovalCard'
@@ -28,6 +28,9 @@ import { queuedEditInput, queuedEditDirty } from '../../../../shared/queued-mess
 import { reserveNativeChatAttachmentChips as reserve } from './native-chat-session-attachment-drop'
 import * as ExternalAttachments from './use-native-chat-external-attachments'
 import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
+import { handleAppMenuPasteRequest } from '@/lib/app-menu-paste'
+import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
+import type { NativeChatComposerHandle } from './native-chat-composer-types'
 
 const externalAttachments = ExternalAttachments.useNativeChatExternalAttachments
 let chips: Parameters<typeof externalAttachments>[0]['pendingChips']
@@ -268,7 +271,13 @@ const writeSpy = vi.fn(async (..._args: unknown[]) => ({
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: answers only queuedMessageUpdate, with that method's result.
 const write = writeSpy as StructuredAgentSessionWrite
 
-function EditedCard({ imagesCapable }: { imagesCapable: boolean }): React.JSX.Element | null {
+function EditedCard({
+  imagesCapable,
+  acceptsImages = true
+}: {
+  imagesCapable: boolean
+  acceptsImages?: boolean
+}): React.JSX.Element | null {
   const messages = [card]
   const { editor, begin } = useStructuredAgentSessionQueuedEdit({
     transport: { target: { kind: 'local' }, sessionId: 's', capable: true, imagesCapable, write },
@@ -281,7 +290,7 @@ function EditedCard({ imagesCapable }: { imagesCapable: boolean }): React.JSX.El
   useEffect(() => void begin('card'), [begin])
   const attachTo = {
     terminalTabId: 'tab',
-    transport: { sessionId: 's', worktreeId: 'wt', runtimeEnvironmentId: null, acceptsImages: true }
+    transport: { sessionId: 's', worktreeId: 'wt', runtimeEnvironmentId: null, acceptsImages }
   }
   return editor ? (
     <TooltipProvider>
@@ -298,7 +307,92 @@ function savedParams(): unknown {
   return writeSpy.mock.calls.at(-1)?.[2]
 }
 
+function PastePane({
+  composer,
+  children
+}: {
+  composer: NativeChatComposerHandle
+  children: ReactNode
+}): React.JSX.Element {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef(composer)
+  useNativeChatPasteBridge({ rootRef, composerRef })
+  return <div ref={rootRef}>{children}</div>
+}
+
 describe('queued card image edit', () => {
+  it('routes a menu image paste from an edit button to its owner and text to the chat box', async () => {
+    const ui = {
+      readClipboardText: vi.fn().mockResolvedValue(''),
+      readClipboardFilePaths: vi.fn().mockResolvedValue([]),
+      clipboardHasImage: vi.fn().mockResolvedValue(true),
+      readClipboardImageThumbnail: vi.fn().mockResolvedValue(null)
+    }
+    vi.stubGlobal('api', { ui })
+    const composer: NativeChatComposerHandle = {
+      focus: () => true,
+      insertTypedText: () => true,
+      acceptsText: () => true,
+      appendText: vi.fn(),
+      handlePasteEvent: vi.fn(),
+      pasteFromClipboard: vi.fn(),
+      contains: () => false
+    }
+    const nativePaste = vi.fn()
+    const paste = () =>
+      handleAppMenuPasteRequest({
+        readClipboardText: ui.readClipboardText,
+        performNativePaste: nativePaste
+      })
+    const view = render(
+      <PastePane composer={composer}>
+        <EditedCard imagesCapable />
+      </PastePane>
+    )
+    try {
+      const attach = await screen.findByRole('button', { name: 'Attach file' })
+      const field = screen.getByRole('textbox', { name: 'Edit message' })
+      await waitFor(() => expect(field).toHaveProperty('readOnly', false))
+      attach.focus()
+      await act(async () => void (await paste()))
+      await waitFor(() =>
+        expect(screen.getAllByRole('button', { name: 'Remove attachment' })).toHaveLength(3)
+      )
+      expect(composer.pasteFromClipboard).not.toHaveBeenCalled()
+      expect(composer.handlePasteEvent).not.toHaveBeenCalled()
+      expect(nativePaste).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(attach)
+
+      ui.readClipboardText.mockResolvedValue('chat text')
+      ui.clipboardHasImage.mockResolvedValue(false)
+      await act(async () => void (await paste()))
+      expect(composer.handlePasteEvent).toHaveBeenCalledOnce()
+      expect(
+        vi.mocked(composer.handlePasteEvent).mock.calls[0]?.[0].clipboardData?.getData('text/plain')
+      ).toBe('chat text')
+      expect(field).toHaveProperty('value', 'replace WORD please [Image #1] and [Image #2]')
+
+      ui.readClipboardText.mockResolvedValue('')
+      ui.clipboardHasImage.mockResolvedValue(true)
+      for (const capabilities of [
+        { imagesCapable: false, acceptsImages: true },
+        { imagesCapable: true, acceptsImages: false }
+      ]) {
+        view.rerender(
+          <PastePane composer={composer}>
+            <EditedCard {...capabilities} />
+          </PastePane>
+        )
+        screen.getByRole('button', { name: 'Cancel editing' }).focus()
+        await act(async () => void (await paste()))
+      }
+      expect(composer.pasteFromClipboard).toHaveBeenCalledTimes(2)
+      expect(nativePaste).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('keeps image intake text-neutral, saves suffixes and hands off only surviving changes', async () => {
     writeSpy.mockClear()
     render(<EditedCard imagesCapable />)
