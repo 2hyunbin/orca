@@ -35,6 +35,7 @@ import { abandonWslHostAdd, connectForWslHostAdd } from './wsl-host-first-connec
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 import { defaultWslOrcadEnvironmentId } from './wsl-orcad-deploy'
 import { WslProjectHostEnsurer } from './wsl-project-host-ensurer'
+import { toWslHostDistroList } from './wsl-host-distro-list'
 
 import type { WslHostConnector, WslHostServiceDependencies } from './wsl-host-service-contract'
 export type { WslHostConnector, WslHostServiceDependencies } from './wsl-host-service-contract'
@@ -97,11 +98,7 @@ export class WslHostService {
   async listDistros(): Promise<WslHostDistro[]> {
     const records = this.records()
     const candidates = await this.wsl.listDistros()
-    return candidates.map(({ id: _id, ...distro }) => ({
-      ...distro,
-      environmentId:
-        records.find((record) => sameWslDistro(record.distro, distro.name))?.environmentId ?? null
-    }))
+    return toWslHostDistroList(candidates, records)
   }
 
   add(args: { distro: string; startIfStopped?: boolean }): Promise<WslHostAddResult> {

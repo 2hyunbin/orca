@@ -314,11 +314,9 @@ describe('one placement per project operation', () => {
         return normal(env, method, params, beforeSend)
       })
       const adding = addLocalRepoFromPath(store, path, 'folder')
-      if (phase === 'send-stop') {
-        await expect(adding).rejects.toThrow('unavailable')
-      } else {
-        await expect(adding).resolves.toEqual({ repo: saved, alreadyExisted: true })
-      }
+      await (phase === 'send-stop'
+        ? expect(adding).rejects.toThrow('unavailable')
+        : expect(adding).resolves.toEqual({ repo: saved, alreadyExisted: true }))
       expect(mocks.ownerRepos).toEqual([])
       expect(store.addRepo).not.toHaveBeenCalled()
     }
