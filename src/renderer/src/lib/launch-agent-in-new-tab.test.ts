@@ -542,6 +542,8 @@ describe('launchAgentInNewTab', () => {
       activeRuntimeEnvironmentId: 'web-runtime',
       experimentalNativeChat: true
     }
+    // The client stamps a server's rows on arrival; focus alone never names the owner.
+    Object.assign(store.repos[0], { executionHostId: 'runtime:web-runtime' })
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
     launchAgentInNewTab({ requestId: 'request-12', agent: 'codex', worktreeId: 'wt-1' })
@@ -564,6 +566,8 @@ describe('launchAgentInNewTab', () => {
       activeRuntimeEnvironmentId: 'web-runtime',
       experimentalNativeChat: true
     }
+    // The client stamps a server's rows on arrival; focus alone never names the owner.
+    Object.assign(store.repos[0], { executionHostId: 'runtime:web-runtime' })
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
     launchAgentInNewTab({ requestId: 'request-13', agent: 'codex', worktreeId: 'wt-1' })

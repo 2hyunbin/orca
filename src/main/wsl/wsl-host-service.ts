@@ -200,7 +200,8 @@ export class WslHostService {
    */
   async ensureForRuntimeCall(environmentId: string): Promise<void> {
     const record = this.recordForEnvironment(environmentId)
-    if (!record || !this.connector || this.connector.get(record.distro)) {
+    const connector = this.connector
+    if (!record || !connector || (await connector.isReachable(record.distro, environmentId))) {
       return
     }
     const refusal = wslHostRunRefusal(this.deps)
@@ -210,7 +211,7 @@ export class WslHostService {
     if (!this.visible.has(environmentId)) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
-    await this.connector.connect(record.distro)
+    await connector.connect(record.distro)
   }
 
   /** Whether anything may still be started for this distro (spawn guard). */
@@ -224,12 +225,9 @@ export class WslHostService {
       return
     }
     for (const environmentId of this.visible) {
-      if (previous.has(environmentId)) {
-        continue
-      }
-      const record = this.recordForEnvironment(environmentId)
-      if (record && !this.connector.get(record.distro)) {
-        this.connector.connect(record.distro).catch((error: unknown) => {
+      const record = !previous.has(environmentId) && this.recordForEnvironment(environmentId)
+      if (record) {
+        this.ensureForRuntimeCall(environmentId).catch((error: unknown) => {
           console.warn(`[wsl-hosts] Could not connect to ${record.distro}:`, error)
         })
       }

@@ -16,6 +16,7 @@ import { detectRepoIconAndUpstream } from '../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
+import { runtimeRepoIsRegistrationCandidate } from './runtime-worktree-selection'
 import {
   placeProject,
   registrationDomain,
@@ -145,7 +146,8 @@ export class RuntimeRepositoryRegistrationController {
       name: trimmedName,
       domain: registrationDomain(caller),
       fromPairedClient: caller.fromPairedClient,
-      sameTarget: (path) => runtimePathsEqual(path, targetPath)
+      // Why host-qualified: an SSH project at this path string is another machine's directory.
+      sameTarget: (repo) => runtimeRepoIsRegistrationCandidate(repo) && runtimePathsEqual(repo.path, targetPath)
     })
     if (placement.kind === 'saved') {
       return { repo: placement.repo }

@@ -1,7 +1,8 @@
 import type {
   CommandOf,
   LayoutApplyOutcome,
-  LayoutCommand
+  LayoutCommand,
+  LayoutRefusalCode
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import {
   resolveHostId,
@@ -9,6 +10,7 @@ import {
 } from '../loading-store/session-host-partitions'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import { applyLayout, keepFrozen, topologyCommitContext } from './terminal-topology-commit'
+import { applyLayoutRenames } from './terminal-layout-renames-commit'
 import { moveTabAcrossPartitions } from './cross-partition-tab-move'
 import { writeRestorable } from './restorable-write'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
@@ -45,6 +47,19 @@ export class LayoutCommandPersistence {
     const resolved = hostIds.length > 0 ? hostIds.map(resolveHostId) : [resolveHostId()]
     return context.runtime.runDurableMutation(
       applyLayout(resolved, command, topologyCommitContext(context))
+    )
+  }
+
+  /** `renameTabs`: each partition's renames in one durable write of all; resolves those refused. */
+  applyTabRenames(
+    batches: readonly { hostId: string; renames: readonly CommandOf<'renameTab'>[] }[]
+  ): Promise<{ rename: CommandOf<'renameTab'>; code: LayoutRefusalCode }[]> {
+    const context = this[layoutCommandPersistenceContext]
+    return context.runtime.runDurableMutation(
+      applyLayoutRenames(
+        batches.map(({ hostId, renames }) => ({ hostId: resolveHostId(hostId), renames })),
+        topologyCommitContext(context)
+      )
     )
   }
 

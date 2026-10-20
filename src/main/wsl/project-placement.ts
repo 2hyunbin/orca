@@ -49,7 +49,7 @@ export type PlacementContext = PlacementCaller &
         parentPath: string
         name: string
         /** The caller's own duplicate rule for targets that no WSL host can own. */
-        sameTarget: (path: string) => boolean
+        sameTarget: (repo: Repo) => boolean
       }
   )
 
@@ -112,7 +112,7 @@ export async function placeProject(
   const wsl = parseWslUncPath(target) !== null && wslProjectRoutingEnabled(store, context.domain)
   if (context.operation === 'create' && !wsl) {
     const { sameTarget } = context
-    const findSaved = () => store.getRepos().find((repo) => sameTarget(repo.path))
+    const findSaved = () => store.getRepos().find(sameTarget)
     const repo = findSaved()
     const admission = { selectedPath: target, registrationPath: target, saved: repo, findSaved }
     return repo ? { kind: 'saved', repo, admission } : { kind: 'local', admission }

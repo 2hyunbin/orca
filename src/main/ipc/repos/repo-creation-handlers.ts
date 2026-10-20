@@ -119,7 +119,7 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
         name,
         domain: LOCAL_EXECUTION_HOST_ID,
         fromPairedClient: false,
-        sameTarget: (path) => path === targetPath
+        sameTarget: (repo) => repo.path === targetPath
       })
       if (placement.kind === 'saved') {
         emitRepoAdded('folder_picker', true, repoKind === 'git')

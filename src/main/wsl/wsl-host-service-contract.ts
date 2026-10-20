@@ -10,6 +10,8 @@ export type WslHostConnector = {
   /** User-initiated; may boot the distro. `force` takes an update live terminals deferred. */
   connect(distro: string, options?: { force?: boolean }): Promise<WslOrcadConnection>
   get(distro: string): WslOrcadConnection | null
+  /** Checks the paired server without starting a stopped or unconfirmed distro. */
+  isReachable(distro: string, environmentId: string): Promise<boolean>
   disconnect(distro: string): Promise<void>
   /** Ends the host's terminals, orcad and its terminal daemon; never boots a stopped distro. */
   stopServer(distro: string, environmentId: string): Promise<WslHostServerStop>

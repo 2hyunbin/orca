@@ -12,7 +12,10 @@ import { awaitWindowsHostGitEnvironmentReady } from './git/runner'
 import { getGitRepoRootAsync, inspectGitRepoForRegistrationAsync } from './git/repo'
 import { findProjectAtSameRealPath } from './project-realpath-identity'
 import { runtimePathsEqual } from './runtime/runtime-worktree-path-identity'
-import { runtimeRepoMatchesExecutionHost } from './runtime/runtime-worktree-selection'
+import {
+  runtimeRepoIsRegistrationCandidate,
+  runtimeRepoMatchesExecutionHost
+} from './runtime/runtime-worktree-selection'
 
 export type RepositoryCheckoutAdmission = {
   selectedPath: string
@@ -52,11 +55,12 @@ export async function admitRepositoryCheckout(
   }
   const registrationPath = info?.rootPath ?? selectedPath
   if (rule.scope === 'runtime') {
-    const sameHost = store.getRepos().filter((repo) => runtimeRepoMatchesExecutionHost(repo, rule.executionHostId))
-    const saved = sameHost.find((repo) =>
+    const candidates = store.getRepos().filter((repo) =>
+      runtimeRepoIsRegistrationCandidate(repo, rule.executionHostId))
+    // Why: git's toplevel is already resolved through symlinks, so an alias of a tracked checkout finds it.
+    const saved = candidates.find((repo) =>
       runtimePathsEqual(repo.path, selectedPath) || runtimePathsEqual(repo.path, registrationPath)) ??
-      // Why: SSH rows name paths on another machine; resolving them here could match an unrelated local dir.
-      await findProjectAtSameRealPath(sameHost.filter((repo) => !isSshRow(repo)), registrationPath)
+      await findProjectAtSameRealPath(candidates, registrationPath)
     const findSaved = liveClaim(() => store.getRepos(), saved)
     return { selectedPath, registrationPath, saved: saved ?? undefined, findSaved }
   }
