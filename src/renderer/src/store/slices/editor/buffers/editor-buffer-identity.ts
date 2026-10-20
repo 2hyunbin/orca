@@ -14,18 +14,20 @@ export type EditorBufferIdentity = {
   environmentId: string | null
 }
 
-/**
- * The endpoint an SSH target id currently names. Target ids survive an in-place edit to another
- * machine, while the connection generation also moves on a plain reconnect, so neither alone can
- * key a file. Undefined when not known: that tab never shares.
- */
-export type SshEndpointIncarnationOf = (
-  environmentId: string | null,
-  targetId: string
-) => string | undefined
+/** `windows` or `posix` only when verified for the host; `unknown` never folds an ambiguous path. */
+export type EditorBufferHostPathFlavor = 'windows' | 'posix' | 'unknown'
 
-/** `win32` only when the host is known to be Windows; `unknown` never folds an ambiguous path. */
-export type EditorBufferHostPathFlavor = 'win32' | 'unknown'
+/** Facts about the tab's execution host, supplied per tab by the caller. */
+export type EditorBufferHostFacts = {
+  /**
+   * The SSH endpoint this tab captured when it opened. Never the target's current endpoint: a
+   * target id can be edited in place to name another machine, and a live lookup would then match
+   * an old tab to the new machine. Undefined for an SSH tab means it never shares.
+   */
+  capturedSshEndpoint?: string
+  /** Verified path flavor of a remote host. The local client's flavor is detected here. */
+  remotePathFlavor?: EditorBufferHostPathFlavor
+}
 
 /** A WSL key is a tuple, so no real path string can ever equal it. */
 export type EditorBufferPathKey = string | readonly ['wsl', string, string]
@@ -46,7 +48,7 @@ export function editorBufferPathKey(
   }
   // Absolute POSIX paths start with `/`, so a drive or `\\` prefix proves Windows. `//` does not.
   const drive = /^[A-Za-z]:[\\/]/.test(filePath)
-  const unc = filePath.startsWith('\\\\') || (flavor === 'win32' && filePath.startsWith('//'))
+  const unc = filePath.startsWith('\\\\') || (flavor === 'windows' && filePath.startsWith('//'))
   if (!drive && !unc) {
     return filePath
   }
@@ -62,8 +64,8 @@ export function editorBufferPathKey(
 }
 
 /**
- * Null for tabs that never share: non-edit views, unresolved owners, and SSH targets whose endpoint
- * is unknown.
+ * Null for tabs that never share: non-edit views, unresolved owners, and SSH tabs with no captured
+ * endpoint.
  *
  * The key is not fixed for a live tab: an unpinned runtime tab resolves its pairing live (null
  * before the revision registry loads, the newest proven revision after). A caller must treat a key
@@ -72,7 +74,7 @@ export function editorBufferPathKey(
 export function editorBufferIdentityOf(
   file: OpenFile,
   state: WorktreeOperationRouteState,
-  sshEndpointOf: SshEndpointIncarnationOf
+  hostFacts: EditorBufferHostFacts
 ): EditorBufferIdentity | null {
   if (file.mode !== 'edit') {
     return null
@@ -82,8 +84,8 @@ export function editorBufferIdentityOf(
   if (!host) {
     return null
   }
-  const sshEndpoint = host.kind === 'ssh' ? sshEndpointOf(environmentId, host.targetId) : null
-  if (sshEndpoint === undefined) {
+  const sshEndpoint = host.kind === 'ssh' ? (hostFacts.capturedSshEndpoint ?? null) : null
+  if (host.kind === 'ssh' && !sshEndpoint) {
     return null
   }
   // A same-host re-pair resolves to the revision it continues; an unproven one stays apart.
@@ -93,16 +95,21 @@ export function editorBufferIdentityOf(
         file.operationProvenance?.generation.runtimePairingRevision
       ) ?? null)
     : null
-  // Only the local machine's OS is known here. `wsl$` and `wsl.localhost` name one distro only on
-  // Windows; a paired web client (including `orca serve` on Windows) keeps them apart, as today.
+  // `wsl$` and `wsl.localhost` name one distro only on the local Windows client; a paired web
+  // client (including `orca serve` on Windows) keeps them apart, as today.
   const localWindows = host.kind === 'local' && !environmentId && isLocalWindowsDesktopClient()
+  const flavor = localWindows
+    ? 'windows'
+    : host.kind === 'local' && !environmentId
+      ? 'unknown'
+      : (hostFacts.remotePathFlavor ?? 'unknown')
   return {
     key: JSON.stringify([
       environmentId,
       host.id,
       revisionRoot,
       sshEndpoint,
-      editorBufferPathKey(file.filePath, localWindows ? 'win32' : 'unknown', localWindows)
+      editorBufferPathKey(file.filePath, flavor, localWindows)
     ]),
     environmentId
   }
