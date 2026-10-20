@@ -46,19 +46,26 @@ function withinCallerBounds<T>(
   if (!signal && !(timeoutMs && timeoutMs > 0)) {
     return start
   }
+  if (signal?.aborted) {
+    return Promise.reject(new Error('request_aborted'))
+  }
   return new Promise<T>((resolve, reject) => {
-    const abort = (): void => reject(new Error('request_aborted'))
-    const timer =
-      timeoutMs && timeoutMs > 0 ? setTimeout(() => reject(new Error('timeout')), timeoutMs) : null
-    if (signal?.aborted) {
-      abort()
-    }
-    signal?.addEventListener('abort', abort, { once: true })
-    start.then(resolve, reject).finally(() => {
+    const settle = (finish: () => void): void => {
       if (timer) {
         clearTimeout(timer)
       }
       signal?.removeEventListener('abort', abort)
-    })
+      finish()
+    }
+    const abort = (): void => settle(() => reject(new Error('request_aborted')))
+    const timer =
+      timeoutMs && timeoutMs > 0
+        ? setTimeout(() => settle(() => reject(new Error('timeout'))), timeoutMs)
+        : null
+    signal?.addEventListener('abort', abort, { once: true })
+    start.then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error))
+    )
   })
 }

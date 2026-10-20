@@ -161,7 +161,12 @@ describe('a CLI trigger on a saved pane with no terminal (layout-owner build)', 
     started.resolve({ id: 'pty-c' })
 
     await expect(send).resolves.toMatchObject({ accepted: true })
-    await expect(phone).resolves.toBeDefined()
+    await phone
+    // The phone's row shows the one started terminal.
+    const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(
+      listed.tabs.find((tab) => tab.id === `${SURFACE_TAB_ID}::${THIRD_LEAF_ID}`)
+    ).toMatchObject({ status: 'ready', terminal: expect.any(String) })
     expect(spawn).toHaveBeenCalledOnce()
     expect(write).toHaveBeenCalledWith('pty-c', 'echo hi', 'driving')
   })
@@ -187,6 +192,8 @@ describe('a CLI trigger on a saved pane with no terminal (layout-owner build)', 
     await new Promise((resolve) => setTimeout(resolve, 10))
     bindThirdPane('pty-c')
     await new Promise((resolve) => setTimeout(resolve, 10))
+    // The caller's own handle now names the bound pane (adopted), not only the started terminal's.
+    expect(runtime.resolveLiveLeafForHandle(handle)?.ptyId).toBe('pty-c')
     await expect(
       runtime.sendTerminal(handle, { text: 'echo bound', enter: true }, DRIVING)
     ).resolves.toMatchObject({ handle, accepted: true })
