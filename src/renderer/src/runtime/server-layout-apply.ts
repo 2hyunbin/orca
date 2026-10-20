@@ -73,7 +73,10 @@ export function handleServerLayoutReply(
   handlers: LayoutApplyHandlers
 ): void {
   if (reply?.ok) {
-    handlers.apply(resultForDesktop(reply.result, server.route))
+    handlers.apply(resultForDesktop(reply.result, server.route), {
+      framesKey: server.route.environmentId,
+      routed: true
+    })
     return
   }
   const code = reply ? reply.code : 'call_failed'

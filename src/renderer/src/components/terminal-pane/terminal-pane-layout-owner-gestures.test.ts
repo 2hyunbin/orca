@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { LOCAL_LAYOUT_APPLY_ORIGIN } from '@/runtime/server-layout-apply-routes'
 
 const mocks = vi.hoisted(() => ({
   root: {
@@ -60,7 +61,7 @@ describe('layoutOwnerPaneGestures', () => {
     )
     expect(move).not.toHaveBeenCalled()
 
-    mocks.send.mock.calls[0]?.[2].apply({})
+    mocks.send.mock.calls[0]?.[2].apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
     expect(move).toHaveBeenCalledOnce()
   })
 
@@ -91,10 +92,10 @@ describe('layoutOwnerPaneGestures', () => {
     view.onDividerRatiosCommitted?.()
     const [first, second] = mocks.send.mock.calls.map(([, , on]) => on)
 
-    expect(() => first?.apply({})).toThrow('pane gone')
+    expect(() => first?.apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)).toThrow('pane gone')
     expect(mocks.send).toHaveBeenCalledTimes(2)
 
-    second?.apply({})
+    second?.apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
     expect(mocks.send).toHaveBeenCalledTimes(3)
     expect(mocks.send).toHaveBeenLastCalledWith(
       'worktree-1',
@@ -111,7 +112,7 @@ describe('layoutOwnerPaneGestures', () => {
     view.onDividerRatiosCommitted?.()
     expect(mocks.send).toHaveBeenCalledOnce()
 
-    mocks.send.mock.calls[0]?.[2].apply({})
+    mocks.send.mock.calls[0]?.[2].apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
     expect(move).toHaveBeenCalledOnce()
     expect(mocks.send).toHaveBeenLastCalledWith(
       'worktree-1',

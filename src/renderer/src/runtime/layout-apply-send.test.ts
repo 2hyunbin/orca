@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LOCAL_LAYOUT_APPLY_ORIGIN } from './server-layout-apply-routes'
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
 const mocks = vi.hoisted(() => {
@@ -107,7 +108,7 @@ describe('sendLayoutApply', () => {
     expect(refused.refused).toHaveBeenCalledWith('last_pane')
 
     const applied = await send({ ok: true, result: { tabId: 'tab-1' } })
-    expect(applied.apply).toHaveBeenCalledWith({ tabId: 'tab-1' })
+    expect(applied.apply).toHaveBeenCalledWith({ tabId: 'tab-1' }, LOCAL_LAYOUT_APPLY_ORIGIN)
   })
 
   it('holds the tabs a drawn change names, in each workspace, until its answer is in', async () => {
@@ -220,7 +221,7 @@ describe('sendLayoutApply holds with no answer', () => {
 
     mocks.frame.waiting.forEach((run) => run())
     await vi.advanceTimersByTimeAsync(1)
-    expect(handlers.apply).toHaveBeenCalledWith({ tabId: 'tab-1' })
+    expect(handlers.apply).toHaveBeenCalledWith({ tabId: 'tab-1' }, LOCAL_LAYOUT_APPLY_ORIGIN)
     expect(mocks.paneRelease).toHaveBeenCalledOnce()
     expect(console.warn).toHaveBeenCalledOnce()
   })

@@ -12,6 +12,8 @@ type StreamPosition = {
   position: number | null
   /** 'none' before the stream opens; 'coming' from then, even before its first frame. */
   stream: 'none' | 'coming' | 'ended'
+  /** The publishing process's stream identity: a restarted main counts its positions anew. */
+  epoch?: string
   waiters: Waiter[]
 }
 
@@ -62,6 +64,23 @@ export function noteLayoutFramePosition(
   entry.position = entry.position === null ? seq : Math.max(entry.position, seq)
   const reached = entry.position
   release(entry, (waiter) => waiter.seq <= reached)
+}
+
+/** A frame's stream identity. A new one (the main restarted) starts its positions over, and a
+ *  reply waiting on the old one shows now: its position will never come. */
+export function noteLayoutFrameEpoch(
+  epoch: string | undefined,
+  key: string = LOCAL_LAYOUT_STREAM
+): void {
+  if (epoch === undefined) {
+    return
+  }
+  const entry = streamOf(key)
+  if (entry.epoch !== undefined && entry.epoch !== epoch) {
+    entry.position = null
+    release(entry, () => true)
+  }
+  entry.epoch = epoch
 }
 
 /** Whether main's frames will come: from when the window opens its stream until it ends. */

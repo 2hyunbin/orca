@@ -9,6 +9,10 @@ import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
 import { holdDrawnTabs, type DrawnTabHold } from '@/runtime/layout-owner-drawn-tab-holds'
 import { holdsPaneTree, releaseLayoutApplyHolds } from '@/runtime/layout-apply-hold-release'
 import { handleServerLayoutReply, serverLayoutApplyFor } from '@/runtime/server-layout-apply'
+import {
+  LOCAL_LAYOUT_APPLY_ORIGIN,
+  type LayoutApplyOrigin
+} from '@/runtime/server-layout-apply-routes'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
@@ -143,7 +147,7 @@ export type WindowLayoutCommand =
 export type WindowRefusalCode = Extract<LayoutApplyReply, { ok: false }>['code'] | 'call_failed'
 
 export type LayoutApplyHandlers = {
-  apply: (result: LayoutCommandResult) => void
+  apply: (result: LayoutCommandResult, origin: LayoutApplyOrigin) => void
   asToday: () => void
   refused?: (code: WindowRefusalCode) => void
   /** The window already drew the change: frames keep its tabs as drawn until the answer is in. */
@@ -291,7 +295,7 @@ function handleReply(
   handlers: LayoutApplyHandlers
 ): void {
   if (reply.ok) {
-    handlers.apply(reply.result)
+    handlers.apply(reply.result, LOCAL_LAYOUT_APPLY_ORIGIN)
   } else if (refusalActsAsToday(state, worktreeId, reply.code)) {
     handlers.asToday()
   } else {

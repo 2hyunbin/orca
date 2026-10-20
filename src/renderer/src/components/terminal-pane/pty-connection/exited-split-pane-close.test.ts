@@ -9,6 +9,7 @@ import {
   takePaneCloseIntent
 } from '@/runtime/layout-owner-pane-intents'
 import { closeExitedSplitPaneThroughLayoutOwner } from './exited-split-pane-close'
+import { LOCAL_LAYOUT_APPLY_ORIGIN } from '@/runtime/server-layout-apply-routes'
 
 const mocks = vi.hoisted(() => ({
   sendLayoutCommandToOwner: vi.fn<typeof sendLayoutCommandToOwner>()
@@ -77,7 +78,7 @@ describe('closeExitedSplitPaneThroughLayoutOwner', () => {
       expect.any(Object)
     )
     noteLayoutFramePosition(1)
-    c.handlers().apply({})
+    c.handlers().apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
     endLayoutFramePositions()
 
     expect(c.closePane).not.toHaveBeenCalled()
@@ -87,7 +88,7 @@ describe('closeExitedSplitPaneThroughLayoutOwner', () => {
   it('closes the pane itself when main closed it and no frame is coming', () => {
     const c = close()
 
-    c.handlers().apply({})
+    c.handlers().apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(c.closePane).toHaveBeenCalledWith(1)
     expect(takePaneCloseIntent('tab-1', LEAF)).toBeNull()

@@ -10,6 +10,7 @@ import {
   _resetLayoutOwnerPaneIntentsForTests,
   takePaneAppearIntent
 } from '@/runtime/layout-owner-pane-intents'
+import { LOCAL_LAYOUT_APPLY_ORIGIN } from '@/runtime/server-layout-apply-routes'
 
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: false,
@@ -284,7 +285,7 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
       newLeafId: expect.any(String)
     })
     noteLayoutFramePosition(1)
-    handlers?.apply({})
+    handlers?.apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
     endLayoutFramePositions()
     expect(splitPane).not.toHaveBeenCalled()
 
@@ -302,7 +303,7 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     const [, command, handlers] = mocks.sendLayoutCommandToOwner.mock.calls[0] ?? []
     const newLeafId = command?.type === 'splitPane' ? (command.newLeafId ?? '') : ''
 
-    handlers?.apply({})
+    handlers?.apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(splitPane).toHaveBeenCalledWith(1, 'vertical', { cwd: '/cached', leafId: newLeafId })
     expect(takePaneAppearIntent('tab-1', newLeafId)).toBeNull()

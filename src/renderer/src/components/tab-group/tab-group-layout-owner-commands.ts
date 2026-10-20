@@ -8,6 +8,7 @@ import type { TabSplitDirection } from '@/store/slices/tabs'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import type { WindowLayoutCommand } from '@/runtime/layout-apply-send'
+import type { LayoutApplyOrigin } from '@/runtime/server-layout-apply-routes'
 import { moveGroupLeafBeside } from '../../../../shared/workspace-layout/tab-group-layout-tree'
 import { stableJson } from '../../../../shared/workspace-layout/workspace-layout-load-report'
 import { isPaneColumnSplitDropNoOp } from '@/store/slices/pane-column-split-drop-no-op'
@@ -30,7 +31,7 @@ export function dropTabThroughLayoutOwner(worktreeId: string, drop: TabDrop): bo
     return false
   }
   return sendLayoutCommandToOwner(worktreeId, command, {
-    apply: ({ groupId }) => showMainMove(worktreeId, drop, groupId),
+    apply: ({ groupId }, origin) => showMainMove(worktreeId, drop, groupId, origin),
     asToday: () => moveAsToday(worktreeId, drop)
   })
 }
@@ -108,14 +109,23 @@ function moveAsToday(worktreeId: string, drop: TabDrop, newGroupId?: string): bo
 }
 
 /** Shows main's placement (main's frame may already have) and selects the tab. */
-function showMainMove(worktreeId: string, drop: TabDrop, mainGroupId: string | undefined): void {
+function showMainMove(
+  worktreeId: string,
+  drop: TabDrop,
+  mainGroupId: string | undefined,
+  origin: LayoutApplyOrigin
+): void {
+  // A server's main moved it: its frames show the move, and a move here would send it again.
+  const moveHere = origin.routed
+    ? (): boolean => false
+    : (newGroupId?: string): boolean => moveAsToday(worktreeId, drop, newGroupId)
   const state = useAppStore.getState()
   const { tabId } = drop
   const groups = state.groupsByWorktree[worktreeId] ?? []
   if (drop.kind === 'reorder') {
     const order = groups.find((group) => group.id === drop.groupId)?.tabOrder
     if (order?.indexOf(tabId) !== drop.tabOrder.indexOf(tabId)) {
-      moveAsToday(worktreeId, drop)
+      moveHere()
     }
     return
   }
@@ -125,18 +135,18 @@ function showMainMove(worktreeId: string, drop: TabDrop, mainGroupId: string | u
     return
   }
   if (tab.groupId !== groupId) {
-    moveAsToday(worktreeId, drop, groupId)
+    moveHere(groupId)
     return
   }
   if (drop.kind === 'split') {
     // Main moved the tab's lone group whole, keeping its id; a no-op once main's frame showed it.
     // Why the window's count: main may not have this window's newer tabs in that group yet.
     if (groups.find((group) => group.id === groupId)?.tabOrder.length !== 1) {
-      moveAsToday(worktreeId, drop)
+      moveHere()
       return
     }
     // Main's frame placed the group; the window places it only when no frame is coming.
-    if (!layoutFramesFlowing()) {
+    if (!origin.routed && !layoutFramesFlowing(origin.framesKey)) {
       placeGroupBeside(worktreeId, groupId, drop.groupId, drop.direction)
     }
   }

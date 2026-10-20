@@ -8,6 +8,7 @@ import {
   beginLayoutFramePositions,
   endLayoutFramePositions,
   layoutFramePositionKey,
+  noteLayoutFrameEpoch,
   noteLayoutFramePosition
 } from './layout-frame-position'
 import { subscribeRuntimeLayout, type RuntimeLayoutStreamStatus } from './runtime-layout-client'
@@ -40,7 +41,13 @@ export function openLayoutFrameStream(
   const stream = subscribeRuntimeLayout(
     source.target,
     {},
-    (frame) => receive(source.translate ? source.translate(frame) : frame),
+    (frame) => {
+      noteLayoutFrameEpoch(
+        frame.type === 'snapshot' || frame.type === 'records' ? frame.epoch : undefined,
+        key
+      )
+      receive(source.translate ? source.translate(frame) : frame)
+    },
     (status) => {
       if (status.state === 'lost' || status.state === 'refused') {
         console.warn('[layout-owner] layout stream stopped:', status)

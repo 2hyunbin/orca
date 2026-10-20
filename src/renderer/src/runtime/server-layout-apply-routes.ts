@@ -12,6 +12,16 @@ export type ServerLayoutApplyRoute = {
   redraw: () => void
 }
 
+/** Whose main answered a layout intent, and whose frames show the answer. */
+export type LayoutApplyOrigin = {
+  /** The stream key (layout-frame-position.ts) whose frames hold the answer. */
+  framesKey: string
+  /** A paired server's main took it: the window never makes the change itself. */
+  routed: boolean
+}
+
+export const LOCAL_LAYOUT_APPLY_ORIGIN: LayoutApplyOrigin = { framesKey: 'local', routed: false }
+
 type RouteProvider = (worktreeId: string) => ServerLayoutApplyRoute | null
 
 const providers = new Map<string, RouteProvider>()

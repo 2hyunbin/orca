@@ -7,6 +7,7 @@ import {
   dropTabThroughLayoutOwner,
   setGroupRatioThroughLayoutOwner
 } from './tab-group-layout-owner-commands'
+import { LOCAL_LAYOUT_APPLY_ORIGIN } from '@/runtime/server-layout-apply-routes'
 
 const mocks = vi.hoisted(
   (): {
@@ -79,10 +80,26 @@ describe('dropTabThroughLayoutOwner', () => {
     )
     expect(groupOf('a')).not.toBe(right)
 
-    lastHandlers().apply({})
+    lastHandlers().apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(orderOf(right)).toEqual(['a', 'c'])
     expect(store().getState().activeGroupIdByWorktree[WT]).toBe(right)
+  })
+
+  it('never moves the tab itself when a paired server’s main answered', () => {
+    const { left, right } = seeded()
+    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right, index: 0 })
+    dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'b', groupId: left, direction: 'down' })
+    const groupsBefore = store().getState().groupsByWorktree[WT]
+    const routed = { framesKey: 'env-1', routed: true }
+
+    // The server's frame has not shown either move: a move here would send it to the server again.
+    mocks.send.mock.calls[0]![2].apply({}, routed)
+    mocks.send.mock.calls[1]![2].apply({ groupId: 'group-server' }, routed)
+
+    expect(groupOf('a')).toBe(left)
+    expect(groupOf('b')).toBe(left)
+    expect(store().getState().groupsByWorktree[WT]).toBe(groupsBefore)
   })
 
   it('only selects the tab when main’s frame already moved it', () => {
@@ -92,7 +109,7 @@ describe('dropTabThroughLayoutOwner', () => {
     store().getState().dropUnifiedTab('a', { groupId: right, index: 1 })
     store().getState().focusGroup(WT, left)
 
-    lastHandlers().apply({})
+    lastHandlers().apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(orderOf(right)).toEqual(['c', 'a'])
     expect(store().getState().activeGroupIdByWorktree[WT]).toBe(right)
@@ -113,7 +130,7 @@ describe('dropTabThroughLayoutOwner', () => {
       besideGroupId: left,
       direction: 'down'
     })
-    lastHandlers().apply({ groupId: 'group-main' })
+    lastHandlers().apply({ groupId: 'group-main' }, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(groupOf('b')).toBe('group-main')
     expect(store().getState().activeGroupIdByWorktree[WT]).toBe('group-main')
@@ -123,7 +140,7 @@ describe('dropTabThroughLayoutOwner', () => {
     const { left, right } = seeded()
 
     dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'c', groupId: left, direction: 'left' })
-    lastHandlers().apply({ groupId: right })
+    lastHandlers().apply({ groupId: right }, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(
       store()
@@ -146,7 +163,7 @@ describe('dropTabThroughLayoutOwner', () => {
     beginLayoutFramePositions()
     try {
       dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'c', groupId: left, direction: 'left' })
-      lastHandlers().apply({ groupId: right })
+      lastHandlers().apply({ groupId: right }, LOCAL_LAYOUT_APPLY_ORIGIN)
     } finally {
       endLayoutFramePositions()
     }
@@ -196,7 +213,7 @@ describe('dropTabThroughLayoutOwner', () => {
       toGroupId: left,
       index: 1
     })
-    lastHandlers().apply({})
+    lastHandlers().apply({}, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(orderOf(left)).toEqual(['b', 'a'])
   })
@@ -218,7 +235,7 @@ describe('dropTabThroughLayoutOwner', () => {
 
     dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'b', groupId: left, direction: 'down' })
     // Main had only `b` in that group, so it kept the group's id and moved it.
-    lastHandlers().apply({ groupId: left })
+    lastHandlers().apply({ groupId: left }, LOCAL_LAYOUT_APPLY_ORIGIN)
 
     expect(orderOf(left)).toEqual(['a'])
     expect(groupOf('b')).not.toBe(left)
