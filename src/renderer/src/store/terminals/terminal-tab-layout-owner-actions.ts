@@ -97,7 +97,15 @@ export function routeTerminalTabChangesThroughLayoutOwner(
     const entry = {}
     const sent = sendGeneratedTabTitles(
       state,
-      toMain.map(({ tab, title }) => ({ worktreeId: tab.worktreeId, tabId: tab.id, title })),
+      toMain.map(({ tab, title, updates: given }) => ({
+        worktreeId: tab.worktreeId,
+        tabId: tab.id,
+        title,
+        // Main keeps a tab's first generated title, as the window does, unless the update replaces it.
+        ...(given.some((update) => update.options?.replaceExistingGeneratedTitle === true)
+          ? { replaceExisting: true as const }
+          : {})
+      })),
       (outcomes) => {
         for (const { tabId } of toMain) {
           if (generatedTitleSent.get(tabId) === entry) {

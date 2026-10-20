@@ -645,6 +645,16 @@ describe('layout.apply', () => {
     expect(parses({ kind: 'generated', renames: [] })).toBe(false)
     expect(parses({ kind: 'custom', renames: [titled] })).toBe(false)
     expect(parses({ kind: 'generated', renames: [{ ...titled, workspace: '' }] })).toBe(false)
+    // A title that replaces the tab's first one reaches main as such.
+    const replacing = { ...titled, replaceExisting: true }
+    expect(
+      apply?.params?.safeParse({
+        command: { type: 'renameTabs', kind: 'generated', renames: [replacing] }
+      }).data
+    ).toEqual({ command: { type: 'renameTabs', kind: 'generated', renames: [replacing] } })
+    expect(parses({ kind: 'generated', renames: [{ ...titled, replaceExisting: false }] })).toBe(
+      false
+    )
   })
 
   it('gives each title in its tab’s partition in one write, naming a paired server’s tab', async () => {

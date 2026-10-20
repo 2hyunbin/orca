@@ -6,7 +6,12 @@ import { errorMessage } from '../../../shared/error-message'
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 
 /** One tab's agent-generated title, for `sendGeneratedTabTitles`. */
-export type GeneratedTitleSend = { worktreeId: string; tabId: string; title: string | null }
+export type GeneratedTitleSend = {
+  worktreeId: string
+  tabId: string
+  title: string | null
+  replaceExisting?: true
+}
 
 /** Per title: main gave it (its frame drew it), main left it to the window as today, or refused. */
 export type GeneratedTitleOutcome = 'shown' | 'asToday' | 'refused'
@@ -23,8 +28,10 @@ export function sendGeneratedTabTitles(
   answer: (outcomes: GeneratedTitleOutcome[]) => void
 ): boolean[] {
   const sent = titles.map(({ worktreeId }) => !runtimeEnvironmentIdUnlessTwin(state, worktreeId))
-  const renames = titles.flatMap(({ worktreeId, tabId, title }, index) =>
-    sent[index] ? [{ workspace: worktreeId, tabId, title }] : []
+  const renames = titles.flatMap(({ worktreeId, tabId, title, replaceExisting }, index) =>
+    sent[index]
+      ? [{ workspace: worktreeId, tabId, title, ...(replaceExisting ? { replaceExisting } : {}) }]
+      : []
   )
   if (renames.length === 0) {
     return sent
@@ -43,7 +50,8 @@ export function sendGeneratedTabTitles(
         return 'refused'
       }
       const code = reply ? refusalOf(reply, title) : 'call_failed'
-      if (code === undefined) {
+      // Main kept the tab's first generated title, which its frame shows.
+      if (code === undefined || code === 'generated_title_kept') {
         return 'shown'
       }
       if (refusalActsAsToday(state, title.worktreeId, code)) {

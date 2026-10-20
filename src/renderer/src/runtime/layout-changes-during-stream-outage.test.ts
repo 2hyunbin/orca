@@ -5,11 +5,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { useAppStore } from '@/store'
-import { applyLayoutCommand } from '../../../shared/workspace-layout/workspace-layout-commands'
+import {
+  applyLayoutCommand,
+  renameTabCommandsOf
+} from '../../../shared/workspace-layout/workspace-layout-commands'
 import type {
   LayoutApplyReply,
-  LayoutCommand
+  LayoutCommandResult,
+  RenameTabsCommand,
+  UntitledTab
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
+import { makePaneKey } from '../../../shared/stable-pane-id'
 import { testContext } from '../../../shared/workspace-layout/workspace-layout-command.test-fixture'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
@@ -26,6 +32,7 @@ import { dropTabThroughLayoutOwner } from '../components/tab-group/tab-group-lay
 import { applyRuntimePaneTitle } from '../hooks/ipc-events/terminal-pane-title-ipc-bridge'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { endLayoutFramePositions } from './layout-frame-position'
+import type { AppliedLayoutCommand } from './layout-apply-test-double'
 import { mainLayoutFrameSender } from './main-loaded-layout-frames.test-fixture'
 import type { RuntimeLayoutStreamStatus } from './runtime-layout-client'
 import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
@@ -43,11 +50,11 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
 })
 
-type Call = { command: LayoutCommand; answer: (reply: LayoutApplyReply) => void }
+type Call = { command: AppliedLayoutCommand; answer: (reply: LayoutApplyReply) => void }
 const rpc = vi.hoisted((): { calls: Call[] } => ({ calls: [] }))
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  callRuntimeRpc: (_target: unknown, _method: string, params: { command: LayoutCommand }) =>
+  callRuntimeRpc: (_target: unknown, _method: string, params: { command: AppliedLayoutCommand }) =>
     new Promise<LayoutApplyReply>((answer) => rpc.calls.push({ command: params.command, answer }))
 }))
 
@@ -110,6 +117,10 @@ afterEach(() => {
 /** Main applies each command the window sent and answers; no frame comes while the stream is down. */
 async function mainAppliesEach(): Promise<void> {
   for (const call of rpc.calls.splice(0)) {
+    if (call.command.type === 'renameTabs') {
+      call.answer({ ok: true, result: mainRenames(call.command) })
+      continue
+    }
     const applied = applyLayoutCommand(model, call.command, testContext())
     if (!applied.ok) {
       throw new Error(`main refused ${call.command.type}: ${applied.code}`)
@@ -118,6 +129,20 @@ async function mainAppliesEach(): Promise<void> {
     call.answer({ ok: true, result: applied.result })
   }
   await settle()
+}
+
+/** Main's `renameTabs`: each title as its `renameTab`, naming those main did not give. */
+function mainRenames(command: RenameTabsCommand): LayoutCommandResult {
+  const untitled: UntitledTab[] = []
+  for (const rename of renameTabCommandsOf(command)) {
+    const applied = applyLayoutCommand(model, rename, testContext())
+    if (applied.ok) {
+      model = applied.model
+    } else {
+      untitled.push({ workspace: rename.workspace, tabId: rename.tabId, code: applied.code })
+    }
+  }
+  return untitled.length > 0 ? { untitled } : {}
 }
 
 const terminalRow = (id: string) =>
@@ -170,5 +195,28 @@ describe('changes made while main’s layout stream is down', () => {
       useAppStore.getState().groupsByWorktree[GIT_KEY]!.find((group) => group.id === 'group-a')
         ?.activeTabId
     ).toBe('tab-unbound')
+  })
+  it('keep an agent’s first generated title when a second prompt comes before the snapshot', async () => {
+    useAppStore.setState({
+      settings: { ...useAppStore.getState().settings!, tabAutoGenerateTitle: true }
+    })
+    const leafId = useAppStore.getState().terminalLayoutsByTabId['tab-unbound']!.activeLeafId!
+    const paneKey = makePaneKey('tab-unbound', leafId)
+    stream.onStatus!({ state: 'lost' })
+
+    useAppStore.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Refactor the auth module')
+    await mainAppliesEach()
+    // The answer settled the first title, so the second prompt is sent too.
+    useAppStore.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Fix the flaky login test')
+    expect(rpc.calls.map((call) => call.command.type)).toEqual(['renameTabs'])
+    await mainAppliesEach()
+    expect(terminalRow('tab-unbound').generatedTitle).toBeUndefined()
+
+    stream.onStatus!({ state: 'connecting' })
+    stream.onFrame!(frames.snapshot(published(), ++seq))
+    stream.onPosition!(seq)
+    await settle()
+
+    expect(terminalRow('tab-unbound').generatedTitle).toBe('Refactor the auth module')
   })
 })
