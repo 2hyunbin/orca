@@ -8,7 +8,8 @@
 import { z } from 'zod'
 import { openEnum } from './zod-salvage'
 
-/** Plain request in the slot directory: the same graceful stop as SIGTERM. */
+/** Plain request in the slot directory: `stop-now` stops gracefully at once; an empty request,
+ *  an older client's update, restarts only once chats are idle. */
 export const ORCAD_STOP_REQUEST_FILENAME = '.orcad-stop-request'
 /**
  * The plain request's contents meaning "stop now". Older clients wrote an empty file both to stop
