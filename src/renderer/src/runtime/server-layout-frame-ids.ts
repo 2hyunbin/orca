@@ -1,8 +1,13 @@
 // A paired server's layout frames under the ids this desktop already gives that server's tabs (the
 // session.tabs mirror's), so a workspace moves between the two sources without a remount. The one
-// place server ids become desktop ids; layout.apply maps back through the same rules.
+// place server ids become desktop ids; layout.apply maps back through the same rules. Frames carry
+// no terminal handle: a pane binds the handle session.tabs gives its (host tab, leaf) surface.
 
-import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toRuntimeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import { toRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import type { TabContentType } from '../../../shared/tab-types'
 import {
@@ -24,7 +29,10 @@ import {
   type IndexedLayoutRecords,
   type WorkspaceLayoutRecordChange
 } from '../../../shared/workspace-layout/workspace-layout-records'
-import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
+import type {
+  WorkspaceLayoutChangeFrame,
+  WorkspaceLayoutRecordsFrame
+} from '../../../shared/workspace-layout/workspace-layout-stream-frames'
 
 /** Which tab ids a kind changes: a terminal's take the mirror's surface prefix, others keep theirs. */
 const TAB_ID_RULES: Record<TabContentType, 'terminal' | 'kept'> = {
@@ -61,9 +69,18 @@ function desktopEditorEntityId(
   return file ? ownedEditorFileId(file.filePath, layout.worktreeId, environmentId) : entityId
 }
 
-function desktopPane(pane: PublishedPane, environmentId: string): PublishedPane {
-  const { ptyId, handle, ptyGeneration, ...rest } = pane
-  // The desktop attaches by the server's handle, as the mirror does; a pane without one waits.
+/** The handle session.tabs gives a server terminal tab's pane; null while it has none. */
+export type ServerTerminalHandleOf = (hostTabId: string, leafId: string) => string | null
+
+function desktopPane(
+  pane: PublishedPane,
+  hostTabId: string,
+  environmentId: string,
+  handleOf: ServerTerminalHandleOf
+): PublishedPane {
+  const { ptyId, ptyGeneration, ...rest } = pane
+  const handle = ptyId ? handleOf(hostTabId, pane.leafId) : null
+  // A bound pane without a handle yet shows as pending, as the mirror's `pending-handle` does.
   return handle
     ? {
         ...rest,
@@ -77,12 +94,14 @@ function desktopTab(
   tab: PublishedTab,
   layout: PublishedWorkspaceLayout,
   host: ExecutionHostId,
-  environmentId: string
+  environmentId: string,
+  handleOf: ServerTerminalHandleOf
 ): PublishedTab {
   const terminal = tabIdRule(tab.kind) === 'terminal'
   return {
     ...tab,
-    id: terminal ? toWebTerminalSurfaceTabId(tab.id) : tab.id,
+    // The mirror names a terminal tab by its terminal's id alone, tab-bar entry included.
+    id: terminal ? toWebTerminalSurfaceTabId(tab.entityId) : tab.id,
     entityId: terminal
       ? toWebTerminalSurfaceTabId(tab.entityId)
       : tab.kind === 'editor'
@@ -93,7 +112,9 @@ function desktopTab(
       ? {
           terminal: {
             ...tab.terminal,
-            panes: tab.terminal.panes.map((pane) => desktopPane(pane, environmentId))
+            panes: tab.terminal.panes.map((pane) =>
+              desktopPane(pane, tab.entityId, environmentId, handleOf)
+            )
           }
         }
       : {})
@@ -109,17 +130,23 @@ function desktopEditorFile(file: PublishedEditorFile, environmentId: string): Pu
 /** One workspace of a server's frames under this desktop's ids. */
 export function serverLayoutForDesktop(
   layout: PublishedWorkspaceLayout,
-  environmentId: string
+  environmentId: string,
+  handleOf: ServerTerminalHandleOf
 ): PublishedWorkspaceLayout {
   const host = toRuntimeExecutionHostId(environmentId)
-  const terminalTabIds = new Set(
-    layout.tabs.filter((tab) => tabIdRule(tab.kind) === 'terminal').map((tab) => tab.id)
+  const terminalEntityByTabId = new Map(
+    layout.tabs
+      .filter((tab) => tabIdRule(tab.kind) === 'terminal')
+      .map((tab) => [tab.id, tab.entityId])
   )
-  const tabId = (id: string) => (terminalTabIds.has(id) ? toWebTerminalSurfaceTabId(id) : id)
+  const tabId = (id: string) => {
+    const entityId = terminalEntityByTabId.get(id)
+    return entityId === undefined ? id : toWebTerminalSurfaceTabId(entityId)
+  }
   return {
     ...layout,
     groups: layout.groups.map((group) => ({ ...group, tabIds: group.tabIds.map(tabId) })),
-    tabs: layout.tabs.map((tab) => desktopTab(tab, layout, host, environmentId)),
+    tabs: layout.tabs.map((tab) => desktopTab(tab, layout, host, environmentId, handleOf)),
     editorFiles: layout.editorFiles.map((file) => desktopEditorFile(file, environmentId)),
     browserTabs: layout.browserTabs
   }
@@ -130,26 +157,85 @@ export function serverTabIdOf(desktopTabId: string): string {
   return isWebTerminalSurfaceTabId(desktopTabId) ? toHostSessionTabId(desktopTabId) : desktopTabId
 }
 
+/** A desktop editor tab's file id as the server knows it: its own file, owned by no environment. */
+function serverEditorEntityId(entityId: string, layout: PublishedWorkspaceLayout): string {
+  const file = layout.editorFiles.find(
+    (candidate) =>
+      ownedEditorFileId(candidate.filePath, layout.worktreeId, candidate.runtimeEnvironmentId) ===
+      entityId
+  )
+  return file ? ownedEditorFileId(file.filePath, layout.worktreeId, undefined) : entityId
+}
+
+/**
+ * A desktop-shaped workspace under the server's ids: the inverse of `serverLayoutForDesktop` for
+ * every id it maps. Panes keep no terminal: the desktop binds handles, which the server never takes.
+ */
+export function desktopLayoutForServer(layout: PublishedWorkspaceLayout): PublishedWorkspaceLayout {
+  return {
+    ...layout,
+    groups: layout.groups.map((group) => ({ ...group, tabIds: group.tabIds.map(serverTabIdOf) })),
+    tabs: layout.tabs.map((tab) => {
+      tabIdRule(tab.kind)
+      return {
+        ...tab,
+        id: serverTabIdOf(tab.id),
+        entityId:
+          tab.kind === 'editor'
+            ? serverEditorEntityId(tab.entityId, layout)
+            : serverTabIdOf(tab.entityId),
+        executionHostId: LOCAL_EXECUTION_HOST_ID,
+        ...(tab.terminal
+          ? {
+              terminal: {
+                ...tab.terminal,
+                panes: tab.terminal.panes.map(({ ptyId: _handle, ptyGeneration: _g, ...pane }) => pane)
+              }
+            }
+          : {})
+      }
+    }),
+    editorFiles: layout.editorFiles.map(({ runtimeEnvironmentId: _env, ...file }) => file)
+  }
+}
+
+/** One server stream's frames under desktop ids, and the changes a new terminal handle makes. */
+export type ServerLayoutFrameTranslator = {
+  translate: (frame: WorkspaceLayoutChangeFrame) => WorkspaceLayoutChangeFrame
+  /** A records frame binding the panes whose handle session.tabs changed; null when none did. */
+  rebind: (key: string) => WorkspaceLayoutRecordsFrame | null
+}
+
 /**
  * Translates one server stream's frames in order. It keeps the server's copy of each workspace, so
  * a records frame is re-diffed under desktop ids: a record's key can depend on another record (a
  * group names terminal tabs by their kind), which one frame alone may not carry.
  */
 export function createServerLayoutFrameTranslator(
-  environmentId: string
-): (frame: WorkspaceLayoutChangeFrame) => WorkspaceLayoutChangeFrame {
+  environmentId: string,
+  handleOf: (worktreeId: string) => ServerTerminalHandleOf
+): ServerLayoutFrameTranslator {
   const server = new Map<string, PublishedWorkspaceLayout>()
-  const desktop = new Map<string, { layout: PublishedWorkspaceLayout; index: IndexedLayoutRecords | null }>()
+  const desktop = new Map<string, Translated>()
+  /** The last server frame's stream identity, which a desktop-made frame repeats. */
+  let position = { epoch: '', seq: 0 }
 
-  const show = (key: string, layout: PublishedWorkspaceLayout): PublishedWorkspaceLayout => {
-    const translated = serverLayoutForDesktop(layout, environmentId)
+  const show = (key: string, layout: PublishedWorkspaceLayout): Translated => {
+    const translated = serverLayoutForDesktop(layout, environmentId, handleOf(layout.worktreeId))
+    const entry = { layout: translated, index: indexPublishedLayout(translated) }
     server.set(key, layout)
-    desktop.set(key, { layout: translated, index: indexPublishedLayout(translated) })
-    return translated
+    desktop.set(key, entry)
+    return entry
   }
   const drop = (key: string): void => {
     server.delete(key)
     desktop.delete(key)
+  }
+  const changeTo = (key: string, layout: PublishedWorkspaceLayout): WorkspaceLayoutRecordChange[] => {
+    const before = desktop.get(key)
+    const after = show(key, layout)
+    const diff = diffPublishedLayouts(key, before?.index ?? null, after.index, after.layout)
+    return diff ? [diff] : []
   }
 
   const recordChange = (change: WorkspaceLayoutRecordChange): WorkspaceLayoutRecordChange[] => {
@@ -158,37 +244,42 @@ export function createServerLayoutFrameTranslator(
       return [change]
     }
     if (change.change === 'layout') {
-      return [{ ...change, layout: show(change.key, change.layout) }]
+      return [{ ...change, layout: show(change.key, change.layout).layout }]
     }
-    const before = desktop.get(change.key)
     // Throws for a change that does not fit: the stream then resubscribes for a snapshot.
-    const after = applyWorkspaceLayoutRecordChange(server.get(change.key), change)!
-    const translated = show(change.key, after)
-    const diff = diffPublishedLayouts(
-      change.key,
-      before?.index ?? null,
-      desktop.get(change.key)!.index,
-      translated
-    )
-    return diff ? [diff] : []
+    return changeTo(change.key, applyWorkspaceLayoutRecordChange(server.get(change.key), change)!)
   }
 
-  return (frame) => {
-    switch (frame.type) {
-      case 'snapshot':
-        server.clear()
-        desktop.clear()
-        return {
-          ...frame,
-          workspaces: frame.workspaces.map(({ key, layout }) => ({ key, layout: show(key, layout) }))
-        }
-      case 'workspace':
-        return { ...frame, layout: show(frame.key, frame.layout) }
-      case 'removed':
-        drop(frame.key)
-        return frame
-      case 'records':
-        return { ...frame, workspaces: frame.workspaces.flatMap(recordChange) }
+  return {
+    translate: (frame) => {
+      switch (frame.type) {
+        case 'snapshot':
+          server.clear()
+          desktop.clear()
+          position = { epoch: frame.epoch ?? '', seq: frame.seq ?? 0 }
+          return {
+            ...frame,
+            workspaces: frame.workspaces.map(({ key, layout }) => ({
+              key,
+              layout: show(key, layout).layout
+            }))
+          }
+        case 'workspace':
+          return { ...frame, layout: show(frame.key, frame.layout).layout }
+        case 'removed':
+          drop(frame.key)
+          return frame
+        case 'records':
+          position = { epoch: frame.epoch, seq: frame.seq }
+          return { ...frame, workspaces: frame.workspaces.flatMap(recordChange) }
+      }
+    },
+    rebind: (key) => {
+      const layout = server.get(key)
+      const workspaces = layout ? changeTo(key, layout) : []
+      return workspaces.length > 0 ? { type: 'records', ...position, workspaces } : null
     }
   }
 }
+
+type Translated = { layout: PublishedWorkspaceLayout; index: IndexedLayoutRecords | null }
