@@ -17,6 +17,8 @@ export type MainTerminalSurfacesHost = {
   /** Main's one layout projection. */
   reads: () => WorkspaceLayoutReads
   homeHostId: (key: string) => ExecutionHostId | null
+  /** Whether the PTY registry holds the terminal. */
+  registered: (ptyId: string) => boolean
   /** The graph authority now, when its graph is ready; null otherwise. */
   readyGraphPublisher: () => number | null
   /** Installs a graph under the publisher's authority, as the window's own publication does. */
@@ -30,6 +32,7 @@ class MainSurfacePublisher {
   /** The main surfaces the last installed graph carried. */
   private installed: MainTerminalSurfaces | null = null
   private scheduled = false
+  private forceNext = false
 
   constructor(private readonly host: MainTerminalSurfacesHost) {
     this.index = new TerminalSurfaceIndex({
@@ -46,7 +49,7 @@ class MainSurfacePublisher {
     this.index.start()
     this.lastWindowGraph = { windowId, graph }
     this.installed = this.index.surfaces()
-    return composeMainTerminalSurfaces(graph, this.installed)
+    return composeMainTerminalSurfaces(graph, this.installed, this.host.registered)
   }
 
   /** The pane main's layout binds a terminal to, read fresh; null when no pane main owns holds it. */
@@ -83,15 +86,40 @@ class MainSurfacePublisher {
     })
   }
 
-  /** A Store write may have moved a pane; main's panes are installed once per task. */
-  private schedule(): void {
+  /** Whether the window shows or parks the tab: what a reader of "the renderer lists it" asks. */
+  windowListsTab(tabId: string): boolean {
+    const windowId = this.host.readyGraphPublisher()
+    const last = this.lastWindowGraph?.windowId === windowId ? this.lastWindowGraph.graph : null
+    return (
+      !!last &&
+      (last.tabs.some((tab) => tab.tabId === tabId) ||
+        (last.mountedLeaves ?? []).some((leaf) => leaf.tabId === tabId))
+    )
+  }
+
+  /** A terminal registered: main's panes reflect it now, in the same push, not at a later sync. */
+  terminalRegistered(ptyId: string): void {
+    // Registering can also move a workspace to its SSH partition, which changes main's panes.
+    this.republish({ force: this.findPaneForPty(ptyId) !== null })
+  }
+
+  /** A pane's terminal came or went: its record changes with no layout change, so reinstall. */
+  terminalChanged(): void {
+    this.schedule({ force: true })
+  }
+
+  /** A layout operation may have moved a pane; main's panes are installed once per task. */
+  private schedule(opts: { force?: boolean } = {}): void {
+    this.forceNext ||= opts.force === true
     if (this.scheduled) {
       return
     }
     this.scheduled = true
     queueMicrotask(() => {
+      const force = this.forceNext
       this.scheduled = false
-      this.republish()
+      this.forceNext = false
+      this.republish({ force })
     })
   }
 }
@@ -114,4 +142,16 @@ export function mainTerminalSurfaces(
 /** The runtime's publisher when it has installed a graph; null before that. */
 export function startedMainTerminalSurfaces(runtime: object): MainSurfacePublisher | null {
   return byRuntime.get(runtime) ?? null
+}
+
+/**
+ * Layout-owner builds: whether the window lists a tab. The runtime graph holds main's own tabs
+ * too, so its membership no longer says the window has the tab.
+ */
+export function windowListsTab(
+  runtime: object,
+  tabs: ReadonlyMap<string, unknown>,
+  tabId: string
+): boolean {
+  return startedMainTerminalSurfaces(runtime)?.windowListsTab(tabId) ?? tabs.has(tabId)
 }

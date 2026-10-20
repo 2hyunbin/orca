@@ -51,7 +51,16 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
   ): RuntimePtyWorktreeRecord {
     // Switch point: the pane main's layout binds the terminal to outranks any caller's claim.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      const pane = startedMainTerminalSurfaces(this)?.findPaneForPty(ptyId)
+      const surfaces = startedMainTerminalSurfaces(this)
+      const pane = surfaces?.findPaneForPty(ptyId)
+      // A bound pane's terminal connecting or ending changes its leaf, though no layout changed.
+      if (
+        pane &&
+        state.connected !== undefined &&
+        this.ptysById.get(ptyId)?.connected !== state.connected
+      ) {
+        surfaces?.terminalChanged()
+      }
       if (pane && (state.tabId !== undefined || state.paneKey !== undefined)) {
         state = {
           ...state,

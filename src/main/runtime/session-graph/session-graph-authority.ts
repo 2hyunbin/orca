@@ -59,11 +59,7 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
   }
 
   protected shouldRestoreHeadlessGraph(windowId: number): boolean {
-    // Switch point: main holds every pane it owns, so it takes the graph back from any window.
-    return (
-      windowId !== HEADLESS_RUNTIME_WINDOW_ID &&
-      (ORCA_LAYOUT_OWNER_IS_MAIN || this.headlessGraphFallbackAvailable)
-    )
+    return windowId !== HEADLESS_RUNTIME_WINDOW_ID && this.headlessGraphFallbackAvailable
   }
 
   protected restoreHeadlessGraphAuthority(): void {

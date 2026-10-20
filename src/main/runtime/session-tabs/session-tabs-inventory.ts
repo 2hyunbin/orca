@@ -32,6 +32,7 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       store: () => this.store,
       reads: () => this.workspaceLayoutReads,
       homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
+      registered: (ptyId) => this.ptysById.has(ptyId),
       readyGraphPublisher: () => (this.graphStatus === 'ready' ? this.authoritativeWindowId : null),
       publish: (publisher, next) => {
         this.syncWindowGraph(publisher, next)
