@@ -4,7 +4,7 @@ import { formatRepoList, formatRepoRefs, formatRepoShow, printResult } from '../
 import { getOptionalPositiveIntegerFlag, getRequiredStringFlag } from '../flags'
 import { resolveRepoPathArgument } from '../repo-path-arguments'
 import { RuntimeClientError } from '../runtime/types'
-import { parseWslUncPath } from '../../shared/wsl-paths'
+import { wslRegistrationCallOptions } from '../wsl-registration-timeout'
 
 export const REPO_HANDLERS: Record<string, CommandHandler> = {
   'repo list': async ({ client, json }) => {
@@ -16,13 +16,10 @@ export const REPO_HANDLERS: Record<string, CommandHandler> = {
     const params = {
       path: resolveRepoPathArgument(repoPath, cwd, client.isRemote, 'Remote repo add')
     }
-    // First use can install the selected distro's server before it registers the project.
-    const result =
-      parseWslUncPath(params.path) && !client.isRemote
-        ? await client.call<{ repo: Record<string, unknown> }>('repo.add', params, {
-            timeoutMs: 10 * 60_000
-          })
-        : await client.call<{ repo: Record<string, unknown> }>('repo.add', params)
+    const options = wslRegistrationCallOptions(params.path, !client.isRemote)
+    const result = options
+      ? await client.call<{ repo: Record<string, unknown> }>('repo.add', params, options)
+      : await client.call<{ repo: Record<string, unknown> }>('repo.add', params)
     printResult(result, json, formatRepoShow)
   },
   'repo show': async ({ flags, client, json }) => {

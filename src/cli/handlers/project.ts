@@ -11,7 +11,7 @@ import type {
   ProjectHostSetupUpdateResult
 } from '../../shared/project-types'
 import { getSshTargetIdForExecutionHost, type ExecutionHostId } from '../../shared/execution-host'
-import { parseWslUncPath } from '../../shared/wsl-paths'
+import { wslRegistrationCallOptions } from '../wsl-registration-timeout'
 import type { RepoKind } from '../../shared/repo-types'
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import { PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY } from '../../shared/runtime-capability-constants'
@@ -168,9 +168,7 @@ export const PROJECT_HANDLERS: Record<string, CommandHandler> = {
       client,
       'projectHostSetup.setupExistingFolder',
       args,
-      !pathIsOffClient && hostId === 'local' && parseWslUncPath(args.path)
-        ? { timeoutMs: 10 * 60_000 }
-        : undefined
+      wslRegistrationCallOptions(args.path, !pathIsOffClient && hostId === 'local')
     )
     printResult(result, json, formatProjectHostSetupResult)
   },

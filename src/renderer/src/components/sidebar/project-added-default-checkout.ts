@@ -166,17 +166,10 @@ async function findDetectedDefaultCheckout(
   }
 }
 
-// Why: a WSL folder picked on Windows lands on its distro's server, whose checkout paths are Linux.
+// Why: the returned owner decides; a WSL selection registered on its distro has Linux checkout paths.
 function selectedPathOnOwner(selectedPath: string, executionHostId?: ExecutionHostId): string {
-  const uncPath = parseWslUncPath(selectedPath)
-  const owner = parseExecutionHostId(executionHostId)
-  const ownerDistro =
-    owner?.kind === 'runtime'
-      ? useAppStore.getState().wslHostStatuses[owner.environmentId]?.distro
-      : undefined
-  return uncPath && ownerDistro?.toLowerCase() === uncPath.distro.toLowerCase()
-    ? uncPath.linuxPath
-    : selectedPath
+  const ownerIsRuntime = parseExecutionHostId(executionHostId)?.kind === 'runtime'
+  return (ownerIsRuntime && parseWslUncPath(selectedPath)?.linuxPath) || selectedPath
 }
 
 function resolveInitialCwdForDefaultCheckout(
