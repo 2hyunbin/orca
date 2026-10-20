@@ -165,7 +165,7 @@ function AgentRow({
             value={(settled / read.total) * 100}
             aria-label={checked}
             aria-valuetext={checked}
-            className="h-1 motion-reduce:[&>[data-slot=progress-indicator]]:transition-none"
+            className="h-1"
           />
         )}
       </div>
