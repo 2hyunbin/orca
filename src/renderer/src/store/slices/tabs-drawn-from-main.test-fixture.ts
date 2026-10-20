@@ -38,6 +38,30 @@ async function drain(): Promise<void> {
   }
 }
 
+/** Empty slices a frame build reads, for a partial test store (editor + tabs) that lacks them. */
+const FRAME_SLICES: Partial<AppState> = {
+  tabsByWorktree: {},
+  ptyIdsByTabId: {},
+  lastKnownRelayPtyIdByTabId: {},
+  terminalLayoutsByTabId: {},
+  localOnlyScrollbackByTabId: {},
+  browserTabsByWorktree: {},
+  browserPagesByWorkspace: {},
+  remoteBrowserPageHandlesByPageId: {},
+  activeBrowserTabIdByWorktree: {},
+  activeTabIdByWorktree: {},
+  unifiedTabsByWorktree: {},
+  groupsByWorktree: {},
+  layoutByWorktree: {},
+  activeGroupIdByWorktree: {},
+  browserUrlHistory: [],
+  sshConnectionStates: new Map()
+}
+
+function missingFrameSlices(state: AppState): Partial<AppState> {
+  return Object.fromEntries(Object.entries(FRAME_SLICES).filter(([key]) => !(key in state)))
+}
+
 /** Main takes the store's current layout and draws it from here on; a no-op with the switch off. */
 export async function drawTabsFromMain(store: DrawnStore): Promise<TabsDrawnFromMain> {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
@@ -47,6 +71,7 @@ export async function drawTabsFromMain(store: DrawnStore): Promise<TabsDrawnFrom
   _resetLayoutFramePositionForTests()
   _resetPendingTabsForTests()
   layoutApplyTestTransport.answerWith('apply')
+  store.setState(missingFrameSlices(store.getState()))
   layoutApplyTestTransport.useMainModel(
     loadMainLayoutModel('local', buildWorkspaceSessionPayload(store.getState()))
   )

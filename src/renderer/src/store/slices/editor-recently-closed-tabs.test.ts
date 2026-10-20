@@ -7,6 +7,19 @@ import {
 } from './editor-slice-test-harness'
 import type { AppState } from '../types'
 import type { Tab } from '../../../../shared/tab-types'
+import { drawTabsFromMain } from './tabs-drawn-from-main.test-fixture'
+
+// Main's answer to the window's layout commands, as a switch-on build sends them.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply(await importOriginal())
+)
+vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeLayoutClientWithTestFrames(await importOriginal())
+)
 
 const { toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn()
@@ -190,9 +203,10 @@ describe('createEditorSlice recently closed editor tabs', () => {
     expect(store.getState().tabBarOrderByWorktree['wt-1']).toEqual([firstId])
   })
 
-  it('captures close-all snapshot positions without rescanning tab state per closed tab', () => {
-    const countEntityIdReads = (fileCount: number): number => {
+  it('captures close-all snapshot positions without rescanning tab state per closed tab', async () => {
+    const countEntityIdReads = async (fileCount: number): Promise<number> => {
       const store = createEditorTabsStore()
+      const main = await drawTabsFromMain(store)
       for (let index = 0; index < fileCount; index += 1) {
         store.getState().openFile(
           {
@@ -205,6 +219,8 @@ describe('createEditorSlice recently closed editor tabs', () => {
           { preview: false }
         )
       }
+      // A layout-owner build draws the tabs from main's frames.
+      await main.settle()
       let reads = 0
       store.setState({
         unifiedTabsByWorktree: {
@@ -226,15 +242,17 @@ describe('createEditorSlice recently closed editor tabs', () => {
         groupId: expect.any(String),
         groupIndex: 0
       })
+      main.close()
       return reads
     }
 
     // Why: resolving each closed tab's position by rescanning tab order and group membership
     // made close-all cubic — 4x the tabs cost ~64x the scans and froze the renderer for seconds.
-    expect(countEntityIdReads(80)).toBeLessThanOrEqual(countEntityIdReads(20) * 8)
+    const small = await countEntityIdReads(20)
+    expect(await countEntityIdReads(80)).toBeLessThanOrEqual(small * 8)
   })
 
-  it('reactivates the live tab when a stale reopen id targets an already-open file', () => {
+  it('reactivates the live tab when a stale reopen id targets an already-open file', async () => {
     const store = createEditorTabsStore()
     store.setState({
       worktreesByRepo: {
@@ -244,6 +262,7 @@ describe('createEditorSlice recently closed editor tabs', () => {
         ]
       }
     } as unknown as Partial<AppState>)
+    const main = await drawTabsFromMain(store)
     const sharedPath = '/home/me/.zshrc'
     const openShared = (worktreeId: string): string =>
       store.getState().openFile({
@@ -257,18 +276,24 @@ describe('createEditorSlice recently closed editor tabs', () => {
     // Bare path id: nothing else owns this path yet.
     const staleWt1Id = openShared('wt-1')
     expect(staleWt1Id).toBe(sharedPath)
+    await main.settle()
     store.getState().closeFile(staleWt1Id)
+    await main.settle()
 
     // wt-2 claims the bare id, so wt-1's reopen gets a namespaced id instead.
     const wt2Id = openShared('wt-2')
     expect(wt2Id).toBe(sharedPath)
     const liveWt1Id = openShared('wt-1')
     expect(liveWt1Id).toBe(ownedEditorFileId(sharedPath, 'wt-1', null))
+    await main.settle()
     store.getState().closeFile(wt2Id)
+    await main.settle()
     // Why: closing wt-1's last tab above left the landing state; reopen runs for the on-screen worktree.
     store.setState({ activeWorktreeId: 'wt-1' })
 
     expect(store.getState().reopenClosedEditorTab('wt-1')).toBe(true)
+    await main.settle()
+    main.close()
 
     expect(store.getState().openFiles.map((file) => file.id)).toEqual([liveWt1Id])
     expect(store.getState().activeFileId).toBe(liveWt1Id)
