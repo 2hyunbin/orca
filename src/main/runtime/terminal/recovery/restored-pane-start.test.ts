@@ -41,6 +41,10 @@ describe('restoredPaneStartPlan', () => {
     expect(restoredPaneStartPlan(PANE, OWN)).toEqual({ sessionId: OWN })
     expect(restoredPaneStartPlan(PANE, 'repo-2::/other@@x')).toEqual({})
     expect(restoredPaneStartPlan(PANE, undefined)).toEqual({})
+    // An SSH id names its connection, not a workspace, so the pane reattaches over the relay.
+    expect(restoredPaneStartPlan(PANE, 'ssh:ssh-1@@relay-pty')).toEqual({
+      sessionId: 'ssh:ssh-1@@relay-pty'
+    })
   })
 })
 

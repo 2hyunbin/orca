@@ -54,16 +54,16 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
         if (!tab) {
           throw new Error('tab_not_found')
         }
-        await this.materializePendingMobileSessionTerminal(target.worktreeId, tab, {
+        const started = await this.materializePendingMobileSessionTerminal(target.worktreeId, tab, {
           ...startTrigger,
           sessionId: plan.sessionId
         })
+        // Why: the started id, not the stored layout, whose bind write may still be in flight.
         // Resolved only once registered, so a caller delivering to it never misses (A1's handles).
-        const bound = this.storedPaneBinding(target)
-        if (!bound || !this.ptysById.has(bound)) {
+        if (!started || !this.ptysById.has(started)) {
           throw new Error('terminal_not_started')
         }
-        return bound
+        return started
       }
     })
     return this.restoredPanes.ensureStarted(pane, trigger)
@@ -76,11 +76,13 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     leafId
   }: RestoredPane): string | null | undefined {
     const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    const layout = session?.terminalLayoutsByTabId?.[tabId]
-    if (!session?.tabsByWorktree?.[worktreeId]?.some((row) => row.id === tabId) || !layout) {
+    const row = session?.tabsByWorktree?.[worktreeId]?.find((candidate) => candidate.id === tabId)
+    if (!row) {
       return null
     }
-    return layout.ptyIdsByLeafId?.[leafId]
+    const layout = session?.terminalLayoutsByTabId?.[tabId]
+    // Why: a tab saved with no layout is one pane, the one the projection lists for it.
+    return layout ? layout.ptyIdsByLeafId?.[leafId] : (row.ptyId ?? undefined)
   }
 
   /** Starts a pending terminal row in its own pane, resuming the agent the host recorded there. */
@@ -93,7 +95,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       targetGroupId,
       sessionId
     }: RestoredPaneTrigger & { sessionId?: string }
-  ): Promise<void> {
+  ): Promise<string | null> {
     // Why: a pending agent tab may exist without its startup command ever
     // having been delivered (the create's renderer stalled, #7587), so a
     // bare materialize would put a plain shell under the agent icon.
@@ -120,29 +122,35 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       }
     }
     try {
-      await this.createRuntimeOwnedMobileSessionTerminal(worktreeId, targetsHost, undefined, {
-        identity: {
-          tabId: tab.parentTabId,
-          leafId: tab.leafId,
-          sessionId
-        },
-        cwd: tab.startupCwd,
-        command: agentStartup.command,
-        env: agentStartup.env,
-        startupCommandDelivery: agentStartup.startupCommandDelivery,
-        launchConfig: agentStartup.launchConfig,
-        launchAgent: agentStartup.launchAgent ?? tab.launchAgent,
-        // Why: a resume is restore work, so the host's restore admission must see it.
-        ...('resumeProviderSession' in agentStartup
-          ? {
-              resumeProviderSession: agentStartup.resumeProviderSession,
-              spawnIntent: automatic ? 'automatic-restore' : 'user-resume'
-            }
-          : {}),
-        launchRuntime: agentStartup.launchRuntime,
-        targetGroupId,
-        ...(automatic ? { refuseSleptWorktree: true } : {})
-      })
+      const created = await this.createRuntimeOwnedMobileSessionTerminal(
+        worktreeId,
+        targetsHost,
+        undefined,
+        {
+          identity: {
+            tabId: tab.parentTabId,
+            leafId: tab.leafId,
+            sessionId
+          },
+          cwd: tab.startupCwd,
+          command: agentStartup.command,
+          env: agentStartup.env,
+          startupCommandDelivery: agentStartup.startupCommandDelivery,
+          launchConfig: agentStartup.launchConfig,
+          launchAgent: agentStartup.launchAgent ?? tab.launchAgent,
+          // Why: a resume is restore work, so the host's restore admission must see it.
+          ...('resumeProviderSession' in agentStartup
+            ? {
+                resumeProviderSession: agentStartup.resumeProviderSession,
+                spawnIntent: automatic ? 'automatic-restore' : 'user-resume'
+              }
+            : {}),
+          launchRuntime: agentStartup.launchRuntime,
+          targetGroupId,
+          ...(automatic ? { refuseSleptWorktree: true } : {})
+        }
+      )
+      return created.tab.ptyId
     } catch (err) {
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&

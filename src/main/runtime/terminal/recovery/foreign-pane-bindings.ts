@@ -7,6 +7,15 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
+/** An SSH id names its connection, never a workspace, so only a local minted id can be foreign. */
+export function isPtyIdMintedForAnotherWorkspace(ptyId: string, worktreeId: string): boolean {
+  return (
+    !isRemoteRuntimePtyId(ptyId) &&
+    !parseAppSshPtyId(ptyId) &&
+    !isPtySessionIdOwnedByWorktree(ptyId, worktreeId)
+  )
+}
+
 export type PaneBinding = { worktreeId: string; tabId: string; leafId: string; ptyId: string }
 
 /** Every pane `session` binds to a terminal minted for another workspace. */
@@ -15,7 +24,7 @@ export function panesBoundToAnotherWorkspace(session: WorkspaceSessionState): Pa
     rows.flatMap((row) =>
       Object.entries(session.terminalLayoutsByTabId?.[row.id]?.ptyIdsByLeafId ?? {}).flatMap(
         ([leafId, ptyId]) =>
-          ptyId && !isRemoteRuntimePtyId(ptyId) && !isPtySessionIdOwnedByWorktree(ptyId, worktreeId)
+          ptyId && isPtyIdMintedForAnotherWorkspace(ptyId, worktreeId)
             ? [{ worktreeId, tabId: row.id, leafId, ptyId }]
             : []
       )

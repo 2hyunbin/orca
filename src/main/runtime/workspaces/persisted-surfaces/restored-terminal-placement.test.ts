@@ -137,7 +137,7 @@ describe('main’s startup pass over the host census, layout-owner build', () =>
     )
   })
 
-  it("starts fresh a pane bound to another workspace's terminal, keeping its own", async () => {
+  it("starts fresh a pane bound to another workspace's terminal, keeping its own and an SSH one", async () => {
     const own = `${FOLDER_KEY}@@own`
     const other = 'repo-2::/fixture/other@@theirs'
     const session = {
@@ -162,11 +162,20 @@ describe('main’s startup pass over the host census, layout-owner build', () =>
             type: 'split' as const,
             direction: 'vertical' as const,
             first: { type: 'leaf' as const, leafId: 'leaf-own' },
-            second: { type: 'leaf' as const, leafId: 'leaf-other' }
+            second: {
+              type: 'split' as const,
+              direction: 'horizontal' as const,
+              first: { type: 'leaf' as const, leafId: 'leaf-other' },
+              second: { type: 'leaf' as const, leafId: 'leaf-ssh' }
+            }
           },
           activeLeafId: 'leaf-own',
           expandedLeafId: null,
-          ptyIdsByLeafId: { 'leaf-own': own, 'leaf-other': other }
+          ptyIdsByLeafId: {
+            'leaf-own': own,
+            'leaf-other': other,
+            'leaf-ssh': 'ssh:ssh-1@@relay-pty'
+          }
         }
       }
     }

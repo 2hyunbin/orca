@@ -3,7 +3,7 @@
 // orchestration send, wait, read or wake). Restores from the pane's stored terminal when this
 // workspace owns it; the start port resumes the agent the host recorded for the pane.
 
-import { isPtySessionIdOwnedByWorktree } from '../../../../shared/pty-session-id-format'
+import { isPtyIdMintedForAnotherWorkspace } from './foreign-pane-bindings'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 
 export type RestoredPane = { worktreeId: string; tabId: string; leafId: string }
@@ -37,7 +37,7 @@ export function restoredPaneStartPlan(
   pane: RestoredPane,
   boundPtyId: string | null | undefined
 ): RestoredPaneStartPlan {
-  return boundPtyId && isPtySessionIdOwnedByWorktree(boundPtyId, pane.worktreeId)
+  return boundPtyId && !isPtyIdMintedForAnotherWorkspace(boundPtyId, pane.worktreeId)
     ? { sessionId: boundPtyId }
     : {}
 }
