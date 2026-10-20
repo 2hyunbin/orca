@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const browserMocks = vi.hoisted(() => ({
   appGetPathMock: vi.fn(() => '/downloads'),
+  appPrependListenerMock: vi.fn(),
   shellOpenExternalMock: vi.fn(),
   browserWindowFromWebContentsMock: vi.fn(),
   menuBuildFromTemplateMock: vi.fn(),
@@ -11,13 +12,15 @@ const browserMocks = vi.hoisted(() => ({
   guestSetWindowOpenHandlerMock: vi.fn(),
   guestOpenDevToolsMock: vi.fn(),
   webContentsFromIdMock: vi.fn(),
+  webContentsFromFrameMock: vi.fn(),
   screenGetCursorScreenPointMock: vi.fn(() => ({ x: 0, y: 0 })),
   openPopupWithOriginBarMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({
   app: {
-    prependOnceListener: vi.fn(),
+    listeners: vi.fn(() => []),
+    prependListener: browserMocks.appPrependListenerMock,
     off: vi.fn(),
     getPath: browserMocks.appGetPathMock
   },
@@ -33,7 +36,8 @@ vi.mock('electron', () => ({
     getCursorScreenPoint: browserMocks.screenGetCursorScreenPointMock
   },
   webContents: {
-    fromId: browserMocks.webContentsFromIdMock
+    fromId: browserMocks.webContentsFromIdMock,
+    fromFrame: browserMocks.webContentsFromFrameMock
   }
 }))
 
@@ -80,6 +84,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -113,6 +118,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -187,17 +193,20 @@ describe('browserManager', () => {
     // keeps its opener and a blank URL each mark such a flow, so both keep a
     // real child window no matter which disposition Chromium reports.
     const guest = {
+      mainFrame: {},
       id: 140,
       isDestroyed: vi.fn(() => false),
       getType: vi.fn(() => 'webview'),
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
     webContentsFromIdMock.mockReturnValue(guest)
+    browserMocks.webContentsFromFrameMock.mockReturnValue(guest)
 
     browserManager.attachGuestPolicies(guest as never)
     browserManager.registerGuest({
@@ -233,6 +242,31 @@ describe('browserManager', () => {
     for (const disposition of ['foreground-tab', 'background-tab', 'new-window']) {
       for (const open of openerDependentOpens) {
         expect(handler({ ...open, disposition })).toMatchObject({ action: 'allow' })
+        if (disposition !== 'foreground-tab' && open.features === '' && open.frameName === '') {
+          const contents = {
+            opener: { top: guest.mainFrame },
+            session: undefined,
+            isDestroyed: () => false,
+            on: vi.fn(),
+            once: vi.fn(),
+            off: vi.fn(),
+            close: vi.fn(),
+            setWindowOpenHandler: vi.fn()
+          }
+          const notify = (name: string, value: unknown): void => {
+            const listener = browserMocks.appPrependListenerMock.mock.calls.findLast(
+              (call) => call[0] === name
+            )?.[1]
+            listener({}, value)
+          }
+          // Complete each original child before testing the next independent request shape.
+          notify('web-contents-created', contents)
+          notify('browser-window-created', {
+            webContents: contents,
+            isDestroyed: () => false,
+            destroy: vi.fn()
+          })
+        }
       }
     }
     // Chromium reports size/position features as a popup, with or without an opener.
@@ -259,6 +293,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -335,6 +370,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -394,6 +430,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -686,6 +723,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -735,6 +773,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
@@ -760,6 +799,7 @@ describe('browserManager', () => {
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
       on: guestOnMock,
+      once: vi.fn(),
       prependListener: vi.fn(),
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock,

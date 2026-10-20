@@ -1,0 +1,1025 @@
+{
+  "baseCommit": "ef1584b867adf598b551cdf87b4424a4fd90007f",
+  "reviewedCheckpoint": "089dfb3e0dedb719befa6d114adc985ef3566436",
+  "candidate": "Final repair; exact source SHA-256 values below.",
+  "sourceSha256": {
+    "src/main/browser/browser-manager-guest-popup-policy.ts": "f8320ba22020e814df02e4493e6d3d33d208eeb2597208bdbc7762db8f99d260",
+    "src/main/browser/browser-manager-popup-openerless-tab.test.ts": "af4f60c3ba2eebbad00e5f7b0602293cfc12b4f709bbe8aa591f5f908c71f140",
+    "src/main/browser/browser-manager-popup-routing.test.ts": "f8c03a68ca7cb4d7ba2766eb53f6c0764a8ea5bdc3df5ac069d0f7620590819e",
+    "src/main/browser/browser-popup-adapter-compatibility.electron.test.ts": "c4218f0c252a1a3ba5011cb637172ffcdfb78624a963e993a35600efb71c6521",
+    "src/main/browser/browser-popup-adapter-probe-fixture.ts": "57a89ddccf3b622b80380d274479e7a36821a3333806b1c4f90d382a646b83cb",
+    "src/main/browser/browser-popup-background-cdp-probe.ts": "9e7e89d0bc3d7cbf64e98ad8fca9a432045348323a87b6271698e507b1103e23",
+    "src/main/browser/browser-popup-compatibility-electron-fixture.ts": "1400754bc3727151bd1268a5f2b3be5e42b5c0d97622826b0107cf7708fd403e",
+    "src/main/browser/browser-popup-compatibility-status.ts": "2329449bcc1c257820124bbc97662caa4c5bda8bf7c8c343fdac6fb719532e28",
+    "src/main/browser/browser-popup-held-delivery-fixture.ts": "a1f0c8f95db587c25f56d1cc7f2db366095e5539d369ce09ecfc1392a08edf67",
+    "src/main/browser/browser-popup-native-compatibility.electron.test.ts": "b628a94425383688d9673bd6b5f6722c30d2f368c44c4e3bd0a8b98dcf6ada7f",
+    "src/main/browser/browser-popup-native-electron-fixture.ts": "d2e95f6239da49ea677f6326d1ca79f34eec775cff910b84e7c7a679f066d06b",
+    "src/main/browser/browser-popup-native-window.test.ts": "86ab3d5741134f40d9aee0977823b0104a039cff4a6aaa2a70303be542e2e134",
+    "src/main/browser/browser-popup-native-window.ts": "87ea8f93bcb9d87d2daa4e892875bbddbb093a1604710820fdbbaf7c745207d4",
+    "src/main/browser/browser-route-guest-popups.ts": "1b07f260d1f5c327e3a32cba0c48d20c8f3fbe3c33b144e35acf9a077790cb6d",
+    "src/main/browser/popup-committed-origin.ts": "fac6ffc8b1dbc5ed414104b53794b45e56c2981a7dc3223f4f7e2cdf4ace21c7",
+    "src/main/browser/popup-origin-bar-window.ts": "5d0365eca489b361448b40460746110e975f6a504873251d39e42955e2d5502c",
+    "src/main/browser/popup-origin-description.ts": "361117d43d1e5c65edebc3d50bf3a7e4a0e430852ea4c1ecd6beef53a9eb3031"
+  },
+  "runtime": {
+    "electron": "43.7.8",
+    "chromium": "150.0.7871.250",
+    "platform": "darwin",
+    "arch": "arm64",
+    "backgroundLaunch": true
+  },
+  "validation": {
+    "focusedFiles": 9,
+    "passedTests": 141,
+    "expectedFailures": 0,
+    "skippedContracts": 0,
+    "durationSeconds": 67.73,
+    "nodeTypecheckFiles": 16899,
+    "nodeTypecheck": "passed",
+    "changedCodeQuality": "passed",
+    "targetedOxlint": "passed",
+    "formatting": "passed",
+    "diffWhitespace": "passed"
+  },
+  "rawArtifactSha256": {
+    "adapter-electron-evidence.json": "d12a92af12a4a1f05aeccc3b800857bf9f7152c6793e867a0a38bb8e335d7070",
+    "native-electron-evidence.json": "e21bcbf6896bc545e631496a7be17a8220b9926092081aeaf569cae2fed00380",
+    "background-electron-evidence.json": "5271b836e7f3c5f63368dc54f69d8b719b6a1493a007ad33c3806dad3d14b91c",
+    "electron-evidence.json": "358d0d32f40e54f8118c197fca96fdf99b88c58f1b75982ab06857c174bf60e2"
+  },
+  "visibility": {
+    "adapter-electron-evidence.json": {
+      "windowsHidden": true,
+      "presentationCalls": []
+    },
+    "native-electron-evidence.json": {
+      "windowsHidden": true,
+      "presentationCalls": []
+    },
+    "background-electron-evidence.json": {
+      "windowsHidden": true,
+      "presentationCalls": []
+    },
+    "electron-evidence.json": {
+      "windowsHidden": true,
+      "presentationCalls": []
+    }
+  },
+  "normalization": "Relevant production identity/navigation events retained in original order. Preferences/options omitted. Synthetic loopback ports replaced with PORT. Raw artifacts remain under /tmp/orca-popup-repaired-final.",
+  "heldOriginals": [
+    {
+      "contentsId": 74,
+      "beforeRequestCount": 0,
+      "callbackCount": 0
+    },
+    {
+      "contentsId": 76,
+      "beforeRequestCount": 0,
+      "callbackCount": 0
+    },
+    {
+      "contentsId": 77,
+      "beforeRequestCount": 0,
+      "callbackCount": 0
+    }
+  ],
+  "nativeCreationBoundaries": [
+    {
+      "contentsId": 5,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 6,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 7,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 8,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 9,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 10,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 11,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 14,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 15,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 16,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 19,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 20,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 35,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 38,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 41,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 44,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 45,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 46,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 47,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank"
+    },
+    {
+      "contentsId": 48,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank"
+    },
+    {
+      "contentsId": 49,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank"
+    },
+    {
+      "contentsId": 50,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank"
+    },
+    {
+      "contentsId": 59,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 60,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 61,
+      "firstNavigationPolicy": "disable_non_proxied_udp",
+      "firstNavigationOwner": 4,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 62,
+      "firstNavigationPolicy": "disable_non_proxied_udp",
+      "firstNavigationOwner": 4,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 63,
+      "firstNavigationPolicy": "disable_non_proxied_udp",
+      "firstNavigationOwner": 4,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 64,
+      "firstNavigationPolicy": "disable_non_proxied_udp",
+      "firstNavigationOwner": 4,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "disable_non_proxied_udp",
+      "firstRequestOwner": 4,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 65,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    },
+    {
+      "contentsId": 66,
+      "firstNavigationPolicy": "default",
+      "firstNavigationOwner": null,
+      "firstNavigationTitle": "about:blank",
+      "firstRequestObserved": true,
+      "firstRequestPolicy": "default",
+      "firstRequestOwner": null,
+      "firstRequestTitle": "about:blank"
+    }
+  ],
+  "events": [
+    {
+      "sequence": 425,
+      "event": "admission",
+      "request": 39,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 428,
+      "event": "unrelated-window",
+      "request": 39,
+      "contentsId": 63,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 430,
+      "event": "production-adapter-created",
+      "request": 39,
+      "owner": 8,
+      "contentsId": 64,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 433,
+      "event": "did-create-window",
+      "owner": 8,
+      "contentsId": 64,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 436,
+      "event": "will-frame-navigate",
+      "contentsId": 64,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 437,
+      "event": "before-request",
+      "contentsId": 64,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 438,
+      "event": "loaded",
+      "owner": 8,
+      "contentsId": 64,
+      "frameName": "original-request-0",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    },
+    {
+      "sequence": 440,
+      "event": "unrelated-destroyed",
+      "request": 39
+    },
+    {
+      "sequence": 442,
+      "event": "admission",
+      "request": 40,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 445,
+      "event": "unrelated-window",
+      "request": 40,
+      "contentsId": 65,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 447,
+      "event": "production-adapter-created",
+      "request": 40,
+      "owner": 8,
+      "contentsId": 66,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 450,
+      "event": "did-create-window",
+      "owner": 8,
+      "contentsId": 66,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 453,
+      "event": "will-frame-navigate",
+      "contentsId": 66,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 454,
+      "event": "before-request",
+      "contentsId": 66,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 455,
+      "event": "loaded",
+      "owner": 8,
+      "contentsId": 66,
+      "frameName": "original-request-0",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    },
+    {
+      "sequence": 457,
+      "event": "unrelated-destroyed",
+      "request": 40
+    },
+    {
+      "sequence": 459,
+      "event": "admission",
+      "request": 41,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 462,
+      "event": "unrelated-window",
+      "request": 41,
+      "contentsId": 67,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 466,
+      "event": "will-frame-navigate",
+      "contentsId": 68,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 467,
+      "event": "production-adapter-created",
+      "request": 41,
+      "owner": 8,
+      "contentsId": 68,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 469,
+      "event": "did-create-window",
+      "owner": 8,
+      "contentsId": 68,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 470,
+      "event": "before-request",
+      "contentsId": 68,
+      "url": "http://127.0.0.1:PORT/isolation-original",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 472,
+      "event": "unrelated-destroyed",
+      "request": 41
+    },
+    {
+      "sequence": 474,
+      "event": "loaded",
+      "owner": 8,
+      "contentsId": 68,
+      "frameName": "",
+      "url": "http://127.0.0.1:PORT/isolation-original"
+    },
+    {
+      "sequence": 475,
+      "event": "admission",
+      "request": 42,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 478,
+      "event": "unrelated-window",
+      "request": 42,
+      "contentsId": 69,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 482,
+      "event": "will-frame-navigate",
+      "contentsId": 70,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 483,
+      "event": "production-adapter-created",
+      "request": 42,
+      "owner": 8,
+      "contentsId": 70,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 485,
+      "event": "did-create-window",
+      "owner": 8,
+      "contentsId": 70,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 486,
+      "event": "before-request",
+      "contentsId": 70,
+      "url": "http://127.0.0.1:PORT/isolation-original",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 488,
+      "event": "unrelated-destroyed",
+      "request": 42
+    },
+    {
+      "sequence": 489,
+      "event": "loaded",
+      "owner": 8,
+      "contentsId": 70,
+      "frameName": "",
+      "url": "http://127.0.0.1:PORT/isolation-original"
+    },
+    {
+      "sequence": 491,
+      "event": "admission",
+      "request": 43,
+      "owner": 6,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 492,
+      "event": "production-response",
+      "request": 43,
+      "action": "allow"
+    },
+    {
+      "sequence": 494,
+      "event": "production-adapter-created",
+      "request": 43,
+      "owner": 6,
+      "contentsId": 71,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 497,
+      "event": "did-create-window",
+      "owner": 6,
+      "contentsId": 71,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 500,
+      "event": "will-frame-navigate",
+      "contentsId": 71,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 501,
+      "event": "admission",
+      "request": 44,
+      "owner": 6,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 502,
+      "event": "production-response",
+      "request": 44,
+      "action": "allow"
+    },
+    {
+      "sequence": 504,
+      "event": "production-adapter-created",
+      "request": 44,
+      "owner": 6,
+      "contentsId": 72,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 507,
+      "event": "did-create-window",
+      "owner": 6,
+      "contentsId": 72,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 508,
+      "event": "before-request",
+      "contentsId": 71,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 511,
+      "event": "will-frame-navigate",
+      "contentsId": 72,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 512,
+      "event": "admission",
+      "request": 45,
+      "owner": 6,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 513,
+      "event": "production-response",
+      "request": 45,
+      "action": "allow"
+    },
+    {
+      "sequence": 515,
+      "event": "production-adapter-created",
+      "request": 45,
+      "owner": 6,
+      "contentsId": 73,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 518,
+      "event": "did-create-window",
+      "owner": 6,
+      "contentsId": 73,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 519,
+      "event": "before-request",
+      "contentsId": 72,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 522,
+      "event": "will-frame-navigate",
+      "contentsId": 73,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 523,
+      "event": "before-request",
+      "contentsId": 73,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 524,
+      "event": "loaded",
+      "owner": 6,
+      "contentsId": 71,
+      "frameName": "original-request-0",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    },
+    {
+      "sequence": 525,
+      "event": "loaded",
+      "owner": 6,
+      "contentsId": 72,
+      "frameName": "original-request-1",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    },
+    {
+      "sequence": 526,
+      "event": "loaded",
+      "owner": 6,
+      "contentsId": 73,
+      "frameName": "original-request-2",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    },
+    {
+      "sequence": 528,
+      "event": "admission",
+      "request": 46,
+      "owner": 6,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 529,
+      "event": "production-response",
+      "request": 46,
+      "action": "allow"
+    },
+    {
+      "sequence": 531,
+      "event": "delivery-held",
+      "contentsId": 74,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 533,
+      "event": "will-frame-navigate",
+      "contentsId": 74,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 534,
+      "event": "held-original-canceled",
+      "contentsId": 74,
+      "frameName": "original-request-0",
+      "url": ""
+    },
+    {
+      "sequence": 536,
+      "event": "held-delivery-discarded",
+      "contentsId": 6,
+      "childContentsId": 74,
+      "frameName": "",
+      "url": "http://127.0.0.1:PORT/probe-one"
+    },
+    {
+      "sequence": 537,
+      "event": "admission",
+      "request": 47,
+      "owner": 6,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 538,
+      "event": "production-response",
+      "request": 47,
+      "action": "allow"
+    },
+    {
+      "sequence": 540,
+      "event": "production-adapter-created",
+      "request": 47,
+      "owner": 6,
+      "contentsId": 75,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 543,
+      "event": "did-create-window",
+      "owner": 6,
+      "contentsId": 75,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 546,
+      "event": "will-frame-navigate",
+      "contentsId": 75,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 547,
+      "event": "before-request",
+      "contentsId": 75,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 548,
+      "event": "loaded",
+      "owner": 6,
+      "contentsId": 75,
+      "frameName": "original-request-0",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    },
+    {
+      "sequence": 550,
+      "event": "admission",
+      "request": 48,
+      "owner": 6,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 551,
+      "event": "production-response",
+      "request": 48,
+      "action": "allow"
+    },
+    {
+      "sequence": 553,
+      "event": "delivery-held",
+      "contentsId": 76,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 555,
+      "event": "will-frame-navigate",
+      "contentsId": 76,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 556,
+      "event": "held-original-released",
+      "contentsId": 76,
+      "frameName": "original-request-0",
+      "url": ""
+    },
+    {
+      "sequence": 559,
+      "event": "did-create-window",
+      "owner": 6,
+      "contentsId": 76,
+      "frameName": "original-request-0",
+      "url": ""
+    },
+    {
+      "sequence": 563,
+      "event": "admission",
+      "request": 49,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 564,
+      "event": "production-response",
+      "request": 49,
+      "action": "allow"
+    },
+    {
+      "sequence": 566,
+      "event": "delivery-held",
+      "contentsId": 77,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 568,
+      "event": "will-frame-navigate",
+      "contentsId": 77,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 569,
+      "event": "held-original-before-next-request",
+      "contentsId": 77,
+      "frameName": "original-request-0",
+      "url": ""
+    },
+    {
+      "sequence": 570,
+      "event": "admission",
+      "request": 50,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 571,
+      "event": "production-response",
+      "request": 50,
+      "action": "deny"
+    },
+    {
+      "sequence": 572,
+      "event": "held-delivery-discarded",
+      "contentsId": 8,
+      "childContentsId": 77,
+      "frameName": "",
+      "url": "http://127.0.0.1:PORT/probe-two"
+    },
+    {
+      "sequence": 573,
+      "event": "admission",
+      "request": 51,
+      "owner": 8,
+      "disposition": "new-window"
+    },
+    {
+      "sequence": 574,
+      "event": "production-response",
+      "request": 51,
+      "action": "allow"
+    },
+    {
+      "sequence": 576,
+      "event": "production-adapter-created",
+      "request": 51,
+      "owner": 8,
+      "contentsId": 78,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 579,
+      "event": "did-create-window",
+      "owner": 8,
+      "contentsId": 78,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 582,
+      "event": "will-frame-navigate",
+      "contentsId": 78,
+      "frameName": "",
+      "url": ""
+    },
+    {
+      "sequence": 583,
+      "event": "before-request",
+      "contentsId": 78,
+      "url": "http://127.0.0.1:PORT/identical-child",
+      "observedBeforeRequest": true,
+      "webRtcPolicy": "disable_non_proxied_udp"
+    },
+    {
+      "sequence": 584,
+      "event": "loaded",
+      "owner": 8,
+      "contentsId": 78,
+      "frameName": "original-request-0",
+      "url": "http://127.0.0.1:PORT/identical-child"
+    }
+  ],
+  "limitations": [
+    "Controlled engine delivery delay, not naturally reproduced overlap.",
+    "An unobserved original child remains fenced while its original source frame lives; elapsed time cannot establish cancellation.",
+    "Source-frame retirement and overwritten-options edge cases are adversarial unit tests, not runtime overlap traces.",
+    "Hidden synthetic macOS Electron/CDP only; no visible/native-focus, Windows/Linux runtime, remote SSH authentication or fresh YouTube challenge verification.",
+    "The separate adopted-path association and inherited-script-sandbox/tab-conversion questions are outside this admission repair."
+  ]
+}

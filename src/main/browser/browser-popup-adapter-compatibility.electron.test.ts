@@ -43,8 +43,21 @@ async function childAt(url: string): Promise<Page> {
   return child
 }
 
+async function configureProbe(page: Page, command: string): Promise<void> {
+  const offset = status().adapterProbe?.length ?? 0
+  const message = `orca-popup-fixture:probe-${command}`
+  await page.evaluate((message) => console.log(message), message)
+  await expect
+    .poll(() =>
+      eventsSince(offset).some(
+        (event) => event.event === 'probe-configured' && event.message === message
+      )
+    )
+    .toBe(true)
+}
+
 async function configure(page: Page, path: CreationPath): Promise<void> {
-  await page.evaluate((path) => console.log(`orca-popup-fixture:probe-${path}`), path)
+  await configureProbe(page, path)
 }
 
 async function installBurst(page: Page, count = 3): Promise<void> {
@@ -266,29 +279,51 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
     snapshots.push(status())
   })
 
-  it('reproduces production native admission attaching to an unrelated same-session app window', async () => {
-    const page = guest('probe-two')
-    await page.evaluate('console.log("orca-popup-fixture:probe-unrelated")')
-    await installBurst(page, 1)
-    const offset = status().adapterProbe?.length ?? 0
-    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
-    await childAt(`${origin}/identical-child`)
-    const events = eventsSince(offset)
-    const unrelated = events.find((event) => event.event === 'unrelated-window')
-    const admitted = events.find((event) => event.event === 'production-adapter-created')
-    expect(unrelated).toBeDefined()
-    expect(admitted?.contentsId).toBe(unrelated?.contentsId)
-    expect(events.filter((event) => event.event === 'production-adapter-created')).toHaveLength(1)
-    const realChild = events.find((event) => event.event === 'did-create-window')
-    expect(realChild?.contentsId).not.toBe(admitted?.contentsId)
-    snapshots.push(status())
-    await page.evaluate('console.log("orca-popup-fixture:probe-cleanup")')
-    await closeChildren(page)
-  })
+  it.each(['script', 'link'] as const)(
+    'isolates same-session and foreign-session app windows during original %s creation',
+    async (kind) => {
+      const page = guest('probe-two')
+      for (const foreign of [false, true]) {
+        await configureProbe(page, foreign ? 'unrelated-foreign' : 'unrelated')
+        await installBurst(page, 1)
+        await page.evaluate(() => {
+          document.querySelector('#native-isolation')?.remove()
+          const link = document.createElement('a')
+          link.id = 'native-isolation'
+          link.href = '/isolation-original'
+          link.textContent = 'Original native link'
+          document.body.append(link)
+        })
+        const offset = status().adapterProbe?.length ?? 0
+        await page
+          .locator(kind === 'script' ? '#identity-burst' : '#native-isolation')
+          .click({ modifiers: ['Shift'] })
+        await expect
+          .poll(() => eventsSince(offset).some((event) => event.event === 'did-create-window'))
+          .toBe(true)
+        const events = eventsSince(offset)
+        const unrelated = events.find((event) => event.event === 'unrelated-window')
+        const admitted = events.find((event) => event.event === 'production-adapter-created')
+        expect(unrelated).toBeDefined()
+        expect(admitted).toBeDefined()
+        expect(admitted?.contentsId).not.toBe(unrelated?.contentsId)
+        expect(events.some((event) => event.event === 'unrelated-destroyed')).toBe(false)
+        expect(events.filter((event) => event.event === 'production-adapter-created')).toHaveLength(
+          1
+        )
+        expect(events.find((event) => event.event === 'did-create-window')?.contentsId).toBe(
+          admitted?.contentsId
+        )
+        snapshots.push(status())
+        await configureProbe(page, 'cleanup')
+        await closeChildren(page)
+      }
+    }
+  )
   // Production keeps an admission guard on the opener, so raw API probes run first.
   it('correlates production scripted admissions for identical-URL children before navigation', async () => {
     const page = guest('probe-one')
-    await page.evaluate('console.log("orca-popup-fixture:probe-production-scripted")')
+    await configureProbe(page, 'production-scripted')
     const offset = status().adapterProbe?.length ?? 0
     const before = receipts.length
     await installBurst(page)
@@ -304,17 +339,14 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
     for (const child of created) {
       const delivery = delivered.find((event) => event.contentsId === child.contentsId)
       expect(delivery?.owner).toBe(child.owner)
-      expect(delivery?.optionsArguments).toEqual([
-        `--orca-popup-probe=${String(child.request)}`,
-        expect.stringMatching(/^--orca-native-popup-admission=[\da-f-]+$/)
-      ])
+      expect(delivery?.optionsArguments).toEqual([`--orca-popup-probe=${String(child.request)}`])
       expect(child.preferences).toMatchObject(expectedSecurity)
       expect(
         events.findIndex(
           (event) =>
             event.event === 'browser-window-created' && event.contentsId === child.contentsId
         )
-      ).toBeLessThan(events.indexOf(child))
+      ).toBeGreaterThan(events.indexOf(child))
       expect(
         events.findIndex(
           (event) => event.event === 'did-start-navigation' && event.contentsId === child.contentsId
@@ -324,13 +356,141 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
     expect(
       receipts.slice(before).filter((receipt) => receipt.path === '/identical-child')
     ).toHaveLength(3)
-    expect(
-      events
-        .filter((event) => event.event === 'loaded')
-        .map((event) => event.frameName)
-        .sort()
-    ).toEqual(['original-request-0', 'original-request-1', 'original-request-2'])
+    const requests = events.filter((event) => event.event === 'admission')
+    for (const [index, request] of requests.entries()) {
+      const child = created.find((event) => event.request === request.request)
+      const loaded = events.find(
+        (event) => event.event === 'loaded' && event.contentsId === child?.contentsId
+      )
+      expect(loaded?.frameName).toBe(`original-request-${index}`)
+    }
     expect(status().windowsHidden).toBe(true)
+    snapshots.push(status())
+    await closeChildren(page)
+  })
+  it('cancels a held original child before creation notification, then binds its successor independently', async () => {
+    const page = guest('probe-one')
+    await configureProbe(page, 'hold-delivery')
+    const offset = status().adapterProbe?.length ?? 0
+    const before = receipts.length
+    await installBurst(page, 1)
+    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
+    await expect
+      .poll(() => eventsSince(offset).some((event) => event.event === 'delivery-held'))
+      .toBe(true)
+    await configureProbe(page, 'cancel-held')
+    await expect
+      .poll(() => eventsSince(offset).some((event) => event.event === 'held-delivery-discarded'))
+      .toBe(true)
+    await installBurst(page, 1)
+    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
+    await expect
+      .poll(() => eventsSince(offset).some((event) => event.event === 'loaded'))
+      .toBe(true)
+    const events = eventsSince(offset)
+    const held = events.find((event) => event.event === 'delivery-held')
+    const canceled = events.find((event) => event.event === 'held-original-canceled')
+    expect(canceled).toMatchObject({
+      contentsId: held?.contentsId,
+      frameName: 'original-request-0'
+    })
+    const callbacks = events.filter((event) => event.event === 'production-adapter-created')
+    expect(callbacks).toHaveLength(1)
+    expect(callbacks[0].contentsId).not.toBe(held?.contentsId)
+    expect(callbacks[0].request).toBe(
+      events.filter((event) => event.event === 'admission')[1].request
+    )
+    expect(
+      events.find(
+        (event) => event.event === 'loaded' && event.contentsId === callbacks[0].contentsId
+      )?.frameName
+    ).toBe('original-request-0')
+    expect(
+      receipts.slice(before).filter((receipt) => receipt.path === '/identical-child')
+    ).toHaveLength(1)
+    expect(status().windowsHidden).toBe(true)
+    snapshots.push(status())
+    await closeChildren(page)
+  })
+
+  it('rejects a genuinely late live child whose navigation was held behind preparation', async () => {
+    const page = guest('probe-one')
+    await configureProbe(page, 'hold-delivery')
+    const offset = status().adapterProbe?.length ?? 0
+    const before = receipts.length
+    await installBurst(page, 1)
+    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
+    await expect
+      .poll(() => eventsSince(offset).some((event) => event.event === 'will-frame-navigate'))
+      .toBe(true)
+    await configureProbe(page, 'release-held')
+    await expect
+      .poll(() => eventsSince(offset).some((event) => event.event === 'did-create-window'))
+      .toBe(true)
+    const events = eventsSince(offset)
+    const held = events.find((event) => event.event === 'delivery-held')
+    expect(events.find((event) => event.event === 'held-original-released')).toMatchObject({
+      contentsId: held?.contentsId,
+      frameName: 'original-request-0'
+    })
+    expect(events.filter((event) => event.event === 'production-adapter-created')).toHaveLength(0)
+    expect(
+      events.filter(
+        (event) => event.event === 'before-request' && event.contentsId === held?.contentsId
+      )
+    ).toHaveLength(0)
+    expect(
+      receipts.slice(before).filter((receipt) => receipt.path === '/identical-child')
+    ).toHaveLength(0)
+    expect(status().windowsHidden).toBe(true)
+    snapshots.push(status())
+  })
+
+  it('fails closed at the actual engine boundary when a second request overlaps held delivery', async () => {
+    const page = guest('probe-two')
+    await configureProbe(page, 'production-scripted')
+    await configureProbe(page, 'hold-delivery')
+    const offset = status().adapterProbe?.length ?? 0
+    const before = receipts.length
+    await installBurst(page, 2)
+    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
+    await expect
+      .poll(() => eventsSince(offset).some((event) => event.event === 'held-delivery-discarded'))
+      .toBe(true)
+    const events = eventsSince(offset)
+    const held = events.find((event) => event.event === 'delivery-held')
+    expect(
+      events.find((event) => event.event === 'held-original-before-next-request')
+    ).toMatchObject({ contentsId: held?.contentsId, frameName: 'original-request-0' })
+    expect(
+      events.filter((event) => event.event === 'production-response').map((event) => event.action)
+    ).toEqual(['allow', 'deny'])
+    expect(events.filter((event) => event.event === 'production-adapter-created')).toHaveLength(0)
+    expect(events.filter((event) => event.event === 'did-create-window')).toHaveLength(0)
+    expect(
+      receipts.slice(before).filter((receipt) => receipt.path === '/identical-child')
+    ).toHaveLength(0)
+    expect(status().windowsHidden).toBe(true)
+    snapshots.push(status())
+    // Recovery follows the confirmed original destruction; the opener remains usable.
+    await installBurst(page, 1)
+    await page.locator('#identity-burst').click({ modifiers: ['Shift'] })
+    await expect
+      .poll(
+        () =>
+          eventsSince(offset).filter((event) => event.event === 'production-adapter-created').length
+      )
+      .toBe(1)
+    await expect
+      .poll(() => eventsSince(offset).filter((event) => event.event === 'loaded').length)
+      .toBe(1)
+    const recovered = eventsSince(offset).find(
+      (event) => event.event === 'production-adapter-created'
+    )
+    expect(recovered?.contentsId).not.toBe(held?.contentsId)
+    expect(recovered?.request).toBe(
+      eventsSince(offset).filter((event) => event.event === 'admission')[2]?.request
+    )
     snapshots.push(status())
     await closeChildren(page)
   })
@@ -370,6 +530,17 @@ async function installSandboxFrame(
     },
     { sandbox, destination, kind }
   )
+  await page
+    .frameLocator('#sandbox-probe')
+    .locator('#open')
+    .evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+    )
+  // A replacement iframe needs current compositor hit testing before hidden CDP input.
+  await page.screenshot()
 }
 
 async function exerciseSandboxControls(
@@ -401,7 +572,7 @@ async function exerciseSandboxControls(
         receipts.slice(initialReceipt).some((receipt) => destination.endsWith(receipt.path))
       ).toBe(false)
       snapshots.push(status())
-      await page.evaluate('console.log("orca-popup-fixture:probe-cleanup")')
+      await configureProbe(page, 'cleanup')
       continue
     }
     const child = await childAt(destination)

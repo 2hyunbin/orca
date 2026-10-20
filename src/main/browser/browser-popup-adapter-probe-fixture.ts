@@ -1,6 +1,7 @@
-import { app, BrowserWindow, type Session, type WebContents } from 'electron'
+import { app, BrowserWindow, session, type Session, type WebContents } from 'electron'
 import { openPopupWithOriginBar, type PopupChildWindowOptions } from './popup-origin-bar-window'
 import { allowNativeBrowserPopup } from './browser-popup-native-window'
+import { BrowserPopupHeldDeliveryFixture } from './browser-popup-held-delivery-fixture'
 
 export class BrowserPopupAdapterProbeFixture {
   readonly events: Record<string, unknown>[] = []
@@ -59,10 +60,23 @@ export class BrowserPopupAdapterProbeFixture {
         callback({})
       })
     }
+    const delivery = new BrowserPopupHeldDeliveryFixture(guest, (event, contents, extra) =>
+      this.record(event, contents, extra)
+    )
     let adopted = true
     let productionScripted = false
     let unrelatedDuringAdmission = false
+    let foreignUnrelated = false
     guest.on('console-message', ({ message }) => {
+      if (message === 'orca-popup-fixture:probe-hold-delivery') {
+        delivery.holdNext()
+      }
+      if (message === 'orca-popup-fixture:probe-release-held') {
+        delivery.releaseLive()
+      }
+      if (message === 'orca-popup-fixture:probe-cancel-held') {
+        delivery.cancel()
+      }
       if (message === 'orca-popup-fixture:probe-native') {
         adopted = false
         productionScripted = false
@@ -74,8 +88,12 @@ export class BrowserPopupAdapterProbeFixture {
       if (message === 'orca-popup-fixture:probe-production-scripted') {
         productionScripted = true
       }
-      if (message === 'orca-popup-fixture:probe-unrelated') {
+      if (
+        message === 'orca-popup-fixture:probe-unrelated' ||
+        message === 'orca-popup-fixture:probe-unrelated-foreign'
+      ) {
         unrelatedDuringAdmission = true
+        foreignUnrelated = message.endsWith('-foreign')
       }
       if (message === 'orca-popup-fixture:snapshot') {
         this.writeStatus()
@@ -88,6 +106,9 @@ export class BrowserPopupAdapterProbeFixture {
         }
         this.unrelatedWindows.clear()
       }
+      if (message.startsWith('orca-popup-fixture:probe-')) {
+        this.record('probe-configured', guest, { message })
+      }
     })
     guest.on('did-create-window', (window, details) => {
       this.record('did-create-window', window.webContents, {
@@ -97,6 +118,7 @@ export class BrowserPopupAdapterProbeFixture {
       })
     })
     guest.setWindowOpenHandler((details) => {
+      delivery.beforeNextRequest()
       const request = ++this.sequence
       this.events.push({ event: 'admission', request, owner: guest.id, details })
       this.writeStatus()
@@ -118,7 +140,11 @@ export class BrowserPopupAdapterProbeFixture {
         })
         const unrelated = new BrowserWindow({
           show: false,
-          webPreferences: { session: guest.session }
+          webPreferences: {
+            session: foreignUnrelated
+              ? session.fromPartition('popup-isolation-foreign')
+              : guest.session
+          }
         })
         this.unrelatedWindows.add(unrelated)
         this.record('unrelated-window', unrelated.webContents, { request })
@@ -138,9 +164,8 @@ export class BrowserPopupAdapterProbeFixture {
         }
       }
       if (productionScripted) {
-        return allowNativeBrowserPopup({
+        const response = allowNativeBrowserPopup({
           opener: guest,
-          targetUrl: details.url,
           options,
           onCreated: ({ nativeWindow }) => {
             if (!nativeWindow) {
@@ -153,6 +178,9 @@ export class BrowserPopupAdapterProbeFixture {
             return nativeWindow.webContents
           }
         })
+        this.events.push({ event: 'production-response', request, action: response.action })
+        this.writeStatus()
+        return response
       }
       return {
         action: 'allow',

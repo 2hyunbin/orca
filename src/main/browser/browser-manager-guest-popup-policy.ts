@@ -12,7 +12,8 @@ import { BrowserManagerNavigation } from './browser-manager-navigation'
 import {
   allowNativeBrowserPopup,
   discardBrowserPopupContents,
-  isNativeBrowserPopupRequest
+  isNativeBrowserPopupRequest,
+  rejectOverlappingNativeBrowserPopup
 } from './browser-popup-native-window'
 import { isBrowserRouteGuestPopup } from './browser-route-guest-popup-ownership'
 import { requestBrowserExternalAppLaunch } from './browser-external-app-launch'
@@ -29,6 +30,9 @@ export abstract class BrowserManagerGuestPopupPolicy extends BrowserManagerNavig
     }
     guest.on('did-create-window', handleDidCreateWindow)
     guest.setWindowOpenHandler(({ url, frameName, disposition, postBody, features, referrer }) => {
+      if (rejectOverlappingNativeBrowserPopup(guest)) {
+        return { action: 'deny' }
+      }
       // Why: as in Chrome, every open spends the click, so a popup's click cannot fund a later tab.
       const clicked = gesture.consume()
       const ownerContext = this.resolvePopupOwnerContext(guest.id)

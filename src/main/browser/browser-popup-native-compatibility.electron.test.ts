@@ -14,7 +14,6 @@ import {
   status,
   setPopupFixtureEvidenceName
 } from './browser-popup-compatibility-cdp-fixture'
-import { waitForHiddenFrameInput } from './hidden-frame-input-readiness-fixture'
 import { MIN_POPUP_CONTENT_HEIGHT, MIN_POPUP_CONTENT_WIDTH } from './popup-window-minimum-size'
 
 setPopupFixtureEvidenceName('native-electron-evidence.json')
@@ -109,9 +108,13 @@ describe('hidden Chromium native popup request compatibility', () => {
       expect(status().native.windows.at(-1)).toMatchObject({ fullscreen: false, focused: false })
       if (name === 'route') {
         expect(status().native.creation.at(-1)).toMatchObject({
-          firstNavigationPolicy: 'disable_non_proxied_udp',
+          firstNavigationPolicy: 'default',
           firstNavigationTitle: 'about:blank',
-          firstNavigationOwner: expect.any(Number)
+          firstNavigationOwner: null,
+          firstRequestObserved: true,
+          firstRequestPolicy: 'disable_non_proxied_udp',
+          firstRequestOwner: expect.any(Number),
+          firstRequestTitle: 'about:blank'
         })
       }
       expect(status().native.requests.at(-1)).toEqual({
@@ -313,13 +316,14 @@ describe('hidden Chromium native popup request compatibility', () => {
             },
             { targetOrigin, opaque, shift }
           )
-          const post = page.frameLocator('#frame-probe').locator('#frame-post')
           if (opaque) {
-            await waitForHiddenFrameInput(post)
-            // Opaque frame input does not reach the route's root gesture gate.
+            // Prime hidden Linux OOPIF hit testing and the route's root gesture gate.
             await page.locator('#frame-gesture').click()
           }
-          await post.click(shift ? { modifiers: ['Shift'] } : {})
+          await page
+            .frameLocator('#frame-probe')
+            .locator('#frame-post')
+            .click(shift ? { modifiers: ['Shift'] } : {})
           await expect
             .poll(() => receipts.slice(before).find((receipt) => receipt.path === '/frame-post'))
             .toMatchObject({
@@ -415,6 +419,7 @@ describe('hidden Chromium native popup request compatibility', () => {
       await page.evaluate('console.log("orca-popup-fixture:snapshot")')
       await expect.poll(() => status().native.windows.length).toBe(before + 1)
       await expect.poll(() => status().native.windows.at(-1)?.closed).toBe(true)
+      expect(status().native.creation.at(-1)?.firstRequestObserved).toBeUndefined()
       expect(
         receipts.slice(receiptCount).some((receipt) => receipt.path === '/must-not-execute')
       ).toBe(false)
@@ -515,7 +520,9 @@ describe('hidden Chromium native popup request compatibility', () => {
       })
       expect(status().native.creation.at(-1)).toMatchObject({
         firstNavigationPolicy: 'disable_non_proxied_udp',
-        firstNavigationOwner: expect.any(Number)
+        firstNavigationOwner: expect.any(Number),
+        firstRequestPolicy: 'disable_non_proxied_udp',
+        firstRequestOwner: expect.any(Number)
       })
     }
     // Four live native children fill the route popup cap.

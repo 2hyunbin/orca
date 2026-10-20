@@ -15,7 +15,11 @@ import {
   type BrowserRouteGuestPopupWindow
 } from './browser-route-guest-popup-window-options'
 import { openPopupWithOriginBar, type PopupChildWindowOptions } from './popup-origin-bar-window'
-import { allowNativeBrowserPopup, isNativeBrowserPopupRequest } from './browser-popup-native-window'
+import {
+  allowNativeBrowserPopup,
+  isNativeBrowserPopupRequest,
+  rejectOverlappingNativeBrowserPopup
+} from './browser-popup-native-window'
 import { allowPageUnload } from './browser-guest-unload-policy'
 
 /** Bounded so a page holding a real gesture stream cannot paper the desktop in windows. */
@@ -175,6 +179,10 @@ export function createBrowserRouteGuestPopupController(input: {
     gesture: BrowserGuestInputGesture
   ): (details?: PopupRequest) => Electron.WindowOpenHandlerResponse {
     return (details) => {
+      if (rejectOverlappingNativeBrowserPopup(source)) {
+        reportBlockedPopup(details?.url)
+        return { action: 'deny' }
+      }
       const clicked = gesture.consume()
       const normalized = normalizeBrowserPopupUrl(details?.url)
       if (

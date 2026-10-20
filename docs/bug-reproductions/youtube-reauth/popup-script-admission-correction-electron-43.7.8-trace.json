@@ -1,0 +1,542 @@
+{
+  "baseCommit": "ef1584b867a",
+  "candidate": "uncommitted correction; exact source SHA-256 values below",
+  "sourceSha256": {
+    "src/main/browser/browser-popup-native-window.ts": "76863af42f9d1e69dbd73d6728c82a713921d61dda3ed6f377ea59912d5074d5",
+    "src/main/browser/browser-manager-guest-popup-policy.ts": "1f034c3e670b12c7a9b8e6f52198273030f85930aba2e1dbd6e0dfcbe2fefcfc",
+    "src/main/browser/browser-route-guest-popups.ts": "a91fd75949ef5d180976d75db50e351c4cf25ccbbb41780752e3aeae098aa38e",
+    "src/main/browser/browser-popup-adapter-probe-fixture.ts": "e2ff03c4c5cf94500c5d05b1f7d10825c61fc3c32ace96f8f5404dac14e27759",
+    "src/main/browser/browser-popup-held-delivery-fixture.ts": "a1f0c8f95db587c25f56d1cc7f2db366095e5539d369ce09ecfc1392a08edf67",
+    "src/main/browser/browser-popup-adapter-compatibility.electron.test.ts": "d541aba8fd499555567451f1f212c008f97bc591e8fe9cd80efbd383d246de99",
+    "src/main/browser/browser-popup-native-window.test.ts": "ca636fd516fd5c7a4d1830ba0f586333965aad55ec9445facba92063ec24649d"
+  },
+  "electron": "43.7.8",
+  "platform": "darwin",
+  "arch": "arm64",
+  "hiddenWindows": true,
+  "presentationCalls": [],
+  "rawArtifactSha256": "a620caad1209294d70b4bf44a31b712a14f1232fef2c2a7362f0ca24df0e62ca",
+  "normalization": "Only relevant identity/navigation events retained; options/preferences omitted; synthetic loopback ports replaced by PORT; original event order preserved.",
+  "validation": {
+    "focusedFiles": 9,
+    "passedTests": 124,
+    "expectedFailures": 3,
+    "nodeTypecheck": "passed",
+    "changedCodeQuality": "passed",
+    "additionalForegroundReadinessAssertions": 4,
+    "finalNativeWindowUnitFile": {
+      "passed": 32,
+      "expectedFailures": 3
+    }
+  },
+  "limitations": [
+    "Controlled engine-delivery delay, not a naturally observed overlapping delivery.",
+    "Overlaps are rejected, not supported as two concurrent admissions.",
+    "Three openerless native OpenURL admission failures remain blockers.",
+    "No visible/native-focus, Linux/Windows, or remote authentication validation."
+  ],
+  "cases": [
+    {
+      "name": "ordinary independent original-child binding",
+      "events": [
+        {
+          "event": "admission",
+          "request": 40,
+          "owner": 6
+        },
+        {
+          "event": "production-response",
+          "request": 40,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 65,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "production-adapter-created",
+          "contentsId": 65,
+          "url": "",
+          "frameName": "",
+          "request": 40,
+          "owner": 6
+        },
+        {
+          "event": "browser-window-created",
+          "contentsId": 65,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "observer-attached",
+          "contentsId": 65,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "did-create-window",
+          "contentsId": 65,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 65,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "first-navigation",
+          "contentsId": 65,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 65,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "admission",
+          "request": 41,
+          "owner": 6
+        },
+        {
+          "event": "production-response",
+          "request": 41,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 66,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "production-adapter-created",
+          "contentsId": 66,
+          "url": "",
+          "frameName": "",
+          "request": 41,
+          "owner": 6
+        },
+        {
+          "event": "browser-window-created",
+          "contentsId": 66,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "observer-attached",
+          "contentsId": 66,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "did-create-window",
+          "contentsId": 66,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "before-request",
+          "contentsId": 65,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "observedBeforeRequest": true,
+          "webRtcPolicy": "disable_non_proxied_udp"
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 66,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "first-navigation",
+          "contentsId": 66,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 66,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "admission",
+          "request": 42,
+          "owner": 6
+        },
+        {
+          "event": "production-response",
+          "request": 42,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 67,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "production-adapter-created",
+          "contentsId": 67,
+          "url": "",
+          "frameName": "",
+          "request": 42,
+          "owner": 6
+        },
+        {
+          "event": "browser-window-created",
+          "contentsId": 67,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "observer-attached",
+          "contentsId": 67,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "did-create-window",
+          "contentsId": 67,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "before-request",
+          "contentsId": 66,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "observedBeforeRequest": true,
+          "webRtcPolicy": "disable_non_proxied_udp"
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 67,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "first-navigation",
+          "contentsId": 67,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 67,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "before-request",
+          "contentsId": 67,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "observedBeforeRequest": true,
+          "webRtcPolicy": "disable_non_proxied_udp"
+        },
+        {
+          "event": "loaded",
+          "contentsId": 65,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "frameName": "original-request-0",
+          "owner": 6
+        },
+        {
+          "event": "loaded",
+          "contentsId": 66,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "frameName": "original-request-1",
+          "owner": 6
+        },
+        {
+          "event": "loaded",
+          "contentsId": 67,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "frameName": "original-request-2",
+          "owner": 6
+        }
+      ]
+    },
+    {
+      "name": "cancellation before window delivery then successor",
+      "events": [
+        {
+          "event": "admission",
+          "request": 43,
+          "owner": 6
+        },
+        {
+          "event": "production-response",
+          "request": 43,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 68,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "delivery-held",
+          "contentsId": 68,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 68,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 68,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "held-original-canceled",
+          "contentsId": 68,
+          "url": "",
+          "frameName": "original-request-0"
+        },
+        {
+          "event": "held-delivery-discarded",
+          "contentsId": 6,
+          "url": "http://127.0.0.1:PORT/probe-one",
+          "frameName": "",
+          "childContentsId": 68
+        },
+        {
+          "event": "admission",
+          "request": 44,
+          "owner": 6
+        },
+        {
+          "event": "production-response",
+          "request": 44,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 69,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "production-adapter-created",
+          "contentsId": 69,
+          "url": "",
+          "frameName": "",
+          "request": 44,
+          "owner": 6
+        },
+        {
+          "event": "browser-window-created",
+          "contentsId": 69,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "observer-attached",
+          "contentsId": 69,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "did-create-window",
+          "contentsId": 69,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 69,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "first-navigation",
+          "contentsId": 69,
+          "url": "",
+          "frameName": "",
+          "owner": 6
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 69,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "before-request",
+          "contentsId": 69,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "observedBeforeRequest": true,
+          "webRtcPolicy": "disable_non_proxied_udp"
+        },
+        {
+          "event": "loaded",
+          "contentsId": 69,
+          "url": "http://127.0.0.1:PORT/identical-child",
+          "frameName": "original-request-0",
+          "owner": 6
+        }
+      ],
+      "originalContentsId": 68,
+      "originalBeforeRequests": 0,
+      "admissionCallbacks": 1
+    },
+    {
+      "name": "late live original child rejected without replay",
+      "events": [
+        {
+          "event": "admission",
+          "request": 45,
+          "owner": 6
+        },
+        {
+          "event": "production-response",
+          "request": 45,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 70,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "delivery-held",
+          "contentsId": 70,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 70,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 70,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "held-original-released",
+          "contentsId": 70,
+          "url": "",
+          "frameName": "original-request-0"
+        },
+        {
+          "event": "browser-window-created",
+          "contentsId": 70,
+          "url": "",
+          "frameName": "original-request-0"
+        },
+        {
+          "event": "observer-attached",
+          "contentsId": 70,
+          "url": "",
+          "frameName": "original-request-0",
+          "owner": 6
+        },
+        {
+          "event": "did-create-window",
+          "contentsId": 70,
+          "url": "",
+          "frameName": "original-request-0",
+          "owner": 6
+        }
+      ],
+      "originalContentsId": 70,
+      "originalBeforeRequests": 0,
+      "admissionCallbacks": 0
+    },
+    {
+      "name": "overlap rejects both captured callbacks",
+      "events": [
+        {
+          "event": "admission",
+          "request": 46,
+          "owner": 8
+        },
+        {
+          "event": "production-response",
+          "request": 46,
+          "action": "allow"
+        },
+        {
+          "event": "web-contents-created",
+          "contentsId": 71,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "delivery-held",
+          "contentsId": 71,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "did-start-navigation",
+          "contentsId": 71,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "will-frame-navigate",
+          "contentsId": 71,
+          "url": "",
+          "frameName": ""
+        },
+        {
+          "event": "held-original-before-next-request",
+          "contentsId": 71,
+          "url": "",
+          "frameName": "original-request-0"
+        },
+        {
+          "event": "admission",
+          "request": 47,
+          "owner": 8
+        },
+        {
+          "event": "production-response",
+          "request": 47,
+          "action": "deny"
+        },
+        {
+          "event": "held-delivery-discarded",
+          "contentsId": 8,
+          "url": "http://127.0.0.1:PORT/probe-two",
+          "frameName": "",
+          "childContentsId": 71
+        }
+      ],
+      "originalContentsId": 71,
+      "originalBeforeRequests": 0,
+      "admissionCallbacks": 0
+    }
+  ],
+  "sourceHashScope": "Production and runtime-fixture hashes identify the combined runtime run; the native-window unit-test hash includes four later foreground readiness assertions verified separately."
+}

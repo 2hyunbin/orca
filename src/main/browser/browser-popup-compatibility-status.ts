@@ -27,6 +27,10 @@ export type PopupCompatibilityStatus = {
     presentationCalls: string[]
     requests: { disposition: string; features: string; frameName: string; post: boolean }[]
     creation: {
+      firstRequestObserved?: boolean
+      firstRequestPolicy?: string
+      firstRequestOwner?: number | null
+      firstRequestTitle?: string
       firstNavigationPolicy: string
       firstNavigationOwner: number | null
       firstNavigationTitle: string

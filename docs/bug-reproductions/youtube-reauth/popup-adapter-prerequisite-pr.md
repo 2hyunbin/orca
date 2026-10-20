@@ -1,49 +1,50 @@
-Draft title: test(browser): record blocked popup adapter prerequisites on Electron 43.7.8
+Draft title: fix(browser): bind popup admission to the original child and opener
 
 ## ELI5
 
-An openerless popup can still inherit browser restrictions that disappear if it is reopened as an ordinary tab. Electron 43.7.8 does not expose enough synchronous information to distinguish the tested restricted and safe script popups, so this prerequisite remains **BLOCKED** and changes no production routing.
+An unrelated app window could take a popup's handling, and overlapping opens could disable later popups for the rest of the page's lifetime. Only the originating child now receives its handling; overlap cancels safely and later requests recover after the original is accounted for.
 
 ## What Changed
 
-Added hidden Electron probes for actual adopted/native script children, restricted iframe controls, native link flags, missing adopted link contents, same-session parents, creation order and an unrelated-window admission reproducer. Replaced the single-listener native app mock with EventEmitter delivery and five explicit expected-failure assertions for the desired no-theft contract, plus a duplicate control. Reused the existing compatibility harness and included the new probe in Node runtime and the existing Linux boundary job.
+Kept the staged original-script-child binding and navigation fence. Replaced openerless app-wide native admission with the opener's own creation event and a consumed-once private identity. Removed the synchronous candidate set, expiry timers and sticky quarantine. Recovery follows confirmed child/window/source-frame lifecycle. Reused the checkpoint's committed-frame title behavior, including neutral blank/opaque/error states, and stop navigation before asynchronously closing rejected contents.
 
 ## Why
 
-A passing mock or a fresh callback closure cannot prove that Electron supplies the matching original child. Real probes show that the production native adapter can grant an admission to an unrelated same-session window, and that the restricted/escape script controls have indistinguishable synchronous metadata despite different browser-enforced behavior. Recording the API limits keeps routing changes behind the required gate until the API or presentation tradeoff is explicitly resolved.
+Electron reuses script options, so those options cannot establish the original child. Native OpenURL instead has a scoped event with stack-local options; it can keep Chromium's POST/referrer/sandbox continuation. Using each existing association avoids a queue, replay, timing guesses and a second request registry. Unidentified admissions remain fenced until their original frame is actually destroyed, because elapsed time cannot establish cancellation.
 
 ## Linked Issue
 
-Internal prerequisite to the supplied YouTube reauthentication design. No new issue was opened; the separate WebContentsView architecture investigation is not this change's scope.
+Internal popup-admission review handoff. No issue was opened.
 
 ## Visual Proof
 
-N/A — production behavior and UI are unchanged. Hidden runtime observations and sanitized event/network traces are in [the evidence report](popup-adapter-prerequisite-evidence.md).
+[Hidden Electron/CDP evidence and limits](popup-adapter-prerequisite-evidence.md). Synthetic fixture pages/origin bars were rendered and inspected; native titles were read through Electron. Foreground/native-focus and visible app/native chrome validation remain for an isolated display or CI. No remote attachment was published.
 
 ## Testing
 
-- [x] I manually tested these changes locally through hidden synthetic Electron/CDP fixtures on macOS arm64.
-- [x] Automated tests added/updated. Five named expected failures document unresolved admission contract violations; they are not passed release gates.
-
-See the evidence report for exact candidate commit, commands, results, limitations and unexercised matrix rows. Native focus/visible windows, Linux/Windows runtime, SSH/server-hosted authentication, replacement-tab materialization, stress comparison and a fresh YouTube challenge remain unverified here.
+- [x] Nine requested suites: 141 tests passed, zero expected failures.
+- [x] Real Electron suites ran without file parallelism with `ORCA_BACKGROUND_LAUNCH=1`; fixtures rebuild current source before launch.
+- [x] Same/foreign-session unrelated-window isolation on script and native-link paths; callback consumption, old-child/successor isolation, overlap/cancellation/recovery, title trust and first-request failure fences.
+- [x] Local/route POST bodies, referrer, cookies, initiator/sandbox semantics and route owner/WebRTC policy before `onBeforeRequest`.
+- [x] Node typecheck (16,899 files), changed-code quality, targeted oxlint, formatting and diff whitespace checks.
 
 ## Review
 
-**Do not treat this draft as approval to broaden popup routing.** Adopted association, native association, adopted script conversion safety and native script conversion safety are each **BLOCKED**. No production admission workaround is included.
+The three former expected-failure isolation contracts are ordinary passing assertions. Controlled engine-event delay remains explicitly distinguished from natural overlap. Native policy assertions now use the actual first-network-request boundary, because native navigation-start precedes its scoped creation event. No test contract was waived.
 
 ## Agent skill upstream boundary
 
-- [x] Not applicable, or this change copies or mechanically translates no upstream skill-installer source, tests, fixtures, registry entries, path tables, comments, or documentation.
+- [x] Not applicable: no upstream skill implementation or resources copied.
 
 ## Notes
 
-This is a local PR body prepared for the coordinator. No branch push, draft PR creation, GitHub comment or merge was performed by the worker. All app/test launches used `ORCA_BACKGROUND_LAUNCH=1`; no tokens or saved callbacks were replayed, and no remote/persistence schema changed.
+An admission whose child has never been observed remains fenced while its original source frame lives. Bound-child cancellation and rejected-window delivery recover without retiring the opener. Windows/Linux runtime, remote SSH authentication, foreground/native-focus and a fresh YouTube challenge were not exercised. The separate adopted-path and inherited-script-sandbox conversion questions remain outside this admission repair. URL classification, remote protocols and persistence formats are unchanged.
 
 ## Checklist
 
-- [x] This PR is small and focused on compatibility evidence and faithful mocks.
-- [x] I explained what changed and why (ELI5, user behavior, mechanism and alternatives).
-- [x] N/A with reason provided for production visual changes.
-- [x] Self-reviewed for correctness, security and performance.
-- [x] Cross-platform, SSH/remote and path/shortcut impact considered; actual untested environments are listed.
-- [ ] Full repository lint/typecheck/test/build and remote CI were not all run; focused checks and their exact results are recorded in the evidence report.
+- [x] Explained before/after behavior, mechanism and alternative tradeoffs.
+- [x] Self-reviewed the change and retained staged corrections/evidence.
+- [x] Focused validation passed; full repository build/lint/test and remote CI were not run.
+- [ ] Visible app/native chrome before/after proof remains for an isolated display or CI.
+
+No push, PR publication or merge is requested or performed.

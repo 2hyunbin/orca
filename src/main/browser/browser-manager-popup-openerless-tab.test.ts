@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const browserMocks = vi.hoisted(() => ({
   appGetPathMock: vi.fn(() => '/downloads'),
-  appPrependOnceListenerMock: vi.fn(),
+  appPrependListenerMock: vi.fn(),
+  guestPrependListenerMock: vi.fn(),
   shellOpenExternalMock: vi.fn(),
   browserWindowFromWebContentsMock: vi.fn(),
   menuBuildFromTemplateMock: vi.fn(),
@@ -18,7 +19,8 @@ const browserMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({
   app: {
-    prependOnceListener: browserMocks.appPrependOnceListenerMock,
+    listeners: vi.fn(() => []),
+    prependListener: browserMocks.appPrependListenerMock,
     off: vi.fn(),
     getPath: browserMocks.appGetPathMock
   },
@@ -42,7 +44,7 @@ import {
 } from './browser-manager-test-harness'
 
 const {
-  appPrependOnceListenerMock,
+  appPrependListenerMock,
   guestOnMock,
   guestSetWindowOpenHandlerMock,
   webContentsFromIdMock,
@@ -58,7 +60,11 @@ type WindowOpenHandler = (details: {
   features: string
   disposition: string
   postBody?: Electron.PostBody
-}) => { action: 'allow' | 'deny'; createWindow?: (options: Record<string, unknown>) => unknown }
+}) => {
+  action: 'allow' | 'deny'
+  overrideBrowserWindowOptions?: Electron.BrowserWindowConstructorOptions
+  createWindow?: (options: Record<string, unknown>) => unknown
+}
 
 function popupContents(opener: Pick<Electron.WebFrameMain, 'frameTreeNodeId'> | null) {
   return {
@@ -86,6 +92,7 @@ function attachClickedGuest(): WindowOpenHandler {
     setBackgroundThrottling: vi.fn(),
     setWindowOpenHandler: guestSetWindowOpenHandlerMock,
     on: guestOnMock,
+    prependListener: browserMocks.guestPrependListenerMock,
     once: vi.fn(),
     off: vi.fn(),
     openDevTools: vi.fn()
@@ -121,7 +128,8 @@ describe('tab-shaped OAuth opens without an opener', () => {
   beforeEach(() => {
     resetBrowserManagerMocks(browserMocks)
     resetBrowserManagerState()
-    appPrependOnceListenerMock.mockReset()
+    appPrependListenerMock.mockReset()
+    browserMocks.guestPrependListenerMock.mockReset()
     rendererSendMock.mockReset()
     openPopupWithOriginBarMock.mockReturnValue({
       contentWebContents: popupContents(null),
@@ -195,8 +203,9 @@ describe('tab-shaped OAuth opens without an opener', () => {
       disposition: 'background-tab'
     })
     expect(response).toMatchObject({ action: 'allow' })
-    const onWindowCreated: (event: unknown, window: unknown) => void =
-      appPrependOnceListenerMock.mock.calls.at(-1)?.[1]
+    const onWindowCreated = browserMocks.guestPrependListenerMock.mock.calls.find(
+      ([event]) => event === 'did-create-window'
+    )?.[1]
     const nativeWindow = {
       webContents: popupContents(null),
       isDestroyed: vi.fn(() => false),
@@ -206,7 +215,7 @@ describe('tab-shaped OAuth opens without an opener', () => {
       setTitle: vi.fn()
     }
 
-    onWindowCreated({}, nativeWindow)
+    onWindowCreated(nativeWindow, { options: response.overrideBrowserWindowOptions })
 
     expect(routedTabs()).toEqual([{ browserPageId: 'browser-1', url: OAUTH_URL, activate: false }])
     const [options, , prepare] = openPopupWithOriginBarMock.mock.calls.at(-1) ?? []

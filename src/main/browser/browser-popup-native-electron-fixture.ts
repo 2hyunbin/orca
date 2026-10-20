@@ -14,6 +14,10 @@ export class BrowserPopupNativeFixture {
     []
   readonly creation: {
     contentsId: number
+    firstRequestObserved?: boolean
+    firstRequestPolicy?: string
+    firstRequestOwner?: number | null
+    firstRequestTitle?: string
     firstNavigationPolicy?: string
     firstNavigationOwner?: number | null
     firstNavigationTitle?: string
@@ -75,6 +79,25 @@ export class BrowserPopupNativeFixture {
         record.firstNavigationTitle = window.getTitle()
         input.writeStatus()
       })
+    })
+  }
+
+  observeRequests(targetSession: Session): void {
+    targetSession.webRequest.onBeforeRequest((details, callback) => {
+      const record = this.creation.find(
+        (candidate) => candidate.contentsId === details.webContentsId
+      )
+      if (details.resourceType === 'mainFrame' && record && !record.firstRequestObserved) {
+        record.firstRequestObserved = true
+        record.firstRequestPolicy = details.webContents?.getWebRTCIPHandlingPolicy()
+        record.firstRequestOwner = resolveBrowserRouteGuestPopupOpener(record.contentsId)
+        const window = this.windows.find(
+          (candidate) => !candidate.isDestroyed() && candidate.webContents.id === record.contentsId
+        )
+        record.firstRequestTitle = window?.getTitle()
+        this.input.writeStatus()
+      }
+      callback({})
     })
   }
 

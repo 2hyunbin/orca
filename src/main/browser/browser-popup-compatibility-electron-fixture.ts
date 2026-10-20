@@ -223,6 +223,7 @@ async function run(): Promise<void> {
     [localSession, 'local'],
     [routeSession, 'route']
   ] as const) {
+    native.observeRequests(targetSession)
     targetSession.setPermissionCheckHandler(() => false)
     targetSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
     await targetSession.cookies.set({ url: fixtureOrigin, name: 'synthetic_session', value })
