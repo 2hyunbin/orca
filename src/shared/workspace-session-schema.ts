@@ -68,6 +68,11 @@ export const terminalPaneLayoutNodeSchema: z.ZodType<TerminalPaneLayoutNode> = z
 
 const leafStringsSchema = salvagingRecord(z.string(), z.string())
 
+const terminalGridSchema = z.object({
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive()
+})
+
 const terminalLayoutSnapshotSchema = z.object({
   root: terminalPaneLayoutNodeSchema.nullable(),
   activeLeafId: z.string().nullable(),
@@ -76,7 +81,11 @@ const terminalLayoutSnapshotSchema = z.object({
   ptyIdsByLeafId: salvagedOptional('ptyIdsByLeafId', leafStringsSchema),
   buffersByLeafId: salvagedOptional('buffersByLeafId', leafStringsSchema),
   scrollbackRefsByLeafId: salvagedOptional('scrollbackRefsByLeafId', leafStringsSchema),
-  titlesByLeafId: salvagedOptional('titlesByLeafId', leafStringsSchema)
+  titlesByLeafId: salvagedOptional('titlesByLeafId', leafStringsSchema),
+  lastGridsByLeafId: salvagedOptional(
+    'lastGridsByLeafId',
+    salvagingRecord(z.string(), terminalGridSchema)
+  )
 })
 
 // ─── Terminal tab (legacy) ──────────────────────────────────────────

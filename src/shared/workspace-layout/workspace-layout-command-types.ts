@@ -10,7 +10,11 @@ import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
 import type { EditorTabView } from '../editor-tab-view-types'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
-import type { TerminalPaneLayoutNode, TerminalPaneSplitDirection } from '../terminal-tab-types'
+import type {
+  TerminalGrid,
+  TerminalPaneLayoutNode,
+  TerminalPaneSplitDirection
+} from '../terminal-tab-types'
 import type { PaneSide } from './terminal-pane-tree'
 import type { PaneOutcomeChanges } from './workspace-layout-pane-outcomes'
 import type { LayoutEditorFile, LayoutTerminalCreation } from './workspace-layout-model'
@@ -101,6 +105,8 @@ export type LayoutCommand =
     })
   | (On & { type: 'renameTab'; tabId: string } & TabTitle)
   | (On & { type: 'renamePane'; tabId: string; leafId: string; title: string | null })
+  /** Main only: the grid the pane's terminal was last sized to, which a restart starts it at. */
+  | (On & { type: 'setPaneGrid'; tabId: string; leafId: string; grid: TerminalGrid })
   | (On & {
       type: 'setTabProps'
       tabId: string
