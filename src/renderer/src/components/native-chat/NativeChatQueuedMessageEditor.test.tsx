@@ -440,6 +440,31 @@ describe('queued card image edit', () => {
       expect(composer.handlePasteEvent).toHaveBeenCalledTimes(5)
       expect(composer.pasteFromClipboard).not.toHaveBeenCalled()
 
+      const desktopNavigator = navigator
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+      for (const userAgent of ['Windows', 'Linux', 'Macintosh']) {
+        vi.stubGlobal('navigator', { userAgent, clipboard: undefined })
+        attach.focus()
+        expect(
+          fireEvent.keyDown(attach, {
+            key: 'v',
+            ctrlKey: userAgent !== 'Macintosh',
+            metaKey: userAgent === 'Macintosh'
+          })
+        ).toBe(true)
+        expect(document.activeElement).toBe(chatField)
+        const data = new DataTransfer()
+        data.setData('text/plain', 'payload')
+        fireEvent.paste(chatField, { clipboardData: data })
+        expect(
+          vi
+            .mocked(composer.handlePasteEvent)
+            .mock.lastCall?.[0].clipboardData?.getData('text/plain')
+        ).toBe('payload')
+      }
+      vi.stubGlobal('navigator', desktopNavigator)
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+
       if (!(field instanceof HTMLTextAreaElement)) {
         throw new Error('Expected edit textarea')
       }

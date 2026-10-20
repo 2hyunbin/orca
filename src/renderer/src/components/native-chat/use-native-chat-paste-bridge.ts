@@ -122,24 +122,26 @@ export function useNativeChatPasteBridge({
       if (card) {
         // Native paste follows Chromium's selection, which can still be in the chat box.
         const request = new NativeChatPasteRequest(
-          activeElement instanceof HTMLTextAreaElement
-            ? (text) => {
-                void pasteTextIntoTextControl(activeElement, text, {
-                  source: 'app-menu',
-                  canContinue: () => document.activeElement === activeElement
-                })
-              }
-            : (text) => {
-                const data = new DataTransfer()
-                data.setData('text/plain', text)
-                root.dispatchEvent(
-                  new ClipboardEvent('paste', {
-                    clipboardData: data,
-                    bubbles: true,
-                    cancelable: true
+          activeElement instanceof HTMLTextAreaElement && activeElement.readOnly
+            ? undefined
+            : activeElement instanceof HTMLTextAreaElement
+              ? (text) => {
+                  void pasteTextIntoTextControl(activeElement, text, {
+                    source: 'app-menu',
+                    canContinue: () => document.activeElement === activeElement
                   })
-                )
-              }
+                }
+              : (text) => {
+                  const data = new DataTransfer()
+                  data.setData('text/plain', text)
+                  root.dispatchEvent(
+                    new ClipboardEvent('paste', {
+                      clipboardData: data,
+                      bubbles: true,
+                      cancelable: true
+                    })
+                  )
+                }
         )
         card.dispatchEvent(request)
         if (request.defaultPrevented) {
