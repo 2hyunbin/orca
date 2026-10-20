@@ -161,19 +161,19 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
   /** A phone holding the workspace's session open has it on screen: its flag is read and stays down. */
   readAndHoldPhoneSession(worktreeId: string, connectionId: string | null): () => void {
-    // Why: a page whose JS runs in the background can re-subscribe while it reports away.
-    if (connectionId === null || this.workspaceViewers.isClientPresent(connectionId)) {
+    // Why: a page re-subscribes a session route it left behind another screen, or while away.
+    if (connectionId === null || this.workspaceViewers.showsWorkspace(connectionId, worktreeId)) {
       this.markWorkspaceRead(worktreeId)
     }
     return this.workspaceViewers.openPhoneSession(connectionId, worktreeId)
   }
 
-  /** A client's view; a phone back in the foreground has read the sessions it holds open. */
+  /** A client's view; a phone session it now shows, and did not before, has been read. */
   reportClientView(connectionId: string, view: ClientWorkspaceView): boolean {
-    const wasPresent = this.workspaceViewers.isClientPresent(connectionId)
+    const shown = new Set(this.workspaceViewers.shownPhoneSessions(connectionId))
     const first = this.workspaceViewers.reportClientView(connectionId, view)
-    if (!wasPresent && this.workspaceViewers.isClientPresent(connectionId)) {
-      for (const worktreeId of this.workspaceViewers.phoneSessionWorktrees(connectionId)) {
+    for (const worktreeId of this.workspaceViewers.shownPhoneSessions(connectionId)) {
+      if (!shown.has(worktreeId)) {
         this.markWorkspaceRead(worktreeId)
       }
     }

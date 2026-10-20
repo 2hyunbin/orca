@@ -186,6 +186,49 @@ describe('workspace unread flag on a headless host', () => {
     expect(host.meta[WT].isUnread).toBe(true)
   })
 
+  // The page names the session route it shows while in the foreground, and reports away otherwise.
+  it('counts only the phone’s focused session route as looking, and reads only it on return', async () => {
+    const host = createHeadlessHost()
+    const shows = (workspaceIds: string[]) => ({ workspaceIds, tabIds: [], presentForMs: null })
+    const away = { workspaceIds: [], tabIds: [], presentForMs: 0 }
+    await host.openOnPhone(WT)
+    await host.reportView(shows([WT]), 'phone-1', 'mobile')
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(false)
+
+    // Settings covers the session route; its subscription stays open beneath.
+    await host.reportView(away, 'phone-1', 'mobile')
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
+
+    // Backgrounded, then foregrounded with settings still on top: nothing was seen.
+    host.meta[WT].isUnread = false
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
+    await host.reportView(away, 'phone-1', 'mobile')
+    expect(host.meta[WT].isUnread).toBe(true)
+    // A re-subscribe of the covered route reads nothing either.
+    await host.openOnPhone(WT)
+    expect(host.meta[WT].isUnread).toBe(true)
+
+    // Back on the session route: read, and quiet while shown.
+    await host.reportView(shows([WT]), 'phone-1', 'mobile')
+    expect(host.meta[WT].isUnread).toBe(false)
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(false)
+
+    // A second session route pushed on top: only it is shown, and only it is read.
+    host.meta[WT].isUnread = true
+    host.folders[FOLDER_ID].isUnread = true
+    await host.openOnPhone(FOLDER)
+    await host.reportView(shows([FOLDER]), 'phone-1', 'mobile')
+    expect(host.folders[FOLDER_ID].isUnread).toBe(false)
+    expect(host.meta[WT].isUnread).toBe(true)
+    host.meta[WT].isUnread = false
+    host.finishTurn()
+    expect(host.meta[WT].isUnread).toBe(true)
+  })
+
   it('clears a folder workspace and an SSH worktree on their own records when the phone opens them', async () => {
     const host = createHeadlessHost()
     host.folders[FOLDER_ID].isUnread = true

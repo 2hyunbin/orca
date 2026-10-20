@@ -1,42 +1,99 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
+import { useFocusEffect } from 'expo-router'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 
-/** No workspaces: the host reads what is on screen from the open sessions, and this only says
- *  whether the user is present (0 away, null back). */
-export function phonePresenceView(state: AppStateStatus): {
-  workspaceIds: string[]
-  tabIds: string[]
-  presentForMs: number | null
-} {
-  return { workspaceIds: [], tabIds: [], presentForMs: state === 'active' ? null : 0 }
+/** The session routes one host's client has in focus, by screen. */
+type HostView = { focused: Map<object, string>; holders: number; stopAppState: () => void }
+
+// One per client: every session screen on a host reports into one view, so a screen's blur and
+// another's focus cannot overwrite each other in either order.
+const viewsByClient = new Map<RpcClient, HostView>()
+
+/**
+ * What the phone shows a host: the session routes in focus while the app is in the foreground (0
+ * away otherwise). Naming them tells a current host that a session route left behind another
+ * screen is not on screen; an older one reads only the presence.
+ */
+export function phonePresenceView(
+  state: AppStateStatus,
+  focused: Iterable<string>
+): { workspaceIds: string[]; tabIds: string[]; presentForMs: number | null } {
+  const workspaceIds = state === 'active' ? [...new Set(focused)] : []
+  return { workspaceIds, tabIds: [], presentForMs: workspaceIds.length > 0 ? null : 0 }
+}
+
+function report(client: RpcClient, view: HostView): void {
+  const params = phonePresenceView(AppState.currentState, view.focused.values())
+  // An older or switch-off host refuses the method; it then holds the session until close as before.
+  void client.sendRequest('sidebarInputs.reportView', params).catch(() => {})
+}
+
+function holdHostView(client: RpcClient): HostView {
+  const existing = viewsByClient.get(client)
+  if (existing) {
+    existing.holders += 1
+    return existing
+  }
+  let wasActive = AppState.currentState === 'active'
+  const view: HostView = { focused: new Map(), holders: 1, stopAppState: () => {} }
+  const subscription = AppState.addEventListener('change', (state) => {
+    // iOS passes through inactive on the way back; only the edge into or out of active is news.
+    if ((state === 'active') !== wasActive) {
+      wasActive = state === 'active'
+      report(client, view)
+    }
+  })
+  view.stopAppState = () => subscription.remove()
+  viewsByClient.set(client, view)
+  return view
+}
+
+function releaseHostView(client: RpcClient, view: HostView): void {
+  view.holders -= 1
+  if (view.holders === 0) {
+    view.stopAppState()
+    viewsByClient.delete(client)
+  }
 }
 
 /**
- * Tells the session's host when the phone leaves and returns to the foreground, so a locked or
- * backgrounded phone stops muting the host's unread dot at once instead of when its socket closes.
+ * Tells the session's host which session route is on screen: the focused one, while the app is in
+ * the foreground. A route covered by another screen, a locked phone, or a backgrounded app is away,
+ * so the host's unread dot is not muted for what nobody sees.
  */
-export function usePhonePresenceReport(client: RpcClient | null, connState: ConnectionState): void {
+export function usePhonePresenceReport(
+  client: RpcClient | null,
+  connState: ConnectionState,
+  worktreeId: string
+): void {
+  const reportingClient = ORCA_SIDEBAR_INPUTS_IS_MAIN && connState === 'connected' ? client : null
+  // Said on every connect, ahead of this screen's session subscription (hook order), so a route
+  // re-subscribing behind another screen is never taken for the one on screen.
   useEffect(() => {
-    if (!ORCA_SIDEBAR_INPUTS_IS_MAIN || !client || connState !== 'connected') {
+    if (!reportingClient) {
       return
     }
-    // An older or switch-off host refuses the method; it then holds the session until close as before.
-    const report = (state: AppStateStatus): void => {
-      void client.sendRequest('sidebarInputs.reportView', phonePresenceView(state)).catch(() => {})
-    }
-    // Said on every connect too: a change missed while disconnected must not leave the host stale.
-    let wasActive = AppState.currentState === 'active'
-    report(AppState.currentState)
-    const subscription = AppState.addEventListener('change', (state) => {
-      const isActive = state === 'active'
-      if (isActive !== wasActive) {
-        wasActive = isActive
-        report(state)
+    const view = holdHostView(reportingClient)
+    report(reportingClient, view)
+    return () => releaseHostView(reportingClient, view)
+  }, [reportingClient])
+  useFocusEffect(
+    useCallback(() => {
+      if (!reportingClient) {
+        return
       }
-    })
-    return () => subscription.remove()
-  }, [client, connState])
+      const view = holdHostView(reportingClient)
+      const screen = {}
+      view.focused.set(screen, worktreeId)
+      report(reportingClient, view)
+      return () => {
+        view.focused.delete(screen)
+        report(reportingClient, view)
+        releaseHostView(reportingClient, view)
+      }
+    }, [reportingClient, worktreeId])
+  )
 }
