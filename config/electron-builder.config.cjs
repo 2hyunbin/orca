@@ -66,6 +66,7 @@ const {
   verifyAppImageNodeRuntimeServesPty
 } = require('./scripts/appimage-node-runtime.cjs')
 const { signWindowsUninstallerViaSignPath } = require('./scripts/windows-uninstaller-signing.cjs')
+const { buildMacShipItScheduling } = require('./scripts/macos-shipit-scheduling.cjs')
 
 // Why: dev-channel builds must carry the *release* identity — same bundle id,
 // Developer ID signature, and notarization ticket — or Squirrel.Mac refuses to
@@ -436,6 +437,8 @@ module.exports = {
         context.packager.appInfo.productFilename
       )
       const architecture = macSliceArch(context.arch, 'local-build compatibility')
+      const schedulingAddon = buildMacShipItScheduling(resourcesDir, architecture)
+      await signMacStandaloneHelper(schedulingAddon, 'ShipIt scheduling', context.packager)
       const version = context.packager.appInfo.version
       let commit = process.env.ORCA_BUILD_COMMIT || process.env.GITHUB_SHA || 'unknown'
       if (commit === 'unknown') {
