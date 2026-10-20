@@ -30,8 +30,7 @@ function sweepRows(
   session: WorkspaceSessionState,
   key: string,
   rows: readonly TerminalTab[],
-  live: boolean,
-  isSsh: boolean
+  live: boolean
 ): RowSweep {
   const canonical = readCanonicalPtyOwners(session, key, rows)
   const unattached = new Set<string>()
@@ -49,8 +48,9 @@ function sweepRows(
     if (canonical.tabIds.has(row.id)) {
       continue
     }
-    // An SSH row's own id is a wake hint; it reconnects through its relay session id.
-    const named = [live && !isSsh ? row.ptyId : null, session.remoteSessionIdsByTabId?.[row.id]]
+    // Why not SSH-aware: the window ignores an SSH row's own id only when it finds the worktree
+    // listed, which main cannot know at load; keeping errs to a ghost, never a lost terminal.
+    const named = [live ? row.ptyId : null, session.remoteSessionIdsByTabId?.[row.id]]
     const reattaches =
       named.some((ptyId) => ptyId && !claim.releasedPtyIds.has(ptyId)) || claim.reconnectPtyId
     if (!reattaches) {
@@ -64,14 +64,11 @@ function sweepRows(
  * Drops each stored terminal row the window's startup would sweep, with its pane layout, and
  * moves a selection off it as the sweep does. Resume and close records stay, as they do there.
  */
-export function sweepUnattachedTerminalRows(
-  session: WorkspaceSessionState,
-  isSshWorkspace: (key: string) => boolean
-): WorkspaceSessionState {
+export function sweepUnattachedTerminalRows(session: WorkspaceSessionState): WorkspaceSessionState {
   const live = liveAtShutdown(session)
   let next: WorkspaceSessionState | null = null
   for (const [key, rows] of Object.entries(session.tabsByWorktree ?? {})) {
-    const { unattached, hydrated } = sweepRows(session, key, rows, live(key), isSshWorkspace(key))
+    const { unattached, hydrated } = sweepRows(session, key, rows, live(key))
     if (unattached.size === 0) {
       continue
     }

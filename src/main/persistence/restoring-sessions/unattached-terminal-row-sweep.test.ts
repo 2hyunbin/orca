@@ -135,7 +135,7 @@ describe('load sweep: a terminal row outside the tab bar', () => {
     expect(after[serverHost]).toBe(serverSession)
   })
 
-  it('goes when it is an SSH workspace’s and only its own terminal id names one, a wake hint there', () => {
+  it('stays when it is an SSH workspace’s and only its own terminal id names one, as the window may reattach it', () => {
     const state = getDefaultPersistedState('/home/dev')
     state.repos = [
       {
@@ -150,6 +150,9 @@ describe('load sweep: a terminal row outside the tab bar', () => {
     const session = unattachedRow()
     session.tabsByWorktree[GIT_KEY]![1]!.ptyId = 'pty-b'
     state.workspaceSession = session
-    expect(rowIds(sweepPersistedUnattachedTerminalRows(state).workspaceSession)).toEqual(['tab-a'])
+    expect(rowIds(sweepPersistedUnattachedTerminalRows(state).workspaceSession)).toEqual([
+      'tab-a',
+      'tab-b'
+    ])
   })
 })

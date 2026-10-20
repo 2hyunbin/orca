@@ -13,8 +13,9 @@ export function sweptAtStartup(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState
 ): WorkspaceSessionState {
-  const kind = parseExecutionHostId(hostId)?.kind
-  return kind === 'runtime' ? session : sweepUnattachedTerminalRows(session, () => kind === 'ssh')
+  return parseExecutionHostId(hostId)?.kind === 'runtime'
+    ? session
+    : sweepUnattachedTerminalRows(session)
 }
 
 export type KnownDifference = {
