@@ -7,11 +7,8 @@ import {
   NODE_RUNTIME_PIN,
   SERVER_TARGETS
 } from '../../src/shared/node-runtime-pin.ts'
-import {
-  findNodeRuntimePinProblems,
-  lockfileRootImporter,
-  main
-} from './check-node-runtime-pin.mjs'
+import { findNodeRuntimePinProblems, main } from './check-node-runtime-pin.mjs'
+import { lockfileRootImporter } from './pnpm-lockfile-root-importer.mjs'
 
 const projectDir = path.resolve(import.meta.dirname, '../..')
 const HASH = 'a'.repeat(64)
