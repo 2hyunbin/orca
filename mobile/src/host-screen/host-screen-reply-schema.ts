@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { PersistedUIState } from '../../../src/shared/persisted-ui-state-types'
 import type { RepoIcon } from '../../../src/shared/repo-icon'
 import { hostUnionArms, salvagedOptional, salvagingArray } from '../../../src/shared/zod-salvage'
-import { NODE_PLATFORM_NAMES } from '../transport/mobile-runtime-host-platform'
+import { NODE_PLATFORM_NAMES, toNodePlatform } from '../transport/mobile-runtime-host-platform'
 
 // The closed arm sets on this screen are the desktop's own unions, pinned through hostUnionArms so
 // an arm the desktop adds or drops fails tsc here rather than degrading silently on the phone.
@@ -138,7 +138,9 @@ export const hostSshTargetSummariesSchema = z
  */
 export const hostPlatformSchema = z
   .looseObject({ platform: salvagedOptional('platform', z.enum(NODE_PLATFORM_NAMES)) })
-  .transform((reply) => reply.platform ?? null)
+  // Why the explicit guard: `salvagedOptional` comes from src/shared, so with mobile's own zod
+  // installed its inferred arm type degrades to {} for callers type-checked from outside mobile/.
+  .transform((reply): NodeJS.Platform | null => toNodePlatform(reply.platform))
   .catch(() => null)
 
 /**

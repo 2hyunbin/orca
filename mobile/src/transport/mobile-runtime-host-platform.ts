@@ -17,6 +17,11 @@ export const NODE_PLATFORM_NAMES = hostUnionArms<NodeJS.Platform>({
 
 const NODE_PLATFORMS = new Set<NodeJS.Platform>(NODE_PLATFORM_NAMES)
 
+/** The platform name a host reported, or null for anything this build does not know. */
+export function toNodePlatform(value: unknown): NodeJS.Platform | null {
+  return NODE_PLATFORM_NAMES.find((name) => name === value) ?? null
+}
+
 export function readMobileRuntimeHostPlatform(statusResult: unknown): NodeJS.Platform | null {
   const hostPlatform = (statusResult as { hostPlatform?: unknown } | null)?.hostPlatform
   return typeof hostPlatform === 'string' && NODE_PLATFORMS.has(hostPlatform as NodeJS.Platform)
