@@ -11,6 +11,7 @@ import {
 } from './workspace-layout-frame-apply-observer'
 import { fullLayoutFrameBuildPatch } from './workspace-layout-frame-builds'
 import type { LayoutFrameSlices } from '@/store/workspace-layout-frame-slices'
+import type { AppState } from '@/store/types'
 
 const FRAME_SLICES: readonly (keyof LayoutFrameSlices)[] = [
   'tabsByWorktree',
@@ -31,9 +32,46 @@ const FRAME_SLICES: readonly (keyof LayoutFrameSlices)[] = [
   'activeTabTypeByWorktree'
 ]
 
+/** The slices' records of `keys` alone: each workspace's entries, and its tabs', files' and pages'. */
+function recordsOf(state: AppState, keys: readonly string[]): Record<string, unknown> {
+  const keySet = new Set(keys)
+  const byKey = <T>(map: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(Object.entries(map).filter(([key]) => keySet.has(key)))
+  const tabIds = new Set(keys.flatMap((key) => (state.tabsByWorktree[key] ?? []).map((t) => t.id)))
+  const files = state.openFiles.filter((file) => keySet.has(file.worktreeId))
+  const fileIds = new Set(files.map((file) => file.id))
+  const browserTabIds = new Set(
+    keys.flatMap((key) => (state.browserTabsByWorktree[key] ?? []).map((tab) => tab.id))
+  )
+  const pageIds = new Set(
+    [...browserTabIds].flatMap((id) => (state.browserPagesByWorkspace[id] ?? []).map((p) => p.id))
+  )
+  const only = <T>(map: Record<string, T>, ids: ReadonlySet<string>): Record<string, T> =>
+    Object.fromEntries(Object.entries(map).filter(([id]) => ids.has(id)))
+  return {
+    tabsByWorktree: byKey(state.tabsByWorktree),
+    terminalLayoutsByTabId: only(state.terminalLayoutsByTabId, tabIds),
+    activeTabIdByWorktree: byKey(state.activeTabIdByWorktree),
+    unifiedTabsByWorktree: byKey(state.unifiedTabsByWorktree),
+    groupsByWorktree: byKey(state.groupsByWorktree),
+    activeGroupIdByWorktree: byKey(state.activeGroupIdByWorktree),
+    layoutByWorktree: byKey(state.layoutByWorktree),
+    openFiles: files,
+    editorDrafts: only(state.editorDrafts, fileIds),
+    markdownFrontmatterVisible: only(state.markdownFrontmatterVisible, fileIds),
+    activeFileIdByWorktree: byKey(state.activeFileIdByWorktree),
+    browserTabsByWorktree: byKey(state.browserTabsByWorktree),
+    browserPagesByWorkspace: only(state.browserPagesByWorkspace, browserTabIds),
+    remoteBrowserPageHandlesByPageId: only(state.remoteBrowserPageHandlesByPageId, pageIds),
+    activeBrowserTabIdByWorktree: byKey(state.activeBrowserTabIdByWorktree),
+    activeTabTypeByWorktree: byKey(state.activeTabTypeByWorktree)
+  }
+}
+
 /**
- * Empty when the flush left the store as the full build of its workspaces leaves it. A flush that
- * built in full ran the reference itself (and a second run mints other ids for a new page).
+ * Empty when the flush left the store as the full build of its workspaces leaves it. A workspace
+ * the flush built in full ran the reference itself (and a second run mints other ids for a new
+ * page), so a flush that built one in full is checked on its other workspaces' records.
  */
 export function layoutFrameApplyErrors({
   before,
@@ -43,11 +81,11 @@ export function layoutFrameApplyErrors({
   fullBuilt,
   rowFieldsTaken
 }: LayoutFrameApplyObservation): string[] {
-  const keys = changed.filter((key) => key in cache)
-  if (keys.length === 0 || fullBuilt.length > 0) {
+  const keys = changed.filter((key) => key in cache && !fullBuilt.includes(key))
+  if (keys.length === 0) {
     return []
   }
-  const expected: Record<string, unknown> = {
+  const built: AppState = {
     ...before,
     ...fullLayoutFrameBuildPatch(before, cache, keys, {
       keepsTerminalLayout: isTabPaneTreeHeld,
@@ -55,7 +93,9 @@ export function layoutFrameApplyErrors({
       held: { isTabHeld: isDrawnTabHeld, isGroupLayoutHeld: isDrawnGroupLayoutHeld }
     })
   }
-  const shown: Record<string, unknown> = { ...after }
+  const whole = fullBuilt.length === 0
+  const expected: Record<string, unknown> = whole ? { ...built } : recordsOf(built, keys)
+  const shown: Record<string, unknown> = whole ? { ...after } : recordsOf(after, keys)
   return FRAME_SLICES.flatMap((slice) =>
     stableJson(shown[slice]) === stableJson(expected[slice])
       ? []

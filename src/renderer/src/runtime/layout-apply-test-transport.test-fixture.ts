@@ -30,7 +30,10 @@ import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layou
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { layoutSnapshotFrame, publishedLayoutsOf } from './main-loaded-layout-frames.test-fixture'
 import { throwLayoutFrameApplyErrors } from './workspace-layout-frame-apply-check.test-fixture'
-import { observeLayoutFrameApply } from './workspace-layout-frame-apply-observer'
+import {
+  layoutFrameApplyObserver,
+  observeLayoutFrameApply
+} from './workspace-layout-frame-apply-observer'
 import type * as LayoutClient from './runtime-layout-client'
 import type * as RpcClient from './runtime-rpc-client'
 
@@ -317,8 +320,10 @@ export function runtimeLayoutClientWithTestFrames(actual: LayoutClientModule): L
     }
     const sink: FrameSink = { onFrame, onPosition }
     state.sinks.add(sink)
-    // Every flush of the window's frames must show what the full build shows.
-    observeLayoutFrameApply(throwLayoutFrameApplyErrors)
+    // Every flush of the window's frames must show what the full build shows; a test's own
+    // installed check keeps reporting it.
+    const previousCheck = layoutFrameApplyObserver()
+    observeLayoutFrameApply(previousCheck ?? throwLayoutFrameApplyErrors)
     onStatus({ state: 'connecting' })
     queueMicrotask(() => {
       if (!state.sinks.has(sink)) {
@@ -331,7 +336,7 @@ export function runtimeLayoutClientWithTestFrames(actual: LayoutClientModule): L
     return {
       close: () => {
         state.sinks.delete(sink)
-        observeLayoutFrameApply(null)
+        observeLayoutFrameApply(previousCheck)
         onStatus({ state: 'closed' })
       }
     }
