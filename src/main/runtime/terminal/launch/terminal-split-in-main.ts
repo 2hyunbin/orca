@@ -10,6 +10,7 @@ import { spawnInAdmittedPane } from '../../runtime-pane-admission'
 import { resolvePtyFirstSize, type PtyGridSize } from '../../../ipc/pty/pty-first-size'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { randomUUID } from 'node:crypto'
+import { paneStartFailure } from '../../pane-start-statuses'
 import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 
 export type SplitPaneSource = { worktreeId: string; tabId: string; leafId: string }
@@ -34,6 +35,31 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
     return Boolean(hostId && parseExecutionHostId(hostId)?.kind !== 'runtime')
   }
 
+  /** A window split whose start fails before main could start it still shows, with why. */
+  private async keepSplitThatCannotStart(
+    source: SplitPaneSource,
+    opts: SplitPaneInMainOptions,
+    error: unknown
+  ): Promise<never> {
+    if (opts.keepPaneOnStartFailure && opts.newLeafId && isTerminalLeafId(opts.newLeafId)) {
+      const reply = await this.applyLayoutCommand({
+        type: 'splitPane',
+        workspace: source.worktreeId,
+        tabId: source.tabId,
+        leafId: source.leafId,
+        direction: opts.direction,
+        newLeafId: opts.newLeafId
+      })
+      if (reply.ok) {
+        this.paneStartStatuses?.set(
+          makePaneKey(source.tabId, opts.newLeafId),
+          paneStartFailure(error)
+        )
+      }
+    }
+    throw error
+  }
+
   private holdsLeaf(worktreeId: string, leafId: string): boolean {
     const layouts = this.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId ?? {}
     return Object.values(layouts).some((layout) => collectLeafIds(layout?.root).includes(leafId))
@@ -55,10 +81,13 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
     source: SplitPaneSource,
     opts: SplitPaneInMainOptions
   ): Promise<RuntimeTerminalSplit> {
-    if (!this.ptyController?.spawn) {
-      throw new Error('runtime_unavailable')
+    const controller = this.ptyController
+    if (!controller?.spawn) {
+      return this.keepSplitThatCannotStart(source, opts, new Error('runtime_unavailable'))
     }
-    const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${source.worktreeId}`)
+    const workspace = await this.resolveTerminalWorkspaceLaunchScope(
+      `id:${source.worktreeId}`
+    ).catch((error: unknown) => this.keepSplitThatCannotStart(source, opts, error))
     const leafId =
       opts.newLeafId && isTerminalLeafId(opts.newLeafId) ? opts.newLeafId : randomUUID()
     // A named pane id another pane holds is refused: the start must not land in a live pane.
@@ -66,7 +95,7 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
       throw new Error('pane_exists')
     }
     const preAllocatedHandle = this.createPreAllocatedTerminalHandle()
-    const result = await spawnInAdmittedPane(this.store, this.ptyController, {
+    const result = await spawnInAdmittedPane(this.store, controller, {
       ...resolvePtyFirstSize({ pane: opts.initialSize }),
       cwd: opts.cwd ?? workspace.path,
       command: opts.command,

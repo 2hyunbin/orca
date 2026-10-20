@@ -245,4 +245,26 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
     expect(spawn).not.toHaveBeenCalled()
     expect(runtime.startStatusOf(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))).toBeNull()
   })
+
+  it('a window split main cannot start at all still shows its pane, failed, with why', async () => {
+    const { runtime, leafIds } = setup()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+
+    await expect(
+      runtime.splitTerminalPane(
+        { worktreeId: TEST_WORKTREE_ID, tabId: TAB_ID, leafId: HEADLESS_LEAF_ID },
+        { direction: 'vertical', newLeafId: NEW_LEAF_ID, keepPaneOnStartFailure: true }
+      )
+    ).rejects.toThrow('runtime_unavailable')
+
+    expect(leafIds()).toEqual([HEADLESS_LEAF_ID, NEW_LEAF_ID])
+    expect(runtime.startStatusOf(makePaneKey(TAB_ID, NEW_LEAF_ID))).toEqual({
+      status: 'failed',
+      reason: 'runtime_unavailable'
+    })
+  })
 })
