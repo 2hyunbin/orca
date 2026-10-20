@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { HEADLESS_LEAF_ID, TEST_WORKTREE_ID } from '../../orca-runtime-test-fixtures.spec'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import type { PaneStartStatuses } from '../../pane-start-statuses'
 import { SURFACE_TAB_ID, surfaceRuntime } from './terminal-surface-replies.test-fixture'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -44,15 +45,29 @@ async function firstPaneRow(
 
 // Layout-owner build: a terminal.list row carries the host's verdict; a pane with a status is never live.
 describe("main's pane verdicts (switch on)", () => {
-  it('a sleeping pane whose terminal still runs is unverifiable and not connected, never live', async () => {
-    const { runtime } = sleepingPaneRuntime()
+  // Every status D1a publishes on a bound pane (PaneStartStatus) and the sleeping record; C1b's
+  // resuming and held join this list when they reach main's pane binding.
+  it.each(['starting', 'failed', 'sleeping'] as const)(
+    'a %s pane whose terminal still runs is not connected and never live',
+    async (status) => {
+      const harness = status === 'sleeping' ? sleepingPaneRuntime() : surfaceRuntime()
+      if (status !== 'sleeping') {
+        harness.runtime.attachWindow(1)
+        harness.runtime.syncWindowGraph(1, { tabs: [], leaves: [], mountedLeaves: [] })
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the layout-owner runtime always holds this register; the test sets a start status as main's start does.
+        const { paneStartStatuses } = harness.runtime as unknown as {
+          paneStartStatuses: PaneStartStatuses
+        }
+        paneStartStatuses.set(PANE_KEY, { status })
+      }
 
-    expect(await firstPaneRow(runtime)).toEqual({
-      connected: false,
-      writable: false,
-      verdict: 'unverifiable'
-    })
-  })
+      expect(await firstPaneRow(harness.runtime)).toEqual({
+        connected: false,
+        writable: false,
+        verdict: 'unverifiable'
+      })
+    }
+  )
 
   it('a sleeping pane whose terminal the host reports absent is exited', async () => {
     let hostLists = ['pty-a', 'pty-b']

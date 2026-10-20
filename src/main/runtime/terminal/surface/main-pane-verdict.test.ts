@@ -58,6 +58,20 @@ describe('a main-owned pane verdict', () => {
     ).toBe('unverifiable')
   })
 
+  // A remote terminal's verdict is its own host's answer, through the relay or the server's list.
+  it.each<[PtyLivenessVerdict, PtyLivenessVerdict['status']]>([
+    [{ status: 'exited' }, 'exited'],
+    [{ status: 'unverifiable', reason: 'relay timed out' }, 'unverifiable'],
+    [{ status: 'live', ptyIds: ['ssh:conn-1@@pty-a'] }, 'live']
+  ])('a remote host answer %o reads %s', (verdict, expected) => {
+    expect(
+      mainPaneVerdict(
+        { ptyId: 'ssh:conn-1@@pty-a', hasStatus: false },
+        host({ verdict, inventory: [] })
+      )
+    ).toBe(expected)
+  })
+
   it('an unbound pane is exited only once the host answered', () => {
     const pane = { ptyId: null, hasStatus: false }
     expect(mainPaneVerdict(pane, host({ inventory: [] }))).toBe('exited')

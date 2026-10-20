@@ -10,6 +10,7 @@ import type {
 } from '../../../../shared/runtime-types'
 import type { LoadedWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-load-types'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
+import { bindingOf } from '../../pane-start-statuses'
 import { projectRuntimeSurfaces } from '../../runtime-leaf-record-projection'
 import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 
@@ -22,8 +23,8 @@ export type MainTerminalSurfaces = {
   leaves: RuntimeSyncedLeaf[]
   /** Every workspace main answers for, a workspace with no terminal tab included. */
   worktreeIds: ReadonlySet<string>
-  /** `tabId::leafId` of each pane with a status (today a sleeping record): never a live terminal. */
-  statusPanes: ReadonlySet<string>
+  /** By `tabId::leafId`: the pane's binding as published (bindingOf) and its sleeping record. */
+  paneFacts: ReadonlyMap<string, { binding: string; sleeping: boolean }>
 }
 
 export class TerminalSurfaceIndex {
@@ -90,7 +91,7 @@ export class TerminalSurfaceIndex {
     const json = JSON.stringify({
       tabs: next.tabs,
       leaves: next.leaves,
-      statusPanes: [...next.statusPanes]
+      paneFacts: [...next.paneFacts]
     })
     // The same object when nothing changed, so a write that moves no pane installs nothing.
     if (!this.current || json !== this.currentJson) {
@@ -106,7 +107,7 @@ export class TerminalSurfaceIndex {
   ): MainTerminalSurfaces {
     const partitions: LoadedPartition[] = []
     const worktreeIds = new Set<string>()
-    const statusPanes = new Set<string>()
+    const paneFacts = new Map<string, { binding: string; sleeping: boolean }>()
     hostIds.forEach((hostId, index) => {
       const partition = loaded[index]
       if (!partition) {
@@ -123,9 +124,11 @@ export class TerminalSurfaceIndex {
             continue
           }
           for (const leafId of collectLayoutLeafIdsInOrder(tab.panes.root)) {
-            if (workspace.leaves?.[leafId]?.sleeping) {
-              statusPanes.add(`${tab.entityId}::${leafId}`)
-            }
+            const leaf = workspace.leaves?.[leafId] ?? {}
+            paneFacts.set(`${tab.entityId}::${leafId}`, {
+              binding: bindingOf(leaf),
+              sleeping: leaf.sleeping !== undefined
+            })
           }
         }
       }
@@ -144,7 +147,7 @@ export class TerminalSurfaceIndex {
         title: tabs.get(tab.entityId)?.title ?? liveTitle
       })),
       worktreeIds,
-      statusPanes
+      paneFacts
     }
   }
 

@@ -19,9 +19,11 @@ import type {
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
 import { parseExecutionHostId } from '../../../shared/execution-host'
+import type { PaneStartStatuses } from '../pane-start-statuses'
 
 export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
   abstract get workspaceLayoutReads(): WorkspaceLayoutReads
+  declare protected readonly paneStartStatuses: PaneStartStatuses | null
 
   /** Layout-owner builds: the window's graph with main's own panes for what main owns. */
   protected withMainSurfaces(
@@ -33,6 +35,7 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       reads: () => this.workspaceLayoutReads,
       homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
       registered: (ptyId) => this.ptysById.has(ptyId),
+      paneStartFact: (paneKey, binding) => this.paneStartStatuses?.get(paneKey, binding) ?? null,
       readyGraphPublisher: () => (this.graphStatus === 'ready' ? this.authoritativeWindowId : null),
       publish: (publisher, next) => {
         this.syncWindowGraph(publisher, next)

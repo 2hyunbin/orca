@@ -2,6 +2,7 @@
 // and main republishes them when the Store's layout changes, whether or not a window publishes.
 // Only switch-on code reaches this module, so a window-owned build bundles none of it.
 
+import type { PaneStartFactOf } from '../../pane-start-statuses'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
 import type { RuntimeStore } from '../../runtime-store-contract'
@@ -19,6 +20,8 @@ export type MainTerminalSurfacesHost = {
   homeHostId: (key: string) => ExecutionHostId | null
   /** Whether the PTY registry holds the terminal. */
   registered: (ptyId: string) => boolean
+  /** Main's start status of a pane, as the layout stream publishes it. */
+  paneStartFact: PaneStartFactOf
   /** The graph authority now, when its graph is ready; null otherwise. */
   readyGraphPublisher: () => number | null
   /** Installs a graph under the publisher's authority, as the window's own publication does. */
@@ -58,13 +61,19 @@ class MainSurfacePublisher {
     return pane ? { worktreeId: pane.worktreeId, tabId: pane.tabId, leafId: pane.leafId } : null
   }
 
-  /** A pane main owns: the terminal its layout binds and whether it has a status; null otherwise. */
+  /**
+   * A pane main owns: the terminal its layout binds and whether it has a status (a start in flight
+   * or failed, or a sleeping agent), which says that binding is not live; null otherwise.
+   */
   paneOf(tabId: string, leafId: string): { ptyId: string | null; hasStatus: boolean } | null {
     const surfaces = this.index.surfaces()
     const pane = surfaces.leaves.find((leaf) => leaf.tabId === tabId && leaf.leafId === leafId)
-    return pane
-      ? { ptyId: pane.ptyId, hasStatus: surfaces.statusPanes.has(`${tabId}::${leafId}`) }
-      : null
+    const facts = surfaces.paneFacts.get(`${tabId}::${leafId}`)
+    if (!pane || !facts) {
+      return null
+    }
+    const started = this.host.paneStartFact(`${tabId}:${leafId}`, facts.binding)
+    return { ptyId: pane.ptyId, hasStatus: facts.sleeping || started !== null }
   }
 
   /** Whether main lists the workspace's terminals. */
