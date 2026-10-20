@@ -71,15 +71,32 @@ describe('a pane main is starting a terminal for', () => {
     await restoreTerminalTestGlobals()
   })
 
-  it('starts nothing while main starts it, then connects once main’s start ends', async () => {
+  it('starts nothing while main starts it, then attaches to main’s terminal', async () => {
     const { transport } = await connectWithStart({ status: 'starting' })
     expect(transport.connect).not.toHaveBeenCalled()
     expect(transport.attach).not.toHaveBeenCalled()
 
-    setStore({ terminalPaneStartsByPaneKey: {} } as never)
+    // Main's start ends as the pane binds to main's terminal.
+    const leafId = leafIdForPane(1)
+    setStore({
+      tabsByWorktree: { 'wt-1': [{ id: TAB, ptyId: 'pty-main' }] },
+      terminalLayoutsByTabId: {
+        [TAB]: {
+          root: { type: 'leaf', leafId },
+          activeLeafId: leafId,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafId]: 'pty-main' }
+        }
+      },
+      terminalPaneStartsByPaneKey: {}
+    } as never)
     await flushAsyncTicks()
 
-    expect(transport.connect.mock.calls.length + transport.attach.mock.calls.length).toBe(1)
+    // It attaches to main's terminal at the pane's own grid, and starts none of its own.
+    expect(transport.connect).toHaveBeenCalledTimes(1)
+    expect(transport.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'pty-main', cols: 120, rows: 40 })
+    )
   })
 
   it('shows why a failed start failed and starts nothing', async () => {
