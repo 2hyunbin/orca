@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as NodePath from 'node:path'
+import type * as NodeFsPromises from 'node:fs/promises'
 import { realpath } from 'node:fs/promises'
 import type { NestedRepoScanResult, ProjectGroup } from '../../shared/project-group-types'
 import type { BrowserWindow } from 'electron'
@@ -26,7 +27,7 @@ vi.mock('node:path', async (importOriginal) => {
   return { ...actual.win32, default: actual.win32, posix: actual.posix, win32: actual.win32 }
 })
 vi.mock('node:fs/promises', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  ...(await importOriginal<typeof NodeFsPromises>()),
   realpath: vi.fn(async (path: string) => path)
 }))
 vi.mock('electron', () => ({
