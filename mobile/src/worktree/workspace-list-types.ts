@@ -55,6 +55,10 @@ export type Worktree = {
   parentWorktreeId?: string | null
   childWorktreeIds?: string[]
   lineageDepth?: number
+  /** How deep the row sits in the desktop's project-group tree; indents it the same way. */
+  projectGroupDepth?: number
+  /** Its project group came from a folder scan, whose rows the desktop steps more compactly. */
+  inFolderScanGroup?: boolean
   lineageChildCount?: number
   lineageCollapsed?: boolean
   /** The collapse key the shared builder gave this row's children; set only on a feed-built list. */
