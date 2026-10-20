@@ -76,8 +76,8 @@ const row = (store: ReturnType<typeof createTestStore>) =>
 function mainFrameDrawsTitles(store: ReturnType<typeof createTestStore>): void {
   const titles = new Map<string, string | null>()
   for (const params of sent()) {
-    for (const rename of params.command.renames ?? []) {
-      const { tabId, title } = rename as { tabId: string; title: string | null }
+    const renames: { tabId: string; title: string | null }[] = params.command.renames ?? []
+    for (const { tabId, title } of renames) {
       titles.set(tabId, title)
     }
   }
