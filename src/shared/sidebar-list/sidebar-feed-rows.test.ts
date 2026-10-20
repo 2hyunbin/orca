@@ -188,3 +188,50 @@ describe('buildSidebarFeedRows nests each paired server’s own lineage', () => 
     ])
   })
 })
+
+function projectGroup(id: string, parentGroupId: string | null): ProjectGroup {
+  return {
+    id,
+    name: id,
+    parentPath: null,
+    parentGroupId,
+    createdFrom: 'manual',
+    tabOrder: 0,
+    isCollapsed: false,
+    color: null,
+    createdAt: 0,
+    updatedAt: 0
+  }
+}
+
+describe('buildSidebarFeedRows host sections', () => {
+  it('repeats a nested project group’s whole path in each host it spans', () => {
+    const repos = [
+      repo('near', { displayName: 'near', projectGroupId: 'H' }),
+      repo('far', { displayName: 'far', connectionId: 'box', projectGroupId: 'H' })
+    ]
+    const workspaces = buildWorkspaceRows({
+      worktrees: [worktree('near::/w/a'), worktree('far::/w/b', { hostId: 'ssh:box' })],
+      folderWorkspaces: [],
+      repos,
+      lineageById: {}
+    })
+    const built = buildSidebarFeedRows(
+      domains({ workspaces }),
+      catalog(repos, [projectGroup('G', null), projectGroup('H', 'G')]),
+      view({ groupBy: 'repo', visibleWorkspaceHostIds: ['local', 'ssh:box'] })
+    )
+    expect(outline(built.sectionRows)).toEqual([
+      '## This computer',
+      '# G@0',
+      '# H@1',
+      '# near@2',
+      '|near::/w/a@0',
+      '## box',
+      '# G@0',
+      '# H@1',
+      '# far@2',
+      'ssh:box|far::/w/b@0'
+    ])
+  })
+})
