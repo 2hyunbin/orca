@@ -70,8 +70,8 @@ export type WorkspaceLayoutFrameSync = LayoutFrameTerminalQueries & {
   close: () => void
   /** A frame this window made from what it already holds (a paired server's new handles). */
   receive: (frame: WorkspaceLayoutChangeFrame) => void
-  /** Which workspaces the frames draw may have changed. */
-  redraw: () => void
+  /** These workspaces have just started drawing from frames: each takes the full build. */
+  redraw: (keys: Iterable<string>) => void
 }
 
 export function openWorkspaceLayoutFrameSync(
@@ -311,7 +311,14 @@ export function openWorkspaceLayoutFrameSync(
       flush()
     },
     receive,
-    redraw: () => streamOpen && scheduleFlush(),
+    redraw: (keys) => {
+      for (const key of keys) {
+        shown.delete(key)
+      }
+      if (streamOpen) {
+        scheduleFlush()
+      }
+    },
     close: () => {
       live = false
       stopHeldWorkspacesListener()

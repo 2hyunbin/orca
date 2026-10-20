@@ -71,13 +71,14 @@ function openServerFrames(
       })
     }
   }
-  const regate = (): boolean => {
+  /** Gates the workspaces the stream holds that are this server's; returns the ones newly gated. */
+  const regate = (): string[] => {
     const keys = new Set(translator.keys().filter(owns))
-    const changed = keys.size !== gated.size || [...keys].some((key) => !gated.has(key))
-    if (changed) {
+    const added = [...keys].filter((key) => !gated.has(key))
+    if (added.length > 0 || keys.size !== gated.size) {
       gate(keys)
     }
-    return changed
+    return added
   }
   const handBack = (): void => {
     live = false
@@ -114,8 +115,10 @@ function openServerFrames(
       return
     }
     routing = next
-    if (live && regate()) {
-      sync.redraw()
+    const added = live ? regate() : []
+    if (added.length > 0) {
+      // The mirror may have drawn them meanwhile.
+      sync.redraw(added)
     }
   })
   const stopHandles = onMirroredTerminalHandlesChanged((environment, worktreeId) => {

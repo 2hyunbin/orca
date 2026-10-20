@@ -326,6 +326,35 @@ describe('a workspace that turns out to be the server’s after its snapshot', (
   })
 })
 
+describe('a workspace whose owner briefly reads unknown', () => {
+  it('is drawn from frames in full again when it rejoins the gate', async () => {
+    const store = mirroredStore()
+    install(store)
+    setServers(store, [CAPABLE])
+    const check = installLayoutFrameApplyCheck()
+    try {
+      const stream = streams.openTo(ENV)
+      streams.send(stream, senderSnapshot(mainLayoutFrameSender(), { [WT]: SERVER_LAYOUT }, 1))
+      await settle()
+      expect(check.fullBuilt).toEqual([WT])
+
+      hoisted.owners.delete(WT)
+      store.setState({ repos: [...store.getState().repos] })
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+      hoisted.owners.set(WT, ENV)
+      store.setState({ repos: [...store.getState().repos] })
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+      await settle()
+
+      // The mirror may have drawn it in the gap: the frames redraw it rather than trust it.
+      expect(check.fullBuilt).toEqual([WT, WT])
+      expect(check.failures).toEqual([])
+    } finally {
+      check.uninstall()
+    }
+  })
+})
+
 describe('server frames and this window’s layout.apply positions', () => {
   it('never release a local wait, whatever their seq, nor end it when the server stream stops', async () => {
     const store = mirroredStore()
