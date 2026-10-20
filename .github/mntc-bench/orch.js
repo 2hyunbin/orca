@@ -1,6 +1,7 @@
 // Windows-side orchestrator. Usage: node orch.js <phase...>. Env: DISTRO, LIN_NODE, LIN_RG, WIN_RG, PARCEL_WATCHER, OUT.
 const { execFileSync, spawn } = require('child_process'), fs = require('fs'), path = require('path')
 const { DISTRO, LIN_NODE, LIN_RG, WIN_RG, PARCEL_WATCHER, OUT } = process.env
+const OP_TIMEOUT_MIN = +(process.env.OP_TIMEOUT_MIN || 15)
 const MNT = '/mnt/c/bench/repo', WIN = 'C:\\bench\\repo', BASE = '/home/orca/bench/base'
 const HERE = '/mnt/' + __dirname[0].toLowerCase() + __dirname.slice(2).replace(/\\/g, '/')
 fs.mkdirSync(OUT, { recursive: true })
@@ -17,13 +18,21 @@ const PATHS = {
   a: { kind: 'bridge', linuxRepo: MNT }, b: { kind: 'host', linuxRepo: MNT },
   c: { kind: 'win', linuxRepo: MNT }, d: { kind: 'host', linuxRepo: BASE }
 }
-function ops(p, list, tag) {
-  const cfg = Buffer.from(JSON.stringify({ ...PATHS[p], winRepo: WIN, distro: DISTRO, linRg: LIN_RG, winRg: WIN_RG, ops: list })).toString('base64')
-  const out = PATHS[p].kind === 'host'
-    ? wsl(['--exec', LIN_NODE, `${HERE}/ops.js`, cfg])
-    : execFileSync(process.execPath, [path.join(__dirname, 'ops.js'), cfg], { windowsHide: true, maxBuffer: 1 << 28 }).toString()
+function ops(p, list, tag, extraCfg = {}) {
+  const cfg = Buffer.from(JSON.stringify({ ...PATHS[p], ...extraCfg, winRepo: WIN, distro: DISTRO, linRg: LIN_RG, winRg: WIN_RG, ops: list })).toString('base64')
+  const timeout = OP_TIMEOUT_MIN * 60_000
+  let out
+  try {
+    out = PATHS[p].kind === 'host'
+      ? wsl(['--exec', LIN_NODE, `${HERE}/ops.js`, cfg], { timeout })
+      : execFileSync(process.execPath, [path.join(__dirname, 'ops.js'), cfg], { windowsHide: true, maxBuffer: 1 << 28, timeout }).toString()
+  } catch (e) {
+    const timedOut = e.code === 'ETIMEDOUT' || e.signal === 'SIGTERM'
+    log('results.jsonl', { path: p, tag, ops: list, ...(timedOut ? { timeout: `> ${OP_TIMEOUT_MIN} min` } : { error: String(e.stdout ?? e).slice(0, 600) }) })
+    return []
+  }
   const r = JSON.parse(out.trim().split('\n').pop())
-  if (r.error) throw new Error(r.error)
+  if (r.error) { log('results.jsonl', { path: p, tag, ops: list, error: r.error }); return [] }
   for (const x of r) log('results.jsonl', { path: p, tag, ...x })
   return r
 }
@@ -48,6 +57,7 @@ const PHASES = {
   async fsops() {
     for (const op of ['readdir', 'read5mb', 'search']) for (const p of ['a', 'b', 'c', 'd']) coldWarm(p, op)
     coldWarm('a', 'search', { legacy: true })
+    ops('a', [{ op: 'readdir', reps: 3 }, { op: 'read5mb', reps: 3 }], 'unc-wsl$', { uncHost: 'wsl$' })
   },
   async lineendings() {
     // R23b: same-size Windows edit with a preserved mtime.
@@ -95,19 +105,20 @@ const PHASES = {
       const before = snapshot(); const at = Date.now(); act(); await sleep(4000)
       const after = snapshot()
       const changed = [...after.map].filter(([p, m]) => before.map.get(p) !== m).map(([p]) => p)
-      const hit = events.filter((e) => e.at >= at && e.path === target)
-      log('watch.jsonl', { action: name, inotifySaw: hit.length > 0, latencyMs: hit.length ? hit[0].at - at : null, eventTypes: hit.map((e) => e.type), bridgePollSaw: target.startsWith(MNT) ? changed.length > 0 : 'n/a', bridgePollChanged: changed, bridgePollMs: after.ms })
+      const hit = events.filter((e) => e.at >= at && e.path === target && e.src === 'parcel')
+      const raw = events.filter((e) => e.at >= at && e.path === target && e.src === 'fswatch')
+      log('watch.jsonl', { action: name, inotifySaw: hit.length > 0, rawFsWatchSaw: target.startsWith(MNT) && (target.includes('/p03/c/') || target.includes('/p04/d/')) ? raw.length > 0 : 'n/a', latencyMs: hit.length ? hit[0].at - at : null, eventTypes: hit.map((e) => e.type), bridgePollSaw: target.startsWith(MNT) ? changed.length > 0 : 'n/a', bridgePollChanged: changed, bridgePollMs: after.ms })
     }
     child.kill()
     winGit(['checkout', '--', '.']); winGit(['clean', '-fdq'])
   },
   async writes() {
-    ops('b', [{ op: 'stage', r23: true, reps: 5 }, { op: 'commit', r23: true, reps: 5 }, { op: 'diff', r23: true, reps: 5 }], 'write')
+    ops('b', [{ op: 'stage', r23: true, reps: 5 }, { op: 'commit', r23: true, reps: 3 }, { op: 'diff', r23: true, reps: 5 }], 'write')
     ops('c', [{ op: 'status', reps: 1 }], 'after-wsl-index-write'); ops('c', [{ op: 'status', reps: 3 }], 'warm-after-wsl-write')
     ops('c', [{ op: 'stage', reps: 5 }, { op: 'commit', reps: 5 }, { op: 'diff', reps: 5 }], 'write')
     ops('b', [{ op: 'status', r23: true, reps: 1 }], 'after-win-index-write'); ops('b', [{ op: 'status', r23: true, reps: 3 }], 'warm-after-win-write')
     ops('a', [{ op: 'status', reps: 1 }], 'plain-after-wsl-index-write')
-    ops('a', [{ op: 'stage', r23: true, reps: 5 }, { op: 'commit', r23: true, reps: 5 }, { op: 'diff', r23: true, reps: 5 }], 'write')
+    ops('a', [{ op: 'stage', r23: true, reps: 5 }, { op: 'commit', r23: true, reps: 3 }, { op: 'diff', r23: true, reps: 5 }], 'write')
     ops('d', [{ op: 'stage', reps: 5 }, { op: 'commit', reps: 5 }, { op: 'diff', reps: 5 }], 'write')
   }
 }

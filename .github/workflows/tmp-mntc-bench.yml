@@ -19,6 +19,7 @@ env:
   LIN_RG: /home/orca/rg
   PARCEL_WATCHER: /home/orca/w/node_modules/@parcel/watcher
   OUT: ${{ github.workspace }}\mntc-out
+  OP_TIMEOUT_MIN: '15'
 
 jobs:
   bench:
@@ -96,29 +97,27 @@ jobs:
             wsl.exe -d $env:DISTRO --exec sh -c 'uname -r; git --version; nproc; free -m; /home/orca/node/bin/node --version; /home/orca/rg --version | head -1; mount | grep -E " /mnt/c | / "; df -h / /mnt/c'
             & $env:WIN_RG --version | Select-Object -First 1
           } 2>&1 | Tee-Object $f -Append
-      - name: 'Phase: unflagged status (bridge today)'
+      - name: UNC access diagnostics
         if: ${{ !cancelled() }}
-        timeout-minutes: 90
-        run: node .github/mntc-bench/orch.js plain
-      - name: 'Phase: status with R23 flags'
-        if: ${{ !cancelled() }}
-        timeout-minutes: 60
-        run: node .github/mntc-bench/orch.js status
+        run: |
+          $f = Join-Path $env:OUT 'unc.txt'
+          & {
+            "whoami: $(whoami)  elevated: $(([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))"
+            foreach ($p in @("\\wsl.localhost\$env:DISTRO\home\orca\bench\base\README.md", "\\wsl.localhost\$env:DISTRO\mnt\c\bench\repo\README.md", "\\wsl$\$env:DISTRO\mnt\c\bench\repo\README.md", "\\wsl.localhost\$env:DISTRO\mnt\c\bench\repo\src\big")) {
+              try { $i = Get-Item -LiteralPath $p -ErrorAction Stop; "OK   $p  $($i.GetType().Name)" } catch { "FAIL $p  $($_.Exception.Message)" }
+            }
+          } 2>&1 | Tee-Object $f
       - name: 'Phase: listing, 5 MB read, search'
         if: ${{ !cancelled() }}
-        timeout-minutes: 60
+        timeout-minutes: 120
         run: node .github/mntc-bench/orch.js fsops
-      - name: 'Phase: line endings (R23b, staging)'
-        if: ${{ !cancelled() }}
-        timeout-minutes: 30
-        run: node .github/mntc-bench/orch.js lineendings
       - name: 'Phase: watcher'
         if: ${{ !cancelled() }}
         timeout-minutes: 15
         run: node .github/mntc-bench/orch.js watcher
       - name: 'Phase: stage, commit, diff, index thrash'
         if: ${{ !cancelled() }}
-        timeout-minutes: 60
+        timeout-minutes: 150
         run: node .github/mntc-bench/orch.js writes
       - uses: actions/upload-artifact@v7
         if: always()
