@@ -192,7 +192,7 @@ describe('agent hooks CLI handler', () => {
     const grokHooks = join(userDataPath, '.grok', 'hooks', 'orca-status.json')
     mkdirSync(join(userDataPath, '.grok', 'hooks'), { recursive: true })
     writeFileSync(grokHooks, '{"hooks":{}}\n')
-    const { GrokHookService } = await import('../../main/grok/hook-service')
+    const { GrokHookService } = await import('../../main/grok/hook-service.js')
     applyAgentStatusHooksEnabledMock.mockImplementationOnce(
       async (_enabled, _settings, options) => [new GrokHookService().install(options)]
     )
