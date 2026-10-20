@@ -90,4 +90,25 @@ describe('isOpenFileOnMoveOwner', () => {
     ).toBe(false)
     expect(isOpenFileOnMoveOwner(state, tab(), owner)).toBe(false)
   })
+
+  it('moves a tab from another workspace only when that workspace is on the renaming host', () => {
+    useAppStore.setState({
+      repos: [
+        { id: 'repo-ssh', connectionId: 'box' },
+        { id: 'repo-local', connectionId: null }
+      ] as never,
+      worktreesByRepo: {
+        'repo-ssh': [{ id: 'wt-ssh', repoId: 'repo-ssh' }],
+        'repo-local': [{ id: 'wt-local', repoId: 'repo-local' }]
+      } as never
+    })
+    const state = useAppStore.getState()
+    const owner = editorMoveOwnerFromContext(
+      { target: { kind: 'local' }, expectedExecutionHostId: 'ssh:box' },
+      'wt-1'
+    )
+    const inWorkspace = (worktreeId: string) => ({ worktreeId, runtimeEnvironmentId: null })
+    expect(isOpenFileOnMoveOwner(state, inWorkspace('wt-ssh'), owner)).toBe(true)
+    expect(isOpenFileOnMoveOwner(state, inWorkspace('wt-local'), owner)).toBe(false)
+  })
 })

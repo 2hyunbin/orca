@@ -86,7 +86,24 @@ export function isOpenFileOnMoveOwner(
     return true
   }
   const tabHost = workspaceHostKey(state, file.worktreeId)
-  return tabHost !== null && tabHost === workspaceHostKey(state, owner.worktreeId)
+  return tabHost !== null && tabHost === moveHostKey(state, owner)
+}
+
+/** The host the rename was sent to, when its route named one; else its workspace's rows. */
+function moveHostKey(state: WorktreeOperationRouteState, owner: EditorMoveOwner): string | null {
+  if (owner.sshHostId === undefined) {
+    return workspaceHostKey(state, owner.worktreeId)
+  }
+  const at = parseExecutionHostId(owner.sshHostId ?? 'local')
+  if (at?.kind !== 'ssh' && at?.kind !== 'local') {
+    return null
+  }
+  return authorityKey({
+    endpoint: owner.runtimeEnvironmentId
+      ? { kind: 'environment', environmentId: owner.runtimeEnvironmentId }
+      : { kind: 'self' },
+    at: at.id
+  })
 }
 
 /** A workspace's host from its rows; one without rows is this app's, as everywhere; a twin has none. */
