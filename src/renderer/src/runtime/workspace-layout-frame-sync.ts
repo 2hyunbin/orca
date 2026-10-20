@@ -26,6 +26,7 @@ import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layou
 import { liveTitleUpdates } from './workspace-layout-frame-changes'
 import { terminalLayoutsWithFrameBindings } from './workspace-layout-frame-bindings'
 import { terminalLayoutsWithFramePaneTrees } from './workspace-layout-frame-pane-trees'
+import { paneStartsWithFrames } from './workspace-layout-frame-pane-starts'
 import {
   fullLayoutFrameBuildPatch,
   workspaceLayoutFrameBuildPatch,
@@ -91,6 +92,8 @@ export function openWorkspaceLayoutFrameSync(
   /** Workspaces whose pane trees the store may still lack: a build ran for them, or a tab the
    *  window's own command held skipped one. */
   let paneTreeKeys = new Set<string>()
+  /** Workspace key → the pane keys whose start the store shows. */
+  const paneStartsShown = new Map<string, ReadonlySet<string>>()
 
   const show = (patch: LayoutFrameBuildPatch): void => {
     if (Object.keys(patch).length > 0) {
@@ -218,6 +221,12 @@ export function openWorkspaceLayoutFrameSync(
     }
     if (titleUpdates.length > 0) {
       store.getState().updateTabTitles(titleUpdates)
+    }
+    const starts = store.getState().terminalPaneStartsByPaneKey
+    const gone = [...paneStartsShown.keys()].filter((key) => !(key in cache))
+    const nextStarts = paneStartsWithFrames(starts, [...changed, ...gone], cache, paneStartsShown)
+    if (nextStarts !== starts) {
+      store.setState({ terminalPaneStartsByPaneKey: nextStarts })
     }
     for (const key of [...fullBuilt, ...workspaceBuilt]) {
       shown.add(key)
