@@ -4,13 +4,14 @@ import {
 } from '../../../../../shared/agent-session-resume'
 import { useAppStore } from '@/store'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import type { ReattachPayloadSession } from './reattach-payload-session'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 import type { PtyPaneStartup } from '../pty-connection-types'
 
 type SavedStartup = ColdRestoreAgentResumeStartup | PtyPaneStartup
 
 export function captureTerminalLaunchContext(
-  session: ConnectPanePtySession,
+  session: ConnectPanePtySession | ReattachPayloadSession,
   startup: SavedStartup
 ) {
   const state = useAppStore.getState()
@@ -25,7 +26,7 @@ export function captureTerminalLaunchContext(
 export type TerminalLaunchContext = ReturnType<typeof captureTerminalLaunchContext>
 
 export function applyTerminalLaunchResult(
-  session: ConnectPanePtySession,
+  session: ConnectPanePtySession | ReattachPayloadSession,
   result: TerminalLaunchResult & { isReattach?: boolean },
   context: TerminalLaunchContext,
   kind: 'creator' | 'observer' | 'candidate'
