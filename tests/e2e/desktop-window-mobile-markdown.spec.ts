@@ -183,7 +183,7 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
       .not.toBe('')
 
     // Why poll: the desktop persists its session (which names the file) on a debounce.
-    let answer: unknown = null
+    let read: RuntimeMarkdownReadTabResult | null = null
     await expect
       .poll(
         async () => {
@@ -191,14 +191,14 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
             worktree,
             tabId
           })
-          answer = response.ok ? response.result : response.error
-          return response.ok
+          read = response.ok ? response.result : null
+          return response.ok ? 'read' : `${response.error.code}: ${response.error.message}`
         },
         { timeout: 30_000 }
       )
-      .toBe(true)
+      .toBe('read')
     const disk = readFileSync(untitledPath, 'utf8')
-    expect(answer).toMatchObject({
+    expect(read).toMatchObject({
       tabId,
       filePath: untitledPath,
       content: disk,
@@ -207,13 +207,12 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
       editable: false,
       readOnlyReason: 'unsupported_untitled'
     })
-    expect(JSON.stringify(answer)).not.toContain(DRAFT_LINE)
+    expect(JSON.stringify(read)).not.toContain(DRAFT_LINE)
 
-    const read = answer as RuntimeMarkdownReadTabResult
     const save = await phone.request('markdown.saveTab', {
       worktree,
       tabId,
-      baseVersion: read.version,
+      baseVersion: read!.version,
       content: PHONE
     })
     expect(save).toMatchObject({ ok: false, error: { message: 'unsupported_untitled' } })
@@ -230,7 +229,7 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
     const missingSave = await phone.request('markdown.saveTab', {
       worktree,
       tabId,
-      baseVersion: read.version,
+      baseVersion: read!.version,
       content: PHONE
     })
     expect(missingSave).toMatchObject({ ok: false, error: { message: 'unsupported_untitled' } })
