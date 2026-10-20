@@ -95,7 +95,8 @@ describe('mobile in-place queued Edit', () => {
     message: AgentSessionQueuedMessage,
     editSupport: boolean | null = true,
     imageEdit = false,
-    composerImages?: MobileQueuedEditComposerImages
+    composerImages?: MobileQueuedEditComposerImages,
+    queuedImageCards: boolean | 'absent' = true
   ) {
     vi.clearAllMocks()
     sendRequest.mockImplementation(async (method) =>
@@ -108,7 +109,12 @@ describe('mobile in-place queued Edit', () => {
     await act(async () => {
       renderer = create(createElement(Harness, { editSupport, imageEdit }))
     })
-    act(() => listener?.(snapshotEvent({ queuedMessages: [message], runningTurn: true })))
+    act(() =>
+      listener?.({
+        ...snapshotEvent({ queuedMessages: [message], runningTurn: true }),
+        ...(queuedImageCards === 'absent' ? {} : { queuedImageCards })
+      })
+    )
     if (editSupport !== null) {
       await act(async () => {
         expect(await hook!.queued.edit!(message.messageId, undefined, composerImages)).toBe(true)
@@ -199,6 +205,23 @@ describe('mobile in-place queued Edit', () => {
     expect(append).not.toHaveBeenCalled()
   })
 
+  it.each(['absent', false] as const)(
+    'edits text only when the reader verdict is %s',
+    async (verdict) => {
+      const message = queuedDraft({ messageId: 'text-only' })
+      await mount(message, true, true, undefined, verdict)
+      expect(hook!.queued.editor!.images).toBeUndefined()
+      act(() => hook!.queued.editor!.change('text edit'))
+      await act(async () => {
+        expect(await hook!.queued.editor!.save()).toBe(true)
+      })
+      const update = sendRequest.mock.calls.find(
+        ([method]) => method === 'agentSession.queuedMessageUpdate'
+      )
+      expect(fieldsOf(update?.[1])).not.toHaveProperty('images')
+    }
+  )
+
   it('removes and adds images, saves ordered markers, and recovers unsaved edits', async () => {
     const kept = {
       type: 'image-ref' as const,
@@ -225,8 +248,8 @@ describe('mobile in-place queued Edit', () => {
     const composerImages: MobileQueuedEditComposerImages = {
       upload: (sink) =>
         new Promise<void>((resolve) => {
-          sink.onStart()
           landPhoto = () => {
+            sink.onStart()
             sink.onImage(photo)
             resolve()
           }
@@ -361,6 +384,7 @@ describe('mobile in-place queued Edit', () => {
       expect(hook!.queued.editor!.saving).toBe(true)
       await act(async () => renderer?.update(createElement(Harness, { sessionId: 'other-chat' })))
       expect(append).not.toHaveBeenCalled()
+      await act(async () => renderer?.update(createElement(Harness)))
       await act(async () => {
         answer?.(mutationOk({ status, messageId: message.messageId, fingerprint: 'new' }))
         await save
@@ -372,53 +396,75 @@ describe('mobile in-place queued Edit', () => {
     }
   )
 
-  it('retires a removed card during Save and ignores its late refusal while editing another card', async () => {
-    const message = queuedDraft({ messageId: 'lost-reply-card' })
-    const nextMessage = queuedDraft({ messageId: 'next-card', position: 2 })
-    await mount(message)
-    act(() => listener?.(batchEvent([message, nextMessage])))
-    expect(hook!.queued.cards.map((card) => card.messageId)).toEqual([
-      message.messageId,
-      nextMessage.messageId
-    ])
-    let answer: ((response: RpcResponse) => void) | undefined
-    sendRequest.mockImplementation((method) =>
-      method === 'agentSession.queuedMessageUpdate'
-        ? new Promise<RpcResponse>((resolve) => {
-            answer = resolve
-          })
-        : Promise.resolve(ok({ status: 'held' }))
-    )
-    act(() => hook!.queued.editor!.change('submitted edit'))
-    let save: Promise<boolean> | undefined
-    act(() => {
-      save = hook!.queued.editor!.save()
-    })
-    expect(hook!.queued.editor?.saving).toBe(true)
-    act(() => listener?.(batchEvent([nextMessage])))
-    expect(hook!.queued.editor).toBeUndefined()
-    await act(async () => {
-      expect(await hook!.queued.edit!(nextMessage.messageId)).toBe(true)
-    })
-    act(() => hook!.queued.editor!.change('next edit'))
-    await act(async () => {
-      answer?.(
-        ok({
-          ok: false,
-          refusal: { code: 'agent_session_operation_invalid', message: 'Could not edit.' }
-        })
+  it.each(['updated', 'unchanged', 'gone', 'changed', 'rejected', 'unknown'] as const)(
+    'settles a removed card Save (%s) without disturbing another edit',
+    async (status) => {
+      const message = queuedDraft({ messageId: 'lost-reply-card' })
+      const nextMessage = queuedDraft({ messageId: 'next-card', position: 2 })
+      const photo = { path: '/tmp/added.png', previewUri: 'file:///added.png' }
+      const appendImages = vi.fn(() => true)
+      await mount(message, true, true, {
+        upload: async (sink) => {
+          sink.onImage(photo)
+        },
+        append: appendImages
+      })
+      await act(async () => hook!.queued.editor!.images!.attach!())
+      act(() => listener?.({ ...batchEvent([message, nextMessage]), queuedImageCards: true }))
+      expect(hook!.queued.cards.map((card) => card.messageId)).toEqual([
+        message.messageId,
+        nextMessage.messageId
+      ])
+      let answer: ((response: RpcResponse) => void) | undefined
+      sendRequest.mockImplementation((method) =>
+        method === 'agentSession.queuedMessageUpdate'
+          ? new Promise<RpcResponse>((resolve, reject) => {
+              answer = (response) =>
+                status === 'unknown'
+                  ? reject(markRpcDeliveryUnknown(new Error('reply lost')))
+                  : resolve(response)
+            })
+          : Promise.resolve(ok({ status: 'held' }))
       )
-      expect(await save).toBe(false)
-    })
-    expect(hook!.queued.editor).toMatchObject({
-      messageId: nextMessage.messageId,
-      text: 'next edit',
-      saving: false
-    })
-    expect(append).not.toHaveBeenCalled()
-    expect(error).not.toHaveBeenCalled()
-    expect(resolved).not.toHaveBeenCalled()
-  })
+      act(() => hook!.queued.editor!.change('submitted edit'))
+      let save: Promise<boolean> | undefined
+      act(() => {
+        save = hook!.queued.editor!.save()
+      })
+      expect(hook!.queued.editor?.saving).toBe(true)
+      act(() => listener?.(batchEvent([nextMessage])))
+      expect(hook!.queued.editor).toBeUndefined()
+      await act(async () => {
+        expect(await hook!.queued.edit!(nextMessage.messageId)).toBe(true)
+      })
+      act(() => hook!.queued.editor!.change('next edit'))
+      await act(async () => {
+        answer?.(
+          status === 'rejected'
+            ? ok({
+                ok: false,
+                refusal: { code: 'agent_session_operation_invalid', message: 'Could not edit.' }
+              })
+            : mutationOk({ status, messageId: message.messageId, fingerprint: 'new' })
+        )
+        expect(await save).toBe(status === 'updated' || status === 'unchanged')
+      })
+      expect(hook!.queued.editor).toMatchObject({
+        messageId: nextMessage.messageId,
+        text: 'next edit',
+        saving: false
+      })
+      const succeeded = status === 'updated' || status === 'unchanged'
+      expect(append).toHaveBeenCalledTimes(succeeded ? 0 : 1)
+      expect(appendImages).toHaveBeenCalledTimes(succeeded ? 0 : 1)
+      if (!succeeded) {
+        expect(append).toHaveBeenCalledWith('submitted edit')
+        expect(appendImages).toHaveBeenCalledWith([expect.objectContaining(photo)])
+      }
+      expect(error).toHaveBeenCalledTimes(succeeded ? 0 : 1)
+      expect(resolved).toHaveBeenCalledTimes(succeeded ? 1 : 0)
+    }
+  )
 
   it('keeps a refused Save in the editor and closes only when the published card is gone', async () => {
     const message = queuedDraft({ messageId: 'refused-card' })

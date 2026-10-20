@@ -20,6 +20,8 @@ type ShowToast = (message: string, durationMs?: number) => void
 export type MobileNativeChatImageUploadSink = {
   onStart: () => void
   onImage: (image: UploadedNativeChatImage) => void
+  /** Settles attachment state before success or error feedback. */
+  onComplete?: () => void
 }
 
 export function useMobileNativeChatImageUpload(args: {
@@ -53,26 +55,30 @@ export function useMobileNativeChatImageUpload(args: {
   const [isAttaching, setIsAttaching] = useState(false)
   const picker = useMediaPicker()
   const attachingCount = useRef(0)
-  const connStateRef = useRef(connState)
+  const serviceRef = useRef({ scopeKey, client, connState, getActiveWorktreeConnectionId })
   useLayoutEffect(() => {
-    connStateRef.current = connState
-  }, [connState])
+    serviceRef.current = { scopeKey, client, connState, getActiveWorktreeConnectionId }
+  }, [client, connState, getActiveWorktreeConnectionId, scopeKey])
 
   /** Picks and uploads; each finished image reaches `sink`, and a failure is told as a toast. */
   const uploadImages = useCallback(
     async (source: MobileImageSource, sink: MobileNativeChatImageUploadSink): Promise<void> => {
+      // An open edit keeps its destination while its upload client can be replaced.
+      const service = serviceRef.current
       if (
-        !client ||
-        connState !== 'connected' ||
+        service.scopeKey !== scopeKey ||
+        !service.client ||
+        service.connState !== 'connected' ||
         (!activeHandleRef.current && !structuredNativeChat)
       ) {
         return
       }
       let uploaded = false
+      let uploadError: unknown = null
       try {
         await uploadMobileNativeChatImages(source, {
-          client,
-          getConnectionId: getActiveWorktreeConnectionId,
+          client: service.client,
+          getConnectionId: service.getActiveWorktreeConnectionId,
           pickImages: picker.pickImages,
           onImageUploaded: (image) => {
             uploaded = true
@@ -80,10 +86,18 @@ export function useMobileNativeChatImageUpload(args: {
           },
           onUploadStart: sink.onStart
         })
-      } catch (uploadError) {
+      } catch (error) {
+        uploadError = error
+      } finally {
+        sink.onComplete?.()
+      }
+      if (uploaded) {
+        onAttachSuccess?.()
+      }
+      if (uploadError !== null) {
         const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
         onError?.()
-        if (connStateRef.current !== 'connected') {
+        if (serviceRef.current.connState !== 'connected') {
           showToast('Attach failed (disconnected)', 1500)
         } else if (uploadError instanceof ImageLibraryPermissionError) {
           showToast('Photo permission denied', 1500)
@@ -93,21 +107,8 @@ export function useMobileNativeChatImageUpload(args: {
           showToast('Attach failed', 1500)
         }
       }
-      if (uploaded) {
-        onAttachSuccess?.()
-      }
     },
-    [
-      activeHandleRef,
-      client,
-      connState,
-      getActiveWorktreeConnectionId,
-      onAttachSuccess,
-      onError,
-      picker,
-      showToast,
-      structuredNativeChat
-    ]
+    [activeHandleRef, scopeKey, onAttachSuccess, onError, picker, showToast, structuredNativeChat]
   )
 
   const attachImage = useCallback(
@@ -118,26 +119,25 @@ export function useMobileNativeChatImageUpload(args: {
       }
       let started = false
       const uploadedImages: UploadedNativeChatImage[] = []
-      try {
-        await uploadImages(source, {
-          onImage: (image) => uploadedImages.push(image),
-          onStart: () => {
-            started = true
-            attachingCount.current += 1
-            setIsAttaching(true)
+      await uploadImages(source, {
+        onImage: (image) => uploadedImages.push(image),
+        onStart: () => {
+          started = true
+          attachingCount.current += 1
+          setIsAttaching(true)
+        },
+        onComplete: () => {
+          if (started) {
+            attachingCount.current -= 1
+            if (attachingCount.current === 0) {
+              setIsAttaching(false)
+            }
           }
-        })
-      } finally {
-        if (started) {
-          attachingCount.current -= 1
-          if (attachingCount.current === 0) {
-            setIsAttaching(false)
+          if (uploadedImages.length > 0) {
+            onImagesUploaded(scope, uploadedImages)
           }
         }
-      }
-      if (uploadedImages.length > 0) {
-        onImagesUploaded(scope, uploadedImages)
-      }
+      })
     },
     [onImagesUploaded, scopeKey, uploadImages]
   )

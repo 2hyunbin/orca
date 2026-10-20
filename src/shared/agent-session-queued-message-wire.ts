@@ -19,6 +19,8 @@ export type AgentSessionQueuePause = { reason: 'stopped' }
 
 /** What rides beside a frame's `queuedMessages`, published together with the list. */
 export type AgentSessionQueuePublicationFields = {
+  /** This reader receives image cards; absent on older hosts. */
+  queuedImageCards?: boolean
   /** Null when the queue sends on its own. */
   queuePause?: AgentSessionQueuePause | null
   /** The card the queue sends next once nothing runs, null while anything holds the queue.

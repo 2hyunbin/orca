@@ -25,6 +25,8 @@ import {
 } from './structured-agent-session-host-current-work'
 
 export type QueuePublication = {
+  /** Set only by the per-reader projection. */
+  queuedImageCards?: boolean
   queuedMessages: AgentSessionQueuedMessage[]
   queuePause: AgentSessionQueuePause | null
   /** The card the drain sends next as soon as nothing runs (`nextStructuredQueuedMessage`), so a

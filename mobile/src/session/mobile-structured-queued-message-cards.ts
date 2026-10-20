@@ -21,6 +21,7 @@ import {
 import { readAgentMessageSource } from '../../../src/shared/agent-session-message-source'
 import { getRuntimePathBasename } from '../../../src/shared/cross-platform-path'
 import type { QueuedMessageImageBlock } from '../../../src/shared/queued-message-edit'
+import { stripSentImagePromptMarkers } from '../../../src/shared/native-chat-image-transcript-markers'
 import { agentMessageAttribution } from './mobile-agent-message-attribution'
 
 export type MobileQueuedMessageCard = {
@@ -57,8 +58,9 @@ export function mobileQueuedMessageCardLine(
   card: Pick<MobileQueuedMessageCard, 'text' | 'images'>
 ): string {
   const [first, ...rest] = card.images ?? []
-  if (card.text.trim() || !first) {
-    return card.text
+  const text = stripSentImagePromptMarkers(card.text, card.images?.length ?? 0)
+  if (text.trim() || !first) {
+    return text
   }
   return rest.length === 0 ? mobileQueuedImageLabel(first) : `${rest.length + 1} images`
 }

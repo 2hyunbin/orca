@@ -6,7 +6,6 @@ import type {
 import { agentSessionSendBodyFingerprint } from '../../../src/shared/structured-agent-session-send-mutation'
 import {
   queuedEditDirty,
-  queuedEditImagesPending,
   queuedEditInput,
   queuedEditKeptImages,
   queuedEditSaveHeld,
@@ -22,7 +21,7 @@ import type { MobileStructuredAgentMutate } from './use-mobile-structured-agent-
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 import {
   handOffMobileQueuedEdit,
-  mobileQueuedEditImageTiles,
+  mobileQueuedEditImageEditor,
   useMobileQueuedEditImageActions,
   type MobileQueuedEditComposerImages,
   type MobileQueuedEditImagesEditor,
@@ -74,6 +73,7 @@ export function useMobileStructuredQueuedEdit(args: {
     clientRef.current = { sessionKey, client }
   }, [client, sessionKey])
   const active = useRef<Edit | null>(null)
+  const abandoned = useRef(0)
   /** Save answered `changed`: the editor reopens on the newer text once the card shows it. */
   const reopen = useRef<{
     scope: string
@@ -94,13 +94,11 @@ export function useMobileStructuredQueuedEdit(args: {
 
   useEffect(() => {
     return () => {
-      const edit = active.current
-      active.current = null
+      abandoned.current += 1
       reopen.current = null
-      setShown(null)
-      edit?.lease.end()
+      close()
     }
-  }, [sessionKey, args.chatActive])
+  }, [sessionKey, args.chatActive, close])
 
   const gone = useCallback(
     (edit: Edit) => {
@@ -152,7 +150,7 @@ export function useMobileStructuredQueuedEdit(args: {
       render(edit)
       void edit.lease.acquired.then(
         (answer) => {
-          if (!isOpen(active, edit) || edit.saving) {
+          if (active.current !== edit || edit.saving) {
             return
           }
           if (answer.status === 'gone') {
@@ -193,6 +191,7 @@ export function useMobileStructuredQueuedEdit(args: {
       close()
       return true
     }
+    const epoch = abandoned.current
     edit.saving = true
     render(edit)
     const result = await mutate<AgentSessionQueuedMessageUpdateResult>(
@@ -204,19 +203,34 @@ export function useMobileStructuredQueuedEdit(args: {
         text: input.text,
         ...(input.images ? { images: input.images } : {})
       },
-      () => isOpen(active, edit)
+      () => active.current === edit
     )
     // A reply landing mid chat switch belongs to the chat being left.
-    if (!isOpen(active, edit) || clientRef.current.sessionKey !== edit.scope) {
+    if (abandoned.current !== epoch || clientRef.current.sessionKey !== edit.scope) {
       return false
     }
     edit.saving = false
-    if (result.status === 'accepted') {
-      if (result.value.status === 'updated' || result.value.status === 'unchanged') {
+    if (
+      result.status === 'accepted' &&
+      (result.value.status === 'updated' || result.value.status === 'unchanged')
+    ) {
+      if (active.current === edit) {
         close()
-        onActionResolved?.()
-        return true
       }
+      onActionResolved?.()
+      return true
+    }
+    if (active.current !== edit) {
+      if (handOffMobileQueuedEdit(edit, args.appendComposerText)) {
+        onSendError(
+          result.status === 'unknown'
+            ? "Couldn't confirm Save. Your edit is in the chat box; check before sending it again."
+            : "Couldn't save this queued message. Your edit is in the chat box."
+        )
+      }
+      return false
+    }
+    if (result.status === 'accepted') {
       if (result.value.status === 'gone') {
         gone(edit)
         return false
@@ -282,16 +296,9 @@ export function useMobileStructuredQueuedEdit(args: {
           text: shown.text,
           saving: shown.saving,
           canSave: edited.ok && !queuedEditSaveHeld(shown.body, shown, imagesCapable),
-          ...(imagesCapable
-            ? {
-                images: {
-                  tiles: mobileQueuedEditImageTiles(shown),
-                  uploading: queuedEditImagesPending(shown),
-                  ...(args.acceptsImages && shown.composerImages ? { attach: images.attach } : {}),
-                  remove: images.remove
-                }
-              }
-            : {}),
+          images: imagesCapable
+            ? mobileQueuedEditImageEditor(shown, args.acceptsImages, images)
+            : undefined,
           change,
           save,
           cancel: () => {
@@ -302,8 +309,4 @@ export function useMobileStructuredQueuedEdit(args: {
         }
       : undefined
   return { begin, editor }
-}
-
-function isOpen(active: { current: Edit | null }, edit: Edit): boolean {
-  return active.current === edit
 }

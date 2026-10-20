@@ -170,7 +170,7 @@ describe('MobileNativeChatQueuedMessages', () => {
     const shot = { type: 'image-ref' as const, path: '/host/tmp/shot.png' }
     const mounted = await mount({
       cards: [
-        card({ messageId: 'a', text: '', images: [shot] }),
+        card({ messageId: 'a', text: '[Image #1] ', images: [shot] }),
         card({ messageId: 'b', images: [shot, shot] })
       ],
       onEdit: vi.fn(async () => true)

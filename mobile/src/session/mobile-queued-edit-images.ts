@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react'
 import type { AgentSessionQueuedMessage } from '../../../src/shared/agent-session-wire'
 import {
   queuedEditBaseText,
+  queuedEditImagesPending,
   queuedEditTextForKeptImages,
   type QueuedMessageEditDraft
 } from '../../../src/shared/queued-message-edit'
@@ -73,6 +74,20 @@ export type MobileQueuedEditImagesEditor = {
   remove: (id: string) => void
 }
 
+/** The open edit's current strip and actions. */
+export function mobileQueuedEditImageEditor(
+  edit: MobileQueuedEditImageState,
+  acceptsImages: boolean | undefined,
+  actions: { attach: () => void; remove: (id: string) => void }
+): MobileQueuedEditImagesEditor {
+  return {
+    tiles: mobileQueuedEditImageTiles(edit),
+    uploading: queuedEditImagesPending(edit),
+    ...(acceptsImages && edit.composerImages ? { attach: actions.attach } : {}),
+    remove: actions.remove
+  }
+}
+
 export function mobileQueuedEditImageTiles(
   edit: MobileQueuedEditImageState
 ): MobileQueuedEditImageTile[] {
@@ -126,13 +141,13 @@ export function useMobileQueuedEditImageActions<
       }
     }
     const pendingId = `upload-${++addedIds.current}`
+    // Picking includes asynchronous photo reads before the transfer starts.
+    edit.added = [...edit.added, { id: pendingId, path: '', previewUri: '', pending: true }]
+    shown()
     // A photo landing after the edit closed belongs to no card; its upload is left unused.
     void edit.composerImages
       .upload({
-        onStart: () => {
-          edit.added = [...edit.added, { id: pendingId, path: '', previewUri: '', pending: true }]
-          shown()
-        },
+        onStart: () => {},
         onImage: (image) => {
           addedIds.current += 1
           edit.added = [...edit.added, { id: `added-${addedIds.current}`, ...image }]
