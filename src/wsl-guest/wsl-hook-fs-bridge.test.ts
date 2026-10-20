@@ -5,7 +5,12 @@
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { posix } from 'node:path'
 import { tmpdir } from 'node:os'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const rootCapture = vi.hoisted(() => ({ resolve: vi.fn() }))
+vi.mock('../main/claude/claude-hook-target', () => ({
+  resolveSystemClaudeHookTarget: rootCapture.resolve
+}))
 
 import { registerWslHookFsHandlers } from './wsl-hook-fs-bridge'
 import type { MethodHandler, RelayDispatcher, RequestContext } from './dispatcher'
@@ -29,6 +34,10 @@ describe.skipIf(process.platform === 'win32')('registerWslHookFsHandlers (WSL fs
 
   beforeEach(() => {
     home = mkdtempSync(posix.join(tmpdir(), 'wsl-fs-home-'))
+    rootCapture.resolve.mockResolvedValue({
+      kind: 'system-default',
+      configDir: posix.join(home, '.claude')
+    })
     handlers = new Map<string, MethodHandler>()
     // Capture handlers from a minimal fake dispatcher — registration only ever
     // calls onRequest, so a real RelayDispatcher is unnecessary.
@@ -42,6 +51,53 @@ describe.skipIf(process.platform === 'win32')('registerWslHookFsHandlers (WSL fs
 
   afterEach(() => {
     rmSync(home, { recursive: true, force: true })
+  })
+
+  it('awaits the guest-derived custom root before allowing atomic writes outside HOME', async () => {
+    const custom = mkdtempSync(posix.join(tmpdir(), 'wsl-fs-custom-'))
+    let resolveCapture!: (value: { kind: 'system-default'; configDir: string }) => void
+    rootCapture.resolve.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCapture = resolve
+      })
+    )
+    try {
+      const path = posix.join(custom, 'settings.json')
+      let finished = false
+      const pending = call(WSL_HOOK_FS_METHODS.writeFile, {
+        path: `${path}.tmp`,
+        content: '{}'
+      }).then((value) => {
+        finished = true
+        return value
+      })
+      await Promise.resolve()
+      expect(finished).toBe(false)
+      resolveCapture({ kind: 'system-default', configDir: custom })
+      expect(await pending).toEqual({ ok: true })
+      expect(await call(WSL_HOOK_FS_METHODS.rename, { src: `${path}.tmp`, dst: path })).toEqual({
+        ok: true
+      })
+      expect(await call(WSL_HOOK_FS_METHODS.readFile, { path })).toEqual({
+        ok: true,
+        content: '{}'
+      })
+      expect((await call(WSL_HOOK_FS_METHODS.stat, { path })).ok).toBe(true)
+      expect((await call(WSL_HOOK_FS_METHODS.chmod, { path, mode: 0o600 })).ok).toBe(true)
+      expect((await call(WSL_HOOK_FS_METHODS.readdir, { path: posix.dirname(custom) })).ok).toBe(
+        true
+      )
+      expect(
+        await call(WSL_HOOK_FS_METHODS.rename, { src: path, dst: `${custom}-other/settings.json` })
+      ).toMatchObject({ ok: false, errno: 'EACCES' })
+      expect(await call(WSL_HOOK_FS_METHODS.mkdir, { path: `${custom}-other` })).toMatchObject({
+        ok: false,
+        errno: 'EACCES'
+      })
+      expect((await call(WSL_HOOK_FS_METHODS.unlink, { path })).ok).toBe(true)
+    } finally {
+      rmSync(custom, { recursive: true, force: true })
+    }
   })
 
   it('returns the resolved home and merges linkStatus extras', async () => {

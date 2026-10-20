@@ -1,3 +1,5 @@
+import type { ManagedHookInvocation } from '../../main/claude/claude-hook-target'
+import { readUserClaudeConfigDirAsSet } from '../../main/claude-accounts/claude-profile-paths'
 import { join } from 'node:path'
 import type { CommandHandler } from '../dispatch'
 import { printResult } from '../format'
@@ -44,7 +46,7 @@ function legacyProfileStateLocation(): ProfileStateOfflineLocation {
 }
 
 async function readHookSettingsFromDisk(): Promise<
-  Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents'>
+  Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents' | 'agentCmdOverrides'>
 > {
   const { acquireProfileStateRuntimeAdmission } =
     await import('../../main/persistence/profile-state/profile-state-access.js')
@@ -57,7 +59,7 @@ async function readHookSettingsFromDisk(): Promise<
 }
 
 async function readAdmittedHookSettingsFromDisk(): Promise<
-  Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents'>
+  Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents' | 'agentCmdOverrides'>
 > {
   const { readAgentHookSettingsFromProfileState } =
     await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
@@ -157,6 +159,11 @@ function formatAgentHookCommandResult(result: AgentHookCommandResult): string {
     .join('\n')
 }
 
+function hookInvocation(): ManagedHookInvocation {
+  const configDir = readUserClaudeConfigDirAsSet(process.env)
+  return configDir === undefined ? {} : { env: { CLAUDE_CONFIG_DIR: configDir } }
+}
+
 async function setAgentHooksEnabled(
   client: RuntimeClient,
   enabled: boolean
@@ -166,9 +173,26 @@ async function setAgentHooksEnabled(
   const updatedRuntime = await updateRunningRuntime(client, enabled)
   const offlineUpdate = updatedRuntime ? null : await updateEnabledOnDisk(enabled)
   const settingsPath = offlineUpdate?.settingsPath ?? (await getDataPath())
-  const statuses = updatedRuntime
-    ? getManagedAgentHookStatuses()
-    : await applyAgentStatusHooksEnabled(enabled, offlineUpdate?.settings)
+  const invocation = hookInvocation()
+  let statuses: AgentHookInstallStatus[]
+  if (updatedRuntime && invocation.env) {
+    const settings = await readHookSettingsFromDisk()
+    const applied = await applyAgentStatusHooksEnabled(enabled, settings, {
+      ...invocation,
+      agents: ['claude'],
+      userInitiated: true
+    })
+    statuses = (await getManagedAgentHookStatuses(invocation)).map(
+      (status) => applied.find((result) => result.agent === status.agent) ?? status
+    )
+  } else {
+    statuses = updatedRuntime
+      ? await getManagedAgentHookStatuses(invocation)
+      : await applyAgentStatusHooksEnabled(enabled, offlineUpdate?.settings, {
+          ...invocation,
+          userInitiated: true
+        })
+  }
   return {
     enabled,
     settingsPath,
@@ -206,7 +230,7 @@ export const AGENT_HOOK_HANDLERS: Record<string, CommandHandler> = {
       enabled: (await readHookSettingsFromDisk()).agentStatusHooksEnabled,
       settingsPath: await getDataPath(),
       appliedBy: 'offline',
-      statuses: getManagedAgentHookStatuses()
+      statuses: await getManagedAgentHookStatuses(hookInvocation())
     }
     printResult(localSuccess(result), json, formatAgentHookCommandResult)
   },
