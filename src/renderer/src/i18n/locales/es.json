@@ -18064,7 +18064,7 @@
         "claudeManagedNotSignedIn": "Esta cuenta de Claude no ha iniciado sesión. Vuelve a iniciar sesión en la configuración de Cuentas de Claude.",
         "codexSystemNotSignedIn": "Codex no ha iniciado sesión. Ejecuta `{{loginCommand}}`.",
         "codexManagedNotSignedIn": "Esta cuenta de Codex no ha iniciado sesión. Vuelve a iniciar sesión en la configuración de Cuentas de Codex.",
-        "antigravityNotSignedIn": "Antigravity no ha iniciado sesión. Inicia sesión en Ajustes → Cuentas → Antigravity.",
+        "antigravityNotSignedIn": "Antigravity no ha iniciado sesión. Inicia sesión en Ajustes → Cuentas → Antigravity. Después, vuelve a enviar tu mensaje.",
         "cliMissing": "No se encontró {{agent}} en el equipo que ejecuta este chat. Instálelo o revise su Comando en Ajustes → Agentes.",
         "signInFirst": "Inicie sesión primero.",
         "signInThenRunCommand": "Inicie sesión y vuelva a ejecutar /{{command}}.",
@@ -18770,6 +18770,9 @@
         "replaceTitle": "¿Reemplazar este chat?",
         "replaceDescription": "Reanudar “{{title}}” aquí detendrá lo que {{agent}} está haciendo en este chat.",
         "replace": "Reemplazar"
+      },
+      "antigravitySignIn": {
+        "sentence": "Antigravity no ha iniciado sesión. Inicia sesión en <settings>Ajustes → Cuentas → Antigravity</settings>. Después, vuelve a enviar tu mensaje."
       },
       "claudeSignIn": {
         "signingIn": "Iniciando sesión…"
