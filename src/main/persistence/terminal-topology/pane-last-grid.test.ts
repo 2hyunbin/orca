@@ -144,7 +144,7 @@ describe("a pane's last grid (layout-owner build)", () => {
   it('releases a pane from the terminal it names, and leaves a pane another terminal took', async () => {
     const { store } = await storeWithSplit()
     await store.persistPtyBinding({
-      ...{ worktreeId: FIXTURE_GIT_WORKTREE_ID },
+      worktreeId: FIXTURE_GIT_WORKTREE_ID,
       tabId: 'tab-1',
       leafId: LEAF_B,
       ptyId: 'pty-b'
