@@ -6,6 +6,12 @@ import type { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs as BuildHeadl
 import type { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals as RestoreLivePairedRendererSessionOwnedMobileTerminalsMethods } from './renderer-session-terminal-rescue'
 import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 import { OrcaRuntimeWithSyncWindowGraph } from '../session-graph/session-window-graph'
+import {
+  mainTerminalSurfaces,
+  type MainTerminalSurfacesHost
+} from '../terminal/surface/main-terminal-surfaces'
+import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
+import type { WorkspaceLayoutReads } from '../workspace-layout-stream'
 import type {
   RuntimeMobileSessionTabsResult,
   RuntimeSyncedTab
@@ -15,6 +21,25 @@ import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 
 export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
+  abstract get workspaceLayoutReads(): WorkspaceLayoutReads
+
+  /** Layout-owner builds: the window's graph with main's own panes for what main owns. */
+  protected withMainSurfaces(
+    windowId: number,
+    graph: RuntimeSyncWindowGraph
+  ): RuntimeSyncWindowGraph {
+    const host = (): MainTerminalSurfacesHost => ({
+      store: () => this.store,
+      reads: () => this.workspaceLayoutReads,
+      homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
+      readyGraphPublisher: () => (this.graphStatus === 'ready' ? this.authoritativeWindowId : null),
+      publish: (publisher, next) => {
+        this.syncWindowGraph(publisher, next)
+      }
+    })
+    return mainTerminalSurfaces(this, host).withMainSurfaces(windowId, graph)
+  }
+
   protected abstract getAuthoritativeSessionTabsInventoryEpoch(
     ...args: Parameters<
       SessionTabsInventoryPublicationMethods['getAuthoritativeSessionTabsInventoryEpoch']

@@ -8,9 +8,9 @@ import type {
 } from '../../../shared/runtime-session-contracts'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
+
+type Graph = RuntimeSyncWindowGraph
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { mainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
-import type { WorkspaceLayoutReads } from '../workspace-layout-stream'
 
 /** The runtime indexes graph tabs by bare id, so duplicate ids cannot be routed safely. */
 function assertUniqueRuntimeGraphTabIds(tabs: readonly RuntimeSyncedTab[]): void {
@@ -24,7 +24,8 @@ function assertUniqueRuntimeGraphTabIds(tabs: readonly RuntimeSyncedTab[]): void
 }
 
 export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow {
-  abstract get workspaceLayoutReads(): WorkspaceLayoutReads
+  /** Layout-owner builds: main's panes in place of the window's (session-tabs-inventory.ts). */
+  protected abstract withMainSurfaces(windowId: number, graph: Graph): Graph
   declare protected terminalGroupGridSizes?: RuntimeSyncWindowGraph['terminalGroupGridSizes']
   declare protected singleGroupWorkspaceGridSize?: RuntimeSyncWindowGraph['singleGroupWorkspaceGridSize']
 
@@ -91,16 +92,7 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
     }
     // Switch point: main's own panes stand in for the window's list of a workspace main owns.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      graph = mainTerminalSurfaces(this, () => ({
-        store: () => this.store,
-        reads: () => this.workspaceLayoutReads,
-        homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
-        readyGraphPublisher: () =>
-          this.graphStatus === 'ready' ? this.authoritativeWindowId : null,
-        publish: (publisher, next) => {
-          this.syncWindowGraph(publisher, next)
-        }
-      })).withMainSurfaces(windowId, graph)
+      graph = this.withMainSurfaces(windowId, graph)
     }
 
     if (graph.terminalGroupGridSizes) {
