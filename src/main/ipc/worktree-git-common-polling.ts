@@ -13,7 +13,6 @@ import type {
   WorktreePollerWindowVisibility
 } from './worktree-base-directory-poller'
 import {
-  entryDirGateMissedChange,
   gitCommonDirectorySignature,
   gitCommonFileSignature,
   snapshotGitCommonEntry,
@@ -69,7 +68,8 @@ async function snapshotGitCommon(
   includePrimary = true,
   forceFullScan = false,
   statusRefPaths = new Set<string>(),
-  statInPlaceLeaves = false
+  statInPlaceLeaves = false,
+  onDirGateMiss?: () => void
 ): Promise<GitCommonSnapshot> {
   const worktreesDir = join(commonDirPath, 'worktrees')
   const [worktreesDirSignature, primarySignatures, statusRefSignatures] = await Promise.all([
@@ -106,7 +106,13 @@ async function snapshotGitCommon(
     const previousEntry = previous?.entries.get(entryPath)
     entries.set(
       entryPath,
-      await snapshotGitCommonEntry(entryPath, previousEntry, forceFullScan, statInPlaceLeaves)
+      await snapshotGitCommonEntry(
+        entryPath,
+        previousEntry,
+        forceFullScan,
+        statInPlaceLeaves,
+        onDirGateMiss
+      )
     )
   })
   // Why: the expensive per-entry `index` read stays gated on each entry's own dir signature; onFullScan
@@ -131,15 +137,9 @@ export type GitCommonPollingOptions = {
   reconciliationFullScanEveryTicks?: number
 }
 
-function snapshotsShowEntryDirGateMiss(prev: GitCommonSnapshot, next: GitCommonSnapshot): boolean {
-  for (const [entryPath, entry] of next.entries) {
-    const prevEntry = prev.entries.get(entryPath)
-    if (prevEntry && entryDirGateMissedChange(prevEntry, entry)) {
-      return true
-    }
-  }
-  return false
-}
+// Why: require the miss on two separate ticks so one unlucky timing can't
+// disable the gate for the whole catalog.
+const DIR_GATE_MISS_TICKS_TO_DISTRUST = 2
 
 export async function startGitCommonPolling(
   commonDirPath: string,
@@ -159,6 +159,7 @@ export async function startGitCommonPolling(
   // Why: a filesystem whose dir mtime ignores child renames (FAT/exFAT, some network
   // mounts) would hide changes until the slow sweep; once one is seen, sweep every tick.
   let entryDirGateTrusted = true
+  let dirGateMissTicks = 0
   let snapshot = await snapshotGitCommon(
     commonDirPath,
     undefined,
@@ -190,6 +191,7 @@ export async function startGitCommonPolling(
       (isReconciliation && !entryDirGateTrusted) ||
       forceFullScan ||
       tickCount % (reconciliationFullScanEveryTicks ?? INDEX_BACKSTOP_TICKS) === 0
+    let dirGateMissed = false
     try {
       const next = await snapshotGitCommon(
         commonDirPath,
@@ -197,17 +199,17 @@ export async function startGitCommonPolling(
         includePrimary,
         shouldForceFullScan,
         new Set(getStatusRefPaths()),
+        isReconciliation,
         isReconciliation
+          ? () => {
+              dirGateMissed = true
+            }
+          : undefined
       )
       if (disposed) {
         return
       }
-      if (
-        isReconciliation &&
-        next.didFullScan &&
-        entryDirGateTrusted &&
-        snapshotsShowEntryDirGateMiss(snapshot, next)
-      ) {
+      if (dirGateMissed && ++dirGateMissTicks >= DIR_GATE_MISS_TICKS_TO_DISTRUST) {
         entryDirGateTrusted = false
       }
       if (next.didFullScan) {

@@ -14,12 +14,17 @@ import type {
 // real disk timing (#17828). `entryZeroStatCalls` tracks every stat under a
 // specific pre-existing entry (its dir plus every leaf), used to prove the
 // entry-dir signature gate keeps an unchanged entry to one stat per tick.
-const { statDelayMs, readdirCalls, concurrency, entryZeroStatCalls } = vi.hoisted(() => ({
-  statDelayMs: { current: 0 },
-  readdirCalls: { count: 0 },
-  concurrency: { current: 0, peak: 0 },
-  entryZeroStatCalls: { count: 0 }
-}))
+type StatHook = { current: ((path: unknown) => Promise<void>) | null }
+const { statDelayMs, statHook, readdirCalls, concurrency, entryZeroStatCalls } = vi.hoisted(() => {
+  const statHook: StatHook = { current: null }
+  return {
+    statDelayMs: { current: 0 },
+    statHook,
+    readdirCalls: { count: 0 },
+    concurrency: { current: 0, peak: 0 },
+    entryZeroStatCalls: { count: 0 }
+  }
+})
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFsPromises>()
@@ -41,6 +46,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
         entryZeroStatCalls.count += 1
       }
       try {
+        await statHook.current?.(path)
         if (statDelayMs.current > 0) {
           await new Promise((resolve) => setTimeout(resolve, statDelayMs.current))
         }
@@ -251,11 +257,25 @@ describe('startGitCommonPolling reconciliation mode', () => {
   })
 
   afterEach(async () => {
+    statHook.current = null
     await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()))
     await Promise.all(
       dirsToRemove.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
     )
   })
+
+  async function expectFullScanEveryTick(onFullScan: ReturnType<typeof vi.fn>, expected: boolean) {
+    readdirCalls.count = 0
+    onFullScan.mockClear()
+    await vi.waitFor(() => expect(readdirCalls.count).toBeGreaterThanOrEqual(5), {
+      timeout: 2_000
+    })
+    if (expected) {
+      expect(onFullScan.mock.calls.length).toBeGreaterThanOrEqual(readdirCalls.count - 1)
+    } else {
+      expect(onFullScan).not.toHaveBeenCalled()
+    }
+  }
 
   async function startReconciliation(fullScanEveryTicks: number) {
     const commonDir = await makeCommonDir(1)
@@ -303,30 +323,56 @@ describe('startGitCommonPolling reconciliation mode', () => {
     expect(onFullScan).not.toHaveBeenCalled()
   })
 
-  it('runs the ungated sweep periodically and sweeps every tick once the dir gate misses', async () => {
-    const { entryDir, events, onFullScan } = await startReconciliation(4)
+  it('runs the ungated sweep periodically', async () => {
+    const { onFullScan } = await startReconciliation(4)
     await vi.waitFor(() => expect(onFullScan).toHaveBeenCalled(), { timeout: 2_000 })
     readdirCalls.count = 0
     onFullScan.mockClear()
     await vi.waitFor(() => expect(readdirCalls.count).toBeGreaterThanOrEqual(8), {
       timeout: 2_000
     })
+    expect(onFullScan.mock.calls.length).toBeGreaterThanOrEqual(1)
     expect(onFullScan.mock.calls.length).toBeLessThanOrEqual(3)
+  })
 
-    // An in-place index rewrite leaves the dir signature alone, like a dir-mtime-blind filesystem.
+  it('sweeps every tick once leaf-triggered rescans twice find a change the dir missed', async () => {
+    const { entryDir, events, onFullScan } = await startReconciliation(1_000)
     const indexPath = join(entryDir, 'index')
-    await writeFile(indexPath, Buffer.from([1, 2]))
-    await vi.waitFor(
-      () => expect(events.flat()).toContainEqual({ type: 'update', path: indexPath }),
-      {
-        timeout: 2_000
+    // In-place index + reflog writes mimic a commit on a dir-mtime-blind filesystem.
+    for (const [round, bytes] of [
+      [1, [1]],
+      [2, [2, 3]]
+    ] as const) {
+      await writeFile(indexPath, Buffer.from(bytes))
+      await appendFile(join(entryDir, 'logs', 'HEAD'), `${round}\n`)
+      await vi.waitFor(
+        () => expect(events.flat().filter((event) => event.path === indexPath)).toHaveLength(round),
+        { timeout: 2_000 }
+      )
+    }
+    await expectFullScanEveryTick(onFullScan, true)
+  })
+
+  it('keeps the dir gate when a rename races the leaf stats', async () => {
+    const { entryDir, events, onFullScan } = await startReconciliation(1_000)
+    const headPath = join(entryDir, 'HEAD')
+    for (const round of [1, 2, 3]) {
+      let raced = false
+      // Land a lock+rename after the dir stat but before the leaf stats see HEAD.
+      statHook.current = async (path) => {
+        if (path === headPath && !raced) {
+          raced = true
+          await writeFile(`${headPath}.lock`, `ref: refs/heads/race-${round}\n`)
+          await rename(`${headPath}.lock`, headPath)
+        }
       }
-    )
-    readdirCalls.count = 0
-    onFullScan.mockClear()
-    await vi.waitFor(() => expect(readdirCalls.count).toBeGreaterThanOrEqual(5), {
-      timeout: 2_000
-    })
-    expect(onFullScan.mock.calls.length).toBeGreaterThanOrEqual(readdirCalls.count - 1)
+      await appendFile(join(entryDir, 'logs', 'HEAD'), `${round}\n`)
+      await vi.waitFor(
+        () => expect(events.flat().filter((event) => event.path === headPath)).toHaveLength(round),
+        { timeout: 2_000 }
+      )
+    }
+    statHook.current = null
+    await expectFullScanEveryTick(onFullScan, false)
   })
 })

@@ -52,32 +52,38 @@ async function inPlaceLeavesChanged(
   )
 }
 
-/** True when an ungated rescan found a dir-gated leaf change the entry-dir signature never reflected. */
-export function entryDirGateMissedChange(
+// Only leaf rewrites count: a null side may be a transient stat miss, and
+// create/unlink of a leaf (e.g. `locked`) is a real dir change anyway.
+function gatedLeafRewritten(
   previous: GitCommonEntrySnapshot,
   next: GitCommonEntrySnapshot
 ): boolean {
-  if (previous.dirSignature !== next.dirSignature || next.dirSignature === 'missing') {
-    return false
-  }
-  if (previous.indexSignature !== next.indexSignature) {
+  if (
+    previous.indexSignature !== null &&
+    next.indexSignature !== null &&
+    previous.indexSignature !== next.indexSignature
+  ) {
     return true
   }
-  const names = new Set([
-    ...previous.structuralSignatures.keys(),
-    ...next.structuralSignatures.keys()
-  ])
-  names.delete(GITDIR_FILE)
-  return [...names].some(
-    (name) => previous.structuralSignatures.get(name) !== next.structuralSignatures.get(name)
-  )
+  for (const [name, signature] of next.structuralSignatures) {
+    const previousSignature = previous.structuralSignatures.get(name)
+    if (
+      name !== GITDIR_FILE &&
+      previousSignature !== undefined &&
+      previousSignature !== signature
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 export async function snapshotGitCommonEntry(
   entryPath: string,
   previous: GitCommonEntrySnapshot | undefined,
   forceFullScan: boolean,
-  statInPlaceLeaves = false
+  statInPlaceLeaves = false,
+  onDirGateMiss?: () => void
 ): Promise<GitCommonEntrySnapshot> {
   // Git writes HEAD/index/config.worktree/locked via a lock file + rename inside the
   // entry dir, so the entry dir's own signature moves on every one of those writes
@@ -122,10 +128,22 @@ export async function snapshotGitCommonEntry(
       })
     )
   ])
-  return {
+  const next = {
     dirSignature: nextDirSignature,
     structuralSignatures,
     indexSignature,
     headLogSignature
   }
+  // Why: re-stat the dir so a rename landing between the dir and leaf stats isn't
+  // mistaken for a filesystem whose dir signature ignores child renames.
+  if (
+    onDirGateMiss &&
+    previous &&
+    previous.dirSignature === nextDirSignature &&
+    gatedLeafRewritten(previous, next) &&
+    (await gitCommonDirectorySignature(entryPath)) === nextDirSignature
+  ) {
+    onDirGateMiss()
+  }
+  return next
 }
