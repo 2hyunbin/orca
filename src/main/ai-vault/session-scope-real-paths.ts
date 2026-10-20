@@ -1,8 +1,7 @@
 import { realpath } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import type { AiVaultListResult, AiVaultSession } from '../../shared/ai-vault-types'
 import {
-  isPathInsideOrEqual,
   normalizeRuntimePathForComparison,
   relativePathInsideRoot
 } from '../../shared/cross-platform-path'
@@ -50,15 +49,16 @@ export async function resolveAiVaultScopeRealPaths(
 /**
  * Gives each session recorded under a linked scope's real path the registered
  * spelling as a matching-only alias. Resume keeps reading the recorded `cwd`.
+ * Why no realpath per cwd: a listing must not touch arbitrary cwds, which can sit
+ * on hung network mounts or behind macOS privacy prompts.
  */
-export async function attachAiVaultScopeCwdAliases(
+export function attachAiVaultScopeCwdAliases(
   result: AiVaultListResult,
   scope: AiVaultScopeRealPaths
-): Promise<AiVaultListResult> {
+): AiVaultListResult {
   if (scope.links.length === 0) {
     return result
   }
-  const resolveCwd = createLooseRealPathResolver()
   const aliasesByCwd = new Map<string, string[]>()
   let changed = false
   const sessions: AiVaultSession[] = []
@@ -72,13 +72,6 @@ export async function attachAiVaultScopeCwdAliases(
     let aliases = aliasesByCwd.get(cwd)
     if (!aliases) {
       aliases = scopeAliasesFor(cwd, scope.links)
-      // A cwd recorded through another symlink only matches once it is resolved too.
-      if (
-        aliases.length === 0 &&
-        !scope.scanScopePaths.some((scopePath) => isPathInsideOrEqual(scopePath, cwd))
-      ) {
-        aliases = scopeAliasesFor(await resolveCwd(cwd), scope.links)
-      }
       aliasesByCwd.set(cwd, aliases)
     }
     if (aliases.length === 0) {
@@ -100,23 +93,6 @@ function scopeAliasesFor(cwd: string, links: readonly AiVaultScopeLink[]): strin
     }
   }
   return aliases
-}
-
-/** realpath of the deepest existing ancestor plus the rest, so a deleted cwd still resolves. */
-function createLooseRealPathResolver(): (path: string) => Promise<string> {
-  const cache = new Map<string, Promise<string>>()
-  const resolve = (path: string): Promise<string> => {
-    let pending = cache.get(path)
-    if (!pending) {
-      pending = realpath(path).catch(async () => {
-        const parent = dirname(path)
-        return parent === path ? path : join(await resolve(parent), basename(path))
-      })
-      cache.set(path, pending)
-    }
-    return pending
-  }
-  return resolve
 }
 
 function sameComparisonPath(left: string, right: string): boolean {

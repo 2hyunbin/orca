@@ -549,6 +549,32 @@ describe('buildAiVaultSessionProjectById', () => {
 
     expect(map.get('claude:linked')).toMatchObject({ kind: 'repo', key: 'repo:child' })
   })
+
+  it('keeps a nested project over a longer-spelled parent link that reaches it through an alias', () => {
+    const parent = makeRepo({
+      id: 'parent',
+      displayName: 'Parent',
+      path: '/a-very-long-parent-link'
+    })
+    const child = makeRepo({ id: 'child', displayName: 'Child', path: '/real/child' })
+    const map = buildAiVaultSessionProjectById({
+      repos: [parent, child],
+      worktrees: [
+        makeWorktree({ id: 'wt-parent', repoId: parent.id, path: parent.path }),
+        makeWorktree({ id: 'wt-child', repoId: child.id, path: child.path })
+      ],
+      projectHostSetupProjection: makeProjection({}),
+      sessions: [
+        makeSession({
+          id: 'claude:nested',
+          cwd: '/real/child/pkg',
+          cwdAliases: ['/a-very-long-parent-link/child/pkg']
+        })
+      ]
+    })
+
+    expect(map.get('claude:nested')).toMatchObject({ kind: 'repo', key: 'repo:child' })
+  })
 })
 
 function makeSession(overrides: Partial<AiVaultSession>): AiVaultSession {

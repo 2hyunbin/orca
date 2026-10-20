@@ -168,21 +168,28 @@ describe('listAiVaultSessions symlinked scope', () => {
       resumeCommand: 's1',
       subagent: null
     } satisfies AiVaultSession
+    const outOfScope = (id: string): AiVaultSession => ({
+      ...recorded,
+      id: `codex:${id}`,
+      sessionId: id,
+      cwd: join(root, 'elsewhere'),
+      modifiedAt: '2026-10-21T00:00:00.000Z'
+    })
     scanAiVaultSessionsInService.mockResolvedValueOnce({
       ...scanResult('scan-A'),
-      sessions: [recorded]
+      sessions: [outOfScope('newer-1'), outOfScope('newer-2'), recorded]
     })
 
-    const listed = await listAiVaultSessions({ limit: 0, scopePaths: [linkedRepo] })
+    const listed = await listAiVaultSessions({ limit: 1, scopePaths: [linkedRepo] })
 
     expect(scanAiVaultSessionsInService.mock.calls[0]?.[0]).toMatchObject({
       scopePaths: [linkedRepo, realRepo]
     })
-    expect(listed.sessions.map((entry) => [entry.cwd, entry.cwdAliases])).toEqual([
-      [realRepo, [linkedRepo]]
+    expect(listed.sessions.find((entry) => entry.id === 'codex:s1')?.cwdAliases).toEqual([
+      linkedRepo
     ])
-    // A cache hit at depth 0 drops out-of-scope rows, so the alias must count as in scope.
-    const cached = await listAiVaultSessions({ limit: 0, scopePaths: [linkedRepo] })
-    expect(cached.sessions.map((entry) => entry.id)).toEqual(['codex:s1'])
+    // A cache hit at depth 1 keeps one out-of-scope row; the aliased row must count as in scope.
+    const cached = await listAiVaultSessions({ limit: 1, scopePaths: [linkedRepo] })
+    expect(cached.sessions.map((entry) => entry.id)).toEqual(['codex:newer-1', 'codex:s1'])
   })
 })

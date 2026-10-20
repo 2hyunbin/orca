@@ -75,7 +75,7 @@ describe('resolveAiVaultScopeRealPaths', () => {
 describe('attachAiVaultScopeCwdAliases', () => {
   it('aliases cwds under the real path to the registered spelling and keeps cwd for resume', async () => {
     const scope = await resolveAiVaultScopeRealPaths([linkedRepo])
-    const listed = await attachAiVaultScopeCwdAliases(
+    const listed = attachAiVaultScopeCwdAliases(
       result([session('real', realRepo), session('nested', join(realRepo, 'pkg'))]),
       scope
     )
@@ -86,22 +86,17 @@ describe('attachAiVaultScopeCwdAliases', () => {
     ])
   })
 
-  it('resolves a cwd recorded through another symlink, or since deleted, before matching', async () => {
+  it('never resolves a recorded cwd, so a cwd spelled through another link stays unmatched', async () => {
     const otherLink = join(root, 'other-link')
     await linkDir(realRepo, otherLink)
-    const scope = await resolveAiVaultScopeRealPaths([linkedRepo])
-    const listed = await attachAiVaultScopeCwdAliases(
-      result([
-        session('other-link', join(otherLink, 'pkg')),
-        session('deleted', join(otherLink, 'deleted', 'dir'))
-      ]),
-      scope
+    const rows = [session('other-link', join(otherLink, 'pkg'))]
+
+    const listed = attachAiVaultScopeCwdAliases(
+      result(rows),
+      await resolveAiVaultScopeRealPaths([linkedRepo])
     )
 
-    expect(listed.sessions.map((entry) => entry.cwdAliases)).toEqual([
-      [join(linkedRepo, 'pkg')],
-      [join(linkedRepo, 'deleted', 'dir')]
-    ])
+    expect(listed.sessions).toEqual(rows)
   })
 
   it('leaves unrelated, cwd-less and WSL rows untouched', async () => {
@@ -111,7 +106,7 @@ describe('attachAiVaultScopeCwdAliases', () => {
       session('no-cwd', null),
       session('wsl', '/data/api', '\\\\wsl.localhost\\Ubuntu\\home\\me\\.codex\\s.jsonl')
     ]
-    const listed = await attachAiVaultScopeCwdAliases(result(rows), scope)
+    const listed = attachAiVaultScopeCwdAliases(result(rows), scope)
 
     expect(listed.sessions).toEqual(rows)
   })
@@ -120,7 +115,7 @@ describe('attachAiVaultScopeCwdAliases', () => {
     const scanned = result([session('real', realRepo)])
 
     expect(
-      await attachAiVaultScopeCwdAliases(scanned, await resolveAiVaultScopeRealPaths([realRepo]))
+      attachAiVaultScopeCwdAliases(scanned, await resolveAiVaultScopeRealPaths([realRepo]))
     ).toBe(scanned)
   })
 })

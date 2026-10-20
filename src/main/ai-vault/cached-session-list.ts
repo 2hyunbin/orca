@@ -159,7 +159,7 @@ export async function listAiVaultSessions(
         scanSignal,
         scanProgress
       )
-      const result = { ...(await attachAiVaultScopeCwdAliases(scanned, scope)), scanId }
+      const result = { ...attachAiVaultScopeCwdAliases(scanned, scope), scanId }
       // A delete (or other invalidation) landed while this scan was running:
       // its result predates the delete, so caching it would resurrect the
       // deleted session for the TTL. Return it to this caller but don't cache.

@@ -1,7 +1,4 @@
-import {
-  createNormalizedAiVaultScopeCwdMatcher,
-  sessionFileExecutionNamespace
-} from '../../../../shared/ai-vault-scope-cwd-match'
+import { createNormalizedAiVaultScopeCwdMatcher } from '../../../../shared/ai-vault-scope-cwd-match'
 import { resolveActiveProjectKey } from './ai-vault-project-key'
 import { toAiVaultProjectKey } from '../../../../shared/ai-vault-project-key'
 import {
@@ -16,6 +13,10 @@ import type { ProjectHostSetup } from '../../../../shared/project-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
+import {
+  aiVaultSessionProjectCwdKey,
+  matchAiVaultProjectCandidates
+} from './ai-vault-session-project-candidates'
 import {
   folderGroupKey,
   folderLabel,
@@ -105,11 +106,7 @@ export function buildAiVaultSessionProjectById({
       projectsByCwd = new Map()
       projectsByHostAndCwd.set(host, projectsByCwd)
     }
-    const cwdKey = JSON.stringify([
-      sessionFileExecutionNamespace(session.filePath),
-      session.cwd,
-      ...(session.cwdAliases ?? [])
-    ])
+    const cwdKey = aiVaultSessionProjectCwdKey(session)
     let project = projectsByCwd.get(cwdKey)
     if (!project) {
       project = resolveSessionProject(session, candidates, projectLabelByKey)
@@ -271,13 +268,7 @@ function resolveSessionProject(
     return { kind: 'unknown', key: 'unknown', label: '' }
   }
 
-  // Aliases are the host's spellings of cwd under a symlinked workspace; the longest root still wins.
-  const normalizedCwds = [cwd, ...(session.cwdAliases ?? [])].map(normalizeRuntimePathForComparison)
-  const matches = candidates.filter((candidate) =>
-    normalizedCwds.some((normalizedCwd) =>
-      candidate.ownsNormalizedCwd(normalizedCwd, session.filePath)
-    )
-  )
+  const matches = matchAiVaultProjectCandidates(session, cwd, candidates, compareCandidates)
   const sessionHostId = normalizeExecutionHostId(session.executionHostId)
   const hostMatches = sessionHostId
     ? matches.filter((candidate) => candidate.hostKey === sessionHostId)
@@ -293,7 +284,7 @@ function resolveSessionProject(
     return folderProject(cwd)
   }
 
-  const bestCandidate = hostMatches.sort(compareCandidates)[0]
+  const bestCandidate = hostMatches[0]
   if (!bestCandidate) {
     return folderProject(cwd)
   }
