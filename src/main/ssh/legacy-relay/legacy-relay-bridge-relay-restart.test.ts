@@ -100,7 +100,10 @@ describe('a relay restarted at the same socket', () => {
     expect(leases[0].state).toBe('detached')
     // Nothing proves the first shell exited: the replacement dropping the id is not its exit.
     relay.ptys.delete('pty-1')
+    const opened = relay.clients.length
     await vi.advanceTimersByTimeAsync(60_000)
+    // The waiting pane keeps its relay's connection rather than reclaiming it on every retry.
+    expect(relay.clients).toHaveLength(opened)
     expect(subject.snapshot()).toEqual([expect.objectContaining({ state: 'unverifiable' })])
     expect(leases[0].state).toBe('detached')
     // Closing the tab never stops the replacement.

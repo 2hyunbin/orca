@@ -163,8 +163,14 @@ export function relistedPane(
     }
     return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
   }
-  // Unreachable, contested or replaced: loss of contact is never exit, so the pane waits.
-  return toPane(lease, relayPtyId, null, 'unverifiable')
+  // Unreachable, contested or replaced: loss of contact is never exit, so the pane waits. A replaced
+  // owner's endpoint stays named, so its connection is kept rather than reopened every listing.
+  return toPane(
+    lease,
+    relayPtyId,
+    owners.isReplaced(relayPtyId) ? (owner ?? null) : null,
+    'unverifiable'
+  )
 }
 
 /** The panes a bridge serves; a closed tab's pane, its stop owed or its lease ended, is not one. */

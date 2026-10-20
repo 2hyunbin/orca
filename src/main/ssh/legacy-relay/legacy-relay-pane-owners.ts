@@ -22,7 +22,7 @@ export type LegacyRelayOwnerRow = { endpoint: string; incarnationId?: string | u
 export class LegacyRelayPaneOwners {
   /** `null`: two relays claimed the id before either was known to own it, so neither ever does. */
   private readonly owners = new Map<string, Owner | null>()
-  /** Exits no live pane took, by relay: the listing that next binds one to that relay reads them. */
+  /** Exit reports by relay endpoint, until the next listing reads or drops them. */
   private readonly unclaimedExits = new Map<string, number>()
 
   owner(relayPtyId: string): string | null | undefined {
@@ -67,7 +67,10 @@ export class LegacyRelayPaneOwners {
     this.owners.delete(relayPtyId)
   }
 
-  /** Every exit report, kept until the next listing: one may race the listing that binds its pane. */
+  /**
+   * Every exit report, kept until the next listing: one may race the listing that binds its pane.
+   * Why by endpoint, not connection: a reopened socket's listing still reads an exit sent before it.
+   */
   noteExit(relayPtyId: string, endpoint: string, code: number): void {
     this.unclaimedExits.set(`${endpoint}\n${relayPtyId}`, code)
   }
