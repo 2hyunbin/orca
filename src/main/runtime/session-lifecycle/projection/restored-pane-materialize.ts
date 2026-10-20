@@ -150,7 +150,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
           ...(automatic ? { refuseSleptWorktree: true } : {})
         }
       )
-      return created.tab.ptyId
+      return created.tab.ptyId ?? null
     } catch (err) {
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&
