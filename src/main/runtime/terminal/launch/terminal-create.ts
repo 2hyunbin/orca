@@ -14,6 +14,8 @@ import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
 import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
 
 export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
+  protected abstract paneStartStatusArgs: dependencies.PaneStartArgsOf
+
   async createTerminal(
     worktreeSelector?: string,
     opts: dependencies.TerminalCreateOptions = {},
@@ -190,7 +192,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
             ...(launchOpts.afterTabId ? { afterTabId: launchOpts.afterTabId } : {}),
             ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
             ...(!adoptedBeforeLaunch && launchOpts.isNewSession ? { isNewSession: true } : {}),
-            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS
+            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS,
+            ...this.paneStartStatusArgs(launchOpts)
           })
         } finally {
           releaseStablePaneCreate?.()
@@ -286,16 +289,13 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           warning = dependencies.createTerminalRevealWarning(handle)
         }
         return {
-          ...terminalLaunchPublicFacts(result, launch.adoptedStablePane),
+          ...terminalLaunchPublicFacts(result, launch.adoptedStablePane, pty),
           handle,
           tabId,
           paneKey,
           ptyId: result.id,
           worktreeId: workspace.id,
           title: pty?.title ?? launch.effectiveTitle ?? null,
-          launchConfig: pty?.launchConfig ?? undefined,
-          launchAgent: pty?.launchAgent ?? undefined,
-          launchToken: pty?.launchToken ?? undefined,
           ...this.getPtyExecutionHostMetadata(result.id),
           surface,
           ...(warning ? { warning } : {})

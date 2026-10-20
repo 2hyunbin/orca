@@ -66,9 +66,16 @@ export function recordTerminalLaunchMetadata(
   }
 }
 
-export function terminalLaunchPublicFacts(result: TerminalSpawnResult, adoptedStablePane: boolean) {
+export function terminalLaunchPublicFacts(
+  result: TerminalSpawnResult,
+  adoptedStablePane: boolean,
+  pty: RuntimePtyWorktreeRecord | null
+) {
   return {
     ...terminalLaunchFacts(result),
+    launchConfig: pty?.launchConfig ?? undefined,
+    launchAgent: pty?.launchAgent ?? undefined,
+    launchToken: pty?.launchToken ?? undefined,
     ...(!adoptedStablePane && result.coldRestore ? { coldRestore: result.coldRestore } : {}),
     ...(result.pid ? { processId: result.pid } : {}),
     ...(result.agentSessionEnsure
