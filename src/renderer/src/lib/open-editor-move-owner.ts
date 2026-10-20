@@ -1,6 +1,6 @@
 import type { OpenFile } from '@/store/slices/editor'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
-import { toSshExecutionHostId } from '../../../shared/execution-host'
+import { parseExecutionHostId, toSshExecutionHostId } from '../../../shared/execution-host'
 import {
   getExecutionHostIdForWorktree,
   runtimeEnvironmentIdWithLegacyFallbackUnlessTwin
@@ -24,11 +24,12 @@ export function editorMoveOwnerFromContext(
   context: Pick<RuntimeFileOperationArgs, 'target' | 'expectedExecutionHostId'>,
   worktreeId: string | undefined
 ): EditorMoveOwner {
-  const expected = context.expectedExecutionHostId
+  const expected = parseExecutionHostId(context.expectedExecutionHostId)
   return {
     runtimeEnvironmentId:
       context.target.kind === 'environment' ? context.target.environmentId : null,
-    sshHostId: expected === undefined ? undefined : expected === 'local' ? null : expected,
+    sshHostId:
+      expected?.kind === 'ssh' ? expected.id : expected?.kind === 'local' ? null : undefined,
     worktreeHostId: getExecutionHostIdForWorktree(state, worktreeId)
   }
 }
@@ -43,10 +44,16 @@ function openFileOwner(
 ): FileOwner {
   const captured = file.operationProvenance?.generation.route
   if (captured) {
-    const host = captured.executionHostId
+    const host = parseExecutionHostId(captured.executionHostId)
     return {
       runtimeEnvironmentId: captured.runtimeEnvironmentId,
-      sshHostId: host?.startsWith('ssh:') ? host : host ? null : undefined
+      // Why a server's route says nothing: it names the server, not which of its machines.
+      sshHostId:
+        host?.kind === 'ssh'
+          ? host.id
+          : host?.kind === 'local' && !captured.runtimeEnvironmentId
+            ? null
+            : undefined
     }
   }
   return {
