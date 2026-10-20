@@ -95,6 +95,11 @@ describe('macOS build workflow policy', () => {
   it('qualification signs the workflow commit, gates its complete template, and cannot publish', () => {
     const source = workflow('release')
     expect(source.on.workflow_dispatch.inputs.qualification_only.default).toBe(false)
+    expect(source.concurrency).toEqual({
+      group:
+        "release-mac-build-${{ inputs.tag }}${{ inputs.qualification_only && '-qualification' || '' }}",
+      'cancel-in-progress': false
+    })
     expect(source.jobs['qualification-template'].if).toBe('inputs.qualification_only')
     expect(source.jobs['qualification-template'].with).toEqual({
       ref: '${{ github.sha }}',

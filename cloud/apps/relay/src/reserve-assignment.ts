@@ -137,10 +137,15 @@ export class ReserveAssignment {
     return this.input.directory.cellIds().some((cellId) => this.input.directory.placementModeOf(cellId) === 'reserve')
   }
 
-  async plan(identity: Identity, request: { reconnect: boolean; region: RelayRegion }): Promise<ReservePlan> {
+  async plan(
+    identity: Identity,
+    // regionCorrection: the reply carries a region window bound to the database row.
+    request: { reconnect: boolean; region: RelayRegion; regionCorrection?: boolean }
+  ): Promise<ReservePlan> {
     this.flushSummary()
     if (this.input.mode === 'off') return { kind: 'database' }
     if (this.input.mode === 'dry-run') {
+      if (request.regionCorrection) return { kind: 'database' }
       return { kind: 'database', placeFresh: async () => await this.dryRun(identity, request.region) }
     }
     if (!this.hasReserveCells()) return { kind: 'database' }
@@ -167,7 +172,7 @@ export class ReserveAssignment {
     // above it on any director, not just the one that demoted it.
     const leftWrongCell =
       left?.closeCode === RELAY_CLOSE_CODE.WRONG_CELL && !(this.input.databaseBusy?.() ?? false)
-    if (known.length === 0 || leftWrongCell) {
+    if ((known.length === 0 && !request.regionCorrection) || leftWrongCell) {
       try {
         // Only the never-seen host needs the row; for the WRONG_CELL one it is an optimisation,
         // bounded so a database stall cannot hold the reconnect (the reconcile repairs a miss).
@@ -187,6 +192,13 @@ export class ReserveAssignment {
     }
     const epochFloor = known.length === 0 ? 0 : Math.max(...known)
     const lastCellId = seats[0]?.cellId ?? left?.cellId ?? row?.cellId
+    // The database lane answers it, so the window exchange follows: no memory answer, no share
+    // draw, only the in-region fallback, once the map is complete and knows the host.
+    if (request.regionCorrection) {
+      return incomplete || known.length === 0
+        ? { kind: 'database' }
+        : { kind: 'database', regionReserve: this.regionReserve(identity, request.region, epochFloor, seats, now) }
+    }
     if (incomplete) {
       if (lastCellId !== undefined && directory.cellState(lastCellId)?.status === 'pending') {
         this.summary.retries.mapIncomplete += 1
