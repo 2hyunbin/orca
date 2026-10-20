@@ -32,7 +32,7 @@ describe('Claude accepted message choices', () => {
   it.each([false, true])(
     'delivers resumed choices despite optional reports (alias listed: %s)',
     async (listed) => {
-      const saved = { model: 'opus[1m]', effort: 'high', fastMode: 'false' }
+      const saved = { model: 'opus[1m]', effort: 'high', fastMode: 'false' } as const
       const models = listed ? [...MODELS, { value: saved.model }] : MODELS
       const claude = fakeClaude({ initModels: models, routes: { list_models: () => models } })
       const adapter = adapterFor(claude, { resumesTranscript: true })

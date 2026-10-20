@@ -201,7 +201,7 @@ describe('Claude effort against the model that must run it', () => {
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'max' }, undefined)
     ).resolves.toEqual({ model: 'sonnet', effort: 'max' })
-    expect(calls).toEqual(['list_models', 'apply:max', 'get_settings'])
+    expect(calls).toEqual(['list_models', 'apply:max'])
     await readClaudeStructuredSessionOptions(session, undefined)
     expect(session.appliedInputOptions.get('effort')).toBe('max')
     expect(session.confirmedOptions.has('effort')).toBe(false)

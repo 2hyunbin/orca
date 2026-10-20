@@ -172,8 +172,9 @@ export async function setClaudeStructuredOption(
     throw error
   }
   // Readback confirms presentation; accepted input remains independent of optional reports.
+  // Max is session-only; settings readback reports the underlying level.
   const adopted =
-    input.key === 'effort' || input.key === 'fastMode'
+    (input.key === 'effort' && input.value !== 'max') || input.key === 'fastMode'
       ? await session.connection
           .getSettings({ timeoutMs })
           .then((settings) =>
