@@ -175,8 +175,9 @@ export class AgentTransitionDetector {
     }
     this.titlePanes.set(paneKey, { ptyId, releaseExit })
     const now = this.deps.now()
-    this.emit({ kind: 'seeded', paneKey, workspace, phase, at: now, fromTitle: true })
+    // The pane leaves its old workspace first, so a reader never takes the leave for the new one.
     this.leaveIfMoved(paneKey, workspace, now)
+    this.emit({ kind: 'seeded', paneKey, workspace, phase, at: now, fromTitle: true })
     this.track(paneKey, workspace, phase)
   }
 
@@ -199,8 +200,8 @@ export class AgentTransitionDetector {
     const observed = row ? hookRowAgentPhase(row) : 'rest'
     const restored = !!row && (seed || !!row.restoredUnconfirmed || !!row.isReplay)
     if (row && workspace && restored) {
-      this.emit({ kind: 'seeded', paneKey, workspace, phase: observed, at: row.stateStartedAt })
       this.leaveIfMoved(paneKey, workspace, now)
+      this.emit({ kind: 'seeded', paneKey, workspace, phase: observed, at: row.stateStartedAt })
       this.track(paneKey, workspace, observed)
       return
     }

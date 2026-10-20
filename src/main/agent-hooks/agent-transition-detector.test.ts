@@ -247,6 +247,18 @@ describe('AgentTransitionDetector: hookless titles', () => {
     expect(h.changes.at(-1)).toMatchObject({ from: 'working', to: 'rest', transition: null })
   })
 
+  it('rests a pane where it was before seeding it in the workspace of a row present at attach', () => {
+    const h = createHarness()
+    ingest(h.server, { state: 'working' }, { worktreeId: OTHER_WT })
+    noteTitle(h.detector, '⠋ Codex working')
+    h.changes.length = 0
+    h.detector.attach(h.server)
+    expect(h.changes.map((change) => [change.kind, change.workspace.worktreeId])).toEqual([
+      ['moved', WT],
+      ['seeded', OTHER_WT]
+    ])
+  })
+
   it('finishes a title-tracked turn when the first hook row reports done', () => {
     const h = createHarness()
     h.detector.attach(h.server)

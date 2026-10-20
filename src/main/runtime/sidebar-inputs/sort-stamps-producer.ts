@@ -171,7 +171,6 @@ export class SortStampsProducer {
     phase: AgentPhase,
     observedAt: number
   ): void {
-    this.leaveIfMoved(paneKey, workspace, this.sources.now())
     const stored = readSortStamps(this.sources.store(), workspace)
     const state = {
       phase,
@@ -195,7 +194,6 @@ export class SortStampsProducer {
   /** The detector moved one pane; the tier takes its phase as given. */
   private applyMove(change: Extract<AgentPaneChange, { kind: 'moved' }>): void {
     const { paneKey, workspace, from, to, at, transition } = change
-    this.leaveIfMoved(paneKey, workspace, at)
     const state = enterAgentPaneState(this.panes.get(paneKey)?.state ?? REST_PANE, to, at)
     if (state.phase === 'rest') {
       this.panes.delete(paneKey)
@@ -203,19 +201,6 @@ export class SortStampsProducer {
       this.panes.set(paneKey, { ...workspace, state })
     }
     this.writeAgentChange(workspace, { from, to, transition }, at, paneKey)
-  }
-
-  /** A pane kept in another workspace rests there. */
-  private leaveIfMoved(paneKey: string, workspace: AgentPaneWorkspace, at: number): void {
-    const previous = this.panes.get(paneKey)
-    if (previous && !sameAgentPaneWorkspace(previous, workspace)) {
-      this.panes.delete(paneKey)
-      this.writeAgentChange(
-        previous,
-        { from: previous.state.phase, to: 'rest', transition: null },
-        at
-      )
-    }
   }
 
   private writeAgentChange(

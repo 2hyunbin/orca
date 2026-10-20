@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   classifySortStampEvent,
   isUnreadNews,
-  nextAgentPaneState,
+  enterAgentPaneState,
   RECENT_STAMP_THROTTLE_MS,
   REST_PANE,
   workspaceSmartStamp,
@@ -23,30 +23,22 @@ function agentEvent(
   return { kind: 'agent' as const, from, to, transition, panes }
 }
 
-describe('nextAgentPaneState', () => {
+describe('enterAgentPaneState', () => {
   it('enters a phase at now', () => {
-    expect(nextAgentPaneState(REST_PANE, 'working', NOW)).toEqual({ phase: 'working', at: NOW })
+    expect(enterAgentPaneState(REST_PANE, 'working', NOW)).toEqual({ phase: 'working', at: NOW })
+    expect(enterAgentPaneState({ phase: 'working', at: 1 }, 'done', NOW)).toEqual({
+      phase: 'done',
+      at: NOW
+    })
   })
 
   it('keeps the same object when the phase holds, so running stays running', () => {
     const working = { phase: 'working' as const, at: NOW - 5 }
-    expect(nextAgentPaneState(working, 'working', NOW)).toBe(working)
-  })
-
-  it('reaches Done only from a turn', () => {
-    expect(nextAgentPaneState(REST_PANE, 'done', NOW)).toBe(REST_PANE)
-    expect(nextAgentPaneState({ phase: 'working', at: 1 }, 'done', NOW)).toEqual({
-      phase: 'done',
-      at: NOW
-    })
-    expect(nextAgentPaneState({ phase: 'needs-you', at: 1 }, 'done', NOW)).toEqual({
-      phase: 'done',
-      at: NOW
-    })
+    expect(enterAgentPaneState(working, 'working', NOW)).toBe(working)
   })
 
   it('keeps the time an approval was asked when the turn resumes', () => {
-    expect(nextAgentPaneState({ phase: 'needs-you', at: 7 }, 'working', NOW)).toEqual({
+    expect(enterAgentPaneState({ phase: 'needs-you', at: 7 }, 'working', NOW)).toEqual({
       phase: 'working',
       at: 7
     })

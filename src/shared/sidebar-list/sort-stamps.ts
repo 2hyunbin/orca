@@ -1,9 +1,4 @@
-import {
-  agentPhaseTransition,
-  nextAgentPhase,
-  type AgentPhase,
-  type AgentTransition
-} from '../agent-transitions'
+import { agentPhaseTransition, type AgentPhase, type AgentTransition } from '../agent-transitions'
 
 /**
  * Sort stamps the host that owns a workspace writes on its record when something happens there.
@@ -43,19 +38,10 @@ export type SortStampEvent =
   | { kind: 'terminal-started' }
 
 /**
- * A pane's state after observing `observed` at `now`. Done only follows a turn, and stays until
- * the next prompt or the agent exits (owner decision Q1: no fade; change it here before the flip).
- * Resuming after an approval is the same turn, so it keeps the time it asked.
+ * A pane's state on entering `phase` at `now`, from `previous`. Done stays until the next prompt or
+ * the agent exits (owner decision Q1: no fade). Resuming after an approval is the same turn, so it
+ * keeps the time it asked.
  */
-export function nextAgentPaneState(
-  previous: AgentPaneState,
-  observed: AgentPhase,
-  now: number
-): AgentPaneState {
-  return enterAgentPaneState(previous, nextAgentPhase(previous.phase, observed), now)
-}
-
-/** A pane's state on entering `phase` at `now`, from `previous`. */
 export function enterAgentPaneState(
   previous: AgentPaneState,
   phase: AgentPhase,

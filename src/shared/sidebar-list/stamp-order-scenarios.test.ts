@@ -5,12 +5,12 @@ import {
 } from '../workspace-view/workspace-row-sort'
 import {
   classifySortStampEvent,
-  nextAgentPaneState,
+  enterAgentPaneState,
   REST_PANE,
   type AgentPaneState,
   type SortStamps
 } from './sort-stamps'
-import { agentPhaseTransition, type AgentPhase } from '../agent-transitions'
+import { agentPhaseTransition, nextAgentPhase, type AgentPhase } from '../agent-transitions'
 import { compareSmartStamps, recentStamp } from './stamp-order'
 
 /**
@@ -45,7 +45,7 @@ class Host {
 
   agent(id: string, observed: AgentPhase): void {
     const row = this.rows.get(id)!
-    const pane = nextAgentPaneState(row.pane, observed, this.now)
+    const pane = enterAgentPaneState(row.pane, nextAgentPhase(row.pane.phase, observed), this.now)
     if (pane === row.pane) {
       return
     }

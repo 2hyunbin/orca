@@ -471,6 +471,21 @@ describe('SortStampsProducer: terminal events', () => {
     expect(h.meta.get(WT)?.smartTier).toBeUndefined()
   })
 
+  it('moves a pane to the workspace of a row present at attach, keeping that tier', () => {
+    const h = createHarness()
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: FOLDER,
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    h.attach(h.server)
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+    expect(h.folders.get(FOLDER_ID)?.smartTier).toBe('working')
+  })
+
   it('keeps a pane its first hook row finished in step: a later stop clears Done', () => {
     const h = createHarness()
     h.attach(h.server)
