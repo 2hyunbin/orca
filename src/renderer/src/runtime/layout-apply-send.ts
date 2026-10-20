@@ -13,6 +13,7 @@ import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import type { PaneSide } from '../../../shared/workspace-layout/terminal-pane-tree'
 import type { LayoutEditorFile } from '../../../shared/workspace-layout/workspace-layout-model'
+import type { LayoutEditorView } from '../../../shared/workspace-layout/layout-editor-view'
 import type { EditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
 import type {
   CommandOf,
@@ -89,7 +90,9 @@ export type WindowLayoutCommand =
       fileId: string
       contentType: EditorTabContentType
       file?: LayoutEditorFile
+      view?: LayoutEditorView
       groupId?: string
+      index?: number
       preview?: true
       createdAt: number
       split?: NewGroupSplit
@@ -167,14 +170,11 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
       return [{ workspace: worktreeId, ids: command.tabIds }]
     case 'openBrowserTab':
       return [{ workspace: worktreeId, ids: [command.tabId, command.browserTabId] }]
-    case 'openEditorTab':
-      return [{ workspace: worktreeId, ids: [command.tabId, command.fileId] }]
     case 'splitGroup':
       return [{ workspace: worktreeId, ids: [command.tabId], groupLayout: true }]
     case 'moveTab':
     case 'renameTab':
     case 'setTabProps':
-    case 'promotePreviewTab':
     case 'openAgentSessionTab':
     case 'openSimulatorTab':
     case 'createTerminalTab':
@@ -201,7 +201,10 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
       ]
     case 'setGroupRatios':
       return [{ workspace: worktreeId, ids: [], groupLayout: true }]
-    // Pane commands hold their tab's pane tree; records are not drawn from frames.
+    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor opens
+    // and promotions are sent before the window draws them.
+    case 'openEditorTab':
+    case 'promotePreviewTab':
     case 'splitPane':
     case 'closePane':
     case 'renamePane':

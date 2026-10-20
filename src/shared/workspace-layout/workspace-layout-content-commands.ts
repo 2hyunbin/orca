@@ -54,7 +54,12 @@ export function openEditorTab(
     tab.entityId === fileId && tab.kind === command.contentType
   const drawn = drawnTabOpen(model, key, command.tabId, sameFile, true)
   if (drawn) {
-    return drawn.ok ? applied(withEditorFile(drawn.model, key, command.file), drawn.result) : drawn
+    // The same tab sent again: an open that rewrote its record or view (a conflict open) updates both.
+    if (!drawn.ok || !command.tabId) {
+      return drawn
+    }
+    const next = withEditorFile(drawn.model, key, command.file)
+    return applied(withEditorView(next, key, command.tabId, command.view), drawn.result)
   }
   if (
     command.groupId &&

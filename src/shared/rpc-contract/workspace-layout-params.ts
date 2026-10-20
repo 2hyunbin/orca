@@ -124,7 +124,7 @@ const NewGroupSplit = z
   .optional()
 
 /**
- * An editor tab under the id the window drew it with: its callers act on the tab at once. Main
+ * An editor tab under the id the window proposes; main refuses an id another tab holds. Main
  * places it and replaces the group's preview by the same rules as the window.
  */
 const OpenEditorTabCommand = z.object({
@@ -135,6 +135,8 @@ const OpenEditorTabCommand = z.object({
   file: EditorFileRecord.optional(),
   view: EditorViewRecord.optional(),
   groupId: z.string().min(1).optional(),
+  /** Where in the group a reopened tab goes back to. */
+  index: z.number().int().nonnegative().optional(),
   preview: z.literal(true).optional(),
   createdAt: z.number().int().nonnegative().optional(),
   split: NewGroupSplit

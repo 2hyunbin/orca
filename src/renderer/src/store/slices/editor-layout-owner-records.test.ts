@@ -1,58 +1,34 @@
 // @vitest-environment happy-dom
 
+// Editor records in a layout-owner build (ORCA_LAYOUT_OWNER=main): main's frames draw the editor
+// tabs, and a diff, preview or conflict tab is drawn from the view its open sent.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { remapOpenEditorTabsForPathChange } from '@/lib/remap-open-editor-tabs-for-path-change'
 import type { AppState } from '@/store/types'
-import { endLayoutFramePositions } from '@/runtime/layout-frame-position'
-import { openWorkspaceLayoutFrameSync } from '@/runtime/workspace-layout-frame-sync'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
-import { applyLayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-commands'
-import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
-import type { WorkspaceLayoutModel } from '../../../../shared/workspace-layout/workspace-layout-model'
-import { publishWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-published'
-import type { WorkspaceLayoutChangeFrame } from '../../../../shared/workspace-layout/workspace-layout-stream-frames'
+import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { editorMoveOwnerFromContext, type EditorMoveOwner } from '@/lib/open-editor-move-owner'
+import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
 
-const mocks = vi.hoisted(() => ({
-  layoutOwnerIsMain: true,
-  callRuntimeRpc: vi.fn(
-    async (_target: unknown, _method: string, _params: { command: LayoutCommand }) => ({
-      ok: true,
-      result: {}
-    })
-  )
-}))
-
-const stream = vi.hoisted(
-  (): { onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null } => ({ onFrame: null })
+// Main's answer to the window's layout commands, as a switch-on build sends them.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply(await importOriginal())
 )
-
-vi.mock('../../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
-    return mocks.layoutOwnerIsMain
-  }
-}))
-vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
-vi.mock('@/runtime/runtime-layout-client', () => ({
-  subscribeRuntimeLayout: (
-    _target: unknown,
-    _params: unknown,
-    onFrame: (frame: WorkspaceLayoutChangeFrame) => void
-  ) => {
-    stream.onFrame = onFrame
-    return { close: () => {} }
-  }
-}))
+vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeLayoutClientWithTestFrames(await importOriginal())
+)
 
 const WT = 'repo-a::/repo-a'
 const SIBLING = 'repo-a::/repo-a-2'
 
-let main: WorkspaceLayoutModel
+let main: TabsDrawnFromMain
 
-beforeEach(() => {
-  mocks.layoutOwnerIsMain = true
-  mocks.callRuntimeRpc.mockClear()
+beforeEach(async () => {
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAppStore.setState(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial catalog with only the fields editor opens and frames read.
@@ -77,50 +53,10 @@ beforeEach(() => {
       gitStatusHugeByWorktree: {}
     } as unknown as Partial<AppState>
   )
-  main = {
-    hostId: LOCAL_EXECUTION_HOST_ID,
-    workspaces: {},
-    records: {},
-    legacy: { terminalRowOwners: {} }
-  }
+  main = await drawTabsFromMain(useAppStore)
 })
 
-afterEach(() => endLayoutFramePositions())
-
-function applySent(): LayoutCommand[] {
-  const commands = mocks.callRuntimeRpc.mock.calls.map((call) => call[2].command)
-  mocks.layoutOwnerIsMain = true
-  mocks.callRuntimeRpc.mockClear()
-  let id = 0
-  for (const command of commands) {
-    const applied = applyLayoutCommand(main, command, {
-      mintId: () => `main-${++id}`,
-      mintLeafId: () => `leaf-${++id}`,
-      now: () => 1
-    })
-    if (!applied.ok) {
-      throw new Error(`${command.type} refused: ${applied.code}`)
-    }
-    main = applied.model
-  }
-  return commands
-}
-
-async function showMainFrame(): Promise<void> {
-  // Main has answered the window's commands, so no tab of theirs is still held as drawn.
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  const sync = openWorkspaceLayoutFrameSync(useAppStore)
-  stream.onFrame!({
-    type: 'snapshot',
-    workspaces: Object.entries(main.workspaces).map(([key, workspace]) => ({
-      key,
-      layout: publishWorkspaceLayout(workspace, LOCAL_EXECUTION_HOST_ID)
-    }))
-  })
-  sync.start()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  sync.close()
-}
+afterEach(() => main.close())
 
 function editorTabsAndFiles(worktreeId = WT) {
   const state = useAppStore.getState()
@@ -148,7 +84,7 @@ function windowView(worktreeId: string) {
 }
 
 function mainView(worktreeId: string) {
-  const workspace = main.workspaces[worktreeId]
+  const workspace = layoutApplyTestTransport.mainModel!.workspaces[worktreeId]
   return (workspace?.groups ?? []).map((group) => ({
     group: group.id,
     tabs: group.tabOrder.map((tabId) => {
@@ -176,8 +112,8 @@ function localMoveOwner(worktreeId: string | undefined): EditorMoveOwner {
   return editorMoveOwnerFromContext({ target: { kind: 'local' } }, worktreeId)
 }
 
-describe('editor records under frames, layout-owner build', () => {
-  it('keeps the file record of every editor tab main keeps', async () => {
+describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('editor records under frames, layout-owner build', () => {
+  it('draws every editor tab main keeps, each with its file record', async () => {
     const state = useAppStore.getState()
     state.openFile(
       {
@@ -198,19 +134,28 @@ describe('editor records under frames, layout-owner build', () => {
       runtimeEnvironmentId: null,
       language: 'markdown'
     })
-    applySent()
-    const before = editorTabsAndFiles()
-    expect(before.every((tab) => tab.hasFile)).toBe(true)
+    await main.settle()
 
-    await showMainFrame()
-
-    expect(editorTabsAndFiles()).toEqual(before)
+    expect(editorTabsAndFiles()).toEqual([
+      { kind: 'editor', entity: '/repo-a/a.md', hasFile: true },
+      { kind: 'diff', entity: expect.any(String), hasFile: true },
+      { kind: 'editor', entity: expect.any(String), hasFile: true }
+    ])
+    // A diff or preview is kept by the view its open sent, not by the window's record.
+    expect(
+      layoutApplyTestTransport
+        .sentOfType('openEditorTab')
+        .map((command) => [command.contentType, command.view?.view.mode ?? null])
+    ).toEqual([
+      ['editor', null],
+      ['diff', 'diff'],
+      ['editor', 'markdown-preview']
+    ])
   })
 
   it('drops a diff record with the tab main closed, and keeps a record no tab shows', async () => {
-    const state = useAppStore.getState()
-    state.openDiff(WT, '/repo-a/b.ts', 'b.ts', 'typescript', false)
-    applySent()
+    useAppStore.getState().openDiff(WT, '/repo-a/b.ts', 'b.ts', 'typescript', false)
+    await main.settle()
     const diffTab = useAppStore.getState().unifiedTabsByWorktree[WT]![0]!
     // A conflict review's selected file has no tab of its own.
     useAppStore.setState({
@@ -228,31 +173,25 @@ describe('editor records under frames, layout-owner build', () => {
       ]
     })
     // Main closes the diff tab (another client's close).
-    const closed = applyLayoutCommand(
-      main,
-      { type: 'closeTabs', workspace: WT, tabIds: [diffTab.id], force: true },
-      { mintId: () => 'x', mintLeafId: () => 'y', now: () => 1 }
-    )
-    if (!closed.ok) {
-      throw new Error(closed.code)
-    }
-    main = closed.model
-
-    await showMainFrame()
+    await layoutApplyTestTransport.call({
+      command: { type: 'closeTabs', workspace: WT, tabIds: [diffTab.id], force: true }
+    })
+    await main.settle()
 
     expect(editorTabsAndFiles()).toEqual([])
     expect(useAppStore.getState().openFiles.map((file) => file.id)).toEqual(['/repo-a/c.ts'])
   })
 })
 
-describe('open files renamed on disk, layout-owner build', () => {
+describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, layout-owner build', () => {
   it("rekeys main's tabs and file records under the window's ids", async () => {
     const plain = openEdit(WT, '/repo-a/src/a.ts', 'src/a.ts')
     // The same path in a sibling workspace gets an owner-qualified id.
     const owned = openEdit(SIBLING, '/repo-a/src/a.ts', 'src/a.ts')
     useAppStore.getState().openDiff(WT, '/repo-a/src/a.ts', 'src/a.ts', 'typescript', false)
-    applySent()
+    await main.settle()
     expect(owned).toMatch(/^editor:/)
+    const sentBefore = layoutApplyTestTransport.sent.length
 
     const result = remapOpenEditorTabsForPathChange({
       fromPath: '/repo-a/src',
@@ -263,7 +202,8 @@ describe('open files renamed on disk, layout-owner build', () => {
     })
 
     expect(result).toEqual({ ok: true })
-    const commands = applySent()
+    await main.settle()
+    const commands = layoutApplyTestTransport.sent.slice(sentBefore)
     expect(commands.map((command) => [command.type, command.workspace])).toEqual([
       ['renameEditorFiles', WT],
       ['renameEditorFiles', SIBLING]
@@ -271,20 +211,19 @@ describe('open files renamed on disk, layout-owner build', () => {
     expect(editorTabsAndFiles().map((tab) => tab.entity)).not.toContain(plain)
     for (const worktreeId of [WT, SIBLING]) {
       expect(mainView(worktreeId)).toEqual(windowView(worktreeId))
-      expect(main.workspaces[worktreeId]!.editorFiles).toEqual([
+      expect(layoutApplyTestTransport.mainModel!.workspaces[worktreeId]!.editorFiles).toEqual([
         expect.objectContaining({ filePath: '/repo-a/lib/a.ts', relativePath: 'lib/a.ts' })
       ])
     }
-
-    const before = [editorTabsAndFiles(WT), editorTabsAndFiles(SIBLING)]
-    await showMainFrame()
-    expect([editorTabsAndFiles(WT), editorTabsAndFiles(SIBLING)]).toEqual(before)
+    expect(editorTabsAndFiles(WT).every((tab) => tab.hasFile)).toBe(true)
+    expect(editorTabsAndFiles(SIBLING).every((tab) => tab.hasFile)).toBe(true)
   })
 
-  it('sends nothing for a refused rekey or with the switch off', () => {
+  it('sends nothing for a refused rekey', async () => {
     openEdit(WT, '/repo-a/a.ts', 'a.ts')
     openEdit(WT, '/repo-a/b.ts', 'b.ts')
-    applySent()
+    await main.settle()
+    const sentBefore = layoutApplyTestTransport.sent.length
     expect(
       remapOpenEditorTabsForPathChange({
         fromPath: '/repo-a/a.ts',
@@ -294,9 +233,13 @@ describe('open files renamed on disk, layout-owner build', () => {
         owner: localMoveOwner(WT)
       })
     ).toEqual({ ok: false, reason: 'collision' })
-    expect(applySent()).toEqual([])
+    expect(layoutApplyTestTransport.sent.slice(sentBefore)).toEqual([])
+  })
+})
 
-    mocks.layoutOwnerIsMain = false
+describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, switch off', () => {
+  it('sends nothing', () => {
+    openEdit(WT, '/repo-a/a.ts', 'a.ts')
     expect(
       remapOpenEditorTabsForPathChange({
         fromPath: '/repo-a/a.ts',
@@ -306,34 +249,39 @@ describe('open files renamed on disk, layout-owner build', () => {
         owner: localMoveOwner(WT)
       })
     ).toEqual({ ok: true })
-    expect(applySent()).toEqual([])
+    expect(layoutApplyTestTransport.sent).toEqual([])
   })
 })
 
-describe('a resolved deleted-side conflict, layout-owner build', () => {
-  it("closes the placeholder's tab in main, so no frame brings its record back", async () => {
-    const entry = {
-      path: 'gone.ts',
-      status: 'deleted' as const,
-      area: 'unstaged' as const,
-      conflictKind: 'deleted_by_us' as const,
-      conflictStatus: 'unresolved' as const,
-      conflictStatusSource: 'git' as const
-    }
-    useAppStore.getState().setGitStatus(WT, { entries: [entry], conflictOperation: 'merge' })
-    useAppStore.getState().openConflictFile(WT, '/repo-a', entry, 'typescript')
-    applySent()
-    expect(editorTabsAndFiles()).toEqual([
-      { kind: 'editor', entity: '/repo-a/gone.ts', hasFile: true }
-    ])
-    expect(main.workspaces[WT]!.tabs).toHaveLength(1)
+describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+  'a resolved deleted-side conflict, layout-owner build',
+  () => {
+    it("closes the placeholder's tab in main, and the frame drops it", async () => {
+      const entry = {
+        path: 'gone.ts',
+        status: 'deleted' as const,
+        area: 'unstaged' as const,
+        conflictKind: 'deleted_by_us' as const,
+        conflictStatus: 'unresolved' as const,
+        conflictStatusSource: 'git' as const
+      }
+      useAppStore.getState().setGitStatus(WT, { entries: [entry], conflictOperation: 'merge' })
+      useAppStore.getState().openConflictFile(WT, '/repo-a', entry, 'typescript')
+      await main.settle()
+      expect(editorTabsAndFiles()).toEqual([
+        { kind: 'editor', entity: '/repo-a/gone.ts', hasFile: true }
+      ])
+      expect(layoutApplyTestTransport.mainModel!.workspaces[WT]!.tabs).toHaveLength(1)
+      const sentBefore = layoutApplyTestTransport.sent.length
 
-    useAppStore.getState().setGitStatus(WT, { entries: [], conflictOperation: 'merge' })
-
-    expect(applySent().map((command) => command.type)).toEqual(['closeTabs'])
-    expect(main.workspaces[WT]!.tabs).toEqual([])
-    await showMainFrame()
-    expect(editorTabsAndFiles()).toEqual([])
-    expect(useAppStore.getState().openFiles).toEqual([])
-  })
-})
+      useAppStore.getState().setGitStatus(WT, { entries: [], conflictOperation: 'merge' })
+      expect(
+        layoutApplyTestTransport.sent.slice(sentBefore).map((command) => command.type)
+      ).toEqual(['closeTabs'])
+      await main.settle()
+      expect(layoutApplyTestTransport.mainModel!.workspaces[WT]?.tabs ?? []).toEqual([])
+      expect(editorTabsAndFiles()).toEqual([])
+      expect(useAppStore.getState().openFiles).toEqual([])
+    })
+  }
+)

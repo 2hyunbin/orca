@@ -173,19 +173,24 @@ function applyToMainModel(command: LayoutCommand): LayoutApplyReply {
   state.model = applied.model
   state.seq += 1
   const seq = state.seq
-  const key = command.workspace
-  const before = model.workspaces[key]
-  const workspace = applied.model.workspaces[key]
-  // Main publishes the operation's records before it replies.
+  // Main publishes the operation's records, in every workspace it changed (a move changes two),
+  // before it replies.
+  const keys = new Set([...Object.keys(model.workspaces), ...Object.keys(applied.model.workspaces)])
   emit({
     type: 'records',
     epoch: TEST_EPOCH,
     seq,
-    workspaces: recordChanges(
-      key,
-      before && publishWorkspaceLayout(before, model.hostId),
-      workspace && publishWorkspaceLayout(workspace, model.hostId)
-    )
+    workspaces: [...keys].flatMap((key) => {
+      const before = model.workspaces[key]
+      const workspace = applied.model.workspaces[key]
+      return before === workspace
+        ? []
+        : recordChanges(
+            key,
+            before && publishWorkspaceLayout(before, model.hostId),
+            workspace && publishWorkspaceLayout(workspace, model.hostId)
+          )
+    })
   })
   return { ok: true, result: applied.result, frameSeq: seq }
 }

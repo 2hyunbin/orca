@@ -124,6 +124,8 @@ export type LayoutCommand =
       /** What the tab shows beyond its file; not saved. */
       view?: LayoutEditorView
       groupId?: string
+      /** Placement in the group: at this index, else at its end. */
+      index?: number
       preview?: boolean
       /** Editor tabs whose view reported an unsaved draft: a preview among them is not replaced. */
       dirtyTabIds?: string[]

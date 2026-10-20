@@ -7,15 +7,14 @@ import {
 } from '../tab-group-state'
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
-import { recordPromotedEditorTabsInLayoutOwner } from '../editor/tabs/editor-tab-layout-owner'
-import { withPreviewEnded } from './tab-preview-flag'
+import { promotePreviewTabsThroughLayoutOwner } from './preview-tab-promotion'
 
-/** Activation ends a preview unless it preserves it. */
+/** Activation ends a preview unless it preserves it; in a layout-owner build main's frame ends it. */
 function withPreviewOnActivation(tab: Tab, preservePreview: boolean): Tab {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return { ...tab, isPreview: preservePreview ? tab.isPreview : false }
   }
-  return preservePreview ? tab : withPreviewEnded(tab)
+  return tab
 }
 
 export function createTabsFocusActions(
@@ -106,9 +105,9 @@ export function createTabsFocusActions(
           }
         }
       })
-      // Switch point: main records that activating a preview made it permanent.
+      // Switch point: main makes the activated preview permanent; its frame clears the flag.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        recordPromotedEditorTabsInLayoutOwner(get(), promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
       }
     }
   }

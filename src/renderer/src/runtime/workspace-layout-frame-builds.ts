@@ -39,12 +39,10 @@ function patchFromSlices(
   { view, facts }: { view: DesktopLayoutView; facts: LayoutContentFacts },
   holds: LayoutFrameBuildHolds
 ): LayoutFrameBuildPatch {
-  const heldFiles = new Set(state.openFiles.map((file) => `${file.worktreeId}\0${file.id}`))
   const built = buildLayoutFrameSlices({
     layouts: Object.fromEntries(keys.map((key) => [key, cache[key]!])),
     facts,
-    view,
-    holdsEditorFile: (worktreeId, fileId) => heldFiles.has(`${worktreeId}\0${fileId}`)
+    view
   })
   return buildLayoutFrameStorePatch(
     state,

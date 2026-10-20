@@ -4,10 +4,8 @@ import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
 import type { Tab } from '../../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
-import {
-  previewEditorTabsOf,
-  recordPromotedEditorTabsInLayoutOwner
-} from '../tabs/editor-tab-layout-owner'
+import { previewEditorTabsOf } from '../tabs/editor-tab-layout-owner'
+import { promotePreviewTabsThroughLayoutOwner } from '../../tabs/preview-tab-promotion'
 import { writeEditorBuffer } from '../buffers/editor-buffer-record'
 import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
 
@@ -109,7 +107,8 @@ export function createOpenFileMutations(
             needsPreviewClear ? { isPreview: undefined } : undefined
           ),
           ...(dropDraft ? { editorDrafts: withoutKey(s.editorDrafts, fileId) } : {}),
-          ...(needsPreviewClear
+          // Switch point: main's frame ends the tabs' preview.
+          ...(needsPreviewClear && !ORCA_LAYOUT_OWNER_IS_MAIN
             ? {
                 unifiedTabsByWorktree: Object.fromEntries(
                   Object.entries(s.unifiedTabsByWorktree ?? {}).map(([worktreeId, tabs]) => [
@@ -125,9 +124,9 @@ export function createOpenFileMutations(
             : {})
         }
       })
-      // Switch point: main records that an edit made a preview tab permanent.
+      // Switch point: main makes the edited preview tabs permanent.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
-        recordPromotedEditorTabsInLayoutOwner(get(), promoted)
+        promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
       }
     },
 

@@ -39,8 +39,6 @@ export type LayoutFrameSliceInput = {
   layouts: WorkspaceLayoutCache
   facts: LayoutContentFacts
   view: DesktopLayoutView
-  /** Whether this window holds an editor file's record: frames carry edit-mode files' and views. */
-  holdsEditorFile?: (worktreeId: string, fileId: string) => boolean
 }
 
 export type LayoutFrameSlices = Pick<
@@ -185,8 +183,7 @@ function withFramedViewFiles(
 export function buildLayoutFrameSlices({
   layouts,
   facts,
-  view,
-  holdsEditorFile
+  view
 }: LayoutFrameSliceInput): LayoutFrameSlices {
   const liveTitles = liveTitlesByTabId(layouts, view)
   const saved = saveWorkspaceLayout({
@@ -225,11 +222,9 @@ export function buildLayoutFrameSlices({
   })
 
   const framed = framedViewFiles(layouts)
-  const tabs = buildHydratedTabState(
-    session,
-    workspaceKeys,
-    (worktreeId, fileId) =>
-      framed.has(fileKey(worktreeId, fileId)) || holdsEditorFile?.(worktreeId, fileId) === true
+  // A diff, conflict or check tab is drawn from its view: every window open sends one.
+  const tabs = buildHydratedTabState(session, workspaceKeys, (worktreeId, fileId) =>
+    framed.has(fileKey(worktreeId, fileId))
   )
   const editor = buildHydratedEditorSessionState(session, workspaceKeys, null)
   const openFiles = withFramedViewFiles(editor.state.openFiles, framed)
