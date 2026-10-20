@@ -22,6 +22,8 @@ import {
 function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService {
   return {
     getRuntimeId: () => 'test-runtime',
+    getPtyExecutionHostMetadata: () => ({ incarnationId: 'test-incarnation' }),
+    getTerminalLaunchResult: () => undefined,
     ...overrides
   } as OrcaRuntimeService
 }

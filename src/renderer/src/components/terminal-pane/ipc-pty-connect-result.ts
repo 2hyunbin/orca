@@ -7,8 +7,8 @@ type IpcPtySpawnResult = PtyConnectResult & { isReattach?: boolean }
 export function projectIpcPtyConnectResult(
   spawnResult: IpcPtySpawnResult
 ): string | PtyConnectResult {
-  const facts = terminalLaunchFacts(spawnResult)
   const launchAgent = isTuiAgent(spawnResult.launchAgent) ? spawnResult.launchAgent : undefined
+  const facts = terminalLaunchFacts({ ...spawnResult, launchAgent })
   if (spawnResult.isReattach || spawnResult.coldRestore || spawnResult.sessionExpired) {
     return {
       ...facts,

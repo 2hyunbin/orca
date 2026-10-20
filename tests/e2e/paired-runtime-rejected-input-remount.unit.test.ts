@@ -95,6 +95,8 @@ function startHost(): {
   const sendTerminal = vi.fn().mockResolvedValue({ accepted: false })
   const runtime = {
     getRuntimeId: () => 'test-runtime',
+    getPtyExecutionHostMetadata: () => ({ incarnationId: 'test-incarnation' }),
+    getTerminalLaunchResult: () => undefined,
     registerRemoteTerminalViewSubscriber: () => () => {},
     resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
     requestRendererTerminalTabMount: vi.fn().mockReturnValue(true),
