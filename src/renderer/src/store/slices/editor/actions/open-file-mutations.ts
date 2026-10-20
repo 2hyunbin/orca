@@ -1,7 +1,14 @@
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
-import type { OpenFile } from '../types/open-file'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
+import type { Tab } from '../../../../../../shared/tab-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { withPreviewEnded } from '../../tabs/tab-preview-flag'
+import {
+  previewEditorTabsOf,
+  recordPromotedEditorTabsInLayoutOwner
+} from '../tabs/editor-tab-layout-owner'
+import { writeEditorBuffer } from '../buffers/editor-buffer-record'
 
 export function createOpenFileMutations(
   set: EditorSet,
@@ -9,7 +16,6 @@ export function createOpenFileMutations(
 ): Pick<
   EditorSlice,
   | 'setActiveFile'
-  | 'reorderFiles'
   | 'markFileDirty'
   | 'setExternalMutation'
   | 'setLastKnownDiskSignature'
@@ -60,25 +66,8 @@ export function createOpenFileMutations(
       }
     },
 
-    reorderFiles: (fileIds) =>
-      set((s) => {
-        const reorderedSet = new Set(fileIds)
-        const byId = new Map(s.openFiles.map((f) => [f.id, f]))
-        const reordered = fileIds.map((id) => byId.get(id)).filter(Boolean) as OpenFile[]
-        // Replace the reordered subset in-place: keep other-worktree files at their positions
-        const result: OpenFile[] = []
-        let ri = 0
-        for (const f of s.openFiles) {
-          if (reorderedSet.has(f.id)) {
-            result.push(reordered[ri++])
-          } else {
-            result.push(f)
-          }
-        }
-        return { openFiles: result }
-      }),
-
-    markFileDirty: (fileId, dirty) =>
+    markFileDirty: (fileId, dirty) => {
+      const promoted: Tab[] = []
       set((s) => {
         // Why: this fires on every keystroke; rebuilding openFiles unconditionally thrashes subscribers and caused typing lag, so bail when nothing changes.
         const file = s.openFiles.find((f) => f.id === fileId)
@@ -93,13 +82,16 @@ export function createOpenFileMutations(
         if (file.isDirty === dirty && !needsPreviewClear) {
           return s
         }
-        const nextOpenFiles = s.openFiles.map((f) =>
-          f.id === fileId
-            ? { ...f, isDirty: dirty, ...(needsPreviewClear ? { isPreview: undefined } : {}) }
-            : f
-        )
+        if (ORCA_LAYOUT_OWNER_IS_MAIN && needsPreviewClear) {
+          promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, fileId))
+        }
         return {
-          openFiles: nextOpenFiles,
+          ...writeEditorBuffer(
+            s,
+            fileId,
+            { isDirty: dirty },
+            needsPreviewClear ? { isPreview: undefined } : undefined
+          ),
           ...(needsPreviewClear
             ? {
                 unifiedTabsByWorktree: Object.fromEntries(
@@ -107,7 +99,7 @@ export function createOpenFileMutations(
                     worktreeId,
                     tabs.map((tab) =>
                       tab.entityId === fileId && isEditorTabContentType(tab.contentType)
-                        ? { ...tab, isPreview: false }
+                        ? withPreviewEnded(tab)
                         : tab
                     )
                   ])
@@ -115,7 +107,12 @@ export function createOpenFileMutations(
               }
             : {})
         }
-      }),
+      })
+      // Switch point: main records that an edit made a preview tab permanent.
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
+        recordPromotedEditorTabsInLayoutOwner(get(), promoted)
+      }
+    },
 
     setExternalMutation: (fileId, mutation) =>
       set((s) => {
@@ -127,11 +124,7 @@ export function createOpenFileMutations(
         if (file.externalMutation === next) {
           return s
         }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, externalMutation: next } : f
-          )
-        }
+        return writeEditorBuffer(s, fileId, { externalMutation: next })
       }),
 
     setLastKnownDiskSignature: (fileId, signature) =>
@@ -140,11 +133,7 @@ export function createOpenFileMutations(
         if (!file || file.lastKnownDiskSignature === signature) {
           return s
         }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, lastKnownDiskSignature: signature } : f
-          )
-        }
+        return writeEditorBuffer(s, fileId, { lastKnownDiskSignature: signature })
       }),
 
     clearPendingDiskBaselineVerification: (fileId) =>
@@ -153,11 +142,7 @@ export function createOpenFileMutations(
         if (!file?.pendingDiskBaselineVerification) {
           return s
         }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, pendingDiskBaselineVerification: undefined } : f
-          )
-        }
+        return writeEditorBuffer(s, fileId, { pendingDiskBaselineVerification: undefined })
       }),
 
     setPendingDiskBaselineVerification: (fileId, value) =>
@@ -167,11 +152,7 @@ export function createOpenFileMutations(
         if (!file || file.pendingDiskBaselineVerification === next) {
           return s
         }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, pendingDiskBaselineVerification: next } : f
-          )
-        }
+        return writeEditorBuffer(s, fileId, { pendingDiskBaselineVerification: next })
       }),
 
     setPendingLiveDiskVerification: (fileId, value) =>
@@ -181,11 +162,7 @@ export function createOpenFileMutations(
         if (!file || file.pendingLiveDiskVerification === next) {
           return s
         }
-        return {
-          openFiles: s.openFiles.map((f) =>
-            f.id === fileId ? { ...f, pendingLiveDiskVerification: next } : f
-          )
-        }
+        return writeEditorBuffer(s, fileId, { pendingLiveDiskVerification: next })
       }),
 
     clearSelfMoveEcho: (fileId) =>

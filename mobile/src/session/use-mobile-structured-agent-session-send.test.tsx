@@ -9,6 +9,11 @@ import { fieldsOf, ok } from './use-mobile-structured-agent-session-queued.test-
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 import { structuredSendResultFixture } from './structured-agent-send-result.test-fixture'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
+import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../src/shared/agent-session-create-capabilities'
+import {
+  structuredAgentSessionHostSupport,
+  type StructuredAgentSessionHostSupport
+} from './mobile-structured-agent-session-host-support'
 import { agentSessionFailureWords } from '../../../src/shared/agent-session-failure-words'
 import { agentJournalSubmissionKey } from '../../../src/shared/agent-session-journal-item-key'
 import {
@@ -66,6 +71,7 @@ describe('mobile structured send actions', () => {
   let listener: ((value: unknown) => void) | null = null
   let storedOperations: Map<string, string>
   let agent = 'codex'
+  let hostSupport: StructuredAgentSessionHostSupport | null = null
   const onSendError = vi.fn()
   const sendRequest = vi.fn<RpcClient['sendRequest']>()
   const subscribe = vi.fn<RpcClient['subscribe']>((_method, _params, onData) => {
@@ -94,7 +100,7 @@ describe('mobile structured send actions', () => {
       enabled: true,
       connected: true,
       agent,
-      hostSupport: null,
+      hostSupport,
       onSendError
     })
     return createElement('span', null, banner.message)
@@ -146,6 +152,93 @@ describe('mobile structured send actions', () => {
     banner = null
     listener = null
     agent = 'codex'
+    hostSupport = null
+  })
+
+  it.each([
+    ['carries the shown model and effort to a host that takes them', true],
+    ['sends the old shape to a host that does not', false]
+  ])('%s', async (_name, takesOptions) => {
+    agent = 'claude'
+    hostSupport = structuredAgentSessionHostSupport(
+      takesOptions ? [AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY] : []
+    )
+    const high = [
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' }
+    ]
+    sendRequest.mockImplementation(async (method) =>
+      method === 'agentSession.send'
+        ? sendResult('accepted')
+        : method === 'agentSession.options'
+          ? ok({
+              models: [{ id: 'opus[1m]', label: 'Opus', isDefault: true, efforts: high }],
+              current: { model: 'opus[1m]', effort: 'high' }
+            })
+          : ok({})
+    )
+    await mountSession()
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(sendRequest.mock.calls.some(([method]) => method === 'agentSession.options')).toBe(
+          true
+        )
+      )
+    })
+    await act(async () => {
+      expect(await hook!.sendWithOutcome('hello')).toBe('accepted')
+      expect(await hook!.sendWithOutcome('again')).toBe('accepted')
+    })
+    for (const [, params] of calls()) {
+      if (takesOptions) {
+        expect(fieldsOf(params).options).toEqual({ model: 'opus[1m]', effort: 'high' })
+      } else {
+        expect(fieldsOf(params)).not.toHaveProperty('options')
+      }
+    }
+  })
+
+  it("keeps a chat's model its CLI stopped listing, and sends on it and its effort", async () => {
+    agent = 'claude'
+    hostSupport = structuredAgentSessionHostSupport([AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY])
+    const opus = {
+      id: 'opus',
+      label: 'Opus',
+      isDefault: true,
+      efforts: [{ value: 'high', label: 'High' }]
+    }
+    sendRequest.mockImplementation(async (method) =>
+      method === 'agentSession.send'
+        ? sendResult('accepted')
+        : method === 'agentSession.modelCatalog'
+          ? ok({ origin: 'probe', fetchedAt: 1, models: [opus] })
+          : method === 'agentSession.options'
+            ? ok({
+                // A stopped chat lists the host's rows and its own model.
+                models: [
+                  opus,
+                  { id: 'opus[1m]', label: 'opus[1m]', isDefault: false, efforts: [] }
+                ],
+                listedModelIds: ['opus'],
+                current: { model: 'opus[1m]', effort: 'max' }
+              })
+            : ok({})
+    )
+    await mountSession()
+    await vi.waitFor(async () => {
+      await act(async () => {})
+      expect(
+        hook!.optionSnapshot.find((descriptor) => descriptor.id === 'model')?.kind
+      ).toMatchObject({ currentValue: 'opus[1m]' })
+    })
+    expect(hook!.optionSnapshot.find((descriptor) => descriptor.id === 'effort')).toMatchObject({
+      settable: false,
+      kind: { currentValue: 'max' }
+    })
+    await act(async () => {
+      expect(await hook!.sendWithOutcome('hello')).toBe('accepted')
+    })
+    expect(fieldsOf(calls()[0]![1]).options).toEqual({ model: 'opus[1m]', effort: 'max' })
   })
 
   it("sends a command the chat's own agent runs as a message, though Codex's host claims it", async () => {
@@ -313,6 +406,27 @@ describe('mobile structured send actions', () => {
     expect(calls()[1]?.[1]).toMatchObject({
       body: {
         blocks: expect.arrayContaining([{ type: 'image-ref', path: '/tmp/reuploaded.png' }])
+      }
+    })
+  })
+
+  it('sends an attached file as a reference after the text, and only images as image blocks', async () => {
+    sendRequest.mockImplementation(async (method) =>
+      method === 'agentSession.send' ? sendResult('accepted') : ok({ models: [], current: {} })
+    )
+    await mountSession()
+    await act(async () => {
+      await hook!.sendWithOutcome('read these', undefined, undefined, [
+        { path: '/tmp/shot.png', previewUri: 'file:///shot.png' },
+        { kind: 'file', path: '/store/u1/spec.pdf' }
+      ])
+    })
+    expect(calls()[0]?.[1]).toMatchObject({
+      body: {
+        blocks: [
+          { type: 'text', text: 'read these\n@/store/u1/spec.pdf' },
+          { type: 'image-ref', path: '/tmp/shot.png' }
+        ]
       }
     })
   })
