@@ -8,6 +8,34 @@ import {
   seedStore
 } from '../slices/store-test-helpers'
 import { createStoreCascadesMockApi } from '../slices/store-cascades-test-harness'
+import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply(await importOriginal())
+)
+
+type CloseReason = 'user' | 'cleanup'
+
+/** The closes main was told to record: `closeTabs` intents with the switch on, else today's call. */
+function sentCloses(
+  closeTerminalSurface: ReturnType<typeof vi.fn>
+): { worktreeId: string; tabId: string; reason: CloseReason }[] {
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    return layoutApplyTestTransport.sentOfType('closeTabs').map((command) => ({
+      worktreeId: command.workspace,
+      tabId: command.tabIds[0]!,
+      reason: command.recordClose === 'cleanup' ? 'cleanup' : 'user'
+    }))
+  }
+  return closeTerminalSurface.mock.calls.map(([args]) => ({
+    worktreeId: args.worktreeId,
+    tabId: args.target.tabId,
+    reason: args.reason
+  }))
+}
 
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }
@@ -54,6 +82,7 @@ vi.mock('@/lib/agent-status', async (importOriginal) => ({
 
     beforeEach(() => {
       vi.clearAllMocks()
+      layoutApplyTestTransport.reset()
       closeTerminalSurface.mockResolvedValue(undefined)
       mockApi.worktrees.updateMeta.mockResolvedValue({})
     })
@@ -66,20 +95,19 @@ vi.mock('@/lib/agent-status', async (importOriginal) => ({
       await Promise.resolve()
 
       expect(mockApi.pty.kill).toHaveBeenCalledWith(SSH_PTY)
-      expect(closeTerminalSurface).toHaveBeenCalledWith({
-        worktreeId: SSH_WORKTREE,
-        target: { kind: 'tab', tabId: 'ssh-tab' },
-        reason: 'user'
-      })
+      expect(sentCloses(closeTerminalSurface)).toEqual([
+        { worktreeId: SSH_WORKTREE, tabId: 'ssh-tab', reason: 'user' }
+      ])
     })
 
     it('removes the tab and kills it without waiting for main to write the close', async () => {
       closeTerminalSurface.mockReturnValue(new Promise<void>(() => {}))
+      layoutApplyTestTransport.answerWith('pending')
       const store = storeWithSshTab()
 
       store.getState().closeTab('ssh-tab')
 
-      expect(closeTerminalSurface).toHaveBeenCalledTimes(1)
+      expect(sentCloses(closeTerminalSurface)).toHaveLength(1)
       expect(store.getState().tabsByWorktree[SSH_WORKTREE]).toEqual([])
       await Promise.resolve()
       expect(mockApi.pty.kill).toHaveBeenCalledWith(SSH_PTY)
@@ -88,20 +116,22 @@ vi.mock('@/lib/agent-status', async (importOriginal) => ({
     it.each([['user'], ['cleanup']] as const)('sends the intent for a %s close', (reason) => {
       storeWithSshTab().getState().closeTab('ssh-tab', { reason })
 
-      expect(closeTerminalSurface).toHaveBeenCalledTimes(1)
+      expect(sentCloses(closeTerminalSurface)).toEqual([
+        { worktreeId: SSH_WORKTREE, tabId: 'ssh-tab', reason }
+      ])
     })
 
     // Why: exits still retire through main's own exit handling until main decides exits itself.
     it('sends nothing for a pty-exit close', () => {
       storeWithSshTab().getState().closeTab('ssh-tab', { reason: 'pty-exit' })
 
-      expect(closeTerminalSurface).not.toHaveBeenCalled()
+      expect(sentCloses(closeTerminalSurface)).toEqual([])
     })
 
     it('sends nothing when a paired host owns the close', () => {
       storeWithSshTab().getState().closeTab('ssh-tab', { remoteCloseOwnedByHost: true })
 
-      expect(closeTerminalSurface).not.toHaveBeenCalled()
+      expect(sentCloses(closeTerminalSurface)).toEqual([])
     })
   })
 }
@@ -240,6 +270,7 @@ vi.mock('@/lib/agent-status', async (importOriginal) => ({
 
     beforeEach(() => {
       vi.clearAllMocks()
+      layoutApplyTestTransport.reset()
       closeTerminalSurface.mockResolvedValue(undefined)
       mockApi.worktrees.updateMeta.mockResolvedValue({})
     })
@@ -259,11 +290,7 @@ vi.mock('@/lib/agent-status', async (importOriginal) => ({
         worktreeId,
         reason: 'user'
       })
-      expect(closeTerminalSurface).toHaveBeenCalledWith({
-        worktreeId,
-        target: { kind: 'tab', tabId },
-        reason: 'user'
-      })
+      expect(sentCloses(closeTerminalSurface)).toEqual([{ worktreeId, tabId, reason: 'user' }])
     })
 
     it('mirrors a cleanup close with its reason', () => {
@@ -286,7 +313,7 @@ vi.mock('@/lib/agent-status', async (importOriginal) => ({
       store.getState().closeTab('remote-tab', opts)
 
       expect(store.getState().closedTerminalTabTombstonesByTabId).toEqual({})
-      expect(closeTerminalSurface).not.toHaveBeenCalled()
+      expect(sentCloses(closeTerminalSurface)).toEqual([])
     })
   })
 }
