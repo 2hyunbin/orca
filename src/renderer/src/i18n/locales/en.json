@@ -7125,7 +7125,8 @@
               "help": "Used for OpenCode Go usage in the status bar. The session cookie below is only needed for legacy console (OpenCode Black) accounts."
             }
           },
-          "remoteScopeLocalAccountsKeptHostPicker": "Accounts managed on this desktop are unchanged. Choose this computer in the Host menu at the top of Settings to view them."
+          "remoteScopeLocalAccountsKeptHostPicker": "Accounts managed on this desktop are unchanged. Choose this computer in the Host menu at the top of Settings to view them.",
+          "apiKeyUpdateFailed": "MiniMax API key update failed."
         },
         "AdvancedPane": {
           "40b29e0bf3": "Restart",
@@ -12880,7 +12881,8 @@
           "siteUnavailable": "Host plan site unavailable",
           "keyStoredOnHostHelp": "Stored on {{host}} and sent from there only to the selected site for usage refreshes. It takes priority over the ZCode CLI sign-in.",
           "usingCliOnHostHelp": "Orca reads the selected Coding Plan from the ZCode CLI credential store on {{host}}. Save an API key below to link the plan there instead.",
-          "notConfiguredOnHostHelp": "Save the plan API key below, or sign in with the ZCode CLI on {{host}}."
+          "notConfiguredOnHostHelp": "Save the plan API key below, or sign in with the ZCode CLI on {{host}}.",
+          "keyOnHostDescription": "Paste the API key from the selected console’s API Keys page. Stored on {{host}} and sent from there only to that site for usage refreshes."
         },
         "deltaMove": {
           "action": "Move the new projects…",
@@ -12964,7 +12966,8 @@
           "cookieNeedsDesktop": "{{host}} has no Orca desktop app to send a session cookie from. Save an API key instead.",
           "checking": "Checking {{host}}…",
           "sealedElsewhereForgettable": "Saved by another Orca app on {{host}}, which this one cannot read. Change it in that app, or forget it here.",
-          "unreadableKey": "Orca on {{host}} cannot read the saved key. Replace it or forget it."
+          "unreadableKey": "Orca on {{host}} cannot read the saved key. Replace it or forget it.",
+          "miniMaxApiKeyDescription": "Paste the API key from your MiniMax console → API keys. Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes. The API key takes priority over the cookie."
         },
         "useUsageHostSettings": {
           "updateFailed": "Could not update the setting on {{host}}."

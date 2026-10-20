@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   callMiniMax: vi.fn(),
   callZcode: vi.fn(),
   update: vi.fn(),
-  toastError: vi.fn()
+  toastError: vi.fn(),
+  settingsSearchQuery: ''
 }))
 
 vi.mock('@/runtime/runtime-usage-credentials-client', async (importOriginal) => ({
@@ -36,7 +37,7 @@ vi.mock('../../store', () => ({
     selector({
       recordFeatureInteraction: vi.fn(),
       refreshRateLimits: vi.fn(),
-      settingsSearchQuery: '',
+      settingsSearchQuery: mocks.settingsSearchQuery,
       rateLimits: { zcode: null }
     })
 }))
@@ -81,6 +82,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  mocks.settingsSearchQuery = ''
   cleanup()
   vi.clearAllMocks()
 })
@@ -98,6 +100,18 @@ describe('usage keys on the Settings host', () => {
     await waitFor(() =>
       expect(mocks.callMiniMax).toHaveBeenCalledWith(owner, 'saveApiKey', 'key-a')
     )
+  })
+
+  it('finds the MiniMax API key by its host, not as stored locally', async () => {
+    mocks.settingsSearchQuery = 'stored locally'
+    renderMiniMax()
+    await waitFor(() => expect(mocks.callMiniMax).toHaveBeenCalled())
+    expect(screen.queryByPlaceholderText('Paste your MiniMax API key')).not.toBeInTheDocument()
+    cleanup()
+
+    mocks.settingsSearchQuery = 'stored on build box'
+    renderMiniMax()
+    expect(await screen.findByPlaceholderText('Paste your MiniMax API key')).toBeInTheDocument()
   })
 
   it('disables the cookie where the host has no desktop cookie jar', async () => {
@@ -185,5 +199,21 @@ describe('usage keys on the Settings host', () => {
       )
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Paste your GLM Coding Plan API key')).toBeEnabled()
+  })
+
+  it('finds the GLM API key by its host, not as stored locally', async () => {
+    mocks.settingsSearchQuery = 'stored locally'
+    render(<ZcodePlanAccountsSection host={host} usageSettings={usageSettings} />)
+    await waitFor(() => expect(mocks.callZcode).toHaveBeenCalled())
+    expect(
+      screen.queryByPlaceholderText('Paste your GLM Coding Plan API key')
+    ).not.toBeInTheDocument()
+    cleanup()
+
+    mocks.settingsSearchQuery = 'stored on build box'
+    render(<ZcodePlanAccountsSection host={host} usageSettings={usageSettings} />)
+    expect(
+      await screen.findByPlaceholderText('Paste your GLM Coding Plan API key')
+    ).toBeInTheDocument()
   })
 })

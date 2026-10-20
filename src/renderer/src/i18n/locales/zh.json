@@ -6853,7 +6853,8 @@
               "help": "用于在状态栏中显示 OpenCode Go 使用情况。下面的会话 Cookie 仅旧版控制台 (OpenCode Black) 账号需要。"
             }
           },
-          "remoteScopeLocalAccountsKeptHostPicker": "在此桌面上管理的账户保持不变。请在设置顶部的“主机”菜单中选择此计算机以查看它们。"
+          "remoteScopeLocalAccountsKeptHostPicker": "在此桌面上管理的账户保持不变。请在设置顶部的“主机”菜单中选择此计算机以查看它们。",
+          "apiKeyUpdateFailed": "MiniMax API 密钥更新失败。"
         },
         "AdvancedPane": {
           "40b29e0bf3": "重新启动",
@@ -12469,7 +12470,8 @@
           "siteUnavailable": "主机计划网站不可用",
           "keyStoredOnHostHelp": "保存在 {{host}}，刷新用量时仅从那里发送到所选站点。它优先于 ZCode CLI 登录。",
           "usingCliOnHostHelp": "Orca 从 {{host}} 上的 ZCode CLI 凭据存储读取所选的 Coding Plan。在下方保存 API 密钥即可在那里关联该套餐。",
-          "notConfiguredOnHostHelp": "在下方保存套餐 API 密钥，或在 {{host}} 上使用 ZCode CLI 登录。"
+          "notConfiguredOnHostHelp": "在下方保存套餐 API 密钥，或在 {{host}} 上使用 ZCode CLI 登录。",
+          "keyOnHostDescription": "从所选控制台的 API Keys 页面粘贴 API 密钥。保存在 {{host}}，刷新用量时仅从那里发送到该站点。"
         },
         "NotificationHostToggles": {
           "offCount": "{{count}} 台已关闭",
@@ -12688,7 +12690,8 @@
           "cookieNeedsDesktop": "{{host}} 上没有可发送会话 Cookie 的 Orca 桌面应用。请改为保存 API 密钥。",
           "checking": "正在检查 {{host}}…",
           "sealedElsewhereForgettable": "由 {{host}} 上的另一个 Orca 应用保存，此应用无法读取。请在该应用中更改，或在此处忘记它。",
-          "unreadableKey": "{{host}} 上的 Orca 无法读取已保存的密钥。请替换或忘记它。"
+          "unreadableKey": "{{host}} 上的 Orca 无法读取已保存的密钥。请替换或忘记它。",
+          "miniMaxApiKeyDescription": "从 MiniMax 控制台 → API keys 粘贴 API 密钥。保存在 {{host}}，并在刷新用量时从那里发送到所选的 MiniMax 端点。API 密钥优先于 Cookie。"
         },
         "useUsageHostSettings": {
           "updateFailed": "无法更新 {{host}} 上的设置。"

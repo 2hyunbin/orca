@@ -76,9 +76,9 @@ export function createMiniMaxCredentialActions(context: MiniMaxCredentialActionC
     'auto.components.settings.AccountsPane.b43e761fe5',
     'MiniMax cookie update failed.'
   )
-  const credentialFailure = translate(
-    'auto.components.settings.AccountsPane.b43e761fe5',
-    'MiniMax credential update failed.'
+  const apiKeyFailure = translate(
+    'auto.components.settings.AccountsPane.apiKeyUpdateFailed',
+    'MiniMax API key update failed.'
   )
 
   const saveMiniMaxCookie = async (): Promise<void> => {
@@ -118,7 +118,7 @@ export function createMiniMaxCredentialActions(context: MiniMaxCredentialActionC
     await run('saveApiKey', {
       value: apiKey,
       clearDraft: clearApiKeyDraft,
-      failureMessage: credentialFailure,
+      failureMessage: apiKeyFailure,
       saved: {
         landed: (status) => status.apiKeyConfigured,
         notSaved: translate(
@@ -136,6 +136,6 @@ export function createMiniMaxCredentialActions(context: MiniMaxCredentialActionC
       run('clearCookie', { clearDraft: clearCookieDraft, failureMessage: cookieFailure }),
     saveMiniMaxApiKey,
     clearMiniMaxApiKey: () =>
-      run('clearApiKey', { clearDraft: clearApiKeyDraft, failureMessage: credentialFailure })
+      run('clearApiKey', { clearDraft: clearApiKeyDraft, failureMessage: apiKeyFailure })
   }
 }

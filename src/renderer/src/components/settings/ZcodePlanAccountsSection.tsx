@@ -24,6 +24,7 @@ import {
   usageCredentialAccessNotice,
   usageCredentialSealedElsewhere,
   usageCredentialUnreadableNotice,
+  zcodePlanKeyDescription,
   type UsageCredentialHost
 } from './usage-credential-host'
 import type { UsageHostSettingsModel } from './use-usage-host-settings'
@@ -294,10 +295,7 @@ export function ZcodePlanAccountsSection({
 
       <SearchableSetting
         title={translate('auto.components.settings.ZcodePlanAccountsSection.keyTitle', 'API key')}
-        description={translate(
-          'auto.components.settings.ZcodePlanAccountsSection.keyDescription',
-          'Paste the API key from the selected console’s API Keys page. Stored locally, encrypted when the OS supports it, and sent only to that site for usage refreshes.'
-        )}
+        description={zcodePlanKeyDescription(host)}
         keywords={SEARCH_KEYWORDS}
         className="space-y-2"
       >

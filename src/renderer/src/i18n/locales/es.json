@@ -6863,7 +6863,8 @@
           "copySelectedConsoleCookie": "Abra la consola seleccionada, inicie sesión y luego copie el encabezado de solicitud de cookies de DevTools (Red → cualquier solicitud restante → Cookie).",
           "apiKeySelectedEndpoint": "Pegue la clave API desde su consola MiniMax → Claves API. Almacenado localmente y enviado al punto final MiniMax seleccionado para actualizaciones de uso. La clave API tiene prioridad sobre la cookie.",
           "apiKeyInstructions": "Copie la clave API desde su consola MiniMax → Claves API. Una clave API guardada tiene prioridad sobre la cookie; Utilice la tecla Olvidar para volver a la cookie.",
-          "remoteScopeLocalAccountsKeptHostPicker": "Las cuentas gestionadas en este escritorio no cambian. Elige este equipo en el menú Host de la parte superior de Ajustes para verlas."
+          "remoteScopeLocalAccountsKeptHostPicker": "Las cuentas gestionadas en este escritorio no cambian. Elige este equipo en el menú Host de la parte superior de Ajustes para verlas.",
+          "apiKeyUpdateFailed": "No se pudo actualizar la clave de API de MiniMax."
         },
         "AdvancedPane": {
           "40b29e0bf3": "Reiniciar",
@@ -12396,7 +12397,8 @@
           "siteUnavailable": "El sitio del plan de host no está disponible",
           "keyStoredOnHostHelp": "Guardada en {{host}} y enviada desde allí solo al sitio seleccionado para actualizar el uso. Tiene prioridad sobre el inicio de sesión de la CLI de ZCode.",
           "usingCliOnHostHelp": "Orca lee el Coding Plan seleccionado del almacén de credenciales de la CLI de ZCode en {{host}}. Guarda una clave de API abajo para vincular el plan allí.",
-          "notConfiguredOnHostHelp": "Guarda la clave de API del plan abajo o inicia sesión con la CLI de ZCode en {{host}}."
+          "notConfiguredOnHostHelp": "Guarda la clave de API del plan abajo o inicia sesión con la CLI de ZCode en {{host}}.",
+          "keyOnHostDescription": "Pega la clave de API desde la página API Keys de la consola seleccionada. Se guarda en {{host}} y se envía desde allí solo a ese sitio para actualizar el uso."
         },
         "VoiceMicrophoneSetting": {
           "label": "Micrófono",
@@ -12683,7 +12685,8 @@
           "cookieNeedsDesktop": "{{host}} no tiene la app de escritorio de Orca para enviar una cookie de sesión. Guarda una clave de API en su lugar.",
           "checking": "Comprobando {{host}}…",
           "sealedElsewhereForgettable": "Guardada por otra app de Orca en {{host}}, que esta no puede leer. Cámbiala en esa app u olvídala aquí.",
-          "unreadableKey": "Orca en {{host}} no puede leer la clave guardada. Reemplázala u olvídala."
+          "unreadableKey": "Orca en {{host}} no puede leer la clave guardada. Reemplázala u olvídala.",
+          "miniMaxApiKeyDescription": "Pega la clave de API desde tu consola de MiniMax → API keys. Se guarda en {{host}} y se envía desde allí al endpoint de MiniMax seleccionado para actualizar el uso. La clave de API tiene prioridad sobre la cookie."
         },
         "useUsageHostSettings": {
           "updateFailed": "No se pudo actualizar el ajuste en {{host}}."

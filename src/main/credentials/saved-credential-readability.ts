@@ -57,12 +57,18 @@ export function savedCredentialUnreadable(
   if (kind !== 'encrypted') {
     return 'unreadable'
   }
+  const payload = rest.slice(separator + 1).trim()
+  const cipher = Buffer.from(payload, 'base64')
+  // Why: Buffer decodes malformed base64 leniently, and that garbage would read as sealed elsewhere.
+  if (cipher.length === 0 || cipher.toString('base64') !== payload) {
+    return 'unreadable'
+  }
   const secretStore = getSecretStore()
   if (!secretStore.isEncryptionAvailable() || !secretStoreWorks()) {
     return 'unreadable'
   }
   try {
-    secretStore.decryptString(Buffer.from(rest.slice(separator + 1), 'base64'))
+    secretStore.decryptString(cipher)
     return undefined
   } catch {
     // Why only here: a well-formed sealed file that a working store cannot open came from another.

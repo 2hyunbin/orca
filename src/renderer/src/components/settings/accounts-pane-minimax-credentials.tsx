@@ -264,10 +264,18 @@ export function MiniMaxCredentials({
 
       <SearchableSetting
         title={translate('auto.components.settings.AccountsPane.83b6a1f7c4', 'MiniMax API key')}
-        description={translate(
-          'auto.components.settings.AccountsPane.apiKeySelectedEndpoint',
-          'Paste the API key from your MiniMax console → API keys. Stored locally and sent to the selected MiniMax endpoint for usage refreshes. The API key takes priority over the cookie.'
-        )}
+        description={
+          host.label === null
+            ? translate(
+                'auto.components.settings.AccountsPane.apiKeySelectedEndpoint',
+                'Paste the API key from your MiniMax console → API keys. Stored locally and sent to the selected MiniMax endpoint for usage refreshes. The API key takes priority over the cookie.'
+              )
+            : translate(
+                'auto.components.settings.usageCredentialHost.miniMaxApiKeyDescription',
+                'Paste the API key from your MiniMax console → API keys. Stored on {{host}} and sent from there to the selected MiniMax endpoint for usage refreshes. The API key takes priority over the cookie.',
+                { host: host.label }
+              )
+        }
         keywords={['minimax', 'api', 'key', 'cn', 'china', 'bearer', 'rate limit']}
         className="space-y-2"
       >

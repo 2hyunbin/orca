@@ -92,3 +92,16 @@ export function usageCredentialStoredLabel(host: UsageCredentialHost): string {
         host: host.label
       })
 }
+
+export function zcodePlanKeyDescription(host: UsageCredentialHost): string {
+  return host.label === null
+    ? translate(
+        'auto.components.settings.ZcodePlanAccountsSection.keyDescription',
+        'Paste the API key from the selected console’s API Keys page. Stored locally, encrypted when the OS supports it, and sent only to that site for usage refreshes.'
+      )
+    : translate(
+        'auto.components.settings.ZcodePlanAccountsSection.keyOnHostDescription',
+        'Paste the API key from the selected console’s API Keys page. Stored on {{host}} and sent from there only to that site for usage refreshes.',
+        { host: host.label }
+      )
+}

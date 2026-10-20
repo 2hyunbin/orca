@@ -6976,7 +6976,8 @@
               "help": "Utilisé pour l'utilisation d'OpenCode Go dans la barre d'état. Le cookie de session ci-dessous n'est nécessaire que pour les anciens comptes console (OpenCode Black)."
             }
           },
-          "remoteScopeLocalAccountsKeptHostPicker": "Les comptes gérés sur ce bureau sont inchangés. Choisissez cet ordinateur dans le menu Hôte en haut des Paramètres pour les afficher."
+          "remoteScopeLocalAccountsKeptHostPicker": "Les comptes gérés sur ce bureau sont inchangés. Choisissez cet ordinateur dans le menu Hôte en haut des Paramètres pour les afficher.",
+          "apiKeyUpdateFailed": "Échec de la mise à jour de la clé API MiniMax."
         },
         "AdvancedPane": {
           "40b29e0bf3": "Redémarrer",
@@ -12571,7 +12572,8 @@
           "siteUnavailable": "Site du plan d'hébergement indisponible",
           "keyStoredOnHostHelp": "Enregistrée sur {{host}} et envoyée depuis cet hôte uniquement au site sélectionné pour actualiser l’utilisation. Elle a priorité sur la connexion de la CLI ZCode.",
           "usingCliOnHostHelp": "Orca lit le Coding Plan sélectionné dans le magasin d’identifiants de la CLI ZCode sur {{host}}. Enregistrez une clé API ci-dessous pour y lier le plan.",
-          "notConfiguredOnHostHelp": "Enregistrez la clé API du plan ci-dessous, ou connectez-vous avec la CLI ZCode sur {{host}}."
+          "notConfiguredOnHostHelp": "Enregistrez la clé API du plan ci-dessous, ou connectez-vous avec la CLI ZCode sur {{host}}.",
+          "keyOnHostDescription": "Collez la clé API depuis la page API Keys de la console sélectionnée. Elle est enregistrée sur {{host}} et envoyée depuis cet hôte uniquement à ce site pour actualiser l’utilisation."
         },
         "sshManagedHostRemove": {
           "description": "{{label}} exécute un serveur Orca géré. Dans Serveurs gérés, utilisez Arrêter… pour retirer le serveur de l’hôte, ou Oublier… si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
@@ -12796,7 +12798,8 @@
           "cookieNeedsDesktop": "{{host}} n’a pas l’application de bureau Orca pour envoyer un cookie de session. Enregistrez plutôt une clé API.",
           "checking": "Vérification de {{host}}…",
           "sealedElsewhereForgettable": "Enregistrée par une autre application Orca sur {{host}}, que celle-ci ne peut pas lire. Modifiez-la dans cette application ou oubliez-la ici.",
-          "unreadableKey": "Orca sur {{host}} ne peut pas lire la clé enregistrée. Remplacez-la ou oubliez-la."
+          "unreadableKey": "Orca sur {{host}} ne peut pas lire la clé enregistrée. Remplacez-la ou oubliez-la.",
+          "miniMaxApiKeyDescription": "Collez la clé API depuis votre console MiniMax → API keys. Elle est enregistrée sur {{host}} et envoyée depuis cet hôte au point de terminaison MiniMax sélectionné pour actualiser l’utilisation. La clé API a priorité sur le cookie."
         },
         "useUsageHostSettings": {
           "updateFailed": "Impossible de mettre à jour le réglage sur {{host}}."
