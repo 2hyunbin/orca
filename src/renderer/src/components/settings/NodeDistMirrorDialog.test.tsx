@@ -27,6 +27,11 @@ const settingsSet = vi.fn(async (updates: Partial<GlobalSettings>) => ({
 }))
 const connect = vi.fn(async () => ({ targetId: 'ssh-1', status: 'connected' }))
 
+function settingsWithMirror(nodeDistMirrorUrl: string): GlobalSettings {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these components read only nodeDistMirrorUrl.
+  return { nodeDistMirrorUrl } as GlobalSettings
+}
+
 function Host({ status }: { status: SshManagedServerStatus }) {
   const open = useAppStore((s) => s.activeModal === 'node-dist-mirror')
   return (
@@ -44,8 +49,7 @@ beforeEach(() => {
   Object.assign(window, {
     api: { ...window.api, settings: { set: settingsSet }, ssh: { connect } }
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dialog reads only nodeDistMirrorUrl.
-  useAppStore.setState({ settings: { nodeDistMirrorUrl: '' } as GlobalSettings })
+  useAppStore.setState({ settings: settingsWithMirror('') })
 })
 
 afterEach(() => {
@@ -163,9 +167,8 @@ describe('Use a Node.js mirror', () => {
     })
     toastSshConnectFailure('ssh-1', new Error('x'), 'Connection failed')
     const [, options] = toastError.mock.calls[0]
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the action reads only nodeDistMirrorUrl.
     useAppStore.setState({
-      settings: { nodeDistMirrorUrl: 'https://m.example/node' } as GlobalSettings
+      settings: settingsWithMirror('https://m.example/node')
     })
     act(() => options.action.onClick())
     expect(useAppStore.getState().activeModal).toBe('none')
