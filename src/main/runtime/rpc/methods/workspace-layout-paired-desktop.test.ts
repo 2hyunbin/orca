@@ -3,6 +3,7 @@
 // desktop every session.tabs mutation it sends today.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-types'
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../../../shared/workspace-layout/layout-intents-capability'
 import { remoteRuntimeClientCapabilities } from '../../../../shared/remote-runtime-client-capabilities'
@@ -31,6 +32,9 @@ async function switchedBuild(layoutOwnerIsMain: boolean) {
   ])
   return { OrcaRuntimeService, RpcDispatcher, ALL_RPC_METHODS }
 }
+
+const Frame = z.object({ type: z.string(), subscriptionId: z.string().optional() })
+const StreamReply = z.object({ ok: z.literal(true), result: Frame })
 
 function request(method: string, params?: unknown): RpcRequest {
   return { id: `req-${method}`, authToken: 'unused', method, params }
@@ -83,16 +87,10 @@ describe('layout methods on a layout-owner server', () => {
     const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
     const runtime = new OrcaRuntimeService()
     const dispatcher = new RpcDispatcher({ runtime })
-    const frames: { type?: string; subscriptionId?: string }[] = []
+    const frames: z.infer<typeof Frame>[] = []
     const done = dispatcher.dispatchStreaming(
       request('layout.subscribe'),
-      (raw) => {
-        const response = JSON.parse(raw) as RpcResponse
-        if (!response.ok) {
-          throw new Error(response.error.code)
-        }
-        frames.push(response.result as { type?: string; subscriptionId?: string })
-      },
+      (raw) => frames.push(StreamReply.parse(JSON.parse(raw)).result),
       { callerScope: PAIRED_DESKTOP, connectionId: 'desktop-1', clientKind: 'runtime' }
     )
     await vi.waitFor(() => expect(frames[0]?.type).toBe('snapshot'))
@@ -150,18 +148,21 @@ describe('an older desktop on a layout-owner server', () => {
   /** A windowless (serve) host: no notifier, its tabs already published. */
   async function headlessServer() {
     const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
-    const runtime = new OrcaRuntimeService()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the published snapshot map is protected; seeding it stands in for a prior publication.
-    const snapshots = (
-      runtime as unknown as {
-        mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
+    // Seeding stands in for a prior publication.
+    class HeadlessServer extends OrcaRuntimeService {
+      seed(): void {
+        this.storeMobileSessionSnapshot(WT, published())
       }
-    ).mobileSessionTabsByWorktree
-    snapshots.set(WT, published())
+      current(): RuntimeMobileSessionTabsSnapshot | undefined {
+        return this.mobileSessionTabsByWorktree.get(WT)
+      }
+    }
+    const runtime = new HeadlessServer()
+    runtime.seed()
     const dispatcher = new RpcDispatcher({ runtime })
     const send = (method: string, params: unknown) =>
       dispatcher.dispatch(request(method, params), OLDER_DESKTOP)
-    return { runtime, send, current: () => snapshots.get(WT) }
+    return { runtime, send, current: () => runtime.current() }
   }
 
   // Every session.tabs mutation a desktop sends, and the runtime method that serves it.
@@ -194,13 +195,10 @@ describe('an older desktop on a layout-owner server', () => {
 
   it.each(MUTATIONS)('still serves %s', async (method, runtimeMethod, params) => {
     const { runtime, send } = await headlessServer()
-    vi.spyOn(runtime, 'listMobileSessionTabs').mockResolvedValue(published())
-    const served = vi.spyOn(runtime, runtimeMethod).mockResolvedValue(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the test reads only that the method was reached; a tab list is the reply every one of them may project.
-      published() as never
-    )
+    // Its own refusal proves the request got past registration, scope and the client's projection.
+    const served = vi.spyOn(runtime, runtimeMethod).mockRejectedValue(new Error('reached'))
     const response = await send(method, { worktree: SELECTOR, ...params })
-    expect(errorCode(response)).toBeNull()
+    expect(response.ok ? null : response.error.message).toBe('reached')
     expect(served).toHaveBeenCalledTimes(1)
   })
 
@@ -214,7 +212,7 @@ describe('an older desktop on a layout-owner server', () => {
       tabOrder: ['tab-c', 'tab-a', 'tab-b']
     })
     expect(errorCode(response)).toBeNull()
-    expect(current()?.tabGroups[0]?.tabOrder).toEqual(['tab-c', 'tab-a', 'tab-b'])
+    expect(current()?.tabGroups?.[0]?.tabOrder).toEqual(['tab-c', 'tab-a', 'tab-b'])
   })
 
   it('names a tab on the windowless path', async () => {
@@ -225,6 +223,9 @@ describe('an older desktop on a layout-owner server', () => {
       customTitle: 'Build'
     })
     expect(errorCode(response)).toBeNull()
-    expect(current()?.tabs.find((tab) => tab.parentTabId === 'tab-b')?.title).toBe('Build')
+    const named = current()?.tabs.find(
+      (tab) => tab.type === 'terminal' && tab.parentTabId === 'tab-b'
+    )
+    expect(named?.title).toBe('Build')
   })
 })
