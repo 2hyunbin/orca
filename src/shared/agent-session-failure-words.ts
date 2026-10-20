@@ -184,6 +184,8 @@ const FAILURE_SENTENCES = {
   runtimeNotInstalled: namingAgent('runtimeNotInstalled'),
   conversationOpenInTerminal: namingAgent('conversationOpenInTerminal'),
   conversationOpenElsewhere: (_context, _fact, _surface, say) => say('conversationOpenElsewhere'),
+  conversationMovingToTerminal: (_context, _fact, _surface, say) =>
+    say('conversationMovingToTerminal'),
   managedAccountUnsupported: (context, _fact, _surface, say) =>
     joinSentences([
       say('managedAccountUnsupported'),

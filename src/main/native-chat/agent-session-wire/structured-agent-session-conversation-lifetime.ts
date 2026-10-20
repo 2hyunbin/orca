@@ -40,6 +40,7 @@ import {
 } from './structured-agent-session-failure-text'
 import { recordStructuredAgentSessionStartFailure } from './structured-agent-session-start-failure-row'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
+import * as switchAdmission from './structured-agent-session-switch-admission'
 
 export type StructuredAgentSessionConversationLifetime = ReturnType<
   typeof createStructuredAgentSessionConversationLifetime
@@ -330,6 +331,16 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         host.context().runtimeState.acquireAborts.abort(sessionId, 'closed while starting')
         await holdStopClose(sessionId, () => stopAgent(sessionId, { cause }))
       })
-    }
+    },
+    /** Close's body behind an idle-only admission with no effect of its own; `admit` registers the
+     *  switch before the stop, in the same step. */
+    switchToTerminal: <T>(id: string, admit: () => T): Promise<T> =>
+      serialize(id, () =>
+        switchAdmission.stopIdleStructuredAgentSessionForSwitch(
+          { session: sessions.get(id), delivering: host.deliveryActive(id), idleSweep, admit },
+          () => holdStopClose(id, () => stopAgent(id, { cause: 'user-close' })),
+          () => deps().store.getRecord(id)
+        )
+      )
   }
 }

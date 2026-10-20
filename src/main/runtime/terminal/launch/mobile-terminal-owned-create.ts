@@ -44,7 +44,7 @@ export type OwnedMobileTerminalCreateOptions = {
   supportsSplitGroupPlacement?: boolean
   launchConfig?: SleepingAgentLaunchConfig
   resumeProviderSession?: AgentProviderSessionMetadata
-  resumeOrigin?: 'saved'
+  resumeOrigin?: 'saved' | 'switch'
   spawnIntent?: SpawnIntent
   launchRuntime?: AgentLaunchRuntime
   signal?: AbortSignal

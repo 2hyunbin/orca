@@ -23,6 +23,7 @@ import {
   captureSavedResumeCleanup,
   admitColdRestoreReattach,
   forgetRefusedResume,
+  settleSwitchSpawn,
   resumeSpawnRefusal,
   savedResumeRecord
 } from '../host-env/saved-resume-admission'
@@ -125,8 +126,10 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     if (!ctx.result.isReattach) {
       deps.runtime?.rememberSavedTerminalLaunchResult?.(committed.id, committed)
     }
+    settleSwitchSpawn(deps.runtime, ctx.resumeAdmission, committed.id)
     return committed
   } catch (caught) {
+    settleSwitchSpawn(deps.runtime, ctx.resumeAdmission, ctx.result.id)
     const err = endPaneAgentLaunch(ctx, { error: caught }) ?? caught
     releaseAbandonedAgentTeamsLeader(ctx)
     if (ctx.preSpawnHiddenMarkId !== null) {

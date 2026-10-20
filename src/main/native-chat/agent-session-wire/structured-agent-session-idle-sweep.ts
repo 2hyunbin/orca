@@ -161,7 +161,7 @@ export class StructuredAgentSessionIdleSweep {
 
   /** Work the running child still owes. Scoped to the child: with none, nothing here can pin the
    *  handle, and a leftover prompt or turn row is only history. */
-  private owesWork(sessionId: string, session: StructuredAgentSessionHostSession): boolean {
+  owesWork(sessionId: string, session: StructuredAgentSessionHostSession): boolean {
     return (
       this.queuedOrDelivering(sessionId, session) ||
       structuredAgentSessionChildHasOpenWork({

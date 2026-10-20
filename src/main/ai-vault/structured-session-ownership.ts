@@ -9,6 +9,7 @@ import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire
 import { ensureStructuredAgentSessionHostUnlessRefused } from '../runtime/structured-agent-session-host-refusal'
 import {
   listStructuredProviderSessionOwnership,
+  sameIdTerminalResumeEnabled,
   terminalResumeBlocked,
   type StructuredProviderSessionOwnership
 } from '../native-chat/agent-session-wire/structured-provider-session-ownership'
@@ -117,7 +118,8 @@ function ownedRow(rowAgent: string, ownership: StructuredProviderSessionOwnershi
 }
 
 /** One index per projection: a list holds hundreds of rows, each once searched every record. A row
- *  names the chat continuing its conversation now, else one whose chain held it earlier. */
+ *  names the chat continuing its conversation now, else (agents not yet switching in place) one
+ *  whose chain held it earlier. */
 function ownershipLookup():
   | ((row: { agent: string; sessionId: string }) => StructuredProviderSessionOwnership | null)
   | null {
@@ -136,7 +138,9 @@ function ownershipLookup():
     const found = historyRowOwners(row.agent).flatMap(
       (owner) => byProviderSession.get(`${owner}\0${row.sessionId}`) ?? []
     )
-    return found.find((ownership) => ownership.role === 'head') ?? found[0] ?? null
+    // An agent that switches in place lists a conversation a chat held earlier as the terminal's.
+    const earlier = found.find((ownership) => !sameIdTerminalResumeEnabled(ownership.provider))
+    return found.find((ownership) => ownership.role === 'head') ?? earlier ?? null
   }
 }
 

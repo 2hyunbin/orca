@@ -1,67 +1,36 @@
-import type { TuiAgent } from '../../../../shared/tui-agent'
 import {
   normalizeAgentProviderSession,
   agentProviderSessionsEqual,
-  type AgentProviderSessionMetadata,
-  type SleepingAgentLaunchConfig,
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
-import type {
-  AgentStatusIpcPayload,
-  RefusedPaneResume
-} from '../../../../shared/agent-status-types'
-import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
-import {
-  agentSessionLeasePossiblyWriting,
-  listStructuredProviderSessionOwnership
-} from '../../../native-chat/agent-session-wire/structured-provider-session-ownership'
+import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
 import { agentHookServer } from '../../../agent-hooks/server'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import {
-  keysMayMatch,
-  terminalConversationKey
-} from '../../../native-chat/structured-conversation-key'
+  admitSwitchResumeSpawn,
+  judgeResumes,
+  type AdmissionRuntime,
+  type ResumeSpawnAdmission,
+  type ResumeSpawnArgs,
+  type ResumeSpawnRefusal
+} from './resume-spawn-judgement'
 
-export type ResumeSpawnArgs = {
-  connectionId?: string | null
-  command?: string
-  launchAgent?: TuiAgent
-  launchConfig?: SleepingAgentLaunchConfig
-  launchToken?: unknown
-  resumeProviderSession?: AgentProviderSessionMetadata
-  /** `saved`: the resume was built from a pane's saved facts, not asked for by the user. */
-  resumeOrigin?: unknown
-  env?: Record<string, string>
-}
+export type {
+  ResumeSpawnAdmission,
+  ResumeSpawnArgs,
+  ResumeSpawnRefusal
+} from './resume-spawn-judgement'
 
-type AdmissionRuntime = {
-  getAgentProviderSessionRows?(): AgentStatusIpcPayload[]
-  readSavedResumeSource?(
-    worktreeId: string,
-    paneKey: string
-  ): Promise<SleepingAgentSessionRecord | undefined>
-  openAgentSessionRecordStore(): Promise<AgentSessionRecordStore>
-}
-
-/** `chat-home`: an automatic restore of a conversation an open chat continues; `chat-writing`:
- *  any start of one a chat may be writing; `unverifiable`: an automatic restore with no records. */
-export type ResumeSpawnRefusal = {
-  sourceRecord?: SleepingAgentSessionRecord
-  verdict: 'chat-home' | 'chat-writing' | 'unverifiable'
-  refused: RefusedPaneResume
-}
-
-export type ResumeSpawnAdmission =
-  | { verdict: 'admitted'; refused: RefusedPaneResume; sourceRecord?: SleepingAgentSessionRecord }
-  | ResumeSpawnRefusal
-
-/** Saved-home policy only; ordinary terminal starts remain hook-observed. */
+/** Saved-home policy and a switch's own start; other terminal starts remain hook-observed. */
 export async function admitResumeSpawn(
   runtime: AdmissionRuntime | undefined,
   args: ResumeSpawnArgs,
   wslDistro: string | null
 ): Promise<ResumeSpawnAdmission | null> {
+  if (args.resumeOrigin === 'switch') {
+    return admitSwitchResumeSpawn(runtime, args, wslDistro)
+  }
   const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
   const agent = args.launchAgent
   // Native chats run only natively, so a remote or WSL conversation is never a chat's.
@@ -114,49 +83,6 @@ export async function admitColdRestoreReattach(
   return first ? judgeResumes(runtime, [first]) : null
 }
 
-async function judgeResumes(
-  runtime: AdmissionRuntime,
-  resumes: readonly [RefusedPaneResume, ...RefusedPaneResume[]]
-): Promise<ResumeSpawnAdmission> {
-  const keysOf = ({ agent, providerSession }: RefusedPaneResume) =>
-    [providerSession.id, providerSession.transcriptPath].flatMap((id) =>
-      id?.trim() ? [terminalConversationKey(agent, id)] : []
-    )
-  const admitted = (): ResumeSpawnAdmission => ({
-    verdict: 'admitted',
-    refused: resumes[0]
-  })
-  let store: AgentSessionRecordStore
-  try {
-    store = await runtime.openAgentSessionRecordStore()
-  } catch (error) {
-    console.warn(
-      "[pty] native chat records unreadable; cannot tell whether a resume is a chat's",
-      error
-    )
-    return { verdict: 'unverifiable', refused: resumes[0] }
-  }
-  const heads = listStructuredProviderSessionOwnership(store.listRecords()).filter(
-    (holding) => holding.role === 'head'
-  )
-  const tabs = store.getVisibleSessionTabIndex()
-  for (const refused of resumes) {
-    const holders = heads.filter((holding) =>
-      keysOf(refused).some((key) => keysMayMatch(holding.key, key))
-    )
-    if (holders.some((holding) => agentSessionLeasePossiblyWriting(holding.lease))) {
-      return { verdict: 'chat-writing', refused }
-    }
-    if (holders.length > 0 && (!tabs || !tabs.present)) {
-      return { verdict: 'unverifiable', refused }
-    }
-    if (tabs && holders.some((holding) => tabs.sessionIds.includes(holding.sessionId))) {
-      return { verdict: 'chat-home', refused }
-    }
-  }
-  return admitted()
-}
-
 /** A refused resume becomes the pane's plain shell: nothing of the agent launch is left to run,
  *  register, or mark the shell as an unattended agent's. */
 export function dropAgentLaunch(args: ResumeSpawnArgs): void {
@@ -177,6 +103,17 @@ export function dropAgentLaunch(args: ResumeSpawnArgs): void {
   delete args.launchConfig
   delete args.launchToken
   delete args.resumeProviderSession
+}
+
+/** Every exit of a switch spawn settles its claim: on the PTY it produced, or gone with none. */
+export function settleSwitchSpawn(
+  runtime: AdmissionRuntime | undefined,
+  admission: ResumeSpawnAdmission | null,
+  ptyId: string | null
+): void {
+  if (admission?.verdict === 'admitted' && admission.switchClaim) {
+    runtime?.settleSwitchStart?.(admission.switchClaim, ptyId)
+  }
 }
 
 export function resumeSpawnRefusal(

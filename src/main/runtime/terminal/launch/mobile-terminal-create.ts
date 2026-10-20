@@ -46,6 +46,7 @@ export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRun
       agentPrompt?: string
       launchConfig?: SleepingAgentLaunchConfig
       resumeProviderSession?: AgentProviderSessionMetadata
+      resumeOrigin?: 'switch'
       launchAgent?: TuiAgent
       terminalImageViewerSupported?: boolean
       viewMode?: 'terminal' | 'chat'

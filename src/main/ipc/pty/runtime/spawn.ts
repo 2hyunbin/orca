@@ -4,7 +4,8 @@ import {
   savedResumeRecord,
   savedResumeResult,
   resumeSpawnRefusal,
-  forgetRefusedResume
+  forgetRefusedResume,
+  settleSwitchSpawn
 } from '../host-env/saved-resume-admission'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
@@ -132,8 +133,10 @@ export async function spawnPtyFromRuntimeController(
     if (!ctx.result.isReattach) {
       deps.runtime?.rememberSavedTerminalLaunchResult?.(committed.id, committed)
     }
+    settleSwitchSpawn(deps.runtime, ctx.resumeAdmission, committed.id)
     return committed
   } catch (err) {
+    settleSwitchSpawn(deps.runtime, ctx.resumeAdmission, ctx.result.id)
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(

@@ -69,7 +69,7 @@ export type RuntimePtyController = {
     env?: Record<string, string>
     envToDelete?: string[]
     resumeProviderSession?: AgentProviderSessionMetadata
-    resumeOrigin?: 'saved'
+    resumeOrigin?: 'saved' | 'switch'
     telemetry?: WorktreeStartupLaunch['telemetry']
     connectionId?: string | null
     worktreeId?: string
