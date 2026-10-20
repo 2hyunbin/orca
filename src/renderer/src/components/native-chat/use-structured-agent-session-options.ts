@@ -98,7 +98,8 @@ export function useStructuredAgentSessionOptions(args: {
 
   const awaitingOptions =
     conversationSupport?.sessionId === sessionId && conversationSupport.fence !== fence
-  const acceptsPicks = (!transportEnabled || fence !== null) && !awaitingOptions
+  const acceptsPicks =
+    (!transportEnabled || fence !== null) && launch?.seedPending !== true && !awaitingOptions
 
   const hostCatalog = useHostModelCatalogUpgrade({
     agent,
