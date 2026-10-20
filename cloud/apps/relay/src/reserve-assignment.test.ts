@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { RelayRegion } from '@orca-cloud/relay-contract'
 import type { CellReserveClient } from './cell-reserve-client.js'
 import {
   ReserveAssignment,
@@ -13,7 +14,7 @@ import { ShadowSeatDirectory, type SeatFeedCell, type SeatFeedResponse } from '.
 const HOST = { userId: 'user-1', relayHostId: 'abcdefghijklmnop' }
 const US = 'us-central1' as const
 
-function cellList(ids: string[], region = US): SeatFeedCell[] {
+function cellList(ids: string[], region: RelayRegion = US): SeatFeedCell[] {
   return ids.map((cellId) => ({
     cellId,
     cellUrl: `https://${cellId}.example`,
@@ -320,6 +321,33 @@ describe('reserve assignment on a director', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('offers the reserve cell to a share-draw loser, in its region only, only while it has room', async () => {
+    const ASIA = 'asia-east2' as const
+    const cells = [...cellList(['c1', 'c2'], ASIA), ...cellList(['c3'])]
+    const { assignment, reserved, directory, now } = setup({
+      cells,
+      feeds: [
+        feed('c1'),
+        // Database room far above the reserve cell's, so the 0.25 draw loses.
+        feed('c2', { admitMode: 'db', counts: { seats: 0, controls: 0, bookings: 0, units: 0, ceiling: 5_000 } }),
+        feed('c3')
+      ]
+    })
+    const plan = await assignment.plan(HOST, { reconnect: false, region: ASIA })
+    expect(plan).toMatchObject({ kind: 'database', epochFloor: 0 })
+    expect(reserved).toEqual([])
+    const regionReserve = plan.kind === 'database' ? plan.regionReserve : undefined
+    expect(regionReserve?.hasRoom()).toBe(true)
+    await expect(regionReserve?.place()).resolves.toMatchObject({ cellId: 'c1', region: ASIA })
+    expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
+    // A full reserve cell has no room, and the US reserve cell is never offered.
+    const full = feed('c1', { counts: { seats: 500, controls: 500, bookings: 0, units: 500, ceiling: 500 } })
+    directory.apply('c1', full, now.value, now.value)
+    expect(regionReserve?.hasRoom()).toBe(false)
+    await expect(regionReserve?.place()).resolves.toBeNull()
+    expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
   })
 
   it('paces with Retry-After when every reserve cell is out of budget and no database cell exists', async () => {
