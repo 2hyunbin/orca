@@ -210,7 +210,9 @@ async function startOrcadRuntime(
   })
 
   const { loadAgentSessionClaimSigner } = await import('../runtime/agent-session-claim-identity')
-  const runtime = new OrcaRuntimeService(profileStore, undefined, {
+  const { startOrcadStats } = await import('./orcad-stats')
+  const stats = startOrcadStats(runtimeUserDataPath, agentHookServer, registerCleanup)
+  const runtime = new OrcaRuntimeService(profileStore, stats, {
     // Why persistent: the terminal daemon outlives orcad, so a per-process key would make a
     // restarted orcad unable to recognise (and adopt) the agent PTYs it already owns.
     agentSessionClaimSigner: loadAgentSessionClaimSigner(runtimeUserDataPath, runtimeUserDataPath),
