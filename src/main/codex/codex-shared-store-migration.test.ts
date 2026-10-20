@@ -12,6 +12,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { runCodexAppServerSession } from './codex-app-server-session'
 import { applyCodexSharedStoreConfig } from './codex-shared-store-config'
 import { migrateCodexHomeToSharedStore } from './codex-shared-store-migration'
 
@@ -71,10 +72,7 @@ describe('moving an account home onto the shared Codex store', () => {
       [PINNED_THREAD, join(account, 'sessions', day, pinned), PINNED]
     ])
     const calls: { home: string; method: string; params: unknown }[] = []
-    const run = async <T>(
-      invocation: { env?: Record<string, string> },
-      body: (rpc: { request: (method: string, params?: unknown) => Promise<unknown> }) => Promise<T>
-    ): Promise<T> =>
+    const run: typeof runCodexAppServerSession = async (invocation, body) =>
       body({
         request: async (method, params) => {
           calls.push({ home: invocation.env?.CODEX_HOME ?? '', method, params })
@@ -82,14 +80,12 @@ describe('moving an account home onto the shared Codex store', () => {
             return { thread: { id: 'forked-thread' } }
           }
           return method === 'threadSection/list' ? { data: [{ id: PINNED, name: 'Pinned' }] } : {}
-        }
+        },
+        notify: () => {}
       })
 
     expect(applyCodexSharedStoreConfig('model = "x"\n', account)).toBe('model = "x"\n')
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake implements the request calls the migration makes.
-    await expect(
-      migrateCodexHomeToSharedStore(account, store, { run: run as never })
-    ).resolves.toBe('complete')
+    await expect(migrateCodexHomeToSharedStore(account, store, { run })).resolves.toBe('complete')
 
     for (const name of ['sessions', 'archived_sessions', 'thread-writer-locks']) {
       expect(lstatSync(join(account, name)).isSymbolicLink()).toBe(true)

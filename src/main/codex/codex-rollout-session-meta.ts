@@ -55,38 +55,31 @@ export async function readCodexRolloutSessionMeta(
 }
 
 export function parseCodexSessionMetaLine(line: string): CodexRolloutSessionMeta | null {
+  let record: Map<string, unknown>
   try {
-    const record = JSON.parse(line) as {
-      type?: unknown
-      id?: unknown
-      session_id?: unknown
-      thread_id?: unknown
-      payload?: { id?: unknown; session_id?: unknown; thread_id?: unknown; history_base?: unknown }
-    }
-    if (record.type !== 'session_meta') {
-      return null
-    }
-    const id =
-      record.payload?.id ??
-      record.payload?.session_id ??
-      record.payload?.thread_id ??
-      record.id ??
-      record.session_id ??
-      record.thread_id
-    if (typeof id !== 'string' || id.length === 0) {
-      return null
-    }
-    return { id, historyBase: readCodexHistoryBase(record.payload?.history_base) }
+    record = objectFields(JSON.parse(line))
   } catch {
     return null
   }
+  if (record.get('type') !== 'session_meta') {
+    return null
+  }
+  const payload = objectFields(record.get('payload'))
+  const id = [payload, record]
+    .flatMap((fields) => ['id', 'session_id', 'thread_id'].map((key) => fields.get(key)))
+    .find((value) => value !== undefined && value !== null)
+  if (typeof id !== 'string' || id.length === 0) {
+    return null
+  }
+  return { id, historyBase: readCodexHistoryBase(payload.get('history_base')) }
+}
+
+function objectFields(value: unknown): Map<string, unknown> {
+  return new Map(value && typeof value === 'object' ? Object.entries(value) : [])
 }
 
 export function readCodexHistoryBase(value: unknown): CodexRolloutHistoryBase | null {
-  if (!value || typeof value !== 'object') {
-    return null
-  }
-  const fields = new Map(Object.entries(value))
+  const fields = objectFields(value)
   const rolloutId = fields.get('thread_id')
   const endByteOffset = fields.get('end_byte_offset')
   return typeof rolloutId === 'string' &&
