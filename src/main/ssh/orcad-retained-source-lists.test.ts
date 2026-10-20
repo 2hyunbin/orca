@@ -174,6 +174,18 @@ describe('project host setups of a converted host', () => {
     ])
   })
 
+  it('hides a folder-only host placeholder even when no repo row is hidden', () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the list reads only these getters.
+    const folderOnly = {
+      getSshTargets: () => [FENCED],
+      getRepos: () => [localRepo],
+      getProjectGroups: () => [],
+      getFolderWorkspaces: () => [],
+      getProjectHostSetups: () => setups.slice(1)
+    } as unknown as Store
+    expect(visibleProjectHostSetups(folderOnly).map((entry) => entry.id)).toEqual(['repo-local'])
+  })
+
   it('lists them again once an older build changed the host', () => {
     const changed = { ...FENCED, orcadFence: { environmentId: 'env-1', sourceChangedAt: 'x' } }
     expect(visibleProjectHostSetups(store([changed]))).toHaveLength(3)

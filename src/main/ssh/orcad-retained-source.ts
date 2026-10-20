@@ -149,9 +149,13 @@ export function visibleProjectHostSetups(
   getUserDataPath = appUserDataPath
 ): ProjectHostSetup[] {
   const setups = store.getProjectHostSetups()
+  if (setups.length === 0) {
+    return setups
+  }
+  const hiddenTargets = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
   const allRepos = store.getRepos()
   const shownRepos = visibleRepos(store, getUserDataPath)
-  if (setups.length === 0 || shownRepos.length === allRepos.length) {
+  if (hiddenTargets.length === 0 && shownRepos.length === allRepos.length) {
     return setups
   }
   const rowKey = (hostId: string, repoId: string): string => `${hostId}\0${repoId}`
@@ -161,12 +165,11 @@ export function visibleProjectHostSetups(
       .map((repo) => rowKey(getRepoExecutionHostId(repo), repo.id))
       .filter((key) => !shownKeys.has(key))
   )
-  const hiddenTargets = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
   return setups.filter((setup) => {
     if (setup.repoId && hiddenKeys.has(rowKey(setup.hostId, setup.repoId))) {
       return false
     }
-    // A repo-less placeholder on a hidden host has no row to follow; the host decides.
+    // Repo-less placeholders have no row to follow, so the hidden host decides for them.
     const host = parseExecutionHostId(setup.hostId)
     return !(host?.kind === 'ssh' && hiddenTargets.includes(host.targetId))
   })
