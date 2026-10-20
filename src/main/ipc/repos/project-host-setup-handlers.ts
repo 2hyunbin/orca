@@ -179,7 +179,7 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
       }
       const placed =
         parsedHost.kind === 'local'
-          ? await placeExistingFolderSetup(store, args, {
+          ? await placeExistingFolderSetup(store, { ...args, hostId: parsedHost.id }, {
               domain: LOCAL_EXECUTION_HOST_ID,
               fromPairedClient: false
             })

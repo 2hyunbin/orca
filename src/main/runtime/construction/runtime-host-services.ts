@@ -46,7 +46,6 @@ import { teardownFolderWorkspacePtys } from '../folder-workspace-pty-teardown'
 import { countRepoTerminalsNotKnownExited } from '../project-removal-impact'
 
 export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeWithTerminalDrivers {
-  declare addRepo: RuntimeRepositoryCommandSurface['addRepo']
   declare addPlacedRepo: RuntimeRepositoryCommandSurface['addPlacedRepo']
   declare cloneRepo: RuntimeRepositoryCommandSurface['cloneRepo']
   protected abstract tryGetWorkspaceSessionHostIdForWorktree(
