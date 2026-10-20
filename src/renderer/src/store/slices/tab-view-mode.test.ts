@@ -36,7 +36,9 @@ function seedTwoLeafTabs(store: ReturnType<typeof createTestStore>): void {
   const left = makeUnifiedTab({ id: 'left-tab', worktreeId: WT, groupId: 'g-left' })
   const right = makeUnifiedTab({ id: 'right-tab', worktreeId: WT, groupId: 'g-right' })
   store.setState({
-    worktreesByRepo: { repo1: [makeRuntimeOwnedWorktree({ id: WT, repoId: 'repo1' })] },
+    worktreesByRepo: { repo1: [makeRuntimeOwnedWorktree({ id: WT, repoId: 'repo1' })] }
+  })
+  store.setState({
     unifiedTabsByWorktree: { [WT]: [left, right] },
     groupsByWorktree: {
       [WT]: [
