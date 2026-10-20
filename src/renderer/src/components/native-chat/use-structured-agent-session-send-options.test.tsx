@@ -20,7 +20,7 @@ const levels = (...values: string[]) => values.map((value) => ({ value, label: v
 function sendOptionsFor(
   takesSendOptions: boolean,
   pending: Record<string, string>,
-  seedOptions: Record<string, string> | undefined = { model: 'claude-gone', effort: 'max' }
+  seedOptions: Record<string, string> = { model: 'sonnet', effort: 'high' }
 ) {
   const optionStateRef = {
     current: applyStructuredAgentSessionModelCatalog(
@@ -44,8 +44,7 @@ function sendOptionsFor(
       {
         optionStateRef,
         pendingOptionsRef: { current: pending },
-        optionView: (state, seed, held) =>
-          structuredAgentSessionOptionView(state, seed, held, takesSendOptions),
+        optionView: structuredAgentSessionOptionView,
         takesSendOptions
       }
     )
@@ -56,12 +55,8 @@ function sendOptionsFor(
 describe('what each composer send carries', () => {
   it('carries the shown model and effort to a host that takes them, on every send', () => {
     const sendOptions = sendOptionsFor(true, {})
-    expect(sendOptions()).toEqual({ model: 'claude-gone', effort: 'max' })
-    expect(sendOptions()).toEqual({ model: 'claude-gone', effort: 'max' })
-  })
-
-  it('omits an untouched provisional default when nothing names a model', () => {
-    expect(sendOptionsFor(true, {}, {})()).toBeUndefined()
+    expect(sendOptions()).toEqual({ model: 'sonnet', effort: 'high' })
+    expect(sendOptions()).toEqual({ model: 'sonnet', effort: 'high' })
   })
 
   it('carries a pick still on its way, resolved as the picker shows it', () => {
@@ -69,6 +64,7 @@ describe('what each composer send carries', () => {
       model: 'opus[1m]',
       effort: 'low'
     })
+    // A model the list lacks runs as picked.
     expect(sendOptionsFor(true, { model: 'claude-retired' })()).toMatchObject({
       model: 'claude-retired'
     })

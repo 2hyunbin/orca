@@ -21,6 +21,7 @@ import { createProviderRecordReader } from '../provider-process/provider-record-
 
 export type CodexAppServerInvocation = {
   command: string
+  cwd?: string
   args: string[]
   /**
    * The resolved CLI path, used to pair the CLI with the `node` it was installed
@@ -32,7 +33,6 @@ export type CodexAppServerInvocation = {
    * path means nothing. Optional would let a native builder omit it and silently
    * skip the pairing with no type error.
    */
-  cwd?: string
   cliPath: string | null
   /** Overlay applied on top of the inherited environment (e.g. CODEX_HOME). */
   env?: Record<string, string>
@@ -73,11 +73,12 @@ type JsonRpcResponse = {
 }
 
 export type CodexAppServerRpc = {
-  /** `timeoutMs` bounds one call inside the session deadline, so a caller can drop it and go on. */
+  /** `timeoutMs` bounds one call inside the session deadline, so a caller can drop it and go on;
+   *  absent or null, only the session deadline does. */
   request: (
     method: string,
     params?: Record<string, unknown>,
-    options?: { timeoutMs?: number }
+    options?: { timeoutMs?: number | null }
   ) => Promise<unknown>
   notify: (method: string, params?: Record<string, unknown>) => void
 }
@@ -127,11 +128,12 @@ export async function runCodexAppServerSession<T>(
       site: CODEX_APP_SERVER_KILL_SITE,
       inheritedEnv: pairedEnv,
       spawnImpl: (spec) =>
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every stdio slot is 'pipe', so stdin, stdout and stderr exist.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the managed spec's first three stdio slots are 'pipe', so stdin, stdout and stderr exist.
         spawnImpl(spec.program, [...(spec.args ?? [])], {
           env: spec.env,
           ...(spec.cwd ? { cwd: spec.cwd } : {}),
-          stdio: ['pipe', 'pipe', 'pipe'],
+          // The managed spec's slots, so the supervisor's group-report channel survives.
+          stdio: spec.stdio ?? ['pipe', 'pipe', 'pipe'],
           windowsHide: true,
           ...(spec.detached ? { detached: true } : {})
         }) as ChildProcessWithoutNullStreams
@@ -246,7 +248,7 @@ export async function runCodexAppServerSession<T>(
   async function requestRpc(
     method: string,
     params?: Record<string, unknown>,
-    options: { timeoutMs?: number } = {}
+    options: { timeoutMs?: number | null } = {}
   ): Promise<unknown> {
     if (spawnError) {
       throw spawnError
@@ -261,8 +263,8 @@ export async function runCodexAppServerSession<T>(
     let requestTimer: ReturnType<typeof setTimeout> | undefined
     const response = await new Promise<JsonRpcResponse>((resolve, reject) => {
       pending.set(id, { resolve, reject })
-      if (options.timeoutMs !== undefined) {
-        const { timeoutMs } = options
+      const { timeoutMs } = options
+      if (typeof timeoutMs === 'number') {
         requestTimer = setTimeout(() => {
           pending.delete(id)
           reject(

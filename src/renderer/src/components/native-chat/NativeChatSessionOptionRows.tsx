@@ -5,7 +5,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { sortNativeChatSessionOptions } from '../../../../shared/native-chat-session-option-snapshot'
 import {
-  sessionOptionIsCurrentValueOnly,
+  isReadOnlySessionOptionValue,
   type SessionOptionDescriptor,
   type SessionOptionSelectChoice,
   type SessionOptionValue
@@ -37,10 +37,7 @@ function withEarlierRows(
   earlier: readonly SessionOptionDescriptor[],
   current: readonly SessionOptionDescriptor[]
 ): readonly SessionOptionDescriptor[] {
-  const gone = earlier.filter(
-    (row) =>
-      !sessionOptionIsCurrentValueOnly(row) && !current.some((option) => option.id === row.id)
-  )
+  const gone = earlier.filter((row) => !current.some((option) => option.id === row.id))
   return gone.length === 0 ? current : sortNativeChatSessionOptions([...current, ...gone])
 }
 
@@ -129,13 +126,17 @@ function OptionRow(props: {
     )
   }
   const current = descriptor.kind.currentValue
-  if (!gone && sessionOptionIsCurrentValueOnly(descriptor)) {
+  const only = descriptor.kind.choices[0]
+  if (only && isReadOnlySessionOptionValue(descriptor)) {
+    // A row kept from the previous model names no value under this one, as a switched-off row.
     return (
-      <div className="flex min-h-7 items-center justify-between gap-3 px-2">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="text-xs text-foreground">
-          {nativeChatSessionChoiceLabel(descriptor.kind.choices[0]!, descriptor.id)}
-        </span>
+      <div className="flex min-h-7 items-center justify-between gap-3 px-2 text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        {gone ? null : (
+          <span className="text-foreground">
+            {nativeChatSessionChoiceLabel(only, descriptor.id)}
+          </span>
+        )}
       </div>
     )
   }

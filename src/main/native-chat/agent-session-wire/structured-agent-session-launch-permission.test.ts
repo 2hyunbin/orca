@@ -39,8 +39,7 @@ function launchPermission(
   })
   const modelCatalog = {
     read,
-    peek: vi.fn(() => null),
-    retainedLiveModelIds: vi.fn(() => []),
+    retainedLiveModelIds: vi.fn(async () => []),
     recordLiveListing: vi.fn(),
     prewarm: vi.fn(async () => undefined),
     stop: vi.fn(),

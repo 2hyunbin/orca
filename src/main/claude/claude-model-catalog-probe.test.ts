@@ -64,9 +64,7 @@ describe('claude model catalog probe', () => {
   it.each([`"${process.execPath}"`, ''])(
     'lists with the session executable and env for Command %j',
     async (command) => {
-      let args = ['--model', 'sonnet']
-      const resolveLaunchArgs = vi.fn(() => args)
-      const deps = { ...probeDeps(command), resolveLaunchArgs }
+      const deps = probeDeps(command)
       const calls: ListingCall[] = []
       const probe = createClaudeModelCatalogProbe({
         ...deps,
@@ -75,12 +73,7 @@ describe('claude model catalog probe', () => {
           return LISTED
         }
       })
-      const resolved = await probe.resolve!(HOME('/homes/account-a'), '/project', {
-        model: 'opus',
-        effort: 'high'
-      })
-      args = ['--model', 'changed']
-      const success = await resolved.run()
+      const success = await probe(HOME('/homes/account-a'))
       expect(success.origin).toBe('probe')
       expect(success.models).toEqual([
         {
@@ -101,28 +94,11 @@ describe('claude model catalog probe', () => {
       const [launch, options] = calls[0]!
       expect(launch).toEqual({
         command: invocation.command,
-        args: expect.arrayContaining([
-          ...CLAUDE_MODEL_LIST_ARGS,
-          '--model',
-          'opus',
-          '--effort',
-          'high'
-        ]),
-        cwd: '/project',
+        args: [...CLAUDE_MODEL_LIST_ARGS, '--setting-sources', 'user,project,local'],
+        cwd: process.cwd(),
         stdin: expect.stringContaining(CLAUDE_MODEL_LIST_STDIN)
       })
       expect(options.inheritedEnv).toEqual(invocation.env)
-      expect(launch.stdin).toContain('get_settings')
-      expect(success.complete).toBe(true)
-      const legacy = await (await probe.resolveLegacy!(HOME('/homes/account-a'))).run()
-      expect(calls[1]![0]).toEqual({
-        command: invocation.command,
-        args: [...CLAUDE_MODEL_LIST_ARGS],
-        stdin: CLAUDE_MODEL_LIST_STDIN
-      })
-      expect(calls[1]![1].inheritedEnv).toEqual(invocation.env)
-      expect(resolveLaunchArgs).toHaveBeenCalledTimes(1)
-      expect(legacy).not.toHaveProperty('configured')
     }
   )
 
@@ -137,25 +113,19 @@ describe('claude model catalog probe', () => {
           models: [
             { value: 'default', resolvedModel: 'claude-opus-5-5[1m]', supportsAutoMode: true },
             { value: 'opus[1m]', resolvedModel: 'claude-opus-5-5[1m]', supportsAutoMode: true },
-            { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', supportsAutoMode: null },
-            { value: 'sonnet', supportsEffort: true },
-            null
+            { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', supportsAutoMode: null }
           ]
         }
       }
     })}\n`
     const probe = createClaudeModelCatalogProbe({ ...probeDeps(), runListing: async () => listing })
-    const success = await probe(HOME('/homes/account-a'))
-    const { models } = success
+    const { models } = await probe(HOME('/homes/account-a'))
     expect(
       models.map(({ id, isDefault, supportsAutoMode }) => ({ id, isDefault, supportsAutoMode }))
     ).toEqual([
       { id: 'opus[1m]', isDefault: true, supportsAutoMode: true },
-      { id: 'haiku', isDefault: false, supportsAutoMode: undefined },
-      { id: 'sonnet', isDefault: false, supportsAutoMode: undefined }
+      { id: 'haiku', isDefault: false, supportsAutoMode: undefined }
     ])
-    expect(success.complete).toBe(false)
-    expect(models[2]).toMatchObject({ efforts: [], effortsKnown: false })
   })
 
   it('pins no CLAUDE_CONFIG_DIR for the CLI default home, exactly as a session spawn does', async () => {
@@ -210,8 +180,8 @@ let input = ''
 process.stdin.on('data', (chunk) => (input += chunk))
 process.stdin.on('end', () => setTimeout(() => {
   require('node:fs').writeFileSync(${JSON.stringify(parentFile)}, String(process.ppid))
-  const request = input.trim().split('\\n').map(JSON.parse).find((row) => row.request.subtype === 'list_models')
-  if (request.request.subtype !== 'list_models') { process.exit(2) }
+  const request = JSON.parse(input.trim().split('\\n').find(line => line.includes('list_models')))
+  if (request.request.subtype !== 'list_models') process.exit(2)
   console.log(JSON.stringify({ type: 'control_response', response: { subtype: 'success',
     request_id: request.request_id, response: { models: [{ value: 'sonnet', displayName: 'Sonnet' }] } } }))
 }, ${PROVIDER_STDIN_END_GRACE_MS * 1.5}))
@@ -280,4 +250,62 @@ describe('Claude catalog availability', () => {
       rmSync(folder, { recursive: true, force: true })
     }
   })
+})
+
+// Only completed failed exits supply process facts to the shared retry policy.
+it.each([null, 0, 1])('enterprise retry uses the actual exit code %s', async (exitCode) => {
+  const stderr = 'You cannot use --strict-mcp-config when an enterprise MCP config is present'
+  const runListing = vi.fn(async () => LISTED)
+  runListing.mockRejectedValueOnce(
+    new AgentModelCatalogProbeError(stderr, 'exit', false, { exitCode, stdout: '', stderr })
+  )
+  const result = createClaudeModelCatalogProbe({ ...probeDeps(), runListing })(HOME('/homes/a'))
+  await (exitCode === 1
+    ? expect(result).resolves.toMatchObject({ models: [{ id: 'sonnet' }] })
+    : expect(result).rejects.toMatchObject({ failedExit: { exitCode } }))
+  expect(runListing).toHaveBeenCalledTimes(exitCode === 1 ? 2 : 1)
+})
+
+it('discovers a configured launch override without chat picks and preserves literal settings', async () => {
+  const calls: ListingCall[] = []
+  const probe = createClaudeModelCatalogProbe({
+    ...probeDeps(),
+    resolveLaunchArgs: () => [
+      '--model',
+      'sonnet',
+      '--effort',
+      'high',
+      '--settings',
+      '/literal/settings.json'
+    ],
+    runListing: async (...call) => {
+      calls.push(call)
+      return `${LISTED}${JSON.stringify({
+        type: 'control_response',
+        response: {
+          subtype: 'success',
+          response: { applied: { model: 'sonnet', effort: 'high' } }
+        }
+      })}\n`
+    }
+  })
+  const resolved = await probe.resolve?.(HOME('/account'), '/project')
+  expect(await resolved?.run()).toMatchObject({ configured: { model: 'sonnet', effort: 'high' } })
+  expect(calls[0]?.[0].args).toEqual(
+    expect.arrayContaining([
+      '--model',
+      'sonnet',
+      '--effort',
+      'high',
+      '--settings',
+      '/literal/settings.json'
+    ])
+  )
+  expect(calls[0]?.[0].args.filter((arg) => arg === '--settings')).toHaveLength(1)
+  expect(
+    calls[0]?.[0].stdin
+      ?.trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+  ).toHaveLength(2)
 })

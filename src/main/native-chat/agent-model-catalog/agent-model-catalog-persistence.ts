@@ -9,11 +9,10 @@ import {
   type AgentModelCatalogEntry,
   type AgentModelCatalogListing
 } from './agent-model-catalog-entry'
-import { discoveryEntry } from './agent-model-catalog-discovery'
 import { isStructuredAgentId } from '../../../shared/agent-session-provider-handle-encoding'
 
 // 3: Codex models carry `serviceTiers`; an older file would offer Fast with no tier to send.
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 3
 const SAVE_COALESCE_MS = 500
 
 export type AgentModelCatalogPersistence = {
@@ -44,7 +43,7 @@ function parseChoice(value: unknown): AgentSessionOptionChoice | null {
   return { value: choice, label, ...(description ? { description } : {}) }
 }
 
-function parseModel(value: unknown, sparse: boolean): AgentSessionModelOption | null {
+function parseModel(value: unknown): AgentSessionModelOption | null {
   const row = asRecord(value)
   const id = text(row?.id)
   const label = text(row?.label)
@@ -67,9 +66,7 @@ function parseModel(value: unknown, sparse: boolean): AgentSessionModelOption | 
     id,
     label,
     ...(resolvedModel ? { resolvedModel } : {}),
-    ...(row.effortsKnown === false || (sparse && efforts.length === 0)
-      ? { effortsKnown: false as const }
-      : {}),
+    ...(row.effortsKnown === false ? { effortsKnown: false as const } : {}),
     ...(description ? { description } : {}),
     isDefault: row.isDefault === true,
     ...(defaultEffort ? { defaultEffort } : {}),
@@ -84,19 +81,18 @@ function parseModel(value: unknown, sparse: boolean): AgentSessionModelOption | 
   }
 }
 
-function parseListing(value: unknown, sparse = false): AgentModelCatalogListing | null {
+function parseListing(value: unknown): AgentModelCatalogListing | null {
   const row = asRecord(value)
   if (
     !row ||
     (row.origin !== 'live-session' && row.origin !== 'probe') ||
     typeof row.at !== 'number' ||
-    !Number.isFinite(row.at) ||
     !Array.isArray(row.models) ||
     row.models.length === 0
   ) {
     return null
   }
-  const models = row.models.map((model) => parseModel(model, sparse))
+  const models = row.models.map(parseModel)
   if (models.some((model) => model === null)) {
     return null
   }
@@ -115,117 +111,51 @@ function parseListing(value: unknown, sparse = false): AgentModelCatalogListing 
       : {}),
     origin: row.origin,
     at: row.at,
-    complete: row.complete === true,
-    ...(asRecord(row.configured) ? { configured: parseConfigured(row.configured) } : {})
+    ...(row.complete === true ? { complete: true } : {})
   }
 }
 
-function parseConfigured(value: unknown): NonNullable<AgentModelCatalogListing['configured']> {
-  const row = asRecord(value)
-  const model = text(row?.model)
-  const effort = text(row?.effort)
-  return {
-    ...(model ? { model } : {}),
-    ...(effort ? { effort } : {}),
-    ...(typeof row?.at === 'number' && Number.isFinite(row.at) ? { at: row.at } : {})
-  }
-}
-
-function parseEntry(value: unknown, sparse: boolean): AgentModelCatalogEntry | null {
+/** Checked reconstruction rather than trust: a field a future schema drops or
+ *  reshapes loads as "no entry", never as a corrupt catalog. */
+function parseEntry(value: unknown): AgentModelCatalogEntry | null {
   const row = asRecord(value)
   if (!row || !isStructuredAgentId(row.agent) || typeof row.fingerprint !== 'string') {
     return null
   }
-  // Old digests remain legacy identities, never inferred exact launch scopes.
-  const independent = row.agent === 'claude' || row.agent === 'codex'
-  const legacyLive = parseListing(row.live, sparse && !independent)
-  const legacyProbe = parseListing(row.discovered, sparse && !independent)
+  if (row.agent === 'claude' || row.agent === 'codex') {
+    const display = parseListing(row.discovered) ?? parseListing(row.live)
+    return agentModelCatalogEntry(row.agent, row.fingerprint, display, null, null)
+  }
   const configured = asRecord(row.configured)
-  const model = text(configured?.modelId)
-  if (!independent) {
-    const sameModelIds = Array.isArray(configured?.sameModelIds)
-      ? configured.sameModelIds.filter((id): id is string => typeof id === 'string')
-      : []
-    const effort = text(configured?.effort)
-    const retained = agentModelCatalogEntry(
-      row.agent,
-      row.fingerprint,
-      legacyProbe,
-      legacyLive,
-      model && typeof configured?.at === 'number' && Number.isFinite(configured.at)
-        ? {
-            modelId: model,
-            at: configured.at,
-            ...(sameModelIds.length ? { sameModelIds } : {}),
-            ...(effort ? { effort } : {})
-          }
-        : null
-    )
-    if (retained) {
-      return retained
-    }
-    // Flattened unreleased caches cannot establish either source's menu or default.
-    const fallback = parseListing(row.observation)
-    return fallback
-      ? discoveryEntry(
-          row.agent,
-          row.fingerprint,
-          {
-            ...fallback,
-            complete: false,
-            configured: undefined,
-            models: fallback.models.map(({ defaultEffort: _default, ...row }) => ({
-              ...row,
-              isDefault: false,
-              efforts: [],
-              effortsKnown: false as const
-            }))
-          },
-          'probe-advisory'
-        )
+  const configuredModelId = text(configured?.modelId)
+  const configuredEffort = text(configured?.effort)
+  const sameModelIds = Array.isArray(configured?.sameModelIds)
+    ? configured.sameModelIds.filter((id): id is string => typeof id === 'string')
+    : []
+  return agentModelCatalogEntry(
+    row.agent,
+    row.fingerprint,
+    parseListing(row.discovered),
+    parseListing(row.live),
+    configuredModelId && typeof configured?.at === 'number'
+      ? {
+          modelId: configuredModelId,
+          ...(sameModelIds.length > 0 ? { sameModelIds } : {}),
+          ...(configuredEffort ? { effort: configuredEffort } : {}),
+          at: configured.at
+        }
       : null
-  }
-  const legacy =
-    legacyProbe && (!legacyLive || legacyProbe.at >= legacyLive.at) ? legacyProbe : legacyLive
-  let observation = parseListing(row.observation) ?? legacy
-  if (!observation) {
-    return null
-  }
-  if (
-    !row.observation &&
-    model &&
-    typeof configured?.at === 'number' &&
-    Number.isFinite(configured.at)
-  ) {
-    const effort = text(configured.effort)
-    observation = {
-      ...observation,
-      configured: { model, ...(effort ? { effort } : {}), at: configured.at }
-    }
-  }
-  const source =
-    row.source === 'discovery' ||
-    row.source === 'session-advisory' ||
-    row.source === 'probe-advisory'
-      ? row.source
-      : legacy === legacyLive
-        ? 'session-advisory'
-        : 'probe-advisory'
-
-  return discoveryEntry(row.agent, row.fingerprint, observation, source)
+  )
 }
 
+/** Only the two listings and the configured default are written; the merged view is derived again on load. */
 function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   return {
     agent: entry.agent,
     fingerprint: entry.fingerprint,
-    ...(entry.observation
-      ? { observation: entry.observation, source: entry.source }
-      : {
-          discovered: entry.discovered,
-          live: entry.live,
-          ...(entry.configured ? { configured: entry.configured } : {})
-        })
+    discovered: entry.discovered,
+    live: entry.live,
+    ...(entry.configured ? { configured: entry.configured } : {})
   }
 }
 
@@ -274,15 +204,11 @@ export function createAgentModelCatalogFilePersistence(
       try {
         const parsed: unknown = JSON.parse(await readFile(filePath, 'utf8'))
         const root = asRecord(parsed)
-        if (
-          !root ||
-          (root.version !== SCHEMA_VERSION && root.version !== 3) ||
-          !Array.isArray(root.entries)
-        ) {
+        if (!root || root.version !== SCHEMA_VERSION || !Array.isArray(root.entries)) {
           return []
         }
         return root.entries
-          .map((entry) => parseEntry(entry, root.version === 3))
+          .map(parseEntry)
           .filter((entry): entry is AgentModelCatalogEntry => entry !== null)
       } catch {
         return []

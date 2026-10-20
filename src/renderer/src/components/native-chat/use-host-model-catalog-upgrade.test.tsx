@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ call: vi.fn() }))
@@ -23,11 +23,7 @@ vi.mock('@/lib/structured-agent-session-launch-options', () => ({
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
-import {
-  readHostModelCatalogSnapshot,
-  forgetHostModelCatalogSnapshots,
-  resetHostModelCatalogSnapshotsForTests
-} from '@/runtime/host-model-catalog-snapshots'
+import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
 
 const PAIRED_TARGET = { kind: 'environment', environmentId: 'server-1' } as const
 const UNKNOWN = { origin: 'unknown' }
@@ -35,16 +31,7 @@ const LISTING = { origin: 'unknown', listingInProgress: true }
 const HOST_CATALOG = {
   origin: 'probe',
   models: [
-    {
-      id: 'gpt-hosted',
-      label: 'GPT Hosted',
-      isDefault: true,
-      defaultEffort: 'high',
-      efforts: [
-        { value: 'low', label: 'Low' },
-        { value: 'high', label: 'High' }
-      ]
-    },
+    { id: 'gpt-hosted', label: 'GPT Hosted', isDefault: true, efforts: [] },
     // The launch seed's model, so the saved pick is one the host list names.
     { id: 'gpt-5.5', label: 'GPT-5.5', efforts: [] }
   ],
@@ -54,13 +41,7 @@ const HOST_CATALOG = {
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: no test here sends a pick over a fence, so mutate is never called.
 const mutate = vi.fn(async () => null) as unknown as StructuredAgentSessionMutate
 
-type Props = {
-  hidden?: boolean
-  attached?: boolean
-  sessionId?: string
-  worktree?: string
-  seedOptions?: Record<string, string>
-}
+type Props = { hidden?: boolean; attached?: boolean; sessionId?: string }
 
 // A chat's waiting read outlives its mounts, so each test gets its own chat.
 let sessionId = ''
@@ -80,12 +61,7 @@ function renderOptions(initial: Props = {}) {
         turnId: null,
         unloadedTurnRevisions: undefined,
         mutate,
-        launch: {
-          kind: 'new',
-          seedOptions: props.seedOptions ?? {},
-          heldOptions: {},
-          ...(props.worktree ? { worktree: props.worktree } : {})
-        }
+        launch: { kind: 'new', seedOptions: { model: 'gpt-5.5' }, heldOptions: {} }
       }),
     { initialProps: initial }
   )
@@ -108,33 +84,21 @@ function deferred(): Deferred {
 }
 
 /** Each catalog read takes the next answer; `options` reads never settle unless given. */
-function answerCatalog(
-  answers: (() => Promise<unknown>)[],
-  pureAnswers: (() => Promise<unknown>)[] = []
-): void {
+function answerCatalog(answers: (() => Promise<unknown>)[]): void {
   let index = 0
-  let pureIndex = 0
-  mocks.call.mockImplementation(
-    (_target: unknown, method: string, params: { sessionId?: string }) => {
-      if (method === 'agentSession.modelCatalog' && !params.sessionId) {
-        return pureAnswers[pureIndex++]?.() ?? Promise.resolve(UNKNOWN)
-      }
-      if (method === 'agentSession.modelCatalog') {
-        const next = answers[index]
-        index += 1
-        return next ? next() : new Promise(() => {})
-      }
-      return new Promise(() => {})
+  mocks.call.mockImplementation((_target: unknown, method: string) => {
+    if (method === 'agentSession.modelCatalog') {
+      const next = answers[index]
+      index += 1
+      return next ? next() : new Promise(() => {})
     }
-  )
+    return new Promise(() => {})
+  })
 }
 
-function catalogReads(pure = false): unknown[] {
+function catalogReads(): unknown[] {
   return mocks.call.mock.calls
-    .filter(
-      ([, method, params]) =>
-        method === 'agentSession.modelCatalog' && (pure ? !params.sessionId : params.sessionId)
-    )
+    .filter(([, method]) => method === 'agentSession.modelCatalog')
     .map(([, , params]) => params)
 }
 
@@ -175,13 +139,12 @@ describe('host model catalog read', () => {
     expect(catalogReads()).toEqual([{ agent: 'codex', sessionId }])
     expect(modelChoices(result.current.optionSnapshot)).toContain('gpt-hosted')
     const named = model(result.current.optionSnapshot)
-    expect(named.kind.type === 'select' ? named.kind.currentValue : null).toBe('gpt-hosted')
-    expect(named.valueSource).toBe('default')
+    expect(named.kind.type === 'select' ? named.kind.currentValue : null).toBe('gpt-5.5')
     expect(usable(result.current.optionSnapshot)).toBe(true)
     unmount()
   })
 
-  it('keeps cold discovery quiet until its joined listing lands', async () => {
+  it('a new Codex chat on a cold catalog shows a usable unnamed built-in list, then the listing', async () => {
     const waited = deferred()
     answerCatalog([() => Promise.resolve(LISTING), () => waited.promise])
     const { result, unmount } = renderOptions()
@@ -190,8 +153,15 @@ describe('host model catalog read', () => {
       { agent: 'codex', sessionId },
       { agent: 'codex', sessionId, waitForListing: true }
     ])
-    expect(usable(result.current.optionSnapshot)).toBe(false)
-    expect(modelChoices(result.current.optionSnapshot)).toEqual([])
+    // Once the host says it has none: the built-in list, open to a pick, naming nothing it
+    // could replace.
+    const first = model(result.current.optionSnapshot)
+    expect(usable(result.current.optionSnapshot)).toBe(true)
+    expect(first.kind.type === 'select' ? first.kind.currentValue : null).toBeUndefined()
+    expect(modelChoices(result.current.optionSnapshot)).not.toContain('gpt-hosted')
+    await act(async () => {
+      expect(await result.current.setStructuredOption('model', 'gpt-5.5')).toBe(true)
+    })
 
     waited.resolve(HOST_CATALOG)
     await flush()
@@ -201,7 +171,7 @@ describe('host model catalog read', () => {
     unmount()
   })
 
-  it('keeps unknown discovery quiet when the waiting read fails or times out', async () => {
+  it('keeps the built-in list when the waiting read fails or times out', async () => {
     for (const failure of [
       () => Promise.resolve(UNKNOWN),
       () => Promise.reject(Object.assign(new Error('timed out'), { code: 'runtime_timeout' })),
@@ -212,7 +182,7 @@ describe('host model catalog read', () => {
       const { result, unmount } = renderOptions()
       await flush()
       expect(catalogReads()).toHaveLength(2)
-      expect(usable(result.current.optionSnapshot)).toBe(false)
+      expect(usable(result.current.optionSnapshot)).toBe(true)
       expect(modelChoices(result.current.optionSnapshot)).not.toContain('gpt-hosted')
       unmount()
     }
@@ -223,125 +193,43 @@ describe('host model catalog read', () => {
     const { result, unmount } = renderOptions()
     await flush()
     expect(catalogReads()).toHaveLength(1)
-    expect(usable(result.current.optionSnapshot)).toBe(false)
+    expect(usable(result.current.optionSnapshot)).toBe(true)
     unmount()
   })
 
-  it('shares completed pure workspace discovery while current rows and controls stay local', async () => {
+  it('the running provider list wins over a host listing that lands later', async () => {
     const live = deferred()
     const waited = deferred()
-    const pure = deferred()
-    const initial = deferred()
-    const joiningId = `${sessionId}-joining`
-    answerCatalog(
-      [() => Promise.resolve(LISTING), () => waited.promise],
-      [() => initial.promise, () => pure.promise]
-    )
+    answerCatalog([() => Promise.resolve(LISTING), () => waited.promise])
     const catalogAnswers = mocks.call.getMockImplementation()!
-    mocks.call.mockImplementation(
-      (target: unknown, method: string, params: { sessionId?: string }) =>
-        params.sessionId === joiningId
-          ? Promise.resolve(UNKNOWN)
-          : method === 'agentSession.options'
-            ? live.promise
-            : catalogAnswers(target, method, params)
+    mocks.call.mockImplementation((target: unknown, method: string, params: unknown) =>
+      method === 'agentSession.options' ? live.promise : catalogAnswers(target, method, params)
     )
-    const worktree = 'id:wt-a'
-    const { result, unmount } = renderOptions({
-      attached: true,
-      worktree,
-      seedOptions: { model: 'gpt-live' }
-    })
-    const joining = renderOptions({ worktree, sessionId: joiningId })
+    const { result, unmount } = renderOptions({ attached: true })
     await flush()
     live.resolve({
-      models: [
-        {
-          ...HOST_CATALOG.models[0]!,
-          id: 'gpt-live',
-          label: 'GPT Live'
-        }
-      ],
-      current: { model: 'gpt-live', effort: 'high', confirmed: ['model', 'effort'] }
+      models: [{ id: 'gpt-live', label: 'GPT Live', isDefault: true, efforts: [] }],
+      current: { model: 'gpt-live', confirmed: ['model'] }
     })
+    await flush()
+    expect(modelChoices(result.current.optionSnapshot)).toContain('gpt-live')
     waited.resolve(HOST_CATALOG)
     await flush()
-    expect(usable(result.current.optionSnapshot)).toBe(true)
-    expect(modelChoices(result.current.optionSnapshot)).toEqual([
-      'gpt-hosted',
-      'gpt-5.5',
-      'gpt-live'
-    ])
-    expect(result.current.optionSnapshot.find((entry) => entry.id === 'effort')).toMatchObject({
-      settable: true,
-      kind: {
-        currentValue: 'high',
-        choices: HOST_CATALOG.models[0]!.efforts
-      }
-    })
-    const launch = { newLaunch: true, seedsModel: false, worktree }
-    expect(readHostModelCatalogSnapshot(PAIRED_TARGET, 'codex', launch)).toBeUndefined()
-    // B's answer would complete before A's delayed initial answer if it had its own request.
-    pure.resolve({ ...HOST_CATALOG, listingNamesConfiguredModel: true })
-    await flush()
-    initial.resolve(LISTING)
-    await waitFor(() => expect(catalogReads(true)).toHaveLength(2), { timeout: 2_000 })
-    await flush()
-    expect(catalogReads(true)).toEqual([
-      { agent: 'codex', worktree },
-      { agent: 'codex', worktree, waitForListing: true }
-    ])
-    const shared = readHostModelCatalogSnapshot(PAIRED_TARGET, 'codex', launch)
-    expect(shared?.origin !== 'unknown' && shared?.models.map((row) => row.id)).toEqual([
-      'gpt-hosted',
-      'gpt-5.5'
-    ])
-    const next = renderOptions({ worktree, sessionId: `${sessionId}-next` })
-    expect(model(next.result.current.optionSnapshot)).toMatchObject({
-      kind: { currentValue: 'gpt-hosted' }
-    })
-    expect(next.result.current.optionSnapshot.find((entry) => entry.id === 'effort')).toMatchObject(
-      {
-        kind: { currentValue: 'high' }
-      }
-    )
-    expect(modelChoices(next.result.current.optionSnapshot)).not.toContain('gpt-live')
-    next.unmount()
-    const other = renderOptions({ worktree: 'id:wt-b', sessionId: `${sessionId}-other` })
-    expect(usable(other.result.current.optionSnapshot)).toBe(false)
-    other.unmount()
-    joining.unmount()
+    expect(modelChoices(result.current.optionSnapshot)).not.toContain('gpt-hosted')
     unmount()
   })
 
-  it('discards the pre-attach wait when a new process generation starts', async () => {
+  it('joins the wait already in flight through attach', async () => {
     const waited = deferred()
-    const attached = deferred()
-    const oldAccount = deferred()
-    const freshAccount = deferred()
-    answerCatalog(
-      [() => Promise.resolve(LISTING), () => waited.promise, () => attached.promise],
-      [() => Promise.resolve(LISTING), () => oldAccount.promise, () => freshAccount.promise]
-    )
-    const worktree = 'id:wt-account'
-    const { result, rerender, unmount } = renderOptions({ worktree })
-    await waitFor(() => expect(catalogReads(true)).toHaveLength(2), { timeout: 2_000 })
-    forgetHostModelCatalogSnapshots(PAIRED_TARGET)
-    rerender({ attached: true, worktree })
+    answerCatalog([() => Promise.resolve(LISTING), () => waited.promise])
+    const { result, rerender, unmount } = renderOptions()
     await flush()
-    expect(catalogReads()).toHaveLength(3)
+    rerender({ attached: true })
+    await flush()
+    expect(catalogReads()).toHaveLength(2)
     waited.resolve(HOST_CATALOG)
-    oldAccount.resolve(HOST_CATALOG)
-    await flush()
-    expect(modelChoices(result.current.optionSnapshot)).not.toContain('gpt-hosted')
-    const launch = { newLaunch: true, seedsModel: true, worktree }
-    expect(readHostModelCatalogSnapshot(PAIRED_TARGET, 'codex', launch)).toBeUndefined()
-    freshAccount.resolve({ ...HOST_CATALOG, models: [HOST_CATALOG.models[1]!] })
-    attached.resolve(HOST_CATALOG)
     await flush()
     expect(modelChoices(result.current.optionSnapshot)).toContain('gpt-hosted')
-    const shared = readHostModelCatalogSnapshot(PAIRED_TARGET, 'codex', launch)
-    expect(shared?.origin !== 'unknown' && shared?.models.map((row) => row.id)).toEqual(['gpt-5.5'])
     unmount()
   })
 
@@ -370,7 +258,7 @@ describe('host model catalog read', () => {
     const { result, unmount } = renderOptions()
     await flush()
     expect(catalogReads()).toHaveLength(2)
-    expect(usable(result.current.optionSnapshot)).toBe(false)
+    expect(usable(result.current.optionSnapshot)).toBe(true)
     waited.resolve(HOST_CATALOG)
     await flush()
     expect(modelChoices(result.current.optionSnapshot)).toContain('gpt-hosted')
@@ -395,28 +283,18 @@ describe('host model catalog read', () => {
     unmount()
   })
 
-  it.each([false, true])('keeps no late pure answer after close (joined=%s)', async (joined) => {
+  it('applies nothing and keeps nothing when the answer lands after the chat closed', async () => {
     const waited = deferred()
-    const pure = deferred()
-    answerCatalog(
-      [() => Promise.resolve(LISTING), () => waited.promise, () => Promise.resolve(UNKNOWN)],
-      joined ? [() => Promise.resolve(LISTING), () => pure.promise] : [() => pure.promise]
-    )
+    answerCatalog([
+      () => Promise.resolve(LISTING),
+      () => waited.promise,
+      () => Promise.resolve(UNKNOWN)
+    ])
     const first = renderOptions()
     await flush()
-    if (joined) {
-      await waitFor(() => expect(catalogReads(true)).toHaveLength(2), { timeout: 2_000 })
-    }
     first.unmount()
     waited.resolve(HOST_CATALOG)
-    pure.resolve(HOST_CATALOG)
     await flush()
-    expect(
-      readHostModelCatalogSnapshot(PAIRED_TARGET, 'codex', {
-        newLaunch: true,
-        seedsModel: true
-      })
-    ).toBeUndefined()
     // A later open of the same chat asks afresh instead of joining a finished wait.
     const { result, unmount } = renderOptions()
     await flush()

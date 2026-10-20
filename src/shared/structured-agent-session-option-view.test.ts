@@ -1,139 +1,169 @@
-import { expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { CLAUDE_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-claude-codex'
 import type { AgentSessionModelCatalogResult } from './agent-session-wire'
-import { CLAUDE_SESSION_OPTION_CATALOG as seed } from './agent-session-option-catalog-claude-codex'
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
-  createStructuredAgentSessionOptionState,
   commitStructuredAgentSessionOption,
-  resetStructuredAgentSessionCurrentOptions,
-  structuredAgentSessionOptionSnapshot
+  createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionSnapshot,
+  type StructuredAgentSessionOptionState
 } from './structured-agent-session-options'
 import {
   structuredAgentSessionOptionView,
-  structuredAgentSessionSendSelection
+  structuredAgentSessionSendSelection,
+  structuredAgentSessionShownSnapshot
 } from './structured-agent-session-option-view'
 
-const row = (id: string) => ({ id, label: id, isDefault: true, efforts: [] })
-const efforts = ['low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({
-  value,
-  label: value === 'high' ? 'High' : value
-}))
-const catalog = { origin: 'probe' as const, fetchedAt: 1, models: [{ ...row('sonnet'), efforts }] }
-const fresh = () => createStructuredAgentSessionOptionState('claude', seed)
-const inventory = (
-  state = fresh(),
-  listing: AgentSessionModelCatalogResult = catalog,
-  newLaunch = true
-) => applyStructuredAgentSessionModelCatalog(state, seed, listing, { newLaunch })
-const picked = { model: 'opus[1m]', effort: 'high' }
-const selection = (state: ReturnType<typeof fresh>) =>
-  structuredAgentSessionSendSelection('claude', structuredAgentSessionOptionSnapshot(state))
+const levels = (...values: string[]) => values.map((value) => ({ value, label: value }))
+const OPUS = { id: 'opus[1m]', label: 'Opus', isDefault: false, efforts: levels('low', 'xhigh') }
+const SONNET = { id: 'sonnet', label: 'Sonnet', isDefault: false, efforts: levels('low', 'high') }
+// Claude's session-less listing marks no default row.
+const LISTED: AgentSessionModelCatalogResult = { origin: 'probe', fetchedAt: 1, models: [OPUS] }
+const remembered = { model: 'claude-gone', effort: 'max' }
+// Claude Code 2.1.302 lists plain opus and no opus[1m], which still runs.
+const CLI302 = [{ ...OPUS, id: 'opus', isDefault: true }, SONNET]
 
-it('composes an off-list client seed beside a full list and carries its literal effort to Send', () => {
-  const state = inventory()
-  const view = structuredAgentSessionOptionView(state, picked, {}, true)
-  const snapshot = structuredAgentSessionOptionSnapshot(view)
-  expect(snapshot.find((entry) => entry.id === 'model')?.kind).toEqual({
-    type: 'select',
-    currentValue: 'opus[1m]',
-    choices: [
-      { value: 'sonnet', label: 'sonnet' },
-      { value: 'opus[1m]', label: 'opus[1m]' }
-    ]
+const fresh = () => createStructuredAgentSessionOptionState('claude', CLAUDE_SESSION_OPTION_CATALOG)
+const withHostList = (state = fresh(), catalog: AgentSessionModelCatalogResult = LISTED) =>
+  applyStructuredAgentSessionModelCatalog(state, CLAUDE_SESSION_OPTION_CATALOG, catalog, {
+    newLaunch: true
   })
-  expect(snapshot.find((entry) => entry.id === 'effort')).toMatchObject({
-    kind: { type: 'select', currentValue: 'high', choices: [{ value: 'high', label: 'High' }] },
-    valueSource: 'dispatched',
-    settable: false
+// A chat's own answer lists its listing's rows plus its own model, named by its id; `listed` are
+// the ids its listing names (none from an older host).
+const stopped = (
+  model: string,
+  rows = [OPUS],
+  listed = rows.map((row) => row.id),
+  effort = 'high'
+) =>
+  applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, {
+    models: [...rows, { id: model, label: model, isDefault: false, efforts: [] }],
+    listedModelIds: listed,
+    current: { model, effort }
   })
-  expect(selection(view)).toEqual(picked)
-  expect(state.record.model).toBeUndefined()
-  expect(state.catalog?.models.map((entry) => entry.id)).toEqual(['sonnet'])
-})
 
-it('preserves a running or restored pick in both response orders and accepts later inventory', () => {
-  for (const order of ['options-first', 'catalog-first']) {
-    let state = fresh()
-    const options = {
-      models: ['sonnet', 'opus[1m]'].map((id) => ({ ...row(id), efforts, supportsFastMode: true })),
-      fastModeSupport: { supported: true },
-      current: { ...picked, fastMode: true, confirmed: ['model', 'effort', 'fastMode'] }
-    }
-    const fast = (next: typeof state) =>
-      structuredAgentSessionOptionSnapshot(next).find((entry) => entry.id === 'fastMode')
-    const reported = applyStructuredAgentSessionOptions(state, seed, options)
-    expect(fast(resetStructuredAgentSessionCurrentOptions(reported))).toBeUndefined()
-    state =
-      order === 'options-first'
-        ? inventory(reported, catalog, false)
-        : applyStructuredAgentSessionOptions(inventory(), seed, options)
-    state = inventory(state, { ...catalog, models: [row('new-installed')] }, false)
-    expect(state.catalog?.models.map((entry) => entry.id)).toEqual(['new-installed'])
-    const effort = (next: typeof state) =>
-      structuredAgentSessionOptionSnapshot(next).find((row) => row.id === 'effort')
-    expect(fast(state)).toMatchObject({
-      settable: true,
-      kind: { type: 'boolean', currentValue: true }
-    })
-    expect(fast(resetStructuredAgentSessionCurrentOptions(state))).toBeUndefined()
-    const pickedOther = commitStructuredAgentSessionOption(
-      { ...state, record: structuredClone(state.record) },
-      'model',
-      'new-installed'
-    )
-    expect(fast(pickedOther)).toBeUndefined()
-    expect(fast(inventory())).toBeUndefined()
-    expect(effort(state)).toMatchObject({ settable: true, kind: { choices: efforts } })
-    expect(effort(resetStructuredAgentSessionCurrentOptions(state))).toMatchObject({
-      settable: false,
-      valueSource: 'dispatched',
-      kind: { currentValue: 'high', choices: [{ value: 'high', label: 'high' }] }
-    })
-    expect(effort(inventory())).toBeUndefined()
-    const changed = applyStructuredAgentSessionOptions(state, seed, {
-      models: [row('new-installed')],
-      current: { model: 'new-installed' }
-    })
-    expect(effort(changed)).toBeUndefined()
-    // Restore the current model before checking the opaque 302 scalar.
-    state = applyStructuredAgentSessionOptions(state, seed, options)
-    expect(selection(state)).toEqual(picked)
-    for (const effortsKnown of [undefined, false] as const) {
-      const currentOnly = applyStructuredAgentSessionOptions(state, seed, {
-        models: [{ ...row('opus[1m]'), effortsKnown, supportsFastMode: true }],
-        fastModeSupport: { supported: true },
-        listedModelIds: [],
-        current: { ...picked, fastMode: true }
-      })
-      expect(currentOnly.catalog).toBe(state.catalog)
-      expect(fast(currentOnly)).toMatchObject({ kind: { currentValue: true } })
-      expect(effort(currentOnly)).toMatchObject({
-        settable: false,
-        kind: { currentValue: 'high', choices: [{ value: 'high', label: 'high' }] }
-      })
-    }
-    expect(
-      fast(
-        applyStructuredAgentSessionOptions(state, seed, { ...options, fastModeSupport: undefined })
-      )
-    ).toBeUndefined()
+function shown(...args: Parameters<typeof structuredAgentSessionOptionView>) {
+  const snapshot = structuredAgentSessionOptionSnapshot(structuredAgentSessionOptionView(...args))
+  const value = (id: string) => {
+    const kind = snapshot.find((descriptor) => descriptor.id === id)?.kind
+    return kind?.type === 'select' ? kind.currentValue : undefined
   }
+  return { model: value('model'), effort: value('effort') }
+}
+
+const carried = (
+  state: StructuredAgentSessionOptionState,
+  seed?: Readonly<Record<string, string>>,
+  picks: Readonly<Record<string, string>> = {}
+) => structuredAgentSessionSendSelection(structuredAgentSessionOptionView(state, seed, picks))
+
+describe('a Claude model its CLI no longer lists', () => {
+  it('stays the chat model through a refresh and every send, its effort read-only', () => {
+    // The incident: a chat on opus[1m] at max, reopened under a CLI that lists only plain opus.
+    const restored = withHostList(stopped('opus[1m]', CLI302, undefined, 'max'), {
+      ...LISTED,
+      models: CLI302
+    })
+    const refreshed = applyStructuredAgentSessionOptions(restored, CLAUDE_SESSION_OPTION_CATALOG, {
+      models: [...CLI302, { id: 'opus[1m]', label: 'opus[1m]', isDefault: false, efforts: [] }],
+      listedModelIds: CLI302.map((row) => row.id),
+      current: { model: 'opus[1m]', effort: 'max' }
+    })
+    for (const state of [restored, refreshed]) {
+      expect(shown(state, undefined, {})).toEqual({ model: 'opus[1m]', effort: 'max' })
+      expect(carried(state)).toEqual({ model: 'opus[1m]', effort: 'max' })
+      const snapshot = structuredAgentSessionShownSnapshot(state)
+      // No inferred menu: the one level it holds, which nothing can change.
+      expect(snapshot.find((entry) => entry.id === 'effort')).toMatchObject({
+        settable: false,
+        kind: { choices: [{ value: 'max', label: 'max' }] }
+      })
+    }
+  })
+
+  it('keeps a remembered model for a new chat, and offers no effort under a listed model with none', () => {
+    // The placeholder stands until the host answers with the chat's own model; create seeds it.
+    expect(carried(withHostList(), remembered)).toBeUndefined()
+    const haiku = { id: 'haiku', label: 'Haiku', isDefault: false, efforts: [] }
+    const listed = applyStructuredAgentSessionOptions(fresh(), CLAUDE_SESSION_OPTION_CATALOG, {
+      models: [OPUS, haiku],
+      listedModelIds: ['opus[1m]', 'haiku'],
+      current: { model: 'haiku', effort: 'high' }
+    })
+    expect(shown(listed, undefined, {})).toEqual({ model: 'haiku', effort: undefined })
+  })
 })
 
-it('keeps an unpicked launch and restores discovered efforts after a literal model pick', () => {
-  expect(
-    selection(inventory(fresh(), { ...catalog, listingNamesConfiguredModel: true }))
-  ).toBeUndefined()
-  const unknown = applyStructuredAgentSessionOptions(fresh(), seed, {
-    models: [{ ...row(picked.model), effortsKnown: false }],
-    current: { model: picked.model }
+describe('what a send carries', () => {
+  it('carries the default it shows when nothing names a model', () => {
+    const named = { ...SONNET, isDefault: true }
+    const listing = { ...LISTED, models: [OPUS, named], listingNamesConfiguredModel: true }
+    expect(carried(withHostList(fresh(), listing))).toEqual({ model: 'sonnet' })
   })
-  const exact = { ...row(picked.model), efforts }
-  const listed = inventory(unknown, { ...catalog, models: [exact] }, false)
-  expect(
-    structuredAgentSessionOptionSnapshot(listed).find((entry) => entry.id === 'effort')
-  ).toMatchObject({ settable: true, kind: { choices: efforts } })
-  const selected = commitStructuredAgentSessionOption(listed, 'effort', 'high')
-  expect(selection(selected)).toEqual(picked)
+
+  it('carries a pick on its way as given', () => {
+    const listed = withHostList(fresh(), { ...LISTED, models: [OPUS, SONNET] })
+    expect(carried(listed, remembered, { model: 'sonnet' })).toMatchObject({ model: 'sonnet' })
+    expect(carried(withHostList(), undefined, { model: 'claude-retired' })).toMatchObject({
+      model: 'claude-retired'
+    })
+  })
+
+  it('carries nothing before a model shows, or for another agent', () => {
+    expect(carried(fresh())).toBeUndefined()
+    const codex = applyStructuredAgentSessionOptions(
+      createStructuredAgentSessionOptionState('codex', CLAUDE_SESSION_OPTION_CATALOG),
+      CLAUDE_SESSION_OPTION_CATALOG,
+      { models: [OPUS], current: { model: 'opus[1m]' } }
+    )
+    expect(carried(codex)).toBeUndefined()
+  })
+})
+
+describe("a chat's model and effort, apart from the defaults filling them in", () => {
+  const listed = CLI302.map((row) => row.id)
+  // A resumed chat at rest that never picked a model: its host fills in the listing's default.
+  const resumed = (defaulted?: readonly ('model' | 'effort')[]) =>
+    applyStructuredAgentSessionOptions(
+      applyStructuredAgentSessionModelCatalog(
+        fresh(),
+        CLAUDE_SESSION_OPTION_CATALOG,
+        { ...LISTED, models: CLI302 },
+        { newLaunch: false }
+      ),
+      CLAUDE_SESSION_OPTION_CATALOG,
+      {
+        models: CLI302,
+        listedModelIds: listed,
+        current: { model: 'opus', effort: 'low', ...(defaulted ? { defaulted } : {}) }
+      }
+    )
+
+  it("names a resumed chat's defaults but never sends them, only its picks", () => {
+    const state = resumed(['model', 'effort'])
+    expect(shown(state, undefined, {})).toEqual({ model: 'opus', effort: 'low' })
+    expect(carried(state)).toBeUndefined()
+    const effort = commitStructuredAgentSessionOption(state, 'effort', 'xhigh')
+    expect(carried(effort)).toEqual({ effort: 'xhigh' })
+  })
+
+  it("reads an older host's answer, which marks no default, as it always has", () => {
+    const state = resumed()
+    expect(shown(state, undefined, {})).toEqual({ model: 'opus', effort: 'low' })
+    expect(carried(state)).toEqual({ model: 'opus', effort: 'low' })
+  })
+
+  it('lets a new chat pick its effort before its first message, under the default it shows', () => {
+    const state = withHostList(fresh(), {
+      ...LISTED,
+      models: CLI302,
+      listingNamesConfiguredModel: true
+    })
+    expect(shown(state, undefined, { effort: 'xhigh' })).toEqual({ model: 'opus', effort: 'xhigh' })
+    expect(carried(state, undefined, { effort: 'xhigh' })).toEqual({
+      model: 'opus',
+      effort: 'xhigh'
+    })
+  })
 })

@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { AcpStructuredOptions, restoreAcpSessionOptions } from './acp-structured-options'
+import { AcpStructuredOptions } from './acp-structured-options'
 import { GROK_ACP_DIALECT } from './acp-dialects/grok-dialect'
-import { grokModelCatalogFromState } from './acp-dialects/grok-model-catalog'
 
 const configOptions = [
   {
@@ -36,7 +35,7 @@ describe('ACP session options', () => {
     const { models, current } = options.read()
     // The effort menu belongs to the model running now; nothing is anyone's default.
     expect(models).toEqual([
-      { id: 'model-a', label: 'Model A', isDefault: false, efforts: [], effortsKnown: false },
+      { id: 'model-a', label: 'Model A', isDefault: false, efforts: [] },
       {
         id: 'model-b',
         label: 'Model B',
@@ -99,61 +98,33 @@ describe('ACP session options', () => {
     expect(options.reported()).toEqual({ model: 'model-b', effort: 'high' })
   })
 
-  it('uses observed efforts for unknown Grok metadata and preserves advertised empty menus', () => {
+  it('keeps the session’s effort menu for the running model when its advertised one is empty', () => {
     const options = new AcpStructuredOptions(GROK_ACP_DIALECT)
-    const models = {
-      currentModelId: 'model-b',
-      availableModels: [
-        { modelId: 'model-a', name: 'Model A' },
-        { modelId: 'model-b', name: 'Model B', _meta: { supportsReasoningEffort: false } }
-      ]
-    }
-    options.adoptSession({ configOptions, models })
+    options.adoptSession({
+      configOptions,
+      models: {
+        currentModelId: 'model-b',
+        availableModels: [
+          { modelId: 'model-a', name: 'Model A' },
+          { modelId: 'model-b', name: 'Model B', _meta: { supportsReasoningEffort: false } }
+        ]
+      }
+    })
     const [modelA, modelB] = options.read().models
     expect(modelA?.efforts).toEqual([])
-    expect(modelB?.efforts).toEqual([])
-    expect(modelB?.defaultEffort).toBeUndefined()
-    const unknownModels = {
-      ...models,
-      availableModels: models.availableModels.map(({ modelId, name }) => ({ modelId, name }))
-    }
-    options.adoptSession({ configOptions, models: unknownModels })
-    expect(options.read().models[0]?.effortsKnown).toBe(false)
-    expect(options.read().models[1]?.efforts).toEqual([
+    expect(modelB?.efforts).toEqual([
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' }
     ])
-    expect(options.read().current).toEqual({
-      model: 'model-b',
-      effort: 'high',
-      confirmed: ['model', 'effort']
-    })
-    expect(options.read().models[1]?.defaultEffort).toBeUndefined()
-    expect(
-      grokModelCatalogFromState(unknownModels).every((model) => model.effortsKnown === false)
-    ).toBe(true)
-    options.adoptSession({ models: unknownModels })
-    expect(options.read().models.every((model) => model.effortsKnown === false)).toBe(true)
+    expect(modelB?.defaultEffort).toBeUndefined()
   })
 })
 
 describe('what a new session with no pick says about the configured default', () => {
-  const connection = {
-    setConfigOption: async () => ({ configOptions }),
-    setModel: async () => ({})
-  }
-
   it('is the model and effort the agent chose for itself', () => {
     const options = new AcpStructuredOptions()
     options.adoptSession({ configOptions }, 'new')
     expect(options.configuredDefault()).toEqual({ modelId: 'model-b', effort: 'high' })
-    expect(options.startListing().configuredDefault).toEqual({
-      modelId: 'model-b',
-      effort: 'high'
-    })
-    expect(options.readWithCatalogListing().catalogListing).not.toHaveProperty('configuredDefault')
-    options.adoptSession({ configOptions })
-    expect(options.readWithCatalogListing().catalogListing).not.toHaveProperty('configuredDefault')
   })
 
   it('says nothing of a loaded session, which keeps the model it ran', () => {
@@ -162,17 +133,17 @@ describe('what a new session with no pick says about the configured default', ()
     expect(options.configuredDefault()).toBeUndefined()
   })
 
-  it('says nothing once the chat holds a model pick, even one the session already runs', async () => {
+  it('says nothing once the chat holds a model pick, even one the session already runs', () => {
     const options = new AcpStructuredOptions()
     options.adoptSession({ configOptions }, 'new')
-    await restoreAcpSessionOptions(connection, options, { model: 'model-b' })
+    options.notePick('model')
     expect(options.configuredDefault()).toBeUndefined()
   })
 
-  it('keeps the model but not an effort the chat picked', async () => {
+  it('keeps the model but not an effort the chat picked', () => {
     const options = new AcpStructuredOptions()
     options.adoptSession({ configOptions }, 'new')
-    await restoreAcpSessionOptions(connection, options, { effort: 'low' })
+    options.notePick('effort')
     expect(options.configuredDefault()).toEqual({ modelId: 'model-b' })
   })
 

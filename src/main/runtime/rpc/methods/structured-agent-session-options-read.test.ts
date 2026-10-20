@@ -3,16 +3,10 @@ import '../unused-default-rpc-methods.test-fixture'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { AgentSessionUnavailable } from '../../../../shared/agent-session-availability'
 import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
 import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-session-wire'
 import { agentSessionRecordFixture } from '../../../../shared/agent-session-record.test-fixture'
-import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../../shared/structured-agent-session-surface-capabilities'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import {
-  PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
-} from '../../../../shared/protocol-version'
 import {
   call,
   clearStructuredHostStub,
@@ -26,7 +20,7 @@ afterEach(() => {
 })
 
 describe('agentSession.modelCatalog', () => {
-  const read = vi.fn(async (): Promise<AgentSessionModelCatalogResult> => ({ origin: 'unknown' }))
+  const read = vi.fn(async () => ({ origin: 'unknown' as const }))
   let record: AgentSessionRecord | null = null
 
   beforeEach(() => {
@@ -57,7 +51,6 @@ describe('agentSession.modelCatalog', () => {
     expect(resolveStructuredAgentSessionLocalWorkspacePath).not.toHaveBeenCalled()
     expect(read).toHaveBeenCalledWith({
       agent: 'codex',
-      legacy: true,
       sessionId: SESSION,
       workspacePath: '/home/me/floating-a'
     })
@@ -74,7 +67,6 @@ describe('agentSession.modelCatalog', () => {
     expect(resolveStructuredAgentSessionLocalWorkspacePath).toHaveBeenCalledWith('id:wt-1')
     expect(read).toHaveBeenCalledWith({
       agent: 'codex',
-      legacy: true,
       sessionId: SESSION,
       workspacePath: '/repo/wt'
     })
@@ -91,43 +83,26 @@ describe('agentSession.modelCatalog', () => {
         })
       }
     )
-    expect(read).toHaveBeenCalledWith({ agent: 'codex', workspacePath: null, legacy: true })
+    expect(read).toHaveBeenCalledWith({ agent: 'codex', workspacePath: null })
   })
 
   it('reads as before when no worktree is named', async () => {
     await call('agentSession.modelCatalog', { agent: 'claude' }, STRUCTURED_CLIENT)
-    expect(read).toHaveBeenCalledWith({ agent: 'claude', legacy: true })
+    expect(read).toHaveBeenCalledWith({ agent: 'claude' })
   })
 
-  it.each(['runtime', 'mobile'] as const)(
-    'routes a waiting %s reader by negotiated capability',
-    async (clientKind) => {
-      for (const coherent of [false, true]) {
-        await call(
-          'agentSession.modelCatalog',
-          { agent: 'codex', sessionId: SESSION, waitForListing: true },
-          {
-            ...STRUCTURED_CLIENT,
-            clientKind,
-            clientCapabilities: [
-              ...STRUCTURED_CLIENT.clientCapabilities,
-              ...(coherent ? [AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY] : [])
-            ]
-          }
-        )
-        expect(read).toHaveBeenLastCalledWith({
-          agent: 'codex',
-          sessionId: SESSION,
-          waitForListing: true,
-          legacy: !coherent
-        })
-      }
-    }
-  )
+  it('passes a wait for the listing through to the catalog', async () => {
+    await call(
+      'agentSession.modelCatalog',
+      { agent: 'codex', sessionId: SESSION, waitForListing: true },
+      STRUCTURED_CLIENT
+    )
+    expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION, waitForListing: true })
+  })
 
   it('passes a saved-only read through to the catalog', async () => {
     await call('agentSession.modelCatalog', { agent: 'grok', savedOnly: true }, STRUCTURED_CLIENT)
-    expect(read).toHaveBeenCalledWith({ agent: 'grok', savedOnly: true, legacy: true })
+    expect(read).toHaveBeenCalledWith({ agent: 'grok', savedOnly: true })
   })
 })
 
@@ -162,7 +137,7 @@ describe('agentSession.modelCatalog before anything built the host', () => {
     )
     expect(installHost).toHaveBeenCalledTimes(1)
     expect(reply).toMatchObject({ ok: true, result: { origin: 'probe' } })
-    expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION, legacy: true })
+    expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION })
   })
 
   // Terminal-backed chat reads with no session: a host that runs no structured chat keeps its
@@ -188,67 +163,42 @@ describe('agentSession.modelCatalog before anything built the host', () => {
   })
 })
 
-const PI_CLIENT = {
-  ...STRUCTURED_CLIENT,
-  clientCapabilities: [
-    ...STRUCTURED_CLIENT.clientCapabilities,
-    STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
-    PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY
-  ]
-}
-
-describe("agentSession.modelCatalog with what the running agent's start said", () => {
-  const read = vi.fn(async (): Promise<AgentSessionModelCatalogResult> => ({ origin: 'unknown' }))
-  const startUnavailable = vi.fn((_sessionId: string): AgentSessionUnavailable | undefined => ({
-    reason: 'notSignedIn'
+describe('agentSession.modelCatalog for a chat on a model its CLI stopped listing', () => {
+  const opus = { id: 'opus', label: 'Opus', isDefault: true, efforts: [] }
+  const read = vi.fn(async (): Promise<AgentSessionModelCatalogResult> => ({
+    origin: 'probe',
+    fetchedAt: 1,
+    models: [opus]
   }))
-  const record: AgentSessionRecord = { ...agentSessionRecordFixture(), provider: 'pi' }
-  const readFor = (agent: string) =>
-    call('agentSession.modelCatalog', { agent, sessionId: record.sessionId }, PI_CLIENT)
+  const record: AgentSessionRecord = {
+    ...agentSessionRecordFixture(),
+    provider: 'claude',
+    options: { model: 'opus[1m]', effort: 'max' }
+  }
 
   beforeEach(() => {
-    read.mockReset()
-    read.mockResolvedValue({ origin: 'unknown' })
-    startUnavailable.mockClear()
     setStructuredAgentSessionHost(
       Object.assign(hostStub(), {
-        deps: {
-          modelCatalog: { read },
-          store: { getRecord: () => record },
-          adapter: { startUnavailable }
-        }
+        deps: { modelCatalog: { read }, store: { getRecord: () => record }, adapter: {} }
       })
     )
   })
 
-  it("answers a Pi chat's catalog with its signed-out start", async () => {
-    const reply = await readFor('pi')
-    expect(startUnavailable).toHaveBeenCalledWith(record.sessionId)
-    expect(reply).toMatchObject({
+  it("lists the chat's own model, so an older client that replaces an unlisted one keeps it", async () => {
+    const own = { id: 'opus[1m]', label: 'opus[1m]', isDefault: false, efforts: [] }
+    const forChat = { agent: 'claude', sessionId: record.sessionId }
+    expect(await call('agentSession.modelCatalog', forChat, STRUCTURED_CLIENT)).toMatchObject({
       ok: true,
-      result: { origin: 'unknown', unavailable: { reason: 'notSignedIn' } }
+      result: { models: [opus, own] }
     })
-  })
-
-  it('keeps the reason the catalog itself found', async () => {
-    read.mockResolvedValue({ origin: 'unknown', unavailable: { reason: 'cliMissing' } })
-    expect(await readFor('pi')).toMatchObject({
-      ok: true,
-      result: { unavailable: { reason: 'cliMissing' } }
-    })
-  })
-
-  it("never lends one agent's start to another agent's read", async () => {
-    const reply = await readFor('codex')
-    expect(startUnavailable).not.toHaveBeenCalled()
-    expect(reply).toMatchObject({ ok: true, result: { origin: 'unknown' } })
-    expect(reply).not.toMatchObject({ result: { unavailable: expect.anything() } })
-  })
-
-  it('stays quiet while the start said nothing', async () => {
-    startUnavailable.mockReturnValueOnce(undefined)
-    const reply = await readFor('pi')
-    expect(reply).toMatchObject({ ok: true })
-    expect(reply).not.toMatchObject({ result: { unavailable: expect.anything() } })
+    // A new chat's read, which seeds the next new chat's list, and the account's name only the CLI's.
+    const newChat = { ...forChat, worktree: 'id:wt-1' }
+    const runtime = { resolveStructuredAgentSessionLocalWorkspacePath: async () => '/repo' }
+    for (const reply of [
+      await call('agentSession.modelCatalog', newChat, STRUCTURED_CLIENT, runtime),
+      await call('agentSession.modelCatalog', { agent: 'claude' }, STRUCTURED_CLIENT)
+    ]) {
+      expect(reply).toMatchObject({ ok: true, result: { models: [opus] } })
+    }
   })
 })

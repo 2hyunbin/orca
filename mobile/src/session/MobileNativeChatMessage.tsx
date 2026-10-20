@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useContext, useLayoutEffect, useMemo, useRef } from 'react'
 import { Text, View } from 'react-native'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
 import { MobileNativeChatLongPressContent as Content } from './MobileNativeChatLongPressContent'
@@ -13,11 +13,21 @@ import {
   isRenderableSubagentGroup,
   withoutSubagentGroupTwins
 } from '../../../src/shared/native-chat-subagent-summary'
-import type { NativeChatBlock, NativeChatMessage } from '../../../src/shared/native-chat-types'
+import type {
+  NativeChatBlock,
+  NativeChatMessage,
+  NativeChatToolCallBlock
+} from '../../../src/shared/native-chat-types'
 import { MobileSourceCopyButton } from '../components/MobileSourceCopyButton'
 import { nativeChatMessagePlainText } from './mobile-native-chat-message-plain-text'
 import { deriveNativeChatRowContent } from '../../../src/shared/native-chat-row-content'
-import { MobileNativeChatReasoningRow } from './MobileNativeChatReasoningRow'
+import {
+  MobileNativeChatGroupedThought,
+  MobileNativeChatReasoningRow
+} from './MobileNativeChatReasoningRow'
+import { mobileNativeChatRowId } from './MobileNativeChatScrollHold'
+import { nativeChatWorkRunEntries } from '../../../src/shared/native-chat-work-run'
+import { nativeChatReasoningDisclosureKey } from '../../../src/shared/native-chat-reasoning-row'
 import { MobileNativeChatTurnStatus } from './MobileNativeChatTurnStatus'
 import { MobileNativeChatNoticeRow } from './MobileNativeChatNoticeRow'
 import { MobileNativeChatRowOverlaysContext } from './mobile-native-chat-row-overlays'
@@ -36,13 +46,18 @@ import type { NativeChatTurnStatus } from './use-mobile-native-chat-turn-status'
 import { styles } from './mobile-native-chat-message-styles'
 import { agentMessageAttribution } from './mobile-agent-message-attribution'
 import { MobileNativeChatVisualContext } from './mobile-native-chat-visual-context'
+import { useMobileNativeChatFullMessage } from './MobileNativeChatFullContent'
 import { MobileNativeChatPacedProse } from './MobileNativeChatPacedProse'
 import { Prose } from './MobileNativeChatProse'
 
 function MobileNativeChatMessageImpl({
-  message,
+  message: rowMessage,
+  rowKey,
+  runOwner,
   mayStillGrow = false,
   toolsExpanded = false,
+  previousTodoWrite,
+  previousUpdatePlan,
   fontScale = 1,
   onOpenFile,
   turnStatus,
@@ -51,6 +66,11 @@ function MobileNativeChatMessageImpl({
   turnKey,
   onToggleTurn,
   activeTurnIsWorking,
+  trailingRun,
+  workRun,
+  joinsWorkRun = false,
+  foldedAway = false,
+  openReasoning,
   structuredActivityUi = false,
   reasoningIsLive = false,
   reasoningExpanded,
@@ -64,9 +84,15 @@ function MobileNativeChatMessageImpl({
   onToggleUserMessage
 }: {
   message: NativeChatMessage
+  /** The row's place on the page, kept while older messages join it; tags the row. */
+  rowKey?: string
+  runOwner?: string
   /** The newest assistant row of a live turn with no prompt open: its last text may still grow. */
   mayStillGrow?: boolean
   toolsExpanded?: boolean
+  /** The last plan each task-list tool wrote before this row, so an update reads as its changes. */
+  previousTodoWrite?: NativeChatToolCallBlock
+  previousUpdatePlan?: NativeChatToolCallBlock
   /** Multiplies all chat text sizes for pinch-to-zoom (1 = no change). */
   fontScale?: number
   onOpenFile?: (relativePath: string) => void
@@ -82,6 +108,17 @@ function MobileNativeChatMessageImpl({
   onToggleTurn?: (turnKey: string) => void
   /** Session-level working state for this message's turn; gates the live tool row. */
   activeTurnIsWorking?: boolean
+  /** Whether this row is the live turn's frontier, the last where the agent spoke or acted. */
+  trailingRun?: boolean
+  /** Set on the first row of a work run: every member, which this row draws as one run. */
+  workRun?: readonly NativeChatMessage[]
+  /** A later member of a work run, which its first row draws. */
+  joinsWorkRun?: boolean
+  /** Folded behind its settled turn's "Worked for" row. The Tools toggle still shows it, or that
+   *  toggle would do nothing on every settled turn. */
+  foldedAway?: boolean
+  /** The reasoning disclosures the reader opened, for thoughts drawn inside the work run. */
+  openReasoning?: ReadonlySet<string>
   /** Structured lane only: live tool progress plus the turn-status disclosure. */
   structuredActivityUi?: boolean
   /** This open reasoning block is disclosed by the live activity line, so its row draws nothing. */
@@ -99,6 +136,7 @@ function MobileNativeChatMessageImpl({
   userMessageOpen?: boolean
   onToggleUserMessage?: (messageId: string) => void
 }): React.JSX.Element {
+  const { shown: message, showFull, recovery } = useMobileNativeChatFullMessage(rowMessage)
   // Another agent's message is set apart from the person's bubble, left-aligned and named.
   const attribution = agentMessageAttribution('Message from', message.from)
   const isUser = message.role === 'user' && attribution === null
@@ -107,30 +145,46 @@ function MobileNativeChatMessageImpl({
   // tool calls fold into a collapsible run beneath. The user's own messages get
   // an inverted (filled accent) bubble so they stand apart from agent prose.
   const { prose, tools: blocksOfTools } = splitNativeChatBlocks(message.blocks)
-  const { asks, unansweredAsks, work: tools } = nativeChatAskRunBlocks(blocksOfTools)
-  // A roster draws as its group row, which replaces its frozen sentence.
-  const drawnProse = withoutSubagentGroupTwins(prose)
+  const { asks, unansweredAsks, work: ownTools } = nativeChatAskRunBlocks(blocksOfTools)
+  const { openActions: openSheet } = useContext(MobileNativeChatRowOverlaysContext)
+  // A work run draws every member's calls as this row's one run, its thoughts among them.
+  const run = useMemo(() => (workRun ? nativeChatWorkRunEntries(workRun) : null), [workRun])
+  const tools = run?.blocks ?? ownTools
+  const asides = useMemo(() => {
+    if (!run) {
+      return undefined
+    }
+    const thought = (thoughtMessage: NativeChatMessage): React.JSX.Element => (
+      // Keyed by the thought, so it stays mounted as calls arrive after it.
+      <MobileNativeChatGroupedThought
+        key={`thought:${thoughtMessage.id}`}
+        message={thoughtMessage}
+        fontScale={fontScale}
+        live={activeTurnIsWorking === true}
+        expanded={openReasoning?.has(nativeChatReasoningDisclosureKey(thoughtMessage.id)) === true}
+        onToggle={onToggleReasoning}
+        onOpenFile={onOpenFile}
+        // Its own actions, as a standalone thought's: the run's row is another message.
+        onLongPress={INLINE_TEXT_SELECTION ? undefined : () => openSheet(thoughtMessage)}
+      />
+    )
+    const before = new Map<NativeChatBlock, React.JSX.Element[]>()
+    for (const [block, thoughts] of run.thoughtsBefore) {
+      before.set(block, thoughts.map(thought))
+    }
+    return { before, after: run.thoughtsAfter.map(thought) }
+  }, [run, fontScale, activeTurnIsWorking, openReasoning, onToggleReasoning, onOpenFile, openSheet])
+  // A roster draws as its group row, which replaces its frozen sentence. A thought heading a
+  // run draws inside the run, so its words are not this row's prose.
+  const drawnProse = isReasoning ? [] : withoutSubagentGroupTwins(prose)
   // The agent did not write a system row: its words draw as a notice or a faint aside.
   const isSystem = message.role === 'system'
-  const activeCall = structuredActivityUi
-    ? selectActiveToolCall(tools, { activeTurnIsWorking })
-    : null
-  // A completed turn's activity belongs behind the turn-status caret. Leaving the
-  // grouped row visible made a failed child command read as a failed response.
-  // The composer's global Tools toggle still overrides this, or it would silently
-  // do nothing on every settled turn.
-  const settledToolsHidden =
-    structuredActivityUi &&
-    activeCall == null &&
-    activeTurnIsWorking === false &&
-    !turnExpanded &&
-    !toolsExpanded
-  const showToolRun = tools.length > 0 && !settledToolsHidden
+  const showToolRun = tools.length > 0
   const askPending = structuredActivityUi
     ? selectActiveToolCall(unansweredAsks, { activeTurnIsWorking }) !== null
     : unansweredAsks.length > 0
   const askRow =
-    asks.length > 0 && !settledToolsHidden ? (
+    asks.length > 0 ? (
       <MobileNativeChatAwaitingInputRow
         subject={nativeChatAskRunSubject(asks)}
         pending={askPending}
@@ -139,7 +193,6 @@ function MobileNativeChatMessageImpl({
       />
     ) : null
   // A ref keeps the memoized Markdown context stable as the message streams.
-  const { openActions: openSheet } = useContext(MobileNativeChatRowOverlaysContext)
   const pressedMessage = useRef(message)
   useLayoutEffect(() => {
     pressedMessage.current = message
@@ -162,11 +215,15 @@ function MobileNativeChatMessageImpl({
       onToggleExpanded={turnKey && onToggleTurn ? () => onToggleTurn(turnKey) : undefined}
     />
   ) : null
+  // A receipt outlives the fold, as on desktop: it is the record of what the reader answered.
+  if (joinsWorkRun || (foldedAway && !toolsExpanded && !receipt)) {
+    return <>{statusRow}</>
+  }
   if (receipt) {
     return (
       <>
         {turnStatusAbove ? statusRow : null}
-        <View style={styles.row}>
+        <View style={styles.row} testID={mobileNativeChatRowId(rowKey ?? message.id)}>
           <MobileNativeChatResolutionReceipt
             body={receipt}
             awaiting={awaiting}
@@ -177,7 +234,8 @@ function MobileNativeChatMessageImpl({
       </>
     )
   }
-  if (isReasoning) {
+  // A run that opens on a thought draws as the run, the thought inside it.
+  if (isReasoning && !workRun) {
     // The same text the live line's selector reads, so the two agree on whether there is any.
     const markdown = deriveNativeChatRowContent(message.blocks).markdown
     // Blank, or disclosed by the live activity line: nothing draws, not even an empty row.
@@ -186,7 +244,7 @@ function MobileNativeChatMessageImpl({
       <>
         {turnStatusAbove ? statusRow : null}
         {draws ? (
-          <View style={styles.row}>
+          <View style={styles.row} testID={mobileNativeChatRowId(rowKey ?? message.id)}>
             <MobileNativeChatReasoningRow
               message={message}
               markdown={markdown}
@@ -197,6 +255,7 @@ function MobileNativeChatMessageImpl({
               onOpenFile={onOpenFile}
               onLongPress={onLongPress}
             />
+            {showFull}
           </View>
         ) : null}
         {turnStatusAbove ? null : statusRow}
@@ -233,7 +292,10 @@ function MobileNativeChatMessageImpl({
     <>
       {/* A turn with no user bubble carries its bar above its first row. */}
       {turnStatusAbove ? statusRow : null}
-      <View style={[styles.row, isUser && styles.rowUser]}>
+      <View
+        style={[styles.row, isUser && styles.rowUser]}
+        testID={mobileNativeChatRowId(rowKey ?? message.id)}
+      >
         <Content
           onLongPress={onLongPress}
           style={[
@@ -265,6 +327,8 @@ function MobileNativeChatMessageImpl({
                 fontScale={fontScale}
                 open={userMessageOpen === true}
                 onToggle={() => onToggleUserMessage?.(message.id)}
+                recovery={recovery}
+                status={showFull}
               >
                 {proseRows(drawnProse.filter((block) => !isImageRefBlock(block)))}
               </MobileNativeChatUserMessageFold>
@@ -279,16 +343,23 @@ function MobileNativeChatMessageImpl({
               {(block, index, shown) => proseRow(block, index, shown.text, shown.revealing)}
             </MobileNativeChatPacedProse>
           )}
+          {isUser ? null : showFull}
           {askRow}
           {showToolRun ? (
             <ToolRun
-              // Why: a global toggle intentionally resets all per-run/per-line
-              // overrides in one remount, avoiding an effect-driven second render.
-              key={`${toolsExpanded ? 'expanded' : 'collapsed'}:${turnExpanded ? 'turn' : 'flat'}`}
               blocks={tools}
-              defaultExpanded={turnExpanded || toolsExpanded}
-              expandChildren={turnExpanded ? false : toolsExpanded}
-              activeCall={activeCall}
+              // Opening the turn reveals its runs folded, as on desktop; the Tools toggle is the
+              // default every run and line reads, and a reader's own choice is kept per default.
+              defaultExpanded={toolsExpanded}
+              expandChildren={toolsExpanded}
+              disclosureId={runOwner ?? rowKey ?? message.id}
+              asides={asides}
+              activeTurnIsWorking={structuredActivityUi ? activeTurnIsWorking : undefined}
+              trailing={trailingRun}
+              awaitingAnswer={askPending}
+              previousTodoWrite={previousTodoWrite}
+              previousUpdatePlan={previousUpdatePlan}
+              fontScale={fontScale}
               onOpenFile={onOpenFile}
             />
           ) : null}

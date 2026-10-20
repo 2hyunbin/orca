@@ -1,296 +1,319 @@
-import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
-import { homedir } from 'node:os'
+import { prewarmAgentModelCatalog, newChatCatalogKey } from './agent-model-catalog-prewarm'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { isNativeLocalLocation } from '../../../shared/execution-host'
-import { PrioritySemaphore } from '../../../shared/priority-semaphore'
-import {
-  agentModelCatalogFingerprint,
-  agentModelCatalogFingerprintForRecord,
-  agentModelCatalogScopeFingerprint
-} from './agent-model-catalog-fingerprint'
+import type {
+  AgentSessionAccountHome,
+  AgentSessionRecord
+} from '../../../shared/agent-session-record'
+import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
+import { agentModelCatalogFingerprintForRecord } from './agent-model-catalog-fingerprint'
 import {
   agentModelCatalogResultFromEntry,
-  agentModelCatalogSessionObservation,
-  retainedAgentModelCatalogModels,
-  type AgentModelCatalogConfiguredChoice
+  retainedAgentModelCatalogModels
 } from './agent-model-catalog-entry'
-import type { AgentModelCatalogEntry } from './agent-model-catalog-store'
-import { rememberDiscoveryScope } from './agent-model-catalog-discovery'
+import type {
+  AgentModelCatalogEntry,
+  AgentModelCatalogLiveListing,
+  AgentModelCatalogProbe,
+  AgentModelCatalogSuccess
+} from './agent-model-catalog-store'
 import { AgentModelCatalogListingStoppedError } from './agent-model-catalog-failures'
+import {
+  catalogFolder,
+  recordConfiguredDefault,
+  sessionWorkspacePath,
+  workspaceKeepsListedDefault
+} from './agent-model-catalog-workspace'
 
 import type {
-  AgentModelCatalogRead,
-  AgentModelCatalogService,
-  AgentModelCatalogServiceDeps
+  AgentModelCatalogServiceDeps,
+  AgentModelCatalogService
 } from './agent-model-catalog-service-contract'
 export type {
-  AgentModelCatalogService,
-  AgentModelCatalogServiceDeps
+  AgentModelCatalogServiceDeps,
+  AgentModelCatalogService
 } from './agent-model-catalog-service-contract'
+import { resolveAgentModelCatalogScope } from './agent-model-catalog-scope'
+import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
+import { PrioritySemaphore } from '../../../shared/priority-semaphore'
 
-async function recordConfiguredDefault(
-  deps: AgentModelCatalogServiceDeps,
-  record: AgentSessionRecord,
-  fingerprint: string,
-  choice: AgentModelCatalogConfiguredChoice | null
-): Promise<void> {
-  const accountHome = record.accountHome
-  if (!deps.workspaceMayOverrideDefaultModel) {
-    return
-  }
-  const workspacePath = isNativeLocalLocation(record.location)
-    ? await deps.recordWorkspacePath?.(record).catch(() => null)
-    : null
-  if (
-    !workspacePath ||
-    (await deps.workspaceMayOverrideDefaultModel({
-      agent: record.provider,
-      workspacePath,
-      accountHomePath: isLegacyAgentSessionAccountHome(accountHome) ? accountHome.path : null
-    }))
-  ) {
-    return
-  }
-  deps.store.recordConfiguredDefault(fingerprint, choice)
-}
-
+/**
+ * Serves the host catalog to pickers, never through a session's serialize
+ * queue. A session record names its own catalog (the account home pinned at
+ * launch); without one, the key is the account a launch would pin right now —
+ * never "whichever account listed last". `unknown` tells the client to keep
+ * its static seed, and a missing or aged entry kicks one joined background
+ * probe so the next read is warm. With no entry, the answer says that listing
+ * is running, and only a read that asks waits for it. Failures suppress a new
+ * probe for 30s, but never hide another listing already running for the account.
+ * A probe failure that says why no chat can start rides every answer as
+ * `unavailable` until a later probe answers again.
+ */
 export function createAgentModelCatalogService(
   deps: AgentModelCatalogServiceDeps
 ): AgentModelCatalogService {
+  // One per host: stopping it ends every listing this service started.
   const lifetime = new AbortController()
   const admission = new PrioritySemaphore(2)
   const sessionKeys = new Map<string, string>()
+  // A chat's configured default still being checked against its workspace, per catalog: a read
+  // answers after it, so the chat that reported it is followed by an answer naming it.
   const recordingDefaults = new Map<string, Promise<void>>()
-  const retainedKey = (sessionId: string): string => {
-    const record = deps.getRecord(sessionId)
-    return record &&
-      deps.drivesRecord(record) &&
-      (isNativeLocalLocation(record.location) || record.location.wslDistro !== null)
-      ? (record.provider === 'claude' || record.provider === 'codex') &&
-        isNativeLocalLocation(record.location)
-        ? (sessionKeys.get(sessionId) ?? '')
-        : agentModelCatalogFingerprintForRecord(record)
-      : ''
-  }
-  const read = async (params: AgentModelCatalogRead): Promise<AgentSessionModelCatalogResult> => {
-    const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
-    if (
-      record &&
-      (record.provider !== params.agent ||
-        !deps.drivesRecord(record) ||
-        (!isNativeLocalLocation(record.location) && record.location.wslDistro === null))
-    ) {
-      return { origin: 'unknown' }
-    }
-    const home =
-      record?.accountHome ?? (await deps.resolveAccountHome(params.agent).catch(() => null))
-    if (!home) {
-      return { origin: 'unknown' }
-    }
-    const native = !record || isNativeLocalLocation(record.location)
-    const base = record
-      ? agentModelCatalogFingerprintForRecord(record)
-      : agentModelCatalogFingerprint({
-          agent: params.agent,
-          accountHome: home,
-          wslDistro: null
-        })
-    const independent = native && (params.agent === 'claude' || params.agent === 'codex')
-    const legacyAccount = params.legacy && independent
-    const workspacePath = async () =>
-      !native
-        ? null
-        : params.accountDefault && !legacyAccount
-          ? homedir()
-          : params.workspacePath === null
-            ? null
-            : (params.workspacePath ??
-              (record ? await deps.recordWorkspacePath?.(record).catch(() => null) : homedir()))
-    const cwd = legacyAccount || !independent ? undefined : await workspacePath()
-    if (!cwd && !legacyAccount && independent) {
-      const legacy = deps.store.get(base)
-      if (!legacy) {
-        return { origin: 'unknown' }
-      }
-      return {
-        ...agentModelCatalogResultFromEntry(legacy, false, false),
-        models: legacy.models.map((row) => ({ ...row, isDefault: false }))
-      }
-    }
-    const namesDefault = async (): Promise<boolean> => {
-      if (
-        params.accountDefault ||
-        (params.workspacePath === undefined && !params.inSessionWorkspace)
-      ) {
-        return true
-      }
-      const directory = legacyAccount || !independent ? await workspacePath() : cwd
-      return directory && deps.workspaceMayOverrideDefaultModel
-        ? !(await deps
-            .workspaceMayOverrideDefaultModel({
-              agent: params.agent,
-              workspacePath: directory,
-              accountHomePath: isLegacyAgentSessionAccountHome(home) ? home.path : null
-            })
-            .catch(() => true))
-        : false
-    }
-    const probe = native ? deps.probes?.[params.agent] : undefined
-    const resolved = cwd
-      ? await probe
-          ?.resolve?.(home, cwd, params.accountDefault ? undefined : record?.options)
-          .catch(() => null)
-      : undefined
-    if (independent && !legacyAccount && probe?.resolve && !resolved) {
-      return { origin: 'unknown' }
-    }
-    const fingerprint = independent
-      ? agentModelCatalogScopeFingerprint(
-          base,
-          legacyAccount ? 'legacy-account' : (cwd ?? ''),
-          resolved?.identity
-        )
-      : base
-    if (independent && params.sessionId && !params.accountDefault && !params.legacy) {
-      rememberDiscoveryScope(sessionKeys, params.sessionId, fingerprint)
-    }
-    await recordingDefaults.get(fingerprint)
-    let entry = deps.store.get(fingerprint)
-    // Old cache identities remain usable only through the legacy flat display contract.
-    const legacy = entry ? null : deps.store.get(base)
-    const answer = async (
-      listed: AgentModelCatalogEntry | null,
-      listingInProgress = false
-    ): Promise<AgentSessionModelCatalogResult> => {
-      const unavailable = deps.store.failure(fingerprint)?.unavailable
-      const display = listed ?? legacy
-      const result = display
-        ? agentModelCatalogResultFromEntry(
-            display,
-            (listed !== null || params.legacy === true) && (await namesDefault()),
-            deps.listingNamesConfiguredModel?.has(params.agent) === true
-          )
-        : null
-      return {
-        ...(result ?? { origin: 'unknown' as const }),
-        ...(result?.listingNamesConfiguredModel === true &&
-        deps.agentReadsProjectModelConfig?.(params.agent) === false
-          ? { defaultHoldsInEveryWorkspace: true as const }
-          : {}),
-        ...(listingInProgress ? { listingInProgress: true as const } : {}),
-        ...(unavailable ? { unavailable } : {})
-      }
-    }
-    if (
-      params.savedOnly ||
-      ((params.legacy || !independent) &&
-        record?.lease?.claimStatus === 'released' &&
-        record.lease.deathEvidence)
-    ) {
-      return answer(entry)
-    }
-    if (probe && !lifetime.signal.aborted && deps.store.probeDue(fingerprint)) {
-      deps.store.refresh(fingerprint, params.agent, probe, async () => {
-        try {
-          const release = legacyAccount ? () => {} : await admission.acquire(0, lifetime.signal)
-          try {
-            const result =
-              legacyAccount && probe.resolveLegacy
-                ? await (await probe.resolveLegacy(home)).run(lifetime.signal)
-                : resolved
-                  ? await resolved.run(lifetime.signal)
-                  : await probe(home, {
-                      ...(legacyAccount || !cwd ? {} : { cwd }),
-                      signal: lifetime.signal
-                    })
-            return result
-          } finally {
-            release()
-          }
-        } catch (error) {
-          if (lifetime.signal.aborted) {
-            throw new AgentModelCatalogListingStoppedError(String(error))
-          }
-          throw error
-        }
+  const listWith =
+    (probe: AgentModelCatalogProbe, home: AgentSessionAccountHome, workspacePath?: string) =>
+    (): Promise<AgentModelCatalogSuccess> =>
+      probe(home, { signal: lifetime.signal, workspacePath }).catch((error: unknown) => {
+        throw lifetime.signal.aborted
+          ? new AgentModelCatalogListingStoppedError(String(error))
+          : error
       })
+  // A running chat's saves for agents kept per folder, which wait on a folder lookup.
+  const liveWrites = new Map<string, Promise<void>>()
+  /** The catalog a session's own listings belong to: its pinned account and host, and its folder
+   *  for an agent kept per folder. */
+  const sessionCatalogKey = async (record: AgentSessionRecord): Promise<string> =>
+    agentModelCatalogFingerprintForRecord(
+      record,
+      await catalogFolder(deps, record.provider, undefined, record)
+    )
+  const saveLiveListing = (
+    record: AgentSessionRecord,
+    listing: AgentModelCatalogLiveListing,
+    fingerprint: string
+  ): void => {
+    const { configuredDefault, ...listed } = listing
+    const saved = deps.store.recordSuccess(
+      fingerprint,
+      record.provider,
+      { ...listed, origin: 'live-session' },
+      'live'
+    )
+    if (saved && configuredDefault !== undefined) {
+      // In report order, so the latest chat's resolution is the one kept.
+      const recording = (recordingDefaults.get(fingerprint) ?? Promise.resolve())
+        .then(() => recordConfiguredDefault(deps, record, fingerprint, configuredDefault))
+        .catch(() => {})
+        .then(() => {
+          if (recordingDefaults.get(fingerprint) === recording) {
+            recordingDefaults.delete(fingerprint)
+          }
+        })
+      recordingDefaults.set(fingerprint, recording)
     }
-    if (params.waitForListing && deps.store.isListing(fingerprint)) {
-      await deps.store.pendingListing(fingerprint, entry)
-      entry = deps.store.get(fingerprint)
-    }
-    return answer(entry, deps.store.isListing(fingerprint))
   }
   return {
-    read,
-    peek: (sessionId, verifiedOnly) => {
-      const entry = deps.store.get(retainedKey(sessionId))
-      return entry &&
-        (!verifiedOnly ||
-          (sessionKeys.get(sessionId) === entry.fingerprint &&
-            deps.store.freshForMs(entry) > 0 &&
-            !deps.store.hasActiveFailure(entry.fingerprint) &&
-            !deps.store.failure(entry.fingerprint)?.unavailable))
-        ? entry
-        : null
+    peek(sessionId, verifiedOnly) {
+      const key = sessionKeys.get(sessionId)
+      const entry = key ? deps.store.get(key) : null
+      return entry && (!verifiedOnly || deps.store.verified(entry)) ? entry : null
     },
     providerStarted(record) {
       const key = sessionKeys.get(record.sessionId)
       if (key) {
         deps.store.expireFailure(key)
       }
-      const account = agentModelCatalogFingerprintForRecord(record)
-      deps.store.expireFailure(account)
-      deps.store.expireFailure(agentModelCatalogScopeFingerprint(account, 'legacy-account'))
+      if (!deps.listsInChatFolder?.has(record.provider)) {
+        deps.store.expireFailure(agentModelCatalogFingerprintForRecord(record))
+        return
+      }
+      void sessionCatalogKey(record)
+        .then((fingerprint) => deps.store.expireFailure(fingerprint))
+        .catch(() => {})
     },
-    retainedLiveModelIds(sessionId, listing) {
-      return retainedAgentModelCatalogModels(deps.store.get(retainedKey(sessionId)), listing).map(
-        (model) => model.id
+    async read(params) {
+      const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
+      const scoped =
+        record && record.provider === params.agent && deps.drivesRecord(record) ? record : undefined
+      const workspacePath = params.inSessionWorkspace
+        ? record
+          ? await sessionWorkspacePath(deps, record)
+          : null
+        : params.workspacePath
+      const folder = await catalogFolder(deps, params.agent, workspacePath, scoped)
+      let fingerprint: string
+      // The account a probe lists under; null where this host cannot spawn one natively.
+      let probeHome: AgentSessionAccountHome | null
+      if (scoped) {
+        fingerprint = agentModelCatalogFingerprintForRecord(scoped, folder)
+        // Probes spawn natively; a WSL-pinned record has no host-side lister.
+        probeHome =
+          scoped.location.executionHostId === 'local' && scoped.location.wslDistro === null
+            ? scoped.accountHome
+            : null
+      } else {
+        const key = await newChatCatalogKey(deps, params.agent, folder)
+        if (!key) {
+          return { origin: 'unknown' }
+        }
+        fingerprint = key.fingerprint
+        probeHome = key.accountHome
+      }
+      const scope = await resolveAgentModelCatalogScope(
+        deps,
+        params,
+        scoped,
+        fingerprint,
+        probeHome
       )
+      if (!scope) {
+        return { origin: 'unknown' }
+      }
+      const { base, exact, resolved, cwd } = scope
+      fingerprint = scope.fingerprint
+      if (scoped && exact) {
+        if (sessionKeys.size >= 256 && !sessionKeys.has(scoped.sessionId)) {
+          const oldest = sessionKeys.keys().next().value
+          if (oldest !== undefined) {
+            sessionKeys.delete(oldest)
+          }
+        }
+        sessionKeys.set(scoped.sessionId, fingerprint)
+      }
+      const accountHomePath =
+        probeHome && isLegacyAgentSessionAccountHome(probeHome) ? probeHome.path : null
+      await Promise.all(liveWrites.values())
+      await recordingDefaults.get(fingerprint)
+      let entry = deps.store.get(fingerprint)
+      const probe = deps.probes?.[params.agent]
+      const home = probeHome
+      const list = async (): Promise<AgentModelCatalogSuccess> => {
+        const release = await admission.acquire(0, lifetime.signal)
+        try {
+          if (resolved) {
+            return await resolved.run(lifetime.signal)
+          }
+          if (!probe || !home) {
+            throw new AgentModelCatalogListingStoppedError('catalog scope unavailable')
+          }
+          return await listWith(probe, home, cwd ?? folder)()
+        } finally {
+          release()
+        }
+      }
+      // Every answer carries the reason the probe last found, read when the answer is made.
+      const answer = async (
+        listed: AgentModelCatalogEntry | null,
+        extra: { listingInProgress?: true } = {}
+      ): Promise<AgentSessionModelCatalogResult> => {
+        const unavailable = deps.store.failure(fingerprint)?.unavailable
+        if (
+          params.verifiedOnly &&
+          (!listed ||
+            (independentAgentModelCatalog(params.agent) &&
+              (!exact || !deps.store.verified(listed))))
+        ) {
+          return { origin: 'unknown' }
+        }
+        const display = listed ?? (exact && !params.verifiedOnly ? deps.store.get(base) : null)
+        const result = display
+          ? agentModelCatalogResultFromEntry(
+              display,
+              exact
+                ? listed !== null
+                : await workspaceKeepsListedDefault(
+                    deps,
+                    params.agent,
+                    workspacePath,
+                    accountHomePath
+                  ),
+              deps.listingNamesConfiguredModel?.has(params.agent) === true
+            )
+          : null
+        const holdsEverywhere =
+          result?.listingNamesConfiguredModel === true &&
+          deps.agentReadsProjectModelConfig?.(params.agent) === false
+        return {
+          ...(result ?? { origin: 'unknown' }),
+          ...(holdsEverywhere ? { defaultHoldsInEveryWorkspace: true as const } : {}),
+          ...(result && (folder !== undefined || exact)
+            ? { modelsDifferByWorkspace: true as const }
+            : {}),
+          ...extra,
+          ...(unavailable ? { unavailable } : {})
+        }
+      }
+      // Death evidence keeps a read after an observed exit from spawning another agent; a new chat
+      // also starts released, but still needs its first listing.
+      if (
+        params.savedOnly ||
+        (!exact && scoped?.lease?.claimStatus === 'released' && scoped.lease.deathEvidence)
+      ) {
+        return answer(entry)
+      }
+      // Past its TTL, only the probe re-derives a held reason. The reason is served meanwhile;
+      // only a read that asks waits for the probe's answer.
+      if (probe && home && !lifetime.signal.aborted && deps.store.heldReasonDue(fingerprint)) {
+        const probing = deps.store.refresh(fingerprint, params.agent, probe, list)
+        if (!params.waitForListing) {
+          return answer(entry, { listingInProgress: true })
+        }
+        await probing
+        return answer(deps.store.get(fingerprint))
+      }
+      // Without an entry, answer from any running listing instead of starting a second one.
+      let listing = !entry && home ? deps.store.pendingListing(fingerprint) : null
+      if (probe && home && !lifetime.signal.aborted) {
+        if (entry && deps.store.shouldRefresh(fingerprint)) {
+          void deps.store.refresh(fingerprint, params.agent, probe, list)
+        } else if (!entry && !listing && !deps.store.hasActiveFailure(fingerprint)) {
+          void deps.store.refresh(fingerprint, params.agent, probe, list)
+          listing = deps.store.pendingListing(fingerprint)
+        }
+      }
+      if (
+        entry &&
+        independentAgentModelCatalog(params.agent) &&
+        deps.store.isListing(fingerprint)
+      ) {
+        if (!params.waitForListing) {
+          return answer(entry, { listingInProgress: true })
+        }
+        await deps.store.pendingListing(fingerprint, true)
+        return answer(deps.store.get(fingerprint))
+      }
+      if (!entry) {
+        if (!listing) {
+          return answer(null)
+        }
+        if (!params.waitForListing) {
+          return answer(null, { listingInProgress: true })
+        }
+        const listed = await listing
+        entry = deps.store.get(fingerprint) ?? listed
+      }
+      return answer(entry)
+    },
+    async retainedLiveModelIds(sessionId, listing) {
+      const record = deps.getRecord(sessionId)
+      const entry =
+        record && deps.drivesRecord(record)
+          ? deps.store.get(await sessionCatalogKey(record))
+          : undefined
+      return retainedAgentModelCatalogModels(entry, listing).map((model) => model.id)
     },
     recordLiveListing(sessionId, listing) {
       const record = deps.getRecord(sessionId)
-      if (
-        !record ||
-        !deps.drivesRecord(record) ||
-        record.provider === 'claude' ||
-        record.provider === 'codex'
-      ) {
+      if (!record || !deps.drivesRecord(record) || independentAgentModelCatalog(record.provider)) {
         return
       }
-      const fingerprint = agentModelCatalogFingerprintForRecord(record)
-      const { configuredDefault, ...listed } = listing
-      const saved = deps.store.recordSuccess(
-        fingerprint,
-        record.provider,
-        agentModelCatalogSessionObservation({
-          ...listed,
-          models: retainedAgentModelCatalogModels(deps.store.get(fingerprint), listing)
-        }),
-        'live'
-      )
-      if (saved && configuredDefault !== undefined) {
-        const recording = (recordingDefaults.get(fingerprint) ?? Promise.resolve())
-          .then(() => recordConfiguredDefault(deps, record, fingerprint, configuredDefault))
-          .catch(() => {})
-          .then(() => {
-            if (recordingDefaults.get(fingerprint) === recording) {
-              recordingDefaults.delete(fingerprint)
-            }
-          })
-        recordingDefaults.set(fingerprint, recording)
+      if (!deps.listsInChatFolder?.has(record.provider)) {
+        saveLiveListing(record, listing, agentModelCatalogFingerprintForRecord(record))
+        return
       }
+      // In report order: a folder lookup that resolves late must not let an older listing land last.
+      const writing = (liveWrites.get(sessionId) ?? Promise.resolve())
+        .then(async () => saveLiveListing(record, listing, await sessionCatalogKey(record)))
+        .catch((error: unknown) => {
+          console.warn('[agent-model-catalog] could not save a chat model list:', error)
+        })
+        .finally(() => {
+          if (liveWrites.get(sessionId) === writing) {
+            liveWrites.delete(sessionId)
+          }
+        })
+      liveWrites.set(sessionId, writing)
     },
     async prewarm() {
-      if (lifetime.signal.aborted) {
-        return
-      }
-      await Promise.all(
-        Object.keys(deps.probes ?? {})
-          .filter((agent) => deps.store.hasEntryForAgent(agent) || deps.hasChatRecords?.(agent))
-          .map((agent) => read({ agent, waitForListing: true }).catch(() => {}))
-      )
+      await prewarmAgentModelCatalog(deps, lifetime.signal, (params) => this.read(params), listWith)
     },
     stop() {
       lifetime.abort()

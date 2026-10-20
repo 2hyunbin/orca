@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fetchCodexModelCatalogListing } from './codex-structured-model-catalog'
 
-function modelRow(id: string) {
-  return { model: id, supportedReasoningEfforts: [{ reasoningEffort: 'high' }] }
+function modelRow(id: string): Record<string, unknown> {
+  return {
+    model: id,
+    displayName: id.toUpperCase(),
+    supportedReasoningEfforts: [{ reasoningEffort: 'high' }]
+  }
 }
 
-describe('Codex discovery deadline', () => {
+describe('first-turn catalog deadline', () => {
   it('budgets all pages and config/read against one 30-second deadline', async () => {
     let now = 1_000
     const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
@@ -14,7 +18,7 @@ describe('Codex discovery deadline', () => {
       async (
         method: string,
         _params?: Record<string, unknown>,
-        options?: { timeoutMs?: number }
+        options?: { timeoutMs?: number | null }
       ) => {
         timeouts.push(options?.timeoutMs ?? 0)
         if (method === 'model/list') {

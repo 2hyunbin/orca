@@ -104,7 +104,6 @@ function firstFrame(answer: AgentSessionModelCatalogResult) {
     { newLaunch: true }
   )
   const snapshot = structuredAgentSessionOptionSnapshot(state)
-  expect(state.record).toEqual({ agent: 'grok', valuesByModel: {} })
   const select = (id: string) => {
     const entry = snapshot.find((descriptor) => descriptor.id === id)
     return entry?.kind.type === 'select' ? (entry.kind.currentValue ?? null) : null
@@ -138,24 +137,22 @@ async function openGrokHost(runs: string, create?: StructuredAgentSessionFirstMe
   )
   const rig = await openHostRig({
     modelCatalog: catalog,
-    script: (agent) => {
+    script: (agent) =>
       agent.on('session/new', (frame) =>
         agent.reply(frame, { sessionId: 'acp-session-1', configOptions: opened })
-      )
-    },
+      ),
     deps: { resolveLaunch: launch(() => false) }
   })
   records.store = rig.store
-  const listed = await catalog.read({
-    agent: 'grok',
-    sessionId: SESSION,
-    workspacePath: '/workspace/project',
-    waitForListing: true
-  })
+  const listed = await catalog.read({ agent: 'grok', waitForListing: true })
   const opening = create
     ? rig.host.create(CALLER, createTestParams(create, attachParams()), { firstMessage: create })
     : rig.host.attach(CALLER, attachParams())
   expect(await opening).toMatchObject({ ok: true })
+  if (!create) {
+    // The attach answers at spawn; what the chat runs is known once its start is proven.
+    await rig.ready()
+  }
   return { ...rig, catalog, listed }
 }
 
@@ -177,9 +174,6 @@ describe('Grok’s default comes from what a chat with no pick runs', () => {
       defaultHoldsInEveryWorkspace: true
     })
     expect(firstFrame(answer)).toEqual({ model: 'grok-4.6', effort: 'high' })
-    expect(
-      answer.origin !== 'unknown' && answer.models.find((row) => row.id === 'grok-4.6')?.efforts
-    ).toHaveLength(2)
   })
 
   it('learns 4.6 from a chat created with its first message and no pick', async () => {

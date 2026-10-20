@@ -57,29 +57,6 @@ export type SessionOptionDescriptor = {
   action?: { type: 'agent-picker' | 'toggle-command' }
 }
 
-/** A current scalar has no alternative choices or temporary restriction to present. */
-export function sessionOptionIsCurrentValueOnly(descriptor: SessionOptionDescriptor): boolean {
-  return (
-    !descriptor.settable &&
-    !descriptor.disabledReason &&
-    !descriptor.action &&
-    descriptor.kind.type === 'select' &&
-    descriptor.kind.currentValue !== undefined &&
-    descriptor.kind.choices.length === 1 &&
-    descriptor.kind.choices[0]?.value === descriptor.kind.currentValue
-  )
-}
-
-/** Unknown empty discovery has no useful picker page; retained values and actions do. */
-export function sessionOptionHasPickerContent(descriptor: SessionOptionDescriptor): boolean {
-  return (
-    descriptor.action !== undefined ||
-    descriptor.kind.type === 'boolean' ||
-    descriptor.kind.currentValue !== undefined ||
-    descriptor.kind.choices.length > 0
-  )
-}
-
 /** A value we typed at the agent and have never read back. Both lanes write
  *  `dispatched` on a set, so the source alone does not name one — the transport
  *  check is what limits the caption to the terminal, where reading the screen
@@ -147,10 +124,22 @@ export type NativeChatSessionOptionSettingsMutation =
   | { type: 'clear-model-if-missing'; agent: AgentType; availableModelIds: readonly string[] }
 
 export type SessionOptionsSurface = {
+  demandModelCatalog?: () => void
   getSnapshot(): SessionOptionDescriptor[]
   /** Apply an absolute target; known flip-only options use their tracked baseline. */
   setOption(id: string, value: SessionOptionValue): Promise<SessionOptionSetResult>
   /** Invoke the value-less action exposed by the current descriptor. */
   invokeAction(id: string): Promise<SessionOptionSetResult>
   subscribe(listener: (snapshot: SessionOptionDescriptor[]) => void): () => void
+}
+
+/** An effort no list confirms, under a model the list lacks: shown as text, not a control. */
+export function isReadOnlySessionOptionValue(descriptor: SessionOptionDescriptor): boolean {
+  return (
+    descriptor.id === 'effort' &&
+    descriptor.kind.type === 'select' &&
+    !descriptor.settable &&
+    !descriptor.action &&
+    descriptor.kind.choices.length === 1
+  )
 }

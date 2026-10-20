@@ -1,8 +1,9 @@
 import {
-  CLAUDE_MODEL_LIST_ARGS,
+  buildClaudeModelListArgs,
   CLAUDE_MODEL_LIST_STDIN
 } from '../../shared/claude-model-list-probe'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { runClaudeBackgroundAttempts } from '../../shared/claude-background-run-isolation'
 import {
   isCompleteClaudeModelListing,
   listedModels,
@@ -11,7 +12,6 @@ import {
 import { wireClaudeModels } from './claude-structured-catalog-listing'
 import { readClaudeSettingsApplied } from './claude-structured-session-options'
 import { claudeStructuredLaunchArgs } from './claude-structured-launch-args'
-import { claudeStructuredSpawnOptions } from './claude-structured-spawn-options'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
 import { claudeConfigDirEnvPatch } from './claude-config-dir-pin'
 import {
@@ -42,7 +42,6 @@ export async function runClaudeListing(
   deps: ClaudeModelCatalogProbeDeps,
   request: {
     accountHomePath: string
-    args: readonly string[]
     stdin: string
     site: string
     cwd?: string
@@ -55,15 +54,34 @@ export async function runClaudeListing(
     ...base,
     ...claudeConfigDirEnvPatch(request.accountHomePath, { env: base })
   }))
-  return (deps.runListing ?? runAgentModelCatalogListing)(
-    {
-      command,
-      args: [...request.args],
-      stdin: request.stdin,
-      ...(request.cwd ? { cwd: request.cwd } : {})
-    },
-    { site: request.site, inheritedEnv: env, signal: request.signal }
-  )
+  const run = (args: readonly string[]) =>
+    (deps.runListing ?? runAgentModelCatalogListing)(
+      {
+        command,
+        args: [...args],
+        stdin: request.stdin,
+        ...(request.cwd ? { cwd: request.cwd } : {})
+      },
+      { site: request.site, inheritedEnv: env, signal: request.signal }
+    )
+  const result = await runClaudeBackgroundAttempts({
+    agentId: 'claude',
+    run: (strictMcp) =>
+      run(buildClaudeModelListArgs(strictMcp)).catch((error: unknown) => {
+        if (error instanceof AgentModelCatalogProbeError) {
+          return error
+        }
+        throw error
+      }),
+    failedExit: (outcome) =>
+      outcome instanceof AgentModelCatalogProbeError && outcome.reason === 'exit'
+        ? outcome.failedExit
+        : undefined
+  })
+  if (result instanceof AgentModelCatalogProbeError) {
+    throw result
+  }
+  return result
 }
 
 /**
@@ -74,32 +92,22 @@ export async function runClaudeListing(
 export function createClaudeModelCatalogProbe(
   deps: ClaudeModelCatalogProbeDeps
 ): AgentModelCatalogProbe {
-  const resolve = async (
-    accountHome: Parameters<AgentModelCatalogProbe>[0],
-    cwd?: string,
-    saved?: Readonly<Record<string, string>>
-  ) => {
+  const resolve = async (accountHome: Parameters<AgentModelCatalogProbe>[0], cwd?: string) => {
     const configuredArgs = claudeStructuredLaunchArgs(
       cwd ? ((await deps.resolveLaunchArgs?.()) ?? []) : []
     )
-    const { sdkOptions } = claudeStructuredSpawnOptions({
-      launch: { options: configuredArgs, resumesTranscript: false },
-      saved
-    })
-    const effectiveArgs = {
-      ...sdkOptions.extraArgs,
-      ...(sdkOptions.model !== undefined ? { model: sdkOptions.model } : {}),
-      ...(sdkOptions.effort !== undefined ? { effort: sdkOptions.effort } : {}),
-      ...(sdkOptions.settings ? { settings: JSON.stringify(sdkOptions.settings) } : {})
-    }
-    const args = [
-      ...CLAUDE_MODEL_LIST_ARGS,
-      ...(cwd ? ['--setting-sources', CLAUDE_DEFAULT_SETTING_SOURCES.join(',')] : []),
-      ...Object.entries(cwd ? effectiveArgs : {}).flatMap(([key, value]) =>
+    const userArgs = [
+      ...Object.entries(configuredArgs.extraArgs).flatMap(([key, value]) =>
         value === null ? [`--${key}`] : [`--${key}`, value]
       ),
       ...configuredArgs.additionalDirectories.flatMap((directory) => ['--add-dir', directory])
     ]
+    const argsFor = (strictMcp: boolean) => [
+      ...buildClaudeModelListArgs(strictMcp, userArgs),
+      ...(cwd ? ['--setting-sources', CLAUDE_DEFAULT_SETTING_SOURCES.join(',')] : []),
+      ...userArgs
+    ]
+    const args = argsFor(true)
     const { command, env } = await resolveClaudeStructuredInvocation(
       { ...deps, ...(cwd ? { resolveWorkingDirectory: () => cwd } : {}) },
       (base) => ({
@@ -113,29 +121,35 @@ export function createClaudeModelCatalogProbe(
     return {
       identity: launch,
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
-        const stdout = await (deps.runListing ?? runAgentModelCatalogListing)(
-          {
-            command,
-            args,
-            ...(cwd ? { cwd } : {}),
-            stdin: cwd
-              ? `${
-                  CLAUDE_MODEL_LIST_STDIN +
-                  JSON.stringify({
-                    type: 'control_request',
-                    request_id: 'orca-model-settings',
-                    request: { subtype: 'get_settings' }
-                  })
-                }\n`
-              : CLAUDE_MODEL_LIST_STDIN
-          },
-          { site: 'claude-model-catalog-probe', inheritedEnv: env, signal }
-        ).catch((error: unknown) => {
-          if (error instanceof AgentModelCatalogProbeError && error.executableMissing) {
+        const outcome = await runClaudeBackgroundAttempts({
+          agentId: 'claude',
+          run: (strictMcp) =>
+            (deps.runListing ?? runAgentModelCatalogListing)(
+              {
+                command,
+                args: argsFor(strictMcp),
+                ...(cwd ? { cwd } : {}),
+                stdin: `${CLAUDE_MODEL_LIST_STDIN}${JSON.stringify({ type: 'control_request', request_id: 'orca-model-settings', request: { subtype: 'get_settings' } })}\n`
+              },
+              { site: 'claude-model-catalog-probe', inheritedEnv: env, signal }
+            ).catch((error: unknown) => {
+              if (error instanceof AgentModelCatalogProbeError) {
+                return error
+              }
+              throw error
+            }),
+          failedExit: (outcome) =>
+            outcome instanceof AgentModelCatalogProbeError && outcome.reason === 'exit'
+              ? outcome.failedExit
+              : undefined
+        })
+        if (outcome instanceof AgentModelCatalogProbeError) {
+          if (outcome.executableMissing) {
             throw new AgentModelCatalogUnavailableError({ reason: 'cliMissing' })
           }
-          throw error
-        })
+          throw outcome
+        }
+        const stdout = outcome
         let models: AgentModelCatalogSuccess['models'] = []
         let complete = false
         let configured: AgentModelCatalogSuccess['configured']
@@ -151,7 +165,7 @@ export function createClaudeModelCatalogProbe(
               models = wireClaudeModels(listed)
               complete = isCompleteClaudeModelListing(body)
             }
-            configured = cwd ? (readClaudeSettingsApplied(body) ?? configured) : undefined
+            configured = readClaudeSettingsApplied(body) ?? configured
           } catch {
             /* Non-JSON diagnostic output carries no catalog facts. */
           }
@@ -163,16 +177,7 @@ export function createClaudeModelCatalogProbe(
           models,
           origin: 'probe',
           complete,
-          ...(configured && !Object.hasOwn(effectiveArgs, 'model')
-            ? {
-                configured: {
-                  ...(configured.model ? { model: configured.model } : {}),
-                  ...(!Object.hasOwn(effectiveArgs, 'effort') && configured.effort
-                    ? { effort: configured.effort }
-                    : {})
-                }
-              }
-            : {})
+          ...(configured ? { configured } : {})
         }
       }
     }
@@ -182,7 +187,9 @@ export function createClaudeModelCatalogProbe(
     Pick<AgentModelCatalogProbe, 'resolve' | 'resolveLegacy'>
   >(
     async (home, options) =>
-      (await resolve(home, options?.cwd ?? process.cwd())).run(options?.signal),
+      (await resolve(home, options?.cwd ?? options?.workspacePath ?? process.cwd())).run(
+        options?.signal
+      ),
     { resolve, resolveLegacy: (home) => resolve(home) }
   )
 }

@@ -99,9 +99,7 @@ export class StructuredAgentSessionClientDelivery {
     return record ? adapter.atRestCommands?.read(record) : undefined
   }
 
-  publishStatus = (sessionId: string): void => {
-    this.statusFeed.publish(sessionId)
-  }
+  publishStatus = (sessionId: string): void => this.statusFeed.publish(sessionId)
 
   publishConversationName = (sessionId: string): void =>
     this.statusFeed.publishConversationName(sessionId)
@@ -133,7 +131,7 @@ export class StructuredAgentSessionClientDelivery {
     this.statusFeed.childWorkIncomplete(sessionId)
 
   publishStatusAndSettlement = (sessionId: string): void => {
-    this.publishStatus(sessionId)
+    this.statusFeed.publish(sessionId)
     const journal = this.sessions.get(sessionId)?.journal
     if (journal) {
       this.sendSettlement.publish(sessionId, this.settlementReading(sessionId, journal))
@@ -220,7 +218,9 @@ export class StructuredAgentSessionClientDelivery {
 
   private settlementReading(sessionId: string, journal: AgentSessionJournal) {
     return {
-      submissions: () => journal.submissions(),
+      // A send the child stopped holding unanswered settles the wait as doubt (`publishedSubmission`).
+      submissions: () =>
+        journal.submissions().map(this.currentWork(sessionId, journal).publishedSubmission),
       cursor: () => journal.cursor(),
       activeTurnId: () => this.currentWork(sessionId, journal).activeTurnId()
     }

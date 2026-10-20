@@ -93,7 +93,7 @@ describe('Claude model before the first turn', () => {
       // A null applied effort means none is sent, so none is shown.
       expect(current.effort).toBe(effort)
       expect(current.confirmed ?? []).not.toContain('model')
-      expect(current.confirmed?.includes('effort') ?? false).toBe(effort !== undefined)
+      expect(current.confirmed ?? []).not.toContain('effort')
     }
   )
 
@@ -131,19 +131,18 @@ describe('Claude model before the first turn', () => {
     expect(reported).toMatchObject({ reportedOptions: { model: 'haiku' } })
   })
 
-  it('reports the applied effort separately from the opened options', async () => {
+  it('shows the applied effort but never persists it as the session options', async () => {
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = await acquired(startedWithoutATurn(SETTINGS.noOverride), {}, events)
 
     const started = await claudeOpened(adapter, 'session-1')
     expect(started).toMatchObject({ reportedOptions: { model: 'opus[1m]' } })
-    // Opening keeps reported effort separate from saved user choices.
+    // Saved, it would be restored on every reopen past a later settings.json change.
     expect(started.reportedOptions).not.toHaveProperty('effort')
     const reported = events.find((event) => event.type === 'options-reported')
-    expect(reported?.type === 'options-reported' ? reported.reportedOptions : null).toHaveProperty(
-      'effort',
-      'medium'
-    )
+    expect(
+      reported?.type === 'options-reported' ? reported.reportedOptions : null
+    ).not.toHaveProperty('effort')
     const { current } = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
     expect(current.effort).toBe('medium')
   })

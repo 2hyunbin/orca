@@ -2,17 +2,26 @@ import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk'
 import { ClaudeControlRequestError } from './claude-stream-json-connection'
 import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import {
+  claudeCatalogAdmitsModel,
   claudeModelEffortLevels,
   claudeModelFastModeSupport,
   readClaudeCurrentModel,
   readClaudeListedModels,
-  readClaudeSettingsApplied,
+  readClaudeSettingsEffort,
   readClaudeSettingsFastMode
 } from './claude-structured-session-options'
 import type { ClaudeSession } from './claude-structured-session-state'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
 
 const OPTION_ORDER = ['model', 'effort', 'fastMode'] as const
+
+/**
+ * Efforts the settings readback cannot report. `max` applies for the rest of the
+ * session and is excluded from the persisted `effortLevel` by contract, so
+ * `get_settings` answers with the level underneath it — an absence of evidence
+ * that must not be read as the child refusing a level its own catalog offers.
+ */
+const UNREPORTED_EFFORTS: ReadonlySet<string> = new Set(['max'])
 
 export function restoredClaudeStructuredSessionOptions(
   options: Readonly<Record<string, string>> | undefined
@@ -111,11 +120,22 @@ export async function setClaudeStructuredOption(
       )
     }
   }
+  // set_model resolves for a model the provider never lists and the session then
+  // fails every turn with zero tokens, so the acceptance proves nothing and only
+  // the catalog does.
+  if (input.key === 'model' && !claudeCatalogAdmitsModel(listed, input.value)) {
+    throw new AgentSessionOptionRejectedError(`claude does not list a model named ${input.value}`)
+  }
   const modelFastModeSupport =
     input.key === 'model' && session.options.get('fastMode') === 'true'
       ? claudeModelFastModeSupport(session, listed, input.value)
       : null
   const modelWasConfirmed = readClaudeCurrentModel(session).confirmed
+  session.reusableOptions.delete(input.key)
+  if (input.key === 'model') {
+    session.reusableOptions.delete('effort')
+    session.reusableOptions.delete('fastMode')
+  }
   const mutationSequence = ++session.optionMutationSequence
   // Read with the fence bump, so a write that lands after an earlier one's bookkeeping compares against it.
   const held = session.options.get(input.key)
@@ -145,6 +165,7 @@ export async function setClaudeStructuredOption(
       if (mutationSequence !== session.optionMutationSequence) {
         return Object.fromEntries(session.options)
       }
+      session.reusableOptions.set('model', input.value)
       session.options.set('model', input.value)
       session.options.set('fastMode', 'false')
       session.confirmedOptions.delete('effort')
@@ -162,28 +183,23 @@ export async function setClaudeStructuredOption(
   // apply_flag_settings answers `success` for an effort it then ignores, so the
   // absence of a throw proves nothing. Ask what the child actually holds.
   const adopted =
-    input.key === 'effort' || input.key === 'fastMode'
+    (input.key === 'effort' && !UNREPORTED_EFFORTS.has(input.value)) || input.key === 'fastMode'
       ? await session.connection
           .getSettings({ timeoutMs })
           .then((settings) =>
             input.key === 'fastMode'
               ? readClaudeSettingsFastMode(settings)
-              : (() => {
-                  const applied = readClaudeSettingsApplied(settings)
-                  const target = readClaudeCurrentModel(session).id
-                  const row = listed.find(
-                    (model) => model.id === target || model.resolvedModel === target
-                  )
-                  return applied?.model &&
-                    (applied.model === target || applied.model === row?.resolvedModel)
-                    ? (applied.effort ?? null)
-                    : null
-                })()
+              : readClaudeSettingsEffort(settings)
           )
           .catch(() => null)
       : null
   if (mutationSequence !== session.optionMutationSequence) {
     return Object.fromEntries(session.options)
+  }
+  if (input.key === 'model' || (input.key === 'effort' && UNREPORTED_EFFORTS.has(input.value))) {
+    session.reusableOptions.set(input.key, input.value)
+  } else if (adopted !== null) {
+    session.reusableOptions.set(input.key, String(adopted))
   }
   if (input.key === 'fastMode' && typeof adopted === 'boolean') {
     session.reportedOptions.fastMode = adopted
@@ -201,7 +217,7 @@ export async function setClaudeStructuredOption(
   }
   session.options.set(
     input.key,
-    typeof adopted === 'string' || typeof adopted === 'boolean' ? String(adopted) : input.value
+    input.key === 'fastMode' && typeof adopted === 'boolean' ? String(adopted) : input.value
   )
   // Only a readback that agreed is adoption evidence; one that disagreed or could
   // not be taken records the value but must not also claim the provider vouched for it.

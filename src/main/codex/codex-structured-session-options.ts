@@ -1,3 +1,4 @@
+import { agentSessionEffortLevels } from '../../shared/agent-session-effort-levels'
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import type { CodexSession } from './codex-structured-session-state'
@@ -7,8 +8,7 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
 import {
   CODEX_DEFAULT_SERVICE_TIER,
   codexFastServiceTier,
-  codexOffersServiceTier,
-  dropUnlistedCodexServiceTier
+  codexOffersServiceTier
 } from './codex-structured-service-tier'
 import {
   composeCodexSessionOptionCatalog,
@@ -25,49 +25,43 @@ export function restoredCodexSessionOptions(
   return new Map(Object.entries(options ?? {}).filter(([key]) => isCodexTurnOptionKey(key)))
 }
 
-export function readCodexAcquisitionOptions(
-  session: CodexSession,
-  priorOptions?: Readonly<Record<string, string>>
-): Record<string, string> | undefined {
-  const options = {
-    ...Object.fromEntries(
-      Object.entries(priorOptions ?? {}).filter(([key]) => !isCodexTurnOptionKey(key))
-    ),
-    ...Object.fromEntries(session.options)
+/** Startup reports the thread's defaults together with the saved next-turn intent. */
+export function reportedCodexSessionOptions(
+  session: CodexSession
+): AgentSessionOptionsResult['current'] {
+  const model = session.options.get('model') ?? session.reportedOptions.model ?? ''
+  const effort =
+    session.options.get('effort') ??
+    (model === session.reportedOptions.model ? session.reportedOptions.effort : undefined)
+  // The saved tier, which the next turn sends as-is.
+  const serviceTier = session.options.get('serviceTier')
+  return {
+    model,
+    ...(effort ? { effort } : {}),
+    ...(serviceTier ? { serviceTier } : {})
   }
-  const reported = session.reportedOptions
-  // The thread's effort belongs to the thread's model, not to a different saved one.
-  if (
-    options.effort === undefined &&
-    reported.effort &&
-    (options.model === undefined || options.model === reported.model)
-  ) {
-    options.effort = reported.effort
-  }
-  if (options.model === undefined && reported.model) {
-    options.model = reported.model
-  }
-  return Object.keys(options).length > 0 ? options : undefined
 }
 
 export type { CodexSessionOptionCatalog } from './codex-structured-model-catalog'
 
 export { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
 
-/** Picker reads demand the host's discovery owner; acquisition and sends stay cache-only. */
+/** Shared discovery supplies the picker; a chat never publishes inventory. */
 export async function codexSessionCatalogListingForPicker(
   session: CodexSession,
-  _timeoutMs: number | undefined,
-  legacy = false
+  timeoutMs: number | undefined
 ): Promise<CodexModelCatalogListing> {
-  const observation = await session.catalogAccess?.demand?.(legacy).catch(() => {})
-  if (legacy) {
-    return {
-      models: observation?.origin && observation.origin !== 'unknown' ? observation.models : [],
-      complete: !observation?.listingInProgress && !observation?.unavailable
-    }
+  const access = session.catalogAccess
+  if (access) {
+    await access.demand?.()
+    return codexAcquireCatalogListing(access) ?? { models: [] }
   }
-  return codexAcquireCatalogListing(session.catalogAccess) ?? { models: [] }
+  const result = await readCodexStructuredSessionOptionCatalog({
+    connection: session.connection,
+    current: reportedCodexSessionOptions(session),
+    timeoutMs
+  })
+  return { models: result.models }
 }
 
 export async function readCodexStructuredSessionOptions(input: {
@@ -106,18 +100,6 @@ function applyLiveCodexCatalog(
   session: CodexSession,
   listing: CodexModelCatalogListing
 ): AgentSessionOptionsResult {
-  if (listing.models.length === 0) {
-    const { model, effort, serviceTier } = session.reportedOptions
-    return {
-      models: [],
-      current: {
-        ...(model ? { model } : {}),
-        ...(effort ? { effort } : {}),
-        ...(serviceTier ? { serviceTier } : {}),
-        ...Object.fromEntries(session.options)
-      }
-    }
-  }
   return composeLiveCodexCatalog(session, listing)
 }
 
@@ -132,21 +114,19 @@ export async function readLiveCodexSessionOptions(
 /** Fetch outside the session lane; apply against current options inside it. */
 export async function prepareLiveCodexSessionOptions(
   session: CodexSession,
-  timeoutMs: number | undefined,
-  legacy = false
+  timeoutMs: number | undefined
 ): Promise<() => AgentSessionOptionsResult> {
-  const listing = await codexSessionCatalogListingForPicker(session, timeoutMs, legacy)
+  const listing = await codexSessionCatalogListingForPicker(session, timeoutMs)
   return () => applyLiveCodexCatalog(session, listing)
 }
 
 export async function applyCodexStructuredSessionOption(
   session: CodexSession,
   key: string,
-  value: string,
-  listing?: CodexModelCatalogListing | null
+  value: string
 ): Promise<Readonly<Record<string, string>>> {
   try {
-    return applyValidatedCodexStructuredSessionOption(session, key, value, listing)
+    return applyValidatedCodexStructuredSessionOption(session, key, value)
   } catch (error) {
     throw new AgentSessionOptionRejectedError(error)
   }
@@ -175,15 +155,11 @@ function applyUnlistedCodexSessionOption(
 function applyValidatedCodexStructuredSessionOption(
   session: CodexSession,
   requestedKey: string,
-  requestedValue: string,
-  selectedListing?: CodexModelCatalogListing | null
+  requestedValue: string
 ): Readonly<Record<string, string>> {
-  const listing =
-    selectedListing === undefined
-      ? codexAcquireCatalogListing(session.catalogAccess)
-      : selectedListing
+  const listing = codexAcquireCatalogListing(session.catalogAccess, true)
   const priorModel = session.options.get('model') ?? session.reportedOptions.model
-  const catalog = listing?.models.length
+  const catalog = listing
     ? composeCodexSessionOptionCatalog(listing, {
         current: priorModel ? { model: priorModel } : {}
       })
@@ -222,26 +198,23 @@ function applyValidatedCodexStructuredSessionOption(
   }
   const priorEffort = session.options.get('effort') ?? session.reportedOptions.effort
   const requestedEffort = key === 'effort' ? value : priorEffort
-  if (
-    key === 'effort' &&
-    (!model?.efforts.length || !model.efforts.some((effort) => effort.value === requestedEffort))
-  ) {
+  const levels = agentSessionEffortLevels(model)
+  if (key === 'effort' && levels && !levels.has(value)) {
     throw new Error(`codex app-server model ${modelId} does not support ${value}`)
   }
   const effort =
-    model?.efforts.length === 0
-      ? undefined
-      : (model?.efforts.find((entry) => entry.value === requestedEffort)?.value ??
-        model?.defaultEffort ??
-        model?.efforts[0]?.value)
+    levels === null
+      ? requestedEffort
+      : levels.size === 0
+        ? undefined
+        : (model?.efforts.find((entry) => entry.value === requestedEffort)?.value ??
+          model?.defaultEffort ??
+          model?.efforts[0]?.value)
   session.options.set('model', modelId)
   if (effort) {
     session.options.set('effort', effort)
   } else {
     session.options.delete('effort')
-  }
-  if (key === 'model' && modelId !== priorModel) {
-    dropUnlistedCodexServiceTier(session, modelId, catalog.models)
   }
   return Object.fromEntries(session.options)
 }

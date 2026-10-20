@@ -1,6 +1,8 @@
+import { agentSessionEffortLevels } from '../../shared/agent-session-effort-levels'
 import type { AgentSessionFastModeState } from '../../shared/agent-session-wire'
 import {
   currentModelId,
+  currentModelIsDefaulted,
   listedModels,
   matchListedModel,
   record,
@@ -25,8 +27,7 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
  * rather than showing an effort nothing measured.
  */
 export function readClaudeSettingsEffort(settings: unknown): string | null {
-  const applied = record(record(settings)?.applied)
-  return applied ? text(applied.effort) : text(record(record(settings)?.effective)?.effortLevel)
+  return text(record(record(settings)?.effective)?.effortLevel)
 }
 
 /** `applied` is the CLI's own resolution of env over settings over its listed default; a null
@@ -49,6 +50,22 @@ export function observeClaudeSettingsApplied(session: ClaudeSession, settings: u
     session.appliedOptions = applied
   } else {
     delete session.appliedOptions
+  }
+}
+
+/** Applied effort describes execution; effective effort describes the underlying settings. */
+export function observeClaudeSettingsExecutionEffort(
+  session: ClaudeSession,
+  settings: unknown
+): void {
+  const applied = readClaudeSettingsApplied(settings)
+  const effort = applied ? applied.effort : readClaudeSettingsEffort(settings)
+  if (session.reusableOptions.get('effort') !== 'max') {
+    if (effort) {
+      session.reusableOptions.set('effort', effort)
+    } else if (applied) {
+      session.reusableOptions.delete('effort')
+    }
   }
 }
 
@@ -156,7 +173,7 @@ export function claudeModelEffortLevels(
     : undefined
   return {
     modelId: matched?.id ?? modelId,
-    levels: matched ? new Set(matched.efforts.map((choice) => choice.value)) : null
+    levels: agentSessionEffortLevels(matched)
   }
 }
 
@@ -190,6 +207,22 @@ function decodedFastMode(session: ClaudeSession): boolean | undefined {
   return typeof decoded === 'boolean' ? decoded : undefined
 }
 
+/**
+ * Whether the catalog admits the model, matched by alias or resolved id so a pick
+ * stored as either one is found. The permissive case lives here rather than at the
+ * call site: every caller must treat an unidentified catalog the same way, and one
+ * that forgot would refuse every model on a CLI that cannot answer.
+ */
+export function claudeCatalogAdmitsModel(models: readonly ListedModel[], modelId: string): boolean {
+  // An empty list identifies no model, so it is not evidence against one — a live
+  // CLI predating `list_models` would otherwise have every model refused under it.
+  // Do not turn this into a refusal.
+  return (
+    models.length === 0 ||
+    models.some((model) => model.id === modelId || model.resolvedModel === modelId)
+  )
+}
+
 /** The built-in models a running child lists when the CLI gives it none; a chat at rest with no
  *  catalog lists the same. */
 export function claudeFallbackModelOptions(): WireClaudeModel[] {
@@ -219,10 +252,12 @@ function observeClaudeSettingsReadback(
     const fastMode = readClaudeSettingsFastMode(settings)
     const perSessionOptIn = readClaudeSettingsFastModePerSessionOptIn(settings)
     observeClaudeSettingsApplied(session, settings)
+    observeClaudeSettingsExecutionEffort(session, settings)
     if (effort) {
       session.reportedOptions.effort = effort
     }
     if (fastMode !== null) {
+      session.reusableOptions.set('fastMode', String(fastMode))
       session.reportedOptions.fastMode = fastMode
       if (decodedFastMode(session) !== undefined) {
         session.options.set('fastMode', String(fastMode))
@@ -251,9 +286,9 @@ export function claudeStructuredSessionOptionsFrom(
     resolvedModel: null
   }))
   const effort =
-    session.appliedOptions?.effort ??
+    session.options.get('effort') ??
     session.reportedOptions.effort ??
-    session.options.get('effort')
+    session.appliedOptions?.effort
   let desiredFastMode = decodedFastMode(session)
   if (
     desiredFastMode === true &&
@@ -261,6 +296,7 @@ export function claudeStructuredSessionOptionsFrom(
     readMutationSequence === session.optionMutationSequence
   ) {
     session.options.set('fastMode', 'false')
+    session.reusableOptions.delete('fastMode')
     session.confirmedOptions.delete('fastMode')
     desiredFastMode = false
   }
@@ -284,18 +320,15 @@ export function claudeStructuredSessionOptionsFrom(
       : [])
   ]
   return {
-    models: wireClaudeModels(models).map((row) =>
-      discovered.some((entry) => entry.id === row.id)
-        ? row
-        : { ...row, efforts: [], effortsKnown: false }
-    ),
+    models: wireClaudeModels(models),
     ...(support ? { fastModeSupport: support } : {}),
     current: {
       model,
       ...(effort ? { effort } : {}),
       ...(fastMode !== undefined ? { fastMode } : {}),
       ...(session.fastModeState ? { fastModeState: session.fastModeState } : {}),
-      ...(confirmed.length > 0 ? { confirmed } : {})
+      ...(confirmed.length > 0 ? { confirmed } : {}),
+      ...(currentModelIsDefaulted(current.id) ? { defaulted: ['model'] as const } : {})
     }
   }
 }

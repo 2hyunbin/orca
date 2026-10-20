@@ -25,6 +25,7 @@ import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from './agent-session-
 // Electron clients can decode client-hosted page placement; becoming a page
 // host still requires the separate authenticated browser-client lease.
 export const ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
+  AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY,
   ...NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES,
   TERMINAL_IMAGE_VIEWER_CAPABILITY,
   AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY,
@@ -36,7 +37,6 @@ export const ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
   CLAUDE_STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
   AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY,
-  AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY,
   // Same renderer: its queued cards show their images, and Edit keeps them.
   AGENT_SESSION_QUEUED_IMAGE_CARDS_CLIENT_CAPABILITY,
   // Same renderer: it reads each host's `agentSession.agents` and renders any agent listed there.

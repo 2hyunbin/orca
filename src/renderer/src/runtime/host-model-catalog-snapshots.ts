@@ -40,7 +40,8 @@ function withoutNamedDefault(catalog: ListedCatalog): ListedCatalog {
  * What a chat's first frame may render from: undefined until the host has answered what that
  * frame would show. Whether a new chat runs the listed default depends on its workspace's own
  * config, so another workspace's answer serves only a chat that names its model, a list that
- * names no default, or a default the host says no workspace can replace.
+ * names no default, or a default the host says no workspace can replace; never a list the host
+ * says is that workspace's own.
  */
 export function readHostModelCatalogSnapshot(
   target: RuntimeClientTarget,
@@ -56,8 +57,10 @@ export function readHostModelCatalogSnapshot(
     return exact
   }
   const listed = entry.account ?? entry.byWorktree.values().next().value
+  if (!listed || listed.modelsDifferByWorkspace) {
+    return undefined
+  }
   if (
-    !listed ||
     !launch.newLaunch ||
     listed.listingNamesConfiguredModel === false ||
     listed.defaultHoldsInEveryWorkspace === true
@@ -94,24 +97,6 @@ export function recordHostModelCatalogSnapshot(
   )
 }
 
-/** A qualified read keeps the account generation under which it began. */
-export function captureHostModelCatalogSnapshot(
-  target: RuntimeClientTarget,
-  agent: string,
-  worktree: string | null
-) {
-  const hostKey = structuredAgentSessionHostKey(target)
-  const generation = generations.get(hostKey) ?? 0
-  return {
-    waitKey: JSON.stringify([hostKey, agent, worktree, generation]),
-    record: (catalog: AgentSessionModelCatalogResult): void => {
-      if ((generations.get(hostKey) ?? 0) === generation) {
-        recordHostModelCatalogSnapshot(target, agent, worktree, catalog)
-      }
-    }
-  }
-}
-
 /** Drops a host's answers, for every agent or only `agents`: the account they were for may not be
  *  the one a new chat pins now. */
 export function forgetHostModelCatalogSnapshots(
@@ -144,17 +129,22 @@ export async function preloadHostModelCatalogSnapshots(
   agents: readonly string[],
   options: { savedOnly?: true } = {}
 ): Promise<void> {
+  const hostKey = structuredAgentSessionHostKey(target)
+  const generation = generations.get(hostKey) ?? 0
   await Promise.all(
-    agents.map((agent) => {
-      const snapshot = captureHostModelCatalogSnapshot(target, agent, null)
-      return callStructuredAgentSession<AgentSessionModelCatalogResult>(
+    agents.map((agent) =>
+      callStructuredAgentSession<AgentSessionModelCatalogResult>(
         target,
         'agentSession.modelCatalog',
         { agent, ...options }
       )
-        .then(snapshot.record)
+        .then((catalog) => {
+          if ((generations.get(hostKey) ?? 0) === generation) {
+            recordHostModelCatalogSnapshot(target, agent, null, catalog)
+          }
+        })
         .catch(() => undefined)
-    })
+    )
   )
 }
 

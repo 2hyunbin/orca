@@ -1,3 +1,7 @@
+import { agentSessionOptionAdmitted } from '../runtime/agent-session-record-options'
+import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
+import { applyCodexStructuredSessionOption } from '../codex/codex-structured-session-options'
+import { optionSession } from '../codex/codex-structured-option-session.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { setClaudeStructuredOption } from './claude-structured-options'
 import type { ClaudeSession } from './claude-structured-session-state'
@@ -38,7 +42,7 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
     reportedOptions: {},
     reportedModelMutation: 0,
     confirmedOptions: new Set(),
-    restoreSkippedOptions: new Set(),
+    reusableOptions: new Map(),
     launchedModel: null,
     fastModeAtStart: false,
     capabilities: [],
@@ -346,6 +350,8 @@ describe('Claude structured Fast mode', () => {
     ).resolves.toMatchObject({ model: 'haiku', fastMode: 'false' })
     expect(session.reportedOptions.fastMode).toBe(true)
     expect(session.confirmedOptions.has('fastMode')).toBe(false)
+    expect(session.reusableOptions.get('model')).toBe('haiku')
+    expect(session.reusableOptions.has('fastMode')).toBe(false)
   })
 
   it('treats an unrecognized provider disabled reason as unavailable', async () => {
@@ -435,6 +441,19 @@ describe('Claude Fast mode reported by the session frame alone', () => {
   })
 })
 
+describe("Claude's model the chat never chose", () => {
+  it('marks the listed default it falls back to, never a model the chat runs', async () => {
+    const { session } = fastModeSession(true)
+    const current = async () =>
+      (await readClaudeStructuredSessionOptions(session, undefined)).current
+    expect((await current()).defaulted).toBeUndefined()
+    session.options.delete('model')
+    expect(await current()).toMatchObject({ defaulted: ['model'] })
+    session.options.set('model', 'default')
+    expect(await current()).toMatchObject({ defaulted: ['model'] })
+  })
+})
+
 describe('Claude structured option write under the request deadline', () => {
   it("keeps a timed-out client write as the deadline's own error, not a rejection", async () => {
     const session = sessionFor(async () => {
@@ -445,4 +464,48 @@ describe('Claude structured option write under the request deadline', () => {
       setClaudeStructuredOption(session, { key: 'model', value: 'sonnet' }, 10)
     ).rejects.toBeInstanceOf(ClaudeControlRequestTimeoutError)
   })
+})
+
+describe('unknown versus explicitly empty effort across host and adapters', () => {
+  it.each([false, true])(
+    'keeps a scalar only while effort metadata is unknown (%s)',
+    async (known) => {
+      const row = {
+        id: 'opus',
+        label: 'Opus',
+        isDefault: false,
+        efforts: [],
+        ...(known ? {} : { effortsKnown: false as const })
+      }
+      expect(agentSessionOptionAdmitted('claude', [row], 'opus', 'effort', 'high')).toBe(!known)
+      const { session } = fastModeSession(undefined)
+      session.connection.supportedModels = async () => [
+        { value: 'opus', ...(known ? { supportsEffort: false } : {}) }
+      ]
+      session.connection.applyFlagSettings = async () => {}
+      session.connection.getSettings = async () => ({ effective: { effortLevel: 'high' } })
+      const applied = setClaudeStructuredOption(
+        session,
+        { key: 'effort', value: 'high' },
+        undefined
+      )
+      await (known
+        ? expect(applied).rejects.toThrow('does not accept effort')
+        : expect(applied).resolves.toMatchObject({ effort: 'high' }))
+      const codex = optionSession(vi.fn())
+      codex.options.set('model', 'opus')
+      const store = new AgentModelCatalogStore()
+      store.recordSuccess(
+        'scope',
+        'codex',
+        { models: [row], complete: true, origin: 'probe' },
+        'discovery'
+      )
+      codex.catalogAccess = { store, fingerprint: 'scope', accountHomePath: '/qa' }
+      const picked = applyCodexStructuredSessionOption(codex, 'effort', 'high')
+      await (known
+        ? expect(picked).rejects.toThrow('does not support high')
+        : expect(picked).resolves.toMatchObject({ effort: 'high' }))
+    }
+  )
 })

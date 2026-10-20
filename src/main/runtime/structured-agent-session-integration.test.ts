@@ -11,17 +11,14 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../shared/structured-agent-session-surface-capabilities'
 import type {
   CodexAppServerConnection,
   CodexAppServerConnectionHandlers,
   openCodexAppServerConnection
 } from '../codex/codex-app-server-connection'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import {
-  AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
-} from '../../shared/protocol-version'
+import { DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES } from '../ipc/desktop-renderer-runtime-capabilities'
+import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../shared/agent-session-create-capabilities'
 import type {
   AgentJournalRenderItem,
   AgentJournalSubmission
@@ -48,10 +45,6 @@ import {
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
-import {
-  installScriptedCodexModelCatalog,
-  verifyScriptedCodexRecipientCatalogs
-} from './scripted-codex-model-catalog.test-fixture'
 
 const journals = createTrackedJournalOpener()
 
@@ -66,15 +59,18 @@ const JOURNAL_IDENTITY = {
   agent: 'codex' as const,
   providerHandle: codexProviderHandle(THREAD)
 }
-// A legacy reader requires current.model and pending sends, but reads no coherent catalog envelope.
+// An eager-start client with current options capabilities. Without the pending-send
+// one the host holds the reply until the send settles, which is a shim for
+// clients too old to render a pending bubble — not what this suite models.
 const CLIENT = {
   clientId: 'device-a',
   clientKind: 'runtime' as const,
-  clientCapabilities: [
-    AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
-    STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
-  ]
+  clientCapabilities: DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES.filter(
+    (capability) => capability !== AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY
+  )
 }
+
+// ─── the fake `codex app-server` ────────────────────────────────────────────
 
 type CodexScript = {
   connections: FakeConnection[]
@@ -97,7 +93,6 @@ type FakeConnection = Omit<CodexAppServerConnection, 'closed'> & {
 
 function fakeCodex(): CodexScript {
   const connections: FakeConnection[] = []
-  const current = { model: 'gpt-live', reasoningEffort: 'medium' }
   const openConnection: typeof openCodexAppServerConnection = async (launch, handlers = {}) => {
     const connection: FakeConnection = {
       launch,
@@ -110,15 +105,32 @@ function fakeCodex(): CodexScript {
       request: async (method, params) => {
         connection.calls.push({ method, params })
         if (method === 'thread/start') {
-          return { thread: { id: THREAD, path: '/rollouts/integration.jsonl' }, ...current }
+          return { thread: { id: THREAD, path: '/rollouts/integration.jsonl' } }
         }
         if (method === 'thread/resume') {
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: integration sends schema-validated thread/resume parameters.
           connection.resumedThreadId = (params as { threadId: string }).threadId
-          return { thread: { id: connection.resumedThreadId }, ...current }
+          return { thread: { id: connection.resumedThreadId } }
         }
         if (method === 'turn/start') {
           return { turn: { id: TURN } }
+        }
+        if (method === 'model/list') {
+          return {
+            data: [
+              {
+                model: 'gpt-live',
+                displayName: 'GPT Live',
+                hidden: false,
+                supportedReasoningEfforts: [
+                  { reasoningEffort: 'medium', description: 'Balanced' },
+                  { reasoningEffort: 'high', description: 'Deep reasoning' }
+                ],
+                defaultReasoningEffort: 'medium',
+                isDefault: true
+              }
+            ],
+            nextCursor: null
+          }
         }
         return {}
       },
@@ -227,17 +239,10 @@ let configuredCodexProfile: string
 let shellEnvironmentPolicy: NativeChatShellEnvironmentPolicy
 
 /** Runs a one-shot method and returns its decoded reply. */
-async function call(method: string, params: unknown, modern = false): Promise<RpcResponse> {
+async function call(method: string, params: unknown): Promise<RpcResponse> {
   const replies: RpcResponse[] = []
   const request: RpcRequest = { id: `req-${operations}`, authToken: 'token', method, params }
-  const clientCapabilities = [
-    ...CLIENT.clientCapabilities,
-    ...(modern ? [AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY] : [])
-  ]
-  await dispatcher.dispatchStreaming(request, (raw) => replies.push(JSON.parse(raw)), {
-    ...CLIENT,
-    clientCapabilities
-  })
+  await dispatcher.dispatchStreaming(request, (raw) => replies.push(JSON.parse(raw)), CLIENT)
   const first = replies[0]
   if (!first) {
     throw new Error(`no reply for ${method}`)
@@ -310,6 +315,20 @@ async function historyPage(
   return (response as { result: AgentSessionHistoryResult }).result
 }
 
+async function readKnownOptions(): Promise<RpcResponse> {
+  return vi.waitFor(async () => {
+    const result = await call('agentSession.options', { sessionId: SESSION })
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
+        current: { model: 'gpt-live' }
+      }
+    })
+    return result
+  })
+}
+
 beforeEach(async () => {
   operations = 0
   root = await mkdtemp(join(tmpdir(), 'orca-structured-integration-'))
@@ -329,7 +348,7 @@ beforeEach(async () => {
         providerHandle: _providerHandle,
         ...resolved
       } = attachParams(null)
-      return resolved
+      return { ...resolved, options: { model: 'gpt-live' } }
     },
     publishStructuredAgentSessionTab: () => {},
     ensureStructuredAgentSessionHost: () =>
@@ -430,52 +449,15 @@ describe('a structured codex session over agentSession.*', () => {
     // The previous process exits, closing its database.
     await journals.closeAll()
 
-    const created = await ok<{ fence: number; page: { items: AgentJournalRenderItem[] } }>(
+    const created = await ok<{ page: { items: AgentJournalRenderItem[] } }>(
       'agentSession.create',
       createIntentParams()
     )
     expect(created.page.items.map(textOf)).toContain('legacy question')
-    const { probe } = installScriptedCodexModelCatalog(SESSION, root)
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-      ok: true,
-      result: {
-        models: [{ id: 'gpt-live', serviceTiers: [{ value: 'priority' }] }],
-        current: { model: 'gpt-live', effort: 'medium' }
-      }
-    })
-    const fields = { key: 'fastMode', value: 'true' }
-    await ok('agentSession.setOption', {
-      envelope: envelope('agentSession.setOption', fields, created.fence),
-      ...fields
-    })
-    expect(probe).toHaveBeenCalledTimes(1)
-    expect(codex.live().calls.some((entry) => entry.method === 'model/list')).toBe(false)
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-      result: { current: { serviceTier: 'priority', fastMode: true } }
-    })
-    const body = { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'chosen speed' }] }
-    await ok('agentSession.send', {
-      envelope: envelope('agentSession.send', { body }, created.fence),
-      body
-    })
-    await handedOverAs({ serviceTier: 'priority' })
-    expect(
-      codex.live().calls.find((entry) => entry.method === 'turn/start')?.params
-    ).not.toHaveProperty('fastMode')
-    await verifyScriptedCodexRecipientCatalogs(SESSION, root, (key, value, modern) => {
-      const fields = { key, value }
-      return call(
-        'agentSession.setOption',
-        { envelope: envelope('agentSession.setOption', fields, created.fence), ...fields },
-        modern
-      )
-    })
+    await readKnownOptions()
   })
 
-  it('runs create → send → stream → approval → cancel → reconnect → page history', async () => {
-    // ── create ──────────────────────────────────────────────────────────────
-    // No host exists yet; `create` is the call that builds one.
-    expect(getStructuredAgentSessionHost()).toBeNull()
+  it('dispatches and streams a plain first send from a fresh session', async () => {
     const created = await ok<{ fence: number; page: { items: unknown[] } }>(
       'agentSession.create',
       createIntentParams()
@@ -491,25 +473,74 @@ describe('a structured codex session over agentSession.*', () => {
     expect(store).toContain('/home/dev/.codex')
     expect(store).not.toContain('EXAMPLE_GATEWAY_TOKEN')
     expect(store).not.toContain('"launchEnv"')
-    expect(codex.live().calls[0]).toMatchObject({
-      method: 'thread/start',
-      params: { cwd: `/repos/${WORKSPACE}` }
+    const stream = await subscribe('sub-first-send')
+    const body = { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hi' }] }
+
+    const sent = await ok<{
+      clientMessageId: string
+      submission: { dispatchState: string; providerItemId: string | null }
+    }>('agentSession.send', {
+      envelope: envelope('agentSession.send', { body }, created.fence),
+      body
     })
+    // Admission, not identity. `turn/start` proves Codex owns the message, but a
+    // send coalesced into a running turn is answered with that turn's id, so
+    // which message landed where is knowable only from the echo.
+    expect(sent.submission).toMatchObject({ dispatchState: 'pending', providerItemId: null })
+    await handedOverAs({ threadId: THREAD, clientUserMessageId: sent.clientMessageId })
+
+    codex.notify('turn/started', { turn: { id: TURN } })
+    // Codex echoes the message back carrying the `clientId` it was sent under,
+    // which is the only thing that names which submission this row settles.
+    codex.notify('item/completed', {
+      item: {
+        type: 'userMessage',
+        id: 'item-0',
+        clientId: sent.clientMessageId,
+        content: [{ type: 'text', text: 'hi' }]
+      }
+    })
+    codex.notify('item/started', { item: { type: 'agentMessage', id: 'item-1', text: '' } })
+    codex.notify('item/agentMessage/delta', { itemId: 'item-1', delta: 'Hello.' })
+    codex.notify('item/completed', {
+      item: { type: 'agentMessage', id: 'item-1', text: 'Hello.' }
+    })
+    await drainStreamedEvents()
+
+    expect(itemsOf(stream).map(textOf).filter(Boolean)).toEqual(['hi', 'Hello.'])
+    // The echo is the first item of this turn, so the settled key is ordinal 0 —
+    // minted by the same `identityFor` a history replay computes with, rather
+    // than guessed from the turn/start response.
+    await vi.waitFor(async () =>
+      expect(await submissionOf(sent.clientMessageId)).toMatchObject({
+        dispatchState: 'accepted',
+        providerItemId: `codex:${THREAD}:${TURN}:0`
+      })
+    )
+  })
+
+  it('runs create → send → stream → approval → cancel → reconnect → page history', async () => {
+    // ── create ──────────────────────────────────────────────────────────────
+    // No host exists yet; `create` is the call that builds one.
+    expect(getStructuredAgentSessionHost()).toBeNull()
+    const created = await ok<{ fence: number; page: { items: unknown[] } }>(
+      'agentSession.create',
+      createIntentParams()
+    )
+    expect(created.page.items).toEqual([])
+    // Create answers at spawn; the thread opens once Codex has initialized.
+    await vi.waitFor(() =>
+      expect(codex.live().calls.find((call) => call.method === 'thread/start')).toMatchObject({
+        params: { cwd: `/repos/${WORKSPACE}` }
+      })
+    )
     const fence = created.fence
 
     const stream = await subscribe('sub-1')
     expect(stream[0]).toMatchObject({ type: 'snapshot', sessionId: SESSION })
 
     // ── options ─────────────────────────────────────────────────────────────
-    const options = await call('agentSession.options', { sessionId: SESSION })
-    expect(options).toMatchObject({
-      ok: true,
-      result: {
-        models: [{ id: 'gpt-live', label: 'gpt-live', efforts: [], effortsKnown: false }],
-        current: { model: 'gpt-live', effort: 'medium' }
-      }
-    })
-    expect(codex.live().calls.some((entry) => entry.method === 'model/list')).toBe(false)
+    await readKnownOptions()
     await ok('agentSession.setOption', {
       envelope: envelope('agentSession.setOption', { key: 'model', value: 'gpt-live' }, fence),
       key: 'model',
@@ -520,10 +551,12 @@ describe('a structured codex session over agentSession.*', () => {
       key: 'effort',
       value: 'high'
     })
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-      ok: true,
-      result: { current: { model: 'gpt-live', effort: 'high' } }
-    })
+    await vi.waitFor(async () =>
+      expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+        ok: true,
+        result: { current: { model: 'gpt-live', effort: 'high' } }
+      })
+    )
     expect(itemsOf(stream)).toEqual([])
 
     // ── send ────────────────────────────────────────────────────────────────
@@ -665,12 +698,9 @@ describe('a structured codex session over agentSession.*', () => {
     expect(resumed.fence).toBe(fence + 1)
     expect(reaped.closed).toBe(true)
     expect(codex.live().resumedThreadId).toBe(THREAD)
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+    expect(await readKnownOptions()).toMatchObject({
       ok: true,
-      result: {
-        models: [expect.objectContaining({ id: 'gpt-live', efforts: [] })],
-        current: { model: 'gpt-live', effort: 'high' }
-      }
+      result: { current: { effort: 'high' } }
     })
     // The journal belongs to the session, not to the process that just died.
     expect(resumed.page.items.map(textOf)).toContain('Two files.')
@@ -695,7 +725,7 @@ describe('a structured codex session over agentSession.*', () => {
     // The turn's lifecycle row outlives the turn: it is revised, never tombstoned.
     expect([...older.page.items, ...tail.page.items].map((item) => item.body?.kind)).toEqual([
       'message',
-      'status',
+      'turn',
       'message',
       'tool-call',
       'approval',
@@ -812,8 +842,9 @@ describe('a structured codex session over agentSession.*', () => {
     ).toBe(false)
   })
 
-  it('persists truncated command output before publishing its journal row', async () => {
+  it('persists complete command output while publishing a shortened copy', async () => {
     await ok<{ fence: number }>('agentSession.create', createIntentParams())
+    const stream = await subscribe('sub-large-output')
     const output = 'large command output\n'.repeat(2_000)
 
     codex.notify('item/completed', {
@@ -830,13 +861,15 @@ describe('a structured codex session over agentSession.*', () => {
     })
     await drainStreamedEvents()
 
-    const host = getStructuredAgentSessionHost()
-    const journal = (
-      host as unknown as { sessions: Map<string, { journal: AgentSessionJournal }> }
-    ).sessions.get(SESSION)!.journal
-    const item = journal.snapshot().items.find((candidate) => candidate.body?.kind === 'tool-call')
+    const snapshot = await getStructuredAgentSessionHost()?.journalSnapshot(SESSION)
+    const item = snapshot?.items.find((candidate) => candidate.body?.kind === 'tool-call')
     const bounded = item?.body?.kind === 'tool-call' ? item.body.output : undefined
-    expect(bounded).toMatchObject({ truncated: true, byteLength: Buffer.byteLength(output) })
+    expect(bounded).toMatchObject({ head: output, truncated: false, byteLength: output.length })
+    const published = itemsOf(stream).find((candidate) => candidate.itemId === item?.itemId)
+    expect(published?.shortened).toBe(true)
+    expect(published?.body).toMatchObject({
+      output: { head: output.slice(0, 16 * 1024), truncated: true, byteLength: output.length }
+    })
   })
 
   it('keeps an answered prompt resolved after the provider exits', async () => {
@@ -860,10 +893,8 @@ describe('a structured codex session over agentSession.*', () => {
     })
     await drainStreamedEvents()
     const host = getStructuredAgentSessionHost()
-    const journal = (
-      host as unknown as { sessions: Map<string, { journal: AgentSessionJournal }> }
-    ).sessions.get(SESSION)!.journal
-    const approval = journal.snapshot().items.find((item) => item.body?.kind === 'approval')
+    let snapshot = await host?.journalSnapshot(SESSION)
+    const approval = snapshot?.items.find((item) => item.body?.kind === 'approval')
     expect(approval?.body).toMatchObject({
       kind: 'approval',
       resolution: { state: 'pending' }
@@ -886,9 +917,8 @@ describe('a structured codex session over agentSession.*', () => {
     codex.live().handlers.onExit?.(new Error('provider exited after answer'))
     await drainStreamedEvents()
 
-    expect(
-      journal.snapshot().items.find((item) => item.itemId === approval?.itemId)?.body
-    ).toMatchObject({
+    snapshot = await host?.journalSnapshot(SESSION)
+    expect(snapshot?.items.find((item) => item.itemId === approval?.itemId)?.body).toMatchObject({
       kind: 'approval',
       resolution: { state: 'resolved', selectedOptionId: 'accept' }
     })

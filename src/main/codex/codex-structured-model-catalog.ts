@@ -3,6 +3,7 @@ import type {
   AgentSessionOptionChoice,
   AgentSessionOptionsResult
 } from '../../shared/agent-session-wire'
+import { effectiveServiceTier } from '../../shared/structured-agent-session-effective-tier'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import { structuredAgentSessionOptionModels } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import {
@@ -193,7 +194,17 @@ export function composeCodexSessionOptionCatalog(
   const reportedTier = input.reportedServiceTierKnown
     ? (input.reportedServiceTier ?? CODEX_DEFAULT_SERVICE_TIER)
     : undefined
-  const serviceTier = input.current.serviceTier ?? reportedTier
+  const selectedTier = input.current.serviceTier ?? reportedTier
+  const modelTiers = models.find((row) => row.id === model)?.serviceTiers
+  const serviceTier =
+    selectedTier && modelTiers
+      ? effectiveServiceTier({
+          tier: selectedTier,
+          modelTiers: modelTiers.map((row) => row.value),
+          listedTiers: models.flatMap((row) => row.serviceTiers?.map((tier) => tier.value) ?? []),
+          reported: selectedTier === reportedTier
+        })
+      : selectedTier
   // Older clients only read Fast; any other tier leaves their toggle unset.
   const fastMode = codexFastModeOfServiceTier(
     serviceTier,
@@ -210,7 +221,9 @@ export function composeCodexSessionOptionCatalog(
       ...(fastMode !== undefined ? { fastMode } : {}),
       ...(reportedTier !== undefined && input.current.serviceTier === undefined
         ? { confirmed: fastMode === undefined ? ['serviceTier'] : ['serviceTier', 'fastMode'] }
-        : {})
+        : {}),
+      // The listing's default stands in for a thread that reported no model of its own.
+      ...(input.current.model ? {} : { defaulted: ['model'] as const })
     }
   }
 }

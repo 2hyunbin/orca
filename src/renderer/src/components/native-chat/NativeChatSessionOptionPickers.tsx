@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -7,7 +7,6 @@ import { translate } from '@/i18n/i18n'
 import { sortNativeChatSessionOptions } from '../../../../shared/native-chat-session-option-snapshot'
 import {
   sessionOptionDispatchUnconfirmed,
-  sessionOptionHasPickerContent,
   type SessionOptionDescriptor,
   type SessionOptionsSurface,
   type SessionOptionValue
@@ -128,6 +127,7 @@ function PickerTrigger(props: {
 }
 
 function SessionOptionPopover(props: {
+  demandModelCatalog?: () => void
   model: SessionOptionDescriptor
   options: readonly SessionOptionDescriptor[]
   isWorking: boolean
@@ -139,7 +139,6 @@ function SessionOptionPopover(props: {
   focusComposer?: () => void
 }): React.JSX.Element {
   const { model, options, pendingIds } = props
-  const disabled = props.isWorking || ![model, ...options].some(sessionOptionHasPickerContent)
   // Why here: this unmounts with the pill, so a picker that went away comes back closed.
   const [open, setOpen] = useState(false)
   const [seenRequest, setSeenRequest] = useState<NativeChatOptionPickerRequest | null>(null)
@@ -147,11 +146,18 @@ function SessionOptionPopover(props: {
   const [requestedOptionId, setRequestedOptionId] = useState<string | null>(null)
   if (props.request !== seenRequest) {
     setSeenRequest(props.request)
-    if (props.request && !disabled) {
+    if (props.request) {
       setOpen(true)
       setRequestedOptionId(props.request.id === model.id ? null : props.request.id)
     }
   }
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      props.demandModelCatalog?.()
+    }
+    wasOpen.current = open
+  }, [open, props.demandModelCatalog])
   const focusReturn = useNativeChatPickerFocusReturn(props.focusComposer)
   const modelTitle = translate('components.native-chat.composer.model', 'Model')
   const modelLabel = nativeChatModelPillLabel(model)
@@ -191,7 +197,7 @@ function SessionOptionPopover(props: {
   }
 
   return (
-    <Popover open={open && !disabled} onOpenChange={(next) => setOpen(next && !disabled)}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PickerTrigger
         modelLabel={modelLabel}
         optionsLabel={optionsLabel}
@@ -200,7 +206,7 @@ function SessionOptionPopover(props: {
             ? `${modelName}, ${pillAccessibleName(optionsTitle, optionsLabel)}`
             : modelName
         }
-        disabled={disabled}
+        disabled={props.isWorking}
         disabledReason={modelReason ?? optionsReason}
         dispatched={
           sessionOptionDispatchUnconfirmed(model) || options.some(sessionOptionDispatchUnconfirmed)
@@ -208,7 +214,7 @@ function SessionOptionPopover(props: {
         triggerRef={focusReturn.triggerRef}
         // Why: a popover trigger opens on Enter and Space only; a menu also takes ArrowDown.
         onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' && !disabled) {
+          if (event.key === 'ArrowDown') {
             event.preventDefault()
             setOpen(true)
           }
@@ -322,6 +328,7 @@ function NativeChatSessionOptionPickersInner({
   return (
     <div className="flex min-w-0 items-center text-chat-foreground-faint">
       <SessionOptionPopover
+        demandModelCatalog={surface.demandModelCatalog}
         model={model}
         options={options}
         isWorking={isWorking}

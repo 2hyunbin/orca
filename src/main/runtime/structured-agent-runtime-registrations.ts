@@ -68,14 +68,14 @@ function createCodexAdapter(context: StructuredAgentAdapterContext): StructuredA
       host()?.deps.modelCatalog?.read({
         agent: 'codex',
         sessionId,
-        inSessionWorkspace: true,
-        legacy,
-        waitForListing: true
+        ...(legacy ? { legacy: true } : {})
       }),
     onChildWorkEvidence: (sessionId, evidence, producer) =>
       host()?.publishChildWorkEvidence(sessionId, evidence, producer),
     onDispatchSettledLate: followUps.onDispatchSettledLate,
-    onPrimaryThreadStoppedRunning: followUps.releaseUnansweredDispatches,
+    // After the frame being read: what the child holds is re-derived, never published mid-frame.
+    onHeldSendsChanged: ({ sessionId }) =>
+      queueMicrotask(() => host()?.publishWorkChanged(sessionId)),
     logger: deps.logger,
     onEvent: (event) => {
       // Every exit, expected or not: the host ends that child's record.
@@ -131,6 +131,7 @@ function createAcpAdapter(
     const sources = structuredAgentLaunchSources(context)
     const part = acpStructuredLaunchPart(spec, {
       readJournal,
+      ...deps.acpLaunchCommand,
       dataDirectory: deps.stateDirectory,
       logger: deps.logger
     })
@@ -141,18 +142,13 @@ function createAcpAdapter(
       readLaunch: composeStructuredLaunchRead(definition, sources, part),
       dataDirectory: deps.stateDirectory,
       resolveLaunchArgs: () => deps.resolveLaunchArgs(spec.agent),
-      connect: (launch, options) => createAcpAgentConnection(launch, options),
+      connect: deps.openAcpConnection ?? createAcpAgentConnection,
       onChildWorkEvidence: (sessionId, evidence, producer) =>
         context.host()?.publishChildWorkEvidence(sessionId, evidence, producer),
       ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {}),
       onDispatchSettledLate: followUps.onDispatchSettledLate,
       logger: deps.logger,
-      // Every exit, expected or not: the host ends that child's record.
-      onEvent: (event) => {
-        if (event.type === 'ended') {
-          context.deliverLifecycle(event)
-        }
-      }
+      onEvent: context.deliverLifecycle
     })
   }
 }

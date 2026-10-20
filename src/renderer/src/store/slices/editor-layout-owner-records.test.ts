@@ -12,6 +12,7 @@ import type { LayoutCommand } from '../../../../shared/workspace-layout/workspac
 import type { WorkspaceLayoutModel } from '../../../../shared/workspace-layout/workspace-layout-model'
 import { publishWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-published'
 import type { WorkspaceLayoutChangeFrame } from '../../../../shared/workspace-layout/workspace-layout-stream-frames'
+import { editorMoveOwnerFromContext, type EditorMoveOwner } from '@/lib/open-editor-move-owner'
 
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: true,
@@ -106,6 +107,8 @@ function applySent(): LayoutCommand[] {
 }
 
 async function showMainFrame(): Promise<void> {
+  // Main has answered the window's commands, so no tab of theirs is still held as drawn.
+  await new Promise((resolve) => setTimeout(resolve, 0))
   const sync = openWorkspaceLayoutFrameSync(useAppStore)
   stream.onFrame!({
     type: 'snapshot',
@@ -167,6 +170,10 @@ function openEdit(worktreeId: string, filePath: string, relativePath: string): s
     },
     { suppressActiveRuntimeFallback: true }
   )
+}
+
+function localMoveOwner(worktreeId: string | undefined): EditorMoveOwner {
+  return editorMoveOwnerFromContext({ target: { kind: 'local' } }, worktreeId)
 }
 
 describe('editor records under frames, layout-owner build', () => {
@@ -251,7 +258,8 @@ describe('open files renamed on disk, layout-owner build', () => {
       fromPath: '/repo-a/src',
       toPath: '/repo-a/lib',
       worktreePath: '/repo-a',
-      worktreeId: WT
+      worktreeId: WT,
+      owner: localMoveOwner(WT)
     })
 
     expect(result).toEqual({ ok: true })
@@ -282,7 +290,8 @@ describe('open files renamed on disk, layout-owner build', () => {
         fromPath: '/repo-a/a.ts',
         toPath: '/repo-a/b.ts',
         worktreePath: '/repo-a',
-        worktreeId: WT
+        worktreeId: WT,
+        owner: localMoveOwner(WT)
       })
     ).toEqual({ ok: false, reason: 'collision' })
     expect(applySent()).toEqual([])
@@ -293,7 +302,8 @@ describe('open files renamed on disk, layout-owner build', () => {
         fromPath: '/repo-a/a.ts',
         toPath: '/repo-a/c.ts',
         worktreePath: '/repo-a',
-        worktreeId: WT
+        worktreeId: WT,
+        owner: localMoveOwner(WT)
       })
     ).toEqual({ ok: true })
     expect(applySent()).toEqual([])

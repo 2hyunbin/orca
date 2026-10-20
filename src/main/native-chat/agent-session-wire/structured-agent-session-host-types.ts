@@ -28,7 +28,7 @@ import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionStartupLimits } from './structured-agent-session-startup-attempt-contract'
 import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
 
-export type StructuredAgentSessionCaller = { callerKey: string; readsCoherentCatalog?: boolean }
+export type StructuredAgentSessionCaller = { callerKey: string }
 
 /** What the host believes about a session it just made addressable again. The workspace and agent
  *  come from the record, so a caller publishes the host's view rather than a client's assertion.
@@ -69,7 +69,7 @@ export type StructuredAgentSessionChildClose = {
 /** The provider process behind a conversation. Written only in
  *  `structured-agent-session-provider-child`. */
 export type StructuredAgentSessionProviderChild = StructuredAgentSessionProviderChildIdentity & {
-  /** A starting acquisition stays `starting` until the host settles its `started` event; only then is
+  /** Every acquired child is `starting` until the host settles its open result; only then is
    *  it handed input and are its reported options fact. */
   phase: StructuredAgentSessionProviderChildPhase
   /** The queued message whose delivery started this child, fixed when the start is made; absent
@@ -77,6 +77,8 @@ export type StructuredAgentSessionProviderChild = StructuredAgentSessionProvider
   readonly startedFor?: string
   /** The permission mode it was launched with, in memory only; absent for an agent with none. */
   readonly permissionMode?: AgentChatPermissionMode
+  /** The adapter's `heldSends` for this conversation, read at each decision. */
+  readonly heldSends?: () => ReadonlySet<string> | undefined
   close?: StructuredAgentSessionChildClose
 }
 

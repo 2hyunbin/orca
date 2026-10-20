@@ -1,8 +1,5 @@
 import { useCallback, useMemo, useState, type RefObject } from 'react'
-import {
-  structuredAgentSessionShownSnapshot,
-  structuredAgentSessionSendSelection
-} from '../../../src/shared/structured-agent-session-option-view'
+import { structuredAgentSessionShownSnapshot } from '../../../src/shared/structured-agent-session-option-view'
 import type { StructuredAgentSessionOptionState } from '../../../src/shared/structured-agent-session-options'
 import type {
   SessionOptionDescriptor,
@@ -12,13 +9,13 @@ import type {
 
 /** The picker surface over a structured chat's options: picks, `/`-opened pickers, snapshots. */
 export function useMobileStructuredOptionSurface(args: {
+  demandModelCatalog: () => void
   optionSnapshot: SessionOptionDescriptor[]
   setStructuredOption: (id: string, value: SessionOptionValue) => Promise<boolean>
   /** The latest option state, which a settled pick's snapshot is read from. */
   optionStateRef: RefObject<StructuredAgentSessionOptionState>
-  takesSendOptions: boolean
 }) {
-  const { optionSnapshot, optionStateRef, setStructuredOption, takesSendOptions } = args
+  const { optionSnapshot, optionStateRef, setStructuredOption, demandModelCatalog } = args
   const [optionPickerRequest, setOptionPickerRequest] = useState<{
     id: string
     sequence: number
@@ -38,31 +35,21 @@ export function useMobileStructuredOptionSurface(args: {
   const setOption = useCallback(
     async (id: string, value: SessionOptionValue) => {
       await setStructuredOption(id, value)
-      return {
-        snapshot: structuredAgentSessionShownSnapshot(optionStateRef.current, takesSendOptions)
-      }
+      return { snapshot: structuredAgentSessionShownSnapshot(optionStateRef.current) }
     },
-    [optionStateRef, setStructuredOption, takesSendOptions]
+    [optionStateRef, setStructuredOption]
   )
 
   const optionSurface = useMemo<SessionOptionsSurface>(
     () => ({
       getSnapshot: () => optionSnapshot,
+      demandModelCatalog,
       setOption,
       invokeAction: async () => ({ snapshot: optionSnapshot }),
       subscribe: () => () => {}
     }),
-    [optionSnapshot, setOption]
+    [optionSnapshot, setOption, demandModelCatalog]
   )
 
-  const sendSelection = useCallback(
-    () =>
-      structuredAgentSessionSendSelection(
-        optionStateRef.current.record.agent,
-        structuredAgentSessionShownSnapshot(optionStateRef.current, takesSendOptions)
-      ),
-    [optionStateRef, takesSendOptions]
-  )
-
-  return { optionPickerRequest, invokeStructuredOption, optionSurface, sendSelection }
+  return { optionPickerRequest, invokeStructuredOption, optionSurface }
 }

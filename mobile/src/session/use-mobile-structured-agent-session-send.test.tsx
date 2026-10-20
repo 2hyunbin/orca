@@ -198,68 +198,47 @@ describe('mobile structured send actions', () => {
     }
   })
 
-  it('sends the retained literal selection until an explicit model and effort pick', async () => {
+  it("keeps a chat's model its CLI stopped listing, and sends on it and its effort", async () => {
     agent = 'claude'
     hostSupport = structuredAgentSessionHostSupport([AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY])
-    const efforts = [
-      { value: 'low', label: 'Low' },
-      { value: 'high', label: 'High' }
-    ]
-    let current = { model: 'claude-gone', effort: 'high' }
-    sendRequest.mockImplementation(async (method, params) => {
-      if (method === 'agentSession.setOption') {
-        const fields = fieldsOf(params)
-        current = { ...current, [String(fields.key)]: String(fields.value) }
-        return ok({ ok: true, value: { options: current } })
-      }
-      return method === 'agentSession.send'
+    const opus = {
+      id: 'opus',
+      label: 'Opus',
+      isDefault: true,
+      efforts: [{ value: 'high', label: 'High' }]
+    }
+    sendRequest.mockImplementation(async (method) =>
+      method === 'agentSession.send'
         ? sendResult('accepted')
         : method === 'agentSession.modelCatalog'
-          ? ok({
-              origin: 'probe',
-              fetchedAt: 1,
-              models: [{ id: 'opus[1m]', label: 'Opus', isDefault: true, efforts }]
-            })
+          ? ok({ origin: 'probe', fetchedAt: 1, models: [opus] })
           : method === 'agentSession.options'
             ? ok({
                 // A stopped chat lists the host's rows and its own model.
                 models: [
-                  { id: 'opus[1m]', label: 'Opus', isDefault: true, efforts },
-                  { id: 'claude-gone', label: 'claude-gone', isDefault: false, efforts: [] }
+                  opus,
+                  { id: 'opus[1m]', label: 'opus[1m]', isDefault: false, efforts: [] }
                 ],
-                listedModelIds: ['opus[1m]'],
-                current
+                listedModelIds: ['opus'],
+                current: { model: 'opus[1m]', effort: 'max' }
               })
             : ok({})
-    })
+    )
     await mountSession()
     await vi.waitFor(async () => {
       await act(async () => {})
       expect(
         hook!.optionSnapshot.find((descriptor) => descriptor.id === 'model')?.kind
-      ).toMatchObject({ currentValue: 'claude-gone' })
+      ).toMatchObject({ currentValue: 'opus[1m]' })
     })
-    expect(hook!.optionSnapshot.find((entry) => entry.id === 'effort')).toMatchObject({
+    expect(hook!.optionSnapshot.find((descriptor) => descriptor.id === 'effort')).toMatchObject({
       settable: false,
-      kind: { currentValue: 'high', choices: [{ value: 'high', label: 'High' }] }
+      kind: { currentValue: 'max' }
     })
-    expect(
-      sendRequest.mock.calls.filter(([method]) => method === 'agentSession.setOption')
-    ).toHaveLength(0)
     await act(async () => {
-      expect(await hook!.sendWithOutcome('literal')).toBe('accepted')
-      await hook!.setStructuredOption('model', 'opus[1m]')
-      await hook!.setStructuredOption('effort', 'low')
+      expect(await hook!.sendWithOutcome('hello')).toBe('accepted')
     })
-    const picks = sendRequest.mock.calls.filter(([method]) => method === 'agentSession.setOption')
-    expect(picks.map(([, params]) => fieldsOf(params).value)).toEqual(['opus[1m]', 'low'])
-    await act(async () => {
-      expect(await hook!.sendWithOutcome('picked')).toBe('accepted')
-    })
-    expect(calls().map(([, params]) => fieldsOf(params).options)).toEqual([
-      { model: 'claude-gone', effort: 'high' },
-      { model: 'opus[1m]', effort: 'low' }
-    ])
+    expect(fieldsOf(calls()[0]![1]).options).toEqual({ model: 'opus[1m]', effort: 'max' })
   })
 
   it("sends a command the chat's own agent runs as a message, though Codex's host claims it", async () => {
@@ -427,6 +406,27 @@ describe('mobile structured send actions', () => {
     expect(calls()[1]?.[1]).toMatchObject({
       body: {
         blocks: expect.arrayContaining([{ type: 'image-ref', path: '/tmp/reuploaded.png' }])
+      }
+    })
+  })
+
+  it('sends an attached file as a reference after the text, and only images as image blocks', async () => {
+    sendRequest.mockImplementation(async (method) =>
+      method === 'agentSession.send' ? sendResult('accepted') : ok({ models: [], current: {} })
+    )
+    await mountSession()
+    await act(async () => {
+      await hook!.sendWithOutcome('read these', undefined, undefined, [
+        { path: '/tmp/shot.png', previewUri: 'file:///shot.png' },
+        { kind: 'file', path: '/store/u1/spec.pdf' }
+      ])
+    })
+    expect(calls()[0]?.[1]).toMatchObject({
+      body: {
+        blocks: [
+          { type: 'text', text: 'read these\n@/store/u1/spec.pdf' },
+          { type: 'image-ref', path: '/tmp/shot.png' }
+        ]
       }
     })
   })

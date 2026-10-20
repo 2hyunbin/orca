@@ -20,10 +20,7 @@ import { grokModelCatalogFromState } from '../acp/acp-dialects/grok-model-catalo
 import { acpLaunchSpecFor } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
-import {
-  agentModelCatalogFingerprintForRecord,
-  agentModelCatalogScopeFingerprint
-} from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
+import { agentModelCatalogFingerprintForRecord } from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
@@ -156,11 +153,13 @@ function newChatRecord(
   workspacePath: string,
   options: Record<string, string>
 ): AgentSessionRecord {
+  const providerHandleChain: AgentSessionRecord['providerHandleChain'] = []
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the catalog service and the at-rest read touch only these fields.
   return {
     sessionId: `${agent}-new`,
     provider: agent,
     accountHome: HOMES[agent]!,
+    providerHandleChain,
     launchDirectory: workspacePath,
     location: {
       executionHostId: 'local',
@@ -175,32 +174,18 @@ function newChatRecord(
 /** A host whose catalog for `agent`'s account is warm, holding one new chat that never sent. */
 function host(agent: string, record: AgentSessionRecord) {
   const store = new AgentModelCatalogStore()
-  const fingerprint = agentModelCatalogScopeFingerprint(
-    agentModelCatalogFingerprintForRecord(record),
-    record.launchDirectory!
-  )
+  const fingerprint = agentModelCatalogFingerprintForRecord(record)
   const account = ACCOUNTS[agent]!
+  // Not inline: this base's listing still requires the tier map that main has since dropped.
   const listing = {
     models: account.models,
-    origin: 'probe' as const,
-    complete: true,
-    ...(account.configured
-      ? { configured: { model: account.configured.modelId, effort: account.configured.effort } }
-      : {})
+    fastModeTierByModel: new Map(),
+    origin: 'probe' as const
   }
   store.recordSuccess(fingerprint, agent, listing, 'discovery')
-  if (agent === 'codex') {
-    store.recordSuccess(
-      agentModelCatalogScopeFingerprint(
-        agentModelCatalogFingerprintForRecord(record),
-        'legacy-account'
-      ),
-      agent,
-      { models: CODEX_LISTING, origin: 'probe', complete: true },
-      'discovery'
-    )
+  if (account.configured) {
+    store.recordConfiguredDefault(fingerprint, account.configured)
   }
-
   const modelCatalog = createAgentModelCatalogService({
     store,
     getRecord: (sessionId) => (sessionId === record.sessionId ? record : undefined),
@@ -214,7 +199,13 @@ function host(agent: string, record: AgentSessionRecord) {
   const resting = {
     child: null,
     params: { provider: agent },
-    journal: { threadGoal: () => null, contextUsage: () => null, context: { floor: () => null } }
+    journal: {
+      threadGoal: () => null,
+      visitItems: () => {},
+      submissions: () => [],
+      contextUsage: () => null,
+      context: { floor: () => null }
+    }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the at-rest read touches only these members.
   const context = {
@@ -263,12 +254,16 @@ async function newChatFrames(
   const atRest = await readStructuredAgentSessionOptions(context, record.sessionId, {
     readsWithoutModel: chat.readsWithoutModel ?? true
   })
-  const settled = applyStructuredAgentSessionOptions(first, seed, atRest)
+  const settled = applyStructuredAgentSessionOptions(first, seed, atRest, { newLaunch: true })
   return { atRest, first: firstPills, settled: pills(settled) }
 }
 
 describe("a new chat's effort pill before its agent starts", () => {
-  it.each([['codex', 'gpt-5.5', 'medium']])(
+  it.each([
+    ['codex', 'gpt-5.5', 'medium'],
+    ['grok', 'grok-4', 'max'],
+    ['pi', 'openai/gpt-6', 'high']
+  ])(
     '%s keeps the first frame’s model and effort through the at-rest read',
     async (agent, model, effort) => {
       const { atRest, first, settled } = await newChatFrames(agent)
@@ -276,7 +271,7 @@ describe("a new chat's effort pill before its agent starts", () => {
       expect(first.model?.value).toBe(model)
       expect(first.effort?.value).toBe(effort)
       expect(settled).toEqual(first)
-      expect(atRest.current).toEqual({ model, effort, ...modeOf(agent) })
+      expect(atRest.current).toEqual({ model, effort, defaulted: [], ...modeOf(agent) })
     }
   )
 
@@ -293,7 +288,7 @@ describe("a new chat's effort pill before its agent starts", () => {
       expect(first.model?.value).toBeUndefined()
       expect(first.effort).toBeNull()
       expect(settled).toEqual(first)
-      expect(atRest.current).toEqual(modeOf(agent))
+      expect(atRest.current).toEqual({ defaulted: [], ...modeOf(agent) })
     }
   )
 
@@ -304,28 +299,36 @@ describe("a new chat's effort pill before its agent starts", () => {
     })
 
     // The account default is not what this repo runs, so its effort is never claimed.
-    expect(atRest.current).toEqual({ model: 'gpt-5.5', permissionMode: 'ask' })
+    expect(atRest.current).toEqual({ model: 'gpt-5.5', defaulted: [], permissionMode: 'ask' })
     expect(atRest.conversationCommands).toEqual(['clear', 'compact'])
   })
 
   it('names the folder’s default effort for a client that needs a model too', async () => {
     const { atRest } = await newChatFrames('codex', { readsWithoutModel: false })
 
-    expect(atRest.current).toEqual({ model: 'gpt-5.5', effort: 'medium', permissionMode: 'ask' })
+    expect(atRest.current).toEqual({
+      model: 'gpt-5.5',
+      effort: 'medium',
+      defaulted: [],
+      permissionMode: 'ask'
+    })
   })
 
   it('keeps a saved effort over the default model’s', async () => {
-    const { atRest, settled } = await newChatFrames('grok', {
-      saved: { model: 'grok-4', effort: 'high' }
-    })
+    const { atRest, settled } = await newChatFrames('grok', { saved: { effort: 'high' } })
 
-    expect(atRest.current).toEqual({ model: 'grok-4', effort: 'high', ...modeOf('grok') })
+    expect(atRest.current).toEqual({
+      model: 'grok-4',
+      effort: 'high',
+      defaulted: [],
+      ...modeOf('grok')
+    })
     expect(settled.effort?.value).toBe('high')
   })
 
   it('leaves the effort of a saved model to the agent, as its running child reports it', async () => {
     const { atRest } = await newChatFrames('codex', { saved: { model: 'gpt-5.5-mini' } })
 
-    expect(atRest.current).toEqual({ model: 'gpt-5.5-mini', permissionMode: 'ask' })
+    expect(atRest.current).toEqual({ model: 'gpt-5.5-mini', defaulted: [], permissionMode: 'ask' })
   })
 })

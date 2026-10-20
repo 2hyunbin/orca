@@ -121,19 +121,10 @@ function renderNewChat(args: {
 
 function catalogAnswers(...answers: (() => Promise<unknown>)[]): void {
   let reads = 0
-  mocks.call.mockImplementation(
-    (
-      _target: unknown,
-      method: string,
-      params: { sessionId?: string; waitForListing?: boolean }
-    ) => {
-      if (method !== 'agentSession.modelCatalog') {
-        return new Promise(() => {})
-      }
-      const index = params.sessionId ? reads++ : params.waitForListing ? 1 : 0
-      const answer = answers[Math.min(index, answers.length - 1)]
-      return answer ? answer() : new Promise(() => {})
-    }
+  mocks.call.mockImplementation((_target: unknown, method: string) =>
+    method === 'agentSession.modelCatalog'
+      ? (answers[Math.min(reads++, answers.length - 1)] ?? (() => new Promise(() => {})))()
+      : new Promise(() => {})
   )
 }
 
@@ -156,11 +147,7 @@ describe('a new chat picker’s first frame', () => {
       agent: 'claude',
       seedOptions: { model: 'opus[1m]', effort: 'high' }
     })
-    await waitFor(() =>
-      expect(mocks.call.mock.calls.some(([, , params]) => params?.sessionId === 'session-1')).toBe(
-        true
-      )
-    )
+    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
     const final = { model: 'opus[1m]', label: 'Opus (1M context)', effort: 'high', usable: true }
     expect(frames[0]).toEqual(final)
     // The pane's own read lands the same list: no frame ever showed anything else.
@@ -210,15 +197,15 @@ describe('a new chat picker’s first frame', () => {
   })
 
   it.each(['claude', 'codex', 'grok'] as const)(
-    '%s: a cold account shows the quiet placeholder until the host confirms its default',
+    '%s: a cold account shows the quiet placeholder until the host answers, then the list once',
     async (agent) => {
       const answer = deferred<AgentSessionModelCatalogResult>()
       catalogAnswers(() => answer.promise)
       const list = agent === 'claude' ? CLAUDE_LIST : agent === 'codex' ? CODEX_LIST : GROK_LIST
       const first = list.models[0]!
-      const { frames, unmount } = renderNewChat({ agent })
+      const { frames, unmount } = renderNewChat({ agent, seedOptions: { model: first.id } })
       expect(frames[0]).toEqual(PLACEHOLDER)
-      answer.resolve({ ...list, listingNamesConfiguredModel: true })
+      answer.resolve(list)
       await waitFor(() => expect(frames.at(-1)?.usable).toBe(true))
       const named = frames.filter((frame) => frame.model !== null)
       // Only the host's label is ever painted: no built-in label, no raw id, no second change.
@@ -229,40 +216,32 @@ describe('a new chat picker’s first frame', () => {
     }
   )
 
-  it('keeps a cold modern picker empty and disabled until discovery lands', async () => {
+  it('with nothing saved, the built-in list is usable, naming nothing, until the listing lands', async () => {
     const listing = deferred<AgentSessionModelCatalogResult>()
     catalogAnswers(
       () => Promise.resolve({ origin: 'unknown', listingInProgress: true }),
       () => listing.promise
     )
-    const { frames, unmount } = renderNewChat({ agent: 'codex' })
+    const { frames, unmount } = renderNewChat({ agent: 'codex', seedOptions: { model: 'gpt-5.5' } })
     expect(frames[0]).toEqual(PLACEHOLDER)
-    await waitFor(() =>
-      expect(mocks.call.mock.calls.some(([, , params]) => params?.waitForListing)).toBe(true)
-    )
-    expect(frames.every((frame) => JSON.stringify(frame) === JSON.stringify(PLACEHOLDER))).toBe(
-      true
-    )
+    await waitFor(() => expect(frames.at(-1)).toEqual({ ...PLACEHOLDER, usable: true }))
     listing.resolve(CODEX_LIST)
-    await waitFor(() => expect(frames.at(-1)?.usable).toBe(true))
-    expect(frames.every((frame) => frame.model === null)).toBe(true)
+    await waitFor(() => expect(frames.at(-1)?.label).toBe('GPT-5.5 (host)'))
+    expect(frames.some((frame) => frame.model !== null && frame.label !== 'GPT-5.5 (host)')).toBe(
+      false
+    )
     unmount()
   })
 
-  it('keeps an explicit saved pick when the host list omits it', async () => {
+  it('never paints a saved pick the host list does not name', async () => {
     catalogAnswers(() => Promise.resolve(CODEX_LIST))
     await preloadHostModelCatalogSnapshots(LOCAL_TARGET, ['codex'])
     const { frames, unmount } = renderNewChat({
       agent: 'codex',
       seedOptions: { model: 'gpt-retired' }
     })
-    await waitFor(() =>
-      expect(mocks.call.mock.calls.some(([, , params]) => params?.sessionId === 'session-1')).toBe(
-        true
-      )
-    )
-    expect(frames.every((frame) => frame.model === 'gpt-retired')).toBe(true)
-    expect(frames[0]?.label).toBe('gpt-retired')
+    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
+    expect(frames.every((frame) => frame.model === null && !frame.usable)).toBe(true)
     unmount()
   })
 
@@ -285,7 +264,7 @@ describe('a new chat picker’s first frame', () => {
     expect(second.frames[0]).toMatchObject({ label: 'GPT-6.1 Sol', usable: true })
     second.unmount()
     // This machine's host never answered, so its chat waits for it rather than borrow the server's.
-    const local = renderNewChat({ agent: 'codex' })
+    const local = renderNewChat({ agent: 'codex', seedOptions: { model: 'gpt-5.5' } })
     expect(local.frames[0]).toEqual(PLACEHOLDER)
     local.unmount()
   })

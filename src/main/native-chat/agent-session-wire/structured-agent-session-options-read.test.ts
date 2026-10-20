@@ -2,36 +2,58 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionProviderHandleLink } from '../../../shared/agent-session-provider-handle'
+import type { AgentSessionRewindRecord } from '../../../shared/agent-session-rewind'
+import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
 import { createAgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import {
   AgentModelCatalogStore,
   type AgentModelCatalogSuccess
 } from '../agent-model-catalog/agent-model-catalog-store'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
-import { readStructuredAgentSessionOptions } from './structured-agent-session-options-read'
-import { AcpStructuredOptions, writeAcpSessionOption } from '../../acp/acp-structured-options'
-import { acpLaunchSpecFor } from '../../acp/acp-launch-specs'
-import { acpStructuredAgentDefinition } from '../../acp/acp-structured-agent-definitions'
+import {
+  readStructuredAgentSessionOptions,
+  recordStructuredAgentSessionOptionIntent
+} from './structured-agent-session-options-read'
+import { AcpStructuredOptions } from '../../acp/acp-structured-options'
 import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-support'
 import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
-import { agentModelCatalogFingerprintForRecord } from '../agent-model-catalog/agent-model-catalog-fingerprint'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
+import { recordAgentSessionRanOptions } from '../../runtime/agent-session-record-options'
 import {
-  NO_STRUCTURED_AGENTS,
-  structuredAgentsDeclaringNothing
+  claudeAndCodexAgents,
+  NO_STRUCTURED_AGENTS
 } from './structured-agent-session-adapter-router-test-support'
 
 const SESSION = 'session-1'
 
+type RestingFacts = Pick<Partial<AgentSessionRecord>, 'options'> & {
+  providerHandleChain?: Pick<AgentSessionProviderHandleLink, 'origin'>[]
+  rewind?: Pick<AgentSessionRewindRecord, 'phase'>
+}
+
+function restingJournal(items: AgentJournalItemBody[] = [], wroteBeforeOpen = false) {
+  return {
+    threadGoal: () => null,
+    visitItems: (visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void) =>
+      items.forEach((body, index) => visit(`item-${index}`, index + 1, body)),
+    wroteBeforeOpen: () => wroteBeforeOpen,
+    submissions: () => [],
+    contextUsage: () => null,
+    context: { floor: () => null }
+  }
+}
+
 function restingRecord(): AgentSessionRecord {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resting read and the catalog key touch only these fields.
   return {
-    sessionId: SESSION,
-    launchDirectory: '/repo',
     provider: 'codex',
     accountHome: { variable: 'CODEX_HOME', path: '/homes/a' },
+    providerHandleChain: [],
     location: { executionHostId: 'local', wslDistro: null },
+    lease: { claimStatus: 'released', ownerProcess: null, runtimeFence: 1 },
     options: {}
   } as unknown as AgentSessionRecord
 }
@@ -54,7 +76,7 @@ describe('options at rest', () => {
     const starting = {
       child: { phase: 'starting' },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal: restingJournal()
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -72,32 +94,66 @@ describe('options at rest', () => {
     const current = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: true
     })
-    expect(current.current).toEqual({ permissionMode: 'ask' })
-    expect(read).toHaveBeenCalledTimes(1)
+    expect(current.current).toEqual({ defaulted: [], permissionMode: 'ask' })
+    expect(read).toHaveBeenCalledTimes(2)
     const older = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: false
     })
-    expect(older.current).toEqual({ model: 'gpt-account', permissionMode: 'ask' })
-    expect(read).toHaveBeenLastCalledWith({
-      agent: 'codex',
-      sessionId: SESSION,
-      savedOnly: true,
-      legacy: true,
-      accountDefault: true
+    // A new chat that has sent nothing runs that default, which its first send pins.
+    expect(older.current).toEqual({
+      model: 'gpt-account',
+      defaulted: [],
+      permissionMode: 'ask'
     })
+    expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
+  })
+
+  it("names the saved listing's ids and model for a live child that fell back to its default", async () => {
+    const record = { ...restingRecord(), options: { model: 'gpt-unlisted', effort: 'high' } }
+    const listed = { id: 'gpt-5.5', label: 'GPT-5.5', isDefault: true, efforts: [] }
+    let live = false
+    const conversation = () => ({
+      child: live ? { fence: 7 } : null,
+      params: { provider: 'codex' },
+      journal: restingJournal()
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+    const context = {
+      deps: {
+        adapter: {
+          readOptions: async () => ({
+            models: [listed, { ...listed, id: 'gpt-unlisted', isDefault: false }],
+            current: { model: 'gpt-5.5', effort: 'high', defaulted: ['model'] }
+          })
+        },
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record },
+        modelCatalog: { read: async () => ({ origin: 'probe', models: [listed], fetchedAt: 1 }) }
+      },
+      serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => conversation(),
+      conversation: async () => conversation()
+    } as unknown as StructuredAgentSessionMutationContext
+    const read = () =>
+      readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+    const resting = await read()
+    live = true
+    const running = await read()
+    expect(running.listedModelIds).toEqual(resting.listedModelIds)
+    expect(resting.listedModelIds).toEqual(['gpt-5.5'])
+    // The saved model shows over the child's fallback, and is the chat's own.
+    expect(running.current).toMatchObject({ model: 'gpt-unlisted', defaulted: [] })
   })
 
   it.each(['omp', 'grok', 'opencode'] as const)(
-    '%s keeps an unknown model and binds later effort picks to the live model',
+    '%s keeps an unknown model and learns menus from later options',
     async (provider) => {
       const record = { ...restingRecord(), provider }
       const probe = vi.fn(() => new Promise<AgentModelCatalogSuccess>(() => {}))
-      const store = new AgentModelCatalogStore()
       const modelCatalog = createAgentModelCatalogService({
-        store,
+        store: new AgentModelCatalogStore(),
         getRecord: () => record,
         drivesRecord: () => true,
-        recordWorkspacePath: async () => '/repo',
         resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/homes/a' }),
         probes: { codex: probe }
       })
@@ -106,25 +162,20 @@ describe('options at rest', () => {
       const configOptions = SessionConfigOptionSchema.array().parse(GROK_CONFIG_OPTIONS)
       const resting = {
         child: null,
-        params: { provider },
-        journal: { threadGoal: () => null, context: { floor: () => null } }
-      }
-      const running = { ...resting, child: { fence: 7 } }
-      const spec = acpLaunchSpecFor(provider)
-      if (!spec) {
-        throw new Error('Missing ACP test launch')
+        params: { provider: 'codex' },
+        journal: restingJournal()
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: options reads touch only these context members.
       const context = {
         deps: {
           adapter: { readOptions: async () => withLiveCatalogListing(reader.read()) },
-          agents: structuredAgentsDeclaringNothing([acpStructuredAgentDefinition(spec)]),
+          agents: NO_STRUCTURED_AGENTS,
           store: { getRecord: () => record },
           modelCatalog
         },
         serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
-        openConversation: async () => (live ? running : resting),
-        conversation: async () => (live ? running : resting)
+        openConversation: async () => (live ? { ...resting, child: { fence: 7 } } : resting),
+        conversation: async () => resting
       } as unknown as StructuredAgentSessionMutationContext
 
       const read = () =>
@@ -134,10 +185,11 @@ describe('options at rest', () => {
       expect(result.models).toEqual([])
       expect(result.current).not.toHaveProperty('model')
       record.options = { model: 'later-model', effort: 'off' }
+      // Only Codex is registered here, and a mode is stated only for a registered agent's chat.
       expect((await read()).current).toEqual({
         model: 'later-model',
         effort: 'off',
-        permissionMode: 'ask'
+        defaulted: []
       })
       for (const emptyStart of [false, true]) {
         modelCatalog.recordLiveListing(SESSION, {
@@ -145,69 +197,151 @@ describe('options at rest', () => {
         })
         reader.adoptSession(emptyStart ? {} : { configOptions })
         modelCatalog.recordLiveListing(SESSION, reader.startListing())
-        const liveConfig = configOptions.map((option) =>
-          option.type === 'select' && option.category === 'model'
-            ? { ...option, currentValue: 'grok-4.6' }
-            : option
-        )
-        reader.adoptConfigOptions(liveConfig)
-        record.options = { model: 'grok-4.7', effort: 'off' }
-        live = true
-        const shown = await read()
-        expect(shown.current.model).toBe('grok-4.6')
-        expect(shown.current.confirmed).toEqual(['model', 'effort'])
-        expect(shown.models.find((row) => row.id === 'grok-4.7')?.efforts).toEqual([])
-        const write = reader.write('effort', 'low')
-        if (!write) {
-          throw new Error('Missing advertised effort write')
-        }
-        const setConfigOption = vi.fn(async () => ({
-          configOptions: liveConfig.map((option) =>
-            option.type === 'select' && option.category === 'thought_level'
-              ? { ...option, currentValue: 'low' }
+        reader.adoptConfigOptions(
+          configOptions.map((option) =>
+            option.type === 'select' && option.category === 'model'
+              ? { ...option, currentValue: 'grok-4.6' }
               : option
           )
-        }))
-        const setModel = vi.fn(async () => ({}))
-        await writeAcpSessionOption({ setConfigOption, setModel }, reader, write, {
-          agent: provider,
-          timeoutMs: 1_000
-        })
-        expect(setConfigOption).toHaveBeenCalledExactlyOnceWith('reasoning_effort', 'low')
-        expect(setModel).not.toHaveBeenCalled()
-        expect(reader.reported()).toEqual({ model: 'grok-4.6', effort: 'low' })
+        )
         record.options = { model: 'grok-4.6', effort: 'high' }
+        live = true
+        await read()
         live = false
         const answer = await read()
         expect(answer.models).toEqual(reader.read().models)
       }
-      const switched = reader.startListing()
-      reader.adoptSession({ configOptions })
-      const discovery = reader.startListing()
-      store.recordSuccess(
-        agentModelCatalogFingerprintForRecord(record),
-        provider,
-        { ...discovery, origin: 'probe' },
-        'discovery'
-      )
-      modelCatalog.recordLiveListing(SESSION, switched)
-      expect((await read()).models.find((row) => row.id === 'grok-4.7')?.efforts).toEqual(
-        discovery.models.find((row) => row.id === 'grok-4.7')?.efforts
-      )
-      modelCatalog.recordLiveListing(SESSION, {
-        models: [{ id: 'grok-4.7', label: 'Grok 4.7', isDefault: false, efforts: [] }]
-      })
-      expect((await read()).models.find((row) => row.id === 'grok-4.7')?.efforts).toEqual([])
     }
   )
+})
+
+describe('a chat at rest, read by the host', () => {
+  const created: RestingFacts['providerHandleChain'] = [{ origin: 'created' }]
+  const turn: AgentJournalItemBody = { kind: 'turn', turnId: 'turn-1', state: 'completed' }
+  const fast = [{ value: 'priority', label: 'Fast' }]
+  const flex = [...fast, { value: 'flex', label: 'Flex' }]
+  const listed: AgentSessionModelOption[] = [
+    { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [], serviceTiers: fast },
+    { id: 'gpt-flex', label: 'Flex', isDefault: false, efforts: [], serviceTiers: flex }
+  ]
+  const catalog = (models = listed) => ({
+    read: async () => ({ origin: 'probe' as const, models, fetchedAt: 1 })
+  })
+  function readAtRest(
+    facts: RestingFacts,
+    items: AgentJournalItemBody[] = [],
+    wroteBeforeOpen = false,
+    models = listed
+  ) {
+    const record = { ...restingRecord(), ...facts }
+    const resting = {
+      child: null,
+      params: { provider: 'codex' },
+      journal: restingJournal(items, wroteBeforeOpen)
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+    const context = {
+      deps: {
+        adapter: {},
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record },
+        modelCatalog: catalog(models)
+      },
+      serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => resting,
+      conversation: async () => resting
+    } as unknown as StructuredAgentSessionMutationContext
+    return readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+  }
+
+  it.each<[string, RestingFacts, AgentJournalItemBody[], boolean, string[]]>([
+    ['started here names its default as its own', {}, [], false, []],
+    ['taken from history', { providerHandleChain: [{ origin: 'adopted' }] }, [], true, ['model']],
+    // A context clear hides the turn from the newest-turn read, not from history.
+    ['with a turn before a context clear', {}, [turn], true, ['model']],
+    ['after a rewind', { rewind: { phase: 'completed' } }, [], true, ['model']],
+    // A journal founded afresh proves nothing for a chat whose agent already ran.
+    ['whose journal went missing', { providerHandleChain: created }, [], false, ['model']]
+  ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
+    const read = await readAtRest(facts, items, wroteBeforeOpen)
+    expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+  })
+
+  it.each([
+    ['another model offers', listed, 'default'],
+    // Codex lists no Flex; a Flex from the user's config runs as configured.
+    ['no model lists', listed.slice(0, 1), 'flex']
+  ])(
+    'names the tier the model runs where %s it, and keeps the saved one',
+    async (_n, models, runs) => {
+      const options = { model: 'gpt-account', serviceTier: 'flex' }
+      const answer = await readAtRest({ options }, [], false, models)
+      expect(answer.current).toMatchObject({ serviceTier: runs })
+      const chat = picking(options, models)
+      expect(await chat.pick('model', 'gpt-account')).toMatchObject({
+        value: { options: { serviceTier: runs } }
+      })
+      expect(chat.record().options?.serviceTier).toBe('flex')
+    }
+  )
+
+  const high = [{ value: 'high', label: 'High' }]
+  const efforts: AgentSessionModelOption[] = [
+    { id: 'a', label: 'A', isDefault: true, efforts: high },
+    { id: 'b', label: 'B', isDefault: false, efforts: high },
+    { id: 'c', label: 'C', isDefault: false, efforts: [] }
+  ]
+  function picking(options: Record<string, string>, models = efforts) {
+    let record: AgentSessionRecord = { ...restingRecord(), options }
+    const store = {
+      getRecord: () => record,
+      replaceSessionOptions: vi.fn(),
+      reviseSessionOptions: async <A>(
+        revise: (held: AgentSessionRecord, args: A) => AgentSessionRecord,
+        args: A
+      ) => (record = revise(record, args))
+    }
+    const deps = { store, agents: claudeAndCodexAgents(), modelCatalog: catalog(models) }
+    const ctx = { sessionId: SESSION, fence: 1, publish: vi.fn(), now: () => 0 }
+    return {
+      pick: (key: string, value: string) =>
+        recordStructuredAgentSessionOptionIntent(deps, ctx, { key, value }),
+      ran: (model: string, ran: Record<string, string>, rows = models) =>
+        (record = recordAgentSessionRanOptions(record, {
+          sessionId: SESSION,
+          fence: 1,
+          now: 0,
+          model,
+          options: ran,
+          models: rows
+        })),
+      record: () => record
+    }
+  }
+
+  it('admits options only under the model the chat runs, whichever write lands first', async () => {
+    const chat = picking({ model: 'a', effort: 'high' })
+    // A model pick drops an inherited effort its row does not offer; an offered one is refused.
+    await chat.pick('model', 'c')
+    expect(chat.record().options).toEqual({ model: 'c' })
+    expect(await chat.pick('effort', 'high')).toMatchObject({ ok: false })
+    await chat.pick('model', 'b')
+    // A turn that ran on another model, recorded late, fills nothing, though b offers its effort.
+    expect(chat.ran('a', { effort: 'high' }).options).toEqual({ model: 'b' })
+    expect(chat.ran('b', { effort: 'high' }).options).toEqual({ model: 'b', effort: 'high' })
+    // A catalog that later drops it, or a pick, keeps the saved value.
+    chat.ran('b', { effort: 'low' }, [])
+    await chat.pick('serviceTier', 'priority')
+    expect(chat.record().options).toEqual({ model: 'b', effort: 'high', serviceTier: 'priority' })
+  })
 })
 
 describe('live Codex option reads', () => {
   it('keeps newer saved picks after a cold live listing waits without holding the session lane', async () => {
     const listing = Promise.withResolvers<void>()
     const queue = new StructuredAgentSessionTaskQueue()
+    const record = { ...restingRecord(), options: { model: 'gpt-picked', effort: 'high' } }
     const child = { fence: 7 }
-    const record = restingRecord()
     const apply = vi.fn(() => ({
       models: [{ id: 'gpt-live', label: 'GPT Live', efforts: [] }],
       current: { model: 'gpt-live', effort: 'high', confirmed: ['model', 'effort'] as const }
@@ -219,7 +353,7 @@ describe('live Codex option reads', () => {
     const live = {
       child,
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, contextUsage: () => null, context: { floor: () => null } }
+      journal: restingJournal()
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -234,13 +368,11 @@ describe('live Codex option reads', () => {
       conversation: async () => live
     } as unknown as StructuredAgentSessionMutationContext
 
-    const reading = readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+    const reading = readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: false
+    })
     await vi.waitFor(() =>
-      expect(prepareReadOptions).toHaveBeenCalledWith({
-        sessionId: SESSION,
-        fence: 7,
-        legacyCatalog: true
-      })
+      expect(prepareReadOptions).toHaveBeenCalledWith({ sessionId: SESSION, fence: 7 })
     )
     await expect(queue.serialize(SESSION, async () => 'delivery can proceed')).resolves.toBe(
       'delivery can proceed'
@@ -249,7 +381,7 @@ describe('live Codex option reads', () => {
     record.options = { model: 'gpt-next', effort: 'low' }
     listing.resolve()
     await expect(reading).resolves.toMatchObject({
-      current: { model: 'gpt-next', effort: 'low', confirmed: [] }
+      current: { model: 'gpt-next', effort: 'low' }
     })
     expect(apply).toHaveBeenCalledOnce()
   })
@@ -259,7 +391,7 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal: restingJournal()
     }
     const failure = new Error('model/list unavailable')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the failed read ends before touching the remaining context fields.
@@ -286,89 +418,39 @@ describe('live Codex option reads', () => {
     )
   })
 
-  it.each(['prepared', 'inventory'] as const)(
-    'drops replaced-child facts after a late %s read',
-    async (stage) => {
-      const listing = Promise.withResolvers<void>()
-      const queue = new StructuredAgentSessionTaskQueue()
-      let blocked = false
-      const entered = Promise.withResolvers<void>()
-      const wait = async () => {
-        entered.resolve()
-        await listing.promise
-      }
-      const apply = vi.fn(() => ({
-        models: [
-          {
-            id: 'stale',
-            label: 'stale',
-            isDefault: false,
-            efforts: [],
-            effortsKnown: false as const,
-            supportsFastMode: true
-          }
-        ],
-        fastModeSupport: { supported: true },
-        current: { model: 'stale', fastMode: true }
-      }))
-      const prepareReadOptions = vi.fn(async () => {
-        if (blocked && stage === 'prepared') {
-          await wait()
-        }
-        return apply
-      })
-      const live = {
-        child: { fence: 7 },
-        params: { provider: 'codex' },
-        journal: { threadGoal: () => null, context: { floor: () => null } }
-      }
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
-      const context = {
-        deps: {
-          adapter: { prepareReadOptions },
-          agents: NO_STRUCTURED_AGENTS,
-          store: { getRecord: () => restingRecord() },
-          modelCatalog: {
-            read: async () => {
-              if (blocked && stage === 'inventory') {
-                await wait()
-              }
-              return {
-                origin: 'probe',
-                fetchedAt: 1,
-                models: [{ id: 'installed', label: 'installed', isDefault: true, efforts: [] }]
-              }
-            }
-          }
-        },
-        serialize: (sessionId: string, task: () => Promise<unknown>) =>
-          queue.serialize(sessionId, task),
-        openConversation: async () => live,
-        conversation: async () => live
-      } as unknown as StructuredAgentSessionMutationContext
-
-      const read = () =>
-        readStructuredAgentSessionOptions(context, SESSION, {
-          readsWithoutModel: true,
-          readsCoherentCatalog: true
-        })
-      const initial = await read()
-      expect(initial.models.map((row) => row.id)).toEqual(['installed', 'stale'])
-      expect(initial.models.find((row) => row.id === 'stale')).toMatchObject({
-        supportsFastMode: true
-      })
-      expect(initial.current.fastMode).toBe(true)
-      blocked = true
-      const reading = read()
-      await entered.promise
-      await queue.serialize(SESSION, async () => {
-        live.child = { fence: 8 }
-      })
-      listing.resolve()
-      const replaced = await reading
-      expect(replaced.current).not.toHaveProperty('model')
-      expect(replaced.models.every((row) => row.supportsFastMode !== true)).toBe(true)
-      expect(apply).toHaveBeenCalledTimes(stage === 'prepared' ? 1 : 2)
+  it('does not apply a listing to a replaced child', async () => {
+    const listing = Promise.withResolvers<void>()
+    const queue = new StructuredAgentSessionTaskQueue()
+    const apply = vi.fn(() => ({ models: [], current: { model: 'stale' } }))
+    const prepareReadOptions = vi.fn(async () => {
+      await listing.promise
+      return apply
+    })
+    const live = {
+      child: { fence: 7 },
+      params: { provider: 'codex' },
+      journal: restingJournal()
     }
-  )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+    const context = {
+      deps: {
+        adapter: { prepareReadOptions },
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => restingRecord() }
+      },
+      serialize: (sessionId: string, task: () => Promise<unknown>) =>
+        queue.serialize(sessionId, task),
+      openConversation: async () => live,
+      conversation: async () => live
+    } as unknown as StructuredAgentSessionMutationContext
+
+    const reading = readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+    await vi.waitFor(() => expect(prepareReadOptions).toHaveBeenCalledOnce())
+    await queue.serialize(SESSION, async () => {
+      live.child = { fence: 8 }
+    })
+    listing.resolve()
+    expect((await reading).current).not.toHaveProperty('model')
+    expect(apply).not.toHaveBeenCalled()
+  })
 })

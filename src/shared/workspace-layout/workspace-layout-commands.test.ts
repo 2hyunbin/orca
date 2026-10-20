@@ -571,6 +571,41 @@ describe('layout command effects', () => {
     expect(last.result.ptyId).toBeNull()
   })
 
+  it('a window drag-out starts an unbound pane’s new tab in the pane’s folder', () => {
+    const { model, tabA, leafA2, ctx } = setup()
+    const workspace = model.workspaces[WS]!
+    const withCwd: WorkspaceLayoutModel = {
+      ...model,
+      workspaces: {
+        [WS]: {
+          ...workspace,
+          tabs: workspace.tabs.map((tab) =>
+            tab.id === tabA && tab.kind === 'terminal'
+              ? { ...tab, terminal: { ...tab.terminal, startupCwd: '/w' } }
+              : tab
+          )
+        }
+      }
+    }
+    const drag = (ptyId: string | null) =>
+      build(
+        ctx,
+        [
+          {
+            type: 'movePaneToNewTab',
+            workspace: WS,
+            tabId: tabA,
+            leafId: leafA2,
+            windowDetach: { ptyId, tabId: 'tab-main', startupCwd: '/w/packages/app' }
+          }
+        ],
+        withCwd
+      ).model
+    expect(terminalTab(drag(null), 'tab-main').terminal.startupCwd).toBe('/w/packages/app')
+    // A bound pane keeps its shell; its new tab keeps the source tab's folder.
+    expect(terminalTab(drag('pty-live'), 'tab-main').terminal.startupCwd).toBe('/w')
+  })
+
   it('equalizes same-axis panes into equal shares', () => {
     const { model, tabA, leafA2, ctx } = setup()
     const three = build(
@@ -704,6 +739,15 @@ describe('layout command effects', () => {
     ])
     expect(terminalTab(model, results[0]!.tabId!).createdAt).toBe(42)
     expect(terminalTab(model, results[1]!.tabId!).createdAt).toBeGreaterThan(42)
+  })
+
+  it('creates a terminal tab with the quick command label the window drew it with', () => {
+    const { model, results } = build(testContext(), [
+      { type: 'createTerminalTab', workspace: WS, quickCommandLabel: 'Dev server' },
+      { type: 'createTerminalTab', workspace: WS }
+    ])
+    expect(terminalTab(model, results[0]!.tabId!).quickCommandLabel).toBe('Dev server')
+    expect(terminalTab(model, results[1]!.tabId!)).not.toHaveProperty('quickCommandLabel')
   })
 
   it('opens an editor tab at the time the window drew it, else now', () => {

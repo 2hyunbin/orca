@@ -123,10 +123,11 @@ describe('Claude model confirmation', () => {
 
     // The effort write bumps the option fence but does not change what the child
     // runs, so the sonnet report is still current and still governs the guard.
-    // Sonnet permits the request; its applied readback corrects the ignored Max to High.
+    // `max` skips the settings readback by contract, so only the catalog gates it:
+    // sonnet advertises it, haiku advertises no effort control at all.
     await expect(
       adapter.setOption({ sessionId: 'session-1', key: 'effort', value: 'max', fence: 7 })
-    ).resolves.toMatchObject({ effort: 'high' })
+    ).resolves.toMatchObject({ effort: 'max' })
   })
 
   it('guards an effort against a just-set model no turn has reported yet', async () => {
@@ -185,6 +186,7 @@ describe('Claude effort the settings readback cannot report', () => {
         reportedOptions: {},
         optionMutationSequence: 0,
         confirmedOptions: new Set<string>(),
+        reusableOptions: new Map(),
         connection: {
           supportedModels: async () => {
             calls.push('list_models')
@@ -208,13 +210,15 @@ describe('Claude effort the settings readback cannot report', () => {
     }
   }
 
-  it('keeps an effort unconfirmed when the readback names no applied model', async () => {
+  it('records a session-scoped effort the persisted settings never carry', async () => {
+    // `max` applies for the session and is deliberately excluded from the
+    // persisted effortLevel, so the readback reporting `high` is an absence of
+    // evidence, not a refusal — and the CLI offers `max` in its own catalog.
     const { session, calls } = sessionWith('high')
 
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'max' }, undefined)
     ).resolves.toEqual({ model: 'sonnet', effort: 'max' })
-    expect(calls).toEqual(['list_models', 'apply:max', 'get_settings'])
-    expect(session.confirmedOptions.has('effort')).toBe(false)
+    expect(calls).toEqual(['list_models', 'apply:max'])
   })
 })

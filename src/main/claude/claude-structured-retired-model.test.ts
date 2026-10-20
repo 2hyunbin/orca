@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import {
+  AgentModelCatalogStore,
+  type AgentModelCatalogLiveListing
+} from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { retireClaudeLaunchedModel } from './claude-structured-retired-model'
 import {
   adapterFor,
   claudeFrame,
+  claudeStartupSettled,
   fakeClaude,
   tick,
   identityFor,
-  PROVIDER_SESSION_ID
+  PROVIDER_SESSION_ID,
+  recordingJournalSink
 } from './claude-structured-session-test-support'
 
 const RETIRED = 'claude-retired-1'
@@ -35,8 +41,7 @@ function modelNotFound(parentToolUseId: string | null = null): Record<string, un
 function sessionLaunchedWith(model: string | null, picked: string | null = model) {
   return {
     launchedModel: model,
-    options: new Map(picked === null ? [] : [['model', picked]]),
-    restoreSkippedOptions: new Set<string>()
+    options: new Map(picked === null ? [] : [['model', picked]])
   }
 }
 
@@ -46,7 +51,6 @@ describe("the CLI's word that a launched model does not exist", () => {
 
     expect(retireClaudeLaunchedModel(session, modelNotFound())).toBe(RETIRED)
     expect(session.options.has('model')).toBe(false)
-    expect([...session.restoreSkippedOptions]).toEqual(['model'])
     expect(retireClaudeLaunchedModel(session, modelNotFound())).toBeNull()
   })
 
@@ -57,7 +61,61 @@ describe("the CLI's word that a launched model does not exist", () => {
     ['a launch that named no model', sessionLaunchedWith(null), modelNotFound()]
   ])('keeps the saved model for %s', (_case, session, message) => {
     expect(retireClaudeLaunchedModel(session, message)).toBeNull()
-    expect([...session.restoreSkippedOptions]).toEqual([])
+  })
+})
+
+describe("the account catalog facts a child's listing hands the host", () => {
+  async function listingOfChildLaunchedWith(model: string) {
+    const claude = fakeClaude({
+      initModels: [NATIVE_OPUS, LAUNCHED_ROW],
+      routes: { list_models: () => [NATIVE_OPUS, LAUNCHED_ROW] }
+    })
+    const adapter = adapterFor(claude)
+    await adapter.acquire({
+      identity: identityFor(),
+      fence: 7,
+      spawnToken: 'spawn-9',
+      events: recordingJournalSink(),
+      options: { model }
+    })
+    await claudeStartupSettled(adapter, 'session-1')
+    const { catalogListing } = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
+    await adapter.closeAll()
+    return catalogListing
+  }
+
+  function savedIds(cached: string[] | null, listing: AgentModelCatalogLiveListing) {
+    const store = new AgentModelCatalogStore()
+    if (cached) {
+      store.recordSuccess(
+        'fp',
+        'claude',
+        {
+          models: cached.map((id) => ({ id, label: id, isDefault: false, efforts: [] })),
+          origin: 'probe'
+        },
+        'discovery'
+      )
+    }
+    store.recordSuccess('fp', 'claude', { ...listing, origin: 'live-session' }, 'live')
+    return store.get('fp')?.models.map((model) => model.id)
+  }
+
+  it('marks the row the launch added for its own model, which the account catalog leaves out', async () => {
+    const listing = await listingOfChildLaunchedWith(RETIRED)
+    expect(listing?.launchOnlyModelId).toBe(RETIRED)
+    expect(savedIds(null, listing!)).toEqual(['opus'])
+  })
+
+  it('keeps that row when the account already listed the model', async () => {
+    const listing = await listingOfChildLaunchedWith(RETIRED)
+    expect(savedIds([RETIRED], listing!)).toEqual(['opus', RETIRED])
+  })
+
+  it('marks nothing for a launched native model, which carries its own display name', async () => {
+    const listing = await listingOfChildLaunchedWith('opus')
+    expect(listing?.launchOnlyModelId).toBeUndefined()
+    expect(savedIds(null, listing!)).toEqual(['opus', RETIRED])
   })
 })
 

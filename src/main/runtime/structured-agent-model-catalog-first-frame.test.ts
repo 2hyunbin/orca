@@ -69,7 +69,6 @@ function grokRecord(): AgentSessionRecord {
   return {
     sessionId: 'grok-session',
     provider: 'grok',
-    launchDirectory: '/repo',
     accountHome: HOMES.grok,
     location: {
       executionHostId: 'local',
@@ -97,7 +96,6 @@ function service(
     store,
     getRecord: (sessionId) => records.find((record) => record.sessionId === sessionId),
     drivesRecord: () => true,
-    recordWorkspacePath: async (record) => record.launchDirectory ?? null,
     resolveAccountHome: async (agent) => HOMES[agent]!,
     probes,
     workspaceMayOverrideDefaultModel,
@@ -138,7 +136,7 @@ describe('a new chat’s first frame from the host catalog', () => {
     expect(host).toMatchObject({ origin: 'probe', listingNamesConfiguredModel: false })
     expect(model?.choices.map((choice) => choice.value)).toEqual(['grok-4', 'grok-3-mini'])
     expect(model?.currentValue).toBeUndefined()
-    expect(state.record.model).toBeUndefined()
+    expect(state.record.values.model).toBeUndefined()
   })
 
   it('lists a warm Pi account’s models without naming one its listing does not name', async () => {
@@ -159,13 +157,12 @@ describe('a new chat’s first frame from the host catalog', () => {
   })
 })
 
-describe('whole process observations', () => {
+describe('a running chat’s listing, saved for the next chat', () => {
   it('keeps a Grok account warm from a live session, without its picks becoming defaults', async () => {
     const store = new AgentModelCatalogStore()
     const record = grokRecord()
     const catalog = service(store, { grok: GROK_LISTING }, [record])
-    await newChatFirstFrame(catalog, 'grok', '/repo')
-    await catalog.read({ agent: 'grok', sessionId: record.sessionId, savedOnly: true })
+    await newChatFirstFrame(catalog, 'grok')
     // The running chat switched to the mini model and reports a list with one more model.
     const options = new AcpStructuredOptions(GROK_ACP_DIALECT)
     options.adoptSession({
@@ -183,7 +180,7 @@ describe('whole process observations', () => {
       withLiveCatalogListing(options.read()).catalogListing
     )
 
-    const { host, model, effort } = await newChatFirstFrame(catalog, 'grok', '/repo')
+    const { host, model, effort } = await newChatFirstFrame(catalog, 'grok')
     expect(host.origin).toBe('live-session')
     expect(model?.choices.map((choice) => choice.value)).toEqual([
       'grok-4',
@@ -213,12 +210,10 @@ describe('whole process observations', () => {
       'opencode',
       {
         models: listed,
-        origin: 'probe',
-        advisory: true
+        origin: 'probe'
       },
       'discovery'
     )
-    await catalog.read({ agent: 'opencode', sessionId: record.sessionId, savedOnly: true })
     catalog.recordLiveListing(record.sessionId, {
       models: [
         { id: 'a', label: 'A', isDefault: false, efforts: [{ value: 'high', label: 'High' }] },
@@ -228,7 +223,7 @@ describe('whole process observations', () => {
     const read = await catalog.read({ agent: 'opencode', sessionId: 'oc' })
     expect(read.origin === 'unknown' ? null : read.models.map((m) => m.efforts)).toEqual([
       [{ value: 'high', label: 'High' }],
-      []
+      [{ value: 'low', label: 'Low' }]
     ])
   })
 })

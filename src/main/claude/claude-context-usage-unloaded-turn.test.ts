@@ -1,12 +1,9 @@
+import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentSessionHistoryPage } from '../../shared/agent-session-wire'
-import {
-  agentSessionLeaseFixture,
-  agentSessionRecordFixture
-} from '../../shared/agent-session-record.test-fixture'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
 import {
   latestStructuredAgentContextFacts,
@@ -103,7 +100,12 @@ function readOptions(journal: AgentSessionJournal, agents: StructuredAgentRegist
       },
       agents,
       store: {
-        getRecord: () => agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: SESSION }))
+        getRecord: () => ({
+          ...agentSessionRecordFixture(),
+          sessionId: SESSION,
+          provider: 'claude',
+          options: { model: 'opus' }
+        })
       }
     },
     serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),

@@ -7,12 +7,8 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../../shared/agent-session-optional-model-capability'
-import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../../shared/structured-agent-session-surface-capabilities'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
-import {
-  agentModelCatalogFingerprintForRecord,
-  agentModelCatalogScopeFingerprint
-} from '../../../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
+import { agentModelCatalogFingerprintForRecord } from '../../../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from '../../../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../../../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
@@ -42,8 +38,7 @@ const CURRENT_CLIENT = {
   clientKind: 'runtime' as const,
   clientCapabilities: [
     STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
-    AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY,
-    AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
+    AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY
   ]
 }
 
@@ -67,7 +62,7 @@ async function readOptions(client: typeof OLDER_CLIENT | typeof CURRENT_CLIENT) 
 
 /** A Codex chat with no pick, at rest in a repo; `configured` gives the repo a `.codex/config.toml`
  *  that sets the effort. */
-async function chatAtRest(repoConfig: { configured: boolean }) {
+async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
   await foundRestTestChat(rig)
   // The chat never picked: its next start runs whatever its config resolves.
   await rig.store.replaceSessionOptions({
@@ -80,12 +75,10 @@ async function chatAtRest(repoConfig: { configured: boolean }) {
   await mkdir(join(repo, '.codex'), { recursive: true })
   await writeFile(join(repo, '.git'), 'gitdir: /elsewhere')
   if (repoConfig.configured) {
-    await writeFile(
-      join(repo, '.codex', 'config.toml'),
-      'model = "gpt-oss:20b"\nmodel_reasoning_effort = "high"\n'
-    )
+    await writeFile(join(repo, '.codex', 'config.toml'), 'model_reasoning_effort = "high"\n')
   }
   const store = new AgentModelCatalogStore()
+  // Not inline: this base's listing still requires the tier map that main has since dropped.
   const listing = {
     models: [
       {
@@ -99,19 +92,13 @@ async function chatAtRest(repoConfig: { configured: boolean }) {
         ]
       }
     ],
-    complete: true,
+    fastModeTierByModel: new Map(),
     origin: 'probe' as const
   }
   store.recordSuccess(
-    agentModelCatalogScopeFingerprint(
-      agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
-      repo
-    ),
+    agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
     'codex',
-    {
-      ...listing,
-      ...(repoConfig.configured ? { configured: { model: 'gpt-oss:20b', effort: 'high' } } : {})
-    },
+    listing,
     'discovery'
   )
   const modelCatalog = createAgentModelCatalogService({
@@ -124,21 +111,9 @@ async function chatAtRest(repoConfig: { configured: boolean }) {
     agentReadsProjectModelConfig,
     workspaceMayOverrideDefaultModel
   })
-  store.recordSuccess(
-    agentModelCatalogScopeFingerprint(
-      agentModelCatalogFingerprintForRecord(rig.store.getRecord(SESSION)!),
-      'legacy-account'
-    ),
-    'codex',
-    listing,
-    'discovery'
-  )
-  await modelCatalog.read({ agent: 'codex', sessionId: SESSION, savedOnly: true })
-  const modernEntry = modelCatalog.peek(SESSION)
   await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
   rig.adapter.acquire.mockClear()
-  return { modelCatalog, repo, modernEntry }
 }
 
 beforeEach(async () => {
@@ -161,7 +136,7 @@ afterEach(async () => {
 
 describe('options at rest in a repo whose config may pick the model', () => {
   it('keeps the account default model, with no effort, for a client that needs a model', async () => {
-    const { modelCatalog, modernEntry } = await chatAtRest({ configured: true })
+    await chatAtRest({ configured: true })
 
     const reply = await readOptions(OLDER_CLIENT)
 
@@ -171,7 +146,6 @@ describe('options at rest in a repo whose config may pick the model', () => {
     })
     expect(reply).not.toHaveProperty('result.current.effort')
     expect(rig.adapter.acquire).not.toHaveBeenCalled()
-    expect(modelCatalog.peek(SESSION)).toBe(modernEntry)
   })
 
   it('names no model or effort for a client that takes an answer without one', async () => {
@@ -182,7 +156,6 @@ describe('options at rest in a repo whose config may pick the model', () => {
     expect(reply).toMatchObject({ ok: true, result: { conversationCommands: ['clear'] } })
     expect(reply).not.toHaveProperty('result.current.model')
     expect(reply).not.toHaveProperty('result.current.effort')
-    expect(reply).toMatchObject({ result: { models: [{ id: 'gpt-5.5' }] } })
   })
 })
 

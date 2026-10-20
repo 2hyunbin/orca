@@ -90,7 +90,8 @@ describe('structured option confirmation reaches the pill', () => {
       routes: { list_models: () => CATALOG }
     })
     const adapter = await acquired(claude)
-    // An empty applied readback cannot confirm the requested effort.
+    // `max` is session-scoped and absent from the persisted settings, so it records
+    // without a readback — recorded, never vouched for.
     await adapter.setOption({ sessionId: 'session-1', key: 'effort', value: 'max', fence: 7 })
 
     const result = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
@@ -98,18 +99,14 @@ describe('structured option confirmation reaches the pill', () => {
     expect(result.current.confirmed ?? []).not.toContain('effort')
   })
 
-  it.each(['low', 'max'])('confirms %s when the applied readback agrees', async (effort) => {
+  it('confirms an effort the readback agreed with', async () => {
     const claude = fakeClaude({
       initModel: 'claude-sonnet-5',
-      settings: {
-        applied: { model: 'claude-sonnet-5', effort },
-        effective: { effortLevel: effort },
-        sources: {}
-      },
+      settings: { applied: { effort: 'low' }, effective: { effortLevel: 'low' }, sources: {} },
       routes: { list_models: () => CATALOG }
     })
     const adapter = await acquired(claude)
-    await adapter.setOption({ sessionId: 'session-1', key: 'effort', value: effort, fence: 7 })
+    await adapter.setOption({ sessionId: 'session-1', key: 'effort', value: 'low', fence: 7 })
 
     const result = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
     expect(result.current.confirmed).toContain('effort')
@@ -164,20 +161,21 @@ describe('the provider report corrects the pill', () => {
 describe('confirmation never outlives the write it belongs to', () => {
   it('drops an earlier effort confirmation when the value changes', async () => {
     const calls: string[] = []
-    const reported = 'low'
+    let reported = 'low'
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture supplies every session member the option paths under test read.
     const session = {
       options: new Map<string, string>([['model', 'sonnet']]),
       reportedOptions: {},
       optionMutationSequence: 0,
       confirmedOptions: new Set<string>(),
+      reusableOptions: new Map(),
       connection: {
         supportedModels: async () => CATALOG,
         applyFlagSettings: async (s: { effortLevel?: string }) => {
           calls.push(`apply:${s.effortLevel}`)
         },
         getSettings: async () => ({
-          applied: { model: 'claude-sonnet-5', effort: reported },
+          applied: { effort: reported },
           effective: { effortLevel: reported },
           sources: {}
         })
@@ -188,10 +186,10 @@ describe('confirmation never outlives the write it belongs to', () => {
     await setClaudeStructuredOption(session, { key: 'effort', value: 'low' }, undefined)
     expect(session.confirmedOptions.has('effort')).toBe(true)
 
-    // The ignored request must visibly correct to the actual Low without keeping confirmation.
+    // The provider now reports a level it cannot represent; the stale confirmation
+    // must not survive into the new value.
     await setClaudeStructuredOption(session, { key: 'effort', value: 'max' }, undefined)
-    expect(session.options.get('effort')).toBe('low')
-    expect(session.reportedOptions.effort).toBe('low')
+    expect(session.options.get('effort')).toBe('max')
     expect(session.confirmedOptions.has('effort')).toBe(false)
     expect(calls).toEqual(['apply:low', 'apply:max'])
   })

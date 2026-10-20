@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { structuredAgentSessionSendSelection } from './structured-agent-session-option-view'
 import { getAgentSessionOptionCatalog } from './agent-session-option-catalog'
 import type { AgentSessionModelCatalogResult } from './agent-session-wire'
 import {
@@ -6,7 +7,8 @@ import {
   applyStructuredAgentSessionOptions,
   createStructuredAgentSessionOptionState,
   settleStructuredAgentSessionBuiltinCatalog,
-  structuredAgentSessionOptionSnapshot
+  structuredAgentSessionOptionSnapshot,
+  commitStructuredAgentSessionOption
 } from './structured-agent-session-options'
 
 const SEED = getAgentSessionOptionCatalog('codex')!
@@ -44,10 +46,9 @@ describe('structured option state from the host model catalog', () => {
     ])
   })
 
-  it('makes the built-in list pickable, naming nothing, only when the host does not support discovery', () => {
+  it('makes the built-in list pickable, naming nothing, once the host says it has none', () => {
     const state = settleStructuredAgentSessionBuiltinCatalog(
-      createStructuredAgentSessionOptionState('codex', SEED),
-      Object.assign(new Error('missing'), { code: 'method_not_found' })
+      createStructuredAgentSessionOptionState('codex', SEED)
     )
     expect(state.catalogSource).toBe('builtin')
     const model = structuredAgentSessionOptionSnapshot(state).find((d) => d.id === 'model')!
@@ -124,39 +125,22 @@ describe('structured option state from the host model catalog', () => {
     expect(silent.valueSource).toBe('unknown')
   })
 
-  it('retains genuine or unknown inventory on an unknown or empty answer', () => {
+  it('settles on the built-in list on an unknown or empty host answer, and keeps a host list', () => {
     const seeded = createStructuredAgentSessionOptionState('codex', SEED)
-    for (const error of [
-      new Error('timed out'),
-      Object.assign(new Error('denied'), { code: 'forbidden' })
-    ]) {
-      expect(settleStructuredAgentSessionBuiltinCatalog(seeded, error)).toBe(seeded)
-    }
-    expect(
-      settleStructuredAgentSessionBuiltinCatalog(
-        seeded,
-        Object.assign(
-          new Error("Method 'agentSession.modelCatalog' is not available to mobile clients"),
-          { code: 'forbidden' }
-        )
-      ).catalogSource
-    ).toBe('builtin')
     for (const answer of [
       { origin: 'unknown' as const },
       { origin: 'probe' as const, models: [], fetchedAt: 1 }
     ]) {
       const settled = applyStructuredAgentSessionModelCatalog(seeded, SEED, answer, LAUNCH)
-      expect(settled.catalogSource).toBe('seed')
+      expect(settled.catalogSource).toBe('builtin')
       expect(settled.catalog).toBe(seeded.catalog)
       const hosted = applyStructuredAgentSessionModelCatalog(seeded, SEED, HOST_CATALOG, LAUNCH)
-      // The host list stays; the answer only says it is no longer a finished listing.
-      expect(applyStructuredAgentSessionModelCatalog(hosted, SEED, answer, LAUNCH)).toEqual({
-        ...hosted
-      })
+      // The host list stays.
+      expect(applyStructuredAgentSessionModelCatalog(hosted, SEED, answer, LAUNCH)).toBe(hosted)
     }
   })
 
-  it('refreshes inventory after live current facts without changing the selection', () => {
+  it('refreshes inventory after a live answer while retaining the chat’s own selection', () => {
     const live = applyStructuredAgentSessionOptions(
       createStructuredAgentSessionOptionState('codex', SEED),
       SEED,
@@ -167,9 +151,46 @@ describe('structured option state from the host model catalog', () => {
     )
     expect(live.catalogSource).toBe('live')
     const refreshed = applyStructuredAgentSessionModelCatalog(live, SEED, HOST_CATALOG, LAUNCH)
-    expect(refreshed.catalog?.models.map((row) => row.id)).toEqual(['gpt-hosted'])
-    const snapshot = structuredAgentSessionOptionSnapshot(refreshed)
+    expect(refreshed.catalog?.models.map((row) => row.id)).toEqual(['gpt-hosted', 'gpt-live'])
+    expect(refreshed.record).toBe(live.record)
+    const snapshot = structuredAgentSessionOptionSnapshot(live)
     const model = snapshot.find((descriptor) => descriptor.id === 'model')!
     expect(model.kind.type === 'select' ? model.kind.currentValue : null).toBe('gpt-live')
   })
+})
+
+it('keeps one flat selection across inventory/answer arrival order and child replacement', () => {
+  for (const inventoryFirst of [true, false]) {
+    let state = commitStructuredAgentSessionOption(
+      applyStructuredAgentSessionModelCatalog(
+        createStructuredAgentSessionOptionState('claude', SEED),
+        SEED,
+        HOST_CATALOG,
+        LAUNCH
+      ),
+      'model',
+      'omitted'
+    )
+    state = commitStructuredAgentSessionOption(state, 'effort', 'high')
+    const inventory = (current: typeof state) =>
+      applyStructuredAgentSessionModelCatalog(current, SEED, HOST_CATALOG, LAUNCH)
+    const answer = (current: typeof state) =>
+      applyStructuredAgentSessionOptions(current, SEED, {
+        models: HOST_CATALOG.models,
+        listedModelIds: ['gpt-hosted'],
+        current: { model: 'omitted', effort: 'high' }
+      })
+    state = inventoryFirst ? answer(inventory(state)) : inventory(answer(state))
+    expect(structuredAgentSessionSendSelection(state)).toMatchObject({
+      model: 'omitted',
+      effort: 'high'
+    })
+    // A replacement child drops live capabilities while the conversation keeps its flat record.
+    state = { ...createStructuredAgentSessionOptionState('claude', SEED), record: state.record }
+    state = inventory(state)
+    expect(structuredAgentSessionSendSelection(state)).toMatchObject({
+      model: 'omitted',
+      effort: 'high'
+    })
+  }
 })

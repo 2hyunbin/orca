@@ -166,11 +166,7 @@ describe('useStructuredAgentSession provisional launch gate', () => {
       await result.current.stopBackgroundTask('task-1')
     })
 
-    expect(methodsCalled()).toEqual(['agentSession.modelCatalog', 'agentSession.modelCatalog'])
-    expect(mocks.call.mock.calls.map(([, , params]) => params)).toEqual([
-      { agent: 'codex' },
-      { agent: 'codex', sessionId: 'session-1' }
-    ])
+    expect(methodsCalled()).toEqual(['agentSession.modelCatalog'])
   })
 
   it("offers Stop while the launch's text waits on an unpublished chat, and takes it back locally", async () => {

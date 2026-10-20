@@ -35,32 +35,19 @@ describe('codex model catalog probe', () => {
           options
         )
       })
-      let args = ['-c', 'model="configured"']
-      const resolveLaunchArgs = vi.fn(() => args)
-      const configs: unknown[] = []
       const invocations: CodexAppServerInvocation[] = []
       const probe = createCodexModelCatalogProbe({
         resolveEnvironment,
         resolveCommand,
-        resolveLaunchArgs,
         runSession: async (invocation, body) => {
           invocations.push(invocation)
           return body({
-            request: async (method, params) => {
-              if (method === 'config/read') {
-                configs.push(params)
-                return { config: { model: 'gpt-live', model_reasoning_effort: 'high' } }
-              }
-              return { data: [MODEL_ROW], nextCursor: null }
-            },
+            request: async () => ({ data: [MODEL_ROW], nextCursor: null }),
             notify: () => {}
           })
         }
       })
-      const home = { variable: 'CODEX_HOME', path: '/homes/account-a' }
-      const resolved = await probe.resolve!(home, '/project')
-      args = ['-c', 'model="changed"']
-      const success = await resolved.run()
+      const success = await probe({ variable: 'CODEX_HOME', path: '/homes/account-a' })
       expect(success.origin).toBe('probe')
       expect(success.models.map((model) => model.id)).toEqual(['gpt-live'])
       // The session launch resolves the exact same invocation for the same deps.
@@ -78,17 +65,6 @@ describe('codex model catalog probe', () => {
       })
       // A short-lived probe must not start plugin marketplace clones that outlive its teardown.
       expect(invocations[0]!.args.join(' ')).toContain('features.plugins=false')
-      expect(invocations[0]).toMatchObject({
-        cwd: '/project',
-        args: expect.arrayContaining(['-c', 'model="configured"'])
-      })
-      expect(success.configured).toEqual({ model: 'gpt-live', effort: 'high' })
-      const legacy = await (await probe.resolveLegacy!(home)).run()
-      expect(invocations[1]).not.toHaveProperty('cwd')
-      expect(invocations[1]!.env).toEqual(invocations[0]!.env)
-      expect(configs).toEqual([{ cwd: '/project' }, {}])
-      expect(resolveLaunchArgs).toHaveBeenCalledTimes(1)
-      expect(legacy).not.toHaveProperty('configured')
     }
   )
 
@@ -97,14 +73,14 @@ describe('codex model catalog probe', () => {
       const readline = require('node:readline')
       readline.createInterface({ input: process.stdin }).on('line', (line) => {
         const message = JSON.parse(line)
-        if (typeof message.id !== 'number' || message.method === 'config/read') { return }
+        if (typeof message.id !== 'number' || message.method === 'config/read') return
         const result = message.method === 'model/list'
           ? { data: [${JSON.stringify(MODEL_ROW)}], nextCursor: null }
           : {}
         process.stdout.write(JSON.stringify({ id: message.id, result }) + '\n')
       })
     `
-    const configReadTimeouts: (number | undefined)[] = []
+    const configReadTimeouts: (number | null | undefined)[] = []
     const configReadFailures: unknown[] = []
     const probe = createCodexModelCatalogProbe({
       resolveEnvironment: async () => ({ PATH: '/bin' }),

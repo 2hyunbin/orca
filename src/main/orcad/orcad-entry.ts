@@ -13,7 +13,6 @@
 import { join } from 'node:path'
 import process from 'node:process'
 import { getAppEnvironment } from '../../shared/app-environment'
-import type { ServeReadiness } from '../server/serve-readiness'
 import { resolveOrcadInstallRoot, resolveUserDataPath } from './orcad-app-paths'
 import { prepareOrcadCliLauncher } from './orcad-cli-launcher'
 import {
@@ -28,11 +27,11 @@ import {
   startOrcadWithHost,
   type OrcadShutdownTrigger
 } from './orcad-lifecycle'
-import { ORCAD_USAGE, parseArgs } from './orcad-command-arguments'
+import { ORCAD_USAGE, parseArgs, resolveOrcadWebClientRoot } from './orcad-command-arguments'
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
 import { installOrcadStopRequestListeners } from './orcad-stop-request-listener'
 import { prepareOrcadManagedStop } from './orcad-managed-stop-admission'
-import type { OrcadManagedStopContext } from '../../shared/orcad-stop-request'
+import type { OrcadHandle, OrcadOptions } from './orcad-start-contract'
 import { beginOrcadIdleExit, bindOrcadIdleShutdown } from './orcad-managed-idle-exit-host'
 import { orcadAutomationsKeepHostBusy, startOrcadAutomations } from './orcad-automations'
 import {
@@ -43,33 +42,12 @@ import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
 import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
 import { orcadWsPortOptions } from './orcad-ws-port-policy'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { placeUnshownLiveTerminalsAtStartup } from '../runtime/terminal/adoption/unshown-live-terminal-placement'
 
 export { parseArgs }
 
 let closeOrcadObservability = (): void => {}
-
-export type OrcadOptions = {
-  port?: number
-  json?: boolean
-  noPairing?: boolean
-  pairingAddress?: string
-  /** Desktop `orca serve` parity: a mobile-scoped offer with a terminal QR. */
-  mobilePairing?: boolean
-  /** Lets the paired runtime client drive this machine's desktop (computer.*). */
-  grantDesktopControl?: boolean
-  /** Desktop `orca serve` parity: print only the ephemeral-VM recipe line. */
-  recipeJson?: boolean
-  projectRoot?: string
-  /** Literal IP to bind. Defaults to loopback; see orcad-bind-address.ts. */
-  bind?: string
-}
-
-export type OrcadHandle = {
-  readiness: ServeReadiness
-  /** What an instance-bound stop request must name to stop this process. */
-  managedStop: OrcadManagedStopContext
-  stop(): Promise<void>
-}
 
 /**
  * Boot the runtime and serve RPC. Resolves once the transport is listening and the
@@ -287,6 +265,12 @@ async function startOrcadRuntime(
   startAgentStateRulesLiveUpdates(profileStore, (rules) =>
     console.info(`[orcad] agent state rules ${rules.version} (${rules.source})`)
   )
+  // Switch point: main's load repair, here too, now that this runtime can move pane owners.
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    const { repairDuplicatePtyPanesOnStart } = await import('../runtime/moved-pane-owner-rekey')
+    // Awaited: it queues behind any in-flight write, and must land before reconcile and RPC.
+    await repairDuplicatePtyPanesOnStart(profileStore, runtime)
+  }
 
   // Why here too and not only on the desktop: nothing else republishes `session.tabs` when a
   // pane's status row changes, and orcad's whole job is serving paired clients.
@@ -294,11 +278,7 @@ async function startOrcadRuntime(
     agentHookServer,
     () => runtime
   )
-  if (runtime.sidebarFacts) {
-    registerCleanup(
-      runtime.sidebarFacts.workspaceActivityFacts.attachAgentStatusStore(agentHookServer)
-    )
-  }
+  registerCleanup(runtime.attachAgentStatusStore(agentHookServer))
 
   // Why the headless entry point rather than registerPtyHandlers directly: this is the
   // same call `--serve` makes, and it threads the store through. Without the store the
@@ -324,6 +304,13 @@ async function startOrcadRuntime(
 
   await runtime.refreshRestoredOrchestrationAuthority()
   await runtime.reconcileLegacyWorkerTerminals()
+  // Switch point: main shows live terminals no pane shows, before any client attaches.
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    await placeUnshownLiveTerminalsAtStartup(runtime)
+  }
+  // Hook rows hydrated and the PTY runtime registered: stored sort tiers can be checked.
+  runtime.agentTransitions.seedRestoredRows()
+  void runtime.sidebarFacts?.reconcileSortStampTiers(getLocalPtyProvider())
 
   // Runs after RPC stops (cleanups run reversed); later records save synchronously until exit.
   registerCleanup(() => runtime.closeNotificationDismissals())
@@ -332,6 +319,7 @@ async function startOrcadRuntime(
 
   // Recovery binds terminal and dispatch identities; only now can startup observations be fenced.
   observedStatusCapture.attach(runtime)
+  agentHookServer.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
   // Why before the RPC server binds: like `--serve`, the first client must find a ready graph.
   const { publishHeadlessRuntimeGraph } = await import('../runtime/headless-runtime-graph')
   publishHeadlessRuntimeGraph(runtime)
@@ -350,6 +338,7 @@ async function startOrcadRuntime(
     // once a device has connected, so a loopback deployment would silently go wide one
     // restart after its first client paired.
     pinnedBindHost: bindHost,
+    webClientRoot: resolveOrcadWebClientRoot(options.webClientRoot),
     ...orcadWsPortOptions(options.port)
   })
   // Stops first: no RPC may write while the rest of the runtime is torn down.

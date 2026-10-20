@@ -5,8 +5,15 @@ import type { CodexModelCatalogListing } from './codex-structured-model-catalog'
 export function listingFromEntry(entry: AgentModelCatalogEntry): CodexModelCatalogListing {
   return {
     models: entry.models.map((model) => ({ ...model })),
-    complete: entry.observation?.complete === true,
-    ...(entry.observation?.configured ? { configured: entry.observation?.configured } : {})
+    complete: entry.discovered?.complete === true,
+    ...(entry.configured
+      ? {
+          configured: {
+            model: entry.configured.modelId,
+            ...(entry.configured.effort ? { effort: entry.configured.effort } : {})
+          }
+        }
+      : {})
   }
 }
 
@@ -15,10 +22,11 @@ export function codexAcquireCatalogListing(
   catalogAccess: CodexSessionCatalogAccess | undefined,
   verifiedOnly = false
 ): CodexModelCatalogListing | null {
-  const entry = verifiedOnly
-    ? catalogAccess?.read?.(true)
-    : catalogAccess?.read
-      ? catalogAccess.read()
-      : catalogAccess?.store.get(catalogAccess.fingerprint)
+  const entry = catalogAccess?.read
+    ? catalogAccess.read(verifiedOnly)
+    : catalogAccess?.store.get(catalogAccess.fingerprint)
+  if (verifiedOnly && entry && !catalogAccess?.read && !catalogAccess?.store.verified(entry)) {
+    return null
+  }
   return entry ? listingFromEntry(entry) : null
 }

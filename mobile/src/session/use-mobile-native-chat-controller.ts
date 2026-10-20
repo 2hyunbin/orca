@@ -240,6 +240,7 @@ export function useMobileNativeChatController(args: {
       modelSwitchCommand: activeSessionTab?.agentStatus?.modelSwitchCommand,
       structured: {
         optionPickerRequest: structuredNativeChat.optionPickerRequest,
+        optionSurface: structuredNativeChat.optionSurface,
         conversationCommands: structuredNativeChat.conversationCommands,
         snapshot: structuredNativeChat.optionSnapshot,
         pendingId: structuredNativeChat.pendingOptionId,
@@ -289,6 +290,10 @@ export function useMobileNativeChatController(args: {
     /** Structured lane: drives the per-turn status row and live tool progress. */
     nativeChatStructured: activeChatStructured,
     nativeChatVisualSource: activeChatStructured ? structuredNativeChat.visualSource : null,
+    nativeChatItemSource:
+      activeChatStructured && agentSessionHostSupport?.itemDetail === true
+        ? structuredNativeChat.visualSource
+        : null,
     nativeChatAgentWorking,
     nativeChatTurnIndicator: activeChatStructured ? structuredNativeChat.turnIndicator : null,
     nativeChatWorkingStartedAt: activeChatStructured ? structuredNativeChat.workingStartedAt : null,

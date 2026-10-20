@@ -558,6 +558,7 @@ describe('Claude stream-json connection', () => {
     const session = {
       connection,
       options: new Map<string, string>(),
+      reusableOptions: new Map<string, string>(),
       reportedOptions: {},
       startup: { state: 'proven' }
     } as unknown as ClaudeSession
@@ -568,7 +569,6 @@ describe('Claude stream-json connection', () => {
     // both can only have come from the child.
     expect(options.models).toContainEqual({
       id: 'opus',
-      resolvedModel: 'claude-opus-5',
       label: 'Opus 5',
       description: 'The live row, not the seed',
       isDefault: true,

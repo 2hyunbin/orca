@@ -50,14 +50,12 @@ function capitalized(id: string): string {
 
 /** One model's effort menu as Grok advertises it. Choice values are Grok's option ids — what its
  *  effort config option takes — not the canonical sampling value behind them. */
-export function grokModelEfforts(
-  model: Pick<ModelInfo, '_meta'>
-): { efforts: AgentSessionOptionChoice[]; defaultEffort?: string } | undefined {
+export function grokModelEfforts(model: Pick<ModelInfo, '_meta'>): {
+  efforts: AgentSessionOptionChoice[]
+  defaultEffort?: string
+} {
   const meta = modelMetaSchema.safeParse(model._meta ?? {})
-  if (!meta.success || meta.data.supportsReasoningEffort === undefined) {
-    return undefined
-  }
-  if (meta.data.supportsReasoningEffort === false) {
+  if (!meta.success || meta.data.supportsReasoningEffort !== true) {
     return { efforts: [] }
   }
   const efforts: AgentSessionOptionChoice[] = []
@@ -100,7 +98,7 @@ export function grokModelCatalogFromState(state: SessionModelState): AgentSessio
     label: model.name,
     ...(model.description ? { description: model.description } : {}),
     isDefault: false,
-    ...(grokModelEfforts(model) ?? { efforts: [], effortsKnown: false })
+    ...grokModelEfforts(model)
   }))
 }
 

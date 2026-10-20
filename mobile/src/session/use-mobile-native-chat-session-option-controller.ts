@@ -87,6 +87,7 @@ export function useMobileNativeChatSessionOptionController(args: {
         ? {
             snapshot: structuredSnapshot,
             optionPickerRequest: structured.optionPickerRequest,
+            optionSurface: structured.optionSurface,
             conversationCommands: structured.conversationCommands,
             pendingId: structuredPendingId,
             setOption: setStructuredOption,
