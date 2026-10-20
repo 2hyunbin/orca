@@ -62,7 +62,6 @@ export async function initializeReadyFoundation(): Promise<void> {
   // Why: a headless automated run must not claim a macOS Dock tile or the menu bar.
   applyBackgroundActivationPolicy({ warn: console.warn })
   installElectronProxyRequestGuard(session.defaultSession)
-  setNodeDistMirrorSettingReader(() => store.getSettings().nodeDistMirrorUrl)
   app.on('login', (event, webContents, details, authInfo, callback) => {
     handleElectronProxyLogin(
       event,
@@ -151,6 +150,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   }
   const store = profileState.store
   state.store = store
+  setNodeDistMirrorSettingReader(() => store.getSettings().nodeDistMirrorUrl)
   // Why before any handler or runtime: a project a WSL move is taking must never get a new terminal.
   loadWslMoveFence(getAppEnvironment().getPath('userData'))
   // Finishes a move that committed before a crash; gated off it does nothing, and it never throws.

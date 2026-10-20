@@ -19,9 +19,12 @@ export function NodeDistMirrorSettingField({
 }: NodeDistMirrorSettingFieldProps): React.JSX.Element {
   const source = value ?? ''
   const [draft, setDraft] = useState<MirrorDraft>({ source, text: source, error: null })
-  // Why: settings can reload outside this pane; a changed source replaces a stale draft.
+  // Why stored, not derived: a draft left keyed to an old value would match again if it returned.
   const current: MirrorDraft =
     draft.source === source ? draft : { source, text: source, error: null }
+  if (current !== draft) {
+    setDraft(current)
+  }
 
   const commit = (): void => {
     const normalized = normalizeNodeDistMirrorUrl(current.text)

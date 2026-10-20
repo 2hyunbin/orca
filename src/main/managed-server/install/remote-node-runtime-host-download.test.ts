@@ -43,7 +43,7 @@ function fakeHost(tools: Record<string, string>): { bin: string; stage: string }
   const stage = join(root, 'stage')
   mkdirSync(bin)
   mkdirSync(stage)
-  for (const basic of ['cut', 'rm', 'tail', 'sha256sum', 'shasum', 'perl']) {
+  for (const basic of ['cut', 'rm', 'head', 'sha256sum', 'shasum', 'perl']) {
     const resolved = which(basic)
     if (resolved) {
       symlinkSync(resolved, join(bin, basic))
@@ -99,16 +99,28 @@ describe.skipIf(process.platform === 'win32')('the host-side pinned Node downloa
     expect(readHostNodeDownload(runOnHost(bin, stage))).toEqual({ ok: true })
   })
 
-  it('does not start wget after curl ran out of time, so both fit the exec limit', () => {
+  it('moves on to the release URL when a mirror times out from the host', () => {
     const { bin, stage } = fakeHost({
-      curl: "echo 'curl: (28) Operation timed out' >&2; exit 28",
-      wget: `touch "\${0%/*}/wget.ran"; ${writeTo('-O', PAYLOAD)}`
+      curl:
+        `for a in "$@"; do case "$a" in https://nodejs.org/*) ${writeTo('-o', PAYLOAD)}; exit 0;; esac; done\n` +
+        "echo 'curl: (28) Connection timed out after 20001 milliseconds' >&2; exit 28"
     })
-    expect(readHostNodeDownload(runOnHost(bin, stage))).toMatchObject({
-      ok: false,
-      report: expect.stringContaining('exit 28')
+    expect(
+      readHostNodeDownload(runOnHost(bin, stage, { mirror: 'https://desk.example/dist' }))
+    ).toEqual({
+      ok: true
     })
-    expect(existsSync(join(bin, 'wget.ran'))).toBe(false)
+  })
+
+  it('stops starting downloads once the shared deadline has passed', () => {
+    // The first reading sets the deadline; every later one is already past it.
+    const { bin, stage } = fakeHost({
+      date: `if [ -e "\${0%/*}/clock" ]; then echo 99999; else : > "\${0%/*}/clock"; echo 1000; fi`,
+      curl: `touch "\${0%/*}/curl.ran"; exit 7`
+    })
+    const result = readHostNodeDownload(runOnHost(bin, stage))
+    expect(result).toMatchObject({ ok: false, report: expect.stringContaining('out of time') })
+    expect(existsSync(join(bin, 'curl.ran'))).toBe(false)
   })
 
   it('discards a file that is not the pinned release', () => {

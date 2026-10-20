@@ -98,4 +98,28 @@ describe('AdvancedNetworkSettingsSection Node.js download mirror', () => {
     expect(updateSettings).not.toHaveBeenCalled()
     expect(container.textContent).toContain('cannot contain a user name or password')
   })
+
+  it('follows settings reloads A to B and back to A', () => {
+    const updateSettings = vi.fn()
+    const base = getDefaultSettings('/tmp')
+    const a = 'https://a.example/dist'
+    const b = 'https://b.example/dist'
+    const view = (mirror: string) => (
+      <AdvancedNetworkSettingsSection
+        settings={{ ...base, nodeDistMirrorUrl: mirror }}
+        updateSettings={updateSettings}
+      />
+    )
+    const { container, rerender } = render(view(a))
+    const input = () => container.querySelector<HTMLInputElement>('#settings-node-dist-mirror-url')!
+
+    fireEvent.change(input(), { target: { value: b } })
+    fireEvent.blur(input())
+    rerender(view(b))
+    rerender(view(a))
+
+    expect(input().value).toBe(a)
+    fireEvent.blur(input())
+    expect(updateSettings).toHaveBeenCalledTimes(1)
+  })
 })

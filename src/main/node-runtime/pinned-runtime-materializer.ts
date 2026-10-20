@@ -24,6 +24,7 @@ import {
 export type PinnedRuntimeMaterializeOptions = {
   fetcher?: MainHttpClient['fetch']
   signal?: AbortSignal
+  /** Pauses between download attempts; empty makes a single attempt. */
   retryDelaysMs?: readonly number[]
 }
 
@@ -206,23 +207,24 @@ function nodeRuntimeArchive(target: NodeRuntimeTarget): PinnedRuntimeArchive {
 async function withNodeDistMirror<T>(
   target: NodeRuntimeTarget,
   options: PinnedRuntimeMaterializeOptions,
-  run: (archive: PinnedRuntimeArchive) => Promise<T>
+  run: (archive: PinnedRuntimeArchive, options: PinnedRuntimeMaterializeOptions) => Promise<T>
 ): Promise<T> {
   const archive = nodeRuntimeArchive(target)
   const asset = pinnedNodeRuntimeAsset(target)
   // Mirrors carry the official tree only; unofficial builds live at one address.
   const mirror = asset.source === 'official' ? configuredNodeDistMirror() : null
   if (!mirror) {
-    return run(archive)
+    return run(archive, options)
   }
   const mirrorUrl = nodeDistMirrorUrl(mirror, NODE_RUNTIME_PIN.version, asset.archive)
   try {
-    return await run({ ...archive, url: mirrorUrl })
+    // One attempt: an unreachable mirror must not hold up the release URL behind its retries.
+    return await run({ ...archive, url: mirrorUrl }, { ...options, retryDelaysMs: [] })
   } catch (mirrorError) {
     if (options.signal?.aborted) {
       throw mirrorError
     }
-    return run(archive).catch((error: unknown) => {
+    return run(archive, options).catch((error: unknown) => {
       throw new Error(
         `${errorText(error)} (the mirror ${mirrorUrl} failed too: ${errorText(mirrorError)})`,
         { cause: error }
@@ -241,8 +243,8 @@ export function materializeNodeRuntimeArchive(
   cacheRoot: string,
   options: PinnedRuntimeMaterializeOptions
 ): Promise<string> {
-  return withNodeDistMirror(target, options, (archive) =>
-    materializeVerifiedRuntimeArchive(archive, nodeRuntimeArchiveDir(cacheRoot), options)
+  return withNodeDistMirror(target, options, (archive, download) =>
+    materializeVerifiedRuntimeArchive(archive, nodeRuntimeArchiveDir(cacheRoot), download)
   )
 }
 
@@ -266,7 +268,7 @@ export function materializeCachedNodeRuntime(
 ): Promise<string> {
   const asset = pinnedNodeRuntimeAsset(target)
   const executableName = basename(orcadNodeRuntimeExecutable(target))
-  return withNodeDistMirror(target, options, (archive) =>
+  return withNodeDistMirror(target, options, (archive, download) =>
     materializeCachedRuntimeExecutable(
       {
         ...archive,
@@ -281,7 +283,7 @@ export function materializeCachedNodeRuntime(
             `${attempt ? `repair-${attempt}-` : ''}${executableName}`
           )
       },
-      options
+      download
     )
   )
 }

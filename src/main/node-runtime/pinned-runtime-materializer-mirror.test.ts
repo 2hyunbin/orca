@@ -55,6 +55,19 @@ describe('the pinned Node download with a mirror configured', () => {
     expect(urls.at(-1)).toMatch(/^https:\/\/nodejs\.org\/dist\//)
   })
 
+  it('tries an unreachable mirror once, without its retry pauses, before nodejs.org', async () => {
+    const fetch = vi.fn<typeof fetch>(async (url) => {
+      if (String(url) === mirrorUrl) {
+        throw new Error('net::ERR_CONNECTION_TIMED_OUT')
+      }
+      return new Response(Buffer.from(BODY), { status: 200 })
+    })
+
+    await materializeNodeRuntimeArchive(TARGET, root, { fetcher: fetch })
+
+    expect(fetch.mock.calls.map(([url]) => String(url) === mirrorUrl)).toEqual([true, false])
+  })
+
   it('rejects a mirror file that fails the pin, whatever the mirror says', async () => {
     const fetch = vi.fn<typeof fetch>(
       async () => new Response('<html>blocked</html>', { status: 200 })

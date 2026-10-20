@@ -29,13 +29,12 @@ import { remoteSha256Command } from './remote-sha256-command'
 export const HOST_NODE_DOWNLOAD_OK = 'ORCA_NODE_HOST_DOWNLOAD_OK'
 export const HOST_NODE_DOWNLOAD_FAILED = 'ORCA_NODE_HOST_DOWNLOAD_FAILED'
 export const HOST_NODE_DOWNLOAD_NO_TOOL = 'ORCA_NODE_HOST_DOWNLOAD_NO_TOOL'
-/** Each tool's wall-clock cap: ~140 KB/s still fetches the ~58 MB archive. */
-const HOST_DOWNLOAD_TOOL_SECONDS = 420
-/**
- * Both tools on one slow URL, plus quick refusals from the others and the hash. A timed-out URL
- * ends the loop, so a tool's own limit always reports before the exec gives up.
- */
-export const HOST_NODE_DOWNLOAD_TIMEOUT_MS = (2 * HOST_DOWNLOAD_TOOL_SECONDS + 180) * 1000
+/** One wall-clock budget for every URL and tool: ~70 KB/s still fetches the ~58 MB archive. */
+const HOST_DOWNLOAD_BUDGET_SECONDS = 840
+/** Below this a new attempt can't finish, so the loop stops and reports instead. */
+const HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS = 30
+/** The budget plus the hash and the report, so the script always answers before the exec gives up. */
+export const HOST_NODE_DOWNLOAD_TIMEOUT_MS = (HOST_DOWNLOAD_BUDGET_SECONDS + 120) * 1000
 
 const HOST_NODE_DOWNLOAD_NOT_PINNED =
   'the file is not the pinned release (a proxy or filter may have replaced it, or the host lacks sha256sum and shasum)'
@@ -67,24 +66,32 @@ export function hostDownloadNodeRuntimeCommand(
       : null,
     quotePosixShell(hostNodeRuntimeUrl(args.target))
   ].filter((url): url is string => url !== null)
-  const curl = `curl -fsSL --connect-timeout 20 --max-time ${HOST_DOWNLOAD_TOOL_SECONDS} -o ${file} "$orca_dl_url"`
-  // wget has no total-time limit of its own. Probed by running it: old busybox wants `-t SECS`.
+  const curl = `curl -fsSL --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$orca_dl_url"`
   const wget = `$orca_dl_timeout wget -q -T 20 -t 2 -O ${file} "$orca_dl_url"`
   const hostMirror = NODE_DIST_MIRROR_ENV_KEYS.reduceRight(
     (fallback, key) => `\${${key}:-${fallback}}`,
     ''
   )
+  const min = HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS
+  // Without a clock each of the (up to) two tools per URL gets an equal share of the budget.
+  const share = Math.floor(HOST_DOWNLOAD_BUDGET_SECONDS / (2 * urls.length))
   return [
-    'orca_dl_status=127; orca_dl_out=; orca_dl_timeout=; orca_dl_ok=',
-    `timeout 5 true >/dev/null 2>&1 && orca_dl_timeout="timeout ${HOST_DOWNLOAD_TOOL_SECONDS}"`,
+    'orca_dl_status=127; orca_dl_out=; orca_dl_ok=; orca_dl_t=',
     `orca_dl_mirror="${hostMirror}"; orca_dl_mirror="\${orca_dl_mirror%/}"`,
+    // One deadline for the whole loop, so an unreachable mirror can't starve the release URL.
+    'orca_dl_end=$(date +%s 2>/dev/null)',
+    `case "$orca_dl_end" in ''|*[!0-9]*) orca_dl_end= ;; *) orca_dl_end=$((orca_dl_end + ${HOST_DOWNLOAD_BUDGET_SECONDS})) ;; esac`,
+    `orca_dl_left() { if [ -n "$orca_dl_end" ]; then orca_dl_t=$((orca_dl_end - $(date +%s))); else orca_dl_t=${share}; fi; [ "$orca_dl_t" -ge ${min} ]; }`,
+    // wget has no total-time limit of its own. Probed by running it: old busybox wants `-t SECS`.
+    'orca_dl_timeout=; timeout 5 true >/dev/null 2>&1 && orca_dl_timeout=timeout',
     `for orca_dl_url in ${urls.join(' ')}; do`,
     '[ -n "$orca_dl_url" ] || continue',
+    `orca_dl_left || { orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$orca_dl_url: not tried, out of time"; break; }`,
     'orca_dl_try=127; orca_dl_said=',
     `if command -v curl >/dev/null 2>&1; then orca_dl_said=$(${curl} 2>&1); orca_dl_try=$?; fi`,
-    // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget
-    // works. Not after curl's timeout (28): the link is just slow, and wget would be too.
-    `if [ "$orca_dl_try" != 0 ] && [ "$orca_dl_try" != 28 ] && command -v wget >/dev/null 2>&1; then ` +
+    // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget works.
+    'if [ "$orca_dl_try" != 0 ] && command -v wget >/dev/null 2>&1 && orca_dl_left; then ' +
+      '[ -n "$orca_dl_timeout" ] && orca_dl_timeout="timeout $orca_dl_t"; ' +
       `orca_dl_said="$orca_dl_said\${orca_dl_said:+; }$(${wget} 2>&1)"; orca_dl_try=$?; fi`,
     'if [ "$orca_dl_try" = 127 ] && [ -z "$orca_dl_said" ]; then break; fi',
     'orca_dl_status=$orca_dl_try',
@@ -92,13 +99,11 @@ export function hostDownloadNodeRuntimeCommand(
     `rm -f ${file}`,
     `[ "$orca_dl_try" = 0 ] && orca_dl_said='${HOST_NODE_DOWNLOAD_NOT_PINNED}'`,
     'orca_dl_out="$orca_dl_out${orca_dl_out:+; }$orca_dl_url: $orca_dl_said"',
-    // A slow link stays slow on the next URL, and the exec budget assumes one slow attempt.
-    'case "$orca_dl_try" in 28|124) break ;; esac',
     'done',
     `if [ -n "$orca_dl_ok" ]; then echo ${HOST_NODE_DOWNLOAD_OK}`,
     `elif [ "$orca_dl_status" = 127 ] && [ -z "$orca_dl_out" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}`,
     `else echo ${HOST_NODE_DOWNLOAD_FAILED}; echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_dl_status"; ` +
-      `printf '%s' "$orca_dl_out" | tail -c 3000; fi`
+      `printf '%s' "$orca_dl_out" | head -c 3000; fi`
   ].join('\n')
 }
 
@@ -118,7 +123,7 @@ export function readHostNodeDownload(output: string): HostNodeDownloadResult {
     const { exitStatus, output: words } = parseRemoteRuntimeExitReport(output.slice(failed))
     return {
       ok: false,
-      report: `its download failed (exit ${exitStatus ?? 'unknown'})${words ? `: ${words}` : ''}`
+      report: `its download failed${exitStatus ? ` (exit ${exitStatus})` : ''}${words ? `: ${words}` : ''}`
     }
   }
   return { ok: false, report: `it gave an unexpected reply: ${output.trim().slice(0, 500)}` }
