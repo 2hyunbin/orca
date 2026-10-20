@@ -57,9 +57,9 @@ const NO_FEED: SidebarFeedDomains = {
 // The window renders its own collapse, so planning never re-runs on a toggle.
 const PLANNED_UNCOLLAPSED: ReadonlySet<string> = new Set()
 
-/** The window's own creations main does not list: preflight, a paired server's, and the window's
- *  work after main's reply (as the window's own list shows them). */
-function withWindowCreations(
+/** Every creation main lists, whoever started it (so the window lists what the phone does), plus
+ *  the window's own main does not list: preflight, a paired server's, and its work after main's reply. */
+export function withWindowCreations(
   domains: SidebarFeedDomains,
   pendingCreationKeys: readonly string[]
 ): SidebarFeedDomains {

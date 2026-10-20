@@ -5403,7 +5403,8 @@
         },
         "PendingWorktreeRow": {
           "af21e953d1": "ワークツリーの作成をキャンセルする",
-          "188f6922a0": "キャンセル"
+          "188f6922a0": "キャンセル",
+          "creatingWorkspace": "ワークスペースを作成中…"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "キャンセル",

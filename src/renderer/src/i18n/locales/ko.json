@@ -5403,7 +5403,8 @@
         },
         "PendingWorktreeRow": {
           "af21e953d1": "워크트리 만들기 취소",
-          "188f6922a0": "취소"
+          "188f6922a0": "취소",
+          "creatingWorkspace": "워크스페이스 만드는 중…"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "취소",
