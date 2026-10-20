@@ -2,6 +2,7 @@ import type { Repo } from '../shared/repo-types'
 import { normalizeRuntimePathForComparison } from '../shared/cross-platform-path'
 import {
   getRepoExecutionHostId,
+  getRepoRoutingConnectionId,
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
   type ExecutionHostId
@@ -102,7 +103,7 @@ function liveClaim(
 
 async function admitDesktopClaim(store: Store, paths: CheckoutPaths): Promise<Claim> {
   const key = normalizeRuntimePathForComparison
-  const rows = () => store.getRepos().filter((repo) => !repo.connectionId)
+  const rows = () => store.getRepos().filter((repo) => getRepoRoutingConnectionId(repo) === null)
   const at = (path: string, repo: Repo) => key(repo.path) === key(path)
   const atMain = (repo: Repo) =>
     paths.mainRepoPath !== null && !isFolderRepo(repo) && at(paths.mainRepoPath, repo)
