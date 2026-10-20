@@ -553,8 +553,10 @@ it('opens Antigravity accounts from its signed-out notice, and offers no link fo
       {
         kind: 'status',
         tone: 'error',
-        text: 'Antigravity is not signed in.',
-        failure: { kind: 'notSignedIn' }
+        ...agentSessionFailureWords(
+          { kind: 'notSignedIn' },
+          { agentName: 'Antigravity', surface: 'row' }
+        )
       },
       null,
       false,
@@ -574,7 +576,11 @@ it('opens Antigravity accounts from its signed-out notice, and offers no link fo
       ['Claude', 'notSignedIn']
     ] as const) {
       renderStatus(
-        { kind: 'status', tone: 'error', text: 'Chat failed.', failure: { kind } },
+        {
+          kind: 'status',
+          tone: 'error',
+          ...agentSessionFailureWords({ kind }, { agentName, surface: 'row' })
+        },
         null,
         false,
         false,
