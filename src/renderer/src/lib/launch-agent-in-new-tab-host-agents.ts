@@ -92,3 +92,9 @@ export function launchOnceHostAnswered(
       : {})
   }
 }
+
+export function shouldQueueTerminalFocusAfterMenuClose(
+  result: NonNullable<LaunchAgentInNewTabResult>
+): boolean {
+  return result.surface.kind === 'host-published'
+}

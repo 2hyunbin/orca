@@ -108,11 +108,7 @@ export type LaunchAgentInNewTabResult = {
   structuredSettlement?: Promise<StructuredAgentLaunchSettlement>
 } | null
 
-export function shouldQueueTerminalFocusAfterMenuClose(
-  result: NonNullable<LaunchAgentInNewTabResult>
-): boolean {
-  return result.surface.kind === 'host-published'
-}
+export { shouldQueueTerminalFocusAfterMenuClose } from '@/lib/launch-agent-in-new-tab-host-agents'
 
 /**
  * Create a new terminal tab and queue the agent's launch command, optionally
