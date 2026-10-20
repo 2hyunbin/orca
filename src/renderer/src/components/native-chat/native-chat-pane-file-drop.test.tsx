@@ -46,7 +46,7 @@ function EditingCard({ disabled = false }: { disabled?: boolean }) {
               resolve: () => false,
               reveal: IGNORE_DRAG,
               drop: () => false,
-              append: IGNORE_DRAG,
+              append: () => [],
               remove: IGNORE_DRAG
             }
           }
