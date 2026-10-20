@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as NodePath from 'node:path'
+import { realpath } from 'node:fs/promises'
 import type { NestedRepoScanResult, ProjectGroup } from '../../shared/project-group-types'
 import type { BrowserWindow } from 'electron'
 import type { Repo } from '../../shared/repo-types'
@@ -24,6 +25,10 @@ vi.mock('node:path', async (importOriginal) => {
   const actual = await importOriginal<typeof NodePath>()
   return { ...actual.win32, default: actual.win32, posix: actual.posix, win32: actual.win32 }
 })
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  realpath: vi.fn(async (path: string) => path)
+}))
 vi.mock('electron', () => ({
   ipcMain: { handle: (channel: string, handler: never) => mocks.handlers.set(channel, handler) }
 }))
@@ -135,6 +140,7 @@ describe('one placement per project operation', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '1')
     mocks.ensure.mockReset().mockResolvedValue('wsl:ubuntu')
+    vi.mocked(realpath).mockClear()
     mocks.ownerRepos = []
     mocks.target = (path) => path
     mocks.handlers.clear()
@@ -184,6 +190,38 @@ describe('one placement per project operation', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
     vi.unstubAllEnvs()
   })
+
+  it.each(['create', 'nested'] as const)(
+    '%s never traverses unrelated saved UNC or native-link catalog paths',
+    async (operation) => {
+      const parentPath = '\\\\wsl.localhost\\Ubuntu\\home\\me'
+      const selected = `${parentPath}\\new`
+      const store = makeStore([
+        row('foreign-distro', '\\\\wsl.localhost\\Debian\\home\\me\\old'),
+        row('native-link', 'C:\\aliases\\foreign')
+      ])
+      registerRepoCreationHandlers(mainWindow, store)
+      registerNestedRepoImportHandler(mainWindow, store)
+      mocks.scan = scanOf(parentPath, [selected])
+      const result = await mocks.handlers.get(
+        operation === 'create' ? 'repos:create' : 'projectGroups:importNested'
+      )!(null, {
+        parentPath,
+        name: 'new',
+        kind: 'folder',
+        projectPaths: [selected],
+        mode: 'separate',
+        scanId: 'scan-1'
+      })
+      expect(result).toMatchObject(
+        operation === 'create'
+          ? { repo: { path: '/home/me/new', executionHostId: OWNER } }
+          : { importedCount: 1, projects: [{ status: 'imported', executionHostId: OWNER }] }
+      )
+      expect(realpath).not.toHaveBeenCalled()
+      expect(mocks.ensure).toHaveBeenCalledExactlyOnceWith('Ubuntu')
+    }
+  )
 
   it("creates on the named distro instead of returning another machine's project at an alias", async () => {
     const foreign = row('other-windows-notes', '\\\\wsl$\\Ubuntu\\home\\me\\notes', {

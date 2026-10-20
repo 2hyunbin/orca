@@ -150,7 +150,11 @@ export async function placeProject(
     target,
     context.operation === 'create' ? 'folder' : context.kind,
     wsl || context.operation === 'create'
-      ? { scope: 'wsl', domain: context.domain }
+      ? {
+          scope: 'wsl',
+          domain: context.domain,
+          aliases: context.operation === 'create' ? 'lexical' : 'realpath'
+        }
       : context.claimsOutsideWsl
   )
   const { saved } = admission

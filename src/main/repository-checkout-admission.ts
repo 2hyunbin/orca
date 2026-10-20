@@ -32,7 +32,7 @@ export type RepositoryCheckoutAdmission = {
  */
 export type SavedClaimRule =
   /** local is this computer's rows, a runtime id that endpoint's, null a path-only caller's. */
-  | { scope: 'wsl'; domain: ExecutionHostId | null }
+  | { scope: 'wsl'; domain: ExecutionHostId | null; aliases: 'lexical' | 'realpath' }
   /** Desktop Add: rows without an SSH connection; realpath only against this computer's rows. */
   | { scope: 'desktop' }
   /** Runtime add: the caller's host rows (every row when it names none), with no late re-check. */
@@ -73,7 +73,7 @@ export async function admitRepositoryCheckout(
   const claim =
     rule.scope === 'desktop'
       ? await admitDesktopClaim(store, paths)
-      : await admitWslClaim(store, paths, rule.domain)
+      : await admitWslClaim(store, paths, rule)
   return { selectedPath, registrationPath, ...claim }
 }
 
@@ -127,7 +127,7 @@ async function admitDesktopClaim(store: Store, paths: CheckoutPaths): Promise<Cl
 async function admitWslClaim(
   store: Store,
   paths: CheckoutPaths,
-  domain: ExecutionHostId | null
+  rule: Extract<SavedClaimRule, { scope: 'wsl' }>
 ): Promise<Claim> {
   const key = (path: string) => normalizeRuntimePathForComparison(normalizeWindowsWslPath(path))
   const sameHostRepos = () =>
@@ -136,9 +136,9 @@ async function admitWslClaim(
       .filter(
         (repo) =>
           !isSshRow(repo) &&
-          (domain === LOCAL_EXECUTION_HOST_ID
+          (rule.domain === LOCAL_EXECUTION_HOST_ID
             ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
-            : runtimeRepoMatchesExecutionHost(repo, domain))
+            : runtimeRepoMatchesExecutionHost(repo, rule.domain))
       )
   const { mainRepoPath } = paths
   const matches = (repo: Repo) =>
@@ -147,14 +147,17 @@ async function admitWslClaim(
     (mainRepoPath !== null && !isFolderRepo(repo) && key(repo.path) === key(mainRepoPath))
   const realPathMatch =
     sameHostRepos().find(matches) ??
-    (await findProjectAtSameRealPath(sameHostRepos(), paths.registrationPath, key)) ??
-    (mainRepoPath !== null
-      ? await findProjectAtSameRealPath(
-          sameHostRepos().filter((repo) => !isFolderRepo(repo)),
-          mainRepoPath,
-          key
-        )
-      : null)
+    // Create/nested keep their ordinary catalog lookup free of filesystem reads.
+    (rule.aliases === 'lexical'
+      ? null
+      : ((await findProjectAtSameRealPath(sameHostRepos(), paths.registrationPath, key)) ??
+        (mainRepoPath !== null
+          ? await findProjectAtSameRealPath(
+              sameHostRepos().filter((repo) => !isFolderRepo(repo)),
+              mainRepoPath,
+              key
+            )
+          : null)))
   let captured: Repo | null | undefined = realPathMatch
   const findSaved = () => {
     if (captured) {

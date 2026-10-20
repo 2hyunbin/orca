@@ -73,7 +73,8 @@ export async function placeNestedImport(
       const target = await targetResolver.resolveLocal(path)
       const admission = await admitRepositoryCheckout(store, target, 'git', {
         scope: 'wsl',
-        domain: caller.domain
+        domain: caller.domain,
+        aliases: 'lexical'
       })
       const owner = parseWslUncPath(admission.registrationPath)
       const original = parseWslUncPath(path)
