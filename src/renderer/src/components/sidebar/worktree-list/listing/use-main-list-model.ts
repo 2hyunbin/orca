@@ -42,6 +42,7 @@ import { useEffectiveCollapsedGroups } from './use-collapsed-groups'
 import { useSidebarExternalWorktreeCards } from './use-external-worktree-cards'
 import { useOrderHeldWhileEngaged } from './use-order-hold'
 import { useReusedArrayIdentity } from './use-reused-array-identity'
+import type { WorkspaceCreation } from '../../../../../../shared/sidebar-list/workspace-creations'
 
 const NO_FEED: SidebarFeedDomains = {
   workspaces: new Map(),
@@ -57,22 +58,26 @@ const NO_FEED: SidebarFeedDomains = {
 // The window renders its own collapse, so planning never re-runs on a toggle.
 const PLANNED_UNCOLLAPSED: ReadonlySet<string> = new Set()
 
-/** The window's own creations main does not list: preflight, a paired server's, and the window's
- *  work after main's reply (as the window's own list shows them). */
-function withWindowCreations(
+/** The creations the window draws: its own, with main's record where main runs one. Main also lists
+ *  creations the window holds no entry for (finished here, or started elsewhere); their row draws
+ *  nothing, so listing them leaves an empty gap that closes, shifting every row below it. */
+export function withWindowCreations(
   domains: SidebarFeedDomains,
   pendingCreationKeys: readonly string[]
 ): SidebarFeedDomains {
-  let creations: Map<string, { repoId: string }> | null = null
+  if (pendingCreationKeys.length === 0 && domains.creations.size === 0) {
+    return domains
+  }
+  const creations = new Map<string, WorkspaceCreation>()
   for (const key of pendingCreationKeys) {
     const separator = key.indexOf(' ')
     const creationId = key.slice(0, separator)
-    if (!domains.creations.has(creationId)) {
-      creations ??= new Map(domains.creations)
-      creations.set(creationId, { repoId: key.slice(separator + 1) })
-    }
+    creations.set(
+      creationId,
+      domains.creations.get(creationId) ?? { repoId: key.slice(separator + 1) }
+    )
   }
-  return creations ? { ...domains, creations } : domains
+  return { ...domains, creations }
 }
 
 function folderRecordKey(id: string, hostId: string | null | undefined): string {

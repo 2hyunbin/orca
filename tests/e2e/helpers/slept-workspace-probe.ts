@@ -7,7 +7,7 @@ import type { Locator, Page } from '@stablyai/playwright-test'
 import { expect } from '@stablyai/playwright-test'
 import { ensureTerminalVisible } from './store'
 import { waitForActivePanePtyId, waitForActiveTerminalManager } from './terminal'
-import { uncoverSidebarRow } from './sidebar-setup-prompt'
+import { dismissSetupScriptPrompts } from './sidebar-setup-prompt'
 
 export type WorkspaceSample = {
   livePtyCount: number
@@ -112,7 +112,7 @@ export async function sleepWorkspaceViaSidebar(page: Page, worktreeId: string): 
   const row = rowLocator(page, worktreeId)
   await expect(row).toBeVisible()
   await row.scrollIntoViewIfNeeded()
-  await uncoverSidebarRow(page, row)
+  await dismissSetupScriptPrompts(page)
   const scope = row.locator('[data-worktree-context-menu-scope="worktree"]').first()
   const target = (await scope.count()) > 0 ? scope : row
   await target.click({ button: 'right' })
@@ -125,7 +125,7 @@ export async function activateWorkspaceByClick(page: Page, worktreeId: string): 
   const row = rowLocator(page, worktreeId)
   await expect(row).toBeVisible()
   await row.scrollIntoViewIfNeeded()
-  await uncoverSidebarRow(page, row)
+  await dismissSetupScriptPrompts(page)
   await row.click()
   await expect
     .poll(() => page.evaluate(() => window.__store?.getState().activeWorktreeId ?? null), {
