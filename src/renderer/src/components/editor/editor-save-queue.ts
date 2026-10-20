@@ -122,9 +122,10 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         if (
           trigger === 'autosave' &&
           (isAutosaveSuspendedForFile(liveFile) ||
-            editorBufferRecordsKeptApart(state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX).has(
-              recordId
-            ))
+            editorBufferRecordsKeptApart(
+              state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX,
+              state.editorBuffers ?? {}
+            ).has(recordId))
         ) {
           return
         }
@@ -195,6 +196,18 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         // Why: disk now holds contentToSave — rebaseline so our own save isn't flagged external; drop pending verification.
         nextState.setLastKnownDiskSignature(view.id, getDiskBaselineSignature(contentToSave))
         nextState.clearPendingDiskBaselineVerification(view.id)
+        // Why: another record of this file kept apart now holds edits against an older disk version.
+        const savedKey = nextState.editorBufferIndex?.keyByRecordId[recordId]?.identity.key
+        for (const other of savedKey === undefined ? [] : nextState.openFiles) {
+          const otherId = editorBufferIdOf(nextState, other.id)
+          if (
+            otherId !== recordId &&
+            other.isDirty &&
+            nextState.editorBufferIndex?.keyByRecordId[otherId]?.identity.key === savedKey
+          ) {
+            store.getState().setExternalMutation(other.id, 'changed')
+          }
+        }
         // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
         const savedFile = store.getState().openFiles.find((openFile) => openFile.id === view.id)
         if (savedFile?.externalMutation === 'changed') {
@@ -236,7 +249,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     if (state.settings?.editorAutoSave) {
       // Why: two different drafts of one file wait for the user instead of racing to disk.
       const keptApart = editorBufferRecordsKeptApart(
-        state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX
+        state.editorBufferIndex ?? EMPTY_EDITOR_BUFFER_INDEX,
+        state.editorBuffers ?? {}
       )
       for (const file of state.openFiles) {
         const recordId = editorBufferIdOf(state, file.id)

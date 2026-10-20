@@ -1,4 +1,5 @@
 import type { OpenFile } from '../types/open-file'
+import { flushPendingEditorChange } from '@/components/editor/editor-pending-flush'
 import { editorBufferViewIds, type EditorBufferIndex } from './editor-buffer-record'
 
 type EditorBufferViewState = {
@@ -38,4 +39,19 @@ export function needsSavePromptOnClose(
   return (
     file?.isDirty === true && canSave(file) && !hasOtherSavingEditorView(state, fileId, closing)
   )
+}
+
+/**
+ * Why: a delayed editor (rich markdown, notebook, CSV) may hold text not yet in the shared draft;
+ * once its tab leaves the record, its late commit is rejected and a sibling keeps old text.
+ */
+export function flushSharedEditorViewsBeforeClose(
+  state: EditorBufferViewState,
+  fileIds: Iterable<string>
+): void {
+  for (const fileId of fileIds) {
+    if (editorBufferViewIds(state, fileId).length > 1) {
+      flushPendingEditorChange(fileId)
+    }
+  }
 }

@@ -22,8 +22,8 @@ export function useEditorBufferContentSync(
   fileContents: Record<string, FileContent>,
   setFileContents: Dispatch<SetStateAction<Record<string, FileContent>>>,
   openFilesRef: { current: OpenFile[] },
-  /** Discards this panel's in-flight read of a tab, so it can't land after newer text. */
-  supersedeRead?: (fileId: string) => void
+  /** Discards this panel's in-flight read of a tab, so it can't land after newer text; true if one was tracked. */
+  supersedeRead?: (fileId: string) => boolean
 ): void {
   const previousRef = useRef(fileContents)
   // Entries this panel received from another panel; re-publishing them would echo.
@@ -33,16 +33,19 @@ export function useEditorBufferContentSync(
     const listener: BufferContentListener = (sourceFileId, content) => {
       const ids = editorBufferViewIds(useAppStore.getState(), sourceFileId)
       receivedRef.current.add(content)
-      for (const id of ids) {
-        if (previousRef.current[id] !== content) {
-          supersedeRead?.(id)
-        }
-      }
+      // Why seed: a superseded first read would otherwise leave the tab loading forever.
+      const superseded = new Set(
+        ids.filter((id) => previousRef.current[id] !== content && supersedeRead?.(id) === true)
+      )
       setFileContents((prev) => {
         let next = prev
         for (const id of ids) {
           const existing = prev[id]
-          if (!existing || existing === content || isSameText(existing, content)) {
+          if (
+            (!existing && !superseded.has(id)) ||
+            existing === content ||
+            (existing && isSameText(existing, content))
+          ) {
             continue
           }
           next = next === prev ? { ...prev } : next

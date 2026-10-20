@@ -27,7 +27,7 @@ function Panel({
 }: {
   initial: Record<string, FileContent>
   handle: PanelHandle
-  supersedeRead?: (fileId: string) => void
+  supersedeRead?: (fileId: string) => boolean
 }) {
   const [contents, setContents] = useState(initial)
   const openFilesRef = useRef(fixture.store?.getState().openFiles ?? [])
@@ -103,13 +103,34 @@ it("discards another panel's in-flight read once newer text for the file lands",
     root.render(
       <>
         <Panel initial={{ [a]: old }} handle={panelA} />
-        <Panel initial={{}} handle={panelB} supersedeRead={(id) => superseded.push(id)} />
+        <Panel initial={{}} handle={panelB} supersedeRead={(id) => superseded.push(id) > 0} />
       </>
     )
   )
 
   act(() => panelA.set(a, 'saved text'))
 
-  // B's read started before the save; its generation moves, so its old bytes are dropped.
+  // B's read started before the save; its generation moves, so its old bytes are dropped,
+  // and the newer text fills the tab so it doesn't stay loading.
   expect(superseded).toContain(b)
+  expect(panelB.contents[b]?.content).toBe('saved text')
+})
+
+it("doesn't seed a tab another panel has no read for", () => {
+  const a = openTab('wt-1')
+  const b = openTab('wt-2')
+  const panelA: PanelHandle = { contents: {}, set: () => {} }
+  const panelB: PanelHandle = { contents: {}, set: () => {} }
+  act(() =>
+    root.render(
+      <>
+        <Panel initial={{ [a]: { content: 'old', isBinary: false } }} handle={panelA} />
+        <Panel initial={{}} handle={panelB} supersedeRead={() => false} />
+      </>
+    )
+  )
+
+  act(() => panelA.set(a, 'saved text'))
+
+  expect(panelB.contents[b]).toBeUndefined()
 })

@@ -9,7 +9,7 @@ import {
   type EditorBufferIdentity
 } from './editor-buffer-identity'
 import { EMPTY_EDITOR_BUFFER_INDEX } from './editor-buffer-record'
-import { reconcileEditorBufferSharing } from './editor-buffer-sharing'
+import { editorBufferRecordsKeptApart, reconcileEditorBufferSharing } from './editor-buffer-sharing'
 
 function file(overrides: Partial<OpenFile>): OpenFile {
   return {
@@ -144,6 +144,8 @@ describe('editor buffer identity', () => {
       next.index.keyByRecordId[oldRecord].modelOwnerKey
     )
     expect(next.drafts).toEqual({ old: 'edit on the old machine' })
+    // Only the old machine's record holds edits, so the replacement may still autosave.
+    expect(editorBufferRecordsKeptApart(next.index, next.records).size).toBe(0)
     expect(next.openFiles.find((tab) => tab.id === 'new')?.isDirty).toBe(false)
   })
 })

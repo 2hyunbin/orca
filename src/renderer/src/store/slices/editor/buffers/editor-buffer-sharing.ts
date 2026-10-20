@@ -204,11 +204,21 @@ export function reconcileEditorBufferSharing(
   }
 }
 
-/** Records of one file kept apart because their unsaved edits differ; none may autosave over another. */
-export function editorBufferRecordsKeptApart(index: EditorBufferIndex): Set<string> {
+/**
+ * Dirty records of one file whose differing drafts start from the same disk version, so neither
+ * may autosave over the other. A save from one moves its baseline and marks the rest changed.
+ */
+export function editorBufferRecordsKeptApart(
+  index: EditorBufferIndex,
+  records: EditorBufferRecords
+): Set<string> {
   const byKey = new Map<string, string[]>()
   for (const [recordId, key] of Object.entries(index.keyByRecordId)) {
-    byKey.set(key.identity.key, [...(byKey.get(key.identity.key) ?? []), recordId])
+    const record = records[recordId]
+    if (record?.isDirty === true) {
+      const group = JSON.stringify([key.identity.key, record.lastKnownDiskSignature ?? null])
+      byKey.set(group, [...(byKey.get(group) ?? []), recordId])
+    }
   }
   return new Set([...byKey.values()].filter((ids) => ids.length > 1).flat())
 }

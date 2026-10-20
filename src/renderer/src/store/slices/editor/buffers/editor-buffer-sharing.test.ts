@@ -308,6 +308,25 @@ describe('one editor buffer record per physical file', () => {
     expect(store.getState().editorDrafts).toEqual({})
   })
 
+  it('closing a tab inside its rich-editor delay hands the pending text to its sibling', () => {
+    const a = openTab(store, 'wt-1', { filePath: '/repo/a.md', relativePath: 'a.md' })
+    const b = openTab(store, 'wt-2', { filePath: '/repo/a.md', relativePath: 'a.md' })
+    // The rich editor has marked the file dirty but holds its serialization for 300 ms.
+    store.getState().markFileDirty(a, true)
+    const unregister = registerPendingEditorFlush(a, () => {
+      if (store.getState().openFiles.some((file) => file.id === a)) {
+        store.getState().setEditorDraft(a, 'typed in rich A')
+      }
+    })
+
+    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
+    store.getState().closeFile(a)
+    unregister()
+
+    expect(store.getState().editorDrafts[b]).toBe('typed in rich A')
+    expect(tab(store, b)?.isDirty).toBe(true)
+  })
+
   it('a tab queued to close behind its sibling leaves the prompt to the sibling', () => {
     const a = openTab(store, 'wt-1')
     const b = openTab(store, 'wt-2')
@@ -457,6 +476,31 @@ describe('one editor buffer record per physical file', () => {
       queue.dispose()
 
       expect(disk.fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('autosaves again once only one of the drafts kept apart is still unsaved', async () => {
+      vi.useFakeTimers()
+      disk = stubEditorWindowWithDisk()
+      const a = openTab(store, 'wt-1')
+      const b = openTab(store, 'wt-2')
+      store.setState({
+        editorDrafts: { [`${a}-restored`]: 'draft one', [`${b}-restored`]: 'draft two' },
+        openFiles: store
+          .getState()
+          .openFiles.map((file) => ({ ...file, id: `${file.id}-restored`, isDirty: true }))
+      })
+      const queue = createEditorSaveQueue(store)
+      await queue.queueSave(tab(store, `${a}-restored`)!, 'draft one', 'user')
+
+      type(store, `${a}-restored`, 'typing after the manual save')
+      queue.syncAutoSave()
+      await vi.advanceTimersByTimeAsync(1000)
+      queue.dispose()
+
+      expect(disk.files.get(FILE)).toBe('typing after the manual save')
+      expect(store.getState().editorDrafts[`${b}-restored`]).toBe('draft two')
+      // B's draft is now against an older disk version: it shows the banner and waits.
+      expect(tab(store, `${b}-restored`)?.externalMutation).toBe('changed')
     })
 
     it('on a rename onto a file with other unsaved edits', () => {
