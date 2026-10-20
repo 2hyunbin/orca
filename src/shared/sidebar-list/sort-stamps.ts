@@ -1,4 +1,4 @@
-import { agentPhaseTransition, nextAgentPhase, type AgentPhase } from '../agent-transitions'
+import { agentPhaseTransition, type AgentPhase, type AgentTransition } from '../agent-transitions'
 
 /**
  * Sort stamps the host that owns a workspace writes on its record when something happens there.
@@ -25,27 +25,28 @@ export type AgentPaneState = { phase: AgentPhase; at: number }
 export const RECENT_STAMP_THROTTLE_MS = 10_000
 
 export type SortStampEvent =
-  /** One pane moved; `panes` is every pane of the workspace afterwards. */
+  /** One pane moved; `transition` is the detector's news in it, `panes` every pane of the
+   *  workspace afterwards. */
   | {
       kind: 'agent'
       from: AgentPhase
       to: AgentPhase
+      transition: AgentTransition | null
       panes: readonly AgentPaneState[]
     }
   | { kind: 'bell' }
   | { kind: 'terminal-started' }
 
 /**
- * A pane's state after observing `observed` at `now`. Done only follows a turn, and stays until
- * the next prompt or the agent exits (owner decision Q1: no fade; change it here before the flip).
- * Resuming after an approval is the same turn, so it keeps the time it asked.
+ * A pane's state on entering `phase` at `now`, from `previous`. Done stays until the next prompt or
+ * the agent exits (owner decision Q1: no fade). Resuming after an approval is the same turn, so it
+ * keeps the time it asked.
  */
-export function nextAgentPaneState(
+export function enterAgentPaneState(
   previous: AgentPaneState,
-  observed: AgentPhase,
+  phase: AgentPhase,
   now: number
 ): AgentPaneState {
-  const phase = nextAgentPhase(previous.phase, observed)
   if (phase === previous.phase) {
     return previous
   }
@@ -111,11 +112,13 @@ export function classifySortStampEvent(
   }
 }
 
-/** A finish, a request for input or a bell: news that flags the workspace for whoever isn't looking. */
+/**
+ * A finish (or failure), a request for input or a bell: news that flags the workspace for whoever
+ * isn't looking. A session boundary's done moves the tier but is no news.
+ */
 export function isUnreadNews(event: SortStampEvent): boolean {
   if (event.kind !== 'agent') {
     return event.kind === 'bell'
   }
-  const transition = agentPhaseTransition(event.from, event.to)
-  return transition === 'turn-finished' || transition === 'needs-input'
+  return event.transition !== null && event.transition !== 'prompt-submitted'
 }

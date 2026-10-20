@@ -56,7 +56,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     store: () => this.store,
     isWriteFenced: (worktreeId) =>
       isWslMoveProjectBlocked(this.store ?? undefined, wslMoveProjectRefForWorkspace(worktreeId)),
-    subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     onClientEvent: (listener, options) => this.onClientEvent(listener, options),
     isViewing: (worktreeId, paneKey) => this.workspaceViewers.isViewing(worktreeId, paneKey),
     onStampsWritten: (worktreeId) => {
@@ -88,6 +87,18 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     this.workspaceActivityFacts.revision.onChange(() => this.sidebarTemporal.noteActivityChange())
     this.store?.onUIChanged?.(() => this.sidebarTemporal.noteViewChange())
     this.terminalRunFacts.onInput((ptyId, now) => this.terminalUse.noteTerminalUse(ptyId, now))
+    // Before any store attaches, so its rows reach the stamps as seeds; titles flow without one.
+    this.sortStamps.attachAgentTransitions(this.agentTransitions)
+    // Why here: consuming side effects makes the host scan its bytes, which only this layer's
+    // stamps (and the switch) pay for; hookless titles then reach every detector reader.
+    this.onClientEvent(
+      (event) => {
+        if (event.type === 'terminalSideEffects') {
+          this.agentTransitions.noteTerminalSideEffects(event.batch)
+        }
+      },
+      { consumesTerminalSideEffects: true }
+    )
     // Every catalog change, from IPC or the runtime, reaches clients through this one bus.
     this.clientEvents.on(
       (event) => {
@@ -219,12 +230,10 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   override attachAgentStatusStore(store: AgentStatusStoreView): () => void {
     // The sidebar subscribes first, so the statuses present at attach reach it as seeds.
     const detachActivity = this.workspaceActivityFacts.attachAgentStatusStore(store)
-    const detachStamps = this.sortStamps.attachAgentTransitions(this.agentTransitions)
     const detachTransitions = super.attachAgentStatusStore(store)
     return () => {
       detachTransitions()
       detachActivity()
-      detachStamps()
       this.sidebarTemporal.dispose()
       this.sortStampNotices.dispose()
     }

@@ -16195,9 +16195,11 @@
           "cancelled": "Gros collage annulé car sa cible d'origine a changé."
         },
         "ExternalFileChangeBanner": {
-          "7c41e90d12": "Ce fichier a été modifié sur le disque alors que vous avez des modifications non enregistrées. L'enregistrement écrasera le contenu plus récent présent sur le disque.",
+          "7c41e90d12": "This file changed on disk while you have unsaved edits. Overwrite replaces the newer disk content.",
           "3fa2b8d417": "Recharger depuis le disque",
           "a95d02c644": "Garder mes modifications",
+          "overwrite": "Overwrite",
+          "keepHint": "Keeps your version. Your next save replaces the version on disk.",
           "5c02de9b31": "Rechargé depuis le disque",
           "d1e830fa22": "Annuler",
           "90b2ce7d43": "Comparer"
@@ -16236,6 +16238,12 @@
               "notice": {
                 "8c59ce5075": "Échec de l'enregistrement du fichier. Veuillez réessayer."
               }
+            },
+            "stale": {
+              "notice": "This file changed on disk since your edits. Use the banner to compare, reload, or overwrite."
+            },
+            "sectionStale": {
+              "notice": "This file changed on disk since this section loaded."
             }
           }
         },
