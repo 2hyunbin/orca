@@ -1,3 +1,4 @@
+import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import { readTerminalSpawnDeferral } from '../../../../shared/host-spawn-admission'
 import { isRuntimeOwnedSshTargetId } from '../../../../shared/execution-host'
 import { readIpcErrorDetail } from '@/lib/ipc-error'
@@ -138,6 +139,7 @@ export async function connectIpcPty(
         return
       }
       return {
+        ...terminalLaunchFacts(spawnResult),
         id: spawnResult.id,
         exitedBeforeAttach: true,
         // Why kept: a shell that replaced a resume and then exited never resumed the agent, and a

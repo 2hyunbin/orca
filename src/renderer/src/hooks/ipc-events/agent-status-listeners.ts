@@ -24,6 +24,9 @@ function dropEventsRestoringRefused(
   }
 ): void {
   const restores = (event: AgentStatusIpcPayload): boolean =>
+    !!refused.expectedStatus &&
+    event.receivedAt <= refused.expectedStatus.receivedAt &&
+    event.stateStartedAt === refused.expectedStatus.stateStartedAt &&
     resolveAgentPaneAuthorityKey(event.paneKey) === paneKey &&
     namesRefusedResume(refused, { ...event, agent: event.agentType })
   const pending = queues.pendingAgentStatusEvents

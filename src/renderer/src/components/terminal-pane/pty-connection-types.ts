@@ -1,3 +1,4 @@
+import type { SavedResumeStartupSource } from '../../../../shared/agent-session-resume'
 import type { WorkspaceAttentionSlice } from '@/store/slices/workspace-attention/workspace-attention-contract'
 import type { NotificationWorkspaceOwner } from '../../../../shared/notification-source'
 import type { PtyTransport, PtyTransportRecoveryState } from './pty-transport-types'
@@ -31,6 +32,7 @@ export type PtyPaneStartup = {
   resumeProviderSession?: AgentProviderSessionMetadata
   /** `saved`: a resume built from saved facts, which the host refuses for a chat's conversation. */
   resumeOrigin?: 'saved'
+  resumeSource?: SavedResumeStartupSource
   launchToken?: string
   launchAgent?: TuiAgent
   /** The agent launch the pane's own spawn starts, instead of `command`. */

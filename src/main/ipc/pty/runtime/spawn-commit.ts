@@ -119,11 +119,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       ctx.paneSpawnReservation,
       adoptedResult
     )
-    return {
-      id: ctx.result.id,
-      ...(ctx.result.incarnationId ? { incarnationId: ctx.result.incarnationId } : {}),
-      agentSessionEnsure: ctx.result.agentSessionEnsure
-    }
+    return adoptedResult
   }
   if (ctx.hostSessionBinding && !ctx.stablePaneBindingPersisted) {
     try {
@@ -269,7 +265,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         : {})
   })
   const response = {
-    id: ctx.result.id,
+    ...ctx.result,
     ...(ctx.result.incarnationId ? { incarnationId: ctx.result.incarnationId } : {}),
     ...(ctx.stablePaneOwner && (ctx.stablePaneOwner.handle || args.preAllocatedHandle)
       ? {

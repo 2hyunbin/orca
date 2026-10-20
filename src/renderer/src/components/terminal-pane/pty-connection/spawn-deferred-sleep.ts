@@ -153,8 +153,10 @@ export function installSpawnDeferredSleep(session: ConnectPanePtySession): void 
   session.keepUnrunResumeHandle = (
     startupOverride: PendingStartupCommand | null | undefined
   ): void => {
-    const record = deferredResumeRecord(session, startupOverride)
-    if (record) {
+    const captured =
+      startupOverride?.resumeSource?.record ?? session.paneStartup?.resumeSource?.record
+    const record = captured ?? deferredResumeRecord(session, startupOverride)
+    if (record && !useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]) {
       // Why left after a later resume: the next quit capture replaces it, and a pane with a live PTY owns it.
       useAppStore.getState().rememberSleepingAgentSession(record)
     }

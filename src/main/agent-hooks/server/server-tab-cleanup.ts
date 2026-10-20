@@ -16,6 +16,9 @@ export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
     const clear = { paneKey: ownerKey, refusedResume: refused }
     if (
       row &&
+      refused.expectedStatus &&
+      row.receivedAt <= refused.expectedStatus.receivedAt &&
+      row.stateStartedAt === refused.expectedStatus.stateStartedAt &&
       row.payload.agentType === refused.agent &&
       agentProviderSessionsEqual(refused.agent, row.providerSession, refused.providerSession)
     ) {

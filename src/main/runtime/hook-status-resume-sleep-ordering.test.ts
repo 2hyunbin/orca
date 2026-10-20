@@ -166,3 +166,42 @@ describe('a queued hook status and a workspace sleep', () => {
     })
   })
 })
+
+it.each([false, true])(
+  'orders refused cleanup after queued status and preserves newer same-conversation recipe (%s)',
+  async (newer) => {
+    const { runtime, getSession, releaseFirstWrite } = makeRuntimeWithSlowFirstWrite()
+    runtime.recordHookStatusResume(codexRow())
+    await vi.waitFor(() =>
+      expect(getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toBeDefined()
+    )
+    runtime.recordHookStatusResume(codexRow({ state: 'blocked', receivedAt: 11 }))
+    const sourcePromise = runtime.readSavedResumeSource(TEST_WORKTREE_ID, PANE_KEY)
+    releaseFirstWrite()
+    const source = await sourcePromise
+    if (!source) {
+      throw new Error('missing captured source')
+    }
+    const refused = {
+      agent: 'codex' as const,
+      providerSession: SESSION,
+      expectedStatus: { paneKey: PANE_KEY, receivedAt: 11, stateStartedAt: 10 },
+      expectedSavedRecord: {
+        paneKey: PANE_KEY,
+        capturedAt: source.capturedAt,
+        updatedAt: source.updatedAt
+      }
+    }
+    if (newer) {
+      runtime.recordHookStatusResume(codexRow({ receivedAt: 30, prompt: 'new explicit C' }))
+    }
+    await runtime.forgetRefusedSavedResume(TEST_WORKTREE_ID, PANE_KEY, refused, source)
+    await runtime['hookStatusResumeWrites']
+    const record = getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]
+    if (newer) {
+      expect(record).toMatchObject({ prompt: 'new explicit C', updatedAt: 30 })
+    } else {
+      expect(getSession().sleepingAgentSessionsByPaneKey).toEqual({})
+    }
+  }
+)

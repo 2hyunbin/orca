@@ -1,3 +1,4 @@
+import type { SavedResumeDecision, TerminalLaunchResult } from '../../shared/agent-session-resume'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 import type {
   AgentProviderSessionMetadata,
@@ -90,6 +91,10 @@ export type PtyApi = {
     startupCwdFallback?: { kind: 'worktree'; cwd: string }
     agentResumeUnavailable?: true
     agentResumeRefused?: 'chat-home' | 'chat-writing' | 'unverifiable'
+    savedResumeDecision?: SavedResumeDecision
+    refusedResume?: TerminalLaunchResult['refusedResume']
+    launchToken?: string
+    resumeProviderSession?: TerminalLaunchResult['resumeProviderSession']
     /** Host verdict on the shell-ready marker; absent when the execution host predates the field. */
     shellReadyArmed?: boolean
   }>

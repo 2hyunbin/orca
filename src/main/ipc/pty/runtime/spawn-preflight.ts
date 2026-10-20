@@ -20,11 +20,6 @@ import { resolvePtySpawnHostEnv } from '../spawn-host-env'
 import { ptySpawnPaneFromIds, stampPtySpawnPaneEnv } from '../spawn-pane-env'
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
 import {
-  applyResumeSpawnAdmission,
-  forgetRefusedResume,
-  resumeSpawnRefusal
-} from '../host-env/saved-resume-admission'
-import {
   ensureJcodeRuntimeDir,
   JCODE_RUNTIME_DIR_ENV_KEY
 } from '../../../../shared/jcode-runtime-dir'
@@ -81,9 +76,6 @@ export async function prepareRuntimePtySpawn(
   ctx.daemonShellOverride = ctx.terminalRuntimeOptions.shellOverride
   ctx.expectedWslDistro = target.expectedWslDistro
   ctx.codexSelectionTarget = target.codexSelectionTarget
-  if (!ctx.preAdoptedStablePane) {
-    await admitRuntimeResumeSpawn(ctx)
-  }
   args.env = withClaudeProfileTerminalEnv(args.env, ctx.codexSelectionTarget)
   ctx.claudeAuth =
     ctx.isClaudeLaunch && ctx.deps.prepareClaudeAuth
@@ -128,8 +120,6 @@ export async function prepareRuntimePtySpawn(
       jcodeRuntimeDir: jcodeEnv?.[JCODE_RUNTIME_DIR_ENV_KEY]
     })
   }
-  // Why: a dropped resume still applies here, but this controller's result has no field for
-  // notifyResumeUnavailable — runtime/relay panes start fresh without the notice.
   const hostEnv = await resolvePtySpawnHostEnv({
     launchAgent: args.launchAgent,
     command: args.command,
@@ -150,6 +140,13 @@ export async function prepareRuntimePtySpawn(
     provider: ctx.provider,
     deps: ctx.deps
   })
+  ctx.agentResumeUnavailable = hostEnv.codexResumeLaunch.notifyResumeUnavailable
+  if (hostEnv.codexResumeLaunch.droppedResumeArgv && args.launchConfig) {
+    args.launchConfig = {
+      ...args.launchConfig,
+      agentCommand: hostEnv.launchCommand ?? args.launchConfig.agentCommand
+    }
+  }
   ctx.launchCommand = hostEnv.launchCommand
   ctx.codexResumeArgvDropped = hostEnv.codexResumeLaunch.droppedResumeArgv
   ctx.env = hostEnv.env
@@ -159,33 +156,4 @@ export async function prepareRuntimePtySpawn(
   ctx.stripInheritedOrcaCodexHome = hostEnv.stripInheritedOrcaCodexHome
 
   return null
-}
-
-async function admitRuntimeResumeSpawn(ctx: RuntimePtySpawnState): Promise<void> {
-  const { args } = ctx
-  ctx.resumeAdmission = await applyResumeSpawnAdmission(
-    ctx.deps.runtime,
-    args,
-    ctx.expectedWslDistro
-  )
-  const refusal = resumeSpawnRefusal(ctx.resumeAdmission)
-  if (!refusal) {
-    return
-  }
-  ctx.isClaudeLaunch = false
-  const paneKey = ptySpawnPaneFromIds(args)?.paneKey ?? null
-  forgetRefusedResume(paneKey, refusal)
-  // A host with no window has no one else to forget the pane's saved record.
-  if (
-    paneKey &&
-    args.worktreeId &&
-    args.resumeOrigin === 'saved' &&
-    refusal.verdict !== 'unverifiable'
-  ) {
-    void ctx.deps.runtime
-      ?.forgetRefusedSavedResume(args.worktreeId, paneKey, refusal.refused)
-      .catch((error: unknown) =>
-        console.warn('[pty] could not forget a refused saved resume', error)
-      )
-  }
 }

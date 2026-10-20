@@ -163,20 +163,13 @@ export function assertLegacyAiVaultResumeAllowed(args: AiVaultPrepareSessionResu
   }
 }
 
-/** A terminal resume a command asks for: the chat agent whose conversations it names, and the
- *  conversation (null: any of that agent's). */
-export type AdmittedResumeInvocation = { provider: StructuredAgentId; target: string | null }
-
-/** Refuses a command resuming a conversation a chat holds; otherwise `register` runs in the same
- *  synchronous step as the check, so a chat starting meanwhile sees what it registered. */
-export async function assertLegacyAiVaultResumeCommandAllowed<T>(
+export async function assertLegacyAiVaultResumeCommandAllowed(
   command: string,
-  ensureHost: () => Promise<void>,
-  register?: (invocations: AdmittedResumeInvocation[]) => T
-): Promise<T | undefined> {
+  ensureHost: () => Promise<void>
+): Promise<void> {
   const invocations = parseResumeInvocations(command)
   if (invocations.length === 0) {
-    return undefined
+    return
   }
   // A terminal command is not a chat: with chats refused here there is no ownership to check.
   await ensureStructuredAgentSessionHostUnlessRefused(ensureHost)
@@ -188,7 +181,6 @@ export async function assertLegacyAiVaultResumeCommandAllowed<T>(
       refuseLegacyWriter(ownership)
     }
   }
-  return register?.(invocations.map(({ provider, target }) => ({ provider, target })))
 }
 
 /** Any chat whose chain ever held the row a resume or fork names; null when none did. */

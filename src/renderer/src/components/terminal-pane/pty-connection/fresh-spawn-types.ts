@@ -1,12 +1,15 @@
 import type {
   AgentProviderSessionMetadata,
   ResumableTuiAgent,
+  SavedResumeStartupSource,
   SleepingAgentSessionRecord
 } from '../../../../../shared/agent-session-resume'
 import type { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 
 export type PendingStartupCommand = {
   command: string
+  resumeSource?: SavedResumeStartupSource
+  isCurrent?: () => boolean
   env?: Record<string, string>
 }
 

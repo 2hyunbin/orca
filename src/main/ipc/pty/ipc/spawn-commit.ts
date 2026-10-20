@@ -23,7 +23,7 @@ import { reflowHeadlessTerminalToCommittedGrid } from '../delivery/attached-pty-
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { markNativeWindowsConptyPty } from '../../../runtime/terminal-model-query-authority'
 import { commitPtyWithOpenCodePromptIntent } from '../../../opencode/opencode-startup-prompt-owner'
-import { resumeSpawnRefusal } from '../host-env/saved-resume-admission'
+import { resumeSpawnRefusal, savedResumeResult } from '../host-env/saved-resume-admission'
 
 export async function commitPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpawnResult> {
   return commitPtyWithOpenCodePromptIntent(ctx, () => commitReservedPtyIpcSpawn(ctx))
@@ -41,7 +41,7 @@ function resumeDisposition(ctx: PtyIpcSpawnState) {
     ...(ctx.codexResumeLaunch.notifyResumeUnavailable || refusal
       ? { agentResumeUnavailable: true as const }
       : {}),
-    ...(refusal ? { agentResumeRefused: refusal.verdict } : {})
+    ...savedResumeResult(ctx.resumeAdmission)
   }
 }
 
@@ -208,6 +208,15 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
   }
   const response = {
     ...ctx.result,
+    ...(!ctx.result.isReattach && !resumeSpawnRefusal(ctx.resumeAdmission)
+      ? {
+          launchAgent: args.launchAgent,
+          launchToken: typeof args.launchToken === 'string' ? args.launchToken : undefined,
+          resumeProviderSession: ctx.codexResumeLaunch.droppedResumeArgv
+            ? undefined
+            : args.resumeProviderSession
+        }
+      : {}),
     // Why both or neither: a pane can only adopt proven kitty flags together
     // with the sequence boundary they describe.
     ...(typeof ctx.result.snapshotKittyKeyboardFlags === 'number' &&

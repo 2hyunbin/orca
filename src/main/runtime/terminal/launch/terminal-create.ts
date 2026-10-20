@@ -1,3 +1,4 @@
+import { recordTerminalLaunchMetadata, resolveTerminalLaunchResult } from './terminal-launch-result'
 import { OrcaRuntimeWithTerminalCreateDeduplication } from './terminal-create-deduplication'
 import * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { createDesktopTerminal } from '../../orca-runtime-create-terminal-desktop'
@@ -138,6 +139,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
               ? launchOpts.command
               : (agentTeamsPlan?.command ?? launchOpts.command),
             launchAgent: launchOpts.launchAgent,
+            launchConfig: effectiveLaunchConfig,
+            ...(launchToken ? { launchToken } : {}),
             commandDelivery: 'provider',
             startupCommandDelivery: launchOpts.startupCommandDelivery,
             env,
@@ -193,17 +196,13 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         }
         restoreHint.consume()
         // Why here: refused before a handle, snapshot or reveal could pose the live PTY as new.
-        const adoptedStablePane = dependencies.admitStablePaneAdoption(result, launchOpts)
-        if (result.agentSessionEnsure) {
-          const canonicalSurface = result.agentSessionEnsure.owner.surface
-          preAllocatedHandle = canonicalSurface.terminalHandle
-          tabId = canonicalSurface.tabId
-          leafId = canonicalSurface.leafId
-          paneKey = dependencies.makePaneKey(tabId, leafId)
-        } else if (result.stablePaneOwner) {
-          preAllocatedHandle = result.stablePaneOwner.handle
-          tabId = result.stablePaneOwner.tabId
-          leafId = result.stablePaneOwner.leafId
+        const launch = resolveTerminalLaunchResult(result, {
+          ...launchOpts,
+          launchConfig: effectiveLaunchConfig,
+          launchToken
+        })
+        if (launch.surface) {
+          ;({ terminalHandle: preAllocatedHandle, tabId, leafId } = launch.surface)
           paneKey = dependencies.makePaneKey(tabId, leafId)
         }
         try {
@@ -227,34 +226,32 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
         const pty = this.getOrCreatePtyWorktreeRecord(result.id)
         if (pty) {
           pty.runtimeSessionOwned = true
-          if (!adoptedStablePane) {
-            if (launchOpts.title) {
+          if (!launch.adoptedStablePane) {
+            if (launch.effectiveTitle) {
               const observedAt = this.nextTitleObservationSequence()
-              pty.title = launchOpts.title
+              pty.title = launch.effectiveTitle
               pty.titleUpdatedAt = observedAt
-              this.setPtyManagementTitleFromObservedTitle(pty, launchOpts.title, observedAt)
+              this.setPtyManagementTitleFromObservedTitle(pty, launch.effectiveTitle, observedAt)
             } else {
               pty.title = null
               pty.titleUpdatedAt = null
             }
-            pty.launchConfig = effectiveLaunchConfig
-              ? dependencies.copySleepingAgentLaunchConfig(effectiveLaunchConfig)
-              : null
-            pty.launchToken = launchToken ?? null
-            pty.launchIncarnationId = launchToken ? pty.incarnationId : null
-            pty.launchAgent = launchOpts.launchAgent ?? null
+          }
+          recordTerminalLaunchMetadata(pty, result, launch)
+          if (!launch.adoptedStablePane) {
+            this.rememberSavedTerminalLaunchResult(result.id, result)
           }
           recordPtySurface(pty, tabId, paneKey, spawnSurfaceClaimSequence(this.graphSequence))
         }
         const handle = pty ? this.issuePtyHandle(pty) : preAllocatedHandle
-        if (pty && !adoptedStablePane && launchOpts.deferMobileSessionPublish !== true) {
+        if (pty && !launch.adoptedStablePane && launchOpts.deferMobileSessionPublish !== true) {
           this.publishPtyBackedMobileSessionTerminal(workspace.id, pty, {
             tabId,
             leafId,
-            title: launchOpts.title ?? null,
+            title: launch.effectiveTitle ?? null,
             activate: presentation === 'focused',
             selectIfNoActiveTab: presentation !== 'background',
-            ...(launchOpts.viewMode ? { viewMode: launchOpts.viewMode } : {}),
+            ...(launch.effectiveViewMode ? { viewMode: launch.effectiveViewMode } : {}),
             ...(cwd !== workspace.path ? { startupCwd: cwd } : {})
           })
         }
@@ -264,12 +261,12 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           try {
             await this.notifier.revealTerminalSession(workspace.id, {
               ptyId: result.id,
-              title: launchOpts.title ?? null,
+              title: pty?.title ?? launch.effectiveTitle ?? null,
               ...(cwd !== workspace.path ? { cwd } : {}),
-              ...(effectiveLaunchConfig ? { launchConfig: effectiveLaunchConfig } : {}),
-              ...(launchToken ? { launchToken } : {}),
-              ...(launchOpts.launchAgent ? { launchAgent: launchOpts.launchAgent } : {}),
-              ...(launchOpts.viewMode ? { viewMode: launchOpts.viewMode } : {}),
+              ...(pty?.launchConfig ? { launchConfig: pty.launchConfig } : {}),
+              ...(pty?.launchToken ? { launchToken: pty.launchToken } : {}),
+              ...(pty?.launchAgent ? { launchAgent: pty.launchAgent } : {}),
+              ...(launch.effectiveViewMode ? { viewMode: launch.effectiveViewMode } : {}),
               activate: presentation === 'focused',
               ...(presentation ? { presentation } : {}),
               ...dependencies.terminalRevealViewerOptions(opts),
@@ -285,19 +282,23 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           warning = dependencies.createTerminalRevealWarning(handle)
         }
         return {
+          ...result,
           handle,
           tabId,
           paneKey,
           ptyId: result.id,
           worktreeId: workspace.id,
-          title: pty?.title ?? launchOpts.title ?? null,
+          title: pty?.title ?? launch.effectiveTitle ?? null,
+          launchConfig: pty?.launchConfig ?? undefined,
+          launchAgent: pty?.launchAgent ?? undefined,
+          launchToken: pty?.launchToken ?? undefined,
           ...this.getPtyExecutionHostMetadata(result.id),
           surface,
           ...(result.pid ? { processId: result.pid } : {}),
           ...(result.agentSessionEnsure
             ? { agentSessionDisposition: result.agentSessionEnsure.disposition }
             : {}),
-          ...(adoptedStablePane ? { isReattach: true as const } : {}),
+          ...(launch.adoptedStablePane ? { isReattach: true as const } : {}),
           ...(warning ? { warning } : {})
         }
       } finally {

@@ -70,3 +70,52 @@ describe('host-initiated terminal creation under an attached window', () => {
     expect(pty?.runtimeSessionOwned).toBe(true)
   })
 })
+
+it.each(['refused', 'adopted', 'fresh-unavailable'] as const)(
+  'publishes the effective %s terminal rather than the requested saved recipe',
+  async (kind) => {
+    const { runtime, spawn } = createRuntimeWithAttachedWindow()
+    const config = { agentCommand: 'codex', agentArgs: '', agentEnv: {} }
+    spawn.mockResolvedValue({
+      id: 'effective-pty',
+      ...(kind === 'adopted'
+        ? { isReattach: true, launchAgent: 'codex', launchConfig: config }
+        : {}),
+      ...(kind === 'refused'
+        ? {
+            agentResumeRefused: 'chat-home',
+            agentResumeUnavailable: true,
+            savedResumeDecision: {
+              agent: 'claude',
+              providerSession: { key: 'session_id', id: 'C' },
+              verdict: 'chat-home'
+            }
+          }
+        : {}),
+      ...(kind === 'fresh-unavailable'
+        ? {
+            agentResumeUnavailable: true,
+            launchAgent: 'codex',
+            launchConfig: config,
+            launchToken: 'actual-fresh-token'
+          }
+        : {})
+    })
+    const result = await runtime.createTerminal('id:repo-1::/tmp/wt-cli', {
+      launchAgent: 'claude',
+      title: 'Rejected C',
+      resumeOrigin: 'saved',
+      resumeProviderSession: { key: 'session_id', id: 'C' },
+      launchConfig: { agentCommand: 'claude', agentArgs: '', agentEnv: {} }
+    })
+    expect(result.agentResumeRefused).toBe(kind === 'refused' ? 'chat-home' : undefined)
+    expect(result.launchAgent).toBe(kind === 'refused' ? undefined : 'codex')
+    expect(result.launchConfig).toEqual(kind === 'refused' ? undefined : config)
+    if (kind === 'refused') {
+      expect(result.title).not.toBe('Rejected C')
+    }
+    if (kind === 'fresh-unavailable') {
+      expect(result.launchToken).toBe('actual-fresh-token')
+    }
+  }
+)

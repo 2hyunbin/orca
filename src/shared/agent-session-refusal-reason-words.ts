@@ -120,6 +120,7 @@ const REASON_WORDS = {
     agentCommandNotRunnable: { fact: 'agentCommandNotRunnable', action: 'actFirst' },
     runtimeNotInstalled: { fact: 'runtimeNotInstalled', action: 'actFirst' },
     conversationOpenInTerminal: { fact: 'conversationOpenInTerminal', action: 'actFirst' },
+    conversationOpenElsewhere: { fact: 'conversationOpenElsewhere', action: 'actFirst' },
     attachFailed: codeWords('retry')
   },
   agent_session_ownership_unknown: {

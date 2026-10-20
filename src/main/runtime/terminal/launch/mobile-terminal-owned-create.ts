@@ -228,8 +228,8 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
       incarnationId: livePty.pty.incarnationId,
       title: terminal.title ?? livePty.pty.title ?? 'Terminal',
       ...(cwd ? { startupCwd: cwd } : {}),
-      ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
-      ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
+      ...(livePty.pty.launchAgent ? { launchAgent: livePty.pty.launchAgent } : {}),
+      ...(!terminal.agentResumeRefused && opts.viewMode ? { viewMode: opts.viewMode } : {}),
       parentLayout,
       isActive: activate
     }

@@ -110,6 +110,23 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
       launchConfig: startupPlan.launchConfig,
       resumeProviderSession: providerSession,
       resumeOrigin: 'saved',
+      resumeSource: {
+        cancelled: false,
+        ...(sleepingRecord &&
+        sleepingRecord.agent === agent &&
+        agentProviderSessionsEqual(agent, sleepingRecord.providerSession, providerSession)
+          ? { record: sleepingRecord }
+          : {}),
+        ...(useLiveEntry && entry
+          ? {
+              expectedStatus: {
+                paneKey: session.cacheKey,
+                receivedAt: entry.updatedAt,
+                stateStartedAt: entry.stateStartedAt
+              }
+            }
+          : {})
+      },
       launchToken: coldRestoreLaunchToken,
       useLiveEntry: Boolean(useLiveEntry),
       hasSleepingRecord: Boolean(sleepingRecord),

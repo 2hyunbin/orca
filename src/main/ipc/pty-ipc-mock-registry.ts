@@ -135,9 +135,7 @@ export const noChatsRuntimeMembers = () => ({
   openAgentSessionRecordStore: vi.fn(async () => ({
     listRecords: () => [],
     getVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] })
-  })),
-  reserveManagedConversationStart: vi.fn(() => ({ bind: vi.fn(), drop: vi.fn() })),
-  bindManagedConversationStart: vi.fn()
+  }))
 })
 
 export const agentHookServerModuleMock = () => ({

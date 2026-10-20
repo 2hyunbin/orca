@@ -1,3 +1,6 @@
+import { localProvider } from '../provider/registry'
+import { spawnPtyFromRuntimeController } from './spawn'
+import * as owners from '../pane/agent-session-owners'
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserWindow } from 'electron'
 import { getDefaultSettings } from '../../../../shared/constants'
@@ -6,16 +9,31 @@ import {
   agentSessionRecordFixture
 } from '../../../../shared/agent-session-record.test-fixture'
 import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
-import { ManagedConversationStarts } from '../../../runtime/managed-conversation-starts'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { finishPtyShutdown } from '../provider/liveness'
 import { admitColdRestoreReattach } from '../host-env/saved-resume-admission'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
-import { prepareRuntimePtySpawn } from './spawn-preflight'
+import { executeRuntimePtySpawn } from './spawn-execute'
+import { savedResumeResult } from '../host-env/saved-resume-admission'
 import { createRuntimePtySpawnState } from './spawn-state'
 
 const forgetRefusedPaneResume = vi.hoisted(() => vi.fn())
 vi.mock('../../../agent-hooks/server', () => ({ agentHookServer: { forgetRefusedPaneResume } }))
+
+vi.mock('./spawn-preflight', () => ({ prepareRuntimePtySpawn: vi.fn(async () => null) }))
+vi.mock('./spawn-options', () => ({
+  buildRuntimePtySpawnOptions: vi.fn(async (ctx: ReturnType<typeof createRuntimePtySpawnState>) => {
+    ctx.spawnIdentityPaneKey = 'tab-1:leaf'
+    ctx.spawnOptions = {
+      cols: ctx.args.cols,
+      rows: ctx.args.rows,
+      command: ctx.args.command,
+      env: ctx.args.env,
+      launchAgent: ctx.args.launchAgent
+    }
+    return null
+  })
+}))
 
 const C = 'provider-session-alpha-1'
 const chat = agentSessionRecordFixture(
@@ -34,14 +52,21 @@ const store = {
 
 /** A host whose one chat continues C at rest, with its tab open. */
 function chatHost() {
-  const starts = new ManagedConversationStarts()
   return {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the admission reads only the two members `store` has.
     openAgentSessionRecordStore: async () => store as unknown as AgentSessionRecordStore,
-    reserveManagedConversationStart: vi.fn(starts.reserve.bind(starts)),
+    getTerminalLaunchResult: vi.fn(),
     forgetRefusedSavedResume: vi.fn(async () => {}),
     getAgentProviderSessionRows: () => [
-      { paneKey: 'tab-1:leaf', agentType: 'claude', providerSession: { key: 'session_id', id: C } }
+      {
+        paneKey: 'tab-1:leaf',
+        agentType: 'claude' as const,
+        state: 'working' as const,
+        prompt: '',
+        receivedAt: 1,
+        stateStartedAt: 1,
+        providerSession: { key: 'session_id' as const, id: C }
+      }
     ]
   }
 }
@@ -83,41 +108,178 @@ function deps(runtime: ReturnType<typeof chatHost>): PtyRuntimeControllerDeps {
   }
 }
 
-describe('host-side saved resumes of a conversation an open chat continues', () => {
-  it('materializes a phone-restored pane as a plain shell and forgets its saved record', async () => {
-    const runtime = chatHost()
+describe('actual runtime saved-resume outcomes', () => {
+  function freshContext(runtime = chatHost()) {
     const ctx = createRuntimePtySpawnState(deps(runtime), {
       cols: 80,
       rows: 24,
       worktreeId: 'wt-1',
       tabId: 'tab-1',
-      leafId: '11111111-1111-4111-8111-111111111111',
       command: `claude --resume ${C}`,
       launchAgent: 'claude',
       resumeProviderSession: { key: 'session_id', id: C },
-      resumeOrigin: 'saved'
+      resumeOrigin: 'saved',
+      launchConfig: { agentCommand: 'claude', agentArgs: '', agentEnv: { AGENT_ONLY: 'yes' } },
+      env: {
+        WORKSPACE: 'keep',
+        AGENT_ONLY: 'yes',
+        ORCA_AGENT_LAUNCH_TOKEN: 'rejected',
+        ORCA_SEQUENCED_STARTUP_COMMAND: `claude --resume ${C}`,
+        ORCA_SEQUENCED_STARTUP_SCRIPT: `fallback claude --resume ${C}`
+      }
     })
-    await prepareRuntimePtySpawn(ctx)
-    ctx.finishTerminalInstall()
-    expect(ctx.args.command).toBeUndefined()
-    expect(ctx.launchCommand ?? '').not.toContain(C)
-    expect(runtime.forgetRefusedSavedResume).toHaveBeenCalledWith(
-      'wt-1',
-      'tab-1:11111111-1111-4111-8111-111111111111',
-      { agent: 'claude', providerSession: { key: 'session_id', id: C } }
-    )
+    ctx.spawnOptions = {
+      cols: 80,
+      rows: 24,
+      command: ctx.args.command,
+      launchAgent: 'claude',
+      env: { ...ctx.args.env }
+    }
+    return ctx
+  }
+
+  it('chooses a plain shell only in the fresh callback and does not forget before commit', async () => {
+    const runtime = chatHost()
+    const ctx = freshContext(runtime)
+    const spawn = vi.spyOn(ctx.provider, 'spawn').mockResolvedValue({ id: 'plain-shell' })
+    try {
+      expect(ctx.args.command).toContain(C)
+      await executeRuntimePtySpawn(ctx)
+      expect(spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: { WORKSPACE: 'keep' }
+        })
+      )
+      expect(ctx.spawnOptions.command).toBeUndefined()
+      expect(ctx.args.launchAgent).toBeUndefined()
+      expect(savedResumeResult(ctx.resumeAdmission)).toMatchObject({
+        agentResumeRefused: 'chat-home',
+        agentResumeUnavailable: true,
+        savedResumeDecision: { verdict: 'chat-home', providerSession: { id: C } }
+      })
+      expect(forgetRefusedPaneResume).not.toHaveBeenCalled()
+      expect(runtime.forgetRefusedSavedResume).not.toHaveBeenCalled()
+    } finally {
+      spawn.mockRestore()
+    }
   })
 
-  it("refuses a late reattach's cold restore before its window can resume it", async () => {
+  it('lets the actual lower-owned live result override a tentative fresh refusal', async () => {
     const runtime = chatHost()
+    const ctx = freshContext(runtime)
+    runtime.getTerminalLaunchResult.mockReturnValue({ launchAgent: 'codex' })
+    const spawn = vi.spyOn(ctx.provider, 'spawn').mockResolvedValue({
+      id: 'already-live',
+      isReattach: true,
+      launchAgent: 'codex'
+    })
+    try {
+      await executeRuntimePtySpawn(ctx)
+      expect(ctx.result).toMatchObject({
+        id: 'already-live',
+        isReattach: true,
+        launchAgent: 'codex'
+      })
+      expect(ctx.resumeAdmission).toBeNull()
+      expect(runtime.forgetRefusedSavedResume).not.toHaveBeenCalled()
+    } finally {
+      spawn.mockRestore()
+    }
+  })
+
+  it('checks the selected late cold-shell candidate but never checks a real reattach', async () => {
+    const runtime = chatHost()
+    const pane = { paneKey: 'tab-1:leaf', saved: undefined }
     await expect(
       admitColdRestoreReattach(
         runtime,
         { coldRestore: { scrollback: '', cwd: '/tmp' } },
-        { paneKey: 'tab-1:leaf', saved: undefined },
+        pane,
         null
       )
-    ).resolves.toMatchObject({ verdict: 'chat-home' })
-    expect(runtime.reserveManagedConversationStart).not.toHaveBeenCalled()
+    ).resolves.toMatchObject({ verdict: 'chat-home', refused: { providerSession: { id: C } } })
+    await expect(
+      admitColdRestoreReattach(runtime, { coldRestore: {}, isReattach: true }, pane, null)
+    ).resolves.toBeNull()
   })
+})
+
+it('unwinds a refused fresh claim before spawning an unclaimed shell', async () => {
+  const runtime = chatHost()
+  const ctx = createRuntimePtySpawnState(deps(runtime), {
+    cols: 80,
+    rows: 24,
+    launchAgent: 'claude',
+    command: `claude --resume ${C}`,
+    resumeOrigin: 'saved',
+    resumeProviderSession: { key: 'session_id', id: C },
+    agentSessionEnsure: {
+      claim: {
+        agent: 'claude',
+        digestVersion: 1,
+        keyId: 'key',
+        identityDigest: 'C',
+        worktreeScopeDigest: 'scope'
+      },
+      surface: { worktreeId: 'wt-1', tabId: 'tab-1', leafId: 'leaf', terminalHandle: 'terminal' }
+    }
+  })
+  const claim = ctx.args.agentSessionEnsure?.claim
+  if (!claim) {
+    throw new Error('missing fixture claim')
+  }
+  ctx.spawnOptions = {
+    cols: 80,
+    rows: 24,
+    command: ctx.args.command,
+    agentSessionEnsure: ctx.args.agentSessionEnsure
+  }
+  const inventory = vi.spyOn(owners, 'reconcileAgentSessionOwnerListings').mockResolvedValue()
+  const spawn = vi.spyOn(ctx.provider, 'spawn').mockResolvedValue({ id: 'refused-shell' })
+  try {
+    await executeRuntimePtySpawn(ctx)
+    expect(spawn).toHaveBeenCalledOnce()
+    expect(ctx.spawnOptions.command).toBeUndefined()
+    expect(ctx.result.agentSessionEnsure).toBeUndefined()
+    expect(owners.agentSessionOwners.find(claim)).toBeNull()
+    expect(ctx.resumeAdmission).toMatchObject({ verdict: 'chat-home' })
+  } finally {
+    inventory.mockRestore()
+    spawn.mockRestore()
+  }
+})
+
+it('returns the committed runtime shell when exact saved-record persistence fails', async () => {
+  const runtime = {
+    ...chatHost(),
+    registerPty: vi.fn(),
+    noteTerminalSpawnCommand: vi.fn(),
+    reflowHeadlessTerminalToPtyGrid: vi.fn(),
+    forgetRefusedSavedResume: vi.fn(async () => {
+      throw new Error('saved record disk full')
+    })
+  }
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const spawn = vi.spyOn(localProvider, 'spawn').mockResolvedValue({ id: 'cleanup-failed-shell' })
+  try {
+    const result = await spawnPtyFromRuntimeController(deps(runtime), {
+      cols: 80,
+      rows: 24,
+      worktreeId: 'wt-1',
+      tabId: 'tab-1',
+      command: `claude --resume ${C}`,
+      launchAgent: 'claude',
+      resumeOrigin: 'saved',
+      resumeProviderSession: { key: 'session_id', id: C }
+    })
+    expect(result).toMatchObject({ id: 'cleanup-failed-shell', agentResumeRefused: 'chat-home' })
+    expect(spawn.mock.calls[0]?.[0].command).toBeUndefined()
+    expect(runtime.registerPty).toHaveBeenCalled()
+    expect(runtime.forgetRefusedSavedResume).toHaveBeenCalledOnce()
+    await Promise.resolve()
+    expect(warning).toHaveBeenCalled()
+  } finally {
+    spawn.mockRestore()
+    warning.mockRestore()
+  }
 })

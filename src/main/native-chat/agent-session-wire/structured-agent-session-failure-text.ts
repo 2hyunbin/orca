@@ -38,7 +38,8 @@ const TYPED_START_REFUSALS = [
   'claudeAccountSetupFailed',
   'agentCommandNotRunnable',
   'runtimeNotInstalled',
-  'conversationOpenInTerminal'
+  'conversationOpenInTerminal',
+  'conversationOpenElsewhere'
 ] as const satisfies readonly (AgentSessionFailureKind &
   AgentSessionRefusalReason<'agent_session_operation_invalid'>)[]
 
@@ -71,10 +72,28 @@ export function providerExitObserved(error: unknown, depth = 0): boolean {
   return providerExitObserved(error.cause, depth + 1)
 }
 
-/** A start that did not land. A refusal the adapter typed keeps its situation, and an exit the
- *  adapter observed says the provider stopped; anything else blames no one — it may be Orca's, or
- *  a spawn that failed. Either keeps the provider's diagnostic when the error carried one. */
+/** Cleanup wrappers retain the provider's typed refusal without changing their exit proof. */
+export function startupAcquisitionRefusal(
+  error: unknown,
+  depth = 0
+): AgentSessionAcquisitionRefusal | undefined {
+  if (depth >= 6 || !(error instanceof Error)) {
+    return undefined
+  }
+  if (error instanceof AgentSessionAcquisitionRefusal) {
+    return error
+  }
+  return (
+    startupAcquisitionRefusal(error.cause, depth + 1) ??
+    (error instanceof AggregateError
+      ? error.errors.map((inner) => startupAcquisitionRefusal(inner, depth + 1)).find(Boolean)
+      : undefined)
+  )
+}
+
+/** A failed start keeps its typed refusal or observed exit and private provider diagnostic. */
 export function providerStartupFailureFact(cause?: unknown): SubmissionRejectionFact {
+  cause = startupAcquisitionRefusal(cause) ?? cause
   const codexInstallation = codexInstallationProblemOf(cause)
   if (codexInstallation) {
     return agentSessionFailureFact('startFailed', {

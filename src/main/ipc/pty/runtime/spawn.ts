@@ -1,4 +1,11 @@
-import type { AgentSessionClaimedSpawnResult } from '../../../../shared/agent-session-host-authority'
+import {
+  captureSavedResumeCleanup,
+  admitColdRestoreReattach,
+  savedResumeRecord,
+  savedResumeResult,
+  resumeSpawnRefusal,
+  forgetRefusedResume
+} from '../host-env/saved-resume-admission'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
@@ -16,27 +23,10 @@ import { buildRuntimePtySpawnOptions } from './spawn-options'
 import { executeRuntimePtySpawn } from './spawn-execute'
 import { commitRuntimePtySpawn } from './spawn-commit'
 import { createRuntimePtySpawnState, type RuntimePtySpawnArgs } from './spawn-state'
-import { bindResumeSpawnStart, dropResumeSpawnStart } from '../host-env/saved-resume-admission'
 import {
   commitRuntimeSpawnHiddenDelivery,
   releaseRuntimeSpawnPreSpawnHiddenMark
 } from './spawn-hidden-delivery'
-
-function toRuntimeSpawnReply(result: {
-  id: string
-  incarnationId?: string
-  wslDistro?: string | null
-  stablePaneOwner?: { handle: string; tabId: string; leafId: string }
-  agentSessionEnsure?: AgentSessionClaimedSpawnResult
-}) {
-  return {
-    id: result.id,
-    ...(result.incarnationId ? { incarnationId: result.incarnationId } : {}),
-    ...(typeof result.wslDistro === 'string' ? { wslDistro: result.wslDistro } : {}),
-    ...(result.stablePaneOwner ? { stablePaneOwner: result.stablePaneOwner } : {}),
-    ...(result.agentSessionEnsure ? { agentSessionEnsure: result.agentSessionEnsure } : {})
-  }
-}
 
 export async function spawnPtyFromRuntimeController(
   deps: PtyRuntimeControllerDeps,
@@ -74,11 +64,11 @@ export async function spawnPtyFromRuntimeController(
     const materialized =
       materializedOrPromise instanceof Promise ? await materializedOrPromise : materializedOrPromise
     if (materialized) {
-      return toRuntimeSpawnReply(materialized)
+      return { ...materialized, ...deps.runtime?.getTerminalLaunchResult?.(materialized.id) }
     }
     const earlyAdopt = await prepareRuntimePtySpawn(ctx)
     if (earlyAdopt) {
-      return toRuntimeSpawnReply(earlyAdopt)
+      return { ...earlyAdopt, ...deps.runtime?.getTerminalLaunchResult?.(earlyAdopt.id) }
     }
     const earlyReserved = await buildRuntimePtySpawnOptions(ctx).catch((error: unknown) => {
       restoreProvisionalPtySize({
@@ -90,16 +80,60 @@ export async function spawnPtyFromRuntimeController(
       throw error
     })
     if (earlyReserved) {
-      dropResumeSpawnStart(ctx.resumeAdmission)
-      return toRuntimeSpawnReply(earlyReserved)
+      return { ...earlyReserved, ...deps.runtime?.getTerminalLaunchResult?.(earlyReserved.id) }
     }
     await executeRuntimePtySpawn(ctx)
+    if (!ctx.resumeAdmission) {
+      ctx.resumeAdmission = await admitColdRestoreReattach(
+        deps.runtime,
+        ctx.result,
+        {
+          paneKey: ctx.spawnIdentityPaneKey,
+          saved: savedResumeRecord(deps.store, ctx.spawnIdentityPaneKey)
+        },
+        ctx.expectedWslDistro
+      )
+      await captureSavedResumeCleanup(
+        deps.runtime,
+        deps.store,
+        ctx.spawnIdentityPaneKey,
+        ctx.resumeAdmission,
+        args.worktreeId
+      )
+    }
+    if (!ctx.result.isReattach) {
+      Object.assign(ctx.result, savedResumeResult(ctx.resumeAdmission), {
+        ...(ctx.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
+        launchConfig: args.launchConfig,
+        launchAgent: args.launchAgent,
+        launchToken: args.launchToken,
+        resumeProviderSession: ctx.codexResumeArgvDropped ? undefined : args.resumeProviderSession
+      })
+    }
     const committed = await commitRuntimePtySpawn(ctx)
-    bindResumeSpawnStart(deps.runtime, ctx.resumeAdmission, ctx.result)
+    const refusal = resumeSpawnRefusal(ctx.resumeAdmission)
+    forgetRefusedResume(ctx.spawnIdentityPaneKey, refusal)
+    if (
+      args.worktreeId &&
+      ctx.spawnIdentityPaneKey &&
+      refusal &&
+      refusal.verdict !== 'unverifiable'
+    ) {
+      void deps.runtime
+        ?.forgetRefusedSavedResume?.(
+          args.worktreeId,
+          ctx.spawnIdentityPaneKey,
+          refusal.refused,
+          refusal.sourceRecord
+        )
+        .catch((error: unknown) => console.warn('[pty] refused resume cleanup failed', error))
+    }
     commitRuntimeSpawnHiddenDelivery(ctx)
-    return toRuntimeSpawnReply(committed)
+    if (!ctx.result.isReattach) {
+      deps.runtime?.rememberSavedTerminalLaunchResult?.(committed.id, committed)
+    }
+    return committed
   } catch (err) {
-    dropResumeSpawnStart(ctx.resumeAdmission)
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     if (ctx.pendingRegistrationPtyId) {
       deps.runtime?.cancelPendingPtyRegistration?.(

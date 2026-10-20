@@ -1,11 +1,12 @@
+import { assertLegacyAiVaultResumeCommandAllowed } from '../../../../ai-vault/structured-session-ownership'
 import { InvalidArgumentError, defineMethod } from '../../core'
 import { isTerminalQueryReply } from '../../../../../shared/terminal-query-reply'
 import { isUntypedTerminalInput } from '../../../../../shared/terminal-untyped-input'
 import { assertTerminalAgentSendable } from '../../terminal-agent-send-guard'
 import { TerminalSend } from '../../../../../shared/rpc-contract/terminal-unary-params'
-import { withTerminalSendResumeStarts } from './terminal-send-resume-starts'
 import {
   assertTerminalSendExactPtyBinding,
+  assertTerminalSendTextWithinLimit,
   commitMobileInputFloorClaim,
   getTerminalSendGuardRefusedReason,
   isTerminalInputLockedForClient,
@@ -36,6 +37,18 @@ export const TERMINAL_SEND_METHODS = [
         replayedMutationReceipt
       }
     ) => {
+      await assertTerminalSendTextWithinLimit(params.text)
+      await assertTerminalSendTextWithinLimit(params.resolvedLaunchDraft?.text)
+      if (params.text) {
+        await assertLegacyAiVaultResumeCommandAllowed(params.text, () =>
+          runtime.ensureStructuredAgentSessionHost()
+        )
+      }
+      if (params.resolvedLaunchDraft?.text) {
+        await assertLegacyAiVaultResumeCommandAllowed(params.resolvedLaunchDraft.text, () =>
+          runtime.ensureStructuredAgentSessionHost()
+        )
+      }
       const queryReplyClientId = clientId ?? params.client?.id
       if (
         params.inputKind === 'query-reply' &&
@@ -291,4 +304,4 @@ export const TERMINAL_SEND_METHODS = [
       return { send: result }
     }
   })
-].map(withTerminalSendResumeStarts)
+]

@@ -1,3 +1,4 @@
+import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import type { PtyConnectResult } from './pty-transport-types'
 
@@ -6,9 +7,12 @@ type IpcPtySpawnResult = PtyConnectResult & { isReattach?: boolean }
 export function projectIpcPtyConnectResult(
   spawnResult: IpcPtySpawnResult
 ): string | PtyConnectResult {
+  const facts = terminalLaunchFacts(spawnResult)
   const launchAgent = isTuiAgent(spawnResult.launchAgent) ? spawnResult.launchAgent : undefined
   if (spawnResult.isReattach || spawnResult.coldRestore || spawnResult.sessionExpired) {
     return {
+      ...facts,
+      ...(spawnResult.incarnationId ? { incarnationId: spawnResult.incarnationId } : {}),
       id: spawnResult.id,
       ...(spawnResult.isReattach ? { isReattach: true } : {}),
       ...(launchAgent ? { launchAgent } : {}),
@@ -47,9 +51,14 @@ export function projectIpcPtyConnectResult(
     launchAgent ||
     spawnResult.launchConfig ||
     spawnResult.startupCwdFallback ||
-    spawnResult.agentResumeUnavailable
+    spawnResult.agentResumeUnavailable ||
+    spawnResult.savedResumeDecision ||
+    spawnResult.refusedResume ||
+    spawnResult.launchToken
   ) {
     return {
+      ...facts,
+      ...(spawnResult.incarnationId ? { incarnationId: spawnResult.incarnationId } : {}),
       id: spawnResult.id,
       ...(launchAgent ? { launchAgent } : {}),
       ...(spawnResult.launchConfig ? { launchConfig: spawnResult.launchConfig } : {}),

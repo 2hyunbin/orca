@@ -40,6 +40,7 @@ type ReattachResultSession = ReattachPayloadSession &
     | 'handleReattachResult'
     | 'mountFollowsTerminalPark'
     | 'registerEffectiveLaunchConfig'
+    | 'cancelSavedResumeStartup'
     | 'registerPaneSerializerFor'
     | 'registerSideEffectFactConsumerForPty'
     | 'reportPanePtyVisibility'
@@ -94,6 +95,12 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       session.remotePtyIncarnationId = null
     }
 
+    if (
+      connectResult?.agentResumeRefused ||
+      (connectResult?.agentResumeUnavailable && !connectResult.isReattach)
+    ) {
+      session.cancelSavedResumeStartup(coldRestoreStartup ?? sessionBag.paneStartup, connectResult)
+    }
     if (connectResult?.exitedBeforeAttach) {
       if (connectResult.agentResumeUnavailable) {
         session.showSessionRestoredBanner('resume-unavailable')
@@ -103,7 +110,12 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     }
 
     // Why: main started a plain shell instead, so nothing of the plan may be registered over it.
-    const startup = connectResult?.agentResumeRefused ? null : coldRestoreStartup
+    const startup =
+      connectResult?.agentResumeRefused ||
+      connectResult?.agentResumeUnavailable ||
+      connectResult?.isReattach
+        ? null
+        : coldRestoreStartup
     const ptyId =
       connectResult?.id ?? (typeof result === 'string' ? result : session.transport.getPtyId())
     const hasExplicitPtyId = Boolean(connectResult?.id || typeof result === 'string')
@@ -130,7 +142,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       return false
     }
     session.registerEffectiveLaunchConfig(connectResult?.launchConfig, {
-      ...(startup ? { launchToken: startup.launchToken } : {}),
+      ...(connectResult?.launchToken ? { launchToken: connectResult.launchToken } : {}),
       ...(connectResult?.launchAgent
         ? { launchAgent: connectResult.launchAgent }
         : startup
@@ -179,7 +191,10 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     if (
       !hasStructuralReplay &&
       connectResult?.isReattach &&
-      hasEmptyReattachRetireEvidence(ptyId, startup)
+      hasEmptyReattachRetireEvidence(
+        ptyId,
+        connectResult.agentResumeRefused ? null : coldRestoreStartup
+      )
     ) {
       session.transport.disconnect()
       if (staleSessionId) {
@@ -188,7 +203,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       } else {
         session.syncPanePtyLayoutBinding(null)
       }
-      session.startFreshColdRestoreAgentResume(startup, {
+      session.startFreshColdRestoreAgentResume(coldRestoreStartup, {
         forceBlankRestoredViewport: true
       })
       return false

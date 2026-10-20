@@ -1,3 +1,4 @@
+import type { SavedResumeDecision, TerminalLaunchResult } from '../../shared/agent-session-resume'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 import { ipcRenderer } from 'electron'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
@@ -67,6 +68,7 @@ export const ptySessionControlApi = {
     /** Which lifetime of `id` this reply named; absent when the execution host predates the field. */
     incarnationId?: string
     launchConfig?: SleepingAgentLaunchConfig
+    launchAgent?: TuiAgent
     snapshot?: string
     snapshotCols?: number
     snapshotRows?: number
@@ -84,6 +86,10 @@ export const ptySessionControlApi = {
     startupCwdFallback?: { kind: 'worktree'; cwd: string }
     agentResumeUnavailable?: true
     agentResumeRefused?: 'chat-home' | 'chat-writing' | 'unverifiable'
+    savedResumeDecision?: SavedResumeDecision
+    refusedResume?: TerminalLaunchResult['refusedResume']
+    launchToken?: string
+    resumeProviderSession?: TerminalLaunchResult['resumeProviderSession']
     /** Host verdict on the shell-ready marker; absent when the execution host predates the field. */
     shellReadyArmed?: boolean
   }> => ipcRenderer.invoke('pty:spawn', opts),

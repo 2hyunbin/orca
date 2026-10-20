@@ -16,7 +16,10 @@ import type { TerminalPanePlacement } from '../../../../shared/terminal-pane-pla
 import type { ResumeSpawnAdmission } from '../host-env/saved-resume-admission'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { AgentProviderSessionMetadata } from '../../../../shared/agent-session-resume'
+import type {
+  SleepingAgentLaunchConfig,
+  AgentProviderSessionMetadata
+} from '../../../../shared/agent-session-resume'
 import type { StartupCommandDelivery } from '../../../../shared/codex-startup-delivery'
 import type {
   AgentSessionExecutionClaim,
@@ -63,6 +66,7 @@ export type RuntimePtySpawnState = {
   requestedAgentTeamsPath: string | undefined
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
+  agentResumeUnavailable: boolean
   codexResumeArgvDropped: boolean
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
@@ -98,6 +102,8 @@ export type RuntimePtySpawnArgs = {
   cwd?: string
   command?: string
   launchAgent?: TuiAgent
+  launchConfig?: SleepingAgentLaunchConfig
+  launchToken?: string
   commandDelivery?: 'renderer' | 'provider'
   startupCommandDelivery?: StartupCommandDelivery
   telemetry?: {
@@ -182,6 +188,7 @@ export function createRuntimePtySpawnState(
     requestedAgentTeamsPath: undefined,
     selectedCodexHomePath: null,
     codexResumeHomeSelected: false,
+    agentResumeUnavailable: false,
     codexResumeArgvDropped: false,
     skipCodexHomeEnv: false,
     stripInheritedOrcaCodexHome: false,

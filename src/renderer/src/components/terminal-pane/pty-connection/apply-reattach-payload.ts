@@ -1,3 +1,4 @@
+import { agentProviderSessionsEqual } from '../../../../../shared/agent-session-resume'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { waitForTerminalReplayWritesParsed } from '../replay-guard'
 import {
@@ -264,11 +265,33 @@ export function createReattachPayloadHandlers(
         `${RESET_GRAPHIC_RENDITION}${ctx.connectResult.coldRestore.scrollback}`
       )
       // Why not rebuilt when refused: main started a plain shell instead of that plan.
-      const preparedStartup = ctx.connectResult.agentResumeRefused
-        ? null
-        : (ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup())
+      let resumeUnavailable = Boolean(ctx.connectResult.agentResumeUnavailable)
+      let preparedStartup =
+        ctx.connectResult.agentResumeRefused || resumeUnavailable
+          ? null
+          : (ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup())
+      if (preparedStartup && !ctx.coldRestoreStartup) {
+        const decision = ctx.connectResult.savedResumeDecision
+        if (
+          !decision ||
+          decision.verdict !== 'admitted' ||
+          decision.agent !== preparedStartup.agent ||
+          !agentProviderSessionsEqual(
+            decision.agent,
+            decision.providerSession,
+            preparedStartup.resumeProviderSession
+          )
+        ) {
+          resumeUnavailable = true
+          session.cancelSavedResumeStartup(preparedStartup, {
+            ...ctx.connectResult,
+            agentResumeRefused: 'unverifiable'
+          })
+          preparedStartup = null
+        }
+      }
       const didPrepareResume = session.applyColdRestoreAgentResumeStartup(preparedStartup)
-      if (ctx.connectResult.agentResumeUnavailable) {
+      if (resumeUnavailable) {
         // Why: main dropped the resume argv, so this pane is a NEW session —
         // the plain restored banner would claim the old one came back.
         session.showSessionRestoredBanner('resume-unavailable')

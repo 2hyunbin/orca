@@ -5,7 +5,6 @@ import type {
   SpawnIntent
 } from '../../shared/host-spawn-admission'
 import type {
-  AgentSessionClaimedSpawnResult,
   AgentSessionExecutionClaim,
   AgentSessionSurfaceBinding
 } from '../../shared/agent-session-host-authority'
@@ -63,6 +62,8 @@ export type RuntimePtyController = {
     cwd?: string
     command?: string
     launchAgent?: TuiAgent
+    launchConfig?: WorktreeStartupLaunch['launchConfig']
+    launchToken?: string
     commandDelivery?: 'renderer' | 'provider'
     startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
     env?: Record<string, string>
@@ -108,14 +109,11 @@ export type RuntimePtyController = {
       }
       materialized?: true
     }
-  }): Promise<{
-    id: string
-    pid?: number | null
-    incarnationId?: PtyIncarnationId
-    wslDistro?: string
-    stablePaneOwner?: { handle: string; tabId: string; leafId: string }
-    agentSessionEnsure?: AgentSessionClaimedSpawnResult
-  }>
+  }): Promise<
+    PtySpawnResult & {
+      stablePaneOwner?: { handle: string; tabId: string; leafId: string }
+    }
+  >
   /** The local terminal owner's automatic-restore state; null when it has no fork gate. */
   getAutomaticWorkStatus?(): Promise<AutomaticWorkStatus | null>
   resumeAutomaticWork?(): Promise<AutomaticWorkResumeOutcome>

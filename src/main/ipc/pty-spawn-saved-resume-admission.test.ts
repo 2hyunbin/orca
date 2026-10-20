@@ -132,16 +132,30 @@ describe('a pane restore of a conversation a native chat continues', () => {
     }
   )
 
+  posixOnlyIt('keeps a committed refused shell usable when status cleanup fails', async () => {
+    register([chat.sessionId])
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    forgetRefusedPaneResumeMock.mockImplementationOnce(() => {
+      throw new Error('cleanup failed')
+    })
+    try {
+      const restored = await spawnResume('saved')
+      expect(restored).toMatchObject({ refused: 'chat-home', notice: true })
+      expect(restored.input).not.toContain(C)
+      expect(warning).toHaveBeenCalled()
+    } finally {
+      warning.mockRestore()
+    }
+  })
+
   posixOnlyIt(
-    'resumes once the chat tab is closed, and the chat then refuses to start',
+    'resumes once the chat tab is closed, with the accepted pre-report interval',
     async () => {
       const runtime = register([])
       const restored = await spawnResume('saved')
       expect(restored.refused).toBeUndefined()
       expect(restored.input).toContain(`--resume '${C}'`)
-      await expect(runtime['assertStructuredChatAcquireAdmissible'](chat)).rejects.toMatchObject({
-        refusal: { details: { reason: 'conversationHeldElsewhere' } }
-      })
+      await expect(runtime['assertStructuredChatAcquireAdmissible'](chat)).resolves.toBeUndefined()
     }
   )
 

@@ -1,3 +1,4 @@
+import type { SavedResumeStartupSource } from '../../../../shared/agent-session-resume'
 import type { ClosedTerminalTabTombstonesByTabId } from '../../../../shared/closed-terminal-tab-tombstones'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -57,6 +58,7 @@ export type TerminalState = {
       launchConfig?: SleepingAgentLaunchConfig
       resumeProviderSession?: AgentProviderSessionMetadata
       resumeOrigin?: 'saved'
+      resumeSource?: SavedResumeStartupSource
       launchToken?: string
       launchAgent?: TuiAgent
       /** The agent launch the pane's own spawn starts, instead of `command`. */

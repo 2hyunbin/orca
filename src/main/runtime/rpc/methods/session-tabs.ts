@@ -19,7 +19,6 @@ import { SESSION_TAB_MUTATION_METHODS } from './session-tab-mutation-methods'
 import { createSessionTabsRetirementProofDelta } from './session-tabs-retirement-proof-delta'
 import { restoreStructuredTabsIfSupported } from './structured-session-tab-restore'
 import { assertLegacyAiVaultResumeCommandAllowed } from '../../../ai-vault/structured-session-ownership'
-import { terminalConversationKey } from '../../../native-chat/structured-conversation-key'
 import { SessionTabsUnsubscribeAllParams } from '../../../../shared/rpc-contract/session-tabs-params'
 import { SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { createSessionTabsTabDeltaEncoder } from '../../../../shared/session-tabs-tab-delta'
@@ -58,22 +57,12 @@ export const SESSION_TAB_METHODS = [
     params: CreateTerminalTab,
     handler: async (params, context) => {
       const { runtime, signal, clientKind, pairedDeviceId, clientCapabilities } = context
-      // With a resume session the spawn step registers the start; a bare command registers here.
-      const start = params.command
-        ? await assertLegacyAiVaultResumeCommandAllowed(
-            params.command,
-            () => runtime.ensureStructuredAgentSessionHost(),
-            params.resumeProviderSession
-              ? undefined
-              : (invocations) =>
-                  runtime.reserveManagedConversationStart(
-                    invocations.map((invocation) =>
-                      terminalConversationKey(invocation.provider, invocation.target)
-                    )
-                  )
-          )
-        : undefined
-      const created = runtime.createMobileSessionTerminal(params.worktree, {
+      if (params.command) {
+        await assertLegacyAiVaultResumeCommandAllowed(params.command, () =>
+          runtime.ensureStructuredAgentSessionHost()
+        )
+      }
+      return runtime.createMobileSessionTerminal(params.worktree, {
         ...(params.sourceChatFork ? { sourceChatFork: params.sourceChatFork } : {}),
         terminalImageViewerSupported: terminalImageViewerSupported(context),
         afterTabId: params.afterTabId,
@@ -113,19 +102,6 @@ export const SESSION_TAB_METHODS = [
         // of running down the timeout and rolling back a live tab (#7718).
         signal
       })
-      // A renderer-backed create has no live PTY yet, so its start isn't held (a known gap).
-      return start
-        ? created.then(
-            (result) => {
-              runtime.bindManagedConversationStartToTerminal(start, result.tab.terminal)
-              return result
-            },
-            (error: unknown) => {
-              start.drop()
-              throw error
-            }
-          )
-        : created
     }
   }),
   defineStreamingMethod({

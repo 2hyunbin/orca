@@ -1,3 +1,4 @@
+import type { TerminalLaunchResult } from '../../../../shared/agent-session-resume'
 import type { AgentIdleEdgeMeta } from '../../../../shared/terminal-output-side-effects'
 import type {
   RestoreSpawnIntent,
@@ -90,7 +91,7 @@ export type LocalPtySessionMetadata = {
   shellOverride?: string
 }
 
-export type PtyConnectResult = {
+export type PtyConnectResult = TerminalLaunchResult & {
   id: string
   /** Host-owned PTY incarnation used to fence remote identity observations. */
   incarnationId?: string

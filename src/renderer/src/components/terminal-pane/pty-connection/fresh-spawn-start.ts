@@ -50,6 +50,11 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
       releaseDeferredCwdFence()
       return Promise.resolve(null)
     }
+    const effectiveStartup = startupOverride === undefined ? session.paneStartup : startupOverride
+    if (effectiveStartup?.resumeSource?.cancelled) {
+      releaseDeferredCwdFence()
+      return Promise.resolve(null)
+    }
     session.authoritativeReattachGeneration += 1
     // Every fresh connect creates or rebinds a PTY. Do not let a legacy
     // response that omits `incarnationId` inherit the predecessor's fence.
@@ -90,7 +95,6 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
     session.transportConnectInFlightSince = Date.now()
     session.pendingSpawnDeferral = null
     const visibleAtSpawn = session.deps.isVisibleRef.current === true
-    const effectiveStartup = startupOverride === undefined ? session.paneStartup : startupOverride
     const outputCallbacks = session.captureTransportOutputCallbacks(
       session.reportError,
       toProcessExitStartup(coldRestoreOverride ?? effectiveStartup)
@@ -163,7 +167,13 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
         // unverifiable until a stamped attach result arrives.
         session.remotePtyIncarnationId = connectResult?.incarnationId ?? null
         if (connectResult?.isReattach) {
-          session.pendingStartupCommand = null
+          if (
+            session.pendingStartupCommand?.resumeSource === effectiveStartup?.resumeSource &&
+            (effectiveStartup?.resumeSource ||
+              session.pendingStartupCommand?.command === effectiveStartup?.command)
+          ) {
+            session.pendingStartupCommand = null
+          }
           const accepted = await session.handleReattachResult(
             connectResult,
             null,
@@ -184,19 +194,23 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           return accepted ? resolvedPtyId : null
         }
         // Why: main started a plain shell instead, so nothing of the plan may stay registered over it.
-        const coldRestore = connectResult?.agentResumeRefused ? null : coldRestoreOverride
-        if (connectResult?.agentResumeRefused) {
-          session.clearRegisteredStartupLaunchConfig()
-          session.pendingStartupCommand = null
+        const rejectedSavedStartup =
+          connectResult?.agentResumeRefused ||
+          (connectResult?.agentResumeUnavailable && effectiveStartup?.resumeSource)
+        const coldRestore = rejectedSavedStartup ? null : coldRestoreOverride
+        if (connectResult && rejectedSavedStartup) {
+          session.cancelSavedResumeStartup(coldRestoreOverride ?? effectiveStartup, connectResult)
         }
         if (connectResult?.agentResumeRefused === 'unverifiable') {
           // Why: the saved session may have been consumed before this spawn; keep it for the next try.
-          session.keepUnrunResumeHandle(startupOverride)
+          if (!(coldRestoreOverride ?? effectiveStartup)?.resumeSource?.record) {
+            session.keepUnrunResumeHandle(startupOverride)
+          }
         }
         if (spawnedPtyId && typeof spawnedPtyId === 'object' && 'id' in spawnedPtyId) {
           session.registerEffectiveLaunchConfig(spawnedPtyId.launchConfig, {
-            ...(coldRestore ? { launchToken: coldRestore.launchToken } : {}),
-            ...(coldRestore ? { launchAgent: coldRestore.agent } : {})
+            ...(spawnedPtyId.launchToken ? { launchToken: spawnedPtyId.launchToken } : {}),
+            ...(spawnedPtyId.launchAgent ? { launchAgent: spawnedPtyId.launchAgent } : {})
           })
         }
         if (resolvedPtyId) {
@@ -229,7 +243,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           // Why: delayed draft/follow-up delivery keys off this launch
           // registry. If spawn produced no PTY, the launch is no longer a
           // viable delivery target and must not wait for a future pane.
-          session.clearRegisteredStartupLaunchConfig()
+          session.clearRegisteredStartupLaunchConfig(coldRestoreOverride ?? effectiveStartup)
         }
         if (
           resolvedPtyId &&
@@ -276,7 +290,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           session.paneStartup?.launchConfig ||
           (startupOverride && 'launchConfig' in startupOverride)
         ) {
-          session.clearRegisteredStartupLaunchConfig()
+          session.clearRegisteredStartupLaunchConfig(coldRestoreOverride ?? effectiveStartup)
         }
         clearPreSignaledSerializer()
         return null

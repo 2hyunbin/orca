@@ -109,3 +109,57 @@ describe('reattach payload context', () => {
     expect(context.reattachPayloadApplied).toBe(true)
   })
 })
+
+it.each(['missing', 'different', 'admitted'] as const)(
+  'authorizes only the checked late saved candidate (%s)',
+  async (kind) => {
+    await installTerminalTestGlobals()
+    try {
+      const startup: ColdRestoreAgentResumeStartup = {
+        command: 'codex resume C',
+        agent: 'codex',
+        resumeOrigin: 'saved',
+        resumeProviderSession: { key: 'session_id', id: 'C' },
+        launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
+        launchToken: 'saved-C',
+        resumeSource: { cancelled: false },
+        useLiveEntry: false,
+        hasSleepingRecord: false,
+        sleepingRecordEntry: null
+      }
+      const apply = vi.fn((value) => Boolean(value))
+      const cancel = vi.fn()
+      const schedule = vi.fn()
+      const session = createSession({
+        buildColdRestoreAgentResumeStartup: () => startup,
+        applyColdRestoreAgentResumeStartup: apply,
+        cancelSavedResumeStartup: cancel,
+        schedulePendingStartupCommandDelivery: schedule,
+        clearSleepingRecordAfterColdRestoreSpawn: vi.fn(),
+        showSessionRestoredBanner: vi.fn(),
+        consumeRestoredViewportBlankingMarker: vi.fn(),
+        writeFreshShellViewportBlanking: vi.fn()
+      })
+      const context = createContext('', 1)
+      context.connectResult = {
+        id: 'pty-1',
+        coldRestore: { scrollback: '', cwd: '/workspace' },
+        ...(kind === 'missing'
+          ? {}
+          : {
+              savedResumeDecision: {
+                agent: 'codex',
+                providerSession: { key: 'session_id', id: kind === 'different' ? 'D' : 'C' },
+                verdict: 'admitted'
+              }
+            })
+      }
+      await createReattachPayloadHandlers(session, context).applyReattachPayload()
+      expect(apply).toHaveBeenCalledWith(kind === 'admitted' ? startup : null)
+      expect(schedule).toHaveBeenCalledTimes(kind === 'admitted' ? 1 : 0)
+      expect(cancel).toHaveBeenCalledTimes(kind === 'admitted' ? 0 : 1)
+    } finally {
+      await restoreTerminalTestGlobals()
+    }
+  }
+)

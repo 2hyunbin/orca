@@ -1,3 +1,4 @@
+import type { TerminalLaunchResult } from './agent-session-resume'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
@@ -271,7 +272,8 @@ export type RuntimeTerminalCreateRequestPayload =
       source: 'runtime-session'
     })
 
-export type RuntimeTerminalCreate = {
+export type RuntimeTerminalCreate = TerminalLaunchResult & {
+  coldRestore?: { scrollback: string; cwd: string; cols?: number; rows?: number }
   handle: string
   /** Host-owned PTY incarnation used to fence remote identity observations. */
   incarnationId?: string | null

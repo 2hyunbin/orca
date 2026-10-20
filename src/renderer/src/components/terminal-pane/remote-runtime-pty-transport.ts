@@ -1,3 +1,7 @@
+import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
+import { isRuntimeCompatBlockError } from '@/runtime/runtime-protocol-compat'
+import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
+import { SAVED_RESUME_ORIGIN_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { readTerminalSpawnDeferral } from '../../../../shared/host-spawn-admission'
 import { remoteRestoreSpawnIntentParams } from '../../runtime/remote-restore-spawn-intent'
 import { createAgentSessionKeyboardOptions } from '@/runtime/agent-session-keyboard-capability'
@@ -532,6 +536,8 @@ export function createRemoteRuntimePtyTransport(
   }
   // Why: tab/leaf ids are shared by paired viewers; the instance suffix keeps one viewer's refresh off peer records.
   const clientId = `desktop:${tabId ?? 'tab'}:${leafId ?? 'leaf'}:${createBrowserUuid()}`
+  let replayLaunch: ((epoch: number) => Promise<RemoteAgentSessionLaunchResult | null>) | undefined
+  let savedOriginOptions: Promise<{ resumeOrigin?: 'saved' }> | undefined
   const terminalCreateMutationId = createBrowserUuid()
   // Why: reconnect retries must replay one host operation instead of creating
   // another fresh agent when the first response was lost.
@@ -3088,6 +3094,23 @@ export function createRemoteRuntimePtyTransport(
       if (restoreSpawnIntent && (destroyed || lifecycleEpoch !== connectLifecycleEpoch)) {
         return
       }
+      const originOptions =
+        (options.resumeOrigin ?? resumeOrigin) === 'saved'
+          ? await (savedOriginOptions ??= (async () => {
+              try {
+                const supported = await runtimeEnvironmentSupportsCapability(
+                  createEnvironmentId,
+                  SAVED_RESUME_ORIGIN_RUNTIME_CAPABILITY
+                )
+                return supported ? { resumeOrigin: 'saved' as const } : {}
+              } catch (error) {
+                if (isRuntimeCompatBlockError(error)) {
+                  throw error
+                }
+                return {}
+              }
+            })())
+          : {}
       const legacyCreateParams = {
         worktree: toRuntimeTerminalWorktreeSelector(worktreeId),
         clientMutationId: terminalCreateMutationId,
@@ -3101,9 +3124,7 @@ export function createRemoteRuntimePtyTransport(
         ...(resumeProviderSessionToSend !== undefined
           ? { resumeProviderSession: resumeProviderSessionToSend }
           : {}),
-        ...(resumeProviderSessionToSend && (options.resumeOrigin ?? resumeOrigin)
-          ? { resumeOrigin: options.resumeOrigin ?? resumeOrigin }
-          : {}),
+        ...originOptions,
         ...(launchTokenToSend !== undefined ? { launchToken: launchTokenToSend } : {}),
         ...(launchAgentToSend !== undefined ? { launchAgent: launchAgentToSend } : {}),
         ...spawnIntentParams,
@@ -3116,7 +3137,7 @@ export function createRemoteRuntimePtyTransport(
         presentation: 'background' as const,
         ...(activate === true ? { activate: true } : {})
       }
-      const legacyCreate = () =>
+      const legacyCreate = (epoch = connectLifecycleEpoch) =>
         createWithUnknownOutcomeRecovery(
           'terminal',
           (timeoutMs, reconcileExisting) =>
@@ -3130,9 +3151,9 @@ export function createRemoteRuntimePtyTransport(
               timeoutMs
             ),
           createEnvironmentId,
-          connectLifecycleEpoch
+          epoch
         )
-      const hostAuthorityCreate = async () => {
+      const hostAuthorityCreate = async (epoch = connectLifecycleEpoch) => {
         const keyboardOptions = await agentKeyboardOptions(createEnvironmentId)
         return createWithUnknownOutcomeRecovery(
           'agent-session',
@@ -3144,6 +3165,7 @@ export function createRemoteRuntimePtyTransport(
                   {
                     kind: 'explicit',
                     ...keyboardOptions,
+                    ...originOptions,
                     worktree: toRuntimeTerminalWorktreeSelector(worktreeId),
                     agent: launchAgentToSend!,
                     providerSession: resumeProviderSessionToSend,
@@ -3182,24 +3204,32 @@ export function createRemoteRuntimePtyTransport(
                   timeoutMs
                 ),
           createEnvironmentId,
-          connectLifecycleEpoch
+          epoch
         )
       }
       const resumeHostAuthorityCapability = resumeProviderSessionToSend
         ? agentResumeHostAuthorityCapability(launchAgentToSend)
         : undefined
-      const created = launchAgentToSend
-        ? agentSessionRequiresHostAuthorityReplay
-          ? await hostAuthorityCreate()
-          : await runRemoteAgentSessionLaunch<RemoteAgentSessionLaunchResult | null>({
-              environmentId: createEnvironmentId,
-              hostAuthority: hostAuthorityCreate,
-              ...(resumeHostAuthorityCapability
-                ? { hostAuthorityCapability: resumeHostAuthorityCapability }
-                : {}),
-              legacy: legacyCreate
-            })
-        : await legacyCreate()
+      const created = replayLaunch
+        ? await replayLaunch(connectLifecycleEpoch)
+        : launchAgentToSend
+          ? agentSessionRequiresHostAuthorityReplay
+            ? await hostAuthorityCreate()
+            : await runRemoteAgentSessionLaunch<RemoteAgentSessionLaunchResult | null>({
+                environmentId: createEnvironmentId,
+                hostAuthority: () => {
+                  replayLaunch = hostAuthorityCreate
+                  return hostAuthorityCreate()
+                },
+                ...(resumeHostAuthorityCapability
+                  ? { hostAuthorityCapability: resumeHostAuthorityCapability }
+                  : {}),
+                legacy: () => {
+                  replayLaunch = legacyCreate
+                  return legacyCreate()
+                }
+              })
+          : await (replayLaunch = legacyCreate)()
       if (!created) {
         if (!destroyed && lifecycleEpoch === connectLifecycleEpoch) {
           connecting = false
@@ -3267,6 +3297,8 @@ export function createRemoteRuntimePtyTransport(
       }
 
       return {
+        ...terminalLaunchFacts(createdTerminal),
+        ...(createdTerminal.coldRestore ? { coldRestore: createdTerminal.coldRestore } : {}),
         id: remotePtyId,
         replay: '',
         ...(authoritativePtyIncarnationId ? { incarnationId: authoritativePtyIncarnationId } : {}),

@@ -178,6 +178,7 @@ export type StablePaneSpawnContext = {
   worktreeId?: string
   connectionId?: string | null
   resolveOwner?: () => StablePaneOwner | null
+  beforeFreshSpawn?: () => Promise<void>
   onFreshSpawn?: (result: PtySpawnResult) => void
 }
 
@@ -292,6 +293,7 @@ export async function spawnForStablePane(
       return attached
     }
   }
+  await args.beforeFreshSpawn?.()
   const result = await args.provider.spawn(args.spawnOptions)
   args.onFreshSpawn?.(result)
   return { result, owner: null }

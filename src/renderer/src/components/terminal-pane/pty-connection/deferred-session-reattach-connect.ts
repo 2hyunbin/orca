@@ -108,6 +108,7 @@ function connectDeferredSessionReattach(
     ...(coldRestoreStartup?.resumeProviderSession
       ? { resumeProviderSession: coldRestoreStartup.resumeProviderSession }
       : {}),
+    ...(coldRestoreStartup ? { resumeOrigin: coldRestoreStartup.resumeOrigin } : {}),
     ...(coldRestoreStartup?.launchToken ? { launchToken: coldRestoreStartup.launchToken } : {}),
     ...(coldRestoreStartup?.agent ? { launchAgent: coldRestoreStartup.agent } : {}),
     ...(session.shouldDeclareHiddenAtSpawn() ? { initiallyHidden: true } : {}),
