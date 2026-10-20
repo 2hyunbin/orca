@@ -98,6 +98,8 @@ function makeStore(
   return {
     getProjectHostSetups: () => setups,
     getRepo: (id: string) => repos.find((repo) => repo.id === id),
+    getRepos: () => repos,
+    stampLegacyAutomationRunContext: () => true,
     automationOwnerPrecondition: () =>
       projectedAutomation
         ? toAutomationOwnerPrecondition(
