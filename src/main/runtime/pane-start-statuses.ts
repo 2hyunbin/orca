@@ -36,6 +36,11 @@ export class PaneStartStatuses {
     }
   }
 
+  /** The status as set, without pinning it to a binding (tests and logs). */
+  peek(paneKey: string): PaneStartFact | null {
+    return this.byPaneKey.get(paneKey)?.fact ?? null
+  }
+
   /** The status while the pane keeps the binding it was first published with; a new bind ends it. */
   get(paneKey: string, binding: string): PaneStartFact | null {
     const entry = this.byPaneKey.get(paneKey)

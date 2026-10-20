@@ -171,4 +171,14 @@ describe('a pane’s start status in the published layout', () => {
     expect(register.get(PANE_KEY, bindingOf({ ptyId: 'new', ptyGeneration: 2 }))).toBeNull()
     expect(register.get(PANE_KEY, dead)).toBeNull()
   })
+
+  it('ends it when the pane binds live again under the same terminal id (a restore)', () => {
+    const { register } = statuses()
+    register.set(PANE_KEY, { status: 'starting' })
+    // Every bind raises the pane's generation, a same-id respawn included.
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'p', ptyGeneration: 1 }))?.status).toBe(
+      'starting'
+    )
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'p', ptyGeneration: 2 }))).toBeNull()
+  })
 })
