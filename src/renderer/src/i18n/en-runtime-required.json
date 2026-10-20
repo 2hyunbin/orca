@@ -1904,7 +1904,6 @@
           "outcome": {
             "activeServer": "Not done: this server is the default host for new projects. Choose another one in Advanced before stopping it."
           },
-          "row": {},
           "title": "Orca on your SSH hosts"
         },
         "mobile": {
@@ -1936,7 +1935,6 @@
             }
           }
         },
-        "serverList": {},
         "settingOwnership": {
           "clientDefaultProjectScopes": "Client default + project scopes",
           "terminalQuickCommands": "Commands are saved on this client, then scoped globally or to a project setup so they run from the selected terminal context."
@@ -2523,7 +2521,9 @@
             "connectedHostCount_other": "{{count}} hosts",
             "d09ec41831": "Remote Hosts",
             "fbb3f9f05e": "conflict",
-            "fd9a3c600e": "error"
+            "fd9a3c600e": "error",
+            "moreSshHosts_one": "{{count}} more SSH host…",
+            "moreSshHosts_other": "{{count}} more SSH hosts…"
           },
           "StatusBar": {
             "06741a2f3d": "Open MiniMax usage details",
