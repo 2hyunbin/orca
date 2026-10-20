@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { speechRecognizerPackageName } from '../../shared/speech-recognizer-package'
 
@@ -23,6 +23,7 @@ export function findAppSpeechRecognizerDir(
  * The recognizer directory orcad should load. On Windows a loaded addon locks its files for the
  * process's life, which would make the next app update fail to replace them, so orcad gets a copy
  * in the profile, one per recognizer version. Undefined (cloud models only) when the copy fails.
+ * Never pruned here: this runs before the profile lock, while another server may use a copy.
  */
 export function stageSpeechRecognizerForOrcad(
   appRecognizerDir: string | undefined,
@@ -44,7 +45,8 @@ export function stageSpeechRecognizerForOrcad(
     // Copied aside then renamed, so a crash mid-copy never leaves a half recognizer in place.
     const staging = `${target}.staging-${process.pid}`
     rmSync(staging, { recursive: true, force: true })
-    cpSync(appRecognizerDir, staging, { recursive: true })
+    // Dereferenced: a linked package (pnpm) would otherwise still lock the app's own files.
+    cpSync(appRecognizerDir, staging, { recursive: true, dereference: true })
     try {
       renameSync(staging, target)
     } catch (error) {
@@ -54,29 +56,12 @@ export function stageSpeechRecognizerForOrcad(
         throw error
       }
     }
-    pruneOlderRecognizers(target, basename(appRecognizerDir))
     return target
   } catch (error) {
     process.stderr.write(
       `[serve] on-device dictation unavailable: could not stage the speech recognizer: ${error instanceof Error ? error.message : String(error)}\n`
     )
     return undefined
-  }
-}
-
-/** Best effort: a copy a running orcad still holds stays until the next version is staged. */
-function pruneOlderRecognizers(current: string, packageName: string): void {
-  const parent = dirname(current)
-  for (const entry of readdirSync(parent)) {
-    const path = join(parent, entry)
-    // Why skip staging dirs: they belong to a serve copying right now.
-    if (path !== current && entry.startsWith(`${packageName}-`) && !entry.includes('.staging-')) {
-      try {
-        rmSync(path, { recursive: true, force: true })
-      } catch {
-        // Locked by a running orcad.
-      }
-    }
   }
 }
 

@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -68,8 +77,17 @@ describe('staging the recognizer for orcad', () => {
     const next = stageSpeechRecognizerForOrcad(app, profile, 'win32')
     expect(next).toBe(join(profile, 'speech-recognizer', 'sherpa-onnx-win-x64-1.13.0'))
     expect(existsSync(join(next!, 'sherpa-onnx.node'))).toBe(true)
-    // The superseded copy is pruned once nothing holds it.
-    expect(existsSync(staged!)).toBe(false)
+    // A running server may still load the older copy.
+    expect(existsSync(staged!)).toBe(true)
+  })
+
+  it('copies a linked package as real files', () => {
+    const app = recognizerAt(join(tempRoot(), 'store', 'sherpa-onnx-win-x64'))
+    const linked = join(tempRoot(), 'sherpa-onnx-win-x64')
+    symlinkSync(app, linked, 'junction')
+    const staged = stageSpeechRecognizerForOrcad(linked, tempRoot(), 'win32')
+    expect(lstatSync(staged!).isSymbolicLink()).toBe(false)
+    expect(lstatSync(join(staged!, 'sherpa-onnx.node')).isFile()).toBe(true)
   })
 
   it('leaves orcad cloud-only when the copy cannot be made', () => {
