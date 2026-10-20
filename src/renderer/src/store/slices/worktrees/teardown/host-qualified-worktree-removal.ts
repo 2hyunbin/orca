@@ -12,10 +12,10 @@ import type { RuntimeClientTarget } from '../../../../../../shared/runtime-clien
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import {
   getWorktreeOperationOwnerHostIds,
+  resolveWorktreeOperationRoute,
   resolveWorktreeOperationRouteForHost,
   type WorktreeOperationRoute
 } from '@/lib/worktree-operation-route'
-import { resolveWriteRoute } from '@/lib/resolve-owner'
 import { captureWorktreeOperationGenerationGuard } from '@/lib/worktree-operation-generation'
 import { getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import { appliedWorktreeCatalogVersionPatch } from '../listing/worktree-catalog-version-state'
@@ -51,7 +51,7 @@ function resolveHostQualifiedRemovalRoute(
 ): WorktreeOperationRoute | null {
   return requiredExecutionHostId
     ? resolveWorktreeOperationRouteForHost(get(), worktreeId, requiredExecutionHostId)
-    : resolveWriteRoute(get(), worktreeId)
+    : resolveWorktreeOperationRoute(get(), worktreeId)
 }
 
 export type HostQualifiedRemovalStart =
