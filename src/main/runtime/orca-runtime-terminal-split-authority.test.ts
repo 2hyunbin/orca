@@ -6,6 +6,7 @@ import type { TerminalLayoutSnapshot } from '../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { OrcaRuntimeService } from './orca-runtime'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 const REPO_ID = 'repo-1'
 const WORKTREE_ID = `${REPO_ID}::/workspace`
@@ -252,7 +253,9 @@ describe('remote runtime terminal split authority', () => {
       newLeafId
     })
     // A switch-on build binds the new pane only once its terminal registered, before the graph.
-    harness.registerSplitPty(newLeafId)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      harness.registerSplitPty(newLeafId)
+    }
     harness.runtime.syncWindowGraph(1, {
       tabs: [
         {

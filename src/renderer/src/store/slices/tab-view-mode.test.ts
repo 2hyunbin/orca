@@ -89,10 +89,9 @@ describe('tab view mode', () => {
     expect(findTab(store, 'right-tab')?.viewMode).toBeUndefined()
   })
 
-  it('is a no-op for an unknown tab id', async () => {
+  it('is a no-op for an unknown tab id', () => {
     const before = store.getState().unifiedTabsByWorktree[WT]
     store.getState().toggleTabViewMode('missing-tab')
-    await layoutApplyTestTransport.settle()
     expect(store.getState().unifiedTabsByWorktree[WT]).toBe(before)
   })
 

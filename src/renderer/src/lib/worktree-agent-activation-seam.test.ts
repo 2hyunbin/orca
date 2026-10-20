@@ -181,6 +181,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   useAppStore.setState(initialState, true)
+  layoutApplyTestTransport.reset()
 })
 
 describe('worktree agent activation seam', () => {
@@ -234,24 +235,25 @@ describe('worktree agent activation seam', () => {
     useAppStore.setState({ ...baseState(), unifiedTabsByWorktree: { [worktree.id]: [] } })
     stubInventory({ livePtyId })
     // A switch-on build shows the adopted terminal from main's frame.
-    layoutApplyTestTransport.reset()
     layoutApplyTestTransport.answerWith('apply')
     layoutApplyTestTransport.useMainModel(loadMainLayoutModel('local', emptySession()))
     const frames = openWorkspaceLayoutFrameSync(useAppStore)
     frames.start()
+    try {
+      expect(activateAndRevealWorktree(worktree.id)).toEqual({ primaryTabId: null })
+      await waitForWorktreeAgentActivationGateForTests(worktree.id)
+      await layoutApplyTestTransport.settle()
 
-    expect(activateAndRevealWorktree(worktree.id)).toEqual({ primaryTabId: null })
-    await waitForWorktreeAgentActivationGateForTests(worktree.id)
-    await layoutApplyTestTransport.settle()
-
-    const tabs = useAppStore.getState().tabsByWorktree[worktree.id] ?? []
-    expect(tabs).toHaveLength(1)
-    // Switch-on, the pane binds to the terminal main's frame names; the row keeps no ptyId.
-    const shownPtyId = ORCA_LAYOUT_OWNER_IS_MAIN
-      ? frames.terminalTab(worktree.id, tabs[0]!.id)?.terminal?.panes[0]?.ptyId
-      : tabs[0]?.ptyId
-    frames.close()
-    expect(shownPtyId).toBe(livePtyId)
+      const tabs = useAppStore.getState().tabsByWorktree[worktree.id] ?? []
+      expect(tabs).toHaveLength(1)
+      // Switch-on, the pane binds to the terminal main's frame names; the row keeps no ptyId.
+      const shownPtyId = ORCA_LAYOUT_OWNER_IS_MAIN
+        ? frames.terminalTab(worktree.id, tabs[0]!.id)?.terminal?.panes[0]?.ptyId
+        : tabs[0]?.ptyId
+      expect(shownPtyId).toBe(livePtyId)
+    } finally {
+      frames.close()
+    }
   })
 
   it('spawns a fallback when the workspace has no agent', async () => {

@@ -208,7 +208,6 @@ Old dispatch task that already finished`,
         )
       }
     })
-    await layoutApplyTestTransport.settle()
 
     store.getState().setAgentStatus(paneKey, {
       state: 'working',
@@ -355,7 +354,6 @@ Implement task B worker instructions for the next dispatch`,
         repo1: [makeWorktree({ id: WORKTREE_ID, repoId: 'repo1', path: '/path/wt1' })]
       }
     })
-    await layoutApplyTestTransport.settle()
     const tabId = store
       .getState()
       .createTab(WORKTREE_ID, undefined, undefined, { quickCommandLabel: 'Run tests' }).id

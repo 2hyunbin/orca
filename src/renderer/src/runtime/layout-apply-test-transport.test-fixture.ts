@@ -112,6 +112,8 @@ function emit(frame: WorkspaceLayoutChangeFrame): void {
   }
 }
 
+/** Main's apply without its routing: no host partitions, `host_not_owned`, forced closes, or a
+ *  frame position on refusals. */
 function applyToMainModel(command: LayoutCommand): LayoutApplyReply {
   const model = state.model
   if (!model) {
@@ -139,30 +141,33 @@ function applyToMainModel(command: LayoutCommand): LayoutApplyReply {
   return { ok: true, result: applied.result, frameSeq: seq }
 }
 
+/** The current answer to one command; `pending` when it waits for `answerPending`. */
+function replyTo(command: LayoutCommand): LayoutApplyReply | 'pending' {
+  const answer = state.answer
+  if (typeof answer === 'function') {
+    return answer(command)
+  }
+  if (answer === 'accept') {
+    return { ok: true, result: acceptedResult(command) }
+  }
+  if (answer === 'apply') {
+    return applyToMainModel(command)
+  }
+  return answer === 'pending' ? 'pending' : { ok: false, code: answer.refuse }
+}
+
 function answerCommand(command: LayoutCommand): Promise<LayoutApplyReply> {
   state.sent.push(command)
-  const answer = state.answer
-  const reply =
-    typeof answer === 'function'
-      ? answer(command)
-      : answer === 'accept'
-        ? ({ ok: true, result: acceptedResult(command) } satisfies LayoutApplyReply)
-        : answer === 'apply'
-          ? applyToMainModel(command)
-          : answer === 'pending'
-            ? 'pending'
-            : ({ ok: false, code: answer.refuse } satisfies LayoutApplyReply)
-  const answered =
-    reply === 'pending'
-      ? new Promise<LayoutApplyReply>((resolve) => state.pending.push({ command, resolve }))
-      : Promise.resolve(reply)
-  if (reply !== 'pending') {
-    state.inFlight.push(answered)
+  const reply = replyTo(command)
+  if (reply === 'pending') {
+    return new Promise((resolve) => state.pending.push({ command, resolve }))
   }
+  const answered = Promise.resolve(reply)
+  state.inFlight.push(answered)
   return answered
 }
 
-// The sender's reply chain (reply, frame wait, handler) runs a few microtasks after the answer.
+// layout-apply-send.ts's chain (reply, frame wait, handler) runs a few microtasks after the answer.
 const REPLY_CHAIN_TURNS = 5
 
 export const layoutApplyTestTransport = {
@@ -189,16 +194,15 @@ export const layoutApplyTestTransport = {
   get pendingCount(): number {
     return state.pending.length
   },
-  /** Answers every pending command: with `reply`, else as the current answer (not `pending`). */
+  /** Answers every pending command: with `reply`, else as the current answer (`accept` when that
+   *  is still `pending`). */
   answerPending(reply?: LayoutApplyReply): void {
     const pending = state.pending
     state.pending = []
     for (const { command, resolve } of pending) {
+      const next = replyTo(command)
       const answer =
-        reply ??
-        (state.answer === 'apply'
-          ? applyToMainModel(command)
-          : { ok: true as const, result: acceptedResult(command) })
+        reply ?? (next === 'pending' ? { ok: true, result: acceptedResult(command) } : next)
       state.inFlight.push(Promise.resolve(answer))
       resolve(answer)
     }

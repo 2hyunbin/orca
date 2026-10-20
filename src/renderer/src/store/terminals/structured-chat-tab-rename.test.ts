@@ -85,7 +85,6 @@ describe('renaming a terminal tab still resolves', () => {
       },
       unifiedTabsByWorktree: { [WORKTREE]: [terminalTab(), structuredTab()] }
     })
-    await layoutApplyTestTransport.settle()
 
     // Keyed by the TERMINAL's entityId — the structured tab must not absorb it.
     store.getState().setTabCustomTitle(TERMINAL_TAB_ID, 'Build logs')

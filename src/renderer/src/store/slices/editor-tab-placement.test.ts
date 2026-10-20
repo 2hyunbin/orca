@@ -1,8 +1,13 @@
 import type { StoreApi } from 'zustand/vanilla'
 import { describe, expect, it, vi } from 'vitest'
-import { createEditorStore, createEditorTabsStore } from './editor-slice-test-harness'
+import {
+  createEditorStore,
+  createEditorTabsStore,
+  ownedEditorFileId
+} from './editor-slice-test-harness'
 import type { AppState } from '../types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 const { toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn()
@@ -24,6 +29,13 @@ function fileIdOf(store: { getState: () => AppState }, filePath: string): string
   return store.getState().openFiles.find((file) => file.filePath === filePath)?.id
 }
 
+/** A floating file's id: its path, or an owned id when main owns the layout. */
+function expectedFileId(filePath: string): unknown {
+  return ORCA_LAYOUT_OWNER_IS_MAIN
+    ? ownedEditorFileId(filePath, FLOATING_TERMINAL_WORKTREE_ID, null)
+    : filePath
+}
+
 describe('createEditorSlice floating editor activation', () => {
   it('creates a visible floating editor tab when the floating workspace is empty', () => {
     const store = createEditorTabsStore()
@@ -40,8 +52,8 @@ describe('createEditorSlice floating editor activation', () => {
       { suppressActiveRuntimeFallback: true }
     )
 
-    // The file's own id: its path, or an owned id when main owns the layout.
     const fileId = fileIdOf(store, '/tmp/orca/notes.md')
+    expect(fileId).toEqual(expectedFileId('/tmp/orca/notes.md'))
     const tab = store.getState().unifiedTabsByWorktree[FLOATING_TERMINAL_WORKTREE_ID]?.[0]
     expect(tab).toMatchObject({
       contentType: 'editor',
@@ -76,8 +88,8 @@ describe('createEditorSlice floating editor activation', () => {
 
     expect(store.getState().activeFileId).toBe('/repo/main.md')
     expect(store.getState().activeTabType).toBe('editor')
-    expect(store.getState().activeFileIdByWorktree[FLOATING_TERMINAL_WORKTREE_ID]).toBe(
-      fileIdOf(store, '/tmp/orca/untitled.md')
+    expect(store.getState().activeFileIdByWorktree[FLOATING_TERMINAL_WORKTREE_ID]).toEqual(
+      expectedFileId('/tmp/orca/untitled.md')
     )
     expect(store.getState().activeTabTypeByWorktree[FLOATING_TERMINAL_WORKTREE_ID]).toBe('editor')
   })

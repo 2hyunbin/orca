@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createEditorStore, createEditorTabsStore } from './editor-slice-test-harness'
 import type { AppState } from '../types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 const { toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn()
@@ -652,7 +653,9 @@ describe('createEditorSlice openDiff', () => {
       })
     ])
     // Not a preview: a switch-on build omits the flag rather than writing false.
-    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview ?? false).toBe(false)
+    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview).toBe(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : false
+    )
   })
 
   it('makes a preview file permanent without pinning the tab', () => {
@@ -683,7 +686,9 @@ describe('createEditorSlice openDiff', () => {
       })
     ])
     // Not a preview: a switch-on build omits the flag rather than writing false.
-    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview ?? false).toBe(false)
+    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview).toBe(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : false
+    )
   })
 
   it('does not replace a dirty file that was opened as a preview', () => {
@@ -724,6 +729,8 @@ describe('createEditorSlice openDiff', () => {
       })
     ])
     // Not a preview: a switch-on build omits the flag rather than writing false.
-    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview ?? false).toBe(false)
+    expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview).toBe(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : false
+    )
   })
 })

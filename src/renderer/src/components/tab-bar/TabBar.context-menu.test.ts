@@ -352,7 +352,6 @@ describe('TabBar context menu wiring', () => {
       browserTabs: [],
       tabBarOrder: ['term-1', 'unified-editor-1']
     })
-    await layoutApplyTestTransport.settle()
     const sortable = findChildrenByType(element, 'SortableTab')
     expect(sortable).toHaveLength(1)
     expect(sortable[0].props.tabCount).toBe(2)
@@ -365,7 +364,6 @@ describe('TabBar context menu wiring', () => {
       browserTabs: [],
       tabBarOrder: ['term-1', 'unified-editor-1']
     })
-    await layoutApplyTestTransport.settle()
     const divs = findChildrenByType(element, 'div')
     const stripWrapper = divs.find((candidate) =>
       String(candidate.props.className ?? '').includes('flex-[0_1_auto]')
@@ -397,12 +395,10 @@ describe('TabBar context menu wiring', () => {
       tabBarOrder: ['term-1', 'unified-editor-1'],
       onCloseToRight
     })
-    await layoutApplyTestTransport.settle()
     const editorTabs = findChildrenByType(element, 'EditorFileTab')
     expect(editorTabs).toHaveLength(1)
     const onClose = editorTabs[0].props.onCloseToRight as () => void
     onClose()
-    await layoutApplyTestTransport.settle()
     expect(onCloseToRight).toHaveBeenCalledWith('unified-editor-1')
   })
 
@@ -417,7 +413,6 @@ describe('TabBar context menu wiring', () => {
       onCloseToLeft,
       onCloseOthers
     })
-    await layoutApplyTestTransport.settle()
 
     const sortable = findChildrenByType(element, 'SortableTab')
     expect(sortable).toHaveLength(1)
@@ -459,7 +454,6 @@ describe('TabBar context menu wiring', () => {
       browserTabs: [],
       tabBarOrder: ['term-1']
     })
-    await layoutApplyTestTransport.settle()
 
     const sortable = findChildrenByType(element, 'SortableTab')
     expect(sortable).toHaveLength(1)
@@ -475,7 +469,6 @@ describe('TabBar context menu wiring', () => {
   it('waits for async menu-created terminals before focusing xterm', async () => {
     vi.useFakeTimers()
     Object.assign(window, { setTimeout, clearTimeout })
-    await layoutApplyTestTransport.settle()
     const { focusTerminalTabSurface } = await import('@/lib/focus-terminal-tab-surface')
     const element = await renderTabBar({
       tabs: [TERMINAL_TAB],
@@ -488,7 +481,6 @@ describe('TabBar context menu wiring', () => {
         }, 100)
       }
     })
-    await layoutApplyTestTransport.settle()
 
     const menuItems = findChildrenByType(element, 'DropdownMenuItem')
     const newTerminalItem = menuItems[0]
@@ -500,7 +492,6 @@ describe('TabBar context menu wiring', () => {
     ;(menuContent.props.onCloseAutoFocus as (event: { preventDefault: () => void }) => void)({
       preventDefault: vi.fn()
     })
-    await layoutApplyTestTransport.settle()
 
     await vi.advanceTimersByTimeAsync(50)
     expect(focusTerminalTabSurface).not.toHaveBeenCalled()
@@ -517,7 +508,6 @@ describe('TabBar context menu wiring', () => {
       onOpenFileTab: () => {},
       newTabMenuOrder: 'markdown-first'
     })
-    await layoutApplyTestTransport.settle()
 
     const menuLabels = findChildrenByType(element, 'DropdownMenuItem').map((item) =>
       extractText(item.props.children)
@@ -537,7 +527,6 @@ describe('TabBar context menu wiring', () => {
       onOpenFileTab: () => {},
       onNewSimulatorTab: () => {}
     })
-    await layoutApplyTestTransport.settle()
 
     const menuLabels = findChildrenByType(element, 'DropdownMenuItem').map((item) =>
       extractText(item.props.children)
@@ -574,7 +563,6 @@ describe('TabBar context menu wiring', () => {
       groupId: 'group-1',
       onNewSimulatorTab
     })
-    await layoutApplyTestTransport.settle()
 
     const emulatorItem = findChildrenByType(element, 'DropdownMenuItem').find((item) =>
       extractText(item.props.children).includes('Go to Mobile Emulator')
@@ -597,7 +585,6 @@ describe('TabBar context menu wiring', () => {
   it('cancels delayed menu focus when the tab bar root unmounts', async () => {
     vi.useFakeTimers()
     Object.assign(window, { setTimeout, clearTimeout })
-    await layoutApplyTestTransport.settle()
     const { focusTerminalTabSurface } = await import('@/lib/focus-terminal-tab-surface')
     const element = await renderTabBar({
       tabs: [TERMINAL_TAB],
@@ -610,7 +597,6 @@ describe('TabBar context menu wiring', () => {
         }, 100)
       }
     })
-    await layoutApplyTestTransport.settle()
 
     const newTerminalItem = findChildrenByType(element, 'DropdownMenuItem')[0]
     const menuContent = findChildrenByType(element, 'DropdownMenuContent')[0]
@@ -618,12 +604,10 @@ describe('TabBar context menu wiring', () => {
     ;(menuContent.props.onCloseAutoFocus as (event: { preventDefault: () => void }) => void)({
       preventDefault: vi.fn()
     })
-    await layoutApplyTestTransport.settle()
 
     const root = findChildrenByType(element, 'div')[0]
     const rootRef = (root.props.ref ?? root.ref) as (node: HTMLDivElement | null) => void
     rootRef(null)
-    await layoutApplyTestTransport.settle()
 
     await vi.advanceTimersByTimeAsync(5000)
     expect(focusTerminalTabSurface).not.toHaveBeenCalled()

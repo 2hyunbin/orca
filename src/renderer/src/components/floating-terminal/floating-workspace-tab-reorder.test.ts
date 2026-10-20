@@ -198,22 +198,19 @@ describe('floating panel titlebar drag target', () => {
     }
   )
 
-  it('does not move the panel when a tab SVG icon receives the press', async () => {
+  it('does not move the panel when a tab SVG icon receives the press', () => {
     const tab = document.createElement('div')
     tab.dataset.tabId = 'terminal-tab'
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     tab.appendChild(icon)
-    await layoutApplyTestTransport.settle()
     document.body.appendChild(tab)
-    await layoutApplyTestTransport.settle()
 
     expect(isFloatingTerminalDragTarget(icon)).toBe(false)
   })
 
-  it('still moves the panel from bare titlebar chrome', async () => {
+  it('still moves the panel from bare titlebar chrome', () => {
     const titlebar = document.createElement('div')
     document.body.appendChild(titlebar)
-    await layoutApplyTestTransport.settle()
     expect(isFloatingTerminalDragTarget(titlebar)).toBe(true)
   })
 })
