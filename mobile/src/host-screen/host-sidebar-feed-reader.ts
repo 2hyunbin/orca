@@ -26,8 +26,7 @@ export type HostSidebarFeedRead = {
   unavailable: boolean
 }
 
-// A read that failed with the connection up (a timeout) gets no ready to repeat it, and the
-// notices it would have followed are spent; backing off, so a failing host is not hammered.
+// A read that fails with the connection up gets no ready to repeat it; back off so a failing host is not hammered.
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000]
 
 /** One host connection's sidebar feed, driven through the shared installer. */
@@ -65,6 +64,8 @@ export class HostSidebarFeedReader {
     const before = this.state.installed
     this.state = step.state
     if (step.state.installed !== before) {
+      // Only an install ends a failure streak: a page that answers mid-batch does not.
+      this.retries = 0
       this.onRead({ installed: step.state.installed, unavailable: this.unavailable })
     }
     if (step.request) {
@@ -103,7 +104,6 @@ export class HostSidebarFeedReader {
       }
       const read = readHostMethodReply(reply, sidebarInputsRead.interpret)
       if (read.kind === 'answered') {
-        this.retries = 0
         this.apply(sidebarInputsReplied(this.state, request.id, read.value))
         return
       }

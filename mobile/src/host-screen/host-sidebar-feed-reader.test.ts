@@ -149,6 +149,29 @@ describe('HostSidebarFeedReader', () => {
     }
   })
 
+  it('stays bounded when a batch’s first page answers but a later page keeps failing', async () => {
+    vi.useFakeTimers()
+    try {
+      const host = hostWithFeed()
+      const answer = host.sendRequest.getMockImplementation()!
+      host.sendRequest.mockImplementation(async (method: string, params: unknown) => {
+        const reply = await answer(method, params)
+        const pageToken = new Map(Object.entries(Object(params))).get('pageToken')
+        if (pageToken !== undefined) {
+          throw new Error('Request timed out: sidebarInputs.read')
+        }
+        // Every first page says more follows, so no batch ever installs.
+        return { ...reply, result: { ...Object(reply.ok ? reply.result : {}), next: 'p#1' } }
+      })
+      host.reader.refresh()
+      await vi.advanceTimersByTimeAsync(10 * 60_000)
+      expect(host.reads).toEqual([])
+      expect(host.sendRequest.mock.calls.length).toBeLessThan(20)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('drops a reply that lands after the screen let go of its host', async () => {
     const host = hostWithFeed()
     host.reader.refresh()

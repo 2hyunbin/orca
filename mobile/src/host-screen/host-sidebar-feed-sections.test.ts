@@ -179,6 +179,7 @@ describe('the phone list from the sidebar feed', () => {
       ...FEED_ROWS.child,
       displayName: 'new name',
       branch: 'new-branch',
+      comment: 'new note',
       isUnread: true,
       isPinned: true
     }
@@ -196,6 +197,7 @@ describe('the phone list from the sidebar feed', () => {
       worktreeId: 'orca::/w/child',
       displayName: 'old name',
       branch: 'old-branch',
+      comment: 'old note',
       unread: false,
       isPinned: false,
       isArchived: true,
@@ -213,6 +215,7 @@ describe('the phone list from the sidebar feed', () => {
         worktreeId: 'orca::/w/child',
         displayName: 'new name',
         branch: 'new-branch',
+        comment: 'new note',
         unread: true,
         isPinned: true,
         isArchived: false,

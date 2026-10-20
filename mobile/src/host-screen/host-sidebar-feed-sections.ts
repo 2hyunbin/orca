@@ -78,6 +78,7 @@ function drawnRow(
     repo: repoName ?? live?.repo ?? '',
     branch: worktree.branch,
     displayName: worktree.displayName,
+    comment: worktree.comment,
     path: worktree.path,
     isArchived: worktree.isArchived,
     isMainWorktree: worktree.isMainWorktree,
@@ -138,9 +139,9 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
       case 'item': {
         // Local as the fallback, as the phone resolves its own rows: the desktop's focus is not an owner.
         const hostId = getWorktreeExecutionHostId(row.worktree, row.repo, LOCAL_EXECUTION_HOST_ID)
-        const live = rowOf(row.worktree, hostId, row.repo?.displayName, 'git')
+        const drawn = rowOf(row.worktree, hostId, row.repo?.displayName, 'git')
         current().data.push({
-          ...live,
+          ...drawn,
           isActive: sources.activeRowKeys.has(row.rowKey),
           sectionListKey: row.rowKey,
           lineageDepth: row.depth,
@@ -152,7 +153,7 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
           // The desktop's mixed-host rule names the host; a health word alone still shows.
           hostContextLabel:
             row.hostContextLabel ??
-            (live.hostContextHealthLabel ? live.hostContextLabel : undefined)
+            (drawn.hostContextHealthLabel ? drawn.hostContextLabel : undefined)
         })
         break
       }
