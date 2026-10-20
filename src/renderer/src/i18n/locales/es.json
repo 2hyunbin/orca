@@ -1088,7 +1088,7 @@
         "fetchingBaseBranch": "Obteniendo la rama base…"
       },
       "duplicatePairedServers": {
-        "ambiguousSameServer": "{{value0}} y {{value1}} son el mismo servidor emparejado dos veces. Quita uno en Configuración > Servidores Orca remotos."
+        "ambiguousSameServer": "{{value0}} y {{value1}} son el mismo servidor emparejado dos veces. Quita uno en Configuración > Servidores remotos de Orca."
       }
     },
     "hooks": {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppState } from '../types'
+import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
+import { runtimeTargetForWorktreeOwner } from './worktrees/listing/worktree-owner-target'
 import {
   createTestStore,
   resetRemoteRuntimeMocks,
@@ -17,16 +18,18 @@ const WORKTREE_ID = 'repo-ssh::/srv/same-wt'
 
 function storeWithTwoServersPublishing(hostKeys: [string, string]) {
   const store = createTestStore()
-  const environment = (id: string, name: string, hostKeyFingerprint: string) => ({
+  const environment = (
+    id: string,
+    name: string,
+    hostKeyFingerprint: string
+  ): PublicKnownRuntimeEnvironment => ({
     id,
     name,
     createdAt: 1,
     updatedAt: 1,
     lastUsedAt: null,
     runtimeId: null,
-    endpoints: [
-      { id: `ws-${id}`, kind: 'websocket' as const, label: 'WebSocket', endpoint: 'ws://x' }
-    ],
+    endpoints: [{ id: `ws-${id}`, kind: 'websocket', label: 'WebSocket', endpoint: 'ws://x' }],
     preferredEndpointId: `ws-${id}`,
     hostKeyFingerprint
   })
@@ -45,7 +48,7 @@ function storeWithTwoServersPublishing(hostKeys: [string, string]) {
         })
       )
     }
-  } as Partial<AppState>)
+  })
   return store
 }
 
@@ -72,5 +75,17 @@ describe('removing a workspace two saved servers publish', () => {
       ok: false,
       error: 'Workspace identity is ambiguous across hosts. Refresh projects and try again.'
     })
+  })
+})
+
+describe('resolving the owner of a workspace two twins publish', () => {
+  it('keeps the generic refusal when the caller named the host', () => {
+    const store = storeWithTwoServersPublishing(['key-1', 'key-1'])
+    expect(() =>
+      runtimeTargetForWorktreeOwner(store.getState(), WORKTREE_ID, 'ssh:same-private-target')
+    ).toThrow('Workspace identity is ambiguous across hosts. Refresh projects and try again.')
+    expect(() => runtimeTargetForWorktreeOwner(store.getState(), WORKTREE_ID)).toThrow(
+      'Studio and Studio relay are the same server paired twice.'
+    )
   })
 })

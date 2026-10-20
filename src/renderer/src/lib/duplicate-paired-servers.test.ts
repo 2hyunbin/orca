@@ -11,12 +11,14 @@ const studio = { id: 'env-a', name: 'Studio', hostKeyFingerprint: 'key-1' }
 const studioRelay = { id: 'env-b', name: 'Studio relay', hostKeyFingerprint: 'key-1' }
 const laptop = { id: 'env-c', name: 'Laptop', hostKeyFingerprint: 'key-2' }
 
+type OwnerRow = { id: string; hostId: string; runtimeOwnerEnvironmentId?: string }
+
 // Each server proxies the same SSH target, so both publish an `ssh:box` row for the workspace.
 function stateWith(environments: (typeof studio)[], publishers: string[]) {
   return {
     runtimeEnvironments: environments,
     worktreesByRepo: {
-      'repo-1': publishers.map((environmentId) => ({
+      'repo-1': publishers.map((environmentId): OwnerRow => ({
         id: WORKSPACE,
         hostId: 'ssh:box',
         runtimeOwnerEnvironmentId: environmentId
@@ -41,6 +43,29 @@ describe('a server paired twice', () => {
     const state = stateWith([studio, laptop], ['env-a', 'env-c'])
     expect(findDuplicatePairedServersForWorkspace(state, WORKSPACE)).toBeNull()
     expect(ambiguousWorkspaceOwnerMessage(state, WORKSPACE)).toBe(WORKTREE_REMOVAL_AMBIGUOUS_ERROR)
+  })
+
+  it('keeps the generic message when another host publishes it too, since removing a twin would not help', () => {
+    const withLaptop = stateWith([studio, studioRelay, laptop], ['env-a', 'env-b', 'env-c'])
+    expect(findDuplicatePairedServersForWorkspace(withLaptop, WORKSPACE)).toBeNull()
+    const withLocal = stateWith([studio, studioRelay], ['env-a', 'env-b'])
+    withLocal.worktreesByRepo['repo-1'].push({ id: WORKSPACE, hostId: 'local' })
+    expect(findDuplicatePairedServersForWorkspace(withLocal, WORKSPACE)).toBeNull()
+  })
+
+  it('reads an unstamped folder through the project group both twins publish', () => {
+    const state = {
+      runtimeEnvironments: [studio, studioRelay],
+      folderWorkspaces: [{ id: 'f1', projectGroupId: 'g1' }],
+      projectGroups: [
+        { id: 'g1', executionHostId: 'runtime:env-a' },
+        { id: 'g1', executionHostId: 'runtime:env-b' }
+      ]
+    }
+    expect(findDuplicatePairedServersForWorkspace(state, 'folder:f1')).toEqual([
+      'Studio',
+      'Studio relay'
+    ])
   })
 
   it('keeps the generic message when only one of the twins publishes the workspace', () => {

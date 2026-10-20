@@ -19,7 +19,13 @@ export type DuplicateServerState = {
   runtimeEnvironments?: readonly DuplicateServerEnvironment[]
   worktreesByRepo?: Record<string, readonly WorkspaceOwnerRow[]>
   detectedWorktreesByRepo?: Record<string, { worktrees: readonly WorkspaceOwnerRow[] }>
-  folderWorkspaces?: readonly { id: string; executionHostId?: string | null }[]
+  folderWorkspaces?: readonly {
+    id: string
+    executionHostId?: string | null
+    connectionId?: string | null
+    projectGroupId?: string | null
+  }[]
+  projectGroups?: readonly { id: string; executionHostId?: string | null }[]
 }
 
 /** Other saved servers carrying this one's host key, by name. */
@@ -39,25 +45,20 @@ export function duplicatePairedServerNames(
     : []
 }
 
-function runtimeEnvironmentIdOf(row: {
-  hostId?: string | null
-  runtimeOwnerEnvironmentId?: string
-}) {
+type PublisherRow = { hostId?: string | null; runtimeOwnerEnvironmentId?: string }
+
+/** A paired server's id, or a distinct marker for any other host, so it can never match a twin. */
+function publisherOf(row: PublisherRow): string {
   const host = parseExecutionHostId(row.hostId ?? undefined)
-  return (
+  const environmentId =
     row.runtimeOwnerEnvironmentId ?? (host?.kind === 'runtime' ? host.environmentId : undefined)
-  )
+  return environmentId ? `env:${environmentId}` : `host:${row.hostId ?? 'unstamped'}`
 }
 
-/** Saved servers whose rows publish this workspace. */
-function publishingEnvironmentIds(state: DuplicateServerState, workspaceId: string): Set<string> {
-  const ids = new Set<string>()
-  const add = (row: { hostId?: string | null; runtimeOwnerEnvironmentId?: string }) => {
-    const id = runtimeEnvironmentIdOf(row)
-    if (id) {
-      ids.add(id)
-    }
-  }
+/** Every host whose rows publish this workspace. */
+function workspacePublishers(state: DuplicateServerState, workspaceId: string): Set<string> {
+  const publishers = new Set<string>()
+  const add = (row: PublisherRow) => publishers.add(publisherOf(row))
   for (const rows of Object.values(state.worktreesByRepo ?? {})) {
     rows.filter((row) => row.id === workspaceId).forEach(add)
   }
@@ -67,35 +68,45 @@ function publishingEnvironmentIds(state: DuplicateServerState, workspaceId: stri
   const scope = parseWorkspaceKey(workspaceId)
   if (scope?.type === 'folder') {
     for (const folder of state.folderWorkspaces ?? []) {
-      if (folder.id === scope.folderWorkspaceId) {
+      if (folder.id !== scope.folderWorkspaceId) {
+        continue
+      }
+      // Why the group: an unstamped folder takes its host from its project group.
+      const inherited =
+        !folder.executionHostId?.trim() && !folder.connectionId?.trim()
+          ? (state.projectGroups ?? []).filter((group) => group.id === folder.projectGroupId)
+          : []
+      if (inherited.length > 0) {
+        inherited.forEach((group) => add({ hostId: group.executionHostId }))
+      } else {
         add({ hostId: folder.executionHostId })
       }
     }
   }
-  return ids
+  return publishers
 }
 
-/** Two saved servers with one host key that both publish this workspace, or null. */
+/**
+ * The two names when every host publishing this workspace is a saved server with one host key, or
+ * null. Why every host: if any other host also publishes it, removing a twin would not end the
+ * refusal, so naming the twins would mislead.
+ */
 export function findDuplicatePairedServersForWorkspace(
   state: DuplicateServerState,
   workspaceId: string
 ): [string, string] | null {
-  const publishing = publishingEnvironmentIds(state, workspaceId)
-  const environments = (state.runtimeEnvironments ?? []).filter((environment) =>
-    publishing.has(environment.id)
+  const publishers = [...workspacePublishers(state, workspaceId)]
+  const environments = publishers.map((publisher) =>
+    (state.runtimeEnvironments ?? []).find((environment) => `env:${environment.id}` === publisher)
   )
-  for (const environment of environments) {
-    const twin = environments.find(
-      (other) =>
-        other.id !== environment.id &&
-        environment.hostKeyFingerprint !== undefined &&
-        other.hostKeyFingerprint === environment.hostKeyFingerprint
-    )
-    if (twin) {
-      return [environment.name, twin.name]
-    }
+  const [first, second] = environments
+  const key = first?.hostKeyFingerprint
+  if (!first || !second || !key) {
+    return null
   }
-  return null
+  return environments.every((environment) => environment?.hostKeyFingerprint === key)
+    ? [first.name, second.name]
+    : null
 }
 
 /**

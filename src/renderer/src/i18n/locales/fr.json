@@ -1193,7 +1193,7 @@
         "fetchingBaseBranch": "Récupération de la branche de base…"
       },
       "duplicatePairedServers": {
-        "ambiguousSameServer": "{{value0}} et {{value1}} sont le même serveur associé deux fois. Supprimez-en un dans Réglages > Serveurs Orca distants."
+        "ambiguousSameServer": "{{value0}} et {{value1}} sont le même serveur associé deux fois. Supprimez-en un dans Paramètres > Serveurs Orca distants."
       }
     },
     "hooks": {

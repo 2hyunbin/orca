@@ -191,7 +191,7 @@ export function RuntimeServerRow({
             {translate(
               'auto.components.settings.RuntimeEnvironmentsPane.pairedTwice',
               'Same server as {{value0}}, paired twice. Remove one so its projects can be edited.',
-              { value0: duplicateOfNames.join(', ') }
+              { value0: duplicateOfNames[0] }
             )}
           </p>
         ) : null}
