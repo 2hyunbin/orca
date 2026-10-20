@@ -6,15 +6,15 @@ import {
 } from '@/runtime/layout-owner-pane-intents'
 import { expectExitedSplitPaneClose } from './exited-split-pane-close'
 
-const mocks = vi.hoisted(() => ({
-  sendLayoutCommandToOwner: vi.fn<typeof sendLayoutCommandToOwner>(),
-  pairedServer: null as string | null
-}))
+const mocks = vi.hoisted(() => {
+  const owner: { pairedServer: string | null } = { pairedServer: null }
+  return { sendLayoutCommandToOwner: vi.fn<typeof sendLayoutCommandToOwner>(), owner }
+})
 vi.mock('@/runtime/layout-owner-command', () => ({
   sendLayoutCommandToOwner: mocks.sendLayoutCommandToOwner
 }))
 vi.mock('@/lib/resolve-owner', () => ({
-  runtimeEnvironmentIdUnlessTwin: () => mocks.pairedServer
+  runtimeEnvironmentIdUnlessTwin: () => mocks.owner.pairedServer
 }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 
@@ -24,7 +24,7 @@ describe('expectExitedSplitPaneClose', () => {
   beforeEach(() => {
     _resetLayoutOwnerPaneIntentsForTests()
     mocks.sendLayoutCommandToOwner.mockReset()
-    mocks.pairedServer = null
+    mocks.owner.pairedServer = null
   })
 
   it('sends main nothing: main saw the exit and closes the pane, which its frame drops', () => {
@@ -36,7 +36,7 @@ describe('expectExitedSplitPaneClose', () => {
   })
 
   it('leaves a paired server’s workspace to today’s close', () => {
-    mocks.pairedServer = 'env-1'
+    mocks.owner.pairedServer = 'env-1'
     expect(expectExitedSplitPaneClose({ worktreeId: 'wt-1', tabId: 'tab-1', leafId: LEAF })).toBe(
       false
     )

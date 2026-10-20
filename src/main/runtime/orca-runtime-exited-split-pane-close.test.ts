@@ -55,6 +55,7 @@ function splitSession(): WorkspaceSessionState {
 /** A runtime over one stored session, with the window's two split panes registered. */
 function splitRuntime(): { runtime: OrcaRuntimeService; session: () => WorkspaceSessionState } {
   let session = splitSession()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the exit path reads only these store members.
   const runtime = new OrcaRuntimeService({
     getRepos: () => [LIVE_REPO],
     getWorkspaceSession: () => session,
