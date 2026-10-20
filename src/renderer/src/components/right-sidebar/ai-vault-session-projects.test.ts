@@ -528,6 +528,27 @@ describe('buildAiVaultSessionProjectById', () => {
 
     expect(map.get('claude:nfd')).toMatchObject({ kind: 'repo', key: 'repo:repo-1' })
   })
+  it('attributes a real-path session to the symlinked workspace its host alias names', () => {
+    const parent = makeRepo({ id: 'parent', displayName: 'Work', path: '/Users/ada/work' })
+    const child = makeRepo({ id: 'child', displayName: 'Api', path: '/Users/ada/work/api' })
+    const map = buildAiVaultSessionProjectById({
+      repos: [parent, child],
+      worktrees: [
+        makeWorktree({ id: 'wt-parent', repoId: parent.id, path: parent.path }),
+        makeWorktree({ id: 'wt-child', repoId: child.id, path: child.path })
+      ],
+      projectHostSetupProjection: makeProjection({}),
+      sessions: [
+        makeSession({
+          id: 'claude:linked',
+          cwd: '/data/src/api/pkg',
+          cwdAliases: ['/Users/ada/work/api/pkg']
+        })
+      ]
+    })
+
+    expect(map.get('claude:linked')).toMatchObject({ kind: 'repo', key: 'repo:child' })
+  })
 })
 
 function makeSession(overrides: Partial<AiVaultSession>): AiVaultSession {

@@ -105,7 +105,11 @@ export function buildAiVaultSessionProjectById({
       projectsByCwd = new Map()
       projectsByHostAndCwd.set(host, projectsByCwd)
     }
-    const cwdKey = JSON.stringify([sessionFileExecutionNamespace(session.filePath), session.cwd])
+    const cwdKey = JSON.stringify([
+      sessionFileExecutionNamespace(session.filePath),
+      session.cwd,
+      ...(session.cwdAliases ?? [])
+    ])
     let project = projectsByCwd.get(cwdKey)
     if (!project) {
       project = resolveSessionProject(session, candidates, projectLabelByKey)
@@ -267,9 +271,12 @@ function resolveSessionProject(
     return { kind: 'unknown', key: 'unknown', label: '' }
   }
 
-  const normalizedCwd = normalizeRuntimePathForComparison(cwd)
+  // Aliases are the host's spellings of cwd under a symlinked workspace; the longest root still wins.
+  const normalizedCwds = [cwd, ...(session.cwdAliases ?? [])].map(normalizeRuntimePathForComparison)
   const matches = candidates.filter((candidate) =>
-    candidate.ownsNormalizedCwd(normalizedCwd, session.filePath)
+    normalizedCwds.some((normalizedCwd) =>
+      candidate.ownsNormalizedCwd(normalizedCwd, session.filePath)
+    )
   )
   const sessionHostId = normalizeExecutionHostId(session.executionHostId)
   const hostMatches = sessionHostId
