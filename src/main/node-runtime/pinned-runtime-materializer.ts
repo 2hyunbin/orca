@@ -21,6 +21,7 @@ import {
 export type PinnedRuntimeMaterializeOptions = {
   fetcher?: MainHttpClient['fetch']
   signal?: AbortSignal
+  retryDelaysMs?: readonly number[]
 }
 
 export type PinnedRuntimeArchive = {
@@ -69,7 +70,8 @@ export async function materializeVerifiedRuntimeArchive(
       archive,
       downloaded,
       options.fetcher ?? getMainHttpClient().fetch,
-      options.signal
+      options.signal,
+      options.retryDelaysMs
     ).catch((error: unknown) => {
       throw unreachableArchiveError(archive, cached.path, error, options.signal)
     })
@@ -138,7 +140,8 @@ export async function materializeCachedRuntimeExecutable(
       runtime,
       archivePath,
       options.fetcher ?? getMainHttpClient().fetch,
-      options.signal
+      options.signal,
+      options.retryDelaysMs
     )
     options.signal?.throwIfAborted()
     const extractedDir = join(temporaryDir, 'extracted')
@@ -204,9 +207,18 @@ export function materializeNodeRuntimeArchive(
 ): Promise<string> {
   return materializeVerifiedRuntimeArchive(
     nodeRuntimeArchive(target),
-    join(cacheRoot, 'node', 'archives'),
+    nodeRuntimeArchiveDir(cacheRoot),
     options
   )
+}
+
+/** Where a hand-copied archive with the pinned hash is used without any download. */
+export function nodeRuntimeArchiveCachePath(target: NodeRuntimeTarget, cacheRoot: string): string {
+  return join(nodeRuntimeArchiveDir(cacheRoot), pinnedNodeRuntimeAsset(target).archive)
+}
+
+function nodeRuntimeArchiveDir(cacheRoot: string): string {
+  return join(cacheRoot, 'node', 'archives')
 }
 
 /**
