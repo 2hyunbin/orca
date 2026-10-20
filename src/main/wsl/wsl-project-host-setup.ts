@@ -12,12 +12,12 @@ import type {
 } from '../../shared/project-types'
 import {
   placeProject,
-  type PlacementCaller,
+  type PlacementOwner,
   type PlacementStore,
   type ProjectPlacement,
+  type RegistrationCaller,
   type WslPlacement
 } from './project-placement'
-import type { SavedClaimRule } from '../repository-checkout-admission'
 import { callWslProjectHost } from './wsl-project-registration'
 
 const SetupReply = z.object({
@@ -59,20 +59,37 @@ const SetupReply = z.object({
   })
 })
 
-/** Setup places its folder once: a WSL owner links it there; anything else returns to the caller's writer. */
+/**
+ * Setup places its folder once: a WSL owner links it there; anything else returns to the caller's
+ * writer. The desktop places on this computer; the runtime on the requested host, as its caller.
+ */
 export async function placeExistingFolderSetup(
   store: PlacementStore & { getProjects?(): Project[] },
   args: ProjectHostSetupExistingFolderArgs,
-  caller: PlacementCaller & { claimsOutsideWsl: Exclude<SavedClaimRule, { scope: 'wsl' }> }
-): Promise<{ hosted: ProjectHostSetupResult } | { placement: Exclude<ProjectPlacement, WslPlacement> }> {
+  caller: { owner: 'desktop' } | ({ owner: 'runtime' } & RegistrationCaller)
+): Promise<
+  { hosted: ProjectHostSetupResult } | { placement: Exclude<ProjectPlacement, WslPlacement> }
+> {
   if (!isAbsolute(args.path)) {
     throw new Error('Project path must be an absolute path')
   }
+  const owner: PlacementOwner =
+    caller.owner === 'desktop'
+      ? {
+          domain: LOCAL_EXECUTION_HOST_ID,
+          fromPairedClient: false,
+          claimsOutsideWsl: { scope: 'desktop' }
+        }
+      : {
+          domain: args.hostId,
+          fromPairedClient: caller.fromPairedClient,
+          claimsOutsideWsl: { scope: 'runtime', executionHostId: args.hostId }
+        }
   const placement = await placeProject(store, {
+    ...owner,
     operation: 'setup',
     selectedPath: args.path,
-    kind: args.kind === 'folder' ? 'folder' : 'git',
-    ...caller
+    kind: args.kind === 'folder' ? 'folder' : 'git'
   })
   return placement.kind === 'wsl'
     ? { hosted: await setupProjectOnWslOwner(store, args, placement) }

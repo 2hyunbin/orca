@@ -546,7 +546,10 @@ describe('repos:add + repos:clone', () => {
     }
     mockStore.getRepos.mockReturnValue([existing])
 
-    const result = await handlers.get('repos:add')!(null, { path: '/tmp/from-add-runtime', kind: 'folder' })
+    const result = await handlers.get('repos:add')!(null, {
+      path: '/tmp/from-add-runtime',
+      kind: 'folder'
+    })
 
     expect(result).toEqual({ repo: existing })
     expect(mockStore.addRepo).not.toHaveBeenCalled()

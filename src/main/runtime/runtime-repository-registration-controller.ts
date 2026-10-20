@@ -82,7 +82,10 @@ export class RuntimeRepositoryRegistrationController {
     }
     if (placement.kind === 'wsl') {
       return registerOnWslOwner(placement.environmentId, {
-        kind: 'add', path: placement.linuxPath, repoKind: kind, displayName
+        kind: 'add',
+        path: placement.linuxPath,
+        repoKind: kind,
+        displayName
       })
     }
     const { admission } = placement
@@ -147,14 +150,18 @@ export class RuntimeRepositoryRegistrationController {
       domain: registrationDomain(caller),
       fromPairedClient: caller.fromPairedClient,
       // Why host-qualified: an SSH project at this path string is another machine's directory.
-      sameTarget: (repo) => runtimeRepoIsRegistrationCandidate(repo) && runtimePathsEqual(repo.path, targetPath)
+      sameTarget: (repo) =>
+        runtimeRepoIsRegistrationCandidate(repo) && runtimePathsEqual(repo.path, targetPath)
     })
     if (placement.kind === 'saved') {
       return { repo: placement.repo }
     }
     if (placement.kind === 'wsl') {
       const repo = await registerOnWslOwner(placement.environmentId, {
-        kind: 'create', path: posix.dirname(placement.linuxPath), name: trimmedName, repoKind
+        kind: 'create',
+        path: posix.dirname(placement.linuxPath),
+        name: trimmedName,
+        repoKind
       })
       return { repo }
     }

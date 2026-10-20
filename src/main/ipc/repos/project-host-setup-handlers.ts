@@ -15,11 +15,7 @@ import type {
 import { getProjectHostSetupForRepo } from '../../../shared/project-host-setup-lookup'
 import { resolveImportedFolderProjectLink } from '../../../shared/imported-folder-project-identity'
 import { readCurrentGitRemoteIdentity } from '../../repo-git-remote-identity'
-import {
-  getRepoExecutionHostId,
-  LOCAL_EXECUTION_HOST_ID,
-  parseExecutionHostId
-} from '../../../shared/execution-host'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../../shared/execution-host'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { updateProjectHostSetupWithProvenKind } from '../../folder-repo-git-conversion'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
@@ -173,18 +169,22 @@ export function registerProjectHostSetupHandlers(mainWindow: BrowserWindow, stor
       }
       const placed =
         parsedHost.kind === 'local'
-          ? await placeExistingFolderSetup(store, { ...args, hostId: parsedHost.id }, {
-              domain: LOCAL_EXECUTION_HOST_ID,
-              fromPairedClient: false,
-              claimsOutsideWsl: { scope: 'desktop' }
-            })
+          ? await placeExistingFolderSetup(
+              store,
+              { ...args, hostId: parsedHost.id },
+              { owner: 'desktop' }
+            )
           : null
       if (placed && 'hosted' in placed) {
         notifyReposChanged(mainWindow)
         return placed.hosted
       }
       const result = placed
-        ? await registerPlacedDesktopProject(store, placed.placement, args.kind === 'folder' ? 'folder' : 'git')
+        ? await registerPlacedDesktopProject(
+            store,
+            placed.placement,
+            args.kind === 'folder' ? 'folder' : 'git'
+          )
         : parsedHost.kind === 'ssh'
           ? { error: sshTargetNotConnectedMessage(parsedHost.targetId) }
           : {

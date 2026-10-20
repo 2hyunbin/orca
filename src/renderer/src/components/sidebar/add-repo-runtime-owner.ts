@@ -51,7 +51,10 @@ export function addedRepoRefreshOptions(repo: {
 export function nestedImportRefreshTargets(
   result: ProjectGroupImportResult,
   sshConnectionId: string | null
-): { projectId: string; options: { requireAuthoritative: true; executionHostId?: ExecutionHostId } }[] {
+): {
+  projectId: string
+  options: { requireAuthoritative: true; executionHostId?: ExecutionHostId }
+}[] {
   return result.projects.flatMap((entry) =>
     entry.projectId
       ? [

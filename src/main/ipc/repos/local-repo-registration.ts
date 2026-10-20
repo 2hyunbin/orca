@@ -50,7 +50,10 @@ export async function registerPlacedDesktopProject(
   }
   if (placement.kind === 'wsl') {
     const repo = await registerOnWslOwner(placement.environmentId, {
-      kind: 'add', path: placement.linuxPath, repoKind, displayName
+      kind: 'add',
+      path: placement.linuxPath,
+      repoKind,
+      displayName
     })
     return { repo, alreadyExisted: false }
   }

@@ -35,23 +35,20 @@ export function registrationDomain(
   return executionHostId ?? (caller.fromPairedClient ? null : LOCAL_EXECUTION_HOST_ID)
 }
 
-export type PlacementContext = PlacementCaller &
-  (
-    | {
-        operation: 'add' | 'setup'
-        selectedPath: string
-        kind: 'git' | 'folder'
-        /** The caller's own saved-row rule for selections no WSL host can own. */
-        claimsOutsideWsl: Exclude<SavedClaimRule, { scope: 'wsl' }>
-      }
-    | {
-        operation: 'create'
-        parentPath: string
-        name: string
-        /** The caller's own duplicate rule for targets that no WSL host can own. */
-        sameTarget: (repo: Repo) => boolean
-      }
-  )
+/** A caller of Add or setup, with its own saved-row rule for selections no WSL host can own. */
+export type PlacementOwner = PlacementCaller & {
+  claimsOutsideWsl: Exclude<SavedClaimRule, { scope: 'wsl' }>
+}
+
+export type PlacementContext =
+  | (PlacementOwner & { operation: 'add' | 'setup'; selectedPath: string; kind: 'git' | 'folder' })
+  | (PlacementCaller & {
+      operation: 'create'
+      parentPath: string
+      name: string
+      /** The caller's own duplicate rule for targets that no WSL host can own. */
+      sameTarget: (repo: Repo) => boolean
+    })
 
 export type WslPlacement = {
   kind: 'wsl'
@@ -61,6 +58,13 @@ export type WslPlacement = {
   selectedPath: string
   admission: RepositoryCheckoutAdmission
 }
+
+/** The ordinary writer for a placement already decided; it never admits again. */
+export type PlacedProjectWriter = (
+  placement: ProjectPlacement,
+  kind: 'folder' | 'git',
+  hostId: ExecutionHostId
+) => Promise<Repo>
 
 export type ProjectPlacement =
   | { kind: 'saved'; repo: Repo; admission: RepositoryCheckoutAdmission }

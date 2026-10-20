@@ -48,7 +48,10 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
         }))
       const selection = resolveNestedRepoSelection({ scan, projectPaths: requestedPaths })
       const placement = await placeNestedImport(
-        store, args, { domain: LOCAL_EXECUTION_HOST_ID, fromPairedClient: false }, scan
+        store,
+        args,
+        { domain: LOCAL_EXECUTION_HOST_ID, fromPairedClient: false },
+        scan
       )
       if (placement.kind === 'done') {
         notifyReposChanged(mainWindow)

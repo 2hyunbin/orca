@@ -87,9 +87,17 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('waits for first-use server setup when adding a local WSL path', async () => {
-    queueFixtures(callMock, okFixture('req_repo_add', {
-      repo: { id: 'guest', path: '/home/me/repo', displayName: 'repo', executionHostId: 'runtime:wsl:ubuntu' }
-    }))
+    queueFixtures(
+      callMock,
+      okFixture('req_repo_add', {
+        repo: {
+          id: 'guest',
+          path: '/home/me/repo',
+          displayName: 'repo',
+          executionHostId: 'runtime:wsl:ubuntu'
+        }
+      })
+    )
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const repoPath = '\\\\wsl$\\Ubuntu\\home\\me\\repo'
     await main(['repo', 'add', '--path', repoPath, '--json'], '/tmp')

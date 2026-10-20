@@ -86,7 +86,8 @@ export function useSidebarProjectDrop(): {
   )
   const wslRoutingEnabled = useWslHostsEnabled()
   const focusedRuntimeId = getFocusedDropRuntimeId(settings)
-  const remoteRuntimeActive = !wslRoutingEnabled && isSidebarProjectDropRefusedByFocus(focusedRuntimeId, wslDropHosts)
+  const remoteRuntimeActive =
+    !wslRoutingEnabled && isSidebarProjectDropRefusedByFocus(focusedRuntimeId, wslDropHosts)
   const mountedRef = useMountedRef()
 
   const clearDragState = useCallback(() => {

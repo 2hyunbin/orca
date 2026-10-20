@@ -30,7 +30,7 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { updateProjectHostSetupWithProvenKind } from '../folder-repo-git-conversion'
 import type { RuntimeStore } from './runtime-store-contract'
 import { placeExistingFolderSetup } from '../wsl/wsl-project-host-setup'
-import { UNNAMED_REGISTRATION_CALLER, type ProjectPlacement } from '../wsl/project-placement'
+import { UNNAMED_REGISTRATION_CALLER, type PlacedProjectWriter } from '../wsl/project-placement'
 import { assertCloneHostIsSupported } from './runtime-repository-clone-controller'
 import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
 import { readCurrentGitRemoteIdentity } from '../repo-git-remote-identity'
@@ -52,7 +52,7 @@ import {
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
   listRepos: () => Repo[]
-  addRepo: (placement: ProjectPlacement, kind: 'folder' | 'git', hostId: ExecutionHostId) => Promise<Repo>
+  addRepo: PlacedProjectWriter
   cloneRepo: (url: string, destination: string, hostId: ExecutionHostId) => Promise<Repo>
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
@@ -126,9 +126,7 @@ export class RuntimeProjectHostSetupController {
     if (sshTargetId) {
       throw sshTargetNotServedError(sshTargetId)
     }
-    const placed = await placeExistingFolderSetup(store, args, {
-      ...caller, domain: args.hostId, claimsOutsideWsl: { scope: 'runtime', executionHostId: args.hostId }
-    })
+    const placed = await placeExistingFolderSetup(store, args, { owner: 'runtime', ...caller })
     if ('hosted' in placed) {
       return placed.hosted
     }

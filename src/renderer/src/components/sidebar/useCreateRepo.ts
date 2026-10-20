@@ -170,7 +170,8 @@ export function useCreateRepo(
         const folderWorktree = useAppStore
           .getState()
           .worktreesByRepo[repo.id]?.find(
-            (worktree) => getWorktreeExecutionHostId(worktree, repo) === ownerOptions.executionHostId
+            (worktree) =>
+              getWorktreeExecutionHostId(worktree, repo) === ownerOptions.executionHostId
           )
         if (folderWorktree) {
           activateAndRevealWorktree(folderWorktree.id, {

@@ -101,7 +101,11 @@ describe('RuntimeProjectHostSetupController host routing', () => {
       kind: 'folder'
     })
 
-    expect(addRepo).toHaveBeenCalledWith(expect.objectContaining({ kind: 'saved', repo }), 'folder', 'local')
+    expect(addRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'saved', repo }),
+      'folder',
+      'local'
+    )
   })
 
   it('refuses to clone onto an SSH host, because nothing here clones remotely', async () => {

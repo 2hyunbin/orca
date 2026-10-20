@@ -8,19 +8,18 @@ import { callWslProjectHost } from './wsl-project-registration'
 export type PlacedNestedItem = { path: string; order: number; selectedLinuxPath: string }
 
 const GroupReply = z.object({
-  group: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      parentPath: z.string().nullable(),
-      parentGroupId: z.string().nullable(),
-      createdFrom: z.enum(['manual', 'folder-scan', 'migration']),
-      tabOrder: z.number(),
-      isCollapsed: z.boolean(),
-      color: z.string().nullable(),
-      createdAt: z.number(),
-      updatedAt: z.number()
-    })
+  group: z.object({
+    id: z.string(),
+    name: z.string(),
+    parentPath: z.string().nullable(),
+    parentGroupId: z.string().nullable(),
+    createdFrom: z.enum(['manual', 'folder-scan', 'migration']),
+    tabOrder: z.number(),
+    isCollapsed: z.boolean(),
+    color: z.string().nullable(),
+    createdAt: z.number(),
+    updatedAt: z.number()
+  })
 })
 
 const INCOMPLETE_GROUP = 'The project was added, but its group could not be completed.'
@@ -87,12 +86,16 @@ export async function groupOnWslOwner(args: {
   }
   try {
     for (const group of planned) {
-      const reply = GroupReply.parse(await callWslProjectHost(args.environmentId, 'projectGroup.create', {
-        name: group.name,
-        parentPath: group.parentPath ?? undefined,
-        parentGroupId: group.parentGroupId ? (created.get(group.parentGroupId)?.id ?? null) : null,
-        createdFrom: group.createdFrom
-      }))
+      const reply = GroupReply.parse(
+        await callWslProjectHost(args.environmentId, 'projectGroup.create', {
+          name: group.name,
+          parentPath: group.parentPath ?? undefined,
+          parentGroupId: group.parentGroupId
+            ? (created.get(group.parentGroupId)?.id ?? null)
+            : null,
+          createdFrom: group.createdFrom
+        })
+      )
       created.set(group.id, reply.group)
     }
   } catch {

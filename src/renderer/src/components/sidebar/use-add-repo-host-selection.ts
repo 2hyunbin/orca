@@ -109,10 +109,12 @@ export function useAddRepoHostSelection({
         selectableHostOptions.find((host) => canSelectAddRepoHost(host)))
   const selectedHostId = pinLocalHost
     ? LOCAL_EXECUTION_HOST_ID
-    : selectedHost?.id ?? (isWebClient || requestedHostPending ? null : LOCAL_EXECUTION_HOST_ID)
+    : (selectedHost?.id ?? (isWebClient || requestedHostPending ? null : LOCAL_EXECUTION_HOST_ID))
   const displayedHostId = pinLocalHost
     ? LOCAL_EXECUTION_HOST_ID
-    : requestedHostPending ? (requestedHost?.id ?? null) : selectedHostId
+    : requestedHostPending
+      ? (requestedHost?.id ?? null)
+      : selectedHostId
   const selectedParsedHost = parseExecutionHostId(selectedHostId)
 
   useEffect(() => {

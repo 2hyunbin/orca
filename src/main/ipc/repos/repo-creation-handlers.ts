@@ -127,7 +127,10 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       }
       if (placement.kind === 'wsl') {
         const repo = await registerOnWslOwner(placement.environmentId, {
-          kind: 'create', path: posix.dirname(placement.linuxPath), name, repoKind
+          kind: 'create',
+          path: posix.dirname(placement.linuxPath),
+          name,
+          repoKind
         })
         notifyReposChanged(mainWindow)
         return { repo }

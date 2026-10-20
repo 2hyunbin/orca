@@ -55,20 +55,25 @@ export async function admitRepositoryCheckout(
   }
   const registrationPath = info?.rootPath ?? selectedPath
   if (rule.scope === 'runtime') {
-    const candidates = store.getRepos().filter((repo) =>
-      runtimeRepoIsRegistrationCandidate(repo, rule.executionHostId))
+    const candidates = store
+      .getRepos()
+      .filter((repo) => runtimeRepoIsRegistrationCandidate(repo, rule.executionHostId))
     // Why: git's toplevel is already resolved through symlinks, so an alias of a tracked checkout finds it.
-    const saved = candidates.find((repo) =>
-      runtimePathsEqual(repo.path, selectedPath) || runtimePathsEqual(repo.path, registrationPath)) ??
-      await findProjectAtSameRealPath(candidates, registrationPath)
+    const saved =
+      candidates.find(
+        (repo) =>
+          runtimePathsEqual(repo.path, selectedPath) ||
+          runtimePathsEqual(repo.path, registrationPath)
+      ) ?? (await findProjectAtSameRealPath(candidates, registrationPath))
     const findSaved = liveClaim(() => store.getRepos(), saved)
     return { selectedPath, registrationPath, saved: saved ?? undefined, findSaved }
   }
   const mainRepoPath = info?.mainRepoPath ? await getGitRepoRootAsync(info.mainRepoPath) : null
   const paths = { selectedPath, registrationPath, mainRepoPath }
-  const claim = rule.scope === 'desktop'
-    ? await admitDesktopClaim(store, paths)
-    : await admitWslClaim(store, paths, rule.domain)
+  const claim =
+    rule.scope === 'desktop'
+      ? await admitDesktopClaim(store, paths)
+      : await admitWslClaim(store, paths, rule.domain)
   return { selectedPath, registrationPath, ...claim }
 }
 
@@ -85,27 +90,33 @@ function liveClaim(
   claim: Repo | null | undefined,
   key = normalizeRuntimePathForComparison
 ): () => Repo | undefined {
-  return () => rows().find((repo) =>
-    claim != null && repo.id === claim.id && key(repo.path) === key(claim.path))
+  return () =>
+    rows().find(
+      (repo) => claim != null && repo.id === claim.id && key(repo.path) === key(claim.path)
+    )
 }
 
 async function admitDesktopClaim(store: Store, paths: CheckoutPaths): Promise<Claim> {
   const key = normalizeRuntimePathForComparison
   const rows = () => store.getRepos().filter((repo) => !repo.connectionId)
   const at = (path: string, repo: Repo) => key(repo.path) === key(path)
-  const atMain = (repo: Repo) => paths.mainRepoPath !== null && !isFolderRepo(repo) && at(paths.mainRepoPath, repo)
-  const saved = rows().find((repo) => at(paths.selectedPath, repo)) ??
+  const atMain = (repo: Repo) =>
+    paths.mainRepoPath !== null && !isFolderRepo(repo) && at(paths.mainRepoPath, repo)
+  const saved =
+    rows().find((repo) => at(paths.selectedPath, repo)) ??
     rows().find((repo) => at(paths.registrationPath, repo)) ??
-    await findProjectAtSameRealPath(
+    (await findProjectAtSameRealPath(
       store.getRepos().filter((repo) => getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID),
       paths.registrationPath
-    ) ??
+    )) ??
     rows().find(atMain)
   const captured = liveClaim(rows, saved)
   return {
     saved: saved ?? undefined,
-    findSaved: () => rows().find((repo) =>
-      at(paths.selectedPath, repo) || at(paths.registrationPath, repo) || atMain(repo)) ?? captured()
+    findSaved: () =>
+      rows().find(
+        (repo) => at(paths.selectedPath, repo) || at(paths.registrationPath, repo) || atMain(repo)
+      ) ?? captured()
   }
 }
 
@@ -115,18 +126,30 @@ async function admitWslClaim(
   domain: ExecutionHostId | null
 ): Promise<Claim> {
   const key = (path: string) => normalizeRuntimePathForComparison(normalizeWindowsWslPath(path))
-  const sameHostRepos = () => store.getRepos().filter((repo) => !isSshRow(repo) &&
-    (domain === LOCAL_EXECUTION_HOST_ID
-      ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
-      : runtimeRepoMatchesExecutionHost(repo, domain)))
+  const sameHostRepos = () =>
+    store
+      .getRepos()
+      .filter(
+        (repo) =>
+          !isSshRow(repo) &&
+          (domain === LOCAL_EXECUTION_HOST_ID
+            ? getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
+            : runtimeRepoMatchesExecutionHost(repo, domain))
+      )
   const { mainRepoPath } = paths
-  const matches = (repo: Repo) => key(repo.path) === key(paths.selectedPath) ||
+  const matches = (repo: Repo) =>
+    key(repo.path) === key(paths.selectedPath) ||
     key(repo.path) === key(paths.registrationPath) ||
     (mainRepoPath !== null && !isFolderRepo(repo) && key(repo.path) === key(mainRepoPath))
-  const realPathMatch = sameHostRepos().find(matches) ??
-    await findProjectAtSameRealPath(sameHostRepos(), paths.registrationPath, key) ??
+  const realPathMatch =
+    sameHostRepos().find(matches) ??
+    (await findProjectAtSameRealPath(sameHostRepos(), paths.registrationPath, key)) ??
     (mainRepoPath !== null
-      ? await findProjectAtSameRealPath(sameHostRepos().filter((repo) => !isFolderRepo(repo)), mainRepoPath, key)
+      ? await findProjectAtSameRealPath(
+          sameHostRepos().filter((repo) => !isFolderRepo(repo)),
+          mainRepoPath,
+          key
+        )
       : null)
   const captured = liveClaim(sameHostRepos, realPathMatch, key)
   const findSaved = () => sameHostRepos().find(matches) ?? captured()

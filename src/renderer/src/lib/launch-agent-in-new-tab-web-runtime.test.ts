@@ -176,9 +176,8 @@ describe('launchAgentInNewTab paired web runtime', () => {
     'settles declined new-tab launch after %s receipt',
     async (status) => {
       const { adoptAgentSessionLaunchVerdict } = await import('./agent-session-launch-plan')
-      const { launchStructuredAgentFromNewTab } = await import(
-        './launch-agent-in-new-tab-structured-route'
-      )
+      const { launchStructuredAgentFromNewTab } =
+        await import('./launch-agent-in-new-tab-structured-route')
       const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
       let finish!: (outcome: { status: string; message: string }) => void
       mocks.createWebRuntimeSessionTerminal.mockReturnValue(
