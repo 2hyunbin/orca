@@ -58,6 +58,14 @@ vi.mock('../../../../shared/keybindings', () => ({
   keybindingMatchesAction: keybindingsMock.matchAction
 }))
 
+// Why: the stubbed window stands in for the app keyboard router's capture stage.
+vi.mock('@/lib/app-keyboard-router', () => ({
+  addAppKeyListener: (type: string, handler: (e: KeyboardEvent) => void) =>
+    window.addEventListener(type, handler, { capture: true }),
+  removeAppKeyListener: (type: string, handler: (e: KeyboardEvent) => void) =>
+    window.removeEventListener(type, handler, { capture: true })
+}))
+
 vi.mock('@/lib/shortcut-platform', () => ({
   getShortcutPlatform: () => 'darwin' as const
 }))
