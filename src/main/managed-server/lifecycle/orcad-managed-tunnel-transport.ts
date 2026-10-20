@@ -134,7 +134,7 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
     this.bridgedGenerations.set(conn, generation)
     if (!this.dependencies.stdio.canHandle(conn)) {
       throw new Error(
-        `The managed Orca server tunnel has no route: ${forwardFailure}, and there is no stdio bridge.`
+        `The tunnel to this host's Orca server has no route: ${forwardFailure}, and there is no stdio bridge.`
       )
     }
     // Why: a closed `ssh -L` (ours, or one an earlier Orca orphaned) may still hold the port.

@@ -106,7 +106,7 @@ export type SshTarget = {
    */
   /** Main-owned: managed orcad can't run on this host; retried once this app version changes. */
   managedServerUnavailable?: { reason: string; appVersion: string }
-  /** Main-owned: the one-time "move now" offer was shown under this app version. */
+  /** Retired with the move offer (hosts convert on connect); kept so a downgraded build doesn't re-offer. */
   managedServerMoveOffered?: { appVersion: string }
   /**
    * Main-owned: the user confirmed "Move anyway", so saved state the move can't carry stays in this

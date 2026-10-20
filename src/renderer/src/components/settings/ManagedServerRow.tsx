@@ -141,7 +141,11 @@ export function ManagedServerRow({
   return (
     <div className="space-y-2 px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
-        <div className="truncate text-sm font-medium">{environment.name}</div>
+        <div className="truncate text-sm font-medium">
+          {translate('auto.components.settings.managedServers.row.title', 'Orca on {{host}}', {
+            host: environment.name
+          })}
+        </div>
         <span className="shrink-0 text-[11px] text-muted-foreground">
           {versionLabel(status, statusError)}
         </span>

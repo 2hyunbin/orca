@@ -121,12 +121,18 @@ export function ManagedServersSection({
     <div className="space-y-4" data-settings-section="managed-servers">
       <div className="space-y-0.5">
         <div className="text-sm font-medium">
-          {translate('auto.components.settings.managedServers.title', 'Managed servers')}
+          {translate('auto.components.settings.managedServers.title', 'Orca on your SSH hosts')}
         </div>
         <p className="text-xs text-muted-foreground">
           {translate(
             'auto.components.settings.managedServers.description',
-            'Orca installs and runs a server on an empty SSH host and keeps it up to date.'
+            'Orca installs itself on an empty SSH host over your SSH connection and keeps it up to date.'
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {translate(
+            'auto.components.settings.managedServers.reassurance',
+            'Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host.'
           )}
         </p>
         {loadFailed ? (

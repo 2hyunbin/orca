@@ -1266,7 +1266,7 @@
       },
       "ipcEvents": {
         "sshManagedServer": {
-          "refusedBlocked": "Este host SSH no pudo moverse a un servidor Orca gestionado. Hosts SSH en Ajustes muestra por qué."
+          "refusedBlocked": "Orca no pudo instalarse en este host SSH. Hosts SSH en Ajustes muestra por qué."
         }
       }
     },
@@ -12478,8 +12478,8 @@
           "body": "{{credential}} se almacena sin cifrar: este sistema no tiene ningún conjunto de claves del sistema operativo que Orca pueda usar. Cualquiera que pueda leer su disco o una copia de seguridad del mismo puede leer la credencial. Instale y desbloquee gnome-keyring o kwallet, luego guárdelo nuevamente para sellarlo."
         },
         "sshManagedHostRemove": {
-          "description": "{{label}} ejecuta un servidor Orca gestionado. En Servidores gestionados, usa Detener… para quitar el servidor del host, u Olvidar… si el host ya no existe. Después podrás eliminar este host SSH.",
-          "open": "Abrir Servidores gestionados"
+          "description": "Orca se ejecuta en {{label}}. En Orca en tus hosts SSH, usa Detener… para quitar Orca del host, u Olvidar… si el host ya no existe. Después podrás eliminar este host SSH.",
+          "open": "Abrir Orca en tus hosts SSH"
         },
         "managedServers": {
           "row": {
@@ -12501,10 +12501,11 @@
             "forget": "Olvidar…",
             "confirmForget": "Olvidar en este escritorio",
             "keepLinked": "Mantener vinculado",
-            "forgetDescription": "Desvincula este servidor aquí sin contactar con su host. Si el host vuelve, es posible que el servidor siga ejecutándose allí."
+            "forgetDescription": "Desvincula este servidor aquí sin contactar con su host. Si el host vuelve, es posible que el servidor siga ejecutándose allí.",
+            "title": "Orca en {{host}}"
           },
-          "title": "Servidores gestionados",
-          "description": "Orca instala y ejecuta un servidor en un host SSH vacío y lo mantiene actualizado.",
+          "title": "Orca en tus hosts SSH",
+          "description": "Orca se instala en un host SSH vacío a través de tu conexión SSH y lo mantiene actualizado.",
           "deploy": {
             "host": "Host SSH",
             "hostPlaceholder": "Elige un host SSH vacío",
@@ -12529,8 +12530,9 @@
             "cancelLink": "Cancelar"
           },
           "search": {
-            "title": "Servidores gestionados",
-            "keywordSsh": "ssh"
+            "title": "Orca en tus hosts SSH",
+            "keywordSsh": "ssh",
+            "keywordFormerName": "servidores gestionados"
           },
           "phase": {
             "fenced": "Host bloqueado",
@@ -12549,7 +12551,7 @@
           },
           "blocker": {
             "notFound": "El host SSH ya no existe.",
-            "owned": "Este host SSH ya pertenece a un servidor gestionado.",
+            "owned": "Orca ya se ejecuta en este host SSH.",
             "catalog": "Los proyectos de este host aún no se pueden mover.",
             "terminals": "Los terminales de este host siguen en ejecución ({{count}}). Ciérralos primero.",
             "portForwards": "Los reenvíos de puertos guardados se quedan con el host SSH.",
@@ -12579,17 +12581,18 @@
             "migration": "No se hizo: un movimiento a este servidor quedó sin terminar. Reanúdalo primero.",
             "deferred": "Aún no se hizo: el servidor no está listo para esto. Inténtalo más tarde.",
             "failed": "Orca no pudo completar esto en el servidor. Inténtalo de nuevo."
-          }
+          },
+          "reassurance": "Se ejecuta en cada host y se accede a través de tu propia conexión SSH. Tu código y tus archivos se quedan donde están. Solo la lista de proyectos, pestañas y terminales de Orca pasa al host."
         },
         "sshHostServer": {
-          "sourceChanged": "Una versión anterior de Orca cambió los proyectos de este host. Mueve esos cambios a su servidor gestionado o conserva la versión del servidor para volver a conectarte.",
-          "deploying": "Configurando un servidor Orca gestionado…",
-          "converting": "Moviendo los proyectos de este host a su servidor Orca gestionado…",
-          "connecting": "Conectando al servidor Orca gestionado…",
-          "updating": "Actualizando el servidor gestionado…",
-          "starting": "Iniciando el servidor gestionado…",
-          "notServing": "Orca no pudo confirmar que el servidor gestionado esté respondiendo.",
-          "hostNewer": "Ejecuta un servidor Orca gestionado de una versión más reciente de Orca; conserva esa versión.",
+          "sourceChanged": "Una versión anterior de Orca cambió los proyectos de este host. Mueve esos cambios al servidor de Orca de este host o conserva la versión del servidor para volver a conectarte.",
+          "deploying": "Configurando Orca en {{host}}…",
+          "converting": "Moviendo la lista de proyectos, pestañas y terminales de Orca a {{host}}…",
+          "connecting": "Conectando con Orca en {{host}}…",
+          "updating": "Actualizando Orca en {{host}}…",
+          "starting": "Iniciando Orca en {{host}}…",
+          "notServing": "Orca no pudo confirmar que su servidor en {{host}} esté respondiendo.",
+          "hostNewer": "Ejecuta el servidor de Orca de una versión más reciente de Orca; conserva esa versión.",
           "failureDetails": "Detalles",
           "cause": {
             "unsupportedHost": "Orca no tiene una compilación de servidor para este sistema",
@@ -12599,15 +12602,15 @@
             "securitySoftware": "el software de seguridad modificó el runtime del servidor",
             "nativePreflight": "al host le faltan bibliotecas del sistema que el servidor necesita"
           },
-          "updateDeferredLater": "Ejecuta un servidor Orca gestionado; se actualizará en una conexión posterior.",
-          "updateFailedPrevious": "Ejecuta un servidor Orca gestionado en su versión anterior; no se pudo actualizar.",
-          "refusedBlocked": "No se movió a un servidor gestionado: algo en este host impide el movimiento.",
+          "updateDeferredLater": "Ejecuta el servidor de Orca; se actualizará en una conexión posterior.",
+          "updateFailedPrevious": "Ejecuta el servidor de Orca en su versión anterior; no se pudo actualizar.",
+          "refusedBlocked": "Orca aún no está configurado en este host: algo en el host impide el traslado.",
           "unsupported": "Esta versión de Orca no admite este host ({{reason}}). Para seguir usándolo, instala una versión anterior de Orca.",
           "unsupportedUnknown": "Esta versión de Orca no admite este host. Para seguir usándolo, instala una versión anterior de Orca.",
           "tunnelUnsupported": "Esta versión de Orca no admite este host: su servidor SSH no permite el reenvío de puertos y Orca tampoco pudo llegar a su servidor a través de la sesión SSH. Para seguir usándolo, instala una versión anterior de Orca.",
           "setupRetry": "Orca no pudo iniciar su servidor en este host. Intenta conectarte de nuevo.",
-          "moveHeld": "Orca pausó el traslado de los proyectos de este host a su servidor gestionado porque no pudo confirmar la copia del servidor. No se pierde nada: el host conserva sus proyectos y queda bloqueado hasta que termine el traslado. Conéctate de nuevo para reanudarlo. Si el servidor no puede volver, detenlo u olvídalo en Configuración > Servidores gestionados.",
-          "olderTerminalsBridged": "Aún no se ha movido a un servidor administrado: los terminales iniciados por una versión anterior de Orca siguen ejecutándose en los proyectos de este host. Siguen funcionando aquí. Ciérralos o termínalos en el host y vuelve a conectarte.",
+          "moveHeld": "Orca pausó el traslado de los proyectos de este host al servidor de Orca del host porque no pudo confirmar la copia del servidor. No se pierde nada: el host conserva sus proyectos y queda bloqueado hasta que termine el traslado. Conéctate de nuevo para reanudarlo. Si el servidor no puede volver, detenlo u olvídalo en Ajustes > Orca en tus hosts SSH.",
+          "olderTerminalsBridged": "Orca aún no está configurado en este host: los terminales iniciados por una versión anterior de Orca siguen ejecutándose en los proyectos de este host. Siguen funcionando aquí. Ciérralos o termínalos en el host y vuelve a conectarte.",
           "olderTerminalsUncounted": "Los terminales iniciados por una versión anterior de Orca siguen ejecutándose en este host y no se detienen solos. Ciérralos en esa versión de Orca o termínalos en el host y vuelve a conectarte.",
           "olderTerminalsUnverifiable": "Orca no pudo confirmar que los terminales iniciados por una versión anterior de Orca hayan terminado. Vuelve a conectarte para intentarlo de nuevo.",
           "olderTerminals_one": "{{count}} terminal iniciado por una versión anterior de Orca sigue ejecutándose en este host y no se detiene solo. Ciérralo en esa versión de Orca o termínalo en el host y vuelve a conectarte.",
@@ -12619,12 +12622,18 @@
           "linkedProjectsNoAutomations": "El servidor Orca de este host ya tenía {{paths}}, así que este escritorio ahora usa la copia del servidor. Las pestañas de este escritorio allí no se movieron, y los worktrees que creó allí aparecen como worktrees externos.",
           "nodeDownloadBlocked": "Ni este equipo ni este host pudieron descargar Node.js, que el servidor de Orca necesita. Usa un mirror de Node.js o revisa la red en ambas máquinas.",
           "nodeDownloadBlockedNoMirror": "Ni este equipo ni este host pudieron descargar Node.js, que el servidor de Orca necesita. Revisa la red o el proxy en ambas máquinas y vuelve a conectar.",
-          "nodeDownloadBlockedMirrorTried": "Ni este equipo ni este host pudieron descargar Node.js, tampoco desde el mirror de descarga de Node.js. Revisa el ajuste del mirror y vuelve a conectar."
+          "nodeDownloadBlockedMirrorTried": "Ni este equipo ni este host pudieron descargar Node.js, tampoco desde el mirror de descarga de Node.js. Revisa el ajuste del mirror y vuelve a conectar.",
+          "reassurance": "Se ejecuta en {{host}} y se accede a través de tu propia conexión SSH. Tu código y tus archivos se quedan donde están. Solo la lista de proyectos, pestañas y terminales de Orca pasa a {{host}}.",
+          "launchSessionEnded": "Es posible que los terminales de este Mac hayan perdido el acceso a la red local porque terminó la sesión SSH que inició el servidor de Orca de este host. Reinicia el servidor de Orca para restaurarlo.",
+          "behindRolledBack": "Ejecuta una versión del servidor de Orca más antigua que esta app; la última actualización se revirtió. Usa Actualizar servidor para intentarlo de nuevo.",
+          "behindNoTemplate": "Ejecuta una versión del servidor de Orca que esta app no puede actualizar; esta compilación no incluye un servidor para este host.",
+          "behindMigrating": "Ejecuta el servidor de Orca, que se actualizará cuando termine el traslado de sus proyectos.",
+          "behindCheckFailed": "Ejecuta el servidor de Orca; Orca no pudo comprobar si está por detrás de esta app."
         },
         "deltaMove": {
           "action": "Mover los proyectos nuevos…",
           "title": "Mover los proyectos nuevos",
-          "description": "Una versión anterior de Orca modificó este host después de que se moviera a su servidor gestionado. Esto agrega al servidor lo que creó; nunca sobrescribe lo que el servidor ya tiene.",
+          "description": "Una versión anterior de Orca modificó este host después de que sus proyectos pasaran al servidor de Orca del host. Esto agrega al servidor lo que creó; nunca sobrescribe lo que el servidor ya tiene.",
           "added": "Agregado al servidor",
           "nothingNew": "No hay nada nuevo que agregar.",
           "notReflected": "Modificado o eliminado en la versión anterior; el servidor conserva su propia copia",
@@ -12639,14 +12648,14 @@
         "keepServer": {
           "action": "Conservar la versión del servidor…",
           "title": "Conservar la versión del servidor",
-          "description": "Este host vuelve a su servidor gestionado tal como está. Lo que la versión anterior de Orca agregó o cambió aquí no se mueve; permanece solo en los ajustes guardados de esta computadora hasta que se limpien.",
+          "description": "Este host sigue usando su servidor de Orca tal como está. Lo que la versión anterior de Orca agregó o cambió aquí no se mueve; permanece solo en los ajustes guardados de esta computadora hasta que se limpien.",
           "cancel": "Cancelar",
           "confirm": "Conservar la versión del servidor"
         },
         "moveAnyway": {
           "action": "Mover de todos modos…",
           "title": "Mover este host de todos modos",
-          "description": "Orca mueve este host a su servidor gestionado sin los elementos guardados que aparecen abajo. Se quedan en este equipo y no aparecen en el servidor gestionado. Las ediciones sin guardar se conservan; nunca se eliminan.",
+          "description": "Orca mueve los proyectos de este host a Orca en {{host}} sin los elementos guardados que aparecen abajo. Se quedan en este equipo y no aparecen en {{host}}. Las ediciones sin guardar se conservan; nunca se eliminan.",
           "cancel": "Cancelar",
           "confirm": "Mover de todos modos"
         },
@@ -12727,6 +12736,13 @@
             "query": "La URL del mirror no puede tener una consulta ni un fragmento.",
             "invalid": "Introduce una URL de mirror válida."
           }
+        },
+        "restartServer": {
+          "action": "Reiniciar el servidor de Orca…",
+          "title": "Reiniciar el servidor de Orca",
+          "description": "Orca reinicia su servidor en este host desde tu conexión actual. Solo se reinicia cuando no hay terminales en ejecución en el host, porque los terminales que siguen abiertos conservan el acceso perdido. Ciérralos primero.",
+          "terminalsUnknown": "Orca no pudo confirmar si hay terminales en ejecución en este host, así que no reinició el servidor de Orca.",
+          "terminalsRunning": "{{count}} terminales siguen en ejecución en este host. Ciérralos y luego reinicia el servidor de Orca."
         }
       },
       "right": {

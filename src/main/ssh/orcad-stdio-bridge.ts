@@ -106,7 +106,7 @@ export async function checkOrcadStdioBridge(
     }
     const unavailable = (detail: string): Error =>
       new OrcadStdioBridgeUnavailableError(
-        `The SSH host could not run the managed Orca server's stdio bridge: ${detail}`
+        `The SSH host could not run the stdio bridge for this host's Orca server: ${detail}`
       )
     decoder.on('signal', (signal: OrcadStdioBridgeSignal) => {
       settle(signal === 'no-node' ? unavailable('no pinned Node runtime') : 'running')

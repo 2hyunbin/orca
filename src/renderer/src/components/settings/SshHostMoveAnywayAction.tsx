@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SshManagedServerStatus, SshTarget } from '../../../../shared/ssh-types'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
+import { sshHostServerReassurance } from '@/ssh/ssh-host-server-setup-copy'
 import { Button } from '../ui/button'
 import {
   Dialog,
@@ -75,9 +76,13 @@ export function SshHostMoveAnywayAction({
             <DialogDescription>
               {translate(
                 'auto.components.settings.moveAnyway.description',
-                'Orca moves this host to its managed server without the saved items below. They stay on this computer and don’t appear on the managed server. Unsaved edits are kept, never deleted.'
+                'Orca moves this host’s projects to Orca on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.',
+                { host: target.label }
               )}
             </DialogDescription>
+            <p className="text-sm text-muted-foreground">
+              {sshHostServerReassurance(target.label)}
+            </p>
           </DialogHeader>
           {status.detail ? (
             <pre className="scrollbar-sleek max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground">

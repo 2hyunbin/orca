@@ -39,6 +39,7 @@ export function SshTargetServerStatus({
       >
         {line.text}
       </p>
+      {line.hint ? <p className="px-1 text-xs text-muted-foreground">{line.hint}</p> : null}
       {line.detail ? (
         <Collapsible>
           {/* Why one row: the recovery sits beside Details, so it reads as part of this failure. */}
