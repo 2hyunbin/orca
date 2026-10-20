@@ -510,7 +510,10 @@ import {
   UpdatePaneLayout,
   WorktreeTabSelector
 } from './session-tabs-schemas-params'
-import { SidebarSessionBeginParams } from './sidebar-session-params'
+import {
+  SidebarSessionBeginParams,
+  SidebarSessionSleptWorkspacesParams
+} from './sidebar-session-params'
 import {
   SkillsCancelInstallParams,
   SkillsDiscoverParams,
@@ -1295,6 +1298,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.workspaceCreations': null,
   'sidebarInputs.workspaceRows': null,
   'sidebarSession.begin': SidebarSessionBeginParams,
+  'sidebarSession.sleptWorkspaces': SidebarSessionSleptWorkspacesParams,
   'skills.beginUpload': SkillUploadBeginRequestSchema,
   'skills.cancelInstall': SkillsCancelInstallParams,
   'skills.cancelUpload': SkillUploadCommitRequestSchema,

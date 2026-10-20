@@ -11,7 +11,8 @@ import { createSideEffectRuntime } from '../orca-runtime-test-scenario-builders.
 import { DECORATIVE_TITLE_FACT_HEARTBEAT_MS } from '../decorative-title-fact-emission'
 
 describe('terminal side-effect fact channel', () => {
-  it('defers desktop-only output scanners until a headless runtime is promoted', () => {
+  // The host scans its own bytes for its sort stamps, so the scanners outlive any window.
+  it('sends output facts only to a promoted window, and keeps scanning while headless', () => {
     const { runtime, batches } = createSideEffectRuntime()
     const trackerEntries = (
       runtime as unknown as {
@@ -23,7 +24,7 @@ describe('terminal side-effect fact channel', () => {
     runtime.onPtyData('pty-1', '\x07', 100)
 
     expect(batches).toEqual([])
-    expect(trackerEntries.get('pty-1')?.commandCodeDetector).toBeNull()
+    expect(trackerEntries.get('pty-1')?.commandCodeDetector).not.toBeNull()
 
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
@@ -36,7 +37,7 @@ describe('terminal side-effect fact channel', () => {
     runtime.onPtyData('pty-1', '\x07', 102)
 
     expect(batches).toHaveLength(1)
-    expect(trackerEntries.get('pty-1')?.commandCodeDetector).toBeNull()
+    expect(trackerEntries.get('pty-1')?.commandCodeDetector).not.toBeNull()
   })
 
   it('forwards facts over the shared client-event stream without a desktop renderer', () => {
@@ -185,7 +186,8 @@ describe('terminal side-effect fact channel', () => {
       await vi.advanceTimersByTimeAsync(3_000)
 
       expect(trackerEntries.has(ptyId)).toBe(true)
-      expect(trackerEntries.get(ptyId)?.commandCodeDetector).toBeNull()
+      // The host's own sort stamps keep the desktop scanner.
+      expect(trackerEntries.get(ptyId)?.commandCodeDetector).not.toBeNull()
       expect((await runtime.listTerminals()).terminals[0]).toMatchObject({ title: 'Codex' })
       expect(mobileEvents.some((event) => event.type === 'terminalSideEffects')).toBe(false)
     } finally {

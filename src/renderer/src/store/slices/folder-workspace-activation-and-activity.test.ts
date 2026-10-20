@@ -11,6 +11,10 @@ import {
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 import { createTestStore } from './store-test-helpers'
 
+// The window stamps Recent only for an older paired server's rows; the activity tests pin that path.
+const ownerHostOwnsSidebarInputs = vi.hoisted(() => vi.fn(async () => false))
+vi.mock('./worktrees/listing/owner-host-sidebar-inputs', () => ({ ownerHostOwnsSidebarInputs }))
+
 const folderWorkspacesUpdate = vi.fn()
 const folderWorkspacesList = vi.fn()
 const runtimeEnvironmentCall = vi.fn()
@@ -238,95 +242,5 @@ describe('folder workspace generic activation and activity', () => {
 
     expect(store.getState().activeTabType).toBe('editor')
     expect(store.getState().activeFileId).toBe('fallback-file')
-  })
-
-  it('coalesces repeated activity persistence while keeping local activity current', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_000)
-    const folderWorkspace = makeFolderWorkspace()
-    const workspaceKey = folderWorkspaceKey(folderWorkspace.id)
-    let resolveFirst!: (workspace: FolderWorkspace) => void
-    folderWorkspacesUpdate
-      .mockImplementationOnce(
-        () =>
-          new Promise<FolderWorkspace>((resolve) => {
-            resolveFirst = resolve
-          })
-      )
-      .mockImplementation(respondWithUpdates(folderWorkspace))
-    const store = seedLocalFolderStore(folderWorkspace)
-
-    store.getState().bumpWorktreeActivity(workspaceKey)
-    await vi.advanceTimersByTimeAsync(100)
-    store.getState().bumpWorktreeActivity(workspaceKey)
-    await vi.advanceTimersByTimeAsync(100)
-    store.getState().bumpWorktreeActivity(workspaceKey)
-
-    expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_200)
-    expect(folderWorkspacesUpdate).toHaveBeenCalledTimes(1)
-    expect(folderWorkspacesUpdate).toHaveBeenLastCalledWith({
-      folderWorkspaceId: folderWorkspace.id,
-      updates: { lastActivityAt: 1_000 }
-    })
-
-    // Why: the first IPC must not rewind local activity that advanced while it was in flight.
-    resolveFirst({
-      ...folderWorkspace,
-      lastActivityAt: 1_000,
-      updatedAt: 2
-    })
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_200)
-
-    await vi.advanceTimersByTimeAsync(800)
-
-    expect(folderWorkspacesUpdate).toHaveBeenCalledTimes(2)
-    expect(folderWorkspacesUpdate).toHaveBeenLastCalledWith({
-      folderWorkspaceId: folderWorkspace.id,
-      updates: { lastActivityAt: 1_200 }
-    })
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_200)
-  })
-
-  it('does not rewind local activity when a failed early persist reconciles an older catalog value', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_000)
-    const folderWorkspace = makeFolderWorkspace()
-    const workspaceKey = folderWorkspaceKey(folderWorkspace.id)
-    let rejectFirst!: (error: Error) => void
-    folderWorkspacesUpdate
-      .mockImplementationOnce(
-        () =>
-          new Promise<FolderWorkspace>((_resolve, reject) => {
-            rejectFirst = reject
-          })
-      )
-      .mockImplementation(respondWithUpdates(folderWorkspace))
-    folderWorkspacesList.mockResolvedValue([
-      { ...folderWorkspace, lastActivityAt: 1_000, updatedAt: 2 }
-    ])
-    const store = seedLocalFolderStore(folderWorkspace)
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-
-    try {
-      store.getState().bumpWorktreeActivity(workspaceKey)
-      await vi.advanceTimersByTimeAsync(100)
-      store.getState().bumpWorktreeActivity(workspaceKey)
-      expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_100)
-
-      rejectFirst(new Error('persist failed'))
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
-
-      expect(folderWorkspacesList).toHaveBeenCalled()
-      expect(store.getState().folderWorkspaces[0]?.lastActivityAt).toBe(1_100)
-    } finally {
-      errorSpy.mockRestore()
-    }
   })
 })

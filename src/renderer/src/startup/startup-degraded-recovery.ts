@@ -85,7 +85,7 @@ export async function recoverFromDegradedStartup(args: DegradedStartupRecoveryAr
     return
   }
   // Why: degraded mode stays interactive; later repo/runtime changes must not remain gated forever.
-  useAppStore.setState({ startupWorktreeRefreshCompleted: true })
+  useAppStore.setState({ startupWorktreeRefreshCompleted: true, startupLocalCatalogHydrated: true })
   // Why (issue #1158): only apply default UI if ui.get() never hydrated; otherwise defaults would clobber ui.json via the debounced writer.
   const fallbackUI = getStartupErrorFallbackUI(uiHydrated)
   if (fallbackUI) {

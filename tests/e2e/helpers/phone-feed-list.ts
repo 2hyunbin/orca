@@ -21,6 +21,7 @@ import {
   type WorkspaceViewSettings
 } from '../../../mobile/src/worktree/workspace-view-settings'
 import type { RpcResponse } from '../../../mobile/src/transport/types'
+import { NODE_PLATFORM_NAMES } from '../../../mobile/src/transport/mobile-runtime-host-platform'
 import type { Section } from '../../../mobile/src/worktree/workspace-list-types'
 import type { PairedMobileClient, PairedMobileSocket } from './paired-mobile-client'
 
@@ -118,7 +119,10 @@ export async function openPhoneFeedList(phone: PairedMobileClient) {
     await port.sendRequest('host.platform'),
     hostPlatformRead.interpret
   )
-  const hostPlatform = platformRead.kind === 'answered' ? platformRead.value : null
+  const answered = platformRead.kind === 'answered' ? platformRead.value : null
+  // Why matched, not read: this helper and the page may resolve different zod copies, so the
+  // reply's inferred type does not carry across.
+  const hostPlatform = NODE_PLATFORM_NAMES.find((name) => name === answered) ?? null
   await syncViewSettings()
   const stop = startHostWorktreeRefresh({
     client: socketEventClient(socket),
@@ -157,6 +161,8 @@ export async function openPhoneFeedList(phone: PairedMobileClient) {
     return buildHostFeedSections({
       rows: built.sectionRows,
       activeRowKeys: built.activeRowKeys,
+      // A phone that has opened nothing on this host: the desktop's selection.
+      lastVisited: null,
       liveRows: [],
       repoHostIdByRepoId: new Map(),
       search: ''

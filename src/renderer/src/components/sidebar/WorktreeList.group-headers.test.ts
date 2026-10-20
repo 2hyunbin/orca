@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ProjectGroup } from '../../../../shared/project-group-types'
 import type { Repo } from '../../../../shared/repo-types'
@@ -23,8 +25,13 @@ import {
 } from './worktree-list-lineage-card-test-fixtures'
 import { setLineageFixtureState } from './worktree-list-lineage-store-state'
 import { setPinnedFixtureState } from './worktree-list-pinned-store-state'
+import { createWindowStateSidebarFeedModuleMock } from './window-state-sidebar-feed.test-fixture'
 
 vi.mock('@/store', () => createAppStoreModuleMock())
+vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
+vi.mock('@/lib/desktop-sidebar-feed', () =>
+  createWindowStateSidebarFeedModuleMock(() => mockStore.state)
+)
 vi.mock('@tanstack/react-virtual', () => createReactVirtualModuleMock())
 vi.mock('@/hooks/useVirtualizedScrollAnchor', () => createVirtualizedScrollAnchorModuleMock())
 vi.mock('./project-header-drag', () => createProjectHeaderDragModuleMock())

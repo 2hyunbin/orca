@@ -508,7 +508,7 @@ describe('createTerminalHandleLinkProvider', () => {
       params: { task: 'task_worker' }
     })
     expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1')
-    expect(mocks.storeState.markWorktreeVisited).toHaveBeenCalledWith('wt-1')
+    expect(mocks.storeState.markWorktreeVisited).toHaveBeenCalledWith('wt-1', expect.any(Number))
     expect(mocks.storeState.setActiveView).toHaveBeenCalledWith('terminal')
     expect(mocks.storeState.setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
     expect(mocks.storeState.revealWorktreeInSidebar).toHaveBeenCalledWith('wt-1')

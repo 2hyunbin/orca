@@ -5,11 +5,6 @@ import {
   buildWorktreeSortLabels,
   type SortBy
 } from '../../../../shared/sidebar-list/smart-sort'
-import {
-  IDLE,
-  type SmartClass,
-  type WorktreeAttention
-} from '../../../../shared/sidebar-list/smart-attention'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { countActiveWorkspaceFilters } from '../../../../shared/workspace-view/workspace-row-filters'
 import { getWorktreeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
@@ -272,33 +267,16 @@ describe('the shared Workspace options evaluator matches the sidebar it replaced
   })
 })
 
-// The sidebar comparator before the shared evaluator, verbatim apart from the label lookup.
-function previousDesktopComparator(
-  sortBy: SortBy,
-  now: number,
-  attention: Map<string, WorktreeAttention>
-) {
+// The sidebar comparator before the shared evaluator, verbatim apart from the label lookup. Recent
+// and Smart now read the owning host's stamps (stamp-order.ts), so only the clock-free modes remain.
+type ClockFreeSortBy = Exclude<SortBy, 'recent' | 'smart'>
+
+function previousDesktopComparator(sortBy: ClockFreeSortBy) {
   const label = (w: Worktree) => w.displayName
-  const recent = (w: Worktree) =>
-    w.createdAt === undefined || now >= w.createdAt + 5 * 60 * 1000
-      ? w.lastActivityAt
-      : Math.max(w.lastActivityAt, w.createdAt + 5 * 60 * 1000)
   return (a: Worktree, b: Worktree): number => {
     switch (sortBy) {
       case 'name':
         return label(a).localeCompare(label(b))
-      case 'smart': {
-        const aw = attention.get(a.id) ?? IDLE
-        const bw = attention.get(b.id) ?? IDLE
-        return (
-          aw.cls - bw.cls ||
-          bw.attentionTimestamp - aw.attentionTimestamp ||
-          recent(b) - recent(a) ||
-          label(a).localeCompare(label(b))
-        )
-      }
-      case 'recent':
-        return recent(b) - recent(a) || label(a).localeCompare(label(b))
       case 'repo': {
         const cmp = (repoMap.get(a.repoId)?.displayName ?? '').localeCompare(
           repoMap.get(b.repoId)?.displayName ?? ''
@@ -314,11 +292,6 @@ function previousDesktopComparator(
   }
 }
 
-const SMART_CLASSES: readonly SmartClass[] = [1, 2, 3]
-function attentionFor(index: number): WorktreeAttention {
-  return { cls: SMART_CLASSES[index % 3], attentionTimestamp: index % 4 }
-}
-
 describe('the shared comparator matches the sidebar comparator it replaced', () => {
   const sortRows = rows.map((w, index) => ({
     ...w,
@@ -328,18 +301,13 @@ describe('the shared comparator matches the sidebar comparator it replaced', () 
     ...(index % 3 === 0 ? { manualOrder: index } : {}),
     ...(index % 4 === 0 ? { createdAt: 0 } : {})
   }))
-  for (const sortBy of ['name', 'smart', 'recent', 'repo', 'manual'] as const) {
+  for (const sortBy of ['name', 'repo', 'manual'] as const) {
     it(`orders rows the same way by ${sortBy}`, () => {
-      const now = 60_000
-      // Classes and attention stamps tie in places, so every smart tiebreak runs.
-      const attention = new Map<string, WorktreeAttention>(
-        sortRows.map((w, index) => [w.id, index % 2 === 0 ? IDLE : attentionFor(index)])
-      )
       const labels = buildWorktreeSortLabels(sortRows)
       const actual = [...sortRows].sort(
-        buildWorktreeComparator(sortBy, repoMap, now, attention, labels)
+        buildWorktreeComparator(sortBy, repoMap, 60_000, new Map(), labels)
       )
-      const expected = [...sortRows].sort(previousDesktopComparator(sortBy, now, attention))
+      const expected = [...sortRows].sort(previousDesktopComparator(sortBy))
       expect(actual.map((w) => w.id)).toEqual(expected.map((w) => w.id))
     })
   }

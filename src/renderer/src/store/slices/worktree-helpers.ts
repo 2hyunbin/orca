@@ -171,6 +171,8 @@ export type WorktreeSlice = {
   hasHydratedWorktreePurge: boolean
   /** Startup owns the initial all-host refresh; sidebar repo-change refreshes stay gated until it finishes. */
   startupWorktreeRefreshCompleted: boolean
+  /** Startup has read the saved view settings and this host's projects, groups and folders. */
+  startupLocalCatalogHydrated: boolean
   fetchDetectedWorktrees: (repoId: string) => Promise<DetectedWorktreeListResult | null>
   fetchWorktrees: {
     (
