@@ -9,9 +9,14 @@ import type {
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabsSnapshot
 } from '../../../shared/runtime-session-contracts'
-import type { ProjectedSessionTabs } from '../../../shared/workspace-layout/old-client/old-client-session-tabs-projection'
 
 type Row = RuntimeMobileSessionSnapshotTab
+
+/** Main's projection of the rows (projectSessionTabs): the snapshot minus the runtime's stamps. */
+export type MainSessionTabRows = Omit<
+  RuntimeMobileSessionTabsSnapshot,
+  'publicationEpoch' | 'snapshotVersion' | 'worktreeInstanceId' | 'retiredTerminalSurfaces'
+>
 
 /**
  * Rows main's layout answers for: terminals and edit-mode files (the model holds no diff or
@@ -69,7 +74,7 @@ function withWindowOnlyIds(
  */
 export function withMainSessionTabRows(
   published: RuntimeMobileSessionTabsSnapshot,
-  projected: ProjectedSessionTabs
+  projected: MainSessionTabRows
 ): RuntimeMobileSessionTabsSnapshot {
   const windowRows = new Map(published.tabs.map((row) => [row.id, row]))
   const projectedIds = new Set(projected.tabs.map((row) => row.id))

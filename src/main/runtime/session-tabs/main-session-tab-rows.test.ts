@@ -4,8 +4,7 @@ import type {
   RuntimeMobileSessionTerminalTab
 } from '../../../shared/runtime-mobile-session-tab-contracts'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
-import type { ProjectedSessionTabs } from '../../../shared/workspace-layout/old-client/old-client-session-tabs-projection'
-import { withMainSessionTabRows } from './main-session-tab-rows'
+import { withMainSessionTabRows, type MainSessionTabRows } from './main-session-tab-rows'
 
 const WT = 'repo::/wt'
 
@@ -75,7 +74,7 @@ function mainProjection(
   tabs: RuntimeMobileSessionSnapshotTab[],
   tabOrder: string[],
   activeTabId: string | null
-): ProjectedSessionTabs {
+): MainSessionTabRows {
   const {
     publicationEpoch: _e,
     snapshotVersion: _v,
