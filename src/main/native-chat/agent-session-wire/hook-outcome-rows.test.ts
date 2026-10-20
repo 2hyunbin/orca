@@ -3,7 +3,10 @@
 
 import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalRenderItem
+} from '../../../shared/agent-session-journal-types'
 import {
   claudeProviderHandle,
   codexProviderHandle
@@ -11,7 +14,10 @@ import {
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
-import { nativeChatRowTurnKeys } from '../../../shared/native-chat-turn-grouping'
+import {
+  nativeChatRowTurnKeys,
+  nativeChatTurnBarRows
+} from '../../../shared/native-chat-turn-grouping'
 import { nativeChatTurnFold, nativeChatTurnFoldRow } from '../../../shared/native-chat-turn-fold'
 import { nativeChatTurnMembership } from '../../../shared/native-chat-turn-membership'
 import { projectStructuredItemsToNativeChat } from '../../../shared/structured-agent-session-projection'
@@ -36,7 +42,11 @@ const CLAUDE_CHAT = { agent: 'claude' as const, providerHandle: claudeProviderHa
 const QA_POLICY = 'QA policy: BLOCKME prompts are not allowed'
 const SEND = { clientMessageId: 'cm-1', payloadFingerprint: 'fp', fence: 1 }
 const GO = [{ type: 'text' as const, text: 'go' }]
-type Captured = { method: string; params: Record<string, unknown>; frame: Record<string, unknown> }
+type Captured = {
+  method: string
+  params: Record<string, unknown> & { run?: Record<string, unknown> }
+  frame: Record<string, unknown>
+}
 
 afterEach(closeProviderTimelineRigs)
 
@@ -81,28 +91,43 @@ async function blockedChat(
 describe('a prompt hook that blocked the message', () => {
   // A blocked tool call reaches the model as the tool's result, and writes no row of its own.
   it.each([
-    ['blocked-prompt', [DEPLOYS_FROZEN]],
-    ['blocked-steer', [DEPLOYS_FROZEN]],
-    ['blocked-tool', []]
-  ])('Codex %s', async (scenario, rows) => {
+    ['blocked-prompt', [DEPLOYS_FROZEN], 'blocked'],
+    ['blocked-prompt', [row('Hook stopped: Deploys are frozen')], 'stopped'],
+    ['blocked-steer', [DEPLOYS_FROZEN], 'blocked'],
+    ['blocked-tool', [], 'blocked']
+  ])('Codex %s (%s, %s)', async (scenario, rows, status) => {
     const frames = await captured<Captured>('codex', scenario)
     const { items, submissions } = await blockedChat(CODEX_CHAT, (rig) => {
       const deps = { sessionId: 's', primaryThreadId: () => 't', sink: rig.eventSink }
       const lane = createCodexJournalTranslator({ ...deps, schedule: (run) => (run(), () => {}) })
       for (const { method, params } of frames) {
         const frame = { method, params: { ...params, threadId: 't' } }
+        if (scenario === 'blocked-prompt' && method === 'hook/completed') {
+          frame.params.run = { ...params.run, status }
+        }
         lane.handle({ type: 'notification', sessionId: 's', threadId: 't', ...frame })
       }
     })
     expect(settledRows(items)).toEqual(rows)
-    // Unechoed when its turn ends, the send reads in doubt, and every row stays in its turn.
-    const inDoubt = submissions.map((sent) => ({ ...sent, dispatchState: 'unknown' as const }))
-    const journal = { items, submissions: inDoubt }
-    const { turnKeys } = nativeChatTurnMembership(
-      projectStructuredItemsToNativeChat(items),
-      journal
+    const notices = items.filter(
+      (item) => item.body.kind === 'status' && item.body.presentation === 'turn-notice'
     )
-    expect(new Set(turnKeys)).toEqual(new Set([agentJournalSubmissionKey(SEND.clientMessageId)]))
+    expect(notices.map((item) => item.turnScope)).toEqual(
+      rows.map(() => AGENT_JOURNAL_THREAD_SCOPE)
+    )
+    if (scenario === 'blocked-prompt') {
+      const messages = projectStructuredItemsToNativeChat(items)
+      for (const dispatchState of ['pending', 'unknown'] as const) {
+        const journal = {
+          items,
+          submissions: submissions.map((sent) => ({ ...sent, dispatchState }))
+        }
+        const { turnKeys } = nativeChatTurnMembership(messages, journal)
+        expect([...nativeChatTurnBarRows(messages, turnKeys).keys()]).toEqual([
+          agentJournalSubmissionKey(SEND.clientMessageId)
+        ])
+      }
+    }
   })
 
   it.each([

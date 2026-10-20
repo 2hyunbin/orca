@@ -1,4 +1,8 @@
-import type { AgentJournalPlainStatusItem } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalPlainStatusItem,
+  AgentJournalTurnScope
+} from '../../../shared/agent-session-journal-types'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { CLAUDE_LOCAL_COMMAND_OUTPUT_FRAME_KIND } from '../../../shared/native-chat-provider-frame-summary'
 import {
   boundInlineText,
@@ -13,6 +17,7 @@ import { hookOutcomeRowBody } from '../../../shared/agent-session-hook-outcome'
 
 export type UnhandledProviderFrameJournalItem = {
   body: AgentJournalPlainStatusItem
+  turnScope?: AgentJournalTurnScope
   /** Why the frame surfaced. `error-surface` rows (failures, warnings, a hook's refusal) skip row caps. */
   classification: 'timeline-substantive' | 'error-surface'
 }
@@ -148,7 +153,9 @@ export function unhandledProviderFrameJournalItem(
   if (hook) {
     return {
       body: { ...hook, text: boundInlineText(hook.text, limits).text },
-      classification: 'error-surface'
+      classification: 'error-surface',
+      // Codex never echoes a refused prompt, so the turn has no message to group under.
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
     }
   }
   const classification =

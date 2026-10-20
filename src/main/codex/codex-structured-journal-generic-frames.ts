@@ -120,6 +120,7 @@ export class CodexJournalGenericFrames {
     translated: {
       body: AgentJournalStatusItem
       classification: UnhandledProviderFrameJournalItem['classification']
+      turnScope?: UnhandledProviderFrameJournalItem['turnScope']
     }
   ): CodexJournalTranslationAdmission {
     const frameTurnId = readCodexTurnId(payload) ?? this.activeTurn(threadId)
@@ -155,6 +156,7 @@ export class CodexJournalGenericFrames {
       clientMessageId: `provider-frame:codex:${this.deps.acquisitionId ?? 'acquisition'}:${this.fallbackSequence}`
     }
     const attribution = this.deps.attributionFor(threadId, frameTurnId)
+    attribution.turnScope = translated.turnScope ?? attribution.turnScope
     const admission = this.deps.sink.tryAppendItem
       ? this.deps.sink.tryAppendItem(identity, translated.body, attribution)
       : (this.deps.sink.appendItem(identity, translated.body, attribution), CODEX_JOURNAL_ADMITTED)
