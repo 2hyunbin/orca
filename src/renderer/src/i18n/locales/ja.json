@@ -233,7 +233,7 @@
         "savedModel": "設定のモデル: {{value0}}",
         "permissionsDefault": "新しいチャットと同じ",
         "chatOptions": "チャットオプション",
-        "savedChatOptions": "設定のチャットオプション: {{value0}}"
+        "savedChatOptions": "保存されたチャットオプション: {{value0}}。古いサーバーでは、新しいチャット用の権限が使用されます。"
       }
     }
   },

@@ -233,7 +233,7 @@
         "savedModel": "Modelo de Configuración: {{value0}}",
         "permissionsDefault": "Igual que los chats nuevos",
         "chatOptions": "Opciones del chat",
-        "savedChatOptions": "Opciones del chat de Configuración: {{value0}}"
+        "savedChatOptions": "Opciones de chat guardadas: {{value0}}. Los servidores antiguos usan sus permisos para los chats nuevos."
       }
     }
   },

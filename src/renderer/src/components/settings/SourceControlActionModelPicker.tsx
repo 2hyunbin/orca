@@ -15,8 +15,11 @@ import {
 } from '../native-chat/native-chat-permission-mode-labels'
 import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import { Label } from '../ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Select, SelectContent, SelectItem } from '../ui/select'
+import {
+  SourceControlActionOptionField,
+  SourceControlActionOptionTrigger
+} from './SourceControlActionOptionField'
 import { translate } from '@/i18n/i18n'
 
 const AGENT_DEFAULT_VALUE = '__agent_default__'
@@ -60,12 +63,12 @@ export function SourceControlActionModelPicker({
       ? selected.model
       : undefined
   const options = selected?.model ? sourceControlActionChatOptions(agent, selected.model) : []
-  // Model and Permissions take full rows so long values stay readable in the narrow column.
   return (
-    <div className="grid auto-rows-[minmax(56.5px,auto)] grid-cols-2 gap-2">
+    <div className="grid min-w-0 gap-2">
       {catalog ? (
-        <div className="col-span-2 space-y-2">
-          <Label>{translate('settings.sourceControl.actionModel.model', 'Model')}</Label>
+        <SourceControlActionOptionField
+          label={translate('settings.sourceControl.actionModel.model', 'Model')}
+        >
           <Select
             value={selected?.model ?? AGENT_DEFAULT_VALUE}
             disabled={disabled}
@@ -73,9 +76,14 @@ export function SourceControlActionModelPicker({
               save({ ...(model === AGENT_DEFAULT_VALUE ? {} : { model }), permissionMode })
             }
           >
-            <SelectTrigger size="sm" className="h-8 w-full text-xs">
-              <SelectValue />
-            </SelectTrigger>
+            <SourceControlActionOptionTrigger
+              disabled={disabled}
+              label={
+                selected?.model
+                  ? (findCatalogModel(catalog, selected.model)?.label ?? selected.model)
+                  : translate('settings.sourceControl.actionModel.agentDefault', 'Agent default')
+              }
+            />
             <SelectContent>
               <SelectItem value={AGENT_DEFAULT_VALUE}>
                 {translate('settings.sourceControl.actionModel.agentDefault', 'Agent default')}
@@ -90,11 +98,10 @@ export function SourceControlActionModelPicker({
               ) : null}
             </SelectContent>
           </Select>
-        </div>
+        </SourceControlActionOptionField>
       ) : null}
       {modes.length > 0 ? (
-        <div className="col-span-2 space-y-2">
-          <Label>{nativeChatPermissionPickerTitle()}</Label>
+        <SourceControlActionOptionField label={nativeChatPermissionPickerTitle()}>
           <Select
             value={permissionMode ?? AGENT_DEFAULT_VALUE}
             disabled={disabled}
@@ -106,9 +113,17 @@ export function SourceControlActionModelPicker({
               })
             }
           >
-            <SelectTrigger size="sm" className="h-8 w-full text-xs">
-              <SelectValue />
-            </SelectTrigger>
+            <SourceControlActionOptionTrigger
+              disabled={disabled}
+              label={
+                permissionMode
+                  ? nativeChatPermissionModeLabel(permissionMode)
+                  : translate(
+                      'settings.sourceControl.actionModel.permissionsDefault',
+                      'Same as new chats'
+                    )
+              }
+            />
             <SelectContent>
               <SelectItem value={AGENT_DEFAULT_VALUE}>
                 {translate(
@@ -126,7 +141,7 @@ export function SourceControlActionModelPicker({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </SourceControlActionOptionField>
       ) : null}
       {selected?.model
         ? options.map((option) => {
@@ -145,8 +160,7 @@ export function SourceControlActionModelPicker({
                   ]
             const current = selected.options?.[option.id]
             return (
-              <div key={option.id} className="space-y-2">
-                <Label>{option.label}</Label>
+              <SourceControlActionOptionField key={option.id} label={option.label}>
                 <Select
                   value={current ?? AGENT_DEFAULT_VALUE}
                   disabled={disabled}
@@ -166,9 +180,14 @@ export function SourceControlActionModelPicker({
                     onChange({ ...selected, options: values })
                   }}
                 >
-                  <SelectTrigger size="sm" className="h-8 w-full text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SourceControlActionOptionTrigger
+                    disabled={disabled}
+                    label={
+                      current
+                        ? (choices.find((choice) => choice.value === current)?.label ?? current)
+                        : translate('settings.sourceControl.actionModel.effortDefault', 'Default')
+                    }
+                  />
                   <SelectContent>
                     <SelectItem value={AGENT_DEFAULT_VALUE}>
                       {translate('settings.sourceControl.actionModel.effortDefault', 'Default')}
@@ -183,7 +202,7 @@ export function SourceControlActionModelPicker({
                     ) : null}
                   </SelectContent>
                 </Select>
-              </div>
+              </SourceControlActionOptionField>
             )
           })
         : null}

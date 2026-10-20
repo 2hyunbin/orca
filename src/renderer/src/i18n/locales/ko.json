@@ -233,7 +233,7 @@
         "savedModel": "설정의 모델: {{value0}}",
         "permissionsDefault": "새 채팅과 동일",
         "chatOptions": "채팅 옵션",
-        "savedChatOptions": "설정의 채팅 옵션: {{value0}}"
+        "savedChatOptions": "저장된 채팅 옵션: {{value0}}. 이전 서버는 새 채팅에 서버의 권한 설정을 사용합니다."
       }
     }
   },

@@ -25,7 +25,10 @@ import {
 } from './source-control-action-recipe-options'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import { SourceControlActionOptionsPlaceholder } from './SourceControlActionOptionsPlaceholder'
+import {
+  SourceControlActionOptionField,
+  SourceControlActionOptionsPlaceholder
+} from './SourceControlActionOptionField'
 import { useSourceControlActionChatAgent } from './use-source-control-action-chat-agent'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
@@ -153,7 +156,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
       </div>
       <div className="mt-3 grid items-start gap-3 sm:grid-cols-[220px_1fr]">
         {isLaunchAction && actual.status === 'pending' ? (
-          <SourceControlActionOptionsPlaceholder value={launchPreferences} />
+          <SourceControlActionOptionsPlaceholder />
         ) : isLaunchAction && actual.status === 'ready' && actual.chat ? (
           <div>
             {onLaunchPreferencesChange ? (
@@ -165,13 +168,12 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
             ) : null}
           </div>
         ) : (
-          <div className="space-y-2">
-            <Label className="text-[11px] text-muted-foreground">
-              {translate(
-                'auto.components.settings.SourceControlAiActionRecipeDefaults.2cb4bb7e5d',
-                'CLI arguments'
-              )}
-            </Label>
+          <SourceControlActionOptionField
+            label={translate(
+              'auto.components.settings.SourceControlAiActionRecipeDefaults.2cb4bb7e5d',
+              'CLI arguments'
+            )}
+          >
             <Input
               value={draftValue.agentArgs}
               spellCheck={false}
@@ -179,7 +181,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
               onChange={(event) => onAgentArgsChange(actionId, event.target.value)}
               className="h-8 font-mono text-xs"
             />
-          </div>
+          </SourceControlActionOptionField>
         )}
         <div className="space-y-2">
           <Label className="text-[11px] text-muted-foreground">

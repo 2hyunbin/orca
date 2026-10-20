@@ -124,6 +124,26 @@ describe('SourceControlAgentActionDialogForm', () => {
     expect(markup).toContain('Resolve the merge conflicts reported for this pull request.')
   })
 
+  it('qualifies saved permissions without changing the model-only summary', () => {
+    const recipe = {
+      agentId: 'codex' as const,
+      launchPreferences: {
+        agentId: 'codex' as const,
+        model: 'saved',
+        permissionMode: 'ask' as const
+      }
+    }
+    expect(renderForm({ recipe, agentArgsApply: false })).toContain(
+      'Older servers use their permissions for new chats.'
+    )
+    expect(
+      renderForm({
+        recipe: { ...recipe, launchPreferences: { agentId: 'codex', model: 'saved' } },
+        agentArgsApply: false
+      })
+    ).toContain('Model from Settings: saved')
+  })
+
   it('offers agents only, since an action cannot start without one', () => {
     expect(renderForm()).toContain('data-allow-blank="false"')
   })

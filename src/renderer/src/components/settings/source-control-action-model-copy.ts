@@ -8,7 +8,7 @@ import { sourceControlActionChatOptions } from '../../../../shared/source-contro
 import { translate } from '@/i18n/i18n'
 import { nativeChatPermissionModeLabel } from '../native-chat/native-chat-permission-mode-labels'
 
-/** The saved model and permission mode the launch runs, named the way the chat pickers name them. */
+/** The model and permission mode saved in the recipe, named the way the chat pickers name them. */
 export function describeSourceControlActionModel(
   agent: TuiAgent,
   preferences: SourceControlActionLaunchPreferences
@@ -35,7 +35,7 @@ export function describeSourceControlActionModel(
   }
   return translate(
     'settings.sourceControl.actionModel.savedChatOptions',
-    'Chat options from Settings: {{value0}}',
+    'Saved chat options: {{value0}}. Older servers use their permissions for new chats.',
     { value0: [...labels, nativeChatPermissionModeLabel(permissionMode)].join(' · ') }
   )
 }

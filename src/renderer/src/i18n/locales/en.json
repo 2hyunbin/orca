@@ -410,7 +410,7 @@
         "savedModel": "Model from Settings: {{value0}}",
         "permissionsDefault": "Same as new chats",
         "chatOptions": "Chat options",
-        "savedChatOptions": "Chat options from Settings: {{value0}}"
+        "savedChatOptions": "Saved chat options: {{value0}}. Older servers use their permissions for new chats."
       }
     }
   },

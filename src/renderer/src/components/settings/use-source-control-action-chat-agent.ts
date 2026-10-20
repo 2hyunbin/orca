@@ -1,7 +1,20 @@
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
+import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../../shared/protocol-version'
+import {
+  isNativeChatEnabled,
+  isNativeChatDefaultFor
+} from '../../../../shared/structured-native-chat-launch-route'
+import {
+  readHostStructuredAgentsForRuntime,
+  hostStructuredAgentsReadFailed,
+  relearnHostStructuredAgents
+} from '@/runtime/host-structured-agents'
+import {
+  readLocalRuntimeCapabilityObservation,
+  subscribeLocalRuntimeCapabilityObservation
+} from '@/runtime/local-runtime-capabilities'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isCustomAgentId } from '../../../../shared/commit-message-agent-spec'
-import { isNativeChatDefaultFor } from '../../../../shared/structured-native-chat-launch-route'
 import { pickSourceControlLaunchAgent } from '../../../../shared/source-control-launch-agent-selection'
 import type { SourceControlActionRecipe } from '../../../../shared/source-control-ai-actions'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
@@ -16,11 +29,15 @@ type ActionChatAgent =
 
 export function useSourceControlActionAgentInventory(enabled = true): void {
   const ensure = useAppStore((state) => state.ensureNativeDetectedAgents)
+  const chatEnabled = useAppStore((state) => isNativeChatEnabled(state.settings))
   useEffect(() => {
     if (enabled) {
       void ensure()
+      if (chatEnabled) {
+        void relearnHostStructuredAgents(LOCAL_EXECUTION_HOST_ID, null, undefined)
+      }
     }
-  }, [enabled, ensure])
+  }, [enabled, ensure, chatEnabled])
 }
 
 export function useSourceControlActionChatAgent(
@@ -30,6 +47,11 @@ export function useSourceControlActionChatAgent(
   const settings = useAppStore((state) => state.settings)
   const detected = useAppStore(readNativeDetectedAgents)
   useHostStructuredAgentsVersion()
+  const capabilities = useSyncExternalStore(
+    subscribeLocalRuntimeCapabilityObservation,
+    readLocalRuntimeCapabilityObservation,
+    readLocalRuntimeCapabilityObservation
+  )
   const providers = chatProviderAgents(LOCAL_EXECUTION_HOST_ID, undefined)
   const resolve = (selected: SourceControlActionRecipe['agentId']): ActionChatAgent => {
     if (detected === null) {
@@ -42,6 +64,19 @@ export function useSourceControlActionChatAgent(
       detectedAgents: detected,
       disabledAgents: settings?.disabledTuiAgents
     })
+    if (
+      agent &&
+      isNativeChatDefaultFor(settings, agent) &&
+      agent !== 'claude' &&
+      agent !== 'codex' &&
+      !readHostStructuredAgentsForRuntime(LOCAL_EXECUTION_HOST_ID, null) &&
+      !hostStructuredAgentsReadFailed(LOCAL_EXECUTION_HOST_ID, null) &&
+      (capabilities.state === 'unlearned' ||
+        capabilities.state === 'pending' ||
+        (capabilities.state === 'known' && capabilities.capabilities.includes(CATALOG)))
+    ) {
+      return { status: 'pending' }
+    }
     return {
       status: 'ready',
       agent,

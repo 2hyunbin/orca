@@ -42,7 +42,10 @@ import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import { SourceControlActionOptionsPlaceholder } from './SourceControlActionOptionsPlaceholder'
+import {
+  SourceControlActionOptionField,
+  SourceControlActionOptionsPlaceholder
+} from './SourceControlActionOptionField'
 import {
   useSourceControlActionAgentInventory,
   useSourceControlActionChatAgent
@@ -237,7 +240,7 @@ export function RepositorySourceControlAiActionRows({
                   <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
                 ) : null}
                 {isLaunchAction && actual.status === 'pending' ? (
-                  <SourceControlActionOptionsPlaceholder value={recipe.launchPreferences} />
+                  <SourceControlActionOptionsPlaceholder />
                 ) : isLaunchAction && actual.status === 'ready' && actual.chat ? (
                   <SourceControlActionModelPicker
                     agent={actual.agent}
@@ -247,13 +250,12 @@ export function RepositorySourceControlAiActionRows({
                   />
                 ) : null}
                 {!isLaunchAction || (actual.status === 'ready' && !actual.chat) ? (
-                  <>
-                    <Label className="text-[11px] text-muted-foreground">
-                      {translate(
-                        'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
-                        'CLI arguments'
-                      )}
-                    </Label>
+                  <SourceControlActionOptionField
+                    label={translate(
+                      'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
+                      'CLI arguments'
+                    )}
+                  >
                     <Input
                       value={agentArgsValue}
                       onChange={(event) => onActionAgentArgsChange(actionId, event.target.value)}
@@ -262,7 +264,7 @@ export function RepositorySourceControlAiActionRows({
                       spellCheck={false}
                       className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
                     />
-                  </>
+                  </SourceControlActionOptionField>
                 ) : null}
               </div>
               <div className="space-y-2">

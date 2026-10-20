@@ -337,7 +337,7 @@
         "savedModel": "Modèle des Réglages : {{value0}}",
         "permissionsDefault": "Comme les nouveaux chats",
         "chatOptions": "Options du chat",
-        "savedChatOptions": "Options du chat des Réglages : {{value0}}"
+        "savedChatOptions": "Options de chat enregistrées : {{value0}}. Les anciens serveurs utilisent leurs autorisations pour les nouveaux chats."
       }
     }
   },
