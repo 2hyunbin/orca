@@ -366,6 +366,31 @@ describe.each(targets)(
       expect(host.streams).toHaveLength(1)
     })
 
+    it('counts a skipped frame of a newer type as a position, so the next frame is no gap', async () => {
+      const stream = await opened(1)
+      stream.send(snapshot('epoch-1', 3, ['a']))
+      stream.send({ type: 'navigate', request: {}, seq: 4 })
+      stream.send(regrouped('epoch-1', 5, 'a', ['t1']))
+      expect(cache).toEqual({ a: layout('a', ['t1']) })
+      expect(host.streams).toHaveLength(1)
+    })
+
+    it('stops resubscribing at once when every fresh stream fails, and backs off', async () => {
+      const bad = { type: 'records', epoch: 'epoch-1', seq: 4, workspaces: 'a' }
+      for (let count = 1; count <= 4; count += 1) {
+        const stream = await opened(count)
+        stream.send(snapshot('epoch-1', 3, ['a']))
+        stream.send(bad)
+      }
+      // Three immediate resubscribes; the fourth failure takes the loss path.
+      expect(statuses.at(-1)).toEqual({ state: 'lost' })
+      expect(host.streams).toHaveLength(4)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(host.streams).toHaveLength(4)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(host.streams).toHaveLength(target.kind === 'local' ? 5 : 4)
+    })
+
     it.each([
       ['an epoch change', regrouped('epoch-2', 4, 'a', ['t1'])],
       ['a position that skips one', regrouped('epoch-1', 5, 'a', ['t1'])],

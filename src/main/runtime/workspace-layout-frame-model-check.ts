@@ -1,5 +1,6 @@
 // Main's model check on a records frame: the frame applied to what subscribers held must equal a
-// fresh projection of every partition. Tests assert it on every frame; dev builds log a mismatch.
+// fresh projection of every partition. Tests that install it check every frame; dev builds log a
+// mismatch on frames a Store write caused (see workspace-layout-frame-observer.ts).
 
 import { stableJson } from '../../shared/workspace-layout/workspace-layout-load-report'
 import { applyWorkspaceLayoutRecordChange } from '../../shared/workspace-layout/workspace-layout-records'
@@ -38,9 +39,9 @@ export function layoutFrameModelErrors({ frame, before, fresh }: LayoutFrameObse
 
 let mismatchLogged = false
 
-/** The dev build's check: logs the first mismatching frame only. */
+/** The dev build's check: logs the first mismatching frame only; a title-only frame is skipped. */
 export function logLayoutFrameModelErrors(observation: LayoutFrameObservation): void {
-  if (mismatchLogged) {
+  if (mismatchLogged || observation.titlesOnly) {
     return
   }
   const errors = layoutFrameModelErrors(observation)

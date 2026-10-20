@@ -10,6 +10,7 @@ import {
   tabId
 } from './pty-pane-owner-swap.test-fixture'
 import { WorkspaceLayoutStream } from '../runtime/workspace-layout-stream'
+import { keepAbsentBindingForSwap } from './pty/ipc/spawn-absent-binding-swap'
 import type { WorkspaceLayoutStreamEvent } from '../../shared/workspace-layout/workspace-layout-stream-frames'
 
 const layoutOwner = vi.hoisted(() => ({ isMain: false }))
@@ -160,6 +161,36 @@ describe('pty:spawn for a restored pane whose process is gone', () => {
       await expect(spawned).resolves.toMatchObject({ id: 'pty-old' })
       expect(durableBindings).toEqual(['pty-old'])
       expect(store.getWorkspaceSession().terminalPtyIncarnationsByPaneKey).toEqual({})
+    })
+
+    it('keeps the swapped same-id binding when a later commit step fails', async () => {
+      const { spawned, leafBinding, retire } = await respawn(
+        { freshId: 'pty-old' },
+        ({ runtime }) => {
+          runtime.registerPty.mockImplementation(() => {
+            throw new Error('register failed')
+          })
+        }
+      )
+
+      await expect(spawned).rejects.toThrow('register failed')
+      expect(retire).not.toHaveBeenCalled()
+      expect(leafBinding()).toBe('pty-old')
+    })
+
+    it('keeps the early retire for a pane on an SSH host', () => {
+      const spawnOn = (connectionId?: string) =>
+        keepAbsentBindingForSwap(
+          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the swap gate reads only args, the reservation and the replaced owner.
+          {
+            args: { connectionId },
+            paneSpawnReservation: {},
+            replacedPaneOwner: null
+          } as unknown as Parameters<typeof keepAbsentBindingForSwap>[0]
+        )
+      expect(spawnOn()).toBeTypeOf('function')
+      // Its dead owner lives on that host, which the swap does not reach.
+      expect(spawnOn('ssh-conn-1')).toBeUndefined()
     })
 
     it('still retires the dead binding when the fresh spawn fails', async () => {

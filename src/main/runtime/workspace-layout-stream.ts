@@ -24,7 +24,10 @@ import type {
 } from '../../shared/workspace-layout/workspace-layout-stream-frames'
 import type { RuntimeStore } from './runtime-store-contract'
 import { withLiveTitles } from './published-pane-live-titles'
-import { workspaceLayoutFrameObserver } from './workspace-layout-frame-observer'
+import {
+  workspaceLayoutFrameObserver,
+  workspaceLayoutPartitionReadObserver
+} from './workspace-layout-frame-observer'
 import {
   WorkspaceLayoutProjection,
   type DirtyPartitions,
@@ -149,10 +152,15 @@ export class WorkspaceLayoutStream {
   /**
    * One session partition's loaded model (layout, view and facts), the one the stream publishes
    * from: shared while anyone listens (cached until a write may change it), else loaded per call.
-   * Read-only. Null with no Store.
+   * READ-ONLY: the stream and every other reader see the same object; tests freeze it. Null with
+   * no Store.
    */
   readPartition(hostId: ExecutionHostId): LoadedWorkspaceLayout | null {
-    return this.projection.loaded(hostId, this.stopWatching !== null)
+    const loaded = this.projection.loaded(hostId, this.stopWatching !== null)
+    if (loaded) {
+      workspaceLayoutPartitionReadObserver()?.(loaded)
+    }
+    return loaded
   }
 
   /** Some terminal's title may have changed; republishes only the panes whose title did. */
@@ -318,7 +326,8 @@ export class WorkspaceLayoutStream {
     workspaceLayoutFrameObserver()?.({
       frame,
       before: new Map([...before].map(([key, { layout }]) => [key, layout])),
-      fresh: () => this.freshLayouts()
+      fresh: () => this.freshLayouts(),
+      titlesOnly: !reproject
     })
   }
 

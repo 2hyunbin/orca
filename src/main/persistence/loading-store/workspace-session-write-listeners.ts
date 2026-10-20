@@ -52,6 +52,11 @@ export function notifyWorkspaceSessionOperationEnded(
     notifyWorkspaceSessionWritten(runtime, undefined, hostId)
   }
   for (const listener of runtime.workspaceSessionOperationListeners) {
-    listener(hostIds)
+    // The operation already committed: a reader's throw must not fail it or the next reader.
+    try {
+      listener(hostIds)
+    } catch (error) {
+      console.warn('[persistence] workspace-session operation listener failed:', error)
+    }
   }
 }

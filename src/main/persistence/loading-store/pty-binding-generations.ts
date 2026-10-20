@@ -1,6 +1,7 @@
-// Each pane's binding generation (`LayoutLeaf.ptyGeneration`): it rises on every write of the
-// pane's binding in this process, a respawn under the same terminal id included, so a reader can
-// tell a new terminal from the one it attached. In memory only; layout-owner builds only.
+// Each pane's binding generation (`LayoutLeaf.ptyGeneration`): it rises on each pty bind
+// (`persistPtyBinding` past its fast lane), retire and rollback of that pane in this process, a
+// same-id respawn included. Layout commands that move or drop a pane do not bump it. In memory
+// only; layout-owner builds only.
 
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'

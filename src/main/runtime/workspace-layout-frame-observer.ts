@@ -1,7 +1,9 @@
-// A test hook on main's layout records frames: tests install main's model check here, so every
-// frame is checked against a fresh projection. Dev builds log the check; release builds run none.
+// Test hooks on main's layout stream. `installLayoutFrameModelCheck` (the stream and operation-frame
+// tests) checks every records frame against a fresh projection and freezes each partition read.
+// Dev builds log the frame check on structural frames; release builds run neither.
 
 import { logLayoutFrameModelErrors } from './workspace-layout-frame-model-check'
+import type { LoadedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load-types'
 import type { PublishedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-published'
 import type { WorkspaceLayoutRecordsFrame } from '../../shared/workspace-layout/workspace-layout-stream-frames'
 
@@ -11,6 +13,8 @@ export type LayoutFrameObservation = {
   before: ReadonlyMap<string, PublishedWorkspaceLayout>
   /** Every workspace as a projection from scratch publishes it now. */
   fresh: () => ReadonlyMap<string, PublishedWorkspaceLayout>
+  /** Only live titles changed: no Store write, so no projection to check. */
+  titlesOnly: boolean
 }
 
 export type LayoutFrameObserver = (observation: LayoutFrameObservation) => void
@@ -28,4 +32,19 @@ export function observeWorkspaceLayoutFrames(next: LayoutFrameObserver | null): 
 
 export function workspaceLayoutFrameObserver(): LayoutFrameObserver | null {
   return observer ?? DEV_BUILD_CHECK
+}
+
+let partitionReadObserver: ((loaded: LoadedWorkspaceLayout) => void) | null = null
+
+/** Tests: sees each partition model handed to a reader, so a mutating reader fails. Null removes it. */
+export function observeWorkspaceLayoutPartitionReads(
+  next: ((loaded: LoadedWorkspaceLayout) => void) | null
+): void {
+  partitionReadObserver = next
+}
+
+export function workspaceLayoutPartitionReadObserver():
+  | ((loaded: LoadedWorkspaceLayout) => void)
+  | null {
+  return partitionReadObserver
 }

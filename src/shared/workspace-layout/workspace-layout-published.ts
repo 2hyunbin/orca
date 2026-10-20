@@ -24,7 +24,7 @@ export type PublishedPane = {
   leafId: string
   /** The terminal the pane shows; absent while unbound. */
   ptyId?: string
-  /** Rises on every change of the pane's binding, a respawn under the same id included. */
+  /** Rises on each pty bind, retire and rollback of the pane in this process (a same-id respawn too). */
   ptyGeneration?: number
   title?: string
   /** The title the pane's terminal shows now. Live state, never saved; the tab's title stays each

@@ -26,6 +26,8 @@ const REFUSAL_CODES = ['method_not_found', 'forbidden'] as const
 /** First wait before a lost local stream reopens; it doubles to the cap until a snapshot comes. */
 const LOCAL_REOPEN_DELAY_MS = 1_000
 const LOCAL_REOPEN_DELAY_CAP_MS = 30_000
+/** Immediate resubscribes allowed before a frame applies cleanly; then the loss path's backoff. */
+const RESYNC_BUDGET = 3
 
 /**
  * Opens the stream; `onFrame` gets a snapshot first, then that stream's changes. A lost local
@@ -53,6 +55,8 @@ export function subscribeRuntimeLayout(
   /** The snapshot's epoch and the last position this stream applied, once a host sends epochs. */
   let epoch: string | undefined
   let lastSeq: number | undefined
+  /** Resubscribes since a records frame last applied cleanly. */
+  let resyncs = 0
 
   const setStatus = (status: RuntimeLayoutStreamStatus): void => {
     state = status.state
@@ -95,10 +99,12 @@ export function subscribeRuntimeLayout(
     if (streamGeneration !== generation) {
       return
     }
-    if (state !== 'live') {
+    // A frame that fails every time must not resubscribe without limit.
+    if (state !== 'live' || resyncs >= RESYNC_BUDGET) {
       lose(streamGeneration, reason)
       return
     }
+    resyncs += 1
     console.warn('[workspace-layout] layout stream resubscribes:', reason)
     release()
     void open()
@@ -117,6 +123,14 @@ export function subscribeRuntimeLayout(
       // A newer host's frame type is skipped; a malformed frame of a known type lost a change.
       if (frame || isKnownWorkspaceLayoutFrameType(value)) {
         deliver(streamGeneration, frame)
+      } else if (
+        state === 'live' &&
+        seq !== undefined &&
+        lastSeq !== undefined &&
+        seq === lastSeq + 1
+      ) {
+        // A skipped frame still holds its position, so the next one is no gap.
+        lastSeq = seq
       }
     } finally {
       if (seq !== undefined && streamGeneration === generation) {
@@ -135,7 +149,10 @@ export function subscribeRuntimeLayout(
       return
     }
     if (frame.type === 'snapshot') {
-      reopenDelay = LOCAL_REOPEN_DELAY_MS
+      // During a resync storm the backoff keeps growing; a snapshot alone proves nothing.
+      if (resyncs === 0) {
+        reopenDelay = LOCAL_REOPEN_DELAY_MS
+      }
       epoch = frame.epoch
       lastSeq = frame.seq
       setStatus({ state: 'live' })
@@ -152,7 +169,9 @@ export function subscribeRuntimeLayout(
         onFrame(frame)
       } catch (error) {
         resync(streamGeneration, error)
+        return
       }
+      resyncs = 0
       return
     }
     onFrame(frame)
