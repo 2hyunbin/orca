@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import {
   RestoredPaneStarter,
   restoredPaneStartPlan,
@@ -13,19 +12,6 @@ const PANE: RestoredPane = {
   leafId: '11111111-1111-4111-8111-111111111111'
 }
 const OWN = 'repo-1::/repo@@abc'
-
-const record = (over: Partial<SleepingAgentSessionRecord> = {}): SleepingAgentSessionRecord => ({
-  paneKey: 'tab-1:11111111-1111-4111-8111-111111111111',
-  tabId: 'tab-1',
-  worktreeId: PANE.worktreeId,
-  agent: 'codex',
-  providerSession: { key: 'session_id', id: 's-1' },
-  prompt: 'p',
-  state: 'working',
-  capturedAt: 1,
-  updatedAt: 1,
-  ...over
-})
 
 function ports(over: Partial<RestoredPaneStartPorts> = {}) {
   let bound: string | null | undefined = OWN
@@ -43,7 +29,6 @@ function ports(over: Partial<RestoredPaneStartPorts> = {}) {
     ports: {
       boundPtyId: () => bound,
       isLive: (ptyId: string) => live.has(ptyId),
-      sleepingRecord: () => null,
       start,
       ...over
     } satisfies RestoredPaneStartPorts,
@@ -52,17 +37,10 @@ function ports(over: Partial<RestoredPaneStartPorts> = {}) {
 }
 
 describe('restoredPaneStartPlan', () => {
-  it('restores from its own stored terminal and resumes its local agent', () => {
-    expect(restoredPaneStartPlan(PANE, OWN, record())).toEqual({
-      sessionId: OWN,
-      resume: { agent: 'codex', providerSession: { key: 'session_id', id: 's-1' } }
-    })
-  })
-
-  it("never restores from another workspace's terminal, nor resumes another host's agent", () => {
-    expect(
-      restoredPaneStartPlan(PANE, 'repo-2::/other@@x', record({ connectionId: 'ssh-1' }))
-    ).toEqual({})
+  it("restores from its own stored terminal, never another workspace's", () => {
+    expect(restoredPaneStartPlan(PANE, OWN)).toEqual({ sessionId: OWN })
+    expect(restoredPaneStartPlan(PANE, 'repo-2::/other@@x')).toEqual({})
+    expect(restoredPaneStartPlan(PANE, undefined)).toEqual({})
   })
 })
 
@@ -78,7 +56,7 @@ describe('RestoredPaneStarter', () => {
     ])
 
     expect(start).toHaveBeenCalledOnce()
-    expect(start).toHaveBeenCalledWith(PANE, { sessionId: OWN })
+    expect(start).toHaveBeenCalledWith(PANE, { sessionId: OWN }, {})
     expect(results).toEqual(['pty-new', 'pty-new', 'pty-new'])
   })
 
