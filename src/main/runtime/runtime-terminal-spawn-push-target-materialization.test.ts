@@ -106,6 +106,21 @@ describe('triggerTerminalSpawnPushTargetMaterialization', () => {
     expect(getLocalProjectWorktreeGitOptionsMock).not.toHaveBeenCalled()
   })
 
+  it("records on a server's own runtime-stamped row, whose git runs here", () => {
+    const serverRow: Repo = { ...LOCAL_REPO, executionHostId: 'runtime:env-1' }
+    triggerTerminalSpawnPushTargetMaterialization(
+      WORKTREE_PATH,
+      forkTarget(),
+      serverRow,
+      STORE,
+      REPO_ID,
+      'worktree-1'
+    )
+    expect(materializeLocalMock.mock.calls[0]?.[5]).toEqual(
+      hostWorktreeTarget({ id: 'worktree-1', hostId: 'runtime:env-1' })
+    )
+  })
+
   it('falls back to default git options when WSL project runtime resolution throws', () => {
     getLocalProjectWorktreeGitOptionsMock.mockImplementation(() => {
       throw new Error('repair-required')
