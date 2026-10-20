@@ -79,6 +79,8 @@ export type LayoutClosedTab = Omit<ClosedTerminalTabTombstone, 'worktreeId'>
 export type LayoutLeaf = {
   /** The terminal it shows; absent while unbound. */
   ptyId?: string
+  /** Rises on every change of this pane's binding in this main process. In memory only, not saved. */
+  ptyGeneration?: number
   incarnationId?: string
   /** User pane title. */
   title?: string

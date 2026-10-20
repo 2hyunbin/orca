@@ -4,6 +4,7 @@
 
 import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
 import {
+  isKnownWorkspaceLayoutFrameType,
   readWorkspaceLayoutFramePosition,
   readWorkspaceLayoutStreamFrame,
   type WorkspaceLayoutChangeFrame,
@@ -30,13 +31,17 @@ const LOCAL_REOPEN_DELAY_CAP_MS = 30_000
  * Opens the stream; `onFrame` gets a snapshot first, then that stream's changes. A lost local
  * stream reports `lost`, then reopens, and its snapshot replaces what the caller holds. A remote
  * stream that drops reports `lost`; reopening it belongs to the connection's reconnect.
+ *
+ * A live stream that misses a frame resubscribes at once for a fresh snapshot: a records frame of
+ * another epoch or out of sequence, an unreadable frame, or one `onFrame` cannot apply.
  */
 export function subscribeRuntimeLayout(
   target: RuntimeClientTarget,
   params: { workspaces?: 'all' | string[] },
   onFrame: (frame: WorkspaceLayoutChangeFrame) => void,
   onStatus: (status: RuntimeLayoutStreamStatus) => void,
-  /** Each frame's stream position, an unreadable frame's too: a reply may name any frame. */
+  /** Each frame's stream position, a skipped frame's too: a reply may name any frame. A frame
+   *  that sends the stream back for a snapshot reports none; the snapshot's position covers it. */
   onPosition?: (seq: number) => void
 ): { close: () => void } {
   // Bumped whenever a stream is given up, so its late callbacks change nothing.
@@ -45,6 +50,9 @@ export function subscribeRuntimeLayout(
   let state: RuntimeLayoutStreamStatus['state'] = 'connecting'
   let reopenTimer: ReturnType<typeof setTimeout> | null = null
   let reopenDelay = LOCAL_REOPEN_DELAY_MS
+  /** The snapshot's epoch and the last position this stream applied, once a host sends epochs. */
+  let epoch: string | undefined
+  let lastSeq: number | undefined
 
   const setStatus = (status: RuntimeLayoutStreamStatus): void => {
     state = status.state
@@ -82,6 +90,20 @@ export function subscribeRuntimeLayout(
     }
   }
 
+  // Before the snapshot the host itself is suspect, so the loss path's backoff applies.
+  const resync = (streamGeneration: number, reason: unknown): void => {
+    if (streamGeneration !== generation) {
+      return
+    }
+    if (state !== 'live') {
+      lose(streamGeneration, reason)
+      return
+    }
+    console.warn('[workspace-layout] layout stream resubscribes:', reason)
+    release()
+    void open()
+  }
+
   const receive = (streamGeneration: number, value: unknown): void => {
     if (streamGeneration !== generation) {
       return
@@ -91,7 +113,11 @@ export function subscribeRuntimeLayout(
     }
     const seq = readWorkspaceLayoutFramePosition(value)
     try {
-      deliver(streamGeneration, readWorkspaceLayoutStreamFrame(value))
+      const frame = readWorkspaceLayoutStreamFrame(value)
+      // A newer host's frame type is skipped; a malformed frame of a known type lost a change.
+      if (frame || isKnownWorkspaceLayoutFrameType(value)) {
+        deliver(streamGeneration, frame)
+      }
     } finally {
       if (seq !== undefined && streamGeneration === generation) {
         onPosition?.(seq)
@@ -100,8 +126,8 @@ export function subscribeRuntimeLayout(
   }
 
   const deliver = (streamGeneration: number, frame: WorkspaceLayoutStreamFrame | null): void => {
-    // Null: a newer host's frame type or an unreadable frame; neither may change the cache.
     if (!frame) {
+      resync(streamGeneration, new Error('unreadable layout frame'))
       return
     }
     if (frame.type === 'end') {
@@ -110,9 +136,23 @@ export function subscribeRuntimeLayout(
     }
     if (frame.type === 'snapshot') {
       reopenDelay = LOCAL_REOPEN_DELAY_MS
+      epoch = frame.epoch
+      lastSeq = frame.seq
       setStatus({ state: 'live' })
     } else if (state !== 'live') {
       // The host sends the snapshot first; a change before it has nothing to replace.
+      return
+    } else if (frame.type === 'records') {
+      if (frame.epoch !== epoch || lastSeq === undefined || frame.seq !== lastSeq + 1) {
+        resync(streamGeneration, new Error(`layout frame ${frame.seq} after ${lastSeq ?? 'none'}`))
+        return
+      }
+      lastSeq = frame.seq
+      try {
+        onFrame(frame)
+      } catch (error) {
+        resync(streamGeneration, error)
+      }
       return
     }
     onFrame(frame)

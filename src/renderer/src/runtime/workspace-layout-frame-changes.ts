@@ -50,7 +50,7 @@ export function unboundStructureJson(layout: PublishedWorkspaceLayout): string {
   return cached(
     unboundJsonByLayout,
     layout,
-    ({ liveTitle: _liveTitle, ptyId: _ptyId, ...pane }) => pane
+    ({ liveTitle: _liveTitle, ptyId: _ptyId, ptyGeneration: _ptyGeneration, ...pane }) => pane
   )
 }
 

@@ -2,6 +2,8 @@
 // real IPC spawn pipeline. The caller's test file declares the module mocks (see the restart test).
 import { vi, type Mock } from 'vitest'
 import { PtyBindingPersistenceOperations } from '../persistence/loading-store/pty-binding-persistence'
+import { ptyBindingGenerationOf } from '../persistence/loading-store/pty-binding-generations'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { PtyIpcSuiteFixtures } from './pty-ipc-test-harness'
 import { TerminalKilledError } from '../daemon/daemon-pty-lifecycle-errors'
 import { SessionNotFoundError } from '../daemon/daemon-errors'
@@ -195,7 +197,8 @@ export function installRestartHarness(
     pendingWrite: null,
     quitFlushStarted: false,
     writeGeneration: 0,
-    lastDurableWriteGeneration: 0
+    lastDurableWriteGeneration: 0,
+    ptyBindingGenerations: new Map<string, number>()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: binding writes read only state, write bookkeeping, durable mutation and the session partitions from these fakes.
   const bindingArgs = [bindingRuntime, store] as unknown as ConstructorParameters<
@@ -204,7 +207,9 @@ export function installRestartHarness(
   const bindingOperations = new PtyBindingPersistenceOperations(...bindingArgs)
   const storeWithRetirement = Object.assign(store, {
     persistPtyBinding: vi.fn(bindingOperations.persistPtyBinding.bind(bindingOperations)),
-    retirePtyBinding: bindingOperations.retirePtyBinding.bind(bindingOperations)
+    retirePtyBinding: bindingOperations.retirePtyBinding.bind(bindingOperations),
+    getPtyBindingGeneration: (hostId: ExecutionHostId, leafId: string) =>
+      ptyBindingGenerationOf(bindingRuntime, hostId, leafId)
   })
   const runtime = {
     setPtyController: stub(),

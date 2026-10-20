@@ -10,7 +10,7 @@ import {
   tabId
 } from './pty-pane-owner-swap.test-fixture'
 import { WorkspaceLayoutStream } from '../runtime/workspace-layout-stream'
-import type { WorkspaceLayoutEvent } from '../../shared/workspace-layout/workspace-layout-stream-frames'
+import type { WorkspaceLayoutStreamEvent } from '../../shared/workspace-layout/workspace-layout-stream-frames'
 
 const layoutOwner = vi.hoisted(() => ({ isMain: false }))
 vi.mock('../../shared/layout-owner-switch', () => ({
@@ -67,7 +67,7 @@ type StreamStore = ReturnType<ConstructorParameters<typeof WorkspaceLayoutStream
 
 /** Main's layout stream over the harness Store, as a window subscribes to it. */
 function watchLayout(store: Harness['store']): {
-  events: WorkspaceLayoutEvent[]
+  events: WorkspaceLayoutStreamEvent[]
   shownPtyId: string | undefined
 } {
   const stream = new WorkspaceLayoutStream({
@@ -76,7 +76,7 @@ function watchLayout(store: Harness['store']): {
     homeHostId: () => 'local',
     liveTitle: () => null
   })
-  const events: WorkspaceLayoutEvent[] = []
+  const events: WorkspaceLayoutStreamEvent[] = []
   const { snapshot } = stream.subscribe((event) => events.push(event))
   const pane = snapshot
     .flatMap(({ layout }) => layout.tabs)
@@ -86,6 +86,14 @@ function watchLayout(store: Harness['store']): {
 }
 
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+/** The frames as records, keeping only what each workspace change carries. */
+const recordsOf = (events: WorkspaceLayoutStreamEvent[]) =>
+  events.map((event) =>
+    event.type === 'records'
+      ? event.workspaces.map(({ key: _key, ...change }) => change)
+      : `${event.type} frame`
+  )
 
 describe('pty:spawn for a restored pane whose process is gone', () => {
   const { handlers, mainWindow } = setupPtyIpcSuite()
@@ -111,7 +119,7 @@ describe('pty:spawn for a restored pane whose process is gone', () => {
       layoutOwner.isMain = false
     })
 
-    it('rebinds the same id in one write and publishes no frame', async () => {
+    it('rebinds the same id in one write and publishes its one binding record', async () => {
       const { spawned, durableBindings, boundAtFreshLaunch, retire, layout } = await respawn({
         freshId: 'pty-old'
       })
@@ -122,7 +130,10 @@ describe('pty:spawn for a restored pane whose process is gone', () => {
       expect(boundAtFreshLaunch).toEqual(['pty-old'])
       expect(durableBindings).toEqual(['pty-old'])
       expect(retire).not.toHaveBeenCalled()
-      expect(layout.events).toEqual([])
+      // Its generation rises, so a reader tells the fresh process from the dead one.
+      expect(recordsOf(layout.events)).toEqual([
+        [{ change: 'records', bindings: { set: [{ leafId, ptyId: 'pty-old', ptyGeneration: 1 }] } }]
+      ])
     })
 
     it('swaps a new id in one write and publishes one frame', async () => {
@@ -135,7 +146,9 @@ describe('pty:spawn for a restored pane whose process is gone', () => {
       expect(store.getWorkspaceSession().terminalPtyIncarnationsByPaneKey).toEqual({
         [paneKey]: 'inc-new'
       })
-      expect(layout.events).toHaveLength(1)
+      expect(recordsOf(layout.events)).toEqual([
+        [{ change: 'records', bindings: { set: [{ leafId, ptyId: 'pty-new', ptyGeneration: 1 }] } }]
+      ])
     })
 
     it('drops the dead incarnation when the fresh process reports none, as the retire did', async () => {

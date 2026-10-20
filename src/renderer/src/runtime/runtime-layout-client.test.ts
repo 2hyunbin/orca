@@ -166,13 +166,12 @@ describe.each(targets)('runtime layout client over the %s transport', (_name, ta
     expect(stream.unsubscribed).toBe(false)
   })
 
-  it('ignores a change before the snapshot, unknown frame types and malformed frames', async () => {
+  it('ignores a change before the snapshot and unknown frame types', async () => {
     subscribe()
     const stream = await opened(1)
     stream.send({ type: 'workspace', key: 'a', layout: layout('a') })
     stream.send(snapshot())
     stream.send({ type: 'navigate', request: { focusTab: 't1' } })
-    stream.send({ type: 'workspace', key: 'a', layout: { worktreeId: 'a' } })
     expect(cache).toEqual({})
     expect(stream.unsubscribed).toBe(false)
   })
@@ -194,13 +193,17 @@ describe.each(targets)('runtime layout client over the %s transport', (_name, ta
     const stream = await opened(1)
     stream.send({ ...snapshot(), seq: 3 })
     stream.send({ type: 'navigate', request: {}, seq: 4 })
-    stream.send({ type: 'workspace', key: 'a', layout: { worktreeId: 'a' }, seq: 5 })
     throwOnFrame = true
-    expect(() => stream.send({ type: 'removed', key: 'a', seq: 6 })).toThrow('reader failed')
+    expect(() => stream.send({ type: 'removed', key: 'a', seq: 5 })).toThrow('reader failed')
     // A frame with no position, as an older host sends, reports none.
     throwOnFrame = false
     stream.send({ type: 'removed', key: 'a' })
-    expect(positions).toEqual([3, 4, 5, 6])
+    expect(positions).toEqual([3, 4, 5])
+    // A malformed frame sends the stream back for a snapshot, whose position covers it.
+    stream.send({ type: 'workspace', key: 'a', layout: { worktreeId: 'a' }, seq: 6 })
+    expect(positions).toEqual([3, 4, 5])
+    ;(await opened(2)).send({ ...snapshot(), seq: 7 })
+    expect(positions).toEqual([3, 4, 5, 7])
   })
 
   it.skipIf(target.kind === 'local')(
@@ -295,6 +298,109 @@ describe.each(targets)('runtime layout client over the %s transport', (_name, ta
     await vi.waitFor(() => expect(stream.unsubscribed).toBe(true))
   })
 })
+
+describe.each(targets)(
+  'a records stream over the %s transport that misses a frame',
+  (_name, target) => {
+    let host: FakeHost
+    let cache: WorkspaceLayoutCache
+    let statuses: RuntimeLayoutStreamStatus[]
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      host = installFakeHost(target)
+      cache = EMPTY_WORKSPACE_LAYOUT_CACHE
+      statuses = []
+      subscribeRuntimeLayout(
+        target,
+        {},
+        (frame) => {
+          cache = applyLayoutFrame(cache, frame)
+        },
+        (next) => statuses.push(next)
+      )
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    })
+
+    async function opened(count: number): Promise<FakeStream> {
+      await vi.waitFor(() => expect(host.streams).toHaveLength(count))
+      await vi.advanceTimersByTimeAsync(0)
+      return host.streams[count - 1]!
+    }
+
+    const snapshot = (epoch: string, seq: number, worktreeIds: string[]) => ({
+      type: 'snapshot',
+      subscriptionId: 'layout-1',
+      epoch,
+      seq,
+      workspaces: worktreeIds.map((id) => ({ key: id, layout: layout(id) }))
+    })
+
+    /** One operation's frame: workspace `key`'s groups now hold `tabIds`. */
+    const regrouped = (epoch: string, seq: number, key: string, tabIds: string[]) => ({
+      type: 'records',
+      epoch,
+      seq,
+      workspaces: [
+        {
+          key,
+          change: 'records',
+          workspace: { worktreeId: key, groups: [{ id: `group-${key}`, tabIds }] }
+        }
+      ]
+    })
+
+    it('applies each records frame in sequence to the snapshot', async () => {
+      const stream = await opened(1)
+      stream.send(snapshot('epoch-1', 3, ['a', 'b']))
+      stream.send(regrouped('epoch-1', 4, 'a', ['t1']))
+      stream.send(regrouped('epoch-1', 5, 'b', ['t2']))
+      expect(cache).toEqual({ a: layout('a', ['t1']), b: layout('b', ['t2']) })
+      expect(stream.unsubscribed).toBe(false)
+      expect(host.streams).toHaveLength(1)
+    })
+
+    it.each([
+      ['an epoch change', regrouped('epoch-2', 4, 'a', ['t1'])],
+      ['a position that skips one', regrouped('epoch-1', 5, 'a', ['t1'])],
+      [
+        'an unreadable records frame',
+        { type: 'records', epoch: 'epoch-1', seq: 4, workspaces: 'a' }
+      ],
+      ['records for a workspace never shown', regrouped('epoch-1', 4, 'z', ['t1'])]
+    ])('resubscribes exactly once after %s and takes the fresh snapshot', async (_case, frame) => {
+      const first = await opened(1)
+      first.send(snapshot('epoch-1', 3, ['a', 'b']))
+
+      first.send(frame)
+      expect(first.unsubscribed).toBe(true)
+      const second = await opened(2)
+      // A frame the dropped stream still delivers changes nothing.
+      first.send(regrouped('epoch-1', 4, 'a', ['late']))
+      second.send(snapshot('epoch-2', 9, ['a']))
+
+      expect(cache).toEqual({ a: layout('a') })
+      second.send(regrouped('epoch-2', 10, 'a', ['t1']))
+      expect(cache).toEqual({ a: layout('a', ['t1']) })
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(host.streams).toHaveLength(2)
+      expect(second.unsubscribed).toBe(false)
+      // The window never sees the stream as lost: it resubscribed at once.
+      expect(statuses.map((status) => status.state)).toEqual([
+        'connecting',
+        'live',
+        'connecting',
+        'live'
+      ])
+    })
+  }
+)
 
 describe('the local layout stream after a loss', () => {
   let host: FakeHost
