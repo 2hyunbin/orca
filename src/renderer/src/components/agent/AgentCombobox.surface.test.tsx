@@ -11,6 +11,7 @@ import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { UseDetectedAgentsResult } from '@/hooks/useDetectedAgents'
 import AgentCombobox from './AgentCombobox'
+import { resolveAgentMenuSelection } from '@/lib/agent-menu-selection'
 
 afterEach(cleanup)
 
@@ -47,7 +48,24 @@ function renderPicker(
       value={value}
       onValueChange={vi.fn()}
       allowBlankTerminal
-      surfaceRows={{ model, surface, onPick }}
+      surfaceRows={{
+        model,
+        surface,
+        onPick,
+        selection: resolveAgentMenuSelection({
+          agent: value,
+          surface,
+          settings: { experimentalNativeChat: true },
+          inventoryReady: model.state === 'settled',
+          answer:
+            model.state === 'settled' &&
+            model.rows.some((row) => row.agent === value && row.kind === 'chat')
+              ? 'yes'
+              : 'no-chats',
+          chatPending: model.state === 'loading',
+          plain: model.state === 'settled' && model.rows.every((row) => row.kind === 'terminal')
+        })
+      }}
     />
   )
   render(element, { wrapper: TooltipProvider })
@@ -86,6 +104,28 @@ describe('AgentCombobox surface rows', () => {
     fireEvent.keyDown(search, { key: 'Enter' })
     expect(onPick).toHaveBeenLastCalledWith('claude', 'terminal')
     expect(onPick).toHaveBeenCalledTimes(3)
+
+    // A mouse commit and a dismissed interaction both cancel a transient terminal arm.
+    for (const dismiss of [false, true]) {
+      fireEvent.click(screen.getByRole('combobox'))
+      const input = screen.getByPlaceholderText('Search agents...')
+      fireEvent.keyDown(input, { key: 'ArrowRight' })
+      if (dismiss) {
+        fireEvent.keyDown(input, { key: 'Escape' })
+      } else {
+        fireEvent.click(option('Claude'))
+      }
+      fireEvent.click(screen.getByRole('combobox'))
+      fireEvent.keyDown(screen.getByPlaceholderText('Search agents...'), { key: 'Enter' })
+      expect(onPick).toHaveBeenLastCalledWith('claude', 'chat')
+    }
+    fireEvent.click(screen.getByRole('combobox'))
+    const input = screen.getByPlaceholderText('Search agents...')
+    fireEvent.keyDown(input, { key: 'ArrowRight' })
+    fireEvent.pointerMove(option('Codex'))
+    fireEvent.pointerMove(option('Claude'))
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onPick).toHaveBeenLastCalledWith('claude', 'chat')
   })
 
   it('shows a terminal pick as the CLI and keeps its button lit on reopen', () => {
@@ -116,4 +156,19 @@ describe('AgentCombobox surface rows', () => {
     renderPicker({ state: 'loading', placeholderCount: 2 }, 'claude')
     expect(screen.getByRole('combobox').hasAttribute('disabled')).toBe(true)
   })
+})
+
+it('keeps exact-agent search ahead of the default agent', () => {
+  const { onPick } = renderPicker(
+    settled([
+      { kind: 'terminal', agent: 'openclaude' },
+      { kind: 'terminal', agent: 'claude' }
+    ]),
+    'openclaude'
+  )
+  fireEvent.click(screen.getByRole('combobox'))
+  const input = screen.getByPlaceholderText('Search agents...')
+  fireEvent.change(input, { target: { value: 'claude' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(onPick).toHaveBeenCalledExactlyOnceWith('claude', 'terminal')
 })

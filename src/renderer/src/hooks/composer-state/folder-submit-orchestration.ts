@@ -109,7 +109,7 @@ export function useFolderSubmitOrchestration(input: FolderSubmitOrchestrationInp
           linkedTaskSourceContext: taskSourceContext,
           note,
           quickAgent: agent,
-          quickSurface: options?.surface,
+          launchChoice: options?.launchChoice,
           autoRenameBranchFromWork: settings?.autoRenameBranchFromWork,
           agentCmdOverrides: settings?.agentCmdOverrides,
           agentArgs: agent

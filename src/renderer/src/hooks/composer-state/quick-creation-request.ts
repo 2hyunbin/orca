@@ -4,7 +4,7 @@ import type { AgentStartupPlan } from '@/lib/tui-agent-startup'
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
 import type { TaskSourceContext } from '../../../../shared/task-source-context'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
+import type { AgentLaunchChoice } from '@/lib/agent-menu-selection'
 import type { GitPushTarget } from '../../../../shared/worktree/types'
 import type { SetupDecision } from '../../../../shared/worktree/create-types'
 import { toFolderWorkspaceLinkedTask } from '@/components/sidebar/folder-workspace-composer-helpers'
@@ -57,8 +57,7 @@ export type QuickCreationRequestInput = {
 
 export type QuickSubmitOptions = {
   setupOnly?: boolean
-  /** Absent or `chat`: the settings route, which is a chat wherever one can run. */
-  surface?: AgentLaunchSurface
+  launchChoice?: AgentLaunchChoice
 }
 
 export function buildQuickCreationRequest(

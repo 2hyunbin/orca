@@ -1,7 +1,6 @@
 import React from 'react'
 import { ChevronDown, Settings2 } from 'lucide-react'
 import AgentCombobox from '@/components/agent/AgentCombobox'
-import AgentSurfaceCombobox from '@/components/agent/AgentSurfaceCombobox'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -12,7 +11,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 type NewWorkspaceComposerAgentSectionProps = Pick<
   NewWorkspaceComposerCardProps,
   | 'quickAgent'
-  | 'quickAgentSurface'
+  | 'agentSurfaceRows'
   | 'onQuickAgentChange'
   | 'agentRows'
   | 'quickSetupOnly'
@@ -33,9 +32,8 @@ type NewWorkspaceComposerAgentSectionProps = Pick<
 
 export function NewWorkspaceComposerAgentSection({
   quickAgent,
-  quickAgentSurface,
+  agentSurfaceRows,
   onQuickAgentChange,
-  agentRows,
   quickSetupOnly = false,
   onQuickSetupOnlySelect,
   onOpenAgentSettings,
@@ -93,17 +91,7 @@ export function NewWorkspaceComposerAgentSection({
             </TooltipContent>
           </Tooltip>
         </div>
-        {agentRows ? (
-          <AgentSurfaceCombobox
-            {...comboboxProps}
-            rowsTarget={agentRows.target}
-            detectionTarget={agentRows.detectionTarget}
-            surface={quickAgentSurface}
-            onPick={onQuickAgentChange}
-          />
-        ) : (
-          <AgentCombobox {...comboboxProps} />
-        )}
+        <AgentCombobox {...comboboxProps} surfaceRows={agentSurfaceRows} />
       </div>
 
       <div className="!mb-2">

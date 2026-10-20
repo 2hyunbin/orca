@@ -174,21 +174,21 @@ export function useQuickCreationExecution(input: QuickCreationExecutionInput) {
 
       const promptDelivery = quickDraftPrompt ? 'draft' : 'auto-submit'
       // Why: the verdict is persisted on the request as data and re-entered once the worktree exists.
-      const agentLaunchRoute =
-        !agent || options?.surface === 'terminal'
-          ? 'terminal-tui'
-          : resolveAgentSessionLaunchRoute(useAppStore.getState(), {
-              agent,
-              workspace: {
-                kind: selectedRepoIsGit ? 'git-worktree' : 'folder',
-                repoId,
-                executionHostId: ephemeralVmRecipe
-                  ? 'runtime:pending-ephemeral-vm'
-                  : (workspaceRunContext?.hostId ?? selectedRepoExecutionHostId ?? undefined)
-              },
-              prompt: quickDraftPrompt ?? quickPrompt,
-              promptDelivery
-            })
+      const agentLaunchRoute = !agent
+        ? 'terminal-tui'
+        : (options?.launchChoice?.route ??
+          resolveAgentSessionLaunchRoute(useAppStore.getState(), {
+            agent,
+            workspace: {
+              kind: selectedRepoIsGit ? 'git-worktree' : 'folder',
+              repoId,
+              executionHostId: ephemeralVmRecipe
+                ? 'runtime:pending-ephemeral-vm'
+                : (workspaceRunContext?.hostId ?? selectedRepoExecutionHostId ?? undefined)
+            },
+            prompt: quickDraftPrompt ?? quickPrompt,
+            promptDelivery
+          }))
       const structuredLaunch = agentLaunchRoute === 'structured-native-chat'
 
       const request = buildQuickCreationRequest({

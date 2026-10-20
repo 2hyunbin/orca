@@ -27,7 +27,6 @@ import { rowLabel } from '@/components/tab-bar/tab-agent-row-presentation'
 import {
   SurfaceAgentItems,
   surfaceCommandValues,
-  surfacePicksCli,
   useSurfaceRowArming,
   type AgentComboboxSurfaceRows
 } from './agent-combobox-surface-items'
@@ -194,8 +193,13 @@ export default function AgentCombobox({
     surfaceRows?.onPick(agent, surface)
     closePicker()
   }
-  const arming = useSurfaceRowArming(surfaceList, commandValue, handleSurfacePick)
-  const picksCli = surfaceRows !== undefined && surfacePicksCli(surfaceRows, value)
+  const arming = useSurfaceRowArming(
+    surfaceList,
+    commandValue,
+    handleSurfacePick,
+    JSON.stringify([open, query, surfaceRows?.contextKey])
+  )
+  const picksCli = surfaceRows?.selection.cli === true
 
   const handleSelectAgent = (nextValue: TuiAgent): void => {
     selection.onValueChange(nextValue)
@@ -274,7 +278,7 @@ export default function AgentCombobox({
               aria-expanded={open}
               onKeyDown={handleTriggerKeyDown}
               // Why: the "(CLI)" suffix depends on the host's answer; it never pops in on a settled field.
-              disabled={surfaceRows?.model.state === 'loading' && value !== null}
+              disabled={surfaceRows?.selection.ready === false && value !== null}
               className={cn(
                 // Why: callers sometimes pass `min-w-0` for grid layouts, but
                 // the compact trigger still needs room for "GitHub Copilot".

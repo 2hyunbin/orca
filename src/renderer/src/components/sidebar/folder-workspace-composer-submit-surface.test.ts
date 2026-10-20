@@ -10,15 +10,16 @@ import { makeProjectGroup, makeFolderWorkspace } from './folder-workspace-compos
 
 const mocks = vi.hoisted(() => ({
   activateAndRevealFolderWorkspace: vi.fn(),
-  beginStructuredAgentSessionProvisionalLaunch: vi.fn()
+  terminal: vi.fn()
 }))
 
 vi.mock('@/lib/worktree-activation', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   activateAndRevealFolderWorkspace: mocks.activateAndRevealFolderWorkspace
 }))
-vi.mock('@/lib/structured-agent-session-provisional-tab', () => ({
-  beginStructuredAgentSessionProvisionalLaunch: mocks.beginStructuredAgentSessionProvisionalLaunch
+vi.mock('@/lib/launch-agent-in-new-tab', () => ({ launchAgentInNewTab: mocks.terminal }))
+vi.mock('@/runtime/structured-agent-session-client', () => ({
+  callStructuredAgentSession: vi.fn(async () => ({ supported: false, reason: 'wsl' }))
 }))
 vi.mock('@/runtime/local-runtime-capabilities', async (importOriginal) => ({
   ...(await importOriginal<typeof LocalRuntimeCapabilitiesModule>()),
@@ -34,10 +35,13 @@ import { submitFolderWorkspaceCreate } from './folder-workspace-composer-submit'
 
 afterEach(() => {
   mocks.activateAndRevealFolderWorkspace.mockReset()
-  mocks.beginStructuredAgentSessionProvisionalLaunch.mockReset()
+  mocks.terminal.mockReset()
 })
 
-function create(quickSurface?: 'terminal'): Promise<boolean> {
+function create(
+  surface?: 'terminal',
+  createFolderWorkspace = vi.fn(async () => makeFolderWorkspace())
+): Promise<boolean> {
   return submitFolderWorkspaceCreate({
     projectGroup: makeProjectGroup(),
     name: '',
@@ -45,10 +49,15 @@ function create(quickSurface?: 'terminal'): Promise<boolean> {
     linkedWorkItem: null,
     note: 'Fix the flaky checkout flow',
     quickAgent: 'claude',
-    quickSurface,
+    launchChoice: {
+      agent: 'claude',
+      route: surface ? 'terminal-tui' : 'structured-native-chat',
+      executionHostId: 'local',
+      requestedSurface: surface ?? 'chat'
+    },
     autoRenameBranchFromWork: false,
     agentCmdOverrides: {},
-    createFolderWorkspace: vi.fn(async () => makeFolderWorkspace()),
+    createFolderWorkspace,
     onOpenChange: vi.fn()
   })
 }
@@ -60,14 +69,29 @@ describe('submitFolderWorkspaceCreate surface pick', () => {
     })
     mocks.activateAndRevealFolderWorkspace.mockReturnValue({ primaryTabId: 'tab-1' })
 
-    await create()
-    expect(mocks.beginStructuredAgentSessionProvisionalLaunch).toHaveBeenCalledOnce()
-    expect(mocks.beginStructuredAgentSessionProvisionalLaunch.mock.calls[0]?.[0]?.plan).toEqual(
-      expect.not.objectContaining({ requestedSurface: expect.anything() })
+    mocks.terminal.mockReturnValue({ surface: { kind: 'host-published' } })
+    const materialization = Promise.withResolvers<ReturnType<typeof makeFolderWorkspace>>()
+    const creating = create(
+      undefined,
+      vi.fn(() => materialization.promise)
     )
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/home/test'), experimentalNativeChat: false }
+    })
+    materialization.resolve(makeFolderWorkspace())
+    await creating
+    await vi.waitFor(() => expect(mocks.terminal).toHaveBeenCalledOnce())
+    expect(mocks.terminal.mock.calls[0]?.[0]).toMatchObject({
+      agent: 'claude',
+      prompt: 'Fix the flaky checkout flow',
+      agentSessionLaunchPlan: { route: 'terminal-tui' }
+    })
 
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/home/test'), experimentalNativeChat: true }
+    })
     await create('terminal')
-    expect(mocks.beginStructuredAgentSessionProvisionalLaunch).toHaveBeenCalledOnce()
+    expect(mocks.terminal).toHaveBeenCalledOnce()
     const startup = mocks.activateAndRevealFolderWorkspace.mock.calls.at(-1)?.[1]?.startup
     expect(startup?.command).toContain('claude')
     expect(startup?.command).toContain('Fix the flaky checkout flow')

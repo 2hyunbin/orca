@@ -45,6 +45,9 @@ import {
   type UseDetectedAgentsResult
 } from '@/hooks/useDetectedAgents'
 import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-inventory'
+import { resolveAgentMenuSelection } from '@/lib/agent-menu-selection'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 
 function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
   const support = structuredAgentLaunchSupport(input)
@@ -102,8 +105,16 @@ export function useNewTabAgentMenuRows(
   open: boolean,
   detectionTarget: AgentDetectionTarget | undefined
 ): NewTabAgentMenuModel {
-  const worktreeId = typeof target === 'string' ? target : target.workspace.worktreeId
-  const launchCwd = typeof target === 'string' ? undefined : target.launchCwd
+  return useAgentMenuObservation(target, open, detectionTarget).model
+}
+
+export function useAgentMenuObservation(
+  target: string | AgentMenuRowsTarget | null,
+  open: boolean,
+  detectionTarget: AgentDetectionTarget | undefined
+) {
+  const worktreeId = typeof target === 'string' ? target : target?.workspace.worktreeId
+  const launchCwd = typeof target === 'string' ? undefined : target?.launchCwd
   // Why: hidden worktrees stay mounted, so only the shown one holds its host's streams.
   const worktreeShown = useAppStore(
     (state) => typeof target === 'string' && state.activeWorktreeId === worktreeId
@@ -125,7 +136,7 @@ export function useNewTabAgentMenuRows(
   const workspace =
     typeof target === 'string'
       ? { kind: workspaceKindForWorktreeId(target), worktreeId: target }
-      : target.workspace
+      : (target?.workspace ?? { kind: 'floating' as const })
   const facts = useAppStore(
     useShallow((state) => {
       const input = buildAgentLaunchRouteInput(state, { agent: 'claude', workspace })
@@ -234,7 +245,7 @@ export function useNewTabAgentMenuRows(
     input.hostCapabilities
   ])
   // Only dependencies that can enable an action hold the cold fill; a failed inventory is terminal.
-  if (
+  const loading =
     !inventoryFailed &&
     ((detection.detectedIds === null && detectionTarget !== undefined) ||
       (!plain &&
@@ -243,33 +254,61 @@ export function useNewTabAgentMenuRows(
           availability?.state === 'pending' ||
           hostCatalogPending ||
           localCatalogPending)))
-  ) {
-    return {
-      state: 'loading',
-      placeholderCount: Math.max(chatAgents.length, detection.detectedIds?.length ?? 0, 2)
+  const answerFor = (agent: TuiAgent): HostChatAnswer => {
+    const route = buildAgentLaunchRouteInput(state, {
+      agent,
+      workspace,
+      ...(launchCwd ? { tuiCustomization: { cwd: launchCwd } } : {})
+    })
+    const preliminary = hostChatAnswer(roster ? { ...route, hostStructuredAgents: roster } : route)
+    if (!roster || !['yes', 'not-yet-known', 'not-on-host'].includes(preliminary)) {
+      return preliminary
     }
+    const verdict =
+      availability?.state === 'received' ? availability.byAgent.get(agent)?.state : undefined
+    // An agent the host could not check keeps this client's facts; the click's admission decides.
+    return !verdict || verdict === 'refused' ? 'not-on-host' : preliminary
   }
   const rows = buildNewTabAgentMenuRows({
     settings,
     detectedOnHost: detection.detectedIds,
     chatAgents,
-    hostChatAnswer: (agent) => {
-      const route = buildAgentLaunchRouteInput(state, {
-        agent,
-        workspace,
-        ...(launchCwd ? { tuiCustomization: { cwd: launchCwd } } : {})
-      })
-      const preliminary = hostChatAnswer(
-        roster ? { ...route, hostStructuredAgents: roster } : route
-      )
-      if (!roster || !['yes', 'not-yet-known', 'not-on-host'].includes(preliminary)) {
-        return preliminary
-      }
-      const verdict =
-        availability?.state === 'received' ? availability.byAgent.get(agent)?.state : undefined
-      // An agent the host could not check keeps this client's facts; the click's admission decides.
-      return !verdict || verdict === 'refused' ? 'not-on-host' : preliminary
-    }
+    hostChatAnswer: answerFor
   }).map((row) => ({ ...row, executionHostId: parseExecutionHostId(facts.executionHostId)?.id }))
-  return { state: 'settled', rows, detection }
+  const model: NewTabAgentMenuModel = loading
+    ? {
+        state: 'loading',
+        placeholderCount: Math.max(chatAgents.length, detection.detectedIds?.length ?? 0, 2)
+      }
+    : { state: 'settled', rows, detection }
+  return {
+    model,
+    detection,
+    contextKey: JSON.stringify([workspace, launchCwd, facts]),
+    selectionFor: (agent: TuiAgent | null, surface?: AgentLaunchSurface) =>
+      resolveAgentMenuSelection({
+        agent,
+        surface,
+        settings,
+        executionHostId: parseExecutionHostId(facts.executionHostId)?.id,
+        inventoryReady:
+          target === null ||
+          (detectionTarget !== undefined &&
+            (inventoryFailed ||
+              (detection.detectedIds !== null &&
+                (agent === null || detection.detectedIds.includes(agent))))),
+        answer:
+          target === null
+            ? 'no-chats'
+            : inventoryFailed
+              ? 'not-on-host'
+              : agent === null
+                ? 'yes'
+                : answerFor(agent),
+        chatPending:
+          !inventoryFailed &&
+          (capabilityPending || availability?.state === 'pending' || hostCatalogPending),
+        plain
+      })
+  }
 }

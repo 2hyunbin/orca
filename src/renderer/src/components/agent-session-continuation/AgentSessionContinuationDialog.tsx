@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, MessageSquarePlus } from 'lucide-react'
-import AgentSurfaceCombobox from '@/components/agent/AgentSurfaceCombobox'
+import AgentCombobox from '@/components/agent/AgentCombobox'
+import { useAgentMenuObservation } from '@/components/tab-bar/use-new-tab-agent-menu-rows'
 import { useAgentDetectionTargetForWorktree } from '@/hooks/useAgentDetectionTarget'
 import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
@@ -28,10 +29,7 @@ import {
   type AgentSessionContinuationContextMode,
   type AgentSessionContinuationRequest
 } from '@/lib/agent-session-continuation'
-import {
-  detectAgentSessionContinuationAgents,
-  launchAgentSessionContinuation
-} from '@/lib/launch-agent-session-continuation'
+import { launchAgentSessionContinuation } from '@/lib/launch-agent-session-continuation'
 import { useAppStore } from '@/store'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -54,70 +52,64 @@ export function AgentSessionContinuationDialog({
   onStarted
 }: AgentSessionContinuationDialogProps): React.JSX.Element {
   const settings = useAppStore((state) => state.settings)
-  const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
-  const [selectedAgent, setSelectedAgent] = useState<TuiAgent | null>(null)
-  const [selectedSurface, setSelectedSurface] = useState<AgentLaunchSurface | undefined>()
+  const [pick, setPick] = useState<{
+    request: AgentSessionContinuationRequest | null
+    agent: TuiAgent
+    surface?: AgentLaunchSurface
+  } | null>(null)
   const detectionTarget = useAgentDetectionTargetForWorktree(request?.worktreeId ?? null)
-  const [contextMode, setContextMode] = useState<AgentSessionContinuationContextMode>('focused')
-  const [detecting, setDetecting] = useState(true)
-  const [detectionFailed, setDetectionFailed] = useState(false)
+  const [contextPick, setContextPick] = useState<{
+    request: AgentSessionContinuationRequest | null
+    mode: AgentSessionContinuationContextMode
+  } | null>(null)
+  if (!open) {
+    if (pick) {
+      setPick(null)
+    }
+    if (contextPick) {
+      setContextPick(null)
+    }
+  }
+  const contextMode = contextPick?.request === request ? contextPick.mode : 'focused'
   const [starting, setStarting] = useState(false)
   const [showStarting, setShowStarting] = useState(false)
   const disabledAgents = settings?.disabledTuiAgents ?? EMPTY_DISABLED_AGENTS
 
+  const observation = useAgentMenuObservation(
+    request
+      ? {
+          workspace: {
+            kind: workspaceKindForWorktreeId(request.worktreeId),
+            worktreeId: request.worktreeId
+          },
+          launchCwd: request.initialCwd
+        }
+      : null,
+    open && Boolean(request),
+    detectionTarget
+  )
+  const { detectedIds, detectionFailed } = observation.detection
+  const detecting =
+    detectedIds === null && !detectionFailed && !observation.detection.needsServerUpdate
   const agents = useMemo(
     () =>
       getAgentCatalog().filter(
-        (agent) => detectedAgents.includes(agent.id) && isTuiAgentEnabled(agent.id, disabledAgents)
+        (agent) => detectedIds?.includes(agent.id) && isTuiAgentEnabled(agent.id, disabledAgents)
       ),
-    [detectedAgents, disabledAgents]
+    [detectedIds, disabledAgents]
   )
   const hasFullContext = request ? hasFullAgentSessionContext(request.source) : false
 
-  useEffect(() => {
-    if (!open || !request) {
-      return
-    }
-    let cancelled = false
-    setDetecting(true)
-    setDetectionFailed(false)
-    setDetectedAgents([])
-    setSelectedAgent(null)
-    setSelectedSurface(undefined)
-    setContextMode('focused')
-    void detectAgentSessionContinuationAgents(request.worktreeId)
-      .then((detected) => {
-        if (cancelled) {
-          return
-        }
-        const enabled = detected.filter((agent) => isTuiAgentEnabled(agent, disabledAgents))
-        setDetectedAgents(enabled)
-        setSelectedAgent(
-          chooseInitialContinuationAgent({
-            availableAgents: enabled,
-            sourceAgent: request.source.sourceAgent,
-            defaultAgent: settings?.defaultTuiAgent
-          })
-        )
-      })
-      .catch((error) => {
-        console.error('Agent detection failed for continuation dialog', error)
-        if (!cancelled) {
-          setDetectedAgents([])
-          setSelectedAgent(null)
-          setDetectionFailed(true)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setDetecting(false)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [disabledAgents, open, request, settings?.defaultTuiAgent])
+  const currentPick =
+    pick?.request === request && agents.some((agent) => agent.id === pick?.agent) ? pick : null
+  const selectedAgent =
+    currentPick?.agent ??
+    chooseInitialContinuationAgent({
+      availableAgents: agents.map((agent) => agent.id),
+      sourceAgent: request?.source.sourceAgent ?? null,
+      defaultAgent: settings?.defaultTuiAgent
+    })
+  const selection = observation.selectionFor(selectedAgent, currentPick?.surface)
 
   useEffect(() => {
     if (!starting) {
@@ -130,7 +122,7 @@ export function AgentSessionContinuationDialog({
   }, [starting])
 
   const handleStart = async (): Promise<void> => {
-    if (!request || !selectedAgent || starting) {
+    if (!request || !selectedAgent || starting || !selection.ready) {
       return
     }
     const prompt = buildAgentSessionContinuationPrompt(request.source, contextMode)
@@ -144,7 +136,7 @@ export function AgentSessionContinuationDialog({
       worktreeId: request.worktreeId,
       groupId: request.groupId,
       initialCwd: request.initialCwd,
-      surface: selectedSurface,
+      launchChoice: selection.choice,
       launchSource: request.launchSource
     })
     setStarting(false)
@@ -158,7 +150,8 @@ export function AgentSessionContinuationDialog({
   const sourceAgentLabel = request?.source.sourceAgent
     ? getAgentLabel(request.source.sourceAgent)
     : null
-  const startDisabled = detecting || starting || agents.length === 0 || !selectedAgent
+  const startDisabled =
+    detecting || starting || agents.length === 0 || !selectedAgent || !selection.ready
 
   return (
     <Dialog
@@ -208,22 +201,16 @@ export function AgentSessionContinuationDialog({
               {translate('components.agentSessionContinuation.agent', 'Agent')}
             </label>
             {request ? (
-              <AgentSurfaceCombobox
+              <AgentCombobox
                 agents={agents}
                 value={selectedAgent}
-                onValueChange={setSelectedAgent}
-                rowsTarget={{
-                  workspace: {
-                    kind: workspaceKindForWorktreeId(request.worktreeId),
-                    worktreeId: request.worktreeId
-                  },
-                  launchCwd: request.initialCwd
-                }}
-                detectionTarget={detectionTarget}
-                surface={selectedSurface}
-                onPick={(agent, surface) => {
-                  setSelectedAgent(agent)
-                  setSelectedSurface(surface)
+                onValueChange={(agent) => setPick({ request, agent })}
+                surfaceRows={{
+                  model: observation.model,
+                  selection,
+                  contextKey: observation.contextKey,
+                  surface: currentPick?.surface,
+                  onPick: (agent, surface) => setPick({ request, agent, surface })
                 }}
                 allowNarrowTrigger
                 triggerClassName="min-w-0 w-full"
@@ -259,9 +246,11 @@ export function AgentSessionContinuationDialog({
             </label>
             <Select
               value={contextMode}
-              onValueChange={(value) =>
-                setContextMode(value as AgentSessionContinuationContextMode)
-              }
+              onValueChange={(value) => {
+                if (value === 'focused' || value === 'full') {
+                  setContextPick({ request, mode: value })
+                }
+              }}
             >
               <SelectTrigger className="min-w-0 w-full" size="sm">
                 <SelectValue />

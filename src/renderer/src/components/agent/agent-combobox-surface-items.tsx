@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { resolveAgentMenuSelection } from '@/lib/agent-menu-selection'
 import { renderAgentComboboxItem } from './agent-combobox-items'
 import { AgentTerminalLaunchButton } from './AgentTerminalLaunchButton'
 
@@ -22,6 +23,8 @@ export type AgentComboboxSurfaceRows = {
   model: NewTabAgentMenuModel
   /** The user's explicit pick for the selected agent; absent follows the agent's own row. */
   surface?: AgentLaunchSurface
+  selection: ReturnType<typeof resolveAgentMenuSelection>
+  contextKey?: string
   onPick: (agent: TuiAgent, surface: AgentLaunchSurface) => void
 }
 
@@ -42,8 +45,10 @@ export function visibleSurfaceRows(
   if (model.state !== 'settled') {
     return []
   }
-  const matching = new Set(searchAgentPickerEntries(agents, query).map((agent) => agent.id))
-  return model.rows.filter((row) => matching.has(row.agent))
+  const matching = searchAgentPickerEntries(agents, query)
+  return query.trim()
+    ? matching.flatMap((agent) => model.rows.filter((row) => row.agent === agent.id))
+    : model.rows.filter((row) => matching.some((agent) => row.agent === agent.id))
 }
 
 /** cmdk values for the surface list: the selected agent's row, and the row a query highlights. */
@@ -81,29 +86,21 @@ export function surfaceRowValue(
   return row ? rowId(row) : undefined
 }
 
-/** Whether the selected agent starts in a terminal where it could also have been a chat. */
-export function surfacePicksCli(
-  surfaceRows: AgentComboboxSurfaceRows,
-  agent: TuiAgent | null
-): boolean {
-  const { model, surface } = surfaceRows
-  if (model.state !== 'settled' || agent === null) {
-    return false
-  }
-  const own = model.rows.filter((row) => row.agent === agent)
-  return own.some((row) => row.kind === 'chat')
-    ? surface === 'terminal'
-    : own.some((row) => row.kind === 'cli')
-}
-
 /** cmdk keeps focus in the search box, so ArrowRight arms the highlighted row's terminal button. */
 export function useSurfaceRowArming(
   rows: readonly NewTabAgentMenuRow[],
   commandValue: string,
-  pick: (agent: TuiAgent, surface: AgentLaunchSurface) => void
+  pick: (agent: TuiAgent, surface: AgentLaunchSurface) => void,
+  interactionKey: string
 ): { armedValue: string | null; onKeyDown: (event: React.KeyboardEvent) => void } {
   const [armed, setArmed] = useState<string | null>(null)
-  const armedValue = armed === commandValue ? armed : null
+  const key = JSON.stringify([interactionKey, commandValue])
+  const [previousKey, setPreviousKey] = useState(key)
+  if (previousKey !== key) {
+    setPreviousKey(key)
+    setArmed(null)
+  }
+  const armedValue = previousKey === key ? armed : null
   const onKeyDown = (event: React.KeyboardEvent): void => {
     const row = rows.find((candidate) => rowId(candidate) === commandValue)
     const input = event.target instanceof HTMLInputElement ? event.target : null
@@ -160,7 +157,7 @@ export function SurfaceAgentItems({
     ))
   }
   const pickedValue = surfaceRowValue(rows, value)
-  const terminalPicked = surfacePicksCli(surfaceRows, value)
+  const terminalPicked = surfaceRows.selection.cli
   return rows.map((row, index) => {
     const id = rowId(row)
     const label = rowLabel(row)
