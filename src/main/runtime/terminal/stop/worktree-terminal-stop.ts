@@ -20,6 +20,8 @@ import {
 } from '../../../../shared/execution-host'
 import type { WorktreePtyHostFence } from '../../worktree-pty-host-fence'
 import { collectWorktreePtyIds } from './worktree-pty-collection'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { withMainBoundLeaves } from '../surface/main-terminal-surfaces'
 import { summarizeWorktreePtyStopVerdict } from '../../worktree-pty-stop-verdict'
 import { describeMobileSessionTabCloseRefusal } from '../../mobile-session-tab-close-refusal-message'
 import { clearClosedWorktreeResumeRecords } from './worktree-sleep-resume-records'
@@ -57,7 +59,10 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
       const sessionHostId = this.getWorkspaceSessionHostIdForWorktree(worktree.id)
       const snapshot = await this.listMobileSessionTabs(`id:${worktree.id}`)
       const targetPtyIds = collectWorktreePtyIds(
-        this.leaves.values(),
+        // Switch point: main's bound terminals too, registered or not.
+        ORCA_LAYOUT_OWNER_IS_MAIN
+          ? withMainBoundLeaves(this, this.leaves.values())
+          : this.leaves.values(),
         this.ptysById,
         worktree.id,
         hostFence,
@@ -178,7 +183,10 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
         ? options
         : this.getWorktreeHostFence(worktree)
     const ptyIds = collectWorktreePtyIds(
-      this.leaves.values(),
+      // Switch point: main's bound terminals too, registered or not.
+      ORCA_LAYOUT_OWNER_IS_MAIN
+        ? withMainBoundLeaves(this, this.leaves.values())
+        : this.leaves.values(),
       this.ptysById,
       worktree.id,
       hostFence

@@ -1,4 +1,3 @@
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
@@ -505,14 +504,6 @@ export function registerOrcaRuntimeTerminalRetirementHostPartitionTests(): void 
         tabId: 'tab',
         leafId: 'left'
       })
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        // Layout-owner build: main lists a pane's terminal once it registers, as the window's
-        // transport attach registers it; the window sends no terminal ids.
-        runtime.registerPty(SSH_PTY_RIGHT, SSH_WORKTREE_ID, CONNECTION_ID, {
-          tabId: 'tab',
-          leafId: 'right'
-        })
-      }
 
       const stopping = runtime.stopTerminalsForWorktree(`id:${SSH_WORKTREE_ID}`, {
         resolvedWorktreeId: SSH_WORKTREE_ID

@@ -79,6 +79,11 @@ class MainSurfacePublisher {
     return { ptyId: pane.ptyId, hasStatus: status !== null, starting: status === 'starting' }
   }
 
+  /** Main's panes with the terminals its layout binds, registered or not. */
+  boundLeaves(): readonly { worktreeId: string; ptyId: string | null }[] {
+    return this.index.surfaces().leaves
+  }
+
   /** Every workspace main lists the terminals of, read once for a batch of checks. */
   ownedWorkspaces(): ReadonlySet<string> {
     return this.index.surfaces().worktreeIds
@@ -125,12 +130,14 @@ class MainSurfacePublisher {
 
   /** A terminal registered: main's panes reflect it now, in the same push, not at a later sync. */
   terminalRegistered(ptyId: string): void {
+    this.index.invalidateRouting()
     // Registering can also move a workspace to its SSH partition, which changes main's panes.
     this.republish({ force: this.findPaneForPty(ptyId) !== null })
   }
 
   /** A pane's terminal came or went: its record changes with no layout change, so reinstall. */
   terminalChanged(): void {
+    this.index.invalidateRouting()
     this.schedule({ force: true })
   }
 
@@ -233,4 +240,15 @@ export function withMainPaneClaim<State extends PaneClaim>(
 /** Whether main lists the workspace's panes, so terminal.list shows every saved one. */
 export function mainListsEveryPane(runtime: SurfacesOwner, worktreeId: string): boolean {
   return startedMainTerminalSurfaces(runtime)?.ownsWorkspace(worktreeId) === true
+}
+
+/**
+ * The runtime's panes plus every terminal main's layout binds, registered or not: a saved SSH
+ * terminal not re-registered since a restart may still run, so a worktree stop still names it.
+ */
+export function withMainBoundLeaves(
+  runtime: SurfacesOwner,
+  leaves: Iterable<{ worktreeId: string; ptyId: string | null }>
+): { worktreeId: string; ptyId: string | null }[] {
+  return [...leaves, ...(startedMainTerminalSurfaces(runtime)?.boundLeaves() ?? [])]
 }

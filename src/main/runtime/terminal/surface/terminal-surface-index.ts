@@ -34,6 +34,10 @@ export class TerminalSurfaceIndex {
   /** The loaded partitions `current` was projected from: the projection's own cached objects. */
   private projectedFrom: (LoadedWorkspaceLayout | null)[] = []
   private projectedHomes = ''
+  private projectedTitles: boolean | null = null
+  /** Workspace key → its home partition, as of the last projection. */
+  private routes = new Map<string, ExecutionHostId | null>()
+  private routesStale = true
 
   constructor(
     private readonly deps: {
@@ -64,6 +68,11 @@ export class TerminalSurfaceIndex {
     this.stopWatching = null
   }
 
+  /** Routing may have changed with no write (a terminal registering moves a workspace). */
+  invalidateRouting(): void {
+    this.routesStale = true
+  }
+
   /** Main's surfaces now: re-projected only when a partition the projection holds was rewritten. */
   surfaces(): MainTerminalSurfaces {
     const reads = this.deps.reads()
@@ -71,21 +80,33 @@ export class TerminalSurfaceIndex {
       .hostIds()
       .filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
     const loaded = hostIds.map((hostId) => reads?.readPartition(hostId) ?? null)
-    // Which partition owns a workspace held twice can change with no write (an SSH terminal
-    // registering). The titles setting changes tab titles with no write, so it keys the cache too.
-    const shared = sharedWorkspaceKeys(loaded)
-    const homes = JSON.stringify([
-      this.deps.generatedTitlesEnabled(),
-      [...shared].map((key) => this.homeOf(key))
-    ])
-    if (
-      this.current &&
-      homes === this.projectedHomes &&
+    const samePartitions =
       loaded.length === this.projectedFrom.length &&
       loaded.every((partition, index) => partition === this.projectedFrom[index])
+    // The titles setting changes tab titles with no write, so it keys the cache too.
+    const titles = this.deps.generatedTitlesEnabled()
+    if (this.current && samePartitions && !this.routesStale && titles === this.projectedTitles) {
+      return this.current
+    }
+    // Routing is read per workspace only here, as the layout stream reads it per write.
+    this.routes = new Map(
+      loaded.flatMap((partition) =>
+        Object.keys(partition?.layout.workspaces ?? {}).map(
+          (key) => [key, this.homeOf(key)] as const
+        )
+      )
+    )
+    this.routesStale = false
+    const homes = JSON.stringify([...this.routes])
+    if (
+      this.current &&
+      samePartitions &&
+      homes === this.projectedHomes &&
+      titles === this.projectedTitles
     ) {
       return this.current
     }
+    this.projectedTitles = titles
     this.projectedFrom = loaded
     this.projectedHomes = homes
     const next = this.project(hostIds, loaded)
@@ -107,7 +128,6 @@ export class TerminalSurfaceIndex {
     loaded: readonly (LoadedWorkspaceLayout | null)[]
   ): MainTerminalSurfaces {
     const partitions: LoadedPartition[] = []
-    const shared = sharedWorkspaceKeys(loaded)
     const worktreeIds = new Set<string>()
     const paneFacts = new Map<string, { binding: string; sleeping: boolean }>()
     hostIds.forEach((hostId, index) => {
@@ -118,7 +138,7 @@ export class TerminalSurfaceIndex {
       // Only the owning partition's copy counts; a stray copy elsewhere is not a second pane.
       const workspaces = Object.fromEntries(
         Object.entries(partition.layout.workspaces).filter(
-          ([key]) => !shared.has(key) || this.homeOf(key) === hostId
+          ([key]) => this.routes.get(key) === hostId
         )
       )
       for (const workspace of Object.values(workspaces)) {
@@ -202,19 +222,4 @@ export function composeMainTerminalSurfaces(
       })
     ]
   }
-}
-
-/** Workspaces more than one partition holds: only those need routing to pick their copy. */
-function sharedWorkspaceKeys(loaded: readonly (LoadedWorkspaceLayout | null)[]): Set<string> {
-  const seen = new Set<string>()
-  const shared = new Set<string>()
-  for (const partition of loaded) {
-    for (const key of Object.keys(partition?.layout.workspaces ?? {})) {
-      if (seen.has(key)) {
-        shared.add(key)
-      }
-      seen.add(key)
-    }
-  }
-  return shared
 }

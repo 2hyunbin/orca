@@ -25,11 +25,13 @@ export function mainPaneVerdict(
     controllerHasPty: (ptyId: string) => boolean
   }
 ): PtyLivenessVerdict['status'] {
-  const fact = paneTerminalFact(pane.ptyId, host)
+  // A start in flight: the old binding's end says nothing of the terminal now starting.
   if (pane.starting) {
-    return fact === 'exited' ? 'exited' : 'unverifiable'
+    return 'unverifiable'
   }
-  const verdict = provenAbsent(pane.ptyId, host) ? 'exited' : (fact ?? 'unverifiable')
+  const verdict = provenAbsent(pane.ptyId, host)
+    ? 'exited'
+    : (paneTerminalFact(pane.ptyId, host) ?? 'unverifiable')
   return pane.hasStatus && verdict === 'live' ? 'unverifiable' : verdict
 }
 

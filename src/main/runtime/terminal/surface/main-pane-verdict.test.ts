@@ -80,7 +80,7 @@ describe('a main-owned pane verdict', () => {
     ).toBe(expected)
   })
 
-  it('a starting pane is never exited on the inventory alone, unbound or rebinding', () => {
+  it('a starting pane is unverifiable, whatever its old binding did', () => {
     for (const ptyId of [null, 'pty-a']) {
       expect(
         mainPaneVerdict({ ptyId, hasStatus: true, starting: true }, host({ inventory: [] }))
