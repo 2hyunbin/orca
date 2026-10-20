@@ -26,6 +26,7 @@ vi.mock('@/components/editor/combined-diff/remember-view/combined-diff-view-cach
 
 import type { OpenFile } from '@/store/slices/editor'
 import {
+  getPendingOverflowProbeCountForTest,
   reconcileEditorTabsAfterOverflow,
   supersedeOverflowProbesForBatch
 } from './editor-external-watch-overflow'
@@ -192,9 +193,27 @@ describe('reconcileEditorTabsAfterOverflow', () => {
       },
       [touched]
     )
+    expect(getPendingOverflowProbeCountForTest()).toBe(0)
 
     answer([{ exists: true }])
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(harness.scheduleReload).not.toHaveBeenCalled()
+    expect(getPendingOverflowProbeCountForTest()).toBe(0)
+  })
+
+  it('leaves no probe entry behind for a tab closed while its probe was pending', async () => {
+    setTabs(tab('a.ts'))
+    let answer: (rows: unknown) => void = () => {}
+    harness.runtimePathsExist.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve))
+    )
+    reconcileEditorTabsAfterOverflow(target)
+    expect(getPendingOverflowProbeCountForTest()).toBe(1)
+
+    setTabs()
+    answer([{ exists: true }])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(harness.scheduleReload).not.toHaveBeenCalled()
+    expect(getPendingOverflowProbeCountForTest()).toBe(0)
   })
 })

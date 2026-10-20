@@ -33,6 +33,10 @@ function claimProbeGeneration(fileId: string): number {
   return probeGenerationSeq
 }
 
+export function getPendingOverflowProbeCountForTest(): number {
+  return probeGenerationByFileId.size
+}
+
 /** Drops pending existence answers for tabs this watch batch touched. */
 export function supersedeOverflowProbesForBatch(
   batchPaths: EditorExternalWatchBatchPathIndex,
@@ -52,10 +56,9 @@ export function supersedeOverflowProbesForBatch(
       touched.add(file.id)
     }
   }
+  // Why: the pending probe's generation can never match again, so its completion no longer owns an entry to delete.
   for (const fileId of touched) {
-    if (probeGenerationByFileId.has(fileId)) {
-      claimProbeGeneration(fileId)
-    }
+    probeGenerationByFileId.delete(fileId)
   }
 }
 

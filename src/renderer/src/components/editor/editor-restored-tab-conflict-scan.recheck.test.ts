@@ -23,6 +23,7 @@ vi.mock('@/lib/file-owner-runtime-target', () => {
 import { createTestStore } from '@/store/slices/store-test-helpers'
 import {
   attachRestoredTabConflictScan,
+  getRestoredTabReverificationRequestCountForTest,
   MAX_VERIFY_ATTEMPTS,
   requestRestoredTabReverification
 } from './editor-restored-tab-conflict-scan'
@@ -128,4 +129,14 @@ it('does not let an absence answer from before a newer check resolve that check'
 
   expect(tab().externalMutation).toBe('changed')
   expect(tab().pendingDiskBaselineVerification).toBeFalsy()
+})
+
+it("forgets a tab's check requests once the tab closes", async () => {
+  mocks.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
+  detach = attachRestoredTabConflictScan(store)
+  requestRestoredTabReverification(FILE)
+  expect(getRestoredTabReverificationRequestCountForTest()).toBeGreaterThan(0)
+
+  store.getState().closeFile(FILE)
+  expect(getRestoredTabReverificationRequestCountForTest()).toBe(0)
 })

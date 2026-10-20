@@ -26,14 +26,30 @@ const MAX_CONCURRENT_VERIFY_READS = 3
 export const MAX_VERIFY_ATTEMPTS = VERIFY_FAST_ATTEMPTS + 10
 
 // Why: a disk check requested while one is in flight must not be answered by the older read.
+// A global sequence, so dropping a closed tab's entry can't let a reopened tab's request reuse an old read's number.
 const verifyRequestGenerationByFileId = new Map<string, number>()
+let verifyRequestGenerationSeq = 0
 
 /** Asks for a fresh disk check of a tab; a read already in flight is followed by one more. */
 export function requestRestoredTabReverification(fileId: string): void {
-  verifyRequestGenerationByFileId.set(
-    fileId,
-    (verifyRequestGenerationByFileId.get(fileId) ?? 0) + 1
-  )
+  verifyRequestGenerationSeq += 1
+  verifyRequestGenerationByFileId.set(fileId, verifyRequestGenerationSeq)
+}
+
+export function getRestoredTabReverificationRequestCountForTest(): number {
+  return verifyRequestGenerationByFileId.size
+}
+
+function forgetClosedTabReverificationRequests(openFiles: readonly OpenFile[]): void {
+  if (verifyRequestGenerationByFileId.size === 0) {
+    return
+  }
+  const openIds = new Set(openFiles.map((file) => file.id))
+  for (const fileId of verifyRequestGenerationByFileId.keys()) {
+    if (!openIds.has(fileId)) {
+      verifyRequestGenerationByFileId.delete(fileId)
+    }
+  }
 }
 
 function verifyRequestGeneration(fileId: string): number {
@@ -284,6 +300,7 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
       return
     }
     previousOpenFiles = nextOpenFiles
+    forgetClosedTabReverificationRequests(nextOpenFiles)
     scan()
   })
   scan()
