@@ -30,7 +30,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-mac-build-${{ inputs.tag }}
+  # Why: a qualification run that reuses a live tag must never queue behind or replace its release build.
+  group: release-mac-build-${{ inputs.tag }}${{ inputs.qualification_only && '-qualification' || '' }}
   cancel-in-progress: false
 
 jobs:

@@ -8,14 +8,10 @@ import {
   readCanonicalPtyOwners,
   resolveCanonicalPtyClaim
 } from '../../../shared/workspace-layout/legacy-terminal-row-claims'
-
-/** The reconnect plan's rule (workspace-terminal-reconnect-plan.ts): the shutdown list, else any row with a terminal. */
-function liveAtShutdown(session: WorkspaceSessionState): (key: string) => boolean {
-  const listed = session.activeWorktreeIdsOnShutdown
-  return listed
-    ? (key) => listed.includes(key)
-    : (key) => (session.tabsByWorktree[key] ?? []).some((row) => row.ptyId)
-}
+import {
+  liveAtShutdown,
+  sweepUnattachedTerminalRows
+} from '../../../shared/workspace-layout/unattached-terminal-row-sweep'
 
 /** Terminals a pane in the layout's tree binds; a binding a removed pane left behind holds nothing. */
 function mountedPtyIds(layout: TerminalLayoutSnapshot): string[] {
@@ -74,15 +70,16 @@ export function bindTabTerminalPanesInSession(
   return layouts ? { ...session, terminalLayoutsByTabId: layouts } : session
 }
 
-/**
- * Load-only repair for layout-owner builds: main's layout holds these terminals from the start, so
- * its frames and saves keep them before the pane mounts. A paired server's partition is the
- * server's and passes through.
- */
-export function bindPersistedTabTerminalPanes(state: PersistedState): PersistedState {
+type SessionRepair = (
+  session: WorkspaceSessionState,
+  isSshWorkspace: (key: string) => boolean
+) => WorkspaceSessionState
+
+/** Repairs every partition this desktop restores; a paired server's is the server's and passes through. */
+function repairRestoredSessions(state: PersistedState, repair: SessionRepair): PersistedState {
   const sshRepoIds = new Set(state.repos.filter((repo) => repo.connectionId).map((repo) => repo.id))
   const sshRepoWorkspace = (key: string): boolean => sshRepoIds.has(getRepoIdFromWorktreeId(key))
-  const workspaceSession = bindTabTerminalPanesInSession(state.workspaceSession, sshRepoWorkspace)
+  const workspaceSession = repair(state.workspaceSession, sshRepoWorkspace)
   let hostSessionsChanged = false
   const workspaceSessionsByHostId = state.workspaceSessionsByHostId
     ? Object.fromEntries(
@@ -90,10 +87,7 @@ export function bindPersistedTabTerminalPanes(state: PersistedState): PersistedS
           const kind = parseExecutionHostId(hostId)?.kind
           const repaired =
             session && kind !== 'runtime'
-              ? bindTabTerminalPanesInSession(
-                  session,
-                  kind === 'ssh' ? () => true : sshRepoWorkspace
-                )
+              ? repair(session, kind === 'ssh' ? () => true : sshRepoWorkspace)
               : session
           hostSessionsChanged ||= repaired !== session
           return [hostId, repaired]
@@ -108,4 +102,30 @@ export function bindPersistedTabTerminalPanes(state: PersistedState): PersistedS
     workspaceSession,
     ...(hostSessionsChanged ? { workspaceSessionsByHostId } : {})
   }
+}
+
+/**
+ * Load-only repair for layout-owner builds: main's layout holds these terminals from the start, so
+ * its frames and saves keep them before the pane mounts.
+ */
+export function bindPersistedTabTerminalPanes(state: PersistedState): PersistedState {
+  return repairRestoredSessions(state, bindTabTerminalPanesInSession)
+}
+
+/**
+ * Load-only repair for layout-owner builds: rows outside the tab bar the window's startup would
+ * sweep go once, before main's layout would draw each as an empty tab.
+ */
+export function sweepPersistedUnattachedTerminalRows(state: PersistedState): PersistedState {
+  // Why any partition's list too: a stale list can name another partition's workspace, which the
+  // window's merged list then counts live; keeping on either never sweeps a row the window keeps.
+  const listedAnywhere = new Set(
+    [state.workspaceSession, ...Object.values(state.workspaceSessionsByHostId ?? {})].flatMap(
+      (session) => session?.activeWorktreeIdsOnShutdown ?? []
+    )
+  )
+  return repairRestoredSessions(state, (session) => {
+    const ownLive = liveAtShutdown(session)
+    return sweepUnattachedTerminalRows(session, (key) => ownLive(key) || listedAnywhere.has(key))
+  })
 }

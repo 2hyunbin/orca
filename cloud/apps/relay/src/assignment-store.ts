@@ -12,6 +12,7 @@ import {
   type RegionalRehomePollGate
 } from './regional-rehome-poll-telemetry.js'
 import { readRegionCorrectionOutcomes } from './region-correction-outcomes.js'
+import { ReservePaceError } from './reserve-assignment.js'
 import {
   previewRegionalRehomeEligibility,
   type RegionCorrectionPreview
@@ -525,7 +526,7 @@ class AssignmentInventoryLockUnavailable extends Error {
 
 // Postgres holds row locks to COMMIT, so the next tier needs a new transaction.
 class AssignmentIsolatedTierExhausted extends Error {
-  constructor() {
+  constructor(readonly source: { cellId: string; region: RelayRegion }) {
     super('assignment_isolated_tier_exhausted')
   }
 }
@@ -536,9 +537,13 @@ class AssignmentInventoryScopeChanged extends Error {
   }
 }
 
+// Sticky's "re-place me": the host's pin is on a cell isolated for a roll.
+type IsolatedPin = { isolatedFrom: { cellId: string; region: RelayRegion } }
+
 // The placement region has no database cell with room; nothing was written.
 class AssignmentRegionFull extends Error {
-  constructor() {
+  // Set when the host is leaving a roll-isolated cell in that region.
+  constructor(readonly isolatedSource?: { cellId: string; region: RelayRegion }) {
     super('assignment_region_full')
   }
 }
@@ -1012,8 +1017,34 @@ export class RelayAssignmentStore {
     step5: AssignOptions = {}
   ): Promise<RelayAssignment> {
     const sticky = await this.assignStickyWithLockRetry(identity, lockMode, preferredRegion)
-    if (sticky) return sticky
-    const booked = await step5.placeFresh?.()
+    if (sticky && !('isolatedFrom' in sticky)) return sticky
+    let isolatedFrom = sticky?.isolatedFrom
+    // Off a roll-isolated cell: the canary counts the move whichever pool takes it, and a
+    // throttled reserve cell is no room, so the drain does not wait on reserve intake.
+    const bookReserve = async (book: () => Promise<RelayAssignment | null>) => {
+      let reserved: RelayAssignment | null
+      try {
+        reserved = await book()
+      } catch (error) {
+        if (!(isolatedFrom && error instanceof ReservePaceError)) throw error
+        reserved = null
+      }
+      if (reserved && isolatedFrom) {
+        console.warn(
+          JSON.stringify({
+            event: 'orca_relay_sticky_replaced_off_isolated_cell',
+            fromCellId: isolatedFrom.cellId,
+            fromRegion: isolatedFrom.region,
+            admissionState: ROLL_ISOLATED_ADMISSION,
+            toCellId: reserved.cellId,
+            region: reserved.region,
+            via: 'reserve'
+          })
+        )
+      }
+      return reserved
+    }
+    const booked = step5.placeFresh ? await bookReserve(step5.placeFresh) : null
     if (booked) return booked
     // Only placement needs the global inventory critical section; queueing those
     // attempts locally avoids turning true placement bursts into NOWAIT storms.
@@ -1037,15 +1068,16 @@ export class RelayAssignmentStore {
       return await placeOnDatabase(true)
     } catch (error) {
       if (!(error instanceof AssignmentRegionFull)) throw error
+      isolatedFrom ??= error.isolatedSource
     }
-    return (await regionReserve()) ?? (await placeOnDatabase(false))
+    return (await bookReserve(regionReserve)) ?? (await placeOnDatabase(false))
   }
 
   private async assignStickyWithLockRetry(
     identity: AssignmentIdentity,
     lockMode: CellInventoryLockMode,
     preferredRegion?: RelayRegion
-  ): Promise<RelayAssignment | null> {
+  ): Promise<RelayAssignment | IsolatedPin | null> {
     return await this.withAssignmentLockRetry(
       async (inventoryFirst) =>
         await this.assignStickyOnce(identity, inventoryFirst, lockMode, preferredRegion)
@@ -1081,6 +1113,10 @@ export class RelayAssignmentStore {
           continue
         }
         if (error instanceof AssignmentIsolatedTierExhausted) {
+          // An in-region reserve cell comes before the other regions.
+          if (keepRegion && error.source.region === placementRegion) {
+            throw new AssignmentRegionFull(error.source)
+          }
           inventoryScope = 'isolated-other-regions'
           continue
         }
@@ -1118,7 +1154,7 @@ export class RelayAssignmentStore {
     inventoryFirst: boolean,
     lockMode: CellInventoryLockMode,
     preferredRegion?: RelayRegion
-  ): Promise<RelayAssignment | null> {
+  ): Promise<RelayAssignment | IsolatedPin | null> {
     const now = this.now()
     await this.reserveModeCells()
     return await this.database.transaction(async (transaction) => {
@@ -1198,7 +1234,8 @@ export class RelayAssignmentStore {
           pinnedAdmission
         )
       ) {
-        return null
+        const cellId = text(existing, 'cell_id')
+        return { isolatedFrom: { cellId, region: await this.cellRegion(transaction, cellId) } }
       }
 
       const currentCellId = text(existing, 'cell_id')
@@ -1442,7 +1479,7 @@ export class RelayAssignmentStore {
           // Same region full: try the other regions. All full: decide under the
           // all-rows lock, which keeps the pin as before.
           if (!isolatedTarget) {
-            if (isolatedTier === 'same-region') throw new AssignmentIsolatedTierExhausted()
+            if (isolatedTier === 'same-region') throw new AssignmentIsolatedTierExhausted(source)
             throw new AssignmentInventoryScopeChanged()
           }
           isolatedIncumbent = source
@@ -8167,15 +8204,18 @@ export class RelayAssignmentStore {
     mode: CellInventoryLockMode
   ): Promise<SqlRow[]> {
     if (sourceCellId === undefined) throw new AssignmentInventoryScopeChanged()
+    const sourceRegion = await this.cellRegion(database, sourceCellId)
     const candidates = await database.query(
       `SELECT admission.cell_id FROM relay_cell_admission admission
        LEFT JOIN relay_cell_regions region ON region.cell_id = admission.cell_id
        WHERE admission.admission_state = 'general' AND admission.cell_id <> ?
          AND COALESCE(region.region, ?) ${tier === 'same-region' ? '=' : '<>'} ?`,
-      [sourceCellId, RELAY_DEFAULT_REGION, await this.cellRegion(database, sourceCellId)]
+      [sourceCellId, RELAY_DEFAULT_REGION, sourceRegion]
     )
     if (candidates.length === 0) {
-      if (tier === 'same-region') throw new AssignmentIsolatedTierExhausted()
+      if (tier === 'same-region') {
+        throw new AssignmentIsolatedTierExhausted({ cellId: sourceCellId, region: sourceRegion })
+      }
       throw new AssignmentInventoryScopeChanged()
     }
     return await this.lockCellRows(

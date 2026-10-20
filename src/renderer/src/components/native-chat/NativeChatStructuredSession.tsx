@@ -341,6 +341,7 @@ export function NativeChatStructuredSession(
             statedFailures={startFailures}
             steerHeld={stopControls.stopping || hostHeld}
             focusComposer={focusComposer}
+            editAttachTo={{ terminalTabId: props.tabId, transport: structuredTransport }}
           />
           <NativeChatStructuredSessionStatus
             sessionId={props.sessionId}

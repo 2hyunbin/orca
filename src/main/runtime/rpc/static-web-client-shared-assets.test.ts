@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { createStaticWebClientHandler } from './static-web-client-handler'
 
 const roots: string[] = []
@@ -83,6 +83,20 @@ it('fails closed when a renderer has no manifest or a corrupt manifest', async (
   rmSync(join(renderer, '.orca-web-client-files.json'))
   const endpoint = await serve(renderer)
   expect((await fetch(`${endpoint}/assets/desktop.js`)).status).toBe(404)
-  writeFileSync(join(renderer, '.orca-web-client-files.json'), '{')
-  expect(() => createStaticWebClientHandler(renderer)).toThrow()
+})
+it('disables only the browser client when the manifest is truncated or invalid', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  try {
+    for (const manifest of ['{', JSON.stringify(['../index.html'])]) {
+      const { renderer } = fixture()
+      writeFileSync(join(renderer, '.orca-web-client-files.json'), manifest)
+      const endpoint = await serve(renderer)
+      for (const file of ['', 'web-index.html', 'assets/shared.js', 'assets/desktop.js']) {
+        expect((await fetch(`${endpoint}/${file}`)).status, file).toBe(404)
+      }
+    }
+    expect(warn).toHaveBeenCalledTimes(2)
+  } finally {
+    warn.mockRestore()
+  }
 })
