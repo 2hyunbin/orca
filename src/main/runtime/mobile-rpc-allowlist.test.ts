@@ -50,6 +50,7 @@ const MOBILE_DYNAMIC_RPC_METHODS = [
 const MOBILE_SIDEBAR_INPUTS_RPC_METHODS = [
   'sidebarInputs.read',
   'sidebarInputs.repoIcons',
+  'sidebarInputs.reportView',
   'ui.setCollapsed'
 ]
 
