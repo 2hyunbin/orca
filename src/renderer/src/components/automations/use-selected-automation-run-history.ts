@@ -8,9 +8,9 @@
  * the host a navigation named — so those, and only those, are the key.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { AutomationRun } from '../../../../shared/automations-types'
-import type { AutomationAuthorityRef } from '../../../../shared/automation-owner-ref'
+import { ownerKey } from '../../../../shared/automation-owner-key'
 import { capturedAutomationOwner, capturedAutomationOwnerKey } from './automation-captured-owner'
 import type { AutomationListRow } from './automation-list-row-identity'
 import {
@@ -68,22 +68,19 @@ export function useSelectedAutomationRunHistory(input: SelectedAutomationRunHist
   const automationId = input.selected?.automation.id ?? null
   const rowKey = input.selected?.key ?? null
   const reloadToken = input.reloadToken
+  const captured = capturedAutomationOwner(input.context.capturedOwners, rowKey)
   const fetchKey =
     automationId && rowKey
       ? [
           rowKey,
-          capturedAutomationOwnerKey(capturedAutomationOwner(input.context.capturedOwners, rowKey)),
+          capturedAutomationOwnerKey(captured),
+          ownerKey({
+            authority: captured.owner?.authority ?? input.context.authority,
+            selector: { kind: 'self' }
+          }),
           navigationHostId(input.navigation, automationId) ?? ''
         ].join('|')
       : ''
-  const captured = input.selected
-    ? capturedAutomationOwner(input.context.capturedOwners, input.selected.key).owner
-    : null
-  const authority = captured?.authority ?? input.context.authority
-  const rowAuthority = useMemo<AutomationAuthorityRef>(
-    () => (authority?.kind === 'runtime' ? authority : { kind: 'desktop' }),
-    [authority]
-  )
 
   useEffect(() => {
     const { selected, context, legacyTarget, navigation, onSettled } = inputRef.current
@@ -92,9 +89,9 @@ export function useSelectedAutomationRunHistory(input: SelectedAutomationRunHist
       return
     }
     let cancelled = false
-    const owner = capturedAutomationOwnerKey(
-      capturedAutomationOwner(context.capturedOwners, rowKey)
-    )
+    const captured = capturedAutomationOwner(context.capturedOwners, rowKey)
+    const owner = capturedAutomationOwnerKey(captured)
+    const rowAuthority = captured.owner?.authority ?? context.authority
     const navigationHost = navigationHostId(navigation, automationId)
     const target = navigationHost
       ? getAutomationTargetFromHostId(navigationHost)
@@ -119,5 +116,5 @@ export function useSelectedAutomationRunHistory(input: SelectedAutomationRunHist
     return () => {
       cancelled = true
     }
-  }, [automationId, rowAuthority, rowKey, fetchKey, reloadToken])
+  }, [automationId, rowKey, fetchKey, reloadToken])
 }

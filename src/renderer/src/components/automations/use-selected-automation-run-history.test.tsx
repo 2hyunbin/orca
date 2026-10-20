@@ -88,6 +88,31 @@ afterEach(async () => {
 })
 
 describe('useSelectedAutomationRunHistory', () => {
+  it.each(['desktop', 'runtime'] as const)(
+    'does not refetch when the same %s owner is reconstructed',
+    async (kind) => {
+      mocks.dispatch.mockResolvedValue({ ok: true, value: [] })
+      const owner: AutomationOwnerRef = {
+        authority:
+          kind === 'runtime'
+            ? { kind: 'runtime', environmentId: 'gpu', pairingRevision: 2 }
+            : { kind: 'desktop' },
+        selector: { kind: 'self' }
+      }
+      const input = makeInput({
+        context: {
+          capturedOwners: new Map([[DESKTOP_ROW.key, { owner, selector: { kind: 'self' } }]]),
+          authority: owner.authority
+        }
+      })
+      const rerender = await render(input)
+
+      await rerender({ ...input, context: structuredClone(input.context) })
+
+      expect(mocks.dispatch).toHaveBeenCalledTimes(1)
+    }
+  )
+
   it('reports the refusal instead of leaving the pane on the previous automation', async () => {
     mocks.dispatch.mockResolvedValue({
       ok: false,

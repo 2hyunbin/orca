@@ -64,7 +64,8 @@ export function createAutomationRunActions({
     }
     useAppStore.getState().recordFeatureInteraction('automation-run')
     invalidateRowHost(row.key, 'run')
-    await pageRefresh.hydratePersistedUIState()
+    pageRefresh.refreshRunHistory(row.key)
+    await pageRefresh.hydratePersistedUIState().catch(() => undefined)
     await pageRefresh.refresh()
     toast.message(
       translate('auto.components.automations.AutomationsPage.a1bdb57008', 'Automation run queued.')
@@ -91,7 +92,8 @@ export function createAutomationRunActions({
         return
       }
       invalidateRowHost(row.key, 'run')
-      await pageRefresh.hydratePersistedUIState()
+      pageRefresh.refreshRunHistory(row.key)
+      await pageRefresh.hydratePersistedUIState().catch(() => undefined)
       await pageRefresh.refresh()
       toast.message(
         translate(
