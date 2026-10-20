@@ -300,7 +300,7 @@ export type RuntimeTerminalSplit = {
   leafId?: string
 }
 
-export type RuntimeTerminalResolvePane = {
+export type RuntimeTerminalResolvePane = TerminalLaunchResult & {
   handle: string
   /** Host-owned PTY incarnation used to fence remote identity observations. */
   incarnationId?: string | null

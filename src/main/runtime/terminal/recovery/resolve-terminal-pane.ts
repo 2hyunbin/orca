@@ -1,3 +1,4 @@
+import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import type { OrcaRuntimeWithCreateTerminal } from '../launch/terminal-create'
 import { OrcaRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-interactive-wait'
 import type {
@@ -160,6 +161,7 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
       leafId: parsed.leafId,
       focus: false
     }).then((terminal) => ({
+      ...terminalLaunchFacts(terminal),
       handle: terminal.handle,
       tabId: parsed.tabId,
       leafId: parsed.leafId,

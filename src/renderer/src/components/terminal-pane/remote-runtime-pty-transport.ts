@@ -1,3 +1,4 @@
+import { parseTerminalAttachmentLaunchResult } from '../../../../shared/terminal-attachment-launch-result'
 import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import { isRuntimeCompatBlockError } from '@/runtime/runtime-protocol-compat'
 import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
@@ -1511,6 +1512,7 @@ export function createRemoteRuntimePtyTransport(
     if (!expiredHandle || !tabId || !leafId || !worktreeId || recoveringPaneHandle) {
       return
     }
+    const recoverySubscriptionGeneration = subscriptionGeneration
     recoveringPaneHandle = expiredHandle
     connected = false
     clearPendingViewportClaim()
@@ -1545,6 +1547,22 @@ export function createRemoteRuntimePtyTransport(
             onPtyRebind?.(remotePtyId, replacedPtyId, authoritativePtyIncarnationId)
           } else {
             onPtyRebind?.(remotePtyId, replacedPtyId)
+          }
+        }
+        const launchResult = parseTerminalAttachmentLaunchResult({
+          ...terminalLaunchFacts(terminal),
+          ptyId: terminal.ptyId,
+          incarnationId: terminal.incarnationId
+        })
+        if (
+          launchResult &&
+          recoverySubscriptionGeneration === subscriptionGeneration &&
+          currentPaneRevision() === getRuntimeEnvironmentRevision(currentRuntimeEnvironmentId)
+        ) {
+          try {
+            storedCallbacks.onLaunchResult?.(launchResult)
+          } catch (error) {
+            console.warn('Terminal launch result bookkeeping failed', error)
           }
         }
         await subscribeToHandle()
@@ -2654,8 +2672,23 @@ export function createRemoteRuntimePtyTransport(
             storedCallbacks.onPausedOutputDropped?.()
           }
         },
-        onSubscribeAcknowledged: () => {
+        onSubscribeAcknowledged: (result) => {
           if (isCurrentSubscription()) {
+            if (
+              result &&
+              (!authoritativePtyIncarnationId ||
+                result.incarnationId === authoritativePtyIncarnationId)
+            ) {
+              authoritativePtyIncarnationId = result.incarnationId
+              try {
+                storedCallbacks.onLaunchResult?.(result)
+              } catch (error) {
+                console.warn('Terminal launch result bookkeeping failed', error)
+              }
+            }
+            if (!isCurrentSubscription()) {
+              return
+            }
             inputReadySubscription = generation
             if (
               installedStream &&

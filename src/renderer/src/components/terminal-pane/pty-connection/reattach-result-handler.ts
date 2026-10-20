@@ -1,3 +1,8 @@
+import {
+  applyTerminalLaunchResult,
+  captureTerminalLaunchContext,
+  type TerminalLaunchContext
+} from './terminal-launch-result-policy'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { scheduleRuntimeGraphSync } from '@/runtime/sync-runtime-graph'
 import type { PtyBufferSnapshot, PtyConnectResult } from '../pty-transport-types'
@@ -65,7 +70,11 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     result: PtyConnectResult | string | void,
     staleSessionId?: string | null,
     coldRestoreStartup?: ColdRestoreAgentResumeStartup | null,
-    attemptGeneration = session.transportStreamGeneration
+    attemptGeneration = session.transportStreamGeneration,
+    launchContext: TerminalLaunchContext = captureTerminalLaunchContext(
+      sessionBag,
+      coldRestoreStartup ?? sessionBag.paneStartup
+    )
   ): Promise<boolean> => {
     if (session.disposed) {
       return false
@@ -95,16 +104,10 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       session.remotePtyIncarnationId = null
     }
 
-    if (
-      connectResult?.agentResumeRefused ||
-      (connectResult?.agentResumeUnavailable && !connectResult.isReattach)
-    ) {
-      session.cancelSavedResumeStartup(coldRestoreStartup ?? sessionBag.paneStartup, connectResult)
+    if (connectResult) {
+      applyTerminalLaunchResult(sessionBag, connectResult, launchContext, 'creator')
     }
     if (connectResult?.exitedBeforeAttach) {
-      if (connectResult.agentResumeUnavailable) {
-        session.showSessionRestoredBanner('resume-unavailable')
-      }
       // Why: the transport already delivered the dead session's final frame + exit; treat as terminal state, not a failed reattach.
       return true
     }
@@ -141,14 +144,6 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       })
       return false
     }
-    session.registerEffectiveLaunchConfig(connectResult?.launchConfig, {
-      ...(connectResult?.launchToken ? { launchToken: connectResult.launchToken } : {}),
-      ...(connectResult?.launchAgent
-        ? { launchAgent: connectResult.launchAgent }
-        : startup
-          ? { launchAgent: startup.agent }
-          : {})
-    })
     if (connectResult?.sessionExpired) {
       if (staleSessionId) {
         session.clearExitedPanePtyLayoutBinding(staleSessionId)
@@ -183,10 +178,6 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     const hasStructuralReplay = Boolean(
       connectResult?.snapshot || connectResult?.replay || connectResult?.coldRestore
     )
-    // Why here: a fresh result with no scrollback never reaches the cold-restore payload that says so.
-    if (connectResult?.agentResumeUnavailable && !connectResult.coldRestore) {
-      session.showSessionRestoredBanner('resume-unavailable')
-    }
     // Why: reattach drops startup commands; only real hibernation is authority to retire an empty adopted shell and resume its provider session.
     if (
       !hasStructuralReplay &&

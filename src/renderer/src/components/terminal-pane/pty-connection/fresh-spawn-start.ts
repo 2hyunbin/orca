@@ -1,3 +1,4 @@
+import { applyTerminalLaunchResult } from './terminal-launch-result-policy'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { useAppStore } from '@/store'
@@ -97,7 +98,8 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
     const visibleAtSpawn = session.deps.isVisibleRef.current === true
     const outputCallbacks = session.captureTransportOutputCallbacks(
       session.reportError,
-      toProcessExitStartup(coldRestoreOverride ?? effectiveStartup)
+      toProcessExitStartup(coldRestoreOverride ?? effectiveStartup),
+      coldRestoreOverride ?? effectiveStartup
     )
     const spawnedRaw = session.transport.connect({
       url: '',
@@ -178,7 +180,8 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
             connectResult,
             null,
             coldRestoreOverride,
-            outputCallbacks.generation
+            outputCallbacks.generation,
+            outputCallbacks.launchContext
           )
           session.finishReattachLiveDataDeferral(accepted, outputCallbacks.generation)
           const gen = await preSignalPromise
@@ -193,25 +196,20 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           }
           return accepted ? resolvedPtyId : null
         }
-        // Why: main started a plain shell instead, so nothing of the plan may stay registered over it.
-        const rejectedSavedStartup =
-          connectResult?.agentResumeRefused ||
-          (connectResult?.agentResumeUnavailable && effectiveStartup?.resumeSource)
+        const rejectedSavedStartup = connectResult
+          ? applyTerminalLaunchResult(
+              session,
+              connectResult,
+              outputCallbacks.launchContext,
+              'creator'
+            )
+          : false
         const coldRestore = rejectedSavedStartup ? null : coldRestoreOverride
-        if (connectResult && rejectedSavedStartup) {
-          session.cancelSavedResumeStartup(coldRestoreOverride ?? effectiveStartup, connectResult)
-        }
-        if (connectResult?.agentResumeRefused === 'unverifiable') {
-          // Why: the saved session may have been consumed before this spawn; keep it for the next try.
-          if (!(coldRestoreOverride ?? effectiveStartup)?.resumeSource?.record) {
-            session.keepUnrunResumeHandle(startupOverride)
-          }
-        }
-        if (spawnedPtyId && typeof spawnedPtyId === 'object' && 'id' in spawnedPtyId) {
-          session.registerEffectiveLaunchConfig(spawnedPtyId.launchConfig, {
-            ...(spawnedPtyId.launchToken ? { launchToken: spawnedPtyId.launchToken } : {}),
-            ...(spawnedPtyId.launchAgent ? { launchAgent: spawnedPtyId.launchAgent } : {})
-          })
+        if (
+          connectResult?.agentResumeRefused === 'unverifiable' &&
+          !(coldRestoreOverride ?? effectiveStartup)?.resumeSource?.record
+        ) {
+          session.keepUnrunResumeHandle(startupOverride)
         }
         if (resolvedPtyId) {
           if (
@@ -230,7 +228,6 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           ) {
             // Why: main dropped the resume argv, so this pane is a NEW session —
             // the plain restored banner would claim the old one came back.
-            session.showSessionRestoredBanner('resume-unavailable')
             options.onAgentResumeUnavailable?.()
           } else if (coldRestore?.hasSleepingRecord) {
             session.showSessionRestoredBanner()

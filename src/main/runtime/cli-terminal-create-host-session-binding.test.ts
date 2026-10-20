@@ -2,6 +2,12 @@
  *  durable binding and runtime ownership keep graph sync from pruning the tab
  *  out from under a live agent — including when a window is attached. */
 import { describe, expect, it, vi } from 'vitest'
+import './rpc/unused-default-rpc-methods.test-fixture'
+import {
+  startDesktopMultiplexSubscribe,
+  sendDesktopMultiplexSubscribe
+} from './rpc/terminal-multiplex-test-harness'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { OrcaRuntimeService } from './orca-runtime'
 
 vi.mock('electron', () => ({
@@ -116,6 +122,99 @@ it.each(['refused', 'adopted', 'fresh-unavailable'] as const)(
     }
     if (kind === 'fresh-unavailable') {
       expect(result.launchToken).toBe('actual-fresh-token')
+    }
+  }
+)
+
+it.each(['unchanged', 'hook', 'config', 'incarnation', 'handle'] as const)(
+  'samples the actual created PTY after snapshot awaits and revalidates %s on reconnect',
+  async (change) => {
+    const { runtime, spawn } = createRuntimeWithAttachedWindow()
+    const providerSession = { key: 'session_id' as const, id: 'C' }
+    spawn.mockResolvedValue({
+      id: 'effective-pty',
+      incarnationId: 'i1',
+      agentResumeUnavailable: true,
+      agentResumeRefused: 'chat-home',
+      savedResumeDecision: { agent: 'claude', providerSession, verdict: 'chat-home' }
+    })
+    const terminal = await runtime.createTerminal('id:repo-1::/tmp/wt-cli', {
+      tabId: 'saved-tab',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      launchAgent: 'claude',
+      resumeOrigin: 'saved',
+      resumeProviderSession: providerSession
+    })
+    let snapshotStarted = false
+    let finishSnapshot = () => {}
+    let handle = terminal.handle
+    const harness = startDesktopMultiplexSubscribe({
+      resolveLiveLeafForHandle: () => runtime.resolveLiveLeafForHandle(handle),
+      getPtyExecutionHostMetadata: runtime.getPtyExecutionHostMetadata.bind(runtime),
+      getTerminalLaunchResult: runtime.getTerminalLaunchResult.bind(runtime),
+      serializeTerminalBuffer: () =>
+        new Promise((resolve) => {
+          snapshotStarted = true
+          finishSnapshot = () => resolve({ data: 'shell$ ', cols: 80, rows: 24 })
+        })
+    })
+    try {
+      await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
+      sendDesktopMultiplexSubscribe(harness.handlers)
+      await vi.waitFor(() => expect(snapshotStarted).toBe(true))
+      if (change === 'hook') {
+        runtime.recordCliWriterConversation({
+          paneKey: 'saved-tab:11111111-1111-4111-8111-111111111111',
+          connectionId: null,
+          receivedAt: 1,
+          stateStartedAt: 1,
+          providerSession,
+          payload: { state: 'done', prompt: '', agentType: 'claude' },
+          agentPresence: {
+            agent: 'claude',
+            process: { pid: 12, platform: 'darwin', startTime: 's' }
+          }
+        })
+      } else if (change === 'config') {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime owns this PTY map; mutate its actual record to model a replacement launch.
+        const records = (runtime as unknown as { ptysById: Map<string, RuntimePtyWorktreeRecord> })
+          .ptysById
+        const pty = records.get('effective-pty')!
+        pty.launchConfig = { agentCommand: 'codex', agentArgs: '', agentEnv: {} }
+      } else if (change === 'incarnation') {
+        runtime.registerPty('effective-pty', 'repo-1::/tmp/wt-cli', null, {
+          tabId: 'saved-tab',
+          leafId: '11111111-1111-4111-8111-111111111111',
+          incarnationId: 'i2'
+        })
+      } else if (change === 'handle') {
+        handle = 'stale-handle'
+      }
+      finishSnapshot()
+      const events = () => harness.messages.map((message) => JSON.parse(message).result)
+      const stale = change === 'handle' || change === 'incarnation'
+      await vi.waitFor(() =>
+        expect(events().some((event) => event?.type === (stale ? 'end' : 'subscribed'))).toBe(true)
+      )
+      if (stale) {
+        expect(events().some((event) => event?.type === 'subscribed')).toBe(false)
+      } else {
+        const result = events().find((event) => event?.type === 'subscribed').launchResult
+        expect(result).toMatchObject({ ptyId: 'effective-pty', incarnationId: 'i1' })
+        expect(result.agentResumeRefused).toBe(change === 'unchanged' ? 'chat-home' : undefined)
+        harness.messages.splice(0)
+        snapshotStarted = false
+        sendDesktopMultiplexSubscribe(harness.handlers)
+        await vi.waitFor(() => expect(snapshotStarted).toBe(true))
+        finishSnapshot()
+        await vi.waitFor(() =>
+          expect(events().some((event) => event?.type === 'subscribed')).toBe(true)
+        )
+        expect(events().find((event) => event?.type === 'subscribed').launchResult).toEqual(result)
+      }
+    } finally {
+      harness.registry.cleanupSubscription('terminal-multiplex:conn-desktop-first-paint')
+      await harness.dispatchPromise
     }
   }
 )

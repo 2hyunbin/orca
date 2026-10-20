@@ -91,7 +91,8 @@ function connectDeferredSessionReattach(
       }
       session.reportError(message)
     },
-    toProcessExitStartup(coldRestoreStartup ?? session.paneStartup)
+    toProcessExitStartup(coldRestoreStartup ?? session.paneStartup),
+    coldRestoreStartup ?? session.paneStartup
   )
   session.beginReattachLiveDataDeferral(outputCallbacks.generation)
   session.transportConnectInFlightSince = Date.now()
@@ -190,7 +191,8 @@ function connectDeferredSessionReattach(
         result,
         deferredReattachSessionId,
         coldRestoreStartup,
-        outputCallbacks.generation
+        outputCallbacks.generation,
+        outputCallbacks.launchContext
       )
       session.finishReattachLiveDataDeferral(accepted, outputCallbacks.generation)
       const gen = await preSignalPromise

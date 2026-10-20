@@ -17,7 +17,6 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
     }
     source.cancelled = true
     const state = useAppStore.getState()
-    state.consumeTabStartupCommand(session.deps.tabId, startup)
     if (session.pendingStartupCommand?.resumeSource === source) {
       session.pendingStartupCommand = null
       if (session.startupInjectTimer !== null) {
@@ -29,6 +28,11 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
       session.deferredSpawn = null
     }
     const ownsPaneStartup = session.paneStartup?.resumeSource === source
+    if (ownsPaneStartup) {
+      session.paneStartup = null
+      session.startupDraftPrompt = null
+    }
+    state.consumeTabStartupCommand(session.deps.tabId, startup)
     const registered = session.savedStartupLaunchRegistration
     const ownsRegistration =
       registered?.source === source &&
@@ -36,11 +40,7 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
       registered.entry === state.agentLaunchConfigByPaneKey[session.cacheKey]
     session.clearRegisteredStartupLaunchConfig(startup)
     const claim = state.automaticAgentResumeClaimsByTabId[session.deps.tabId]
-    if (
-      session.paneStartup?.resumeSource === source &&
-      claim &&
-      claim === session.savedStartupAutomaticClaim
-    ) {
+    if (ownsPaneStartup && claim && claim === session.savedStartupAutomaticClaim) {
       useAppStore.setState((current) => {
         if (current.automaticAgentResumeClaimsByTabId[session.deps.tabId] !== claim) {
           return current
@@ -79,8 +79,6 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
           return { agentStatusByPaneKey: next }
         })
       }
-      session.paneStartup = null
-      session.startupDraftPrompt = null
       session.cleanupStartupDraftPasteTimers?.()
     }
     if (

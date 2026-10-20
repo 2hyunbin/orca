@@ -1,4 +1,7 @@
-import { agentProviderSessionsEqual } from '../../../../../shared/agent-session-resume'
+import {
+  applyTerminalLaunchResult,
+  captureTerminalLaunchContext
+} from './terminal-launch-result-policy'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { waitForTerminalReplayWritesParsed } from '../replay-guard'
 import {
@@ -271,22 +274,14 @@ export function createReattachPayloadHandlers(
           ? null
           : (ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup())
       if (preparedStartup && !ctx.coldRestoreStartup) {
-        const decision = ctx.connectResult.savedResumeDecision
-        if (
-          !decision ||
-          decision.verdict !== 'admitted' ||
-          decision.agent !== preparedStartup.agent ||
-          !agentProviderSessionsEqual(
-            decision.agent,
-            decision.providerSession,
-            preparedStartup.resumeProviderSession
-          )
-        ) {
+        const rejected = applyTerminalLaunchResult(
+          session,
+          ctx.connectResult,
+          captureTerminalLaunchContext(session, preparedStartup),
+          'candidate'
+        )
+        if (rejected) {
           resumeUnavailable = true
-          session.cancelSavedResumeStartup(preparedStartup, {
-            ...ctx.connectResult,
-            agentResumeRefused: 'unverifiable'
-          })
           preparedStartup = null
         }
       }

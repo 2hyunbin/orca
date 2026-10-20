@@ -121,6 +121,9 @@ describe('terminal stream extraction characterization', () => {
       outputBatcher: { push: vi.fn(), flush: vi.fn() }
     } as unknown as TerminalMultiplexStream
     const runtime = {
+      getPtyExecutionHostMetadata: () => ({}),
+      getTerminalLaunchResult: () => undefined,
+      resolveLiveLeafForHandle: () => ({ ptyId: stream.ptyId }),
       readTerminal: vi.fn(async () => {
         readCount += 1
         if (readCount === 2) {

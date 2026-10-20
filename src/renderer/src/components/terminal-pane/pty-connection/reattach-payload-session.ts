@@ -2,6 +2,9 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 export type ReattachPayloadSession = Pick<
   ConnectPanePtySession,
+  | 'cacheKey'
+  | 'paneStartup'
+  | 'registerEffectiveLaunchConfig'
   | 'applyColdRestoreAgentResumeStartup'
   | 'applySnapshotKittyKeyboardModes'
   | 'buildColdRestoreAgentResumeStartup'

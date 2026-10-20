@@ -1,3 +1,9 @@
+import {
+  applyTerminalLaunchResult,
+  captureTerminalLaunchContext
+} from './terminal-launch-result-policy'
+import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
+import type { TerminalAttachmentLaunchResult } from '../../../../../shared/terminal-attachment-launch-result'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
 import { createTerminalStartupTiming } from '../terminal-startup-timing'
 import type { PtyReplayDataMeta, PtyTransportRecoveryState } from '../pty-transport-types'
@@ -10,8 +16,10 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySession): void {
   session.captureTransportOutputCallbacks = (
     onError: (message: string) => void,
-    startup: PtyPaneStartup
+    startup: PtyPaneStartup,
+    savedStartup: ColdRestoreAgentResumeStartup | PtyPaneStartup = session.paneStartup
   ) => {
+    const launchContext = captureTerminalLaunchContext(session, savedStartup)
     // Why: a new stream generation cannot inherit an old replay's pending
     // destination-grid fit or keep its live-data waiter open.
     session.pendingHiddenSnapshotFit?.cancel()
@@ -39,7 +47,18 @@ export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySessi
     })
     return {
       generation,
+      launchContext,
       callbacks: {
+        onLaunchResult: (result: TerminalAttachmentLaunchResult): void => {
+          if (
+            isCurrent() &&
+            (!session.remotePtyIncarnationId ||
+              session.remotePtyIncarnationId === result.incarnationId)
+          ) {
+            session.remotePtyIncarnationId = result.incarnationId
+            applyTerminalLaunchResult(session, result, launchContext, 'observer')
+          }
+        },
         onReattachDetermined: (): void => {
           if (isCurrent()) {
             session.beginReattachLiveDataDeferralIfUnowned(generation)

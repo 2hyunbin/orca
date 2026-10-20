@@ -1,3 +1,4 @@
+import type { TerminalAttachmentLaunchResult } from '../../../../shared/terminal-attachment-launch-result'
 import type { TerminalLaunchResult } from '../../../../shared/agent-session-resume'
 import type { AgentIdleEdgeMeta } from '../../../../shared/terminal-output-side-effects'
 import type {
@@ -135,6 +136,7 @@ export type PtyConnectResult = TerminalLaunchResult & {
 }
 
 type PtyCallbacks = {
+  onLaunchResult?: (result: TerminalAttachmentLaunchResult) => void
   /** Called before an adopted PTY can publish buffered/live bytes. */
   onReattachDetermined?: () => void
   onConnect?: () => void
