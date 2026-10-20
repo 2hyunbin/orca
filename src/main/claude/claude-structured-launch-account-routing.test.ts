@@ -11,6 +11,8 @@ import {
   type ClaudeProfileRouterSettings
 } from '../claude-accounts/claude-profile-router'
 import { installClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
+import { resolveStructuredClaudeAccountHomePath } from '../runtime/structured-agent-account-home'
+import { structuredAgentRuntimeMetadata } from '../runtime/structured-agent-runtime-metadata'
 
 const roots: string[] = []
 afterEach(() => {
@@ -37,7 +39,19 @@ it('launches each acquisition under the current selection, not the account it wa
       throw new Error('setup refused')
     }
   })
+  const follows = () => structuredAgentRuntimeMetadata('claude')?.launchFollowsSelection?.()
+  // Without a router a launch keeps the record's home, so a running chat is never compared.
+  expect(follows()).toBe(false)
   installClaudeProfileRouter(router)
+  expect(follows()).toBe(true)
+  // What a running chat is compared against is the folder a launch runs under, so a switch
+  // replaces it once and no route replaces it before every message.
+  const read = () =>
+    resolveStructuredClaudeAccountHomePath({
+      launchEnv: {},
+      wslDistro: null,
+      getClaudeConfigDirectory: () => router.systemDefaultHome()
+    })
   const record = {
     ...agentSessionRecordFixture(),
     providerHandleChain: [],
@@ -72,6 +86,7 @@ it('launches each acquisition under the current selection, not the account it wa
   writeFileSync(join(root, 'claude-profiles', 'a', 'profile.json'), '{}')
   const routed = await resolve({ identity })
   expect(routed.claudeConfigDir).toBe(home)
+  expect(read()).toBe(home)
   expect(routed.env).toMatchObject({
     CLAUDE_CONFIG_DIR: home,
     ORCA_CLAUDE_INJECTED_CONFIG_DIR: home
@@ -79,6 +94,7 @@ it('launches each acquisition under the current selection, not the account it wa
 
   settings.activeClaudeManagedAccountId = null
   expect((await resolve({ identity })).claudeConfigDir).toBe(resolvePath('/user/own'))
+  expect(read()).toBe(resolvePath('/user/own'))
 })
 
 function routedResumeFixture() {
