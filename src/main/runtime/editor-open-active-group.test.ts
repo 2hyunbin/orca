@@ -106,4 +106,13 @@ describe('a file main opens lands in the group a paired desktop shows', () => {
 
     expect(host.runtime.groupForTest(TEST_WORKTREE_ID)).toBe('g2')
   })
+  it("a desktop's refresh after a reconnect leaves the group another desktop switched to", async () => {
+    const host = twoGroupHost()
+    host.runtime.reportClientView('desktop-a', { [TEST_WORKTREE_ID]: 'g2' })
+    host.runtime.reportClientView('desktop-b', { [TEST_WORKTREE_ID]: 'g1' }, true)
+
+    await host.open()
+
+    expect(host.groupOfFile()).toBe('g2')
+  })
 })

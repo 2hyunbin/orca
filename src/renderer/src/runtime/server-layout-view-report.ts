@@ -12,7 +12,8 @@ export type ServerViewReport = {
     activeGroupIdByWorktree: Readonly<Record<string, string>>,
     drawn: ReadonlySet<string>
   ) => void
-  /** Forgets what was sent: a new stream may come with a connection the server knows nothing of. */
+  /** Forgets what was sent: a new stream may come with a connection the server knows nothing of.
+   *  The next report of each workspace is a refresh, which never outranks another client's. */
   reset: () => void
 }
 
@@ -23,8 +24,38 @@ function only(
   return Object.fromEntries(Object.entries(groups).filter(([key]) => drawn.has(key)))
 }
 
+function partition(
+  groups: Record<string, string | null>,
+  first: (key: string) => boolean
+): [Record<string, string | null>, Record<string, string | null>] {
+  const entries = Object.entries(groups)
+  return [
+    Object.fromEntries(entries.filter(([key]) => first(key))),
+    Object.fromEntries(entries.filter(([key]) => !first(key)))
+  ]
+}
+
+function send(
+  environmentId: string,
+  activeGroupByWorkspace: Record<string, string | null>,
+  refresh: boolean
+): void {
+  if (Object.keys(activeGroupByWorkspace).length === 0) {
+    return
+  }
+  callRuntimeRpc({ kind: 'environment', environmentId }, 'layout.reportView', {
+    activeGroupByWorkspace,
+    ...(refresh ? { refresh: true } : {})
+  }).catch((error: unknown) => {
+    // Not resent: the next change or stream reports again, and the server keeps its saved view.
+    console.warn('[layout-owner] a server did not take the view report:', errorMessage(error))
+  })
+}
+
 export function createServerViewReport(environmentId: string): ServerViewReport {
   let sent: Record<string, string> = {}
+  /** Workspaces reported since the last reset: a first report re-establishes, a later one is a change. */
+  const reported = new Set<string>()
   // Store slices are replaced, never edited: unchanged inputs have nothing new to send.
   let seen: [Readonly<Record<string, string>>, ReadonlySet<string>] | null = null
   return {
@@ -40,16 +71,17 @@ export function createServerViewReport(environmentId: string): ServerViewReport 
       if (!changed) {
         return
       }
-      callRuntimeRpc({ kind: 'environment', environmentId }, 'layout.reportView', {
-        activeGroupByWorkspace: changed
-      }).catch((error: unknown) => {
-        // Not resent: the next change or stream reports again, and the server keeps its saved view.
-        console.warn('[layout-owner] a server did not take the view report:', errorMessage(error))
-      })
+      const [refreshed, live] = partition(changed, (key) => !reported.has(key))
+      for (const key of Object.keys(changed)) {
+        reported.add(key)
+      }
+      send(environmentId, refreshed, true)
+      send(environmentId, live, false)
     },
     reset: () => {
       sent = {}
       seen = null
+      reported.clear()
     }
   }
 }

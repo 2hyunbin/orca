@@ -117,7 +117,7 @@ export const LAYOUT_VIEW_REPORT_METHODS = [
       if (connectionId === undefined || signal?.aborted) {
         throw new Error('client_disconnected')
       }
-      runtime.reportClientView(connectionId, params.activeGroupByWorkspace)
+      runtime.reportClientView(connectionId, params.activeGroupByWorkspace, params.refresh === true)
       return { ok: true }
     }
   })

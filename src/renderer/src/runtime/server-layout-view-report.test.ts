@@ -109,7 +109,7 @@ describe('the group this window shows, told to the server whose frames draw it',
     expect(reports()).toEqual([
       {
         target: { kind: 'environment', environmentId: ENV },
-        params: { activeGroupByWorkspace: { [WT]: HOST_GROUP } }
+        params: { activeGroupByWorkspace: { [WT]: HOST_GROUP }, refresh: true }
       }
     ])
   })
@@ -141,8 +141,8 @@ describe('the group this window shows, told to the server whose frames draw it',
     expect(reports()).toHaveLength(1)
   })
 
-  it("reports again on a new stream's snapshot: the server may not know this connection", async () => {
-    await frameDrawnStore()
+  it("reports again on a new stream's snapshot as a refresh, then a change as live", async () => {
+    const store = await frameDrawnStore()
     hoisted.call.mockClear()
 
     streams.send(streams.openTo(ENV), {
@@ -156,7 +156,16 @@ describe('the group this window shows, told to the server whose frames draw it',
     expect(reports()).toEqual([
       {
         target: { kind: 'environment', environmentId: ENV },
-        params: { activeGroupByWorkspace: { [WT]: HOST_GROUP } }
+        params: { activeGroupByWorkspace: { [WT]: HOST_GROUP }, refresh: true }
+      }
+    ])
+
+    hoisted.call.mockClear()
+    showGroup(store, WT, 'host-group-2')
+    expect(reports()).toEqual([
+      {
+        target: { kind: 'environment', environmentId: ENV },
+        params: { activeGroupByWorkspace: { [WT]: 'host-group-2' } }
       }
     ])
   })

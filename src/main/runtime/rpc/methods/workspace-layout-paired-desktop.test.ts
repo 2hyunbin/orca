@@ -131,7 +131,19 @@ describe('layout.reportView', () => {
       DESKTOP
     )
     expect(reply.ok).toBe(true)
-    expect(reported).toHaveBeenCalledWith('desktop-1', { 'wt-1': 'g2', 'wt-2': null })
+    expect(reported).toHaveBeenCalledWith('desktop-1', { 'wt-1': 'g2', 'wt-2': null }, false)
+  })
+
+  it('passes a refresh on as one', async () => {
+    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new OrcaRuntimeService()
+    const reported = vi.spyOn(runtime, 'reportClientView')
+    const reply = await new RpcDispatcher({ runtime }).dispatch(
+      request('layout.reportView', { activeGroupByWorkspace: { 'wt-1': 'g2' }, refresh: true }),
+      DESKTOP
+    )
+    expect(reply.ok).toBe(true)
+    expect(reported).toHaveBeenCalledWith('desktop-1', { 'wt-1': 'g2' }, true)
   })
 
   it('refuses a caller with no connection to tie the report to', async () => {
@@ -150,7 +162,8 @@ describe('layout.reportView', () => {
     [{}],
     [{ activeGroupByWorkspace: { 'wt-1': 7 } }],
     [{ activeGroupByWorkspace: { 'wt-1': '' } }],
-    [{ activeGroupByWorkspace: ['g1'] }]
+    [{ activeGroupByWorkspace: ['g1'] }],
+    [{ activeGroupByWorkspace: {}, refresh: false }]
   ])('refuses params it cannot read: %j', async (params) => {
     const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
     const runtime = new OrcaRuntimeService()

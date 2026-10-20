@@ -1,6 +1,7 @@
 // The tab group each workspace shows, as the window and each paired desktop last reported it: a
 // view fact, kept in memory only. Main opens a CLI or phone file in the group of whichever of them
-// reported that workspace last; with none, in the saved view's. A closed connection's reports go
+// reported that workspace last; with none, in the saved view's. A refresh (a desktop re-sending its
+// view after a reconnect) ranks below every live report, so it never displaces another's. A closed connection's reports go
 // with it. A removed workspace's entry stays: a stale group is refused and the open falls back to
 // main's rule.
 
@@ -19,11 +20,15 @@ export class ActiveGroupViewFacts {
   }
 
   /** A paired desktop's report, as the window's; true when it is the connection's first. */
-  mergeFromClient(connectionId: string, report: Readonly<Record<string, string | null>>): boolean {
+  mergeFromClient(
+    connectionId: string,
+    report: Readonly<Record<string, string | null>>,
+    refresh = false
+  ): boolean {
     const known = this.fromClients.get(connectionId)
     const reports = known ?? new Map<string, Reported>()
     this.fromClients.set(connectionId, reports)
-    this.record(reports, report)
+    this.record(reports, report, refresh)
     return known === undefined
   }
 
@@ -46,10 +51,13 @@ export class ActiveGroupViewFacts {
 
   private record(
     into: Map<string, Reported>,
-    report: Readonly<Record<string, string | null>> | undefined
+    report: Readonly<Record<string, string | null>> | undefined,
+    refresh = false
   ): void {
     for (const [workspace, groupId] of Object.entries(report ?? {})) {
-      into.set(workspace, { groupId, order: ++this.order })
+      // Still ordered among refreshes, but below every live report.
+      const order = ++this.order
+      into.set(workspace, { groupId, order: refresh ? order - Number.MAX_SAFE_INTEGER : order })
     }
   }
 }

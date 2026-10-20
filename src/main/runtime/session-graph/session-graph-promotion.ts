@@ -25,9 +25,10 @@ export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifyS
   /** A paired desktop's `layout.reportView`: its reports count until its connection closes. */
   reportClientView(
     connectionId: string,
-    activeGroupByWorkspace: Readonly<Record<string, string | null>>
+    activeGroupByWorkspace: Readonly<Record<string, string | null>>,
+    refresh = false
   ): void {
-    if (this.activeGroupViewFacts.mergeFromClient(connectionId, activeGroupByWorkspace)) {
+    if (this.activeGroupViewFacts.mergeFromClient(connectionId, activeGroupByWorkspace, refresh)) {
       this.registerSubscriptionCleanup(
         `layout-view:${connectionId}`,
         () => this.activeGroupViewFacts.dropClient(connectionId),

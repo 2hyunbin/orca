@@ -66,3 +66,36 @@ describe('the group a paired desktop shows, beside the window', () => {
     expect(facts.mergeFromClient('desktop-a', {})).toBe(true)
   })
 })
+
+describe("a desktop's refresh: its view re-sent after a reconnect", () => {
+  it("never displaces another desktop's live report", () => {
+    const facts = new ActiveGroupViewFacts()
+    facts.mergeFromClient('desktop-a', { wt: 'gA' })
+    facts.mergeFromClient('desktop-b', { wt: 'gB' }, true)
+    expect(facts.groupFor('wt', () => 'saved')).toBe('gA')
+  })
+
+  it('counts as live without the flag', () => {
+    const facts = new ActiveGroupViewFacts()
+    facts.mergeFromClient('desktop-a', { wt: 'gA' })
+    facts.mergeFromClient('desktop-b', { wt: 'gB' })
+    expect(facts.groupFor('wt', () => 'saved')).toBe('gB')
+  })
+
+  it("replaces the connection's own entry, and beats the saved view", () => {
+    const facts = new ActiveGroupViewFacts()
+    facts.mergeFromClient('desktop-a', { wt: 'gA' })
+    facts.mergeFromClient('desktop-a', { wt: 'gA2' }, true)
+    expect(facts.groupFor('wt', () => 'saved')).toBe('gA2')
+  })
+
+  it('loses to a later live report of the window, and the later refresh wins among refreshes', () => {
+    const facts = new ActiveGroupViewFacts()
+    facts.mergeFromClient('desktop-a', { wt: 'gA' }, true)
+    facts.mergeFromClient('desktop-b', { wt: 'gB' }, true)
+    expect(facts.groupFor('wt', () => 'saved')).toBe('gB')
+    facts.merge({ wt: 'gW' })
+    facts.mergeFromClient('desktop-a', { wt: 'gA2' }, true)
+    expect(facts.groupFor('wt', () => 'saved')).toBe('gW')
+  })
+})
