@@ -238,7 +238,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       {
         messageId: edit.messageId,
         expectedBodyFingerprint: edit.baseFingerprint,
-        text: edit.text,
+        text: input.text,
         ...(input.images ? { images: input.images } : {})
       }
     )

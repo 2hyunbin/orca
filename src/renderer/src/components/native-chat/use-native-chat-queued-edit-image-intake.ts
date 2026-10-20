@@ -22,7 +22,6 @@ import { useNativeChatExternalAttachments } from './use-native-chat-external-att
 import { useNativeChatFileAttachmentActions } from './use-native-chat-file-attachment-actions'
 import { registerNestedWorkspaceDropSink } from './native-chat-pane-file-drop'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
-import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
 
 /** The chat a queued list sits in, which its edits attach files to as its chat box does. */
 export type QueuedEditAttachTarget = {
@@ -55,27 +54,6 @@ export function useNativeChatQueuedEditImageIntake(
   // Nothing joins an edit until its lease is held, nor while a Save sends the images it read.
   const busy = saving || acquiring
   const [isDragActive, setIsDragActive] = useState(false)
-  const pendingCaret = useRef<{ end: number; length: number } | null>(null)
-  const imageSelection = useCallback(
-    (requireFocus = true) => {
-      const input = field.current
-      if (!input || (requireFocus && input !== document.activeElement)) {
-        return undefined
-      }
-      pendingCaret.current = { end: input.selectionEnd, length: input.value.length }
-      return { start: input.selectionStart, end: input.selectionEnd }
-    },
-    [field]
-  )
-  useLayoutEffect(() => {
-    const caret = pendingCaret.current
-    pendingCaret.current = null
-    const input = field.current
-    if (caret && input === document.activeElement) {
-      const position = caret.end + editor.text.length - caret.length
-      input?.setSelectionRange(position, position)
-    }
-  }, [editor.text, field])
   const liveIntake = useRef(intake)
   useLayoutEffect(() => {
     liveIntake.current = intake
@@ -108,22 +86,17 @@ export function useNativeChatQueuedEditImageIntake(
   )
   const pendingChips = useMemo(
     (): NativeChatPendingAttachmentChips => ({
-      begin: (previewUrl, pendingName) =>
-        intake?.begin(previewUrl, pendingName, imageSelection()) ?? null,
+      begin: (previewUrl, pendingName) => intake?.begin(previewUrl, pendingName) ?? null,
       resolve: (id, path, connectionId) => intake?.resolve(id, path, connectionId) ?? false,
       drop: (id) => intake?.drop(id) ?? false,
       // A stored file that is not an image is referenced in the text, as the chat box does.
       attachReferences: (references) => {
         const kept = references.filter(({ id }) => intake?.drop(id))
-        intake?.append(
-          kept.map(({ path }) => path),
-          undefined,
-          imageSelection(false)
-        )
+        insertReferences(kept.map(({ path }) => path))
         return kept.length > 0
       }
     }),
-    [imageSelection, intake]
+    [insertReferences, intake]
   )
   const attachResolvedPaths = useCallback(
     (
@@ -141,17 +114,13 @@ export function useNativeChatQueuedEditImageIntake(
         if (operation) {
           operation.apply(insertReferences)
         } else {
-          intake.append(
-            paths,
-            connectionId,
-            imageSelection(paths.some(isNativeChatImageAttachmentPath))
-          )
+          insertReferences(intake.append(paths, connectionId))
         }
       } finally {
         operation?.cancel()
       }
     },
-    [busy, imageSelection, insertReferences, intake]
+    [busy, insertReferences, intake]
   )
   const disabled = !editable || busy
   const external = useNativeChatExternalAttachments({

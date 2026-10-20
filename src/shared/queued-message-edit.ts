@@ -49,8 +49,8 @@ function sameImages(
  *  the images added in this edit, whose `path` is empty while the upload is pending. */
 export type QueuedMessageEditDraft = {
   text: string
-  kept: readonly { block: QueuedMessageImageBlock }[]
-  added: readonly { path: string; pending?: boolean }[]
+  kept: readonly { id: string; block: QueuedMessageImageBlock }[]
+  added: readonly { id: string; path: string; pending?: boolean }[]
 }
 
 /** The card's image blocks an edit starts from, each with a chip id that survives removals. */
@@ -77,23 +77,14 @@ export function queuedEditTextForKeptImages(
   return imageReferencesToPromptMarkers(chips, to)
 }
 
-export type QueuedEditImageSelection = { start: number; end: number }
-
-/** A plain field uses the composer's chip insertion, numbered by the eventual saved image order. */
-export function queuedEditTextWithAddedImages(
-  text: string,
-  imageIds: readonly string[],
-  addedIds: readonly string[],
-  selection: QueuedEditImageSelection = { start: text.length, end: text.length },
-  fileReferences = ''
-): string {
-  const before = text.slice(0, selection.start)
-  const after = text.slice(selection.end)
-  const insertion = imageReferencesToPromptMarkers(
-    imageReferenceInsertion(before, after, addedIds),
-    imageIds
+/** Added references are derived at Save, so attachment changes never rewrite the field. */
+export function queuedEditTextWithAddedImages(draft: QueuedMessageEditDraft): string {
+  const addedIds = draft.added.filter((image) => !image.pending).map(({ id }) => id)
+  const suffix = imageReferenceInsertion(draft.text, '', addedIds)
+  return (
+    draft.text +
+    imageReferencesToPromptMarkers(suffix, [...draft.kept.map(({ id }) => id), ...addedIds])
   )
-  return before + insertion + fileReferences + after
 }
 
 /** The text an edit's typing is measured against: the card's own, its markers following the
@@ -155,7 +146,10 @@ export function queuedEditInput(
   const added = draft.added.flatMap((image) =>
     image.pending ? [] : [{ type: 'image-ref' as const, path: image.path }]
   )
-  return { text: draft.text, images: [...draft.kept.map(({ block }) => block), ...added] }
+  return {
+    text: queuedEditTextWithAddedImages(draft),
+    images: [...draft.kept.map(({ block }) => block), ...added]
+  }
 }
 
 /** The edited body; sender, kind and send mode stay. Without `images` the text replaces the

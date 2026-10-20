@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useEffect } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
@@ -19,9 +19,24 @@ import {
   queuedEditImageFields,
   type QueuedEditImageState
 } from './structured-agent-session-queued-edit-images'
-import { readNativeChatAttachmentCache, readNativeChatDraftCache } from './native-chat-draft-cache'
+import {
+  readNativeChatAttachmentCache,
+  readNativeChatDraftCache,
+  appendNativeChatAttachmentCache
+} from './native-chat-draft-cache'
+import { queuedEditInput, queuedEditDirty } from '../../../../shared/queued-message-edit'
+import { reserveNativeChatAttachmentChips as reserve } from './native-chat-session-attachment-drop'
+import * as ExternalAttachments from './use-native-chat-external-attachments'
 import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
 
+const externalAttachments = ExternalAttachments.useNativeChatExternalAttachments
+let chips: Parameters<typeof externalAttachments>[0]['pendingChips']
+beforeEach(() => {
+  vi.spyOn(ExternalAttachments, 'useNativeChatExternalAttachments').mockImplementation((args) => {
+    chips = args.pendingChips
+    return externalAttachments(args)
+  })
+})
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string, values?: Record<string, string>) =>
     fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => values?.[name] ?? '')
@@ -240,7 +255,7 @@ const card: AgentSessionQueuedMessage = {
     kind: 'message',
     role: 'user',
     blocks: [
-      { type: 'text', text: 'see [Image #1] and [Image #2]' },
+      { type: 'text', text: 'replace WORD please [Image #1] and [Image #2]' },
       { type: 'image-ref', path: '/host/old.png' },
       { type: 'image-ref', path: '/host/kept.png' }
     ]
@@ -284,50 +299,60 @@ function savedParams(): unknown {
 }
 
 describe('queued card image edit', () => {
-  it('removes a kept image with its marker, pastes a new one and saves the new set', async () => {
+  it('keeps image intake text-neutral, saves suffixes and hands off only surviving changes', async () => {
     writeSpy.mockClear()
     render(<EditedCard imagesCapable />)
     const field = await screen.findByRole('textbox', { name: 'Edit message' })
     await waitFor(() => expect(field.getAttribute('readonly')).toBeNull())
-    expect(screen.queryByText('1 image')).toBeNull()
-    expect(screen.getByText('Paste or drop images')).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove attachment' })[0]!)
     // The field shows what the agent will read: the removed image's marker goes, #2 becomes #1.
-    expect(field).toHaveProperty('value', 'see and [Image #1]')
+    expect(field).toHaveProperty('value', 'replace WORD please and [Image #1]')
     const data = new DataTransfer()
+    data.setData('text/plain', 'X')
     data.items.add(new File(['png'], 'new.png', { type: 'image/png' }))
     if (!(field instanceof HTMLTextAreaElement)) {
       throw new Error('Expected the edit textarea')
     }
     field.focus()
-    field.setSelectionRange(4, 4)
+    field.setSelectionRange(8, 12)
+    act(() => {
+      const [first, second] = reserve(chips, ['/tmp/first.png', '/tmp/second.png'])
+      chips.resolve(second!.chipId, second!.path)
+      chips.resolve(first!.chipId, first!.path)
+    })
+    expect(field.value).toBe('replace WORD please and [Image #1]')
+    expect([field.selectionStart, field.selectionEnd]).toEqual([8, 12])
     act(() => {
       field.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
     })
-    await waitFor(() => expect(field.value).toBe('see [Image #2] and [Image #1]'))
-    expect(field.selectionStart).toBe('see [Image #2] '.length)
-    // With focus on the card's Attach button, as after a cancelled picker: the paste is the edit's.
-    const attach = screen.getByRole('button', { name: 'Attach file' })
+    await waitFor(() => expect(field.value).toBe('replace X please and [Image #1]'))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false)
+    )
+    fireEvent.change(field, { target: { value: 'abc def' } })
+    field.setSelectionRange(4, 4)
     act(() => {
-      attach.focus()
-      attach.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true }))
+      const [file, image] = reserve(chips, ['/repo/notes.txt', '/tmp/file.png'])
+      chips.resolve(image!.chipId, image!.path)
+      chips.attachReferences([{ id: file!.chipId, path: file!.path }])
     })
-    await waitFor(() => expect(field.value).toBe('see [Image #2] and [Image #1] [Image #3] '))
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove attachment' })[1]!)
-    expect(field.value).toBe('see and [Image #1] [Image #2] ')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove attachment' })[3]!)
+    expect(field.value).toBe('abc @/repo/notes.txt def')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(writeSpy).toHaveBeenCalledOnce())
     expect(savedParams()).toMatchObject({
-      text: 'see and [Image #1] [Image #2] ',
+      text: 'abc @/repo/notes.txt def [Image #2] [Image #3] [Image #4] ',
       images: [
         { type: 'image-ref', path: '/host/kept.png' },
-        { type: 'image-ref', path: '/tmp/new.png' }
+        { type: 'image-ref', path: '/tmp/first.png' },
+        { type: 'image-ref', path: '/tmp/second.png' },
+        { type: 'image-ref', path: '/tmp/file.png' }
       ]
     })
     const edit: QueuedEditImageState = {
       draftKey: 'r6-handoff',
       body: card.body,
-      text: 'see [Image #1] and [Image #2]',
+      text: ' original  wording\n[Image #1] \n',
       ...queuedEditImageFields(
         card.body,
         () => edit,
@@ -335,24 +360,44 @@ describe('queued card image edit', () => {
         () => {}
       )
     }
+    edit.body = { ...card.body, blocks: [{ type: 'text', text: edit.text }] }
+    edit.kept = []
+    const original = edit.text
+    for (const exit of ['pending', 'drop', 'remove'] as const) {
+      const pending = edit.intake.begin()!
+      if (exit === 'remove') {
+        edit.intake.resolve(pending, '/tmp/new.png')
+      }
+      if (exit !== 'pending') {
+        edit.intake[exit](pending)
+      }
+      expect(edit.text).toBe(original)
+      expect(handOffQueuedEdit(edit)).toBe(false)
+      expect(readNativeChatDraftCache(edit.draftKey)).toBe('')
+      edit.intake.drop(pending)
+      expect(queuedEditDirty(edit.body, edit)).toBe(false)
+    }
     edit.intake.append(['/tmp/new.png'])
     const moved = edit.added[0]!
-    const pending = edit.intake.begin()!
-    edit.intake.remove(edit.kept[0]!.id)
-    expect(edit.text).toBe('see and [Image #1] [Image #2] [Image #3] ')
+    expect(queuedEditInput(edit.body, edit, true)).toEqual(queuedEditInput(edit.body, edit, true))
+    expect(edit.text).toBe(original)
     expect(handOffQueuedEdit(edit)).toBe(true)
     expect(readNativeChatAttachmentCache(edit.draftKey)).toEqual([
       { id: moved.id, path: moved.path }
     ])
+    expect(readNativeChatDraftCache(edit.draftKey)).toBe(`${imageReferenceToken(moved.id)} `)
+    edit.draftKey += '-typed'
+    appendNativeChatAttachmentCache(edit.draftKey, [{ id: 'destination', path: '/tmp/dest.png' }])
+    edit.kept = [{ id: 'kept', block: { type: 'image-ref', path: '/host/kept.png' } }]
+    edit.text = 'typed [Image #1] not [Image #2]'
+    expect(handOffQueuedEdit(edit)).toBe(true)
     expect(readNativeChatDraftCache(edit.draftKey)).toBe(
-      `see and  ${imageReferenceToken(moved.id)}`
+      `typed  not [Image #2] ${imageReferenceToken(moved.id)} `
     )
-    expect(edit.intake.drop(pending)).toBe(true)
-    expect(edit.text).toBe('see and [Image #1] [Image #2] ')
-    edit.intake.remove(moved.id)
-    expect(edit.text).toBe('see and [Image #1] ')
-    edit.intake.append(['/tmp/other.png', '/repo/context.ts'], undefined, { start: 0, end: 0 })
-    expect(edit.text).toBe('[Image #2] @/repo/context.ts see and [Image #1] ')
+    expect(readNativeChatAttachmentCache(edit.draftKey).map(({ id }) => id)).toEqual([
+      'destination',
+      moved.id
+    ])
   })
 
   it('never saves an image change as text alone once the host stops reading as taking images', async () => {

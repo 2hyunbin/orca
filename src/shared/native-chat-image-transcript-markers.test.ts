@@ -316,6 +316,13 @@ describe('composer image chips at send and back', () => {
     ).toBe(`${chip('r-3')} then ${chip('r-1')}, not [Image #3]`)
   })
 
+  it.each([
+    ['[Image #1] then [Image #2], not [Image #3]', 2, 'then , not [Image #3]'],
+    ['literal [Image #1]', 0, 'literal [Image #1]']
+  ])('strips only markers for attached images: %s', (text, count, expected) => {
+    expect(stripSentImagePromptMarkers(text, count)).toBe(expected)
+  })
+
   it('leaves a quoted file path that reads like a marker as typed, back or stripped', () => {
     const files = [
       formatNativeChatFileReference('/repo/[Image #1].md'),
@@ -326,7 +333,7 @@ describe('composer image chips at send and back', () => {
       expect(promptMarkersToImageReferences(`[Image #1] in ${file}`, ['r-1'])).toBe(
         `${chip('r-1')} in ${file}`
       )
-      expect(stripSentImagePromptMarkers(`[Image #1] in ${file} [Image #1]`)).toBe(`in ${file}`)
+      expect(stripSentImagePromptMarkers(`[Image #1] in ${file} [Image #1]`, 1)).toBe(`in ${file}`)
     }
   })
 

@@ -8,8 +8,6 @@ import {
   queuedEditImagesPending,
   queuedEditKeptImages,
   queuedEditTextForKeptImages,
-  queuedEditTextWithAddedImages,
-  type QueuedEditImageSelection,
   type QueuedMessageEditResult,
   type QueuedMessageImageBlock
 } from '../../../../shared/queued-message-edit'
@@ -17,11 +15,8 @@ import { createUuidV4 } from '../../../../shared/uuid-v4'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 import { appendNativeChatDraftCache } from './native-chat-draft-cache'
 import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
-import { formatNativeChatFileReference } from '../../../../shared/agent-image-paste'
-import {
-  promptMarkersToImageReferences,
-  stripSentImagePromptMarkers
-} from '../../../../shared/native-chat-image-transcript-markers'
+import { imageReferenceInsertion } from '../../../../shared/native-chat-image-reference'
+import { stripSentImagePromptMarkers } from '../../../../shared/native-chat-image-transcript-markers'
 
 export type QueuedEditImageState = {
   /** The chat box this edit hands off to; the one it started in, never another. */
@@ -36,21 +31,13 @@ export type QueuedEditImageState = {
 /** Drives an edit's added images the way an upload or paste drives the chat box's chips. Bound to
  *  one edit, so a late result never lands in another. */
 export type QueuedEditImageIntake = {
-  begin: (
-    previewUrl?: string,
-    pendingName?: string,
-    selection?: QueuedEditImageSelection
-  ) => string | null
+  begin: (previewUrl?: string, pendingName?: string) => string | null
   resolve: (id: string, path: string, connectionId?: string | null) => boolean
   reveal: (id: string, previewUrl?: string) => void
   /** False once the chip settled or the person removed it, so its file must not attach. */
   drop: (id: string) => boolean
-  /** Adds settled images and references other files in the same text change. */
-  append: (
-    paths: string[],
-    connectionId?: string | null,
-    selection?: QueuedEditImageSelection
-  ) => void
+  /** Adds the image paths settled; returns the rest, which are referenced in the text. */
+  append: (paths: string[], connectionId?: string | null) => string[]
   remove: (id: string) => void
 }
 
@@ -113,16 +100,15 @@ export function releaseQueuedEditImages(edit: QueuedEditImageState): void {
  *  pending drops, as on the phone: its edit is gone. */
 export function handOffQueuedEdit(edit: QueuedEditImageState): boolean {
   const unchanged = edit.text === queuedEditBaseText(edit.body, edit.kept)
+  const typing = unchanged ? '' : stripSentImagePromptMarkers(edit.text, edit.kept.length)
   const images = edit.added.flatMap((image) => (image.pending ? [] : [settled(image)]))
-  const text = unchanged
-    ? ''
-    : stripSentImagePromptMarkers(
-        promptMarkersToImageReferences(
-          edit.text,
-          [...edit.kept, ...edit.added].map(({ id }) => id),
-          images.map(({ id }) => id)
-        )
-      )
+  const text =
+    typing +
+    imageReferenceInsertion(
+      typing,
+      '',
+      images.map(({ id }) => id)
+    )
   appendNativeChatDraftCache(edit.draftKey, text, undefined, images)
   return text !== '' || images.length > 0
 }
@@ -132,41 +118,21 @@ function queuedEditImageIntake(
   live: () => boolean,
   render: () => void
 ): QueuedEditImageIntake {
-  const update = (
-    added: QueuedEditImageState['added'],
-    selection?: QueuedEditImageSelection,
-    kept = edit().kept,
-    fileReferences = ''
-  ): void => {
-    const current = edit()
-    const from = [...current.kept, ...current.added].map(({ id }) => id)
-    const to = [...kept, ...added].map(({ id }) => id)
-    const addedIds = to.filter((id) => !from.includes(id))
-    current.text = queuedEditTextForKeptImages(current.text, from, to)
-    if (addedIds.length > 0 || fileReferences) {
-      current.text = queuedEditTextWithAddedImages(
-        current.text,
-        to,
-        addedIds,
-        selection,
-        fileReferences
-      )
-    }
-    current.kept = kept
-    current.added = added
+  const update = (added: QueuedEditImageState['added']): void => {
+    edit().added = added
     if (live()) {
       render()
     }
   }
   const pendingChip = (id: string) => edit().added.find((image) => image.id === id && image.pending)
   return {
-    begin: (previewUrl, pendingName, selection) => {
+    begin: (previewUrl, pendingName) => {
       if (!live()) {
         return null
       }
       const id = createUuidV4()
       const chip = { id, path: '', pending: true, ...(previewUrl ? { previewUrl } : {}) }
-      update([...edit().added, pendingName ? { ...chip, pendingName } : chip], selection)
+      update([...edit().added, pendingName ? { ...chip, pendingName } : chip])
       return id
     },
     resolve: (id, path, connectionId) => {
@@ -192,27 +158,25 @@ function queuedEditImageIntake(
       }
       return chip !== undefined
     },
-    append: (paths, connectionId, selection) => {
+    append: (paths, connectionId) => {
       const images = paths.filter(isNativeChatImageAttachmentPath)
-      const files = paths.filter((path) => !isNativeChatImageAttachmentPath(path))
-      if (live() && paths.length > 0) {
+      if (live() && images.length > 0) {
         const link = connectionId ? { connectionId } : {}
-        update(
-          [...edit().added, ...images.map((path) => ({ id: createUuidV4(), path, ...link }))],
-          selection,
-          edit().kept,
-          files.length ? `${files.map(formatNativeChatFileReference).join(' ')} ` : ''
-        )
+        update([...edit().added, ...images.map((path) => ({ id: createUuidV4(), path, ...link }))])
       }
+      return paths.filter((path) => !isNativeChatImageAttachmentPath(path))
     },
     remove: (id) => {
       const current = edit()
       current.added.filter((entry) => entry.id === id).forEach(releasePreview)
-      update(
-        current.added.filter((entry) => entry.id !== id),
-        undefined,
-        current.kept.filter((entry) => entry.id !== id)
-      )
+      const kept = current.kept.filter((entry) => entry.id !== id)
+      if (kept.length !== current.kept.length) {
+        // The field shows what the agent will read: the image's markers go, later ones renumber.
+        const ids = (entries: QueuedEditImageState['kept']) => entries.map((entry) => entry.id)
+        current.text = queuedEditTextForKeptImages(current.text, ids(current.kept), ids(kept))
+        current.kept = kept
+      }
+      update(current.added.filter((entry) => entry.id !== id))
     }
   }
 }

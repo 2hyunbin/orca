@@ -223,12 +223,13 @@ describe("saving a queued card's images", () => {
     const base = fingerprint(id)
     const operation = hostTestOperationId()
     const both = [image(A), image(B)]
-    expect(await update(id, base, 'caption ', operation, both)).toMatchObject({
+    const caption = 'caption [Image #1] [Image #2]'
+    expect(await update(id, base, `${caption} `, operation, both)).toMatchObject({
       value: { status: 'updated' }
     })
     const blocks = journal().queuedMessages.get(id)?.body.blocks
-    expect(blocks).toEqual([{ type: 'text', text: 'caption' }, ...both])
-    expect(await update(id, base, 'caption ', operation, both)).toMatchObject({
+    expect(blocks).toEqual([{ type: 'text', text: caption }, ...both])
+    expect(await update(id, base, `${caption} `, operation, both)).toMatchObject({
       value: { status: 'unchanged' }
     })
     expect(await update(id, base, 'caption', undefined, [image(B)])).toMatchObject({
