@@ -12,7 +12,7 @@ export type ExitedSplitPaneFacts = {
   outputSeen: boolean
   /** A client's view of the pane was showing when it ended. */
   shown: boolean
-  /** The process is known to have ended (the host saw it) or was asked to stop, not contact lost. */
+  /** A stop was asked for, or the host confirmed the death; not a raw code from lost contact. */
   endVouched: boolean
 }
 

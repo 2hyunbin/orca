@@ -19,7 +19,7 @@ describe('exitedSplitPaneOutcome', () => {
     expect(exitedSplitPaneOutcome({ ...used, exitCode: 1 })).toBe('keep')
   })
 
-  it('closes on a negative code only when the host saw the end or a stop was asked for', () => {
+  it('closes on a negative code only when the host confirmed it or a stop was asked for', () => {
     expect(exitedSplitPaneOutcome({ ...used, exitCode: -1 })).toBe('close')
     expect(exitedSplitPaneOutcome({ ...used, exitCode: -1, endVouched: false })).toBe('keep')
     expect(exitedSplitPaneOutcome({ ...used, exitCode: -1, endVouched: false }, true)).toBe('keep')

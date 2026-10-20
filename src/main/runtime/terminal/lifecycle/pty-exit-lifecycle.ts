@@ -63,6 +63,11 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     const stopNeverConfirmed =
       observedCause.kind === 'unknown' && observedCause.reason === 'stop_unverified'
     const stopRequested = this.stopRequestedPtyIds.has(ptyId)
+    // A raw provider code is not a death: node-pty reports a closed socket as -1 too.
+    const endVouched =
+      stopRequested ||
+      options.hostExitConfirmed === true ||
+      this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict.status === 'exited'
     const exitCause: TerminalExitCause =
       stopRequested && !stopNeverConfirmed ? OPERATOR_CLOSE_EXIT_CAUSE : observedCause
     this.stopRequestedPtyIds.delete(ptyId)
@@ -264,7 +269,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
             ORCA_LAYOUT_OWNER_IS_MAIN
               ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, {
                   ...options,
-                  endVouched: processDeathCertified || stopRequested
+                  endVouched
                 })
               : undefined
           )

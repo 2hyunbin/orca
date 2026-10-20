@@ -131,6 +131,12 @@ describe('layout-owner build: main closes an exited split pane itself', () => {
     expect(panes(session())).toEqual([LEFT, RIGHT])
   })
 
+  it('keeps a split pane on a -1 only the provider reported, as the window does', async () => {
+    const { runtime, session } = splitRuntime()
+    await runtime.onPtyExit('pty-right', -1, undefined, { providerExitObserved: true })
+    expect(panes(session())).toEqual([LEFT, RIGHT])
+  })
+
   it('closes a split pane on a -1 after a stop was asked for', async () => {
     const { runtime, session } = splitRuntime()
     runtime.markPtyStopRequested('pty-right')
@@ -138,9 +144,9 @@ describe('layout-owner build: main closes an exited split pane itself', () => {
     expect(panes(session())).toEqual([LEFT])
   })
 
-  it('closes a split pane on a -1 the host saw end', async () => {
+  it('closes a split pane on a -1 the host confirmed', async () => {
     const { runtime, session } = splitRuntime()
-    await runtime.onPtyExit('pty-right', -1, undefined, { providerExitObserved: true })
+    await runtime.onPtyExit('pty-right', -1, undefined, { hostExitConfirmed: true })
     expect(panes(session())).toEqual([LEFT])
   })
 
