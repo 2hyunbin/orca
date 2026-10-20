@@ -116,7 +116,7 @@ export function NativeChatPromptEditor({
           if (text == null) {
             return false
           }
-          const content = editor?.schema.nodeFromJSON(promptTextContent(text))
+          const content = editor?.schema.nodeFromJSON(promptTextContent(text, false))
           if (!content) {
             return false
           }
@@ -183,7 +183,7 @@ export function NativeChatPromptEditor({
       editor
         ? {
             insertText: (text) => {
-              const content = editor.schema.nodeFromJSON(promptTextContent(text))
+              const content = editor.schema.nodeFromJSON(promptTextContent(text, false))
               editor.view.dispatch(
                 editor.state.tr.replaceSelection(new Slice(content.content, 1, 1))
               )

@@ -5,24 +5,24 @@ import { NATIVE_CHAT_PASTED_TEXT_TOKEN } from './native-chat-pasted-text-referen
 export const IMAGE_REFERENCE_NODE = 'nativeChatImageReference'
 export const FILE_REFERENCE_NODE = 'nativeChatFileReference'
 
-/** Every path from text to a document goes through here, so each image token becomes its chip and
- *  each pasted text still saving its pill. */
-export function promptTextContent(text: string): JSONContent {
+/** Every path from text to a document goes through here, so each image token becomes its chip.
+ *  A restored draft also turns each pasted text still saving back into its pill; typed and
+ *  clipboard text stays literal, since only a paste being saved owns a token. */
+export function promptTextContent(text: string, restorePastedText = true): JSONContent {
   return {
     type: 'doc',
     content: text.split('\n').map((line) => ({
       type: 'paragraph',
       content: splitImageReferences(line).flatMap((part) =>
         typeof part === 'string'
-          ? part
-              .split(NATIVE_CHAT_PASTED_TEXT_TOKEN)
-              .flatMap((piece, index): JSONContent[] =>
+          ? (restorePastedText ? part.split(NATIVE_CHAT_PASTED_TEXT_TOKEN) : [part]).flatMap(
+              (piece, index): JSONContent[] =>
                 piece === ''
                   ? []
                   : index % 2 === 1
                     ? [{ type: FILE_REFERENCE_NODE, attrs: { token: piece, path: '' } }]
                     : [{ type: 'text', text: piece }]
-              )
+            )
           : [{ type: IMAGE_REFERENCE_NODE, attrs: { attachmentId: part.attachmentId } }]
       )
     }))
