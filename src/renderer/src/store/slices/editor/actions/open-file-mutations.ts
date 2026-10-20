@@ -8,7 +8,7 @@ import {
   previewEditorTabsOf,
   recordPromotedEditorTabsInLayoutOwner
 } from '../tabs/editor-tab-layout-owner'
-import { writeEditorBuffer } from '../buffers/editor-buffer-record'
+import { editorBufferViewIds, writeEditorBuffer } from '../buffers/editor-buffer-record'
 
 export function createOpenFileMutations(
   set: EditorSet,
@@ -78,27 +78,35 @@ export function createOpenFileMutations(
         if (file.readOnly === true || file.csvPreviewOnly === true) {
           return s
         }
-        const needsPreviewClear = dirty && file.isPreview
-        if (file.isDirty === dirty && !needsPreviewClear) {
+        // Why every view: a dirty preview tab in another workspace could be replaced without a prompt.
+        const previewIds = new Set(
+          dirty && s.openFiles.some((f) => f.isPreview)
+            ? editorBufferViewIds(s, fileId).filter(
+                (id) => s.openFiles.find((f) => f.id === id)?.isPreview
+              )
+            : []
+        )
+        if (file.isDirty === dirty && previewIds.size === 0) {
           return s
         }
-        if (ORCA_LAYOUT_OWNER_IS_MAIN && needsPreviewClear) {
-          promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, fileId))
+        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+          for (const previewId of previewIds) {
+            promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, previewId))
+          }
         }
+        const written = writeEditorBuffer(s, fileId, { isDirty: dirty })
         return {
-          ...writeEditorBuffer(
-            s,
-            fileId,
-            { isDirty: dirty },
-            needsPreviewClear ? { isPreview: undefined } : undefined
-          ),
-          ...(needsPreviewClear
+          ...written,
+          ...(previewIds.size > 0
             ? {
+                openFiles: written.openFiles.map((f) =>
+                  previewIds.has(f.id) ? { ...f, isPreview: undefined } : f
+                ),
                 unifiedTabsByWorktree: Object.fromEntries(
                   Object.entries(s.unifiedTabsByWorktree ?? {}).map(([worktreeId, tabs]) => [
                     worktreeId,
                     tabs.map((tab) =>
-                      tab.entityId === fileId && isEditorTabContentType(tab.contentType)
+                      previewIds.has(tab.entityId) && isEditorTabContentType(tab.contentType)
                         ? withPreviewEnded(tab)
                         : tab
                     )

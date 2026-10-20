@@ -3,9 +3,12 @@ import { hasOtherSavingEditorView } from '@/store/slices/editor/buffers/editor-b
 import { requestEditorSaveQuiesce } from './editor-autosave'
 
 /** "Don't Save": cancel pending saves, drop unsaved edits, then close the tab. */
-export async function discardEditorFileChangesAndClose(fileId: string): Promise<void> {
+export async function discardEditorFileChangesAndClose(
+  fileId: string,
+  closing?: ReadonlySet<string>
+): Promise<void> {
   // Why: another tab of the file still shows these edits, so this tab only closes.
-  if (hasOtherSavingEditorView(useAppStore.getState(), fileId)) {
+  if (hasOtherSavingEditorView(useAppStore.getState(), fileId, closing)) {
     useAppStore.getState().closeFile(fileId)
     return
   }

@@ -193,11 +193,13 @@ export function reconcileEditorBufferSharing(
   let filesChanged = false
   const nextFiles = openFiles.map((file) => {
     const record = records[recordIdByFileId[file.id]]
-    if (editorBufferMirrorMismatch(file, record) === null) {
+    const endPreview = record.isDirty && file.isPreview === true
+    if (editorBufferMirrorMismatch(file, record) === null && !endPreview) {
       return file
     }
     filesChanged = true
-    return { ...file, ...record }
+    // Why: a preview tab showing unsaved edits must not be replaced by the next single click.
+    return { ...file, ...record, ...(endPreview ? { isPreview: undefined } : {}) }
   })
 
   return {

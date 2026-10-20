@@ -66,7 +66,9 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
         settleQueuedClose(fileId)
         continue
       }
-      if (!needsSavePromptOnClose(state, fileId)) {
+      // Why the queue: a sibling tab queued behind this one closes only after this decision,
+      // so a cancelled quit keeps it open.
+      if (!needsSavePromptOnClose(state, fileId, new Set(pendingEditorCloseQueueRef.current))) {
         closeFile(fileId)
         settleQueuedClose(fileId)
         continue

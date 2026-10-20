@@ -6,18 +6,36 @@ type EditorBufferViewState = {
   editorBufferIndex?: EditorBufferIndex
 }
 
+const NONE_CLOSING: ReadonlySet<string> = new Set()
+
 function canSave(file: OpenFile): boolean {
   return file.readOnly !== true && file.csvPreviewOnly !== true
 }
 
-/** Whether another open tab can still save `fileId`'s unsaved edits after it closes. */
-export function hasOtherSavingEditorView(state: EditorBufferViewState, fileId: string): boolean {
+/**
+ * Whether a tab that stays open can still save `fileId`'s unsaved edits after it closes.
+ * `closing` are tabs already queued to close, which can't keep the edits.
+ */
+export function hasOtherSavingEditorView(
+  state: EditorBufferViewState,
+  fileId: string,
+  closing: ReadonlySet<string> = NONE_CLOSING
+): boolean {
   const others = new Set(editorBufferViewIds(state, fileId).slice(1))
-  return others.size > 0 && state.openFiles.some((file) => others.has(file.id) && canSave(file))
+  return (
+    others.size > 0 &&
+    state.openFiles.some((file) => others.has(file.id) && !closing.has(file.id) && canSave(file))
+  )
 }
 
 /** Only the last tab that can save the file asks to save it; earlier closes keep the edits. */
-export function needsSavePromptOnClose(state: EditorBufferViewState, fileId: string): boolean {
+export function needsSavePromptOnClose(
+  state: EditorBufferViewState,
+  fileId: string,
+  closing: ReadonlySet<string> = NONE_CLOSING
+): boolean {
   const file = state.openFiles.find((candidate) => candidate.id === fileId)
-  return file?.isDirty === true && canSave(file) && !hasOtherSavingEditorView(state, fileId)
+  return (
+    file?.isDirty === true && canSave(file) && !hasOtherSavingEditorView(state, fileId, closing)
+  )
 }

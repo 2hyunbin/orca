@@ -46,6 +46,10 @@ export function editorBufferViewIds(
   state: EditorBufferIndexState & { openFiles: readonly OpenFile[] },
   fileId: string
 ): string[] {
+  // Why: a closed tab's id may name a record other tabs still show; it must not reach them.
+  if (state.editorBufferIndex && !(fileId in state.editorBufferIndex.recordIdByFileId)) {
+    return [fileId]
+  }
   const recordId = editorBufferIdOf(state, fileId)
   const ids = [fileId]
   for (const file of state.openFiles) {

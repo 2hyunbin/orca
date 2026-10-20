@@ -159,28 +159,35 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           return
         }
 
+        // Why the record: the tab that started the save may have closed while another still shows the file.
         const nextState = store.getState()
-        const currentDraft = nextState.editorDrafts[file.id]
+        const view = nextState.openFiles.find(
+          (openFile) => editorBufferIdOf(nextState, openFile.id) === recordId
+        )
+        if (!view) {
+          return
+        }
+        const currentDraft = nextState.editorDrafts[view.id]
         const stillDirty =
           (currentDraft !== undefined && currentDraft !== contentToSave) ||
-          hasPendingBufferChange(nextState, file.id)
-        nextState.markFileDirty(file.id, stillDirty)
+          hasPendingBufferChange(nextState, view.id)
+        nextState.markFileDirty(view.id, stillDirty)
         if (!stillDirty) {
-          nextState.clearEditorDraft(file.id)
+          nextState.clearEditorDraft(view.id)
         }
         // Why: disk now holds contentToSave — rebaseline so our own save isn't flagged external; drop pending verification.
-        nextState.setLastKnownDiskSignature(file.id, getDiskBaselineSignature(contentToSave))
-        nextState.clearPendingDiskBaselineVerification(file.id)
+        nextState.setLastKnownDiskSignature(view.id, getDiskBaselineSignature(contentToSave))
+        nextState.clearPendingDiskBaselineVerification(view.id)
         // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
-        const savedFile = nextState.openFiles.find((openFile) => openFile.id === file.id)
+        const savedFile = store.getState().openFiles.find((openFile) => openFile.id === view.id)
         if (savedFile?.externalMutation === 'changed') {
           trackExternalChangeConflictAction(savedFile, 'save_overwrite')
-          nextState.setExternalMutation(file.id, null)
+          nextState.setExternalMutation(view.id, null)
         }
 
         window.dispatchEvent(
           new CustomEvent<EditorFileSavedDetail>(ORCA_EDITOR_FILE_SAVED_EVENT, {
-            detail: { fileId: file.id, content: contentToSave }
+            detail: { fileId: view.id, content: contentToSave }
           })
         )
       })

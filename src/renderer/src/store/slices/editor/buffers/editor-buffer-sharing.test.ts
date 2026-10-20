@@ -15,7 +15,8 @@ import { assertEditorBufferInvariant } from '@/store/editor-buffer-record-lifecy
 import { buildEditorSessionData } from '@/lib/workspace-session'
 import { editorBufferIdOf, editorBufferViewIds } from './editor-buffer-record'
 import { editorModelOwnerKeyOf } from './editor-buffer-identity'
-import { needsSavePromptOnClose } from './editor-buffer-close-rule'
+import { hasOtherSavingEditorView, needsSavePromptOnClose } from './editor-buffer-close-rule'
+import { getReplaceablePreviewFileId } from '../tabs/workspace-editor-item'
 
 const fixture = vi.hoisted((): { store: StoreApi<AppState> | null } => ({ store: null }))
 vi.mock('@/store', () => ({
@@ -27,16 +28,20 @@ const FILE = '/repo/a.ts'
 function openTab(
   store: StoreApi<AppState>,
   worktreeId: string,
-  extra: Partial<OpenFile> = {}
+  extra: Partial<OpenFile> = {},
+  options?: { preview?: boolean }
 ): string {
-  store.getState().openFile({
-    filePath: FILE,
-    relativePath: 'a.ts',
-    worktreeId,
-    language: 'typescript',
-    mode: 'edit',
-    ...extra
-  })
+  store.getState().openFile(
+    {
+      filePath: FILE,
+      relativePath: 'a.ts',
+      worktreeId,
+      language: 'typescript',
+      mode: 'edit',
+      ...extra
+    },
+    options
+  )
   return store.getState().openFiles.at(-1)?.id ?? ''
 }
 
@@ -223,6 +228,64 @@ describe('one editor buffer record per physical file', () => {
     }
     store.getState().clearPendingDiskBaselineVerification(c)
     expect(tab(store, a)?.pendingDiskBaselineVerification).toBeUndefined()
+  })
+
+  it("keeps newer edits typed in another tab while a closed tab's save was in flight", async () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'saved text')
+    let finishWrite = (): void => {}
+    disk.fs.writeFile.mockImplementationOnce(
+      async ({ filePath, content }: { filePath: string; content: string }) => {
+        await new Promise<void>((resolve) => {
+          finishWrite = resolve
+        })
+        disk.files.set(filePath, content)
+      }
+    )
+    const queue = createEditorSaveQueue(store)
+
+    const save = queue.queueSave(tab(store, a)!, 'saved text', 'user')
+    await vi.waitFor(() => expect(disk.fs.writeFile).toHaveBeenCalled())
+    store.getState().closeFile(a)
+    type(store, b, 'newer text in B')
+    finishWrite()
+    await save
+    queue.dispose()
+
+    expect(disk.files.get(FILE)).toBe('saved text')
+    expect(store.getState().editorDrafts[b]).toBe('newer text in B')
+    expect(tab(store, b)?.isDirty).toBe(true)
+  })
+
+  it('a preview tab sharing unsaved edits stops being a preview and is never replaced', () => {
+    const a = openTab(store, 'wt-1')
+    const preview = openTab(store, 'wt-2', {}, { preview: true })
+    expect(tab(store, preview)?.isPreview).toBe(true)
+
+    type(store, a, 'typed in A')
+    const joined = openTab(store, 'wt-3', {}, { preview: true })
+
+    expect(tab(store, preview)?.isPreview).toBeUndefined()
+    expect(tab(store, joined)?.isPreview).toBeUndefined()
+    store.setState({
+      openFiles: store
+        .getState()
+        .openFiles.map((file) => (file.id === preview ? { ...file, isPreview: true } : file))
+    })
+    expect(getReplaceablePreviewFileId(store.getState(), 'wt-2', undefined)).toBeNull()
+  })
+
+  it('a tab queued to close behind its sibling leaves the prompt to the sibling', () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'typed in A')
+    const closing = new Set([a, b])
+
+    // Quit queues both: the first prompts, the second waits for that decision.
+    expect(needsSavePromptOnClose(store.getState(), a, closing)).toBe(true)
+    expect(hasOtherSavingEditorView(store.getState(), a, closing)).toBe(false)
+    expect(needsSavePromptOnClose(store.getState(), a)).toBe(false)
   })
 
   it('keeps the same path on another host separate', () => {

@@ -103,7 +103,7 @@ export function useTerminalEditorCloseDialogActions(
     isClosingRef.current = true
     const fileId = saveDialogFileId
     setSaveDialogFileId(null)
-    await discardEditorFileChangesAndClose(fileId)
+    await discardEditorFileChangesAndClose(fileId, new Set(pendingEditorCloseQueueRef.current))
     settleQueuedClose(fileId)
     advanceEditorCloseQueue()
     releaseCloseDialogGuardAfterDebounce()
