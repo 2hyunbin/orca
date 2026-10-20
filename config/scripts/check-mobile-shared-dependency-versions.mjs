@@ -6,9 +6,9 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { lockedVersion, lockfileRootImporter } from './pnpm-lockfile-root-importer.mjs'
 
-// Why zod: mobile type-checks src/shared schemas built on root zod; TypeScript treats two zod
-// versions as unrelated packages, so wrapped schemas infer `{}` (seen at phone-feed-list.ts:154).
-export const SHARED_DEPENDENCIES = ['zod']
+// The packages src/shared imports that mobile/tsconfig.json remaps to mobile's copy. TypeScript
+// merges two copies only at the same version; else zod-wrapped schemas infer `{}` (phone-feed-list.ts).
+export const SHARED_DEPENDENCIES = ['zod', 'tweetnacl', '@noble/hashes', '@types/ws']
 
 function importerVersion(importer, name) {
   return lockedVersion(importer.dependencies?.[name] ?? importer.devDependencies?.[name])
