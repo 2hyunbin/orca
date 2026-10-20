@@ -62,16 +62,32 @@ describe('pairing a server that is already saved', () => {
     })
   })
 
-  it('keeps one entry when the same server is added twice under different names', () => {
-    addEnvironmentFromPairingCode(userDataPath, {
+  it('refuses a second entry for the same server where it cannot switch connections over', () => {
+    const first = addEnvironmentFromPairingCode(userDataPath, {
       name: 'Studio',
       pairingCode: pairingCode('ws://192.0.2.10:6768')
     })
-    addEnvironmentFromPairingCode(userDataPath, {
-      name: 'Studio again',
+    expect(() =>
+      addEnvironmentFromPairingCode(userDataPath, {
+        name: 'Studio again',
+        pairingCode: pairingCode('ws://192.0.2.10:6768', 'second-token')
+      })
+    ).toThrow(
+      'This server is already paired as "Studio". To update its connection, add it again under Settings > Remote Orca Servers.'
+    )
+    expect(listEnvironments(userDataPath)).toEqual([first])
+  })
+
+  it("refreshes the saved server when the code is entered under the server's own name", () => {
+    const first = addEnvironmentFromPairingCode(userDataPath, {
+      name: 'Studio',
+      pairingCode: pairingCode('ws://192.0.2.10:6768')
+    })
+    const outcome = addOrUpdateEnvironmentFromPairingCode(userDataPath, {
+      name: 'Studio',
       pairingCode: pairingCode('ws://192.0.2.10:6768', 'second-token')
     })
-    expect(listEnvironments(userDataPath).map((entry) => entry.name)).toEqual(['Studio'])
+    expect(outcome).toMatchObject({ updatedExisting: true, environment: { id: first.id } })
   })
 
   it('still saves a different server as its own entry', () => {

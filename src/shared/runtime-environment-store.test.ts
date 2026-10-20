@@ -180,7 +180,7 @@ describe('runtime environment store', () => {
 
     const direct = addEnvironmentFromPairingCode(userDataPath, {
       name: 'direct box',
-      pairingCode: pairingCode('ws://192.0.2.11:6768'),
+      pairingCode: pairingCode('ws://192.0.2.11:6768', undefined, 2),
       connectionDependency: 'ssh-tunnel'
     })
     expect(direct).not.toHaveProperty('connectionDependency')
@@ -237,7 +237,7 @@ describe('runtime environment store', () => {
     })
     const legacy = addEnvironmentFromPairingCode(userDataPath, {
       name: 'legacy box',
-      pairingCode: pairingCode('ws://192.0.2.10:6768'),
+      pairingCode: pairingCode('ws://192.0.2.10:6768', undefined, 2),
       now: 1_000
     })
 

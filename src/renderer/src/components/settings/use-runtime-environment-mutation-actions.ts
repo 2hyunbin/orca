@@ -3,13 +3,11 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
-import { findCollidingEnvironmentName } from '../../../../shared/runtime-environment-name-collision'
 import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import { isRuntimeEnvironmentRemovalBlocked } from './runtime-environment-host-details'
 import type { RuntimeHostAccessFailure } from './RuntimeHostAccessFailureAlert'
 
 type RuntimeEnvironmentMutationActionParams = {
-  environments: PublicKnownRuntimeEnvironment[]
   settings: GlobalSettings
   allowLocalRuntime: boolean
   mountedRef: MutableRefObject<boolean>
@@ -22,7 +20,6 @@ type RuntimeEnvironmentMutationActionParams = {
 }
 
 export function useRuntimeEnvironmentMutationActions({
-  environments,
   settings,
   allowLocalRuntime,
   mountedRef,
@@ -59,20 +56,10 @@ export function useRuntimeEnvironmentMutationActions({
       )
       return
     }
-    const duplicate = findCollidingEnvironmentName(environments, trimmedName)
-    if (duplicate) {
-      toast.error(
-        translate(
-          'auto.components.settings.RuntimeEnvironmentsPane.5ef712f407',
-          'A server named "{{value0}}" already exists.',
-          { value0: duplicate.name }
-        )
-      )
-      return
-    }
     setAddServerFailure(null)
     setIsSaving(true)
     try {
+      // Why main judges a taken name: a code for that same saved server refreshes it instead.
       const result = await window.api.runtimeEnvironments.verifyAndAddFromPairingCode({
         name: trimmedName,
         pairingCode: trimmedPairingCode,

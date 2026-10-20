@@ -38,10 +38,9 @@ beforeEach(() => {
 })
 afterEach(() => cleanup())
 
-function renderActions(connectEnvironment: () => Promise<boolean>) {
+function renderActions(connectEnvironment: () => Promise<boolean>, name = 'Studio over relay') {
   const view = renderHook(() =>
     useRuntimeEnvironmentMutationActions({
-      environments: [saved],
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: addEnvironment reads no settings.
       settings: {} as GlobalSettings,
       allowLocalRuntime: false,
@@ -52,7 +51,7 @@ function renderActions(connectEnvironment: () => Promise<boolean>) {
     })
   )
   act(() => {
-    view.result.current.setName('Studio over relay')
+    view.result.current.setName(name)
     view.result.current.setPairingCode('orca://pair#code')
   })
   return view
@@ -90,4 +89,23 @@ it('still discards a brand-new server whose first connect fails', async () => {
   })
 
   expect(remove).toHaveBeenCalledWith({ selector: 'env-new' })
+})
+
+it("lets main judge a saved server's own name, so its code can refresh it", async () => {
+  verifyAndAddFromPairingCode.mockResolvedValue({
+    ok: true,
+    environment: saved,
+    runtimeStatus: { runtimeId: 'runtime-a' },
+    updatedExisting: true
+  })
+  const view = renderActions(async () => true, 'Studio')
+
+  await act(async () => {
+    await view.result.current.addEnvironment(false)
+  })
+
+  expect(verifyAndAddFromPairingCode).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'Studio' })
+  )
+  expect(toastError).not.toHaveBeenCalled()
 })

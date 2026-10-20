@@ -25,7 +25,7 @@ describe('CLI runtime environments', () => {
 
   it('saves, resolves, and removes a paired environment', () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-env-store-'))
-    const { environment: saved } = addEnvironmentFromPairingCode(userDataPath, {
+    const saved = addEnvironmentFromPairingCode(userDataPath, {
       name: 'workstation',
       pairingCode: pairingCode(),
       now: 100
@@ -62,7 +62,7 @@ describe('CLI runtime environments', () => {
 
   it('rejects an environment with the same name', () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-env-store-'))
-    const { environment: first } = addEnvironmentFromPairingCode(userDataPath, {
+    const first = addEnvironmentFromPairingCode(userDataPath, {
       name: 'workstation',
       pairingCode: pairingCode('ws://127.0.0.1:1111'),
       now: 100
@@ -82,25 +82,21 @@ describe('CLI runtime environments', () => {
     expect(listEnvironments(userDataPath)[0]?.id).toBe(first.id)
   })
 
-  it('updates the saved server instead of adding a second entry for the same server', () => {
+  it('refuses saving the same server twice and points at Settings, which can switch its connection', () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-env-store-'))
-    const { environment: first } = addEnvironmentFromPairingCode(userDataPath, {
+    addEnvironmentFromPairingCode(userDataPath, {
       name: 'workstation',
       pairingCode: pairingCode('ws://192.0.2.10:6768'),
       now: 100
     })
 
-    const second = addEnvironmentFromPairingCode(userDataPath, {
-      name: 'workstation over relay',
-      pairingCode: pairingCode('ws://198.51.100.7:6768'),
-      now: 200
-    })
-
-    expect(second.updatedExisting).toBe(true)
-    expect(second.environment).toMatchObject({ id: first.id, name: 'workstation' })
+    expect(() =>
+      addEnvironmentFromPairingCode(userDataPath, {
+        name: 'workstation over relay',
+        pairingCode: pairingCode('ws://198.51.100.7:6768'),
+        now: 200
+      })
+    ).toThrow('already paired as "workstation"')
     expect(listEnvironments(userDataPath)).toHaveLength(1)
-    expect(resolveEnvironmentPairingOffer(userDataPath, first.id).endpoint).toBe(
-      'ws://198.51.100.7:6768'
-    )
   })
 })

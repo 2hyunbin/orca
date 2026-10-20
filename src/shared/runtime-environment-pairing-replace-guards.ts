@@ -30,7 +30,8 @@ export function assertNoIndependentSshAccess(environment: KnownRuntimeEnvironmen
 /** Refuses folding a new code into a saved server that another flow owns, naming that server. */
 export function assertPairingReplaceableByAdd(
   environment: KnownRuntimeEnvironment,
-  source: RuntimeEnvironmentSource | undefined
+  source: RuntimeEnvironmentSource | undefined,
+  refreshable: boolean
 ): void {
   const alreadyPaired = `This server is already paired as "${environment.name}".`
   // Why: a cloud workspace pairs its own server on resume; a hand-made pairing would be swept with it.
@@ -46,5 +47,12 @@ export function assertPairingReplaceableByAdd(
     throw error instanceof RuntimeEnvironmentStoreError
       ? new RuntimeEnvironmentStoreError(error.code, `${alreadyPaired} ${error.message}`)
       : error
+  }
+  // Why: only the app holding this server's connections can switch them to a new pairing.
+  if (!refreshable) {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      `${alreadyPaired} To update its connection, add it again under Settings > Remote Orca Servers.`
+    )
   }
 }

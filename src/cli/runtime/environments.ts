@@ -1,6 +1,5 @@
 import {
-  addOrUpdateEnvironmentFromPairingCode as addOrUpdateEnvironmentFromPairingCodeInStore,
-  type AddEnvironmentOutcome,
+  addEnvironmentFromPairingCode as addEnvironmentFromPairingCodeInStore,
   getEnvironmentStorePath,
   listEnvironments,
   markEnvironmentUsed as markEnvironmentUsedInStore,
@@ -19,7 +18,6 @@ import { RuntimeClientError } from './types'
 
 export type EnvironmentAddResult = {
   environment: PublicKnownRuntimeEnvironment
-  updatedExisting?: true
 }
 
 export type EnvironmentRemoveResult = {
@@ -31,8 +29,8 @@ export { getEnvironmentStorePath, listEnvironments }
 export function addEnvironmentFromPairingCode(
   userDataPath: string,
   args: { name: string; pairingCode: string; now?: number }
-): AddEnvironmentOutcome {
-  return translateStoreError(() => addOrUpdateEnvironmentFromPairingCodeInStore(userDataPath, args))
+): KnownRuntimeEnvironment {
+  return translateStoreError(() => addEnvironmentFromPairingCodeInStore(userDataPath, args))
 }
 
 export function removeEnvironment(userDataPath: string, selector: string): KnownRuntimeEnvironment {

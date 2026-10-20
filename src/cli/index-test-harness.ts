@@ -135,26 +135,23 @@ export function useWorktreeAwarenessEnvironment(mocks: WorktreeAwarenessMocks): 
     mocks.listEnvironmentsMock.mockReset()
     mocks.spawnMock.mockClear()
     mocks.addEnvironmentFromPairingCodeMock.mockReturnValue({
-      updatedExisting: false,
-      environment: {
-        id: 'env-1',
-        name: 'desk',
-        createdAt: 100,
-        updatedAt: 100,
-        lastUsedAt: null,
-        runtimeId: null,
-        endpoints: [
-          {
-            id: 'ws-env-1',
-            kind: 'websocket',
-            label: 'WebSocket',
-            endpoint: 'ws://127.0.0.1:6768',
-            deviceToken: 'token',
-            publicKeyB64: 'pk'
-          }
-        ],
-        preferredEndpointId: 'ws-env-1'
-      }
+      id: 'env-1',
+      name: 'desk',
+      createdAt: 100,
+      updatedAt: 100,
+      lastUsedAt: null,
+      runtimeId: null,
+      endpoints: [
+        {
+          id: 'ws-env-1',
+          kind: 'websocket',
+          label: 'WebSocket',
+          endpoint: 'ws://127.0.0.1:6768',
+          deviceToken: 'token',
+          publicKeyB64: 'pk'
+        }
+      ],
+      preferredEndpointId: 'ws-env-1'
     })
     mocks.listEnvironmentsMock.mockReturnValue([])
   })

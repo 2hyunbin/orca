@@ -53,20 +53,32 @@ export type AddEnvironmentOutcome = {
   updatedExisting: boolean
 }
 
+/**
+ * Saves a pairing, refusing one for a server already saved. Why never a second entry: two entries
+ * for one server publish the same workspaces, which makes every write to them ambiguous.
+ */
 export function addEnvironmentFromPairingCode(
   userDataPath: string,
   args: AddEnvironmentArgs
 ): KnownRuntimeEnvironment {
-  return addOrUpdateEnvironmentFromPairingCode(userDataPath, args).environment
+  return saveEnvironmentFromPairingCode(userDataPath, args, false).environment
 }
 
 /**
- * Saves a pairing, or refreshes the saved server it is for. Why never a second entry: two entries
- * for one server publish the same workspaces, which makes every write to them ambiguous.
+ * Saves a pairing, or refreshes the saved server it is for. Only for callers that then retire the
+ * running app's connections to that server, which still authenticate with the replaced pairing.
  */
 export function addOrUpdateEnvironmentFromPairingCode(
   userDataPath: string,
   args: AddEnvironmentArgs
+): AddEnvironmentOutcome {
+  return saveEnvironmentFromPairingCode(userDataPath, args, true)
+}
+
+function saveEnvironmentFromPairingCode(
+  userDataPath: string,
+  args: AddEnvironmentArgs,
+  refreshSameServer: boolean
 ): AddEnvironmentOutcome {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const now = args.now ?? Date.now()
@@ -75,7 +87,7 @@ export function addOrUpdateEnvironmentFromPairingCode(
     offer.publicKeyB64
   )
   if (samePaired) {
-    assertPairingReplaceableByAdd(samePaired, args.source)
+    assertPairingReplaceableByAdd(samePaired, args.source, refreshSameServer)
     const environment = replaceEnvironmentPairing(userDataPath, samePaired.id, offer, {
       now,
       runtimeId: args.runtimeId,
