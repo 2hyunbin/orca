@@ -20495,9 +20495,9 @@
     }
   },
   "workspaceSpace": {
-    "deleteOne": "Delete {{value0}}",
     "table": {
-      "lastActive": "Last active"
+      "lastActive": "Last active",
+      "actions": "Actions"
     },
     "breakdown": {
       "viewAll": "Show more folder details"
@@ -20551,6 +20551,7 @@
       "main": "The main worktree is protected.",
       "unmanaged": "This workspace is no longer managed by Orca.",
       "unavailable": "This workspace is protected or unavailable."
-    }
+    },
+    "rowActions": "Actions for {{name}}"
   }
 }

@@ -26,6 +26,7 @@ describe('electron-builder config', () => {
       expect.arrayContaining([
         '!src{,/**/*}',
         '!config{,/**/*}',
+        '!cloud{,/**/*}',
         '!docs{,/**/*}',
         '!mobile{,/**/*}',
         '!native{,/**/*}',
