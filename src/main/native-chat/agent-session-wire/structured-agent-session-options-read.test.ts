@@ -105,7 +105,12 @@ describe('options at rest', () => {
       defaulted: [],
       permissionMode: 'ask'
     })
-    expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
+    expect(read).toHaveBeenCalledWith({
+      agent: 'codex',
+      sessionId: SESSION,
+      savedOnly: true,
+      workspacePath: null
+    })
   })
 
   it("names the saved listing's ids and model for a live child that fell back to its default", async () => {
