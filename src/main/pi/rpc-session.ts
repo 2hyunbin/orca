@@ -246,7 +246,8 @@ export class PiRpcSession {
     this.turns.end()
     // The lane is sealed once finalized, so the end event travels with the final transfer.
     this.lane.finalize({
-      type: 'session.ended', verdict: { state: 'interrupted', completedAt: Date.now() }
+      type: 'session.ended',
+      verdict: { state: 'interrupted', completedAt: Date.now() }
     })
     let timer: ReturnType<typeof setTimeout> | undefined
     try {

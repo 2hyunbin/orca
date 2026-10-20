@@ -27,7 +27,10 @@ export type JsonlRpcTimelineLaneDeps = {
 export class JsonlRpcTimelineLane {
   private readonly assembler: ProviderTimelineAssembler
   private readonly identity: ReturnType<typeof createLegacyProviderTimelineIdentityScheme>
-  private readonly held: { events: { event: ProviderTimelineEvent; bytes: number }[]; bytes: number }[] = []
+  private readonly held: {
+    events: { event: ProviderTimelineEvent; bytes: number }[]
+    bytes: number
+  }[] = []
   private heldEvents = 0
   private sealed = false
   private heldBytes = 0
@@ -71,7 +74,10 @@ export class JsonlRpcTimelineLane {
     if (this.ended || this.sealed) {
       return
     }
-    const pending = events.map((event) => ({ event, bytes: Buffer.byteLength(JSON.stringify(event)) }))
+    const pending = events.map((event) => ({
+      event,
+      bytes: Buffer.byteLength(JSON.stringify(event))
+    }))
     // Try the current frame first; only a refused suffix becomes retained head work.
     while (this.held.length === 0 && pending.length > 0 && !this.ended) {
       if (!this.consume(pending[0].event)) {
