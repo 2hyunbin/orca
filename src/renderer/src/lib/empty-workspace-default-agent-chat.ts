@@ -12,9 +12,8 @@ import {
   ensureDetectedAgentsForTarget,
   readDetectedAgentsForTarget
 } from '@/lib/agent-detection-target-inventory'
-import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
+import { workspaceKindForWorktreeId, worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { chosenAgentChatUnlearned, agentChoiceOpensAsChat } from '@/lib/host-chat-program'
-import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
@@ -84,7 +83,6 @@ export function openDefaultAgentChatInEmptyWorkspace(
   if (!target) {
     return null
   }
-  // The default may open as a chat without its CLI; automatic picks stay on detected agents.
   const detected = readDetectedAgentsForTarget(state, target)
   const agent = pickTuiAgent(
     state.settings?.defaultTuiAgent,

@@ -4,8 +4,11 @@ import {
   resolveSourceControlActionRecipe
 } from './source-control-ai'
 import type { SourceControlActionId, SourceControlActionRecipe } from './source-control-ai-actions'
-import { filterEnabledTuiAgents, TUI_AGENT_AUTO_PICK_ORDER } from './tui-agent-selection'
-import { isTuiAgentEnabled } from './tui-agent-selection'
+import {
+  filterEnabledTuiAgents,
+  isTuiAgentEnabled,
+  TUI_AGENT_AUTO_PICK_ORDER
+} from './tui-agent-selection'
 import type { GlobalSettings } from './global-settings-types'
 import type { Repo } from './repo-types'
 import type { TuiAgent } from './tui-agent'
@@ -17,8 +20,6 @@ export function readSourceControlLaunchRecipeAgentId(
   return agentId && !isCustomAgentId(agentId) ? agentId : null
 }
 
-/** A saved or default agent may be one that opens as a chat without its CLI (`chosenOpensAsChat`);
- *  the automatic pick stays on detected agents. */
 export function pickSourceControlLaunchAgent(args: {
   savedAgent?: TuiAgent | null
   defaultAgent: TuiAgent | 'blank' | null | undefined

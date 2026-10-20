@@ -2,9 +2,11 @@ import { createDashboardChatProgramHolds } from './dashboard-chat-program-acquis
 import { useEffect } from 'react'
 import { useAppStore, type AppState } from '@/store'
 import { subscribeChatProgramFacts } from '@/lib/host-chat-program'
-import type { AgentLaunchRouteView } from '@/lib/agent-launch-route-input'
-import { agentLaunchRouteInputsChanged } from '@/lib/agent-launch-route-input'
-import { selectAgentLaunchRouteView } from '@/lib/agent-launch-route-input'
+import {
+  type AgentLaunchRouteView,
+  agentLaunchRouteInputsChanged,
+  selectAgentLaunchRouteView
+} from '@/lib/agent-launch-route-input'
 import { revealDashboardAgent } from './reveal-dashboard-agent'
 import { runSleepWorktree } from '../sidebar/sleep-worktree-flow'
 import type { RepoIcon } from '../../../../shared/repo-icon'
@@ -51,7 +53,6 @@ export function dashboardSnapshotInputsChanged(
   previousState: DashboardSnapshotWatchState
 ): boolean {
   return (
-    // Why: launch options derive from exactly these, and only these, route inputs.
     agentLaunchRouteInputsChanged(state, previousState) ||
     state.repos !== previousState.repos ||
     state.worktreesByRepo !== previousState.worktreesByRepo ||
