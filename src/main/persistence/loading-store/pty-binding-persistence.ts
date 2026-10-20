@@ -10,12 +10,11 @@ import { clearReplacedPaneBinding } from './replaced-pane-binding'
 import type { PtyBindingSourceExpectation } from './store'
 
 import type { StoreRuntimeState } from './store-runtime-state'
-import type { SessionHostPartitionOperations } from './session-host-partitions'
+import { resolveHostId, type SessionHostPartitionOperations } from './session-host-partitions'
 import {
   withdrawUnstartedPane,
   type UnstartedPaneKept
 } from '../terminal-topology/unstarted-pane-withdraw'
-import { resolveHostId } from './session-host-partitions'
 import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
 import { ptyBindingIsRefused } from './pty-binding-refusals'
 import { startPtyBindingSpan, type PtyBindingOrigin, type PtyBindingSpan } from './pty-binding-span'
@@ -77,6 +76,8 @@ export type PersistPtyBindingArgs = {
   origin?: PtyBindingOrigin
   /** Where a new leaf goes. Report-only for now: the span records whether it names today's tab. */
   placement?: TerminalPanePlacement
+  /** Replaces a gone process: with no `incarnationId`, the pane's recorded one is cleared. */
+  dropsIncarnation?: true
 }
 
 const ptyBindingPersistenceOperationsContext = Symbol('PtyBindingPersistenceOperations')

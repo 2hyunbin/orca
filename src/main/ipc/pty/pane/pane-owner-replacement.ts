@@ -9,6 +9,8 @@ import { resolveStablePaneOwner, type StablePaneOwner } from './stable-owner'
 export type ReplacedPaneOwner = {
   ptyId: string
   pane: { worktreeId: string; tabId: string; leafId: string; hostId: string | undefined } | null
+  /** A gone process's: its swap clears the incarnation as the retire it stands in for would. */
+  dropsIncarnation?: true
 }
 
 /** Caller holds the pane's spawn reservation, so no other spawn can claim the pane meanwhile. */
@@ -74,7 +76,10 @@ export function swapReplacedPaneBinding(
         binding.leafId
       ]
     // Unbound is ok: the renderer's pre-connect clear can withdraw it (split tab).
-    return bound === undefined || bound === replaced.ptyId ? binding : null
+    if (bound !== undefined && bound !== replaced.ptyId) {
+      return null
+    }
+    return replaced.dropsIncarnation ? { ...binding, dropsIncarnation: true } : binding
   }
 }
 

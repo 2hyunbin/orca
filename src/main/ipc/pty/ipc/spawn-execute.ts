@@ -6,6 +6,7 @@ import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
 import { clearProviderPtyState } from '../provider/state-cleanup'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { PtyIpcSpawnState } from './spawn-state'
+import { keepAbsentBindingForSwap } from './spawn-absent-binding-swap'
 
 export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
@@ -56,7 +57,8 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           owner: stablePaneOwnerCandidate,
           worktreeId: args.worktreeId,
           connectionId: args.connectionId,
-          resolveOwner
+          resolveOwner,
+          keepAbsentBinding: keepAbsentBindingForSwap(ctx)
         })
     ctx.result = stablePaneSpawn.result
     ctx.stablePaneOwner = stablePaneSpawn.owner
