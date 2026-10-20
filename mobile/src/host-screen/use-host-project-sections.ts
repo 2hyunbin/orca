@@ -14,23 +14,33 @@ const PROJECT_SECTIONS_REFRESH_MS = 60_000
 
 /**
  * The desktop sidebar's Project catalog, refreshed with repo metadata but as its own read, so a
- * slow or missing answer never holds the repo labels back.
+ * slow or missing answer never holds the repo labels back. Skipped while the host's sidebar feed
+ * carries the catalog, which installs it with the rows.
  */
 export function useHostProjectSections(args: {
   client: RpcClient | null
   connState: ConnectionState
   hostId: string | undefined
   state: Pick<HostScreenState, 'clientRef' | 'setServedProjectSections' | 'setHostProjectGroups'>
-}): (options?: { force?: boolean }) => Promise<void> {
-  const { client, connState, hostId, state } = args
+  feedCarriesCatalog?: () => boolean
+}): (options?: { force?: boolean; queueIfInFlight?: boolean }) => Promise<void> {
+  const { client, connState, hostId, state, feedCarriesCatalog } = args
   const { clientRef, setServedProjectSections, setHostProjectGroups } = state
   const inFlight = useRef(new WeakSet<RpcClient>())
+  // A read queued while one ran: that one may predate the change this was asked for.
+  const queued = useRef(new WeakSet<RpcClient>())
   // Per client, so a reused screen for another host fetches its catalog at once.
   const fetchedAt = useRef(new WeakMap<RpcClient, number>())
 
   return useCallback(
-    async (options: { force?: boolean } = {}) => {
-      if (!client || connState !== 'connected' || !hostId || inFlight.current.has(client)) {
+    async (options: { force?: boolean; queueIfInFlight?: boolean } = {}) => {
+      if (!client || connState !== 'connected' || !hostId || feedCarriesCatalog?.()) {
+        return
+      }
+      if (inFlight.current.has(client)) {
+        if (options.queueIfInFlight) {
+          queued.current.add(client)
+        }
         return
       }
       if (
@@ -41,27 +51,38 @@ export function useHostProjectSections(args: {
       }
       inFlight.current.add(client)
       try {
-        const reply = await projectSectionsRead.request(client).catch(() => null)
-        if (clientRef.current !== client) {
-          return
-        }
-        const sections = readServedProjectSections(reply)
-        if (sections.kind === 'answered') {
-          fetchedAt.current.set(client, Date.now())
-          setServedProjectSections(sections.value)
-          // Switch point: with no window catalog's groups, a feed-built list reads the host's own.
-          if (ORCA_SIDEBAR_INPUTS_IS_MAIN && !sections.value?.projectGroups) {
-            const reply = await hostProjectGroupsRead.request(client).catch(() => null)
-            const groups = reply && readHostMethodReply(reply, hostProjectGroupsRead.interpret)
-            if (groups?.kind === 'answered' && clientRef.current === client) {
-              setHostProjectGroups(groups.value)
+        do {
+          queued.current.delete(client)
+          const reply = await projectSectionsRead.request(client).catch(() => null)
+          if (clientRef.current !== client) {
+            return
+          }
+          const sections = readServedProjectSections(reply)
+          if (sections.kind === 'answered') {
+            fetchedAt.current.set(client, Date.now())
+            setServedProjectSections(sections.value)
+            // Switch point: with no window catalog's groups, a feed-built list reads the host's own.
+            if (ORCA_SIDEBAR_INPUTS_IS_MAIN && !sections.value?.projectGroups) {
+              const reply = await hostProjectGroupsRead.request(client).catch(() => null)
+              const groups = reply && readHostMethodReply(reply, hostProjectGroupsRead.interpret)
+              if (groups?.kind === 'answered' && clientRef.current === client) {
+                setHostProjectGroups(groups.value)
+              }
             }
           }
-        }
+        } while (queued.current.has(client))
       } finally {
         inFlight.current.delete(client)
       }
     },
-    [client, clientRef, connState, hostId, setServedProjectSections, setHostProjectGroups]
+    [
+      client,
+      clientRef,
+      connState,
+      feedCarriesCatalog,
+      hostId,
+      setServedProjectSections,
+      setHostProjectGroups
+    ]
   )
 }

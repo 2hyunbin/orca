@@ -1,6 +1,5 @@
 import type { AppState } from '@/store/types'
 import { getAllWorktreesFromState } from '@/store/selectors'
-import { getProjectHostSetupProjectionFromState } from '@/store/project-host-setup-selector'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import {
   getLocalExecutionHostLabel,
@@ -34,6 +33,9 @@ import {
   readWindowPairedServerRows
 } from '@/lib/sidebar-shadow/paired-server-rows-shadow'
 import type { SidebarInputsFeedDomain } from '../../../../main/runtime/sidebar-inputs/sidebar-inputs-feed'
+import type { SidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
+import { buildSidebarFeedCatalog } from '../../../../shared/sidebar-list/sidebar-feed-catalog'
+import { projectCatalogFromWindowState } from './sidebar-list-parity-project-catalog.test-fixture'
 
 const SERVER_HOST_ID = 'runtime:env-1'
 
@@ -245,26 +247,22 @@ export function feedDomainsFromWindowState(state: AppState): SidebarInputsFeedDo
       )
     ),
     domain('pairedServerRows', () => Object.fromEntries(serverRows)),
-    domain('desktop', () => readWindowDesktopSidebarFacts(state))
+    domain('desktop', () => readWindowDesktopSidebarFacts(state)),
+    // Main's own builder, over the store and server reads the window's catalog came from.
+    domain('projectCatalog', () => projectCatalogFromWindowState(state))
   ]
 }
 
-/** What the host's own phone reads beside the feed: repo.list, groups and ui.get/settings.get. */
-export function phoneInputsFromWindowState(state: AppState): {
+/** What the host's own phone reads: the feed's catalog, and ui.get/settings.get for its view. */
+export function phoneInputsFromWindowState(
+  state: AppState,
+  domains: SidebarFeedDomains
+): {
   catalog: SidebarFeedCatalog
   view: SidebarFeedView
 } {
-  const projection = getProjectHostSetupProjectionFromState(state)
   return {
-    catalog: {
-      repos: state.repos,
-      projectGroups: state.projectGroups ?? [],
-      // The projection the window publishes for the phone (mobileRelay.projectSections).
-      projectGrouping: {
-        projects: projection.projects,
-        projectHostSetups: projection.setups
-      }
-    },
+    catalog: buildSidebarFeedCatalog(domains.projectCatalog, [], []),
     view: {
       groupBy: state.groupBy,
       sortBy: state.sortBy,

@@ -30,6 +30,7 @@ import {
   getMountedTerminalTabRegisteredAt,
   mountedTerminalTabEntries
 } from '../mounted-terminal-tab-registry'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
 export async function syncRuntimeGraph(): Promise<void> {
   if (!graphState.syncEnabled || !graphState.getStoreState) {
@@ -61,7 +62,10 @@ export async function syncRuntimeGraph(): Promise<void> {
   )
   const publication = partitionMobileSessionPublication(mobileSessionTabs)
   const gridSizes = measureTerminalGroupGridSizes(state.settings?.terminalFontSize ?? 14)
-  const projectSectionCatalog = getProjectSectionCatalogFromState(state)
+  // Switch point: main answers mobileRelay.projectSections from its own catalog.
+  const projectSectionCatalog = ORCA_SIDEBAR_INPUTS_IS_MAIN
+    ? null
+    : getProjectSectionCatalogFromState(state)
   const graph: RuntimeRendererSyncWindowGraph = {
     tabs: [],
     leaves: [],

@@ -52,6 +52,7 @@ const NO_FEED: SidebarFeedDomains = {
   pairedServerRows: new Map(),
   repoIcons: new Map(),
   desktop: null,
+  projectCatalog: null,
   retention: null
 }
 // The window renders its own collapse, so planning never re-runs on a toggle.

@@ -54,7 +54,13 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
     string,
     { onChange: () => void; onClose: () => void; closed: boolean; ended: boolean }
   >()
+  // worktree.ps; the catalog reads go to `catalogCall`, unanswered unless a test sets them.
   const call = vi.fn<MobileDesktopRelayHosts['call']>()
+  const catalogCall = vi.fn<MobileDesktopRelayHosts['call']>(async (_host, method) => ({
+    id: method,
+    ok: false,
+    error: { code: 'method_not_found', message: method }
+  }))
   const hosts: MobileDesktopRelayHosts = {
     list: () => ({
       environments: state.servers.map(({ id }) => ({
@@ -73,7 +79,8 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
       sshConnectionStates: new Map<string, SshConnectionState>()
     }),
     resolve: async () => null,
-    call,
+    call: (host, method, params, options) =>
+      (method === 'worktree.ps' ? call : catalogCall)(host, method, params, options),
     hostsBrowserPage: () => false,
     onEnvironmentRetired: (listener) => {
       retiredListeners.add(listener)
@@ -97,12 +104,25 @@ function fakeHosts(servers: { id: string; live: boolean }[]) {
   return {
     hosts,
     call,
+    catalogCall,
     state,
     watches,
     publishStatus: () => statusListeners.forEach((listener) => listener()),
     retire: (environmentId: string) =>
       retiredListeners.forEach((listener) => listener(environmentId))
   }
+}
+
+const GROUP = {
+  name: 'school',
+  parentPath: null,
+  parentGroupId: null,
+  createdFrom: 'manual',
+  tabOrder: 0,
+  isCollapsed: false,
+  color: null,
+  createdAt: 1,
+  updatedAt: 1
 }
 
 function rowsOf(producer: PairedServerRowsProducer, hostId: string) {
@@ -475,5 +495,80 @@ describe('PairedServerRowsProducer', () => {
     publishStatus()
     expect(watches.get('box')).not.toBe(first)
     expect(first?.closed).toBe(true)
+  })
+
+  it("reads a server's catalog on contact and on its change events, never on the fallback poll", async () => {
+    const { hosts, call, catalogCall, watches } = fakeHosts([{ id: 'box', live: true }])
+    call.mockResolvedValue(psReply([]))
+    let groupId = 'g1'
+    catalogCall.mockImplementation(async (_host, method) => {
+      const result =
+        method === 'repo.list'
+          ? { repos: [{ id: 'r', path: '/srv/r', displayName: 'r', projectGroupId: groupId }] }
+          : method === 'projectGroup.list'
+            ? { groups: [{ ...GROUP, id: groupId }] }
+            : null
+      return result
+        ? { id: method, ok: true as const, result, _meta: { runtimeId: 'runtime-a' } }
+        : { id: method, ok: false as const, error: { code: 'method_not_found', message: method } }
+    })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
+    producer.attach(hosts)
+    const repoListCalls = () =>
+      catalogCall.mock.calls.filter(([, method]) => method === 'repo.list')
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Stamped as the server's own, and without project.list an older server's projection.
+    expect(producer.catalogs()).toEqual([
+      {
+        hostId: 'runtime:box',
+        repos: [expect.objectContaining({ id: 'r', executionHostId: 'runtime:box' })],
+        projectGroups: [expect.objectContaining({ id: 'g1', executionHostId: 'runtime:box' })],
+        projection: {
+          projects: [expect.objectContaining({ sourceRepoIds: ['r'] })],
+          setups: [expect.objectContaining({ repoId: 'r', hostId: 'runtime:box' })]
+        }
+      }
+    ])
+    await vi.advanceTimersByTimeAsync(FALLBACK_REFRESH_MS)
+    expect(call.mock.calls.length).toBeGreaterThan(1)
+    expect(repoListCalls()).toHaveLength(1)
+
+    groupId = 'g2'
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(repoListCalls()).toHaveLength(2)
+    expect(producer.catalogs()[0]?.repos[0]?.projectGroupId).toBe('g2')
+  })
+
+  it('keeps the last catalog through a failed read and reads it again on the next fetch', async () => {
+    const { hosts, call, catalogCall, watches } = fakeHosts([{ id: 'box', live: true }])
+    call.mockResolvedValue(psReply([]))
+    catalogCall.mockResolvedValueOnce({
+      id: 'repo.list',
+      ok: true,
+      result: { repos: [{ id: 'r', path: '/srv/r', displayName: 'r' }] },
+      _meta: { runtimeId: 'runtime-a' }
+    })
+    const producer = new PairedServerRowsProducer({
+      hasDemand: () => true,
+      hostLabelOverrides: () => new Map()
+    })
+    producer.attach(hosts)
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(producer.catalogs()[0]?.repos.map((repo) => repo.id)).toEqual(['r'])
+
+    watches.get('box')?.onChange()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(producer.catalogs()[0]?.repos.map((repo) => repo.id)).toEqual(['r'])
+    const reads = catalogCall.mock.calls.length
+    // The failed read left it stale, so the poll reads it again.
+    await vi.advanceTimersByTimeAsync(FALLBACK_REFRESH_MS)
+    expect(catalogCall.mock.calls.length).toBeGreaterThan(reads)
   })
 })

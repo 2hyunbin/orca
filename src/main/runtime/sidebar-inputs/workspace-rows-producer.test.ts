@@ -55,7 +55,7 @@ function resolved(id: string, repo: Repo, hostId: ResolvedWorktree['hostId']): R
 }
 
 function setup() {
-  let onWrite: (domains: readonly string[] | undefined) => void = () => {}
+  const writeListeners = new Set<(domains: readonly string[] | undefined) => void>()
   const store: Pick<
     RuntimeStore,
     | 'getRepos'
@@ -80,8 +80,8 @@ function setup() {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the visibility filter reads only absent fields as defaults.
     getSettings: () => ({}) as ReturnType<RuntimeStore['getSettings']>,
     onStateWritten: (listener) => {
-      onWrite = listener
-      return () => {}
+      writeListeners.add(listener)
+      return () => writeListeners.delete(listener)
     }
   }
   const listing: ResolvedWorktreeSnapshot = {
@@ -112,7 +112,7 @@ function setup() {
     runtime,
     rows: requireSwitchedOn(runtime.workspaceRows),
     listing,
-    write: (domains?: readonly string[]) => onWrite(domains)
+    write: (domains?: readonly string[]) => writeListeners.forEach((listener) => listener(domains))
   }
 }
 

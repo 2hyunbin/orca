@@ -1,4 +1,4 @@
-import { AppState } from 'react-native'
+import type { AppStateStatic } from 'react-native'
 import type { RuntimeClientEventStreamMessage } from '../../../src/shared/runtime-client-events'
 import type { RpcClient } from '../transport/rpc-client'
 import type { HostSidebarFeedTriggers } from '../host-screen/host-sidebar-feed-reader'
@@ -9,13 +9,15 @@ type WorktreeRefreshOptions = { allowDuringModal?: boolean; queueIfInFlight?: bo
 type RepoRefreshOptions = { force?: boolean; queueIfInFlight?: boolean }
 
 type HostWorktreeRefreshArgs = {
-  client: RpcClient
+  client: Pick<RpcClient, 'subscribe'>
   fetchWorktrees: (options?: WorktreeRefreshOptions) => Promise<void>
   fetchRepoMetadata: (options?: RepoRefreshOptions) => Promise<void>
   /** Re-reads the Workspace options the phone shares with the desktop. */
   syncViewSettings: (options?: { reconnected?: boolean }) => Promise<void>
   /** The host's sidebar feed, which replaces the poll: its notices say when anything changed. */
   sidebarFeed?: HostSidebarFeedTriggers | null
+  /** React Native's AppState; passed in so the lifecycle also runs off the device. */
+  appState: Pick<AppStateStatic, 'currentState' | 'addEventListener'>
 }
 
 export function startHostWorktreeRefresh({
@@ -23,13 +25,14 @@ export function startHostWorktreeRefresh({
   fetchWorktrees,
   fetchRepoMetadata,
   syncViewSettings,
-  sidebarFeed
+  sidebarFeed,
+  appState
 }: HostWorktreeRefreshArgs): () => void {
   let stale = false
   let eventStreamReady = false
 
   const refreshOnForeground = (): void => {
-    if (AppState.currentState !== 'active') {
+    if (appState.currentState !== 'active') {
       return
     }
     sidebarFeed?.refresh()
@@ -37,7 +40,7 @@ export function startHostWorktreeRefresh({
     void fetchRepoMetadata({ queueIfInFlight: true })
   }
 
-  const appStateSubscription = AppState.addEventListener('change', (state) => {
+  const appStateSubscription = appState.addEventListener('change', (state) => {
     if (state === 'active') {
       refreshOnForeground()
     }
@@ -45,7 +48,7 @@ export function startHostWorktreeRefresh({
   const interval = sidebarFeed
     ? null
     : setInterval(() => {
-        if (AppState.currentState !== 'active') {
+        if (appState.currentState !== 'active') {
           return
         }
         void fetchWorktrees()
