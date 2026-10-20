@@ -69,6 +69,14 @@ describe('OpenAI speech API key store', () => {
     }
   })
 
+  it("does not hand out another store's ciphertext when this host stores plaintext", async () => {
+    writeStoredOpenAiKey('v10\u0000\u00ff\u00fe sealed by another store')
+    const store = await loadStoreModule()
+    safeStorageMock.isEncryptionAvailable.mockReturnValue(false)
+    expect(store.canReadOpenAiSpeechApiKey()).toBe(false)
+    expect(() => store.readOpenAiSpeechApiKey()).toThrow('OpenAI API key could not be decrypted')
+  })
+
   it('reports a stored key this host can decrypt as usable', async () => {
     writeStoredOpenAiKey('encrypted-key')
     const store = await loadStoreModule()

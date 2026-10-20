@@ -114,11 +114,19 @@ export function readOpenAiSpeechApiKey(): string {
     }
     cachedOpenAiSpeechApiKey = getSecretStore().isEncryptionAvailable()
       ? decryptOrLegacyPlaintext(raw)
-      : raw.toString('utf8')
+      : plaintextOnly(raw)
     return cachedOpenAiSpeechApiKey
   } catch {
     throw new Error('OpenAI API key could not be decrypted')
   }
+}
+
+// Why: with no sealing here, sealed bytes are another store's ciphertext, never a usable key.
+function plaintextOnly(raw: Buffer): string {
+  if (classifyUnenvelopedCredential(raw) !== 'plaintext') {
+    throw new Error('sealed by another secret store')
+  }
+  return raw.toString('utf8')
 }
 
 // Why: a key saved before sealing became available stays plaintext until it is migrated or re-saved.
