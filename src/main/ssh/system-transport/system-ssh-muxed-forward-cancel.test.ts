@@ -105,6 +105,21 @@ describe('system SSH muxed forward cancel', () => {
     )
   })
 
+  it('asks no master on Windows, whose OpenSSH cannot multiplex', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    try {
+      await expect(cancelMuxedLocalForward(createTarget(), 59418, '127.0.0.1', 6768)).resolves.toBe(
+        false
+      )
+    } finally {
+      if (platform) {
+        Object.defineProperty(process, 'platform', platform)
+      }
+    }
+    expect(runProcessMock).not.toHaveBeenCalled()
+  })
+
   it('reports nothing released without a system ssh binary', async () => {
     findSystemSshMock.mockReturnValue(null)
 

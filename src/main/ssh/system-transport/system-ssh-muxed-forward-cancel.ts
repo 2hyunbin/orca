@@ -45,7 +45,8 @@ export async function cancelMuxedLocalForward(
   remotePort: number,
   options?: SystemSshBuildArgsOptions
 ): Promise<boolean> {
-  const sshPath = findSystemSsh()
+  // Why: Win32-OpenSSH has no multiplexing, so no master there can hold the port.
+  const sshPath = process.platform === 'win32' ? null : findSystemSsh()
   if (!sshPath) {
     return false
   }
