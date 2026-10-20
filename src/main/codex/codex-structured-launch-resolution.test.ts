@@ -276,7 +276,7 @@ describe('codex structured launch resolution', () => {
 
   // The chat's mode replaces Agent Permissions: a Yolo terminal setting grants a chat nothing.
   it('ignores the bypass flag the agent Arguments carry', async () => {
-    const launch = await resolverFor(record(), undefined, undefined, () => [
+    const launch = await resolverFor(record(), undefined, () => [
       '--dangerously-bypass-approvals-and-sandbox'
     ])({ identity: IDENTITY, spawnToken: TEST_SPAWN_TOKEN, permissionMode: 'ask' })
 
