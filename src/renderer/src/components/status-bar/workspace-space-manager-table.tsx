@@ -3,10 +3,12 @@ import { Loader2 } from 'lucide-react'
 import { VirtualizedList } from '../virtualized-list'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 import { CheckButton, SortIndicator } from './workspace-space-selection-controls'
 import { WorkspaceSpaceWorktreeRow } from './workspace-space-worktree-row'
 import { getWorkspaceSpaceWorktreeIdentity } from './workspace-space-delete-selection'
 import type { useWorkspaceSpaceManagerPanel } from './use-workspace-space-manager-panel'
+import { WORKSPACE_SPACE_TABLE_GRID_CLASS } from './workspace-space-table-layout'
 
 type WorkspaceSpaceManagerModel = ReturnType<typeof useWorkspaceSpaceManagerPanel>
 
@@ -44,8 +46,13 @@ export function WorkspaceSpaceManagerTable({
     <div className="flex min-h-0 flex-1 flex-col">
       {hasRows || isInitialScan ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-x-auto rounded-lg border border-border/70 bg-background/30">
-          <div className="flex min-h-0 min-w-[40rem] flex-1 flex-col">
-            <div className="grid shrink-0 grid-cols-[1.75rem_minmax(0,1.4fr)_minmax(5rem,0.55fr)_5.5rem_6rem_9.5rem] gap-2 border-b border-border/60 px-3 py-1.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="flex min-h-0 min-w-[54rem] flex-1 flex-col">
+            <div
+              className={cn(
+                WORKSPACE_SPACE_TABLE_GRID_CLASS,
+                'shrink-0 border-b border-border/60 px-3 py-1.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground'
+              )}
+            >
               <div className="flex items-center">
                 <CheckButton
                   checked={visibleSelectionState}
@@ -110,6 +117,11 @@ export function WorkspaceSpaceManagerTable({
                   'auto.components.status.bar.WorkspaceSpaceManagerPanel.be37293b10',
                   'State'
                 )}
+              </div>
+              <div>
+                <span className="sr-only">
+                  {translate('workspaceSpace.table.actions', 'Actions')}
+                </span>
               </div>
             </div>
 
