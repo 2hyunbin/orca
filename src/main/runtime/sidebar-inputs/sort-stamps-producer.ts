@@ -101,7 +101,7 @@ export class SortStampsProducer {
     }
     for (const { workspace, phases } of phasesByWorkspace.values()) {
       if (phases.has('done') && phases.has('working')) {
-        this.writeAgentChange(workspace, 'rest', 'rest', this.sources.now())
+        this.writeAgentChange(workspace, SETTLED, this.sources.now())
       }
     }
   }
