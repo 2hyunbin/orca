@@ -159,7 +159,7 @@ describe('forceTerminateProcessTree', () => {
       spawnMock.mockReturnValue(taskkill)
       void forceTerminateProcessTree(child)
 
-      await vi.advanceTimersByTimeAsync(59_999)
+      await vi.advanceTimersByTimeAsync(29_999)
       expect(taskkill.kill).not.toHaveBeenCalled()
       await vi.advanceTimersByTimeAsync(1)
 

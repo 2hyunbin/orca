@@ -75,7 +75,7 @@ describe('runProcess barrier with a slow Windows taskkill', () => {
     expect(root.kill).not.toHaveBeenCalled()
   })
 
-  it('holds termination past root close until the tracked taskkill settles', async () => {
+  it('releases on root close, as before, while taskkill can still verify the barrier', async () => {
     const onChildTerminated = vi.fn()
     const pending = runProcess({
       program: 'C:\\git.exe',
@@ -88,12 +88,18 @@ describe('runProcess barrier with a slow Windows taskkill', () => {
     // taskkill reached the root; its pipes close while descendants may still be dying.
     root.emit('exit', 1, null)
     root.emit('close', 1, null)
+    // The git admission slot is a concurrency budget, not a repo lock: it never outlives the root.
+    expect(onChildTerminated).toHaveBeenCalledOnce()
+    let settled = false
+    void pending.then(() => {
+      settled = true
+    })
     await vi.advanceTimersByTimeAsync(1_500)
-    expect(onChildTerminated).not.toHaveBeenCalled()
+    expect(settled).toBe(false)
 
     taskkill.emit('close', 0)
     await vi.advanceTimersByTimeAsync(0)
-    expect(onChildTerminated).toHaveBeenCalledOnce()
+    expect(settled).toBe(true)
     await expect(pending).resolves.toMatchObject({ timedOut: true })
   })
 
@@ -114,7 +120,6 @@ describe('runProcess barrier with a slow Windows taskkill', () => {
     await vi.advanceTimersByTimeAsync(1)
 
     expect(taskkill.kill).toHaveBeenCalledOnce()
-    // Unverifiable, so termination falls back to the root's close as before.
     expect(onChildTerminated).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(15_000)
     await expect(pending).resolves.toMatchObject({ timedOut: true })
@@ -129,7 +134,7 @@ describe('runProcess barrier with a slow Windows taskkill', () => {
       onChildTerminated
     })
 
-    await vi.advanceTimersByTimeAsync(60_010)
+    await vi.advanceTimersByTimeAsync(30_010)
     expect(taskkill.kill).toHaveBeenCalledOnce()
     expect(root.kill).toHaveBeenCalledWith(undefined)
     expect(onChildTerminated).not.toHaveBeenCalled()

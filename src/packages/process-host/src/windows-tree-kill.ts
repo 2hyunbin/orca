@@ -13,11 +13,11 @@ export type SettledWindowsTreeKillVerdict = Exclude<WindowsTreeKillVerdict, 'liv
 export const WINDOWS_TASKKILL_WAIT_MS = 5_000
 /**
  * How long the tracked taskkill may keep walking after its caller stops waiting.
- * Why so far past the wait: loaded windows-2022 runners measured 4.6-18 s, and
- * killing the root before taskkill reads it orphans the descendants it was
- * about to find.
+ * Why past the wait: loaded windows-2022 runners measured 4.6-18 s, and killing
+ * the root before taskkill reads it orphans the descendants it was about to
+ * find. Bounded because a live root keeps its git admission slot until it exits.
  */
-export const WINDOWS_TASKKILL_DEADLINE_MS = 60_000
+export const WINDOWS_TASKKILL_DEADLINE_MS = 30_000
 /**
  * How long taskkill may keep running once the root has exited.
  * Why short: Node then releases the root's handle, so Windows may reissue the

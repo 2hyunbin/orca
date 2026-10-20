@@ -314,13 +314,7 @@ export function runProcess(
       }
     })
     child.once('close', (code, signal) => {
-      // Root pipes closing is not proof for descendants a taskkill is still walking.
-      const inFlightTreeKill = inFlightWindowsTreeKill(child)
-      if (inFlightTreeKill) {
-        void inFlightTreeKill.then(terminationReporter.report)
-      } else {
-        terminationReporter.report()
-      }
+      terminationReporter.report()
       if (!barrierStopping) {
         rootExitedBeforeBarrier = true
       }

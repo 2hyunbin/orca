@@ -19,7 +19,7 @@ import { windowsSystem32Binary } from '@orca/process-host/windows-system-binary'
  */
 const describeOnWindows = process.platform === 'win32' ? describe : describe.skip
 const underLoad = process.env.ORCA_WINDOWS_TREE_KILL_LOAD === '1'
-// Longer than the caller's 5 s wait, well inside the 60 s deadline.
+// Longer than the caller's 5 s wait, well inside the 30 s deadline.
 const TASKKILL_START_DELAY_MS = 8_000
 
 describeOnWindows('Windows barrier with a taskkill slower than its caller', () => {
