@@ -41,9 +41,14 @@ function findFocusedTwinRepoOwner(
   return focusedMatches.length === 1 ? focusedMatches[0] : null
 }
 
+/** Whether two rows (hosts) publish this repo id, so no host-less caller may pick one. */
+export function isTwinRepo(state: RepoRuntimeOwnerState, repoId: string | null | undefined) {
+  return (state.repos?.filter((entry) => entry.id === repoId).length ?? 0) > 1
+}
+
 /**
  * Transport to a repo row's owner; a row with no owner stamp is local. `null` when no row, or no
- * single row among duplicates, names the repo.
+ * single row among duplicates, names the repo — {@link isTwinRepo} tells the two apart.
  */
 export function runtimeTargetForRepoOwner(
   state: RepoRuntimeOwnerState,
@@ -67,7 +72,7 @@ export function getRuntimeEnvironmentIdForRepo(
     return parsed?.kind === 'runtime' ? parsed.environmentId : null
   }
   // Why: only a repo with no row yet follows focus; a twin names no server rather than a guessed one.
-  return state.repos?.some((entry) => entry.id === repoId)
+  return isTwinRepo(state, repoId)
     ? null
     : state.settings?.activeRuntimeEnvironmentId?.trim() || null
 }

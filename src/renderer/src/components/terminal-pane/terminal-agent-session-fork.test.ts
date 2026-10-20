@@ -27,7 +27,14 @@ const store = {
   },
   worktreesByRepo: {} as Record<
     string,
-    { id: string; repoId: string; path?: string; projectId?: string; hostId?: 'local' }[]
+    {
+      id: string
+      repoId: string
+      path?: string
+      projectId?: string
+      hostId?: 'local' | 'ssh:box'
+      runtimeOwnerEnvironmentId?: string
+    }[]
   >,
   agentStatusByPaneKey: {} as Record<string, { agentType?: string }>,
   tabsByWorktree: {} as Record<string, { id: string; launchAgent?: string | null }[]>,
@@ -402,6 +409,24 @@ describe('forkAgentSessionFromPane', () => {
       'Fork context copied. Launch an agent and paste it to start the fork.'
     )
     expect(pane.terminal.focus).toHaveBeenCalled()
+  })
+
+  it("creates the fork through the source's server, not its SSH place", async () => {
+    store.worktreesByRepo = {
+      'repo-1': [
+        { id: 'wt-1', repoId: 'repo-1', hostId: 'ssh:box', runtimeOwnerEnvironmentId: 'env-1' }
+      ]
+    }
+    const { forkAgentSessionFromPane } = await import('./terminal-agent-session-fork')
+
+    await forkAgentSessionFromPane({
+      pane: makePane('Assistant: plan'),
+      tabId: 'tab-1',
+      worktreeId: 'wt-1',
+      groupId: null
+    })
+
+    expect(mockCreateWorktree.mock.calls[0]?.at(-1)).toEqual({ executionHostId: 'runtime:env-1' })
   })
 
   it('keeps the fork dialog path open when the source workspace has no git branch', async () => {
