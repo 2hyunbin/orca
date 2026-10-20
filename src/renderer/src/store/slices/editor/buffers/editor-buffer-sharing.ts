@@ -22,8 +22,8 @@ export type EditorBufferSharingInput = {
   identityOf: (file: OpenFile) => EditorBufferIdentity | null
   /** Called for a tab mirror written without its record; returning keeps the tab's values. */
   onMirrorDrift: (file: OpenFile, field: keyof EditorBufferRecord) => void
-  /** The tab whose draft wins when two tabs of one file restore different drafts. */
-  isPreferredDraft: (fileId: string) => boolean
+  /** Higher for a more recently active tab; its draft wins when two tabs' drafts differ. */
+  draftPreference: (fileId: string) => number
   now: () => number
 }
 
@@ -164,7 +164,9 @@ export function reconcileEditorBufferSharing(
       const viewEdited = hasEdits(state, draft)
       const targetEdited = hasEdits(targetRecord, targetDraft)
       const divergent = viewEdited && targetEdited && draft !== targetDraft
-      const viewWins = divergent ? input.isPreferredDraft(file.id) : viewEdited && !targetEdited
+      const viewWins = divergent
+        ? input.draftPreference(file.id) > Math.max(...target.views.map(input.draftPreference))
+        : viewEdited && !targetEdited
       if (divergent) {
         const [loser, loserState, loserFile] = viewWins
           ? [targetDraft, targetRecord, openFiles.find((f) => f.id === target.views[0]) ?? file]

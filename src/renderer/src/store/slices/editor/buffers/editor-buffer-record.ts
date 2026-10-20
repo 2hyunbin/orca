@@ -145,8 +145,8 @@ export function createEditorBuffers(
 }
 
 /**
- * Points each migrated tab at its record under its new id. A patched tab whose record other tabs
- * keep showing splits off; sharing then decides whether it may join again.
+ * Points each migrated tab at its record under its new id. A patch applies to the whole record:
+ * a pause set or cleared for one tab of a file holds for every tab of it.
  */
 export function rekeyEditorBuffers(
   state: EditorBufferIndexState & { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords },
@@ -167,21 +167,13 @@ export function rekeyEditorBuffers(
     delete recordIdByFileId[file.id]
   }
   for (const file of moved) {
-    const newId = migrations.get(file.id) ?? file.id
-    const patch = patchFor?.(file)
-    let recordId = editorBufferIdOf(state, file.id)
-    const shared = state.openFiles.some(
-      (other) => !migrations.has(other.id) && editorBufferIdOf(state, other.id) === recordId
-    )
-    const record = editorBufferOf(state.editorBuffers, file, recordId)
-    if (patch && shared) {
-      recordId = newId
-      for (let n = 1; recordId in editorBuffers; n += 1) {
-        recordId = `${newId}#${n}`
-      }
+    const recordId = editorBufferIdOf(state, file.id)
+    recordIdByFileId[migrations.get(file.id) ?? file.id] = recordId
+    editorBuffers[recordId] = {
+      ...editorBufferOf(state.editorBuffers, file, recordId),
+      ...editorBuffers[recordId],
+      ...patchFor?.(file)
     }
-    recordIdByFileId[newId] = recordId
-    editorBuffers[recordId] = { ...record, ...editorBuffers[recordId], ...patch }
   }
   return { editorBuffers, editorBufferIndex: { ...index, recordIdByFileId } }
 }

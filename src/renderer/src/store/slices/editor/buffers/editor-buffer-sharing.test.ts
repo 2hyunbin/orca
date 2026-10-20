@@ -16,7 +16,8 @@ import { buildEditorSessionData } from '@/lib/workspace-session'
 import {
   editorBufferIdOf,
   editorBufferViewIds,
-  liveEditorBufferViewOf
+  liveEditorBufferViewOf,
+  rekeyEditorBuffers
 } from './editor-buffer-record'
 import { attachEditorAutosaveController } from '@/components/editor/editor-autosave-controller'
 import {
@@ -388,6 +389,58 @@ describe('one editor buffer record per physical file', () => {
     expect(disk.fs.writeFile).not.toHaveBeenCalled()
     expect(tab(store, b)).toBeDefined()
     expect(store.getState().editorDrafts[b]).toBe('typed')
+  })
+
+  it('save-and-close keeps the tab when a sibling typed and closed while it wrote', async () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    type(store, a, 'first')
+    const finishWrite = holdNextWrite()
+    const detach = attachEditorAutosaveController(store)
+
+    window.dispatchEvent(
+      new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: a } })
+    )
+    await vi.waitFor(() => expect(disk.fs.writeFile).toHaveBeenCalled())
+    type(store, b, 'newer from B')
+    store.getState().closeFile(b)
+    finishWrite()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    detach()
+
+    expect(tab(store, a)?.isDirty).toBe(true)
+    expect(store.getState().editorDrafts[a]).toBe('newer from B')
+  })
+
+  it("clearing a tab's owner-migration pause clears it for every tab of the file", () => {
+    const a = openTab(store, 'wt-1')
+    const b = openTab(store, 'wt-2')
+    store.getState().setRestoredEditorOwnerMigrationPending(a, true)
+    expect(tab(store, b)?.pendingOwnerMigration).toBe(true)
+
+    store.setState((state) => ({
+      ...rekeyEditorBuffers(state, new Map([[a, a]]), () => ({ pendingOwnerMigration: undefined }))
+    }))
+
+    expect(tab(store, a)?.pendingOwnerMigration).toBeUndefined()
+    expect(tab(store, b)?.pendingOwnerMigration).toBeUndefined()
+  })
+
+  it('two differing drafts keep the tab of the most recently visited workspace', () => {
+    openTab(store, 'wt-1')
+    openTab(store, 'wt-2')
+    const [a, b] = store.getState().openFiles.map((file) => file.id)
+    store.setState((state) => ({
+      activeWorktreeId: 'wt-1',
+      activeFileId: null,
+      activeFileIdByWorktree: { 'wt-1': `${a}-r`, 'wt-2': `${b}-r` },
+      lastVisitedAtByWorktreeId: { 'wt-1': 100, 'local|wt-2': 200 },
+      editorDrafts: { [`${a}-r`]: 'from wt-1', [`${b}-r`]: 'from wt-2' },
+      openFiles: state.openFiles.map((file) => ({ ...file, id: `${file.id}-r`, isDirty: true }))
+    }))
+
+    expect(store.getState().editorDrafts[`${a}-r`]).toBe('from wt-2')
+    expect(store.getState().recoveredEditorDrafts).toMatchObject([{ draft: 'from wt-1' }])
   })
 
   it('a save superseded mid-write still rebaselines to the written text', async () => {

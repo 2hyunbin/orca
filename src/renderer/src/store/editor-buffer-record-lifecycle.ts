@@ -22,6 +22,29 @@ type EditorBufferState = WorktreeOperationRouteState & {
   recoveredEditorDrafts?: RecoveredEditorDraft[]
   activeFileId?: string | null
   activeFileIdByWorktree?: Record<string, string | null>
+  lastVisitedAtByWorktreeId?: Record<string, number>
+}
+
+/**
+ * Why: the most recently active tab's draft is the one the user last worked in. A workspace's
+ * active tab ranks by when the workspace was last visited; with no visit times, the active
+ * workspace wins.
+ */
+function editorDraftPreference(state: EditorBufferState, fileId: string): number {
+  if (state.activeFileId === fileId) {
+    return Number.POSITIVE_INFINITY
+  }
+  const worktreeId = state.openFiles.find((file) => file.id === fileId)?.worktreeId
+  if (worktreeId === undefined || state.activeFileIdByWorktree?.[worktreeId] !== fileId) {
+    return 0
+  }
+  // Visit keys are bare ids or `${executionHostId}|${worktreeId}`.
+  const visited = Object.entries(state.lastVisitedAtByWorktreeId ?? {}).reduce(
+    (latest, [key, at]) =>
+      key === worktreeId || key.endsWith(`|${worktreeId}`) ? Math.max(latest, at) : latest,
+    0
+  )
+  return 1 + visited + (worktreeId === state.activeWorktreeId ? 0.5 : 0)
 }
 
 /**
@@ -58,15 +81,7 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
     previousRecords: state.editorBuffers,
     previousFiles: ownersChanged ? null : new Map(state.openFiles.map((file) => [file.id, file])),
     identityOf: (file) => editorBufferIdentityOf(file, merged()),
-    // Why: the most recently active tab's draft is the one the user last worked in.
-    isPreferredDraft: (fileId) => {
-      const current = merged()
-      return (
-        current.activeFileId === fileId ||
-        (current.activeWorktreeId != null &&
-          current.activeFileIdByWorktree?.[current.activeWorktreeId] === fileId)
-      )
-    },
+    draftPreference: (fileId) => editorDraftPreference(merged(), fileId),
     now: Date.now,
     onMirrorDrift: (file, field) => {
       // Why adopt outside dev: a missed writer must keep main's behaviour, not revert the tab.

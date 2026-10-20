@@ -62,3 +62,19 @@ it('shows nothing when no draft was recovered', () => {
 
   expect(mocks.toast).not.toHaveBeenCalled()
 })
+
+it('shows the notice again for a draft recovered after the user closed it', () => {
+  const first = { filePath: '/repo/a.ts', worktreeId: 'wt', draft: 'one', recoveredAt: 1 }
+  mocks.drafts = [first]
+  act(() => root.render(<RecoveredEditorDraftsNotice />))
+  act(() => mocks.toast.mock.calls.at(-1)?.[1]?.onDismiss())
+  mocks.toast.mockClear()
+
+  mocks.drafts = [first, { ...first, filePath: '/repo/b.ts', recoveredAt: 2 }]
+  act(() => root.render(<RecoveredEditorDraftsNotice />))
+
+  expect(mocks.toast).toHaveBeenCalledWith(
+    'Recovered 1 unsaved draft(s) from an earlier session',
+    expect.anything()
+  )
+})

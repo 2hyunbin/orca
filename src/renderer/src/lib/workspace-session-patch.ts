@@ -3,6 +3,7 @@ import type {
   WorkspaceSessionState
 } from '../../../shared/workspace-session-state-types'
 import { pruneLocalTerminalScrollbackBuffers } from '../../../shared/workspace-session-terminal-buffers'
+import { recoveredEditorDraftsSessionField } from '../store/slices/editor/buffers/recovered-editor-drafts'
 import { normalizeBrowserHistoryEntries } from '../../../shared/workspace-session-browser-history'
 import { normalizeWorkspaceDocHistoryEntries } from '../../../shared/workspace-doc-history'
 import {
@@ -172,7 +173,7 @@ export function buildWorkspaceSessionPatch(
     patch.browserUrlHistory = normalizeBrowserHistoryEntries(snapshot.browserUrlHistory)
   }
   if (changed.has('recoveredEditorDrafts')) {
-    patch.recoveredEditorDrafts = snapshot.recoveredEditorDrafts
+    Object.assign(patch, recoveredEditorDraftsSessionField(snapshot.recoveredEditorDrafts))
   }
   if (changed.has('workspaceDocHistory')) {
     patch.workspaceDocHistory = normalizeWorkspaceDocHistoryEntries(snapshot.workspaceDocHistory)

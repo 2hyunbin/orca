@@ -32,7 +32,7 @@ it(`reconciles ${TABS} tabs in one update without quadratic work`, () => {
     previousFiles: null,
     identityOf,
     onMirrorDrift: () => {},
-    isPreferredDraft: () => false,
+    draftPreference: () => 0,
     now: () => 0
   }
 

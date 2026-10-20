@@ -47,6 +47,8 @@ export type RecoveredEditorDraft = {
   /** Disk version the draft was based on. */
   baselineSignature?: string
   recoveredAt: number
+  /** Over the size cap: offered this launch, never written to the session. */
+  keptForThisLaunchOnly?: true
 }
 
 export type WorkspaceSessionState = {

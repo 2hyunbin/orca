@@ -10,6 +10,8 @@ import {
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import { detectLanguage } from '@/lib/language-detect'
 import { getRuntimeTargetForFileOwner } from '@/lib/file-owner-runtime-target'
+import { getConnectionIdForFile } from '@/lib/connection-context'
+import { recoveredEditorDraftId } from '@/store/slices/editor/buffers/recovered-editor-drafts'
 import { readRuntimeFileContent } from '@/runtime/runtime-file-read-client'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
@@ -39,7 +41,9 @@ async function readCurrentText(draft: RecoveredEditorDraft): Promise<string> {
     target,
     filePath: draft.filePath,
     relativePath: draft.relativePath,
-    worktreeId: draft.worktreeId
+    worktreeId: draft.worktreeId,
+    // Why: an SSH file must be read on its host, the same way the editor's own load reads it.
+    connectionId: getConnectionIdForFile(draft.worktreeId, draft.filePath) ?? undefined
   })
   return result.isBinary ? '' : result.content
 }
@@ -98,7 +102,7 @@ export function RecoveredEditorDraftCompareDialog({
             <Suspense fallback={null}>
               <div className="flex h-full min-h-0 flex-col">
                 <DiffViewer
-                  modelKey={`recovered-draft-compare:${draft.filePath}:${draft.recoveredAt}`}
+                  modelKey={`recovered-draft-compare:${recoveredEditorDraftId(draft)}`}
                   originalContent={draft.draft}
                   modifiedContent={current.text}
                   language={detectLanguage(draft.relativePath ?? draft.filePath)}

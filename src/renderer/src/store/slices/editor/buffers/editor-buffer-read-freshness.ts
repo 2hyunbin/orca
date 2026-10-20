@@ -38,8 +38,33 @@ export function isEditorBufferReadCurrent(fileKey: string, token: number): boole
 export function beginEditorBufferFileRead(
   state: { editorBufferIndex?: EditorBufferIndex },
   fileId: string
-): { recordId: string; isCurrent: () => boolean } {
+): EditorBufferFileRead {
   const recordId = editorBufferFreshnessKeyOf(state, fileId)
   const token = beginEditorBufferRead(recordId)
-  return { recordId, isCurrent: () => isEditorBufferReadCurrent(recordId, token) }
+  return { recordId, token, isCurrent: () => isEditorBufferReadCurrent(recordId, token) }
+}
+
+export type EditorBufferFileRead = { recordId: string; token: number; isCurrent: () => boolean }
+
+/** A panel's own ref object, so each panel can invalidate only the reads it started. */
+export type EditorPanelReadOwner = { current: Record<string, number> }
+
+const readsByPanel = new WeakMap<EditorPanelReadOwner, Map<string, EditorBufferFileRead>>()
+
+export function trackPanelEditorBufferRead(
+  panel: EditorPanelReadOwner,
+  fileId: string,
+  read: EditorBufferFileRead
+): void {
+  const reads = readsByPanel.get(panel) ?? new Map<string, EditorBufferFileRead>()
+  reads.set(fileId, read)
+  readsByPanel.set(panel, reads)
+}
+
+/** Invalidates a panel's read of a tab only while it is still the newest read of the file. */
+export function supersedePanelEditorBufferRead(panel: EditorPanelReadOwner, fileId: string): void {
+  const read = readsByPanel.get(panel)?.get(fileId)
+  if (read?.isCurrent()) {
+    markEditorBufferNewer(read.recordId)
+  }
 }

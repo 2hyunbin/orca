@@ -9,7 +9,10 @@ import {
 import type { OpenFile } from '@/store/slices/editor'
 import { getConnectionIdForFile, isWorktreeConnectionResolved } from '@/lib/connection-context'
 import { useAppStore } from '@/store'
-import { beginEditorBufferFileRead } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
+import {
+  beginEditorBufferFileRead,
+  trackPanelEditorBufferRead
+} from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
 import { liveEditorBufferViewOf } from '@/store/slices/editor/buffers/editor-buffer-record'
 import { stampCleanTabDiskBaseline } from './editor-clean-tab-disk-baseline'
 import { getRuntimeFileReadScope } from '@/runtime/runtime-file-routing'
@@ -85,6 +88,7 @@ export function useEditorPanelFileContentLoader({
       // Why the record owns freshness: any panel's newer read, save or reload of the file
       // supersedes this read, and closing a panel never cancels it.
       const read = beginEditorBufferFileRead(useAppStore.getState(), id)
+      trackPanelEditorBufferRead(fileReadGenerationRef, id, read)
       const isCurrentRead = read.isCurrent
       const retryIfSuperseded = (): void =>
         retrySuperseded(id, generation, () => {

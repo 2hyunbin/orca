@@ -3,40 +3,54 @@ import type { RecoveredEditorDraft } from '../../../../../../shared/workspace-se
 const MAX_RECOVERED_DRAFTS = 20
 const MAX_RECOVERED_DRAFT_CHARS = 2 * 1024 * 1024
 
-/** Adds drafts, keeping the newest within the cap; this only migrates older sessions. */
+/** Unique per draft: the same file can be recovered in two workspaces. */
+export function recoveredEditorDraftId(draft: RecoveredEditorDraft): string {
+  return JSON.stringify([draft.worktreeId, draft.filePath, draft.recoveredAt])
+}
+
+/**
+ * Adds drafts. The newest within the cap are kept across restarts; the rest stay for this launch
+ * only, still offered in the notice, so a draft is never dropped without the user seeing it.
+ */
 export function appendRecoveredEditorDrafts(
   existing: readonly RecoveredEditorDraft[],
   added: readonly RecoveredEditorDraft[]
 ): RecoveredEditorDraft[] {
-  const all = [...existing, ...added].sort((a, b) => b.recoveredAt - a.recoveredAt)
-  const kept: RecoveredEditorDraft[] = []
+  const newestFirst = [...existing, ...added].sort((a, b) => b.recoveredAt - a.recoveredAt)
   let chars = 0
-  for (const draft of all) {
-    if (
-      kept.length >= MAX_RECOVERED_DRAFTS ||
-      chars + draft.draft.length > MAX_RECOVERED_DRAFT_CHARS
-    ) {
-      console.warn('[editor] dropped an older recovered draft over the cap', draft.filePath)
-      continue
+  let count = 0
+  const kept = newestFirst.map((draft) => {
+    const fits =
+      count < MAX_RECOVERED_DRAFTS && chars + draft.draft.length <= MAX_RECOVERED_DRAFT_CHARS
+    if (!fits) {
+      console.warn('[editor] a recovered draft is over the cap; kept for this launch only')
+      const { keptForThisLaunchOnly: _flag, ...rest } = draft
+      return { ...rest, keptForThisLaunchOnly: true as const }
     }
-    kept.push(draft)
+    count += 1
     chars += draft.draft.length
-  }
+    const { keptForThisLaunchOnly: _flag, ...rest } = draft
+    return rest
+  })
   return kept.toReversed()
+}
+
+/** Always written (an empty list included) so a stale host partition can't bring one back. */
+export function recoveredEditorDraftsSessionField(
+  drafts: readonly RecoveredEditorDraft[] | undefined
+): { recoveredEditorDrafts: RecoveredEditorDraft[] } {
+  const persisted: RecoveredEditorDraft[] = []
+  for (const draft of drafts ?? []) {
+    if (draft.keptForThisLaunchOnly !== true) {
+      persisted.push(draft)
+    }
+  }
+  return { recoveredEditorDrafts: persisted }
 }
 
 export function isSameRecoveredEditorDraft(
   a: RecoveredEditorDraft,
   b: RecoveredEditorDraft
 ): boolean {
-  return (
-    a.filePath === b.filePath && a.worktreeId === b.worktreeId && a.recoveredAt === b.recoveredAt
-  )
-}
-
-/** Omitted when empty, so sessions without recovered drafts look exactly as before. */
-export function recoveredEditorDraftsSessionField(
-  drafts: readonly RecoveredEditorDraft[] | undefined
-): { recoveredEditorDrafts?: RecoveredEditorDraft[] } {
-  return drafts && drafts.length > 0 ? { recoveredEditorDrafts: [...drafts] } : {}
+  return recoveredEditorDraftId(a) === recoveredEditorDraftId(b)
 }

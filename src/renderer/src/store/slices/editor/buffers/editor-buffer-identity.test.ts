@@ -119,7 +119,7 @@ describe('editor buffer identity', () => {
       previousFiles: null,
       identityOf: () => identity(1),
       onMirrorDrift: () => {},
-      isPreferredDraft: () => false,
+      draftPreference: () => 0,
       now: () => 0
     })
     replaceRuntimeEnvironmentRevisions([{ id: 'env', createdAt: 0, pairingRevision: 2 }], {
@@ -137,7 +137,7 @@ describe('editor buffer identity', () => {
       previousFiles: new Map([['old', old]]),
       identityOf: (tab) => identity(tab.id === 'old' ? 1 : 2),
       onMirrorDrift: () => {},
-      isPreferredDraft: () => false,
+      draftPreference: () => 0,
       now: () => 0
     })
 

@@ -225,11 +225,13 @@ describe('workspace session editor drafts', () => {
     const without = buildWorkspaceSessionPayload(createSnapshot())
 
     expect(withDrafts.recoveredEditorDrafts).toEqual([recovered])
-    expect(without).not.toHaveProperty('recoveredEditorDrafts')
+    // Written empty, so a stale host partition can't bring a dismissed draft back.
+    expect(without.recoveredEditorDrafts).toEqual([])
     expect(parseWorkspaceSession(withDrafts)).toMatchObject({
       ok: true,
       value: { recoveredEditorDrafts: [recovered] }
     })
-    expect(parseWorkspaceSession(without).ok).toBe(true)
+    const { recoveredEditorDrafts: _omitted, ...olderSession } = without
+    expect(parseWorkspaceSession(olderSession).ok).toBe(true)
   })
 })
