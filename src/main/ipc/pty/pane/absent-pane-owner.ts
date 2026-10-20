@@ -4,7 +4,8 @@ import type { Store } from '../../../persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { ptyOwnership } from '../provider/ownership-state'
 import { clearProviderPtyState } from '../provider/state-cleanup'
-import { retireReplacedPaneBinding, type ReplacedPaneOwner } from './pane-owner-replacement'
+import { retireReplacedPaneBinding } from './pane-owner-replacement'
+import type { ReplacedPaneOwner } from './replaced-pane-owner'
 
 type AbsentPaneContext = {
   runtime: OrcaRuntimeService | undefined

@@ -1,5 +1,5 @@
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import type { ReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import type { ReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import type { PtyIpcSpawnState } from './spawn-state'
 
 /**

@@ -3,15 +3,8 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { Store } from '../../../persistence'
 import type { PersistPtyBindingArgs } from '../../../persistence/loading-store/pty-binding-persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
-import { resolveStablePaneOwner, type StablePaneOwner } from './stable-owner'
-
-/** The owner a replacing spawn stopped. Its binding stays until the replacement's bind swaps it. */
-export type ReplacedPaneOwner = {
-  ptyId: string
-  pane: { worktreeId: string; tabId: string; leafId: string; hostId: string | undefined } | null
-  /** A gone process's: its swap clears the incarnation as the retire it stands in for would. */
-  dropsIncarnation?: true
-}
+import type { ReplacedPaneOwner } from './replaced-pane-owner'
+import { resolveStablePaneOwner } from './stable-owner'
 
 /** Caller holds the pane's spawn reservation, so no other spawn can claim the pane meanwhile. */
 export async function stopReplacedPaneOwner(
@@ -51,14 +44,6 @@ export async function stopReplacedPaneOwner(
           }
         : null
   }
-}
-
-/** The stopped id is dead whatever its incarnation, so a binding naming it must not be reattached. */
-export function excludeReplacedPaneOwner(
-  owner: StablePaneOwner | null,
-  replaced: ReplacedPaneOwner | null
-): StablePaneOwner | null {
-  return owner && owner.ptyId === replaced?.ptyId ? null : owner
 }
 
 /**

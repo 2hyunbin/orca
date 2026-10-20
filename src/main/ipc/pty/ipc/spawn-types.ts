@@ -17,7 +17,7 @@ import type {
   PrepareCodexSessionResume
 } from '../host-env/types'
 import type { StablePaneOwner } from '../pane/stable-owner'
-import type { ReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import type { ReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import type { ResolvedPtyHost } from '../provider/registry'
 import type { PtySpawnCodexResumeDeps } from '../spawn-host-env'
 

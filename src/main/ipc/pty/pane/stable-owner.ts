@@ -19,7 +19,7 @@ import {
 } from '../../../daemon/daemon-errors'
 import { ptyIncarnationById } from '../provider/ownership-state'
 import { keepAbsentPaneBindingForSwap, releaseAbsentPaneOwner } from './absent-pane-owner'
-import { excludeReplacedPaneOwner, type ReplacedPaneOwner } from './pane-owner-replacement'
+import { excludeReplacedPaneOwner, type ReplacedPaneOwner } from './replaced-pane-owner'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
 
 export type StablePaneOwner = {
