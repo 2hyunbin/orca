@@ -41,7 +41,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-function sessionWithReadme(): WorkspaceSessionState {
+function sessionWithReadme(externalSshTargetId?: string): WorkspaceSessionState {
   return {
     ...getDefaultWorkspaceSession(),
     openFilesByWorktree: {
@@ -51,7 +51,8 @@ function sessionWithReadme(): WorkspaceSessionState {
           relativePath: 'README.md',
           worktreeId: TEST_WORKTREE_ID,
           language: 'markdown',
-          runtimeEnvironmentId: null
+          runtimeEnvironmentId: null,
+          ...(externalSshTargetId ? { externalSshTargetId } : {})
         }
       ]
     },
@@ -60,8 +61,11 @@ function sessionWithReadme(): WorkspaceSessionState {
   }
 }
 
-async function runtimeOnHost(executionHostId: ExecutionHostId): Promise<Runtime> {
-  const harness = makeRuntimeStoreWithWorkspaceSession(sessionWithReadme())
+async function runtimeOnHost(
+  executionHostId: ExecutionHostId,
+  session = sessionWithReadme()
+): Promise<Runtime> {
+  const harness = makeRuntimeStoreWithWorkspaceSession(session)
   const runtime = new OrcaRuntimeService(harness.runtimeStore)
   runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
   await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
@@ -236,6 +240,25 @@ describe("a phone's Markdown tab on a raw ssh: host", () => {
       )
     ).rejects.toBeInstanceOf(SshHostNotServedError)
     expect(forwards).not.toHaveBeenCalled()
+  })
+})
+
+describe("a phone's Markdown tab on a file an SSH host holds outside the workspace", () => {
+  it("refuses it on read and save without touching this machine's file at that path", async () => {
+    const runtime = await runtimeOnHost('local', sessionWithReadme('target-1'))
+
+    await expect(
+      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)
+    ).rejects.toBeInstanceOf(SshHostNotServedError)
+    await expect(
+      runtime.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Changed\n'
+      )
+    ).rejects.toBeInstanceOf(SshHostNotServedError)
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
   })
 })
 

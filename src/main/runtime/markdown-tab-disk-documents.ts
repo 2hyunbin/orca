@@ -28,7 +28,10 @@ import { findListedEditorFile } from './mobile-session-editor-projection'
 
 export type MarkdownDiskFile = { content: string; byteLength: number }
 
-type MarkdownFileAddress = Pick<PersistedOpenFile, 'filePath' | 'relativePath'>
+type MarkdownFileAddress = Pick<
+  PersistedOpenFile,
+  'filePath' | 'relativePath' | 'externalSshTargetId'
+>
 
 export type MarkdownTabDiskHost = {
   getWorkspaceSessionForWorktree(worktreeId: string): WorkspaceSessionState | null | undefined

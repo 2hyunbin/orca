@@ -195,13 +195,14 @@ test("a phone opens the desktop's unsaved untitled Markdown tab", async ({ orcaP
         { timeout: 30_000 }
       )
       .toBe(true)
-    console.log('UNTITLED_AFTER_READ', JSON.stringify(answer))
     expect(answer).toMatchObject({
       tabId,
       filePath: untitledPath,
       content: readFileSync(untitledPath, 'utf8'),
       source: 'file',
-      isDirty: true
+      isDirty: true,
+      // The relay refused an untitled tab as read-only (unsupported_untitled); its file is on disk now.
+      editable: true
     })
     expect(JSON.stringify(answer)).not.toContain(DRAFT_LINE)
   } finally {

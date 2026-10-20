@@ -25,6 +25,7 @@ import {
 } from './files/file-target'
 import type { MarkdownDiskFile, MarkdownTabDiskHost } from './markdown-tab-disk-documents'
 import { OrchestrationError } from './orchestration/orchestration-error'
+import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
 type EnvironmentCall = (environmentId: string, method: string, params: unknown) => Promise<unknown>
 
@@ -35,7 +36,11 @@ export type MarkdownTabDiskRuntime = RuntimeLocalFileHost &
   }
 
 export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): MarkdownTabDiskHost {
-  const routeOf = async (worktreeId: string) => {
+  const routeOf = async (worktreeId: string, file: MarkdownFileAddress) => {
+    // Why: a file outside the workspace on an SSH host is that host's; no process here serves it.
+    if (file.externalSshTargetId) {
+      throw new SshHostNotServedError(file.externalSshTargetId)
+    }
     const target = await runtime.resolveRuntimeFileTarget(`id:${worktreeId}`)
     const host = parseExecutionHostId(target.executionHostId)
     if (host?.kind === 'runtime') {
@@ -48,7 +53,7 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
     getWorkspaceSessionForWorktree: (worktreeId) =>
       runtime.getWorkspaceSessionForWorktree(worktreeId),
     readFile: async (worktreeId, file, maxBytes) => {
-      const { environmentId } = await routeOf(worktreeId)
+      const { environmentId } = await routeOf(worktreeId, file)
       if (environmentId) {
         return readFileOnEnvironment(runtime.callEnvironment, environmentId, worktreeId, file)
       }
@@ -63,7 +68,7 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
       return { content: bytes.toString('utf8'), byteLength: size }
     },
     writeFileIfUnchanged: async (worktreeId, file, content, precondition) => {
-      const { environmentId, target } = await routeOf(worktreeId)
+      const { environmentId, target } = await routeOf(worktreeId, file)
       if (environmentId) {
         return writeFileOnEnvironment(
           runtime.callEnvironment,
@@ -83,7 +88,7 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
   }
 }
 
-type MarkdownFileAddress = Pick<PersistedOpenFile, 'relativePath'>
+type MarkdownFileAddress = Pick<PersistedOpenFile, 'relativePath' | 'externalSshTargetId'>
 
 /** The server's answer passes through; losing it is `remote_runtime_unavailable`, never a disk verdict. */
 async function callEnvironment(
