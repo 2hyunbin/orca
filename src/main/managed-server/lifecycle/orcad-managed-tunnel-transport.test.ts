@@ -147,7 +147,9 @@ describe('the managed tunnel’s transport', () => {
     expect(chosen.forward.close).toHaveBeenCalledOnce()
     expect(knownOrcadTunnelTransport('ssh-1')).toBe('stdio_bridge')
     // A late exit of the abandoned forward must not read as the bridge closing.
-    chosen.forward.start.mock.calls[0]?.[1].onUnexpectedClose?.(options, { kind: 'closed' })
+    chosen.forward.start.mock.calls[0]?.[1].onUnexpectedClose?.(options, {
+      kind: 'unexpected-exit'
+    })
     expect(onUnexpectedClose).toHaveBeenCalledOnce()
   })
 
