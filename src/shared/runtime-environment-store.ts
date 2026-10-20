@@ -82,6 +82,7 @@ function saveEnvironmentFromPairingCode(
 ): AddEnvironmentOutcome {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const now = args.now ?? Date.now()
+  // Why the overlaid read: an unreadable sidecar fails the add closed rather than risk a duplicate.
   const samePaired = findEnvironmentWithHostKey(
     readEnvironmentStore(userDataPath).environments,
     offer.publicKeyB64

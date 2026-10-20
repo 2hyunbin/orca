@@ -8502,7 +8502,6 @@
           "6cb6eae14f": "Échec de l'enregistrement de l'environnement d'exécution.",
           "7b5986c8df": "Connecté à {{value0}}. Pour y créer les nouveaux projets par défaut, choisissez-le dans Avancé > Hôte par défaut des nouveaux projets.",
           "serverAlreadyPaired": "Ce serveur est déjà associé sous le nom {{value0}} ; sa connexion a été mise à jour.",
-          "5ef712f407": "Un serveur nommé « {{value0}} » existe déjà.",
           "0c55a47480": "Le nom et le code d'appairage sont requis.",
           "e6410d72c3": "Échec du chargement des environnements d'exécution.",
           "6ef71985da": "Aucun endpoint",

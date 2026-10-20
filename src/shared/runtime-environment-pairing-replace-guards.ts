@@ -35,10 +35,22 @@ export function assertPairingReplaceableByAdd(
 ): void {
   const alreadyPaired = `This server is already paired as "${environment.name}".`
   // Why: a cloud workspace pairs its own server on resume; a hand-made pairing would be swept with it.
-  if (isEphemeralVmRuntimeEnvironment(environment) || source === 'ephemeral-vm') {
+  if (isEphemeralVmRuntimeEnvironment(environment)) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
       `${alreadyPaired} It belongs to a cloud workspace, which pairs it again when it resumes.`
+    )
+  }
+  if (source === 'ephemeral-vm') {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      `${alreadyPaired} The cloud workspace's server reuses that server's identity, so it was not saved.`
+    )
+  }
+  if (environment.orcadDeployment?.kind === 'wsl') {
+    throw new RuntimeEnvironmentStoreError(
+      'invalid_argument',
+      `${alreadyPaired} Orca manages it as a WSL host, so its pairing cannot be replaced here.`
     )
   }
   try {

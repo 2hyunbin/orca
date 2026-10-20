@@ -8679,7 +8679,6 @@
           "6cb6eae14f": "Failed to save runtime environment.",
           "7b5986c8df": "Connected to {{value0}}. To create new projects there by default, choose it under Advanced > Default host for new projects.",
           "serverAlreadyPaired": "This server is already paired as {{value0}}; updated its connection.",
-          "5ef712f407": "A server named \"{{value0}}\" already exists.",
           "0c55a47480": "Name and pairing code are required.",
           "e6410d72c3": "Failed to load runtime environments.",
           "6ef71985da": "No endpoint",

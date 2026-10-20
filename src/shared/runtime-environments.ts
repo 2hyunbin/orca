@@ -313,12 +313,12 @@ export function getPreferredPairingOffer(environment: PreferredEndpointSource): 
  * The saved server holding this host key. Why the key: it is the server's persisted identity,
  * so two pairings carrying it are one server whatever endpoint or name each was saved under.
  */
-export function findEnvironmentWithHostKey<T extends PreferredEndpointSource>(
+export function findEnvironmentWithHostKey<T extends Pick<KnownRuntimeEnvironment, 'endpoints'>>(
   environments: readonly T[],
   publicKeyB64: string
 ): T | undefined {
-  return environments.find(
-    (environment) => getPreferredPairingOffer(environment).publicKeyB64 === publicKeyB64
+  return environments.find((environment) =>
+    environment.endpoints.some((endpoint) => endpoint.publicKeyB64 === publicKeyB64)
   )
 }
 

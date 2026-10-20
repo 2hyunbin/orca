@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import {
-  addOrUpdateEnvironmentFromPairingCode,
+  addEnvironmentFromPairingCode,
   listEnvironments,
   removeEnvironment,
   resolveEnvironment
@@ -88,15 +88,14 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
   })
   ipcMain.handle(
     'runtimeEnvironments:addFromPairingCode',
-    async (_event, args: { name: string; pairingCode: string }) => {
-      const { environment, updatedExisting } = addOrUpdateEnvironmentFromPairingCode(
-        getUserDataPath(),
-        { name: args.name, pairingCode: args.pairingCode }
-      )
+    (
+      _event,
+      args: { name: string; pairingCode: string }
+    ): { environment: PublicKnownRuntimeEnvironment } => {
+      // Why refuse, not refresh: nothing here proves the code works before it would replace one that does.
+      const environment = addEnvironmentFromPairingCode(getUserDataPath(), args)
       clearRuntimeEnvironmentManualDisconnect(environment.id)
-      // Retires the owner keyed on the replaced pairing revision.
-      await (updatedExisting ? invalidateTransport(environment.id) : undefined)
-      return { environment: redactRuntimeEnvironment(environment), updatedExisting }
+      return { environment: redactRuntimeEnvironment(environment) }
     }
   )
   ipcMain.handle(

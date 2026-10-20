@@ -8344,7 +8344,6 @@
           "6cb6eae14f": "No se pudo guardar el runtime.",
           "7b5986c8df": "Conectado a {{value0}}. Para crear proyectos nuevos allí de forma predeterminada, elígelo en Avanzado > Host predeterminado para proyectos nuevos.",
           "serverAlreadyPaired": "Este servidor ya está emparejado como {{value0}}; se actualizó su conexión.",
-          "5ef712f407": "Ya existe un servidor llamado \"{{value0}}\".",
           "0c55a47480": "Se requieren nombre y código de emparejamiento.",
           "e6410d72c3": "No se pudieron cargar los runtimes.",
           "6ef71985da": "Sin punto final",
