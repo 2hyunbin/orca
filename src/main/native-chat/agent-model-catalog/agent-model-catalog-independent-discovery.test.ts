@@ -141,6 +141,46 @@ describe('independent installed CLI discovery', () => {
     })
     expect(entry && restarted.get(entry.fingerprint)).not.toBeNull()
     expect(entry && restarted.verified(entry)).toBe(false)
+    if (entry) {
+      restarted.recordSuccess(
+        entry.fingerprint,
+        'claude',
+        { ...listing('partial'), complete: false },
+        'discovery'
+      )
+      expect(restarted.get(entry.fingerprint)).toBe(entry)
+      expect(restarted.verified(entry)).toBe(false)
+    }
+    h.service.stop()
+  })
+  it('retains complete B/high whole on partial acquisition, then clears it on observed empty config', async () => {
+    const h = harness()
+    await h.read('a', { waitForListing: true })
+    const good = h.service.peek('a')
+    h.update({ ...listing('partial', 'partial'), complete: false })
+    await h.read('a', { waitForListing: true })
+    expect(h.service.peek('a')).toBe(good)
+    expect(await h.read()).not.toHaveProperty('listingInProgress')
+    expect(h.run).toHaveBeenCalledTimes(2)
+    h.update(listing('new'))
+    await h.read('a', { waitForListing: true })
+    expect(h.service.peek('a', true)?.configured).toBeNull()
+    h.service.stop()
+  })
+
+  it('paces cold unsupported display independently of proof and recovers on the same path', async () => {
+    const h = harness()
+    h.update({ ...listing('partial', 'partial'), complete: false })
+    expect(await h.read('a', { waitForListing: true })).toMatchObject({
+      models: [{ id: 'partial', isDefault: false }],
+      listingNamesConfiguredModel: false
+    })
+    expect(h.service.peek('a', true)).toBeNull()
+    await h.read()
+    expect(h.run).toHaveBeenCalledTimes(1)
+    h.update(listing('upgraded', 'upgraded'))
+    await h.read('a', { waitForListing: true })
+    expect(h.service.peek('a', true)?.models[0]?.id).toBe('upgraded')
     h.service.stop()
   })
 })

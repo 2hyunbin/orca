@@ -61,6 +61,7 @@ export function useHostModelCatalogUpgrade(args: {
   providerRunning?: boolean
   /** A listing landed after the chat's options were read, which answered without it. */
   onListingLanded?: () => void
+  holdControls?: boolean
   activeOptionRecordRef: MutableRefObject<StructuredAgentSessionOptionRecord>
   updateOptionState: (
     update: (current: StructuredAgentSessionOptionState) => StructuredAgentSessionOptionState
@@ -79,6 +80,7 @@ export function useHostModelCatalogUpgrade(args: {
     updateOptionState,
     worktree
   } = args
+  const holdControls = args.holdControls === true
   const waitKey = `${structuredAgentSessionHostKey(target)}\u0000${agent}\u0000${sessionId}`
   const [verdict, setVerdict] = useState<{
     key: string
@@ -133,7 +135,8 @@ export function useHostModelCatalogUpgrade(args: {
           ? current
           : catalog
             ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
-                newLaunch
+                newLaunch,
+                holdControls
               })
             : settleStructuredAgentSessionBuiltinCatalog(current)
       )
@@ -182,6 +185,7 @@ export function useHostModelCatalogUpgrade(args: {
       leave?.()
     }
   }, [
+    holdControls,
     activeOptionRecordRef,
     agent,
     enabled,

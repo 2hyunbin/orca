@@ -1,3 +1,7 @@
+import {
+  agentModelCatalogProbeLister,
+  scopedAgentModelCatalogLister
+} from './agent-model-catalog-lister'
 import { prewarmAgentModelCatalog, newChatCatalogKey } from './agent-model-catalog-prewarm'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import type {
@@ -12,11 +16,8 @@ import {
 } from './agent-model-catalog-entry'
 import type {
   AgentModelCatalogEntry,
-  AgentModelCatalogLiveListing,
-  AgentModelCatalogProbe,
-  AgentModelCatalogSuccess
+  AgentModelCatalogLiveListing
 } from './agent-model-catalog-store'
-import { AgentModelCatalogListingStoppedError } from './agent-model-catalog-failures'
 import {
   catalogFolder,
   recordConfiguredDefault,
@@ -58,14 +59,7 @@ export function createAgentModelCatalogService(
   // A chat's configured default still being checked against its workspace, per catalog: a read
   // answers after it, so the chat that reported it is followed by an answer naming it.
   const recordingDefaults = new Map<string, Promise<void>>()
-  const listWith =
-    (probe: AgentModelCatalogProbe, home: AgentSessionAccountHome, workspacePath?: string) =>
-    (): Promise<AgentModelCatalogSuccess> =>
-      probe(home, { signal: lifetime.signal, workspacePath }).catch((error: unknown) => {
-        throw lifetime.signal.aborted
-          ? new AgentModelCatalogListingStoppedError(String(error))
-          : error
-      })
+  const listWith = agentModelCatalogProbeLister(lifetime.signal)
   // A running chat's saves for agents kept per folder, which wait on a folder lookup.
   const liveWrites = new Map<string, Promise<void>>()
   /** The catalog a session's own listings belong to: its pinned account and host, and its folder
@@ -174,26 +168,19 @@ export function createAgentModelCatalogService(
       await recordingDefaults.get(fingerprint)
       let entry = deps.store.get(fingerprint)
       const probe = deps.probes?.[params.agent]
-      const list = async (): Promise<AgentModelCatalogSuccess> => {
-        const release = await admission.acquire(0, lifetime.signal)
-        try {
-          if (resolved) {
-            return await resolved.run(lifetime.signal)
-          }
-          if (!probe || !probeHome) {
-            throw new AgentModelCatalogListingStoppedError('catalog scope unavailable')
-          }
-          return await listWith(probe, probeHome, cwd ?? folder)()
-        } finally {
-          release()
-        }
-      }
+      const list = scopedAgentModelCatalogLister({
+        legacy: params.legacy,
+        admission,
+        signal: lifetime.signal,
+        resolved,
+        probe,
+        probeHome,
+        workspacePath: cwd ?? folder
+      })
       // Every answer carries the reason the probe last found, read when the answer is made.
       const answer = async (
-        listed: AgentModelCatalogEntry | null,
-        extra: { listingInProgress?: true } = {}
+        listed: AgentModelCatalogEntry | null
       ): Promise<AgentSessionModelCatalogResult> => {
-        const unavailable = deps.store.failure(fingerprint)?.unavailable
         if (
           params.verifiedOnly &&
           (!listed ||
@@ -213,16 +200,18 @@ export function createAgentModelCatalogService(
         const result = display
           ? agentModelCatalogResultFromEntry(
               display,
-              exact && listed?.discovered?.complete === true
-                ? true
-                : await workspaceKeepsListedDefault(
-                    deps,
-                    params.agent,
-                    accountFallback ? undefined : workspacePath,
-                    accountHomePath
-                  ),
+              independent && (!deps.store.verified(display) || (!exact && !params.legacy))
+                ? false
+                : exact && listed !== null && deps.store.verified(listed)
+                  ? true
+                  : await workspaceKeepsListedDefault(
+                      deps,
+                      params.agent,
+                      accountFallback ? undefined : workspacePath,
+                      accountHomePath
+                    ),
               deps.listingNamesConfiguredModel?.has(params.agent) === true,
-              !independent || (exact && listed !== null)
+              !independent || (exact && listed !== null && deps.store.verified(listed))
             )
           : null
         const holdsEverywhere =
@@ -234,8 +223,15 @@ export function createAgentModelCatalogService(
           ...(result && (folder !== undefined || exact)
             ? { modelsDifferByWorkspace: true as const }
             : {}),
-          ...extra,
-          ...(unavailable ? { unavailable } : {})
+          ...(!params.savedOnly &&
+          !params.verifiedOnly &&
+          deps.store.isListing(fingerprint) &&
+          (independent || !listed)
+            ? { listingInProgress: true as const }
+            : {}),
+          ...(deps.store.failure(fingerprint)?.unavailable
+            ? { unavailable: deps.store.failure(fingerprint)?.unavailable }
+            : {})
         }
       }
       // Death evidence keeps a read after an observed exit from spawning another agent; a new chat
@@ -249,21 +245,22 @@ export function createAgentModelCatalogService(
       // Past its TTL, only the probe re-derives a held reason. The reason is served meanwhile;
       // only a read that asks waits for the probe's answer.
       if (probe && probeHome && !lifetime.signal.aborted && deps.store.heldReasonDue(fingerprint)) {
-        const probing = deps.store.refresh(fingerprint, params.agent, probe, list)
+        void deps.store.refresh(fingerprint, params.agent, probe, list)
         if (!params.waitForListing) {
-          return answer(entry, { listingInProgress: true })
+          return answer(entry)
         }
-        await probing
+        await deps.store.pendingListing(fingerprint, true, params.legacy)
         return answer(deps.store.get(fingerprint))
       }
       // Without an entry, answer from any running listing instead of starting a second one.
-      let listing = !entry && probeHome ? deps.store.pendingListing(fingerprint) : null
+      let listing =
+        !entry && probeHome ? deps.store.pendingListing(fingerprint, false, params.legacy) : null
       if (probe && probeHome && !lifetime.signal.aborted) {
         if (entry && deps.store.shouldRefresh(fingerprint)) {
           void deps.store.refresh(fingerprint, params.agent, probe, list)
-        } else if (!entry && !listing && !deps.store.hasActiveFailure(fingerprint)) {
+        } else if (!entry && !listing && deps.store.shouldRefresh(fingerprint)) {
           void deps.store.refresh(fingerprint, params.agent, probe, list)
-          listing = deps.store.pendingListing(fingerprint)
+          listing = deps.store.pendingListing(fingerprint, false, params.legacy)
         }
       }
       if (
@@ -272,9 +269,9 @@ export function createAgentModelCatalogService(
         deps.store.isListing(fingerprint)
       ) {
         if (!params.waitForListing) {
-          return answer(entry, { listingInProgress: true })
+          return answer(entry)
         }
-        await deps.store.pendingListing(fingerprint, true)
+        await deps.store.pendingListing(fingerprint, true, params.legacy)
         return answer(deps.store.get(fingerprint))
       }
       if (!entry) {
@@ -282,7 +279,7 @@ export function createAgentModelCatalogService(
           return answer(null)
         }
         if (!params.waitForListing) {
-          return answer(null, { listingInProgress: true })
+          return answer(null)
         }
         const listed = await listing
         entry = deps.store.get(fingerprint) ?? listed
@@ -325,6 +322,7 @@ export function createAgentModelCatalogService(
     stop() {
       lifetime.abort()
       sessionKeys.clear()
+      deps.store.clearPartialAttempts()
     }
   }
 }

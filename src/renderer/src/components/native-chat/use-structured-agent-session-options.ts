@@ -12,13 +12,11 @@ import {
   canSetStructuredAgentSessionOption,
   commitStructuredAgentSessionOptionValues,
   lockedStructuredAgentSessionOptionSnapshot,
-  structuredAgentSessionOptionPicks,
-  structuredAgentSessionOptionSnapshot,
-  type StructuredAgentSessionOptionState
+  structuredAgentSessionOptionSnapshot
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
-import { enqueueSessionOptionSettingsWrite } from './native-chat-session-option-settings-write'
+import { useRememberSessionOptionPicks } from './use-structured-agent-session-option-picks'
 import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 import { useHostModelCatalogUpgrade } from './use-host-model-catalog-upgrade'
@@ -65,7 +63,6 @@ export function useStructuredAgentSessionOptions(args: {
   const launchSeedOptions = launch?.seedOptions
   const held = launch?.heldOptions ?? NO_HELD_OPTIONS
   // Published but not attached: the launch no longer holds picks and there is no fence to send one.
-  const acceptsPicks = !transportEnabled || fence !== null
   const optionCatalog = useMemo(() => structuredAgentSessionSeedCatalog(agent), [agent])
   const {
     optionView,
@@ -99,6 +96,10 @@ export function useStructuredAgentSessionOptions(args: {
     unloadedTurnRevisions: args.unloadedTurnRevisions
   })
 
+  const awaitingOptions =
+    conversationSupport?.sessionId === sessionId && conversationSupport.fence !== fence
+  const acceptsPicks = (!transportEnabled || fence !== null) && !awaitingOptions
+
   const hostCatalog = useHostModelCatalogUpgrade({
     agent,
     sessionId,
@@ -115,19 +116,11 @@ export function useStructuredAgentSessionOptions(args: {
     ...(args.providerRunning ? { providerRunning: true } : {}),
     activeOptionRecordRef,
     updateOptionState,
-    onListingLanded: rereadOptions
+    onListingLanded: rereadOptions,
+    holdControls: awaitingOptions
   })
 
-  // What a settled pick must remember so the next launch starts where the user left off.
-  const rememberOptionPicks = useCallback(
-    (view: StructuredAgentSessionOptionState, committed: Readonly<Record<string, string>>) => {
-      const picks = structuredAgentSessionOptionPicks(view, committed)
-      if (picks.length > 0) {
-        void enqueueSessionOptionSettingsWrite(target, { type: 'apply-picks', agent, picks })
-      }
-    },
-    [agent, target]
-  )
+  const rememberOptionPicks = useRememberSessionOptionPicks(target, agent)
   const sendStructuredOption = useCallback(
     async (id: string, encoded: string): Promise<boolean> => {
       const currentState = optionStateRef.current
@@ -242,6 +235,7 @@ export function useStructuredAgentSessionOptions(args: {
       }
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
+        awaitingOptions ||
         !optionCatalog ||
         encoded === null ||
         !canSetStructuredAgentSessionOption(pickState, id, value)
@@ -257,6 +251,7 @@ export function useStructuredAgentSessionOptions(args: {
       return sendStructuredOption(id, encoded)
     },
     [
+      awaitingOptions,
       fence,
       held,
       launchSeedOptions,

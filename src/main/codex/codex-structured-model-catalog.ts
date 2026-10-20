@@ -92,6 +92,8 @@ export type CodexModelCatalogListing = {
   models: AgentSessionModelOption[]
   complete?: boolean
   configured?: { model?: string; effort?: string }
+  /** Installed tier universe retained while the current child's row overrides its controls. */
+  listedServiceTiers?: readonly string[]
 }
 
 /** One paginated `model/list` pass. The provider fetch and the shaping of a
@@ -101,6 +103,7 @@ export async function fetchCodexModelCatalogListing(input: {
   timeoutMs?: number
   deadlineMs?: number
   cwd?: string
+  configuration?: false
 }): Promise<CodexModelCatalogListing> {
   const deadline = input.deadlineMs === undefined ? null : Date.now() + input.deadlineMs
   const remainingTimeout = (): number | undefined => {
@@ -149,14 +152,13 @@ export async function fetchCodexModelCatalogListing(input: {
       break
     }
   }
-  const configured = await readCodexConfiguredLaunchDefaults(
-    input.connection,
-    remainingTimeout(),
-    input.cwd
-  )
+  const configured =
+    input.configuration === false
+      ? null
+      : await readCodexConfiguredLaunchDefaults(input.connection, remainingTimeout(), input.cwd)
   return {
     models: applyCodexConfiguredLaunchDefaults(parsedModels, configured),
-    complete: complete && cursor === null,
+    complete: complete && cursor === null && (input.configuration === false || configured !== null),
     ...(configured
       ? {
           configured: {
@@ -201,7 +203,9 @@ export function composeCodexSessionOptionCatalog(
       ? effectiveServiceTier({
           tier: selectedTier,
           modelTiers: modelTiers.map((row) => row.value),
-          listedTiers: models.flatMap((row) => row.serviceTiers?.map((tier) => tier.value) ?? []),
+          listedTiers:
+            listing.listedServiceTiers ??
+            models.flatMap((row) => row.serviceTiers?.map((tier) => tier.value) ?? []),
           reported: selectedTier === reportedTier
         })
       : selectedTier

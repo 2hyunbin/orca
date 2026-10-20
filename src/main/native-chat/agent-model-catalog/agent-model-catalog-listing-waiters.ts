@@ -12,7 +12,11 @@ export class AgentModelCatalogListingWaiters {
     private readonly listing: (fingerprint: string) => boolean
   ) {}
 
-  wait(fingerprint: string, waitForChange = false): Promise<AgentModelCatalogEntry | null> | null {
+  wait(
+    fingerprint: string,
+    waitForChange = false,
+    terminal = false
+  ): Promise<AgentModelCatalogEntry | null> | null {
     if (!this.listing(fingerprint)) {
       return null
     }
@@ -34,14 +38,16 @@ export class AgentModelCatalogListingWaiters {
       }
       const check = (): void => {
         const entry = this.read(fingerprint)
-        if ((entry && (!waitForChange || entry !== previous)) || !this.listing(fingerprint)) {
+        if (
+          (!terminal && entry && (!waitForChange || entry !== previous)) ||
+          !this.listing(fingerprint)
+        ) {
           finish(entry)
         }
       }
-      const deadline = setTimeout(
-        () => finish(this.read(fingerprint)),
-        AGENT_MODEL_CATALOG_PICKER_WAIT_MS
-      )
+      const deadline = terminal
+        ? undefined
+        : setTimeout(() => finish(this.read(fingerprint)), AGENT_MODEL_CATALOG_PICKER_WAIT_MS)
       waiters.add(check)
       this.waiters.set(fingerprint, waiters)
       check()

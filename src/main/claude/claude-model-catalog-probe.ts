@@ -7,9 +7,10 @@ import { runClaudeBackgroundAttempts } from '../../shared/claude-background-run-
 import {
   isCompleteClaudeModelListing,
   listedModels,
-  record
+  record,
+  type ListedModel
 } from './claude-structured-model-catalog'
-import { wireClaudeModels } from './claude-structured-catalog-listing'
+import { claudeFastModeSupport, wireClaudeModels } from './claude-structured-catalog-listing'
 import { readClaudeSettingsApplied } from './claude-structured-session-options'
 import { claudeStructuredLaunchArgs } from './claude-structured-launch-args'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
@@ -150,7 +151,7 @@ export function createClaudeModelCatalogProbe(
           throw outcome
         }
         const stdout = outcome
-        let models: AgentModelCatalogSuccess['models'] = []
+        let models: ListedModel[] = []
         let complete = false
         let configured: AgentModelCatalogSuccess['configured']
         for (const line of stdout.split(/\r?\n/)) {
@@ -160,12 +161,23 @@ export function createClaudeModelCatalogProbe(
               continue
             }
             const body = response.response
-            const listed = listedModels(body)
+            const listed = response.request_id === 'orca-model-discovery' ? listedModels(body) : []
             if (listed.length > 0) {
-              models = wireClaudeModels(listed)
+              models = listed
               complete = isCompleteClaudeModelListing(body)
             }
-            configured = readClaudeSettingsApplied(body) ?? configured
+            if (response.request_id === 'orca-model-settings') {
+              const applied = record(record(body)?.applied)
+              if (
+                applied &&
+                !Array.isArray(applied) &&
+                ['model', 'effort'].every(
+                  (key) => applied[key] == null || typeof applied[key] === 'string'
+                )
+              ) {
+                configured = readClaudeSettingsApplied(body) ?? undefined
+              }
+            }
           } catch {
             /* Non-JSON diagnostic output carries no catalog facts. */
           }
@@ -173,10 +185,12 @@ export function createClaudeModelCatalogProbe(
         if (models.length === 0) {
           throw new Error('claude listed no models')
         }
+        const fastModeSupport = claudeFastModeSupport(models, undefined)
         return {
-          models,
+          models: wireClaudeModels(models),
           origin: 'probe',
-          complete,
+          complete: complete && configured !== undefined,
+          ...(fastModeSupport ? { fastModeSupport } : {}),
           ...(configured ? { configured } : {})
         }
       }

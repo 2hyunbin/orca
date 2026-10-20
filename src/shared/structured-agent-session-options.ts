@@ -124,7 +124,7 @@ export function applyStructuredAgentSessionModelCatalog(
   state: StructuredAgentSessionOptionState,
   seed: AgentSessionOptionCatalog,
   catalog: AgentSessionModelCatalogResult,
-  options: { newLaunch: boolean }
+  options: { newLaunch: boolean; holdControls?: boolean }
 ): StructuredAgentSessionOptionState {
   if (state.catalogSource === 'live' && !independentAgentModelCatalog(state.record.agent)) {
     return state
@@ -140,7 +140,7 @@ export function applyStructuredAgentSessionModelCatalog(
   }
   const selected = state.record.values.model?.value
   const currentRow =
-    state.catalogSource === 'live'
+    state.catalogSource === 'live' || options.holdControls
       ? state.catalog?.models.find((row) => row.id === selected)
       : undefined
   const inventory = models.map((row) =>

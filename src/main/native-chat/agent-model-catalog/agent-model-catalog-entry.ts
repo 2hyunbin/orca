@@ -131,6 +131,9 @@ export function agentModelCatalogResultFromEntry(
   listingNamesConfiguredModel: boolean,
   useConfigured = true
 ): Exclude<AgentSessionModelCatalogResult, { origin: 'unknown' }> {
+  if (independentAgentModelCatalog(entry.agent) && entry.discovered?.complete !== true) {
+    namesDefault = false
+  }
   // A CLI-resolved default names the configured model even where the listing names none.
   const namesConfigured =
     listingNamesConfiguredModel || (useConfigured && entry.configured !== null)
@@ -237,7 +240,10 @@ export function agentModelCatalogEntryWithSuccess(
     if (source !== 'discovery' || success.models.length === 0) {
       return null
     }
-    const configuredModel = success.configured?.model
+    if (success.complete !== true && previous?.discovered?.complete === true) {
+      return previous
+    }
+    const configuredModel = success.complete === true ? success.configured?.model : undefined
     const configuredRow = configuredModel
       ? success.models.find(
           (row) => row.id === configuredModel || row.resolvedModel === configuredModel
@@ -247,7 +253,9 @@ export function agentModelCatalogEntryWithSuccess(
       identity.agent,
       identity.fingerprint,
       {
-        models: success.models.map((row) => ({ ...row })),
+        models: success.models.map((row) =>
+          success.complete === true ? { ...row } : { ...row, isDefault: false }
+        ),
         origin: success.origin,
         at,
         complete: success.complete === true,

@@ -12,11 +12,15 @@ import {
 } from './codex-structured-service-tier'
 import {
   composeCodexSessionOptionCatalog,
+  fetchCodexModelCatalogListing,
   readCodexStructuredSessionOptionCatalog,
   type CodexModelCatalogListing,
   type CodexSessionOptionCatalog
 } from './codex-structured-model-catalog'
-import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
+import {
+  codexAcquireCatalogListing,
+  codexSessionCapabilities
+} from './codex-structured-catalog-entry'
 export { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
 
 export function restoredCodexSessionOptions(
@@ -46,22 +50,54 @@ export type { CodexSessionOptionCatalog } from './codex-structured-model-catalog
 
 export { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
 
-/** Shared discovery supplies the picker; a chat never publishes inventory. */
-export async function codexSessionCatalogListingForPicker(
-  session: CodexSession,
-  timeoutMs: number | undefined
-): Promise<CodexModelCatalogListing> {
-  const access = session.catalogAccess
-  if (access) {
-    await access.demand?.()
-    return codexAcquireCatalogListing(access) ?? { models: [] }
+/** Acquire only the exact current row, then apply inside the session's ordered read. */
+async function prepareCodexCurrentCapabilities(session: CodexSession, timeoutMs?: number) {
+  const model = session.options.get('model') ?? session.reportedOptions.model
+  const connection = session.connection
+  let fact = session.currentModelCapabilities
+  if (
+    !fact ||
+    fact.model !== model ||
+    fact.connection !== connection ||
+    fact.fence !== session.fence ||
+    fact.generation !== session.acquisitionGeneration
+  ) {
+    delete session.currentModelCapabilities
+    if (!model || session.ended || connection.closed || session.exitObservedAt !== undefined) {
+      return () => {}
+    }
+    fact = { model, connection, fence: session.fence, generation: session.acquisitionGeneration }
+    session.currentModelCapabilities = fact
   }
-  const result = await readCodexStructuredSessionOptionCatalog({
-    connection: session.connection,
-    current: reportedCodexSessionOptions(session),
-    timeoutMs
+  const captured = fact
+  const pending = (captured.pending ??= fetchCodexModelCatalogListing({
+    connection,
+    timeoutMs,
+    configuration: false
   })
-  return { models: result.models }
+    .then((listing) => listing.models.find((row) => row.id === captured.model))
+    .catch(() => undefined))
+  const row = await pending
+  return () => {
+    if (
+      session.currentModelCapabilities !== captured ||
+      session.ended ||
+      connection.closed ||
+      session.exitObservedAt !== undefined ||
+      session.fence !== captured.fence ||
+      session.acquisitionGeneration !== captured.generation ||
+      session.connection !== connection ||
+      (session.options.get('model') ?? session.reportedOptions.model) !== captured.model
+    ) {
+      return
+    }
+    if (captured.pending === pending) {
+      delete captured.pending
+    }
+    if (row) {
+      captured.row = row
+    }
+  }
 }
 
 export async function readCodexStructuredSessionOptions(input: {
@@ -96,28 +132,26 @@ function composeLiveCodexCatalog(
   })
 }
 
-function applyLiveCodexCatalog(
-  session: CodexSession,
-  listing: CodexModelCatalogListing
-): AgentSessionOptionsResult {
-  return composeLiveCodexCatalog(session, listing)
-}
-
 export async function readLiveCodexSessionOptions(
   session: CodexSession,
   timeoutMs: number | undefined
 ): Promise<AgentSessionOptionsResult> {
-  const listing = await codexSessionCatalogListingForPicker(session, timeoutMs)
-  return applyLiveCodexCatalog(session, listing)
+  return (await prepareLiveCodexSessionOptions(session, timeoutMs))()
 }
 
-/** Fetch outside the session lane; apply against current options inside it. */
+/** Fetch outside the session lane; apply against current child/model identity inside it. */
 export async function prepareLiveCodexSessionOptions(
   session: CodexSession,
   timeoutMs: number | undefined
 ): Promise<() => AgentSessionOptionsResult> {
-  const listing = await codexSessionCatalogListingForPicker(session, timeoutMs)
-  return () => applyLiveCodexCatalog(session, listing)
+  const [apply] = await Promise.all([
+    prepareCodexCurrentCapabilities(session, timeoutMs),
+    session.catalogAccess?.demand?.()
+  ])
+  return () => {
+    apply()
+    return composeLiveCodexCatalog(session, codexSessionCapabilities(session))
+  }
 }
 
 export async function applyCodexStructuredSessionOption(
@@ -147,6 +181,7 @@ function applyUnlistedCodexSessionOption(
   ) {
     // An effort saved under another model is unverified for this one; its default applies.
     session.options.delete('effort')
+    delete session.currentModelCapabilities
   }
   session.options.set(key, value)
   return Object.fromEntries(session.options)
@@ -157,7 +192,10 @@ function applyValidatedCodexStructuredSessionOption(
   requestedKey: string,
   requestedValue: string
 ): Readonly<Record<string, string>> {
-  const listing = codexAcquireCatalogListing(session.catalogAccess, true)
+  const verified = codexAcquireCatalogListing(session.catalogAccess, true)
+  const capabilities = codexSessionCapabilities(session)
+  const listing =
+    requestedKey === 'model' ? verified : capabilities.models.length ? capabilities : null
   const priorModel = session.options.get('model') ?? session.reportedOptions.model
   const catalog = listing
     ? composeCodexSessionOptionCatalog(listing, {
@@ -190,7 +228,15 @@ function applyValidatedCodexStructuredSessionOption(
   const modelId = key === 'model' ? value : catalog.current.model
   const model = catalog.models.find((entry) => entry.id === modelId)
   if (key === 'serviceTier') {
-    if (!codexOffersServiceTier(session, model, catalog.models, value)) {
+    if (
+      !codexOffersServiceTier(
+        session,
+        model,
+        catalog.models,
+        value,
+        capabilities.listedServiceTiers
+      )
+    ) {
       throw new Error(`codex app-server model ${modelId} does not offer the ${value} tier`)
     }
     session.options.set(key, value)
@@ -210,6 +256,9 @@ function applyValidatedCodexStructuredSessionOption(
         : (model?.efforts.find((entry) => entry.value === requestedEffort)?.value ??
           model?.defaultEffort ??
           model?.efforts[0]?.value)
+  if (modelId !== priorModel) {
+    delete session.currentModelCapabilities
+  }
   session.options.set('model', modelId)
   if (effort) {
     session.options.set('effort', effort)

@@ -15,7 +15,9 @@ export function structuredAgentSessionOptionModels<TModel extends AgentSessionMo
 ): TModel[] {
   const models = [...catalog]
   if (current && !models.some((entry) => entry.id === current)) {
-    models.push(row({ id: current, label: current, isDefault: false, efforts: [] }))
+    models.push(
+      row({ id: current, label: current, isDefault: false, efforts: [], effortsKnown: false })
+    )
   }
   return models
 }

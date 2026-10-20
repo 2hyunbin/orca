@@ -33,6 +33,7 @@ import type {
 import type { StructuredAgentSessionAtRestCommands } from './structured-agent-session-at-rest-commands'
 import type {
   AgentSessionOptionsResult,
+  AgentSessionModelOption,
   AgentSessionSlashCommand
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionThreadGoalChange } from '../../../shared/agent-session-thread-goal-wire'
@@ -379,6 +380,16 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   setOption(
     input: StructuredAgentSessionSetOptionInput
   ): Promise<void | Readonly<Record<string, string>>>
+  /** Synchronous capability projection; never acquires inventory or changes saved intent. */
+  projectOptions?(
+    sessionId: string,
+    options: Readonly<Record<string, string>>
+  ):
+    | {
+        models: readonly AgentSessionModelOption[]
+        options: Readonly<Record<string, string>>
+      }
+    | undefined
   /** Fetch off the lane, then apply the result under the same child's fence. */
   prepareReadOptions?(input: {
     sessionId: string

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ call: vi.fn() }))
@@ -153,6 +153,56 @@ describe('a new chat picker’s first frame', () => {
     // The pane's own read lands the same list: no frame ever showed anything else.
     expect(frames.every((frame) => JSON.stringify(frame) === JSON.stringify(final))).toBe(true)
     unmount()
+  })
+
+  it('retains child-only effort slots disabled across a fence and inventory reply', async () => {
+    const replacement = deferred<unknown>()
+    const inventory = deferred<unknown>()
+    let fence = 1
+    const child = {
+      models: [{ id: 'A', label: 'A', isDefault: false, efforts: EFFORTS }],
+      current: { model: 'A', effort: 'high', defaulted: [] }
+    }
+    mocks.call.mockImplementation((_target: unknown, method: string) =>
+      method === 'agentSession.options'
+        ? fence === 1
+          ? Promise.resolve(child)
+          : replacement.promise
+        : method === 'agentSession.modelCatalog'
+          ? fence === 1
+            ? Promise.resolve(CODEX_LIST)
+            : inventory.promise
+          : new Promise(() => {})
+    )
+    const mutate: StructuredAgentSessionMutate = vi.fn()
+    const view = renderHook(
+      ({ currentFence }) =>
+        useStructuredAgentSessionOptions({
+          agent: 'codex',
+          sessionId: 'session-1',
+          target: LOCAL_TARGET,
+          transportEnabled: true,
+          isVisible: true,
+          providerVisible: true,
+          fence: currentFence,
+          turnId: null,
+          unloadedTurnRevisions: undefined,
+          mutate
+        }),
+      { initialProps: { currentFence: 1 } }
+    )
+    const effort = () => view.result.current.optionSnapshot.find((row) => row.id === 'effort')
+    await waitFor(() => expect(effort()?.settable).toBe(true))
+    fence = 2
+    view.rerender({ currentFence: 2 })
+    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
+    await act(async () => inventory.resolve(CODEX_LIST))
+    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
+    expect(await view.result.current.setStructuredOption('effort', 'low')).toBe(false)
+    expect(mutate).not.toHaveBeenCalled()
+    await act(async () => replacement.resolve(child))
+    await waitFor(() => expect(effort()?.settable).toBe(true))
+    view.unmount()
   })
 
   it('codex: the saved list names a saved pick and its effort on the first frame', async () => {

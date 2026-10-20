@@ -138,6 +138,7 @@ export function useStructuredAgentSessionOptionState(args: {
       sameSession && previous.catalogSource !== 'seed' && previous.catalogSource !== null
         ? {
             ...previous,
+            catalogSource: 'host' as const,
             record: cloneStructuredAgentSessionOptionRecord(previous.record),
             pendingId: null
           }

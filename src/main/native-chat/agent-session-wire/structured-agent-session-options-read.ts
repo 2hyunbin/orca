@@ -1,3 +1,4 @@
+import { structuredAgentSessionThreadGoalReport } from './structured-agent-session-thread-goal'
 // A chat's options, live or at rest.
 //
 // The record keeps the next message's choices; the catalog names known defaults. A provider's
@@ -8,10 +9,6 @@ import type {
   AgentSessionOptionsResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import type {
-  AgentJournalCursor,
-  AgentJournalThreadGoal
-} from '../../../shared/agent-session-journal-types'
 import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
 import { finishedListingIds } from '../../../shared/structured-agent-session-options'
 import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
@@ -110,6 +107,11 @@ async function readStructuredAgentSessionOptionsAtRest(
         .catch(() => null)
     : catalog
   const listedModelIds = proof ? finishedListingIds(proof) : undefined
+  const defaultModels = independentAgentModelCatalog(record.provider)
+    ? proof && proof.origin !== 'unknown'
+      ? proof.models
+      : []
+    : models
   const fastMode =
     saved.fastMode === undefined
       ? null
@@ -124,7 +126,7 @@ async function readStructuredAgentSessionOptionsAtRest(
   const effort =
     saved.effort ??
     (rules?.effortDefaultsToModel || (saved.model === undefined && folderDefault)
-      ? models.find((entry) => entry.id === model)?.defaultEffort
+      ? defaultModels.find((entry) => entry.id === model)?.defaultEffort
       : undefined)
   const defaulted = (['model', 'effort'] as const).filter(
     (key) => saved[key] === undefined && Boolean(key === 'model' ? model : effort)
@@ -283,6 +285,15 @@ export async function readStructuredAgentSessionOptions(
       },
       sameChild ? live : null
     )
+    const projected = sameChild
+      ? adapter.projectOptions?.(sessionId, {
+          ...saved,
+          ...(model ? { model } : {})
+        })
+      : undefined
+    if (projected?.options.serviceTier !== undefined) {
+      current.serviceTier = projected.options.serviceTier
+    }
   }
   return {
     ...options,
@@ -313,16 +324,4 @@ export async function readStructuredAgentSessionOptions(
       ? { contextUsage: { current: session.journal.contextUsage(), ...contextFloor } }
       : {})
   }
-}
-
-/** A goal the host can change, or one only the agent's own `/goal` changes, reported apart. */
-function structuredAgentSessionThreadGoalReport(
-  hostChangesGoal: boolean,
-  current: AgentJournalThreadGoal | null,
-  contextFloor: { contextFloor?: AgentJournalCursor }
-): Pick<AgentSessionOptionsResult, 'threadGoal' | 'reportedThreadGoal'> {
-  if (hostChangesGoal) {
-    return { threadGoal: { current, ...contextFloor } }
-  }
-  return current ? { reportedThreadGoal: { current, ...contextFloor } } : {}
 }

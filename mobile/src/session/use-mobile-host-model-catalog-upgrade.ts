@@ -35,6 +35,7 @@ export function useMobileHostModelCatalogUpgrade(args: {
   worktree?: string
   fence: number | null
   optionCatalog: AgentSessionOptionCatalog | null
+  holdControls?: boolean
   activeOptionRecordRef: MutableRefObject<StructuredAgentSessionOptionRecord>
   /** A listing landed after the chat's options were read, which answered without it. */
   onListingLanded?: () => void
@@ -55,6 +56,7 @@ export function useMobileHostModelCatalogUpgrade(args: {
     updateOptionState,
     worktree
   } = args
+  const holdControls = args.holdControls === true
   const [rereads, setRereads] = useState(0)
   const recheck = useCallback(() => setRereads((count) => count + 1), [])
   useEffect(() => {
@@ -79,7 +81,10 @@ export function useMobileHostModelCatalogUpgrade(args: {
       }
       updateOptionState((current) =>
         current.record === activeOptionRecordRef.current
-          ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, { newLaunch })
+          ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
+              newLaunch,
+              holdControls
+            })
           : current
       )
     }
@@ -135,6 +140,7 @@ export function useMobileHostModelCatalogUpgrade(args: {
       leave?.()
     }
   }, [
+    holdControls,
     activeOptionRecordRef,
     agent,
     client,

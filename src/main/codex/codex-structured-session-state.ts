@@ -1,3 +1,4 @@
+import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
@@ -172,6 +173,15 @@ export type CodexSession = {
   appliedTurnOptions?: Readonly<Record<string, string>>
   /** Absent when the adapter runs without a host catalog store (tests). */
   catalogAccess?: CodexSessionCatalogAccess
+  /** Only this child's exact selected row; alternatives belong to host discovery. */
+  currentModelCapabilities?: {
+    connection: CodexAppServerConnection
+    fence: number
+    generation: string
+    model: string
+    row?: AgentSessionModelOption
+    pending?: Promise<AgentSessionModelOption | undefined>
+  }
   /** Sends whose identity is still to be settled by the provider echo. */
   dispatchEchoes: CodexDispatchEchoes
   translator: CodexJournalTranslator | null

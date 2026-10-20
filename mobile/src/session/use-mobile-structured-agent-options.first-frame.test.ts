@@ -1,7 +1,10 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentSessionModelCatalogResult } from '../../../src/shared/agent-session-wire'
+import type {
+  AgentSessionModelCatalogResult,
+  AgentSessionOptionsResult
+} from '../../../src/shared/agent-session-wire'
 import type { SessionOptionDescriptor } from '../../../src/shared/native-chat-session-options'
 import type { RpcClient } from '../transport/rpc-client'
 import type { StructuredAgentSessionMutate } from './mobile-structured-agent-session-rpc'
@@ -14,12 +17,17 @@ const HOST_LIST: AgentSessionModelCatalogResult = {
 }
 
 /** Catalog reads take each scripted answer in turn; option reads never answer. */
-function client(catalog: () => Promise<AgentSessionModelCatalogResult>): RpcClient {
+function client(
+  catalog: () => Promise<AgentSessionModelCatalogResult>,
+  options?: () => Promise<AgentSessionOptionsResult>
+): RpcClient {
   return {
     sendRequest: async (method: string) =>
       method === 'agentSession.modelCatalog'
         ? { id: 'rpc-1', ok: true as const, result: await catalog(), _meta: { runtimeId: 'r' } }
-        : new Promise(() => {}),
+        : method === 'agentSession.options' && options
+          ? { id: 'rpc-2', ok: true as const, result: await options(), _meta: { runtimeId: 'r' } }
+          : new Promise(() => {}),
     subscribe: () => () => {},
     updateTerminalSubscriptionViewport: () => {},
     getState: () => 'connected',
@@ -40,6 +48,7 @@ type Props = { rpc: RpcClient; fence: number }
 
 async function mount(initial: Props) {
   const frames: string[][] = []
+  let snapshot: readonly SessionOptionDescriptor[] = []
   const mutate: StructuredAgentSessionMutate = vi.fn()
   function Probe(props: Props): null {
     const options = useMobileStructuredAgentOptions({
@@ -52,6 +61,7 @@ async function mount(initial: Props) {
       hostSupport: { permissionModes: true }
     })
     frames.push(modelChoices(options.optionSnapshot))
+    snapshot = options.optionSnapshot
     return null
   }
   let renderer: ReactTestRenderer | null = null
@@ -60,6 +70,7 @@ async function mount(initial: Props) {
   })
   return {
     frames,
+    snapshot: () => snapshot,
     update: (next: Props) =>
       act(async () => {
         renderer?.update(createElement(Probe, next))
@@ -98,6 +109,37 @@ describe('the phone picker’s first frame', () => {
     const rpc = client(() => Promise.reject(new Error('method_not_found')))
     const harness = await mount({ rpc, fence: 1 })
     expect(harness.frames.at(-1)?.length).toBeGreaterThan(0)
+    await harness.unmount()
+  })
+
+  it('keeps predecessor effort slots disabled until the replacement answers', async () => {
+    const child: AgentSessionOptionsResult = {
+      models: [
+        {
+          id: 'A',
+          label: 'A',
+          efforts: [
+            { value: 'low', label: 'Low' },
+            { value: 'high', label: 'High' }
+          ]
+        }
+      ],
+      current: { model: 'A', effort: 'high', defaulted: [] }
+    }
+    let replacement = false
+    let answer!: (value: AgentSessionOptionsResult) => void
+    const rpc = client(
+      () => Promise.resolve(HOST_LIST),
+      () => (replacement ? new Promise((resolve) => (answer = resolve)) : Promise.resolve(child))
+    )
+    const harness = await mount({ rpc, fence: 1 })
+    const effort = () => harness.snapshot().find((row) => row.id === 'effort')
+    expect(effort()?.settable).toBe(true)
+    replacement = true
+    await harness.update({ rpc, fence: 2 })
+    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
+    await act(async () => answer(child))
+    expect(effort()?.settable).toBe(true)
     await harness.unmount()
   })
 })

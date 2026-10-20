@@ -11,11 +11,12 @@ export async function savedAgentSessionCatalogModels(
   deps: { modelCatalog?: Pick<AgentModelCatalogService, 'read'> },
   provider: string,
   sessionId: string,
-  workspacePath?: string | null
+  workspacePath?: string | null,
+  verifiedOnly = true
 ): Promise<readonly AgentSessionModelOption[] | undefined> {
   const scope = workspacePath === undefined ? {} : { workspacePath }
   const listing = await deps.modelCatalog
-    ?.read({ agent: provider, sessionId, savedOnly: true, verifiedOnly: true, ...scope })
+    ?.read({ agent: provider, sessionId, savedOnly: true, verifiedOnly, ...scope })
     .catch(() => null)
   return listing && listing.origin !== 'unknown' ? listing.models : undefined
 }

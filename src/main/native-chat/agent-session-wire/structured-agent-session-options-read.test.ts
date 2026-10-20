@@ -29,7 +29,7 @@ import {
 
 const SESSION = 'session-1'
 
-type RestingFacts = Pick<Partial<AgentSessionRecord>, 'options'> & {
+type RestingFacts = Pick<Partial<AgentSessionRecord>, 'options' | 'provider'> & {
   providerHandleChain?: Pick<AgentSessionProviderHandleLink, 'origin'>[]
   rewind?: Pick<AgentSessionRewindRecord, 'phase'>
 }
@@ -229,14 +229,18 @@ describe('a chat at rest, read by the host', () => {
     { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [], serviceTiers: fast },
     { id: 'gpt-flex', label: 'Flex', isDefault: false, efforts: [], serviceTiers: flex }
   ]
-  const catalog = (models = listed) => ({
-    read: async () => ({ origin: 'probe' as const, models, fetchedAt: 1 })
+  const catalog = (models = listed, verified = true) => ({
+    read: async (params?: { verifiedOnly?: boolean }) =>
+      !verified && params?.verifiedOnly
+        ? { origin: 'unknown' as const }
+        : { origin: 'probe' as const, models, fetchedAt: 1 }
   })
   function readAtRest(
     facts: RestingFacts,
     items: AgentJournalItemBody[] = [],
     wroteBeforeOpen = false,
-    models = listed
+    models = listed,
+    verified = true
   ) {
     const record = { ...restingRecord(), ...facts }
     const resting = {
@@ -248,9 +252,9 @@ describe('a chat at rest, read by the host', () => {
     const context = {
       deps: {
         adapter: {},
-        agents: NO_STRUCTURED_AGENTS,
+        agents: claudeAndCodexAgents(),
         store: { getRecord: () => record },
-        modelCatalog: catalog(models)
+        modelCatalog: catalog(models, verified)
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
       openConversation: async () => resting,
@@ -270,6 +274,26 @@ describe('a chat at rest, read by the host', () => {
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
     const read = await readAtRest(facts, items, wroteBeforeOpen)
     expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+  })
+
+  it('uses held rows as menus without projecting an unverified default effort', async () => {
+    const answer = await readAtRest(
+      { provider: 'claude', options: { model: 'gpt-account' } },
+      [],
+      false,
+      [{ ...listed[0]!, defaultEffort: 'high', efforts: [{ value: 'high', label: 'High' }] }],
+      false
+    )
+    expect(answer.current.model).toBe('gpt-account')
+    expect(answer.current.effort).toBeUndefined()
+    expect(answer.models[0]?.defaultEffort).toBe('high')
+    const complete = await readAtRest(
+      { provider: 'claude', options: { model: 'gpt-account' } },
+      [],
+      false,
+      answer.models
+    )
+    expect(complete.current.effort).toBe('high')
   })
 
   it.each([
@@ -296,7 +320,17 @@ describe('a chat at rest, read by the host', () => {
     { id: 'b', label: 'B', isDefault: false, efforts: high },
     { id: 'c', label: 'C', isDefault: false, efforts: [] }
   ]
-  function picking(options: Record<string, string>, models = efforts) {
+  function picking(
+    options: Record<string, string>,
+    models = efforts,
+    projectOptions?: (
+      sessionId: string,
+      options: Readonly<Record<string, string>>
+    ) => {
+      models: AgentSessionModelOption[]
+      options: Record<string, string>
+    }
+  ) {
     let record: AgentSessionRecord = { ...restingRecord(), options }
     const store = {
       getRecord: () => record,
@@ -306,7 +340,12 @@ describe('a chat at rest, read by the host', () => {
         args: A
       ) => (record = revise(record, args))
     }
-    const deps = { store, agents: claudeAndCodexAgents(), modelCatalog: catalog(models) }
+    const deps = {
+      store,
+      agents: claudeAndCodexAgents(),
+      modelCatalog: catalog(models),
+      adapter: { projectOptions }
+    }
     const ctx = { sessionId: SESSION, fence: 1, publish: vi.fn(), now: () => 0 }
     return {
       pick: (key: string, value: string) =>
@@ -338,6 +377,30 @@ describe('a chat at rest, read by the host', () => {
     chat.ran('b', { effort: 'low' }, [])
     await chat.pick('serviceTier', 'priority')
     expect(chat.record().options).toEqual({ model: 'b', effort: 'high', serviceTier: 'priority' })
+  })
+
+  it('uses the child capability projection for a normal effort pick without admitting alternative models', async () => {
+    const child = {
+      id: 'A',
+      label: 'A',
+      efforts: [
+        { value: 'low', label: 'Low' },
+        { value: 'high', label: 'High' }
+      ]
+    }
+    const inventory = [{ id: 'B', label: 'B', efforts: [] }]
+    const chat = picking({ model: 'A', effort: 'high' }, inventory, (_id, options) => ({
+      models: [...inventory, child],
+      options: { ...options }
+    }))
+    expect(await chat.pick('effort', 'low')).toMatchObject({
+      ok: true,
+      value: { options: { model: 'A', effort: 'low' } }
+    })
+    expect(chat.record().options?.effort).toBe('low')
+    expect(await chat.pick('model', 'B')).toMatchObject({ ok: true })
+    expect(chat.record().options).toEqual({ model: 'B' })
+    expect(await chat.pick('effort', 'low')).toMatchObject({ ok: false })
   })
 })
 

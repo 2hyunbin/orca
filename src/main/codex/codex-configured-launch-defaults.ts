@@ -29,7 +29,17 @@ export async function readCodexConfiguredLaunchDefaults(
       typeof response === 'object' && response !== null && 'config' in response
         ? response.config
         : null
-    if (typeof config !== 'object' || config === null) {
+    if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+      return null
+    }
+    if (
+      Object.entries(config).some(
+        ([key, value]) =>
+          ['model', 'model_reasoning_effort', 'personality', 'service_tier'].includes(key) &&
+          value != null &&
+          typeof value !== 'string'
+      )
+    ) {
       return null
     }
     const personality = 'personality' in config ? configuredText(config.personality) : null
@@ -42,7 +52,7 @@ export async function readCodexConfiguredLaunchDefaults(
         'model_reasoning_effort' in config ? configuredText(config.model_reasoning_effort) : null
     }
   } catch {
-    // Older Codex has no config/read; its own listing default then stands.
+    // Refusal and transport failure leave configuration unknown.
     return null
   }
 }

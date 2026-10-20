@@ -6,7 +6,7 @@ import type {
 import { readRecord } from './codex-item-field-readers'
 import type { CodexOpenedThread } from './codex-structured-thread-open'
 import type { CodexSession } from './codex-structured-session-state'
-import { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
+import { codexSessionCapabilities } from './codex-structured-catalog-entry'
 import { effectiveServiceTier } from '../../shared/structured-agent-session-effective-tier'
 
 /** Codex's request value for a model's standard tier. */
@@ -94,32 +94,59 @@ export function codexOffersServiceTier(
   session: Pick<CodexSession, 'reportedOptions'>,
   model: AgentSessionModelOption | undefined,
   models: readonly AgentSessionModelOption[],
-  tier: string
+  tier: string,
+  listedTiers = models.flatMap(tierValues)
 ): boolean {
-  const listedTiers = models.flatMap(tierValues)
   const reported = tier === session.reportedOptions.serviceTier
   return (
-    effectiveServiceTier({ tier, modelTiers: tierValues(model), listedTiers, reported }) === tier
+    effectiveServiceTier({
+      tier,
+      modelTiers: model?.serviceTiers?.map((row) => row.value),
+      listedTiers,
+      reported
+    }) === tier
   )
 }
 
 /** A turn's options: an unoffered tier runs as standard; the chat's saved tier is kept. */
 export function codexTurnRequestOptions(
-  session: Pick<CodexSession, 'options' | 'catalogAccess'> & {
-    reportedOptions?: CodexSession['reportedOptions']
-  }
+  session: Parameters<typeof codexSessionCapabilities>[0]
 ): Record<string, string> {
   const options = Object.fromEntries(session.options)
   const reportedOptions = session.reportedOptions ?? {}
-  const models = codexAcquireCatalogListing(session.catalogAccess, true)?.models ?? []
+  const capabilities = codexSessionCapabilities(session)
+  const models = capabilities.models
   const model = models.find((entry) => entry.id === (options.model ?? reportedOptions.model))
   const tier = options.serviceTier
   if (
     tier &&
     model?.serviceTiers &&
-    !codexOffersServiceTier({ reportedOptions }, model, models, tier)
+    !codexOffersServiceTier(
+      { reportedOptions },
+      model,
+      models,
+      tier,
+      capabilities.listedServiceTiers
+    )
   ) {
     options.serviceTier = CODEX_DEFAULT_SERVICE_TIER
   }
   return options
+}
+
+export function projectCodexSessionOptions(
+  session: CodexSession | undefined,
+  options: Readonly<Record<string, string>>
+) {
+  if (!session || session.ended || session.connection.closed) {
+    return undefined
+  }
+  if (options.model && session.currentModelCapabilities?.model !== options.model) {
+    delete session.currentModelCapabilities
+  }
+  const selected = { ...session, options: new Map(Object.entries(options)) }
+  return {
+    models: codexSessionCapabilities(selected).models,
+    options: codexTurnRequestOptions(selected)
+  }
 }

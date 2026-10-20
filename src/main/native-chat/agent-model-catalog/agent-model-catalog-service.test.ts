@@ -1,3 +1,7 @@
+import {
+  joinHostModelListingWait,
+  isHostModelListingWaitInFlight
+} from '../../../shared/host-model-listing-waits'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -574,3 +578,82 @@ describe('agent model catalog service', () => {
     })
   })
 })
+
+it.each(['cold', 'warm', 'failure', 'stop'] as const)(
+  'delivers queued %s settlement after the 30s snapshot to joined readers',
+  async (mode) => {
+    vi.useFakeTimers()
+    const store = new AgentModelCatalogStore()
+    let failing = false
+    const run = vi.fn(
+      (
+        _home: AgentSessionAccountHome,
+        options?: { signal?: AbortSignal; workspacePath?: string }
+      ) =>
+        new Promise<AgentModelCatalogSuccess>((resolve, reject) => {
+          const timer = setTimeout(
+            () =>
+              failing
+                ? reject(new Error('offline'))
+                : resolve({
+                    ...listing(options?.workspacePath ?? 'listed'),
+                    complete: true,
+                    configured: {}
+                  }),
+            12_000
+          )
+          options?.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer)
+              reject(new Error('stopped'))
+            },
+            { once: true }
+          )
+        })
+    )
+    const service = createAgentModelCatalogService({
+      store,
+      getRecord: () => undefined,
+      drivesRecord: () => true,
+      resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/account' }),
+      probes: { codex: run }
+    })
+    const read = (path: string, waitForListing = false) =>
+      service.read({ agent: 'codex', workspacePath: path, waitForListing })
+    const replies: unknown[] = []
+    let leave = () => {}
+    try {
+      if (mode === 'warm') {
+        const initial = read('/5', true)
+        await vi.advanceTimersByTimeAsync(12_000)
+        await initial
+        await vi.advanceTimersByTimeAsync(120_001)
+      }
+      failing = mode === 'failure'
+      await Promise.all(['/1', '/2', '/3', '/4', '/5'].map((path) => read(path)))
+      const follow = vi.fn(() => read('/5', true))
+      const owner = { close() {} }
+      leave = joinHostModelListingWait('queued', follow, (reply) => replies.push(reply), owner)
+      const second = joinHostModelListingWait('queued', follow, () => {}, owner)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(replies[0]).toMatchObject({ listingInProgress: true })
+      expect(follow).toHaveBeenCalledTimes(1)
+      if (mode === 'stop') {
+        service.stop()
+      }
+      await vi.advanceTimersByTimeAsync(7_000)
+      expect(replies.at(-1)).not.toHaveProperty('listingInProgress')
+      expect(isHostModelListingWaitInFlight('queued', owner)).toBe(false)
+      if (mode === 'cold' || mode === 'warm') {
+        expect(replies.at(-1)).toMatchObject({ models: [{ id: '/5' }] })
+      }
+      expect(run).toHaveBeenCalledTimes(mode === 'warm' ? 6 : 5)
+      second()
+    } finally {
+      leave()
+      service.stop()
+      vi.useRealTimers()
+    }
+  }
+)

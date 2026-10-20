@@ -27,17 +27,39 @@ const MODELS: AgentSessionModelOption[] = [
 ]
 
 /** The tier the first turn after a start carries, and the session's tier after a live read. */
-async function hostRuns(saved: Record<string, string>) {
-  const store = new AgentModelCatalogStore()
+async function hostRuns(
+  saved: Record<string, string>,
+  ageMs = 0,
+  child?: { tiers?: readonly string[]; reported?: string }
+) {
+  let now = 1
+  const store = new AgentModelCatalogStore({ now: () => now })
   store.recordSuccess(
     'codex-account',
     'codex',
     { models: MODELS, complete: true, origin: 'probe' },
     'discovery'
   )
-  const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
-    turn: { id: 'turn-1' }
-  }))
+  now += ageMs
+  let offline = false
+  const request = vi.fn(async (method: string, _params?: Record<string, unknown>) => {
+    if (method !== 'model/list') {
+      return { turn: { id: 'turn-1' } }
+    }
+    if (offline) {
+      throw new Error('offline')
+    }
+    return {
+      data: [
+        {
+          model: saved.model,
+          supportedReasoningEfforts: [],
+          ...(child?.tiers ? { additionalSpeedTiers: child.tiers } : {})
+        }
+      ],
+      nextCursor: null
+    }
+  })
   const session: CodexSession = {
     connection: {
       pid: 1,
@@ -55,11 +77,18 @@ async function hostRuns(saved: Record<string, string>) {
     threadId: 'thread-1',
     prompts: new CodexAcquisitionWindow().prompts,
     options: new Map(Object.entries(saved)),
-    reportedOptions: {},
+    reportedOptions: child?.reported ? { serviceTier: child.reported, serviceTierKnown: true } : {},
     catalogAccess: { store, fingerprint: 'codex-account', accountHomePath: '/account' },
     dispatchEchoes: createCodexDispatchEchoes(),
     turnOpenWaits: createCodexTurnOpenWaits(),
     translator: null
+  }
+  const shown = child
+    ? (await readLiveCodexSessionOptions(session, undefined)).current.serviceTier
+    : undefined
+  if (child) {
+    offline = true
+    store.recordFailure('codex-account', 'offline', 'codex')
   }
   await startCodexTurn(session, {
     clientMessageId: 'message-1',
@@ -67,7 +96,11 @@ async function hostRuns(saved: Record<string, string>) {
   })
   const firstTurn = request.mock.calls.find(([method]) => method === 'turn/start')?.[1]
   await readLiveCodexSessionOptions(session, undefined)
-  return { firstTurn: firstTurn?.serviceTier, afterLiveRead: session.options.get('serviceTier') }
+  return {
+    firstTurn: firstTurn?.serviceTier,
+    afterLiveRead: session.options.get('serviceTier'),
+    ...(child ? { shown } : {})
+  }
 }
 
 /** A host's answer naming the saved values; an older host marks no defaults. */
@@ -87,6 +120,22 @@ function shownTier(state: StructuredAgentSessionOptionState): string | undefined
 }
 
 describe("a Codex chat's speed, shown and sent", () => {
+  it('uses the same eligible child tiers through failure, including unknown, empty and reported opaque', async () => {
+    for (const [child, tier, runs] of [
+      [{ tiers: ['priority'] }, 'priority', 'priority'],
+      [{ tiers: ['ultrafast'] }, 'priority', 'default'],
+      [{}, 'priority', 'priority'],
+      [{ tiers: [] }, 'priority', 'default'],
+      [{ tiers: [], reported: 'opaque' }, 'opaque', 'opaque'],
+      [{ tiers: [], reported: 'ultrafast' }, 'ultrafast', 'default']
+    ] as const) {
+      await expect(hostRuns({ model: 'm2', serviceTier: tier }, 120_000, child)).resolves.toEqual({
+        firstTurn: runs,
+        shown: runs,
+        afterLiveRead: tier
+      })
+    }
+  })
   it('shows what the host runs, an older host as it sends it, and keeps the saved tier', async () => {
     // [saved, shown from this host, shown from an older host, what this host's turns run]
     for (const [saved, shown, olderShown, runs] of [
@@ -97,10 +146,12 @@ describe("a Codex chat's speed, shown and sent", () => {
       expect(shownTier(answered(saved, true))).toBe(shown)
       // An older host sends its Flex unchanged, and Codex passes Flex.
       expect(shownTier(answered(saved, false))).toBe(olderShown)
-      await expect(hostRuns(saved)).resolves.toEqual({
-        firstTurn: runs,
-        afterLiveRead: saved.serviceTier
-      })
+      for (const ageMs of [0, 2 * 60_000]) {
+        await expect(hostRuns(saved, ageMs)).resolves.toEqual({
+          firstTurn: runs,
+          afterLiveRead: saved.serviceTier
+        })
+      }
     }
     // Back on a model that offers it, the saved tier is the chat's again.
     const back = commitStructuredAgentSessionOption(

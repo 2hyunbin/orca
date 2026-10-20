@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { PROVIDER_STDIN_END_GRACE_MS } from '../provider-process/provider-process-supervisor'
 import { createClaudeModelCatalogProbe } from './claude-model-catalog-probe'
+import { discoveredModel } from '../../shared/structured-agent-session-discovered-model'
 import { resolveClaudeStructuredInvocation } from './claude-structured-launch-resolution'
 import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
 import {
@@ -103,7 +104,7 @@ describe('claude model catalog probe', () => {
   )
 
   // The rows `claude` 2.1.280 lists: what a chat naming no model runs, and its auto support.
-  it('marks the row the CLI default resolves to and keeps each row auto support', async () => {
+  it('keeps the CLI default and account Fast and per-row auto support', async () => {
     const listing = `${JSON.stringify({
       type: 'control_response',
       response: {
@@ -112,14 +113,24 @@ describe('claude model catalog probe', () => {
         response: {
           models: [
             { value: 'default', resolvedModel: 'claude-opus-5-5[1m]', supportsAutoMode: true },
-            { value: 'opus[1m]', resolvedModel: 'claude-opus-5-5[1m]', supportsAutoMode: true },
+            {
+              value: 'opus[1m]',
+              resolvedModel: 'claude-opus-5-5[1m]',
+              supportsAutoMode: true,
+              supportsFastMode: true
+            },
             { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', supportsAutoMode: null }
           ]
         }
       }
     })}\n`
     const probe = createClaudeModelCatalogProbe({ ...probeDeps(), runListing: async () => listing })
-    const { models } = await probe(HOME('/homes/account-a'))
+    const { models, fastModeSupport } = await probe(HOME('/homes/account-a'))
+    expect(fastModeSupport).toEqual({ supported: true })
+    expect(models[0]?.supportsFastMode).toBe(true)
+    expect(
+      models[0] && discoveredModel(models[0], fastModeSupport?.supported === true).options
+    ).toContainEqual(expect.objectContaining({ id: 'fastMode' }))
     expect(
       models.map(({ id, isDefault, supportsAutoMode }) => ({ id, isDefault, supportsAutoMode }))
     ).toEqual([
@@ -284,6 +295,7 @@ it('discovers a configured launch override without chat picks and preserves lite
         type: 'control_response',
         response: {
           subtype: 'success',
+          request_id: 'orca-model-settings',
           response: { applied: { model: 'sonnet', effort: 'high' } }
         }
       })}\n`
@@ -308,4 +320,28 @@ it('discovers a configured launch override without chat picks and preserves lite
       .split('\n')
       .map((line) => JSON.parse(line))
   ).toHaveLength(2)
+})
+
+it('qualifies only a correlated valid settings observation', async () => {
+  for (const [applied, requestId, complete] of [
+    [{}, 'orca-model-settings', true],
+    [[], 'orca-model-settings', false],
+    [{ model: 42 }, 'orca-model-settings', false],
+    [{}, 'other-request', false],
+    [undefined, 'orca-model-settings', false]
+  ] as const) {
+    const probe = createClaudeModelCatalogProbe({
+      ...probeDeps(),
+      runListing: async () =>
+        LISTED +
+        JSON.stringify({
+          response: {
+            subtype: 'success',
+            request_id: requestId,
+            response: applied === undefined ? {} : { applied }
+          }
+        })
+    })
+    expect((await probe(HOME('/account'))).complete).toBe(complete)
+  }
 })

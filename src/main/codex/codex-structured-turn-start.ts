@@ -60,6 +60,7 @@ export type CodexTurnHost = {
   appliedTurnOptions?: Readonly<Record<string, string>>
   reportedOptions?: CodexSession['reportedOptions']
   catalogAccess?: CodexSession['catalogAccess']
+  currentModelCapabilities?: CodexSession['currentModelCapabilities']
   dispatchEchoes: CodexDispatchEchoes
   activeTurnIds?: ReadonlySet<string>
   /** Running turns whose interrupt Codex already answered: aborted, so never steered. */
@@ -165,6 +166,9 @@ export async function startCodexTurn(
   const previousApplied = host.appliedTurnOptions
   const previousOptions = input.turnOptions ? new Map(host.options) : null
   if (input.turnOptions) {
+    if (input.turnOptions.model !== (host.options.get('model') ?? host.reportedOptions?.model)) {
+      delete host.currentModelCapabilities
+    }
     host.options.clear()
     for (const [key, value] of Object.entries(input.turnOptions)) {
       host.options.set(key, value)
