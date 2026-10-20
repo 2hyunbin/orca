@@ -3,7 +3,8 @@
  * matches the desktop sidebar row for row: headers, order, nesting, the single highlight and
  * collapse. Desktop, then a desktop that is a paired server's client.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
@@ -149,6 +150,97 @@ test.describe('the phone reads the sidebar feed', () => {
         (outline) => !hasPinned(outline)
       )
       expect(activeCount(unpinned)).toBe(1)
+    } finally {
+      list.close()
+      phone.dispose()
+    }
+  })
+
+  test('the phone files grouped projects under the desktop’s project group, and folds it with the desktop', async ({
+    orcaPage,
+    registerPostElectronShutdownCleanup
+  }) => {
+    test.setTimeout(180_000)
+    await waitForSessionReady(orcaPage)
+    const activeId = await waitForActiveWorktree(orcaPage)
+    const repoId = activeId.split('::')[0]
+    const folderPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-phone-group-')))
+    registerPostElectronShutdownCleanup(async () =>
+      rmSync(folderPath, { recursive: true, force: true })
+    )
+    const folder = AddedRepoSchema.parse(
+      await runtimeCall(orcaPage, 'repo.add', { path: folderPath, kind: 'folder' })
+    )
+    await expect
+      .poll(() =>
+        orcaPage.evaluate(
+          (id) => window.__store!.getState().repos.some((entry) => entry.id === id),
+          folder.repo.id
+        )
+      )
+      .toBe(true)
+    // A group holding a repo project and a folder project, the folder project first.
+    const moved = await orcaPage.evaluate(
+      async ({ repoId, folderId }) => {
+        const state = () => window.__store!.getState()
+        const group = await state().createProjectGroup('school', 'local')
+        if (!group) {
+          throw new Error('Expected a project group')
+        }
+        return [
+          await state().moveProjectToGroup(folderId, group.id, 0),
+          await state().moveProjectToGroup(repoId, group.id, 1)
+        ]
+      },
+      { repoId, folderId: folder.repo.id }
+    )
+    expect(moved).toEqual([true, true])
+    const phone = pairMobileClient(await createDesktopMobilePairingOffer(orcaPage))
+    const list = await openPhoneFeedList(phone)
+    try {
+      // The group, then the folder project, then the repo project's rows: the desktop's order.
+      const inGroup = (outline: ListOutline): boolean => {
+        const at = [
+          outline.indexOf('HEADER school'),
+          outline.indexOf(`HEADER ${path.basename(folderPath)}`),
+          outline.findIndex((line) => line.startsWith('ITEM ') && line.includes(repoId))
+        ]
+        return at[0] !== -1 && at[0] < at[1] && at[1] < at[2]
+      }
+      const shown = await expectPhoneMatchesDesktop(orcaPage, list, inGroup)
+      expect(inGroup(shown)).toBe(true)
+      const sections = (await list.sections()) ?? []
+      const groupAt = sections.findIndex((section) => section.title === 'school')
+      expect(sections[groupAt]).toMatchObject({ isProjectGroup: true })
+      // The folder project, then the repo project, both one level in.
+      expect(
+        sections
+          .slice(groupAt + 1, groupAt + 3)
+          .map((section) => [section.repo?.id, section.projectGroupDepth])
+      ).toEqual([
+        [folder.repo.id, 1],
+        [repoId, 1]
+      ])
+
+      // The phone folds the group; the desktop folds it too, and both hide its projects.
+      const key = sections[groupAt]!.key
+      expect(
+        await list.request('ui.setCollapsed', {
+          key,
+          collapsed: true,
+          opId: { writer: 'e2e-phone-group', seq: 1 }
+        })
+      ).toMatchObject({ ok: true })
+      // Every project sits in the group, so both lists fold down to its header alone.
+      await expect
+        .poll(async () => [await list.outline(), await desktopSidebarOutline(orcaPage)], {
+          timeout: 30_000
+        })
+        .toEqual([['HEADER school'], ['HEADER school']])
+
+      // The desktop unfolds it; the phone follows.
+      await orcaPage.evaluate((key) => window.__store!.getState().toggleCollapsedGroup(key), key)
+      await expectPhoneMatchesDesktop(orcaPage, list, (outline) => outline.length === shown.length)
     } finally {
       list.close()
       phone.dispose()

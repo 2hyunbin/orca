@@ -8,8 +8,16 @@ import type { SidebarFeedDomains } from '../../../src/shared/sidebar-list/sideba
 import { resolveVisibleWorkspaceHostIds } from '../../../src/shared/workspace-view/workspace-host-visibility'
 import { buildHostFeedCatalog, buildHostFeedView } from './host-sidebar-feed-inputs'
 import { buildHostFeedSections, buildPreFeedSections } from './host-sidebar-feed-sections'
-import { SERVED_SECTIONS, feedDomains, liveRow, phoneView } from './host-sidebar-feed.test-fixture'
+import {
+  SERVED_SECTIONS,
+  feedDomains,
+  feedRow,
+  liveRow,
+  phoneView
+} from './host-sidebar-feed.test-fixture'
 import type { MobileViewState } from '../worktree/workspace-view-settings'
+import type { ProjectGroup } from '../../../src/shared/project-group-types'
+import { readServedProjectSections } from '../worktree/project-sections-operations'
 
 const catalog = buildHostFeedCatalog(SERVED_SECTIONS, [], [])
 
@@ -77,6 +85,68 @@ describe('the phone list from the sidebar feed', () => {
     expect(lines.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
     expect(lines.some((line) => line.includes('orca::/w/child depth=1'))).toBe(true)
     expect(lines.some((line) => line.includes('"lab"'))).toBe(true)
+  })
+
+  it('files a grouped project under its group header, nested and in the group’s order', () => {
+    const group = (id: string, name: string, extra: Partial<ProjectGroup> = {}): ProjectGroup => ({
+      id,
+      name,
+      parentPath: null,
+      parentGroupId: null,
+      createdFrom: 'manual',
+      tabOrder: 0,
+      isCollapsed: false,
+      color: null,
+      createdAt: 0,
+      updatedAt: 0,
+      ...extra
+    })
+    // As the desktop serves it, read by the page's own reply parser.
+    const served = readServedProjectSections({
+      id: 'sections',
+      ok: true,
+      result: {
+        catalog: {
+          ...SERVED_SECTIONS,
+          repos: [
+            // Listed against their group order, so the order must come from projectGroupOrder.
+            { ...SERVED_SECTIONS.repos[0]!, projectGroupId: 'pg-inner', projectGroupOrder: 1 },
+            { ...SERVED_SECTIONS.repos[1]!, projectGroupId: 'pg-inner', projectGroupOrder: 0 }
+          ],
+          projectGroups: [
+            group('pg-school', 'school'),
+            group('pg-inner', 'inner', { parentGroupId: 'pg-school' })
+          ]
+        }
+      }
+    })
+    if (served.kind !== 'answered' || !served.value) {
+      throw new Error('expected a served catalog')
+    }
+    const grouped = buildHostFeedCatalog(served.value, [], [])
+    const domains = feedDomains()
+    // An unpinned orca workspace, so orca draws its own header beside lab.
+    domains.workspaces.set('|orca::/w/solo', feedRow({ id: 'orca::/w/solo', manualOrder: 4 }))
+    const built = buildSidebarFeedRows(domains, grouped, phoneFeedView(phoneView()))
+    const sections = buildHostFeedSections({
+      rows: built.sectionRows,
+      activeRowKeys: built.activeRowKeys,
+      liveRows: [],
+      repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
+      search: ''
+    })
+    const headers = sections.map(
+      (section) =>
+        `${section.title}${section.isProjectGroup ? ' group' : ''} depth=${String(section.projectGroupDepth ?? 0)}`
+    )
+    expect(headers).toEqual([
+      'Pinned depth=0',
+      'school group depth=0',
+      'inner group depth=1',
+      'lab depth=2',
+      'orca depth=2'
+    ])
+    expect(sections.at(-2)?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
   })
 
   it('highlights every occurrence when pinned rows also show in their groups', () => {
