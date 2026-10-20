@@ -129,7 +129,7 @@ function applyMainFrames(
 async function launch(onDisk: StoredPartition[]): Promise<Launched> {
   const partitions = onDisk.map(({ hostId, session }) => ({
     hostId,
-    session: bindTabTerminalPanesInSession(session)
+    session: bindTabTerminalPanesInSession(session, () => hostId === SSH_HOST)
   }))
   const store = createTestStore()
   const launched: Launched = { store, stored: partitions, mainPaneTerminals: new Map() }

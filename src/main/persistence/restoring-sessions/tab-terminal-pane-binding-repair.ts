@@ -2,6 +2,7 @@ import { parseExecutionHostId } from '../../../shared/execution-host'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { collectLayoutLeafIdsInOrder } from '../../../shared/workspace-layout/terminal-pane-tree'
 import {
   readCanonicalPtyOwners,
@@ -32,9 +33,11 @@ function soleUnboundLeafId(layout: TerminalLayoutSnapshot | undefined): string |
  * Binds each one-pane tab whose layout binds no terminal to the one named on the tab (an older
  * session, or an unvisited SSH tab's relay session), as the window's reconnect rebinds it: only
  * in a workspace live at shutdown, and never to a terminal another pane or a tab-bar tab holds.
+ * An SSH workspace's tab takes only its relay session id; its row's id is a wake hint there.
  */
 export function bindTabTerminalPanesInSession(
-  session: WorkspaceSessionState
+  session: WorkspaceSessionState,
+  isSshWorkspace: (key: string) => boolean
 ): WorkspaceSessionState {
   const live = liveAtShutdown(session)
   const bound = new Set(Object.values(session.terminalLayoutsByTabId ?? {}).flatMap(mountedPtyIds))
@@ -48,7 +51,8 @@ export function bindTabTerminalPanesInSession(
       const layout = (layouts ?? session.terminalLayoutsByTabId)?.[row.id]
       const leafId = soleUnboundLeafId(layout)
       // Reconnect takes the relay session id over the row's.
-      const named = [session.remoteSessionIdsByTabId?.[row.id], row.ptyId].filter(
+      const relayId = session.remoteSessionIdsByTabId?.[row.id]
+      const named = [relayId, isSshWorkspace(key) ? undefined : row.ptyId].filter(
         (ptyId): ptyId is string => typeof ptyId === 'string' && ptyId !== '' && !bound.has(ptyId)
       )
       if (!layout || !leafId || named.length === 0) {
@@ -76,14 +80,20 @@ export function bindTabTerminalPanesInSession(
  * server's and passes through.
  */
 export function bindPersistedTabTerminalPanes(state: PersistedState): PersistedState {
-  const workspaceSession = bindTabTerminalPanesInSession(state.workspaceSession)
+  const sshRepoIds = new Set(state.repos.filter((repo) => repo.connectionId).map((repo) => repo.id))
+  const sshRepoWorkspace = (key: string): boolean => sshRepoIds.has(getRepoIdFromWorktreeId(key))
+  const workspaceSession = bindTabTerminalPanesInSession(state.workspaceSession, sshRepoWorkspace)
   let hostSessionsChanged = false
   const workspaceSessionsByHostId = state.workspaceSessionsByHostId
     ? Object.fromEntries(
         Object.entries(state.workspaceSessionsByHostId).map(([hostId, session]) => {
+          const kind = parseExecutionHostId(hostId)?.kind
           const repaired =
-            session && parseExecutionHostId(hostId)?.kind !== 'runtime'
-              ? bindTabTerminalPanesInSession(session)
+            session && kind !== 'runtime'
+              ? bindTabTerminalPanesInSession(
+                  session,
+                  kind === 'ssh' ? () => true : sshRepoWorkspace
+                )
               : session
           hostSessionsChanged ||= repaired !== session
           return [hostId, repaired]

@@ -45,19 +45,21 @@ function tabLevelSession(
   return session
 }
 
+const repair = (session: WorkspaceSessionState, ssh = false) =>
+  bindTabTerminalPanesInSession(session, () => ssh)
+
 const bindings = (session: WorkspaceSessionState, tabId = 'tab-a') =>
   session.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId
 
 describe("load repair: a tab's own terminal and its unbound pane", () => {
-  it.each<[string, ExecutionHostId, string]>([
-    ['git worktree', LOCAL_EXECUTION_HOST_ID, GIT_KEY],
-    ['folder workspace', LOCAL_EXECUTION_HOST_ID, FOLDER_KEY],
-    ['SSH workspace', SSH_HOST, SSH_KEY]
-  ])('binds it to the one pane in a %s; main loads and saves it bound', (_name, hostId, key) => {
-    const repaired = bindTabTerminalPanesInSession(tabLevelSession(key, hostId))
+  it.each<[string, string]>([
+    ['git worktree', GIT_KEY],
+    ['folder workspace', FOLDER_KEY]
+  ])('binds it to the one pane in a %s; main loads and saves it bound', (_name, key) => {
+    const repaired = repair(tabLevelSession(key))
     expect(bindings(repaired)).toEqual({ [leaf(1)]: 'pty-a' })
     let next = 0
-    const loaded = loadWorkspaceLayout(hostId, repaired, {
+    const loaded = loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, repaired, {
       mintId: () => `minted-${++next}`,
       mintLeafId: () => `00000000-0000-4000-8000-${String(++next).padStart(12, '0')}`
     })
@@ -65,35 +67,34 @@ describe("load repair: a tab's own terminal and its unbound pane", () => {
     expect(saveWorkspaceLayout(loaded).tabsByWorktree[key]![0]!.ptyId).toBe('pty-a')
   })
 
-  it("takes an SSH tab's relay session id over the row's, as reconnect does", () => {
+  it("binds an SSH tab's relay session id, never its row's id, as reconnect does", () => {
     const stored = tabLevelSession(SSH_KEY, SSH_HOST)
+    expect(repair(stored, true)).toBe(stored)
     stored.remoteSessionIdsByTabId = { 'tab-a': 'ssh:box@@pty-9' }
-    expect(bindings(bindTabTerminalPanesInSession(stored))).toEqual({
-      [leaf(1)]: 'ssh:box@@pty-9'
-    })
+    expect(bindings(repair(stored, true))).toEqual({ [leaf(1)]: 'ssh:box@@pty-9' })
   })
 
   it('keeps the terminal the pane already binds, and returns the session it was given', () => {
     const stored = tabLevelSession(GIT_KEY)
     stored.terminalLayoutsByTabId['tab-a']!.ptyIdsByLeafId = { [leaf(1)]: 'pty-pane' }
-    expect(bindTabTerminalPanesInSession(stored)).toBe(stored)
+    expect(repair(stored)).toBe(stored)
   })
 
   it('binds nothing in a workspace that was not live at shutdown, as reconnect skips it', () => {
     const stored = tabLevelSession(GIT_KEY)
     stored.activeWorktreeIdsOnShutdown = []
-    expect(bindTabTerminalPanesInSession(stored)).toBe(stored)
+    expect(repair(stored)).toBe(stored)
   })
 
   it('reads a session without a shutdown list as live where a row names a terminal', () => {
     const stored = tabLevelSession(GIT_KEY)
     delete stored.activeWorktreeIdsOnShutdown
-    expect(bindings(bindTabTerminalPanesInSession(stored))).toEqual({ [leaf(1)]: 'pty-a' })
+    expect(bindings(repair(stored))).toEqual({ [leaf(1)]: 'pty-a' })
   })
 
   it('leaves a split tab unbound: which pane the window gives it depends on mount order', () => {
     const stored = tabLevelSession(GIT_KEY, LOCAL_EXECUTION_HOST_ID, [leaf(1), leaf(2)])
-    expect(bindTabTerminalPanesInSession(stored)).toBe(stored)
+    expect(repair(stored)).toBe(stored)
   })
 
   it("never takes a terminal another tab's pane binds", () => {
@@ -108,13 +109,13 @@ describe("load repair: a tab's own terminal and its unbound pane", () => {
     ])
     stored.tabsByWorktree[GIT_KEY]![0]!.ptyId = 'pty-a'
     stored.activeWorktreeIdsOnShutdown = [GIT_KEY]
-    expect(bindTabTerminalPanesInSession(stored)).toBe(stored)
+    expect(repair(stored)).toBe(stored)
   })
 
   it('ignores a binding a removed pane left behind', () => {
     const stored = tabLevelSession(GIT_KEY)
     stored.terminalLayoutsByTabId['tab-a']!.ptyIdsByLeafId = { [leaf(9)]: 'pty-a' }
-    expect(bindings(bindTabTerminalPanesInSession(stored))).toEqual({
+    expect(bindings(repair(stored))).toEqual({
       [leaf(9)]: 'pty-a',
       [leaf(1)]: 'pty-a'
     })
@@ -134,7 +135,7 @@ describe("load repair: a tab's own terminal and its unbound pane", () => {
       row.ptyId = 'pty-a'
     }
     stored.activeWorktreeIdsOnShutdown = [GIT_KEY]
-    const repaired = bindTabTerminalPanesInSession(stored)
+    const repaired = repair(stored)
     expect(bindings(repaired, 'tab-a')).toEqual({ [leaf(1)]: 'pty-a' })
     expect(bindings(repaired, 'tab-b')?.[leaf(2)]).toBeUndefined()
   })
@@ -158,7 +159,7 @@ describe("load repair: a tab's own terminal and its unbound pane", () => {
       expandedLeafId: null
     }
     stored.activeWorktreeIdsOnShutdown = [GIT_KEY]
-    const repaired = bindTabTerminalPanesInSession(stored)
+    const repaired = repair(stored)
     expect(bindings(repaired, 'tab-b')).toEqual({ [leaf(2)]: 'pty-shared' })
     expect(bindings(repaired, 'tab-a')).toEqual({ [leaf(1)]: 'pty-own' })
   })
@@ -167,15 +168,32 @@ describe("load repair: a tab's own terminal and its unbound pane", () => {
     const state = getDefaultPersistedState('/home/dev')
     const runtimeHost = toRuntimeExecutionHostId('env-1')
     const serverSession = tabLevelSession(GIT_KEY)
+    const sshSession = tabLevelSession(SSH_KEY, SSH_HOST)
+    sshSession.remoteSessionIdsByTabId = { 'tab-a': 'ssh:box@@pty-9' }
     state.workspaceSession = tabLevelSession(GIT_KEY)
-    state.workspaceSessionsByHostId = {
-      [SSH_HOST]: tabLevelSession(SSH_KEY, SSH_HOST),
-      [runtimeHost]: serverSession
-    }
+    state.workspaceSessionsByHostId = { [SSH_HOST]: sshSession, [runtimeHost]: serverSession }
     const repaired = bindPersistedTabTerminalPanes(state)
     expect(bindings(repaired.workspaceSession)).toEqual({ [leaf(1)]: 'pty-a' })
-    expect(bindings(repaired.workspaceSessionsByHostId![SSH_HOST]!)).toEqual({ [leaf(1)]: 'pty-a' })
+    expect(bindings(repaired.workspaceSessionsByHostId![SSH_HOST]!)).toEqual({
+      [leaf(1)]: 'ssh:box@@pty-9'
+    })
     expect(repaired.workspaceSessionsByHostId![runtimeHost]).toBe(serverSession)
     expect(bindPersistedTabTerminalPanes(repaired)).toBe(repaired)
+  })
+
+  it("takes only the relay id for an SSH repo's workspace stored in the local partition", () => {
+    const state = getDefaultPersistedState('/home/dev')
+    state.repos = [
+      {
+        id: 'repo-ssh',
+        path: '/home/dev/api',
+        displayName: 'api',
+        badgeColor: '#000',
+        addedAt: 0,
+        connectionId: 'box'
+      }
+    ]
+    state.workspaceSession = tabLevelSession(SSH_KEY)
+    expect(bindPersistedTabTerminalPanes(state)).toBe(state)
   })
 })
