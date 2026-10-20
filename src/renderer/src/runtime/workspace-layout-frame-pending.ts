@@ -38,7 +38,9 @@ export function pendingWorkspaceChanges(
 }
 
 /** A pane tree without its panes' live titles or bindings. */
-function treeShapeJson(tree: Pick<PublishedPaneTree, 'root' | 'chatLeafId' | 'panes'>): string {
+function unboundPaneTreeJson(
+  tree: Pick<PublishedPaneTree, 'root' | 'chatLeafId' | 'panes'>
+): string {
   return stableJson({
     root: tree.root,
     chatLeafId: tree.chatLeafId,
@@ -83,7 +85,7 @@ function notePendingRecordChange(
   }
   for (const tree of change.paneTrees?.set ?? []) {
     const shown = before.tabs.find((tab) => tab.id === tree.tabId)
-    if (!shown?.terminal || treeShapeJson(shown.terminal) !== treeShapeJson(tree)) {
+    if (!shown?.terminal || unboundPaneTreeJson(shown.terminal) !== unboundPaneTreeJson(tree)) {
       pending.rebuild = true
     } else if (!pending.titled.has(shown.entityId)) {
       pending.titled.set(shown.entityId, shown)
