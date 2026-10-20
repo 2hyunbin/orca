@@ -157,6 +157,8 @@ export async function openPhoneFeedList(phone: PairedMobileClient) {
     return buildHostFeedSections({
       rows: built.sectionRows,
       activeRowKeys: built.activeRowKeys,
+      // A phone that has opened nothing on this host: the desktop's selection.
+      lastVisited: null,
       liveRows: [],
       repoHostIdByRepoId: new Map(),
       search: ''
