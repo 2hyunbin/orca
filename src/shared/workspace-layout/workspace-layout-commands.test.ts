@@ -297,7 +297,7 @@ describe('layout command refusals', () => {
     expect(
       applyLayoutCommand(slept, { type: 'startPane', workspace: WS, paneKey }, context)
     ).toMatchObject({ ok: true, effects: { startPaneKeys: [paneKey] } })
-    // A wake starts the pane and keeps its record until it binds; a record-only wake drops it.
+    // A wake starts the pane and keeps its record; a record-only wake drops it.
     const woken = applyLayoutCommand(slept, { type: 'wake', workspace: WS }, context)
     expect(woken).toMatchObject({
       ok: true,

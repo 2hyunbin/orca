@@ -9,7 +9,6 @@ function ports(overrides: Partial<LayoutPaneStartPorts> = {}): LayoutPaneStartPo
     start: vi.fn(async () => 'pty-1'),
     stop: vi.fn(() => true),
     failed: vi.fn(),
-    dropRecords: vi.fn(async () => undefined),
     ...overrides
   }
 }
@@ -25,7 +24,6 @@ describe('runLayoutPaneStarts', () => {
     expect(run.stop).toHaveBeenCalledWith('pty-old')
     expect(run.start).toHaveBeenCalledWith({ worktreeId: 'wt', tabId: 'tab-1', leafId: LEAF })
     await vi.waitFor(() => expect(run.start).toHaveBeenCalledOnce())
-    expect(run.dropRecords).not.toHaveBeenCalled()
   })
 
   it('starts nothing when a restart could not stop its terminal, and says so', () => {
@@ -51,16 +49,13 @@ describe('runLayoutPaneStarts', () => {
     expect(run.start).not.toHaveBeenCalled()
   })
 
-  it('a wake whose pane main no longer holds keeps its record', async () => {
-    const run = ports({ start: vi.fn(async () => null) })
+  it('shows a failed start on its pane', async () => {
+    const run = ports({ start: vi.fn(async () => Promise.reject(new Error('boom'))) })
     runLayoutPaneStarts(
       { type: 'wake', workspace: 'wt' },
       { stopPtyIds: [], startPaneKeys: [PANE_KEY] },
       run
     )
-    await vi.waitFor(() => expect(run.start).toHaveBeenCalled())
-    await Promise.resolve()
-    expect(run.dropRecords).not.toHaveBeenCalled()
-    expect(run.failed).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(run.failed).toHaveBeenCalledWith(PANE_KEY, expect.any(Error)))
   })
 })

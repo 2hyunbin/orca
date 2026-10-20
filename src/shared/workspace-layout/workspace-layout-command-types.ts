@@ -219,7 +219,7 @@ export type LayoutCommand =
       /** Records how each agent resumes and stops nothing: the window's live and quit captures. */
       recordOnly?: true
     })
-  /** Starts the slept panes; their records go once they bind. `recordOnly`: drops them, starts nothing. */
+  /** Starts the slept panes, which keep their records. `recordOnly`: drops them, starts nothing. */
   | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
   /** The workspace's default tabs were applied (or it had none): never apply them again. */
   | (On & { type: 'setDefaultTabsApplied' })

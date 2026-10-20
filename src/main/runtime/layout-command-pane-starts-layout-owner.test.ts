@@ -1,6 +1,6 @@
 // Layout-owner build: a client's startPane and wake start the pane through main's one starter
-// after the command is written. The reply never carries the effects, a wake's resume record goes
-// only once the pane binds, and a failed start shows on the pane and keeps the record.
+// after the command is written. The reply never carries the effects, a wake keeps the pane's
+// resume record in the pane-owned form, and a failed start shows on the pane and keeps the record.
 import { describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord as SleepingRecord } from '../../shared/agent-session-resume'
 
@@ -44,10 +44,14 @@ const RECORD: SleepingRecord = {
   origin: 'worktree-sleep'
 }
 
-async function desktopRuntime(opts: { slept?: boolean } = {}) {
-  const session = makeWorkspaceSessionWithHeadlessTerminal(
-    opts.slept ? { sleepingAgentSessionsByPaneKey: { [PANE_KEY]: RECORD } } : {}
-  )
+async function desktopRuntime(
+  opts: { slept?: boolean; session?: ReturnType<typeof makeWorkspaceSessionWithHeadlessTerminal> } = {}
+) {
+  const session =
+    opts.session ??
+    makeWorkspaceSessionWithHeadlessTerminal(
+      opts.slept ? { sleepingAgentSessionsByPaneKey: { [PANE_KEY]: RECORD } } : {}
+    )
   // The tab was launched as the agent its record resumes.
   session.tabsByWorktree[TEST_WORKTREE_ID]![0]!.launchAgent = 'claude'
   const fixture = makeRuntimeStoreWithWorkspaceSession(session)
@@ -74,7 +78,7 @@ async function desktopRuntime(opts: { slept?: boolean } = {}) {
     notifyClients: false,
     clientKind: 'runtime'
   })
-  return { runtime, spawn, started, getSession: fixture.getSession }
+  return { runtime, spawn, started, getSession: fixture.getSession, setSession: fixture.setSession }
 }
 
 const startPane = { type: 'startPane', workspace: TEST_WORKTREE_ID, tabId: 'host-tab' } as const
@@ -124,22 +128,29 @@ describe('a client’s startPane in the layout-owner build', () => {
 })
 
 describe('a client’s wake of a slept pane in the layout-owner build', () => {
-  it('resumes its agent through main, then drops the record once the pane binds', async () => {
+  it('resumes its agent through main and keeps the record pane-owned, so a host crash resumes again', async () => {
     const { runtime, spawn, started, getSession } = await desktopRuntime({ slept: true })
 
     const reply = await runtime.applyLayoutCommand({ ...wake, paneKeys: [PANE_KEY] })
     expect(reply).toMatchObject({ ok: true, result: { woken: [PANE_KEY] } })
     await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
-    // The start reads the record, so it is still there until the pane binds.
-    expect(getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toBeDefined()
     const command = spawn.mock.calls[0]![0].command ?? ''
     expect(command).toContain('--resume')
     expect(command).toContain('provider-session-1')
-
     started.resolve({ id: 'persisted-pty' })
-    await vi.waitFor(() =>
-      expect(getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toBeUndefined()
-    )
+    await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
+    expect(getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toMatchObject({
+      state: 'done',
+      restoreOnTabOpenOnly: true
+    })
+
+    // The host crashes: its terminal is gone, and a new runtime loads the same profile.
+    const crashed = getSession()
+    const restarted = await desktopRuntime({ session: crashed })
+    restarted.runtime.setStartStatus(PANE_KEY, 'sleeping')
+    await restarted.runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    await vi.waitFor(() => expect(restarted.spawn).toHaveBeenCalled())
+    expect(restarted.spawn.mock.calls[0]![0].command ?? '').toContain('provider-session-1')
   })
 
   it('keeps the record when the start fails', async () => {

@@ -117,7 +117,7 @@ describe('Store.applyLayoutCommand sleep and wake (layout.apply)', () => {
     })
   })
 
-  it('a wake starts the pane and keeps its record until the start binds', async () => {
+  it('a wake starts the pane and keeps its record, which the start resumes from', async () => {
     const { store } = await storeWithSplitTab()
     const left = record(LEFT, 'left-session')
     await store.applyLayoutCommand({

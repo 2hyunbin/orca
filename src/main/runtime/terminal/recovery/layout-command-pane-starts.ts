@@ -15,8 +15,6 @@ export type LayoutPaneStartPorts = {
   stop: (ptyId: string) => boolean
   /** Publishes a start that failed, with its reason, on the pane. */
   failed: (paneKey: string, error: unknown) => void
-  /** Drops the panes' resume records, once their start bound. */
-  dropRecords: (paneKeys: string[]) => Promise<unknown>
 }
 
 const STARTING_COMMANDS: ReadonlySet<LayoutCommand['type']> = new Set([
@@ -32,7 +30,8 @@ export function startsPanes(command: Pick<LayoutCommand, 'type'>): boolean {
 
 /**
  * Stops, then starts, each pane the command names. Never silent: a failed start shows on the
- * pane, a failed stop is logged and starts nothing. A wake's records go only after its start binds.
+ * pane, a failed stop is logged and starts nothing. A wake keeps its records: the start resumes
+ * from them and keeps them in the pane-owned form, so a host crash resumes the agent again.
  */
 export function runLayoutPaneStarts(
   command: Pick<LayoutCommand, 'type' | 'workspace'>,
@@ -53,15 +52,6 @@ export function runLayoutPaneStarts(
       continue
     }
     const pane = { worktreeId: command.workspace, tabId: parsed.tabId, leafId: parsed.leafId }
-    void ports.start(pane).then(
-      (ptyId) => {
-        if (ptyId !== null && command.type === 'wake') {
-          void ports.dropRecords([paneKey]).catch((error: unknown) => {
-            console.warn('[layout] a woken pane kept its resume record', error)
-          })
-        }
-      },
-      (error: unknown) => ports.failed(paneKey, error)
-    )
+    void ports.start(pane).catch((error: unknown) => ports.failed(paneKey, error))
   }
 }

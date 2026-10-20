@@ -101,7 +101,7 @@ export function sleep(model: WorkspaceLayoutModel, command: CommandOf<'sleep'>):
 
 /**
  * Without `recordOnly`, starts the slept panes and keeps their records: the runtime's start resumes
- * from them and drops each with a record-only wake once its pane binds, so a failed start keeps it.
+ * from them and keeps them in the pane-owned form, so a failed start or a host crash resumes again.
  */
 export function wake(model: WorkspaceLayoutModel, command: CommandOf<'wake'>): Applied {
   let workspace = model.workspaces[command.workspace]!
