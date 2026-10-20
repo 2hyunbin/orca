@@ -119,6 +119,7 @@ export async function saveNodeDistMirrorAndRetry(
     return { outcome: 'retrying', retry: trackSshConnect(targetId, deps.connect(targetId)) }
   }
   // Why wait: a second connect would race the one dialing, which may be past the download already.
+  // The status is current once the lock clears: main publishes a failed setup before it rejects.
   const retry = sshConnectSettled(targetId).then(() =>
     blockedNodeDownload(useAppStore.getState().sshConnectionStates.get(targetId)?.managedServer)
       ? trackSshConnect(targetId, deps.connect(targetId))

@@ -40,7 +40,10 @@ function deps() {
   }
 }
 
-afterEach(() => resetSshConnectInFlightForTests())
+afterEach(() => {
+  resetSshConnectInFlightForTests()
+  useAppStore.getState().clearRemovedSshTargetState('ssh-1')
+})
 
 describe('save a Node.js mirror and retry', () => {
   it('saves the normalized mirror first, then retries the connect as an in-flight attempt', async () => {
