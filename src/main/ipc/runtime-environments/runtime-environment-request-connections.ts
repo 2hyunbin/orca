@@ -16,10 +16,9 @@ import type {
   RemoteRuntimeSharedConnectionDiagnostics,
   RemoteRuntimeSharedSubscription
 } from '../../../shared/remote-runtime-shared-control-types'
-import { isRuntimeEnvironmentCapabilityPaused } from './runtime-environment-capability-evidence'
 import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
 import { publishRuntimeEnvironmentDiagnostics } from './runtime-environment-diagnostics-broadcast'
-import { handleSharedControlRefusal } from './runtime-environment-pairing-refusal-registry'
+import { sharedControlEnvironmentPolicy } from './runtime-environment-shared-control-policy'
 import {
   clearSharedControlAnswerSource,
   setSharedControlAnswerSource
@@ -284,9 +283,7 @@ function getSharedControlConnection(
       connection: new RemoteRuntimeSharedControlConnection(pairedConnection, {
         environmentId,
         clientCapabilities: ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES,
-        isManuallyDisconnected: () => isRuntimeEnvironmentManuallyDisconnected(environmentId),
-        isCapabilityPaused: () => isRuntimeEnvironmentCapabilityPaused(environmentId),
-        onAuthenticationRejected: () => handleSharedControlRefusal(environmentId),
+        ...sharedControlEnvironmentPolicy(environmentId),
         // Why wall clock: it advances across a suspend, so a pre-sleep answer reads as stale.
         onAnswered: () => {
           answeredAt = Date.now()
