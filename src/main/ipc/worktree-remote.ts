@@ -78,7 +78,12 @@ import { mergeWorktree } from './worktree-metadata-merge'
 import { resolveCreatedWorktree } from './created-worktree-reconciliation'
 import { notifyLineageRepos } from '../worktree-lineage-change-notification'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
-import { getConnectionExecutionHostId, getRepoExecutionHostId } from '../../shared/execution-host'
+import {
+  getConnectionExecutionHostId,
+  getRepoExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../../shared/execution-host'
 import type { BranchPrefixSettings } from '../../shared/branch-prefix'
 import { parseWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { sharesWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
@@ -790,7 +795,7 @@ async function adoptExistingForkRemoteForBranch(
     store !== undefined &&
     ownerRepoId !== undefined &&
     // SAFETY: Legacy null keeps this branch's original failure rather than introducing a fallback.
-    isPushTargetRemoteCreatedByKnownWorktree(store!, restored, ownerRepoId)
+    isPushTargetRemoteCreatedByKnownWorktree(store!, restored, ownerRepoId, worktree?.hostId)
   const adopted = owned ? { ...restored, remoteCreated: true } : restored
   persistMaterializedPushTargetIfCreated(store, worktree, adopted)
   return adopted
@@ -856,10 +861,15 @@ function persistMaterializedPushTargetIfCreated(
 function isPushTargetRemoteCreatedByKnownWorktree(
   store: WorktreePushTargetStore,
   target: GitPushTarget,
-  repoId?: string
+  repoId?: string,
+  // A same-id twin's remote on another host proves nothing about this host's remote.
+  hostId?: ExecutionHostId
 ): boolean {
   return Object.entries(store.getAllWorktreeMeta()).some(([worktreeId, meta]) => {
     if (repoId && getRepoIdFromWorktreeId(worktreeId) !== repoId) {
+      return false
+    }
+    if (hostId && (meta.hostId ?? LOCAL_EXECUTION_HOST_ID) !== hostId) {
       return false
     }
     if (!meta.pushTarget?.remoteCreated) {

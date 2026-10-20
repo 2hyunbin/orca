@@ -32,33 +32,18 @@ type SortOrderStore = {
   setWorktreeMeta: (target: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => unknown
 }
 
-/**
- * The client's host for this id as this store spells it, or null when no repo row lives there.
- * The client names hosts relative to this endpoint, so its `local` is also a row this store
- * stamped with its own `runtime:` id.
- */
+/** The client's host for this id when a repo row of this store is stamped exactly that. */
 function knownHost(
   store: SortOrderStore,
   worktreeId: string,
-  hostId: string | undefined
+  hostId: ExecutionHostId
 ): ExecutionHostId | null {
-  const parsed = parseExecutionHostId(hostId)
-  if (!parsed) {
-    return null
-  }
   const repoId = getRepoIdFromWorktreeId(worktreeId)
-  const stored = new Set(
-    store
-      .getRepos()
-      .filter((repo) => repo.id === repoId)
-      .map(getRepoExecutionHostId)
-  )
-  if (stored.has(parsed.id)) {
-    return parsed.id
-  }
-  // Only when no row is stamped `local`: a single own-runtime stamp is that same copy.
-  const aliases = [...stored].filter((host) => parseExecutionHostId(host)?.kind === 'runtime')
-  return parsed.kind === 'local' && aliases.length === 1 ? (aliases[0] ?? null) : null
+  return store
+    .getRepos()
+    .some((repo) => repo.id === repoId && getRepoExecutionHostId(repo) === hostId)
+    ? hostId
+    : null
 }
 
 /**
@@ -88,9 +73,18 @@ export function writeWorktreeSortOrder(
       targets.set(worktreeId, resolveWorktreeMetaOwner(store, worktreeId))
       return
     }
-    // A named host this store no longer registers is skipped, never redirected to another copy.
-    const hostId = knownHost(store, worktreeId, hostIds[index])
-    targets.set(worktreeId, hostId ? hostWorktreeTarget({ id: worktreeId, hostId }) : undefined)
+    const named = parseExecutionHostId(hostIds[index])
+    const hostId = named ? knownHost(store, worktreeId, named.id) : null
+    if (hostId) {
+      targets.set(worktreeId, hostWorktreeTarget({ id: worktreeId, hostId }))
+      return
+    }
+    // The client's `local` may be a row this server stamped with its own id, so it keeps the
+    // id-only rule (which refuses twins); any other host this store lacks is skipped.
+    targets.set(
+      worktreeId,
+      named?.kind === 'local' ? resolveWorktreeMetaOwner(store, worktreeId) : undefined
+    )
   })
   const metaFor = (worktreeId: string): WorktreeMeta | undefined => {
     const target = targets.get(worktreeId)
