@@ -277,6 +277,7 @@ function setAgentLineageState(options: {
   }
 
   mockStore.state = {
+    startupLocalCatalogHydrated: true,
     // Reactive-ish toggle: the chip's onClick eventually calls
     // toggleCollapsedGroup; mutate the live Set so the next manual re-render
     // (store isn't reactive in this harness) reflects the user's toggle.

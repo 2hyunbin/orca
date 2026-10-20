@@ -20,6 +20,7 @@ export const worktreeSliceInitialState: Pick<
   | 'lastVisitedAtByWorktreeId'
   | 'hasHydratedWorktreePurge'
   | 'startupWorktreeRefreshCompleted'
+  | 'startupLocalCatalogHydrated'
 > = {
   worktreesByRepo: {},
   detectedWorktreesByRepo: {},
@@ -38,5 +39,6 @@ export const worktreeSliceInitialState: Pick<
   everActivatedWorktreeIds: new Set<string>(),
   lastVisitedAtByWorktreeId: {},
   hasHydratedWorktreePurge: false,
-  startupWorktreeRefreshCompleted: false
+  startupWorktreeRefreshCompleted: false,
+  startupLocalCatalogHydrated: false
 }

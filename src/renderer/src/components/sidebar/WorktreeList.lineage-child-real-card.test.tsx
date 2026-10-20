@@ -268,6 +268,7 @@ function setLineageState(
     worktreeLineageById[grandchild.id] = makeLineage(grandchild, child)
   }
   mockStore.state = {
+    startupLocalCatalogHydrated: true,
     ...makeFolderWorkspacePathStatusMockState(),
     activeModal: '',
     activeView: 'terminal',
