@@ -305,9 +305,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     fence: number
     beforeTurnId: string
   }): Promise<{ ok: true } | { ok: false; reason: AgentSessionRewindReason }>
-  /** An agent that rewinds by forking: the session a rewind to before `beforeMessage` continues the
-   *  chat in, which its next launch creates. Read before anything is saved, so a refusal changes
-   *  nothing, and the agent need not be running. */
+  /** Saves the fork a rewind continues in, before the journal or record changes.
+   *  The agent need not be running; a refusal leaves its conversation unchanged. */
   forkForRewind?(input: {
     record: AgentSessionRecord
     beforeMessage: { sessionId: string; uuid: string }
