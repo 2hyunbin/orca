@@ -6,7 +6,7 @@ import {
   stubEditorWindowWithDisk
 } from '../editor-autosave-controller-test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: CsvViewer.editing.test.tsx › drains the old save before reparent, then routes exp...
 vi.mock('../../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 afterEach(() => vi.unstubAllGlobals())

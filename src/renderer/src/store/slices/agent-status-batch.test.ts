@@ -12,9 +12,6 @@ import {
 import type { GeneratedTabTitleUpdate } from './terminal-tab-title-batch'
 import { createTestStore, makeTab } from './store-test-helpers'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 const BASE_TIME = 2_000_000
 const FIRST_PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
 const SECOND_PANE = 'tab-1:22222222-2222-4222-8222-222222222222'

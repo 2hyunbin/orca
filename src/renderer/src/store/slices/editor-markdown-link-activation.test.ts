@@ -8,7 +8,7 @@ import {
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: editor-tab-layout-owner.test.ts › keeps same-path file links on the explicit SSH sourc...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const { toastErrorMock } = vi.hoisted(() => ({

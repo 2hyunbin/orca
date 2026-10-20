@@ -10,7 +10,7 @@ import { useAppStore } from '../../store'
 import { useTabDragSplit, type TabDragItemData } from '../tab-group/useTabDragSplit'
 import { isFloatingTerminalDragTarget } from './floating-terminal-titlebar-drag-target'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: tab-group-layout-owner-commands.test.ts › reorders within a group at the index main got
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('../browser-pane/host-guest/webview-registry', () => ({

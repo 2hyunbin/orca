@@ -11,7 +11,7 @@ import { withOpenedServeBrowserTab } from './serve-browser-tab-layout'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { BLANK_BROWSER_TAB_STATE } from '../../shared/workspace-layout/workspace-layout-beside'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: serve-browser-tabs-layout-owner.test.ts › opens a tab through layout.apply, then saves its pag...
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const BROWSER_ONLY_WORKTREE_ID = 'repo-1::/tmp/browser-only'

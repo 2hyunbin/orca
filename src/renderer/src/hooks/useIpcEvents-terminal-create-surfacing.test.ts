@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { setupTerminalCreateSurfacing } from './ipc-events-terminal-create-test-harness'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: useIpcEvents-silent-terminal-adoption.test.ts › draws a tab main made itself with main’s creation fa...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 describe('useIpcEvents updater integration', () => {

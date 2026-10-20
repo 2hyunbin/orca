@@ -47,7 +47,7 @@ import {
   projectStartupWindowView
 } from './startup-window-view.test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-frame-sync.test.ts › changes nothing for the frame the store already shows
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))

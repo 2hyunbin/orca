@@ -4,9 +4,6 @@ import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 const mockCallRuntimeRpc = vi.hoisted(() => vi.fn())
 
 vi.mock('sonner', () => ({
@@ -25,7 +22,12 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
 
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
   const actual = await importOriginal<typeof RuntimeRpcClientModule>()
-  return { ...actual, callRuntimeRpc: mockCallRuntimeRpc }
+  // Main's layout.apply is local and never answers here; the mock sees only host calls.
+  return {
+    ...actual,
+    callRuntimeRpc: (...args: Parameters<typeof actual.callRuntimeRpc>) =>
+      args[1] === 'layout.apply' ? new Promise(() => {}) : mockCallRuntimeRpc(...args)
+  }
 })
 
 createStoreCascadesMockApi()

@@ -35,7 +35,7 @@ import {
   STRUCTURED_MOBILE_CLIENT
 } from './structured-agent-session-rpc.test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: structured-agent-session-close-before-create.test.ts › create then cancel: an ordinary close, and the creat...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 beforeEach(() => {

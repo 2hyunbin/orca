@@ -1,17 +1,14 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from 'vitest'
-import { createEditorStore } from '@/store/slices/editor-slice-test-harness'
+import { createEditorTabsStore } from '@/store/slices/editor-slice-test-harness'
 import { createEditorSaveQueue } from '../editor-save-queue'
 import { canAutoSaveOpenFile } from '../editor-autosave'
-
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const { writeFile } = vi.hoisted(() => ({ writeFile: vi.fn() }))
 vi.mock('@/runtime/runtime-file-mutation-client', () => ({ writeRuntimeFile: writeFile }))
 
 it('blocks drafts, dirty state, autosave and explicit writes for paged previews', async () => {
-  const store = createEditorStore()
+  const store = createEditorTabsStore()
   store.getState().openFile({
     filePath: '/repo/large.csv',
     relativePath: 'large.csv',

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { withChatTabChanges, type ChatTabChange } from './agent-session-tab-layout'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-first-group.test.ts › changes nothing when sent again, and refuses an id a...
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const WT = 'repo-1::/tmp/worktree-a'

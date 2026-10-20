@@ -9,7 +9,7 @@ import {
   resetAgentBackgroundSessionTestHarness
 } from '@/lib/agent-background-session-test-state'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: automation-terminal-bind-layout-owner.test.ts › binds the one-pane tree main made the tab with…
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const mockSpawn = vi.fn()

@@ -6,9 +6,6 @@ import { computeVisibleWorktreeIds } from '@/components/sidebar/visible-worktree
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { createStoreSessionMockApi } from './store-session-test-harness'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 // Mock sonner (imported by repos.ts)
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 

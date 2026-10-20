@@ -6,7 +6,7 @@ import { registerPtyConnectionParkRevealModelSnapshotTests } from './pty-connect
 import { registerPtyConnectionReplayPayloadHandlingTests } from './pty-connection-replay-payload-handling.spec'
 import { registerPtyConnectionPtyExitTeardownTests } from './pty-connection-pty-exit-teardown.spec'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: exited-split-pane-close.test.ts › asks main to close the exited pane, leaving its remo...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 describe('pty-connection-visibility-resume-size', registerPtyConnectionVisibilityResumeSizeTests)

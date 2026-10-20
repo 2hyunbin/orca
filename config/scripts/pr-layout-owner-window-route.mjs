@@ -43,7 +43,6 @@ export const LAYOUT_OWNER_WINDOW_E2E_SPECS = [
 const LAYOUT_OWNER_WINDOW_PREFIXES = [
   'src/shared/workspace-layout',
   'src/shared/layout-owner-switch.ts',
-  'config/dark-build-switches.cjs',
   'src/main/persistence/',
   'src/main/runtime/',
   'src/renderer/src/store/',

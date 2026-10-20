@@ -6,7 +6,7 @@ import { getDefaultWorkspaceSession } from '../../../../shared/constants'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { createTestStore, makeLayout, makeTab, makeWorktree, seedStore } from './store-test-helpers'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-frame-sync.test.ts › startup from the first snapshot changes nothing rest...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))

@@ -28,9 +28,6 @@ import {
   stubAuxiliaryModules
 } from './ipc-events-agent-status-window-test-fixtures'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 describe('useIpcEvents agent status snapshot integration', () => {
   beforeEach(() => {
     vi.resetModules()

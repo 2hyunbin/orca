@@ -20,7 +20,7 @@ import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { resumeSleepingAgentSessionsForWorktree } from '@/lib/resume-sleeping-agent-session'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: layout-owner-shared-path-gates.test.ts › reconnect advertises restored terminals without rewr...
 vi.mock('../../src/shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const PROVIDER_SESSION_ID = '019feb51-2269-71c2-89c6-faa8dc65c8dc'

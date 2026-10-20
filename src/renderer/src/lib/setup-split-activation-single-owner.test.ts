@@ -10,7 +10,7 @@ import { activateAndRevealWorktree } from './worktree-activation'
 import { gateWorktreeAgentActivation } from './worktree-agent-activation-gate'
 import { makeCreatedAgentWorktree as makeWorktree } from './worktree-activation-created-agent.test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: terminal-presentation-frame-drawn-tab.test.ts › shows the tab its frame drew, bound to main's termin...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 /**

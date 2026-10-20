@@ -15,7 +15,7 @@ import {
 } from '@/lib/worktree-activation-created-agent.test-fixture'
 import { waitForWorktreeAgentActivationGateForTests } from './worktree-agent-activation-gate'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: worktree-initial-terminal-close-records.test.ts › a stale record from an earlier close suppresses the...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const initialAppStoreState = useAppStore.getState()

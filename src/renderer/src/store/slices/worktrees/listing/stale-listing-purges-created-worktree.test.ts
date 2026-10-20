@@ -23,7 +23,7 @@ import {
   resetStructuredAgentLaunchRegistryForTests
 } from '@/lib/structured-agent-session-launch-registry'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: structured-launch-cancel-layout-owner.test.ts › cancel after a reload, when only the saved...
 vi.mock('../../../../../../shared/layout-owner-switch', () => ({
   ORCA_LAYOUT_OWNER_IS_MAIN: false
 }))

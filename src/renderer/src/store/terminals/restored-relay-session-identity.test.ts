@@ -1,11 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { getOrphanTerminalIds } from '../slices/terminal-orphan-helpers'
 import { createTestStore, makeTab, makeWorktree } from '../slices/store-test-helpers'
-
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const TARGET_ID = 'target'
 const REPO_ID = 'repo-ssh'

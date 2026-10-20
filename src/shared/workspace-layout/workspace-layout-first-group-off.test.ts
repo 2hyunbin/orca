@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { build, testContext, WS } from './workspace-layout-command.test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-first-group.test.ts › is the workspace root group id when the sender names none
 vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 describe('a workspace first group with the layout-owner switch off', () => {

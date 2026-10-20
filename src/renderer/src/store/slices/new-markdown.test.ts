@@ -6,7 +6,7 @@ import type { BrowserTab } from '../../../../shared/browser-workspace-types'
 import type { Tab, TabContentType, TabGroup } from '../../../../shared/tab-types'
 import { makeTab } from './store-session-test-harness'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: editor-tab-layout-owner.test.ts › records a close, and a reopen where the window put i...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 function createEditorStore(overrides?: Partial<AppState>): StoreApi<AppState> {

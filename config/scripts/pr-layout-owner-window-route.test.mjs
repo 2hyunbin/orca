@@ -68,7 +68,6 @@ describe('layout owner window (rollback build) job', () => {
     for (const file of [
       'src/shared/workspace-layout/workspace-layout-load.ts',
       'src/shared/layout-owner-switch.ts',
-      'config/dark-build-switches.cjs',
       'src/main/persistence/window-save-divergence.ts',
       'src/main/runtime/terminal-surface-close.ts',
       'src/renderer/src/store/slices/terminals.ts',

@@ -4,7 +4,7 @@ import type { AgentLaunchPaneVerdict } from '../../../shared/agent-launch-pane-v
 import { createTabsSliceMockApi } from '../store/slices/tabs-slice-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: useIpcEvents-agent-launch-closed-tab.test.ts › keeps a launch's final outcome on a retry of that la...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))

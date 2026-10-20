@@ -9,7 +9,7 @@ import { registerPtyConnectionRestartReplacementTests } from './pty-connection-r
 import { registerPtyConnectionSessionLivenessTests } from './pty-connection-session-liveness.spec'
 import { registerPtyConnectionSleepingResumeBannerTests } from './pty-connection-sleeping-resume-banner.spec'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: exited-split-pane-close.test.ts › closes the pane itself when main closed it and no fr...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 describe('pty-connection-agent-session-resume', registerPtyConnectionAgentSessionResumeTests)

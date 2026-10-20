@@ -24,7 +24,7 @@ import { createTestStore } from '../store/slices/store-test-helpers'
 import type { AppState } from '../store/types'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: store-terminal-tab-changes-layout-owner.test.ts › renames in main first by tab-bar id, then the window...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))

@@ -20,7 +20,7 @@ import { saveWorkspaceLayout } from './workspace-layout-save'
 import { addWorkspace, GIT_KEY, leaf } from './workspace-layout-session.test-fixture'
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-editor-file-owner.test.ts › the load report sees a change to one owner's record
 vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 // A model or side-data field no disk field is written from fails here.

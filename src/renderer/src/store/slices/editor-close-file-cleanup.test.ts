@@ -13,7 +13,7 @@ import {
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 import type { Tab } from '../../../../shared/tab-types'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: editor-tab-layout-owner.test.ts › records a close, and a reopen where the window put i...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const { toastErrorMock } = vi.hoisted(() => ({

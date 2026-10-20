@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createEditorStore } from './editor-slice-test-harness'
 import type { AppState } from '../types'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: ai-vault-session-log-open.test.ts › opens the exact path as a permanent read-only local tab
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const { toastErrorMock } = vi.hoisted(() => ({

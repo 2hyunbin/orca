@@ -5,7 +5,7 @@ import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import { getSshProviderAuthority, resetSshProviderAuthorities } from '../ssh/ssh-provider-authority'
 import { mergeWorktreeMetaForWrite } from '../persistence/loading-store/worktree-meta-write-normalization'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: persistence-invalid-workspace-layout-purge.test.ts › keeps every workspace after a scan that could not pr...
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const mocks = vi.hoisted(() => ({

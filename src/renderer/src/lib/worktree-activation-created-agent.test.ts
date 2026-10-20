@@ -13,7 +13,7 @@ import {
 } from '@/lib/worktree-activation-created-agent.test-fixture'
 import { stubRuntimeEnvironmentBridge } from '../runtime/runtime-environment-bridge-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: store-create-tab-layout-owner.test.ts › sends main the tab it drew, under its ids and in its...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const initialAppStoreState = useAppStore.getState()

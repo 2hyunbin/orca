@@ -9,7 +9,7 @@ import {
   RECONCILIATION_WRITABLE_KEYS
 } from './hydrated-workspace-reconciliation-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: layout-owner-shared-path-gates.test.ts › reconcile counts what would render and leaves the ta...
 vi.mock('../../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))

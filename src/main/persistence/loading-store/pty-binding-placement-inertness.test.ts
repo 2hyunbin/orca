@@ -8,7 +8,7 @@ import { fixture } from './profile-state-delayed-authority-fixture'
 import type * as AgreementModule from '../terminal-topology/terminal-pane-placement-agreement'
 import type { PersistPtyBindingArgs } from './pty-binding-persistence'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: persistence-binding-graft-placement.test.ts › splits the named pane top and bottom, leaving the ot...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const agreementCheck = vi.hoisted(() => ({ throws: false }))

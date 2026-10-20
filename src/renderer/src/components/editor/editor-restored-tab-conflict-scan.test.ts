@@ -6,9 +6,6 @@ import type { AppState } from '@/store'
 import { attachRestoredTabConflictScan } from './editor-restored-tab-conflict-scan'
 import { getDiskBaselineSignature } from './diff-content-signature'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 const mocks = vi.hoisted(() => ({
   readRuntimeFileContent: vi.fn(),
   getConnectionIdForFile: vi.fn(),
@@ -27,6 +24,7 @@ function createEditorStore(): StoreApi<AppState> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return createStore<any>()((...args: any[]) => ({
     settings: {},
+    unifiedTabsByWorktree: {},
     ...createEditorSlice(...(args as Parameters<typeof createEditorSlice>))
   })) as unknown as StoreApi<AppState>
 }
@@ -40,22 +38,21 @@ function openRestoredDirtyTab(
     worktreeId: 'wt-1'
   }
 ): void {
-  store.getState().openFile({
+  // A floating file's id is owned, not its path.
+  const fileId = store.getState().openFile({
     filePath,
     ...owner,
     language: 'typescript',
     mode: 'edit'
   })
-  store.getState().setEditorDraft(filePath, 'restored draft')
-  store.getState().markFileDirty(filePath, true)
-  store.getState().setLastKnownDiskSignature(filePath, getDiskBaselineSignature(baselineContent))
+  store.getState().setEditorDraft(fileId, 'restored draft')
+  store.getState().markFileDirty(fileId, true)
+  store.getState().setLastKnownDiskSignature(fileId, getDiskBaselineSignature(baselineContent))
   // Why: hydration flags restored dirty tabs for verification; tests mimic it.
   store.setState({
     openFiles: store
       .getState()
-      .openFiles.map((f) =>
-        f.id === filePath ? { ...f, pendingDiskBaselineVerification: true } : f
-      )
+      .openFiles.map((f) => (f.id === fileId ? { ...f, pendingDiskBaselineVerification: true } : f))
   } as never)
 }
 

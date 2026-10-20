@@ -8,7 +8,7 @@ import { attachEditorAutosaveController } from './editor-autosave-controller'
 import { __clearSelfWriteRegistryForTests, recordSelfWrite } from './editor-self-write-registry'
 import { createEditorStore, stubEditorWindow } from './editor-autosave-controller-test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: useEditorExternalWatch.test.ts › leaves main with the same tabs as the window through...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const mocks = vi.hoisted(() => ({

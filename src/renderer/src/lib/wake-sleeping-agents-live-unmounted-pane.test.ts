@@ -9,7 +9,7 @@ import type { AppState } from '@/store/types'
 import { wakeSleepingAgentsForWorktreeInBackground } from './wake-sleeping-agents-in-background'
 import { waitForWorktreeAgentActivationGateForTests } from './worktree-agent-activation-gate'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: wake-sleeping-agents-in-background.test.ts › fires wake, targeted background-mount, then resume w...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const initialAppStoreState = useAppStore.getState()

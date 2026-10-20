@@ -20,7 +20,7 @@ import {
   registerWorktreeRootsForRepo
 } from './registered-worktree-roots-cache'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: persistence-invalid-workspace-layout-purge.test.ts › drops the workspace an authoritative scan no longer...
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const localWorktreePathPresenceMock = vi.hoisted(() => vi.fn())

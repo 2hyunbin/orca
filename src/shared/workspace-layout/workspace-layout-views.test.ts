@@ -14,7 +14,7 @@ import {
   type LayoutViewRecord
 } from './workspace-layout-views'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-views-owned-file.test.ts › stays through a prune
 vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const PANE_A = '00000000-0000-4000-8000-00000000000a'

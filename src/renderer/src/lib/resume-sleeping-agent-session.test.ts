@@ -5,7 +5,7 @@ import { parseWorkspaceSession } from '../../../shared/workspace-session-schema'
 import { useAppStore } from '@/store'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: terminal-tab-create-through-layout-owner.test.ts › on host_not_owned
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const initialAppStoreState = useAppStore.getState()

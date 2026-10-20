@@ -13,7 +13,7 @@ import {
   type UnownedLiveTerminal
 } from './worktree-live-terminal-surface-owners'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: worktree-agent-live-surface-adoption-cli-tab.test.ts › main’s frame arrives after the census: main names it...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const WORKTREE_ID = 'repo::/worktree'

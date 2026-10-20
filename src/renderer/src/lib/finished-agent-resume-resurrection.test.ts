@@ -17,9 +17,17 @@ import { makePaneKey } from '../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'
 import { activationTreatsNoteAsFinished } from './sleeping-agent-pane-ownership'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
+import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+// Main accepts layout.apply but its frame never lands here, so the window keeps what it drew.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof RuntimeRpcClientModule>()
+  return {
+    ...actual,
+    callRuntimeRpc: (...args: Parameters<typeof actual.callRuntimeRpc>) =>
+      args[1] === 'layout.apply' ? new Promise(() => {}) : actual.callRuntimeRpc(...args)
+  }
+})
 
 const initialAppStoreState = useAppStore.getState()
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'

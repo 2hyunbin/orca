@@ -26,9 +26,6 @@ import {
 import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
 import { Store, initDataPath } from './persistence'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 // Stub the ~/.ssh/config parser so the SSH-import test drives the real Store with deterministic hosts, not the operator's actual ~/.ssh/config.
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
@@ -460,7 +457,8 @@ describe('Store', () => {
   it('remaps legacy SSH lease leaf ids when loading legacy workspace layouts', async () => {
     writeDataFile({
       schemaVersion: 1,
-      repos: [],
+      // `wt1` has no `::`, so it names its own repo; main drops layouts of unregistered repos.
+      repos: [makeRepo({ id: 'wt1', connectionId: 'ssh-1' })],
       worktreeMeta: {},
       settings: {},
       ui: {},
@@ -522,7 +520,8 @@ describe('Store', () => {
     mkdirSync(agentHooksDir, { recursive: true })
     writeDataFile({
       schemaVersion: 1,
-      repos: [],
+      // `wt1` has no `::`, so it names its own repo; main drops layouts of unregistered repos.
+      repos: [makeRepo({ id: 'wt1', connectionId: null })],
       worktreeMeta: {},
       settings: {},
       ui: {},

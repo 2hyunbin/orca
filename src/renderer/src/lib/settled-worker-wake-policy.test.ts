@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: resume-sleeping-agent-session-replay.test.ts › does not fork a provider session that is already queued
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const initialState = useAppStore.getState()

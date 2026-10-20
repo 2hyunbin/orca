@@ -13,7 +13,7 @@ import {
   resetHostSessionMirrorHydrationForTests
 } from '@/runtime/host-session-mirror-hydration'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: store-create-tab-layout-owner.test.ts › sends main the tab it drew, under its ids and in its...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 // Pins the activation contract behind the run6-review-pr-11959 incident shape:

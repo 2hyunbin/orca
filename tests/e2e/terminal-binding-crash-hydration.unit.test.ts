@@ -12,7 +12,7 @@ import {
   TEST_REPO
 } from '../../src/renderer/src/store/slices/store-test-helpers'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-load-normalization.test.ts › gives terminal rows saved without a tab bar
 vi.mock('../../src/shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))

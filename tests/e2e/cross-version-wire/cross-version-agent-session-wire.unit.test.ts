@@ -76,9 +76,7 @@ import { codexProviderHandle } from '../../../src/shared/agent-session-provider-
 import { NO_STRUCTURED_AGENTS } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import { describeReleasedStopNoteProjection } from './cross-version-stop-note-scenarios'
 
-// The rollback path: a chat closed before create (switch on) is remembered across this file's
-// tests, which reuse one session id. Unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../src/shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+import { resetStructuredAgentSessionClosesBeforeCreateForTests } from '../../../src/main/runtime/rpc/methods/structured-agent-session-close-before-create'
 
 // Why: a cold CI run extracts the baseline checkout before the first pairing.
 const SUITE_TIMEOUT_MS = 180_000
@@ -817,6 +815,8 @@ describe('cross-version structured agent sessions', () => {
 
     beforeEach(async () => {
       resetOperationIds()
+      // Main remembers a chat closed before create; earlier tests close this same session id.
+      resetStructuredAgentSessionClosesBeforeCreateForTests()
       startGate = Promise.resolve()
       handshake = Promise.resolve()
       root = await mkdtemp(join(tmpdir(), 'orca-cross-version-agent-session-'))

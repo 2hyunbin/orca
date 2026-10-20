@@ -7,7 +7,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { OrcaRuntimeService } from './orca-runtime'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: terminal-split-layout-owner.test.ts › keeps a pane whose terminal bound before the wait ra...
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const REPO_ID = 'repo-1'

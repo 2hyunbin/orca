@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: session-window-view-save.test.ts › writes a paired server’s partition as the window sen...
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const { handlers } = vi.hoisted(() => ({

@@ -8,7 +8,7 @@ import {
 import type { AppState } from '../types'
 import type { Tab } from '../../../../shared/tab-types'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: editor-tab-layout-owner.test.ts › records close-all, and an open into the root group m...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const { toastErrorMock } = vi.hoisted(() => ({

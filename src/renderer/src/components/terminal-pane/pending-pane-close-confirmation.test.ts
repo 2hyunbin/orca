@@ -4,7 +4,7 @@ import { preparePendingRuntimeClose } from './pending-runtime-pane-close-test-fi
 import { flushPtySideEffects } from './pty-transport-test-harness'
 import type { PtyRunningWorkProbe } from '../terminal/pty-running-work-probe'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: layout-owner-pane-close.test.ts › a layout-owner build removes the pane only once main...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 beforeEach(() => vi.clearAllMocks())

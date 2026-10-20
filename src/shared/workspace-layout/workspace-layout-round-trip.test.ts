@@ -11,7 +11,7 @@ import {
 } from './workspace-layout-profile.test-fixture'
 import { leaf } from './workspace-layout-session.test-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: workspace-layout-editor-file-owner.test.ts › a reload keeps both records, each with its own...
 vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 /** What reaches disk: the profile documents are JSON, so an undefined field is a missing one. */

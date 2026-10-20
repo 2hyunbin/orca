@@ -13,9 +13,17 @@ import {
 } from './host-twin.test-fixture'
 import { makeWorktree } from './slices/store-test-helpers'
 import { makeFolderWorkspace } from './slices/worktrees-slice-test-fixtures'
+import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+// Main accepts layout.apply but its frame never lands here, so the window keeps what it drew.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof RuntimeRpcClientModule>()
+  return {
+    ...actual,
+    callRuntimeRpc: (...args: Parameters<typeof actual.callRuntimeRpc>) =>
+      args[1] === 'layout.apply' ? new Promise(() => {}) : actual.callRuntimeRpc(...args)
+  }
+})
 
 const appStore = vi.hoisted((): { current: HostTwinFixture['store'] | null } => ({
   current: null

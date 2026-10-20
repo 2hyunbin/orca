@@ -16,7 +16,7 @@ import {
   useTabDragSplit
 } from './useTabDragSplit'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: tab-group-layout-owner-commands.test.ts › splits off a group under main’s id when the window m...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true

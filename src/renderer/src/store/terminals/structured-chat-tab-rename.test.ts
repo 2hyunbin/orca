@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-helpers'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: store-terminal-tab-changes-layout-owner.test.ts › renames in main first by tab-bar id, then the window...
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('sonner', () => ({

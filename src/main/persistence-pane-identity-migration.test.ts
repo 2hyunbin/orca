@@ -19,7 +19,7 @@ import {
   makeBalancedLegacyPaneLayout
 } from './persistence-session-fixtures'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: persistence-cross-host-pane-identity.test.ts › remaps persisted agent acknowledgement pane keys whe...
 vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 // Stub the ~/.ssh/config parser so the SSH-import test drives the real Store with deterministic hosts, not the operator's actual ~/.ssh/config.

@@ -14,7 +14,7 @@ import {
 import { WindowSession, withoutLeaf } from './terminal-topology-window-session-fixture'
 import { checkWorkspaceLayoutRules } from '../../../shared/workspace-layout/workspace-layout-rules'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: persistence-runtime-admitted-terminal-membership.test.ts › moves a dragged-out pane in every holder, and its pa...
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))

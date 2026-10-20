@@ -7,7 +7,7 @@ import { makeCreatedAgentWorktree } from '@/lib/worktree-activation-created-agen
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { waitForWorktreeAgentActivationGateForTests } from './worktree-agent-activation-gate'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: terminal-tab-create-through-layout-owner.test.ts › recordCreatedTerminalTabInLayoutOwner cases
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 // Red repro for the aug20 "windows 2" incident (restart-reattach/resume-relaunch):

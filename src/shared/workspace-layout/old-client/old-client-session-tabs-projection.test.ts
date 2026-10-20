@@ -10,7 +10,7 @@ import { BLANK_BROWSER_TAB_STATE } from '../workspace-layout-beside'
 import { build, testContext, WS } from '../workspace-layout-command.test-fixture'
 import type { WorkspaceLayoutModel } from '../workspace-layout-model'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
+// Off path; switch-on test: old-client-session-tabs-projection-owned-editor.test.ts › lists the file with the layout-owner switch on
 vi.mock('../../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 /**

@@ -17,9 +17,6 @@ import {
   WORKTREE_ID
 } from './terminal-pane-tab-detach-fixture'
 
-// Tests the rollback path: unit tests default to the shipped ORCA_LAYOUT_OWNER=main build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
-
 const toastErrorMock = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastErrorMock } }))
 beforeEach(() => {
