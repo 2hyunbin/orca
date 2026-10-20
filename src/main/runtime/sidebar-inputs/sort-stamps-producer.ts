@@ -20,6 +20,7 @@ import {
 import {
   listTieredWorkspaces,
   readSortStamps,
+  readWorkspaceRecord,
   writeSortStamps,
   writeUnreadFlag,
   type SortStampsStore
@@ -87,6 +88,22 @@ export class SortStampsProducer {
   noteTerminalStarted(worktreeId: string, hostId: ExecutionHostId | undefined): void {
     const sshHostId = parseExecutionHostId(hostId)?.kind === 'ssh' ? (hostId ?? null) : null
     this.stamp({ worktreeId, sshHostId }, { kind: 'terminal-started' })
+  }
+
+  /** A record write may have moved an unread flag; a Done beside a Working pane re-tiers on it. */
+  noteRecordsWritten(): void {
+    const phasesByWorkspace = new Map<string, { workspace: TrackedPane; phases: Set<AgentPhase> }>()
+    for (const pane of this.panes.values()) {
+      const key = `${pane.sshHostId ?? ''}|${pane.worktreeId}`
+      const entry = phasesByWorkspace.get(key) ?? { workspace: pane, phases: new Set() }
+      entry.phases.add(pane.state.phase)
+      phasesByWorkspace.set(key, entry)
+    }
+    for (const { workspace, phases } of phasesByWorkspace.values()) {
+      if (phases.has('done') && phases.has('working')) {
+        this.writeAgentChange(workspace, SETTLED, this.sources.now())
+      }
+    }
   }
 
   /**
@@ -229,16 +246,18 @@ export class SortStampsProducer {
     if (!workspace.sshHostId && this.sources.isWriteFenced(workspace.worktreeId)) {
       return
     }
-    const current = readSortStamps(this.sources.store(), workspace)
-    const next = current && classifySortStampEvent(current, event, now)
-    if (next) {
-      writeSortStamps(this.sources.store(), workspace, next)
-    }
     // Filters never gate this shared dot (clients' Filters differ); banners, sounds and pushes mute per surface.
     const raised =
       isUnreadNews(event) &&
       !this.sources.isViewing(workspace.worktreeId, paneKey) &&
       writeUnreadFlag(this.sources.store(), workspace, true)
+    // After the raise: whether Done outranks Working depends on the flag this event leaves.
+    const isUnread = readWorkspaceRecord(this.sources.store(), workspace)?.isUnread === true
+    const current = readSortStamps(this.sources.store(), workspace)
+    const next = current && classifySortStampEvent(current, event, now, isUnread)
+    if (next) {
+      writeSortStamps(this.sources.store(), workspace, next)
+    }
     if (next || raised) {
       this.sources.onStampsWritten(workspace.worktreeId)
     }

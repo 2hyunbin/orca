@@ -9,6 +9,7 @@ import type { MonacoEditorMountParams } from './monaco-editor-mount-params'
 import { useMonacoEditorMount } from './use-monaco-editor-mount'
 
 const filePath = '/repo/file.ts'
+const disk = vi.hoisted(() => ({ text: 'B' }))
 
 vi.mock('@/store', () => ({
   useAppStore: {
@@ -22,7 +23,7 @@ vi.mock('@/store', () => ({
           id: 'tab-b',
           filePath: '/repo/file.ts',
           mode: 'edit',
-          lastKnownDiskSignature: getDiskBaselineSignature('B')
+          lastKnownDiskSignature: getDiskBaselineSignature(disk.text)
         }
       ]
     })
@@ -39,9 +40,12 @@ vi.mock('./monaco-editor-input-bindings', () => ({
   installMonacoEditorInputBindings: () => ({ disposeInputBindings: vi.fn() })
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  disk.text = 'B'
+})
 
-it('mounts the live model over a stale retained cache, editable, and reloads a model-less stale cache once', () => {
+function setupMount() {
   const params: MonacoEditorMountParams = {
     fileId: 'tab-b',
     filePath,
@@ -96,6 +100,7 @@ it('mounts the live model over a stale retained cache, editable, and reloads a m
   const modelText = { value: 'B' }
   const model = {
     getValue: () => modelText.value,
+    getEOL: () => '\n',
     pushEditOperations: vi.fn(),
     getFullModelRange: vi.fn()
   }
@@ -117,6 +122,12 @@ it('mounts the live model over a stale retained cache, editable, and reloads a m
   const editorInstance = mockEditor as unknown as editor.IStandaloneCodeEditor
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked mount integrations do not access Monaco.
   const monaco = {} as Parameters<OnMount>[1]
+  return { params, modelText, model, updateOptions, executeEdits, editorInstance, monaco }
+}
+
+it('mounts the live model over a stale retained cache, editable, and reloads a model-less stale cache once', () => {
+  const { params, modelText, model, updateOptions, executeEdits, editorInstance, monaco } =
+    setupMount()
   const dropped: string[] = []
   const onStale = (event: Event): void => {
     if (event instanceof CustomEvent) {
@@ -142,6 +153,41 @@ it('mounts the live model over a stale retained cache, editable, and reloads a m
     }
     expect(dropped).toEqual(['tab-b'])
     expect(updateOptions).not.toHaveBeenCalledWith({ readOnly: true })
+  } finally {
+    window.removeEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+  }
+})
+
+it('reloads the same stale text again once the baseline moves or a fresh mount settles the reload', () => {
+  const { params, modelText, editorInstance, monaco } = setupMount()
+  const dropped: string[] = []
+  const onStale = (event: Event): void => {
+    if (event instanceof CustomEvent) {
+      dropped.push(event.detail.fileId)
+    }
+  }
+  window.addEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+  const view = renderHook(() => useMonacoEditorMount(params))
+  const mountWith = (text: string): void => {
+    params.contentSync.contentRef.current = text
+    modelText.value = text
+    view.result.current(editorInstance, monaco)
+  }
+  try {
+    mountWith('A2 (stale cache)')
+    mountWith('A2 (stale cache)')
+    expect(dropped).toHaveLength(1)
+
+    // Another write moved the baseline: the same stale text must reload again.
+    disk.text = 'C'
+    mountWith('A2 (stale cache)')
+    expect(dropped).toHaveLength(2)
+
+    // The reload landed fresh text; stale text returning later reloads again.
+    mountWith('C')
+    expect(dropped).toHaveLength(2)
+    mountWith('A2 (stale cache)')
+    expect(dropped).toHaveLength(3)
   } finally {
     window.removeEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
   }

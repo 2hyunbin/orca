@@ -55,9 +55,20 @@ export function enterAgentPaneState(
 
 export const REST_PANE: AgentPaneState = { phase: 'rest', at: 0 }
 
-/** The workspace's tier is its most demanding pane; its time is that tier's latest entry. */
-export function workspaceSmartStamp(panes: readonly AgentPaneState[]): SmartStampFields {
-  const tier = SMART_TIERS.find((candidate) => panes.some((pane) => pane.phase === candidate))
+/** A read Done ranks below Working: the user has seen that finish, another pane still runs. */
+const READ_TIER_ORDER = ['needs-you', 'working', 'done'] as const satisfies readonly SmartTier[]
+
+/**
+ * The workspace's tier is its most demanding pane, Done counting over Working only while unread;
+ * its time is that tier's latest entry. A read Done alone stays Done, which readers show as Rest.
+ */
+export function workspaceSmartStamp(
+  panes: readonly AgentPaneState[],
+  isUnread = true
+): SmartStampFields {
+  const tier = (isUnread ? SMART_TIERS : READ_TIER_ORDER).find((candidate) =>
+    panes.some((pane) => pane.phase === candidate)
+  )
   if (!tier) {
     return {}
   }
@@ -72,19 +83,21 @@ export function workspaceSmartStamp(panes: readonly AgentPaneState[]): SmartStam
 
 /**
  * The stamps after `event`, or null when nothing changes. Pure: `now` is the host's time of the
- * event. Prompts, finishes and requests for input stamp `recentAt`; tier changes apply at once.
+ * event; `isUnread` the workspace's flag after it (unset: Done outranks Working). Prompts,
+ * finishes and requests for input stamp `recentAt`; tier changes apply at once.
  */
 export function classifySortStampEvent(
   current: SortStamps,
   event: SortStampEvent,
-  now: number
+  now: number,
+  isUnread = true
 ): SortStamps | null {
   const stampsRecent = event.kind !== 'agent' || agentPhaseTransition(event.from, event.to) !== null
   const recentAt =
     stampsRecent && now - current.recentAt >= RECENT_STAMP_THROTTLE_MS ? now : current.recentAt
   const smart =
     event.kind === 'agent'
-      ? workspaceSmartStamp(event.panes)
+      ? workspaceSmartStamp(event.panes, isUnread)
       : { smartTier: current.smartTier, smartAt: current.smartAt }
   if (
     recentAt === current.recentAt &&

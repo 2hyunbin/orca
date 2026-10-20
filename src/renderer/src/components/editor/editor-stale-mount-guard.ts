@@ -17,16 +17,23 @@ export function isStaleCachedEditorText(fileId: string, content: string): boolea
   return baseline !== undefined && getDiskBaselineSignature(content) !== baseline
 }
 
+// Why keyed by baseline too: once the baseline moves, the same stale text must be able to reload again.
 const requestedReloads = new Map<string, string>()
 
-/** Drops a stale cache so it reloads from disk, once per cached text: a reload that lands the same text can't loop. */
+/** Drops a stale cache so it reloads from disk, once per cached text and baseline: a reload that lands the same text can't loop. */
 export function requestStaleCacheReload(fileId: string, content: string): void {
-  const signature = getDiskBaselineSignature(content)
-  if (requestedReloads.get(fileId) === signature) {
+  const file = useAppStore.getState()?.openFiles?.find((openFile) => openFile.id === fileId)
+  const stamp = `${file?.lastKnownDiskSignature ?? ''}\n${getDiskBaselineSignature(content)}`
+  if (requestedReloads.get(fileId) === stamp) {
     return
   }
-  requestedReloads.set(fileId, signature)
+  requestedReloads.set(fileId, stamp)
   notifyEditorFileCacheStale(fileId)
+}
+
+/** A mount found the tab's text fresh, so an earlier reload settled; a later stale copy may reload again. */
+export function settleStaleCacheReload(fileId: string): void {
+  requestedReloads.delete(fileId)
 }
 
 /**

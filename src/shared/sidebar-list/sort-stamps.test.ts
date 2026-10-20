@@ -198,3 +198,20 @@ describe('the stamps follow the agent transitions', () => {
     })
   })
 })
+
+describe('workspaceSmartStamp once the workspace is read', () => {
+  it('lets a read Done yield to a Working pane, and keeps a lone read Done', () => {
+    const done = { phase: 'done' as const, at: 100 }
+    const working = { phase: 'working' as const, at: 200 }
+    expect(workspaceSmartStamp([done, working], true)).toEqual({ smartTier: 'done', smartAt: 100 })
+    expect(workspaceSmartStamp([done, working], false)).toEqual({
+      smartTier: 'working',
+      smartAt: 200
+    })
+    expect(workspaceSmartStamp([done], false)).toEqual({ smartTier: 'done', smartAt: 100 })
+    expect(workspaceSmartStamp([done, working, { phase: 'needs-you', at: 50 }], false)).toEqual({
+      smartTier: 'needs-you',
+      smartAt: 50
+    })
+  })
+})

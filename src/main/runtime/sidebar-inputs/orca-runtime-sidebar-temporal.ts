@@ -12,8 +12,7 @@ import {
   type ExecutionHostId
 } from '../../../shared/execution-host'
 import type { SidebarTemporalSnapshot } from '../../../shared/sidebar-list/sidebar-temporal-snapshot'
-import type { Worktree } from '../../../shared/worktree/types'
-import type { Repo } from '../../../shared/repo-types'
+import { listGitWorkspaceRowKeys } from '../../../shared/sidebar-list/workspace-rows'
 import { SidebarRetentionOwner, type SidebarRetentionCandidates } from './sidebar-retention-owner'
 import type { AgentStatusStoreView } from './workspace-activity-facts-producer'
 import { SortStampsProducer } from './sort-stamps-producer'
@@ -27,6 +26,7 @@ import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { anySleepKeyNames } from '../terminal/stop/worktree-terminal-sleep-key'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
+import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
 import {
   isWslMoveProjectBlocked,
   wslMoveProjectRefForWorkspace
@@ -41,7 +41,11 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     // The durable file keeps the hide form; the window reads it the same way at hydration.
     showSleepingWorkspaces: () =>
       !(this.store?.getUI?.().hideSleepingWorkspaces ?? DEFAULT_HIDE_SLEEPING_WORKSPACES),
-    listRows: () => this.listSidebarRows(),
+    listRowKeys: async () =>
+      listGitWorkspaceRowKeys(
+        (await this.listResolvedWorktreeSnapshot()).worktrees,
+        this.store?.getRepos() ?? []
+      ),
     retentionCandidates: () => this.readSidebarRetentionCandidates()
   })
   readonly workspaceViewers = new WorkspaceViewers(Date.now)
@@ -107,6 +111,12 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       },
       { consumesTerminalSideEffects: false }
     )
+    // Every unread write (window, phone, CLI, activation) lands in a record; a Done may re-tier.
+    this.store?.onStateWritten?.((domains) => {
+      if (domains === undefined || WORKTREE_METADATA_DOMAINS.some((d) => domains.includes(d))) {
+        this.sortStamps.noteRecordsWritten()
+      }
+    })
   }
 
   getSidebarTemporalSnapshot(): SidebarTemporalSnapshot {
@@ -230,21 +240,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       this.sidebarTemporal.dispose()
       this.sortStampNotices.dispose()
     }
-  }
-
-  // Retained ids are host-qualified; a row without a stamped host belongs to its repo's host.
-  private async listSidebarRows(repoById = this.readSidebarRepoMap()): Promise<Worktree[]> {
-    const { worktrees } = await this.listResolvedWorktreeSnapshot()
-    return worktrees.map((worktree) => {
-      const repo = repoById.get(worktree.repoId)
-      return worktree.hostId || !repo
-        ? worktree
-        : { ...worktree, hostId: getRepoExecutionHostId(repo) }
-    })
-  }
-
-  private readSidebarRepoMap(): Map<string, Repo> {
-    return new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
   }
 
   private readSidebarRetentionCandidates(): SidebarRetentionCandidates {

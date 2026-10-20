@@ -22,7 +22,8 @@ import {
 import {
   isStaleCachedEditorText,
   mayPushTabTextIntoModel,
-  requestStaleCacheReload
+  requestStaleCacheReload,
+  settleStaleCacheReload
 } from './editor-stale-mount-guard'
 
 // Why: binds a freshly created Monaco instance to the app; reads everything through refs so the callback identity stays stable across renders.
@@ -112,6 +113,9 @@ export function useMonacoEditorMount(params: MonacoEditorMountParams): OnMount {
       // Why: see contentRef — reconcile the retained model to the current prop before user interaction (surfaces edits made while unmounted).
       const modelKey = toEditorModelUri(filePath, modelOwnerKey)
       const staleCache = isStaleCachedEditorText(fileIdRef.current, contentRef.current)
+      if (!staleCache) {
+        settleStaleCacheReload(fileIdRef.current)
+      }
       const liveTextDiffers = editorInstance.getModel()?.getValue() !== contentRef.current
       if (
         (staleCache && liveTextDiffers) ||
