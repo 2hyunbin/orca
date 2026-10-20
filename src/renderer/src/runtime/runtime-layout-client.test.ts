@@ -389,6 +389,37 @@ describe.each(targets)(
       expect(host.streams).toHaveLength(4)
       await vi.advanceTimersByTimeAsync(1)
       expect(host.streams).toHaveLength(target.kind === 'local' ? 5 : 4)
+      if (target.kind !== 'local') {
+        return
+      }
+      // Still failing: the reopened stream's snapshot keeps the backoff growing.
+      const fifth = await opened(5)
+      fifth.send(snapshot('epoch-1', 3, ['a']))
+      fifth.send(bad)
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(host.streams).toHaveLength(5)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(host.streams).toHaveLength(6)
+    })
+
+    it('starts the backoff over after one resync, once the stream is healthy again', async () => {
+      if (target.kind !== 'local') {
+        return
+      }
+      const first = await opened(1)
+      first.send(snapshot('epoch-1', 3, ['a']))
+      first.send(regrouped('epoch-1', 5, 'a', ['t1']))
+      const second = await opened(2)
+      second.send(snapshot('epoch-1', 9, ['a']))
+      // Two unrelated drops, each followed by a healthy snapshot, each reopen after 1 s.
+      for (let count = 3; count <= 4; count += 1) {
+        host.streams.at(-1)!.drop()
+        await vi.advanceTimersByTimeAsync(999)
+        expect(host.streams).toHaveLength(count - 1)
+        await vi.advanceTimersByTimeAsync(1)
+        expect(host.streams).toHaveLength(count)
+        ;(await opened(count)).send(snapshot('epoch-1', 9, ['a']))
+      }
     })
 
     it.each([

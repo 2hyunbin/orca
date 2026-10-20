@@ -1,4 +1,4 @@
-// Test hooks on main's layout stream. `installLayoutFrameModelCheck` (the stream and operation-frame
+// Test hooks on main's layout stream. `installLayoutFrameModelCheck` (installed by the operation-frame
 // tests) checks every records frame against a fresh projection and freezes each partition read.
 // Dev builds log the frame check on structural frames; release builds run neither.
 

@@ -57,6 +57,8 @@ export function subscribeRuntimeLayout(
   let lastSeq: number | undefined
   /** Resubscribes since a records frame last applied cleanly. */
   let resyncs = 0
+  /** The budget ran out: until a records frame applies cleanly, snapshots keep the backoff. */
+  let storm = false
 
   const setStatus = (status: RuntimeLayoutStreamStatus): void => {
     state = status.state
@@ -101,6 +103,7 @@ export function subscribeRuntimeLayout(
     }
     // A frame that fails every time must not resubscribe without limit.
     if (state !== 'live' || resyncs >= RESYNC_BUDGET) {
+      storm ||= resyncs >= RESYNC_BUDGET
       lose(streamGeneration, reason)
       return
     }
@@ -150,7 +153,7 @@ export function subscribeRuntimeLayout(
     }
     if (frame.type === 'snapshot') {
       // During a resync storm the backoff keeps growing; a snapshot alone proves nothing.
-      if (resyncs === 0) {
+      if (!storm) {
         reopenDelay = LOCAL_REOPEN_DELAY_MS
       }
       epoch = frame.epoch
@@ -172,6 +175,7 @@ export function subscribeRuntimeLayout(
         return
       }
       resyncs = 0
+      storm = false
       return
     }
     onFrame(frame)
