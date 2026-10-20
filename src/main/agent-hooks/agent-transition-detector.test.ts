@@ -253,7 +253,7 @@ describe('AgentTransitionDetector: hookless titles', () => {
     noteTitle(h.detector, '⠋ Codex working')
     h.changes.length = 0
     h.detector.attach(h.server)
-    expect(h.changes.map((change) => [change.kind, change.workspace.worktreeId])).toEqual([
+    expect(h.changes.map((change) => [change.kind, change.workspace?.worktreeId])).toEqual([
       ['moved', WT],
       ['seeded', OTHER_WT]
     ])
