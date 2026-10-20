@@ -124,7 +124,14 @@ describe('retaining a committed migration source', () => {
 
 describe('renaming unsaved drafts to the server on commit', () => {
   beforeEach(() => {
-    store.addSshTarget({ id: TARGET_ID, label: 'Prod', host: 'h', port: 22, username: 'u' })
+    store.addSshTarget({
+      id: TARGET_ID,
+      label: 'Prod',
+      host: 'h',
+      port: 22,
+      username: 'u',
+      generation: 2
+    })
     store.addRepo(REPO)
   })
 
@@ -197,6 +204,15 @@ describe('renaming unsaved drafts to the server on commit', () => {
     saveFiles(SERVER_HOST, [])
     await retainOrcadMigrationSource(userDataPath, 'm-1', store)
     expect(serverFiles()).toEqual([])
+  })
+
+  it("never retains another profile's migration at startup", async () => {
+    writeOrcadMigrationSourceCutover(userDataPath, {
+      ...orcadMigrationCutoverFixture('m-9', 'ssh-other-profile'),
+      phase: 'destination-committed'
+    })
+    await retainUnretainedOrcadMigrationSources(userDataPath, store)
+    expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.sourceRetainedAt).toBeUndefined()
   })
 
   it('keeps newer typing in the server copy when the connect retains first', async () => {

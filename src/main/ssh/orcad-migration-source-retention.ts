@@ -82,12 +82,18 @@ async function retainOnce(
  */
 export function retainUnretainedOrcadMigrationSources(
   userDataPath: string,
-  store: OrcadMigrationDraftRenameStore
+  store: OrcadMigrationDraftRenameStore & Pick<Store, 'getSshTarget'>
 ): Promise<void> {
   const migrationIds: string[] = []
   try {
     for (const cutover of listOrcadMigrationSourceCutovers(userDataPath)) {
-      if (cutover.phase !== 'destination-committed' || cutover.sourceRetainedAt) {
+      // Journals are shared across profiles; only the profile that owns the host can rename.
+      const target = store.getSshTarget(cutover.sshTargetId)
+      if (
+        cutover.phase !== 'destination-committed' ||
+        cutover.sourceRetainedAt ||
+        target?.generation !== cutover.sshTargetGeneration
+      ) {
         continue
       }
       const renamed = renamedDestinationSession(store, cutover)
