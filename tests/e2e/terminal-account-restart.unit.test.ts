@@ -265,7 +265,7 @@ describe('account restart through renderer connection and host spawn', () => {
     registerWithFakes(mainWindow, host.runtime, host.store)
     rendererState = createInitialStoreState(() => rendererState)
     rendererState.tabsByWorktree[worktreeId][0].ptyId = 'pty-old'
-    rendererState.ptyIdsByTabId[tabId] = ['pty-old']
+    rendererState.ptyIdsByTabId = { ...rendererState.ptyIdsByTabId, [tabId]: ['pty-old'] }
     rendererState.sleepingAgentSessionsByPaneKey[paneKey] = {
       paneKey,
       tabId,
@@ -277,7 +277,12 @@ describe('account restart through renderer connection and host spawn', () => {
       capturedAt: 1,
       updatedAt: 1
     }
-    rendererState.terminalLayoutsByTabId[tabId].ptyIdsByLeafId[leafId] = 'pty-old'
+    const layouts = rendererState.terminalLayoutsByTabId ?? {}
+    const layout = layouts[tabId]!
+    rendererState.terminalLayoutsByTabId = {
+      ...layouts,
+      [tabId]: { ...layout, ptyIdsByLeafId: { ...layout.ptyIdsByLeafId, [leafId]: 'pty-old' } }
+    }
     await installTerminalTestGlobals()
     installIpcPtyWindow(window, {})
     window.api.pty.claimViewport = vi.fn()
@@ -311,7 +316,7 @@ describe('account restart through renderer connection and host spawn', () => {
       paneTransportsRef: { current: transports },
       clearTabPtyId: vi.fn(() => {
         rendererState.tabsByWorktree[worktreeId][0].ptyId = null
-        rendererState.ptyIdsByTabId[tabId] = []
+        rendererState.ptyIdsByTabId = { ...rendererState.ptyIdsByTabId, [tabId]: [] }
       })
     })
     rendererState.pendingPaneAccountRestarts = { 'pty-old': 'codex' }
