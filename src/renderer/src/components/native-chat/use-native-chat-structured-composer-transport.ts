@@ -66,7 +66,7 @@ export function useNativeChatStructuredComposerTransport(args: {
             : Promise.resolve(false)
       : null
     return {
-      send: (text, attachments) =>
+      send: (text, attachments, ...request) =>
         sendBlockedReason === null &&
         sendThroughLaunch(text, attachments.length > 0, () =>
           controller.send(
@@ -75,7 +75,8 @@ export function useNativeChatStructuredComposerTransport(args: {
               path,
               previewUri: path,
               ...(connectionId ? { connectionId } : {})
-            }))
+            })),
+            ...request
           )
         ),
       dispatchCommand: (text: string) =>

@@ -97,31 +97,14 @@ export function useNativeChatExternalAttachments({
   // The post-await gate asks which workspace this composer serves now, so it
   // reads the pane through a ref. Resolving through the render closure would
   // re-ask the workspace the upload started in — a comparison with itself.
-  const sessionId = structuredSession?.sessionId
-  const runtimeEnvironmentId = structuredSession?.runtimeEnvironmentId ?? null
-  const sessionPending = structuredSession?.sessionPending === true
-  const sessionPendingNotice = structuredSession?.sessionPendingNotice
   const workspaceRef = useRef<ComposerWorkspace>({
     structuredWorktreeId,
     terminalTabId,
     structuredSession
   })
   useLayoutEffect(() => {
-    workspaceRef.current = {
-      structuredWorktreeId,
-      terminalTabId,
-      structuredSession: sessionId
-        ? { sessionId, runtimeEnvironmentId, sessionPending, sessionPendingNotice }
-        : undefined
-    }
-  }, [
-    runtimeEnvironmentId,
-    sessionId,
-    sessionPending,
-    sessionPendingNotice,
-    structuredWorktreeId,
-    terminalTabId
-  ])
+    workspaceRef.current = { structuredWorktreeId, terminalTabId, structuredSession }
+  }, [structuredSession, structuredWorktreeId, terminalTabId])
   const pendingChipsRef = useRef(pendingChips)
   useLayoutEffect(() => {
     pendingChipsRef.current = pendingChips
@@ -138,9 +121,16 @@ export function useNativeChatExternalAttachments({
         runtimeEnvironmentId: structuredSession.runtimeEnvironmentId
       })
     }
-    return structuredWorktreeId
-      ? resolveNativeChatAttachmentOwnerForWorktree(useAppStore.getState(), structuredWorktreeId)
-      : resolveNativeChatAttachmentOwner(useAppStore.getState(), terminalTabId)
+    if (!structuredWorktreeId) {
+      return resolveNativeChatAttachmentOwner(useAppStore.getState(), terminalTabId)
+    }
+    const owner = resolveNativeChatAttachmentOwnerForWorktree(
+      useAppStore.getState(),
+      structuredWorktreeId
+    )
+    return owner.kind === 'local' && structuredSession
+      ? { kind: 'local', structuredSessionId: structuredSession.sessionId }
+      : owner
   }, [])
 
   // Captures one intake's owner, destination and chips; its checks and work run against them later.
