@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toSshExecutionHostId,
+  type ExecutionHostId
+} from '../../shared/execution-host'
 import type {
   RuntimeMobileSessionTabsResult,
   RuntimeTerminalOrphanAdoptionRequest
@@ -62,7 +66,11 @@ function adoptWithFailingFlush(store: Store, revision: number): Promise<unknown>
 function adopt(
   store: Store,
   revision: number,
-  runDurableMutation: Store['runDurableMutation']
+  runDurableMutation: Store['runDurableMutation'],
+  host: { hostId: ExecutionHostId; connectionId: string | null } = {
+    hostId: LOCAL_EXECUTION_HOST_ID,
+    connectionId: null
+  }
 ): Promise<unknown> {
   const request: RuntimeTerminalOrphanAdoptionRequest = {
     worktree: GIT_KEY,
@@ -82,18 +90,18 @@ function adopt(
     ptyId: 'pty-orphan',
     incarnationId: 'inc-orphan',
     worktreeId: GIT_KEY,
-    connectionId: null,
+    connectionId: host.connectionId,
     connected: true,
     tabId: null,
     paneKey: null
   } as RuntimePtyWorktreeRecord
   return adoptRuntimeTerminalOrphansFromInventory({
-    hostId: LOCAL_EXECUTION_HOST_ID,
+    hostId: host.hostId,
     request,
     workspace: {
       id: GIT_KEY,
       path: '/Users/dev/orca',
-      connectionId: null,
+      connectionId: host.connectionId,
       repo: null,
       folderWorkspace: null
     },
@@ -103,9 +111,9 @@ function adopt(
       terminalIdentityByPtyId: new Map([
         ['pty-orphan', { handle: 'term-orphan', incarnationId: 'inc-orphan', wslDistro: null }]
       ]),
-      queriedHostIds: new Set([LOCAL_EXECUTION_HOST_ID])
+      queriedHostIds: new Set([host.hostId])
     },
-    session: store.getWorkspaceSession(),
+    session: store.getWorkspaceSession(host.hostId),
     sessionWorktreeId: GIT_KEY,
     repoId: REPO_ID,
     worktreeWslDistro: null,
@@ -118,13 +126,13 @@ function adopt(
       replayPersistedSurface: vi.fn(),
       recordAdoptedSurface: vi.fn(),
       getMobileSnapshots: () => [],
-      getSession: () => store.getWorkspaceSession(),
-      setSession: (_worktreeId, next) => store.setWorkspaceSession(next),
+      getSession: () => store.getWorkspaceSession(host.hostId),
+      setSession: (_worktreeId, next) => store.setWorkspaceSession(next, host.hostId),
       runDurableMutation,
       flushSession: () => store.flushPendingOrThrowAsync(),
       hydrateSession: vi.fn(),
       notifySessionChanged: vi.fn(),
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: never reached; the flush fails first.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the caller reads only `adopted`.
       getSnapshot: () => ({}) as RuntimeMobileSessionTabsResult
     }
   })
@@ -172,6 +180,18 @@ describe('orphan adoption whose flush fails', () => {
     expect(store.getWorkspaceSession().tabsByWorktree[GIT_KEY]?.map((tab) => tab.id)).toEqual([
       'tab-kept'
     ])
+  })
+
+  it('adopts into an SSH host partition that was never written', async () => {
+    const store = createStore()
+    const host = { hostId: toSshExecutionHostId('target-1'), connectionId: 'target-1' }
+
+    const adoption = adopt(store, 0, (mutate) => store.runDurableMutation(mutate), host)
+
+    await expect(adoption).resolves.toMatchObject({ adopted: true })
+    expect(
+      store.getWorkspaceSession(host.hostId).tabsByWorktree[GIT_KEY]?.map((tab) => tab.id)
+    ).toEqual([ORPHAN_TAB])
   })
 
   it('still rebases a renderer replay of the failed adoption away', async () => {

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import type {
   RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,
@@ -256,12 +257,14 @@ export async function adoptRuntimeTerminalOrphansFromInventory(args: {
   if (ports.runDurableMutation) {
     // Why the store's transaction: only its rollback phase skips the topology-fence rebase, which
     // treats a write below the fence (this rollback) as a stale renderer replay and keeps the adoption.
-    const refusal = await ports.runDurableMutation(() =>
-      // A durable write queued ahead may have changed the session this adoption was checked against.
-      ports.getSession(workspace.id) === session
+    const refusal = await ports.runDurableMutation(() => {
+      const current = ports.getSession(workspace.id)
+      // A write queued ahead may have changed what this adoption was checked against. Why deep:
+      // an absent host partition reads back as a fresh default object each time.
+      return current === session || isDeepStrictEqual(current, session)
         ? stage()
         : { value: new Error('terminal_topology_conflict'), persist: false }
-    )
+    })
     if (refusal) {
       throw refusal
     }
