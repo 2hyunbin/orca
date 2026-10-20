@@ -35,13 +35,8 @@ const SplitPaneCommand = z.object({
   newLeafId: z.string().refine(isTerminalLeafId).optional()
 })
 
-/** Main marks a close as the user's; the window cannot send that mark. `automatic`: not the
- *  user's close (the pane's terminal ended), so no launch in it was stopped by the user. */
-const ClosePaneCommand = z.object({
-  type: z.literal('closePane'),
-  ...OnPane,
-  automatic: z.literal(true).optional()
-})
+/** Main marks a close as the user's; the window cannot send that mark. */
+const ClosePaneCommand = z.object({ type: z.literal('closePane'), ...OnPane })
 
 /** A title is trimmed and non-empty; null clears it. */
 const RenamePaneCommand = z.object({

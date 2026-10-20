@@ -10,6 +10,8 @@ import type { RetiredTerminalSurface } from '../../mobile-session-terminal-retir
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { exitedSplitPaneFacts } from './exited-split-pane-rule'
 import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
@@ -46,6 +48,8 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
        * also drives the SSH surface decision and the liveness verdict: node-pty reports real exits
        * as -1, so the numeric code alone cannot tell a dead process from a failed stop. */
       providerExitObserved?: boolean
+      /** A window's view of the pane was showing when it ended (layout-owner build). */
+      viewShown?: boolean
     } = {}
   ): void | Promise<void> {
     const pty = this.ptysById.get(ptyId)
@@ -253,7 +257,15 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
         // Why: permanent process exit is absence, not a starting/sleeping tab.
         // Retire before publishing so paired clients never persist a ghost.
         try {
-          retirement = this.retireMobileSessionSurfacesForPty(ptyId, incarnationId, exactSurfaces)
+          retirement = this.retireMobileSessionSurfacesForPty(
+            ptyId,
+            incarnationId,
+            exactSurfaces,
+            // Switch point: main decides an exited split pane's close.
+            ORCA_LAYOUT_OWNER_IS_MAIN
+              ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, options)
+              : undefined
+          )
         } catch (error) {
           console.error('[runtime] failed to publish terminal retirement:', error)
         }
