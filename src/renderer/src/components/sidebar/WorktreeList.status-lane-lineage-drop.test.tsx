@@ -247,6 +247,7 @@ function setStatusLaneState(): void {
     workspaceStatus: 'todo'
   })
   mockStore.state = {
+    startupLocalCatalogHydrated: true,
     ...makeFolderWorkspacePathStatusMockState(),
     activeModal: '',
     activeView: 'terminal',

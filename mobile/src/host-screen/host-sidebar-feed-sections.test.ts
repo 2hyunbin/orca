@@ -115,7 +115,7 @@ describe('the phone list from the sidebar feed', () => {
           ],
           projectGroups: [
             group('pg-school', 'school'),
-            group('pg-inner', 'inner', { parentGroupId: 'pg-school' })
+            group('pg-inner', 'inner', { parentGroupId: 'pg-school', createdFrom: 'folder-scan' })
           ]
         }
       }
@@ -146,6 +146,14 @@ describe('the phone list from the sidebar feed', () => {
       'lab depth=2',
       'orca depth=2'
     ])
+    // Rows carry their header's depth and the folder-scanned group, so they indent as the desktop's do.
+    expect(
+      sections
+        .slice(-2)
+        .map((section) =>
+          section.data.map((row) => [row.projectGroupDepth, row.inFolderScanGroup === true])
+        )
+    ).toEqual([[[2, true]], [[2, true]]])
     expect(sections.at(-2)?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
   })
 
