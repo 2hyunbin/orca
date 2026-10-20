@@ -70,19 +70,22 @@ const sendRequest = vi.fn(async () => ({
 }))
 // The transport holds the phone's presence report as a session preamble, so sendRequest counts
 // only reconciliation work.
-const setSessionPreamble = vi.fn()
-const client = {
-  sendRequest,
-  subscribe,
-  setSessionPreamble,
-  getState: () => clientConnectionState
-} as unknown as RpcClient
-const replacementClient = {
-  sendRequest,
-  subscribe,
-  setSessionPreamble,
-  getState: () => clientConnectionState
-} as unknown as RpcClient
+function sessionClient(): RpcClient {
+  return {
+    sendRequest,
+    subscribe,
+    setSessionPreamble: () => {},
+    updateTerminalSubscriptionViewport: () => {},
+    getState: () => clientConnectionState,
+    getReconnectAttempt: () => 0,
+    getLastConnectedAt: () => null,
+    onStateChange: () => () => {},
+    notifyForeground: () => {},
+    close: () => {}
+  }
+}
+const client = sessionClient()
+const replacementClient = sessionClient()
 let currentClient: RpcClient = client
 let currentWorktreeId = 'repo::worktree'
 let currentTerminalInventoryRecoveryScopeKey = 'host::repo::worktree'
