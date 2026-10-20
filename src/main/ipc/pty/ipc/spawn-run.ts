@@ -13,6 +13,7 @@ import {
   resolveEarlyPaneSpawnReservationKey
 } from './spawn-begin'
 import { releaseStoppedPaneBinding, stopReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import { keepAbsentBindingForSwap } from './spawn-absent-binding-swap'
 import { planPaneAgentLaunch } from './spawn-agent-launch'
 import { endPaneAgentLaunch } from './spawn-agent-launch-end'
 import { preparePtyIpcSpawnPreflight } from './spawn-preflight'
@@ -119,6 +120,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
         ...latePane,
         connectionId: args.connectionId,
         renderer: true,
+        keepAbsentBinding: keepAbsentBindingForSwap(ctx),
         spawnFresh: async (scope) => (completed = await complete(scope))
       })
       if (adopted) {
@@ -158,6 +160,7 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
       renderer: true,
       reservation: ctx.paneSpawnReservation ?? undefined,
       stoppedPtyId: ctx.replacedPaneOwner?.ptyId,
+      keepAbsentBinding: keepAbsentBindingForSwap(ctx),
       spawnFresh: async (operation) => (freshResult = await fresh(operation))
     })
     if (adopted) {

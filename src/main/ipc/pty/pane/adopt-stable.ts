@@ -138,7 +138,8 @@ export async function adoptStablePane(
           spawnOptions: { cols: args.cols, rows: args.rows, cwd: args.cwd, signal: args.signal },
           resolveOwner,
           preAllocatedHandle: args.preAllocatedHandle,
-          renderer: args.renderer
+          renderer: args.renderer,
+          keepAbsentBinding: args.keepAbsentBinding
         })
         if (adopted) {
           args.onAdopted?.(adopted.result)

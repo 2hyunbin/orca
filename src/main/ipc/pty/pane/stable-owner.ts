@@ -13,6 +13,7 @@ import type {
 } from '../../../providers/pty-provider-contract'
 import { getPtySshConnectionId } from '../provider/registry'
 import { ptyIncarnationById } from '../provider/ownership-state'
+import type { ReplacedPaneOwner } from './replaced-pane-owner'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
 
 export type StablePaneOwner = {
@@ -175,6 +176,8 @@ export type StablePaneSpawnContext = {
   onFreshSpawn?: (result: PtySpawnResult) => void
   /** Called before attaching an owner that took the pane during the first attach. */
   onOwnerReresolved?: (owner: StablePaneOwner) => void
+  /** Only a spawn holding the pane's reservation: it binds next, so its bind swaps the dead id. */
+  keepAbsentBinding?: (dead: ReplacedPaneOwner) => void
 }
 
 export function stablePanePersistenceFence(

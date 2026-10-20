@@ -6,7 +6,7 @@ import {
   excludeAbsentOwnerReplay,
   PaneOwnerContentionError
 } from '../pane/pane-spawn-operation'
-import { excludeReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import { excludeReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { PtyIpcSpawnState } from './spawn-state'

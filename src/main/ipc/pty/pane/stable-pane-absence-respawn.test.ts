@@ -229,6 +229,41 @@ describe('stable pane adoption after the owning host reports the PTY absent', ()
       expect(session.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId?.[LEAF]).toBeUndefined()
     })
 
+    // Adoption holds the pane's reservation through its fresh launch, so that bind swaps the dead id.
+    it('keeps the absent binding for the swap when the spawn takes it', async () => {
+      const { store, read } = sessionStore([LEAF, SIBLING_LEAF])
+      const before = JSON.stringify(read())
+      const spawn = vi
+        .fn()
+        .mockRejectedValueOnce(new SessionNotFoundError(OWNER.ptyId))
+        .mockResolvedValueOnce({ id: 'ssh:conn-1@@pty-3', isReattach: false })
+      const provider = new LocalPtyProvider()
+      vi.spyOn(provider, 'spawn').mockImplementation(spawn)
+      vi.spyOn(providers, 'getProvider').mockReturnValue(provider)
+      const keepAbsentBinding = vi.fn()
+
+      const result = await adoptStablePane(undefined, store, {
+        ...OWNER,
+        worktreeId: WORKTREE,
+        connectionId: 'conn-1',
+        cols: 80,
+        rows: 24,
+        keepAbsentBinding,
+        spawnFresh: () => spawn({ cols: 80, rows: 24 })
+      })
+
+      expect(result).toBeNull()
+      expect(spawn).toHaveBeenCalledTimes(2)
+      expect(keepAbsentBinding).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          ptyId: OWNER.ptyId,
+          pane: { worktreeId: WORKTREE, tabId: 'tab-1', leafId: LEAF, hostId: 'ssh:conn-1' },
+          dropsIncarnation: true
+        })
+      )
+      expect(JSON.stringify(read())).toBe(before)
+    })
+
     it('leaves persistence untouched when the failure is not positive absence', async () => {
       const { store, read } = sessionStore([LEAF, SIBLING_LEAF])
       const before = JSON.stringify(read())

@@ -19,6 +19,7 @@ import type {
   PrepareCodexSessionResume
 } from '../host-env/types'
 import type { StablePaneOwner } from '../pane/stable-owner'
+import type { ReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import type { ResolvedPtyHost } from '../provider/registry'
 import type { PtySpawnCodexResumeDeps } from '../spawn-host-env'
 
@@ -85,6 +86,8 @@ export type AdoptStablePaneArgs = {
   renderer?: boolean
   signal?: AbortSignal
   spawnFresh?: (operation: PaneSpawnOperation) => Promise<PtySpawnResult>
+  /** See StablePaneSpawnContext; adoption holds the pane's reservation through its fresh launch. */
+  keepAbsentBinding?: (dead: ReplacedPaneOwner) => void
 }
 
 export type AdoptStablePaneResult = {

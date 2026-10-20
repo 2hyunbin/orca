@@ -6,7 +6,8 @@ import {
   TerminalSessionOwnerUnverifiedError
 } from '../../../daemon/daemon-errors'
 import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
-import { releaseAbsentPaneOwner } from './absent-pane-owner'
+import { keepAbsentPaneBindingForSwap, releaseAbsentPaneOwner } from './absent-pane-owner'
+import { excludeReplacedPaneOwner } from './replaced-pane-owner'
 import type { StablePaneOwner, StablePaneSpawnContext } from './stable-owner'
 
 type StablePaneAttachAttempt =
@@ -61,10 +62,14 @@ export async function attemptStablePaneAttach(
     if (ownerBeforeRetire && !isSameStablePaneOwner(ownerBeforeRetire, owner)) {
       return { lostTo: ownerBeforeRetire }
     }
-    if (!(await releaseAbsentPaneOwner(args, owner))) {
+    // The adoption holds the pane's reservation, so its fresh bind can swap the dead binding.
+    const kept = args.keepAbsentBinding ? keepAbsentPaneBindingForSwap(args, owner) : null
+    if (kept) {
+      args.keepAbsentBinding?.(kept)
+    } else if (!(await releaseAbsentPaneOwner(args, owner))) {
       return { lostTo: args.resolveOwner?.() ?? null }
     }
-    const ownerAfterRetire = args.resolveOwner?.()
+    const ownerAfterRetire = excludeReplacedPaneOwner(args.resolveOwner?.() ?? null, kept)
     return ownerAfterRetire ? { lostTo: ownerAfterRetire } : { absent: true }
   }
   if (

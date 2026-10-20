@@ -1,4 +1,5 @@
 import { isRestoreSpawnIntent } from '../../../../shared/host-spawn-admission'
+import { spawnWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { beginPtySpawnForWorktree } from '../host-env/fresh-spawn-routing'
 import { makePaneSpawnReservationKey } from '../pane/spawn-reservation'
 import {
@@ -88,6 +89,9 @@ export async function buildPtyIpcSpawnOptions(ctx: PtyIpcSpawnState): Promise<vo
   const runtime = ctx.deps.runtime
   const acquireWorktreeSpawn = runtime?.acquireWorktreeTerminalSpawn
   ctx.releaseWorktreeSpawn = acquireWorktreeSpawn
-    ? await acquireWorktreeSpawn.call(runtime, args.worktreeId, { connectionId: args.connectionId })
+    ? await acquireWorktreeSpawn.call(
+        runtime,
+        spawnWorktreeTarget(args.worktreeId, args.connectionId)
+      )
     : undefined
 }
