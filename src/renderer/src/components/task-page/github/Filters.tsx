@@ -11,7 +11,6 @@ import { resolveNewIssueOpenSeed } from '@/components/task-page-new-issue-draft'
 import { useAppStore } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
 import { getGitHubRepoRoutingTarget } from '@/lib/github-source-runtime-context'
-import { getRepoExecutionHostId } from '../../../../../shared/execution-host'
 import { hasUpstreamCandidateDivergence, hasDivergentSources } from '../../task-page-draft-storage'
 import IssueSourceIndicator from '@/components/github/IssueSourceIndicator'
 import IssueSourceSelector, { issueSourceChipClass } from '@/components/github/IssueSourceSelector'
@@ -58,14 +57,8 @@ export function TaskPageGitHubFilters({
     activeGithubTaskKind === 'prs' ? state.sources?.prs : state.sources?.issues
   )
   const primaryGithubFilterRepoId = primaryGithubFilterSource?.repoId ?? null
-  // Why: a twin's two rows share the id; the path names which host's row the slug came from.
-  const primaryGithubFilterRepo = selectedRepos.find(
-    (repo) =>
-      repo.id === primaryGithubFilterRepoId && repo.path === primaryGithubFilterSource?.repoPath
-  )
-  const primaryGithubFilterHostId = primaryGithubFilterRepo
-    ? getRepoExecutionHostId(primaryGithubFilterRepo)
-    : null
+  // Why the host: a twin's two rows share the id, so only the source's row host names one.
+  const primaryGithubFilterHostId = primaryGithubFilterSource?.hostId ?? null
   const primaryGithubFilterTarget = useAppStore(
     useShallow((s) =>
       getGitHubRepoRoutingTarget(s, primaryGithubFilterRepoId, null, primaryGithubFilterHostId)

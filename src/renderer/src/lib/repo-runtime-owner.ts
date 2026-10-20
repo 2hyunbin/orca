@@ -78,9 +78,9 @@ export function getRuntimeEnvironmentIdForRepo(
     : state.settings?.activeRuntimeEnvironmentId?.trim() || null
 }
 
-// Why: PR mutations must not fall back to the globally focused runtime — a
-// repo without an explicit owner is a local repo, and routing it to the
-// focused runtime sends the mutation to a host that does not own it (#6957).
+// Why: a repo without an explicit owner is a local repo; routing it to the focused
+// runtime sends the mutation to a host that does not own it (#6957). Only a twin with
+// no caller host still reads focus (findTwinRepoOwner).
 export function getExplicitRuntimeOwnerEnvironmentId(
   state: RepoRuntimeOwnerState,
   repoId: string | null | undefined,
