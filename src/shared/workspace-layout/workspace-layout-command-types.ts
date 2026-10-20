@@ -219,7 +219,7 @@ export type LayoutCommand =
       /** Records how each agent resumes and stops nothing: the window's live and quit captures. */
       recordOnly?: true
     })
-  /** `recordOnly`: drops the records and starts nothing. */
+  /** Starts the slept panes; their records go once they bind. `recordOnly`: drops them, starts nothing. */
   | (On & { type: 'wake'; paneKeys?: string[]; recordOnly?: true })
   /** The workspace's default tabs were applied (or it had none): never apply them again. */
   | (On & { type: 'setDefaultTabsApplied' })
@@ -296,6 +296,7 @@ export type LayoutRefusalCode =
   | 'pane_structure_changed'
   | 'same_pane'
   | 'last_pane'
+  /** Sent by older hosts only: a startPane of an unbound pane with a sleeping record. */
   | 'pane_sleeping'
   | 'pane_already_bound'
   | 'workspace_exists'
@@ -357,6 +358,8 @@ export type LayoutContext = {
   now: () => number
   /** True while a start of this pane is in flight; such a pane is not started again. */
   isStarting?: (leafId: string) => boolean
+  /** True while the pane has a start status: its binding names the terminal it restores from. */
+  hasStartStatus?: (paneKey: string) => boolean
 }
 
 export type LayoutApplyResult<Model> =

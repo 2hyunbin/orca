@@ -93,7 +93,7 @@ describe('Store.applyLayoutCommand sleep and wake (layout.apply)', () => {
     })
   })
 
-  it('wakes only the named pane; the other sleeping pane keeps its record', async () => {
+  it('a record-only wake drops only the named pane’s record', async () => {
     const { store, directory } = await storeWithSplitTab()
     const left = record(LEFT, 'left-session')
     await store.applyLayoutCommand({
@@ -106,7 +106,8 @@ describe('Store.applyLayoutCommand sleep and wake (layout.apply)', () => {
     const reply = await store.applyLayoutCommand({
       type: 'wake',
       workspace: WORKTREE,
-      paneKeys: [left.paneKey]
+      paneKeys: [left.paneKey],
+      recordOnly: true
     })
 
     expect(reply).toEqual({ ok: true, result: { woken: [left.paneKey] } })
@@ -114,6 +115,28 @@ describe('Store.applyLayoutCommand sleep and wake (layout.apply)', () => {
     expect(session.sleepingAgentSessionsByPaneKey).toEqual({
       [`${TAB}:${RIGHT}`]: record(RIGHT, 'right-session')
     })
+  })
+
+  it('a wake starts the pane and keeps its record until the start binds', async () => {
+    const { store } = await storeWithSplitTab()
+    const left = record(LEFT, 'left-session')
+    await store.applyLayoutCommand({
+      type: 'sleep',
+      workspace: WORKTREE,
+      paneKeys: [left.paneKey],
+      records: [left]
+    })
+    const onEffects = vi.fn()
+
+    const reply = await store.applyLayoutCommand(
+      { type: 'wake', workspace: WORKTREE, paneKeys: [left.paneKey] },
+      [],
+      { onEffects }
+    )
+
+    expect(reply).toEqual({ ok: true, result: { woken: [left.paneKey] } })
+    expect(onEffects).toHaveBeenCalledWith({ stopPtyIds: [], startPaneKeys: [left.paneKey] })
+    expect(store.getWorkspaceSession().sleepingAgentSessionsByPaneKey?.[left.paneKey]).toEqual(left)
   })
 
   it('wakes nothing for a pane that holds no record', async () => {

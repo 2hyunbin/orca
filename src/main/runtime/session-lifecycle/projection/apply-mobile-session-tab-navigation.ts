@@ -1,3 +1,4 @@
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as MobileSessionPublication } from '../../session-tabs/session-tabs-change-publication'
 import type { OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab as MobileSessionPreservation } from '../../session-tabs/mobile-session-publication-preservation'
 import { OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh } from './perform-mobile-session-pty-records-refresh'
@@ -153,11 +154,14 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     // Why: an originless record predates capture origins and carries no proof of which pane or
     // host wrote it, so it is left (record kept) for the window's legacy cleanup (#29303).
     // A host with no window right now has no window wake, so the pane owns the record and claims it.
+    // Switch point: a layout-owner window never wakes a pane itself, so main owns every wake.
     const paneOwned =
       record.origin === 'live' ||
       record.origin === 'quit' ||
       (record.origin === 'worktree-sleep' &&
-        (record.state === 'done' || !this.getAvailableAuthoritativeWindow()))
+        (record.state === 'done' ||
+          ORCA_LAYOUT_OWNER_IS_MAIN ||
+          !this.getAvailableAuthoritativeWindow()))
     return paneOwned ? record : null
   }
 
@@ -205,7 +209,8 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     const claimed = await claimWindowWakeRecordForPane(
       (edit) => this.commitWorkspaceSessionEdit(hostId, edit),
       // Why: a window that attached during the awaits above now owns this record's wake.
-      () => Boolean(this.getAvailableAuthoritativeWindow()),
+      // Switch point: a layout-owner window never starts a terminal, so main owns every wake.
+      () => !ORCA_LAYOUT_OWNER_IS_MAIN && Boolean(this.getAvailableAuthoritativeWindow()),
       record
     )
     return claimed ? resume : {}

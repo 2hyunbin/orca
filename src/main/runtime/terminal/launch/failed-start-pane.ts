@@ -4,7 +4,9 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
-import type { WindowLayoutCommand } from '../../runtime-layout-apply'
+import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime-layout-apply'
+import { parsePaneKey } from '../../../../shared/stable-pane-id'
+import { runLayoutPaneStarts, startsPanes } from '../recovery/layout-command-pane-starts'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
 
@@ -35,6 +37,40 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
   protected readonly paneStartStatuses = ORCA_LAYOUT_OWNER_IS_MAIN
     ? new PaneStartStatuses(() => this.markPaneLiveTitlesDirty())
     : null
+
+  /**
+   * Layout-owner build: main's side of a client's layout command, its live start statuses in and
+   * its startPane, wake and restartPane effects out. Undefined with the switch off.
+   */
+  protected layoutCommandRun(command: WindowLayoutCommand): LayoutCommandRunOptions | undefined {
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+      return undefined
+    }
+    const live = {
+      hasStartStatus: (paneKey: string) => Boolean(this.paneStartStatuses?.peek(paneKey))
+    }
+    if (command.type === 'renameTabs' || !startsPanes(command)) {
+      return { live }
+    }
+    const { workspace } = command
+    return {
+      live,
+      onEffects: (effects) =>
+        runLayoutPaneStarts({ type: command.type, workspace }, effects, {
+          start: (pane) => this.ensureRestoredPaneStarted(pane),
+          stop: (ptyId) => this.ptyController?.kill(ptyId) ?? false,
+          failed: (paneKey, error) => this.paneStartStatuses?.set(paneKey, paneStartFailure(error)),
+          dropRecords: (paneKeys) =>
+            this.applyLayoutCommand({
+              type: 'wake',
+              workspace,
+              tabId: parsePaneKey(paneKeys[0]!)?.tabId ?? '',
+              paneKeys,
+              recordOnly: true
+            })
+        })
+    }
+  }
 
   protected paneStartStatusArgs: dependencies.PaneStartArgsOf = (opts) => {
     const sink = this.paneStartStatuses

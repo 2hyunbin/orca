@@ -281,7 +281,8 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
             ? this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
             : [this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId) ?? []].flat(),
         command,
-        (move) => rekeyMovedPaneOwners(this, move)
+        (move) => rekeyMovedPaneOwners(this, move),
+        this.layoutCommandRun(command)
       )
     // A window's sleep or wake lands after the hook statuses main accepted before it, as in the window.
     const reply = await (ORCA_LAYOUT_OWNER_IS_MAIN &&

@@ -32,6 +32,10 @@ export type WindowLayoutCommand =
         | { type: 'setDefaultTabsApplied' | 'applyDefaultTabs' }
       ))
 
+export type LayoutCommandRunOptions = NonNullable<
+  Parameters<NonNullable<RuntimeStore['applyLayoutCommand']>>[2]
+>
+
 /**
  * `layout.apply`: the window's command on the partitions holding its tab, routed partition first;
  * a group tree command goes to the workspace's routed partition. A pane close is the user's: main
@@ -43,7 +47,9 @@ export async function applyWindowLayoutCommand(
   hostIdsFor: (worktreeId: string, tabId: string | null) => ExecutionHostId[],
   command: WindowLayoutCommand,
   /** Agent status and orchestration records follow a pane moved into a new tab. */
-  onPaneMoved: (move: TerminalLeafMoveRequest) => void = () => {}
+  onPaneMoved: (move: TerminalLeafMoveRequest) => void = () => {},
+  /** Layout-owner build: main's live facts in, the command's effects out (never in the reply). */
+  run?: LayoutCommandRunOptions
 ): Promise<LayoutApplyReply> {
   if (command.type === 'renameTabs') {
     return renameTabs(store, hostIdsFor, command)
@@ -122,10 +128,10 @@ export async function applyWindowLayoutCommand(
   }
   // A pane's sleeping record lives with the pane, in each partition that holds its tab.
   if (command.type === 'sleep' || command.type === 'wake') {
-    return store.applyLayoutCommand(command, holders)
+    return store.applyLayoutCommand(command, holders, run)
   }
   if (command.type !== 'closePane') {
-    return store.applyLayoutCommand(command, [hostIds[0]])
+    return store.applyLayoutCommand(command, [hostIds[0]], run)
   }
   const { workspace, tabId, leafId } = command
   // A launch still starting in the pane the user closed stops, and says so (as the legacy close).

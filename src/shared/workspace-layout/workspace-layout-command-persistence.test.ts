@@ -95,7 +95,12 @@ describe('a terminal tab whose tab-bar id and terminal id differ', () => {
     const slept = build(
       context,
       [
-        { type: 'wake', workspace: GIT_KEY, paneKeys: [`term-agent:${leaf(3)}`] },
+        {
+          type: 'wake',
+          workspace: GIT_KEY,
+          paneKeys: [`term-agent:${leaf(3)}`],
+          recordOnly: true
+        },
         {
           type: 'sleep',
           workspace: GIT_KEY,

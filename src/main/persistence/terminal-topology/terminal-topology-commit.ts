@@ -1,4 +1,4 @@
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type {
   TerminalLeafMoveRequest,
@@ -13,9 +13,7 @@ import type {
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import {
   admitPaneToSession,
-  applyCommandToSession,
   withdrawPaneFromSession,
-  type PaneLayoutChange,
   type TerminalPaneAdmission,
   type TerminalPaneAdmissionOutcome
 } from './terminal-pane-admission'
@@ -32,7 +30,12 @@ import type { SessionHostPartitionOperations } from '../loading-store/session-ho
 import { planTerminalLeafMove, writeMovedLeafProfileRecords } from './terminal-leaf-move'
 import { writeRestorable } from './restorable-write'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
-import { keepWslMoveFrozenSessionsForStore } from '../moving-wsl-projects/wsl-move-session-freeze'
+import {
+  commitLayoutCommand,
+  commitPaneChange,
+  keepFrozen,
+  type LayoutCommandRun
+} from './topology-partition-write'
 import { resolveWindowPaneDetach, type WindowPaneDetachCommand } from './window-pane-detach'
 import {
   fencedIfLayoutOwner,
@@ -133,7 +136,8 @@ export function withdrawPane(
 export function applyLayout(
   hostIds: readonly ExecutionHostId[],
   command: LayoutCommand,
-  context: TerminalTopologyCommitContext
+  context: TerminalTopologyCommitContext,
+  run: LayoutCommandRun = {}
 ): () => DurableProfileStateMutation<LayoutApplyOutcome> {
   return traced(
     'apply_layout',
@@ -147,7 +151,7 @@ export function applyLayout(
               { ...command, windowDetach: command.windowDetach },
               context
             )
-          : commitLayoutCommand(hostIds, command, context)
+          : commitLayoutCommand(hostIds, command, context, run)
     ),
     (outcome) => (outcome.ok ? undefined : outcome.code)
   )
@@ -220,17 +224,6 @@ export function topologyCommitContext({
   }
 }
 
-// A paused WSL move keeps its local rows as the quiesce left them.
-export function keepFrozen(
-  hostId: ExecutionHostId,
-  session: WorkspaceSessionState,
-  context: TerminalTopologyCommitContext
-): WorkspaceSessionState {
-  return hostId === LOCAL_EXECUTION_HOST_ID
-    ? keepWslMoveFrozenSessionsForStore(session, context.getSession(hostId))
-    : session
-}
-
 function commitLeafMove(
   request: TerminalLeafMoveRequest,
   context: TerminalTopologyCommitContext
@@ -271,7 +264,7 @@ function commitWindowPaneDetach(
   if (resolved && 'code' in resolved) {
     return { value: { ok: false, code: resolved.code }, persist: false }
   }
-  const committed = commitLayoutCommand(hostIds, resolved?.command ?? command, context)
+  const committed = commitLayoutCommand(hostIds, resolved?.command ?? command, context, {})
   if (!resolved || !committed.value.ok || committed.persist === false) {
     return committed
   }
@@ -294,47 +287,4 @@ function commitWindowPaneDetach(
   }
 }
 
-function commitLayoutCommand(
-  hostIds: readonly ExecutionHostId[],
-  command: LayoutCommand,
-  context: TerminalTopologyCommitContext
-): DurableProfileStateMutation<LayoutApplyOutcome> {
-  const changes = hostIds.map((hostId) => ({
-    hostId,
-    change: applyCommandToSession(hostId, context.getSession(hostId), command)
-  }))
-  const routed = changes[0]?.change.value
-  if (!routed) {
-    return { value: { ok: false, code: 'workspace_not_found' }, persist: false }
-  }
-  const writes = routed.ok
-    ? changes.filter(({ change }) => change.value.ok && change.session !== null)
-    : []
-  if (writes.length === 0) {
-    return { value: routed, persist: false }
-  }
-  const restores = writes.map(({ hostId, change }) =>
-    writeRestorable(
-      () => context.getSession(hostId),
-      (value) => context.markDirty(assignWorkspaceSessionPartition(context.state, hostId, value)),
-      keepFrozen(hostId, change.session!, context)
-    )
-  )
-  return { value: routed, rollback: () => restores.forEach((restore) => restore()) }
-}
-
-function commitPaneChange<T>(
-  hostId: ExecutionHostId,
-  change: PaneLayoutChange<T>,
-  context: TerminalTopologyCommitContext
-): DurableProfileStateMutation<T> {
-  if (!change.session) {
-    return { value: change.value, persist: false }
-  }
-  const restore = writeRestorable(
-    () => context.getSession(hostId),
-    (value) => context.markDirty(assignWorkspaceSessionPartition(context.state, hostId, value)),
-    keepFrozen(hostId, change.session, context)
-  )
-  return { value: change.value, rollback: restore }
-}
+export { keepFrozen, type LayoutCommandRun }
