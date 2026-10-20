@@ -74,6 +74,8 @@ export function clientEventStreamMountAdapters(
               fetchRepoMetadata: fetching('fetchRepoMetadata'),
               // The view-settings family records its own reads.
               syncViewSettings: () => Promise.resolve(),
+              // As the native substitutes stand AppState in: foregrounded, no transitions.
+              appState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
               // The feed reader's family records its own reads.
               sidebarFeed: { refresh: () => {}, changed: () => {}, onInstalled: () => () => {} }
             })

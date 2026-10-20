@@ -13,28 +13,29 @@ function domainsWith(creations: SidebarFeedDomains['creations']): SidebarFeedDom
     pairedServerRows: new Map(),
     repoIcons: new Map(),
     desktop: null,
+    projectCatalog: null,
     retention: null
   }
 }
 
 describe('withWindowCreations', () => {
-  it('lists only the creations the window draws, with main record where main runs one', () => {
+  it('keeps every creation main lists, so a phone’s or the CLI’s shows as on the phone', () => {
     const domains = domainsWith(
       new Map([
         ['ran-here', { repoId: 'repo', worktreeId: 'wt' }],
-        // Finished in the window, or started elsewhere: its row would draw an empty gap.
-        ['not-here', { repoId: 'repo' }]
+        ['from-phone', { repoId: 'repo' }]
       ])
     )
-    const listed = withWindowCreations(domains, ['ran-here repo', 'preflight repo'])
+    const listed = withWindowCreations(domains, ['ran-here repo', 'preflight repo'], new Set())
     expect([...listed.creations]).toEqual([
       ['ran-here', { repoId: 'repo', worktreeId: 'wt' }],
+      ['from-phone', { repoId: 'repo' }],
       ['preflight', { repoId: 'repo' }]
     ])
   })
 
-  it('keeps the same domains when neither side has a creation', () => {
-    const domains = domainsWith(new Map())
-    expect(withWindowCreations(domains, [])).toBe(domains)
+  it('keeps the same domains when the window adds no creation', () => {
+    const domains = domainsWith(new Map([['from-phone', { repoId: 'repo' }]]))
+    expect(withWindowCreations(domains, [], new Set())).toBe(domains)
   })
 })
