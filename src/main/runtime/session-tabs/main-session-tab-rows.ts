@@ -56,7 +56,7 @@ function withWindowOnlyIds(
     }
     const after = windowOrder
       .slice(0, index)
-      .reverse()
+      .toReversed()
       .find((previous) => order.includes(previous))
     order.splice(after === undefined ? 0 : order.indexOf(after) + 1, 0, id)
   })
