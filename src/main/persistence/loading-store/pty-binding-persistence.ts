@@ -16,6 +16,7 @@ import {
   type UnstartedPaneKept
 } from '../terminal-topology/unstarted-pane-withdraw'
 import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
+import { durabilityOnlyBindingResult, isDurabilityOnlyMatch } from './pty-binding-durability-only'
 import { ptyBindingIsRefused } from './pty-binding-refusals'
 import { applyPtyBinding } from './pty-binding-session-update'
 import {
@@ -200,8 +201,14 @@ export class PtyBindingPersistenceOperations {
         span.setEligibility(verdict)
         if (verdict.eligible) {
           outcome = 'fast_lane'
+          span.setPath('durable_match')
           return { value: true, persist: false }
         }
+        if (isDurabilityOnlyMatch(verdict)) {
+          span.setPath('durability_only')
+          return durabilityOnlyBindingResult(runtime, resolvedHostId)
+        }
+        span.setPath('mutation')
         // After the fast lane, so a no-op rebind skips the scan.
         reportPtyBindingOwnerConflict(span, args, resolvedHostId, partitions)
         return {
