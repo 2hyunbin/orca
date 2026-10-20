@@ -632,7 +632,9 @@ export async function prepareWorktreePushTarget(
   target: GitPushTarget,
   store?: WorktreePushTargetStore | null,
   repoId?: string,
-  gitOptions: { wslDistro?: string } = {}
+  gitOptions: { wslDistro?: string } = {},
+  // Ownership evidence comes only from the host this git runs on.
+  hostId?: ExecutionHostId
 ): Promise<GitPushTarget> {
   await validateGitPushTarget(repoPath, target, gitOptions)
   const prepared = await prepareWorktreePushTargetWithExec(
@@ -653,7 +655,8 @@ export async function prepareWorktreePushTarget(
         ? isPushTargetRemoteCreatedByKnownWorktree(
             store,
             { ...target, remoteName: existingRemote },
-            repoId
+            repoId,
+            hostId
           )
         : false
   )
@@ -736,7 +739,14 @@ export async function materializeWorktreePushTargetRemote(
       )
     )
   }
-  const promise = prepareWorktreePushTarget(repoPath, target, store, repoId, gitOptions)
+  const promise = prepareWorktreePushTarget(
+    repoPath,
+    target,
+    store,
+    repoId,
+    gitOptions,
+    worktree?.hostId
+  )
     .then((prepared) => restoreUpstreamAfterMaterialize(execGit, repoPath, prepared))
     .then((prepared) => {
       persistMaterializedPushTargetIfCreated(store, worktree, prepared)
