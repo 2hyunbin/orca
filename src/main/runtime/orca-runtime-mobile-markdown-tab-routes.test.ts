@@ -518,14 +518,18 @@ describe("a phone's Markdown tab with a desktop window attached", () => {
 })
 
 describe("a phone's Markdown tab with no window, on a desktop's untitled document", () => {
-  it('is an ordinary file, because the saved session does not record untitled', async () => {
+  it('saves it as an ordinary file, because the saved session does not record untitled', async () => {
     const untitled = join(root, 'untitled.md')
     await writeFile(untitled, '')
     const runtime = await runtimeOnHost('local', sessionWithFile(untitled, 'untitled.md'))
 
+    const read = await runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)
+    expect(read).toMatchObject({ content: '', editable: true })
+
     await expect(
-      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)
-    ).resolves.toMatchObject({ content: '', editable: true })
+      runtime.saveMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled, read.version, '# Phone\n')
+    ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+    expect(await readFile(untitled, 'utf8')).toBe('# Phone\n')
   })
 })
 
