@@ -486,7 +486,9 @@ async function runConfiguredMainPressureScenario({
     testRepoPath,
     maxMedianKeyLatencyMs: MAX_MEDIAN_KEY_LATENCY_MS,
     maxScrollLatencyMs: MAX_SCROLL_LATENCY_MS,
-    maxTimerDriftMs: MAX_TIMER_DRIFT_MS,
+    // Why: background panes are ACK-gate-held, so drift is environment-dominated like every other
+    // under-load scenario; the 75ms median stays the responsiveness guard.
+    maxTimerDriftMs: MAX_TIMER_DRIFT_UNDER_LOAD_MS,
     maxWorstKeyLatencyMs: MAX_WORST_KEY_LATENCY_UNDER_LOAD_MS,
     deps: terminalLoadScenarioDeps
   })
