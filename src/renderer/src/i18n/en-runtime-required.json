@@ -1426,6 +1426,7 @@
           "sourcesLabel": "Catalog sources"
         },
         "PluginManagerRows": {
+          "enterKey": "Enter",
           "rollback": "Roll back…"
         },
         "PluginMarketplaceBrowser": {
@@ -1460,7 +1461,6 @@
           "reviewAndEnable": "Review & enable",
           "rollback": "Roll back",
           "runtimeError": "Stopped after an error. View logs for details.",
-          "syntaxFailed": "Highlighting stopped: this grammar failed.",
           "viewAdvisory": "View advisory"
         },
         "PluginsSettingsSection": {
