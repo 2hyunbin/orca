@@ -239,6 +239,10 @@ async function withNodeDistMirror<T>(
       throw mirrorError
     }
     return run(archive, options).catch((error: unknown) => {
+      // Only two network failures combine; a cancel or a local error keeps its own identity.
+      if (options.signal?.aborted || !(error instanceof DesktopDownloadUnreachableError)) {
+        throw error
+      }
       const mirrorReason =
         mirrorError instanceof DesktopDownloadUnreachableError
           ? mirrorError.reason

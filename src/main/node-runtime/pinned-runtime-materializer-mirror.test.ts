@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NODE_RUNTIME_ASSETS, NODE_RUNTIME_PIN } from '../../shared/node-runtime-pin'
-import { materializeNodeRuntimeArchive } from './pinned-runtime-materializer'
+import {
+  DesktopDownloadUnreachableError,
+  materializeNodeRuntimeArchive
+} from './pinned-runtime-materializer'
+import { ReleaseMismatchError } from './runtime-archive-download'
 import { setNodeDistMirrorSettingReader } from './node-dist-mirror-setting'
 
 const TARGET = 'linux-x64-glibc'
@@ -73,8 +77,41 @@ describe('the pinned Node download with a mirror configured', () => {
       async () => new Response('<html>blocked</html>', { status: 200 })
     )
 
-    await expect(materializeNodeRuntimeArchive(TARGET, root, { fetcher: fetch })).rejects.toThrow(
-      /mirror .* failed too/
-    )
+    await expect(
+      materializeNodeRuntimeArchive(TARGET, root, { fetcher: fetch })
+    ).rejects.toBeInstanceOf(ReleaseMismatchError)
+  })
+
+  it('names both addresses when neither is reachable', async () => {
+    const fetch = vi.fn<typeof fetch>(async () => {
+      throw new Error('net::ERR_CONNECTION_REFUSED')
+    })
+
+    const error = await materializeNodeRuntimeArchive(TARGET, root, {
+      fetcher: fetch,
+      retryDelaysMs: []
+    }).catch((failure: unknown) => failure)
+
+    expect(error).toBeInstanceOf(DesktopDownloadUnreachableError)
+    expect(String(error)).toMatch(/the mirror .* failed too/)
+  })
+
+  it('keeps a cancel during the release attempt a cancel', async () => {
+    const controller = new AbortController()
+    const fetch = vi.fn<typeof fetch>(async (url) => {
+      if (String(url) !== mirrorUrl) {
+        controller.abort()
+      }
+      throw new Error('net::ERR_CONNECTION_REFUSED')
+    })
+
+    const error = await materializeNodeRuntimeArchive(TARGET, root, {
+      fetcher: fetch,
+      signal: controller.signal,
+      retryDelaysMs: []
+    }).catch((failure: unknown) => failure)
+
+    expect(error).not.toBeInstanceOf(DesktopDownloadUnreachableError)
+    expect(controller.signal.aborted).toBe(true)
   })
 })
