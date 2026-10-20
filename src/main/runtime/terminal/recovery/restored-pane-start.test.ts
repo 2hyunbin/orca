@@ -76,6 +76,21 @@ describe('RestoredPaneStarter', () => {
     expect(gone.start).not.toHaveBeenCalled()
   })
 
+  it("starts fresh a pane still bound to another workspace's live terminal, never resolving to it", async () => {
+    const foreign = 'repo-2::/other@@x'
+    const harness = ports()
+    harness.setBound(foreign)
+    harness.live.add(foreign)
+    harness.start.mockImplementationOnce(async () => {
+      throw new Error('shell not found')
+    })
+
+    await expect(new RestoredPaneStarter(harness.ports).ensureStarted(PANE)).rejects.toThrow(
+      'shell not found'
+    )
+    expect(harness.start).toHaveBeenCalledWith(PANE, {}, {})
+  })
+
   it('resolves to the terminal another starter bound when its own start lost the race', async () => {
     const harness = ports()
     harness.start.mockImplementationOnce(async () => {

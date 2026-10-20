@@ -62,14 +62,14 @@ export class RestoredPaneStarter {
     if (bound === null) {
       return Promise.resolve(null)
     }
-    if (bound && this.ports.isLive(bound)) {
+    if (this.isOwnLive(pane, bound)) {
       return Promise.resolve(bound)
     }
     const start = this.ports
       .start(pane, restoredPaneStartPlan(pane, bound), trigger)
       .catch((error: unknown) => {
         const winner = this.ports.boundPtyId(pane)
-        if (winner && this.ports.isLive(winner)) {
+        if (this.isOwnLive(pane, winner)) {
           return winner
         }
         throw error
@@ -81,5 +81,14 @@ export class RestoredPaneStarter {
       })
     this.inFlight.set(key, start)
     return start
+  }
+
+  // A live terminal another workspace owns is never this pane's: it starts fresh instead.
+  private isOwnLive(pane: RestoredPane, ptyId: string | null | undefined): ptyId is string {
+    return (
+      !!ptyId &&
+      !isPtyIdMintedForAnotherWorkspace(ptyId, pane.worktreeId) &&
+      this.ports.isLive(ptyId)
+    )
   }
 }

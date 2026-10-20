@@ -19,7 +19,7 @@ const PANE = { worktreeId: TEST_WORKTREE_ID, tabId: 'host-tab', leafId: HEADLESS
 
 function windowlessRuntime() {
   // The pane's stored terminal is gone: the host lists no live terminal.
-  const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+  const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
   const runtime = new OrcaRuntimeService(runtimeStore)
@@ -34,7 +34,7 @@ function windowlessRuntime() {
     listProcesses: async () => []
   })
   runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
-  return { runtime, spawn, started }
+  return { runtime, spawn, started, getSession, setSession }
 }
 
 describe('a restored pane with no live terminal, on a host with no window (layout-owner build)', () => {
@@ -68,6 +68,34 @@ describe('a restored pane with no live terminal, on a host with no window (layou
     await expect(
       runtime.ensureRestoredPaneStarted({ ...PANE, tabId: 'tab-gone' })
     ).resolves.toBeNull()
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('resolves to the terminal its start registered, not the id the pane stored', async () => {
+    const { runtime, started } = windowlessRuntime()
+
+    const cliSend = runtime.ensureRestoredPaneStarted(PANE)
+    started.resolve({ id: 'pty-fresh' })
+
+    await expect(cliSend).resolves.toBe('pty-fresh')
+  })
+
+  it("refuses a client's first view of a pane main dropped after the client listed it", async () => {
+    const { runtime, spawn, getSession, setSession } = windowlessRuntime()
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    const session = getSession()
+    setSession({
+      ...session,
+      tabsByWorktree: { ...session.tabsByWorktree, [TEST_WORKTREE_ID]: [] }
+    })
+
+    await expect(
+      runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', HEADLESS_LEAF_ID, {
+        notifyClients: false,
+        navigation: 'caller',
+        intent: 'user'
+      })
+    ).rejects.toThrow('tab_not_found')
     expect(spawn).not.toHaveBeenCalled()
   })
 })

@@ -189,15 +189,21 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
         const trigger = { automatic, targetsHost, targetGroupId }
         try {
           // Switch point: a pane main holds starts through main's one starter.
-          await (ORCA_LAYOUT_OWNER_IS_MAIN
-            ? this.ensureRestoredPaneStarted(
-                { worktreeId, tabId: tab.parentTabId, leafId: tab.leafId },
-                trigger
-              )
-            : this.materializePendingMobileSessionTerminal(worktreeId, tab, {
-                ...trigger,
-                sessionId: tab.ptyId ?? tab.parentLayout?.ptyIdsByLeafId?.[tab.leafId] ?? undefined
-              }))
+          if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+            const started = await this.ensureRestoredPaneStarted(
+              { worktreeId, tabId: tab.parentTabId, leafId: tab.leafId },
+              trigger
+            )
+            // Main no longer holds the pane, so nothing started for it.
+            if (started === null) {
+              throw new Error('tab_not_found')
+            }
+          } else {
+            await this.materializePendingMobileSessionTerminal(worktreeId, tab, {
+              ...trigger,
+              sessionId: tab.ptyId ?? tab.parentLayout?.ptyIdsByLeafId?.[tab.leafId] ?? undefined
+            })
+          }
         } catch (err) {
           if (automatic && isWorktreeTerminalsSleepingError(err)) {
             // Why: the host slept the worktree while this probe waited for the spawn lock.
