@@ -135,11 +135,14 @@ describe('readWslOrcadIncumbent', () => {
     expect(vi.mocked(deps.restartAdmission).mock.calls[0]?.[1]).toBe(
       Date.parse('2026-10-12T01:00:00.000Z')
     )
-    vi.mocked(deps.census).mockResolvedValueOnce({ ...LIVE, liveSessions: 3 })
-    await expect(incumbent.recount()).resolves.toMatchObject({ liveSessions: 3 })
     expect(deps.wake).toHaveBeenCalledTimes(1)
     expect(deps.listen).toHaveBeenCalledTimes(2)
     expect(close).toHaveBeenCalledTimes(2)
+    // The recount before an older host's Force stop also gets its own bridge, never a wake.
+    vi.mocked(deps.census).mockResolvedValueOnce({ ...LIVE, liveSessions: 3 })
+    await expect(incumbent.recount()).resolves.toMatchObject({ liveSessions: 3 })
+    expect(deps.wake).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(3)
   })
 
   // After a reboot the woken incumbent's daemon starts empty, so the census proves zero.
