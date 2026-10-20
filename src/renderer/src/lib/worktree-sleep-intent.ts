@@ -1,3 +1,5 @@
+import { reportWindowSleptWorkspaces } from './sidebar-list-session'
+
 // Why: a slept workspace keeps its panes mounted with only dead PTYs behind them.
 // Any pane connect that runs while the marker is set waits here, and the clear
 // that marks the workspace awake resumes every waiting connect.
@@ -6,7 +8,10 @@ const tearingDownWorktreeIds = new Set<string>()
 const wakeListenersByWorktreeId = new Map<string, Set<() => void>>()
 
 export function markWorktreeSleepIntent(worktreeId: string): void {
-  sleepingWorktreeIds.add(worktreeId)
+  if (!sleepingWorktreeIds.has(worktreeId)) {
+    sleepingWorktreeIds.add(worktreeId)
+    reportWindowSleptWorkspaces([...sleepingWorktreeIds])
+  }
 }
 
 /**
@@ -33,6 +38,7 @@ export function clearWorktreeSleepIntent(worktreeId: string | null): void {
   if (!sleepingWorktreeIds.delete(worktreeId)) {
     return
   }
+  reportWindowSleptWorkspaces([...sleepingWorktreeIds])
   const listeners = wakeListenersByWorktreeId.get(worktreeId)
   wakeListenersByWorktreeId.delete(worktreeId)
   for (const listener of listeners ?? []) {
@@ -47,7 +53,9 @@ export function clearWorktreeSleepIntent(worktreeId: string | null): void {
 
 // Why: a purged worktree must not wake its panes; they are being unmounted.
 export function forgetWorktreeSleepIntent(worktreeId: string): void {
-  sleepingWorktreeIds.delete(worktreeId)
+  if (sleepingWorktreeIds.delete(worktreeId)) {
+    reportWindowSleptWorkspaces([...sleepingWorktreeIds])
+  }
   tearingDownWorktreeIds.delete(worktreeId)
   wakeListenersByWorktreeId.delete(worktreeId)
 }
