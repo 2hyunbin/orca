@@ -34,13 +34,9 @@ import {
 export { AGENT_MODEL_CATALOG_FAILURE_TTL_MS, AGENT_MODEL_CATALOG_PICKER_WAIT_MS }
 export type { AgentModelCatalogFailure }
 
-// The execution host's one model catalog per (agent, launch fingerprint):
-// served immediately at any age, refreshed in the background when old, and
-// written through by each session's startup and later capability listings.
-// Each entry keeps two listings: the last account-level discovery (the only
-// source of the configured default and default efforts, and the only clock a
-// refresh follows) and the last received session listing (which models exist
-// and their efforts). Readers see the two merged; neither write erases the other.
+// Claude/Codex inventory has one discovery owner per launch scope; other agents
+// retain separate discovery and live listings. Stale entries remain displayable,
+// while proof requires fresh discovery completed in this process.
 // Success-only: a failure, timeout or empty list is never stored as a catalog
 // and never persisted — it is held separately under a short TTL so a burst of
 // picker opens does not hammer a dead binary, then dies on its own (see
@@ -236,9 +232,8 @@ export class AgentModelCatalogStore {
     this.failures.chatFailed(fingerprint, detail, agent)
   }
 
-  /** A discovery listing. Joins an in-flight refresh by the same lister rather than starting a second. Never
-   *  joins another lister's: a probe or another chat's Codex that hangs must not decide
-   *  whether this chat starts. Resolves with the entry on success, null on failure. */
+  /** Independent discovery joins by scope; other agents join only their own lister.
+   *  Resolves with the entry on success, null on failure. */
   refresh(
     fingerprint: string,
     agent: string,
