@@ -26,11 +26,17 @@ export type HostSidebarFeedRead = {
   unavailable: boolean
 }
 
+// A read that failed with the connection up (a timeout) gets no ready to repeat it, and the
+// notices it would have followed are spent; backing off, so a failing host is not hammered.
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000]
+
 /** One host connection's sidebar feed, driven through the shared installer. */
 export class HostSidebarFeedReader {
   private state = INITIAL_SIDEBAR_INPUTS_FEED_STATE
   private unavailable = false
   private disposed = false
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retries = 0
 
   constructor(
     private readonly client: UnvalidatedRpcRequestPort,
@@ -39,6 +45,7 @@ export class HostSidebarFeedReader {
 
   /** On every stream ready and return to the foreground; supersedes a read in flight. */
   refresh(): void {
+    this.retries = 0
     this.apply(refreshSidebarInputs(this.state))
   }
 
@@ -48,6 +55,10 @@ export class HostSidebarFeedReader {
 
   dispose(): void {
     this.disposed = true
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
   }
 
   private apply(step: SidebarInputsFeedStep): void {
@@ -61,28 +72,46 @@ export class HostSidebarFeedReader {
     }
   }
 
+  /** Reads again from what is installed, which the host answers past every notice so far. */
+  private retry(): void {
+    const delay = RETRY_DELAYS_MS[this.retries]
+    if (this.disposed || this.retryTimer || delay === undefined) {
+      return
+    }
+    this.retries += 1
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      if (this.state.inFlight === null) {
+        this.apply(refreshSidebarInputs(this.state))
+      }
+    }, delay)
+  }
+
   private send(request: SidebarInputsFeedRequest): void {
     const failed = (): void => {
+      if (this.disposed || request.id !== this.state.inFlight) {
+        return
+      }
       this.state = sidebarInputsReadFailed(this.state, request.id)
+      if (!this.unavailable) {
+        this.retry()
+      }
     }
-    sidebarInputsRead.request(this.client, request.params).then(
-      (reply) => {
-        if (this.disposed) {
-          return
-        }
-        const read = readHostMethodReply(reply, sidebarInputsRead.interpret)
-        if (read.kind === 'answered') {
-          this.apply(sidebarInputsReplied(this.state, request.id, read.value))
-          return
-        }
-        failed()
-        if (read.kind === 'unavailable' && !this.unavailable) {
-          this.unavailable = true
-          this.onRead({ installed: this.state.installed, unavailable: true })
-        }
-      },
-      // A dropped connection: the next ready reads again.
-      failed
-    )
+    sidebarInputsRead.request(this.client, request.params).then((reply) => {
+      if (this.disposed) {
+        return
+      }
+      const read = readHostMethodReply(reply, sidebarInputsRead.interpret)
+      if (read.kind === 'answered') {
+        this.retries = 0
+        this.apply(sidebarInputsReplied(this.state, request.id, read.value))
+        return
+      }
+      if (read.kind === 'unavailable' && !this.unavailable) {
+        this.unavailable = true
+        this.onRead({ installed: this.state.installed, unavailable: true })
+      }
+      failed()
+    }, failed)
   }
 }
