@@ -7,6 +7,7 @@ import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-type
 import { agentHookServer } from '../../../agent-hooks/server'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import type { SwitchSpawnOutcome } from '../../../runtime/session-tabs/structured-session-switch-claims'
 import {
   admitSwitchResumeSpawn,
   judgeResumes,
@@ -26,10 +27,11 @@ export type {
 export async function admitResumeSpawn(
   runtime: AdmissionRuntime | undefined,
   args: ResumeSpawnArgs,
-  wslDistro: string | null
+  wslDistro: string | null,
+  spawn?: { attempt?: string; sessionId?: string }
 ): Promise<ResumeSpawnAdmission | null> {
   if (args.resumeOrigin === 'switch') {
-    return admitSwitchResumeSpawn(runtime, args, wslDistro)
+    return admitSwitchResumeSpawn(runtime, args, wslDistro, spawn)
   }
   const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
   const agent = args.launchAgent
@@ -105,14 +107,14 @@ export function dropAgentLaunch(args: ResumeSpawnArgs): void {
   delete args.resumeProviderSession
 }
 
-/** Every exit of a switch spawn settles its claim: on the PTY it produced, or gone with none. */
+/** Every exit of a switch spawn settles its attempt's claim; `admitSwitchResumeSpawn` explains how. */
 export function settleSwitchSpawn(
   runtime: AdmissionRuntime | undefined,
-  admission: ResumeSpawnAdmission | null,
-  ptyId: string | null
+  attempt: string | undefined,
+  outcome: SwitchSpawnOutcome
 ): void {
-  if (admission?.verdict === 'admitted' && admission.switchClaim) {
-    runtime?.settleSwitchStart?.(admission.switchClaim, ptyId)
+  if (attempt) {
+    runtime?.settleSwitchAttempt?.(attempt, outcome)
   }
 }
 
@@ -159,16 +161,27 @@ export function savedResumeRecord(
     : undefined
 }
 
-/** Runs only in the fresh branch, after stable/claimed owner adoption has settled. */
+/** Runs only in the fresh branch, after stable/claimed owner adoption has settled. A switch's claim
+ *  is owned by this spawn attempt: its host session id, else its pane. */
 export async function chooseSavedResumeFreshLaunch(
-  runtime: AdmissionRuntime | undefined,
+  spawn: {
+    deps: { runtime?: AdmissionRuntime }
+    expectedWslDistro: string | null
+    spawnOptions: ResumeSpawnArgs & { startupCommandDelivery?: unknown; startupIngress?: unknown }
+    effectiveSessionAppId: string | undefined
+    switchAttempt?: string
+  },
   args: ResumeSpawnArgs,
-  wslDistro: string | null,
-  options: ResumeSpawnArgs & { startupCommandDelivery?: unknown; startupIngress?: unknown }
+  paneKey: string | null
 ): Promise<ResumeSpawnAdmission | null> {
-  const admission = await admitResumeSpawn(runtime, args, wslDistro)
+  const sessionId = spawn.effectiveSessionAppId
+  spawn.switchAttempt = sessionId ?? paneKey ?? undefined
+  const admission = await admitResumeSpawn(spawn.deps.runtime, args, spawn.expectedWslDistro, {
+    attempt: spawn.switchAttempt,
+    sessionId
+  })
   if (resumeSpawnRefusal(admission)) {
-    suppressSavedResumeLaunch(args, options)
+    suppressSavedResumeLaunch(args, spawn.spawnOptions)
   }
   return admission
 }

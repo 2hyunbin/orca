@@ -1,5 +1,6 @@
 // Resolves a tab to its Agent Session History row so both menus offer the same surface switches.
 
+import { inPlaceSwitchSupportedNow } from '@/lib/in-place-switch-support'
 import type { AppState } from '@/store/types'
 import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
 import {
@@ -92,8 +93,12 @@ export function canPaneOfferResumeInNewChat(
     conversation.worktreeId
   ).defaultExecutionHostScope
   // The row gate's launch-route half, so a project the chat route refuses (WSL, repair) hides it.
+  // A runtime host that switches this agent in place hands a terminal's conversation over too.
+  const remoteSwitch =
+    parseExecutionHostId(hostScope)?.kind === 'runtime' &&
+    inPlaceSwitchSupportedNow(conversation.executionHostId, conversation.agent)
   return (
-    canHostOfferTabSessionMove('cli', hostScope) &&
+    (canHostOfferTabSessionMove('cli', hostScope) || remoteSwitch) &&
     CLI_CONVERSATION_ADOPTING_AGENTS[conversation.agent].some((agent) =>
       structuredAgentSessionLaunchFeasible(state, {
         agent,

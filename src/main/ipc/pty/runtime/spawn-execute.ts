@@ -45,12 +45,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
   }
   const chooseFresh = async (): Promise<void> => {
     ctx.spawnOptions.env = { ...ctx.spawnOptions.env }
-    ctx.resumeAdmission = await chooseSavedResumeFreshLaunch(
-      ctx.deps.runtime,
-      args,
-      ctx.expectedWslDistro,
-      ctx.spawnOptions
-    )
+    ctx.resumeAdmission = await chooseSavedResumeFreshLaunch(ctx, args, ctx.spawnIdentityPaneKey)
     if (captured && ctx.resumeAdmission) {
       ctx.resumeAdmission.refused = captured.refused
       ctx.resumeAdmission.sourceRecord = captured.sourceRecord

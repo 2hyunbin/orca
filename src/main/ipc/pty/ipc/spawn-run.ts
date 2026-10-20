@@ -126,10 +126,13 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
     if (!ctx.result.isReattach) {
       deps.runtime?.rememberSavedTerminalLaunchResult?.(committed.id, committed)
     }
-    settleSwitchSpawn(deps.runtime, ctx.resumeAdmission, committed.id)
+    settleSwitchSpawn(deps.runtime, ctx.switchAttempt, { ptyId: committed.id })
     return committed
   } catch (caught) {
-    settleSwitchSpawn(deps.runtime, ctx.resumeAdmission, ctx.result.id)
+    settleSwitchSpawn(deps.runtime, ctx.switchAttempt, {
+      // A daemon session may exist even with no reply; an in-process spawn that returned none made none.
+      unknown: ctx.result.id || ctx.effectiveSessionAppId
+    })
     const err = endPaneAgentLaunch(ctx, { error: caught }) ?? caught
     releaseAbandonedAgentTeamsLeader(ctx)
     if (ctx.preSpawnHiddenMarkId !== null) {

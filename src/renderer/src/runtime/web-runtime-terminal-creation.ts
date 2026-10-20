@@ -17,7 +17,7 @@ import type {
  */
 export async function createWebRuntimeSessionTerminal(
   args: CreateWebRuntimeSessionTerminalArgs,
-  options: { notifyFailure?: boolean } = {}
+  options: { notifyFailure?: boolean; withTabId?: boolean } = {}
 ): Promise<WebRuntimeTerminalCreateOutcome> {
   const created = await createWebRuntimeSessionTerminalResult(args)
   if (
@@ -30,7 +30,9 @@ export async function createWebRuntimeSessionTerminal(
       worktreeId: args.worktreeId
     })
   }
-  return created.outcome
+  return options.withTabId && created.outcome.status === 'created' && created.hostTabId
+    ? { status: 'created', tabId: toWebTerminalSurfaceTabId(created.hostTabId) }
+    : created.outcome
 }
 
 export async function createWebRuntimeAgentSessionTerminal(

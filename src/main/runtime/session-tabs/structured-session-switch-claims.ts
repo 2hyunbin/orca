@@ -19,7 +19,15 @@ export type SwitchClaim = {
   at: number
   /** A spawn took it: it never lapses, and settles only with that spawn. */
   accepted: boolean
+  /** The accepting spawn's identity (its host session, else its pane); only it joins or settles. */
+  attempt?: string
+  /** The host session to reconcile when the spawn ended without a result. */
+  sessionId?: string
+  unsettled?: true
 }
+
+/** A switch spawn's end: its PTY, a proved non-start, or a session the host may still hold. */
+export type SwitchSpawnOutcome = { ptyId: string } | 'not-started' | { unknown: string | undefined }
 
 /** The switch's start bound to the execution it spawned. */
 export type SwitchStartProof = {
@@ -87,22 +95,58 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     this.switchClaims.delete(claim)
   }
 
-  /** Synchronous, before the switch spawn's first await, so a chat start censusing after it refuses. */
-  acceptSwitchStart(agent: string, id: string): SwitchClaim {
-    const claim = this.liveSwitchClaim(agent, id) ?? { agent, id, at: Date.now(), accepted: false }
-    claim.accepted = true
+  /** Synchronous, before the switch spawn's first await, so a chat start censusing after it refuses.
+   *  Null refuses: another attempt took this conversation, or a switched terminal may hold it. */
+  acceptSwitchStart(
+    agent: string,
+    id: string,
+    attempt: string,
+    sessionId: string | undefined
+  ): SwitchClaim | null {
+    const live = this.liveSwitchClaim(agent, id)
+    if (live?.accepted ? live.attempt !== attempt : !live && this.boundSwitchStarts(agent, id)[0]) {
+      return null
+    }
+    const claim = live ?? { agent, id, at: Date.now(), accepted: true }
+    Object.assign(claim, { accepted: true, attempt, sessionId: sessionId ?? claim.sessionId })
+    delete claim.unsettled
     this.switchClaims.add(claim)
     return claim
   }
 
-  /** Ends this attempt's claim: bound to the execution its spawn produced, or gone when none exists. */
-  settleSwitchStart(claim: SwitchClaim, ptyId: string | null): void {
-    if (!this.switchClaims.delete(claim)) {
+  /** Only a PTY binds and only a proved non-start drops; an unknown end waits for the host. */
+  settleSwitchAttempt(attempt: string, outcome: SwitchSpawnOutcome): void {
+    const claim = [...this.switchClaims].find((c) => c.accepted && c.attempt === attempt)
+    const sessionId =
+      outcome === 'not-started' ? undefined : 'ptyId' in outcome ? outcome.ptyId : outcome.unknown
+    if (claim && !sessionId) {
+      this.switchClaims.delete(claim)
+    } else if (claim) {
+      Object.assign(claim, { sessionId, unsettled: true })
+      this.bindSwitchStart(claim)
+    }
+  }
+
+  /** Unsettled attempts against the host's own session list; a failed read keeps them. */
+  protected async reconcileSwitchAttempts(): Promise<void> {
+    const open = [...this.switchClaims].filter((c) => c.unsettled && !this.bindSwitchStart(c))
+    if (open.length === 0) {
       return
     }
-    const pty = ptyId ? this.ptysById.get(ptyId) : undefined
-    if (!pty?.incarnationId) {
-      return
+    const listed = await this.ptyController
+      ?.listProcesses?.(LOCAL_EXECUTION_HOST_ID)
+      .catch(() => null)
+    for (const claim of open) {
+      if (listed && !this.bindSwitchStart(claim) && !listed.some((p) => p.id === claim.sessionId)) {
+        this.switchClaims.delete(claim)
+      }
+    }
+  }
+
+  private bindSwitchStart(claim: SwitchClaim): boolean {
+    const pty = claim.sessionId ? this.ptysById.get(claim.sessionId) : undefined
+    if (!pty?.incarnationId || !this.switchClaims.delete(claim)) {
+      return false
     }
     const key = `${claim.agent}\0${claim.id}`
     const reported =
@@ -119,6 +163,7 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     void this.watchSwitchStart(pty.ptyId, proof).catch((error: unknown) =>
       console.warn('[agent-session] could not watch a switched terminal start', error)
     )
+    return true
   }
 
   /** An authentic hook's process joins the proof; identity-only rows carry none. */

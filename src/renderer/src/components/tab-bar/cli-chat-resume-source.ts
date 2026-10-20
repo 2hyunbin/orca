@@ -5,7 +5,7 @@ import {
 } from '@/lib/ai-vault-tab-title-requests'
 import { inPlaceSwitchSupportedNow } from '@/lib/in-place-switch-support'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import {
   adoptsCliConversations,
   type CliConversationRowAgent
@@ -36,12 +36,19 @@ export function resolveCliChatResumeSource(
     : collectAgentPaneConversations(state, adoptsCliConversations).find(
         (candidate) => candidate.tabId === args.tab.id
       )
-  const leafId = state.terminalLayoutsByTabId[args.tab.id]?.activeLeafId
-  const seeded = switchedTerminalConversation(args.tab.id)
-  const paneKey = args.paneKey ?? (leafId ? makePaneKey(args.tab.id, leafId) : null)
+  const layout = state.terminalLayoutsByTabId[args.tab.id]
+  const leafId = args.paneKey ? parsePaneKey(args.paneKey)?.leafId : layout?.activeLeafId
+  const seeded = switchedTerminalConversation(args.tab.id, leafId, layout)
   if (!conversation) {
-    return seeded && paneKey
-      ? { tabId: args.tab.id, workspaceId: args.tab.worktreeId, paneKey, ...seeded }
+    return seeded && leafId
+      ? {
+          tabId: args.tab.id,
+          workspaceId: args.tab.worktreeId,
+          paneKey: makePaneKey(args.tab.id, leafId),
+          agent: seeded.agent,
+          providerSessionId: seeded.providerSessionId,
+          executionHostId: seeded.executionHostId
+        }
       : null
   }
   if (

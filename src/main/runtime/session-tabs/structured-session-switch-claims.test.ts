@@ -19,6 +19,7 @@ vi.mock('./structured-session-switch-observation', () => ({
 }))
 
 const C = 'thread-c'
+const SPAWN = { attempt: 'pane-1' }
 const LEAF = '11111111-1111-4111-8111-111111111111'
 const AGENT = { pid: 999_991, platform: process.platform, startTime: 'started' } as const
 let runtime: OrcaRuntimeService
@@ -64,15 +65,15 @@ describe('the switch claim', () => {
     expect(await reason(chatStart())).toBe('admitted')
 
     runtime.registerSwitchClaim('codex', C)
-    runtime.acceptSwitchStart('codex', C)
+    runtime.acceptSwitchStart('codex', C, 'pty-1', 'pty-1')
     // A spawn slower than the window keeps refusing until it settles.
     vi.advanceTimersByTime(120_000)
     expect(await reason(chatStart())).toBe('conversationMovingToTerminal')
   })
 
   it('binds to the switch terminal, ignores identity-only replays, and ends on a proven exit', async () => {
-    const claim = runtime.acceptSwitchStart('codex', C)
-    runtime.settleSwitchStart(claim, 'pty-1')
+    runtime.acceptSwitchStart('codex', C, 'pty-1', 'pty-1')
+    runtime.settleSwitchAttempt('pty-1', { ptyId: 'pty-1' })
     expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
     // The launch identity names the conversation without proving a start or an exit.
     hook()
@@ -87,9 +88,55 @@ describe('the switch claim', () => {
   })
 
   it('refuses a second switch of the conversation while the first terminal may hold it', () => {
-    const first = runtime.acceptSwitchStart('codex', C)
-    runtime.settleSwitchStart(first, 'pty-1')
+    runtime.acceptSwitchStart('codex', C, 'pty-1', 'pty-1')
+    runtime.settleSwitchAttempt('pty-1', { ptyId: 'pty-1' })
     expect(() => runtime.registerSwitchClaim('codex', C)).toThrow('agent_session_conflict')
+  })
+})
+
+describe('a switch spawn attempt owns its claim', () => {
+  const accept = (attempt: string) => runtime.acceptSwitchStart('codex', C, attempt, attempt)
+
+  it('binds a reattach result to its PTY, and that pane exiting releases the conversation', async () => {
+    expect(accept('pty-1')).not.toBeNull()
+    runtime.settleSwitchAttempt('pty-1', { ptyId: 'pty-1' })
+    expect(await reason(chatStart())).toBe('conversationHeldElsewhere')
+    await runtime.onPtyExit('pty-1', 0, 'i1')
+    expect(await reason(chatStart())).toBe('admitted')
+  })
+
+  it('keeps a lost spawn reply until the host proves its session absent', async () => {
+    let listed: { id: string }[] | Error = [{ id: 'lost' }]
+    runtime.setPtyController({
+      listProcesses: async () => {
+        if (listed instanceof Error) {
+          throw listed
+        }
+        return listed
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: reconciliation reads only listProcesses.
+    } as never)
+    accept('lost')
+    runtime.settleSwitchAttempt('lost', { unknown: 'lost' })
+    expect(await reason(chatStart())).toBe('conversationMovingToTerminal')
+    listed = new Error('host unreachable')
+    expect(await reason(chatStart())).toBe('conversationMovingToTerminal')
+    listed = []
+    expect(await reason(chatStart())).toBe('admitted')
+  })
+
+  it('refuses a delayed second client before and after the first binds; a retry joins', () => {
+    runtime.registerSwitchClaim('codex', C)
+    const b = accept('pty-b')
+    expect(accept('pty-a')).toBeNull()
+    expect(accept('pty-b')).toBe(b)
+    runtime.registerPty('pty-b', 'wt-1', null, {
+      tabId: 'tab-2',
+      leafId: LEAF,
+      incarnationId: 'i2'
+    })
+    runtime.settleSwitchAttempt('pty-b', { ptyId: 'pty-b' })
+    expect(accept('pty-a')).toBeNull()
   })
 })
 
@@ -102,7 +149,7 @@ describe('a switch spawn', () => {
   const admission = (writing: boolean) =>
     ({
       acceptSwitchStart: vi.fn(() => ({ agent: 'codex', id: C, at: 0, accepted: true })),
-      settleSwitchStart: vi.fn(),
+      settleSwitchAttempt: vi.fn(),
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a switch spawn reads only the store's records and tab index.
       openAgentSessionRecordStore: vi.fn(
         async () =>
@@ -115,29 +162,29 @@ describe('a switch spawn', () => {
 
   it('claims before reading the chat, and a writing chat refuses it into a plain shell', async () => {
     const quiet = admission(false)
-    expect(await admitSwitchResumeSpawn(quiet, args, null)).toMatchObject({
-      verdict: 'admitted',
-      switchClaim: { id: C }
+    expect(await admitSwitchResumeSpawn(quiet, args, null, SPAWN)).toMatchObject({
+      verdict: 'admitted'
     })
+    expect(quiet.acceptSwitchStart).toHaveBeenCalledWith('codex', C, 'pane-1', undefined)
     const writing = admission(true)
-    const refused = admitSwitchResumeSpawn(writing, args, null)
+    const refused = admitSwitchResumeSpawn(writing, args, null, SPAWN)
     expect(writing.acceptSwitchStart.mock.invocationCallOrder[0]).toBeLessThan(
       writing.openAgentSessionRecordStore.mock.invocationCallOrder[0]!
     )
     expect(await refused).toMatchObject({ verdict: 'chat-writing' })
-    expect(writing.settleSwitchStart).toHaveBeenCalledWith(expect.anything(), null)
+    expect(writing.settleSwitchAttempt).toHaveBeenCalledWith('pane-1', 'not-started')
   })
 
   it('refuses where it cannot judge the pane, and a switch without its conversation', async () => {
     const quiet = admission(false)
     expect(
-      await admitSwitchResumeSpawn(quiet, { ...args, connectionId: 'ssh' }, null)
+      await admitSwitchResumeSpawn(quiet, { ...args, connectionId: 'ssh' }, null, SPAWN)
     ).toMatchObject({ verdict: 'unverifiable' })
-    expect(await admitSwitchResumeSpawn(quiet, args, 'Ubuntu')).toMatchObject({
+    expect(await admitSwitchResumeSpawn(quiet, args, 'Ubuntu', SPAWN)).toMatchObject({
       verdict: 'unverifiable'
     })
     await expect(
-      admitSwitchResumeSpawn(quiet, { ...args, resumeProviderSession: undefined }, null)
+      admitSwitchResumeSpawn(quiet, { ...args, resumeProviderSession: undefined }, null, SPAWN)
     ).rejects.toThrow('switch_start_missing_conversation')
   })
 })

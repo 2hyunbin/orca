@@ -132,6 +132,7 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
     providerSessionId: string,
     source?: { workspaceId: string; paneKey: string }
   ): Promise<void> {
+    await this.reconcileSwitchAttempts()
     this.assertNoPendingSwitch(agent, providerSessionId)
     await this.assertSwitchStartsEnded(agent, providerSessionId)
     await assertCliConversationWritersExited(
@@ -182,6 +183,7 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
   }
 
   async releaseEndedSwitchStarts(agent: string, id: string): Promise<void> {
+    await this.reconcileSwitchAttempts()
     await this.assertSwitchStartsEnded(agent, id).catch(() => undefined)
   }
 

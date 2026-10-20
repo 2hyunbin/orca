@@ -189,7 +189,7 @@ export function useTerminalPaneProjection(controller: TerminalPaneMobileControll
       activePaneCanResumeInChat:
         !activePaneIsChatLeaf &&
         activeLeafId !== null &&
-        (switchedTerminalConversation(tabId) !== undefined ||
+        (!!switchedTerminalConversation(tabId, activeLeafId, state.terminalLayoutsByTabId[tabId]) ||
           canPaneOfferResumeInNewChat(state, {
             worktreeId,
             paneKey: makePaneKey(tabId, activeLeafId)

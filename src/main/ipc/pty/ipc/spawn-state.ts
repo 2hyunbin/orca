@@ -59,6 +59,8 @@ export type PtyIpcSpawnState = {
   isMintedSessionId: boolean
   effectiveSessionId: string | undefined
   effectiveSessionAppId: string | undefined
+  /** A switch spawn's claim identity, kept apart from the admission a reattach clears. */
+  switchAttempt?: string
   expectedWslDistro: string | null
   baseEnv: Record<string, string> | undefined
   effectiveLaunchConfig: SleepingAgentLaunchConfig | undefined

@@ -3,7 +3,9 @@ import { beforeEach, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   supported: true,
   call: vi.fn(),
-  launch: vi.fn((_args: unknown) => ({ tabId: 'terminal-tab' })),
+  launch: vi.fn((_args: unknown): { tabId: string | null; runtimeLaunch?: Promise<unknown> } => ({
+    tabId: 'terminal-tab'
+  })),
   closeUnifiedTab: vi.fn(),
   toast: vi.fn()
 }))
@@ -27,6 +29,7 @@ vi.mock('@/lib/ai-vault-resume-command', () => ({
 }))
 
 import { runNativeChatCliSwitch } from './native-chat-cli-switch-run'
+import { switchedTerminalConversation } from './switched-terminal-conversation'
 
 const SWITCH = {
   sessionId: 'chat-1',
@@ -92,4 +95,28 @@ it('keeps the chat when the host refuses a busy chat, and says why', async () =>
   expect(mocks.launch).not.toHaveBeenCalled()
   expect(mocks.closeUnifiedTab).not.toHaveBeenCalled()
   expect(mocks.toast).toHaveBeenCalledWith('Wait for the reply to finish or stop it, then switch.')
+})
+
+it('offers the switch back on a paired terminal before any prompt, for its own pane only', async () => {
+  mocks.launch.mockReturnValueOnce({
+    tabId: null,
+    runtimeLaunch: Promise.resolve({ status: 'created', tabId: 'web-terminal-t' })
+  })
+  await runNativeChatCliSwitch({ ...SWITCH, executionHostId: 'runtime:server-1' })
+  const layout = (ptyIdsByLeafId: Record<string, string>) => ({
+    root: null,
+    activeLeafId: 'L1',
+    expandedLeafId: null,
+    ptyIdsByLeafId
+  })
+  expect(switchedTerminalConversation('web-terminal-t', 'L1', layout({ L1: 'p1' }))).toMatchObject({
+    providerSessionId: 'thread-c'
+  })
+  // A split's new plain shell never takes the switched pane's conversation.
+  expect(switchedTerminalConversation('web-terminal-t', 'L2', layout({ L1: 'p1', L2: 'p2' }))).toBe(
+    undefined
+  )
+  // A replaced PTY in the switched pane ends it.
+  expect(switchedTerminalConversation('web-terminal-t', 'L1', layout({ L1: 'p9' }))).toBe(undefined)
+  expect(switchedTerminalConversation('web-terminal-t', 'L1', layout({ L1: 'p1' }))).toBe(undefined)
 })

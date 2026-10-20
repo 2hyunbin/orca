@@ -108,8 +108,10 @@ export async function runNativeChatCliSwitch(args: {
     if (outcome && outcome.status !== 'created') {
       throw new Error(outcome.status === 'failed' ? outcome.message : undefined)
     }
-    if (launch.tabId && adoptsCliConversations(source.agent)) {
-      seedSwitchedTerminalConversation(launch.tabId, {
+    // A paired host's terminal is named by its create result, so the switch back works before a prompt.
+    const tabId = launch.tabId ?? (outcome?.status === 'created' ? outcome.tabId : undefined)
+    if (tabId && adoptsCliConversations(source.agent)) {
+      seedSwitchedTerminalConversation(tabId, {
         agent: source.agent,
         providerSessionId: source.sessionId,
         executionHostId: hostId

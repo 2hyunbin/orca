@@ -67,7 +67,7 @@ export function launchAiVaultSessionInNewTab(args: {
         ...(args.launchConfig ? { agentArgs: args.launchConfig.agentArgs } : {}),
         activate: true
       },
-      { notifyFailure: false }
+      { notifyFailure: false, ...(args.resumeOrigin ? { withTabId: true } : {}) }
     )
     const observedRuntimeLaunch = runtimeLaunch.then((outcome) => {
       if (outcome.status === 'created') {

@@ -28,12 +28,14 @@ import {
   type TabSessionHistorySubject
 } from './tab-session-history-switch'
 
+import type * as LaunchPlan from '@/lib/agent-session-launch-plan'
+
 const mocks = vi.hoisted(() => {
   const state: {
     resumeState: { blocked: boolean; worktreeId: string | null }
     platform: string
   } = { resumeState: { blocked: false, worktreeId: 'repo-1::/repo/wt' }, platform: 'darwin' }
-  return { ...state, resumeInChat: vi.fn() }
+  return { ...state, resumeInChat: vi.fn(), inPlaceSwitch: false, remoteFeasible: false }
 })
 
 // Staged host answers: its capabilities arrive over IPC at boot, and the platform from preload.
@@ -53,6 +55,19 @@ vi.mock('@/runtime/host-structured-agents', async (importOriginal) => ({
     }))
 }))
 vi.mock('@/lib/renderer-app-platform', () => ({ getRendererAppPlatform: () => mocks.platform }))
+vi.mock('@/lib/in-place-switch-support', () => ({
+  inPlaceSwitchSupportedNow: () => mocks.inPlaceSwitch
+}))
+// A paired host's chat support arrives in its runtime status; staged here as the route's answer.
+vi.mock('@/lib/agent-session-launch-plan', async (importOriginal) => {
+  const actual = await importOriginal<typeof LaunchPlan>()
+  return {
+    ...actual,
+    structuredAgentSessionLaunchFeasible: (
+      ...args: Parameters<typeof actual.structuredAgentSessionLaunchFeasible>
+    ) => mocks.remoteFeasible || actual.structuredAgentSessionLaunchFeasible(...args)
+  }
+})
 
 // Parity with the panel's real composition is pinned in tab-session-history-switch.parity.test.ts.
 vi.mock('../right-sidebar/ai-vault-session-resume-in-chat-workspace', () => ({
@@ -469,6 +484,19 @@ describe('one pane of a terminal tab', () => {
     }
     expect(paneGate(onWindows({ kind: 'windows-host' }), claudePane)).toBe(true)
     expect(paneGate(onWindows({ kind: 'wsl', distro: 'Ubuntu' }), claudePane)).toBe(false)
+  })
+
+  it('offers the switch on a paired Orca server only once it switches that agent in place', () => {
+    const remote = () => makeState(liveClaudeEntry, { executionHostId: 'runtime:server-1' })
+    mocks.remoteFeasible = true
+    expect(paneGate(remote(), claudePane)).toBe(false)
+    mocks.inPlaceSwitch = true
+    expect(paneGate(remote(), claudePane)).toBe(true)
+    expect(paneGate(makeState(liveClaudeEntry, { connectionId: 'dev-box' }), claudePane)).toBe(
+      false
+    )
+    mocks.inPlaceSwitch = false
+    mocks.remoteFeasible = false
   })
 
   it('offers nothing over SSH', () => {

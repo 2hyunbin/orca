@@ -10,7 +10,10 @@ import type {
   RefusedPaneResume
 } from '../../../../shared/agent-status-types'
 import type { AgentSessionRecordStore } from '../../../runtime/agent-session-record-store'
-import type { SwitchClaim } from '../../../runtime/session-tabs/structured-session-switch-claims'
+import type {
+  SwitchClaim,
+  SwitchSpawnOutcome
+} from '../../../runtime/session-tabs/structured-session-switch-claims'
 import {
   agentSessionLeasePossiblyWriting,
   listStructuredProviderSessionOwnership
@@ -39,8 +42,13 @@ export type AdmissionRuntime = {
     paneKey: string
   ): Promise<SleepingAgentSessionRecord | undefined>
   openAgentSessionRecordStore(): Promise<AgentSessionRecordStore>
-  acceptSwitchStart?(agent: string, id: string): SwitchClaim
-  settleSwitchStart?(claim: SwitchClaim, ptyId: string | null): void
+  acceptSwitchStart?(
+    agent: string,
+    id: string,
+    attempt: string,
+    sessionId?: string
+  ): SwitchClaim | null
+  settleSwitchAttempt?(attempt: string, outcome: SwitchSpawnOutcome): void
 }
 
 /** `chat-home`: an automatic restore of a conversation an open chat continues; `chat-writing`:
@@ -56,8 +64,6 @@ export type ResumeSpawnAdmission =
       verdict: 'admitted'
       refused: RefusedPaneResume
       sourceRecord?: SleepingAgentSessionRecord
-      /** The switch claim this spawn settles: bound to its PTY, or dropped when none started. */
-      switchClaim?: SwitchClaim
     }
   | ResumeSpawnRefusal
 
@@ -114,7 +120,8 @@ export async function judgeResumes(
 export async function admitSwitchResumeSpawn(
   runtime: AdmissionRuntime | undefined,
   args: ResumeSpawnArgs,
-  wslDistro: string | null
+  wslDistro: string | null,
+  spawn?: { attempt?: string; sessionId?: string }
 ): Promise<ResumeSpawnAdmission> {
   const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
   const agent = args.launchAgent
@@ -122,15 +129,17 @@ export async function admitSwitchResumeSpawn(
     throw new Error('switch_start_missing_conversation')
   }
   const refused = { agent, providerSession }
-  if (args.connectionId || wslDistro !== null || !runtime?.acceptSwitchStart) {
+  const attempt = spawn?.attempt
+  if (args.connectionId || wslDistro !== null || !runtime?.acceptSwitchStart || !attempt) {
     return { verdict: 'unverifiable', refused }
   }
   // Before any await: a chat start whose census ends after this point sees the claim.
-  const switchClaim = runtime.acceptSwitchStart(agent, providerSession.id)
+  if (!runtime.acceptSwitchStart(agent, providerSession.id, attempt, spawn.sessionId)) {
+    return { verdict: 'chat-writing', refused }
+  }
   const admission = await judgeResumes(runtime, [refused], true)
   if (admission.verdict !== 'admitted') {
-    runtime.settleSwitchStart?.(switchClaim, null)
-    return admission
+    runtime.settleSwitchAttempt?.(attempt, 'not-started')
   }
-  return { ...admission, switchClaim }
+  return admission
 }

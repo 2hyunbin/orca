@@ -14,6 +14,7 @@ import { getFreshShellForegroundSnapshot } from '../../../shared/process-table-s
 import {
   isWindowsProcessStartTimeAvailable,
   readWindowsProcessCreationTime,
+  readWindowsProcessIdentityTableFresh,
   readWindowsProcessTableFresh
 } from '../../windows/windows-process-table'
 
@@ -64,5 +65,16 @@ export async function switchStartProcessVerdict(
     return 'unverifiable'
   }
   const created = readWindowsProcessCreationTime(identity.pid)
-  return created !== null && String(created) === identity.startTime ? 'live' : 'exited'
+  if (created !== null) {
+    return String(created) === identity.startTime ? 'live' : 'exited'
+  }
+  // An unreadable pid is not an absent one: only a fresh table's own listing proves it is gone.
+  const rows = await readWindowsProcessIdentityTableFresh().catch(() => [])
+  const row = rows.find((candidate) => candidate.pid === identity.pid)
+  if (rows.length > 0 && !row) {
+    return 'exited'
+  }
+  return row?.creationTimeMs && String(row.creationTimeMs) !== identity.startTime
+    ? 'exited'
+    : 'unverifiable'
 }

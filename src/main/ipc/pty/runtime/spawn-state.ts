@@ -44,6 +44,8 @@ export type RuntimePtySpawnState = {
   requestedSessionId: string | undefined
   sessionId: string | undefined
   effectiveSessionAppId: string | undefined
+  /** A switch spawn's claim identity, kept apart from the admission a reattach clears. */
+  switchAttempt?: string
   isNewDaemonSession: boolean
   expectedWslDistro: string | null
   /** The host's verdict on the spawn's resume; a refused one starts the pane's plain shell. */
