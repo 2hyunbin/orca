@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { speechRecognizerPackageName } from '../../shared/speech-recognizer-package'
 
@@ -54,12 +54,29 @@ export function stageSpeechRecognizerForOrcad(
         throw error
       }
     }
+    pruneOlderRecognizers(target, basename(appRecognizerDir))
     return target
   } catch (error) {
     process.stderr.write(
       `[serve] on-device dictation unavailable: could not stage the speech recognizer: ${error instanceof Error ? error.message : String(error)}\n`
     )
     return undefined
+  }
+}
+
+/** Best effort: a copy a running orcad still holds stays until the next version is staged. */
+function pruneOlderRecognizers(current: string, packageName: string): void {
+  const parent = dirname(current)
+  for (const entry of readdirSync(parent)) {
+    const path = join(parent, entry)
+    // Why skip staging dirs: they belong to a serve copying right now.
+    if (path !== current && entry.startsWith(`${packageName}-`) && !entry.includes('.staging-')) {
+      try {
+        rmSync(path, { recursive: true, force: true })
+      } catch {
+        // Locked by a running orcad.
+      }
+    }
   }
 }
 

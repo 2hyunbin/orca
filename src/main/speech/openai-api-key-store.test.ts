@@ -54,6 +54,27 @@ describe('OpenAI speech API key store', () => {
     expect(safeStorageMock.decryptString).not.toHaveBeenCalled()
   })
 
+  // #31174: orcad cannot open a key the desktop sealed with safeStorage, so it must not say ready.
+  it('reports a stored key this host cannot decrypt as unusable', async () => {
+    writeStoredOpenAiKey('v10\u0000ÿþ sealed by another store')
+    const store = await loadStoreModule()
+    safeStorageMock.decryptString.mockImplementation(() => {
+      throw new Error('not our ciphertext')
+    })
+    try {
+      expect(store.hasOpenAiSpeechApiKey()).toBe(true)
+      expect(store.canReadOpenAiSpeechApiKey()).toBe(false)
+    } finally {
+      safeStorageMock.decryptString.mockImplementation((value: Buffer) => value.toString('utf8'))
+    }
+  })
+
+  it('reports a stored key this host can decrypt as usable', async () => {
+    writeStoredOpenAiKey('encrypted-key')
+    const store = await loadStoreModule()
+    expect(store.canReadOpenAiSpeechApiKey()).toBe(true)
+  })
+
   it('decrypts only when the key is read for an API request', async () => {
     writeStoredOpenAiKey('encrypted-key')
     const store = await loadStoreModule()

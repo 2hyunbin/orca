@@ -52,6 +52,22 @@ export function hasOpenAiSpeechApiKey(): boolean {
   return existsSync(getOpenAiKeyPath())
 }
 
+/**
+ * Whether the stored key decrypts on this host. Why orcad needs it: a key the desktop sealed with
+ * Electron's safeStorage exists on disk but orcad's own secret store cannot open it.
+ */
+export function canReadOpenAiSpeechApiKey(): boolean {
+  if (!hasOpenAiSpeechApiKey()) {
+    return false
+  }
+  try {
+    readOpenAiSpeechApiKey()
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** How the stored speech key sits on disk, or null when none is stored. */
 export function getOpenAiSpeechApiKeyProtection(): SecretAtRestProtection | null {
   // The legacy JSON wrapper only ever held base64 ciphertext, so it is sealed by shape.

@@ -68,6 +68,8 @@ describe('staging the recognizer for orcad', () => {
     const next = stageSpeechRecognizerForOrcad(app, profile, 'win32')
     expect(next).toBe(join(profile, 'speech-recognizer', 'sherpa-onnx-win-x64-1.13.0'))
     expect(existsSync(join(next!, 'sherpa-onnx.node'))).toBe(true)
+    // The superseded copy is pruned once nothing holds it.
+    expect(existsSync(staged!)).toBe(false)
   })
 
   it('leaves orcad cloud-only when the copy cannot be made', () => {

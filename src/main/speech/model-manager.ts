@@ -35,7 +35,11 @@ export class ModelManager extends SpeechModelDownloadTransport {
   private modelStates = new Map<string, SpeechModelState>()
   private progressCallbacks = new Set<ProgressCallback>()
 
-  constructor(customModelsDir: string | undefined, openRequest: OpenSpeechDownloadRequest) {
+  constructor(
+    customModelsDir: string | undefined,
+    openRequest: OpenSpeechDownloadRequest,
+    private readonly hasOpenAiKey: () => boolean = hasOpenAiSpeechApiKey
+  ) {
     super(openRequest)
     const requestedModelsDir =
       customModelsDir || join(getAppEnvironment().getPath('userData'), 'speech-models')
@@ -100,10 +104,7 @@ export class ModelManager extends SpeechModelDownloadTransport {
     }
 
     if (manifest.provider === 'openai') {
-      return {
-        id: modelId,
-        status: hasOpenAiSpeechApiKey() ? 'ready' : 'not-downloaded'
-      }
+      return { id: modelId, status: this.hasOpenAiKey() ? 'ready' : 'not-downloaded' }
     }
 
     const modelDir = this.getModelDir(modelId)
