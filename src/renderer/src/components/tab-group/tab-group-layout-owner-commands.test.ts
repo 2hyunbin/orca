@@ -189,7 +189,16 @@ describe('setGroupRatioThroughLayoutOwner', () => {
     expect(store().getState().layoutByWorktree[WT]).toMatchObject({ type: 'split', ratio: 0.3 })
     expect(mocks.send).toHaveBeenCalledWith(
       WT,
-      { type: 'setGroupRatios', ratios: [{ path: '', ratio: 0.3 }] },
+      {
+        type: 'setGroupRatios',
+        ratios: [
+          {
+            path: '',
+            ratio: 0.3,
+            split: expect.objectContaining({ direction: expect.any(String) })
+          }
+        ]
+      },
       expect.objectContaining({ drawn: true })
     )
   })

@@ -7,6 +7,7 @@ import { samePanesIgnoringRatios } from '../../../../shared/workspace-layout/ter
 import {
   allSplitRatios,
   changedSplitRatios,
+  withPaneSplitRatios,
   type SplitRatioIntent
 } from '../../../../shared/workspace-layout/split-ratio-intents'
 
@@ -23,17 +24,27 @@ export function layoutOwnerPaneGestures(pane: {
   shouldPersistLayout: () => boolean
 }): Pick<PaneManagerOptions, 'takePaneDrop' | 'onDividerRatiosCommitted'> {
   const { worktreeId, tabId } = pane
+  /** Ratios sent and not yet answered: main applies them in order, after its frame's. */
+  const inFlight = new Set<SplitRatioIntent[]>()
   const saveRatios = (): void => {
     // Why the store: the gesture's own persist has just written the window's tree there.
     const root = useAppStore.getState().terminalLayoutsByTabId[tabId]?.root
-    const ratios = root && pane.shouldPersistLayout() ? dividersMoved(worktreeId, tabId, root) : []
+    const ratios =
+      root && pane.shouldPersistLayout() ? dividersMoved(worktreeId, tabId, root, inFlight) : []
     if (ratios.length > 0) {
-      const keep = (): void => {}
-      sendLayoutCommandToOwner(
+      const answered = (): void => {
+        inFlight.delete(ratios)
+      }
+      inFlight.add(ratios)
+      const sent = sendLayoutCommandToOwner(
         worktreeId,
         { type: 'setPaneRatios', tabId, ratios },
-        { apply: keep, asToday: keep }
+        // A refusal (main's panes moved on) releases the tab's hold: its frame redraws main's ratios.
+        { apply: answered, asToday: answered, refused: answered }
       )
+      if (!sent) {
+        answered()
+      }
     }
   }
   return {
@@ -55,16 +66,24 @@ export function layoutOwnerPaneGestures(pane: {
   }
 }
 
-/** The window's ratios main's tree lacks: each moved divider, or every one before main's frame. */
+/**
+ * The dividers the user moved: against main's frame with the ratios still in flight applied, so a
+ * drag back to the frame's ratio is sent too. Every one before main's frame holds the tab.
+ */
 function dividersMoved(
   worktreeId: string,
   tabId: string,
-  root: TerminalPaneLayoutNode
+  root: TerminalPaneLayoutNode,
+  inFlight: ReadonlySet<SplitRatioIntent[]>
 ): SplitRatioIntent[] {
   const mainRoot = layoutFrameTerminalTab(worktreeId, tabId)?.terminal?.root
   if (!mainRoot) {
     return allSplitRatios(root)
   }
+  let expected = mainRoot
+  for (const ratios of inFlight) {
+    expected = withPaneSplitRatios(expected, ratios) ?? expected
+  }
   // Main's panes moved on since this window drew them; its frame redraws them with their ratios.
-  return samePanesIgnoringRatios(mainRoot, root) ? changedSplitRatios(mainRoot, root) : []
+  return samePanesIgnoringRatios(expected, root) ? changedSplitRatios(expected, root) : []
 }

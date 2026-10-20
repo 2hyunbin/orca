@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { TerminalPaneLayoutNode } from '../../../../shared/terminal-tab-types'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
+import { withPaneSplitRatios } from '../../../../shared/workspace-layout/split-ratio-intents'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 
 const mocks = vi.hoisted(
@@ -34,6 +35,9 @@ vi.mock('@/runtime/layout-frame-terminal-panes', () => ({
 vi.mock('@/store', () => ({
   useAppStore: { getState: () => ({ terminalLayoutsByTabId: { 'tab-1': { root: mocks.root } } }) }
 }))
+
+/** The root split's identity: main applies a ratio only to the split it names. */
+const ROOT_SPLIT = { direction: 'vertical', first: 'leaf-1', second: 'leaf-2' }
 
 function gestures(shouldPersistLayout = true) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the gestures read only getLeafId.
@@ -111,8 +115,16 @@ describe('layoutOwnerPaneGestures', () => {
 
     expect(mocks.send).toHaveBeenCalledWith(
       'worktree-1',
-      { type: 'setPaneRatios', tabId: 'tab-1', ratios: [{ path: '', ratio: 0.3 }] },
-      { apply: expect.any(Function), asToday: expect.any(Function) }
+      {
+        type: 'setPaneRatios',
+        tabId: 'tab-1',
+        ratios: [{ path: '', ratio: 0.3, split: ROOT_SPLIT }]
+      },
+      {
+        apply: expect.any(Function),
+        asToday: expect.any(Function),
+        refused: expect.any(Function)
+      }
     )
   })
 
@@ -134,7 +146,11 @@ describe('layoutOwnerPaneGestures', () => {
     }
 
     expect(ratiosSent()).toEqual([
-      { type: 'setPaneRatios', tabId: 'tab-1', ratios: [{ path: 'second', ratio: 0.7 }] }
+      {
+        type: 'setPaneRatios',
+        tabId: 'tab-1',
+        ratios: [{ path: 'second', ratio: 0.7, split: ROOT_SPLIT }]
+      }
     ])
   })
 
@@ -142,7 +158,11 @@ describe('layoutOwnerPaneGestures', () => {
     gestures().onDividerRatiosCommitted?.()
 
     expect(ratiosSent()).toEqual([
-      { type: 'setPaneRatios', tabId: 'tab-1', ratios: [{ path: '', ratio: 0.3 }] }
+      {
+        type: 'setPaneRatios',
+        tabId: 'tab-1',
+        ratios: [{ path: '', ratio: 0.3, split: ROOT_SPLIT }]
+      }
     ])
   })
 
@@ -154,7 +174,11 @@ describe('layoutOwnerPaneGestures', () => {
     view.onDividerRatiosCommitted?.()
 
     expect(ratiosSent()).toEqual([
-      { type: 'setPaneRatios', tabId: 'tab-1', ratios: [{ path: '', ratio: 0.3 }] }
+      {
+        type: 'setPaneRatios',
+        tabId: 'tab-1',
+        ratios: [{ path: '', ratio: 0.3, split: ROOT_SPLIT }]
+      }
     ])
   })
 
@@ -169,6 +193,35 @@ describe('layoutOwnerPaneGestures', () => {
     gestures().onDividerRatiosCommitted?.()
 
     expect(mocks.send).not.toHaveBeenCalled()
+  })
+
+  it('sends a drag back to main’s ratio while the first drag is unanswered, so main ends there', () => {
+    const even = { ...mocks.root, ratio: undefined }
+    mocks.mainRoot = even
+    const view = gestures()
+    view.onDividerRatiosCommitted?.()
+    const windowRoot = mocks.root
+    mocks.root = even
+    try {
+      view.onDividerRatiosCommitted?.()
+    } finally {
+      mocks.root = windowRoot
+    }
+
+    const sent = ratiosSent().map((command) =>
+      command.type === 'setPaneRatios' ? command.ratios : undefined
+    )
+    expect(sent).toEqual([
+      [{ path: '', ratio: 0.3, split: ROOT_SPLIT }],
+      [{ path: '', ratio: 0.5, split: ROOT_SPLIT }]
+    ])
+    // Main applies them in order and ends at the user's last ratio.
+    const ended = sent.reduce<TerminalPaneLayoutNode | null>(
+      (root, ratios) => root && withPaneSplitRatios(root, ratios ?? []),
+      even
+    )
+    expect(ended).toEqual({ ...even, ratio: undefined })
+    expect(ended).not.toHaveProperty('ratio')
   })
 
   it('sends nothing when no divider moved', () => {

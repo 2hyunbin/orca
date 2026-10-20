@@ -31,6 +31,7 @@ function setup() {
     model
   )
   return {
+    ctx,
     model: split.model,
     tabA: first!.tabId!,
     leafA: first!.leafId!,
@@ -143,6 +144,83 @@ describe('divider ratios through main', () => {
     ).toBe('group_set_changed')
     expect(
       refusal(model, { type: 'setGroupRatios', workspace: WS, ratios: [{ path: '', ratio: 0.7 }] })
+    ).toBe('group_set_changed')
+  })
+
+  it('applies an intent only to the split it means: a path now naming another split moves nothing', () => {
+    const { model, tabA, leafA, leafA2 } = setup()
+    const before = terminalTab(model, tabA).panes!.root
+    const meant = { direction: 'vertical', first: leafA, second: leafA2 }
+    expect(
+      refusal(model, {
+        type: 'setPaneRatios',
+        workspace: WS,
+        tabId: tabA,
+        ratios: [{ path: '', ratio: 0.3, split: meant }]
+      })
+    ).toBe('applied')
+    // Main's panes moved on: the root split is now another one.
+    for (const split of [
+      { ...meant, first: leafA2, second: leafA },
+      { ...meant, direction: 'horizontal' }
+    ]) {
+      const refused = applyLayoutCommand(
+        model,
+        {
+          type: 'setPaneRatios',
+          workspace: WS,
+          tabId: tabA,
+          ratios: [{ path: '', ratio: 0.3, split }]
+        },
+        context
+      )
+      expect(refused.ok ? 'applied' : refused.code).toBe('pane_structure_changed')
+      expect(terminalTab(model, tabA).panes!.root).toEqual(before)
+    }
+  })
+
+  it('applies a group intent only to the split it means', () => {
+    const { ctx, model, tabB } = setup()
+    const groupId = model.workspaces[WS]!.groups[0]!.id
+    // The model's own id minter, so the new group's id is not one the model already holds.
+    const split = applyLayoutCommand(
+      model,
+      {
+        type: 'splitGroup',
+        workspace: WS,
+        tabId: tabB,
+        besideGroupId: groupId,
+        direction: 'right'
+      },
+      ctx
+    )
+    if (!split.ok || split.model.workspaces[WS]!.groupLayout?.type !== 'split') {
+      throw new Error('expected a group split')
+    }
+    const layout = split.model.workspaces[WS]!.groupLayout
+    if (layout.type !== 'split' || layout.first.type !== 'leaf' || layout.second.type !== 'leaf') {
+      throw new Error('expected two groups side by side')
+    }
+    const meant = {
+      direction: layout.direction,
+      first: layout.first.groupId,
+      second: layout.second.groupId
+    }
+    expect(
+      refusal(split.model, {
+        type: 'setGroupRatios',
+        workspace: WS,
+        ratios: [{ path: '', ratio: 0.7, split: meant }]
+      })
+    ).toBe('applied')
+    expect(
+      refusal(split.model, {
+        type: 'setGroupRatios',
+        workspace: WS,
+        ratios: [
+          { path: '', ratio: 0.7, split: { ...meant, first: meant.second, second: meant.first } }
+        ]
+      })
     ).toBe('group_set_changed')
   })
 })

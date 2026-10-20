@@ -7,7 +7,15 @@ const SplitRatioIntents = z
   .array(
     z.object({
       path: z.string().regex(/^((first|second)(\.(first|second))*)?$/),
-      ratio: z.number().gt(0).lt(1)
+      ratio: z.number().gt(0).lt(1),
+      // The split the window means: its direction and the first pane or group on each side.
+      split: z
+        .object({
+          direction: z.enum(['horizontal', 'vertical']),
+          first: z.string().min(1),
+          second: z.string().min(1)
+        })
+        .optional()
     })
   )
   .min(1)

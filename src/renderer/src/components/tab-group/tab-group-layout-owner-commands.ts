@@ -15,6 +15,7 @@ import {
 } from '@/runtime/layout-owner-pane-intents'
 import { tabSelectionKey } from '@/store/slices/tabs/moved-tab-selection'
 import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
+import { splitRatioIntentAt } from '../../../../shared/workspace-layout/split-ratio-intents'
 
 /** A tab drop as the window resolved it: within its group, into another, or beside a group. */
 export type TabDrop =
@@ -147,12 +148,15 @@ export function setGroupRatioThroughLayoutOwner(
 ): void {
   const state = useAppStore.getState()
   state.setTabGroupSplitRatio(worktreeId, nodePath, ratio)
-  // The window drew the ratio while dragging; main takes the divider's new ratio, not its tree.
-  if (useAppStore.getState().layoutByWorktree[worktreeId] !== state.layoutByWorktree[worktreeId]) {
+  const layout = useAppStore.getState().layoutByWorktree[worktreeId]
+  // The window drew the ratio while dragging; main takes the divider's new ratio, not its tree,
+  // and refuses it if that path now names another split (frames then redraw main's).
+  const intent = layout && splitRatioIntentAt(layout, nodePath, ratio)
+  if (intent && layout !== state.layoutByWorktree[worktreeId]) {
     const keep = (): void => {}
     sendLayoutCommandToOwner(
       worktreeId,
-      { type: 'setGroupRatios', ratios: [{ path: nodePath, ratio }] },
+      { type: 'setGroupRatios', ratios: [intent] },
       { apply: keep, asToday: keep, drawn: true }
     )
   }
