@@ -79,7 +79,8 @@ describe('proveWslMoveTerminalsExited', () => {
     [
       'a POSIX folder from a daemon that does not report its distro',
       { cwd: '/home/dev/app', wslDistro: undefined }
-    ]
+    ],
+    ['a native-tagged shell in a moved folder', { cwd: '/home/dev/app', wslDistro: null }]
   ])('never proves exit past an unminted live session with %s', async (_label, facts) => {
     await expect(prove([{ sessionId: 'uuid-2', isAlive: true, ...facts }])).resolves.toMatchObject({
       verdict: 'unverifiable'
@@ -94,6 +95,33 @@ describe('proveWslMoveTerminalsExited', () => {
     await expect(prove([{ sessionId: 'uuid-3', isAlive: true, ...facts }])).resolves.toEqual({
       verdict: 'exited'
     })
+  })
+
+  it("counts another workspace's shell that changed into a moved folder", async () => {
+    const sessionId = 'other::\\\\wsl.localhost\\Ubuntu\\home\\dev\\other@@1'
+    await expect(
+      prove([{ sessionId, isAlive: true, cwd: '/home/dev/app/src', wslDistro: 'Ubuntu' }])
+    ).resolves.toEqual({ verdict: 'live', sessionIds: [sessionId] })
+    await expect(
+      prove([{ sessionId, isAlive: true, cwd: '/home/dev/other', wslDistro: 'Ubuntu' }])
+    ).resolves.toEqual({ verdict: 'exited' })
+  })
+
+  it('cannot prove exit when the fence lifts during the census', async () => {
+    let fenced = true
+    await expect(
+      proveWslMoveTerminalsExited(
+        {
+          listSessions: async () => {
+            fenced = false
+            return []
+          },
+          countFallbackSessions: () => 0,
+          isScopeFenced: () => fenced
+        },
+        scope([repoKey])
+      )
+    ).resolves.toMatchObject({ verdict: 'unverifiable' })
   })
 
   it('refuses to prove exit before new terminals are fenced', async () => {

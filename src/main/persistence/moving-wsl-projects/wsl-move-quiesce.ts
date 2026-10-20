@@ -20,7 +20,7 @@ export type WslMoveQuiesceScope = {
   workspaceIds: readonly string[]
   /** Workspace keys as session ids mint them, for the exit proof. */
   workspaceKeys: ReadonlySet<string>
-  /** The panes the move carries, with the daemon session each one recorded. */
+  /** The panes the move carries, with each one's daemon session and its distro read before Sleep. */
   panes: readonly WslMoveRestoreHintPane[]
 }
 

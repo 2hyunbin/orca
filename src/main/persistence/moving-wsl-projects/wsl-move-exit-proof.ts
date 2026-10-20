@@ -48,6 +48,9 @@ export async function proveWslMoveTerminalsExited(
     }
     sessions = await sources.listSessions()
     fallbackSessions = sources.countFallbackSessions()
+    if (!sources.isScopeFenced()) {
+      return { verdict: 'unverifiable', reason: 'the move fence lifted during the census' }
+    }
   } catch (error) {
     return {
       verdict: 'unverifiable',
@@ -102,7 +105,11 @@ function attributeSession(
   }
   const { worktreeId } = parsePtySessionId(session.sessionId)
   if (worktreeId !== null) {
-    return scopeKeys.has(comparableKey(worktreeId, scope.distro)) ? 'in-scope' : 'elsewhere'
+    if (scopeKeys.has(comparableKey(worktreeId, scope.distro))) {
+      return 'in-scope'
+    }
+    // Another workspace's shell can still have changed into a moved folder.
+    return attributeByCwd(session, scope.distro, roots) === 'in-scope' ? 'in-scope' : 'elsewhere'
   }
   return attributeByCwd(session, scope.distro, roots)
 }
@@ -117,14 +124,15 @@ function attributeByCwd(
   if (!cwd) {
     return 'unknown'
   }
-  const isPosix = isLinuxSpelled(cwd)
-  // A POSIX folder is a Linux path only inside WSL; a Git Bash `/c/...` is not.
-  if (isPosix && wslDistro === undefined) {
-    return 'unknown'
-  }
   const inDistro = typeof wslDistro === 'string' && sameDistro(wslDistro, distro)
-  const path = isPosix && !inDistro ? null : comparableWslPath(cwd, distro)
-  if (path !== null && roots.some((root) => isAtOrUnder(path, root))) {
+  const path = comparableWslPath(cwd, distro)
+  const underRoot = path !== null && roots.some((root) => isAtOrUnder(path, root))
+  // A POSIX folder is a Linux path only inside WSL. A Git Bash `/c/...` is not, but a native-tagged
+  // `wsl.exe` shell's may be, so only a folder clear of the move rules it out.
+  if (isLinuxSpelled(cwd) && !inDistro) {
+    return wslDistro === undefined || (wslDistro === null && underRoot) ? 'unknown' : 'elsewhere'
+  }
+  if (underRoot) {
     return 'in-scope'
   }
   const distroRoot = comparableWslPath('/', distro)
