@@ -1,6 +1,7 @@
 import type { GitPushTarget } from '../../shared/worktree/types'
 import type { Repo } from '../../shared/repo-types'
 import { isFolderRepo } from '../../shared/repo-kind'
+import { getRepoSshConnectionId } from '../../shared/execution-host'
 import { fetchCompareBaseRefWithLocalFallback } from '../git/compare-base-ref-fetch'
 import { gitExecFileAsync } from '../git/runner'
 import { getProjectRefForRemote, getWorkItemByProjectRef } from '../gitlab/client'
@@ -45,8 +46,10 @@ export async function resolveRuntimeGitLabWorktreeBase(
   if (isFolderRepo(repo)) {
     return { error: 'Folder mode does not support creating worktrees.' }
   }
-  if (repo.connectionId) {
-    throw new SshHostNotServedError(repo.connectionId)
+  // Why the resolver: a row may name its SSH host only as `executionHostId: 'ssh:<target>'`.
+  const sshTargetId = getRepoSshConnectionId(repo)
+  if (sshTargetId) {
+    throw new SshHostNotServedError(sshTargetId)
   }
   const localGitExecOptions = getLocalProjectGitExecOptions(deps.store, repo)
   const localWorktreeGitOptions = getLocalProjectWorktreeGitOptions(deps.store, repo)
