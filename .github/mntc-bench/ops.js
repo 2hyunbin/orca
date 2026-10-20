@@ -1,7 +1,7 @@
 // Runs benchmark ops in-process; argv[2] = JSON {kind, linuxRepo, winRepo, ops}. Prints JSON results.
 // kind: 'bridge' (Windows node -> wsl.exe per op, UNC fs), 'host' (node inside the distro, as orcad), 'win' (git.exe on C:\)
 const { execFile } = require('child_process'), fs = require('fs'), path = require('path')
-const cfg = JSON.parse(process.argv[2])
+const cfg = JSON.parse(Buffer.from(process.argv[2], 'base64').toString())
 const DISTRO = cfg.distro
 const LOCALE = ['LANGUAGE=en', 'LC_ALL=en_US.UTF-8', 'LANG=en_US.UTF-8']
 const R23 = ['-c', 'core.autocrlf=true', '-c', 'core.checkStat=minimal']

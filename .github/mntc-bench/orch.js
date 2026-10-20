@@ -18,7 +18,7 @@ const PATHS = {
   c: { kind: 'win', linuxRepo: MNT }, d: { kind: 'host', linuxRepo: BASE }
 }
 function ops(p, list, tag) {
-  const cfg = JSON.stringify({ ...PATHS[p], winRepo: WIN, distro: DISTRO, linRg: LIN_RG, winRg: WIN_RG, ops: list })
+  const cfg = Buffer.from(JSON.stringify({ ...PATHS[p], winRepo: WIN, distro: DISTRO, linRg: LIN_RG, winRg: WIN_RG, ops: list })).toString('base64')
   const out = PATHS[p].kind === 'host'
     ? wsl(['--exec', LIN_NODE, `${HERE}/ops.js`, cfg])
     : execFileSync(process.execPath, [path.join(__dirname, 'ops.js'), cfg], { windowsHide: true, maxBuffer: 1 << 28 }).toString()
