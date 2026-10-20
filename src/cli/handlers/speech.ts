@@ -1,10 +1,9 @@
-import type { CommandHandler } from '../dispatch'
+import type { CommandHandler, HandlerContext } from '../dispatch'
 import { printResult } from '../format'
-import { RuntimeClientError } from '../runtime-client'
+import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
+import { OPENAI_SPEECH_KEY_MAX_LENGTH } from '../../shared/rpc-contract/speech-params'
 
 type OpenAiSpeechKeyStatus = { configured: boolean; protection: string | null }
-
-const MAX_KEY_BYTES = 4096
 
 function formatKeyStatus(status: OpenAiSpeechKeyStatus): string {
   if (!status.configured) {
@@ -30,7 +29,7 @@ export async function readOpenAiKeyFromStdin(
   for await (const chunk of stdin) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
     bytes += buffer.length
-    if (bytes > MAX_KEY_BYTES) {
+    if (bytes > OPENAI_SPEECH_KEY_MAX_LENGTH * 4) {
       throw new RuntimeClientError('invalid_argument', 'That is too long to be an OpenAI key')
     }
     chunks.push(buffer)
@@ -39,21 +38,45 @@ export async function readOpenAiKeyFromStdin(
   if (!key) {
     throw new RuntimeClientError('invalid_argument', 'No key on stdin')
   }
+  if (key.length > OPENAI_SPEECH_KEY_MAX_LENGTH) {
+    throw new RuntimeClientError('invalid_argument', 'That is too long to be an OpenAI key')
+  }
   return key
+}
+
+// Why: `--host runtime:<id>` can reach an older server, whose raw `method_not_found` reads as a bug.
+export async function callOpenAiKeyMethod(
+  client: Pick<HandlerContext['client'], 'call'>,
+  method: string,
+  params?: { apiKey: string }
+): Promise<RuntimeRpcSuccess<OpenAiSpeechKeyStatus>> {
+  try {
+    return params === undefined
+      ? await client.call<OpenAiSpeechKeyStatus>(method)
+      : await client.call<OpenAiSpeechKeyStatus>(method, params)
+  } catch (error) {
+    if (error instanceof RuntimeClientError && error.code === 'method_not_found') {
+      throw new RuntimeClientError(
+        'incompatible_runtime',
+        'This Orca server cannot store a voice dictation key yet. Update Orca on the server and try again.'
+      )
+    }
+    throw error
+  }
 }
 
 export const SPEECH_HANDLERS: Record<string, CommandHandler> = {
   'speech openai-key status': async ({ client, json }) => {
-    const result = await client.call<OpenAiSpeechKeyStatus>('speech.openAiKey.status')
+    const result = await callOpenAiKeyMethod(client, 'speech.openAiKey.status')
     printResult(result, json, formatKeyStatus)
   },
   'speech openai-key set': async ({ client, json }) => {
     const apiKey = await readOpenAiKeyFromStdin()
-    const result = await client.call<OpenAiSpeechKeyStatus>('speech.openAiKey.set', { apiKey })
+    const result = await callOpenAiKeyMethod(client, 'speech.openAiKey.set', { apiKey })
     printResult(result, json, formatKeyStatus)
   },
   'speech openai-key clear': async ({ client, json }) => {
-    const result = await client.call<OpenAiSpeechKeyStatus>('speech.openAiKey.clear')
+    const result = await callOpenAiKeyMethod(client, 'speech.openAiKey.clear')
     printResult(result, json, formatKeyStatus)
   }
 }

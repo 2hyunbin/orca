@@ -18,7 +18,10 @@ export const SPEECH_COMMAND_SPECS: CommandSpec[] = [
       'Reads the key from stdin so it never lands in shell history or a process list.',
       'The host that runs dictation seals it, so a headless `orca serve` host can use it.'
     ],
-    examples: ['printf %s "$OPENAI_API_KEY" | orca speech openai-key set']
+    examples: [
+      'printf %s "$OPENAI_API_KEY" | orca speech openai-key set',
+      '$env:OPENAI_API_KEY | orca speech openai-key set'
+    ]
   },
   {
     path: ['speech', 'openai-key', 'clear'],
