@@ -136,7 +136,7 @@ export function withMainSessionTabRows(
     // The window's active group shows the window's active tab, as its top-level selection says.
     const index = tabGroups.findIndex((group) => group.id === published.activeGroupId)
     const shown = windowGroups.get(published.activeGroupId ?? '')?.activeTabId ?? null
-    if (index >= 0) {
+    if (index !== -1) {
       tabGroups[index] = { ...tabGroups[index]!, activeTabId: shown }
     }
   }
