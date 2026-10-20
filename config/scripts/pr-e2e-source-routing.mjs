@@ -254,6 +254,17 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
+    // Unsaved drafts stay on the desktop and are renamed to the server when a move commits.
+    id: 'ssh.orcad-editor-drafts-migration',
+    specs: ['tests/e2e/ssh-orcad-editor-drafts-migration.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      (isProductSource(file) &&
+        /^src\/main\/(?:persistence\/migrating-orcad-catalog\/orcad-source-(?:draft-rename|workspace-session|session-copy-resolution|export)|ssh\/orcad-migration-source-retention|ipc\/ssh\/ssh)\.ts$/.test(
+          file
+        ))
+  },
+  {
     // Why: hand-kept routes missed #30130 and #30120; scoped to managed-host code to bound lane cost.
     id: 'ssh.orcad-remote-sources',
     specs: [
