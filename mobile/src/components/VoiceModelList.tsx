@@ -88,6 +88,9 @@ export function VoiceModelList({
                         pressed && styles.actionPressed
                       ]}
                       disabled={anyBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use ${model.label}`}
+                      accessibilityState={{ disabled: anyBusy }}
                       onPress={() => onUseModel(model)}
                     >
                       {selectBusy ? (
@@ -120,7 +123,9 @@ export function VoiceModelList({
                   style={({ pressed }) => [styles.iconButton, pressed && styles.actionPressed]}
                   disabled={anyBusy}
                   onPress={() => onDownload(model)}
-                  accessibilityLabel={'Download ' + model.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Download ${model.label}`}
+                  accessibilityState={{ disabled: anyBusy }}
                 >
                   {downloadBusy ? (
                     <ActivityIndicator size="small" color={colors.textSecondary} />
@@ -157,7 +162,7 @@ const styles = StyleSheet.create({
   },
   recommended: { color: colors.statusGreen, fontSize: 10, fontWeight: '700' },
   modelMeta: { color: colors.textMuted, fontSize: typography.metaSize, marginTop: 2 },
-  modelStateText: { color: colors.textMuted, fontSize: typography.metaSize },
+  modelStateText: { color: colors.textMuted, fontSize: typography.metaSize, flexShrink: 1 },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',

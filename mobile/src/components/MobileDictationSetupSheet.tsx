@@ -183,6 +183,9 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
                         pressed && styles.actionPressed
                       ]}
                       disabled={rowBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use ${model.label}`}
+                      accessibilityState={{ disabled: rowBusy }}
                       onPress={() => void handleUseModel(model)}
                     >
                       <Text style={styles.actionText}>Use</Text>
@@ -196,6 +199,9 @@ export function MobileDictationSetupSheet({ visible, client, onClose, onReady }:
                         pressed && styles.actionPressed
                       ]}
                       disabled={rowBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Download ${model.label}`}
+                      accessibilityState={{ disabled: rowBusy }}
                       onPress={() => void handleDownload(model)}
                     >
                       {rowBusy ? (
@@ -258,7 +264,7 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   modelMeta: { color: colors.textMuted, fontSize: typography.metaSize, marginTop: 2 },
-  modelStateText: { color: colors.textMuted, fontSize: typography.metaSize },
+  modelStateText: { color: colors.textMuted, fontSize: typography.metaSize, flexShrink: 1 },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',

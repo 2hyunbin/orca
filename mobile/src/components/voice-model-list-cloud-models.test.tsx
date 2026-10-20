@@ -70,6 +70,11 @@ describe('VoiceModelList cloud models', () => {
     })
     expect(texts).toContain('Use')
     expect(pressables).toHaveLength(1)
+    expect(pressables[0].props).toMatchObject({
+      accessibilityRole: 'button',
+      accessibilityLabel: `Use ${ready.label}`,
+      accessibilityState: { disabled: false }
+    })
     act(() => pressables[0].props.onPress())
     expect(onUseModel).toHaveBeenCalledWith(ready)
   })

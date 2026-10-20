@@ -110,8 +110,8 @@ export function isDictationReady(setup: MobileSpeechSetup): boolean {
   return selected?.status === 'ready'
 }
 
-// Why "this computer": the paired host may be a headless server, where "desktop" misleads.
-export const CLOUD_MODEL_NEEDS_KEY = 'Add an OpenAI API key on this computer'
+// Why no "desktop": the paired computer may be a headless server. Short so the name keeps its room.
+export const CLOUD_MODEL_NEEDS_KEY = 'Needs an OpenAI key'
 
 /** What a model row in the setup sheet and Voice settings offers. */
 export type DictationModelRowAction =
