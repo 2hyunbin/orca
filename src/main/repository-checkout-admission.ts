@@ -155,7 +155,7 @@ async function admitWslClaim(
           key
         )
       : null)
-  let captured = realPathMatch
+  let captured: Repo | null | undefined = realPathMatch
   const findSaved = () => {
     if (captured) {
       return requireSavedProject(store, captured, key)

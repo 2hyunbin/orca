@@ -30,6 +30,11 @@ const ProjectReply = z.object({
     .passthrough()
 })
 
+const OwnerIdentity = z.object({
+  executionHostId: z.string().nullable().optional(),
+  connectionId: z.string().nullable().optional()
+})
+
 const OwnerRepos = z.object({ repos: z.array(ProjectReply.shape.repo) })
 const OwnerSetups = z.object({
   setups: z.array(
@@ -77,6 +82,7 @@ export async function registerOnWslOwner(
   let repo: Repo = { ...acknowledged, executionHostId: toRuntimeExecutionHostId(environmentId) }
   try {
     if (operation.repoKind !== 'folder' && !known.some((row) => row.id === repo.id)) {
+      const acknowledgedOwner = OwnerIdentity.parse(acknowledged)
       const { setups } = OwnerSetups.parse(
         await callWslProjectHost(environmentId, 'projectHostSetup.list', undefined)
       )
@@ -84,7 +90,7 @@ export async function registerOnWslOwner(
         (row) =>
           row.repoId === repo.id &&
           row.path === repo.path &&
-          row.hostId === getRepoExecutionHostId(acknowledged)
+          row.hostId === getRepoExecutionHostId(acknowledgedOwner)
       )
       const { projects } = OwnerProjects.parse(
         await callWslProjectHost(environmentId, 'project.list', undefined)
