@@ -11,7 +11,7 @@
 // store does not show from frames yet (startup, a reopened stream, a first visit, one sent whole)
 // takes the full build, whose view the window reads back through its save and the Loader.
 
-import { withMovedTabSelections } from '@/store/slices/tabs/moved-tab-selection'
+import { showFramePatch } from '@/store/slices/tabs/moved-tab-selection'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
@@ -88,11 +88,7 @@ export function openWorkspaceLayoutFrameSync(store: FrameSyncStore): WorkspaceLa
    *  window's own command held skipped one. */
   let paneTreeKeys = new Set<string>()
 
-  const show = (patch: LayoutFrameBuildPatch): void => {
-    if (Object.keys(patch).length > 0) {
-      store.setState(withMovedTabSelections(store.getState(), patch))
-    }
-  }
+  const show = (patch: LayoutFrameBuildPatch): void => showFramePatch(store, patch)
 
   // Each change against the cache's copy it applies to, before the frame replaces it.
   const noteFrame = (before: WorkspaceLayoutCache, frame: WorkspaceLayoutChangeFrame): void => {

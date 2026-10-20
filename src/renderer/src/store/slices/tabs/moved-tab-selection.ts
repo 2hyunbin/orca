@@ -38,7 +38,10 @@ export function withTabActiveInGroup(groups: readonly TabGroup[], tab: Tab): Tab
 }
 
 /** `patch` plus the selection of each moved tab it shows out of its old group. */
-export function withMovedTabSelections(before: AppState, patch: Partial<AppState>): Partial<AppState> {
+export function withMovedTabSelections(
+  before: AppState,
+  patch: Partial<AppState>
+): Partial<AppState> {
   let next: Partial<AppState> = patch
   for (const intent of pendingMovedTabSelections()) {
     const { worktreeId } = intent
@@ -73,4 +76,14 @@ export function withMovedTabSelections(before: AppState, patch: Partial<AppState
     }
   }
   return next
+}
+
+/** Writes a frame's patch, with the selection of each moved tab it shows. */
+export function showFramePatch(
+  store: { getState: () => AppState; setState: (patch: Partial<AppState>) => void },
+  patch: Partial<AppState>
+): void {
+  if (Object.keys(patch).length > 0) {
+    store.setState(withMovedTabSelections(store.getState(), patch))
+  }
 }
