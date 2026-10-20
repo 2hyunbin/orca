@@ -3,6 +3,7 @@
 // which clears it, or a failure, which stays until main's next start into the pane. Shown only
 // while the pane has no terminal; keys are never reused, so a closed pane's entry is inert.
 
+import { NEWER_DAEMON_HOLD_ERROR } from '../../shared/newer-daemon-hold'
 import type {
   PaneStartStatus,
   PublishedWorkspaceLayout
@@ -81,4 +82,10 @@ export function withPaneStartFacts(
         : tab
     )
   }
+}
+
+/** A start that threw: held when a newer build's terminal service may still run it, else failed. */
+export function paneStartFailure(error: unknown): PaneStartFact {
+  const reason = error instanceof Error ? error.message : String(error)
+  return { status: reason === NEWER_DAEMON_HOLD_ERROR ? 'held' : 'failed', reason }
 }
