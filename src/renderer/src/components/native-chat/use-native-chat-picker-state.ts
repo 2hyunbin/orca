@@ -166,11 +166,12 @@ export function useNativeChatPickerState(args: {
   const commitCompletion = useCallback(
     (result: { draft: string; caret: number }) => {
       const textarea = textareaRef.current
+      // Mark the draft dirty before the suppressed transaction saves its chip document.
+      setDraft(result.draft)
       // An IME composition owns the field; the draft reaches it once the composition settles.
       if (textarea && !isComposing()) {
         writeNativeChatComposerText(textarea, result.draft, result.caret)
       }
-      setDraft(result.draft)
       setCaret(result.caret)
       setActiveSuggestion(0)
       setDismissed(null)

@@ -31,12 +31,12 @@ export function useNativeChatTypedInsertion(args: {
 
   const showDraft = useCallback(
     (textarea: NativeChatComposerInput, next: string, nextCaret: number): void => {
+      // Mark the draft dirty before the suppressed transaction saves its chip document.
+      setDraft(next)
       // An IME composition owns the field; the draft reaches it once the composition settles.
       if (!isComposing()) {
         writeNativeChatComposerText(textarea, next, nextCaret)
       }
-      // The editor write suppresses update events, so the draft is synced here.
-      setDraft(next)
       setCaret(nextCaret)
       setActiveSuggestion(0)
     },
