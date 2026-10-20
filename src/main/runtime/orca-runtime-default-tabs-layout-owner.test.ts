@@ -1,0 +1,99 @@
+import { describe, expect, it, vi } from 'vitest'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
+import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
+import { resolveHostId } from '../persistence/loading-store/session-host-partitions'
+import { withDurableRuntimeStore, withRuntimePaneAdmission } from './runtime-durable-store-fixture'
+import { OrcaRuntimeService } from './orca-runtime'
+import { createWorktreeDefaultTabTerminals } from './runtime-worktree-terminal-provisioning'
+
+vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+
+const REPO = {
+  id: 'repo-1',
+  path: '/workspace',
+  displayName: 'repo',
+  badgeColor: 'blue',
+  addedAt: 1
+}
+const WORKTREE_ID = 'repo-1::/workspace'
+
+class ProvisioningRuntime extends OrcaRuntimeService {
+  provisioningHost() {
+    return this.getWorktreeTerminalProvisioningHost()
+  }
+}
+
+function setup() {
+  let session: WorkspaceSessionState = getDefaultWorkspaceSession()
+  const store = withDurableRuntimeStore(
+    withRuntimePaneAdmission({
+      getRepos: () => [REPO],
+      getRepo: (id: string) => (id === REPO.id ? REPO : undefined),
+      getWorkspaceSession: () => session,
+      setWorkspaceSession: (next: WorkspaceSessionState) => {
+        session = next
+      },
+      applyLayoutCommand: async (command: LayoutCommand, hostIds: readonly string[] = []) => {
+        const change = applyCommandToSession(resolveHostId(hostIds[0]), session, command)
+        session = change.session ?? session
+        return change.value
+      },
+      getSettings: () => ({}),
+      persistPtyBinding: () => true,
+      flushOrThrow: () => undefined
+    })
+  )
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake carries every store method a default-tab create reaches.
+  const runtime = new ProvisioningRuntime(store as never)
+  Object.assign(runtime, {
+    resolveTerminalWorkspaceLaunchScope: vi.fn(async () => ({
+      id: WORKTREE_ID,
+      path: '/workspace',
+      connectionId: null,
+      repo: REPO,
+      folderWorkspace: null
+    }))
+  })
+  let spawned = 0
+  const spawn = vi.fn(async (_args: { tabId?: string; leafId?: string }) => ({
+    id: `pty-${++spawned}`
+  }))
+  runtime.setPtyController({
+    spawn,
+    write: () => true,
+    kill: () => true,
+    getForegroundProcess: async () => null
+  })
+  const renameTerminal = vi.fn()
+  runtime.setNotifier({ renameTerminal } as never)
+  return { runtime, spawn, renameTerminal, session: () => session }
+}
+
+describe('layout-owner build: a worktree’s default tabs start in main', () => {
+  it('writes the tabs with their titles and colours in main, then starts each in its pane', async () => {
+    const { runtime, spawn, renameTerminal, session } = setup()
+
+    const handles = await createWorktreeDefaultTabTerminals(
+      runtime.provisioningHost(),
+      `id:${WORKTREE_ID}`,
+      WORKTREE_ID,
+      {
+        runCommands: true,
+        tabs: [{ title: 'Dev', command: 'pnpm dev', color: '#ff0000' }, { title: 'Logs' }]
+      }
+    )
+
+    expect(handles).toHaveLength(2)
+    const rows = session().tabsByWorktree[WORKTREE_ID]!
+    expect(rows.map((row) => [row.customTitle, row.color])).toEqual([
+      ['Dev', '#ff0000'],
+      ['Logs', null]
+    ])
+    expect(spawn.mock.calls.map(([args]) => args.tabId)).toEqual(rows.map((row) => row.id))
+    expect(session().defaultTerminalTabsAppliedByWorktreeId?.[WORKTREE_ID]).toBe(true)
+    // No window round trip writes a default tab's look.
+    expect(renameTerminal).not.toHaveBeenCalled()
+  })
+})
