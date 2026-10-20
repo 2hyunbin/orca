@@ -30,6 +30,9 @@ import {
 } from '../../terminal/recovery/foreign-pane-bindings'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 
+/** The longest a workspace's first surface waits for main's placement pass. */
+export const FIRST_SURFACE_PLACEMENT_WAIT_MS = 500
+
 export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRuntimeWithAutomationOperations {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
   /** Shows a restored pane whose terminal is gone as sleeping, unless it already has a status. */
@@ -71,15 +74,22 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
   }
 
   /**
-   * A workspace's first surface waits out the placement pass running when it arrives (its census
-   * is time-bound), not the passes queued behind it: a live terminal that pass is placing is the
-   * workspace's tab, not room for a fresh shell. Null when there is nothing to wait for.
+   * A workspace's first surface waits out the placement pass running when it arrives, not the
+   * passes queued behind it: a live terminal that pass is placing is the workspace's tab, not room
+   * for a fresh shell. At most FIRST_SURFACE_PLACEMENT_WAIT_MS, so opening a workspace stays quick;
+   * a pass slower than that may leave an extra tab beside the restored terminal. Null when there
+   * is nothing to wait for.
    */
   protected livePlacementSettledFor(command: WindowLayoutCommand): Promise<unknown> | null {
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !('initial' in command) || !command.initial) {
+    const pass = this.placementPass
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !('initial' in command) || !command.initial || !pass) {
       return null
     }
-    return this.placementPass?.catch(() => {}) ?? null
+    let timer: NodeJS.Timeout | undefined
+    const cap = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, FIRST_SURFACE_PLACEMENT_WAIT_MS)
+    })
+    return Promise.race([pass.catch(() => {}), cap]).finally(() => clearTimeout(timer))
   }
 
   private async placeUnshownLiveTerminalsOnce(): Promise<LiveTerminalPlacement> {

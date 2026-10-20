@@ -6,6 +6,7 @@ const settled = () => vi.fn(async () => {})
 const idle = () => vi.fn()
 const stopAgentHookServer = idle()
 const stopStructuredAgentSessionRuntime = settled()
+const beginSshShutdown = settled()
 
 // Every teardown member settles except the profile store, so only the writer can hold quit.
 const dependencies: Record<string, Record<string, unknown>> = {
@@ -14,7 +15,7 @@ const dependencies: Record<string, Record<string, unknown>> = {
   '../ipc/folder-repo-git-upgrade': { stopFolderRepoGitUpgradeWatch: idle() },
   '../ipc/pty/kill-all': { killAllPty: idle() },
   '../daemon/daemon-provider-state': { disconnectDaemon: settled(), shutdownDaemon: settled() },
-  '../ipc/ssh-shutdown-drain': { beginSshShutdown: settled() },
+  '../ipc/ssh/ssh-shutdown-drain': { beginSshShutdown },
   '../agent-hooks/server': { agentHookServer: { stop: stopAgentHookServer } },
   '../agent-hooks/wsl-hook-relay-manager': { wslHookRelayManager: { disposeAll: idle() } },
   '../agent-hooks/managed-agent-hook-controls': {
@@ -63,6 +64,7 @@ async function startQuit(
   flushFinalOrThrowAsync: () => Promise<void>,
   services: Record<string, unknown> = {}
 ) {
+  beginSshShutdown.mockClear()
   vi.resetModules()
   vi.useFakeTimers()
   const app = Object.assign(new EventEmitter(), { quit: vi.fn() })
@@ -131,9 +133,21 @@ it('writes a pane grid still inside its write burst before the final flush', asy
     }
   })
   await vi.advanceTimersByTimeAsync(0)
+  // Before the SSH shutdown too: nothing is awaited between it and the final save.
+  expect(beginSshShutdown).not.toHaveBeenCalled()
   expect(store.flushFinalOrThrowAsync).not.toHaveBeenCalled()
   paneGrids.resolve()
   await vi.advanceTimersByTimeAsync(0)
+  expect(beginSshShutdown).toHaveBeenCalledOnce()
+  expect(store.flushFinalOrThrowAsync).toHaveBeenCalledOnce()
+  expect(beginSshShutdown.mock.invocationCallOrder[0]).toBeLessThan(
+    store.flushFinalOrThrowAsync.mock.invocationCallOrder[0]!
+  )
+})
+
+it('starts the SSH shutdown and the final save at once when no pane grid waits', async () => {
+  const { store } = await startQuit(async () => {})
+  expect(beginSshShutdown).toHaveBeenCalledOnce()
   expect(store.flushFinalOrThrowAsync).toHaveBeenCalledOnce()
 })
 

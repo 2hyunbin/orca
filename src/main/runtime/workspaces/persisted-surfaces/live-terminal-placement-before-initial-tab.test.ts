@@ -8,6 +8,7 @@ import {
   openTopologyStore
 } from '../../../persistence/terminal-topology/terminal-topology-profile-fixture'
 import { OrcaRuntimeService } from '../../orca-runtime'
+import { FIRST_SURFACE_PLACEMENT_WAIT_MS } from './restored-terminal-placement'
 import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -36,7 +37,7 @@ afterEach(() => {
   }
 })
 
-it("gives an activating workspace no fresh shell beside a live terminal main's placement is still placing", async () => {
+async function hostPlacingALiveTerminal() {
   const directory = mkdtempSync(join(tmpdir(), 'orca-placement-before-initial-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
@@ -55,26 +56,50 @@ it("gives an activating workspace no fresh shell beside a live terminal main's p
     getForegroundProcess: async () => null,
     listProcesses
   })
-
   const placing = runtime.placeUnshownLiveTerminals()
   await vi.waitFor(() => expect(listProcesses).toHaveBeenCalled())
-  const activation = runtime.applyLayoutCommand({
-    type: 'createTerminalTab',
-    workspace: WT,
-    tabId: WINDOW_TAB,
-    leafId: WINDOW_LEAF,
-    initial: 'activation'
-  })
+  const activate = () =>
+    runtime.applyLayoutCommand({
+      type: 'createTerminalTab',
+      workspace: WT,
+      tabId: WINDOW_TAB,
+      leafId: WINDOW_LEAF,
+      initial: 'activation'
+    })
+  const tabsOf = () => store.getWorkspaceSession().tabsByWorktree[WT] ?? []
+  return { store, spawn, placing, answerCensus, activate, tabsOf }
+}
+
+it("gives an activating workspace no fresh shell beside a live terminal main's placement is still placing", async () => {
+  const { store, spawn, placing, answerCensus, activate, tabsOf } = await hostPlacingALiveTerminal()
+
+  const activation = activate()
   answerCensus()
   await placing
   const reply = await activation
 
-  const session = store.getWorkspaceSession()
-  const tabs = session.tabsByWorktree[WT] ?? []
+  const tabs = tabsOf()
   expect(tabs).toHaveLength(1)
-  expect(Object.values(session.terminalLayoutsByTabId[tabs[0]!.id]?.ptyIdsByLeafId ?? {})).toEqual([
-    LIVE_PTY
-  ])
+  expect(
+    Object.values(
+      store.getWorkspaceSession().terminalLayoutsByTabId[tabs[0]!.id]?.ptyIdsByLeafId ?? {}
+    )
+  ).toEqual([LIVE_PTY])
   expect(reply.ok && reply.result.tabId).toBeFalsy()
   expect(spawn).not.toHaveBeenCalled()
+})
+
+it('admits the first tab once the cap passes while the placement pass is still reading the census', async () => {
+  const { placing, answerCensus, activate, tabsOf } = await hostPlacingALiveTerminal()
+
+  const startedAt = performance.now()
+  const reply = await activate()
+  const waitedMs = performance.now() - startedAt
+
+  expect(waitedMs).toBeGreaterThanOrEqual(FIRST_SURFACE_PLACEMENT_WAIT_MS - 20)
+  expect(waitedMs).toBeLessThan(FIRST_SURFACE_PLACEMENT_WAIT_MS + 1_000)
+  expect(reply.ok && reply.result.tabId).toBe(WINDOW_TAB)
+  expect(tabsOf().map((tab) => tab.id)).toEqual([WINDOW_TAB])
+  answerCensus()
+  await placing
 })
