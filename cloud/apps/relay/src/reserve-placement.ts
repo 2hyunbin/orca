@@ -106,6 +106,8 @@ export class ReservePlacer {
     // Above every epoch this director knows for the host.
     epoch: number
     reserve: (cellId: string, epoch: number) => Promise<ReserveAttempt>
+    // The database lane found the region full: a throttled reserve cell paces instead.
+    regionFull?: boolean
   }): Promise<PlacementResult> {
     const tried = new Set<string>()
     let epoch = input.epoch
@@ -124,16 +126,16 @@ export class ReservePlacer {
         epoch = Math.max(epoch, answer.epoch + 1)
       }
     }
-    return this.fallback(input.cells, input.region, calls)
+    return this.fallback(input.cells, input.region, calls, input.regionFull)
   }
 
   // Database cells in the region come first, then pacing; a region with neither falls to the
   // database path too, which spills to another region as today.
-  fallback(cells: readonly PlacementCell[], region: RelayRegion, calls: number): PlacementResult {
+  fallback(cells: readonly PlacementCell[], region: RelayRegion, calls: number, regionFull = false): PlacementResult {
     const now = this.now()
-    const databaseCells = cells.some(
-      (cell) => !cell.reserve && cell.region === region && cell.general && !cell.draining
-    )
+    const databaseCells =
+      !regionFull &&
+      cells.some((cell) => !cell.reserve && cell.region === region && cell.general && !cell.draining)
     if (databaseCells) return { kind: 'database', calls }
     let refillMs: number | null = null
     for (const cell of cells) {

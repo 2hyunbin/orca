@@ -323,31 +323,44 @@ describe('reserve assignment on a director', () => {
     }
   })
 
-  it('offers the reserve cell to a share-draw loser, in its region only, only while it has room', async () => {
+  describe('for a share-draw loser', () => {
     const ASIA = 'asia-east2' as const
-    const cells = [...cellList(['c1', 'c2'], ASIA), ...cellList(['c3'])]
-    const { assignment, reserved, directory, now } = setup({
-      cells,
-      feeds: [
-        feed('c1'),
-        // Database room far above the reserve cell's, so the 0.25 draw loses.
-        feed('c2', { admitMode: 'db', counts: { seats: 0, controls: 0, bookings: 0, units: 0, ceiling: 5_000 } }),
-        feed('c3')
-      ]
+    const OTHER = { ...HOST, relayHostId: 'qrstuvwxyzabcdef' }
+    const setupAsia = (reserveCell = feed('c1')) =>
+      setup({
+        cells: [...cellList(['c1', 'c2'], ASIA), ...cellList(['c3'])],
+        feeds: [
+          reserveCell,
+          // Database room far above the reserve cell's, so the 0.25 draw loses.
+          feed('c2', { admitMode: 'db', counts: { seats: 0, controls: 0, bookings: 0, units: 0, ceiling: 5_000 } }),
+          feed('c3')
+        ]
+      })
+    const regionReserveOf = async (assignment: ReserveAssignment, identity = HOST) => {
+      const plan = await assignment.plan(identity, { reconnect: false, region: ASIA })
+      expect(plan).toMatchObject({ kind: 'database', epochFloor: 0 })
+      return plan.kind === 'database' ? plan.regionReserve : undefined
+    }
+
+    it('offers the reserve cell in its region only, only while it has a seat', async () => {
+      const { assignment, reserved, directory, now } = setupAsia()
+      const regionReserve = await regionReserveOf(assignment)
+      expect(reserved).toEqual([])
+      await expect(regionReserve?.()).resolves.toMatchObject({ cellId: 'c1', region: ASIA })
+      expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
+      // A full reserve cell is not offered, and the US reserve cell never is.
+      const full = feed('c1', { counts: { seats: 500, controls: 500, bookings: 0, units: 500, ceiling: 500 } })
+      directory.apply('c1', full, now.value, now.value)
+      expect(await regionReserveOf(assignment, OTHER)).toBeUndefined()
+      expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
     })
-    const plan = await assignment.plan(HOST, { reconnect: false, region: ASIA })
-    expect(plan).toMatchObject({ kind: 'database', epochFloor: 0 })
-    expect(reserved).toEqual([])
-    const regionReserve = plan.kind === 'database' ? plan.regionReserve : undefined
-    expect(regionReserve?.hasRoom()).toBe(true)
-    await expect(regionReserve?.place()).resolves.toMatchObject({ cellId: 'c1', region: ASIA })
-    expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
-    // A full reserve cell has no room, and the US reserve cell is never offered.
-    const full = feed('c1', { counts: { seats: 500, controls: 500, bookings: 0, units: 500, ceiling: 500 } })
-    directory.apply('c1', full, now.value, now.value)
-    expect(regionReserve?.hasRoom()).toBe(false)
-    await expect(regionReserve?.place()).resolves.toBeNull()
-    expect(reserved.map((call) => call.cellId)).toEqual(['c1'])
+
+    it('paces when the reserve cell has seats but no intake budget, rather than give up the region', async () => {
+      const { assignment, reserved } = setupAsia(feed('c1', { intake: { perSec: 1, burst: 20, tokens: 0 } }))
+      const regionReserve = await regionReserveOf(assignment)
+      await expect(regionReserve?.()).rejects.toBeInstanceOf(ReservePaceError)
+      expect(reserved).toEqual([])
+    })
   })
 
   it('paces with Retry-After when every reserve cell is out of budget and no database cell exists', async () => {

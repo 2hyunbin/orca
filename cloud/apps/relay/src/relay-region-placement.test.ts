@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RelayAssignmentStore, type RelayAssignment } from './assignment-store.js'
 import type { RelayCellConfig } from './config.js'
 import { openInMemoryRelayDatabase, type RelayDatabase } from './database.js'
+import { ReservePaceError } from './reserve-assignment.js'
 
 const CELLS: RelayCellConfig[] = [
   {
@@ -189,10 +190,7 @@ describe('Relay regional placement', () => {
       leaseExpiresAt: 1_000_000,
       region: 'asia-east2'
     }
-    const assignAsia = async (regionReserve: {
-      hasRoom: () => boolean
-      place: () => Promise<RelayAssignment | null>
-    }) =>
+    const assignAsia = async (regionReserve?: () => Promise<RelayAssignment | null>) =>
       await store.assign(identity, 'asia-east2', 'asia-east2', undefined, {
         placeFresh: async () => null,
         regionReserve
@@ -204,32 +202,39 @@ describe('Relay regional placement', () => {
     it('books the reserve cell rather than spill out of a full region', async () => {
       await fillAsia()
       const place = vi.fn(async () => onReserve)
-      await expect(assignAsia({ hasRoom: () => true, place })).resolves.toEqual(onReserve)
+      await expect(assignAsia(place)).resolves.toEqual(onReserve)
       expect(place).toHaveBeenCalledOnce()
       // The refused in-region attempt wrote nothing.
+      expect(await database.query(`SELECT cell_id FROM relay_assignments`)).toEqual([])
+    })
+
+    it('answers a throttled reserve cell with its pace, not a cell abroad', async () => {
+      await fillAsia()
+      await expect(
+        assignAsia(async () => {
+          throw new ReservePaceError(4)
+        })
+      ).rejects.toBeInstanceOf(ReservePaceError)
       expect(await database.query(`SELECT cell_id FROM relay_assignments`)).toEqual([])
     })
 
     it('spills as before when the reserve cell has no room either', async () => {
       await fillAsia()
       const place = vi.fn(async () => null)
-      await expect(assignAsia({ hasRoom: () => true, place })).resolves.toMatchObject({
+      await expect(assignAsia(place)).resolves.toMatchObject({
         cellId: 'us-c1',
         region: 'us-central1'
       })
       expect(place).toHaveBeenCalledOnce()
-      const skipped = vi.fn(async () => onReserve)
+      // No in-region reserve room at plan time: today's single spill.
       await expect(
-        store.assign({ ...identity, relayHostId: 'spillhost0000002' }, 'asia-east2', 'asia-east2', undefined, {
-          regionReserve: { hasRoom: () => false, place: skipped }
-        })
+        store.assign({ ...identity, relayHostId: 'spillhost0000002' }, 'asia-east2', 'asia-east2')
       ).resolves.toMatchObject({ cellId: 'us-c1' })
-      expect(skipped).not.toHaveBeenCalled()
     })
 
     it('leaves a region with database room to the database lane', async () => {
       const place = vi.fn(async () => onReserve)
-      await expect(assignAsia({ hasRoom: () => true, place })).resolves.toMatchObject({
+      await expect(assignAsia(place)).resolves.toMatchObject({
         cellId: 'asia-c1',
         region: 'asia-east2'
       })

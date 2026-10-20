@@ -205,7 +205,7 @@ export class ReserveAssignment {
     }
     const placeFresh = async (): Promise<RelayAssignment | null> =>
       await this.placeFresh(identity, request.region, epochFloor, seats)
-    const regionReserve = this.regionReserve(identity, request.region, epochFloor, seats)
+    const regionReserve = this.regionReserve(identity, request.region, epochFloor, seats, now)
     // Where the host was last seen decides who owns it: a database-mode cell keeps today's
     // path, sticky included; only a fresh placement may be booked on a reserve-mode cell.
     const lastOnReserve = lastCellId !== undefined && directory.placementModeOf(lastCellId) === 'reserve'
@@ -218,24 +218,22 @@ export class ReserveAssignment {
   }
 
   // For the share draw's losers: the database lane tries the region first, then this, then spills.
+  // Undefined while no in-region reserve cell has a seat, so the database lane runs as today.
   private regionReserve(
     identity: Identity,
     region: RelayRegion,
     epochFloor: number,
-    seats: readonly ShadowSeat[]
-  ): NonNullable<AssignOptions['regionReserve']> {
-    return {
-      hasRoom: () => {
-        const now = this.now()
-        return this.placementCells().some(
-          (cell) => this.input.placer.isCandidate(cell, region, now) && this.input.placer.hasSeat(cell)
-        )
-      },
-      place: async () => {
-        const placed = await this.placeFresh(identity, region, epochFloor, seats, true)
-        if (placed) this.summary.regionKept += 1
-        return placed
-      }
+    seats: readonly ShadowSeat[],
+    now: number
+  ): AssignOptions['regionReserve'] {
+    const hasRoom = this.placementCells().some(
+      (cell) => this.input.placer.isCandidate(cell, region, now) && this.input.placer.hasSeat(cell)
+    )
+    if (!hasRoom) return undefined
+    return async () => {
+      const placed = await this.placeFresh(identity, region, epochFloor, seats, true)
+      if (placed) this.summary.regionKept += 1
+      return placed
     }
   }
 
@@ -319,6 +317,7 @@ export class ReserveAssignment {
         cells: placements,
         region: target,
         epoch: mintEpoch([epochFloor]),
+        regionFull,
         reserve: async (cellId, epoch) => {
           const cell = this.input.cells().find((entry) => entry.cellId === cellId)
           if (!cell) return { outcome: 'unreachable' }

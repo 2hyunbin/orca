@@ -146,7 +146,7 @@ export type AssignOptions = {
   epochFloor?: number
   placeFresh?: () => Promise<RelayAssignment | null>
   // A reserve cell in the placement region with room: the database lane leaves the region only after it.
-  regionReserve?: { hasRoom: () => boolean; place: () => Promise<RelayAssignment | null> }
+  regionReserve?: () => Promise<RelayAssignment | null>
   hostRequested?: boolean
 }
 
@@ -1032,13 +1032,13 @@ export class RelayAssignmentStore {
           )
       )
     const regionReserve = step5.regionReserve
-    if (!regionReserve?.hasRoom()) return await placeOnDatabase(false)
+    if (!regionReserve) return await placeOnDatabase(false)
     try {
       return await placeOnDatabase(true)
     } catch (error) {
       if (!(error instanceof AssignmentRegionFull)) throw error
     }
-    return (await regionReserve.place()) ?? (await placeOnDatabase(false))
+    return (await regionReserve()) ?? (await placeOnDatabase(false))
   }
 
   private async assignStickyWithLockRetry(
