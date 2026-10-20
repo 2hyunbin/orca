@@ -3,48 +3,87 @@ import type { WorktreeOperationRouteState } from '@/lib/worktree-operation-route
 import { resolveEditorModelOwner } from '@/components/editor/editor-model-owner'
 import { isLocalWindowsDesktopClient } from '@/lib/desktop-window-chrome'
 import { resolveContinuedRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
+import { parseExecutionHostId } from '../../../../../../shared/execution-host'
 import { parseWslUncPath } from '../../../../../../shared/wsl-paths'
-import {
-  isWindowsAbsolutePathLike,
-  normalizeRuntimePathSeparators
-} from '../../../../../../shared/cross-platform-path'
+import { normalizeRuntimePathSeparators } from '../../../../../../shared/cross-platform-path'
 
 /** The physical file an edit tab shows. Renderer-local; the workspace is never part of it. */
 export type EditorBufferIdentity = {
-  /** Environment, host, pairing root and path key: equal keys are one file. */
+  /** Environment, host, pairing root, SSH endpoint and path key: equal keys are one file. */
   key: string
   environmentId: string | null
 }
 
 /**
- * Separators and the drive letter are normalized; case is kept, because case sensitivity can
- * differ per directory and a folded key would merge distinct files. Why not
- * `normalizeRuntimePathForComparison`: it lowercases whole Windows paths.
+ * The endpoint an SSH target id currently names. Target ids survive an in-place edit to another
+ * machine, while the connection generation also moves on a plain reconnect, so neither alone can
+ * key a file. Undefined when not known: that tab never shares.
  */
-export function editorBufferPathKey(filePath: string, foldWslAliases: boolean): string {
+export type SshEndpointIncarnationOf = (
+  environmentId: string | null,
+  targetId: string
+) => string | undefined
+
+/** `win32` only when the host is known to be Windows; `unknown` never folds an ambiguous path. */
+export type EditorBufferHostPathFlavor = 'win32' | 'unknown'
+
+/** A WSL key is a tuple, so no real path string can ever equal it. */
+export type EditorBufferPathKey = string | readonly ['wsl', string, string]
+
+/**
+ * Case is kept, because case sensitivity can differ per directory and a folded key would merge
+ * distinct files. Why not `normalizeRuntimePathForComparison`: it lowercases whole Windows paths.
+ */
+export function editorBufferPathKey(
+  filePath: string,
+  flavor: EditorBufferHostPathFlavor,
+  foldWslAliases = false
+): EditorBufferPathKey {
   const wsl = foldWslAliases ? parseWslUncPath(filePath) : null
   if (wsl) {
-    // WSL distro names are case-insensitive; the Linux path under them is not.
-    return `//wsl/${wsl.distro.toLowerCase()}${wsl.linuxPath}`
+    // Distro names are case-insensitive; the Linux path under them is not.
+    return ['wsl', wsl.distro.toLowerCase(), wsl.linuxPath]
   }
-  if (!isWindowsAbsolutePathLike(filePath)) {
-    // A POSIX backslash is part of the file name.
+  // Absolute POSIX paths start with `/`, so a drive or `\\` prefix proves Windows. `//` does not.
+  const drive = /^[A-Za-z]:[\\/]/.test(filePath)
+  const unc = filePath.startsWith('\\\\') || (flavor === 'win32' && filePath.startsWith('//'))
+  if (!drive && !unc) {
     return filePath
   }
   const slashed = normalizeRuntimePathSeparators(filePath)
-  return /^[A-Za-z]:/.test(slashed) ? `${slashed[0].toLowerCase()}${slashed.slice(1)}` : slashed
+  if (drive) {
+    return `${slashed[0].toLowerCase()}${slashed.slice(1)}`
+  }
+  // The UNC server is a case-insensitive host name, as in the Monaco model URI's authority.
+  const serverEnd = slashed.indexOf('/', 2)
+  return serverEnd === -1
+    ? slashed.toLowerCase()
+    : `${slashed.slice(0, serverEnd).toLowerCase()}${slashed.slice(serverEnd)}`
 }
 
-/** Null for tabs that never share: non-edit views and owners not resolved yet. */
+/**
+ * Null for tabs that never share: non-edit views, unresolved owners, and SSH targets whose endpoint
+ * is unknown.
+ *
+ * The key is not fixed for a live tab: an unpinned runtime tab resolves its pairing live (null
+ * before the revision registry loads, the newest proven revision after). A caller must treat a key
+ * change as a re-key or join of the existing record, never as a fresh record.
+ */
 export function editorBufferIdentityOf(
   file: OpenFile,
-  state: WorktreeOperationRouteState
+  state: WorktreeOperationRouteState,
+  sshEndpointOf: SshEndpointIncarnationOf
 ): EditorBufferIdentity | null {
   if (file.mode !== 'edit') {
     return null
   }
   const { environmentId, hostId } = resolveEditorModelOwner(file, state)
-  if (!hostId) {
+  const host = parseExecutionHostId(hostId)
+  if (!host) {
+    return null
+  }
+  const sshEndpoint = host.kind === 'ssh' ? sshEndpointOf(environmentId, host.targetId) : null
+  if (sshEndpoint === undefined) {
     return null
   }
   // A same-host re-pair resolves to the revision it continues; an unproven one stays apart.
@@ -54,20 +93,25 @@ export function editorBufferIdentityOf(
         file.operationProvenance?.generation.runtimePairingRevision
       ) ?? null)
     : null
-  // `wsl$` and `wsl.localhost` name one distro only on Windows; elsewhere they are plain folders.
-  const foldWslAliases = hostId === 'local' && !environmentId && isLocalWindowsDesktopClient()
+  // Only the local machine's OS is known here. `wsl$` and `wsl.localhost` name one distro only on
+  // Windows; a paired web client (including `orca serve` on Windows) keeps them apart, as today.
+  const localWindows = host.kind === 'local' && !environmentId && isLocalWindowsDesktopClient()
   return {
     key: JSON.stringify([
       environmentId,
-      hostId,
+      host.id,
       revisionRoot,
-      editorBufferPathKey(file.filePath, foldWslAliases)
+      sshEndpoint,
+      editorBufferPathKey(file.filePath, localWindows ? 'win32' : 'unknown', localWindows)
     ]),
     environmentId
   }
 }
 
-/** True when the identity's environment now names another machine. */
+/**
+ * True when the identity's environment now names another machine. Pass the ids from one
+ * `onRuntimeEnvironmentsRetired` event, not a long-lived list: a retired id can be re-paired.
+ */
 export function isEditorBufferIdentityRetired(
   identity: EditorBufferIdentity,
   retiredEnvironmentIds: readonly string[]
