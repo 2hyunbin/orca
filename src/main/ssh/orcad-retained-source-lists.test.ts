@@ -153,15 +153,15 @@ describe('project host setups of a converted host', () => {
     setup('placeholder', 'ssh:ssh-box', ''),
     setup('repo-local', 'local', 'repo-local')
   ]
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the list reads only these getters.
-  const store = (targets: SshTarget[]): Store =>
-    ({
-      getSshTargets: () => targets,
-      getRepos: () => [sourceRepo, localRepo],
-      getProjectGroups: () => [],
-      getFolderWorkspaces: () => [],
-      getProjectHostSetups: () => setups
-    }) as unknown as Store
+  type SetupCatalog = Parameters<typeof visibleProjectHostSetups>[0]
+  const catalogOf = (targets: SshTarget[], repos: Repo[], rows = setups): SetupCatalog => ({
+    getSshTargets: () => targets,
+    getRepos: () => repos,
+    getProjectGroups: () => [],
+    getFolderWorkspaces: () => [],
+    getProjectHostSetups: () => rows
+  })
+  const store = (targets: SshTarget[]): SetupCatalog => catalogOf(targets, [sourceRepo, localRepo])
   let dir = ''
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'orcad-retained-setups-'))
@@ -181,14 +181,7 @@ describe('project host setups of a converted host', () => {
   })
 
   it('hides a folder-only host placeholder even when no repo row is hidden', () => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the list reads only these getters.
-    const folderOnly = {
-      getSshTargets: () => [FENCED],
-      getRepos: () => [localRepo],
-      getProjectGroups: () => [],
-      getFolderWorkspaces: () => [],
-      getProjectHostSetups: () => setups.slice(1)
-    } as unknown as Store
+    const folderOnly = catalogOf([FENCED], [localRepo], setups.slice(1))
     expect(visibleProjectHostSetups(folderOnly).map((entry) => entry.id)).toEqual(['repo-local'])
   })
 
