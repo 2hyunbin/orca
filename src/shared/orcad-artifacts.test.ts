@@ -95,7 +95,7 @@ describe('standalone runtime artifacts', () => {
 
   // #30906: node-pty picks winpty below build 18309, so a ConPTY-only slot left 1809 with no PTY.
   it.each(['win32-x64', 'win32-arm64'])(
-    'ships every native module the %s slot’s node-pty JS can load',
+    'ships every native module the %s slot node-pty JS can load',
     (target) => {
       const nodePtyDir = dirname(createRequire(import.meta.url).resolve('node-pty/package.json'))
       const windowsJs = ORCAD_NODE_PTY_JS_ARTIFACTS.filter((file) =>
