@@ -30,6 +30,12 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
 
   private restoredPanes: RestoredPaneStarter | null = null
 
+  /** Publishes the pane's start status (layout-owner build): starting, or failed with its reason. */
+  protected abstract showRestoredPaneStart(
+    paneKey: string,
+    start: 'starting' | { failed: unknown }
+  ): void
+
   /**
    * Layout-owner build: the pane's live terminal, started once if it has none, for any trigger
    * but a desktop window's own restore. Null when main no longer holds the pane.
@@ -41,6 +47,10 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     this.restoredPanes ??= new RestoredPaneStarter({
       boundPtyId: (target) => this.storedPaneBinding(target),
       isLive: (ptyId) => this.ptysById.get(ptyId)?.connected === true,
+      starting: (target) =>
+        this.showRestoredPaneStart(`${target.tabId}:${target.leafId}`, 'starting'),
+      failed: (target, error) =>
+        this.showRestoredPaneStart(`${target.tabId}:${target.leafId}`, { failed: error }),
       start: async (target, plan, startTrigger) => {
         this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(target.worktreeId)
         const tab = this.mobileSessionTabsByWorktree

@@ -46,7 +46,8 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       return undefined
     }
     const live = {
-      hasStartStatus: (paneKey: string) => Boolean(this.paneStartStatuses?.peek(paneKey))
+      isBindingLive: (paneKey: string, ptyId: string) =>
+        this.ptysById.get(ptyId)?.connected === true && !this.paneStartStatuses?.peek(paneKey)
     }
     if (command.type === 'renameTabs' || !startsPanes(command)) {
       return { live }
@@ -57,10 +58,16 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       onEffects: (effects) =>
         runLayoutPaneStarts({ type: command.type, workspace }, effects, {
           start: (pane) => this.ensureRestoredPaneStarted(pane),
-          stop: (ptyId) => this.ptyController?.kill(ptyId) ?? false,
-          failed: (paneKey, error) => this.paneStartStatuses?.set(paneKey, paneStartFailure(error))
+          stop: (ptyId) => this.ptyController?.kill(ptyId) ?? false
         })
     }
+  }
+
+  protected showRestoredPaneStart(paneKey: string, start: 'starting' | { failed: unknown }): void {
+    this.paneStartStatuses?.set(
+      paneKey,
+      start === 'starting' ? { status: 'starting' } : paneStartFailure(start.failed)
+    )
   }
 
   protected paneStartStatusArgs: dependencies.PaneStartArgsOf = (opts) => {

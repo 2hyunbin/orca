@@ -345,7 +345,7 @@ describe('layout command refusals', () => {
     expect(
       applyLayoutCommand(withLeaf({ ptyId: 'pty-b' }), start, {
         ...context,
-        hasStartStatus: (key) => key === paneKey
+        isBindingLive: (key) => key !== paneKey
       })
     ).toMatchObject({ ok: true, effects: { startPaneKeys: [paneKey] } })
   })

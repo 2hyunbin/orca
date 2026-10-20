@@ -8,7 +8,6 @@ function ports(overrides: Partial<LayoutPaneStartPorts> = {}): LayoutPaneStartPo
   return {
     start: vi.fn(async () => 'pty-1'),
     stop: vi.fn(() => true),
-    failed: vi.fn(),
     ...overrides
   }
 }
@@ -47,19 +46,5 @@ describe('runLayoutPaneStarts', () => {
       run
     )
     expect(run.start).not.toHaveBeenCalled()
-  })
-
-  it('shows a failed start on its pane', async () => {
-    const run = ports({
-      start: vi.fn(async (): Promise<string | null> => {
-        throw new Error('boom')
-      })
-    })
-    runLayoutPaneStarts(
-      { type: 'wake', workspace: 'wt' },
-      { stopPtyIds: [], startPaneKeys: [PANE_KEY] },
-      run
-    )
-    await vi.waitFor(() => expect(run.failed).toHaveBeenCalledWith(PANE_KEY, expect.any(Error)))
   })
 })

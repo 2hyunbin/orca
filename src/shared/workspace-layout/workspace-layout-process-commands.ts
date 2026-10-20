@@ -28,9 +28,10 @@ function workspacePanes(workspace: WorkspaceLayout): { paneKey: string; leafId: 
 }
 
 /**
- * Idempotent: starts or restores a pane that has no live terminal. A bound pane is live unless it
- * has a start status, which names the terminal it restores from; a live pane, or one whose start
- * is in flight, is left alone, and only restartPane replaces a terminal. The runtime's start
+ * Idempotent: starts or restores a pane that has no live terminal. A bound pane is live unless the
+ * runtime knows otherwise (a start status, or an ended terminal), so its binding names what it
+ * restores from; a live pane, or one whose start is in flight, is left alone, and only
+ * restartPane replaces a terminal. The runtime's start
  * resumes the agent a pane's sleeping record names, so a slept pane starts from its record.
  */
 export function startPane(
@@ -45,7 +46,7 @@ export function startPane(
   }
   const leaf = workspace.leaves?.[pane.leafId]
   // A live terminal comes first: a running agent's resume record does not make its pane asleep.
-  const live = leaf?.ptyId && !context.hasStartStatus?.(command.paneKey)
+  const live = leaf?.ptyId && (context.isBindingLive?.(command.paneKey, leaf.ptyId) ?? true)
   if (live || context.isStarting?.(pane.leafId)) {
     return applied(model)
   }

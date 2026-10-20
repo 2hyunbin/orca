@@ -49,6 +49,26 @@ describe('restoredPaneStartPlan', () => {
 })
 
 describe('RestoredPaneStarter', () => {
+  it('shows the start before any await, and a failure with no winner', async () => {
+    const starting = vi.fn()
+    const failed = vi.fn()
+    const error = new Error('boom')
+    const starter = new RestoredPaneStarter({
+      boundPtyId: () => OWN,
+      isLive: () => false,
+      starting,
+      failed,
+      start: vi.fn(async (): Promise<string> => {
+        throw error
+      })
+    })
+
+    const started = starter.ensureStarted(PANE)
+    expect(starting).toHaveBeenCalledWith(PANE)
+    await expect(started).rejects.toBe(error)
+    expect(failed).toHaveBeenCalledWith(PANE, error)
+  })
+
   it('starts once for a trigger that arrives after the start but before its binding is written', async () => {
     const live = new Set<string>()
     const start = vi.fn(async () => {

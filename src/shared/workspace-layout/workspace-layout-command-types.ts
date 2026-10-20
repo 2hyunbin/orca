@@ -358,8 +358,11 @@ export type LayoutContext = {
   now: () => number
   /** True while a start of this pane is in flight; such a pane is not started again. */
   isStarting?: (leafId: string) => boolean
-  /** True while the pane has a start status: its binding names the terminal it restores from. */
-  hasStartStatus?: (paneKey: string) => boolean
+  /**
+   * Whether the pane's bound terminal is live, as the runtime knows it; a binding with a start
+   * status, or to a terminal that ended, names what the pane restores from. Absent: live.
+   */
+  isBindingLive?: (paneKey: string, ptyId: string) => boolean
 }
 
 export type LayoutApplyResult<Model> =

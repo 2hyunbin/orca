@@ -13,8 +13,6 @@ export type LayoutPaneStartPorts = {
   start: (pane: RestoredPane) => Promise<string | null>
   /** Stops a terminal through the existing stop path; false when it could not. */
   stop: (ptyId: string) => boolean
-  /** Publishes a start that failed, with its reason, on the pane. */
-  failed: (paneKey: string, error: unknown) => void
 }
 
 const STARTING_COMMANDS: ReadonlySet<LayoutCommand['type']> = new Set([
@@ -29,8 +27,8 @@ export function startsPanes(command: Pick<LayoutCommand, 'type'>): boolean {
 }
 
 /**
- * Stops, then starts, each pane the command names. Never silent: a failed start shows on the
- * pane, a failed stop is logged and starts nothing. A wake keeps its records: the start resumes
+ * Stops, then starts, each pane the command names. Never silent: the starter shows a failed start
+ * on the pane, and a failed stop is logged and starts nothing. A wake keeps its records: the start resumes
  * from them and keeps them in the pane-owned form, so a host crash resumes the agent again.
  */
 export function runLayoutPaneStarts(
@@ -52,6 +50,7 @@ export function runLayoutPaneStarts(
       continue
     }
     const pane = { worktreeId: command.workspace, tabId: parsed.tabId, leafId: parsed.leafId }
-    void ports.start(pane).catch((error: unknown) => ports.failed(paneKey, error))
+    // The starter shows a failed start on the pane.
+    void ports.start(pane).catch(() => {})
   }
 }

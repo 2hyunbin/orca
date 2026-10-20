@@ -45,7 +45,10 @@ const RECORD: SleepingRecord = {
 }
 
 async function desktopRuntime(
-  opts: { slept?: boolean; session?: ReturnType<typeof makeWorkspaceSessionWithHeadlessTerminal> } = {}
+  opts: {
+    slept?: boolean
+    session?: ReturnType<typeof makeWorkspaceSessionWithHeadlessTerminal>
+  } = {}
 ) {
   const session =
     opts.session ??
@@ -104,14 +107,23 @@ describe('a client’s startPane in the layout-owner build', () => {
     )
   })
 
-  it('leaves a live pane with no start status alone', async () => {
-    const { runtime, spawn } = await desktopRuntime()
+  it('leaves a pane whose terminal is live alone', async () => {
+    const { runtime, spawn, started } = await desktopRuntime()
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    started.resolve({ id: 'persisted-pty' })
+    await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
+    await vi.waitFor(() => expect(runtime.startStatusOf(PANE_KEY)).toBeNull())
 
-    await expect(
-      runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
-    ).resolves.toMatchObject({ ok: true })
-    await Promise.resolve()
-    expect(spawn).not.toHaveBeenCalled()
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('shows the pane starting in the frame its reply names', async () => {
+    const { runtime } = await desktopRuntime()
+
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    expect(runtime.startStatusOf(PANE_KEY)).toEqual({ status: 'starting' })
   })
 
   it('shows a failed start on the pane', async () => {

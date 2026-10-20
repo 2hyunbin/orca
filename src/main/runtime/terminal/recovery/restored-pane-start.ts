@@ -24,6 +24,10 @@ export type RestoredPaneStartPorts = {
   /** The pane's stored terminal, or null for a pane main no longer holds. */
   boundPtyId: (pane: RestoredPane) => string | null | undefined
   isLive: (ptyId: string) => boolean
+  /** Shows the pane starting, before any await, so no view starts it too. */
+  starting?: (pane: RestoredPane) => void
+  /** Shows a start that failed, with its reason; the pane keeps what it restores from. */
+  failed?: (pane: RestoredPane, error: unknown) => void
   /** Starts the pane in place, resuming its recorded agent; resolves to the terminal bound to it. */
   start: (
     pane: RestoredPane,
@@ -75,6 +79,7 @@ export class RestoredPaneStarter {
       return Promise.resolve(started)
     }
     this.started.delete(key)
+    this.ports.starting?.(pane)
     const start = this.ports
       .start(pane, restoredPaneStartPlan(pane, bound), trigger)
       .then((ptyId) => {
@@ -86,6 +91,7 @@ export class RestoredPaneStarter {
         if (this.isOwnLive(pane, winner)) {
           return winner
         }
+        this.ports.failed?.(pane, error)
         throw error
       })
       .finally(() => {
