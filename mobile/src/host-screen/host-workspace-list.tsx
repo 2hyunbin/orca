@@ -28,15 +28,8 @@ import { getWorktreeCardDetails } from '../../../src/shared/worktree/card-proper
 import { hostScreenStyles as styles } from './host-screen-styles'
 import { buildRepoLookById } from './host-repo-looks'
 import { HostPendingCreationRow } from './host-pending-creation-row'
+import { projectGroupHeaderIndent } from '../worktree/project-group-indent'
 import type { HostScreenController } from './use-host-screen-controller'
-
-// The desktop's project-group tree steps (indentation.ts): 10 px a level, at most six levels.
-const PROJECT_GROUP_HEADER_INDENT = 10
-const MAX_PROJECT_GROUP_HEADER_DEPTH = 6
-
-function projectGroupHeaderPaddingLeft(depth: number): number {
-  return spacing.lg + Math.min(depth, MAX_PROJECT_GROUP_HEADER_DEPTH) * PROJECT_GROUP_HEADER_INDENT
-}
 
 export function HostWorkspaceList({ controller }: { controller: HostScreenController }) {
   const {
@@ -199,7 +192,10 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                   style={[
                     styles.sectionHeader,
                     section.projectGroupDepth
-                      ? { paddingLeft: projectGroupHeaderPaddingLeft(section.projectGroupDepth) }
+                      ? {
+                          paddingLeft:
+                            spacing.lg + projectGroupHeaderIndent(section.projectGroupDepth)
+                        }
                       : null
                   ]}
                   onPress={() => settings.toggleCollapsed(section.key)}
@@ -213,7 +209,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
                     <Pin size={12} color={colors.textMuted} style={styles.sectionIcon} />
                   )}
                   {state.view.groupBy === 'repo' && section.isProjectGroup ? (
-                    <FolderTree size={12} color={colors.textSecondary} style={styles.sectionIcon} />
+                    <FolderTree size={12} color={colors.textPrimary} style={styles.sectionIcon} />
                   ) : state.view.groupBy === 'repo' ? (
                     <View style={styles.sectionRepoIcon}>
                       <MobileRepoIcon
