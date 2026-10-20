@@ -21,9 +21,11 @@ import {
 } from './editor-buffer-record'
 import { attachEditorAutosaveController } from '@/components/editor/editor-autosave-controller'
 import {
+  notifyEditorExternalFileChange,
   ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
   requestEditorSaveQuiesce
 } from '@/components/editor/editor-autosave'
+import { beginEditorBufferFileRead } from './editor-buffer-read-freshness'
 import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
 import { editorModelOwnerKeyOf } from './editor-buffer-identity'
 import { hasOtherSavingEditorView, needsSavePromptOnClose } from './editor-buffer-close-rule'
@@ -398,8 +400,9 @@ describe('one editor buffer record per physical file', () => {
     const finishWrite = holdNextWrite()
     const detach = attachEditorAutosaveController(store)
 
+    const onSettled = vi.fn()
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: a } })
+      new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: a, onSettled } })
     )
     await vi.waitFor(() => expect(disk.fs.writeFile).toHaveBeenCalled())
     type(store, b, 'newer from B')
@@ -410,6 +413,8 @@ describe('one editor buffer record per physical file', () => {
 
     expect(tab(store, a)?.isDirty).toBe(true)
     expect(store.getState().editorDrafts[a]).toBe('newer from B')
+    // The dialog closes at once without reporting a failure.
+    expect(onSettled).toHaveBeenCalledWith('kept-open')
   })
 
   it("clearing a tab's owner-migration pause clears it for every tab of the file", () => {
@@ -424,6 +429,63 @@ describe('one editor buffer record per physical file', () => {
 
     expect(tab(store, a)?.pendingOwnerMigration).toBeUndefined()
     expect(tab(store, b)?.pendingOwnerMigration).toBeUndefined()
+  })
+
+  it('three differing drafts: the newest workspace wins and each other draft keeps its own owner', () => {
+    for (const wt of ['wt-1', 'wt-2', 'wt-3']) {
+      openTab(store, wt)
+    }
+    const ids = store.getState().openFiles.map((file) => file.id)
+    store.setState((state) => ({
+      activeWorktreeId: 'wt-1',
+      activeFileId: null,
+      activeFileIdByWorktree: Object.fromEntries(ids.map((id, i) => [`wt-${i + 1}`, `${id}-r`])),
+      lastVisitedAtByWorktreeId: { 'wt-1': 100, 'wt-2': 200, 'wt-3': 300 },
+      editorDrafts: Object.fromEntries(ids.map((id, i) => [`${id}-r`, `d${i + 1}`])),
+      openFiles: state.openFiles.map((file) => ({ ...file, id: `${file.id}-r`, isDirty: true }))
+    }))
+
+    const state = store.getState()
+    expect(new Set(Object.values(state.editorDrafts))).toEqual(new Set(['d3']))
+    expect(
+      state.recoveredEditorDrafts.map((entry) => [entry.worktreeId, entry.draft]).sort()
+    ).toEqual([
+      ['wt-1', 'd1'],
+      ['wt-2', 'd2']
+    ])
+    expect(new Set(state.recoveredEditorDrafts.map((entry) => entry.id)).size).toBe(2)
+  })
+
+  it('dismissing a recovered draft lets one held for this launch be kept across restarts', () => {
+    const entries = Array.from({ length: 21 }, (_, i) => ({
+      id: `r${i}`,
+      filePath: `/repo/${i}.ts`,
+      worktreeId: 'wt-1',
+      draft: 'x',
+      recoveredAt: i,
+      ...(i === 0 ? { keptForThisLaunchOnly: true as const } : {})
+    }))
+    store.setState({ recoveredEditorDrafts: entries })
+
+    store.getState().dismissRecoveredEditorDraft(entries[20])
+
+    expect(
+      store.getState().recoveredEditorDrafts.find((entry) => entry.id === 'r0')
+        ?.keptForThisLaunchOnly
+    ).toBeUndefined()
+  })
+
+  it('a read started before an external change can never replace what the change reloads', () => {
+    const a = openTab(store, 'wt-1')
+    const earlierRead = beginEditorBufferFileRead(store.getState(), a)
+
+    notifyEditorExternalFileChange({
+      worktreeId: 'wt-1',
+      worktreePath: '/repo',
+      relativePath: 'a.ts'
+    })
+
+    expect(earlierRead.isCurrent()).toBe(false)
   })
 
   it('two differing drafts keep the tab of the most recently visited workspace', () => {

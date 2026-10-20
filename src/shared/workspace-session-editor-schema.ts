@@ -20,6 +20,7 @@ export const persistedOpenFileSchema = z.object({
 
 export const recoveredEditorDraftsSchema = salvagingArray(
   z.object({
+    id: z.string().optional(),
     filePath: z.string(),
     relativePath: z.string().optional(),
     worktreeId: z.string(),

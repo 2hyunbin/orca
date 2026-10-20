@@ -266,10 +266,10 @@ export function useEditorPanelFileContentLoader({
         delete fileLoadRetryAttemptsRef.current[id]
         // Why publish: the result belongs to the record, so it reaches every panel showing the
         // file even if this panel has closed.
-        const state = useAppStore.getState()
-        publishEditorBufferContent(liveEditorBufferViewOf(state, read.recordId) ?? id, result)
+        const viewId = liveEditorBufferViewOf(useAppStore.getState(), read.recordId) ?? id
+        publishEditorBufferContent(viewId, result)
         setFileContents((prev) => ({ ...prev, [id]: result }))
-        stampCleanTabDiskBaseline(id, result)
+        stampCleanTabDiskBaseline(viewId, result)
       } catch (err) {
         if (!isCurrentRead()) {
           retryIfSuperseded()

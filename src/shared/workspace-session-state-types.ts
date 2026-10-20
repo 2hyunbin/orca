@@ -39,6 +39,8 @@ export type PersistedOpenFile = {
  * dismisses it. Only restore creates these; one file now has one draft.
  */
 export type RecoveredEditorDraft = {
+  /** Unique per draft; absent only in sessions from before ids were written. */
+  id?: string
   filePath: string
   relativePath?: string
   worktreeId: string

@@ -41,7 +41,11 @@ export function useEditorBufferContentSync(
 
   useEffect(() => {
     const listener: BufferContentListener = (sourceFileId, content) => {
-      const ids = editorBufferViewIds(useAppStore.getState(), sourceFileId)
+      const state = useAppStore.getState()
+      // Why not live tails: each tail appends from its own offset, so shared bytes would repeat.
+      const ids = editorBufferViewIds(state, sourceFileId).filter(
+        (id) => state.openFiles.find((file) => file.id === id)?.liveTail !== true
+      )
       receivedRef.current.add(content)
       // Why seed: this panel's own read of the tab was superseded by this newer text, so without
       // it the tab would stay loading. Publishing never cancels reads; freshness is per record.
@@ -80,13 +84,17 @@ export function useEditorBufferContentSync(
         content === previous[fileId] ||
         !isFreshText(content) ||
         receivedRef.current.has(content) ||
-        openFilesRef.current.find((file) => file.id === fileId)?.mode !== 'edit'
+        !isSharedTextView(openFilesRef.current.find((file) => file.id === fileId))
       ) {
         continue
       }
       publishEditorBufferContent(fileId, content)
     }
   }, [fileContents, openFilesRef])
+}
+
+function isSharedTextView(file: OpenFile | undefined): boolean {
+  return file?.mode === 'edit' && file.liveTail !== true
 }
 
 function isSameText(a: FileContent, b: FileContent): boolean {

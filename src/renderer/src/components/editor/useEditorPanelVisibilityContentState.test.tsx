@@ -43,6 +43,7 @@ vi.mock('@/store', () => ({ useAppStore: { getState: mocks.getState } }))
 import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
 import { useEditorPanelContentState } from './useEditorPanelContentState'
 import { markEditorBufferNewer } from '@/store/slices/editor/buffers/editor-buffer-read-freshness'
+import { getDiskBaselineSignature } from './diff-content-signature'
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -512,5 +513,39 @@ describe('useEditorPanelContentState visibility', () => {
       expect(snapshots.get('main')?.fileContents[file.id]?.loadError).toMatch(/kept changing/)
     )
     expect(mocks.readRuntimeFileContent).toHaveBeenCalledTimes(4)
+  })
+
+  it("a read landing after its tab closed stamps the surviving tab's disk baseline", async () => {
+    const closing = makeFile('closing-tab', { filePath: '/repo/shared.ts' })
+    const survivor = makeFile('surviving-tab', { filePath: '/repo/shared.ts', worktreeId: 'wt-2' })
+    const setLastKnownDiskSignature = vi.fn()
+    const index = (ids: string[]) => ({
+      recordIdByFileId: Object.fromEntries(ids.map((id) => [id, 'shared-record'])),
+      keyByRecordId: {}
+    })
+    mocks.getState.mockReturnValue({
+      settings: null,
+      openFiles: [closing, survivor],
+      editorBufferIndex: index([closing.id, survivor.id]),
+      setLastKnownDiskSignature
+    })
+    const read = createDeferred<FileContent>()
+    mocks.readRuntimeFileContent.mockReturnValueOnce(read.promise)
+
+    await act(async () => root.render(<Probe activeFile={closing} />))
+    await vi.waitFor(() => expect(mocks.readRuntimeFileContent).toHaveBeenCalledOnce())
+    mocks.getState.mockReturnValue({
+      settings: null,
+      openFiles: [survivor],
+      editorBufferIndex: index([survivor.id]),
+      setLastKnownDiskSignature
+    })
+    await act(async () => root.render(null))
+    await act(async () => read.resolve({ content: 'disk text', isBinary: false }))
+
+    expect(setLastKnownDiskSignature).toHaveBeenCalledWith(
+      survivor.id,
+      getDiskBaselineSignature('disk text')
+    )
   })
 })

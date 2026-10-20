@@ -5,7 +5,7 @@ const MAX_RECOVERED_DRAFT_CHARS = 2 * 1024 * 1024
 
 /** Unique per draft: the same file can be recovered in two workspaces. */
 export function recoveredEditorDraftId(draft: RecoveredEditorDraft): string {
-  return JSON.stringify([draft.worktreeId, draft.filePath, draft.recoveredAt])
+  return draft.id ?? JSON.stringify([draft.worktreeId, draft.filePath, draft.recoveredAt])
 }
 
 /**

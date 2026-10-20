@@ -2,7 +2,10 @@ import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import { ownsGlobalSelection } from '../../../global-selection-owner'
 import { EMPTY_EDITOR_BUFFER_INDEX } from '../buffers/editor-buffer-record'
-import { isSameRecoveredEditorDraft } from '../buffers/recovered-editor-drafts'
+import {
+  appendRecoveredEditorDrafts,
+  isSameRecoveredEditorDraft
+} from '../buffers/recovered-editor-drafts'
 
 export function createOpenFileState(
   set: EditorSet,
@@ -28,8 +31,10 @@ export function createOpenFileState(
     recoveredEditorDrafts: [],
     dismissRecoveredEditorDraft: (draft) =>
       set((s) => ({
-        recoveredEditorDrafts: s.recoveredEditorDrafts.filter(
-          (entry) => !isSameRecoveredEditorDraft(entry, draft)
+        // Why re-cap: a draft held for this launch only may fit once another is dismissed.
+        recoveredEditorDrafts: appendRecoveredEditorDrafts(
+          s.recoveredEditorDrafts.filter((entry) => !isSameRecoveredEditorDraft(entry, draft)),
+          []
         )
       })),
     activeFileId: null,

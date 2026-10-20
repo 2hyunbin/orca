@@ -36,6 +36,9 @@ export type EditorBufferSharingResult = {
   recovered: RecoveredEditorDraft[]
 }
 
+// Why a counter: drafts recovered in one join share a timestamp but each needs its own id.
+let recoveredDraftSequence = 0
+
 function hasEdits(record: EditorBufferRecord, draft: string | undefined): boolean {
   return record.isDirty || draft !== undefined
 }
@@ -93,8 +96,15 @@ export function reconcileEditorBufferSharing(
     )
   let draftsChanged = false
 
+  // The tab whose draft a record carries, so a draft that loses a later join is credited to it.
+  const draftOwnerByRecord = new Map<string, OpenFile>()
+  const filesById = new Map(openFiles.map((file) => [file.id, file]))
   const claim = (fileId: string, recordId: string): void => {
     recordIdByFileId[fileId] = recordId
+    const owner = filesById.get(fileId)
+    if (owner && !draftOwnerByRecord.has(recordId)) {
+      draftOwnerByRecord.set(recordId, owner)
+    }
     const views = viewsByRecord.get(recordId)
     if (views) {
       views.push(fileId)
@@ -169,8 +179,11 @@ export function reconcileEditorBufferSharing(
         : viewEdited && !targetEdited
       if (divergent) {
         const [loser, loserState, loserFile] = viewWins
-          ? [targetDraft, targetRecord, openFiles.find((f) => f.id === target.views[0]) ?? file]
+          ? [targetDraft, targetRecord, draftOwnerByRecord.get(target.id) ?? file]
           : [draft, state, file]
+        if (viewWins) {
+          draftOwnerByRecord.set(target.id, file)
+        }
         if (loser !== undefined) {
           recovered.push({
             filePath: loserFile.filePath,
@@ -183,7 +196,8 @@ export function reconcileEditorBufferSharing(
             ...(loserState.lastKnownDiskSignature
               ? { baselineSignature: loserState.lastKnownDiskSignature }
               : {}),
-            recoveredAt: input.now()
+            recoveredAt: input.now(),
+            id: `${input.now()}:${(recoveredDraftSequence += 1)}`
           })
         }
       }

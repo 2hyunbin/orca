@@ -4,6 +4,8 @@ import {
   ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT,
   ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
   ORCA_EDITOR_SAVE_FILE_EVENT,
+  type EditorSaveAndCloseDetail,
+  type EditorSaveAndCloseOutcome,
   type EditorSaveFileDetail,
   type EditorSaveQuiesceDetail
 } from './editor-autosave'
@@ -44,9 +46,12 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
   })
 
   const handleSaveAndClose = async (event: Event): Promise<void> => {
-    const { fileId } = (event as CustomEvent<{ fileId: string }>).detail
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registered only for ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, which is dispatched with this detail.
+    const { fileId, onSettled } = (event as CustomEvent<EditorSaveAndCloseDetail>).detail
+    const settle = (outcome: EditorSaveAndCloseOutcome): void => onSettled?.(outcome)
     const file = store.getState().openFiles.find((openFile) => openFile.id === fileId)
     if (!file) {
+      settle('closed')
       return
     }
 
@@ -56,9 +61,11 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
       try {
         // Why: only a written save may close the tab; anything else keeps it and its edits.
         if ((await queueSave(file, draft)) !== 'written') {
+          settle('not-saved')
           return
         }
       } catch {
+        settle('not-saved')
         return
       }
     }
@@ -68,9 +75,11 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
       flushPendingEditorChange(id)
     }
     if (store.getState().openFiles.find((openFile) => openFile.id === fileId)?.isDirty) {
+      settle('kept-open')
       return
     }
     store.getState().closeFile(fileId)
+    settle('closed')
   }
 
   const handleSaveFile = async (event: Event): Promise<void> => {

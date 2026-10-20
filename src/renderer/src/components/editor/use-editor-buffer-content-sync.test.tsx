@@ -153,3 +153,23 @@ it("a read started by a panel that has since closed still fills the other panel'
 
   expect(panelA.contents[a]?.content).toBe('disk text')
 })
+
+it("doesn't copy one live log tail's bytes into another tail of the same file", () => {
+  const a = openTab('wt-1')
+  const b = openTab('wt-2')
+  fixture.store?.setState({
+    openFiles: (fixture.store?.getState().openFiles ?? []).map((file) => ({
+      ...file,
+      readOnly: true,
+      liveTail: true
+    }))
+  })
+  const panelB: PanelHandle = { contents: {}, set: () => {} }
+  act(() =>
+    root.render(<Panel initial={{ [b]: { content: 'tail b', isBinary: false } }} handle={panelB} />)
+  )
+
+  act(() => publishEditorBufferContent(a, { content: 'tail b plus new lines', isBinary: false }))
+
+  expect(panelB.contents[b]?.content).toBe('tail b')
+})
