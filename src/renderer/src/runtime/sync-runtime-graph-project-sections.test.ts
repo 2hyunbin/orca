@@ -8,6 +8,8 @@ import type { AppState } from '../store/types'
 import type { Repo } from '../../../shared/repo-types'
 import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
 
+// The window publishes the catalog only with the switch off; switched on, main answers from its own.
+vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: false }))
 vi.mock('./sync-runtime-graph/terminal-group-grid-sizes', () => ({
   measureTerminalGroupGridSizes: () => undefined
 }))
