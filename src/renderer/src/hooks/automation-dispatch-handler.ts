@@ -190,6 +190,7 @@ export async function handleAutomationDispatchRequest({
       throw new Error('Unable to build an agent launch plan.')
     }
     terminalOwnership = result.terminalOwnership
+    completion.setSessionObserver(result.releaseRuntimeObservers)
     if (automation.reuseSession) {
       // Why: the first fresh launch is the seed for later reuse and must
       // survive completion under the same policy as an already-reused tab.

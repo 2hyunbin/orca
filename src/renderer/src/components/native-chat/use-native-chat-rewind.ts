@@ -21,7 +21,10 @@ import {
 import type { StructuredAgentSessionWriteOutcome } from './use-structured-agent-session-mutate'
 import { returnMessageToComposer } from './structured-agent-session-message-hand-back'
 import { nativeChatRewindOffered } from './native-chat-rewind-eligibility'
-import { latestAgentSessionContextClearSequence } from '../../../../shared/agent-session-context-clear'
+import {
+  agentSessionContextFloorSequence,
+  latestAgentSessionContextClearSequence
+} from '../../../../shared/agent-session-context-clear'
 import type { AgentJournalCursor } from '../../../../shared/agent-session-journal-types'
 
 export type NativeChatRewindSurface = {
@@ -99,9 +102,7 @@ function turnOpeners(items: StructuredAgentSessionState['items']): Map<string, s
 function rewindContextFloor(input: RewindInput): number {
   return Math.max(
     latestAgentSessionContextClearSequence(input.state.items),
-    input.contextFloor && input.contextFloor.epoch === input.state.epoch
-      ? input.contextFloor.sequence
-      : 0
+    agentSessionContextFloorSequence(input.contextFloor, input.state.epoch)
   )
 }
 

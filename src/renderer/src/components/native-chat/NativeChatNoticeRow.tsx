@@ -28,6 +28,7 @@ import {
 import { readWholeAgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import { agentSessionFailureSentence } from '../../../../shared/agent-session-failure-words'
 import { sayAgentSessionFailureTranslated } from './agent-session-failure-words-text'
+import { nativeChatAntigravitySignInContent } from './native-chat-antigravity-settings'
 import { formatUsageLimitResetClock } from '../../../../shared/agent-session-usage-limit'
 
 const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string> = {
@@ -134,6 +135,7 @@ export function NativeChatNoticeRow({
   const continueOffered =
     orcaStop?.turnItemId !== undefined && orcaStop.turnItemId === orcaStopView.offeredTurnItemId
   const failure = readWholeAgentSessionFailureFact(block.failure)
+  const antigravitySignInContent = nativeChatAntigravitySignInContent(failure?.kind, agentName)
   const usageLimitContinue =
     block.usageLimitTurnItemId !== undefined &&
     block.usageLimitTurnItemId === orcaStopView.usageLimitTurnItemId
@@ -158,15 +160,17 @@ export function NativeChatNoticeRow({
           sayAgentSessionFailureTranslated
         )
       : failure && authSurface
-      ? agentSessionFailureSentence(
-          failure,
-          authSurface,
-          { agentName },
-          sayAgentSessionFailureTranslated
-        )
-      : block.text
-  const detail = failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
-    ? failure.detail.text : undefined
+        ? agentSessionFailureSentence(
+            failure,
+            authSurface,
+            { agentName },
+            sayAgentSessionFailureTranslated
+          )
+        : block.text
+  const detail =
+    failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
+      ? failure.detail.text
+      : undefined
   const tone = named ? 'notice' : look.kind === 'line' ? look.tone : null
   const Icon =
     tone === 'warning'
@@ -188,7 +192,9 @@ export function NativeChatNoticeRow({
     >
       <div className="flex items-start gap-2">
         {Icon ? <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" /> : null}
-        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{text}</p>
+        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+          {antigravitySignInContent ?? text}
+        </p>
         {continueOffered ? (
           <NativeChatInterruptedContinueButton onContinue={orcaStopView.continueNow} />
         ) : usageLimitContinue ? (
