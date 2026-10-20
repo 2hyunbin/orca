@@ -96,6 +96,10 @@ export function applyCommandToSession(
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  const taken = takenIds(loaded.layout, command)
+  if (taken) {
+    return { value: taken, session: null }
+  }
   return applyToSession(loaded, command, (after) => {
     const patched = touchedRecords(session, loaded, after)
     return patched
@@ -135,15 +139,15 @@ export function applyRenamesToSession(
 
 const RENAME_CONTEXT = { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
 
-/** Every write of a pane goes through here, so no create path skips the taken and closed-id guard. */
+/** Every pane write goes through here, so no create path can bring back a tab main closed. */
 function applyToSession(
   loaded: LoadedWorkspaceLayout,
   command: LayoutCommand,
   write: (after: WorkspaceSessionState) => WorkspaceSessionState | null = (after) => after
 ): PaneLayoutChange<LayoutApplyOutcome> {
-  const taken = takenIds(loaded.layout, command)
-  if (taken) {
-    return { value: taken, session: null }
+  const closed = closedIds(loaded.layout, command)
+  if (closed) {
+    return { value: closed, session: null }
   }
   const applied = applyLayoutCommand(loaded.layout, command, {
     mintId: randomUUID,
@@ -174,6 +178,25 @@ function prunedOnRecord(
     : session
 }
 
+function closedIds(
+  layout: WorkspaceLayoutModel,
+  command: LayoutCommand
+): LayoutApplyOutcome | null {
+  if (command.type === 'createTerminalTab') {
+    return command.tabId ? closedCreate(layout, command.tabId) : null
+  }
+  if (command.type === 'applyDefaultTabs') {
+    for (const tab of command.tabs) {
+      const closed = closedCreate(layout, tab.tabId)
+      if (closed) {
+        return closed
+      }
+    }
+  }
+  return null
+}
+
+/** A client's ids only: a runtime create may name a tab that exists, as a host's second pane does. */
 function takenIds(layout: WorkspaceLayoutModel, command: LayoutCommand): LayoutApplyOutcome | null {
   switch (command.type) {
     case 'createTerminalTab':
@@ -208,10 +231,7 @@ function takenTabId(
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
   )
-  if (holds) {
-    return { ok: false, code: 'tab_exists' }
-  }
-  return closedCreate(layout, tabId)
+  return holds ? { ok: false, code: 'tab_exists' } : null
 }
 
 /**
@@ -236,16 +256,7 @@ function takenDefaultTabId(
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => ids.has(tab.id) || ids.has(tab.entityId))
   )
-  if (holds) {
-    return { ok: false, code: 'tab_exists' }
-  }
-  for (const tab of command.tabs) {
-    const closed = closedCreate(layout, tab.tabId)
-    if (closed) {
-      return closed
-    }
-  }
-  return null
+  return holds ? { ok: false, code: 'tab_exists' } : null
 }
 
 /**

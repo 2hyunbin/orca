@@ -1,5 +1,5 @@
-// Every pane write, a client's layout.apply or a terminal main starts, goes through one guard on
-// the ids it names: a closed tab never comes back and a held id is never written twice.
+// Every pane write, a client's layout.apply or a terminal main starts, goes through one guard that
+// keeps a closed tab closed; a client's own ids are also refused when another tab holds them.
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
@@ -50,7 +50,7 @@ const splitIntoTwo = {
   newLeafId: TWO.leafId
 } as const
 
-describe('the taken and closed-id guard, on both ways a pane is written', () => {
+describe('the closed-id guard on every pane write, and the taken-id guard on a client command', () => {
   it('refuses a create of a closed tab', () => {
     const session = closedAndOpen()
     expect(applyCommandToSession(HOST, session, createOne)).toEqual({
@@ -63,19 +63,17 @@ describe('the taken and closed-id guard, on both ways a pane is written', () => 
     })
   })
 
-  it('refuses a create under a tab id another pane holds', () => {
+  it("refuses a client's create under a tab id another pane holds, not a host's next pane", () => {
     const session = closedAndOpen()
     expect(applyCommandToSession(HOST, session, createInTwo).value).toEqual({
       ok: false,
       code: 'tab_exists'
     })
-    expect(admitPaneToSession(HOST, session, createInTwo)).toEqual({
-      value: 'tab_exists',
-      session: null
-    })
+    // A paired host starts each pane of a client's tab as a create under that tab's id.
+    expect(admitPaneToSession(HOST, session, createInTwo).value).toBe('admitted')
   })
 
-  it('refuses a split under a pane id another tab holds', () => {
+  it("refuses a client's split under a pane id another tab holds", () => {
     let session = closedAndOpen()
     session = applied(session, {
       type: 'createTerminalTab',
@@ -91,10 +89,6 @@ describe('the taken and closed-id guard, on both ways a pane is written', () => 
     expect(applyCommandToSession(HOST, session, split).value).toEqual({
       ok: false,
       code: 'pane_in_other_tab'
-    })
-    expect(admitPaneToSession(HOST, session, split)).toEqual({
-      value: 'pane_in_other_tab',
-      session: null
     })
   })
 })
