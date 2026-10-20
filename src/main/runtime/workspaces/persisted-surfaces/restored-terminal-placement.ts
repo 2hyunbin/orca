@@ -65,6 +65,14 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
     return this.placementRun
   }
 
+  /** Settles once a placement pass in flight has placed what its census found; never rejects. */
+  protected livePlacementSettled(): Promise<void> {
+    return this.placementRun?.then(
+      () => {},
+      () => {}
+    ) ?? Promise.resolve()
+  }
+
   private async placeUnshownLiveTerminalsOnce(): Promise<LiveTerminalPlacement> {
     await this.unbindPanesFromOtherWorkspacesTerminals()
     // A host that keeps no local terminals across restarts has none to find.
