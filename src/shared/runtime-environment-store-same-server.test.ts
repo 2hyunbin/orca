@@ -90,6 +90,33 @@ describe('pairing a server that is already saved', () => {
     expect(outcome).toMatchObject({ updatedExisting: true, environment: { id: first.id } })
   })
 
+  it('matches the same key spelled unpadded or URL-safe', () => {
+    const first = addEnvironmentFromPairingCode(userDataPath, {
+      name: 'Studio',
+      pairingCode: pairingCode('ws://192.0.2.10:6768')
+    })
+    const urlSafeUnpadded = Buffer.alloc(32, 0xfb).toString('base64url')
+    addEnvironmentFromPairingCode(userDataPath, {
+      name: 'Wide',
+      pairingCode: pairingCode(
+        'ws://192.0.2.12:6768',
+        'token',
+        Buffer.alloc(32, 0xfb).toString('base64')
+      )
+    })
+    for (const spelling of [serverKey.replace(/=+$/, ''), urlSafeUnpadded]) {
+      const target = spelling === urlSafeUnpadded ? 'Wide' : 'Studio'
+      expect(
+        addOrUpdateEnvironmentFromPairingCode(userDataPath, {
+          name: `${target} again`,
+          pairingCode: pairingCode('ws://192.0.2.20:6768', 'other-token', spelling)
+        })
+      ).toMatchObject({ updatedExisting: true, environment: { name: target } })
+    }
+    expect(listEnvironments(userDataPath).map((entry) => entry.id)).toContain(first.id)
+    expect(listEnvironments(userDataPath)).toHaveLength(2)
+  })
+
   it('still saves a different server as its own entry', () => {
     addEnvironmentFromPairingCode(userDataPath, {
       name: 'Studio',
