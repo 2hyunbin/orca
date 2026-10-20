@@ -21010,8 +21010,6 @@
   },
   "resourceManager": {
     "pty": {
-      "search": "Search terminals",
-      "searchPlaceholder": "Search terminals…",
       "bindingFilter": "Tab filter",
       "all": "All",
       "bound": "Has tab",
