@@ -63,6 +63,7 @@ describe('a paired desktop terminal.create replayed with its pane ids', () => {
       id: first.ptyId!,
       terminalHandle: first.handle,
       worktreeId: WORKTREE_ID,
+      cwd: '/workspace',
       title: ''
     })
     const retry = await create(true)
