@@ -79,11 +79,11 @@ describe.skipIf(process.platform === 'win32')('Codex config.toml file modes', ()
   it('keeps an existing config.toml mode when recording project trust', () => {
     const configPath = join(systemHomePath, 'config.toml')
     writeFileSync(configPath, 'model = "gpt-5"\n')
-    chmodSync(configPath, 0o640)
+    chmodSync(configPath, 0o700)
 
     upsertProjectTrustLevel(configPath, '/repo', 'trusted')
 
-    expect(modeOf(configPath)).toBe(0o640)
+    expect(modeOf(configPath)).toBe(0o700)
   })
 
   it('creates a missing ~/.codex/config.toml owner-only when promoting a setting', () => {
