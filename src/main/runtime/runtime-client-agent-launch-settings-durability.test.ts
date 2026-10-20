@@ -10,7 +10,7 @@ vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: () => ({ nth_repo_added: 2 })
 }))
-vi.mock('../ssh/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
 }))
@@ -110,6 +110,27 @@ describe('durable execution-host launch settings', () => {
     expect(readState().settings.agentDefaultArgs.claude).toBe('--durable-marker')
   })
 
+  it('rolls back a legacy default request when the database write fails', async () => {
+    const { store, authority } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    const before = store.getSettings().defaultTuiAgent
+    authority.failNextWrite()
+    try {
+      await expect(
+        controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+      ).rejects.toThrow('profile_state_write_failed')
+    } finally {
+      await store.flushPendingOrThrowAsync().catch(() => {})
+    }
+    expect(store.getSettings().defaultTuiAgent).toBe(before)
+    expect(store.getSettings().newWorkspaceSetupOnly).toBe(false)
+    await controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+    expect(controller.getAgentLaunch()).toMatchObject({
+      defaultTuiAgent: 'blank',
+      newWorkspaceSetupOnly: false
+    })
+  })
+
   it('rejects a failed disk write, rolls back its settings, and allows an explicit retry', async () => {
     const { store, authority, readState } = await fixture()
     const controller = new RuntimeClientSettingsController(store)
@@ -134,6 +155,59 @@ describe('durable execution-host launch settings', () => {
       value: '--retry-marker'
     })
     expect(readState().settings.agentDefaultArgs.claude).toBe('--retry-marker')
+  })
+
+  it('rolls back the new-chat default with a failed permission preset', async () => {
+    const { store, authority, readState } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    const before = store.getSettings().nativeChatPermissionMode
+    authority.failNextWrite()
+    try {
+      await expect(
+        controller.mutateAgentLaunch({ type: 'permissions', syncNativeChat: true, mode: 'auto' })
+      ).rejects.toThrow('profile_state_write_failed')
+    } finally {
+      await store.flushPendingOrThrowAsync().catch(() => {})
+    }
+    expect(store.getSettings().nativeChatPermissionMode).toBe(before)
+    expect(readState().settings.nativeChatPermissionMode).toBe(before)
+    await controller.mutateAgentLaunch({ type: 'permissions', syncNativeChat: true, mode: 'auto' })
+    expect(readState().settings.nativeChatPermissionMode).toBe(before)
+    expect(readState().settings.agentNativeChatPermissionModes).toEqual({
+      claude: 'auto',
+      codex: 'auto'
+    })
+  })
+
+  it('rolls back a scoped chat default after a failed write and persists a retry', async () => {
+    const { store, authority, readState } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    const beforeArgs = store.getSettings().agentDefaultArgs?.codex
+    const beforeNative = store.getSettings().nativeChatPermissionMode
+    authority.failNextWrite()
+    try {
+      await expect(
+        controller.mutateAgentLaunch({
+          type: 'permissions',
+          syncNativeChat: true,
+          agent: 'codex',
+          mode: 'auto'
+        })
+      ).rejects.toThrow('profile_state_write_failed')
+    } finally {
+      await store.flushPendingOrThrowAsync().catch(() => {})
+    }
+    expect(store.getSettings().agentDefaultArgs?.codex).toBe(beforeArgs)
+    expect(store.getSettings().agentNativeChatPermissionModes).toEqual({})
+    await controller.mutateAgentLaunch({
+      type: 'permissions',
+      syncNativeChat: true,
+      agent: 'codex',
+      mode: 'auto'
+    })
+    expect(readState().settings.agentNativeChatPermissionModes).toEqual({ codex: 'auto' })
+    expect(readState().settings.nativeChatPermissionMode).toBe(beforeNative)
+    expect(readState().settings.agentDefaultArgs.codex).toBe('--approve-for-me')
   })
 
   it('recomputes queued intents after a failed write instead of persisting its stale map', async () => {
@@ -190,6 +264,27 @@ describe('durable execution-host launch settings', () => {
       '__proto__',
       'constructor'
     ])
+  })
+
+  it('preserves a newer agent choice when a pending legacy default write fails', async () => {
+    const { store, authority } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    authority.failNextWrite()
+    const gate = authority.pause()
+    const first = controller.mutateAgentLaunch({ type: 'default', agent: 'blank', setupOnly: true })
+    const refused = expect(first).rejects.toThrow('profile_state_write_failed')
+    try {
+      await gate.started.promise
+      store.updateSettings({ defaultTuiAgent: 'codex', newWorkspaceSetupOnly: false })
+    } finally {
+      gate.finish.resolve()
+    }
+    await refused
+    expect(controller.getAgentLaunch()).toMatchObject({
+      defaultTuiAgent: 'codex',
+      newWorkspaceSetupOnly: false
+    })
+    await store.flushPendingOrThrowAsync()
   })
 
   it('preserves a newer legacy full-map write when an older mutation fails', async () => {

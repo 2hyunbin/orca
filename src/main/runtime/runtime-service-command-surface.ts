@@ -48,6 +48,8 @@ export type RuntimeServiceCommandSurface = {
   setCommitMessageAgentEnvironmentResolvers: RuntimeAccountController['setCommitMessageAgentEnvironment']
   getCommitMessageAgentEnvironmentResolvers: RuntimeAccountController['getCommitMessageAgentEnvironment']
   getAccountsSnapshot: RuntimeAccountController['getSnapshot']
+  getUsageRateLimits: RuntimeAccountController['usageRateLimits']
+  requireUsageRateLimits: RuntimeAccountController['requireUsageRateLimits']
   refreshAccountsForMobile: RuntimeAccountController['refreshForMobile']
   refreshAccountsForMobileSubscriber: RuntimeAccountController['refreshForMobileSubscriber']
   selectClaudeAccount: RuntimeAccountController['selectClaude']
@@ -64,6 +66,8 @@ export type RuntimeServiceCommandSurface = {
   selectDataAccount: RuntimeAccountController['selectData']
   removeDataAccount: RuntimeAccountController['removeData']
   onAccountsChanged: RuntimeAccountController['onChanged']
+  setHostAccountLaunchEnv: RuntimeAccountController['setHostLaunchEnv']
+  restoreHostAccountLaunchEnv: RuntimeAccountController['restoreHostLaunchEnv']
   listMobileSpeechModels: RuntimeMobileSpeechCatalog['list']
   downloadMobileSpeechModel: RuntimeMobileSpeechCatalog['download']
   deleteMobileSpeechModel: RuntimeMobileSpeechCatalog['delete']
@@ -151,6 +155,8 @@ export function installRuntimeServiceCommandSurface(
     getCommitMessageAgentEnvironmentResolvers:
       accounts.getCommitMessageAgentEnvironment.bind(accounts),
     getAccountsSnapshot: accounts.getSnapshot.bind(accounts),
+    getUsageRateLimits: accounts.usageRateLimits.bind(accounts),
+    requireUsageRateLimits: accounts.requireUsageRateLimits.bind(accounts),
     refreshAccountsForMobile: accounts.refreshForMobile.bind(accounts),
     refreshAccountsForMobileSubscriber: accounts.refreshForMobileSubscriber.bind(accounts),
     selectClaudeAccount: accounts.selectClaude.bind(accounts),
@@ -167,6 +173,8 @@ export function installRuntimeServiceCommandSurface(
     selectDataAccount: accounts.selectData.bind(accounts),
     removeDataAccount: accounts.removeData.bind(accounts),
     onAccountsChanged: accounts.onChanged.bind(accounts),
+    setHostAccountLaunchEnv: accounts.setHostLaunchEnv.bind(accounts),
+    restoreHostAccountLaunchEnv: accounts.restoreHostLaunchEnv.bind(accounts),
     listMobileSpeechModels: speech.list.bind(speech),
     downloadMobileSpeechModel: speech.download.bind(speech),
     deleteMobileSpeechModel: speech.delete.bind(speech),

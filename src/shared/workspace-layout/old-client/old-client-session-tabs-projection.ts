@@ -32,6 +32,7 @@ import {
   type DesktopLayoutView,
   type LayoutContentFacts
 } from '../workspace-layout-beside'
+import { editorFileKey, editorTabFile } from '../workspace-layout-editor-tab-file'
 import type {
   LayoutContentTab,
   LayoutTab,
@@ -74,7 +75,7 @@ export function projectSessionTabs(
   facts: SessionTabsFacts,
   generatedTitlesEnabled: boolean
 ): ProjectedSessionTabs {
-  const activeGroupId = view.activeGroupIdByWorktree?.[key] ?? null
+  const activeGroupId = resolveActiveGroupId(workspace, view.activeGroupIdByWorktree?.[key])
   const groupViews = view.groups[key] ?? {}
   const scope: Scope = {
     key,
@@ -131,6 +132,17 @@ export function projectSessionTabs(
   }
 }
 
+/** As a window restores it: the saved group while the workspace has it, else the first group. */
+function resolveActiveGroupId(
+  workspace: WorkspaceLayout,
+  saved: string | undefined
+): string | null {
+  if (saved && workspace.groups.some((group) => group.id === saved)) {
+    return saved
+  }
+  return groupsInLayoutOrder(workspace)[0]?.id ?? null
+}
+
 function groupsInLayoutOrder(workspace: WorkspaceLayout): WorkspaceLayout['groups'] {
   const ids: string[] = []
   const visit = (node: TabGroupLayoutNode | undefined): void => {
@@ -167,7 +179,6 @@ function projectTab(tab: LayoutTab, scope: Scope): RuntimeMobileSessionSnapshotT
     case 'diff':
     case 'conflict-review':
     case 'check-details':
-    case 'chat-visual':
     case 'simulator':
       return []
   }
@@ -247,7 +258,7 @@ function editorRow(
   tab: LayoutContentTab,
   scope: Scope
 ): RuntimeMobileSessionMarkdownTab | RuntimeMobileSessionFileTab | null {
-  const file = scope.workspace.editorFiles?.find((entry) => entry.filePath === tab.entityId)
+  const file = editorTabFile(scope.workspace, tab.entityId)
   if (!file) {
     return null
   }
@@ -256,7 +267,8 @@ function editorRow(
     title: file.relativePath.split(/[\\/]/).pop() || file.relativePath || 'File',
     filePath: file.filePath,
     relativePath: file.relativePath,
-    isDirty: scope.view.editorDrafts[scope.key]?.[file.filePath]?.dirtyDraftContent !== undefined,
+    isDirty:
+      scope.view.editorDrafts[scope.key]?.[editorFileKey(file)]?.dirtyDraftContent !== undefined,
     color: tab.color ?? null,
     isPinned: tab.isPinned === true,
     isActive: scope.activeTabId === tab.id

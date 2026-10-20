@@ -2,6 +2,9 @@ import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import type { RestoredEditorOwnerResult } from '../types/restored-editor-owner'
 import { buildRestoredEditorOwnerTransition } from './restored-editor-owner-transition'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { recordRestoredEditorMoveInLayoutOwner } from '../tabs/editor-tab-layout-owner'
+import { writeEditorBuffer } from '../buffers/editor-buffer-record'
 
 export function createRestoredEditorOwner(
   set: EditorSet,
@@ -17,16 +20,13 @@ export function createRestoredEditorOwner(
           return s
         }
         changed = true
-        return {
-          openFiles: s.openFiles.map((candidate) =>
-            candidate.id === fileId ? { ...candidate, pendingOwnerMigration: next } : candidate
-          )
-        }
+        return writeEditorBuffer(s, fileId, { pendingOwnerMigration: next })
       })
       return changed
     },
 
     reparentRestoredEditorFileOwner: (args) => {
+      const before = ORCA_LAYOUT_OWNER_IS_MAIN ? get() : null
       let result: RestoredEditorOwnerResult = { ok: false, reason: 'stale' }
       const projectReparent = buildRestoredEditorOwnerTransition(args, (next) => {
         result = next
@@ -43,6 +43,9 @@ export function createRestoredEditorOwner(
         })
       } else {
         set((state) => projectReparent(state).patch)
+      }
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && before && initialSource) {
+        recordRestoredEditorMoveInLayoutOwner(before, get(), initialSource, result)
       }
       return result
     }

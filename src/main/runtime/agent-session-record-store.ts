@@ -1,6 +1,7 @@
 /** Durable single-writer session records and their operation ledger, as rows in the host's chat
  *  journal database. */
 
+import { backfillAgentSessionPermissionModes } from './agent-session-permission-backfill'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { createAgentSessionConversationReceipts } from './agent-session-conversation-receipts'
 import { commitConversationCommandRecord } from './agent-session-conversation-command-record'
@@ -115,6 +116,9 @@ export class AgentSessionRecordStore {
     return this.transactions.readOnly
   }
 
+  backfillChatPermissionModes = (ranWithFullAccess: (provider: string) => boolean): Promise<void> =>
+    backfillAgentSessionPermissionModes(this.transactions, ranWithFullAccess)
+
   getRecord = (sessionId: string): AgentSessionRecord | null =>
     this.state.records.get(sessionId) ?? null
 
@@ -207,23 +211,19 @@ export class AgentSessionRecordStore {
   async proveOwner(args: {
     sessionId: string
     fence: number
-    link: AgentSessionProviderHandleLink
+    link?: AgentSessionProviderHandleLink
     now: number
     leaseTtlMs?: number
-    options?: Readonly<Record<string, string>>
   }): Promise<AgentSessionRecord> {
-    return this.mutate(args.sessionId, (record) => {
-      const proved = proveAgentSessionOwner({
+    return this.mutate(args.sessionId, (record) =>
+      proveAgentSessionOwner({
         record,
         fence: args.fence,
-        link: args.link,
+        ...(args.link ? { link: args.link } : {}),
         now: args.now,
         leaseTtlMs: args.leaseTtlMs ?? AGENT_SESSION_LEASE_TTL_MS
       })
-      return args.options
-        ? replaceAgentSessionRecordOptions(proved, { ...args, options: args.options })
-        : proved
-    })
+    )
   }
 
   /** Settle the failed attach and its reservation in one durable transaction. */
@@ -260,15 +260,14 @@ export class AgentSessionRecordStore {
   }
 
   /**
-   * Adjudicate every lease this host loaded. No lease grants a writer until it appears here. On a
-   * database a newer Orca wrote, the verdicts are kept in memory only: they are re-derived at every
+   * Adjudicate loaded leases, or only the addressed session. No lease grants a writer until it
+   * appears here. On a newer database, verdicts stay in memory only: they are re-derived at every
    * start, and none grants a writer there, since every grant is a write.
    */
   async reconcileOnRestart(
     args: AgentSessionRestartProbeArgs
   ): Promise<Map<string, AgentSessionRecord>> {
-    const pending = this.listRecords().filter((record) => record.lease.unreconciled)
-    const probes = await collectAgentSessionRestartProbes(pending, args)
+    const probes = await collectAgentSessionRestartProbes(this, args)
     return this.transact((draft) => applyAgentSessionRestartProbes(draft, probes, args.now), {
       inMemoryWhenReadOnly: true
     })

@@ -145,6 +145,8 @@ type RelayAssignmentStoreOptions = {
 export type AssignOptions = {
   epochFloor?: number
   placeFresh?: () => Promise<RelayAssignment | null>
+  // A reserve cell in the placement region with room: the database lane leaves the region only after it.
+  regionReserve?: () => Promise<RelayAssignment | null>
   hostRequested?: boolean
 }
 
@@ -531,6 +533,13 @@ class AssignmentIsolatedTierExhausted extends Error {
 class AssignmentInventoryScopeChanged extends Error {
   constructor() {
     super('assignment_inventory_scope_changed')
+  }
+}
+
+// The placement region has no database cell with room; nothing was written.
+class AssignmentRegionFull extends Error {
+  constructor() {
+    super('assignment_region_full')
   }
 }
 
@@ -1008,18 +1017,28 @@ export class RelayAssignmentStore {
     if (booked) return booked
     // Only placement needs the global inventory critical section; queueing those
     // attempts locally avoids turning true placement bursts into NOWAIT storms.
-    return await this.serializeAssignment(
-      async () =>
-        await this.assignWithLockRetry(
-          identity,
-          lockMode,
-          preferredRegion,
-          placementRegion,
-          step5.epochFloor ?? 0,
-          // Only through the step-5 plan: its floor holds every epoch the map knows for the host.
-          step5.hostRequested === true && step5.epochFloor !== undefined
-        )
-    )
+    const placeOnDatabase = async (keepRegion: boolean) =>
+      await this.serializeAssignment(
+        async () =>
+          await this.assignWithLockRetry(
+            identity,
+            lockMode,
+            preferredRegion,
+            placementRegion,
+            step5.epochFloor ?? 0,
+            // Only through the step-5 plan: its floor holds every epoch the map knows for the host.
+            step5.hostRequested === true && step5.epochFloor !== undefined,
+            keepRegion
+          )
+      )
+    const regionReserve = step5.regionReserve
+    if (!regionReserve) return await placeOnDatabase(false)
+    try {
+      return await placeOnDatabase(true)
+    } catch (error) {
+      if (!(error instanceof AssignmentRegionFull)) throw error
+    }
+    return (await regionReserve()) ?? (await placeOnDatabase(false))
   }
 
   private async assignStickyWithLockRetry(
@@ -1039,7 +1058,8 @@ export class RelayAssignmentStore {
     preferredRegion?: RelayRegion,
     placementRegion: RelayRegion = preferredRegion ?? RELAY_DEFAULT_REGION,
     epochFloor = 0,
-    hostRequested = false
+    hostRequested = false,
+    keepRegion = false
   ): Promise<RelayAssignment> {
     const deadline = Date.now() + ASSIGNMENT_LOCK_RETRY_DEADLINE_MS
     let inventoryScope: AssignmentInventoryScope = 'none'
@@ -1052,7 +1072,8 @@ export class RelayAssignmentStore {
           preferredRegion,
           placementRegion,
           epochFloor,
-          hostRequested
+          hostRequested,
+          keepRegion
         )
       } catch (error) {
         if (error instanceof AssignmentInventoryScopeChanged) {
@@ -1290,6 +1311,11 @@ export class RelayAssignmentStore {
     if (state !== 'existing-only') {
       return false
     }
+    // A reserve cell keeps no activity rows and its ledger stamps last_activity_at, so zero
+    // leases proves nothing; a dead one is left to the dead-reserve path and its fence.
+    if (await this.mayBeReserveCell(text(existing, 'cell_id'), transaction)) {
+      return false
+    }
     const liveLeases = (
       await transaction.query(
         `SELECT COUNT(*) AS live FROM relay_assignment_activity_leases
@@ -1320,7 +1346,9 @@ export class RelayAssignmentStore {
     preferredRegion?: RelayRegion,
     placementRegion: RelayRegion = preferredRegion ?? RELAY_DEFAULT_REGION,
     epochFloor = 0,
-    hostRequested = false
+    hostRequested = false,
+    // Refuse to spill out of placementRegion: AssignmentRegionFull instead.
+    keepRegion = false
   ): Promise<RelayAssignment> {
     const now = this.now()
     // An isolated retry takes its tier's rows before anything reassigns this,
@@ -1582,8 +1610,15 @@ export class RelayAssignmentStore {
       // cross-region spill it exists to refuse.
       const target =
         isolatedTarget ??
-        (await this.leastLoadedCell(transaction, lockedCells, placementRegion))
-      if (!target) throw new Error('relay_capacity_exhausted')
+        (await this.leastLoadedCell(
+          transaction,
+          lockedCells,
+          placementRegion,
+          keepRegion ? 'require' : 'prefer'
+        ))
+      if (!target) {
+        throw keepRegion ? new AssignmentRegionFull() : new Error('relay_capacity_exhausted')
+      }
       if (deadReserveSource) {
         events.push(
           JSON.stringify({

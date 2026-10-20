@@ -1,3 +1,4 @@
+import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
 import type {
   IPtyProvider,
@@ -59,6 +60,7 @@ export type RuntimePtySpawnState = {
   requestedAgentTeamsPath: string | undefined
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
+  codexResumeArgvDropped: boolean
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
   spawnOptions: PtySpawnOptions
@@ -110,6 +112,8 @@ export type RuntimePtySpawnArgs = {
   leafId?: string
   sessionId?: string
   shellOverride?: string
+  /** The agent launch's runtime fact; when present the PTY shell comes only from it. */
+  launchRuntime?: AgentLaunchRuntime
   isNewSession?: boolean
   /** No renderer view exists at spawn; main owns delivery and query replies until one mounts. */
   initiallyHidden?: boolean
@@ -172,6 +176,7 @@ export function createRuntimePtySpawnState(
     requestedAgentTeamsPath: undefined,
     selectedCodexHomePath: null,
     codexResumeHomeSelected: false,
+    codexResumeArgvDropped: false,
     skipCodexHomeEnv: false,
     stripInheritedOrcaCodexHome: false,
     spawnOptions: { cols: args.cols, rows: args.rows },

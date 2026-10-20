@@ -38,7 +38,7 @@ export const REPO_METHODS = [
       context.runtime.enrichMissingRepoGitRemoteIdentities?.()
       return {
         repos: context.runtime
-          .listRepos()
+          .listVisibleRepos()
           .map((repo) => projectRepoVisibilityForClient(repo, context))
       }
     }
@@ -48,7 +48,7 @@ export const REPO_METHODS = [
     name: 'projectGroup.list',
     permission: 'workspace',
     params: null,
-    handler: (_params, { runtime }) => ({ groups: runtime.listProjectGroups() })
+    handler: (_params, { runtime }) => ({ groups: runtime.listVisibleProjectGroups() })
   }),
   defineMethod({
     name: 'projectGroup.create',
@@ -78,7 +78,12 @@ export const REPO_METHODS = [
     params: ProjectGroupMoveProject,
     handler: async (params, context) => ({
       repo: projectRepoVisibilityForClient(
-        await context.runtime.moveProjectToGroup(params.repo, params.groupId ?? null, params.order),
+        await context.runtime.moveProjectToGroup(
+          params.repo,
+          params.groupId ?? null,
+          params.order,
+          params.connectionId
+        ),
         context
       )
     })

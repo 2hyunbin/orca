@@ -1,3 +1,4 @@
+import { nativeChatAntigravitySignInContent } from './native-chat-antigravity-settings'
 import { translate } from '@/i18n/i18n'
 import type { StructuredAgentSessionLaunchLifecycle } from '@/lib/structured-agent-session-launch'
 import { agentSessionRefusalCauseParts } from '../../../../shared/agent-session-refusal-notice'
@@ -53,7 +54,9 @@ function nativeChatLaunchNotice({
   // An argument problem already says the start failed; the generic lead would repeat it.
   const saysStartFailure =
     failure?.code === 'agent_session_operation_invalid' && failure.details?.argumentProblem
+  const signInContent = nativeChatAntigravitySignInContent(failure?.details?.reason, agentLabel)
   return {
+    content: signInContent,
     key: 'launch',
     kind: 'error',
     text: cause ? (saysStartFailure ? cause : joinSentences([message, cause])) : message,
@@ -64,10 +67,12 @@ function nativeChatLaunchNotice({
             onClick: claudeSignIn.signIn,
             disabled: claudeSignIn.signingIn
           }
-        : {
-            label: translate('auto.components.native.chat.NativeChatLaunchRetry.retry', 'Retry'),
-            onClick: onRetry
-          }
+        : signInContent
+          ? undefined
+          : {
+              label: translate('auto.components.native.chat.NativeChatLaunchRetry.retry', 'Retry'),
+              onClick: onRetry
+            }
   }
 }
 
@@ -78,7 +83,8 @@ export function structuredSessionNotices({
   sessionError,
   composerError,
   claudeSignIn = null,
-  availability = null
+  availability = null,
+  hostPermission = null
 }: {
   launch: {
     lifecycle: StructuredAgentSessionLaunchLifecycle | null
@@ -91,6 +97,8 @@ export function structuredSessionNotices({
   claudeSignIn?: NativeChatClaudeSignIn | null
   /** Why the host says no chat can start here, from `useNativeChatAvailabilityNotice`. */
   availability?: NativeChatComposerNotice | null
+  /** Why this chat's host may not take a turn, from `useNativeChatHostPermissionGate`. */
+  hostPermission?: NativeChatComposerNotice | null
 }): NativeChatComposerNotice[] {
   const launchNotice = nativeChatLaunchNotice({
     lifecycle: launch.lifecycle,
@@ -100,6 +108,7 @@ export function structuredSessionNotices({
     claudeSignIn
   })
   return [
+    ...(hostPermission ? [hostPermission] : []),
     ...(availability ? [availability] : []),
     ...(launchNotice && !sessionError ? [launchNotice] : []),
     ...(sessionError

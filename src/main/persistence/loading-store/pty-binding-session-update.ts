@@ -6,6 +6,8 @@ import {
   layoutContainsLeafId
 } from '../restoring-sessions/terminal-layout-normalization'
 import { createMinimalPersistedTerminalTab } from '../restoring-sessions/session-owner-fields'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { placedSplitRoot } from '../terminal-topology/terminal-pane-placement-graft'
 import { tabRowPtyIdAfterLeafBinding } from './terminal-tab-pty-ownership'
 import type { PersistPtyBindingArgs } from './pty-binding-persistence'
 
@@ -103,14 +105,16 @@ export function applyPtyBinding(
   if (layout) {
     if (!layout.root) {
       terminalMembershipChanged = true
-      // Why: createTab can persist an empty layout before TerminalPane mounts; the sync binding still needs a durable root.
+      // Why: load names every saved root, but the layout type still allows none; the binding needs a durable one.
       layout.root = { type: 'leaf', leafId: args.leafId }
       layout.activeLeafId = args.leafId
       layout.expandedLeafId = null
     } else if (!layoutContainsLeafId(layout.root, args.leafId)) {
       terminalMembershipChanged = true
       // Why: splitPane spawns before its snapshot reaches main; add a minimal leaf so a crash can't strand the pane's binding.
-      layout.root = {
+      // Switch point: main's tree is drawn back, so it places the leaf where the window split it.
+      layout.root = (ORCA_LAYOUT_OWNER_IS_MAIN &&
+        placedSplitRoot(layout.root, args.leafId, args.placement)) || {
         type: 'split',
         direction: 'vertical',
         first: cloneLayoutNode(layout.root),

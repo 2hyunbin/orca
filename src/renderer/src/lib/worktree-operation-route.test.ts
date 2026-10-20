@@ -589,13 +589,34 @@ describe('resolveWorktreeOperationRouteResult', () => {
       })
     })
 
-    it('reports contradictory repo rows as ambiguous rather than defaulting to local', () => {
+    it('routes an unstamped row of a project shared with a paired server here (#25467)', () => {
+      // Listings stamp every paired-server row, so the unstamped row was listed on this machine.
       expect(
         resolveWorktreeOperationRouteResult(
           {
             repos: [
-              { id: 'repo-1', executionHostId: 'local' } as never,
-              { id: 'repo-1', executionHostId: 'runtime:hub-a' } as never
+              { id: 'repo-1', executionHostId: 'local' },
+              { id: 'repo-1', executionHostId: 'runtime:hub-a' }
+            ],
+            runtimeEnvironments: [{ id: 'some-hub' }],
+            runtimeEnvironmentCatalogHydrated: true,
+            worktreesByRepo: { 'repo-1': [worktree(undefined)] }
+          },
+          WORKTREE_ID
+        )
+      ).toEqual({
+        kind: 'resolved',
+        route: { executionHostId: 'local', runtimeEnvironmentId: null }
+      })
+    })
+
+    it('reports contradictory paired-server repo rows as ambiguous rather than defaulting to local', () => {
+      expect(
+        resolveWorktreeOperationRouteResult(
+          {
+            repos: [
+              { id: 'repo-1', executionHostId: 'runtime:hub-b' },
+              { id: 'repo-1', executionHostId: 'runtime:hub-a' }
             ],
             runtimeEnvironments: [{ id: 'some-hub' }],
             runtimeEnvironmentCatalogHydrated: true,
@@ -665,7 +686,8 @@ describe('resolveWorktreeOperationRouteResult', () => {
       })
     })
 
-    it('drops the HUB transport when two HUBs project the active SSH worktree', () => {
+    // A transport-less route would go over this app's own SSH connection (review-5 #2).
+    it('refuses when two HUBs project the active SSH worktree', () => {
       expect(
         resolveWorktreeOperationRouteResult(
           {
@@ -680,10 +702,7 @@ describe('resolveWorktreeOperationRouteResult', () => {
           },
           WORKTREE_ID
         )
-      ).toEqual({
-        kind: 'resolved',
-        route: { executionHostId: 'ssh:same-private-target', runtimeEnvironmentId: null }
-      })
+      ).toEqual({ kind: 'ambiguous' })
     })
 
     it('keeps an unknown active worktree on its selected host', () => {

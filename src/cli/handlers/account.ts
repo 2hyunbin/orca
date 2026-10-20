@@ -7,11 +7,8 @@ import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 import { stripElectronRunAsNode } from '../runtime/launch'
 import { rejectRemoteSelectionFlags } from '../remote-selection-flag-rejection'
-import {
-  buildWslExecArgs,
-  buildWslLoginShellCommand,
-  quotePosixShell
-} from '../../shared/wsl-login-shell-command'
+import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
+import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import {
   getVersionManagerBinPaths,
   resolveCliCommand,
@@ -26,7 +23,7 @@ import { stdioForWindowsInteractiveChild } from '../../shared/windows-console-in
 import {
   ACCOUNT_IMPORT_RUNTIME_CAPABILITY,
   CLAUDE_SIGN_IN_RUNTIME_CAPABILITY
-} from '../../shared/protocol-version'
+} from '../../shared/account-runtime-capabilities'
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import type {
   ClaudeAccountSignIn,

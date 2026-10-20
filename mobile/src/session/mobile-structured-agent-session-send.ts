@@ -1,4 +1,5 @@
 import type { AgentSessionSendResult } from '../../../src/shared/agent-session-wire'
+import type { AgentJournalCursor } from '../../../src/shared/agent-session-journal-types'
 import {
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
@@ -20,10 +21,13 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
   attachments: readonly StructuredAgentSessionAttachment[]
   /** Sent only when the host advertises `agent-session.queued-messages.v1`. */
   delivery?: 'queue-if-active'
+  /** Sent only when the host advertises `agent-session.send-options.v1`. */
+  options?: Readonly<Record<string, string>>
   deadline?: number
   /** The id the host records the message under. */
   clientMessageId: string
   onError: MobileNativeChatSendErrorReporter
+  onAccepted?: (cursor: AgentJournalCursor | undefined) => void
 }): Promise<MobileNativeChatSendOutcome> {
   const timeoutMs = timeoutForDeadline(input.deadline)
   if (timeoutMs === null) {
@@ -39,7 +43,8 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
     expectedRuntimeFence: input.expectedRuntimeFence,
     fields: {
       body: structuredAgentSessionSendBody(input.text, input.attachments),
-      ...(input.delivery ? { delivery: input.delivery } : {})
+      ...(input.delivery ? { delivery: input.delivery } : {}),
+      ...(input.options ? { options: input.options } : {})
     },
     clientOperationId: input.clientMessageId,
     timeoutMs
@@ -47,6 +52,9 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
   const outcome = mobileStructuredSendDelivery(result)
   if (outcome.error !== null) {
     input.onError(outcome.error)
+  }
+  if (outcome.outcome === 'accepted' && result.status === 'accepted') {
+    input.onAccepted?.(result.cursor)
   }
   return outcome.outcome
 }

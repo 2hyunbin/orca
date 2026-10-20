@@ -9,6 +9,7 @@ import {
   applyNativeChatReportedSessionOptions,
   clearTrackedSessionOption,
   createNativeChatSessionOptionRecord,
+  getTrackedSessionOption,
   setTrackedSessionOption,
   type NativeChatSessionOptionRecord
 } from './native-chat-session-option-state'
@@ -17,6 +18,7 @@ import {
   STRUCTURED_LAUNCH_SEED_OPTION_IDS
 } from './native-chat-session-option-defaults'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
+import { withUnlistedEffort } from './structured-agent-session-unlisted-effort'
 import { structuredAgentSessionPermissionDescriptor } from './structured-agent-session-permission-option'
 import type { SessionOptionDescriptor, SessionOptionValue } from './native-chat-session-options'
 import type {
@@ -51,6 +53,9 @@ export type StructuredAgentSessionOptionState = {
    *  built-in list before the host answered (shown as the quiet placeholder); `builtin` is the
    *  same list once the host said it has none, usable but naming nothing the host may replace. */
   catalogSource: 'seed' | 'builtin' | 'host' | 'live' | null
+  /** The rows of a live answer its agent's own listing names; a row outside them is the chat's
+   *  own model, which no list describes. Absent from an older host. */
+  verifiedModelIds?: readonly string[]
   record: NativeChatSessionOptionRecord
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
@@ -80,11 +85,34 @@ export function settleStructuredAgentSessionBuiltinCatalog(
   return state.catalogSource === 'seed' ? { ...state, catalogSource: 'builtin' } : state
 }
 
+function isListedModelRow(row: unknown): row is { id: string } {
+  return (
+    typeof row === 'object' &&
+    row !== null &&
+    'id' in row &&
+    typeof row.id === 'string' &&
+    'efforts' in row &&
+    Array.isArray(row.efforts)
+  )
+}
+
+/** The ids a finished listing names; undefined for one still running, failed, empty or malformed. */
+export function finishedListingIds(catalog: AgentSessionModelCatalogResult): string[] | undefined {
+  const rows: unknown = catalog.origin === 'unknown' ? null : catalog.models
+  return Array.isArray(rows) &&
+    rows.length > 0 &&
+    rows.every(isListedModelRow) &&
+    !catalog.listingInProgress &&
+    !catalog.unavailable
+    ? rows.map((row) => row.id)
+    : undefined
+}
+
 /**
  * Applies the host's stored model catalog: models only, no current selection
  * and no record writes, so nothing here reads as a committed value — the pick
  * stays provisional until a live options result confirms it. A live catalog
- * is never downgraded by this.
+ * is never replaced by this.
  */
 export function applyStructuredAgentSessionModelCatalog(
   state: StructuredAgentSessionOptionState,
@@ -147,6 +175,7 @@ export function applyStructuredAgentSessionOptions(
     ...state,
     catalog: structuredAgentSessionOptionCatalog(seed, result),
     catalogSource: 'live',
+    verifiedModelIds: result.listedModelIds?.length ? result.listedModelIds : undefined,
     permissionMode: result.current.permissionMode ?? null
   }
 }
@@ -190,7 +219,7 @@ function modelOptionSnapshot(state: StructuredAgentSessionOptionState): SessionO
     liveTransport: 'agent-session'
   })
   return snapshot.length > 0 || state.catalogSource === 'live'
-    ? snapshot
+    ? withUnlistedEffort(state.catalog, state.record, state.verifiedModelIds, snapshot)
     : [PROVIDER_DEFAULT_MODEL_PLACEHOLDER]
 }
 
@@ -213,7 +242,7 @@ export function canSetStructuredAgentSessionOption(
   const descriptor = structuredAgentSessionOptionSnapshot(state).find((entry) => entry.id === id)
   return Boolean(
     state.catalog &&
-    state.pendingId === null &&
+    state.pendingId !== id &&
     ((typeof value === 'string' &&
       descriptor?.kind.type === 'select' &&
       descriptor.kind.choices.some((choice) => choice.value === value)) ||
@@ -241,7 +270,13 @@ export function commitStructuredAgentSessionOption(
   if (decoded === null) {
     return { ...state, pendingId: null }
   }
+  const effort =
+    id === 'model' ? getTrackedSessionOption(state.record, effectiveModel, 'effort') : undefined
   setTrackedSessionOption(state.record, id, decoded, 'dispatched', effectiveModel)
+  // The host saves effort for the conversation, including across model picks.
+  if (effort) {
+    setTrackedSessionOption(state.record, 'effort', effort.value, 'dispatched')
+  }
   return { ...state, pendingId: null }
 }
 

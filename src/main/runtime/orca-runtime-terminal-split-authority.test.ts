@@ -13,6 +13,7 @@ const TAB_ID = 'tab-remote'
 const SOURCE_LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const SOURCE_PTY_ID = 'pty-source'
 const SPLIT_PTY_ID = 'pty-split'
+const SPLIT_INCARNATION_ID = 'pty-split-inc'
 
 function sourceLayout(): TerminalLayoutSnapshot {
   return {
@@ -109,11 +110,11 @@ function createHarness(
     },
     persistPtyBinding: () => true
   })
-  let resolveSpawn: ((result: { id: string }) => void) | undefined
+  let resolveSpawn: ((result: { id: string; incarnationId: string }) => void) | undefined
   const spawn = options.deferSpawn
     ? vi.fn(
         () =>
-          new Promise<{ id: string }>((resolve) => {
+          new Promise<{ id: string; incarnationId?: string }>((resolve) => {
             resolveSpawn = resolve
           })
       )
@@ -222,7 +223,7 @@ function createHarness(
       }
     },
     resolveReveal: () => resolveReveal?.({ tabId: TAB_ID }),
-    resolveSpawn: () => resolveSpawn?.({ id: SPLIT_PTY_ID })
+    resolveSpawn: () => resolveSpawn?.({ id: SPLIT_PTY_ID, incarnationId: SPLIT_INCARNATION_ID })
   }
 }
 
@@ -339,6 +340,29 @@ describe('remote runtime terminal split authority', () => {
     expect(siblingSurfaces.every((tab) => tab.parentLayout?.root?.type === 'split')).toBe(true)
   })
 
+  it("gives a split the host's account env, under the caller's own env", async () => {
+    const harness = createHarness()
+    harness.runtime.setHostAccountLaunchEnv({
+      wslDistro: 'Ubuntu',
+      claude: {},
+      terminal: { CODEX_HOME: '/home/u/.orca/codex/b', ORCA_CLAUDE_PROFILE_POINTER: '~/p' }
+    })
+
+    await harness.runtime.splitTerminal(harness.handle, {
+      direction: 'vertical',
+      env: { ORCA_CLAUDE_PROFILE_POINTER: '~/caller' }
+    })
+
+    expect(harness.spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          CODEX_HOME: '/home/u/.orca/codex/b',
+          ORCA_CLAUDE_PROFILE_POINTER: '~/caller'
+        })
+      })
+    )
+  })
+
   it('rejects an unowned split source before spawning a PTY', async () => {
     const harness = createHarness(false)
 
@@ -438,7 +462,7 @@ describe('remote runtime terminal split authority', () => {
       expect.objectContaining({ deadlineMs: expect.any(Number) })
     )
     expect(harness.kill).not.toHaveBeenCalled()
-    expect(harness.retireRejectedPty).toHaveBeenCalledWith(SPLIT_PTY_ID, true)
+    expect(harness.retireRejectedPty).toHaveBeenCalledWith(SPLIT_PTY_ID, true, SPLIT_INCARNATION_ID)
   })
 
   it('refuses a split whose source is only projected, before spawning', async () => {
@@ -472,7 +496,11 @@ describe('remote runtime terminal split authority', () => {
 
     await expect(split).rejects.toThrow('terminal_split_source_not_found')
     expect(harness.kill).toHaveBeenCalledWith(SPLIT_PTY_ID)
-    expect(harness.retireRejectedPty).toHaveBeenCalledWith(SPLIT_PTY_ID, false)
+    expect(harness.retireRejectedPty).toHaveBeenCalledWith(
+      SPLIT_PTY_ID,
+      false,
+      SPLIT_INCARNATION_ID
+    )
     expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]?.root).toEqual({
       type: 'leaf',
       leafId: SOURCE_LEAF_ID

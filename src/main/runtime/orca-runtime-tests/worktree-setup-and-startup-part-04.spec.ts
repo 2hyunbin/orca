@@ -1,3 +1,4 @@
+import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -17,9 +18,11 @@ import type { WorktreeMeta } from '../orca-runtime-test-mocks.spec'
 import {
   TEST_REPO_ID,
   makeWorktreeMeta,
+  spawnedPtyEnv,
   store,
   makeRuntimeStoreWithWorkspaceSession
 } from '../orca-runtime-test-fixtures.spec'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 describe('OrcaRuntimeService', () => {
   it('sends follow-up prompts for CLI-created stdin-after-start startup agents', async () => {
@@ -32,7 +35,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       }
@@ -105,7 +108,7 @@ describe('OrcaRuntimeService', () => {
         }),
         getAllWorktreeMeta: () => metaById,
         getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-        setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+        setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
           metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
           return metaById[worktreeId]
         }
@@ -175,7 +178,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       }
@@ -235,7 +238,7 @@ describe('OrcaRuntimeService', () => {
     expect(metaById[result.worktree.id]).toMatchObject({ createdWithAgent: 'claude' })
   })
 
-  it('honors split setup placement for opted-in local startup-draft worktrees', async () => {
+  it('uses a Setup tab beside opted-in local startup-draft agents', async () => {
     const metaById: Record<string, WorktreeMeta> = {}
     const runtimeStore = {
       ...makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession()).runtimeStore,
@@ -246,7 +249,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       }
@@ -332,8 +335,7 @@ describe('OrcaRuntimeService', () => {
         command: expect.stringContaining('bash /tmp/repo/.git/orca/setup-runner.sh'),
         env: expect.objectContaining({
           ORCA_ROOT_PATH: '/tmp/repo',
-          ORCA_WORKTREE_PATH: '/tmp/workspaces/runtime-startup-setup-split',
-          ORCA_WORKTREE_ID: result.worktree.id
+          ORCA_WORKTREE_PATH: '/tmp/workspaces/runtime-startup-setup-split'
         }),
         worktreeId: result.worktree.id
       })
@@ -354,8 +356,8 @@ describe('OrcaRuntimeService', () => {
     expect(setupCommand).toContain(`${nonceMatch![1]} "$status"`)
     expect(startupScript).toContain(markerPath)
     expect(setupCommand).toContain(markerPath)
-    const mainEnv = (spawn.mock.calls[0]![0] as { env?: Record<string, string> }).env ?? {}
-    const setupEnv = (spawn.mock.calls[1]![0] as { env?: Record<string, string> }).env ?? {}
+    const mainEnv = spawnedPtyEnv(spawn.mock.calls[0]![0])
+    const setupEnv = spawnedPtyEnv(spawn.mock.calls[1]![0])
     expect(result.setup).toBeUndefined()
     expect(result.setupReceipt).toMatchObject({
       state: 'running',
@@ -363,21 +365,19 @@ describe('OrcaRuntimeService', () => {
     })
     expect(mainEnv.ORCA_TAB_ID).toBeDefined()
     expect(mainEnv.ORCA_PANE_KEY).toBeDefined()
-    expect(setupEnv.ORCA_TAB_ID).toBe(mainEnv.ORCA_TAB_ID)
-    const mainLeafId = mainEnv.ORCA_PANE_KEY!.slice(`${mainEnv.ORCA_TAB_ID!}:`.length)
+    expect(setupEnv.ORCA_TAB_ID).not.toBe(mainEnv.ORCA_TAB_ID)
     expect(revealTerminalSession).toHaveBeenLastCalledWith(
       result.worktree.id,
       expect.objectContaining({
         ptyId: 'pty-startup-split-setup',
-        tabId: mainEnv.ORCA_TAB_ID,
+        tabId: setupEnv.ORCA_TAB_ID,
         activate: false,
-        splitFromLeafId: mainLeafId,
-        splitDirection: 'vertical'
+        title: 'Setup'
       })
     )
   })
 
-  it('passes the wrapped setup command to activation when startup spawned but setup did not', async () => {
+  it('hands only the host window a setup main tried and failed to start', async () => {
     const runtime = new OrcaRuntimeService(store)
     const spawn = vi
       .fn()
@@ -405,6 +405,8 @@ describe('OrcaRuntimeService', () => {
       terminalDriverChanged: vi.fn()
     })
     runtime.attachWindow(1)
+    const events: RuntimeClientEvent[] = []
+    const unsubscribe = runtime.onClientEvent((event) => events.push(event))
 
     computeWorktreePathMock.mockReturnValue('/tmp/workspaces/runtime-startup-setup-retry')
     ensurePathWithinWorkspaceMock.mockReturnValue('/tmp/workspaces/runtime-startup-setup-retry')
@@ -438,8 +440,10 @@ describe('OrcaRuntimeService', () => {
       name: 'runtime-startup-setup-retry',
       setupDecision: 'run',
       activate: true,
+      navigation: 'all',
       startup: { command: 'claude' }
     })
+    unsubscribe()
 
     expect(spawn).toHaveBeenCalledTimes(2)
     expect(activateWorktree).toHaveBeenCalledWith(
@@ -452,6 +456,11 @@ describe('OrcaRuntimeService', () => {
       undefined,
       undefined
     )
+    expect(activateWorktree).toHaveBeenCalledOnce()
+    // The window retries it where the user sees its output or its spawn error; clients never run it.
+    expect(
+      events.filter((event) => event.type === 'activateWorktree' && event.setup !== undefined)
+    ).toEqual([])
     const activationSetup = activateWorktree.mock.calls[0]?.[2] as { command?: string } | undefined
     expect(activationSetup?.command).toContain('printf')
   })
@@ -468,7 +477,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       }
@@ -554,7 +563,7 @@ describe('OrcaRuntimeService', () => {
       }),
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       }

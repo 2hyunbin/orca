@@ -5,11 +5,12 @@ import { activateAndRevealWorktree } from './worktree-activation'
 import { ensureWebRuntimeWorktreeTerminalAfterWake } from './web-runtime-worktree-terminal-after-wake'
 import { resetWebSessionTabsSnapshotFreshnessForTests } from '@/runtime/web-session-tabs-sync/tracking-lifecycle'
 import { resetWebRuntimeWakeTerminalRespawnForTests } from '@/runtime/web-runtime-wake-terminal-respawn'
+import { rememberEmptyHostAnswerForTests } from '@/runtime/web-session-tabs-sync/host-terminal-count-fixture'
 import {
   makeCreatedAgentWorktree as makeWorktree,
   seedAlreadyActiveWorktree,
   seedEmptyActivatableWorktree
-} from '@/lib/worktree-activation-created-agent-test-state'
+} from '@/lib/worktree-activation-created-agent.test-fixture'
 import { stubRuntimeEnvironmentBridge } from '../runtime/runtime-environment-bridge-fixture'
 
 const initialAppStoreState = useAppStore.getState()
@@ -114,9 +115,8 @@ describe('activateAndRevealWorktree', () => {
     const target = { ...makeWorktree(), id: 'wt-handoff', displayName: 'handoff' }
     seedEmptyActivatableWorktree(target, { extraWorktrees: [sibling] })
 
-    // The shape post-delete focus handoff produces. That caller passes no opts at all —
-    // asserted directly in active-worktree-focus-after-delete.test.ts.
-    activateAndExpectNoRelaunch(target.id)
+    // The shape the removal successor produces: no startup payload.
+    activateAndExpectNoRelaunch(target.id, { revealInSidebar: false })
   })
 
   it('does not relaunch when activation opts carry no startup payload', () => {
@@ -204,9 +204,9 @@ describe('activateAndRevealWorktree', () => {
         }
       },
       settings: {
-        agentCmdOverrides: {},
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        ...getDefaultSettings(''),
+        agentCmdOverrides: {}
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -258,9 +258,9 @@ describe('activateAndRevealWorktree', () => {
       tabBarOrderByWorktree: {},
       pendingStartupByTabId: {},
       settings: {
-        agentCmdOverrides: {},
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        ...getDefaultSettings(''),
+        agentCmdOverrides: {}
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -308,10 +308,10 @@ describe('activateAndRevealWorktree', () => {
       activeTabIdByWorktree: {},
       tabBarOrderByWorktree: {},
       settings: {
+        ...getDefaultSettings(''),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'web-runtime-1',
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        activeRuntimeEnvironmentId: 'web-runtime-1'
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -371,10 +371,10 @@ describe('activateAndRevealWorktree', () => {
       activeTabIdByWorktree: {},
       tabBarOrderByWorktree: {},
       settings: {
+        ...getDefaultSettings(''),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'focused-runtime',
-        setupScriptLaunchMode: 'new-tab'
-      } as unknown as ReturnType<typeof useAppStore.getState>['settings'],
+        activeRuntimeEnvironmentId: 'focused-runtime'
+      },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
       refreshGitHubForWorktreeIfStale: vi.fn(),
@@ -436,8 +436,7 @@ describe('activateAndRevealWorktree', () => {
       settings: {
         ...getDefaultSettings('/workspace/.orca-workspaces'),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'web-runtime-1',
-        setupScriptLaunchMode: 'new-tab'
+        activeRuntimeEnvironmentId: 'web-runtime-1'
       },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
@@ -586,8 +585,7 @@ describe('activateAndRevealWorktree', () => {
       settings: {
         ...getDefaultSettings('/workspace/.orca-workspaces'),
         agentCmdOverrides: {},
-        activeRuntimeEnvironmentId: 'web-runtime-1',
-        setupScriptLaunchMode: 'new-tab'
+        activeRuntimeEnvironmentId: 'web-runtime-1'
       },
       markWorktreeVisited: vi.fn(),
       recordWorktreeVisit: vi.fn(),
@@ -599,6 +597,7 @@ describe('activateAndRevealWorktree', () => {
       }))
     })
 
+    rememberEmptyHostAnswerForTests('web-runtime-1', worktree.id)
     ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -659,6 +658,7 @@ describe('activateAndRevealWorktree', () => {
       }))
     })
 
+    rememberEmptyHostAnswerForTests('owner-runtime', worktree.id)
     ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
