@@ -24,9 +24,7 @@ import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
 import { removeTabsAttention } from '../workspace-attention/subject-attention-transitions'
 import { settleAttentionRemovedBy } from '../workspace-attention/attention-removal-follow-up'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
-import { closeEditorTabThroughLayoutOwner } from '../editor/tabs/editor-tab-close-through-layout-owner'
-import { recordClosedAgentSessionTabInLayoutOwner } from '@/runtime/agent-session-tab-layout-owner'
-import { recordClosedSimulatorTabInLayoutOwner } from '@/lib/simulator-tab-layout-owner'
+import { closeContentTabThroughLayoutOwner } from './content-tab-close-through-layout-owner'
 
 export function createTabsCloseActions(
   set: TabsSliceSet,
@@ -216,10 +214,25 @@ export function createTabsCloseActions(
             }
           })
         )
-      // Switch point: main closes an editor tab first; its frame drops it.
+      // Switch point: main closes an editor, browser, chat or simulator tab first; its frame drops it.
       if (
         ORCA_LAYOUT_OWNER_IS_MAIN &&
-        closeEditorTabThroughLayoutOwner(get, tab, nextActiveTabId, closeHere)
+        closeContentTabThroughLayoutOwner(get, tab, {
+          nextActiveTabId,
+          closeHere,
+          // A chat tab owns its markers; nothing else retires them.
+          ...(tab.contentType === 'agent-session'
+            ? {
+                closed: () =>
+                  settleAttentionRemovedBy(
+                    set,
+                    get,
+                    () => set((current) => removeTabsAttention(current, [tabId])),
+                    { tabsBefore: state }
+                  )
+              }
+            : {})
+        })
       ) {
         if (opts?.recordInteraction !== false) {
           get().recordFeatureInteraction?.('terminal-tabs')
@@ -227,12 +240,6 @@ export function createTabsCloseActions(
         return { closedTabId: tabId, wasLastTab, worktreeId }
       }
       closeHere()
-      // Switch point: main records a chat or simulator tab the window just closed.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        recordClosedAgentSessionTabInLayoutOwner(get(), tab)
-        recordClosedSimulatorTabInLayoutOwner(get(), tab)
-      }
-
       if (opts?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('terminal-tabs')
       }

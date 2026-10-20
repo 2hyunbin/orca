@@ -72,8 +72,9 @@ export type WindowLayoutCommand =
       groupId?: string
       afterTabId?: string
       index?: number
-      createdAt: number
-      browserCreatedAt: number
+      /** Absent from a switch-on open: main stamps the tab's time. */
+      createdAt?: number
+      browserCreatedAt?: number
       split?: NewGroupSplit
     }
   | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
@@ -106,7 +107,7 @@ export type WindowLayoutCommand =
       groupId: string
       afterTabId?: string
       index?: number
-      createdAt: number
+      createdAt?: number
       split?: NewGroupSplit
     }
   | { type: 'promotePreviewTab'; tabId: string }
@@ -116,7 +117,7 @@ export type WindowLayoutCommand =
       groupId: string
       afterTabId?: string
       index?: number
-      createdAt: number
+      createdAt?: number
       split?: NewGroupSplit
     }
   | {
@@ -169,26 +170,24 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
   switch (command.type) {
     case 'closeTabs':
       return [{ workspace: worktreeId, ids: command.tabIds }]
-    case 'openBrowserTab':
-      return [{ workspace: worktreeId, ids: [command.tabId, command.browserTabId] }]
     case 'splitGroup':
       return [{ workspace: worktreeId, ids: [command.tabId], groupLayout: true }]
     case 'moveTab':
     case 'renameTab':
     case 'setTabProps':
-    case 'openAgentSessionTab':
-    case 'openSimulatorTab':
     case 'createTerminalTab':
       return [{ workspace: worktreeId, ids: [command.tabId] }]
+    case 'setGroupRatios':
+      return [{ workspace: worktreeId, ids: [], groupLayout: true }]
+    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor, browser,
+    // chat and simulator opens and page changes are sent before the window draws them.
+    case 'openBrowserTab':
     case 'openBrowserPage':
     case 'closeBrowserPage':
     case 'replaceBrowserPage':
     case 'setBrowserTabProfile':
-      return [{ workspace: worktreeId, ids: [command.browserTabId] }]
-    case 'setGroupRatios':
-      return [{ workspace: worktreeId, ids: [], groupLayout: true }]
-    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor opens,
-    // promotions, moves and renames are sent before the window draws them.
+    case 'openAgentSessionTab':
+    case 'openSimulatorTab':
     case 'openEditorTab':
     case 'promotePreviewTab':
     case 'moveTabToWorkspace':

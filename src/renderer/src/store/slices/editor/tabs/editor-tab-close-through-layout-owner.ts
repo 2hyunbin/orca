@@ -1,88 +1,10 @@
-// Editor tab closes in a layout-owner build: main closes the tab and its frame drops it; the window
-// changes no tab first, so a close main refuses leaves the tab. Once the frame is in, the group
-// shows the tab today's close picks (its previous one). Waiters on the tab learn the outcome.
+// Editor tabs whose file record the window dropped, in a layout-owner build: main closes them.
+// A single tab's close goes through `closeContentTabThroughLayoutOwner`.
 
-import type { Tab } from '../../../../../../shared/tab-types'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
-import { beginPendingTab } from '@/runtime/layout-owner-pending-tabs'
 import type { AppState } from '../../../types'
 import type { OpenFile } from '../types/open-file'
-import { pickNextActiveTab } from '../../tab-group-state'
 import { isEditorTabContentType } from './editor-tab-content-type'
-
-/**
- * Once main's frame dropped the closed tab, its group shows the tab today's close picks (one
- * picked before that is itself gone falls back to the group's history), and the workspace's
- * surface follows its active group. Nothing while the tab still shows.
- */
-function selectAfterClose(
-  get: () => AppState,
-  tab: Pick<Tab, 'id' | 'worktreeId' | 'groupId'>,
-  nextActiveTabId: string | null
-): void {
-  const state = get()
-  const worktreeId = tab.worktreeId
-  if ((state.unifiedTabsByWorktree[worktreeId] ?? []).some((entry) => entry.id === tab.id)) {
-    return
-  }
-  const activeGroupId = state.activeGroupIdByWorktree[worktreeId]
-  const group = state.groupsByWorktree[worktreeId]?.find((entry) => entry.id === tab.groupId)
-  const next =
-    group && nextActiveTabId && group.tabOrder.includes(nextActiveTabId)
-      ? nextActiveTabId
-      : group
-        ? pickNextActiveTab(group.tabOrder, group.recentTabIds, tab.id)
-        : null
-  if (next && group?.activeTabId !== next) {
-    state.activateTab(next, { worktreeId, preservePreview: true, recordFocus: false })
-  }
-  // Activation focuses the tab's group; the user's focused group stays, and shows its surface.
-  if (activeGroupId) {
-    get().focusGroup(worktreeId, activeGroupId)
-  }
-}
-
-/**
- * Sends an editor tab's close; false when it is no editor tab or main is not asked (a paired
- * server owns the workspace's layout), and the caller closes it as today. `closeHere` is today's
- * close, for a twin main may route to a paired server.
- */
-export function closeEditorTabThroughLayoutOwner(
-  get: () => AppState,
-  tab: Pick<Tab, 'id' | 'entityId' | 'worktreeId' | 'groupId' | 'contentType'>,
-  /** The tab today's close would show next in the group, picked before the close. */
-  nextActiveTabId: string | null,
-  closeHere: () => void
-): boolean {
-  if (!isEditorTabContentType(tab.contentType)) {
-    return false
-  }
-  const settle = beginPendingTab(tab.id, tab.worktreeId, tab.entityId)
-  const sent = sendLayoutApply(
-    get(),
-    tab.worktreeId,
-    { type: 'closeTabs', tabIds: [tab.id] },
-    {
-      apply: (result) => {
-        const closed = result.closed?.includes(tab.id) ?? true
-        // Waiters first: a closeFile's content cleanup must not undo the selection.
-        settle(closed ? tab.id : null)
-        if (closed) {
-          selectAfterClose(get, tab, nextActiveTabId)
-        }
-      },
-      asToday: () => {
-        closeHere()
-        settle(tab.id)
-      },
-      refused: () => settle(null)
-    }
-  )
-  if (!sent) {
-    settle(null)
-  }
-  return sent
-}
 
 /** Editor tabs of a workspace whose file record the window just dropped: main closes them. */
 export function closeDroppedEditorFileTabsThroughLayoutOwner(

@@ -237,12 +237,7 @@ function markStructuredAgentSessionLaunchCancelledInternal(
   if (matchesLaunchWorktree(state, worktreeId) && state) {
     // The launch's own owner outranks the caller's: it is the host the create was sent to.
     if (ORCA_LAYOUT_OWNER_IS_MAIN && state.intent.executionHostId === LOCAL_EXECUTION_HOST_ID) {
-      cancelStructuredAgentLaunchOnLocalHost(
-        worktreeId,
-        sessionId,
-        notifyStructuredLaunchListeners,
-        state.promise
-      )
+      cancelStructuredAgentLaunchOnLocalHost(worktreeId, sessionId)
     } else {
       markStructuredAgentLaunchCancellation(
         sessionId,
@@ -261,7 +256,7 @@ function markStructuredAgentSessionLaunchCancelledInternal(
     !alreadyCancelled &&
     executionHostId === LOCAL_EXECUTION_HOST_ID
   ) {
-    cancelStructuredAgentLaunchOnLocalHost(worktreeId, sessionId, notifyStructuredLaunchListeners)
+    cancelStructuredAgentLaunchOnLocalHost(worktreeId, sessionId)
   } else if (!alreadyCancelled) {
     markStructuredAgentLaunchCancellation(sessionId, executionHostId, alreadyCancelled)
   }

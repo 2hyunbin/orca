@@ -33,9 +33,8 @@ import {
 import { suppressCancelledStructuredSessionTabs } from '../structured-agent-session-tab-retirement'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from '../local-structured-session-owner'
 import { closeStructuredAgentSession } from '../structured-agent-session-close'
-import { useAppStore } from '../../store'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { recordSyncedAgentSessionTabsInLayoutOwner } from '../agent-session-tab-layout-owner'
+import { withFrameDrawnChatStructure } from './frame-drawn-chat-tabs'
 
 /** The host saying it no longer publishes this worktree at all, rather than publishing an empty one. */
 function isWorktreeRetraction(
@@ -68,27 +67,27 @@ export function applyStructuredSessionTabSnapshots(
   options: StructuredSessionSnapshotApplyOptions = {}
 ): void {
   const acceptedAgentSessions: { worktreeId: string; sessionId: string }[] = []
-  const before = ORCA_LAYOUT_OWNER_IS_MAIN ? useAppStore.getState() : null
   const settleStructuredSessionMirror = applyWebSessionTabsStorePatch(
-    (state) =>
-      applyLocalStructuredSessionTabSnapshots(state, snapshots, owner, undefined, {
+    (state) => {
+      const next = applyLocalStructuredSessionTabSnapshots(state, snapshots, owner, undefined, {
         ...options,
         onAcceptedAgentSession: (worktreeId, sessionId) => {
           acceptedAgentSessions.push({ worktreeId, sessionId })
           options.onAcceptedAgentSession?.(worktreeId, sessionId)
         }
-      }),
+      })
+      // Switch point: main places the listed chats' tabs; its frames draw them.
+      return ORCA_LAYOUT_OWNER_IS_MAIN && next !== state
+        ? withFrameDrawnChatStructure(
+            state,
+            next,
+            snapshots.map((snapshot) => snapshot.worktree)
+          )
+        : next
+    },
     { frames: [] }
   )
   settleStructuredSessionMirror()
-  // Switch point: main records the chat tabs this listing added to or removed from the tab bars.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN && before) {
-    recordSyncedAgentSessionTabsInLayoutOwner(
-      before,
-      useAppStore.getState(),
-      snapshots.map((snapshot) => snapshot.worktree)
-    )
-  }
   markStructuredAgentSessionLaunchesPublished(LOCAL_EXECUTION_HOST_ID, acceptedAgentSessions)
   if (options.authoritative) {
     startStructuredAgentLaunchCancellationCleanup(LOCAL_EXECUTION_HOST_ID, (sessionId) =>

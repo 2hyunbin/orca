@@ -18,6 +18,10 @@ import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-w
 import type { StructuredAgentSessionCloseCause } from '../../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from '../structured-agent-session-tab-retirement'
 import { chatTabId, withChatTabChanges, type ChatTabChange } from '../agent-session-tab-layout'
+import { chatTabLayoutCommands } from '../agent-session-tab-layout-commands'
+import type { WindowLayoutCommand } from '../runtime-layout-apply'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import { savedSessionId } from '../saved-structured-agent-session-restoration'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { structuredSessionTabRetired } from '../structured-worker-custody'
@@ -32,6 +36,8 @@ export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends Orca
   protected abstract getMobileTerminalPaneKey(
     ...args: Parameters<PruneMobileSessionTabGroupLayoutMethods['getMobileTerminalPaneKey']>
   ): ReturnType<PruneMobileSessionTabGroupLayoutMethods['getMobileTerminalPaneKey']>
+
+  abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
 
   protected abstract persistHeadlessTabGroups(
     ...args: Parameters<HeadlessTabGroupsMethods['persistHeadlessTabGroups']>
@@ -296,6 +302,13 @@ export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends Orca
 
   // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
   protected changeWindowlessChatTabs(worktreeId: string, changes: readonly ChatTabChange[]): void {
+    // Switch point: main places a chat's tab in its own layout, with or without a window.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      this.applyChatTabLayoutCommands(
+        chatTabLayoutCommands(this.getWorkspaceSessionForWorktree(worktreeId), worktreeId, changes)
+      )
+      return
+    }
     const session = this.getAvailableAuthoritativeWindow()
       ? null
       : this.getWorkspaceSessionForWorktree(worktreeId)
@@ -309,6 +322,24 @@ export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends Orca
       )
     if (next) {
       this.setWorkspaceSessionForWorktree(worktreeId, next)
+    }
+  }
+
+  private chatTabLayoutQueue: Promise<void> = Promise.resolve()
+
+  /** In order: a close follows the open it undoes. A refusal is logged, never thrown. */
+  private applyChatTabLayoutCommands(commands: readonly WindowLayoutCommand[]): void {
+    for (const command of commands) {
+      this.chatTabLayoutQueue = this.chatTabLayoutQueue.then(() =>
+        this.applyLayoutCommand(command).then(
+          (reply) => {
+            if (!reply.ok) {
+              console.warn(`[agent-session-tabs] ${command.type} refused:`, reply.code)
+            }
+          },
+          (error: unknown) => console.warn(`[agent-session-tabs] ${command.type} failed:`, error)
+        )
+      )
     }
   }
 }
