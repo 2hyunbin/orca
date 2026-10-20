@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectLanguage } from './language-detect'
+import { detectLanguage } from './editor-language-detect'
 import { detectMonacoFilenameLanguage } from './monaco-filename-language'
 import associations from './monaco-language-associations.json'
 
