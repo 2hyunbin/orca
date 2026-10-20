@@ -13,8 +13,8 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   beginHostAdmittedStructuredLaunch,
   type DeclinedStructuredLaunchTerminalOptions,
-  type StructuredLaunchTerminal,
-  type HostAdmittedStructuredLaunch
+  type HostAdmittedStructuredLaunch,
+  type StructuredLaunchTerminal
 } from '@/lib/structured-agent-session-launch-admission'
 import {
   resolveStructuredAgentSessionOwner,

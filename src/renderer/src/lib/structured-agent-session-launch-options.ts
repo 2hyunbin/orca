@@ -78,12 +78,10 @@ export function holdStructuredAgentSessionLaunchOption(
   encoded: string
 ): Promise<StructuredLaunchOptionOutcome> | null {
   const state = getStructuredLaunchStateBySessionId(sessionId)
-  if (
-    !state ||
-    state.cancelled ||
-    state.callers.outcome === 'published' ||
-    state.selection.seedPending
-  ) {
+  if (!state || state.cancelled || state.callers.outcome === 'published') {
+    return null
+  }
+  if (state.selection.seedPending) {
     return null
   }
   const replies = repliesFor(state)

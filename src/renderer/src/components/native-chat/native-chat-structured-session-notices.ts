@@ -101,15 +101,13 @@ export function structuredSessionNotices({
   hostPermission?: NativeChatComposerNotice | null
 }): NativeChatComposerNotice[] {
   // A host held for its permission mode already says why nothing starts; Retry returns with it.
-  const launchNotice = hostPermission
-    ? null
-    : nativeChatLaunchNotice({
-        lifecycle: launch.lifecycle,
-        failure: launch.failure,
-        agentLabel,
-        onRetry: launch.retry,
-        claudeSignIn
-      })
+  const launchNotice = nativeChatLaunchNotice({
+    lifecycle: hostPermission ? null : launch.lifecycle,
+    failure: launch.failure,
+    agentLabel,
+    onRetry: launch.retry,
+    claudeSignIn
+  })
   return [
     ...(hostPermission ? [hostPermission] : []),
     ...(availability ? [availability] : []),
