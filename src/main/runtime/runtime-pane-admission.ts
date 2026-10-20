@@ -6,7 +6,7 @@ import type {
 import type { LayoutRefusalCode } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
-import type { PaneStartStatuses } from './pane-start-statuses'
+import { paneStartFailure, type PaneStartStatuses } from './pane-start-statuses'
 
 type Spawn = NonNullable<RuntimePtyController['spawn']>
 type PaneStartStatusSink = Pick<PaneStartStatuses, 'set' | 'clear'>
@@ -160,10 +160,7 @@ export async function spawnInAdmittedPane(
   } catch (error) {
     // A pane that stays (kept to show the failure, or one main already held) shows why.
     if (startStatus && admittedAs && (startStatus.keepOnFailure || admittedAs === 'exists')) {
-      startStatus.sink.set(paneKey, {
-        status: 'failed',
-        reason: error instanceof Error ? error.message : String(error)
-      })
+      startStatus.sink.set(paneKey, paneStartFailure(error))
     } else {
       startStatus?.sink.clear(paneKey)
     }
