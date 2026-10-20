@@ -1,3 +1,4 @@
+import { STRUCTURED_AGENT_RUNTIME_METADATA } from '../../structured-agent-runtime-metadata'
 import { describe, expect, it, vi } from 'vitest'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { STRUCTURED_AGENT_RUNTIME_REGISTRATIONS } from '../../structured-agent-runtime-registrations'
@@ -42,4 +43,27 @@ describe('agentSession.agents', () => {
       )
     ).resolves.toMatchObject({ agents: expect.any(Array) })
   })
+})
+
+it('publishes account following from the agent runtime declaration', async () => {
+  const claude = STRUCTURED_AGENT_RUNTIME_METADATA.find(
+    ({ definition }) => definition.agent === 'claude'
+  )!
+  const declaration = vi.spyOn(claude, 'launchFollowsSelection').mockReturnValue(true)
+  try {
+    const result = await method.handler({}, context({}))
+    expect(result.agents.find(({ agent }) => agent === 'claude')?.followsAccountSelection).toBe(
+      true
+    )
+    expect(
+      result.agents.find(({ agent }) => agent === 'codex')?.followsAccountSelection
+    ).toBeUndefined()
+    declaration.mockReturnValue(false)
+    expect(
+      (await method.handler({}, context({}))).agents.find(({ agent }) => agent === 'claude')
+        ?.followsAccountSelection
+    ).toBeUndefined()
+  } finally {
+    declaration.mockRestore()
+  }
 })

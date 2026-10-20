@@ -183,3 +183,35 @@ export function resolveCodexStatusAccountState(
   }
   return getCodexStatusAccountsFromSettings(settings) ?? runtimeState
 }
+
+export function signedInCodexAccountCount(state: CodexRateLimitAccountsState): number {
+  const signedIn = state.accounts.filter((account) => account.managedHomeRuntime !== 'wsl')
+  return (
+    signedIn.length +
+    (state.systemDefault?.hasAuth &&
+    !signedIn.some((account) => account.email === state.systemDefault?.email)
+      ? 1
+      : 0)
+  )
+}
+
+export function codexStatusSwitchView(
+  state: CodexRateLimitAccountsState,
+  target: CodexStatusRuntimeTarget,
+  options: StatusSwitchGroupOptions,
+  hostOnly: boolean
+) {
+  const selectedRuntimeKey = getCodexStatusRuntimeKey(
+    normalizeCodexStatusRuntimeTarget(state, target)
+  )
+  const switchGroups = buildCodexStatusSwitchGroups(state, target, options)
+  const selectedGroup = hostOnly
+    ? switchGroups.find((group) => group.runtimeTarget.runtime === 'host')
+    : (switchGroups.find((group) => group.key === selectedRuntimeKey) ?? switchGroups[0])
+  return {
+    selectedRuntimeKey,
+    switchGroups,
+    selectedGroup,
+    activeTarget: selectedGroup?.targets.find((target) => target.active)
+  }
+}

@@ -4,17 +4,17 @@ import { formatResetCreditExpiry } from './tooltip'
 export { getCodexAccountSyncKey } from './provider-account-sync-key'
 
 export function getCodexResetProjection(
-  codex: ProviderRateLimits,
+  codex: ProviderRateLimits | null,
   hasActiveRuntimeEnvironment: boolean
 ): {
   resetCreditCount: number | null
   resetCreditExpiry: string | null
   canRedeemReset: boolean
 } {
-  const resetCreditCount = codex.rateLimitResetCredits?.availableCount ?? null
+  const resetCreditCount = codex?.rateLimitResetCredits?.availableCount ?? null
   const resetCreditExpiry =
     resetCreditCount !== null
-      ? formatResetCreditExpiry(codex.rateLimitResetCredits?.nextExpiresAt, resetCreditCount)
+      ? formatResetCreditExpiry(codex?.rateLimitResetCredits?.nextExpiresAt, resetCreditCount)
       : null
   return {
     resetCreditCount,

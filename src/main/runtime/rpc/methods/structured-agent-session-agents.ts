@@ -33,10 +33,11 @@ export const STRUCTURED_AGENT_SESSION_AGENTS_METHODS = [
       return {
         agents: STRUCTURED_AGENT_RUNTIME_METADATA.filter(({ definition }) =>
           clientReadsStructuredSessionAgent(ctx, definition.agent)
-        ).map(({ definition }) => ({
+        ).map(({ definition, launchFollowsSelection }) => ({
           agent: definition.agent,
           capabilities: { ...definition.capabilities },
-          ...(definition.managedRuntime?.() ? { managedRuntime: true as const } : {})
+          ...(definition.managedRuntime?.() ? { managedRuntime: true as const } : {}),
+          ...(launchFollowsSelection?.() ? { followsAccountSelection: true as const } : {})
         }))
       }
     }

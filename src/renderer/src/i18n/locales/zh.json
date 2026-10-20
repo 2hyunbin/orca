@@ -18833,6 +18833,12 @@
       },
       "claudeSignIn": {
         "signingIn": "正在登录…"
+      },
+      "usageLimitActions": {
+        "continueNow": "立即继续",
+        "leadIn": "无需等待，继续此聊天：",
+        "switchAccount": "切换账号",
+        "addAccount": "添加账号…"
       }
     },
     "tab": {

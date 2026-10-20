@@ -1,3 +1,4 @@
+import { providerChatAccountControl, type ChatAccountAction } from './ProviderAccountChatButton'
 import { ChevronDown, ChevronRight, Loader2, RotateCcw } from 'lucide-react'
 import React from 'react'
 import { Button } from '@/components/ui/button'
@@ -33,15 +34,19 @@ export function CodexSwitcherMenu({
   compact,
   iconOnly,
   asSubmenu = false,
-  triggerContent
+  triggerContent,
+  chatAction
 }: {
-  codex: ProviderRateLimits
+  codex: ProviderRateLimits | null
   compact: boolean
   iconOnly: boolean
   asSubmenu?: boolean
   triggerContent?: React.ReactNode
+  chatAction?: ChatAccountAction
 }): React.JSX.Element {
   const {
+    accountsLoaded,
+    signedInCount,
     accountsExpanded,
     activeTarget,
     canRedeemReset,
@@ -71,8 +76,18 @@ export function CodexSwitcherMenu({
     suppressNextAccountSelect,
     suppressNextAccountSelectRef,
     switchGroups
-  } = useCodexSwitcherController(codex)
+  } = useCodexSwitcherController(codex, chatAction)
 
+  const accountControl = providerChatAccountControl(
+    'codex',
+    chatAction,
+    accountsLoaded,
+    signedInCount,
+    isSwitching
+  )
+  if (accountControl?.add) {
+    return accountControl.button
+  }
   return (
     <ProviderDetailsMenu
       provider={codex}
@@ -80,6 +95,7 @@ export function CodexSwitcherMenu({
       iconOnly={iconOnly}
       asSubmenu={asSubmenu}
       triggerContent={triggerContent}
+      trigger={accountControl?.button}
       // Why: Codex reset credits render beside the reset action below; showing
       // them in the generic provider summary duplicates the same metadata.
       hidePanelResetCredits
@@ -88,15 +104,17 @@ export function CodexSwitcherMenu({
         'Open Codex details and account switcher'
       )}
       topContent={
-        <AccountRuntimeToggle
-          groups={switchGroups}
-          value={selectedGroup?.key ?? selectedRuntimeKey}
-          onChange={(group) => void handleSelectRuntime(group)}
-          ariaLabel={translate(
-            'auto.components.status.bar.StatusBar.38b5647724',
-            'Codex usage runtime'
-          )}
-        />
+        chatAction ? undefined : (
+          <AccountRuntimeToggle
+            groups={switchGroups}
+            value={selectedGroup?.key ?? selectedRuntimeKey}
+            onChange={(group) => void handleSelectRuntime(group)}
+            ariaLabel={translate(
+              'auto.components.status.bar.StatusBar.38b5647724',
+              'Codex usage runtime'
+            )}
+          />
+        )
       }
       open={open}
       onOpenChange={handleOpenChange}
