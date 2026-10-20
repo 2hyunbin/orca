@@ -16,6 +16,8 @@ export type EditorBufferRecord = Pick<
 
 export type EditorBufferRecords = Record<string, EditorBufferRecord>
 
+type EditorBufferState = { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords }
+
 export const EDITOR_BUFFER_FIELDS = [
   'isDirty',
   'lastKnownDiskSignature',
@@ -62,11 +64,11 @@ export function patchEditorBuffer(
 
 /** Writes `patch` to one file's record and its tab mirror in one update. */
 export function writeEditorBuffer(
-  state: { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords },
+  state: EditorBufferState,
   fileId: string,
   patch: Partial<EditorBufferRecord>,
   tabPatch?: Partial<OpenFile>
-): { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords } {
+): EditorBufferState {
   let editorBuffers = state.editorBuffers
   const openFiles = state.openFiles.map((file) => {
     if (file.id !== fileId) {
@@ -76,6 +78,44 @@ export function writeEditorBuffer(
     return { ...file, ...tabPatch, ...patch }
   })
   return { openFiles, editorBuffers }
+}
+
+/** Writes `patch` through the file's record; returns `state` itself when the record already holds it. */
+export function updateEditorBuffer<TState extends EditorBufferState>(
+  state: TState,
+  fileId: string,
+  patch: Partial<EditorBufferRecord>
+): TState | EditorBufferState {
+  const file = state.openFiles.find((candidate) => candidate.id === fileId)
+  if (!file) {
+    return state
+  }
+  const record = editorBufferOf(state.editorBuffers, file)
+  const changes = EDITOR_BUFFER_FIELDS.some(
+    (field) => Object.hasOwn(patch, field) && !Object.is(record[field], patch[field])
+  )
+  return changes ? writeEditorBuffer(state, fileId, patch) : state
+}
+
+/** A host-mirrored tab carries the host's buffer state, so its record adopts it in the same write. */
+export function adoptMirroredEditorBuffers(
+  records: EditorBufferRecords,
+  openFiles: readonly OpenFile[]
+): EditorBufferRecords {
+  let next = records
+  for (const file of openFiles) {
+    const record = records[file.id]
+    if (
+      file.mirroredFromRuntimeSession !== true ||
+      !record ||
+      editorBufferMirrorMismatch(file, record) === null
+    ) {
+      continue
+    }
+    next = next === records ? { ...records } : next
+    next[file.id] = editorBufferRecordFromFile(file)
+  }
+  return next
 }
 
 /** Moves each migrated tab's record to its new id in the same update that re-keys the tab. */
