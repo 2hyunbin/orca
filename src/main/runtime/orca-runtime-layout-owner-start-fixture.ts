@@ -24,7 +24,7 @@ export class ProvisioningRuntime extends OrcaRuntimeService {
     return this.getWorktreeTerminalProvisioningHost()
   }
   startStatusOf(paneKey: string) {
-    return this.paneStartStatuses?.get(paneKey) ?? null
+    return this.paneStartStatuses?.peek(paneKey) ?? null
   }
 }
 

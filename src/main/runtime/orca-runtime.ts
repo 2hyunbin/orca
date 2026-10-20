@@ -250,7 +250,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
     // An empty title is no title.
     liveTitle: (ptyId) => this.getTrackedDisplayTitleForPty(ptyId) || null,
-    paneStartFact: (paneKey) => this.paneStartStatuses?.get(paneKey) ?? null
+    paneStartFact: (paneKey, binding) => this.paneStartStatuses?.get(paneKey, binding) ?? null
   })
 
   protected markPaneLiveTitlesDirty(): void {
