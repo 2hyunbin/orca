@@ -24,6 +24,7 @@ import {
   type ProjectPlacement,
   type RegistrationCaller
 } from '../wsl/project-placement'
+import { requireSavedProject } from '../repository-checkout-admission'
 import { registerOnWslOwner } from '../wsl/wsl-project-registration'
 
 type RuntimeRepositoryRegistrationDependencies = {
@@ -67,7 +68,7 @@ export class RuntimeRepositoryRegistrationController {
   ): Promise<Repo> {
     const store = this.requireStore()
     if (placement.kind === 'saved') {
-      const existing = placement.repo
+      const existing = requireSavedProject(store, placement.repo)
       if (
         existing.executionHostId == null &&
         parseExecutionHostId(executionHostId)?.kind === 'runtime'
@@ -81,12 +82,14 @@ export class RuntimeRepositoryRegistrationController {
       return existing
     }
     if (placement.kind === 'wsl') {
-      return registerOnWslOwner(placement.environmentId, {
-        kind: 'add',
-        path: placement.linuxPath,
-        repoKind: kind,
-        displayName
-      })
+      return (
+        await registerOnWslOwner(placement.authority, {
+          kind: 'add',
+          path: placement.linuxPath,
+          repoKind: kind,
+          displayName
+        })
+      ).repo
     }
     const { admission } = placement
     const repoPath = admission.registrationPath
@@ -154,16 +157,16 @@ export class RuntimeRepositoryRegistrationController {
         runtimeRepoIsRegistrationCandidate(repo) && runtimePathsEqual(repo.path, targetPath)
     })
     if (placement.kind === 'saved') {
-      return { repo: placement.repo }
+      return { repo: requireSavedProject(store, placement.repo) }
     }
     if (placement.kind === 'wsl') {
-      const repo = await registerOnWslOwner(placement.environmentId, {
+      const result = await registerOnWslOwner(placement.authority, {
         kind: 'create',
         path: posix.dirname(placement.linuxPath),
         name: trimmedName,
         repoKind
       })
-      return { repo }
+      return { repo: result.repo }
     }
 
     let createdDir = false

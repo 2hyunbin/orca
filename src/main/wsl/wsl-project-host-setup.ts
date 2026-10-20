@@ -18,7 +18,7 @@ import {
   type RegistrationCaller,
   type WslPlacement
 } from './project-placement'
-import { callWslProjectHost } from './wsl-project-registration'
+import { mutateWslProject, UnsentWslSavedClaim } from './wsl-project-registration'
 
 const SetupReply = z.object({
   result: z.object({
@@ -91,9 +91,17 @@ export async function placeExistingFolderSetup(
     selectedPath: args.path,
     kind: args.kind === 'folder' ? 'folder' : 'git'
   })
-  return placement.kind === 'wsl'
-    ? { hosted: await setupProjectOnWslOwner(store, args, placement) }
-    : { placement }
+  if (placement.kind !== 'wsl') {
+    return { placement }
+  }
+  try {
+    return { hosted: await setupProjectOnWslOwner(store, args, placement) }
+  } catch (error) {
+    if (error instanceof UnsentWslSavedClaim) {
+      return { placement: { kind: 'saved', repo: error.repo, admission: placement.admission } }
+    }
+    throw error
+  }
 }
 
 /** Linking an existing project must also happen in the guest's catalog transaction. */
@@ -106,16 +114,12 @@ async function setupProjectOnWslOwner(
   const projectProviderIdentity =
     args.projectProviderIdentity ??
     store.getProjects?.().find((project) => project.id === args.projectId)?.providerIdentity
-  const response = await callWslProjectHost(
-    owner.environmentId,
-    'projectHostSetup.setupExistingFolder',
-    {
-      ...args,
-      hostId: LOCAL_EXECUTION_HOST_ID,
-      path: owner.linuxPath,
-      ...(projectProviderIdentity ? { projectProviderIdentity } : {})
-    }
-  )
+  const response = await mutateWslProject(owner.authority, 'projectHostSetup.setupExistingFolder', {
+    ...args,
+    hostId: LOCAL_EXECUTION_HOST_ID,
+    path: owner.linuxPath,
+    ...(projectProviderIdentity ? { projectProviderIdentity } : {})
+  })
   const { result } = SetupReply.parse(response)
   const target = { kind: 'environment' as const, environmentId: owner.environmentId }
   return {

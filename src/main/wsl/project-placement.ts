@@ -57,6 +57,29 @@ export type WslPlacement = {
   linuxPath: string
   selectedPath: string
   admission: RepositoryCheckoutAdmission
+  authority: WslMutationAuthority
+}
+
+export type WslMutationAuthority = {
+  environmentId: string
+  validate: () => Repo | undefined
+}
+
+export function wslMutationAuthority(
+  store: PlacementStore,
+  caller: PlacementCaller,
+  environmentId: string,
+  claim: () => Repo | undefined
+): WslMutationAuthority {
+  return {
+    environmentId,
+    validate: () => {
+      if (caller.fromPairedClient || !wslProjectRoutingEnabled(store, caller.domain)) {
+        throw new Error('WSL projects were turned off or are unavailable for this request.')
+      }
+      return claim()
+    }
+  }
 }
 
 /** The ordinary writer for a placement already decided; it never admits again. */
@@ -149,6 +172,7 @@ export async function placeProject(
     distro: owner.distro,
     linuxPath: owner.linuxPath,
     selectedPath: target,
-    admission
+    admission,
+    authority: wslMutationAuthority(store, context, environmentId, admission.findSaved)
   }
 }

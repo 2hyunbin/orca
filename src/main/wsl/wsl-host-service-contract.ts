@@ -35,6 +35,7 @@ export type WslHostServiceDependencies = {
     environmentId: string,
     method: string,
     params: unknown,
-    timeoutMs: number
+    timeoutMs: number,
+    beforeSend?: () => void
   ) => Promise<unknown>
 }

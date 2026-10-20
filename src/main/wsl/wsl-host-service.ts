@@ -124,11 +124,16 @@ export class WslHostService {
     return this.projectHosts.ensure(distro)
   }
 
-  callProject(environmentId: string, method: string, params: unknown): Promise<unknown> {
+  callProject(
+    environmentId: string,
+    method: string,
+    params: unknown,
+    beforeSend?: () => void
+  ): Promise<unknown> {
     if (!this.deps.call) {
       throw new Error('WSL host project operations are not available.')
     }
-    return this.deps.call(environmentId, method, params, 10 * 60_000)
+    return this.deps.call(environmentId, method, params, 10 * 60_000, beforeSend)
   }
 
   async remove(environmentId: string): Promise<WslHostServerStop> {

@@ -3,7 +3,12 @@ import { normalizeRuntimePathForComparison as selectionKey } from '../../shared/
 import { toRuntimeExecutionHostId } from '../../shared/execution-host'
 import type { ProjectGroup, ProjectGroupImportResult } from '../../shared/project-group-types'
 import { createNestedProjectGroupResolver } from '../project-groups/nested-repo-import'
-import { callWslProjectHost } from './wsl-project-registration'
+import type { WslMutationAuthority } from './project-placement'
+import {
+  mutateWslProject,
+  StoppedWslMutation,
+  UnsentWslSavedClaim
+} from './wsl-project-registration'
 
 export type PlacedNestedItem = { path: string; order: number; selectedLinuxPath: string }
 
@@ -29,13 +34,13 @@ const INCOMPLETE_GROUP = 'The project was added, but its group could not be comp
  * ordinary hierarchy from the original selections. No path is registered or resolved again.
  */
 export async function groupOnWslOwner(args: {
-  environmentId: string
+  authority: WslMutationAuthority
   parentLinuxPath: string
   groupName: string
   items: readonly PlacedNestedItem[]
   results: Map<string, ProjectGroupImportResult['projects'][number]>
 }): Promise<ProjectGroup | undefined> {
-  const owner = toRuntimeExecutionHostId(args.environmentId)
+  const owner = toRuntimeExecutionHostId(args.authority.environmentId)
   const planned: ProjectGroup[] = []
   const layout = createNestedProjectGroupResolver({
     parentPath: args.parentLinuxPath,
@@ -78,41 +83,58 @@ export async function groupOnWslOwner(args: {
     return undefined
   }
   const created = new Map<string, ProjectGroup>()
-  const markIncomplete = (path: string) => {
-    const result = args.results.get(selectionKey(path))
-    if (result) {
-      args.results.set(selectionKey(path), { ...result, status: 'failed', error: INCOMPLETE_GROUP })
+  const markIncomplete = (projectId: string) => {
+    for (const [key, result] of args.results) {
+      if (
+        result.projectId === projectId &&
+        result.executionHostId === owner &&
+        result.status !== 'failed'
+      ) {
+        args.results.set(key, { ...result, status: 'failed', error: INCOMPLETE_GROUP })
+      }
     }
   }
   try {
-    for (const group of planned) {
+    args.authority.validate()
+  } catch {
+    for (const { projectId } of moves) {
+      markIncomplete(projectId)
+    }
+    return undefined
+  }
+  let stopped = false
+  for (const group of planned) {
+    if (stopped || (group.parentGroupId && !created.has(group.parentGroupId))) {
+      continue
+    }
+    try {
       const reply = GroupReply.parse(
-        await callWslProjectHost(args.environmentId, 'projectGroup.create', {
+        await mutateWslProject(args.authority, 'projectGroup.create', {
           name: group.name,
           parentPath: group.parentPath ?? undefined,
-          parentGroupId: group.parentGroupId
-            ? (created.get(group.parentGroupId)?.id ?? null)
-            : null,
+          parentGroupId: group.parentGroupId ? created.get(group.parentGroupId)!.id : null,
           createdFrom: group.createdFrom
         })
       )
       created.set(group.id, reply.group)
+    } catch (error) {
+      stopped = error instanceof StoppedWslMutation || error instanceof UnsentWslSavedClaim
     }
-  } catch {
-    for (const { item } of moves) {
-      markIncomplete(item.path)
-    }
-    return created.get('planned-0')
   }
   for (const { item, projectId, plannedGroup } of moves) {
+    if (stopped || !created.has(plannedGroup.id)) {
+      markIncomplete(projectId)
+      continue
+    }
     try {
-      await callWslProjectHost(args.environmentId, 'projectGroup.moveProject', {
+      await mutateWslProject(args.authority, 'projectGroup.moveProject', {
         repo: `id:${projectId}`,
-        groupId: created.get(plannedGroup.id)?.id ?? null,
+        groupId: created.get(plannedGroup.id)!.id,
         order: item.order
       })
-    } catch {
-      markIncomplete(item.path)
+    } catch (error) {
+      markIncomplete(projectId)
+      stopped = error instanceof StoppedWslMutation || error instanceof UnsentWslSavedClaim
     }
   }
   return created.get('planned-0')

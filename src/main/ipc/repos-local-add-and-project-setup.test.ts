@@ -535,26 +535,6 @@ describe('repos:add + repos:clone', () => {
     expect(invalidateAuthorizedRootsCacheMock).toHaveBeenCalled()
   })
 
-  it('reuses a runtime-stamped same-path row on repos:add, as before WSL placement', async () => {
-    const existing = {
-      id: 'repo-add-runtime-stamped',
-      path: '/tmp/from-add-runtime',
-      displayName: 'from-add-runtime',
-      kind: 'folder',
-      badgeColor: '#22c55e',
-      executionHostId: 'runtime:env-1'
-    }
-    mockStore.getRepos.mockReturnValue([existing])
-
-    const result = await handlers.get('repos:add')!(null, {
-      path: '/tmp/from-add-runtime',
-      kind: 'folder'
-    })
-
-    expect(result).toEqual({ repo: existing })
-    expect(mockStore.addRepo).not.toHaveBeenCalled()
-  })
-
   it('dedupes repos:add by normalized local path on Windows', async () => {
     const existing = {
       id: 'repo-add-windows-existing',

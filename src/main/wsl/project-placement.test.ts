@@ -69,6 +69,7 @@ vi.mock('../worktree-root-preparation', () => ({
 import { registerRepoCreationHandlers } from '../ipc/repos/repo-creation-handlers'
 import { registerNestedRepoImportHandler } from '../ipc/repos/nested-repo-import-handler'
 import { addLocalRepoFromPath } from '../ipc/repos/local-repo-registration'
+import { placeProject } from './project-placement'
 import { RuntimeRepositoryRegistrationController } from '../runtime/runtime-repository-registration-controller'
 
 const OWNER = 'runtime:wsl%3Aubuntu'
@@ -138,43 +139,46 @@ describe('one placement per project operation', () => {
     mocks.target = (path) => path
     mocks.handlers.clear()
     let groups = 0
-    mocks.call.mockReset().mockImplementation(async (_env, method, params) => {
-      const replies: Record<string, () => unknown> = {
-        'repo.list': () => ({ repos: [...mocks.ownerRepos] }),
-        'projectHostSetup.list': () => ({
-          setups: mocks.ownerRepos.map((repo) => ({
-            projectId: 'owner-project',
-            repoId: repo.id,
-            path: repo.path,
-            hostId: 'local',
-            setupMethod: 'imported-existing-folder'
-          }))
-        }),
-        'project.list': () => ({ projects: [{ id: 'owner-project' }] }),
-        'projectGroup.create': () => ({
-          group: {
-            ...params,
-            id: `guest-group-${++groups}`,
-            parentPath: params.parentPath ?? null,
-            tabOrder: 0,
-            isCollapsed: false,
-            color: null,
-            createdAt: 1,
-            updatedAt: 1
-          }
-        }),
-        'projectGroup.moveProject': () => ({ repo: {} })
-      }
-      const reply = replies[method]
-      if (reply) {
-        return reply()
-      }
-      const path = method === 'repo.create' ? `${params.parentPath}/${params.name}` : params.path
-      const repo =
-        mocks.ownerRepos.find((owned) => owned.path === path) ?? row(`guest:${path}`, path)
-      mocks.ownerRepos.push(repo)
-      return { repo }
-    })
+    mocks.call
+      .mockReset()
+      .mockImplementation(async (_env, method, params, beforeSend?: () => void) => {
+        beforeSend?.()
+        const replies: Record<string, () => unknown> = {
+          'repo.list': () => ({ repos: [...mocks.ownerRepos] }),
+          'projectHostSetup.list': () => ({
+            setups: mocks.ownerRepos.map((repo) => ({
+              projectId: 'owner-project',
+              repoId: repo.id,
+              path: repo.path,
+              hostId: 'local',
+              setupMethod: 'imported-existing-folder'
+            }))
+          }),
+          'project.list': () => ({ projects: [{ id: 'owner-project' }] }),
+          'projectGroup.create': () => ({
+            group: {
+              ...params,
+              id: `guest-group-${++groups}`,
+              parentPath: params.parentPath ?? null,
+              tabOrder: 0,
+              isCollapsed: false,
+              color: null,
+              createdAt: 1,
+              updatedAt: 1
+            }
+          }),
+          'projectGroup.moveProject': () => ({ repo: {} })
+        }
+        const reply = replies[method]
+        if (reply) {
+          return reply()
+        }
+        const path = method === 'repo.create' ? `${params.parentPath}/${params.name}` : params.path
+        const repo =
+          mocks.ownerRepos.find((owned) => owned.path === path) ?? row(`guest:${path}`, path)
+        mocks.ownerRepos.push(repo)
+        return { repo }
+      })
   })
   afterEach(() => {
     Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
@@ -195,11 +199,16 @@ describe('one placement per project operation', () => {
     await expect(mocks.handlers.get('repos:create')!(null, request)).resolves.toMatchObject({
       repo: { path: '/home/me/notes', executionHostId: OWNER }
     })
-    expect(mocks.call).toHaveBeenCalledWith('wsl:ubuntu', 'repo.create', {
-      parentPath: '/home/me',
-      name: 'notes',
-      kind: 'folder'
-    })
+    expect(mocks.call).toHaveBeenCalledWith(
+      'wsl:ubuntu',
+      'repo.create',
+      {
+        parentPath: '/home/me',
+        name: 'notes',
+        kind: 'folder'
+      },
+      expect.any(Function)
+    )
 
     // This desktop's own Windows row at the other alias keeps the project.
     const saved = row('saved-notes', foreign.path, { kind: 'folder' })
@@ -215,7 +224,12 @@ describe('one placement per project operation', () => {
     const saved = row('saved-repo', '\\\\wsl$\\Ubuntu\\home\\me\\old')
     const child = '\\\\wsl.localhost\\ubuntu\\home\\me\\old\\packages\\ui'
     mocks.target = (path) => (path === child ? saved.path : path)
-    await expect(addLocalRepoFromPath(makeStore([saved]), child)).resolves.toEqual({
+    await expect(
+      addLocalRepoFromPath(
+        makeStore([row(saved.id, '/peer', { executionHostId: 'ssh:peer' }), saved]),
+        child
+      )
+    ).resolves.toEqual({
       repo: saved,
       alreadyExisted: true
     })
@@ -229,7 +243,8 @@ describe('one placement per project operation', () => {
     expect(mocks.call).toHaveBeenCalledWith(
       'wsl:ubuntu',
       'repo.add',
-      expect.objectContaining({ path: '/home/me/old' })
+      expect.objectContaining({ path: '/home/me/old' }),
+      expect.any(Function)
     )
 
     const gatedOff = makeStore([], false)
@@ -239,11 +254,19 @@ describe('one placement per project operation', () => {
       expect.objectContaining({ path: '\\\\wsl$\\Ubuntu\\home\\me\\new' })
     )
     expect(mocks.ensure).toHaveBeenCalledTimes(1)
+    const native = row('same', 'C:\\notes', { kind: 'folder', executionHostId: 'runtime:env-1' })
+    registerRepoCreationHandlers(
+      mainWindow,
+      makeStore([row('same', '/peer', { executionHostId: 'ssh:peer' }), native], false)
+    )
+    await expect(
+      mocks.handlers.get('repos:add')!(null, { path: native.path, kind: 'folder' })
+    ).resolves.toEqual({ repo: native })
   })
 
   it('lets a paired caller reuse a saved project but never start a new WSL owner', async () => {
     const saved = row('saved-repo', '\\\\wsl$\\Ubuntu\\home\\me\\old')
-    const store = makeStore([saved])
+    const store = makeStore([row(saved.id, '/peer', { executionHostId: 'runtime:peer' }), saved])
     const controller = new RuntimeRepositoryRegistrationController({
       getStore: () => store,
       invalidateResolvedWorktrees: vi.fn(),
@@ -259,7 +282,47 @@ describe('one placement per project operation', () => {
     ).rejects.toThrow('Windows desktop')
     expect(mocks.ensure).not.toHaveBeenCalled()
     expect(store.addRepo).not.toHaveBeenCalled()
+    const captured = await placeProject(store, {
+      operation: 'add',
+      selectedPath: saved.path,
+      kind: 'git',
+      domain: null,
+      fromPairedClient: true,
+      claimsOutsideWsl: { scope: 'runtime', executionHostId: undefined }
+    })
+    store.repos.splice(1, 1)
+    await expect(controller.addPlaced(captured, 'git')).rejects.toThrow('changed')
   })
+
+  it.each(['list-claim', 'send-claim', 'send-stop'])(
+    'rechecks the admitted owner after preparation: %s',
+    async (phase) => {
+      const path = '\\\\wsl$\\Ubuntu\\home\\me\\late'
+      const saved = row('windows-late', path, { kind: 'folder' })
+      const store = makeStore([])
+      const normal = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation(async (env, method, params, beforeSend) => {
+        if (
+          (phase === 'list-claim' && method === 'repo.list') ||
+          (phase === 'send-claim' && method === 'repo.add')
+        ) {
+          store.repos.push(saved)
+        }
+        if (phase === 'send-stop' && method === 'repo.add') {
+          vi.stubEnv('ORCA_INTERNAL_WSL_HOSTS', '0')
+        }
+        return normal(env, method, params, beforeSend)
+      })
+      const adding = addLocalRepoFromPath(store, path, 'folder')
+      if (phase === 'send-stop') {
+        await expect(adding).rejects.toThrow('unavailable')
+      } else {
+        await expect(adding).resolves.toEqual({ repo: saved, alreadyExisted: true })
+      }
+      expect(mocks.ownerRepos).toEqual([])
+      expect(store.addRepo).not.toHaveBeenCalled()
+    }
+  )
 
   it('groups an all-saved selection on Windows with the exact saved row, even in its extended spelling', async () => {
     const saved = row('saved-a', '\\\\?\\UNC\\wsl$\\Ubuntu\\home\\me\\a')
@@ -283,66 +346,92 @@ describe('one placement per project operation', () => {
     expect(mocks.ensure).not.toHaveBeenCalled()
   })
 
-  it('groups guest projects by acknowledged id with existing methods and leaves a late Windows claim out', async () => {
-    const parentPath = '\\\\wsl.localhost\\Ubuntu\\home\\me'
-    const [web, api, late] = ['apps\\web', 'apps\\api', 'late'].map(
-      (name) => `${parentPath}\\${name}`
-    )
-    mocks.scan = scanOf(parentPath, [web, api, late])
-    const store = makeStore([])
-    const normal = mocks.call.getMockImplementation()!
-    mocks.call.mockImplementation(async (env, method, params) => {
-      // Another window saves `late` on Windows while this import registers its siblings.
-      if (method === 'repo.add' && params.path === '/home/me/apps/web') {
-        store.repos.push(row('late-windows', late))
-      }
-      return normal(env, method, params)
-    })
-    registerNestedRepoImportHandler(mainWindow, store)
-    const result = await mocks.handlers.get('projectGroups:importNested')!(null, {
-      parentPath,
-      projectPaths: [web, api, late],
-      mode: 'group',
-      scanId: 'scan-1'
-    })
-    const methods = mocks.call.mock.calls.map(([, method]) => method)
-    expect(methods.every((method) => OLD_PEER_METHODS.has(method))).toBe(true)
-    expect(
-      mocks.call.mock.calls
-        .filter(([, method]) => method.startsWith('projectGroup.'))
-        .map(([, method, params]) => [method, params])
-    ).toEqual([
-      [
-        'projectGroup.create',
-        { name: 'me', parentPath: '/home/me', parentGroupId: null, createdFrom: 'folder-scan' }
-      ],
-      [
-        'projectGroup.create',
-        {
-          name: 'apps',
-          parentPath: '/home/me/apps',
-          parentGroupId: 'guest-group-1',
-          createdFrom: 'folder-scan'
+  it.each(['complete', 'mixed', 'alias-failure', 'receipt-failure'] as const)(
+    'retains truthful guest receipts and sparse old-peer grouping: %s',
+    async (scenario) => {
+      const parentPath = '\\\\wsl.localhost\\Ubuntu\\home\\me'
+      const [web, api, late] = ['apps\\web', 'apps\\api', 'late'].map(
+        (name) => `${parentPath}\\${name}`
+      )
+      mocks.scan = scanOf(parentPath, [web, api, late])
+      const store = makeStore([])
+      const normal = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation(async (env, method, params, beforeSend) => {
+        // Another window saves `late` on Windows while this import registers its siblings.
+        if (scenario === 'mixed' && method === 'repo.add' && params.path === '/home/me/apps/web') {
+          store.repos.push(row('late-windows', late))
         }
-      ],
-      [
-        'projectGroup.moveProject',
-        { repo: 'id:guest:/home/me/apps/web', groupId: 'guest-group-2', order: 0 }
-      ],
-      [
-        'projectGroup.moveProject',
-        { repo: 'id:guest:/home/me/apps/api', groupId: 'guest-group-2', order: 1 }
+        if (
+          scenario === 'alias-failure' &&
+          method === 'projectGroup.moveProject' &&
+          params.repo === 'id:guest:/home/me/apps/web'
+        ) {
+          throw new Error('Move failed')
+        }
+        if (scenario === 'receipt-failure' && method === 'projectHostSetup.list') {
+          throw new Error('Setup read failed')
+        }
+        return normal(env, method, params, beforeSend)
+      })
+      if (scenario === 'alias-failure') {
+        mocks.target = (path) => (path === api ? web : path)
+      }
+      registerNestedRepoImportHandler(mainWindow, store)
+      const result = await mocks.handlers.get('projectGroups:importNested')!(null, {
+        parentPath,
+        projectPaths: [web, api, late],
+        mode: 'group',
+        scanId: 'scan-1'
+      })
+      const methods = mocks.call.mock.calls.map(([, method]) => method)
+      expect(methods.every((method) => OLD_PEER_METHODS.has(method))).toBe(true)
+      const groupCalls = mocks.call.mock.calls.filter(([, method]) =>
+        method.startsWith('projectGroup.')
+      )
+      const statuses =
+        scenario === 'complete'
+          ? ['imported', 'imported', 'imported']
+          : scenario === 'alias-failure'
+            ? ['failed', 'failed', 'imported']
+            : ['failed', 'failed', 'failed']
+      const ids = [
+        'guest:/home/me/apps/web',
+        scenario === 'alias-failure' ? 'guest:/home/me/apps/web' : 'guest:/home/me/apps/api',
+        scenario === 'mixed' ? 'late-windows' : 'guest:/home/me/late'
       ]
-    ])
-    expect(result).toMatchObject({
-      group: { id: 'guest-group-1', executionHostId: OWNER },
-      importedCount: 2,
-      projects: [
-        { path: web, status: 'imported', executionHostId: OWNER },
-        { path: api, status: 'imported', executionHostId: OWNER },
-        { path: late, projectId: 'late-windows', status: 'failed', executionHostId: 'local' }
-      ]
-    })
-    expect(store.addRepo).not.toHaveBeenCalled()
-  })
+      expect(result).toMatchObject({
+        importedCount: statuses.filter((status) => status === 'imported').length,
+        failedCount: statuses.filter((status) => status === 'failed').length,
+        projects: [web, api, late].map((path, index) => ({
+          path,
+          projectId: ids[index],
+          status: statuses[index],
+          executionHostId: scenario === 'mixed' && index === 2 ? 'local' : OWNER
+        }))
+      })
+      if (scenario === 'mixed' || scenario === 'receipt-failure') {
+        expect(groupCalls).toEqual([])
+        expect(result).not.toHaveProperty('group')
+      } else {
+        expect(result).toMatchObject({ group: { id: 'guest-group-1', executionHostId: OWNER } })
+        const moves = groupCalls.filter(([, method]) => method === 'projectGroup.moveProject')
+        expect(moves).toHaveLength(scenario === 'alias-failure' ? 2 : 3)
+        if (scenario === 'complete') {
+          const layout = groupCalls.map(([, method, params]) =>
+            method === 'projectGroup.create'
+              ? ['create', params.name, params.parentPath, params.parentGroupId]
+              : ['move', params.repo, params.groupId, params.order]
+          )
+          expect(layout).toEqual([
+            ['create', 'me', '/home/me', null],
+            ['create', 'apps', '/home/me/apps', 'guest-group-1'],
+            ['move', 'id:guest:/home/me/apps/web', 'guest-group-2', 0],
+            ['move', 'id:guest:/home/me/apps/api', 'guest-group-2', 1],
+            ['move', 'id:guest:/home/me/late', 'guest-group-1', 2]
+          ])
+        }
+      }
+      expect(store.addRepo).not.toHaveBeenCalled()
+    }
+  )
 })

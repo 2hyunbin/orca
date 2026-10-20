@@ -1,6 +1,6 @@
 import { posix } from 'node:path'
 import { normalizeRuntimePathForComparison as selectionKey } from '../../shared/cross-platform-path'
-import { LOCAL_EXECUTION_HOST_ID, toRuntimeExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, toRuntimeExecutionHostId } from '../../shared/execution-host'
 import type {
   NestedRepoScanResult,
   ProjectGroupImportMode,
@@ -17,11 +17,16 @@ import { resolveNestedRepoSelection } from '../project-groups/nested-repo-import
 import { createNestedRepoImportTargetResolver } from '../project-groups/nested-repo-import-target'
 import {
   ensureNewWslOwner,
+  wslMutationAuthority,
   wslProjectRoutingEnabled,
   type PlacementCaller,
   type PlacementStore
 } from './project-placement'
-import { listWslOwnerRepos, registerOnWslOwner } from './wsl-project-registration'
+import {
+  IncompleteWslProject,
+  listWslOwnerRepos,
+  registerOnWslOwner
+} from './wsl-project-registration'
 import { groupOnWslOwner, type PlacedNestedItem } from './wsl-nested-project-grouping'
 
 type ImportItem = ProjectGroupImportResult['projects'][number]
@@ -122,58 +127,59 @@ export async function placeNestedImport(
   const knownIds = new Set((await listWslOwnerRepos(environmentId)).map((repo) => repo.id))
   const registered = new Map<string, ImportItem>()
   for (const { path, linuxPath, admission } of items) {
-    const saved = admission.findSaved()
-    if (saved) {
-      // A Windows claim that won during registration stays Windows-owned and out of the guest group.
-      results.set(
-        selectionKey(path),
-        args.mode === 'group'
-          ? {
-              path,
-              projectId: saved.id,
-              status: 'failed',
-              executionHostId: LOCAL_EXECUTION_HOST_ID,
-              error: 'This project is already saved on Windows, so it was not added to the group.'
-            }
-          : {
-              path,
-              projectId: saved.id,
-              status: 'already-known',
-              executionHostId: LOCAL_EXECUTION_HOST_ID
-            }
-      )
-      continue
-    }
     const key = linuxPathKey(linuxPath)
-    const previous = registered.get(key)
-    if (previous) {
-      results.set(selectionKey(path), {
-        ...previous,
-        path,
-        status: previous.status === 'imported' ? 'already-known' : previous.status
-      })
-      continue
-    }
     let result: ImportItem
     try {
-      const repo = await registerOnWslOwner(environmentId, {
-        kind: 'add',
-        path: linuxPath,
-        repoKind: 'git'
-      })
-      result = {
-        path,
-        projectId: repo.id,
-        status: knownIds.has(repo.id) ? 'already-known' : 'imported',
-        executionHostId
+      const saved = admission.findSaved()
+      const previous = registered.get(key)
+      const receipt = saved
+        ? { kind: 'saved' as const, repo: saved }
+        : previous
+          ? null
+          : await registerOnWslOwner(
+              wslMutationAuthority(store, caller, environmentId, admission.findSaved),
+              { kind: 'add', path: linuxPath, repoKind: 'git' }
+            )
+      if (receipt?.kind === 'saved') {
+        result = {
+          path,
+          projectId: receipt.repo.id,
+          executionHostId: getRepoExecutionHostId(receipt.repo),
+          status: args.mode === 'group' ? 'failed' : 'already-known',
+          ...(args.mode === 'group'
+            ? {
+                error: 'This project is already saved on Windows, so it was not added to the group.'
+              }
+            : {})
+        }
+      } else if (previous) {
+        result = {
+          ...previous,
+          path,
+          status: previous.status === 'imported' ? 'already-known' : previous.status
+        }
+      } else if (receipt) {
+        result = {
+          path,
+          projectId: receipt.repo.id,
+          status: knownIds.has(receipt.repo.id) ? 'already-known' : 'imported',
+          executionHostId
+        }
+        knownIds.add(receipt.repo.id)
+      } else {
+        throw new Error('The project registration returned no receipt.')
       }
-      knownIds.add(repo.id)
     } catch (error) {
-      // Registration may have committed before transport/setup failed; keep the useful row visible.
-      const repos = await listWslOwnerRepos(environmentId).catch(() => [])
+      // An acknowledged row remains useful even when later preparation or transport fails.
+      const repo =
+        error instanceof IncompleteWslProject
+          ? error.repo
+          : (await listWslOwnerRepos(environmentId).catch(() => [])).find(
+              (row) => linuxPathKey(row.path) === key
+            )
       result = {
         path,
-        projectId: repos.find((row) => linuxPathKey(row.path) === key)?.id,
+        projectId: repo?.id,
         status: 'failed',
         executionHostId,
         error: errorText(error, 'Repository could not be prepared')
@@ -182,10 +188,36 @@ export async function placeNestedImport(
     registered.set(key, result)
     results.set(selectionKey(path), result)
   }
+  for (const failed of results.values()) {
+    if (failed.status !== 'failed' || !failed.projectId) {
+      continue
+    }
+    for (const [key, result] of results) {
+      if (
+        result.projectId === failed.projectId &&
+        result.executionHostId === failed.executionHostId &&
+        result.status !== 'failed'
+      ) {
+        results.set(key, { ...result, status: 'failed', error: failed.error })
+      }
+    }
+  }
   const group =
     args.mode === 'group'
       ? await groupOnWslOwner({
-          environmentId,
+          authority: wslMutationAuthority(store, caller, environmentId, () => {
+            if (
+              items.some((item) => item.admission.findSaved()) ||
+              [...results.values()].some(
+                (result) => result.projectId && result.executionHostId !== executionHostId
+              )
+            ) {
+              throw new Error(
+                'Some of these projects are already saved on Windows. Import them separately instead of as a group.'
+              )
+            }
+            return undefined
+          }),
           parentLinuxPath: parent.linuxPath,
           groupName: args.groupName?.trim() || posix.basename(parent.linuxPath) || parent.distro,
           items,

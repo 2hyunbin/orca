@@ -144,14 +144,16 @@ export function sendRemoteRuntimeSharedControlRequest<TResult>(
   params: unknown,
   timeoutMs: number,
   envelope?: RuntimeOrchestrationEnvelope,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeSend?: () => void
 ): Promise<RuntimeRpcResponse<TResult>> {
   return getSharedControlConnection(environmentId, pairedConnection).request(
     method,
     params,
     timeoutMs,
     envelope,
-    signal
+    signal,
+    beforeSend
   )
 }
 
@@ -167,7 +169,8 @@ export async function sendRemoteRuntimeSharedControlRequestOnRuntime<TResult>(
   timeoutMs: number,
   expectedRuntimeId: string,
   envelope?: RuntimeOrchestrationEnvelope,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeSend?: () => void
 ): Promise<RuntimeRpcResponse<TResult> | null> {
   const shared = getSharedControlConnection(environmentId, pairedConnection)
   let statusSocket: number | undefined
@@ -191,6 +194,7 @@ export async function sendRemoteRuntimeSharedControlRequestOnRuntime<TResult>(
       if (socketChanged) {
         throw new Error('Runtime connection changed before sending')
       }
+      beforeSend?.()
     })
   } catch (error) {
     if (socketChanged) {

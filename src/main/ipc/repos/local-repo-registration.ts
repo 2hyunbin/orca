@@ -7,6 +7,7 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { placeProject, type ProjectPlacement } from '../../wsl/project-placement'
+import { requireSavedProject } from '../../repository-checkout-admission'
 import { registerOnWslOwner } from '../../wsl/wsl-project-registration'
 
 export async function addLocalRepoFromPath(
@@ -42,20 +43,17 @@ export async function registerPlacedDesktopProject(
 ): Promise<{ repo: Repo; alreadyExisted: boolean }> {
   if (placement.kind === 'saved') {
     // The exact claimed row, still saved right before it is linked or returned.
-    const repo = store.getRepos().find((row) => row.id === placement.repo.id)
-    if (!repo) {
-      throw new Error('This project changed while it was being added. Try again.')
-    }
+    const repo = requireSavedProject(store, placement.repo)
     return { repo, alreadyExisted: true }
   }
   if (placement.kind === 'wsl') {
-    const repo = await registerOnWslOwner(placement.environmentId, {
+    const result = await registerOnWslOwner(placement.authority, {
       kind: 'add',
       path: placement.linuxPath,
       repoKind,
       displayName
     })
-    return { repo, alreadyExisted: false }
+    return { repo: result.repo, alreadyExisted: result.kind === 'saved' }
   }
   const { admission } = placement
   const resolvedPath = admission.registrationPath

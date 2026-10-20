@@ -92,7 +92,11 @@ function liveClaim(
 ): () => Repo | undefined {
   return () =>
     rows().find(
-      (repo) => claim != null && repo.id === claim.id && key(repo.path) === key(claim.path)
+      (repo) =>
+        claim != null &&
+        repo.id === claim.id &&
+        getRepoExecutionHostId(repo) === getRepoExecutionHostId(claim) &&
+        key(repo.path) === key(claim.path)
     )
 }
 
@@ -151,7 +155,26 @@ async function admitWslClaim(
           key
         )
       : null)
-  const captured = liveClaim(sameHostRepos, realPathMatch, key)
-  const findSaved = () => sameHostRepos().find(matches) ?? captured()
+  let captured = realPathMatch
+  const findSaved = () => {
+    if (captured) {
+      return requireSavedProject(store, captured, key)
+    }
+    captured = sameHostRepos().find(matches)
+    return captured ?? undefined
+  }
   return { saved: findSaved(), findSaved }
+}
+
+/** Validate a receipt, never discover a replacement for its captured owner and path. */
+export function requireSavedProject(
+  store: Store,
+  claim: Repo,
+  key = normalizeRuntimePathForComparison
+): Repo {
+  const repo = liveClaim(() => store.getRepos(), claim, key)()
+  if (!repo) {
+    throw new Error('This project changed while it was being added. Try again.')
+  }
+  return repo
 }

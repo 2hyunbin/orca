@@ -19,6 +19,7 @@ import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { addLocalRepoFromPath } from './local-repo-registration'
 import { placeProject } from '../../wsl/project-placement'
+import { requireSavedProject } from '../../repository-checkout-admission'
 import { registerOnWslOwner } from '../../wsl/wsl-project-registration'
 
 const GIT_AVAILABILITY_TIMEOUT_MS = 1500
@@ -123,17 +124,17 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       })
       if (placement.kind === 'saved') {
         emitRepoAdded('folder_picker', true, repoKind === 'git')
-        return { repo: placement.repo }
+        return { repo: requireSavedProject(store, placement.repo) }
       }
       if (placement.kind === 'wsl') {
-        const repo = await registerOnWslOwner(placement.environmentId, {
+        const result = await registerOnWslOwner(placement.authority, {
           kind: 'create',
           path: posix.dirname(placement.linuxPath),
           name,
           repoKind
         })
         notifyReposChanged(mainWindow)
-        return { repo }
+        return { repo: result.repo }
       }
 
       // Empty pre-existing dirs are allowed (e.g. made in Finder first); non-empty ones are rejected so we don't overwrite files.
