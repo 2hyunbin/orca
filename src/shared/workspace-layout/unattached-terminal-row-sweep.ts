@@ -10,7 +10,7 @@ import { readCanonicalPtyOwners, resolveCanonicalPtyClaim } from './legacy-termi
 
 /**
  * The reconnect plan's rule: the shutdown list, else any row with a terminal. Read per partition,
- * since each lists only its own workspaces (a stale list naming another's key is not followed).
+ * since each lists only its own workspaces.
  */
 export function liveAtShutdown(session: WorkspaceSessionState): (key: string) => boolean {
   const listed = session.activeWorktreeIdsOnShutdown
@@ -64,8 +64,10 @@ function sweepRows(
  * Drops each stored terminal row the window's startup would sweep, with its pane layout, and
  * moves a selection off it as the sweep does. Resume and close records stay, as they do there.
  */
-export function sweepUnattachedTerminalRows(session: WorkspaceSessionState): WorkspaceSessionState {
-  const live = liveAtShutdown(session)
+export function sweepUnattachedTerminalRows(
+  session: WorkspaceSessionState,
+  live: (key: string) => boolean = liveAtShutdown(session)
+): WorkspaceSessionState {
   let next: WorkspaceSessionState | null = null
   for (const [key, rows] of Object.entries(session.tabsByWorktree ?? {})) {
     const { unattached, hydrated } = sweepRows(session, key, rows, live(key))

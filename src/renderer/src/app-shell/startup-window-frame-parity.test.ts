@@ -273,6 +273,18 @@ const SLICE_DIFFERENCES: readonly SliceDifference[] = [
       `activeGroupIdByWorktree ${GIT}`,
       `layoutByWorktree ${GIT} groupId`
     ]
+  },
+  {
+    fixture: 'session from before the tab bar, a row with no terminal',
+    cause: 'root group and host stamp (above), for the one kept tab',
+    paths: [
+      `unifiedTabsByWorktree ${GIT} 0 groupId`,
+      `unifiedTabsByWorktree ${GIT} 0 executionHostId`,
+      `groupsByWorktree ${GIT} 0 id`,
+      `groupsByWorktree ${GIT} 0 recentTabIds`,
+      `activeGroupIdByWorktree ${GIT}`,
+      `layoutByWorktree ${GIT} groupId`
+    ]
   }
 ]
 

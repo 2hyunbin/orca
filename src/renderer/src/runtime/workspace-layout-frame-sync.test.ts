@@ -129,7 +129,8 @@ const FRAME_DIFFERENCE_FIXTURES = new Set([
   'tab-bar label differing from the row title',
   'row without a tab-bar entry, still bound to a terminal',
   'legacy split row sharing one pane’s terminal with a tab-bar tab',
-  'session from before the tab bar, with an open file'
+  'session from before the tab bar, with an open file',
+  'session from before the tab bar, a row with no terminal'
 ])
 
 afterEach(() => endLayoutFramePositions())

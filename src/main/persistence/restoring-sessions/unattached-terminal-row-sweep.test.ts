@@ -155,4 +155,27 @@ describe('load sweep: a terminal row outside the tab bar', () => {
       'tab-b'
     ])
   })
+
+  it('stays when another partition’s stale shutdown list names its workspace, as the merged list does', () => {
+    const state = getDefaultPersistedState('/home/dev')
+    const sshHost = toSshExecutionHostId('box')
+    const local = unattachedRow()
+    local.tabsByWorktree[GIT_KEY]![1]!.ptyId = 'pty-b'
+    local.activeWorktreeIdsOnShutdown = []
+    const remote = emptySession()
+    remote.activeWorktreeIdsOnShutdown = [GIT_KEY]
+    state.workspaceSession = local
+    state.workspaceSessionsByHostId = { [sshHost]: remote }
+    expect(sweepPersistedUnattachedTerminalRows(state).workspaceSession).toBe(local)
+  })
+
+  it('treats a session from before the tab bar as the window does: keeps a live row, sweeps the rest', () => {
+    const session = unattachedRow()
+    delete session.unifiedTabs
+    delete session.tabGroups
+    delete session.tabGroupLayouts
+    const after = swept(session)
+    expect(rowIds(after)).toEqual(['tab-a'])
+    expect(after.terminalLayoutsByTabId['tab-a']).toBeDefined()
+  })
 })

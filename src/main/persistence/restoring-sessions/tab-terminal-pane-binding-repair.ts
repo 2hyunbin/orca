@@ -117,5 +117,15 @@ export function bindPersistedTabTerminalPanes(state: PersistedState): PersistedS
  * sweep go once, before main's layout would draw each as an empty tab.
  */
 export function sweepPersistedUnattachedTerminalRows(state: PersistedState): PersistedState {
-  return repairRestoredSessions(state, sweepUnattachedTerminalRows)
+  // Why any partition's list too: a stale list can name another partition's workspace, which the
+  // window's merged list then counts live; keeping on either never sweeps a row the window keeps.
+  const listedAnywhere = new Set(
+    [state.workspaceSession, ...Object.values(state.workspaceSessionsByHostId ?? {})].flatMap(
+      (session) => session?.activeWorktreeIdsOnShutdown ?? []
+    )
+  )
+  return repairRestoredSessions(state, (session) => {
+    const ownLive = liveAtShutdown(session)
+    return sweepUnattachedTerminalRows(session, (key) => ownLive(key) || listedAnywhere.has(key))
+  })
 }

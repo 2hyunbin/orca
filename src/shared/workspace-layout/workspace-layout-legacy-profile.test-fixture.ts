@@ -177,6 +177,16 @@ export const LEGACY_WORKSPACE_LAYOUT_PROFILES: readonly WorkspaceLayoutProfile[]
     session.activeTabTypeByWorktree = { [GIT_KEY]: 'editor' }
     return session
   }),
+  local('session from before the tab bar, a row with no terminal', () => {
+    const session = twoTabs()
+    delete session.unifiedTabs
+    delete session.tabGroups
+    delete session.tabGroupLayouts
+    delete session.activeGroupIdByWorktree
+    session.tabsByWorktree[GIT_KEY]![1]!.ptyId = null
+    session.terminalLayoutsByTabId['tab-b']!.ptyIdsByLeafId = {}
+    return session
+  }),
   local('legacy surface tombstone on a pane still showing its terminal', () => {
     const session = twoTabs()
     session.terminalSurfaceTombstonesByPaneKey = {
