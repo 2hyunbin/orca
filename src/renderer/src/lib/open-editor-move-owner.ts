@@ -9,7 +9,7 @@ import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
 
 /**
  * Who a file lives on: the paired server (null for this app) and, when known, the SSH host behind
- * it (null for that runtime's own machine, undefined when nothing recorded it).
+ * it (null for that runtime's own machine, undefined when nothing decisive recorded it).
  */
 type FileOwner = { runtimeEnvironmentId: string | null; sshHostId: string | null | undefined }
 
@@ -34,7 +34,11 @@ export function editorMoveOwnerFromContext(
   }
 }
 
-/** The tab's own owner, captured when it opened; never re-derived from its worktree id alone. */
+/**
+ * The tab's own owner, recorded when it opened; never re-derived from its worktree id alone. Only an
+ * SSH host it names is decisive: a `local` or server route can be this app's view of a host the
+ * File Explorer resolves further (an unstamped folder of SSH repos, a server's nested SSH target).
+ */
 function openFileOwner(
   state: WorktreeRuntimeOwnerState,
   file: Pick<
@@ -43,25 +47,21 @@ function openFileOwner(
   >
 ): FileOwner {
   const captured = file.operationProvenance?.generation.route
-  if (captured) {
-    const host = parseExecutionHostId(captured.executionHostId)
-    return {
-      runtimeEnvironmentId: captured.runtimeEnvironmentId,
-      // Why a server's route says nothing: it names the server, not which of its machines.
-      sshHostId:
-        host?.kind === 'ssh'
-          ? host.id
-          : host?.kind === 'local' && !captured.runtimeEnvironmentId
-            ? null
-            : undefined
-    }
-  }
+  const capturedHost = parseExecutionHostId(captured?.executionHostId)
+  const runtimeEnvironmentId =
+    file.runtimeEnvironmentId !== undefined
+      ? file.runtimeEnvironmentId?.trim() || null
+      : captured
+        ? captured.runtimeEnvironmentId
+        : runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, file.worktreeId)
   return {
-    runtimeEnvironmentId:
-      file.runtimeEnvironmentId !== undefined
-        ? file.runtimeEnvironmentId?.trim() || null
-        : runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, file.worktreeId),
-    sshHostId: file.externalSshTargetId ? toSshExecutionHostId(file.externalSshTargetId) : undefined
+    runtimeEnvironmentId,
+    sshHostId:
+      capturedHost?.kind === 'ssh'
+        ? capturedHost.id
+        : file.externalSshTargetId
+          ? toSshExecutionHostId(file.externalSshTargetId)
+          : undefined
   }
 }
 

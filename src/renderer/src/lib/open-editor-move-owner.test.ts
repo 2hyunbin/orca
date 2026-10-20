@@ -18,9 +18,10 @@ function captured(route: WorktreeOperationRoute): EditorFileOperationProvenance 
   }
 }
 
-const tab = (operationProvenance?: EditorFileOperationProvenance, runtimeEnvironmentId = null) => ({
+// As openFile records it: the tab's server matches the one its route names.
+const tab = (operationProvenance?: EditorFileOperationProvenance) => ({
   worktreeId: 'wt-1',
-  runtimeEnvironmentId,
+  runtimeEnvironmentId: operationProvenance?.generation.route.runtimeEnvironmentId ?? null,
   ...(operationProvenance ? { operationProvenance } : {})
 })
 
@@ -29,7 +30,7 @@ describe('isOpenFileOnMoveOwner', () => {
     useAppStore.setState(useAppStore.getInitialState(), true)
   })
 
-  it('moves only the tab on the renaming host of a local and direct-SSH same-id twin', () => {
+  it('never moves a direct-SSH tab for a rename on this app, and moves it for its own host', () => {
     const state = useAppStore.getState()
     const local = tab(captured({ executionHostId: 'local', runtimeEnvironmentId: null }))
     const ssh = tab(captured({ executionHostId: 'ssh:box', runtimeEnvironmentId: null }))
@@ -47,10 +48,19 @@ describe('isOpenFileOnMoveOwner', () => {
       true,
       false
     ])
-    expect([local, ssh].map((file) => isOpenFileOnMoveOwner(state, file, fromSsh))).toEqual([
-      false,
-      true
-    ])
+    expect(isOpenFileOnMoveOwner(state, ssh, fromSsh)).toBe(true)
+  })
+
+  it('moves a tab recorded as local when the File Explorer resolves its folder to an SSH host', () => {
+    const state = useAppStore.getState()
+    // An unstamped folder of SSH repos: the tab's route says this app, its rename goes to the host.
+    const folderTab = tab(captured({ executionHostId: 'local', runtimeEnvironmentId: null }))
+    const owner = editorMoveOwnerFromContext(
+      state,
+      { target: { kind: 'local' }, expectedExecutionHostId: 'ssh:box' },
+      'wt-1'
+    )
+    expect(isOpenFileOnMoveOwner(state, folderTab, owner)).toBe(true)
   })
 
   it('moves a server tab whose route names only the server when the rename ran on its SSH host', () => {
@@ -83,6 +93,6 @@ describe('isOpenFileOnMoveOwner', () => {
         owner
       )
     ).toBe(false)
-    expect(isOpenFileOnMoveOwner(state, tab(undefined, null), owner)).toBe(false)
+    expect(isOpenFileOnMoveOwner(state, tab(), owner)).toBe(false)
   })
 })
