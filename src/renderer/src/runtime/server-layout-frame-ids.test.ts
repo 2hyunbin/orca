@@ -90,7 +90,8 @@ describe('a server layout under desktop ids', () => {
     expect(desktop.tabs.map((entry) => [entry.id, entry.entityId])).toEqual([
       [toWebTerminalSurfaceTabId('tab-1'), toWebTerminalSurfaceTabId('tab-1')],
       [toWebTerminalSurfaceTabId('term-2'), toWebTerminalSurfaceTabId('term-2')],
-      ['/srv/app/a.ts', '/srv/app/a.ts'],
+      // The mirror names every server file by its owned id, as a restart restores it.
+      ['/srv/app/a.ts', ownedEditorFileId('/srv/app/a.ts', WT, ENV)],
       ['ed-2', ownedEditorFileId('/srv/app/b.ts', WT, ENV)],
       ['br-1', 'browser-1'],
       ['chat-1', 'session-1']

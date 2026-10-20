@@ -59,17 +59,18 @@ function tabIdRule(kind: string): 'terminal' | 'kept' {
   return rule
 }
 
-/** An editor tab names its file by path, or by the owned id of the server's own (local) file. */
+/** A server editor tab names its file by path or by owned id; the desktop always uses the owned id. */
 function desktopEditorEntityId(
   entityId: string,
   layout: PublishedWorkspaceLayout,
   environmentId: string
 ): string {
-  const file = layout.editorFiles.find(
-    (candidate) =>
-      ownedEditorFileId(candidate.filePath, layout.worktreeId, candidate.runtimeEnvironmentId) ===
-      entityId
-  )
+  const file =
+    layout.editorFiles.find(
+      (candidate) =>
+        ownedEditorFileId(candidate.filePath, layout.worktreeId, candidate.runtimeEnvironmentId) ===
+        entityId
+    ) ?? layout.editorFiles.find((candidate) => candidate.filePath === entityId)
   return file ? ownedEditorFileId(file.filePath, layout.worktreeId, environmentId) : entityId
 }
 
@@ -161,7 +162,7 @@ export function serverTabIdOf(desktopTabId: string): string {
   return isWebTerminalSurfaceTabId(desktopTabId) ? toHostSessionTabId(desktopTabId) : desktopTabId
 }
 
-/** A desktop editor tab's file id as the server knows it: its own file, owned by no environment. */
+/** A desktop editor tab's file id as the server knows it: its own file's owned id, even if the server named it by path. */
 function serverEditorEntityId(entityId: string, layout: PublishedWorkspaceLayout): string {
   const file = layout.editorFiles.find(
     (candidate) =>
