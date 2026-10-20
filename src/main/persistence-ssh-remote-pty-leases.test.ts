@@ -553,7 +553,7 @@ describe('Store', () => {
       store.markSshRemotePtyLease(
         'ssh-1',
         'ssh:ssh-2@@remote-pty',
-        PtyExitProof.from('exit-observed')
+        PtyExitProof.from('exit-observed', undefined)
       )
     ).toThrow('belongs to SSH connection "ssh-2"')
   })
@@ -570,7 +570,7 @@ describe('Store', () => {
     store.markSshRemotePtyLease(
       'ssh-1',
       'ssh:ssh-1@@remote-pty',
-      PtyExitProof.from('exit-observed')
+      PtyExitProof.from('exit-observed', undefined)
     )
 
     // An unresolved id would have left the lease `attached`; this unbound row is retired instead.
@@ -583,7 +583,7 @@ describe('Store', () => {
     store.markSshRemotePtyLease(
       'ssh-1',
       'ssh:ssh-1@@remote-pty',
-      PtyExitProof.from('exit-observed')
+      PtyExitProof.from('exit-observed', undefined)
     )
 
     const session = store.getWorkspaceSession()

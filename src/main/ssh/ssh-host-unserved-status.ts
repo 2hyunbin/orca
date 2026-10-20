@@ -1,4 +1,5 @@
 /** What a connect publishes when the managed server doesn't serve the host; there is no fallback. */
+import type { NodeDistMirrorAttempt } from '../../shared/node-dist-mirror'
 import type { SshManagedServerStatus } from '../../shared/ssh-types'
 import type { HostServerOnConnectResult } from './ssh-host-server-on-connect'
 
@@ -16,6 +17,8 @@ export function unservedServerStatus(
     ...(decision.terminalsElsewhere ? { terminalsElsewhere: true } : {}),
     ...(decision.canLeaveBehind ? { canLeaveBehind: true } : {}),
     ...(decision.held ? { held: true } : {}),
+    ...(decision.contactLost ? { contactLost: true } : {}),
+    ...(decision.nodeDownloadBlocked ? { nodeDownloadBlocked: decision.nodeDownloadBlocked } : {}),
     ...(decision.bridged ? { bridged: true } : {})
   }
 }
@@ -25,6 +28,18 @@ const HELD_MOVE_MESSAGE =
 
 const NOEXEC_MESSAGE =
   'This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.'
+
+const CONTACT_LOST_MESSAGE =
+  'Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
+
+const NODE_DOWNLOAD_BLOCKED_MESSAGES: Record<NodeDistMirrorAttempt, string> = {
+  unset:
+    'Neither this computer nor this host could download Node.js, which Orca’s server needs. Set a Node.js download mirror in Settings > Advanced > Network, or check the network on both machines, then connect again.',
+  tried:
+    'Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror in Settings > Advanced > Network, then connect again.',
+  unsupported:
+    'Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.'
+}
 
 /** Untranslated twin of the renderer's status line, for logs and callers without the catalog. */
 export function unservedHostServerMessage(decision: UnservedDecision): string {
@@ -45,6 +60,11 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
       return 'An older version of Orca changed this host’s projects. Move those changes to its managed server in SSH Hosts settings to continue.'
     case 'deferred':
     case 'failed':
-      return 'Orca couldn’t start its server on this host. Try connecting again.'
+      if (decision.contactLost) {
+        return CONTACT_LOST_MESSAGE
+      }
+      return decision.nodeDownloadBlocked
+        ? NODE_DOWNLOAD_BLOCKED_MESSAGES[decision.nodeDownloadBlocked.mirror]
+        : 'Orca couldn’t start its server on this host. Try connecting again.'
   }
 }

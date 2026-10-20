@@ -230,6 +230,19 @@ describe('SSH host server status line', () => {
     })
   })
 
+  it('says contact was lost, not that the server failed, when setup lost the host', () => {
+    const line = sshHostServerStatusLine(plain, {
+      managedServer: {
+        kind: 'relay',
+        reason: 'failed',
+        contactLost: true,
+        detail: 'The SSH connection closed before the transfer finished'
+      }
+    })
+    expect(line).toMatchObject({ tone: 'warning', text: expect.stringContaining('lost contact') })
+    expect(line?.text).not.toContain('couldn’t start')
+  })
+
   it('says a move that stopped short is paused and kept, not a plain try-again', () => {
     const detail = 'Could not connect to the remote Orca runtime.'
     const state = {

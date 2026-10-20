@@ -1,5 +1,6 @@
 import type { SshPendingPtyKill } from './ssh-pending-pty-kill'
 import type { OrcadSshProvisioningIntent } from './orcad-ssh-provisioning'
+import type { NodeDistMirrorAttempt } from './node-dist-mirror'
 
 // ─── SSH Connection Types ───────────────────────────────────────────
 
@@ -352,9 +353,16 @@ export type SshManagedServerStatus =
       canLeaveBehind?: true
       /** A move to the managed server stopped short and keeps the host locked until it resumes. */
       held?: true
+      /** Setup lost contact with the host, so nothing proves it failed there. */
+      contactLost?: true
+      /** Neither this computer nor the host could download the pinned Node runtime. */
+      nodeDownloadBlocked?: SshManagedServerNodeDownloadBlocked
       /** COMPAT(legacy-relay-bridge): the connect stayed up so the bridge serves those terminals. */
       bridged?: true
     }
+
+/** `mirror`: whether that download went through a mirror; admission drops an unknown value. */
+export type SshManagedServerNodeDownloadBlocked = { mirror: NodeDistMirrorAttempt }
 
 /** Plain SSH terminals and SFTP browsing only; `reason` is the ladder's classified cause. */
 export type SshPlainSshMode = {

@@ -10,6 +10,7 @@ import { useAppStore } from '@/store'
 import { launchSessionEndedLine } from './ssh-host-launch-session-copy'
 import { bridgedTerminalsLine } from './ssh-host-bridged-terminals-copy'
 import { managedUpdateLine, withDetail } from './ssh-host-server-update-copy'
+import { blockedNodeDownload, nodeDownloadBlockedText } from './ssh-host-node-download-copy'
 
 export type SshHostServerStatusLine = {
   text: string
@@ -189,6 +190,16 @@ function retryLine(): SshHostServerStatusLine {
   }
 }
 
+function contactLostLine(): SshHostServerStatusLine {
+  return {
+    tone: 'warning',
+    text: translate(
+      'auto.components.settings.sshHostServer.setupContactLost',
+      'Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
+    )
+  }
+}
+
 function heldMoveLine(): SshHostServerStatusLine {
   return {
     tone: 'warning',
@@ -294,7 +305,18 @@ function unservedLine(
         ...withDetail(status.detail)
       }
     case 'deferred':
-    case 'failed':
-      return { ...(status.held ? heldMoveLine() : retryLine()), ...withDetail(status.detail) }
+    case 'failed': {
+      const blocked = blockedNodeDownload(status)
+      return {
+        ...(blocked
+          ? { tone: 'destructive' as const, text: nodeDownloadBlockedText(blocked) }
+          : status.held
+            ? heldMoveLine()
+            : status.contactLost
+              ? contactLostLine()
+              : retryLine()),
+        ...withDetail(status.detail)
+      }
+    }
   }
 }
