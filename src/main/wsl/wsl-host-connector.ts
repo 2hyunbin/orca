@@ -3,6 +3,8 @@ import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { parsePairingCode } from '../../shared/pairing'
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
 import { verifyOrcadPairingIdentity } from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
+import { resolveEnvironmentPairingOffer } from '../../shared/runtime-environment-store'
+import { findWslHostDeployment } from '../../shared/runtime-environment-wsl-host-store'
 import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder'
 import { listWslHostDistros } from './wsl-host-distro-list'
 import type { WslHostConnector } from './wsl-host-service'
@@ -62,6 +64,10 @@ export function createWslHostConnector(options: {
   }
   const manager = new WslOrcadConnectionManager({
     holder,
+    getPairingOffer: (environmentId) =>
+      findWslHostDeployment(options.userDataPath, environmentId)
+        ? resolveEnvironmentPairingOffer(options.userDataPath, environmentId)
+        : null,
     onChange: options.onChange,
     deployAndLaunch: (distro, deployOptions) =>
       options.isKnownDistro(distro)
