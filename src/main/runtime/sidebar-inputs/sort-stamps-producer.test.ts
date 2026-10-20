@@ -78,15 +78,15 @@ function createHarness() {
   }
   const detector = new AgentTransitionDetector({
     resolveTabWorktreeId: (tabId) => (tabId === 'tab-t' ? WT : undefined),
+    subscribeToPtyExit: (ptyId, onExit) => {
+      exits.set(ptyId, onExit)
+      return () => exits.delete(ptyId)
+    },
     now: () => Date.now()
   })
   const producer = new SortStampsProducer({
     store: () => store,
     isWriteFenced: (id) => fenced.has(id),
-    subscribeToPtyExit: (ptyId, onExit) => {
-      exits.set(ptyId, onExit)
-      return () => exits.delete(ptyId)
-    },
     onClientEvent: (next, options) => {
       expect(options.consumesTerminalSideEffects).toBe(true)
       listener = next
@@ -111,21 +111,22 @@ function createHarness() {
     fenced,
     notified,
     viewing,
+    // The runtime feeds the same batch to the detector (titles) and the producer (bells).
     sideEffects: (
       facts: TerminalSideEffectFact[],
       extra: { pane?: string; ptyId?: string; connectionId?: string } = {}
-    ) =>
-      listener({
-        type: 'terminalSideEffects',
-        batch: {
-          ptyId: extra.ptyId ?? 'pty-t',
-          seq: 1,
-          facts,
-          worktreeId: WT,
-          paneKey: extra.pane ?? TITLE_PANE,
-          ...(extra.connectionId ? { connectionId: extra.connectionId } : {})
-        }
-      })
+    ) => {
+      const batch = {
+        ptyId: extra.ptyId ?? 'pty-t',
+        seq: 1,
+        facts,
+        worktreeId: WT,
+        paneKey: extra.pane ?? TITLE_PANE,
+        ...(extra.connectionId ? { connectionId: extra.connectionId } : {})
+      }
+      detector.noteTerminalSideEffects(batch)
+      listener({ type: 'terminalSideEffects', batch })
+    }
   }
 }
 

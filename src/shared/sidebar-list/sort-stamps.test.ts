@@ -14,8 +14,13 @@ import { agentPhaseTransition, type AgentPhase } from '../agent-transitions'
 const NOW = 1_000_000
 const IDLE: SortStamps = { recentAt: NOW - 60_000 }
 
-function agentEvent(from: AgentPhase, to: AgentPhase, panes: AgentPaneState[]) {
-  return { kind: 'agent' as const, from, to, panes }
+function agentEvent(
+  from: AgentPhase,
+  to: AgentPhase,
+  panes: AgentPaneState[],
+  transition = agentPhaseTransition(from, to)
+) {
+  return { kind: 'agent' as const, from, to, transition, panes }
 }
 
 describe('nextAgentPaneState', () => {
@@ -189,4 +194,15 @@ describe('the stamps follow the agent transitions', () => {
       )
     }
   )
+
+  it('flags a failed turn as news, and a session boundary’s done as none while it still stamps', () => {
+    expect(isUnreadNews(agentEvent('working', 'done', [], 'errored'))).toBe(true)
+    const boundary = agentEvent('working', 'done', [{ phase: 'done', at: NOW }], null)
+    expect(isUnreadNews(boundary)).toBe(false)
+    expect(classifySortStampEvent(IDLE, boundary, NOW)).toEqual({
+      recentAt: NOW,
+      smartTier: 'done',
+      smartAt: NOW
+    })
+  })
 })

@@ -1,4 +1,9 @@
-import { agentPhaseTransition, nextAgentPhase, type AgentPhase } from '../agent-transitions'
+import {
+  agentPhaseTransition,
+  nextAgentPhase,
+  type AgentPhase,
+  type AgentTransition
+} from '../agent-transitions'
 
 /**
  * Sort stamps the host that owns a workspace writes on its record when something happens there.
@@ -25,11 +30,13 @@ export type AgentPaneState = { phase: AgentPhase; at: number }
 export const RECENT_STAMP_THROTTLE_MS = 10_000
 
 export type SortStampEvent =
-  /** One pane moved; `panes` is every pane of the workspace afterwards. */
+  /** One pane moved; `transition` is the detector's news in it, `panes` every pane of the
+   *  workspace afterwards. */
   | {
       kind: 'agent'
       from: AgentPhase
       to: AgentPhase
+      transition: AgentTransition | null
       panes: readonly AgentPaneState[]
     }
   | { kind: 'bell' }
@@ -45,7 +52,15 @@ export function nextAgentPaneState(
   observed: AgentPhase,
   now: number
 ): AgentPaneState {
-  const phase = nextAgentPhase(previous.phase, observed)
+  return enterAgentPaneState(previous, nextAgentPhase(previous.phase, observed), now)
+}
+
+/** A pane's state on entering `phase` at `now`, from `previous`. */
+export function enterAgentPaneState(
+  previous: AgentPaneState,
+  phase: AgentPhase,
+  now: number
+): AgentPaneState {
   if (phase === previous.phase) {
     return previous
   }
@@ -98,11 +113,13 @@ export function classifySortStampEvent(
   }
 }
 
-/** A finish, a request for input or a bell: news that flags the workspace for whoever isn't looking. */
+/**
+ * A finish (or failure), a request for input or a bell: news that flags the workspace for whoever
+ * isn't looking. A session boundary's done moves the tier but is no news.
+ */
 export function isUnreadNews(event: SortStampEvent): boolean {
   if (event.kind !== 'agent') {
     return event.kind === 'bell'
   }
-  const transition = agentPhaseTransition(event.from, event.to)
-  return transition === 'turn-finished' || transition === 'needs-input'
+  return event.transition !== null && event.transition !== 'prompt-submitted'
 }

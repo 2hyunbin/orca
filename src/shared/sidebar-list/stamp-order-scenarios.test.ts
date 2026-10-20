@@ -10,7 +10,7 @@ import {
   type AgentPaneState,
   type SortStamps
 } from './sort-stamps'
-import type { AgentPhase } from '../agent-transitions'
+import { agentPhaseTransition, type AgentPhase } from '../agent-transitions'
 import { compareSmartStamps, recentStamp } from './stamp-order'
 
 /**
@@ -49,7 +49,13 @@ class Host {
     if (pane === row.pane) {
       return
     }
-    this.apply(row, { kind: 'agent', from: row.pane.phase, to: pane.phase, panes: [pane] })
+    this.apply(row, {
+      kind: 'agent',
+      from: row.pane.phase,
+      to: pane.phase,
+      transition: agentPhaseTransition(row.pane.phase, pane.phase),
+      panes: [pane]
+    })
     row.pane = pane
     if (pane.phase === 'done' && id !== this.openId) {
       row.unread = true
