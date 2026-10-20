@@ -10,7 +10,7 @@ import {
 } from '@/runtime/layout-owner-content-rekeys'
 import type { EditorFileRename } from '../../../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { AppState } from '../../../types'
-import { rekeyOpenFilesPatch } from '../actions/rekey-open-files-patch'
+import { rekeyOpenFilesPatch } from '../actions/rekey-open-files-action'
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { OpenFile } from '../types/open-file'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from '../types/open-file-path-rekey'

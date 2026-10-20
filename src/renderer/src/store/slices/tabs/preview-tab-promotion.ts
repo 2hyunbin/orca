@@ -8,22 +8,15 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-sw
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
 import type { AppState } from '../../types'
-import { withPreviewEnded } from './tab-preview-flag'
+import { patchTab } from '../tab-group-state'
 
 type OwnerState = Parameters<typeof sendLayoutApply>[0]
 type TabsState = Pick<AppState, 'unifiedTabsByWorktree'>
-type SetTabs = (update: (state: TabsState) => TabsState) => void
+type SetTabs = (update: (state: TabsState) => Partial<TabsState>) => void
 
-/** Ends a tab's preview in the window's own copy. */
+/** Ends a tab's preview in the window's own copy; main stores the flag only while it is true. */
 function endPreviewHere(set: SetTabs, tabId: string): void {
-  set((state) => ({
-    unifiedTabsByWorktree: Object.fromEntries(
-      Object.entries(state.unifiedTabsByWorktree).map(([worktreeId, tabs]) => [
-        worktreeId,
-        tabs.map((tab) => (tab.id === tabId && tab.isPreview ? withPreviewEnded(tab) : tab))
-      ])
-    )
-  }))
+  set((state) => patchTab(state.unifiedTabsByWorktree, tabId, { isPreview: undefined }) ?? {})
 }
 
 /** Whether the window ends a preview in its own copy: always with the switch off. */

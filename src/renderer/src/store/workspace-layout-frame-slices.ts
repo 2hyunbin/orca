@@ -14,6 +14,7 @@ import type {
   LayoutContentFacts
 } from '../../../shared/workspace-layout/workspace-layout-beside'
 import { workspaceLayoutModelFromPublished } from '../../../shared/workspace-layout/workspace-layout-from-published'
+import { editorTabShowsFile } from '../../../shared/workspace-layout/workspace-layout-editor-tab-file'
 import type {
   PublishedTab,
   PublishedWorkspaceLayout
@@ -182,23 +183,38 @@ function withFramedViewFiles(
   return [...files, ...rebuilt]
 }
 
-/** A tab only a frame drew (the window never opened it) takes the label the window's open gives. */
-function withEditorTabLabels(
-  tabsByWorktree: AppState['unifiedTabsByWorktree'],
-  openFiles: readonly OpenFile[]
-): AppState['unifiedTabsByWorktree'] {
-  const files = new Map(openFiles.map((file) => [fileKey(file.worktreeId, file.id), file]))
-  return Object.fromEntries(
-    Object.entries(tabsByWorktree).map(([key, tabs]) => [
-      key,
-      tabs.map((tab) => {
-        const file = tab.label ? undefined : files.get(fileKey(key, tab.entityId))
-        return file && isEditorTabContentType(tab.contentType)
-          ? { ...tab, label: editorTabLabelOf(file) }
-          : tab
-      })
-    ])
+/** The label the window's own open gives a frame's editor tab, from its view or its file record. */
+function frameEditorTabLabel(tab: PublishedTab, layout: PublishedWorkspaceLayout): string | null {
+  if (tab.editorView) {
+    return editorTabLabelOf({
+      mode: tab.editorView.view.mode,
+      relativePath: tab.editorView.file.relativePath
+    })
+  }
+  const file = layout.editorFiles.find((entry) =>
+    editorTabShowsFile(tab.entityId, entry, layout.worktreeId)
   )
+  return file ? file.relativePath : null
+}
+
+/** An editor tab only a frame drew (the window never opened it) takes the label its open would. */
+function withEditorTabLabels(
+  facts: LayoutContentFacts,
+  layouts: WorkspaceLayoutCache
+): LayoutContentFacts {
+  const tabLabels = { ...facts.tabLabels }
+  for (const [key, layout] of Object.entries(layouts)) {
+    for (const tab of layout.tabs) {
+      const label =
+        isEditorTabContentType(tab.kind) && !tabLabels[key]?.[tab.id]
+          ? frameEditorTabLabel(tab, layout)
+          : null
+      if (label) {
+        tabLabels[key] = { ...tabLabels[key], [tab.id]: label }
+      }
+    }
+  }
+  return { ...facts, tabLabels }
 }
 
 export function buildLayoutFrameSlices({
@@ -210,7 +226,7 @@ export function buildLayoutFrameSlices({
   const saved = saveWorkspaceLayout({
     layout: workspaceLayoutModelFromPublished(LOCAL_EXECUTION_HOST_ID, layouts),
     desktopView: view,
-    facts: withLiveTitles(facts, liveTitles),
+    facts: withEditorTabLabels(withLiveTitles(facts, liveTitles), layouts),
     carried: NOTHING_CARRIED
   })
   const session = { ...saved, unifiedTabs: stampExecutionHosts(saved.unifiedTabs ?? {}, layouts) }
@@ -264,10 +280,6 @@ export function buildLayoutFrameSlices({
     ...tabs,
     ...migrateHydratedEditorTabsAndGroups(tabs, editor.editorFileIdMigrationsByWorktree)
   }
-  editorTabs.unifiedTabsByWorktree = withEditorTabLabels(
-    editorTabs.unifiedTabsByWorktree,
-    openFiles
-  )
   return {
     tabsByWorktree: rows.tabsByWorktree,
     terminalLayoutsByTabId,

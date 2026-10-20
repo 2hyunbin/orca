@@ -140,11 +140,8 @@ export function reparentRestoredEditorThroughLayoutOwner(
       expected.applied((patch) => set(patch), get())
       if (activatesTarget) {
         get().setActiveWorktree(to, args.targetExecutionHostId, {
-          // The surface the window's own move selects: the moved file's editor.
-          stateTransition: (s) => ({
-            patch: {
-              activeTabTypeByWorktree: { ...s.activeTabTypeByWorktree, [to]: 'editor' }
-            },
+          stateTransition: () => ({
+            patch: {},
             activate: true,
             preferredActiveUnifiedTabId: moves.at(-1)!.newTabId
           })

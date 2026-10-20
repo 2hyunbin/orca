@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import type { AppState } from '../../types'
+import type { LayoutCommandResult } from '../../../../../shared/workspace-layout/workspace-layout-command-types'
 
-const answer = vi.hoisted(() => ({ value: 'asToday' as 'asToday' | 'apply' | 'refused' }))
+type Answer = 'asToday' | 'apply' | 'refused'
+const answer = vi.hoisted((): { value: Answer } => ({ value: 'asToday' }))
 
 vi.mock('@/lib/resolve-owner', () => ({ runtimeEnvironmentIdUnlessTwin: () => null }))
 vi.mock('@/runtime/layout-apply-send', () => ({
@@ -14,7 +16,11 @@ vi.mock('@/runtime/layout-apply-send', () => ({
     _state: unknown,
     _worktreeId: string,
     _command: unknown,
-    handlers: { apply: (result: object) => void; asToday: () => void; refused?: () => void }
+    handlers: {
+      apply: (result: LayoutCommandResult) => void
+      asToday: () => void
+      refused?: () => void
+    }
   ) => {
     if (answer.value === 'asToday') {
       handlers.asToday()
@@ -52,9 +58,9 @@ function promote(id: string): Tab {
   const set = (
     update: (
       state: Pick<AppState, 'unifiedTabsByWorktree'>
-    ) => Pick<AppState, 'unifiedTabsByWorktree'>
+    ) => Partial<Pick<AppState, 'unifiedTabsByWorktree'>>
   ): void => {
-    tabs = update({ unifiedTabsByWorktree: tabs }).unifiedTabsByWorktree
+    tabs = update({ unifiedTabsByWorktree: tabs }).unifiedTabsByWorktree ?? tabs
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked sender and owner lookup read nothing from the state.
   promotePreviewTabsThroughLayoutOwner({} as AppState, set, [{ id, worktreeId: WT }])

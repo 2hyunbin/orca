@@ -228,6 +228,7 @@ describe('restored editor owner reparent', () => {
   it('commits active reparenting through the complete workspace activation projection', async () => {
     const oldId = await openDrawnRestoredSource()
     const refreshGitHubForWorktreeIfStale = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial terminal, browser and catalog records with only the fields activation and frames read.
     useAppStore.setState({
       activeTabId: 'source-terminal',
       activeBrowserTabId: 'source-browser',
