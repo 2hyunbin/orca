@@ -23,6 +23,7 @@ const idlePane: WslMovePaneFacts = {
 const hints = {
   hints: [{ paneKey: 'tab-1:leaf-1', cwd: '/home/dev/repo-1' }],
   unreadablePaneKeys: [],
+  noCwdPaneKeys: [],
   staleCwdPaneKeys: []
 }
 
