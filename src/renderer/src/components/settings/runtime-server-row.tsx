@@ -35,6 +35,8 @@ import {
 
 type RuntimeServerRowProps = {
   environment: PublicKnownRuntimeEnvironment
+  /** Other saved servers with this one's host key: the same machine paired twice. */
+  duplicateOfNames: readonly string[]
   details: RuntimeHostDetails | undefined
   isActive: boolean
   remoteUpdate: RemoteServerUpdateEntry | undefined
@@ -52,6 +54,7 @@ type RuntimeServerRowProps = {
 
 export function RuntimeServerRow({
   environment,
+  duplicateOfNames,
   details,
   isActive,
   remoteUpdate,
@@ -183,6 +186,15 @@ export function RuntimeServerRow({
           <p className="truncate text-xs text-muted-foreground">{hostDescriptorText}</p>
         ) : null}
         {rowSummary ? <p className="truncate text-xs text-muted-foreground">{rowSummary}</p> : null}
+        {duplicateOfNames.length > 0 ? (
+          <p className="mt-0.5 text-xs text-destructive">
+            {translate(
+              'auto.components.settings.RuntimeEnvironmentsPane.pairedTwice',
+              'Same server as {{value0}}, paired twice. Remove one so its projects can be edited.',
+              { value0: duplicateOfNames[0] }
+            )}
+          </p>
+        ) : null}
         {detailsDescription ? (
           <p
             className={cn(

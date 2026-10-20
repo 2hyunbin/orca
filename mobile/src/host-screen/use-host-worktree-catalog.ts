@@ -34,7 +34,7 @@ export function useHostWorktreeCatalog(args: {
   /** Null in a build that lists without the feed. */
   sidebarFeed: HostSidebarFeedTriggers | null
   state: HostScreenState
-  syncViewSettingsFromDesktop: (options?: { reconnected?: boolean }) => Promise<void>
+  syncViewSettingsFromDesktop: (options?: { resend?: boolean }) => Promise<void>
 }) {
   const {
     client,
@@ -213,7 +213,6 @@ export function useHostWorktreeCatalog(args: {
     if (!client || connState !== 'connected') {
       return
     }
-    void syncViewSettingsFromDesktop()
     return startHostWorktreeRefresh({
       client,
       fetchWorktrees,

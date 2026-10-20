@@ -78,15 +78,15 @@ function createHarness() {
   }
   const detector = new AgentTransitionDetector({
     resolveTabWorktreeId: (tabId) => (tabId === 'tab-t' ? WT : undefined),
+    subscribeToPtyExit: (ptyId, onExit) => {
+      exits.set(ptyId, onExit)
+      return () => exits.delete(ptyId)
+    },
     now: () => Date.now()
   })
   const producer = new SortStampsProducer({
     store: () => store,
     isWriteFenced: (id) => fenced.has(id),
-    subscribeToPtyExit: (ptyId, onExit) => {
-      exits.set(ptyId, onExit)
-      return () => exits.delete(ptyId)
-    },
     onClientEvent: (next, options) => {
       expect(options.consumesTerminalSideEffects).toBe(true)
       listener = next
@@ -111,21 +111,22 @@ function createHarness() {
     fenced,
     notified,
     viewing,
+    // The runtime feeds the same batch to the detector (titles) and the producer (bells).
     sideEffects: (
       facts: TerminalSideEffectFact[],
       extra: { pane?: string; ptyId?: string; connectionId?: string } = {}
-    ) =>
-      listener({
-        type: 'terminalSideEffects',
-        batch: {
-          ptyId: extra.ptyId ?? 'pty-t',
-          seq: 1,
-          facts,
-          worktreeId: WT,
-          paneKey: extra.pane ?? TITLE_PANE,
-          ...(extra.connectionId ? { connectionId: extra.connectionId } : {})
-        }
-      })
+    ) => {
+      const batch = {
+        ptyId: extra.ptyId ?? 'pty-t',
+        seq: 1,
+        facts,
+        worktreeId: WT,
+        paneKey: extra.pane ?? TITLE_PANE,
+        ...(extra.connectionId ? { connectionId: extra.connectionId } : {})
+      }
+      detector.noteTerminalSideEffects(batch)
+      listener({ type: 'terminalSideEffects', batch })
+    }
   }
 }
 
@@ -468,6 +469,21 @@ describe('SortStampsProducer: terminal events', () => {
     expect(h.meta.get(WT)?.smartTier).toBe('working')
     h.attach(h.server)
     expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+  })
+
+  it('moves a pane to the workspace of a row present at attach, keeping that tier', () => {
+    const h = createHarness()
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: FOLDER,
+      payload: { state: 'working', prompt: 'task', agentType: 'codex' }
+    })
+    h.sideEffects([title('⠋ Codex working')], { pane: PANE })
+    expect(h.meta.get(WT)?.smartTier).toBe('working')
+    h.attach(h.server)
+    expect(h.meta.get(WT)?.smartTier).toBeUndefined()
+    expect(h.folders.get(FOLDER_ID)?.smartTier).toBe('working')
   })
 
   it('keeps a pane its first hook row finished in step: a later stop clears Done', () => {

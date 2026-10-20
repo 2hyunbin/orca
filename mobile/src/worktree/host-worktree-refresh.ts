@@ -12,8 +12,8 @@ type HostWorktreeRefreshArgs = {
   client: Pick<RpcClient, 'subscribe'>
   fetchWorktrees: (options?: WorktreeRefreshOptions) => Promise<void>
   fetchRepoMetadata: (options?: RepoRefreshOptions) => Promise<void>
-  /** Re-reads the Workspace options the phone shares with the desktop. */
-  syncViewSettings: (options?: { reconnected?: boolean }) => Promise<void>
+  /** Re-reads the Workspace options the phone shares with the desktop; `resend` retries unanswered changes. */
+  syncViewSettings: (options?: { resend?: boolean }) => Promise<void>
   /** The host's sidebar feed, which replaces the poll: its notices say when anything changed. */
   sidebarFeed?: HostSidebarFeedTriggers | null
   /** React Native's AppState; passed in so the lifecycle also runs off the device. */
@@ -76,7 +76,7 @@ export function startHostWorktreeRefresh({
           // Why: client events are not queued while disconnected, so re-read both snapshots after replay.
           void fetchWorktrees()
           void fetchRepoMetadata({ force: true, queueIfInFlight: true })
-          void syncViewSettings({ reconnected: true })
+          void syncViewSettings({ resend: true })
         }
         return
       }
@@ -108,6 +108,9 @@ export function startHostWorktreeRefresh({
   sidebarFeed?.refresh()
   void fetchWorktrees()
   void fetchRepoMetadata({ force: true, queueIfInFlight: true })
+  // Why resend: each connected edge starts a new lifecycle, so a write the last connection lost is
+  // never seen by a replayed ready above.
+  void syncViewSettings({ resend: true })
 
   return () => {
     stale = true

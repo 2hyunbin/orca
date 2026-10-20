@@ -14,7 +14,10 @@ const WT = 'repo-1::/tmp/worktree-a'
 function createHeadlessRuntime(
   stored: Pick<WorktreeMeta, 'lastActivityAt' | 'smartTier' | 'smartAt'> = { lastActivityAt: 0 }
 ) {
-  const meta: Record<string, Pick<WorktreeMeta, 'lastActivityAt' | 'smartTier' | 'smartAt'>> = {
+  const meta: Record<
+    string,
+    Pick<WorktreeMeta, 'lastActivityAt' | 'smartTier' | 'smartAt'> & { isUnread?: boolean }
+  > = {
     [WT]: stored
   }
   const store = {
@@ -93,7 +96,7 @@ describe('host sort stamps on a headless runtime', () => {
     }
   })
 
-  it('stamps a session boundary’s done as it stamps a finish, as before the shared detector', () => {
+  it('orders a session boundary’s done as a finish, but raises no unread for it', () => {
     const stampsAfter = (sessionBoundary: boolean) => {
       vi.useFakeTimers({ now: 75_000 })
       try {
@@ -119,8 +122,13 @@ describe('host sort stamps on a headless runtime', () => {
         vi.useRealTimers()
       }
     }
-    expect(stampsAfter(true)).toEqual(stampsAfter(false))
-    expect(stampsAfter(true)).toMatchObject({ smartTier: 'done', smartAt: 76_000 })
+    const { isUnread: boundaryUnread, ...boundary } = stampsAfter(true)
+    const { isUnread: finishUnread, ...finish } = stampsAfter(false)
+    expect(boundary).toEqual(finish)
+    expect(boundary).toMatchObject({ smartTier: 'done', smartAt: 76_000 })
+    // No client is looking: a finish is news, a clear or a compaction is not.
+    expect(finishUnread).toBe(true)
+    expect(boundaryUnread).toBeUndefined()
   })
 
   it('stamps agent transitions from the attached hook store', () => {
