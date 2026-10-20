@@ -104,7 +104,7 @@ describe('agentSession.modelCatalog', () => {
     await call(
       'agentSession.modelCatalog',
       { agent: 'codex', sessionId: SESSION, waitForListing: true },
-      STRUCTURED_CLIENT as LEGACY_CLIENT
+      STRUCTURED_CLIENT
     )
     expect(read).toHaveBeenCalledWith({ agent: 'codex', sessionId: SESSION, waitForListing: true })
   })
