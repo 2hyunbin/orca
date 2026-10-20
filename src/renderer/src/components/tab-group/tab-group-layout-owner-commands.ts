@@ -120,7 +120,7 @@ function selectMovedTab(worktreeId: string, drop: TabDrop, mainGroupId: string |
   useAppStore.getState().focusGroup(worktreeId, groupId)
 }
 
-/** Sets a group divider's ratio here, as today, then has main save the workspace's group sizes. */
+/** Sets a group divider's ratio here, as today, then has main save that divider's ratio. */
 export function setGroupRatioThroughLayoutOwner(
   worktreeId: string,
   nodePath: string,
@@ -128,12 +128,12 @@ export function setGroupRatioThroughLayoutOwner(
 ): void {
   const state = useAppStore.getState()
   state.setTabGroupSplitRatio(worktreeId, nodePath, ratio)
-  const groupLayout = useAppStore.getState().layoutByWorktree[worktreeId]
-  if (groupLayout && groupLayout !== state.layoutByWorktree[worktreeId]) {
+  // The window drew the ratio while dragging; main takes the divider's new ratio, not its tree.
+  if (useAppStore.getState().layoutByWorktree[worktreeId] !== state.layoutByWorktree[worktreeId]) {
     const keep = (): void => {}
     sendLayoutCommandToOwner(
       worktreeId,
-      { type: 'setGroupRatios', groupLayout },
+      { type: 'setGroupRatios', ratios: [{ path: nodePath, ratio }] },
       { apply: keep, asToday: keep, drawn: true }
     )
   }

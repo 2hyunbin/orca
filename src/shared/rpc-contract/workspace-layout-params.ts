@@ -55,13 +55,29 @@ const MovePaneCommand = z.object({
   side: z.enum(['left', 'right', 'top', 'bottom'])
 })
 
-/** The tab's tree with its new ratios; main refuses one whose panes differ from its own. */
-const SetPaneRatiosCommand = z.object({
-  type: z.literal('setPaneRatios'),
-  workspace: OnPane.workspace,
-  tabId: OnPane.tabId,
-  root: TerminalPaneLayoutNodeSchema
-})
+/** Divider ratios, each the split it moved by path from the root ("first.second"; "" the root). */
+const SplitRatioIntents = z
+  .array(
+    z.object({
+      path: z.string().regex(/^((first|second)(\.(first|second))*)?$/),
+      ratio: z.number().gt(0).lt(1)
+    })
+  )
+  .min(1)
+
+/**
+ * A tab's new divider ratios: `ratios`, or from a window older than them, `root` (the tab's tree
+ * with its new ratios). Main refuses either where its panes differ.
+ */
+const SetPaneRatiosCommand = z
+  .object({
+    type: z.literal('setPaneRatios'),
+    workspace: OnPane.workspace,
+    tabId: OnPane.tabId,
+    root: TerminalPaneLayoutNodeSchema.optional(),
+    ratios: SplitRatioIntents.optional()
+  })
+  .refine((command) => (command.root === undefined) !== (command.ratios === undefined))
 
 /** The pane a tab's chat view shows; null clears it. */
 const SetChatPaneCommand = z.object({
@@ -95,12 +111,15 @@ const SplitGroupCommand = z.object({
   direction: z.enum(['left', 'right', 'up', 'down'])
 })
 
-/** The workspace's group tree with its new ratios; main refuses one whose groups differ. */
-const SetGroupRatiosCommand = z.object({
-  type: z.literal('setGroupRatios'),
-  workspace: OnPane.workspace,
-  groupLayout: TerminalOrphanGroupLayout
-})
+/** As SetPaneRatiosCommand, for the workspace's group splits (`groupLayout`: the older form). */
+const SetGroupRatiosCommand = z
+  .object({
+    type: z.literal('setGroupRatios'),
+    workspace: OnPane.workspace,
+    groupLayout: TerminalOrphanGroupLayout.optional(),
+    ratios: SplitRatioIntents.optional()
+  })
+  .refine((command) => (command.groupLayout === undefined) !== (command.ratios === undefined))
 
 /**
  * The window's close of one tab it already closed; main records a terminal's close with the

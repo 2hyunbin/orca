@@ -186,17 +186,16 @@ describe('dropTabThroughLayoutOwner', () => {
 })
 
 describe('setGroupRatioThroughLayoutOwner', () => {
-  it('sets the ratio here, then has main save the group tree', () => {
+  it('sets the ratio here, then sends main that divider’s ratio, not the group tree', () => {
     seeded()
 
     setGroupRatioThroughLayoutOwner(WT, '', 0.3)
 
-    const groupLayout = store().getState().layoutByWorktree[WT]
-    expect(groupLayout).toMatchObject({ type: 'split', ratio: 0.3 })
+    expect(store().getState().layoutByWorktree[WT]).toMatchObject({ type: 'split', ratio: 0.3 })
     expect(mocks.send).toHaveBeenCalledWith(
       WT,
-      { type: 'setGroupRatios', groupLayout },
-      expect.anything()
+      { type: 'setGroupRatios', ratios: [{ path: '', ratio: 0.3 }] },
+      expect.objectContaining({ drawn: true })
     )
   })
 

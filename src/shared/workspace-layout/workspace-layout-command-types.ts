@@ -12,6 +12,7 @@ import type { EditorTabView } from '../editor-tab-view-types'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
 import type { TerminalPaneLayoutNode, TerminalPaneSplitDirection } from '../terminal-tab-types'
 import type { PaneSide } from './terminal-pane-tree'
+import type { SplitRatioIntent } from './split-ratio-intents'
 import type { PaneOutcomeChanges } from './workspace-layout-pane-outcomes'
 import type { LayoutEditorFile, LayoutTerminalCreation } from './workspace-layout-model'
 
@@ -86,8 +87,19 @@ export type LayoutCommand =
     })
   | (On & { type: 'moveTab'; tabId: string; toGroupId: string; index: number })
   | (On & { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide })
-  | (On & { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode })
-  | (On & { type: 'setPaneRatios'; tabId: string; root: TerminalPaneLayoutNode })
+  /** `ratios`, or from a window older than them, `groupLayout`: exactly one. */
+  | (On & {
+      type: 'setGroupRatios'
+      groupLayout?: TabGroupLayoutNode
+      ratios?: SplitRatioIntent[]
+    })
+  /** `ratios`, or from a window older than them, `root`: exactly one. */
+  | (On & {
+      type: 'setPaneRatios'
+      tabId: string
+      root?: TerminalPaneLayoutNode
+      ratios?: SplitRatioIntent[]
+    })
   | (On & { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide })
   | (On & { type: 'equalizePanes'; tabId: string })
   | (On & {
