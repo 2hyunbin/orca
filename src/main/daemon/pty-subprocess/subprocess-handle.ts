@@ -34,6 +34,7 @@ export function createDaemonPtySubprocessHandle(args: {
   sessionId: string
   startupAgentRecognition: RecognizedAgentProcess | null
 }): SubprocessHandle {
+  const startupCommandStaging = args.startupCommandStaging
   const reportsChildExitStatus = args.reportsChildExitStatus
   const shellPath = args.shellPath
   const proc = args.process
@@ -61,7 +62,7 @@ export function createDaemonPtySubprocessHandle(args: {
   proc.onExit(({ exitCode, signal }) => {
     // Exit listeners may re-enter cleanup; retire signal authority before notifying them.
     dead = true
-    discardStagedStartupCommand(args.startupCommandStaging)
+    discardStagedStartupCommand(startupCommandStaging)
     foreground.markDead()
     // Why: neutralize kill synchronously so a later async socket-close SIGHUP cannot hit a recycled pid.
     if (process.platform !== 'win32') {
@@ -216,7 +217,7 @@ export function createDaemonPtySubprocessHandle(args: {
         return
       }
       disposed = true
-      discardStagedStartupCommand(args.startupCommandStaging)
+      discardStagedStartupCommand(startupCommandStaging)
       dead = true
       events.clear()
       // POSIX destroy() can asynchronously signal a recycled pid; Windows needs kill() to close ConPTY.

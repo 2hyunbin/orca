@@ -56,6 +56,7 @@ function start(reportsChildExitStatus = true) {
     sessionId: 'native-env-retention',
     startupAgentRecognition: null,
     startupCommandDeliveredInShellArgs: true,
+    startupCommandDeliveredByWrapper: false,
     reportsChildExitStatus,
     env
   }

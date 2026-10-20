@@ -90,6 +90,7 @@ function createHandle(loginWrapper = false, shellPath = '/bin/zsh') {
     spawnCwd: '/tmp',
     env: {},
     startupCommandDeliveredInShellArgs: false,
+    startupCommandDeliveredByWrapper: false,
     reportsChildExitStatus: true,
     sessionId: 'static-name',
     startupAgentRecognition: null

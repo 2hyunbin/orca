@@ -34,6 +34,7 @@ function createFixture() {
     spawnCwd: process.cwd(),
     env: {},
     startupCommandDeliveredInShellArgs: false,
+    startupCommandDeliveredByWrapper: false,
     reportsChildExitStatus: true,
     sessionId: 'io-failure',
     startupAgentRecognition: null

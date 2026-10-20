@@ -46,6 +46,7 @@ describePosix('failed-I/O teardown with a real native PTY', () => {
           spawnCwd: process.cwd(),
           env: {},
           startupCommandDeliveredInShellArgs: false,
+          startupCommandDeliveredByWrapper: false,
           reportsChildExitStatus: true,
           sessionId: 'native-io-failure',
           startupAgentRecognition: null

@@ -150,7 +150,7 @@ export function getShellLaunchConfig(
   }
 ): ShellLaunchConfig {
   const shellName = pathWin32.basename(basename(shellPath)).toLowerCase()
-  const startupEnv =
+  const startupEnv: Record<string, string> =
     options?.startupCommand !== undefined
       ? { [POSIX_SHELL_STARTUP_COMMAND_ENV]: options.startupCommand }
       : {}
