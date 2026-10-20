@@ -229,12 +229,7 @@ const PROVIDER_FRAME_CATALOGS: ReadonlyMap<
         return subtype === 'success' ? 'status-chrome' : 'error-surface'
       }
       if (kind === 'message:system:hook_response') {
-        // Exit 2 is the block the halting warning shows, or a missing plugin script (left unshown).
-        const promptBlock =
-          isProviderRecord(payload) &&
-          payload.hook_event === 'UserPromptSubmit' &&
-          payload.exit_code === 2
-        return isProviderRecord(payload) && payload.outcome === 'error' && !promptBlock
+        return isProviderRecord(payload) && payload.outcome === 'error'
           ? 'error-surface'
           : 'suppressed-benign'
       }
