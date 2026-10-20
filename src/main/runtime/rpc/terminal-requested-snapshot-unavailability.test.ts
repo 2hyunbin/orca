@@ -50,6 +50,7 @@ async function requestSnapshotReply(options: {
     options.duringSerialize?.(requestedAttempt, (data) => dataListenerRef.current?.(data))
     return options.serializeRequested(requestedAttempt)
   })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This partial runtime supplies the terminal RPC methods these tests invoke.
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     getPtyExecutionHostMetadata: () => ({ incarnationId: 'test-incarnation' }),
