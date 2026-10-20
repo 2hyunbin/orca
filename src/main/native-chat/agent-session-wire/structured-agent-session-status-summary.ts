@@ -4,11 +4,13 @@ import { normalizeOptionalField } from '../../../shared/agent-status-field-norma
 import { AGENT_MODEL_MAX_LENGTH } from '../../../shared/agent-status-types'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionStatusState } from './structured-agent-session-status-journal-projection'
-import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
+import type {
+  StructuredAgentSessionProviderChild,
+  StructuredChatNamingFailure
+} from './structured-agent-session-host-types'
 import { structuredAgentSessionProviderSessionMetadata } from './structured-agent-session-history-result'
 import { agentSessionPinnedLaunchDirectory } from '../../runtime/agent-session-record-launch-directory'
 import { isAgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
-import type { StructuredChatNamingFailure } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionStatusFeedDeps } from './structured-agent-session-status-feed-deps'
 import { structuredStatusSummariesEqual } from './structured-agent-session-status-summary-equality'
 
