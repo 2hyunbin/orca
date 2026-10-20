@@ -4,18 +4,17 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 
-export const LOCAL_ACCOUNT_TARGET: RuntimeClientTarget = { kind: 'local' }
-
-/** A chat's account action always applies to this computer's native runtime. */
-export type ChatAccountAction = { disabled: boolean }
+export type ChatAccountAction = { target: RuntimeClientTarget }
 
 export function ProviderAccountChatButton({
   provider,
   add = false,
   disabled,
+  target,
   ...buttonProps
 }: ComponentProps<typeof Button> & {
-  provider: 'claude' | 'codex'
+  provider: 'claude'
+  target: RuntimeClientTarget
   add?: boolean
   disabled: boolean
 }): React.JSX.Element {
@@ -34,7 +33,8 @@ export function ProviderAccountChatButton({
               openSettingsTarget({
                 pane: 'accounts',
                 repoId: null,
-                sectionId: `accounts-${provider}`
+                sectionId: `accounts-${provider}`,
+                hostScope: target
               })
               openSettingsPage()
             }
@@ -49,7 +49,7 @@ export function ProviderAccountChatButton({
 }
 
 export function providerChatAccountControl(
-  provider: 'claude' | 'codex',
+  provider: 'claude',
   action: ChatAccountAction | undefined,
   loaded: boolean,
   signedInCount: number,
@@ -65,7 +65,8 @@ export function providerChatAccountControl(
       <ProviderAccountChatButton
         provider={provider}
         add={add}
-        disabled={action.disabled || !loaded || busy}
+        target={action.target}
+        disabled={!loaded || busy}
       />
     )
   }

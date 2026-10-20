@@ -1,14 +1,9 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode
-} from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import { MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
+import { useStructuredChatTabConversationName } from '@/runtime/structured-conversation-name'
 import { useHostStructuredAgent } from '@/runtime/use-host-structured-agent'
 import { AgentSessionContinuationDialog } from '@/components/agent-session-continuation/AgentSessionContinuationDialog'
 import {
@@ -16,10 +11,10 @@ import {
   type AgentSessionContinuationRequest
 } from '@/lib/agent-session-continuation'
 import { ClaudeSwitcherMenu } from '@/components/status-bar/ClaudeSwitcherMenu'
-import { CodexSwitcherMenu } from '@/components/status-bar/CodexSwitcherMenu'
 import { ProviderAccountChatButton } from '@/components/status-bar/ProviderAccountChatButton'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
-import { getStructuredAgentSessionReadOwner } from './structured-agent-session-read-owner'
+import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
+import type { AgentSessionHistoryResult } from '../../../../shared/agent-session-wire'
 import {
   NativeChatOrcaStopContext,
   type NativeChatOrcaStopView
@@ -48,77 +43,91 @@ export function NativeChatUsageLimitActionsProvider({
   children: ReactNode
 }): React.JSX.Element {
   const active = view.usageLimitTurnItemId !== null
-  const disabled = view.usageLimitContinueDisabled === true || loading
-  const owner = useMemo(
-    () => getStructuredAgentSessionReadOwner(pane.sessionId, pane.target),
-    [pane.sessionId, pane.target]
+  const disabled = loading
+  const chatTab = useAppStore((state) =>
+    directory
+      ? state.unifiedTabsByWorktree[directory.worktreeId]?.find((tab) => tab.id === pane.tabId)
+      : undefined
   )
-  const { providerSession } = useSyncExternalStore(
-    owner.subscribe,
-    owner.getSnapshot,
-    owner.getSnapshot
-  )
+  const conversationName = useStructuredChatTabConversationName(chatTab)
   const declared = useHostStructuredAgent(pane.target, pane.agent)
   const [request, setRequest] = useState<AgentSessionContinuationRequest | null>(null)
-  const continuation = useMemo((): AgentSessionContinuationRequest | null => {
-    if (
-      !active ||
-      !directory ||
-      !isTuiAgent(pane.agent) ||
-      directory.runtimeEnvironmentId !==
-        (pane.target.kind === 'environment' ? pane.target.environmentId : null)
-    ) {
-      return null
+  const canHandOff =
+    active &&
+    directory &&
+    isTuiAgent(pane.agent) &&
+    directory.runtimeEnvironmentId ===
+      (pane.target.kind === 'environment' ? pane.target.environmentId : null)
+  let account: ReactNode = null
+  if (pane.agent === 'claude') {
+    if (declared === undefined) {
+      account = <ProviderAccountChatButton provider="claude" target={pane.target} disabled />
+    } else if (declared.followsAccountSelection) {
+      account = (
+        <ClaudeSwitcherMenu claude={null} compact iconOnly chatAction={{ target: pane.target }} />
+      )
     }
+  }
+  const openHandOff = useCallback(async (): Promise<void> => {
+    if (!canHandOff || !directory || !isTuiAgent(pane.agent)) {
+      return
+    }
+    const history = await callStructuredAgentSession<AgentSessionHistoryResult>(
+      pane.target,
+      'agentSession.history',
+      { sessionId: pane.sessionId, direction: 'tail', limit: 1 }
+    ).catch((error: unknown) => {
+      console.warn('Could not read saved chat context for hand-off', error)
+      return null
+    })
+    const transcriptPath = history?.providerSession?.transcriptPath
     const source = {
+      sourceKind: 'chat' as const,
       sourceAgent: pane.agent,
+      sourceTitle: chatTab?.customLabel?.trim() || conversationName || chatTab?.label,
       sourceWorkingDirectory: directory.worktreePath,
-      transcriptPath: providerSession?.transcriptPath,
-      capturedText: providerSession?.transcriptPath
+      transcriptPath,
+      capturedText: transcriptPath
         ? ''
         : messages
             .map((message) => `${message.role}: ${nativeChatMessageCopyText(message)}`)
             .join('\n\n')
     }
-    return buildAgentSessionContinuationPrompt(source, 'focused')
-      ? {
-          source,
-          worktreeId: directory.worktreeId,
-          workspacePath: directory.worktreePath,
-          initialCwd: directory.worktreePath,
-          groupId: pane.groupId,
-          launchSource: 'sidebar'
-        }
-      : null
-  }, [active, directory, messages, pane.agent, pane.groupId, pane.target, providerSession])
-  let account: ReactNode = null
-  if (pane.target.kind === 'local' && (pane.agent === 'claude' || pane.agent === 'codex')) {
-    if (declared === undefined) {
-      account = <ProviderAccountChatButton provider={pane.agent} disabled />
-    } else if (declared.followsAccountSelection) {
-      account =
-        pane.agent === 'claude' ? (
-          <ClaudeSwitcherMenu claude={null} compact iconOnly chatAction={{ disabled }} />
-        ) : (
-          <CodexSwitcherMenu codex={null} compact iconOnly chatAction={{ disabled }} />
-        )
+    if (buildAgentSessionContinuationPrompt(source, 'focused')) {
+      setRequest({
+        source,
+        worktreeId: directory.worktreeId,
+        workspacePath: directory.worktreePath,
+        initialCwd: directory.worktreePath,
+        groupId: pane.groupId,
+        launchSource: 'native_chat',
+        avoidSourceAgent: true
+      })
     }
-  }
-  const actions = useMemo(
+  }, [
+    canHandOff,
+    directory,
+    pane.agent,
+    pane.groupId,
+    pane.sessionId,
+    pane.target,
+    chatTab,
+    conversationName,
+    messages
+  ])
+  const actions = useMemo<UsageLimitActions>(
     () => ({
       account,
       disabled,
-      ...(continuation || (loading && isTuiAgent(pane.agent))
+      ...(canHandOff || (loading && isTuiAgent(pane.agent))
         ? {
             handOff: () => {
-              if (continuation) {
-                setRequest(continuation)
-              }
+              void openHandOff()
             }
           }
         : {})
     }),
-    [account, continuation, disabled, loading, pane.agent]
+    [account, canHandOff, disabled, loading, openHandOff, pane.agent]
   )
   return (
     <UsageLimitActionsContext.Provider value={actions}>

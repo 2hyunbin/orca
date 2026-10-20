@@ -7,6 +7,7 @@ import { NativeChatNoticeRow } from './NativeChatNoticeRow'
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
+import type { AgentType } from '../../../../shared/agent-status-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 
 const mocks = vi.hoisted(() => ({
@@ -18,11 +19,11 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   dialog: vi.fn()
 }))
-vi.mock('./structured-agent-session-read-owner', () => ({
-  getStructuredAgentSessionReadOwner: () => ({
-    subscribe: () => () => {},
-    getSnapshot: () => mocks.readSnapshot
-  })
+vi.mock('@/runtime/structured-agent-session-client', () => ({
+  callStructuredAgentSession: async () => mocks.readSnapshot
+}))
+vi.mock('@/runtime/structured-conversation-name', () => ({
+  useStructuredChatTabConversationName: () => 'My chat'
 }))
 vi.mock('@/runtime/use-host-structured-agent', () => ({
   useHostStructuredAgent: () => ({ followsAccountSelection: mocks.follows })
@@ -56,7 +57,11 @@ afterEach(() => {
   mocks.follows = true
 })
 
-function row(target: RuntimeClientTarget = { kind: 'local' }, offered = true) {
+function row(
+  target: RuntimeClientTarget = { kind: 'local' },
+  offered = true,
+  agent: AgentType = 'claude'
+) {
   const view: NativeChatOrcaStopView = {
     hostLabel: null,
     remoteHost: target.kind !== 'local',
@@ -74,7 +79,7 @@ function row(target: RuntimeClientTarget = { kind: 'local' }, offered = true) {
         pane={{
           tabId: 'tab',
           sessionId: 'chat',
-          agent: 'claude',
+          agent,
           target,
           isVisible: true,
           isFocusedGroup: true
@@ -116,13 +121,15 @@ function snapshot(count: number) {
   }
 }
 
-it('uses the existing local switcher, opens this chat in the hand-off dialog, and hides actions after sending', async () => {
+it('offers host-owned recovery actions for the current usage-limit cut', async () => {
+  const target: RuntimeClientTarget = { kind: 'environment', environmentId: 'chat-host' }
   mocks.snapshot.mockResolvedValue(snapshot(2))
   mocks.select.mockResolvedValue(snapshot(2).claude)
-  const original = useAppStore.getState().fetchSettings
-  useAppStore.setState({ fetchSettings: vi.fn() })
+  const original = useAppStore.getState()
+  const openSettingsTarget = vi.fn()
+  useAppStore.setState({ openSettingsTarget, openSettingsPage: vi.fn() })
   try {
-    const view = render(row())
+    const view = render(row(target))
     expect(screen.getByRole('button', { name: 'Switch Account' })).toBeDisabled()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Switch Account' })).toBeEnabled()
@@ -134,61 +141,51 @@ it('uses the existing local switcher, opens this chat in the hand-off dialog, an
     })
     fireEvent.click(await screen.findByRole('menuitem', { name: 'account1@example.com' }))
     await waitFor(() =>
-      expect(mocks.select).toHaveBeenCalledWith(
-        { kind: 'local' },
-        { accountId: 'a1', runtime: 'host', wslDistro: null }
-      )
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
-    expect(mocks.dialog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          worktreeId: 'folder',
-          source: expect.objectContaining({
-            transcriptPath: '/work/chat.jsonl',
-            sourceAgent: 'claude'
-          })
-        })
+      expect(mocks.select).toHaveBeenCalledWith(target, {
+        accountId: 'a1',
+        runtime: 'host',
+        wslDistro: null
       })
     )
-    view.rerender(row({ kind: 'local' }, false))
+    fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
+    await waitFor(() =>
+      expect(mocks.dialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            worktreeId: 'folder',
+            avoidSourceAgent: true,
+            launchSource: 'native_chat',
+            source: expect.objectContaining({
+              transcriptPath: '/work/chat.jsonl',
+              sourceAgent: 'claude',
+              sourceTitle: 'My chat'
+            })
+          })
+        })
+      )
+    )
+    view.rerender(row(target, false))
     expect(screen.queryByRole('button', { name: 'Continue Now' })).toBeNull()
     expect(screen.queryByText('Continue this chat without waiting:')).toBeNull()
-  } finally {
-    useAppStore.setState({ fetchSettings: original })
-  }
-})
-
-it('opens the existing accounts settings section for a single signed-in account', async () => {
-  mocks.snapshot.mockResolvedValue(snapshot(1))
-  const original = useAppStore.getState()
-  const openSettingsPage = vi.fn(),
-    openSettingsTarget = vi.fn()
-  useAppStore.setState({ openSettingsPage, openSettingsTarget })
-  try {
-    render(row())
+    cleanup()
+    mocks.snapshot.mockResolvedValue(snapshot(1))
+    render(row(target))
     fireEvent.click(await screen.findByRole('button', { name: 'Add Account…' }))
     expect(openSettingsTarget).toHaveBeenCalledWith({
       pane: 'accounts',
       repoId: null,
-      sectionId: 'accounts-claude'
+      sectionId: 'accounts-claude',
+      hostScope: target
     })
-    expect(openSettingsPage).toHaveBeenCalledOnce()
+    cleanup()
+    mocks.follows = false
+    render(row(target, true, 'codex'))
+    expect(screen.getByRole('button', { name: 'Hand Off to Another Agent' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Account/ })).toBeNull()
   } finally {
     useAppStore.setState({
       openSettingsPage: original.openSettingsPage,
       openSettingsTarget: original.openSettingsTarget
     })
   }
-})
-
-it('offers only hand-off when the host does not declare account following or the chat is remote', () => {
-  mocks.follows = false
-  const view = render(row())
-  expect(screen.getByRole('button', { name: 'Hand Off to Another Agent' })).toBeEnabled()
-  expect(screen.queryByRole('button', { name: /Account/ })).toBeNull()
-  mocks.follows = true
-  view.rerender(row({ kind: 'environment', environmentId: 'remote' }))
-  expect(screen.queryByRole('button', { name: /Account/ })).toBeNull()
-  expect(screen.getByRole('button', { name: 'Hand Off to Another Agent' })).toBeEnabled()
 })

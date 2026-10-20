@@ -1,9 +1,5 @@
 import { useProviderAccountList } from './use-provider-account-list'
-import {
-  providerChatAccountControl,
-  LOCAL_ACCOUNT_TARGET,
-  type ChatAccountAction
-} from './ProviderAccountChatButton'
+import { providerChatAccountControl, type ChatAccountAction } from './ProviderAccountChatButton'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import React, { useCallback, useRef, useState } from 'react'
 import {
@@ -85,7 +81,7 @@ export function ClaudeSwitcherMenu({
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   // Why: no host picker; the focused workspace's owner, else the default scope host.
   const owner = useActiveAccountOwner(defaultScopeHost(settings))
-  const runtimeTarget = chatAction ? LOCAL_ACCOUNT_TARGET : owner.target
+  const runtimeTarget = chatAction?.target ?? owner.target
   const wslHostDistro = chatAction ? null : owner.wslHostDistro
   const activeRuntimeEnvironmentId = runtimeTargetEnvironmentId(runtimeTarget)
   const hasActiveRuntimeEnvironment = activeRuntimeEnvironmentId !== null
@@ -180,7 +176,7 @@ export function ClaudeSwitcherMenu({
         setAccountsExpanded(false)
       }
       const nextActiveAccountId = getClaudeStatusActiveId(next, target)
-      if (previousActiveAccountId !== nextActiveAccountId) {
+      if (!chatAction && previousActiveAccountId !== nextActiveAccountId) {
         void handleRunningClaudeSessionsAfterSwitch({
           owner: runtimeTarget,
           target,
@@ -399,7 +395,8 @@ export function ClaudeSwitcherMenu({
           openSettingsTarget({
             pane: 'accounts',
             repoId: null,
-            sectionId: 'accounts-claude'
+            sectionId: 'accounts-claude',
+            ...(chatAction ? { hostScope: chatAction.target } : {})
           })
           openSettingsPage()
         }}

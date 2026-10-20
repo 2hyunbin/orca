@@ -88,8 +88,10 @@ export function AgentSessionContinuationDialog({
         setDetectedAgents(enabled)
         setSelectedAgent(
           chooseInitialContinuationAgent({
-            availableAgents: enabled,
-            sourceAgent: request.source.sourceAgent,
+            availableAgents: request.avoidSourceAgent
+              ? enabled.filter((agent) => agent !== request.source.sourceAgent)
+              : enabled,
+            sourceAgent: request.avoidSourceAgent ? null : request.source.sourceAgent,
             defaultAgent: settings?.defaultTuiAgent
           })
         )
