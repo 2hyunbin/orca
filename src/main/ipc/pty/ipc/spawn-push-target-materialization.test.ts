@@ -144,14 +144,16 @@ describe('triggerPtySpawnPushTargetMaterialization', () => {
   })
 
   it('reads the local copy when the repo also lives on an SSH host', () => {
-    const sshTwin = { ...REPO, connectionId: 'box', executionHostId: 'ssh:box' } as Repo
+    const sshTwin: Repo = { ...REPO, connectionId: 'box', executionHostId: 'ssh:box' }
     const localTarget = { ...FORK_TARGET, remoteName: 'pr-local' }
     const deps = depsWithStore({
       getRepo: vi.fn().mockReturnValue(sshTwin),
       getRepos: vi.fn().mockReturnValue([sshTwin, REPO]),
-      getWorktreeMetaForHost: vi.fn((_id: string, hostId: string) =>
-        hostId === 'local' ? ({ pushTarget: localTarget } as WorktreeMeta) : undefined
-      )
+      getWorktreeMetaForHost: vi
+        .fn()
+        .mockImplementation((_id: string, hostId: string) =>
+          hostId === 'local' ? { pushTarget: localTarget } : undefined
+        )
     })
     triggerPtySpawnPushTargetMaterialization(deps, baseArgs())
 
