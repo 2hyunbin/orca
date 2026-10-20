@@ -67,16 +67,20 @@ const fresh = (): TransportState => ({
 
 let state = fresh()
 
-const ID_FIELDS = ['tabId', 'leafId', 'groupId', 'pageId'] as const
-
 /** What main's result names for a command it accepted, read off the command. */
 function acceptedResult(command: LayoutCommand): LayoutCommandResult {
   const result: LayoutCommandResult = {}
-  for (const field of ID_FIELDS) {
-    const value: unknown = Reflect.get(command, field)
-    if (typeof value === 'string') {
-      result[field] = value
-    }
+  if ('tabId' in command && typeof command.tabId === 'string') {
+    result.tabId = command.tabId
+  }
+  if ('leafId' in command && typeof command.leafId === 'string') {
+    result.leafId = command.leafId
+  }
+  if ('groupId' in command && typeof command.groupId === 'string') {
+    result.groupId = command.groupId
+  }
+  if ('pageId' in command && typeof command.pageId === 'string') {
+    result.pageId = command.pageId
   }
   if (command.type === 'closeTabs') {
     return { ...result, closed: [...command.tabIds], refused: [] }
@@ -98,9 +102,18 @@ function isLayoutCommand(value: unknown): value is LayoutCommand {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof Reflect.get(value, 'type') === 'string' &&
-    typeof Reflect.get(value, 'workspace') === 'string'
+    'type' in value &&
+    typeof value.type === 'string' &&
+    'workspace' in value &&
+    typeof value.workspace === 'string'
   )
+}
+
+/** The command of a `layout.apply` request's params. */
+function commandOf(params: unknown): unknown {
+  return typeof params === 'object' && params !== null && 'command' in params
+    ? params.command
+    : undefined
 }
 
 function emit(frame: WorkspaceLayoutChangeFrame): void {
@@ -224,8 +237,7 @@ export const layoutApplyTestTransport = {
   },
   /** Answers one `layout.apply` request's params; the RPC mock below routes here. */
   call(params: unknown): Promise<LayoutApplyReply> {
-    const command: unknown =
-      typeof params === 'object' && params !== null ? Reflect.get(params, 'command') : undefined
+    const command = commandOf(params)
     if (!isLayoutCommand(command)) {
       return Promise.reject(new Error('layout.apply without a command'))
     }
