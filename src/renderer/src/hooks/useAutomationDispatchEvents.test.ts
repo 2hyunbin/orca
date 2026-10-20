@@ -15,6 +15,7 @@ const mockOnDispatchRequested = vi.fn()
 const mockRendererReady = vi.fn()
 const mockFinalizeTerminalOwnership = vi.fn()
 const mockReleaseTerminalOwnership = vi.fn()
+const mockReleaseRuntimeObservers = vi.fn()
 const mockSshNeedsPassphrasePrompt = vi.fn()
 const mockSshGetState = vi.fn()
 const mockSshConnect = vi.fn()
@@ -204,6 +205,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
       paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
       ptyId: 'agent-pty',
       startupPlan: {},
+      releaseRuntimeObservers: mockReleaseRuntimeObservers,
       terminalOwnership: {
         finalize: mockFinalizeTerminalOwnership,
         release: mockReleaseTerminalOwnership
@@ -493,6 +495,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
           paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
           ptyId: 'agent-pty',
           startupPlan: {},
+          releaseRuntimeObservers: mockReleaseRuntimeObservers,
           terminalOwnership: {
             finalize: mockFinalizeTerminalOwnership,
             release: mockReleaseTerminalOwnership
@@ -534,6 +537,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
         paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
         ptyId: 'agent-pty',
         startupPlan: {},
+        releaseRuntimeObservers: mockReleaseRuntimeObservers,
         terminalOwnership: {
           finalize: mockFinalizeTerminalOwnership,
           release: mockReleaseTerminalOwnership
@@ -691,6 +695,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
         paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
         ptyId: 'agent-pty',
         startupPlan: {},
+        releaseRuntimeObservers: mockReleaseRuntimeObservers,
         terminalOwnership: {
           finalize: mockFinalizeTerminalOwnership,
           release: mockReleaseTerminalOwnership
@@ -721,6 +726,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
         paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
         ptyId: 'agent-pty',
         startupPlan: {},
+        releaseRuntimeObservers: mockReleaseRuntimeObservers,
         terminalOwnership: {
           finalize: mockFinalizeTerminalOwnership,
           release: mockReleaseTerminalOwnership
@@ -762,6 +768,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
         paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
         ptyId: 'agent-pty',
         startupPlan: {},
+        releaseRuntimeObservers: mockReleaseRuntimeObservers,
         terminalOwnership: {
           finalize: mockFinalizeTerminalOwnership,
           release: mockReleaseTerminalOwnership
@@ -790,6 +797,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
         paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
         ptyId: 'agent-pty',
         startupPlan: {},
+        releaseRuntimeObservers: mockReleaseRuntimeObservers,
         terminalOwnership: {
           finalize: mockFinalizeTerminalOwnership,
           release: mockReleaseTerminalOwnership
@@ -822,6 +830,38 @@ describe('useAutomationDispatchEvents setup launch', () => {
     await registerAndDispatch(makeAutomation({ reuseSession: true }))
 
     expect(mockReleaseTerminalOwnership).toHaveBeenCalledOnce()
+    expect(mockFinalizeTerminalOwnership).not.toHaveBeenCalled()
+  })
+
+  it('releases the launch runtime observers once when a kept-open run completes', async () => {
+    mockFindReusableAutomationSession.mockReturnValue(null)
+    let launchArgs: { onAgentStatus?: (payload: { state: string }) => void } = {}
+    mockLaunchAgentBackgroundSession.mockImplementation(async (args) => {
+      launchArgs = args
+      return {
+        tabId: 'agent-tab',
+        paneKey: 'agent-tab:7c6fb4e5-3bf1-4ff4-8259-03f7ae81c40d',
+        ptyId: 'agent-pty',
+        startupPlan: {},
+        releaseRuntimeObservers: mockReleaseRuntimeObservers,
+        terminalOwnership: {
+          finalize: mockFinalizeTerminalOwnership,
+          release: mockReleaseTerminalOwnership
+        }
+      }
+    })
+
+    await registerAndDispatch(makeAutomation({ reuseSession: true }))
+    expect(mockReleaseRuntimeObservers).not.toHaveBeenCalled()
+    launchArgs.onAgentStatus?.({ state: 'done' })
+    launchArgs.onAgentStatus?.({ state: 'done' })
+
+    await vi.waitFor(() =>
+      expect(mockMarkDispatchResult).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'completed' })
+      )
+    )
+    expect(mockReleaseRuntimeObservers).toHaveBeenCalledOnce()
     expect(mockFinalizeTerminalOwnership).not.toHaveBeenCalled()
   })
 })
