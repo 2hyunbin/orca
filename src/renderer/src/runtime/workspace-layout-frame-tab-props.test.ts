@@ -1,7 +1,7 @@
 // Tab properties in a layout-owner build: main's pin, color or rename, drawn from its frame, must
 // look as the window's own action does today, and must restart the same.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { applyLayoutCommand } from '../../../shared/workspace-layout/workspace-layout-commands'
@@ -21,6 +21,8 @@ import {
 } from '../app-shell/startup-window-view.test-fixture'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
+import { withLayoutOwnerTabProps } from '../components/tab-bar/tab-bar-layout-owner-props'
+import { useAppStore } from '@/store'
 import type { AppState } from '../store/types'
 import { layoutApplyTestTransport } from './layout-apply-test-transport.test-fixture'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
@@ -132,6 +134,27 @@ async function boot(session: WorkspaceSessionState): Promise<Store> {
   return store
 }
 
+const APP_FILE = '/Users/dev/orca/src/app.ts'
+const PIN_PREVIEW: LayoutCommand = {
+  type: 'setTabProps',
+  workspace: GIT_KEY,
+  tabId: 'editor:src/app.ts',
+  isPinned: true
+}
+
+/** The profile with its editor tab a preview. */
+function previewSession(): WorkspaceSessionState {
+  const session = localDesktopSession()
+  session.unifiedTabs![GIT_KEY] = session.unifiedTabs![GIT_KEY]!.map((tab) =>
+    tab.contentType === 'editor' ? { ...tab, isPreview: true } : tab
+  )
+  session.openFilesByWorktree![GIT_KEY] = session.openFilesByWorktree![GIT_KEY]!.map((file) => ({
+    ...file,
+    isPreview: true
+  }))
+  return session
+}
+
 type Case = {
   name: string
   session?: () => WorkspaceSessionState
@@ -221,23 +244,9 @@ const CASES: Case[] = [
   },
   {
     name: 'pin a preview file, which keeps it',
-    session: () => {
-      const session = localDesktopSession()
-      session.unifiedTabs![GIT_KEY] = session.unifiedTabs![GIT_KEY]!.map((tab) =>
-        tab.contentType === 'editor' ? { ...tab, isPreview: true } : tab
-      )
-      session.openFilesByWorktree![GIT_KEY] = session.openFilesByWorktree![GIT_KEY]!.map(
-        (file) => ({ ...file, isPreview: true })
-      )
-      return session
-    },
-    command: {
-      type: 'setTabProps',
-      workspace: GIT_KEY,
-      tabId: 'editor:src/app.ts',
-      isPinned: true
-    },
-    windowAction: (state) => state.pinFile('/Users/dev/orca/src/app.ts', 'editor:src/app.ts'),
+    session: previewSession,
+    command: PIN_PREVIEW,
+    windowAction: (state) => state.pinFile(APP_FILE, 'editor:src/app.ts'),
     // Preview stays the window's until main opens files (phase C4).
     mainCopyLags: {
       [`${GIT_KEY} tab editor:src/app.ts props`]: { pinned: true, preview: true, color: null }
@@ -283,4 +292,59 @@ describe('tab properties through main', () => {
       expect(shownTabs((await boot(afterMain)).getState())).toEqual(mainCopy)
     }
   )
+})
+
+describe('the tab bar’s pin through main', () => {
+  it('pins a preview file as today’s pin does: main’s frame, the window’s preview end, and a use', async () => {
+    const stored = previewSession()
+    layoutOwner.isMain = false
+    const today = await boot(stored)
+    today.getState().pinFile(APP_FILE, 'editor:src/app.ts')
+    const expected = shownTabs(today.getState())
+
+    layoutOwner.isMain = true
+    const recordFeatureInteraction = vi.fn()
+    const previousRecord = useAppStore.getState().recordFeatureInteraction
+    useAppStore.setState({ recordFeatureInteraction })
+    onTestFinished(() => useAppStore.setState({ recordFeatureInteraction: previousRecord }))
+    layoutApplyTestTransport.reset()
+    const drawn = await boot(stored)
+    const sync = openWorkspaceLayoutFrameSync(drawn)
+    stream.onFrame!({ type: 'snapshot', workspaces: [] })
+    sync.start()
+    const windowPin = vi.fn()
+    withLayoutOwnerTabProps(
+      {
+        togglePinned: windowPin,
+        makePreviewFilePermanent: (fileId, tabId) =>
+          drawn.getState().makePreviewFilePermanent(fileId, tabId)
+      },
+      () => GIT_KEY
+    ).togglePinned({
+      unifiedTabId: 'editor:src/app.ts',
+      isPinned: false,
+      type: 'editor',
+      data: { id: APP_FILE }
+    })
+    // Main's frame arrives before its answer.
+    const pinned = mainApplies(stored, PIN_PREVIEW)
+    stream.onFrame!(frameOf(pinned))
+    await layoutApplyTestTransport.settle()
+    await flushMicrotasks()
+
+    // The answer ends the preview, which the window's store action sends to main as well.
+    const promote: LayoutCommand = {
+      type: 'promotePreviewTab',
+      workspace: GIT_KEY,
+      tabId: 'editor:src/app.ts'
+    }
+    expect(layoutApplyTestTransport.sent).toEqual([PIN_PREVIEW, promote])
+    stream.onFrame!(frameOf(mainApplies(pinned, promote)))
+    await layoutApplyTestTransport.settle()
+    await flushMicrotasks()
+    expect(windowPin).not.toHaveBeenCalled()
+    expect(recordFeatureInteraction).toHaveBeenCalledWith('terminal-tabs')
+    expect(shownTabs(drawn.getState())).toEqual(expected)
+    sync.close()
+  })
 })
