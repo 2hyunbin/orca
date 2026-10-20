@@ -162,7 +162,7 @@ export function serverTabIdOf(desktopTabId: string): string {
   return isWebTerminalSurfaceTabId(desktopTabId) ? toHostSessionTabId(desktopTabId) : desktopTabId
 }
 
-/** A desktop editor tab's file id as the server knows it: its own file's owned id, even if the server named it by path. */
+/** A desktop editor tab's file id as the server knows it: its own file, owned by no environment. */
 function serverEditorEntityId(entityId: string, layout: PublishedWorkspaceLayout): string {
   const file = layout.editorFiles.find(
     (candidate) =>
@@ -173,8 +173,9 @@ function serverEditorEntityId(entityId: string, layout: PublishedWorkspaceLayout
 }
 
 /**
- * A desktop-shaped workspace under the server's ids: the inverse of `serverLayoutForDesktop` for
- * every id it maps. Panes keep no terminal: the desktop binds handles, which the server never takes.
+ * A desktop-shaped workspace under the server's ids: the inverse of `serverLayoutForDesktop`, except
+ * that an editor tab the server named by path comes back under the server's owned id for that file.
+ * Panes keep no terminal: the desktop binds handles, which the server never takes.
  */
 export function desktopLayoutForServer(layout: PublishedWorkspaceLayout): PublishedWorkspaceLayout {
   return {
