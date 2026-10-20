@@ -15,10 +15,6 @@ import {
 } from '../../../shared/node-runtime-pin'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import {
-  parseRemoteRuntimeExitReport,
-  REMOTE_NODE_RUNTIME_EXIT_PREFIX
-} from '../../ssh/orcad-remote-node-runtime-report'
-import {
   isWindowsRemoteHost,
   joinRemotePath,
   type RemoteHostPlatform
@@ -29,9 +25,9 @@ import { remoteSha256Command } from './remote-sha256-command'
 export const HOST_NODE_DOWNLOAD_OK = 'ORCA_NODE_HOST_DOWNLOAD_OK'
 export const HOST_NODE_DOWNLOAD_FAILED = 'ORCA_NODE_HOST_DOWNLOAD_FAILED'
 export const HOST_NODE_DOWNLOAD_NO_TOOL = 'ORCA_NODE_HOST_DOWNLOAD_NO_TOOL'
-/** One wall-clock budget for every URL and tool: ~70 KB/s still fetches the ~58 MB archive. */
+/** One wall-clock budget for every source: ~70 KB/s still fetches the ~58 MB archive. */
 const HOST_DOWNLOAD_BUDGET_SECONDS = 840
-/** Below this a new attempt can't finish, so the loop stops and reports instead. */
+/** Below this an attempt can't finish, so the source is reported as not tried. */
 const HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS = 30
 /** The desktop downloader's 200 MiB limit, in the 512-byte blocks `ulimit -f` counts. */
 const HOST_DOWNLOAD_MAX_BLOCKS = (200 * 1024 * 1024) / 512
@@ -47,9 +43,10 @@ export function hostNodeRuntimeUrl(target: NodeRuntimeTarget): string {
 }
 
 /**
- * Downloads into the installer's stage, trying this computer's configured mirror, then the
- * host's own mirror variable, then the release URL; curl first, else wget. Keeps the file only if
- * it hashes to the pin, and always exits 0 with a marker so the caller gets the tools' own words.
+ * Downloads into the installer's stage from this computer's mirror, then the host's own mirror
+ * variable, then the release URL, with curl or else wget. Sources are reported by label, never by
+ * URL, so a host variable's credentials stay on the host. Keeps the file only if it hashes to the
+ * pin, and always exits 0 with a marker so the caller gets the tool's own words.
  */
 export function hostDownloadNodeRuntimeCommand(
   host: RemoteHostPlatform,
@@ -57,64 +54,66 @@ export function hostDownloadNodeRuntimeCommand(
 ): string {
   const asset = pinnedNodeRuntimeAsset(args.target)
   const file = quotePosixShell(joinRemotePath(host, args.stageDir, asset.archive))
+  const path = `v${NODE_RUNTIME_PIN.version}/${asset.archive}`
   // Mirrors carry the official tree only; unofficial builds live at one address.
   const official = asset.source === 'official'
-  const urls = [
+  const desktopMirror =
     official && args.mirror
-      ? quotePosixShell(nodeDistMirrorUrl(args.mirror, NODE_RUNTIME_PIN.version, asset.archive))
-      : null,
-    official
-      ? `"\${orca_dl_mirror:+$orca_dl_mirror/v${NODE_RUNTIME_PIN.version}/${asset.archive}}"`
-      : null,
-    quotePosixShell(hostNodeRuntimeUrl(args.target))
-  ].filter((url): url is string => url !== null)
-  // Why ulimit: a proxy or mirror serving endless bytes would otherwise fill the host's disk.
-  const sizeCap = `ulimit -f ${HOST_DOWNLOAD_MAX_BLOCKS} 2>/dev/null;`
-  const curl = `${sizeCap} curl -fsSL --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$orca_dl_url"`
-  const wget = `${sizeCap} $orca_dl_timeout wget -q -T 20 -t 2 -O ${file} "$orca_dl_url"`
+      ? nodeDistMirrorUrl(args.mirror, NODE_RUNTIME_PIN.version, asset.archive)
+      : null
   const hostMirror = NODE_DIST_MIRROR_ENV_KEYS.reduceRight(
     (fallback, key) => `\${${key}:-${fallback}}`,
     ''
   )
+  const sources = [
+    desktopMirror
+      ? `orca_dl_get 'the mirror set on this computer' ${quotePosixShell(desktopMirror)}`
+      : null,
+    official
+      ? `[ -n "$orca_dl_mirror" ] && orca_dl_get "the host's NODEJS_ORG_MIRROR" "$orca_dl_mirror/${path}"`
+      : null,
+    `orca_dl_get ${quotePosixShell(new URL(hostNodeRuntimeUrl(args.target)).host)} ${quotePosixShell(hostNodeRuntimeUrl(args.target))}`
+  ].filter((line): line is string => line !== null)
+  const fixedSources = sources.length - (official ? 1 : 0)
   const min = HOST_DOWNLOAD_MIN_ATTEMPT_SECONDS
-  // Without a clock each of the (up to) two tools per URL gets an equal share of the budget.
-  const share = Math.floor(HOST_DOWNLOAD_BUDGET_SECONDS / (2 * urls.length))
-  const urlList = urls.join(' ')
+  // Why ulimit: a proxy or mirror serving endless bytes would otherwise fill the host's disk.
+  const sizeCap = `ulimit -f ${HOST_DOWNLOAD_MAX_BLOCKS} 2>/dev/null`
+  // wget has no total-time limit, and `timeout` varies by host, so a backgrounded sleep bounds it.
+  // The watchdog's output goes to /dev/null so it never holds the capture or the SSH channel open.
+  const wget =
+    `wget -q -T 20 -t 1 -O ${file} "$2" & orca_dl_pid=$!; ` +
+    // The trap takes the sleep down with the watchdog, so nothing lingers once wget is done.
+    `(trap 'kill "$orca_dl_z" 2>/dev/null; exit 0' TERM; sleep "$orca_dl_t" & orca_dl_z=$!; ` +
+    'wait "$orca_dl_z" && kill "$orca_dl_pid") </dev/null >/dev/null 2>&1 & orca_dl_dog=$!; ' +
+    'wait "$orca_dl_pid"; orca_dl_s=$?; kill "$orca_dl_dog" 2>/dev/null; exit "$orca_dl_s"'
+  const curl = `curl -fsSL --connect-timeout 20 --max-time "$orca_dl_t" -o ${file} "$2"`
   return [
-    'orca_dl_status=127; orca_dl_out=; orca_dl_ok=; orca_dl_t=',
+    'orca_dl_ok=; orca_dl_out=; orca_dl_tool=',
+    'if command -v curl >/dev/null 2>&1; then orca_dl_tool=curl; elif command -v wget >/dev/null 2>&1; then orca_dl_tool=wget; fi',
     `orca_dl_mirror="${hostMirror}"; orca_dl_mirror="\${orca_dl_mirror%/}"`,
-    // One deadline for the loop, split evenly over the URLs still to try, so a stalled mirror
-    // can't starve the release URL and the last URL inherits whatever the others left.
-    'orca_dl_n=0',
-    `for orca_dl_url in ${urlList}; do [ -n "$orca_dl_url" ] && orca_dl_n=$((orca_dl_n + 1)); done`,
-    'orca_dl_end=$(date +%s 2>/dev/null); orca_dl_slot_end=',
+    official
+      ? `orca_dl_n=${fixedSources}; [ -n "$orca_dl_mirror" ] && orca_dl_n=$((orca_dl_n + 1))`
+      : `orca_dl_n=${fixedSources}`,
+    'orca_dl_end=$(date +%s 2>/dev/null)',
     `case "$orca_dl_end" in ''|*[!0-9]*) orca_dl_end= ;; *) orca_dl_end=$((orca_dl_end + ${HOST_DOWNLOAD_BUDGET_SECONDS})) ;; esac`,
-    `orca_dl_left() { if [ -n "$orca_dl_end" ]; then orca_dl_t=$((\${orca_dl_slot_end:-$orca_dl_end} - $(date +%s))); else orca_dl_t=${share}; fi; [ "$orca_dl_t" -ge ${min} ]; }`,
-    // wget has no total-time limit of its own. Probed by running it: old busybox wants `-t SECS`.
-    'orca_dl_timeout=; timeout 5 true >/dev/null 2>&1 && orca_dl_timeout=timeout',
-    `for orca_dl_url in ${urlList}; do`,
-    '[ -n "$orca_dl_url" ] || continue',
-    'orca_dl_slot_end=',
-    `orca_dl_left || { orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$orca_dl_url: not tried, out of time"; break; }`,
-    '[ -n "$orca_dl_end" ] && orca_dl_slot_end=$(($(date +%s) + orca_dl_t / orca_dl_n)) && orca_dl_left',
-    'orca_dl_n=$((orca_dl_n - 1))',
-    'orca_dl_try=127; orca_dl_said=',
-    `if command -v curl >/dev/null 2>&1; then orca_dl_said=$(${curl} 2>&1); orca_dl_try=$?; fi`,
-    // Why wget after a failed curl: a curl built without TLS or proxy support can fail where wget works.
-    'if [ "$orca_dl_try" != 0 ] && command -v wget >/dev/null 2>&1 && orca_dl_left; then ' +
-      '[ -n "$orca_dl_timeout" ] && orca_dl_timeout="timeout $orca_dl_t"; ' +
-      `orca_dl_said="$orca_dl_said\${orca_dl_said:+; }$(${wget} 2>&1)"; orca_dl_try=$?; fi`,
-    'if [ "$orca_dl_try" = 127 ] && [ -z "$orca_dl_said" ]; then break; fi',
-    'orca_dl_status=$orca_dl_try',
-    `if [ "$orca_dl_try" = 0 ] && [ "$(${remoteSha256Command(file)})" = ${quotePosixShell(asset.archiveSha256)} ]; then orca_dl_ok=1; break; fi`,
-    `rm -f ${file}`,
-    `[ "$orca_dl_try" = 0 ] && orca_dl_said='${HOST_NODE_DOWNLOAD_NOT_PINNED}'`,
-    'orca_dl_out="$orca_dl_out${orca_dl_out:+; }$orca_dl_url: $orca_dl_said"',
-    'done',
-    `if [ -n "$orca_dl_ok" ]; then echo ${HOST_NODE_DOWNLOAD_OK}`,
-    `elif [ "$orca_dl_status" = 127 ] && [ -z "$orca_dl_out" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}`,
-    `else echo ${HOST_NODE_DOWNLOAD_FAILED}; echo "${REMOTE_NODE_RUNTIME_EXIT_PREFIX}$orca_dl_status"; ` +
-      `printf '%s' "$orca_dl_out" | head -c 3000; fi`
+    // Each source gets an even share of what is left, so a stalled mirror can't starve the release
+    // URL, and the last source inherits whatever the others didn't use.
+    'orca_dl_get() {',
+    '  [ -z "$orca_dl_ok" ] || return 0',
+    `  if [ -n "$orca_dl_end" ]; then orca_dl_t=$(((orca_dl_end - $(date +%s)) / orca_dl_n)); else orca_dl_t=$((${HOST_DOWNLOAD_BUDGET_SECONDS} / orca_dl_n)); fi`,
+    '  orca_dl_n=$((orca_dl_n - 1))',
+    `  if [ "$orca_dl_t" -lt ${min} ]; then orca_dl_out="$orca_dl_out\${orca_dl_out:+; }$1: not tried, out of time"; return 0; fi`,
+    `  if [ "$orca_dl_tool" = curl ]; then orca_dl_said=$( (${sizeCap}; ${curl}) 2>&1 ); orca_dl_try=$?`,
+    `  else orca_dl_said=$( (${sizeCap}; ${wget}) 2>&1 ); orca_dl_try=$?; fi`,
+    `  if [ "$orca_dl_try" = 0 ] && [ "$(${remoteSha256Command(file)})" = ${quotePosixShell(asset.archiveSha256)} ]; then orca_dl_ok=1; return 0; fi`,
+    `  rm -f ${file}`,
+    `  [ "$orca_dl_try" = 0 ] && orca_dl_said='${HOST_NODE_DOWNLOAD_NOT_PINNED}'`,
+    '  orca_dl_out="$orca_dl_out${orca_dl_out:+; }$1: $orca_dl_tool exit $orca_dl_try${orca_dl_said:+, $orca_dl_said}"',
+    '}',
+    `if [ -z "$orca_dl_tool" ]; then echo ${HOST_NODE_DOWNLOAD_NO_TOOL}; else`,
+    ...sources,
+    `if [ -n "$orca_dl_ok" ]; then echo ${HOST_NODE_DOWNLOAD_OK}; else echo ${HOST_NODE_DOWNLOAD_FAILED}; printf '%s\\n' "$orca_dl_out" | head -c 3000; fi`,
+    'fi'
   ].join('\n')
 }
 
@@ -131,11 +130,8 @@ export function readHostNodeDownload(output: string): HostNodeDownloadResult {
   }
   const failed = output.indexOf(HOST_NODE_DOWNLOAD_FAILED)
   if (failed !== -1) {
-    const { exitStatus, output: words } = parseRemoteRuntimeExitReport(output.slice(failed))
-    return {
-      ok: false,
-      report: `its download failed${exitStatus ? ` (exit ${exitStatus})` : ''}${words ? `: ${words}` : ''}`
-    }
+    const words = output.slice(failed + HOST_NODE_DOWNLOAD_FAILED.length).trim()
+    return { ok: false, report: `its downloads failed${words ? ` (${words})` : ''}` }
   }
   return { ok: false, report: `it gave an unexpected reply: ${output.trim().slice(0, 500)}` }
 }
