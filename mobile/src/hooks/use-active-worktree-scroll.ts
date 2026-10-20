@@ -3,14 +3,15 @@ import type { SectionList, SectionListData } from 'react-native'
 
 type WithId = { worktreeId: string; isActive?: boolean }
 
-// Scrolls the desktop-focused worktree into view when the active selection
-// changes, so the mobile list mirrors the desktop's current workspace. Fires
-// only on a *change* of active id (not every re-render) so it never yanks the
-// list while the user scrolls or searches. Returns the ref to attach to the
-// SectionList and the onScrollToIndexFailed handler it needs for rows that
-// aren't measured yet (variable heights from the inline agent list).
+// Scrolls the highlighted (isActive) worktree into view when the highlight
+// changes. Fires only on a *change* of active id (not every re-render) so it
+// never yanks the list while the user scrolls or searches. Returns the ref to
+// attach to the SectionList and the onScrollToIndexFailed handler it needs for
+// rows that aren't measured yet (variable heights from the inline agent list).
 export function useActiveWorktreeScroll<T extends WithId, S>(
-  sections: ReadonlyArray<SectionListData<T, S> & { data: readonly T[] }>
+  sections: readonly (SectionListData<T, S> & { data: readonly T[] })[],
+  /** A search in progress: a highlight it moves (the desktop's row standing in) is not followed. */
+  searching = false
 ): {
   sectionListRef: React.RefObject<SectionList<T, S> | null>
   onScrollToIndexFailed: (info: { averageItemLength: number }) => void
@@ -53,13 +54,13 @@ export function useActiveWorktreeScroll<T extends WithId, S>(
   )
 
   useEffect(() => {
-    if (!activeWorktreeId || activeWorktreeId === lastScrolledActiveIdRef.current) {
+    if (searching || !activeWorktreeId || activeWorktreeId === lastScrolledActiveIdRef.current) {
       return
     }
     if (scrollToWorktree(activeWorktreeId)) {
       lastScrolledActiveIdRef.current = activeWorktreeId
     }
-  }, [activeWorktreeId, scrollToWorktree])
+  }, [searching, activeWorktreeId, scrollToWorktree])
 
   const onScrollToIndexFailed = useCallback(
     (info: { averageItemLength: number }) => {

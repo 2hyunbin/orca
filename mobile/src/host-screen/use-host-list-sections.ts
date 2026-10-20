@@ -5,6 +5,7 @@ import type { ProjectOrderBy } from '../../../src/shared/ui-chrome-types'
 import type { RpcClient } from '../transport/rpc-client'
 import { buildFilterRepos, type WorkspaceSectionRepo } from '../worktree/workspace-filter-repos'
 import type { Section, SectionRepo, Worktree } from '../worktree/workspace-list-types'
+import { useLastVisitedWorktreeOnHost } from '../worktree/use-last-visited-worktree-on-host'
 import { buildSidebarFeedCatalog } from '../../../src/shared/sidebar-list/sidebar-feed-catalog'
 import { buildHostFeedView } from './host-sidebar-feed-inputs'
 import { buildHostFeedSections, buildPreFeedSections } from './host-sidebar-feed-sections'
@@ -14,6 +15,8 @@ import type { HostScreenState } from './use-host-screen-state'
 
 export type HostListSectionsInputs = {
   client: RpcClient | null
+  /** The paired host whose list this is. */
+  hostId: string | undefined
   feed: HostSidebarFeed
   /** The rows worktree.ps and the desktop's server lists served, with display state applied. */
   displayWorktrees: Worktree[]
@@ -49,6 +52,7 @@ function useFilterRepos(
 /** The desktop sidebar's own list, built by the shared builder from the host's feed. */
 export function useHostListSections({
   client,
+  hostId,
   feed,
   displayWorktrees,
   hostPlatform,
@@ -78,12 +82,14 @@ export function useHostListSections({
     () => (domains ? buildSidebarFeedRows(domains, catalog, view) : null),
     [domains, catalog, view]
   )
+  const lastVisited = useLastVisitedWorktreeOnHost(hostId)
   const sections = useMemo(
     () =>
       built
         ? buildHostFeedSections({
             rows: built.sectionRows,
             activeRowKeys: built.activeRowKeys,
+            lastVisited,
             liveRows: displayWorktrees,
             repoHostIdByRepoId: state.repoHostIdByRepoId,
             search: state.search
@@ -93,9 +99,10 @@ export function useHostListSections({
             rows: displayWorktrees,
             view: state.view,
             search: state.search,
-            repoHostIdByRepoId: state.repoHostIdByRepoId
+            repoHostIdByRepoId: state.repoHostIdByRepoId,
+            lastVisited
           }),
-    [built, displayWorktrees, state.view, state.repoHostIdByRepoId, state.search]
+    [built, displayWorktrees, state.view, state.repoHostIdByRepoId, state.search, lastVisited]
   )
 
   const iconIds = useMemo(() => [...new Set(domains?.repoIcons.values() ?? [])], [domains])
