@@ -84,7 +84,8 @@ describe('the permission mode a chat starts with', () => {
       { id: 'opus', supportsAutoMode: true },
       { id: 'haiku' }
     ])
-    for (const options of [{ model: 'haiku' }, {}]) {
+    const savedOptions: Record<string, string>[] = [{ model: 'haiku' }, {}]
+    for (const options of savedOptions) {
       await expect(
         launchPermission('claude', { permissionMode: 'auto', ...options }, rows).result
       ).resolves.toBe('ask')
