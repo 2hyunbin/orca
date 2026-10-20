@@ -13,6 +13,8 @@ import {
   hasIndexedDetectedWorktree
 } from './worktree-runtime-owner-index'
 import { getActiveWorkspaceExecutionHostId } from './active-workspace-host'
+import { getSingleFocusedRuntimeEnvironmentId } from './single-runtime-legacy-owner'
+import { isEphemeralSetupTerminalWorktreeId } from '../../../shared/ephemeral-setup-terminal-worktree-id'
 import { getPairedWebClientEnvironmentId } from './paired-web-client-host'
 import {
   findFolderWorkspaceOwner,
@@ -106,7 +108,18 @@ export function getExecutionHostIdForWorktree(
   state: WorktreeRuntimeOwnerState,
   worktreeId: string | null | undefined
 ): ExecutionHostId {
-  return getKnownExecutionHostIdForWorktree(state, worktreeId) ?? getUnstampedExecutionHostId(state)
+  const known = getKnownExecutionHostIdForWorktree(state, worktreeId)
+  if (known) {
+    return known
+  }
+  // Why: a setup terminal has no row and spawns on the focused runtime (resolveTerminalHostOwnership).
+  const setupEnvironmentId =
+    worktreeId && isEphemeralSetupTerminalWorktreeId(worktreeId)
+      ? getSingleFocusedRuntimeEnvironmentId(state)
+      : null
+  return setupEnvironmentId
+    ? toRuntimeExecutionHostId(setupEnvironmentId)
+    : getUnstampedExecutionHostId(state)
 }
 
 /**

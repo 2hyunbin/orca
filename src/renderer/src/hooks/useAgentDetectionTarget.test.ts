@@ -105,12 +105,26 @@ describe('getAgentDetectionTargetKeyForWorktree', () => {
     expect(getAgentDetectionTargetKeyForWorktree(state, 'repo-1::/remote/worktree')).toBeUndefined()
   })
 
-  it('keeps the active runtime fallback for hydrated legacy worktrees', () => {
+  it('keeps a hydrated unstamped worktree local while a runtime is focused', () => {
     const state = {
       settings: { activeRuntimeEnvironmentId: 'env-1' },
       folderWorkspaces: [],
       projectGroups: [],
       repos: [{ id: 'repo-1', connectionId: null, executionHostId: null }],
+      worktreesByRepo: {
+        'repo-1': [{ id: 'repo-1::worktree-1', repoId: 'repo-1' }]
+      }
+    } as unknown as Parameters<typeof getAgentDetectionTargetKeyForWorktree>[0]
+
+    expect(getAgentDetectionTargetKeyForWorktree(state, 'repo-1::worktree-1')).toBe('local')
+  })
+
+  it('carries the workspace on a runtime-owned worktree key', () => {
+    const state = {
+      settings: { activeRuntimeEnvironmentId: null },
+      folderWorkspaces: [],
+      projectGroups: [],
+      repos: [{ id: 'repo-1', connectionId: null, executionHostId: 'runtime:env-1' }],
       worktreesByRepo: {
         'repo-1': [{ id: 'repo-1::worktree-1', repoId: 'repo-1' }]
       }
