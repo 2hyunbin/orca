@@ -48,6 +48,7 @@ import {
   setTabProps
 } from './workspace-layout-tab-commands'
 import { moveTabToWorkspace } from './workspace-layout-workspace-move'
+import { applyDefaultTabs } from './workspace-layout-default-tabs'
 
 const CREATES_WORKSPACE = new Set<LayoutCommand['type']>([
   'createTerminalTab',
@@ -84,6 +85,9 @@ function applyCommand(
 ): Applied {
   if (command.type === 'setDefaultTabsApplied') {
     return setDefaultTabsApplied(model, command.workspace)
+  }
+  if (command.type === 'applyDefaultTabs') {
+    return applyDefaultTabs(model, command, context, setDefaultTabsApplied)
   }
   if (!model.workspaces[command.workspace] && !CREATES_WORKSPACE.has(command.type)) {
     // Closing what is already gone is not an error (#10747).

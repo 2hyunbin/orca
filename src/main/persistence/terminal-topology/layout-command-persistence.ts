@@ -15,6 +15,8 @@ import type {
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { applyLayout, keepFrozen, topologyCommitContext } from './terminal-topology-commit'
 import { applyLayoutRenames } from './terminal-layout-renames-commit'
+import { isTerminalClose, keptOnWriteFailure } from './terminal-close-write-failure'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { moveTabAcrossPartitions } from './cross-partition-tab-move'
 import { writeRestorable } from './restorable-write'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
@@ -40,14 +42,20 @@ const layoutCommandPersistenceContext = Symbol('LayoutCommandPersistence')
 type LayoutCommandPersistenceContext = {
   runtime: LayoutCommandRuntime
   sessions: SessionHostPartitionOperations
+  /** Layout-owner build: saves the profile again later, after a write that failed. */
+  writeLater?: () => void
 }
 
 /** The Store's half of `layout.apply`; the commit module owns the write. */
 export class LayoutCommandPersistence {
   readonly [layoutCommandPersistenceContext]: LayoutCommandPersistenceContext
 
-  constructor(runtime: LayoutCommandRuntime, sessions: SessionHostPartitionOperations) {
-    this[layoutCommandPersistenceContext] = { runtime, sessions }
+  constructor(
+    runtime: LayoutCommandRuntime,
+    sessions: SessionHostPartitionOperations,
+    writeLater?: () => void
+  ) {
+    this[layoutCommandPersistenceContext] = { runtime, sessions, writeLater }
   }
 
   /** Applies to each partition holding the command's tab, routed partition first (local if none). */
@@ -57,6 +65,14 @@ export class LayoutCommandPersistence {
   ): Promise<LayoutApplyOutcome> {
     const context = this[layoutCommandPersistenceContext]
     const resolved = hostIds.length > 0 ? hostIds.map(resolveHostId) : [resolveHostId()]
+    // Switch point: a terminal close stands once applied, as the switch-off window shows it.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN && context.writeLater && isTerminalClose(command)) {
+      return keptOnWriteFailure(
+        (mutate) => context.runtime.runDurableMutation(mutate),
+        writingOnly(resolved, applyLayout(resolved, command, topologyCommitContext(context))),
+        context.writeLater
+      )
+    }
     return context.runtime.runDurableMutation(
       writingOnly(resolved, applyLayout(resolved, command, topologyCommitContext(context)))
     )
