@@ -1087,6 +1087,9 @@
         "preparingWorkspace": "워크스페이스 준비 중…",
         "creatingWorktree": "작업 트리 만드는 중…",
         "fetchingBaseBranch": "기본 브랜치 가져오는 중…"
+      },
+      "duplicatePairedServers": {
+        "ambiguousSameServer": "{{value0}}와(과) {{value1}}은(는) 두 번 페어링된 같은 서버입니다. 설정 > 원격 Orca 서버에서 하나를 제거하세요."
       }
     },
     "hooks": {
@@ -8408,7 +8411,8 @@
           "connectAccessRevoked": "{{value0}}이(가) 더 이상 이 컴퓨터를 허용하지 않습니다. 연결하여 다시 시도하세요.",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
-          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"
+          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)",
+          "pairedTwice": "{{value0}}와(과) 같은 서버가 두 번 페어링되었습니다. 프로젝트를 편집하려면 하나를 제거하세요."
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "{{value0}} 복사"

@@ -1191,6 +1191,9 @@
         "preparingWorkspace": "Préparation de l'espace de travail…",
         "creatingWorktree": "Création du worktree…",
         "fetchingBaseBranch": "Récupération de la branche de base…"
+      },
+      "duplicatePairedServers": {
+        "ambiguousSameServer": "{{value0}} et {{value1}} sont le même serveur associé deux fois. Supprimez-en un dans Réglages > Serveurs Orca distants."
       }
     },
     "hooks": {
@@ -8569,7 +8572,8 @@
           "connectAccessRevoked": "{{value0}} n'accepte plus cet ordinateur. Connectez-vous pour réessayer.",
           "repair": "Re-pair…",
           "serverAccessRevoked": "Access revoked",
-          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)"
+          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)",
+          "pairedTwice": "Même serveur que {{value0}}, associé deux fois. Supprimez-en un pour pouvoir modifier ses projets."
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "Copier {{value0}}"
