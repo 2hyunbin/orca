@@ -1,5 +1,4 @@
 import { OrcaRuntimeWithTerminalCreateDeduplication } from './terminal-create-deduplication'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { createDesktopTerminal } from '../../orca-runtime-create-terminal-desktop'
 import { buildRuntimeAgentTeamsLaunchPlan } from './agent-teams-launch-plan'
@@ -7,7 +6,7 @@ import { createIdempotentCallback } from '../../orca-runtime-report-pty-spawn-co
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
 import { agentLaunchTokenFor } from '../../../agent-launch/agent-launch-token'
 import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
-import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
+import { paneSize, resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
 
 export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
   protected abstract paneStartStatusArgs: dependencies.PaneStartArgsOf
@@ -49,18 +48,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           ? this.singleGroupWorkspaceGridSize
           : undefined
       const group = groupId ? this.terminalGroupGridSizes?.[groupId] : undefined
-      // Switch point: a pane main holds starts at the grid it last had.
-      const lastGrid =
-        ORCA_LAYOUT_OWNER_IS_MAIN && launchOpts.tabId && launchOpts.leafId
-          ? session?.terminalLayoutsByTabId?.[launchOpts.tabId]?.lastGridsByLeafId?.[
-              launchOpts.leafId
-            ]
-          : undefined
-      const initialSize = resolvePtyFirstSize({
-        pane: opts.initialSize ?? lastGrid,
-        group,
-        singleGroup
-      })
+      const initialSize = resolvePtyFirstSize({ pane: paneSize(session, opts), group, singleGroup })
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)

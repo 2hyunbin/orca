@@ -107,6 +107,8 @@ export type LayoutCommand =
   | (On & { type: 'renamePane'; tabId: string; leafId: string; title: string | null })
   /** Main only: the grid the pane's terminal was last sized to, which a restart starts it at. */
   | (On & { type: 'setPaneGrid'; tabId: string; leafId: string; grid: TerminalGrid })
+  /** Main only: unbinds the pane from `ptyId` if it still names it, stopping nothing. */
+  | (On & { type: 'releasePaneTerminal'; tabId: string; leafId: string; ptyId: string })
   | (On & {
       type: 'setTabProps'
       tabId: string

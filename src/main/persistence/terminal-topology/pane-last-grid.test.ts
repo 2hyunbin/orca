@@ -84,7 +84,7 @@ describe("a pane's last grid (layout-owner build)", () => {
 
     const layouts = (await reopenTopologyStore(store, directory)).getWorkspaceSession()
       .terminalLayoutsByTabId
-    const [movedTo] = Object.keys(layouts).filter((tabId) => tabId !== 'tab-1')
+    const movedTo = Object.keys(layouts).find((tabId) => tabId !== 'tab-1')
     expect(layouts['tab-1']?.lastGridsByLeafId).toBeUndefined()
     expect(layouts[movedTo!]?.lastGridsByLeafId).toEqual({ [LEAF_B]: { cols: 91, rows: 33 } })
   })
@@ -139,5 +139,36 @@ describe("a pane's last grid (layout-owner build)", () => {
     expect(
       relaunched.getWorkspaceSession().terminalLayoutsByTabId['tab-1']?.lastGridsByLeafId
     ).toEqual({ [LEAF_B]: { cols: 91, rows: 33 } })
+  })
+
+  it('releases a pane from the terminal it names, and leaves a pane another terminal took', async () => {
+    const { store } = await storeWithSplit()
+    await store.persistPtyBinding({
+      ...{ worktreeId: FIXTURE_GIT_WORKTREE_ID },
+      tabId: 'tab-1',
+      leafId: LEAF_B,
+      ptyId: 'pty-b'
+    })
+    await apply(store, {
+      ...on,
+      type: 'releasePaneTerminal',
+      tabId: 'tab-1',
+      leafId: LEAF_B,
+      ptyId: 'pty-stale'
+    })
+    expect(
+      store.getWorkspaceSession().terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId?.[LEAF_B]
+    ).toBe('pty-b')
+
+    await apply(store, {
+      ...on,
+      type: 'releasePaneTerminal',
+      tabId: 'tab-1',
+      leafId: LEAF_B,
+      ptyId: 'pty-b'
+    })
+    expect(
+      store.getWorkspaceSession().terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId?.[LEAF_B]
+    ).toBeUndefined()
   })
 })

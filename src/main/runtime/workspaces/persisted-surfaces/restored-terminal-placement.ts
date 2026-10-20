@@ -107,9 +107,20 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
     for (const hostId of store?.getWorkspaceSessionHostIds?.() ?? []) {
       const session = store?.getWorkspaceSession?.(hostId)
       for (const binding of session ? panesBoundToAnotherWorkspace(session) : []) {
-        await store?.retirePtyBinding?.(binding, hostId).catch((error: unknown) => {
-          console.warn('[layout] a pane kept another workspace terminal', error)
+        const { worktreeId, ...pane } = binding
+        await this.applyLayoutCommand({
+          type: 'releasePaneTerminal',
+          workspace: worktreeId,
+          ...pane
         })
+          .then((reply) => {
+            if (!reply.ok) {
+              console.warn('[layout] a pane kept another workspace terminal', reply.code)
+            }
+          })
+          .catch((error: unknown) => {
+            console.warn('[layout] a pane kept another workspace terminal', error)
+          })
       }
     }
   }

@@ -46,8 +46,7 @@ function runtimeWithLiveTerminal(
     getAllWorktreeMeta: () => ({}),
     getWorkspaceSessionHostIds: () => ['local'],
     getWorkspaceSession: () => session,
-    applyLayoutCommand,
-    retirePtyBinding: vi.fn(async () => true)
+    applyLayoutCommand
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup pass reads only these store methods.
   const runtime = new OrcaRuntimeService(store as never)
@@ -61,7 +60,7 @@ function runtimeWithLiveTerminal(
       hostIds: ['local' as const]
     })
   })
-  return { runtime, applyLayoutCommand, live, retirePtyBinding: store.retirePtyBinding }
+  return { runtime, applyLayoutCommand, live }
 }
 
 describe('main’s startup pass over the host census, layout-owner build', () => {
@@ -161,14 +160,18 @@ describe('main’s startup pass over the host census, layout-owner build', () =>
         }
       }
     }
-    const { runtime, retirePtyBinding } = runtimeWithLiveTerminal(FOLDER_KEY, [], session)
+    const { runtime, applyLayoutCommand } = runtimeWithLiveTerminal(FOLDER_KEY, [], session)
 
     await runtime.placeUnshownLiveTerminals()
 
-    expect(retirePtyBinding).toHaveBeenCalledTimes(1)
-    expect(retirePtyBinding).toHaveBeenCalledWith(
-      { worktreeId: FOLDER_KEY, tabId: 'tab-1', leafId: 'leaf-other', ptyId: other },
-      'local'
-    )
+    expect(applyLayoutCommand.mock.calls.map(([command]) => command)).toEqual([
+      {
+        type: 'releasePaneTerminal',
+        workspace: FOLDER_KEY,
+        tabId: 'tab-1',
+        leafId: 'leaf-other',
+        ptyId: other
+      }
+    ])
   })
 })
