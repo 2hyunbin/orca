@@ -72,6 +72,34 @@ const sentViewModes = () => sent().map((params) => params.command.viewMode)
 const row = (store: ReturnType<typeof createTestStore>) =>
   store.getState().tabsByWorktree[WORKTREE]![0]!
 
+/** Draws each generated title main was sent, as main's frame would (frames are not modelled). */
+function mainFrameDrawsTitles(store: ReturnType<typeof createTestStore>): void {
+  const titles = new Map<string, string | null>()
+  for (const params of sent()) {
+    for (const rename of params.command.renames ?? []) {
+      const { tabId, title } = rename as { tabId: string; title: string | null }
+      titles.set(tabId, title)
+    }
+  }
+  const state = store.getState()
+  const entityOf = new Map(
+    Object.values(state.unifiedTabsByWorktree)
+      .flat()
+      .map((tab) => [tab.id, tab.entityId])
+  )
+  const drawn = new Map([...titles].map(([tabId, title]) => [entityOf.get(tabId), title]))
+  store.setState({
+    tabsByWorktree: Object.fromEntries(
+      Object.entries(state.tabsByWorktree).map(([key, rows]) => [
+        key,
+        rows.map((row) =>
+          drawn.has(row.id) ? { ...row, generatedTitle: drawn.get(row.id) ?? undefined } : row
+        )
+      ])
+    )
+  })
+}
+
 /** Main's answers and their handlers have run; main's frame, which draws the change, is not modelled. */
 const answered = async (): Promise<void> => {
   for (let turn = 0; turn < 5; turn += 1) {
@@ -137,7 +165,9 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBeTruthy())
+    await answered()
+    // Main's frame draws the title; the window writes none.
+    expect(row(store).generatedTitle).toBeUndefined()
   })
 
   it('sends one agent title while main has not answered the first, as the window keeps it', async () => {
@@ -150,14 +180,18 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
 
     expect(titles()).toHaveLength(1)
     const [first] = titles()
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBe(first))
+    await answered()
+    expect(row(store).generatedTitle).toBeUndefined()
+    mainFrameDrawsTitles(store)
+    expect(row(store).generatedTitle).toBe(first)
 
     store.getState().setGeneratedTabTitleFromAgentPrompt(second, 'write tests', {
       replaceExistingGeneratedTitle: true
     })
     const replaced = titles()[1]
     expect(replaced).not.toEqual(first)
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBe(replaced))
+    await answered()
+    expect(row(store).generatedTitle).toBe(first)
   })
 
   it('forgets an ended launch agent in main, and sends nothing for a tab without one', async () => {
@@ -240,7 +274,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(row(store).viewMode).toBeUndefined()
   })
 
-  it('gives each tab of an agent-title batch its title once main has it, and a paired server’s tab at once', async () => {
+  it('sends an agent-title batch’s local titles to main, whose frame draws them, and shows a paired server’s tab at once', async () => {
     const store = createTestStore()
     const remote = 'repo2::/path/remote'
     seedStore(
@@ -280,11 +314,13 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(title(remote)).toBeTruthy()
     expect(title(WORKTREE)).toBeUndefined()
     answer({ ok: true, result: {} })
-    await vi.waitFor(() => expect(title(WORKTREE)).toBeTruthy())
+    await answered()
+    // Main's frame draws the local tab's title; the window writes none.
+    expect(title(WORKTREE)).toBeUndefined()
     expect(sent()).toHaveLength(1)
   })
 
-  it('sends a batch’s titles of several workspaces as one rename, and shows those main gave', async () => {
+  it('sends a batch’s titles of several workspaces as one rename, and writes none itself', async () => {
     const store = createTestStore()
     const other = 'repo1::/path/other'
     seedStore(store, {
@@ -332,9 +368,11 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
-    await vi.waitFor(() => expect(title(WORKTREE)).toBeTruthy())
+    await answered()
     unsubscribe()
-    expect(publications).toBe(1)
+    // Main's frame draws the title it gave; the window writes neither.
+    expect(publications).toBe(0)
+    expect(title(WORKTREE)).toBeUndefined()
     expect(title(other)).toBeUndefined()
     expect(console.warn).toHaveBeenCalledWith('[layout-owner] renameTabs refused:', 'tab_not_found')
     // Settled: the refused tab's next title is sent again.
@@ -359,7 +397,6 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(row(store).generatedTitle).toBeFalsy()
     store.getState().setGeneratedTabTitlesFromAgentPrompts([update])
     expect(sent()).toHaveLength(2)
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBeTruthy())
   })
 
   it('acts as today at once for a paired server’s workspace', () => {

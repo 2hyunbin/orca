@@ -25,6 +25,10 @@ import { endLayoutFramePositions } from './layout-frame-position'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
 import { mainLayoutFrameSender } from './main-loaded-layout-frames.test-fixture'
+import {
+  getRuntimeMobileSessionSyncKey,
+  runtimeMobileSessionSyncKeysEqual
+} from './sync-runtime-graph/sync-key'
 
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -446,11 +450,15 @@ describe('a change main applies first, with frames flowing', () => {
     store.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Fix the flaky login test')
     expect(renames()).toHaveLength(1)
 
+    const writes = writesOf(store, (state) => state.tabsByWorktree)
     await answer(rpc.calls.indexOf(renames()[0]!), okReply, (layout) => {
       layout.tabs.find((item) => item.id === 'tab-unbound')!.generatedTitle = title
     })
+    writes.stop()
     const row = store.getState().tabsByWorktree[GIT_KEY]!.find((item) => item.id === 'tab-unbound')!
     expect(row.generatedTitle).toBe(title)
+    // Main's frame is the title's one store write.
+    expect(writes.count()).toBe(1)
     store.getState().setGeneratedTabTitleFromAgentPrompt(paneKey, 'Fix the flaky login test', {
       replaceExistingGeneratedTitle: true
     })
@@ -463,6 +471,7 @@ describe('a change main applies first, with frames flowing', () => {
     store.getState().setTabCustomTitle('tab-unbound', 'Build')
     const rename = rpc.calls.length - 1
     const writes = writesOf(store, (state) => state.tabsByWorktree)
+    const graphBefore = getRuntimeMobileSessionSyncKey(store.getState())
 
     await answer(rename, okReply, (layout) => {
       layout.tabs.find((item) => item.id === 'tab-unbound')!.customTitle = 'Build'
@@ -470,6 +479,13 @@ describe('a change main applies first, with frames flowing', () => {
     const row = store.getState().tabsByWorktree[GIT_KEY]!.find((item) => item.id === 'tab-unbound')!
     expect(row.customTitle).toBe('Build')
     expect(writes.count()).toBe(1)
+    // The frame's write changes what the phone graph publishes, so useRuntimeGraphSync republishes.
+    expect(
+      runtimeMobileSessionSyncKeysEqual(
+        getRuntimeMobileSessionSyncKey(store.getState()),
+        graphBefore
+      )
+    ).toBe(false)
     writes.stop()
     sync.close()
   })

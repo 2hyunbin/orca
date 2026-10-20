@@ -98,15 +98,18 @@ export function routeTerminalTabChangesThroughLayoutOwner(
     const sent = sendGeneratedTabTitles(
       state,
       toMain.map(({ tab, title }) => ({ worktreeId: tab.worktreeId, tabId: tab.id, title })),
-      (shown) => {
+      (outcomes) => {
         for (const { tabId } of toMain) {
           if (generatedTitleSent.get(tabId) === entry) {
             generatedTitleSent.delete(tabId)
           }
         }
-        const ofShown = toMain.flatMap((change, index) => (shown[index] ? change.updates : []))
-        if (ofShown.length > 0) {
-          actions.setGeneratedTabTitlesFromAgentPrompts(ofShown)
+        // Main's frame drew the titles it gave; the window shows only those left to it as today.
+        const asToday = toMain.flatMap((change, index) =>
+          outcomes[index] === 'asToday' ? change.updates : []
+        )
+        if (asToday.length > 0) {
+          actions.setGeneratedTabTitlesFromAgentPrompts(asToday)
         }
       }
     )
