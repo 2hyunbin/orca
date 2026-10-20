@@ -162,6 +162,21 @@ describe('a relay restarted at the same socket', () => {
     expect(subject.snapshot()).toEqual([])
   })
 
+  it('takes an exit report on the connection that listed the pane, even after a refused attach', async () => {
+    relay.incarnations.set('pty-1', 'inc-1')
+    let exhaustive = true
+    const subject = bridge({
+      listEndpoints: async () => ({ kind: 'listed', endpoints: [ENDPOINT], exhaustive })
+    })
+    await subject.refresh()
+    exhaustive = false
+    relay.attachError = new Error('PTY busy')
+    await expect(subject.attach(PTY)).resolves.toEqual({ status: 'unverifiable' })
+    relay.clients[0].emitExit('pty-1', 4)
+    expect(events.exits).toEqual([PTY])
+    expect(leases[0].state).toBe('terminated')
+  })
+
   it('reattaches the same shell when the relay lists its incarnation again', async () => {
     relay.incarnations.set('pty-1', 'inc-1')
     const subject = bridge()

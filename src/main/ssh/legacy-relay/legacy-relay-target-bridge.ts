@@ -21,7 +21,7 @@ import {
   findLivePane,
   leasedAppPtyIds,
   listedLeasesByRelayId,
-  type LegacyRelayPty,
+  type ListedRow,
   PROVEN_EXITED,
   relistedPane,
   seededPanes,
@@ -200,7 +200,7 @@ export class LegacyRelayTargetBridge {
     if (this.disposed) {
       return
     }
-    const listedRows: (LegacyRelayPty & { endpoint: string })[] = []
+    const listedRows: ListedRow[] = []
     let complete = listing.kind === 'listed' && listing.exhaustive
     for (const endpoint of listing.kind === 'listed' ? listing.endpoints : []) {
       const listed = await this.listEndpoint(endpoint)
@@ -211,7 +211,7 @@ export class LegacyRelayTargetBridge {
         complete = false
         continue
       }
-      listedRows.push(...listed.map((row) => ({ ...row, endpoint: endpoint.endpoint })))
+      listedRows.push(...listed)
     }
     const next = new Map<string, Pane>()
     // Why re-read: a lease retired while the relays were asked (an exit) must not come back live.
@@ -240,7 +240,7 @@ export class LegacyRelayTargetBridge {
   }
 
   /** The relay's PTYs, an empty list for a relay proven gone, or null when it can't be asked. */
-  private async listEndpoint(endpoint: LegacyRelayEndpoint): Promise<LegacyRelayPty[] | null> {
+  private async listEndpoint(endpoint: LegacyRelayEndpoint): Promise<ListedRow[] | null> {
     const state = this.endpoints.get(endpoint.endpoint) ?? { endpoint, client: null, claim: null }
     this.endpoints.set(endpoint.endpoint, state)
     if (!state.client || state.client.closed) {
@@ -261,8 +261,9 @@ export class LegacyRelayTargetBridge {
         return (await this.deps.endpointExited(endpoint).catch(() => false)) ? [] : null
       }
     }
+    const { client } = state
     try {
-      return await state.client.list()
+      return (await client.list()).map((row) => ({ ...row, endpoint: endpoint.endpoint, client }))
     } catch {
       return null
     }
@@ -271,17 +272,16 @@ export class LegacyRelayTargetBridge {
   private wireClient(endpoint: string, client: LegacyRelayClient): void {
     client.onData((relayPtyId, data) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
-      if (this.attached.has(ptyId) && this.deps.owners.speaksFor(this.panes.get(ptyId), endpoint)) {
+      if (this.attached.has(ptyId) && this.deps.owners.speaksFor(this.panes.get(ptyId), client)) {
         this.deps.onData(ptyId, data)
       }
     })
     client.onExit((relayPtyId, code) => {
       const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
       const pane = this.panes.get(ptyId)
-      if (this.deps.owners.speaksFor(pane, endpoint)) {
+      this.deps.owners.noteExit(relayPtyId, endpoint, code)
+      if (this.deps.owners.speaksFor(pane, client)) {
         this.retire(ptyId, pane, code)
-      } else {
-        this.deps.owners.noteExit(relayPtyId, endpoint, code)
       }
     })
     client.onClose(() => {

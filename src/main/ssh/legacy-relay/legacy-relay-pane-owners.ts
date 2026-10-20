@@ -8,6 +8,7 @@
  * no other process under that id is ever served for it.
  */
 import type { Pane } from './legacy-relay-bridge-leases'
+import type { LegacyRelayClient } from './legacy-relay-client'
 
 type Owner = {
   endpoint: string
@@ -36,14 +37,13 @@ export class LegacyRelayPaneOwners {
   }
 
   /**
-   * Whether a relay's report is about this pane's process. Why live only: a relay reopened at the
-   * same socket may be a restart reusing the id, until its listing shows otherwise.
+   * Whether a connection's report is about this pane's process: the one whose listing bound it.
+   * Why not by endpoint: a relay reopened at the same socket may be a restart reusing the id.
    */
-  speaksFor(pane: Pane | undefined, endpoint: string): pane is Pane {
-    return (
-      pane?.state === 'live' &&
-      pane.endpoint === endpoint &&
-      this.isOwnerProcess(pane.relayPtyId, { endpoint, incarnationId: pane.listed?.incarnationId })
+  speaksFor(pane: Pane | undefined, client: LegacyRelayClient): pane is Pane {
+    const listed = pane?.listed
+    return Boolean(
+      listed && listed.client === client && this.isOwnerProcess(pane.relayPtyId, listed)
     )
   }
 
@@ -67,7 +67,7 @@ export class LegacyRelayPaneOwners {
     this.owners.delete(relayPtyId)
   }
 
-  /** An exit report before any listing bound the id to that relay's process, kept until one does. */
+  /** Every exit report, kept until the next listing: one may race the listing that binds its pane. */
   noteExit(relayPtyId: string, endpoint: string, code: number): void {
     this.unclaimedExits.set(`${endpoint}\n${relayPtyId}`, code)
   }

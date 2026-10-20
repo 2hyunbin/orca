@@ -6,11 +6,14 @@ import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
-import type { LegacyRelayPty } from './legacy-relay-client'
+import type { LegacyRelayClient, LegacyRelayPty } from './legacy-relay-client'
 import { isEpochScopedRelayPtyId } from '../../../shared/ssh-pending-pty-kill'
 import type { LegacyRelayPaneOwners } from './legacy-relay-pane-owners'
 
 export type { LegacyRelayPty }
+
+/** A relay's listing row: the endpoint that answered, and the connection the answer came on. */
+export type ListedRow = LegacyRelayPty & { endpoint: string; client?: LegacyRelayClient }
 
 /** How long an attach waits for an unreachable relay before answering `unverifiable`. */
 export const ATTACH_WAIT_MS = 20_000
@@ -77,7 +80,7 @@ export type Pane = {
   endpoint: string | null
   state: 'live' | 'unverifiable'
   /** What the listing relay claimed about the process, for the relay-era CLI's identity checks. */
-  listed?: LegacyRelayPty
+  listed?: ListedRow
   /** Its tab closed and its stop is still owed: listed for the stop, never served. */
   stopping?: true
 }
@@ -87,7 +90,7 @@ export function toPane(
   relayPtyId: string,
   endpoint: string | null,
   state: Pane['state'],
-  listed?: LegacyRelayPty
+  listed?: ListedRow
 ): Pane {
   return {
     lease,
@@ -123,7 +126,7 @@ export function seededPanes(
 export function relistedPane(
   lease: SshRemotePtyLease,
   relayPtyId: string,
-  listedRows: readonly (LegacyRelayPty & { endpoint: string })[],
+  listedRows: readonly ListedRow[],
   owners: LegacyRelayPaneOwners,
   complete: boolean
 ): Pane | { exited: number | null } {
