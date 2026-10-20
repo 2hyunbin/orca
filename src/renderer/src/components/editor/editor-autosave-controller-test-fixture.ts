@@ -6,6 +6,7 @@ import { createStore, type StoreApi } from 'zustand/vanilla'
 import { createEditorSlice } from '@/store/slices/editor'
 import type { AppState } from '@/store'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import { emptyTabLayoutState } from '@/store/slices/editor-slice-test-harness'
 
 export type FakeEditorDisk = {
   files: Map<string, string>
@@ -71,8 +72,9 @@ export function stubEditorWindow(): ReturnType<typeof vi.fn> {
 }
 
 export function createEditorStore(): StoreApi<AppState> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line typescript/no-explicit-any, typescript/consistent-type-assertions -- SAFETY: a partial store; tests read only the slices it builds.
   return createStore<any>()((...args: any[]) => ({
+    ...emptyTabLayoutState(),
     activeWorktreeId: 'wt-1',
     repos: [],
     worktreesByRepo: {
