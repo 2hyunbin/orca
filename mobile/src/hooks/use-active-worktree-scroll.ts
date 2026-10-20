@@ -9,7 +9,9 @@ type WithId = { worktreeId: string; isActive?: boolean }
 // attach to the SectionList and the onScrollToIndexFailed handler it needs for
 // rows that aren't measured yet (variable heights from the inline agent list).
 export function useActiveWorktreeScroll<T extends WithId, S>(
-  sections: ReadonlyArray<SectionListData<T, S> & { data: readonly T[] }>
+  sections: ReadonlyArray<SectionListData<T, S> & { data: readonly T[] }>,
+  /** A search in progress: a highlight it moves (the desktop's row standing in) is not followed. */
+  searching = false
 ): {
   sectionListRef: React.RefObject<SectionList<T, S> | null>
   onScrollToIndexFailed: (info: { averageItemLength: number }) => void
@@ -52,13 +54,13 @@ export function useActiveWorktreeScroll<T extends WithId, S>(
   )
 
   useEffect(() => {
-    if (!activeWorktreeId || activeWorktreeId === lastScrolledActiveIdRef.current) {
+    if (searching || !activeWorktreeId || activeWorktreeId === lastScrolledActiveIdRef.current) {
       return
     }
     if (scrollToWorktree(activeWorktreeId)) {
       lastScrolledActiveIdRef.current = activeWorktreeId
     }
-  }, [activeWorktreeId, scrollToWorktree])
+  }, [searching, activeWorktreeId, scrollToWorktree])
 
   const onScrollToIndexFailed = useCallback(
     (info: { averageItemLength: number }) => {
