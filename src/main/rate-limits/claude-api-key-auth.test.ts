@@ -11,6 +11,7 @@ type Fixture = {
   hasKeychainKey: ReturnType<typeof vi.fn>
   readCredentials: ReturnType<typeof vi.fn>
   launchEnv: NodeJS.ProcessEnv
+  envStatus: string
   userConfigDir?: string
   managed?: ClaudeManagedSettingsLocations
 }
@@ -18,7 +19,8 @@ type Fixture = {
 const fixture = vi.hoisted((): Fixture => ({
   hasKeychainKey: vi.fn(),
   readCredentials: vi.fn(),
-  launchEnv: {}
+  launchEnv: {},
+  envStatus: 'captured'
 }))
 
 vi.mock('../claude-accounts/keychain', async (importOriginal) => ({
@@ -40,14 +42,24 @@ vi.mock('./claude-settings-sources', async (importOriginal) => {
 })
 vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
   getClaudeProfileRouter: () => ({
+    get envStatus() {
+      return fixture.envStatus
+    },
     claudeLaunchEnv: () => fixture.launchEnv,
     userConfigDir: () => fixture.userConfigDir
   })
 }))
 
-import { readClaudeNoLoginAuth } from './claude-api-key-auth'
+import {
+  readClaudeNoLoginAuth,
+  resetClaudeKeychainPresenceCacheForTests
+} from './claude-api-key-auth'
 import { fetchActiveClaudeRateLimits } from './claude-active-usage-fetch'
-import { claudeManagedSettingsLocations } from './claude-settings-sources'
+import {
+  claudeManagedSettingsLocations,
+  readClaudeAuthFileFacts,
+  resetClaudeAuthFileFactsCacheForTests
+} from './claude-settings-sources'
 
 const SECRET = 'sk-ant-synthetic-secret-value'
 let home: string
@@ -93,7 +105,10 @@ beforeEach(() => {
   fixture.managed = managedIn(managedDir)
   fixture.hasKeychainKey.mockResolvedValue(false)
   fixture.launchEnv = {}
+  fixture.envStatus = 'captured'
   fixture.userConfigDir = undefined
+  resetClaudeAuthFileFactsCacheForTests()
+  resetClaudeKeychainPresenceCacheForTests()
 })
 
 afterEach(() => {
@@ -127,9 +142,10 @@ describe('readClaudeNoLoginAuth', () => {
     const customDir = join(home, 'custom-claude')
     mkdirSync(customDir)
     // Why: with CLAUDE_CONFIG_DIR set, Claude ignores the home state file.
-    await expect(detect({}, { keychainConfigDir: customDir })).resolves.toBe('none')
+    const custom = { CLAUDE_CONFIG_DIR: customDir }
+    await expect(detect(custom, { keychainConfigDir: customDir })).resolves.toBe('none')
     writeJson(join(customDir, '.claude.json'), { primaryApiKey: SECRET })
-    await expect(detect({}, { keychainConfigDir: customDir })).resolves.toBe('api-key')
+    await expect(detect(custom, { keychainConfigDir: customDir })).resolves.toBe('api-key')
   })
 
   it("finds a Console login's Keychain item on macOS only", async () => {
@@ -248,9 +264,49 @@ describe('readClaudeNoLoginAuth settings sources', () => {
   })
 })
 
+describe('readClaudeNoLoginAuth folder and cost', () => {
+  it("omits the answer when Claude's env names another folder than the one checked", async () => {
+    const other = join(home, 'other')
+    await expect(detect({ CLAUDE_CONFIG_DIR: other })).resolves.toBeUndefined()
+    await expect(detect({}, { keychainConfigDir: other })).resolves.toBeUndefined()
+    await expect(detect({ CLAUDE_CONFIG_DIR: other }, { keychainConfigDir: other })).resolves.toBe(
+      'none'
+    )
+  })
+
+  it('rereads a file only when its size or mtime changes', async () => {
+    const file = join(configDir, 'settings.json')
+    writeJson(file, { apiKeyHelper: 'a' })
+    const first = await readClaudeAuthFileFacts(file)
+    expect(await readClaudeAuthFileFacts(file)).toBe(first)
+    writeJson(file, { apiKeyHelper: '' })
+    await expect(readClaudeAuthFileFacts(file)).resolves.toMatchObject({
+      value: { apiKeyHelper: false }
+    })
+  })
+
+  it('keeps presence only, never a key value', async () => {
+    writeJson(join(home, '.claude.json'), {
+      primaryApiKey: SECRET,
+      env: { ANTHROPIC_API_KEY: SECRET }
+    })
+    const facts = await readClaudeAuthFileFacts(join(home, '.claude.json'))
+    expect(JSON.stringify(facts)).not.toContain(SECRET)
+  })
+
+  it('asks the Keychain once per TTL, and again after a failed lookup', async () => {
+    fixture.hasKeychainKey.mockRejectedValueOnce(new Error('locked'))
+    await expect(detect({}, { platform: 'darwin' })).resolves.toBeUndefined()
+    await expect(detect({}, { platform: 'darwin' })).resolves.toBe('none')
+    await expect(detect({}, { platform: 'darwin' })).resolves.toBe('none')
+    expect(fixture.hasKeychainKey).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('fetchActiveClaudeRateLimits with no Claude login', () => {
   beforeEach(() => {
     fixture.userConfigDir = configDir
+    fixture.launchEnv = { CLAUDE_CONFIG_DIR: configDir }
     fixture.readCredentials.mockResolvedValue({
       token: null,
       hasRefreshableCredentials: false,
@@ -265,7 +321,7 @@ describe('fetchActiveClaudeRateLimits with no Claude login', () => {
   }
 
   it('keeps what older clients see and adds claudeAuth, never the key', async () => {
-    fixture.launchEnv = { ANTHROPIC_API_KEY: SECRET }
+    fixture.launchEnv = { CLAUDE_CONFIG_DIR: configDir, ANTHROPIC_API_KEY: SECRET }
     writeJson(join(configDir, '.claude.json'), { primaryApiKey: SECRET })
     const result = await fetchSystemDefault()
     expect(result).toMatchObject({
@@ -284,10 +340,19 @@ describe('fetchActiveClaudeRateLimits with no Claude login', () => {
     await expect(fetchSystemDefault()).resolves.toMatchObject({
       usageMetadata: { claudeAuth: 'none' }
     })
-    fixture.launchEnv = { CLAUDE_CODE_USE_VERTEX: '1' }
+    fixture.launchEnv = { CLAUDE_CONFIG_DIR: configDir, CLAUDE_CODE_USE_VERTEX: '1' }
     const unknown = await fetchSystemDefault()
     expect(unknown.status).toBe('unavailable')
     expect(unknown.usageMetadata).not.toHaveProperty('claudeAuth')
+  })
+
+  it("omits the field until the login shell's env is captured", async () => {
+    for (const status of ['pending', 'fallback']) {
+      fixture.envStatus = status
+      const result = await fetchSystemDefault()
+      expect(result.status).toBe('unavailable')
+      expect(result.usageMetadata).not.toHaveProperty('claudeAuth')
+    }
   })
 
   it('never sets the field for a signed-out account', async () => {

@@ -41,10 +41,12 @@ export async function fetchActiveClaudeRateLimits(
     metadata.authProvenance === 'system'
   ) {
     // Why the copy is unchanged: older clients show it; claudeAuth tells newer ones which case this is.
-    const claudeAuth = await readClaudeNoLoginAuth({
-      ...readOptions,
-      env: getClaudeProfileRouter()?.claudeLaunchEnv() ?? process.env
-    })
+    const router = getClaudeProfileRouter()
+    // Why: without the login shell's env, a key or config folder an rc exports goes unseen.
+    const claudeAuth =
+      router?.envStatus === 'captured'
+        ? await readClaudeNoLoginAuth({ ...readOptions, env: router.claudeLaunchEnv() })
+        : undefined
     return makeClaudeUsageResult('unavailable', 'No subscription plan — API key billing', {
       ...metadata,
       failureKind: 'missing-credentials',

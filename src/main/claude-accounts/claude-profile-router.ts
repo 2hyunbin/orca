@@ -39,7 +39,7 @@ import {
   isSameClaudeLogin,
   type ClaudeFolderLogin
 } from './claude-account-folder'
-import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
+import { captureLoginShellEnvironment } from '../startup/login-shell-environment'
 
 const REFRESH_WAIT_MS = 5_000
 
@@ -62,7 +62,8 @@ export class ClaudeProfileRouter {
   private readonly setups = new Map<string, Promise<ClaudeProfileSetupReport>>()
   private env: NodeJS.ProcessEnv
   private readonly envReady: Promise<unknown>
-  private envResolved: boolean
+  /** Until 'captured', `env` is Orca's own and may lack what the user's rc exports. */
+  envStatus: 'pending' | 'captured' | 'fallback'
   constructor(
     private readonly args: {
       getSettings: () => ClaudeProfileRouterSettings
@@ -79,12 +80,12 @@ export class ClaudeProfileRouter {
     this.pointerPath = join(args.dataRoot, 'claude-profiles', 'selected-host')
     this.env = args.env ?? process.env
     // Why the login shell's: a Dock launch lacks the CLAUDE_CONFIG_DIR an rc exports. Chats share it.
-    this.envResolved = Boolean(args.env)
+    this.envStatus = args.env ? 'captured' : 'pending'
     this.envReady = args.env
       ? Promise.resolve()
-      : resolveLoginShellEnvironment().then((env) => {
+      : captureLoginShellEnvironment().then(({ env, status }) => {
           this.env = env
-          this.envResolved = true
+          this.envStatus = status
           // Why: a pointer written before then compared against the wrong System default.
           try {
             this.writePointer()
@@ -308,7 +309,7 @@ export class ClaudeProfileRouter {
     }
     // Why only the pointer before the login shell's env: which home runs depends on its
     // CLAUDE_CONFIG_DIR, and the pane's `claude` reads the pointer rewritten once it arrives.
-    if (!this.envResolved) {
+    if (this.envStatus === 'pending') {
       return base
     }
     try {

@@ -35,12 +35,15 @@ import {
 
 // Why: removal deletes macOS Keychain items; the test must never reach the real Keychain.
 // The login shell exports what a Dock launch's own env lacks.
-const shell = vi.hoisted(() => ({ hang: false }))
+const shell = vi.hoisted(() => ({ hang: false, status: 'captured' }))
 vi.mock('../startup/login-shell-environment', () => ({
-  resolveLoginShellEnvironment: () =>
+  captureLoginShellEnvironment: () =>
     shell.hang
       ? new Promise(() => {})
-      : Promise.resolve({ CLAUDE_CONFIG_DIR: resolve('/shell/own') })
+      : Promise.resolve({
+          status: shell.status,
+          env: { CLAUDE_CONFIG_DIR: resolve('/shell/own') }
+        })
 }))
 vi.mock('../macos-keychain/generic-password', () => ({
   execSecurityCommand: async () => {
@@ -52,6 +55,7 @@ const roots: string[] = []
 afterEach(() => {
   vi.useRealTimers()
   shell.hang = false
+  shell.status = 'captured'
   installClaudeProfileRouter(undefined)
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
 })
@@ -566,4 +570,26 @@ describe('ClaudeProfileRouter', () => {
       expect(claudeProfileHistoryDirs('projects')).toEqual([join(f.home('a'), 'projects')])
     }
   )
+  it("says whether the login shell's env was captured, and launches Claude with the env setting", async () => {
+    const f = fixture()
+    const make = () =>
+      new ClaudeProfileRouter({
+        getSettings: () => ({ ...f.settings, agentDefaultEnv: { claude: { EXTRA: '1' } } }),
+        dataRoot: f.dataRoot,
+        userHome: f.userHome
+      })
+    shell.hang = true
+    expect(make().envStatus).toBe('pending')
+    shell.hang = false
+    shell.status = 'fallback'
+    const fellBack = make()
+    await vi.waitFor(() => expect(fellBack.envStatus).toBe('fallback'))
+    shell.status = 'captured'
+    const captured = make()
+    await vi.waitFor(() => expect(captured.envStatus).toBe('captured'))
+    expect(captured.claudeLaunchEnv()).toMatchObject({
+      CLAUDE_CONFIG_DIR: resolve('/shell/own'),
+      EXTRA: '1'
+    })
+  })
 })

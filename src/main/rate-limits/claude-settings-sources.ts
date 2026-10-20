@@ -4,7 +4,17 @@ import path from 'node:path'
 import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import type { ClaudeProfileRead } from '../claude-accounts/claude-profile-paths'
 
-type JsonObjectRead = ClaudeProfileRead<Record<string, unknown>>
+/** What one Claude settings or state file says about auth, by presence only: no value is kept. */
+export type ClaudeAuthFileFacts = {
+  /** Names in its `env` with a non-empty value. */
+  envNames: string[]
+  apiKeyHelper: boolean
+  primaryApiKey: boolean
+}
+type FactsRead = ClaudeProfileRead<ClaudeAuthFileFacts>
+
+// Why cached by mtime and size: the state file grows to megabytes and every no-login poll reads it.
+const factsCache = new Map<string, { mtimeMs: number; size: number; read: FactsRead }>()
 
 /** Where Claude Code reads admin-deployed settings on one OS. */
 export type ClaudeManagedSettingsLocations = {
@@ -50,13 +60,13 @@ export function claudeManagedSettingsLocations(
 export async function readClaudeSettingsSources(
   userConfigDir: string,
   managed: ClaudeManagedSettingsLocations
-): Promise<JsonObjectRead[]> {
+): Promise<FactsRead[]> {
   const files = [
     path.join(userConfigDir, 'settings.json'),
     path.join(userConfigDir, 'settings.local.json'),
     ...managed.files
   ]
-  const reads = await Promise.all(files.map(readJsonObject))
+  const reads = await Promise.all(files.map(readClaudeAuthFileFacts))
   for (const dir of managed.dropInDirs) {
     reads.push(...(await readDropIns(dir)))
   }
@@ -66,16 +76,53 @@ export async function readClaudeSettingsSources(
   return reads
 }
 
-export async function readJsonObject(file: string): Promise<JsonObjectRead> {
+export async function readClaudeAuthFileFacts(file: string): Promise<FactsRead> {
+  let info: { mtimeMs: number; size: number }
   try {
-    const value: unknown = JSON.parse(await readFile(file, 'utf8'))
-    return isRecord(value) ? { kind: 'present', value } : { kind: 'unavailable', error: null }
+    info = await stat(file)
   } catch (error) {
     return isDefinitiveAbsence(error) ? { kind: 'absent' } : { kind: 'unavailable', error }
   }
+  const cached = factsCache.get(file)
+  if (cached?.mtimeMs === info.mtimeMs && cached.size === info.size) {
+    return cached.read
+  }
+  const read = await parseAuthFileFacts(file)
+  factsCache.set(file, { mtimeMs: info.mtimeMs, size: info.size, read })
+  return read
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export function resetClaudeAuthFileFactsCacheForTests(): void {
+  factsCache.clear()
+}
+
+async function parseAuthFileFacts(file: string): Promise<FactsRead> {
+  let value: unknown
+  try {
+    value = JSON.parse(await readFile(file, 'utf8'))
+  } catch (error) {
+    return isDefinitiveAbsence(error) ? { kind: 'absent' } : { kind: 'unavailable', error }
+  }
+  if (!isRecord(value)) {
+    return { kind: 'unavailable', error: null }
+  }
+  const env = isRecord(value.env) ? value.env : {}
+  return {
+    kind: 'present',
+    value: {
+      envNames: Object.keys(env).filter((name) => hasText(env, name)),
+      apiKeyHelper: hasText(value, 'apiKeyHelper'),
+      primaryApiKey: hasText(value, 'primaryApiKey')
+    }
+  }
+}
+
+function hasText(value: Record<string, unknown>, key: string): boolean {
+  const text = value[key]
+  return typeof text === 'string' && text.trim() !== ''
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -98,7 +145,7 @@ function userManagedPreferences(plist: string): string[] {
   }
 }
 
-async function readDropIns(dir: string): Promise<JsonObjectRead[]> {
+async function readDropIns(dir: string): Promise<FactsRead[]> {
   let names: string[]
   try {
     names = await readdir(dir)
@@ -106,10 +153,10 @@ async function readDropIns(dir: string): Promise<JsonObjectRead[]> {
     return isDefinitiveAbsence(error) ? [] : [{ kind: 'unavailable', error }]
   }
   const jsonNames = names.filter((name) => name.endsWith('.json') && !name.startsWith('.'))
-  return Promise.all(jsonNames.map((name) => readJsonObject(path.join(dir, name))))
+  return Promise.all(jsonNames.map((name) => readClaudeAuthFileFacts(path.join(dir, name))))
 }
 
-async function probeOpaque(file: string): Promise<JsonObjectRead> {
+async function probeOpaque(file: string): Promise<FactsRead> {
   if (!file) {
     return { kind: 'unavailable', error: null }
   }
