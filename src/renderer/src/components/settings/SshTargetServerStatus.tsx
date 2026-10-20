@@ -8,6 +8,7 @@ import { Button } from '../ui/button'
 import { sshHostServerStatusLine } from '@/ssh/ssh-host-server-status-copy'
 import { SshHostChangedActions } from './SshHostChangedActions'
 import { SshHostMoveAnywayAction } from './SshHostMoveAnywayAction'
+import { SshHostNodeMirrorAction } from './SshHostNodeMirrorAction'
 import { SshHostRestartServerAction } from './SshHostRestartServerAction'
 
 /** Whether this SSH host's managed Orca server serves it, and why not when it doesn't. */
@@ -50,6 +51,9 @@ export function SshTargetServerStatus({
           </CollapsibleContent>
         </Collapsible>
       ) : null}
+      <div className="flex flex-wrap justify-end gap-2 px-1 empty:hidden">
+        <SshHostNodeMirrorAction targetId={target.id} status={state?.managedServer} />
+      </div>
       <SshHostChangedActions target={target} onChanged={onChanged} />
       <SshHostRestartServerAction status={state?.managedServer} onChanged={onChanged} />
       <SshHostMoveAnywayAction

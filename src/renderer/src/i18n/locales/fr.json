@@ -12728,7 +12728,10 @@
           "linkedProjects_one": "Le serveur Orca de cet hôte avait déjà {{paths}} ; ce bureau utilise donc maintenant la copie du serveur. Les onglets de ce bureau et {{count}} automatisation à cet endroit n’ont pas été déplacés, et les worktrees qu’il y a créés apparaissent comme worktrees externes.",
           "linkedProjects_other": "Le serveur Orca de cet hôte avait déjà {{paths}} ; ce bureau utilise donc maintenant la copie du serveur. Les onglets de ce bureau et {{count}} automatisations à cet endroit n’ont pas été déplacés, et les worktrees qu’il y a créés apparaissent comme worktrees externes.",
           "linkedProjects": "Le serveur Orca de cet hôte avait déjà {{paths}} ; ce bureau utilise donc maintenant la copie du serveur. Les onglets de ce bureau et {{count}} automatisations à cet endroit n’ont pas été déplacés, et les worktrees qu’il y a créés apparaissent comme worktrees externes.",
-          "linkedProjectsNoAutomations": "Le serveur Orca de cet hôte avait déjà {{paths}} ; ce bureau utilise donc maintenant la copie du serveur. Les onglets de ce bureau à cet endroit n’ont pas été déplacés, et les worktrees qu’il y a créés apparaissent comme worktrees externes."
+          "linkedProjectsNoAutomations": "Le serveur Orca de cet hôte avait déjà {{paths}} ; ce bureau utilise donc maintenant la copie du serveur. Les onglets de ce bureau à cet endroit n’ont pas été déplacés, et les worktrees qu’il y a créés apparaissent comme worktrees externes.",
+          "nodeDownloadBlocked": "Ni cet ordinateur ni cet hôte n’ont pu télécharger Node.js, dont le serveur Orca a besoin. Utilisez un miroir Node.js ou vérifiez le réseau sur les deux machines.",
+          "nodeDownloadBlockedNoMirror": "Ni cet ordinateur ni cet hôte n’ont pu télécharger Node.js, dont le serveur Orca a besoin. Vérifiez le réseau ou le proxy sur les deux machines, puis reconnectez-vous.",
+          "nodeDownloadBlockedMirrorTried": "Ni cet ordinateur ni cet hôte n’ont pu télécharger Node.js, y compris depuis le miroir de téléchargement Node.js. Vérifiez le paramètre du miroir, puis reconnectez-vous."
         },
         "deltaMove": {
           "action": "Déplacer les nouveaux projets…",
@@ -12817,6 +12820,25 @@
         },
         "useUsageHostSettings": {
           "updateFailed": "Impossible de mettre à jour le réglage sur {{host}}."
+        },
+        "nodeDistMirrorDialog": {
+          "action": "Utiliser un miroir Node.js…",
+          "openSetting": "Ouvrir le paramètre du miroir",
+          "title": "Utiliser un miroir Node.js",
+          "description": "Le serveur Orca a besoin de Node.js, et ni cet ordinateur ni cet hôte n’ont pu le télécharger depuis nodejs.org. Un miroir est une copie de nodejs.org/dist qu’Orca essaie en premier sur les deux machines.",
+          "urlLabel": "URL du miroir",
+          "checksum": "Chaque téléchargement reste vérifié avec la somme de contrôle qu’Orca fixe pour cette version de Node.js. Enregistré dans Paramètres > Avancé > Réseau.",
+          "cancel": "Annuler",
+          "save": "Enregistrer et réessayer",
+          "saveFailed": "Orca n’a pas pu enregistrer le miroir.",
+          "retryFailed": "Échec de la connexion",
+          "refusal": {
+            "tooLong": "L’URL du miroir est trop longue.",
+            "protocol": "Utilisez une URL de miroir http ou https.",
+            "credentials": "L’URL du miroir ne peut pas contenir de nom d’utilisateur ni de mot de passe.",
+            "query": "L’URL du miroir ne peut pas contenir de requête ni de fragment.",
+            "invalid": "Saisissez une URL de miroir valide."
+          }
         }
       },
       "right": {

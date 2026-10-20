@@ -12620,7 +12620,10 @@
           "linkedProjects_one": "이 호스트의 Orca 서버에 {{paths}}이(가) 이미 있어 이 데스크톱은 이제 서버의 사본을 사용합니다. 이 데스크톱의 탭과 자동화 {{count}}개는 이동되지 않았으며, 여기서 만든 워크트리는 외부 워크트리로 표시됩니다.",
           "linkedProjects_other": "이 호스트의 Orca 서버에 {{paths}}이(가) 이미 있어 이 데스크톱은 이제 서버의 사본을 사용합니다. 이 데스크톱의 탭과 자동화 {{count}}개는 이동되지 않았으며, 여기서 만든 워크트리는 외부 워크트리로 표시됩니다.",
           "linkedProjects": "이 호스트의 Orca 서버에 {{paths}}이(가) 이미 있어 이 데스크톱은 이제 서버의 사본을 사용합니다. 이 데스크톱의 탭과 자동화 {{count}}개는 이동되지 않았으며, 여기서 만든 워크트리는 외부 워크트리로 표시됩니다.",
-          "linkedProjectsNoAutomations": "이 호스트의 Orca 서버에 {{paths}}이(가) 이미 있어 이 데스크톱은 이제 서버의 사본을 사용합니다. 이 데스크톱의 탭은 이동되지 않았으며, 여기서 만든 워크트리는 외부 워크트리로 표시됩니다."
+          "linkedProjectsNoAutomations": "이 호스트의 Orca 서버에 {{paths}}이(가) 이미 있어 이 데스크톱은 이제 서버의 사본을 사용합니다. 이 데스크톱의 탭은 이동되지 않았으며, 여기서 만든 워크트리는 외부 워크트리로 표시됩니다.",
+          "nodeDownloadBlocked": "이 컴퓨터와 이 호스트 모두 Orca 서버에 필요한 Node.js를 다운로드하지 못했습니다. Node.js 미러를 사용하거나 두 컴퓨터의 네트워크를 확인하세요.",
+          "nodeDownloadBlockedNoMirror": "이 컴퓨터와 이 호스트 모두 Orca 서버에 필요한 Node.js를 다운로드하지 못했습니다. 두 컴퓨터의 네트워크나 프록시를 확인한 뒤 다시 연결하세요.",
+          "nodeDownloadBlockedMirrorTried": "이 컴퓨터와 이 호스트 모두 Node.js 다운로드 미러를 포함해 Node.js를 다운로드하지 못했습니다. 미러 설정을 확인한 뒤 다시 연결하세요."
         },
         "deltaMove": {
           "action": "새 프로젝트 이동…",
@@ -12709,6 +12712,25 @@
         },
         "useUsageHostSettings": {
           "updateFailed": "{{host}}의 설정을 업데이트하지 못했습니다."
+        },
+        "nodeDistMirrorDialog": {
+          "action": "Node.js 미러 사용…",
+          "openSetting": "미러 설정 열기",
+          "title": "Node.js 미러 사용",
+          "description": "Orca 서버에는 Node.js가 필요한데, 이 컴퓨터와 이 호스트 모두 nodejs.org에서 다운로드하지 못했습니다. 미러는 nodejs.org/dist의 사본으로, Orca가 두 컴퓨터에서 먼저 시도합니다.",
+          "urlLabel": "미러 URL",
+          "checksum": "모든 다운로드는 여전히 Orca가 이 Node.js 릴리스에 고정한 체크섬으로 검증됩니다. 설정 > 고급 > 네트워크에 저장됩니다.",
+          "cancel": "취소",
+          "save": "저장 후 다시 시도",
+          "saveFailed": "Orca가 미러를 저장하지 못했습니다.",
+          "retryFailed": "연결 실패",
+          "refusal": {
+            "tooLong": "미러 URL이 너무 깁니다.",
+            "protocol": "http 또는 https 미러 URL을 사용하세요.",
+            "credentials": "미러 URL에는 사용자 이름이나 비밀번호를 넣을 수 없습니다.",
+            "query": "미러 URL에는 쿼리나 프래그먼트를 넣을 수 없습니다.",
+            "invalid": "올바른 미러 URL을 입력하세요."
+          }
         }
       },
       "right": {

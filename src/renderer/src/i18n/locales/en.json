@@ -12859,7 +12859,10 @@
           "behindMigrating": "Runs a managed Orca server that updates after its project move finishes.",
           "behindCheckFailed": "Runs a managed Orca server; Orca couldn’t check whether it is behind this app.",
           "runtimeNoexec": "This host doesn’t allow running programs from ~/.orca-remote, so Orca can’t start its server there. This usually means the home folder is mounted with noexec. Ask the host’s administrator to allow running programs there, then connect again.",
-          "setupContactLost": "Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue."
+          "setupContactLost": "Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.",
+          "nodeDownloadBlocked": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Use a Node.js mirror, or check the network on both machines.",
+          "nodeDownloadBlockedNoMirror": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.",
+          "nodeDownloadBlockedMirrorTried": "Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror setting, then connect again."
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -13008,6 +13011,25 @@
         },
         "useUsageHostSettings": {
           "updateFailed": "Could not update the setting on {{host}}."
+        },
+        "nodeDistMirrorDialog": {
+          "action": "Use a Node.js mirror…",
+          "openSetting": "Open mirror setting",
+          "title": "Use a Node.js mirror",
+          "description": "Orca’s server needs Node.js, and neither this computer nor this host could download it from nodejs.org. A mirror is a copy of nodejs.org/dist that Orca tries first on both machines.",
+          "urlLabel": "Mirror URL",
+          "checksum": "Each download is still checked against the checksum Orca pins for this Node.js release. Saved to Settings > Advanced > Network.",
+          "cancel": "Cancel",
+          "save": "Save and retry",
+          "saveFailed": "Orca couldn’t save the mirror.",
+          "retryFailed": "Connection failed",
+          "refusal": {
+            "tooLong": "Mirror URL is too long.",
+            "protocol": "Use an http or https mirror URL.",
+            "credentials": "Mirror URL cannot contain a user name or password.",
+            "query": "Mirror URL cannot have a query or fragment.",
+            "invalid": "Enter a valid mirror URL."
+          }
         }
       },
       "right": {

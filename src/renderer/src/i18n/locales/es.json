@@ -12615,7 +12615,10 @@
           "linkedProjects_one": "El servidor Orca de este host ya tenía {{paths}}, así que este escritorio ahora usa la copia del servidor. Las pestañas de este escritorio y {{count}} automatización allí no se movieron, y los worktrees que creó allí aparecen como worktrees externos.",
           "linkedProjects_other": "El servidor Orca de este host ya tenía {{paths}}, así que este escritorio ahora usa la copia del servidor. Las pestañas de este escritorio y {{count}} automatizaciones allí no se movieron, y los worktrees que creó allí aparecen como worktrees externos.",
           "linkedProjects": "El servidor Orca de este host ya tenía {{paths}}, así que este escritorio ahora usa la copia del servidor. Las pestañas de este escritorio y {{count}} automatizaciones allí no se movieron, y los worktrees que creó allí aparecen como worktrees externos.",
-          "linkedProjectsNoAutomations": "El servidor Orca de este host ya tenía {{paths}}, así que este escritorio ahora usa la copia del servidor. Las pestañas de este escritorio allí no se movieron, y los worktrees que creó allí aparecen como worktrees externos."
+          "linkedProjectsNoAutomations": "El servidor Orca de este host ya tenía {{paths}}, así que este escritorio ahora usa la copia del servidor. Las pestañas de este escritorio allí no se movieron, y los worktrees que creó allí aparecen como worktrees externos.",
+          "nodeDownloadBlocked": "Ni este equipo ni este host pudieron descargar Node.js, que el servidor de Orca necesita. Usa un mirror de Node.js o revisa la red en ambas máquinas.",
+          "nodeDownloadBlockedNoMirror": "Ni este equipo ni este host pudieron descargar Node.js, que el servidor de Orca necesita. Revisa la red o el proxy en ambas máquinas y vuelve a conectar.",
+          "nodeDownloadBlockedMirrorTried": "Ni este equipo ni este host pudieron descargar Node.js, tampoco desde el mirror de descarga de Node.js. Revisa el ajuste del mirror y vuelve a conectar."
         },
         "deltaMove": {
           "action": "Mover los proyectos nuevos…",
@@ -12704,6 +12707,25 @@
         },
         "useUsageHostSettings": {
           "updateFailed": "No se pudo actualizar el ajuste en {{host}}."
+        },
+        "nodeDistMirrorDialog": {
+          "action": "Usar un mirror de Node.js…",
+          "openSetting": "Abrir ajuste del mirror",
+          "title": "Usar un mirror de Node.js",
+          "description": "El servidor de Orca necesita Node.js, y ni este equipo ni este host pudieron descargarlo de nodejs.org. Un mirror es una copia de nodejs.org/dist que Orca prueba primero en ambas máquinas.",
+          "urlLabel": "URL del mirror",
+          "checksum": "Cada descarga se sigue comprobando con el checksum que Orca fija para esta versión de Node.js. Se guarda en Ajustes > Avanzado > Red.",
+          "cancel": "Cancelar",
+          "save": "Guardar y reintentar",
+          "saveFailed": "Orca no pudo guardar el mirror.",
+          "retryFailed": "Error de conexión",
+          "refusal": {
+            "tooLong": "La URL del mirror es demasiado larga.",
+            "protocol": "Usa una URL de mirror http o https.",
+            "credentials": "La URL del mirror no puede incluir un nombre de usuario ni una contraseña.",
+            "query": "La URL del mirror no puede tener una consulta ni un fragmento.",
+            "invalid": "Introduce una URL de mirror válida."
+          }
         }
       },
       "right": {

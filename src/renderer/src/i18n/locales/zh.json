@@ -12634,7 +12634,10 @@
           "linkedProjects_one": "此主机的 Orca 服务器已有 {{paths}}，因此此桌面现在使用服务器的副本。此桌面在那里的标签页和 {{count}} 个自动化未被迁移，它在那里创建的工作树会显示为外部工作树。",
           "linkedProjects_other": "此主机的 Orca 服务器已有 {{paths}}，因此此桌面现在使用服务器的副本。此桌面在那里的标签页和 {{count}} 个自动化未被迁移，它在那里创建的工作树会显示为外部工作树。",
           "linkedProjects": "此主机的 Orca 服务器已有 {{paths}}，因此此桌面现在使用服务器的副本。此桌面在那里的标签页和 {{count}} 个自动化未被迁移，它在那里创建的工作树会显示为外部工作树。",
-          "linkedProjectsNoAutomations": "此主机的 Orca 服务器已有 {{paths}}，因此此桌面现在使用服务器的副本。此桌面在那里的标签页未被迁移，它在那里创建的工作树会显示为外部工作树。"
+          "linkedProjectsNoAutomations": "此主机的 Orca 服务器已有 {{paths}}，因此此桌面现在使用服务器的副本。此桌面在那里的标签页未被迁移，它在那里创建的工作树会显示为外部工作树。",
+          "nodeDownloadBlocked": "这台电脑和这台主机都无法下载 Orca 服务器所需的 Node.js。请使用 Node.js 镜像，或检查两台机器的网络。",
+          "nodeDownloadBlockedNoMirror": "这台电脑和这台主机都无法下载 Orca 服务器所需的 Node.js。请检查两台机器的网络或代理，然后重新连接。",
+          "nodeDownloadBlockedMirrorTried": "这台电脑和这台主机都无法下载 Node.js，包括从 Node.js 下载镜像下载。请检查镜像设置，然后重新连接。"
         },
         "deltaMove": {
           "action": "迁移新项目…",
@@ -12709,6 +12712,25 @@
         },
         "useUsageHostSettings": {
           "updateFailed": "无法更新 {{host}} 上的设置。"
+        },
+        "nodeDistMirrorDialog": {
+          "action": "使用 Node.js 镜像…",
+          "openSetting": "打开镜像设置",
+          "title": "使用 Node.js 镜像",
+          "description": "Orca 服务器需要 Node.js，但这台电脑和这台主机都无法从 nodejs.org 下载。镜像是 nodejs.org/dist 的副本，Orca 会在两台机器上优先尝试镜像。",
+          "urlLabel": "镜像 URL",
+          "checksum": "每次下载仍会按 Orca 为此 Node.js 版本固定的校验和进行验证。保存在 设置 > 高级 > 网络 中。",
+          "cancel": "取消",
+          "save": "保存并重试",
+          "saveFailed": "Orca 无法保存镜像。",
+          "retryFailed": "连接失败",
+          "refusal": {
+            "tooLong": "镜像 URL 过长。",
+            "protocol": "请使用 http 或 https 镜像 URL。",
+            "credentials": "镜像 URL 不能包含用户名或密码。",
+            "query": "镜像 URL 不能包含查询或片段。",
+            "invalid": "请输入有效的镜像 URL。"
+          }
         }
       },
       "right": {
