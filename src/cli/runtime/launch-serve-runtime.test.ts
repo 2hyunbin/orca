@@ -105,7 +105,6 @@ describe('orca serve host selection', () => {
       const recognizer = speechRecognizerPackageName(process.platform, process.arch)
       await mkdir(join(appRoot, 'node_modules', recognizer), { recursive: true })
       await writeFile(join(appRoot, 'node_modules', recognizer, 'sherpa-onnx.node'), '')
-      await writeFile(join(appRoot, 'node_modules', recognizer, 'package.json'), '{"version":"1"}')
       process.env.ORCA_SERVE_SUPERVISOR_APP_ROOT = appRoot
       const selection = { kind: 'orcad', runtime: '/node', entry: '/slot/orcad.js', version: '1' }
       resolveLocalServeRuntimeMock.mockResolvedValue(selection)
@@ -119,7 +118,7 @@ describe('orca serve host selection', () => {
         expect.not.objectContaining({ ELECTRON_RUN_AS_NODE: expect.anything() }),
         join(appRoot, 'out', 'web'),
         // #31174: and the app's speech recognizer.
-        expect.stringContaining(recognizer)
+        process.platform === 'win32' ? undefined : join(appRoot, 'node_modules', recognizer)
       )
       expect(spawnMock).not.toHaveBeenCalled()
       expect(stderr.join('')).toContain('[serve] running on orcad 1')
