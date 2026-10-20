@@ -156,7 +156,11 @@ describe('a server layout under desktop ids', () => {
 
   it('refuses a tab kind it does not know rather than show it under raw ids', () => {
     const layout = serverLayout()
-    layout.tabs.push({ ...layout.tabs[2]!, id: 'future-1', kind: 'hologram' as never })
+    // Through JSON, as the wire delivers it: no TabContentType names this kind.
+    const future: PublishedTab = JSON.parse(
+      JSON.stringify({ ...layout.tabs[2]!, id: 'future-1', kind: 'hologram' })
+    )
+    layout.tabs.push(future)
     expect(() => serverLayoutForDesktop(layout, ENV, handles)).toThrow('unknown tab kind')
   })
 })

@@ -111,8 +111,11 @@ describe('which servers get a layout stream', () => {
     setServers(store, [{ ...CAPABLE, capable: false }])
     await settle()
 
-    // Presence: the server is reachable and its workspace mirrored.
-    expect(hoisted.targets.map((target) => target.environmentId)).toEqual([ENV])
+    // Presence: the server is paired and connected, and its workspace mirrored.
+    expect(store.getState().runtimeEnvironments.map((environment) => environment.id)).toEqual([ENV])
+    expect(store.getState().runtimeStatusByEnvironmentId.get(ENV)?.status?.runtimeId).toBe(
+      'runtime-1'
+    )
     expect(store.getState().tabsByWorktree[WT]?.map((tab) => tab.id)).toEqual([TAB_1])
     expect(streams.all).toEqual([])
     expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
@@ -126,28 +129,34 @@ describe('which servers get a layout stream', () => {
     expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
   })
 
-  it('closes the stream of a server leaving the reachable set and hands its workspaces back (L19)', async () => {
-    const store = mirroredStore()
-    install(store)
-    setServers(store, [CAPABLE])
-    const stream = streams.openTo(ENV)
-    streams.send(stream, {
-      type: 'snapshot',
-      workspaces: [{ key: WT, layout: SERVER_LAYOUT }],
-      seq: 1,
-      epoch: 'e'
-    })
-    await settle()
-    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
-    expect(hoisted.resync).not.toHaveBeenCalled()
+  it.each([
+    ['is unpaired', []],
+    ['disconnects', [{ ...CAPABLE, disconnected: true }]]
+  ] as const)(
+    'closes the stream of a server that %s and hands its workspaces back (L19)',
+    async (_, after) => {
+      const store = mirroredStore()
+      install(store)
+      setServers(store, [CAPABLE])
+      const stream = streams.openTo(ENV)
+      streams.send(stream, {
+        type: 'snapshot',
+        workspaces: [{ key: WT, layout: SERVER_LAYOUT }],
+        seq: 1,
+        epoch: 'e'
+      })
+      await settle()
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+      expect(hoisted.resync).not.toHaveBeenCalled()
 
-    setServers(store, [])
+      setServers(store, [...after])
 
-    expect(stream.closed).toBe(true)
-    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
-    await settle()
-    expect(hoisted.resync.mock.calls).toEqual([[ENV, WT]])
-  })
+      expect(stream.closed).toBe(true)
+      expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+      await settle()
+      expect(hoisted.resync.mock.calls).toEqual([[ENV, WT]])
+    }
+  )
 
   it.each([
     ['a new runtime id', { runtimeId: 'runtime-1b' }],
