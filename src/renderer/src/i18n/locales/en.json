@@ -18738,6 +18738,7 @@
         "notDoneOption": "The setting wasn't changed.",
         "notDoneCommand": "The command didn't run.",
         "notDoneGoal": "The goal wasn't changed.",
+        "notDoneQueuedEdit": "Your edit wasn't saved.",
         "restartFailed": "The agent couldn't restart.",
         "capacity": "Orca on the computer running this chat has hit a request limit. Update Orca there, then try again.",
         "outcomeUnknown": "Orca couldn't confirm what happened. Check the chat.",
@@ -19241,6 +19242,7 @@
         "action": "Rewind to here"
       },
       "drop": {
+        "messageTitle": "Drop to attach to this message",
         "title": "Drop to attach to this chat",
         "subtitle": "Files are added to your message as paths the agent can read."
       },
@@ -19327,6 +19329,7 @@
         "cancelEditing": "Cancel editing",
         "editChanged": "This message changed while you were editing. Your edit is in the chat box.",
         "editChangedPrompt": "This message changed while you were editing. Your edit will be in the chat box after you answer the agent.",
+        "editChangedNotSaved": "This message changed while you were editing. Your edit wasn't saved.",
         "editFailed": "This message can't be edited.",
         "editGone": "This message was already sent or removed. Your edit is in the chat box.",
         "editGonePrompt": "This message was already sent or removed. Your edit will be in the chat box after you answer the agent.",
@@ -19336,7 +19339,9 @@
         "collapse": "Collapse",
         "expand": "Expand",
         "queued": "Queued",
-        "clearAll": "Clear all"
+        "clearAll": "Clear all",
+        "pasteOrDropImages": "Paste or drop images",
+        "saveNeedsContent": "Add text or an image to save"
       },
       "thought": "Thought",
       "thoughtForDuration": "Thought for {{duration}}",
