@@ -99,6 +99,9 @@ describe('triggerTerminalSpawnPushTargetMaterialization', () => {
 
   it('is a no-op for an SSH repo, never materializing on this machine', () => {
     triggerTerminalSpawnPushTargetMaterialization(WORKTREE_PATH, forkTarget(), SSH_REPO, STORE)
+    // A row stamped with a remote host but no connection id is just as remote.
+    const stampedOnly = { ...LOCAL_REPO, executionHostId: 'ssh:box' } as Repo
+    triggerTerminalSpawnPushTargetMaterialization(WORKTREE_PATH, forkTarget(), stampedOnly, STORE)
     expect(materializeLocalMock).not.toHaveBeenCalled()
     expect(getLocalProjectWorktreeGitOptionsMock).not.toHaveBeenCalled()
   })

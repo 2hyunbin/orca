@@ -142,4 +142,31 @@ describe('triggerPtySpawnPushTargetMaterialization', () => {
       suffixedId
     )
   })
+
+  it('reads the local copy when the repo also lives on an SSH host', () => {
+    const sshTwin = { ...REPO, connectionId: 'box', executionHostId: 'ssh:box' } as Repo
+    const localTarget = { ...FORK_TARGET, remoteName: 'pr-local' }
+    const deps = depsWithStore({
+      getRepo: vi.fn().mockReturnValue(sshTwin),
+      getRepos: vi.fn().mockReturnValue([sshTwin, REPO]),
+      getWorktreeMetaForHost: vi.fn((_id: string, hostId: string) =>
+        hostId === 'local' ? ({ pushTarget: localTarget } as WorktreeMeta) : undefined
+      )
+    })
+    triggerPtySpawnPushTargetMaterialization(deps, baseArgs())
+
+    expect(triggerMock).toHaveBeenCalledWith(
+      WORKTREE_PATH,
+      localTarget,
+      REPO,
+      deps.store,
+      REPO_ID,
+      WORKTREE_ID
+    )
+  })
+
+  it('leaves an SSH pane to its own host', () => {
+    triggerPtySpawnPushTargetMaterialization(depsWithStore(), baseArgs({ connectionId: 'box' }))
+    expect(triggerMock).not.toHaveBeenCalled()
+  })
 })

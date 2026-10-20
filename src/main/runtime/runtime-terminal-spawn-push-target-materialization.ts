@@ -22,8 +22,13 @@ export function triggerTerminalSpawnPushTargetMaterialization(
   repoId?: string,
   worktreeId?: string
 ): void {
-  // Why: an `ssh:` repo is not served here; its next sync action reports that itself.
-  if (!pushTarget?.remoteUrl || pushTarget.remoteCreated || repo?.connectionId) {
+  // Why: git runs on this machine, so only a local row is served; ssh/runtime rows report on sync.
+  if (
+    !pushTarget?.remoteUrl ||
+    pushTarget.remoteCreated ||
+    repo?.connectionId ||
+    (repo && getRepoExecutionHostId(repo) !== LOCAL_EXECUTION_HOST_ID)
+  ) {
     return
   }
   materializeWorktreePushTargetRemote(
@@ -32,12 +37,7 @@ export function triggerTerminalSpawnPushTargetMaterialization(
     store,
     repoId,
     localGitOptionsForTerminalSpawn(store, repo),
-    worktreeId
-      ? hostWorktreeTarget({
-          id: worktreeId,
-          hostId: repo ? getRepoExecutionHostId(repo) : LOCAL_EXECUTION_HOST_ID
-        })
-      : undefined
+    worktreeId ? hostWorktreeTarget({ id: worktreeId, hostId: LOCAL_EXECUTION_HOST_ID }) : undefined
   ).catch((error: unknown) => {
     console.warn(
       `[terminal-spawn] failed to materialize push target remote for ${worktreePath}:`,
