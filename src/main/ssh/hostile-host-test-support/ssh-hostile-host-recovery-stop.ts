@@ -95,4 +95,6 @@ export async function proveRecoveryStopsRefusingOrcad(
   }
   await ensureOrcadSlotServing(slot, await resolveOrcadSlotIdentity(slot, version))
   expect(await liveness()).toBe('LIVE')
+  // The CI log's proof that this cell ran, not just the file that holds it.
+  console.info(`[recovery-stop cell] ${slot.host.os}: restart refused, recovery stop exited`)
 }
