@@ -4,9 +4,14 @@
 import { useAppStore } from '@/store'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
+import type { PaneStartStatus } from '../../../../../shared/workspace-layout/workspace-layout-published'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 const waiting = new WeakSet<ConnectPanePtySession>()
+
+/** The starts this gate covers; a sleeping, resuming or held pane keeps its restore path (C1c). */
+const gated = (status: PaneStartStatus | undefined): boolean =>
+  status === 'starting' || status === 'failed'
 
 /** Whether the pane waits on main's start; `connect` runs once main's start for it ends. */
 export function waitsForMainPaneStart(
@@ -16,9 +21,8 @@ export function waitsForMainPaneStart(
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return false
   }
-  const startOf = () => useAppStore.getState().terminalPaneStartsByPaneKey[session.cacheKey]
-  const start = startOf()
-  if (!start) {
+  const start = useAppStore.getState().terminalPaneStartsByPaneKey[session.cacheKey]
+  if (!start || !gated(start.status)) {
     return false
   }
   if (waiting.has(session)) {
@@ -37,7 +41,8 @@ export function waitsForMainPaneStart(
   }
   showFailure()
   const unsubscribe = useAppStore.subscribe((state) => {
-    const next = state.terminalPaneStartsByPaneKey[session.cacheKey]
+    const found = state.terminalPaneStartsByPaneKey[session.cacheKey]
+    const next = found && gated(found.status) ? found : undefined
     if (next === shown) {
       return
     }

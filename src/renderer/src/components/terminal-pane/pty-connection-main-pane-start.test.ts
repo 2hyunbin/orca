@@ -118,6 +118,15 @@ describe('a pane main is starting a terminal for', () => {
     )
   })
 
+  it.each(['sleeping', 'resuming', 'held'] as const)(
+    'leaves a %s pane to its restore path, as before',
+    async (status) => {
+      const { transport } = await connectWithStart({ status })
+
+      expect(transport.connect.mock.calls.length + transport.attach.mock.calls.length).toBe(1)
+    }
+  )
+
   it('starts a pane with no start from main as before', async () => {
     const { transport } = await connectWithStart(undefined)
 
