@@ -1,6 +1,6 @@
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import { translate } from '@/i18n/i18n'
-import { getOwnerNotSetUpLabel } from './owner-not-set-up-copy'
+import { describeOwnerNotSetUp, getOwnerNotSetUpLabel } from './owner-not-set-up-copy'
 
 export function getProviderDisplayName(provider: ProviderRateLimits['provider']): string {
   if (provider === 'claude') {
@@ -186,7 +186,11 @@ export function getProviderUsageErrorMessage(p: ProviderRateLimits): string {
   if (!p.error) {
     return fallback
   }
-  if (p.usageMetadata?.unverifiableOwner || p.usageMetadata?.ownerNotSetUp) {
+  // Why rebuilt here: the cached error keeps the language it was resolved in.
+  if (p.usageMetadata?.ownerNotSetUp) {
+    return describeOwnerNotSetUp(p.usageMetadata.ownerNotSetUp)
+  }
+  if (p.usageMetadata?.unverifiableOwner) {
     return p.error
   }
   const delegatedCliProvider = getDelegatedCliRefreshProvider(p)
