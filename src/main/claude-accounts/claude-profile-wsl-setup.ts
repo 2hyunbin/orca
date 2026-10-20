@@ -1,4 +1,5 @@
-import { resolveSystemClaudeHookTarget } from '../claude/claude-hook-target'
+import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
+import { readUserClaudeConfigDir } from './claude-profile-paths'
 import {
   provisionClaudeAccountProfile,
   type ClaudeProfileSetupReport
@@ -16,7 +17,7 @@ export async function provisionWslClaudeAccountProfile(
     dataRoot,
     profile,
     userHome,
-    userConfigDir: (await resolveSystemClaudeHookTarget()).configDir,
+    userConfigDir: readUserClaudeConfigDir(await resolveLoginShellEnvironment()),
     installHooks: null
   })
 }

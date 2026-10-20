@@ -38,14 +38,14 @@ export function registerWslHookFsHandlers(
   const contains = (root: string, path: string): boolean =>
     path === root || path.startsWith(`${root}/`)
   const ancestor = (root: string, path: string): boolean => path === '/' || contains(path, root)
-  const scoped = async (rawPath: unknown, probe = false): Promise<string> => {
+  const scoped = async (rawPath: unknown, allowAncestors = false): Promise<string> => {
     const resolved = resolveRaw(rawPath)
-    if (contains(homeRoot, resolved) || (probe && ancestor(homeRoot, resolved))) {
+    if (contains(homeRoot, resolved) || (allowAncestors && ancestor(homeRoot, resolved))) {
       return resolved
     }
     const target = await resolveSystemClaudeHookTarget()
     const root = posix.resolve(target.configDir)
-    if (contains(root, resolved) || (probe && ancestor(root, resolved))) {
+    if (contains(root, resolved) || (allowAncestors && ancestor(root, resolved))) {
       return resolved
     }
     throw Object.assign(new Error(`path outside hook roots: ${resolved}`), { code: 'EACCES' })
@@ -138,7 +138,8 @@ export function registerWslHookFsHandlers(
 
   dispatcher.onRequest(WSL_HOOK_FS_METHODS.mkdir, async (params): Promise<WslFsResult> => {
     try {
-      await fs.mkdir(await scoped(params.path))
+      // The shared installer creates missing parents on the way to a scoped root.
+      await fs.mkdir(await scoped(params.path, true))
       return { ok: true }
     } catch (err) {
       return failure(err)

@@ -13,6 +13,9 @@ vi.mock('../main/claude/claude-hook-target', () => ({
 }))
 
 import { registerWslHookFsHandlers } from './wsl-hook-fs-bridge'
+import { createWslHookSftpAdapter } from '../main/agent-hooks/wsl-hook-fs-adapter'
+import { writeHooksJsonRemote } from '../main/agent-hooks/installer-utils-remote'
+import type { SshChannelMultiplexer } from '../main/ssh/ssh-channel-multiplexer'
 import type { MethodHandler, RelayDispatcher, RequestContext } from './dispatcher'
 import { WSL_HOOK_FS_METHODS, type WslFsResult } from '../shared/wsl-hook-relay-contract'
 
@@ -51,6 +54,30 @@ describe.skipIf(process.platform === 'win32')('registerWslHookFsHandlers (WSL fs
 
   afterEach(() => {
     rmSync(home, { recursive: true, force: true })
+  })
+
+  it('installs settings into a missing nested custom root outside HOME', async () => {
+    const parent = mkdtempSync(posix.join(tmpdir(), 'wsl-fs-parent-'))
+    const custom = posix.join(parent, 'missing-parent', 'claude')
+    rootCapture.resolve.mockResolvedValue({ kind: 'system-default', configDir: custom })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The adapter only uses request, routed here to the real guest handlers.
+    const mux = { request: call } as unknown as SshChannelMultiplexer
+    try {
+      const path = posix.join(custom, 'settings.json')
+      await writeHooksJsonRemote(createWslHookSftpAdapter(mux), path, { model: 'opus' })
+      expect(await call(WSL_HOOK_FS_METHODS.readFile, { path })).toEqual({
+        ok: true,
+        content: expect.stringContaining('"opus"')
+      })
+      expect(
+        await call(WSL_HOOK_FS_METHODS.writeFile, {
+          path: posix.join(parent, 'missing-parent', 'outside.txt'),
+          content: 'x'
+        })
+      ).toMatchObject({ ok: false, errno: 'EACCES' })
+    } finally {
+      rmSync(parent, { recursive: true, force: true })
+    }
   })
 
   it('awaits the guest-derived custom root before allowing atomic writes outside HOME', async () => {

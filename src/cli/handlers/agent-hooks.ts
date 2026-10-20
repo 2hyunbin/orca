@@ -22,6 +22,11 @@ type AgentHookCommandResult = {
   statuses: AgentHookInstallStatus[]
 }
 
+type HookSettings = Pick<
+  GlobalSettings,
+  'agentStatusHooksEnabled' | 'disabledTuiAgents' | 'agentCmdOverrides'
+>
+
 // Covers managed-home verification, WSL identity, trust grant, and bounded app-server reap.
 const WSL_CODEX_PREPARE_TIMEOUT_MS = 50_000
 
@@ -45,9 +50,7 @@ function legacyProfileStateLocation(): ProfileStateOfflineLocation {
   }
 }
 
-async function readHookSettingsFromDisk(): Promise<
-  Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents' | 'agentCmdOverrides'>
-> {
+async function readHookSettingsFromDisk(): Promise<HookSettings> {
   const { acquireProfileStateRuntimeAdmission } =
     await import('../../main/persistence/profile-state/profile-state-access.js')
   const admission = acquireProfileStateRuntimeAdmission(getDefaultUserDataPath())
@@ -58,9 +61,7 @@ async function readHookSettingsFromDisk(): Promise<
   }
 }
 
-async function readAdmittedHookSettingsFromDisk(): Promise<
-  Pick<GlobalSettings, 'agentStatusHooksEnabled' | 'disabledTuiAgents' | 'agentCmdOverrides'>
-> {
+async function readAdmittedHookSettingsFromDisk(): Promise<HookSettings> {
   const { readAgentHookSettingsFromProfileState } =
     await import('../../main/persistence/profile-state/profile-state-offline-settings.js')
   return readAgentHookSettingsFromProfileState(
@@ -115,7 +116,10 @@ async function updateAdmittedEnabledOnDisk(enabled: boolean): Promise<{
   return updateAgentHookSettingsFromProfileState(location, enabled)
 }
 
-async function updateRunningRuntime(client: RuntimeClient, enabled: boolean): Promise<boolean> {
+async function updateRunningRuntime(
+  client: RuntimeClient,
+  enabled: boolean
+): Promise<{ settings: HookSettings } | null> {
   const status = await client.getCliStatus()
   if (!status.result.runtime.reachable) {
     if (status.result.app.running) {
@@ -124,10 +128,14 @@ async function updateRunningRuntime(client: RuntimeClient, enabled: boolean): Pr
         'Orca is running but unavailable. Retry when it responds, or stop Orca before changing agent hooks offline.'
       )
     }
-    return false
+    return null
   }
-  await client.call('settings.update', { agentStatusHooksEnabled: enabled }, { timeoutMs: 10_000 })
-  return true
+  const updated = await client.call<{ settings: HookSettings }>(
+    'settings.update',
+    { agentStatusHooksEnabled: enabled },
+    { timeoutMs: 10_000 }
+  )
+  return updated.result
 }
 
 function localSuccess<TResult>(result: TResult): RuntimeRpcSuccess<TResult> {
@@ -176,8 +184,7 @@ async function setAgentHooksEnabled(
   const invocation = hookInvocation()
   let statuses: AgentHookInstallStatus[]
   if (updatedRuntime && invocation.env) {
-    const settings = await readHookSettingsFromDisk()
-    const applied = await applyAgentStatusHooksEnabled(enabled, settings, {
+    const applied = await applyAgentStatusHooksEnabled(enabled, updatedRuntime.settings, {
       ...invocation,
       agents: ['claude'],
       userInitiated: true

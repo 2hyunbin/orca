@@ -136,43 +136,51 @@ describe('agent hooks CLI handler', () => {
     rmSync(userDataPath, { recursive: true, force: true })
   })
 
-  it('applies an online CLI override to its invocation root and reports the action result', async () => {
-    const settings = getDefaultPersistedState(userDataPath)
-    settings.settings.agentCmdOverrides = { claude: '/opt/custom-claude' }
-    writeDataFile(userDataPath, settings)
-    vi.stubEnv('CLAUDE_CONFIG_DIR', '/cli/custom-claude')
-    vi.stubEnv('ORCA_CLAUDE_INJECTED_CONFIG_DIR', '')
-    getCliStatusMock.mockResolvedValueOnce({
-      id: 'status',
-      ok: true,
-      result: {
-        app: { running: true, pid: null },
-        runtime: { state: 'ready', reachable: true, runtimeId: null },
-        graph: { state: 'ready' }
-      },
-      _meta: { runtimeId: 'test' }
-    })
-    callMock.mockResolvedValueOnce({ result: {} })
-    const failed = {
-      agent: 'claude',
-      state: 'error',
-      configPath: '/cli/custom-claude/settings.json',
-      managedHooksPresent: true,
-      detail: 'write denied'
-    }
-    applyAgentStatusHooksEnabledMock.mockResolvedValueOnce([failed])
-    getManagedAgentHookStatusesMock.mockReturnValue([{ ...failed, state: 'not_installed' }])
-    await runAgentHooksOff(userDataPath)
-    expect(applyAgentStatusHooksEnabledMock).toHaveBeenCalledWith(
-      false,
-      expect.objectContaining({ agentCmdOverrides: { claude: '/opt/custom-claude' } }),
-      expect.objectContaining({
-        agents: ['claude'],
-        env: expect.objectContaining({ CLAUDE_CONFIG_DIR: '/cli/custom-claude' })
+  it.each(['on', 'off'])(
+    'applies online custom-root %s without local SQLite and reports the action result',
+    async (command) => {
+      await runAgentHooksOff(userDataPath)
+      applyAgentStatusHooksEnabledMock.mockClear()
+      vi.spyOn(profileStateDatabase, 'isProfileStateSqliteAvailable').mockReturnValue(false)
+      vi.stubEnv('CLAUDE_CONFIG_DIR', '/cli/custom-claude')
+      vi.stubEnv('ORCA_CLAUDE_INJECTED_CONFIG_DIR', '')
+      getCliStatusMock.mockResolvedValueOnce({
+        id: 'status',
+        ok: true,
+        result: {
+          app: { running: true, pid: null },
+          runtime: { state: 'ready', reachable: true, runtimeId: null },
+          graph: { state: 'ready' }
+        },
+        _meta: { runtimeId: 'test' }
       })
-    )
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('write denied'))
-  })
+      const settings = {
+        agentCmdOverrides: { claude: '/opt/custom-claude' },
+        disabledTuiAgents: ['gemini']
+      }
+      callMock.mockResolvedValueOnce({ result: { settings } })
+      const failed = {
+        agent: 'claude',
+        state: 'error',
+        configPath: '/cli/custom-claude/settings.json',
+        managedHooksPresent: true,
+        detail: 'write denied'
+      }
+      applyAgentStatusHooksEnabledMock.mockResolvedValueOnce([failed])
+      getManagedAgentHookStatusesMock.mockReturnValue([{ ...failed, state: 'not_installed' }])
+      await main(['agent', 'hooks', command, '--json'], userDataPath)
+      expect(process.exitCode).not.toBe(1)
+      expect(applyAgentStatusHooksEnabledMock).toHaveBeenCalledWith(
+        command === 'on',
+        settings,
+        expect.objectContaining({
+          agents: ['claude'],
+          env: expect.objectContaining({ CLAUDE_CONFIG_DIR: '/cli/custom-claude' })
+        })
+      )
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('write denied'))
+    }
+  )
 
   it('keeps new card style off when creating offline settings for a fresh profile', async () => {
     await runAgentHooksOff(userDataPath)
