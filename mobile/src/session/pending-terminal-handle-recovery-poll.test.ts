@@ -73,7 +73,8 @@ function makeHarness() {
       return () => {}
     }
   )
-  const client = { sendRequest, subscribe } as unknown as RpcClient
+  // The presence report rides the transport's session preamble, not sendRequest.
+  const client = { sendRequest, subscribe, setSessionPreamble: vi.fn() } as unknown as RpcClient
   const consumeAcceptedSessionTabs = () => {}
   const fetchTerminals = async () => {}
   const getPendingTerminalRecoveryContextKey = () => contextKey

@@ -68,14 +68,19 @@ const sendRequest = vi.fn(async () => ({
   },
   _meta: { runtimeId: 'runtime-1' }
 }))
+// The transport holds the phone's presence report as a session preamble, so sendRequest counts
+// only reconciliation work.
+const setSessionPreamble = vi.fn()
 const client = {
   sendRequest,
   subscribe,
+  setSessionPreamble,
   getState: () => clientConnectionState
 } as unknown as RpcClient
 const replacementClient = {
   sendRequest,
   subscribe,
+  setSessionPreamble,
   getState: () => clientConnectionState
 } as unknown as RpcClient
 let currentClient: RpcClient = client
