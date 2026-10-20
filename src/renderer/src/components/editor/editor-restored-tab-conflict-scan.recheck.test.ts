@@ -85,7 +85,7 @@ it('reads once more when a new check is requested while a read is in flight', as
 it.each([
   { disk: 'v1', banner: undefined },
   { disk: 'v2 external write', banner: 'changed' }
-])('stops re-reading at the cap and keeps the last read ($disk)', async ({ disk, banner }) => {
+])('waits out overlapping checks, then judges a fresh read ($disk)', async ({ disk, banner }) => {
   const replies: ((content: string) => void)[] = []
   mocks.readRuntimeFileContent.mockImplementation(
     () => new Promise((resolve) => replies.push((content) => resolve({ content, isBinary: false })))
@@ -94,14 +94,18 @@ it.each([
   detach = attachRestoredTabConflictScan(store)
   await vi.advanceTimersByTimeAsync(0)
 
-  // Each read is slower than the re-verify interval, so a newer check always lands first.
-  for (let i = 0; i < MAX_VERIFY_ATTEMPTS * 2 && replies.length > i; i += 1) {
+  // Every read is slower than the re-verify interval, so a newer check always lands first.
+  for (let i = 0; i < MAX_VERIFY_ATTEMPTS + 5; i += 1) {
     requestRestoredTabReverification(FILE)
-    replies[i](disk)
-    await vi.advanceTimersByTimeAsync(0)
+    replies[i]('v1')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(replies).toHaveLength(i + 2)
   }
+  expect(tab().pendingDiskBaselineVerification).toBe(true)
+  expect(tab().externalMutation).toBeUndefined()
 
-  expect(replies).toHaveLength(MAX_VERIFY_ATTEMPTS)
+  replies.at(-1)!(disk)
+  await vi.advanceTimersByTimeAsync(0)
   expect(tab().pendingDiskBaselineVerification).toBeFalsy()
   expect(tab().externalMutation).toBe(banner)
 })
