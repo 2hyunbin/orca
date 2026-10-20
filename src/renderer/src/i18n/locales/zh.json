@@ -20059,6 +20059,7 @@
       "empty": "未找到子智能体。"
     },
     "antigravityReferenceDescription": "使用此记录作为参考继续新的Antigravity CLI 对话。",
+    "searchHitSourceHost": "在 {{value0}} 上找到",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → 命令行界面",
     "continueInCli": "在 CLI 中继续",
