@@ -18769,6 +18769,9 @@
         "replaceDescription": "在此恢复“{{title}}”将停止 {{agent}} 在此聊天中正在进行的工作。",
         "replace": "替换"
       },
+      "antigravitySignIn": {
+        "openSettings": "打开 Antigravity 设置"
+      },
       "claudeSignIn": {
         "signingIn": "正在登录…"
       }

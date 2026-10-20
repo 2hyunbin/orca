@@ -1,3 +1,4 @@
+import { nativeChatAntigravitySettingsAction } from './native-chat-antigravity-settings'
 import { translate } from '@/i18n/i18n'
 import type { StructuredAgentSessionLaunchLifecycle } from '@/lib/structured-agent-session-launch'
 import { agentSessionRefusalCauseParts } from '../../../../shared/agent-session-refusal-notice'
@@ -64,10 +65,10 @@ function nativeChatLaunchNotice({
             onClick: claudeSignIn.signIn,
             disabled: claudeSignIn.signingIn
           }
-        : {
+        : (nativeChatAntigravitySettingsAction(failure?.details?.reason, agentLabel) ?? {
             label: translate('auto.components.native.chat.NativeChatLaunchRetry.retry', 'Retry'),
             onClick: onRetry
-          }
+          })
   }
 }
 

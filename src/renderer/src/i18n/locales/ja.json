@@ -18804,6 +18804,9 @@
         "replaceDescription": "ここで「{{title}}」を再開すると、このチャットで {{agent}} が行っている処理が停止します。",
         "replace": "置き換える"
       },
+      "antigravitySignIn": {
+        "openSettings": "Antigravity の設定を開く"
+      },
       "claudeSignIn": {
         "signingIn": "サインイン中…"
       }

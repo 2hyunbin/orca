@@ -18804,6 +18804,9 @@
         "replaceDescription": "여기서 “{{title}}”을(를) 재개하면 이 채팅에서 {{agent}}이(가) 하고 있는 작업이 중지됩니다.",
         "replace": "바꾸기"
       },
+      "antigravitySignIn": {
+        "openSettings": "Antigravity 설정 열기"
+      },
       "claudeSignIn": {
         "signingIn": "로그인 중…"
       }

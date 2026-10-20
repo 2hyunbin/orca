@@ -28,6 +28,7 @@ import {
 import { readWholeAgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import { agentSessionFailureSentence } from '../../../../shared/agent-session-failure-words'
 import { sayAgentSessionFailureTranslated } from './agent-session-failure-words-text'
+import { nativeChatAntigravitySettingsAction } from './native-chat-antigravity-settings'
 import { formatUsageLimitResetClock } from '../../../../shared/agent-session-usage-limit'
 
 const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string> = {
@@ -134,6 +135,7 @@ export function NativeChatNoticeRow({
   const continueOffered =
     orcaStop?.turnItemId !== undefined && orcaStop.turnItemId === orcaStopView.offeredTurnItemId
   const failure = readWholeAgentSessionFailureFact(block.failure)
+  const antigravitySettings = nativeChatAntigravitySettingsAction(failure?.kind, agentName)
   const usageLimitContinue =
     block.usageLimitTurnItemId !== undefined &&
     block.usageLimitTurnItemId === orcaStopView.usageLimitTurnItemId
@@ -213,6 +215,11 @@ export function NativeChatNoticeRow({
           onClick={claudeSignIn.signIn}
         >
           {nativeChatClaudeSignInLabel(claudeSignIn)}
+        </Button>
+      ) : null}
+      {antigravitySettings ? (
+        <Button type="button" variant="outline" size="xs" onClick={antigravitySettings.onClick}>
+          {antigravitySettings.label}
         </Button>
       ) : null}
       {block.providerFrame || detail ? (

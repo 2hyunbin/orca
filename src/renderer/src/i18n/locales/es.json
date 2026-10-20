@@ -18764,6 +18764,9 @@
         "replaceDescription": "Reanudar “{{title}}” aquí detendrá lo que {{agent}} está haciendo en este chat.",
         "replace": "Reemplazar"
       },
+      "antigravitySignIn": {
+        "openSettings": "Abrir la configuración de Antigravity"
+      },
       "claudeSignIn": {
         "signingIn": "Iniciando sesión…"
       }

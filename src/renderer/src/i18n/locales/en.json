@@ -19082,6 +19082,9 @@
         "unconfirmed": "Couldn't confirm whether {{agent}} received Continue. Check the chat before trying again.",
         "usageLimitExplanation": "Asks the agent to continue where it left off. Use it once the limit resets."
       },
+      "antigravitySignIn": {
+        "openSettings": "Open Antigravity settings"
+      },
       "claudeSignIn": {
         "signingIn": "Signing in…"
       },

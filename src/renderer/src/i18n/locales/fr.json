@@ -18873,6 +18873,9 @@
         "replaceDescription": "Reprendre « {{title}} » ici arrêtera ce que {{agent}} fait dans ce chat.",
         "replace": "Remplacer"
       },
+      "antigravitySignIn": {
+        "openSettings": "Ouvrir les paramètres d’Antigravity"
+      },
       "claudeSignIn": {
         "signingIn": "Connexion…"
       }
