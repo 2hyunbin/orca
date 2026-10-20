@@ -1,7 +1,7 @@
-// Main's start of a pane's terminal, while the pane has none (layout-owner build): live state laid
-// over the published layout like a pane's live title, never saved. A start ends in a binding,
-// which clears it, or a failure, which stays until main's next start into the pane. Shown only
-// while the pane has no terminal; keys are never reused, so a closed pane's entry is inert.
+// Main's start of a pane's terminal (layout-owner build): live state laid over the published layout
+// like a pane's live title, never saved. A start ends in a binding, which clears it, or a failure,
+// which stays until main's next start into the pane. A pane may still be bound to the terminal it
+// had (a restart into it): a status says that binding is not live. Keys are never reused.
 
 import type {
   PaneStartStatus,
@@ -34,7 +34,7 @@ export class PaneStartStatuses {
   }
 }
 
-/** Each pane's start status, in tab and pane order; null for a bound pane or one with none. */
+/** Each pane's start status, in tab and pane order; null for a pane with none. */
 export function paneStartFactsOf(
   layout: PublishedWorkspaceLayout,
   { paneStartFact: statusOf }: { paneStartFact?: PaneStartFactOf }
@@ -43,9 +43,7 @@ export function paneStartFactsOf(
     return []
   }
   return layout.tabs.flatMap((tab) =>
-    (tab.terminal?.panes ?? []).map((pane) =>
-      pane.ptyId ? null : statusOf(`${tab.entityId}:${pane.leafId}`)
-    )
+    (tab.terminal?.panes ?? []).map((pane) => statusOf(`${tab.entityId}:${pane.leafId}`))
   )
 }
 

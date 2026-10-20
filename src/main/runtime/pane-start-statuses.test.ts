@@ -123,7 +123,7 @@ describe('a pane’s start status in the published layout', () => {
     browserTabs: []
   }
 
-  it('rides the pane’s binding record, never its tree, and goes once the pane binds', () => {
+  it('rides the pane’s binding record, never its tree, bound to a terminal or not', () => {
     const facts = paneStartFactsOf(layout, {
       paneStartFact: () => ({ status: 'failed', reason: 'no pty' })
     })
@@ -144,8 +144,14 @@ describe('a pane’s start status in the published layout', () => {
         }
       ]
     }
-    expect(paneStartFactsOf(bound, { paneStartFact: () => ({ status: 'starting' }) })).toEqual([
-      null
+    // A restart into a pane still bound to its old terminal: the status says that one is not live.
+    const restarting = withPaneStartFacts(
+      bound,
+      paneStartFactsOf(bound, { paneStartFact: () => ({ status: 'starting' }) })
+    )
+    expect(splitPublishedLayout(restarting).bindings).toEqual([
+      { leafId: ARGS.leafId, ptyId: 'p', status: 'starting' }
     ])
+    expect(paneStartFactsOf(bound, { paneStartFact: () => null })).toEqual([null])
   })
 })
