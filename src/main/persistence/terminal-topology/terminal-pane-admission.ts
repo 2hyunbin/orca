@@ -96,14 +96,7 @@ export function applyCommandToSession(
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const taken =
-    command.type === 'createTerminalTab'
-      ? takenTabId(loaded.layout, command)
-      : command.type === 'splitPane'
-        ? takenLeafId(loaded.layout, command)
-        : command.type === 'applyDefaultTabs'
-          ? takenDefaultTabId(loaded.layout, command)
-          : null
+  const taken = takenIds(loaded.layout, command)
   if (taken) {
     return { value: taken, session: null }
   }
@@ -146,11 +139,16 @@ export function applyRenamesToSession(
 
 const RENAME_CONTEXT = { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
 
+/** Every pane write goes through here, so no create path can bring back a tab main closed. */
 function applyToSession(
   loaded: LoadedWorkspaceLayout,
   command: LayoutCommand,
   write: (after: WorkspaceSessionState) => WorkspaceSessionState | null = (after) => after
 ): PaneLayoutChange<LayoutApplyOutcome> {
+  const closed = closedIds(loaded.layout, command)
+  if (closed) {
+    return { value: closed, session: null }
+  }
   const applied = applyLayoutCommand(loaded.layout, command, {
     mintId: randomUUID,
     mintLeafId: randomUUID,
@@ -180,6 +178,35 @@ function prunedOnRecord(
     : session
 }
 
+function closedIds(
+  layout: WorkspaceLayoutModel,
+  command: LayoutCommand
+): LayoutApplyOutcome | null {
+  if (command.type === 'createTerminalTab') {
+    return command.tabId ? closedCreate(layout, command.tabId) : null
+  }
+  if (command.type === 'applyDefaultTabs') {
+    for (const tab of command.tabs) {
+      const closed = closedCreate(layout, tab.tabId)
+      if (closed) {
+        return closed
+      }
+    }
+  }
+  return null
+}
+
+/** A client's ids only: a runtime create may name a tab that exists, as a host's second pane does. */
+function takenIds(layout: WorkspaceLayoutModel, command: LayoutCommand): LayoutApplyOutcome | null {
+  if (command.type === 'createTerminalTab') {
+    return takenTabId(layout, command)
+  }
+  if (command.type === 'splitPane') {
+    return takenLeafId(layout, command)
+  }
+  return command.type === 'applyDefaultTabs' ? takenDefaultTabId(layout, command) : null
+}
+
 /**
  * A window's create names its own ids: the same create again (a tab main wrote first, then drew
  * from its frame) finds its pane and changes nothing; another tab in this partition holding the
@@ -201,10 +228,7 @@ function takenTabId(
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
   )
-  if (holds) {
-    return { ok: false, code: 'tab_exists' }
-  }
-  return closedCreate(layout, tabId)
+  return holds ? { ok: false, code: 'tab_exists' } : null
 }
 
 /**
@@ -229,16 +253,7 @@ function takenDefaultTabId(
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => ids.has(tab.id) || ids.has(tab.entityId))
   )
-  if (holds) {
-    return { ok: false, code: 'tab_exists' }
-  }
-  for (const tab of command.tabs) {
-    const closed = closedCreate(layout, tab.tabId)
-    if (closed) {
-      return closed
-    }
-  }
-  return null
+  return holds ? { ok: false, code: 'tab_exists' } : null
 }
 
 /**

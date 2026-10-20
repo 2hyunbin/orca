@@ -142,8 +142,8 @@ export async function spawnInAdmittedPane(
     hostIdOf(args),
     async (admitted) => {
       if (admitted !== undefined && admitted !== 'admitted' && admitted !== 'exists') {
-        // Only a split is refused: its parent pane left the layout.
-        throw new Error('terminal_split_source_not_found')
+        // A tab main recorded closed, or a split whose parent pane left the layout.
+        throw new Error(admitted === 'tab_closed' ? admitted : 'terminal_split_source_not_found')
       }
       if (!startStatus || (admitted !== 'exists' && !startStatus.keepOnFailure)) {
         // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.

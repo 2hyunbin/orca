@@ -30,6 +30,7 @@ describe('structuredAgentSessionHostSupport', () => {
       sendOptions: false,
       conversationStop: false,
       permissionModes: false,
+      itemDetail: false,
       phoneAttachments: false
     }
     expect(structuredAgentSessionHostSupport([])).toEqual(none)

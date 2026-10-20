@@ -62,10 +62,14 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     const observedCause = options.cause ?? resolveUnreportedExitCause(exitCode)
     const stopNeverConfirmed =
       observedCause.kind === 'unknown' && observedCause.reason === 'stop_unverified'
+    const stopRequested = this.stopRequestedPtyIds.has(ptyId)
+    // A raw provider code is not a death: node-pty reports a closed socket as -1 too.
+    const endVouched =
+      stopRequested ||
+      options.hostExitConfirmed === true ||
+      this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict.status === 'exited'
     const exitCause: TerminalExitCause =
-      this.stopRequestedPtyIds.has(ptyId) && !stopNeverConfirmed
-        ? OPERATOR_CLOSE_EXIT_CAUSE
-        : observedCause
+      stopRequested && !stopNeverConfirmed ? OPERATOR_CLOSE_EXIT_CAUSE : observedCause
     this.stopRequestedPtyIds.delete(ptyId)
     const preservesAbnormalSshSurface =
       this.isSshOwnedPtyId(ptyId) &&
@@ -263,7 +267,10 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
             exactSurfaces,
             // Switch point: main decides an exited split pane's close.
             ORCA_LAYOUT_OWNER_IS_MAIN
-              ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, options)
+              ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, {
+                  ...options,
+                  endVouched
+                })
               : undefined
           )
         } catch (error) {
