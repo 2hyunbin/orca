@@ -82,13 +82,13 @@ describe('a runtime pane in a layout-owner build', () => {
     )
   })
 
-  it('comes back when the window records it after it was taken back, and only once', async () => {
+  it('stays gone when the same split is sent again after it was taken back', async () => {
     const store = await storeWithLeftovers()
     const { newLeafId: _newLeafId, ...split } = admission
     const record = { ...split, newLeafId: NEW_LEAF }
     await store.admitTerminalPane(admission)
 
-    // Main still holds it: the window's record changes nothing.
+    // Main still holds it: the same split again changes nothing.
     await store.applyLayoutCommand(record)
     expect(leafIds(root(store))).toEqual([LEAF, NEW_LEAF])
 
@@ -98,9 +98,7 @@ describe('a runtime pane in a layout-owner build', () => {
       tabId: TAB,
       leafId: NEW_LEAF
     })
-    await store.applyLayoutCommand(record)
-    expect(leafIds(root(store))).toEqual([LEAF, NEW_LEAF])
-    await store.applyLayoutCommand(record)
-    expect(leafIds(root(store))).toEqual([LEAF, NEW_LEAF])
+    expect(await store.applyLayoutCommand(record)).toEqual({ ok: false, code: 'tab_closed' })
+    expect(leafIds(root(store))).toEqual([LEAF])
   })
 })

@@ -292,6 +292,8 @@ export type LayoutRefusalCode =
   | 'pane_already_bound'
   | 'workspace_exists'
   | 'tab_exists'
+  /** A create under a tab id main recorded closed, or a pane id it closed: a resend after the close. */
+  | 'tab_closed'
   | 'group_exists'
   /** A window's drag-out: another tab holds the pane, or no copy binds the window's terminal. */
   | 'pane_in_other_tab'

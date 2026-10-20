@@ -29,6 +29,7 @@ import {
   followRemoteSessionAfterPaneDetach
 } from './pane-remote-session-follow'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
+import { isClosedPaneFenced } from './closed-pane-binding-fence'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
@@ -201,7 +202,29 @@ function takenTabId(
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
   )
-  return holds ? { ok: false, code: 'tab_exists' } : null
+  if (holds) {
+    return { ok: false, code: 'tab_exists' }
+  }
+  return closedCreate(layout, tabId, leafId)
+}
+
+/**
+ * Switch point: a create sent again after its tab closed must not bring the tab back. Ids are
+ * never reused, so a tab main recorded closed, or a pane it closed within the binding window,
+ * can only be such a resend.
+ */
+function closedCreate(
+  layout: WorkspaceLayoutModel,
+  tabId: string,
+  leafId: string | undefined
+): LayoutApplyOutcome | null {
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    return null
+  }
+  const closed =
+    Object.values(layout.workspaces).some((entry) => entry.closedTerminalTabs?.[tabId]) ||
+    (leafId !== undefined && isClosedPaneFenced(paneKeyOf(tabId, leafId)))
+  return closed ? { ok: false, code: 'tab_closed' } : null
 }
 
 /** Default tabs come once, so any proposed id another tab holds refuses them all. */
@@ -213,7 +236,16 @@ function takenDefaultTabId(
   const holds = Object.values(layout.workspaces).some((entry) =>
     entry.tabs.some((tab) => ids.has(tab.id) || ids.has(tab.entityId))
   )
-  return holds ? { ok: false, code: 'tab_exists' } : null
+  if (holds) {
+    return { ok: false, code: 'tab_exists' }
+  }
+  for (const tab of command.tabs) {
+    const closed = closedCreate(layout, tab.tabId, tab.leafId)
+    if (closed) {
+      return closed
+    }
+  }
+  return null
 }
 
 /**
@@ -236,5 +268,11 @@ function takenLeafId(
   const held = workspace.tabs.some(
     (tab) => tab.kind === 'terminal' && leafIdsOf(tab).includes(newLeafId)
   )
-  return held ? { ok: false, code: 'pane_in_other_tab' } : null
+  if (held) {
+    return { ok: false, code: 'pane_in_other_tab' }
+  }
+  // Switch point: a split sent again after its pane closed must not bring the pane back.
+  return ORCA_LAYOUT_OWNER_IS_MAIN && isClosedPaneFenced(paneKey)
+    ? { ok: false, code: 'tab_closed' }
+    : null
 }
