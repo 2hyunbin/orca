@@ -6,8 +6,13 @@ function rig() {
   const work = new OrcadRestartWorkAdmission()
   const shutdown = vi.fn(() => true)
   const ports = {
-    collect: vi.fn(async () => ({ liveSessions: 0, startedSinceActivation: 0,
-      daemonProtocolVersion: null, inProcessSessions: 0, chatWork: 0 })),
+    collect: vi.fn(async () => ({
+      liveSessions: 0,
+      startedSinceActivation: 0,
+      daemonProtocolVersion: null,
+      inProcessSessions: 0,
+      chatWork: 0
+    })),
     drain: vi.fn(async () => {}),
     hasProviders: () => false,
     chatWork: () => 0,

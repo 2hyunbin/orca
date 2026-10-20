@@ -4,8 +4,12 @@ export class OrcadRestartWorkAdmission {
   private reservation: symbol | null = null
   private stopping = false
 
-  get pending(): number { return this.operations }
-  get reserved(): boolean { return this.reservation !== null }
+  get pending(): number {
+    return this.operations
+  }
+  get reserved(): boolean {
+    return this.reservation !== null
+  }
 
   track<T>(run: () => Promise<T>): Promise<T> {
     this.operations++
@@ -13,8 +17,12 @@ export class OrcadRestartWorkAdmission {
       const operation = run()
       // Observe settlement without delaying the session queue's result behind its next task.
       void operation.then(
-        () => { this.operations-- },
-        () => { this.operations-- }
+        () => {
+          this.operations--
+        },
+        () => {
+          this.operations--
+        }
       )
       return operation
     } catch (error) {
@@ -56,7 +64,9 @@ export class OrcadRestartWorkAdmission {
     return owner
   }
 
-  owns(owner: symbol): boolean { return this.reservation === owner }
+  owns(owner: symbol): boolean {
+    return this.reservation === owner
+  }
   release(owner: symbol): void {
     if (this.owns(owner) && !this.stopping) {
       this.reservation = null

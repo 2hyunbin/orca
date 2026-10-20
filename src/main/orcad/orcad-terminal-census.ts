@@ -38,7 +38,9 @@ export async function collectOrcadTerminalCensus(
   const [protocol] = protocols
   return {
     liveSessions: sessions.length + inProcess,
-    chatWork: (getStructuredAgentSessionHost()?.restartWorkCount() ?? 0) + orcadRestartWorkAdmission.pending,
+    chatWork:
+      (getStructuredAgentSessionHost()?.restartWorkCount() ?? 0) +
+      orcadRestartWorkAdmission.pending,
     // In-process terminals carry no creation time to compare against activation.
     startedSinceActivation:
       timestampsKnown && inProcess === 0
