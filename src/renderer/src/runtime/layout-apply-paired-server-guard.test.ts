@@ -137,6 +137,8 @@ describe('layout.apply senders', () => {
   it('are only the guarded paths pinned above', () => {
     expect(layoutApplySenders(path.resolve(__dirname, '..'))).toEqual({
       'runtime/layout-apply-send.ts': 1,
+      // Tests' stand-in for main: it answers layout.apply, never sends it.
+      'runtime/layout-apply-test-transport.test-fixture.ts': 1,
       'store/terminals/terminal-tab-create-through-layout-owner.ts': 2
     })
   })
