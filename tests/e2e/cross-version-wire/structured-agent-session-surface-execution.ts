@@ -1,5 +1,6 @@
 import { expect, vi } from 'vitest'
 import { RuntimeSubscriptionRegistry } from '../../../src/main/runtime/runtime-subscription-registry'
+import { resetStructuredAgentSessionClosesBeforeCreateForTests } from '../../../src/main/runtime/rpc/methods/structured-agent-session-close-before-create'
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../src/shared/agent-session-create-capabilities'
 import {
   attachParams,
@@ -14,6 +15,8 @@ import type {
 } from './versioned-agent-session-wire'
 
 export function runtimeStub(overrides: Record<string, unknown> = {}): unknown {
+  // A fresh runtime remembers no chat closed before its create; scenarios reuse one session id.
+  resetStructuredAgentSessionClosesBeforeCreateForTests()
   const subscriptions = new RuntimeSubscriptionRegistry()
   return {
     getRuntimeId: () => 'runtime-1',

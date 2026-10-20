@@ -10,6 +10,10 @@ export function wasStructuredAgentLaunchClosedByLocalCancel(sessionId: string): 
   return closedByLocalCancel.has(sessionId)
 }
 
+export function resetStructuredAgentLocalLaunchCancelsForTests(): void {
+  closedByLocalCancel.clear()
+}
+
 /**
  * ORCA_LAYOUT_OWNER=main only: this machine's host refuses a create whose close came first, or
  * closes the chat as it lands, so a local cancel retires the chat on the host at once and keeps no

@@ -28,7 +28,10 @@ import {
   retireStructuredAgentLaunchCancellation
 } from './launch-cancel-tombstones-compat/structured-agent-session-launch-cancellation'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { cancelStructuredAgentLaunchOnLocalHost } from './structured-agent-session-local-launch-cancel'
+import {
+  cancelStructuredAgentLaunchOnLocalHost,
+  resetStructuredAgentLocalLaunchCancelsForTests
+} from './structured-agent-session-local-launch-cancel'
 
 export type StructuredLaunchState = StructuredLaunchRecoveryState & {
   identity: string
@@ -56,6 +59,7 @@ export function resetStructuredAgentLaunchRegistryForTests(): void {
   structuredLaunchesBySessionId.clear()
   structuredLaunchListeners.clear()
   resetStructuredAgentLaunchCancellationForTests()
+  resetStructuredAgentLocalLaunchCancelsForTests()
 }
 
 export function notifyStructuredLaunchListeners(): void {
