@@ -47,19 +47,18 @@ function knownHost(
     return null
   }
   const repoId = getRepoIdFromWorktreeId(worktreeId)
-  const matches = new Set(
+  const stored = new Set(
     store
       .getRepos()
       .filter((repo) => repo.id === repoId)
       .map(getRepoExecutionHostId)
-      .filter(
-        (stored) =>
-          stored === parsed.id ||
-          (parsed.kind === 'local' && parseExecutionHostId(stored)?.kind === 'runtime')
-      )
   )
-  const [only] = matches
-  return matches.size === 1 && only ? only : null
+  if (stored.has(parsed.id)) {
+    return parsed.id
+  }
+  // Only when no row is stamped `local`: a single own-runtime stamp is that same copy.
+  const aliases = [...stored].filter((host) => parseExecutionHostId(host)?.kind === 'runtime')
+  return parsed.kind === 'local' && aliases.length === 1 ? (aliases[0] ?? null) : null
 }
 
 /**
