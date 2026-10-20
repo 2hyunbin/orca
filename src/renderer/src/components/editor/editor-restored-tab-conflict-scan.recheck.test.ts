@@ -109,3 +109,23 @@ it('stops retrying and shows the conflict banner when the disk can never be chec
   expect(tab().pendingDiskBaselineVerification).toBeFalsy()
   expect(tab().externalMutation).toBe('changed')
 })
+
+it('does not let an absence answer from before a newer check resolve that check', async () => {
+  let answerProbe: (rows: unknown) => void = () => {}
+  mocks.readRuntimeFileContent.mockRejectedValueOnce(new Error('read failed'))
+  mocks.runtimePathsExist.mockImplementationOnce(
+    () => new Promise((resolve) => (answerProbe = resolve))
+  )
+  store.getState().setPendingDiskBaselineVerification(FILE, true)
+  detach = attachRestoredTabConflictScan(store)
+  await vi.advanceTimersByTimeAsync(0)
+
+  // The file comes back and a new catch-up asks again while the old probe is pending.
+  requestRestoredTabReverification(FILE)
+  mocks.readRuntimeFileContent.mockResolvedValueOnce({ content: 'v2 recreated', isBinary: false })
+  answerProbe([{ exists: false }])
+  await vi.advanceTimersByTimeAsync(0)
+
+  expect(tab().externalMutation).toBe('changed')
+  expect(tab().pendingDiskBaselineVerification).toBeFalsy()
+})

@@ -108,6 +108,18 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
     }
   }
 
+  // Why: a newer check was requested mid-read; this answer may predate it, so keep the flag and read once more.
+  const rereadIfSuperseded = (fileId: string, requestGeneration: number): boolean => {
+    if (verifyRequestGeneration(fileId) === requestGeneration) {
+      return false
+    }
+    queueMicrotask(() => {
+      inFlightFileIds.delete(fileId)
+      scan()
+    })
+    return true
+  }
+
   const verify = async (file: OpenFile): Promise<void> => {
     // ids are file paths: a stray leftover marker would skip a reopened same-path tab, so only a scheduled retry keeps it set.
     let retryScheduled = false
@@ -130,13 +142,8 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
       if (!liveFile) {
         return
       }
-      if (verifyRequestGeneration(file.id) !== requestGeneration) {
-        // Why: a newer check was requested mid-read; this reply may predate it, so read once more.
+      if (rereadIfSuperseded(file.id, requestGeneration)) {
         retryScheduled = true
-        queueMicrotask(() => {
-          inFlightFileIds.delete(file.id)
-          scan()
-        })
         return
       }
       attemptsByFileId.delete(file.id)
@@ -163,6 +170,10 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
       }
       if (await probeFileMissing(file)) {
         if (disposed) {
+          return
+        }
+        if (rereadIfSuperseded(file.id, requestGeneration)) {
+          retryScheduled = true
           return
         }
         // Definitive not-found = resolved: no newer disk content for a save to clobber, so mark deleted instead of retrying forever.
