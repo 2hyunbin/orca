@@ -1,7 +1,8 @@
 // Managed orcad on a real Win32-OpenSSH host, one cell per DefaultShell: resolve the context
 // (pinned node.exe, host script), deploy and activate, prove readiness and liveness, reach orcad
-// through the stdio bridge (this account's sshd refuses forwarding), decommission through the
-// instance-bound stop request, prove exit, and run a GC pass.
+// through the stdio bridge (this account's sshd refuses forwarding), stop it through the slot's
+// plain request and relaunch it, decommission through the instance-bound stop request, prove exit,
+// and run a GC pass.
 // config/ci/windows-ssh-provider/invoke-windows-host-cells.ps1 provisions the account and runs this
 // file for `orcad-*` cells; ssh-windows-hosts.yml runs that.
 //
@@ -21,7 +22,13 @@ import { resolveOrcadRemoteContext } from '../install/orcad-remote-context'
 import { proveWindowsStdioBridge } from '../../ssh/orcad-windows-stdio-bridge-test-cell'
 import { deployOrcad } from '../../ssh/orcad-remote-deploy'
 import { orcadLivenessProbeCommand, parseOrcadLiveness } from '../install/orcad-remote-launch'
-import { orcadSlotDir, type OrcadSlotOptions } from '../../ssh/orcad-recovery-slot'
+import {
+  ensureOrcadSlotServing,
+  orcadSlotDir,
+  resolveOrcadSlotIdentity,
+  stopOrcadSlot,
+  type OrcadSlotOptions
+} from '../../ssh/orcad-recovery-slot'
 import { decommissionRemoteOrcad } from '../install/orcad-remote-decommission'
 import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
 import { gcOldOrcadVersions } from '../install/orcad-remote-gc'
@@ -107,6 +114,15 @@ describe.runIf(RUN)('managed orcad on a Windows OpenSSH host', () => {
           forwarding: 'refused',
           response: expect.stringMatching(/^HTTP\/1\.1 101/u)
         })
+        // Recovery's stop: the host script renames `stop-now` into the slot, which stops at once.
+        receipt.slotStop = await stopOrcadSlot(options, slotDir, false)
+        expect(receipt.slotStop).toBe('stopped')
+        expect(await liveness()).toBe('DEAD')
+        await ensureOrcadSlotServing(
+          options,
+          await resolveOrcadSlotIdentity(options, deployed.fullVersion)
+        )
+        expect(await liveness()).toBe('LIVE')
         // Decommission stops it by the instance-bound request orcad itself completes and proves.
         const record = await readOrcadActivationRecord(options)
         receipt.decommission = await decommissionRemoteOrcad({
