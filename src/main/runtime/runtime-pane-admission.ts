@@ -128,7 +128,8 @@ export async function startInAdmittedPane<T>(
 /**
  * Starts a runtime-originated terminal: its pane, tab-bar entry and group are written first, then
  * the process starts and binds to that pane. A start that fails, or that attaches to a session
- * already running in another pane, takes back the pane it wrote.
+ * already running in another pane, takes back the pane it wrote. With `startStatus`, the pane
+ * shows 'starting' from before it is written, so no view sees it unbound and starts its own.
  */
 export async function spawnInAdmittedPane(
   store: RuntimeStore | null | undefined,
@@ -136,33 +137,44 @@ export async function spawnInAdmittedPane(
   { startStatus, ...args }: AdmittedSpawnArgs & PaneStartArgs
 ): ReturnType<Spawn> {
   const { groupId: _groupId, afterTabId: _afterTabId, ...spawnArgs } = args
-  const { outcome, result } = await startInAdmittedPane(
-    store,
-    admissionFor(args),
-    hostIdOf(args),
-    async (admitted) => {
-      if (admitted !== undefined && admitted !== 'admitted' && admitted !== 'exists') {
-        // A tab main recorded closed, or a split whose parent pane left the layout.
-        throw new Error(admitted === 'tab_closed' ? admitted : 'terminal_split_source_not_found')
-      }
-      if (!startStatus || (admitted !== 'exists' && !startStatus.keepOnFailure)) {
+  const paneKey = `${args.tabId}:${args.leafId}`
+  let admittedAs: TerminalPaneAdmissionOutcome | undefined
+  startStatus?.sink.set(paneKey, { status: 'starting' })
+  let run: { outcome: TerminalPaneAdmissionOutcome | undefined; result: Awaited<ReturnType<Spawn>> }
+  try {
+    run = await startInAdmittedPane(
+      store,
+      admissionFor(args),
+      hostIdOf(args),
+      async (admitted) => {
+        if (admitted !== undefined && admitted !== 'admitted' && admitted !== 'exists') {
+          // A tab main recorded closed, or a split whose parent pane left the layout.
+          throw new Error(admitted === 'tab_closed' ? admitted : 'terminal_split_source_not_found')
+        }
+        admittedAs = admitted
         // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
         return controller.spawn!(spawnArgs)
-      }
-      const { sink } = startStatus
-      const paneKey = `${args.tabId}:${args.leafId}`
-      sink.set(paneKey, { status: 'starting' })
-      try {
-        const started = await controller.spawn!(spawnArgs)
-        sink.clear(paneKey)
-        return started
-      } catch (error) {
-        sink.set(paneKey, paneStartFailure(error))
-        throw error
-      }
-    },
-    startStatus?.keepOnFailure
-  )
+      },
+      startStatus?.keepOnFailure
+    )
+  } catch (error) {
+    // A pane that stays (kept to show the failure, or one main already held) shows why; one
+    // closed while it started is gone, so nothing is left to show.
+    const paneGone = error instanceof Error && error.message === 'terminal_split_source_not_found'
+    if (
+      startStatus &&
+      admittedAs &&
+      !paneGone &&
+      (startStatus.keepOnFailure || admittedAs === 'exists')
+    ) {
+      startStatus.sink.set(paneKey, paneStartFailure(error))
+    } else {
+      startStatus?.sink.clear(paneKey)
+    }
+    throw error
+  }
+  startStatus?.sink.clear(paneKey)
+  const { outcome, result } = run
   const started = result.agentSessionEnsure?.owner.surface ?? result.stablePaneOwner
   const elsewhere = started && (started.tabId !== args.tabId || started.leafId !== args.leafId)
   if (outcome === 'admitted' && elsewhere) {
