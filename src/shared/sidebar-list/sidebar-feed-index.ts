@@ -100,3 +100,29 @@ export function rankSidebarFeedWorktrees(
     index.repoMap
   ).map(getWorktreeHostIdentity)
 }
+
+/**
+ * Presentation only: `live` with each workspace that `heldFrom` also lists keeping the Recent
+ * stamp it had there, so project sections ordered by Recent hold still. New rows keep theirs.
+ */
+export function withHeldProjectRecency(
+  live: SidebarFeedIndex,
+  heldFrom: SidebarFeedIndex
+): SidebarFeedIndex {
+  const heldAt = new Map(
+    heldFrom.worktrees.map((worktree) => [
+      getWorktreeHostIdentity(worktree),
+      worktree.lastActivityAt
+    ])
+  )
+  let changed = false
+  const worktrees = live.worktrees.map((worktree) => {
+    const lastActivityAt = heldAt.get(getWorktreeHostIdentity(worktree)) ?? worktree.lastActivityAt
+    if (lastActivityAt === worktree.lastActivityAt) {
+      return worktree
+    }
+    changed = true
+    return { ...worktree, lastActivityAt }
+  })
+  return changed ? { ...live, worktrees } : live
+}

@@ -9,7 +9,15 @@ import type { HostSectionRow } from './host-section-rows'
 import { normalizePairedServerRow } from './paired-server-rows'
 import type { SidebarFeedDomains } from './sidebar-feed-domains'
 import {
+  indexSidebarFeed,
+  rankSidebarFeedWorktrees,
+  withHeldProjectRecency,
+  type SidebarFeedIndex
+} from './sidebar-feed-index'
+import {
   buildSidebarFeedRows,
+  planSidebarFeedRows,
+  renderSidebarFeedRows,
   type SidebarFeedCatalog,
   type SidebarFeedView
 } from './sidebar-feed-rows'
@@ -232,6 +240,46 @@ describe('buildSidebarFeedRows host sections', () => {
       '# H@1',
       '# far@2',
       'ssh:box|far::/w/b@0'
+    ])
+  })
+})
+
+describe('the desktop’s hover hold over the shared builder', () => {
+  const repos = [repo('a'), repo('b')]
+  const feedAt = (bRecent: number): SidebarFeedDomains =>
+    domains({
+      workspaces: buildWorkspaceRows({
+        worktrees: [
+          worktree('a::/w/1', { lastActivityAt: 100 }),
+          worktree('b::/w/2', { lastActivityAt: bRecent })
+        ],
+        folderWorkspaces: [],
+        repos,
+        lineageById: {}
+      })
+    })
+  const recentView = view({ groupBy: 'repo', sortBy: 'recent', projectOrderBy: 'recent' })
+  const itemsOf = (rows: readonly HostSectionRow[]) =>
+    outline(rows).filter((line) => !line.startsWith('#'))
+
+  it('keeps project sections where they were while the pointer is over the list', () => {
+    const engagedAt = indexSidebarFeed(feedAt(50), repos)
+    const heldRanks = rankSidebarFeedWorktrees(engagedAt, 'recent')
+    const live = feedAt(200)
+    const liveIndex = indexSidebarFeed(live, repos)
+    const shown = (index: SidebarFeedIndex) =>
+      itemsOf(
+        renderSidebarFeedRows(
+          planSidebarFeedRows(live, index, catalog(repos), recentView, heldRanks),
+          recentView,
+          new Set()
+        ).sectionRows
+      )
+    // Held workspace ranks alone let B's project jump above A's.
+    expect(shown(liveIndex)).toEqual(['|b::/w/2@0', '|a::/w/1@0'])
+    expect(shown(withHeldProjectRecency(liveIndex, engagedAt))).toEqual([
+      '|a::/w/1@0',
+      '|b::/w/2@0'
     ])
   })
 })
