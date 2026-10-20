@@ -5406,7 +5406,8 @@
         },
         "PendingWorktreeRow": {
           "af21e953d1": "取消工作树创建",
-          "188f6922a0": "取消"
+          "188f6922a0": "取消",
+          "creatingWorkspace": "正在创建工作区…"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "取消",

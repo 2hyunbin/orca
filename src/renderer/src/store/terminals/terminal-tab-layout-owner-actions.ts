@@ -140,12 +140,12 @@ export function routeTerminalTabChangesThroughLayoutOwner(
         () => actions.setTabCustomTitle(tabId, title, opts),
         opts?.recordInteraction === false ? undefined : recordTabsInteraction
       ),
-    setTabColor: (tabId, color) =>
+    setTabColor: (tabId, color, opts) =>
       route(
         tabId,
         (id) => ({ type: 'setTabProps', tabId: id, color }),
-        () => actions.setTabColor(tabId, color),
-        recordTabsInteraction
+        () => actions.setTabColor(tabId, color, opts),
+        opts?.recordInteraction === false ? undefined : recordTabsInteraction
       ),
     setAiVaultTabTitle: (tabId, title) => {
       const current = terminalTab(get(), tabId)?.aiVaultTitle ?? null
