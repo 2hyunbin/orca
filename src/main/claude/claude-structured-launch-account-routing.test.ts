@@ -141,7 +141,7 @@ function routedResumeFixture() {
     agent: 'claude' as const,
     providerHandle: handle
   }
-  return { root, home, transcriptHomes, launch: () => resolve({ identity }) }
+  return { root, home, record, transcriptHomes, launch: () => resolve({ identity }) }
 }
 
 it('refuses to resume a chat whose transcript is in another account instead of starting fresh', async () => {
@@ -157,6 +157,17 @@ it('refuses to resume a chat whose transcript is in another account instead of s
   const resumed = await launch()
   expect(resumed.options).toMatchObject({ resume: 'ran-under-b' })
   expect(resumed.resumeLeafUuid).toBe('leaf-1')
+})
+
+it('refuses to resume a chat whose transcript is only in its saved custom home', async () => {
+  const { root, record, transcriptHomes, launch } = routedResumeFixture()
+  record.accountHome.path = join(root, 'custom-claude-home')
+  transcriptHomes.add(record.accountHome.path)
+
+  await expect(launch()).rejects.toMatchObject({
+    name: 'AgentSessionPreSpawnError',
+    reason: 'historyInOtherAccount'
+  })
 })
 
 it('resumes a chat with a stored leaf whose transcript is in no known folder', async () => {
