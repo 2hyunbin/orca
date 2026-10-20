@@ -564,6 +564,73 @@ describe('re-placing a host off a cell isolated for a roll', () => {
     expect(moved.assignmentEpoch).toBe(first.assignmentEpoch + 1)
   })
 
+  describe('with a reserve cell in its own region', () => {
+    const onReserve = {
+      ...IDENTITY,
+      cellId: 'asia-reserve',
+      cellUrl: 'https://asia-reserve.example.com',
+      assignmentEpoch: 9,
+      leaseExpiresAt: START_MS + 1_000_000,
+      region: 'asia-east2' as const
+    }
+
+    it('books the reserve cell before leaving the region, and the canary still counts the move', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { store, database, isolateForRoll } = await setup()
+      const first = await store.assign(IDENTITY, 'asia-east2')
+      await isolateForRoll(first.cellId)
+      warn.mockClear()
+      const regionReserve = vi.fn(async () => onReserve)
+      await expect(
+        store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { regionReserve })
+      ).resolves.toEqual(onReserve)
+      expect(regionReserve).toHaveBeenCalledOnce()
+      expect(jsonEvents(warn, 'orca_relay_sticky_replaced_off_isolated_cell')).toEqual([
+        {
+          event: 'orca_relay_sticky_replaced_off_isolated_cell',
+          fromCellId: first.cellId,
+          fromRegion: 'asia-east2',
+          admissionState: 'migration-only',
+          toCellId: 'asia-reserve',
+          region: 'asia-east2',
+          via: 'reserve'
+        }
+      ])
+      // The refused in-region attempt wrote nothing.
+      expect(
+        await database.query(`SELECT cell_id, assignment_epoch FROM relay_assignments`)
+      ).toEqual([{ cell_id: first.cellId, assignment_epoch: first.assignmentEpoch }])
+    })
+
+    it('leaves the region as before when the reserve cell has no room either', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { store, isolateForRoll } = await setup()
+      const first = await store.assign(IDENTITY, 'asia-east2')
+      await isolateForRoll(first.cellId)
+      warn.mockClear()
+      const regionReserve = vi.fn(async () => null)
+      const moved = await store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { regionReserve })
+      expect(moved).toMatchObject({ region: 'us-central1', assignmentEpoch: first.assignmentEpoch + 1 })
+      expect(regionReserve).toHaveBeenCalledOnce()
+      expect(jsonEvents(warn, 'orca_relay_sticky_replaced_off_isolated_cell')).toMatchObject([
+        { fromCellId: first.cellId, region: 'us-central1' }
+      ])
+    })
+
+    it('does not hold a host whose preferred region is elsewhere', async () => {
+      const { store, isolateForRoll, park } = await setup()
+      const first = await store.assign(IDENTITY, 'us-central1')
+      const other = CELLS.find((cell) => cell.region === 'us-central1' && cell.id !== first.cellId)!
+      await park(other.id, 'migration-only')
+      await isolateForRoll(first.cellId)
+      const regionReserve = vi.fn(async () => onReserve)
+      await expect(
+        store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { regionReserve })
+      ).resolves.toMatchObject({ cellId: 'asia-c1' })
+      expect(regionReserve).not.toHaveBeenCalled()
+    })
+  })
+
   it('takes the dead-cell path when a stamped cell stops heartbeating', async () => {
     // Why: the fence is the only proof that a cell we cannot reach has stopped
     // serving the sockets it still holds. A stamp does not make it reachable.

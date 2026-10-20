@@ -462,12 +462,13 @@ export function createRelayApp(
         .sign(config.assignmentSigningKey)
     // Step 5: switched-on cells answer from the map; anything else keeps today's path below.
     let step5: Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve'> = {}
-    if (operations.reservePlacement && !body.data.regionCorrection) {
+    if (operations.reservePlacement && body.data.regionCorrection?.action !== 'report') {
       let plan: ReservePlan
       try {
         plan = await operations.reservePlacement.plan(identity, {
           reconnect: Boolean(body.data.reconnect),
-          region: targetRegion
+          region: targetRegion,
+          regionCorrection: body.data.regionCorrection !== undefined
         })
       } catch (error) {
         if (!(error instanceof ReservePaceError)) throw error

@@ -376,6 +376,39 @@ describe('reserve assignment on a director', () => {
     })
   })
 
+  describe('for a region-correction request', () => {
+    const request = { reconnect: true, region: US, regionCorrection: true }
+
+    it('leaves the answer to the database lane, offering only the in-region reserve fallback', async () => {
+      const row = vi.fn(async () => null)
+      // A memory answer would skip the window exchange; the share draw is not offered either.
+      const { assignment, reserved } = setup({ feeds: [feed('c1', { full: [seated(7)] }), feed('c2')], row })
+      const plan = await assignment.plan(HOST, request)
+      expect(plan).toEqual({ kind: 'database', regionReserve: expect.any(Function) })
+      expect(reserved).toEqual([])
+      expect(row).not.toHaveBeenCalled()
+      await expect(plan.kind === 'database' ? plan.regionReserve?.() : null).resolves.toMatchObject({
+        assignmentEpoch: 8
+      })
+    })
+
+    it('keeps today’s path for a host the map never saw, without reading its row', async () => {
+      const row = vi.fn(async () => ({ cellId: 'c1', assignmentEpoch: 3 }))
+      const { assignment, reserved } = setup({ row })
+      expect(await assignment.plan(HOST, request)).toEqual({ kind: 'database' })
+      expect(row).not.toHaveBeenCalled()
+      expect(reserved).toEqual([])
+    })
+
+    it('keeps today’s path while the map is incomplete, and in dry run', async () => {
+      const gated = setup({ cells: cellList(['c1', 'c2']), feeds: [feed('c1', { full: [seated(4)] })], startedAt: 100_500 })
+      expect(await gated.assignment.plan(HOST, request)).toEqual({ kind: 'database' })
+      const dryRun = setup({ mode: 'dry-run', feeds: [feed('c1', { full: [seated(4)] }), feed('c2')] })
+      expect(await dryRun.assignment.plan(HOST, request)).toEqual({ kind: 'database' })
+      expect([...gated.reserved, ...dryRun.reserved]).toEqual([])
+    })
+  })
+
   it('paces with Retry-After when every reserve cell is out of budget and no database cell exists', async () => {
     const { assignment } = setup({ reserve: () => ({ outcome: 'intake' }) })
     await expect(assignment.plan(HOST, { reconnect: false, region: US })).rejects.toBeInstanceOf(

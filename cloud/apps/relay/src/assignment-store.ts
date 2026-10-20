@@ -525,7 +525,7 @@ class AssignmentInventoryLockUnavailable extends Error {
 
 // Postgres holds row locks to COMMIT, so the next tier needs a new transaction.
 class AssignmentIsolatedTierExhausted extends Error {
-  constructor() {
+  constructor(readonly source: { cellId: string; region: RelayRegion }) {
     super('assignment_isolated_tier_exhausted')
   }
 }
@@ -538,7 +538,8 @@ class AssignmentInventoryScopeChanged extends Error {
 
 // The placement region has no database cell with room; nothing was written.
 class AssignmentRegionFull extends Error {
-  constructor() {
+  // Set when the host is leaving a roll-isolated cell in that region.
+  constructor(readonly isolatedSource?: { cellId: string; region: RelayRegion }) {
     super('assignment_region_full')
   }
 }
@@ -1033,12 +1034,30 @@ export class RelayAssignmentStore {
       )
     const regionReserve = step5.regionReserve
     if (!regionReserve) return await placeOnDatabase(false)
+    let isolatedSource: AssignmentRegionFull['isolatedSource']
     try {
       return await placeOnDatabase(true)
     } catch (error) {
       if (!(error instanceof AssignmentRegionFull)) throw error
+      isolatedSource = error.isolatedSource
     }
-    return (await regionReserve()) ?? (await placeOnDatabase(false))
+    const reserved = await regionReserve()
+    if (!reserved) return await placeOnDatabase(false)
+    if (isolatedSource) {
+      // The roll canary counts these against the drained cell's hosts, whichever pool took them.
+      console.warn(
+        JSON.stringify({
+          event: 'orca_relay_sticky_replaced_off_isolated_cell',
+          fromCellId: isolatedSource.cellId,
+          fromRegion: isolatedSource.region,
+          admissionState: ROLL_ISOLATED_ADMISSION,
+          toCellId: reserved.cellId,
+          region: reserved.region,
+          via: 'reserve'
+        })
+      )
+    }
+    return reserved
   }
 
   private async assignStickyWithLockRetry(
@@ -1081,6 +1100,10 @@ export class RelayAssignmentStore {
           continue
         }
         if (error instanceof AssignmentIsolatedTierExhausted) {
+          // An in-region reserve cell comes before the other regions.
+          if (keepRegion && error.source.region === placementRegion) {
+            throw new AssignmentRegionFull(error.source)
+          }
           inventoryScope = 'isolated-other-regions'
           continue
         }
@@ -1442,7 +1465,7 @@ export class RelayAssignmentStore {
           // Same region full: try the other regions. All full: decide under the
           // all-rows lock, which keeps the pin as before.
           if (!isolatedTarget) {
-            if (isolatedTier === 'same-region') throw new AssignmentIsolatedTierExhausted()
+            if (isolatedTier === 'same-region') throw new AssignmentIsolatedTierExhausted(source)
             throw new AssignmentInventoryScopeChanged()
           }
           isolatedIncumbent = source
@@ -8167,15 +8190,18 @@ export class RelayAssignmentStore {
     mode: CellInventoryLockMode
   ): Promise<SqlRow[]> {
     if (sourceCellId === undefined) throw new AssignmentInventoryScopeChanged()
+    const sourceRegion = await this.cellRegion(database, sourceCellId)
     const candidates = await database.query(
       `SELECT admission.cell_id FROM relay_cell_admission admission
        LEFT JOIN relay_cell_regions region ON region.cell_id = admission.cell_id
        WHERE admission.admission_state = 'general' AND admission.cell_id <> ?
          AND COALESCE(region.region, ?) ${tier === 'same-region' ? '=' : '<>'} ?`,
-      [sourceCellId, RELAY_DEFAULT_REGION, await this.cellRegion(database, sourceCellId)]
+      [sourceCellId, RELAY_DEFAULT_REGION, sourceRegion]
     )
     if (candidates.length === 0) {
-      if (tier === 'same-region') throw new AssignmentIsolatedTierExhausted()
+      if (tier === 'same-region') {
+        throw new AssignmentIsolatedTierExhausted({ cellId: sourceCellId, region: sourceRegion })
+      }
       throw new AssignmentInventoryScopeChanged()
     }
     return await this.lockCellRows(
