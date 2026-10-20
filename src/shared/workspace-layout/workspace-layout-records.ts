@@ -3,7 +3,7 @@
 // browser tab. A change frame carries only the records an operation changed (design E1); splitting
 // and joining keep every field, so a field added to a published type rides its record unchanged.
 
-import { editorFileKey } from './workspace-layout-editor-tab-file'
+import { ownedEditorFileId } from '../workspace-session-pane-ownership'
 import { stableJson } from './workspace-layout-load-report'
 import type {
   PublishedBrowserTab,
@@ -69,7 +69,8 @@ const RECORD_KEYS: { [Kind in RecordKind]: (record: RecordKinds[Kind]) => string
   tabs: (row) => row.id,
   paneTrees: (tree) => tree.tabId,
   bindings: (binding) => binding.leafId,
-  editorFiles: (file) => editorFileKey(file),
+  // Path and owner, whatever the reader's build: a frame's order names records by these keys.
+  editorFiles: (file) => ownedEditorFileId(file.filePath, '', file.runtimeEnvironmentId),
   browserTabs: (tab) => tab.id
 }
 
