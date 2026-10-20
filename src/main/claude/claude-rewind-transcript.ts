@@ -13,6 +13,15 @@ function isTranscriptEntry(value: unknown): value is SessionStoreEntry {
   )
 }
 
+function parseTranscriptEntry(line: string): SessionStoreEntry | undefined {
+  try {
+    const entry: unknown = JSON.parse(line)
+    return isTranscriptEntry(entry) ? entry : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Use Claude's fork implementation for branch selection, compaction and UUID remapping. */
 export async function materializeClaudeRewindTranscript(
   sourcePath: string,
@@ -33,11 +42,11 @@ export async function materializeClaudeRewindTranscript(
           if (!line.trim()) {
             continue
           }
-          const entry: unknown = JSON.parse(line)
-          if (!isTranscriptEntry(entry)) {
-            throw new Error('claude rewind transcript entry is invalid')
+          const entry = parseTranscriptEntry(line)
+          // Skip torn lines (crash mid-write) like the SDK's own local reader does.
+          if (entry) {
+            entries.push(entry)
           }
-          entries.push(entry)
         }
         return entries
       },

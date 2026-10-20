@@ -107,11 +107,14 @@ describe('durable Claude rewind transcripts', () => {
     expect(await readFile(path, 'utf8')).toBe(original)
   })
 
-  it('leaves no partial fork when the source cannot be decoded', async () => {
-    const damaged = `{broken-json}\n${original}`
+  it('skips a torn transcript line instead of failing the rewind', async () => {
+    const damaged = `{broken-json}\n${original}{"type":`
     await writeFile(path, damaged)
-    await expect(forkBefore(secondPrompt)).rejects.toThrow()
-    expect(await readdir(project)).toEqual([`${source}.jsonl`])
+    const fork = await forkBefore(secondPrompt)
+    expect(fork).toMatchObject({ materialized: true, throughEntryId: firstAnswer })
+    const contents = await readFile(join(project, `${fork?.sessionId}.jsonl`), 'utf8')
+    expect(contents).toContain('ALPHA')
+    expect(contents).not.toContain('BRAVO')
     expect(await readFile(path, 'utf8')).toBe(damaged)
   })
 })
