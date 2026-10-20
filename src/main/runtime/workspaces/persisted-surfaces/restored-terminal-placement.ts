@@ -14,8 +14,10 @@ import {
 import type { WindowLayoutCommand } from '../../runtime-layout-apply'
 import {
   placeUnshownLiveTerminals,
+  placeUnshownLiveTerminalsBestEffort,
   type LiveTerminalPlacement
 } from '../../terminal/adoption/unshown-live-terminal-placement'
+import { onLocalPtyProviderRebound } from '../../../ipc/pty/provider/local-provider-rebound'
 import {
   deriveShutdownReconnectFacts,
   type ShutdownReconnectFacts
@@ -25,8 +27,38 @@ import { OrcaRuntimeWithAutomationOperations } from './automation-operations'
 export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRuntimeWithAutomationOperations {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
 
-  /** Layout-owner build: shows every live local terminal no pane shows (startup, window load). */
-  async placeUnshownLiveTerminals(): Promise<LiveTerminalPlacement> {
+  private placementRun: Promise<LiveTerminalPlacement> | null = null
+  private placementAgain = false
+  private stopFollowingProviderRebinds: (() => void) | null = null
+
+  /**
+   * Layout-owner build: shows every live local terminal no pane shows. Runs at startup, window
+   * load and client attach, and after the terminal service is replaced. One pass at a time: a call
+   * during a pass runs one more pass after it, so a terminal seen late is still placed.
+   */
+  placeUnshownLiveTerminals(): Promise<LiveTerminalPlacement> {
+    this.stopFollowingProviderRebinds ??= onLocalPtyProviderRebound(
+      () => void placeUnshownLiveTerminalsBestEffort(this)
+    )
+    if (this.placementRun) {
+      this.placementAgain = true
+      return this.placementRun
+    }
+    const run = async (): Promise<LiveTerminalPlacement> => {
+      let placement: LiveTerminalPlacement
+      do {
+        this.placementAgain = false
+        placement = await this.placeUnshownLiveTerminalsOnce()
+      } while (this.placementAgain)
+      return placement
+    }
+    this.placementRun = run().finally(() => {
+      this.placementRun = null
+    })
+    return this.placementRun
+  }
+
+  private async placeUnshownLiveTerminalsOnce(): Promise<LiveTerminalPlacement> {
     // A host that keeps no local terminals across restarts has none to find.
     if (!this.canRecoverPersistentLocalPtysFn()) {
       return { placed: [], declined: [] }
