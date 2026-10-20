@@ -106,12 +106,4 @@ describe('a pane title drawn from main’s frame', () => {
     expect(titles()).toBeUndefined()
     expect(writes.count()).toBe(1)
   })
-
-  it('names the pane itself while main’s stream is down', async () => {
-    endLayoutFramePositions()
-    applyRuntimePaneTitle({ tabId: 'tab-shell', leafId: leaf(1), title: 'REVIEWER' })
-    await settle()
-
-    expect(titles()).toEqual({ [leaf(1)]: 'REVIEWER', [leaf(2)]: 'server' })
-  })
 })

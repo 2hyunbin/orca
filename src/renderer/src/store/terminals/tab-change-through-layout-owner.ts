@@ -1,6 +1,5 @@
 import type { Tab } from '../../../../shared/tab-types'
 import { sendLayoutApply, type WindowLayoutCommand } from '@/runtime/layout-apply-send'
-import { shownByFrames } from '@/runtime/layout-frame-position'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import { findRenamableUnifiedTab } from './renamable-unified-tab'
 
@@ -17,8 +16,7 @@ export type TabChangeAnswers = { shown?: () => void; refused?: () => void }
 
 /**
  * A tab's own change (title, color, view, launch agent) in a layout-owner build: main changes its
- * copy and its frame draws the change. `local` runs when a paired server holds the tab instead,
- * or when main answers while no frame will come.
+ * copy and its frame draws the change. `local` runs when a paired server holds the tab instead.
  * False when main is not asked (no such tab-bar tab, or a paired server owns the workspace): the
  * caller runs `local`.
  */
@@ -33,7 +31,7 @@ export function sendTabChangeToLayoutOwner(
     return false
   }
   return sendLayoutApply(state, tab.worktreeId, change(tab.id), {
-    apply: shownByFrames(local, answers.shown),
+    apply: () => answers.shown?.(),
     asToday: local,
     refused: answers.refused
   })

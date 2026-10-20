@@ -1,6 +1,5 @@
 import { useAppStore } from '@/store'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
-import { shownByFrames } from '@/runtime/layout-frame-position'
 
 type PinnableItem = {
   unifiedTabId: string
@@ -41,7 +40,7 @@ export function withLayoutOwnerTabProps<Item extends PinnableItem>(
       }
       if (
         !sendLayoutCommandToOwner(worktreeId(), command, {
-          apply: shownByFrames(today, shown),
+          apply: shown,
           asToday: today
         })
       ) {

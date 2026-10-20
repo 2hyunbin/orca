@@ -2,7 +2,6 @@ import type { PaneManager, PaneManagerOptions } from '@/lib/pane-manager/pane-ma
 import type { TerminalPaneLayoutNode } from '../../../../shared/terminal-tab-types'
 import { useAppStore } from '@/store'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
-import { shownByFrames } from '@/runtime/layout-frame-position'
 import { layoutFrameTerminalTab } from '@/runtime/layout-frame-terminal-panes'
 import { samePanesIgnoringRatios } from '../../../../shared/workspace-layout/terminal-pane-tree'
 import {
@@ -49,7 +48,7 @@ export function layoutOwnerPaneGestures(pane: {
         worktreeId,
         { type: 'movePane', tabId, leafId, targetLeafId, side: zone },
         // A refusal left main's tree, which frames draw, as it was: the window keeps its shape.
-        { apply: shownByFrames(move), asToday: move, refused: () => {} }
+        { apply: () => {}, asToday: move, refused: () => {} }
       )
     },
     onDividerRatiosCommitted: saveRatios

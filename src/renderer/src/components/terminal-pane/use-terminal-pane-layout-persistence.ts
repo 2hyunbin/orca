@@ -14,7 +14,6 @@ import {
 import type { TerminalPaneStartupController } from './use-terminal-pane-startup-actions'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
-import { shownByFrames } from '@/runtime/layout-frame-position'
 import { notePendingPaneTitleRename } from '@/runtime/pending-pane-title-renames'
 
 export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartupController) {
@@ -230,7 +229,7 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
         sendLayoutCommandToOwner(
           worktreeId,
           { type: 'renamePane', tabId, leafId, title },
-          { apply: shownByFrames(showTitle), asToday: showTitle }
+          { apply: () => {}, asToday: showTitle }
         )
       ) {
         return

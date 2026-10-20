@@ -24,8 +24,15 @@ import { createTestStore } from '../store/slices/store-test-helpers'
 import type { AppState } from '../store/types'
 import { layoutApplyTestTransport } from './layout-apply-test-transport.test-fixture'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
-import { endLayoutFramePositions } from './layout-frame-position'
 import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
+
+// Today's window acts with the switch off; the layout-owner window, with it on.
+const layoutOwner = vi.hoisted(() => ({ isMain: false }))
+vi.mock('../../../shared/layout-owner-switch', () => ({
+  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+    return layoutOwner.isMain
+  }
+}))
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -244,9 +251,9 @@ describe('tab properties through main', () => {
     async (_, entry) => {
       const stored = (entry.session ?? localDesktopSession)()
 
-      // Today: the window acts on its own copy, with no stream open.
+      // Today: the window acts on its own copy.
+      layoutOwner.isMain = false
       const today = await boot(stored)
-      endLayoutFramePositions()
       entry.windowAction(today.getState())
       await layoutApplyTestTransport.settle()
       const todayTabs = shownTabs(today.getState())
@@ -254,6 +261,7 @@ describe('tab properties through main', () => {
       const expected = { ...todayTabs, ...entry.mainShows }
 
       // Layout-owner build: main applies first and the window draws main's frame.
+      layoutOwner.isMain = true
       const afterMain = mainApplies(stored, entry.command)
       const drawn = await boot(stored)
       const sync = openWorkspaceLayoutFrameSync(drawn)

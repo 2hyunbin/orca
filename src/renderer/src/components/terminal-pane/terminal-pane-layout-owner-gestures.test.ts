@@ -1,9 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { TerminalPaneLayoutNode } from '../../../../shared/terminal-tab-types'
 import { layoutOwnerPaneGestures } from './terminal-pane-layout-owner-gestures'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
-import { beginLayoutFramePositions, endLayoutFramePositions } from '@/runtime/layout-frame-position'
 
 const mocks = vi.hoisted(
   (): {
@@ -55,7 +54,6 @@ describe('layoutOwnerPaneGestures', () => {
     mocks.send.mockReturnValue(true)
     mocks.mainRoot = undefined
   })
-  afterEach(() => endLayoutFramePositions())
 
   const drop = { sourcePaneId: 2, targetPaneId: 1, zone: 'left' } as const
   const ratiosSent = () =>
@@ -64,7 +62,6 @@ describe('layoutOwnerPaneGestures', () => {
       .filter((command) => command.type === 'setPaneRatios')
 
   it('takes an in-tab drop and leaves moving the pane to main’s frame', () => {
-    beginLayoutFramePositions()
     const move = vi.fn()
 
     expect(gestures().takePaneDrop?.(drop, move)).toBe(true)
@@ -80,15 +77,6 @@ describe('layoutOwnerPaneGestures', () => {
     mocks.send.mock.calls[0]?.[2].apply({})
 
     expect(move).not.toHaveBeenCalled()
-  })
-
-  it('moves the pane itself when main answers while its stream is down', () => {
-    const move = vi.fn()
-    gestures().takePaneDrop?.(drop, move)
-
-    mocks.send.mock.calls[0]?.[2].apply({})
-
-    expect(move).toHaveBeenCalledOnce()
   })
 
   it('moves the pane as today when main answers as today', () => {

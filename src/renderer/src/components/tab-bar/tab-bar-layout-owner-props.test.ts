@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { withLayoutOwnerTabProps } from './tab-bar-layout-owner-props'
-import { beginLayoutFramePositions, endLayoutFramePositions } from '@/runtime/layout-frame-position'
 
 const mocks = vi.hoisted(
   (): {
@@ -43,10 +42,8 @@ describe('withLayoutOwnerTabProps', () => {
     mocks.recordFeatureInteraction.mockReset()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
-  afterEach(() => endLayoutFramePositions())
 
   it('sends the pin to main by tab-bar id and leaves drawing it to main’s frame', async () => {
-    beginLayoutFramePositions()
     mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
     const today = windowActions()
 
@@ -59,16 +56,6 @@ describe('withLayoutOwnerTabProps', () => {
       expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-tabs')
     )
     expect(today.togglePinned).not.toHaveBeenCalled()
-  })
-
-  it('pins the tab itself when main answers while its stream is down', async () => {
-    mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
-    const today = windowActions()
-
-    wrap(today).togglePinned(pinnedItem)
-
-    await vi.waitFor(() => expect(today.togglePinned).toHaveBeenCalledWith(pinnedItem))
-    expect(mocks.recordFeatureInteraction).not.toHaveBeenCalled()
   })
 
   it('leaves the window as it is when main refuses', async () => {

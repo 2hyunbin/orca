@@ -1,12 +1,11 @@
 // A layout-owner build's tab moves and group sizes. A move: main places the tab first and its frame
-// shows the move; on main's answer the window selects the tab. Only when no frame is coming does
-// the window make the move itself, until the reopened stream's snapshot redraws main's copy.
+// shows the move, or while its stream is down, the reconnect's snapshot does; on main's answer the
+// window selects the tab once it shows there.
 // Group sizes: drawn while dragging, main saves the ratio when the drag ends.
 
 import { useAppStore } from '@/store'
 import type { TabSplitDirection } from '@/store/slices/tabs'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
-import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import type { WindowLayoutCommand } from '@/runtime/layout-apply-send'
 import { isPaneColumnSplitDropNoOp } from '@/store/slices/pane-column-split-drop-no-op'
 import { mirrorWebRuntimeTabMove } from '../tab-bar/web-runtime-tab-move-mirror'
@@ -103,11 +102,6 @@ function moveAsToday(worktreeId: string, drop: TabDrop): boolean {
 
 /** Main's frame shows the move; the window selects the tab in its new group, a view choice. */
 function selectMovedTab(worktreeId: string, drop: TabDrop, mainGroupId: string | undefined): void {
-  // A closed stream's cache is frozen: the window draws its own answers then.
-  if (!layoutFramesFlowing()) {
-    moveAsToday(worktreeId, drop)
-    return
-  }
   const groupId = drop.kind === 'split' ? mainGroupId : drop.groupId
   const state = useAppStore.getState()
   const tab = state.unifiedTabsByWorktree[worktreeId]?.find(

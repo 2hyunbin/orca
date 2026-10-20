@@ -74,16 +74,32 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+/** The tab's title and color, as the user set them; a layout-owner build's come from main's frame,
+ *  not modelled here, so the test draws what that frame would. */
+async function titleAndColor(store: ReturnType<typeof createTestStore>, tabId: string) {
+  store.getState().setTabCustomTitle(tabId, 'build shell')
+  await layoutApplyTestTransport.settle()
+  store.getState().setTabColor(tabId, '#ff0000')
+  await layoutApplyTestTransport.settle()
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    store.setState((state) => ({
+      tabsByWorktree: {
+        ...state.tabsByWorktree,
+        [WT]: state.tabsByWorktree[WT]!.map((row) =>
+          row.id === tabId ? { ...row, customTitle: 'build shell', color: '#ff0000' } : row
+        )
+      }
+    }))
+  }
+}
+
 describe('terminal recently-closed capture', () => {
   it('captures a snapshot and kind entry on user close', async () => {
     const store = makeSeededStore()
     const tab = store
       .getState()
       .createTab(WT, undefined, undefined, { startupCwd: '/path/wt1/packages/app' })
-    store.getState().setTabCustomTitle(tab.id, 'build shell')
-    await layoutApplyTestTransport.settle()
-    store.getState().setTabColor(tab.id, '#ff0000')
-    await layoutApplyTestTransport.settle()
+    await titleAndColor(store, tab.id)
 
     store.getState().closeTab(tab.id)
     await layoutApplyTestTransport.settle()
@@ -198,10 +214,7 @@ describe('reopenClosedTerminalTab', () => {
     const tab = store
       .getState()
       .createTab(WT, undefined, 'zsh', { startupCwd: '/path/wt1/packages/app' })
-    store.getState().setTabCustomTitle(tab.id, 'build shell')
-    await layoutApplyTestTransport.settle()
-    store.getState().setTabColor(tab.id, '#ff0000')
-    await layoutApplyTestTransport.settle()
+    await titleAndColor(store, tab.id)
     store.getState().closeTab(tab.id)
     await layoutApplyTestTransport.settle()
     expect(store.getState().tabsByWorktree[WT]).toHaveLength(0)
@@ -213,10 +226,20 @@ describe('reopenClosedTerminalTab', () => {
     expect(restored).toHaveLength(1)
     expect(restored[0]).toMatchObject({
       startupCwd: '/path/wt1/packages/app',
-      shellOverride: 'zsh',
-      customTitle: 'build shell',
-      color: '#ff0000'
+      shellOverride: 'zsh'
     })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Main takes the title and color, and its frame draws them.
+      const tabBarId = store.getState().unifiedTabsByWorktree[WT]![0]!.id
+      expect(layoutApplyTestTransport.sent).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'renameTab', tabId: tabBarId, title: 'build shell' }),
+          expect.objectContaining({ type: 'setTabProps', tabId: tabBarId, color: '#ff0000' })
+        ])
+      )
+    } else {
+      expect(restored[0]).toMatchObject({ customTitle: 'build shell', color: '#ff0000' })
+    }
     // Why: a reopened tab is a fresh surface — never the old PTY.
     expect(restored[0].id).not.toBe(tab.id)
     expect(restored[0].ptyId).toBeNull()

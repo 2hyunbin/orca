@@ -72,6 +72,13 @@ const sentViewModes = () => sent().map((params) => params.command.viewMode)
 const row = (store: ReturnType<typeof createTestStore>) =>
   store.getState().tabsByWorktree[WORKTREE]![0]!
 
+/** Main's answers and their handlers have run; main's frame, which draws the change, is not modelled. */
+const answered = async (): Promise<void> => {
+  for (let turn = 0; turn < 5; turn += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+}
+
 beforeEach(() => {
   mocks.layoutOwnerIsMain = true
   mocks.callRuntimeRpc.mockReset()
@@ -81,7 +88,7 @@ beforeEach(() => {
 })
 
 describe('a terminal tab’s own changes in a layout-owner build', () => {
-  it('renames in main first by tab-bar id, then the window shows the title', async () => {
+  it('renames in main by tab-bar id, and leaves showing the title to main’s frame', async () => {
     const { store, tabId, tabBarId } = storeWithTab()
 
     store.getState().setTabCustomTitle(tabId, 'Build')
@@ -97,8 +104,8 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
+    await answered()
     expect(row(store).customTitle).toBeFalsy()
-    await vi.waitFor(() => expect(row(store).customTitle).toBe('Build'))
   })
 
   it('leaves the window’s color as it is when main refuses', async () => {
@@ -167,7 +174,9 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
-    await vi.waitFor(() => expect(row(launched.store).launchAgent).toBeUndefined())
+    await answered()
+    // Main's frame drops the agent; the window does not.
+    expect(row(launched.store).launchAgent).toBe('claude')
 
     const plain = storeWithTab()
     plain.store.getState().clearTabLaunchAgent(plain.tabId)
@@ -175,7 +184,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(sent()).toEqual([])
   })
 
-  it('switches the view in main first, and a toggle names the mode it switches to', async () => {
+  it('switches the view in main, and a toggle names the mode it switches to', async () => {
     const { store, tabBarId } = storeWithTab()
 
     store.getState().toggleTabViewMode(tabBarId)
@@ -183,8 +192,8 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(sent()).toEqual([
       { command: { type: 'setTabProps', workspace: WORKTREE, tabId: tabBarId, viewMode: 'chat' } }
     ])
+    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledOnce())
     expect(row(store).viewMode).toBeUndefined()
-    await vi.waitFor(() => expect(row(store).viewMode).toBe('chat'))
   })
 
   it('flips a second toggle sent before main answers the first, as the window would', async () => {
@@ -199,7 +208,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
       ['terminal', 'chat'],
       ['chat', 'terminal']
     ])
-    expect(row(store).viewMode).toBe('terminal')
+    expect(row(store).viewMode).toBeUndefined()
   })
 
   it('toggles from the mode last set while main has not answered it', async () => {
@@ -210,7 +219,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
 
     expect(sentViewModes()).toEqual(['chat', 'terminal'])
     await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
-    expect(row(store).viewMode).toBe('terminal')
+    expect(row(store).viewMode).toBeUndefined()
   })
 
   it('toggles from the shown mode again once main refuses the pending one', async () => {
@@ -227,8 +236,8 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sentViewModes()).toEqual(['chat', 'chat'])
-    await vi.waitFor(() => expect(row(store).viewMode).toBe('chat'))
-    expect(mocks.toggled).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
+    expect(row(store).viewMode).toBeUndefined()
   })
 
   it('gives each tab of an agent-title batch its title once main has it, and a paired server’s tab at once', async () => {

@@ -139,17 +139,4 @@ describe('a tab move drawn from main’s frame', () => {
 
     expect(groupOf('group-a')!.tabOrder).toEqual(['tab-agent', 'tab-shell', 'editor:src/app.ts'])
   })
-
-  it('moves the tab itself while main’s stream is down', async () => {
-    endLayoutFramePositions()
-    dropTabThroughLayoutOwner(GIT_KEY, {
-      kind: 'move',
-      tabId: 'tab-unbound',
-      groupId: 'group-a',
-      index: 0
-    })
-    await settle()
-
-    expect(tabOf('tab-unbound').groupId).toBe('group-a')
-  })
 })

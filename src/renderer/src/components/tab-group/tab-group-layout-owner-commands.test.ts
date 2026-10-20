@@ -142,7 +142,7 @@ describe('dropTabThroughLayoutOwner', () => {
     expect(orderOf(left)).toEqual(before)
   })
 
-  it('reorders within a group at the index main got', () => {
+  it('reorders within a group at the index main got, and leaves drawing it to main’s frame', () => {
     const { left } = seeded()
 
     dropTabThroughLayoutOwner(WT, {
@@ -159,7 +159,7 @@ describe('dropTabThroughLayoutOwner', () => {
     })
     lastHandlers().apply({})
 
-    expect(orderOf(left)).toEqual(['b', 'a'])
+    expect(orderOf(left)).toEqual(['a', 'b'])
   })
 
   it('moves as today when main cannot act, and not at all when main refuses', () => {
@@ -174,14 +174,13 @@ describe('dropTabThroughLayoutOwner', () => {
     expect(orderOf(right)).toEqual(['c', 'a'])
   })
 
-  it('splits as today, under its own group id, while main’s stream is down', () => {
+  it('moves nothing itself while main’s stream is down; the reconnect’s snapshot shows the split', () => {
     const { left } = seeded()
 
     dropTabThroughLayoutOwner(WT, { kind: 'split', tabId: 'b', groupId: left, direction: 'down' })
     lastHandlers().apply({ groupId: 'group-main' })
 
-    expect(groupOf('b')).not.toBe(left)
-    expect(groupOf('b')).not.toBe('group-main')
+    expect(groupOf('b')).toBe(left)
   })
 })
 
