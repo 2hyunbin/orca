@@ -90,7 +90,7 @@ test.describe('paired desktop sends tab moves to a switch-on server’s main', (
           )
         )
       }
-      const [first, second, third] = tabs as [string, string, string]
+      const [first = '', second = '', third = ''] = tabs
 
       client = await launchPairedElectronClient(host.offer, testInfo, 'server-layout-intents')
       const desktop = client
