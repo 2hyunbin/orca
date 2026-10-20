@@ -1,5 +1,5 @@
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
-import { readUserClaudeConfigDir } from './claude-profile-paths'
+import { readUserClaudeConfigDir } from '../../shared/claude-user-config'
 import {
   provisionClaudeAccountProfile,
   type ClaudeProfileSetupReport

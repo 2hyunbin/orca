@@ -1,8 +1,5 @@
 import { homedir } from 'node:os'
-import {
-  readUserClaudeConfigDir,
-  resolveClaudeDefaultHome
-} from '../claude-accounts/claude-profile-paths'
+import { readUserClaudeConfigDir, resolveClaudeDefaultHome } from '../../shared/claude-user-config'
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
 
 export type SystemClaudeHookTarget = { kind: 'system-default'; configDir: string }

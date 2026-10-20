@@ -1,5 +1,5 @@
 import type { ManagedHookInvocation } from '../../main/claude/claude-hook-target'
-import { readUserClaudeConfigDirAsSet } from '../../main/claude-accounts/claude-profile-paths'
+import { readUserClaudeConfigDirAsSet } from '../../shared/claude-user-config'
 import { join } from 'node:path'
 import type { CommandHandler } from '../dispatch'
 import { printResult } from '../format'
@@ -194,8 +194,7 @@ async function setAgentHooksEnabled(
   if (updatedRuntime && invocation.env) {
     const applied = await applyAgentStatusHooksEnabled(enabled, updatedRuntime.settings, {
       ...invocation,
-      agents: ['claude'],
-      userInitiated: true
+      agents: ['claude']
     })
     statuses = (await getManagedAgentHookStatuses(invocation)).map(
       (status) => applied.find((result) => result.agent === status.agent) ?? status
@@ -203,10 +202,7 @@ async function setAgentHooksEnabled(
   } else {
     statuses = updatedRuntime
       ? await getManagedAgentHookStatuses(invocation)
-      : await applyAgentStatusHooksEnabled(enabled, offlineUpdate?.settings, {
-          ...invocation,
-          userInitiated: true
-        })
+      : await applyAgentStatusHooksEnabled(enabled, offlineUpdate?.settings, invocation)
   }
   return {
     enabled,

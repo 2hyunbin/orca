@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads'
-import { resolveClaudeDefaultHome } from './claude-profile-paths'
+import { resolveClaudeDefaultHome } from '../../shared/claude-user-config'
 import { ClaudeHookService } from '../claude/hook-service'
 import { provisionClaudeAccountProfile } from './claude-profile-setup'
 import type { ClaudeProfileSetupJob } from './claude-profile-setup-worker'

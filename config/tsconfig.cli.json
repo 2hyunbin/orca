@@ -13,8 +13,6 @@
     "../src/main/claude/claude-managed-hook-events.ts",
     "../src/main/claude/claude-hook-target.ts",
     "../src/main/claude/claude-hook-removal.ts",
-    "../src/main/claude-accounts/claude-profile-paths.ts",
-    "../src/main/claude-accounts/claude-profile-report.ts",
     "../src/main/qoder/hook-service.ts",
     "../src/main/qwen-code/hook-service.ts",
     "../src/main/codebuddy/hook-service.ts",

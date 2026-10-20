@@ -182,6 +182,32 @@ describe('agent hooks CLI handler', () => {
     }
   )
 
+  it('keeps the Grok opt-out when offline on carries a custom Claude root', async () => {
+    vi.stubEnv('HOME', userDataPath)
+    vi.stubEnv('USERPROFILE', userDataPath)
+    vi.stubEnv('GROK_HOME', join(userDataPath, '.grok'))
+    const configDir = join(userDataPath, 'custom-claude')
+    vi.stubEnv('CLAUDE_CONFIG_DIR', configDir)
+    vi.stubEnv('ORCA_CLAUDE_INJECTED_CONFIG_DIR', '')
+    const grokHooks = join(userDataPath, '.grok', 'hooks', 'orca-status.json')
+    mkdirSync(join(userDataPath, '.grok', 'hooks'), { recursive: true })
+    writeFileSync(grokHooks, '{"hooks":{}}\n')
+    const { GrokHookService } = await import('../../main/grok/hook-service')
+    applyAgentStatusHooksEnabledMock.mockImplementationOnce(
+      async (_enabled, _settings, options) => [new GrokHookService().install(options)]
+    )
+    getDefaultUserDataPathMock.mockReturnValue(userDataPath)
+
+    await main(['agent', 'hooks', 'on', '--json'], userDataPath)
+
+    expect(process.exitCode).not.toBe(1)
+    expect(applyAgentStatusHooksEnabledMock).toHaveBeenCalledWith(true, expect.any(Object), {
+      env: { CLAUDE_CONFIG_DIR: configDir }
+    })
+    expect(readFileSync(grokHooks, 'utf8')).toBe('{"hooks":{}}\n')
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('not_installed'))
+  })
+
   it('keeps new card style off when creating offline settings for a fresh profile', async () => {
     await runAgentHooksOff(userDataPath)
 
