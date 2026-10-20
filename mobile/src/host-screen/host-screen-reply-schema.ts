@@ -138,9 +138,10 @@ export const hostSshTargetSummariesSchema = z
  */
 export const hostPlatformSchema = z
   .looseObject({ platform: salvagedOptional('platform', z.enum(NODE_PLATFORM_NAMES)) })
-  // Why the explicit guard: `salvagedOptional` comes from src/shared, so with mobile's own zod
-  // installed its inferred arm type degrades to {} for callers type-checked from outside mobile/.
-  .transform((reply): NodeJS.Platform | null => toNodePlatform(reply.platform))
+  .transform((reply) => reply.platform ?? null)
+  // Why a second step: with mobile's own zod installed, the src/shared arm above infers as {} for
+  // callers type-checked from outside mobile/. Separate, so the RPC mutant still anchors on the read.
+  .transform((platform): NodeJS.Platform | null => toNodePlatform(platform))
   .catch(() => null)
 
 /**
