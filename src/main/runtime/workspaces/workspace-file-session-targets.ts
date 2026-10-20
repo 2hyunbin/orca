@@ -228,8 +228,6 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
     return {
       getWorkspaceSessionForWorktree: (worktreeId) =>
         this.getWorkspaceSessionForWorktree(worktreeId),
-      setWorkspaceSessionForWorktree: (worktreeId, session) =>
-        this.setWorkspaceSessionForWorktree(worktreeId, session),
       readFile: async (worktreeId, filePath, maxBytes) => {
         requireLocalRuntimeFileRoute(await this.resolveRuntimeFileTarget(`id:${worktreeId}`))
         const { bytes, size } = await readLocalRuntimeFilePrefix(
@@ -249,10 +247,6 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
           content,
           precondition
         )
-      },
-      republishMobileSessionTabs: (worktreeId) => {
-        this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, { force: true })
-        this.notifyMobileSessionTabsChanged(worktreeId)
       }
     }
   }

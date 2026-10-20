@@ -33,16 +33,13 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
       : { dirtyDraftContent: draft, lastKnownDiskSignature: getDiskBaselineSignature(disk) }),
     ...saved
   }
-  let session: WorkspaceSessionState = {
+  const session: WorkspaceSessionState = {
     ...getDefaultWorkspaceSession(),
     openFilesByWorktree: { [WORKTREE]: [file] }
   }
   const state = { disk }
   const host = {
     getWorkspaceSessionForWorktree: () => session,
-    setWorkspaceSessionForWorktree: vi.fn((_worktreeId: string, next: WorkspaceSessionState) => {
-      session = next
-    }),
     readFile: vi.fn(async (_worktreeId: string, _filePath: string, maxBytes: number) => {
       const bytes = Buffer.from(state.disk)
       return { content: bytes.subarray(0, maxBytes).toString('utf8'), byteLength: bytes.length }
@@ -60,10 +57,9 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
         state.disk = content
         return { ok: true as const }
       }
-    ),
-    republishMobileSessionTabs: vi.fn()
+    )
   } satisfies HeadlessMarkdownTabHost
-  return { host, state, session: () => session }
+  return { host, state }
 }
 
 describe('headless Markdown tab documents', () => {
@@ -82,16 +78,15 @@ describe('headless Markdown tab documents', () => {
     })
   })
 
-  it('reads a saved draft before the disk, as the editor shows it', async () => {
+  it('reads the disk, never a draft a window left in the saved session', async () => {
     const { host } = makeHost('# Disk\n', '# Draft\n')
 
     await expect(readHeadlessMarkdownTab(host, WORKTREE, TAB)).resolves.toMatchObject({
-      content: '# Draft\n',
-      isDirty: true,
-      source: 'draft',
-      version: hashMarkdownContent('# Draft\n')
+      content: '# Disk\n',
+      isDirty: false,
+      source: 'file',
+      version: hashMarkdownContent('# Disk\n')
     })
-    expect(host.readFile).not.toHaveBeenCalled()
   })
 
   it('marks a file over the edit cap read-only, and a file over the read cap truncated', async () => {
@@ -159,22 +154,12 @@ describe('headless Markdown tab documents', () => {
     expect(state.disk).toBe('# Raced\n')
   })
 
-  it('saves over a saved draft, then clears the draft and lists the tab clean', async () => {
-    const { host, state, session } = makeHost('# Disk\n', '# Draft\n')
+  it("saves the disk, leaving a window's saved draft for that window", async () => {
+    const { host, state } = makeHost('# Disk\n', '# Draft\n')
 
-    await saveHeadlessMarkdownTab(
-      host,
-      WORKTREE,
-      TAB,
-      hashMarkdownContent('# Draft\n'),
-      '# Phone\n'
-    )
+    await saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Disk\n'), '# Phone\n')
 
     expect(state.disk).toBe('# Phone\n')
-    const [file] = session().openFilesByWorktree?.[WORKTREE] ?? []
-    expect(file).not.toHaveProperty('dirtyDraftContent')
-    expect(file).not.toHaveProperty('lastKnownDiskSignature')
-    expect(host.republishMobileSessionTabs).toHaveBeenCalledWith(WORKTREE)
   })
 
   it('runs two saves of one file one after the other', async () => {
@@ -203,17 +188,6 @@ describe('headless Markdown tab documents', () => {
     await saveHeadlessMarkdownTab(host, WORKTREE, TAB, base, '# Second\n')
 
     expect(state.disk).toBe('# Second\n')
-  })
-
-  it('refuses to save a draft over a disk edit made after the draft', async () => {
-    const { host, state, session } = makeHost('# Disk\n', '# Draft\n')
-    state.disk = '# Edited on the server\n'
-
-    await expect(
-      saveHeadlessMarkdownTab(host, WORKTREE, TAB, hashMarkdownContent('# Draft\n'), '# Phone\n')
-    ).rejects.toThrow('conflict')
-    expect(state.disk).toBe('# Edited on the server\n')
-    expect(session().openFilesByWorktree?.[WORKTREE]?.[0]?.dirtyDraftContent).toBe('# Draft\n')
   })
 
   it('never saves a read-only tab', async () => {
