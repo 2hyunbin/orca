@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { VirtualizedList } from '../virtualized-list'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { translate } from '@/i18n/i18n'
 import { CheckButton, SortIndicator } from './workspace-space-selection-controls'
@@ -13,12 +15,14 @@ export function WorkspaceSpaceManagerTable({
 }: {
   model: WorkspaceSpaceManagerModel
 }): React.JSX.Element {
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null)
   const {
     analysis,
     decisionDetailsByWorktreeId,
     deleteWorktrees,
     forceDeleteWorktree,
     gitRefreshStateByWorktreeId,
+    gitStatusByWorktreeIdentity,
     hasRows,
     inspectedWorktree,
     isInitialScan,
@@ -109,7 +113,7 @@ export function WorkspaceSpaceManagerTable({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek">
+            <div ref={setScrollElement} className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek">
               {isInitialScan ? (
                 <div className="flex items-center justify-center gap-2 px-4 py-10 text-center text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
@@ -126,42 +130,50 @@ export function WorkspaceSpaceManagerTable({
                   )}
                 </div>
               ) : (
-                rows.map((worktree) => {
-                  const identity = getWorkspaceSpaceWorktreeIdentity(worktree)
-                  const decisionDetails = decisionDetailsByWorktreeId.get(identity)
-                  if (!decisionDetails) {
-                    return null
-                  }
-                  return (
-                    <WorkspaceSpaceWorktreeRow
-                      key={identity}
-                      worktree={worktree}
-                      selected={nextSelectedIds.has(identity)}
-                      inspected={
-                        inspectedWorktree !== null &&
-                        getWorkspaceSpaceWorktreeIdentity(inspectedWorktree) === identity
-                      }
-                      decisionDetails={decisionDetails}
-                      gitRefreshState={gitRefreshStateByWorktreeId[identity]}
-                      deleteState={getDeleteStateForWorktree(worktree)}
-                      onToggleSelected={() => toggleSelection(worktree)}
-                      onInspect={() => setInspectedWorktreeId(identity)}
-                      onOpenWorkspace={() =>
-                        window.location.pathname.endsWith('/space.html')
-                          ? void window.api.workspaceSpace.revealWorktree?.(
-                              worktree.worktreeId,
-                              worktree.executionHostId
-                            )
-                          : activateAndRevealWorktree(worktree.worktreeId, {
-                              navigationIntent: 'user-open',
-                              executionHostId: worktree.executionHostId
-                            })
-                      }
-                      onDelete={() => deleteWorktrees([worktree])}
-                      onForceDelete={() => forceDeleteWorktree(worktree)}
-                    />
-                  )
-                })
+                <VirtualizedList
+                  rows={rows}
+                  getRowKey={getWorkspaceSpaceWorktreeIdentity}
+                  scrollElement={scrollElement}
+                  estimateRowHeightPx={33}
+                  announceListPosition
+                  renderRow={(worktree) => {
+                    const identity = getWorkspaceSpaceWorktreeIdentity(worktree)
+                    const decisionDetails = decisionDetailsByWorktreeId.get(identity)
+                    if (!decisionDetails) {
+                      return null
+                    }
+                    return (
+                      <WorkspaceSpaceWorktreeRow
+                        key={identity}
+                        worktree={worktree}
+                        selected={nextSelectedIds.has(identity)}
+                        inspected={
+                          inspectedWorktree !== null &&
+                          getWorkspaceSpaceWorktreeIdentity(inspectedWorktree) === identity
+                        }
+                        decisionDetails={decisionDetails}
+                        changedFiles={gitStatusByWorktreeIdentity.get(identity)}
+                        gitRefreshState={gitRefreshStateByWorktreeId[identity]}
+                        deleteState={getDeleteStateForWorktree(worktree)}
+                        onToggleSelected={() => toggleSelection(worktree)}
+                        onInspect={() => setInspectedWorktreeId(identity)}
+                        onOpenWorkspace={() =>
+                          window.location.pathname.endsWith('/space.html')
+                            ? void window.api.workspaceSpace.revealWorktree?.(
+                                worktree.worktreeId,
+                                worktree.executionHostId
+                              )
+                            : activateAndRevealWorktree(worktree.worktreeId, {
+                                navigationIntent: 'user-open',
+                                executionHostId: worktree.executionHostId
+                              })
+                        }
+                        onDelete={() => deleteWorktrees([worktree], { forceOnConfirm: true })}
+                        onForceDelete={() => forceDeleteWorktree(worktree)}
+                      />
+                    )
+                  }}
+                />
               )}
             </div>
           </div>
