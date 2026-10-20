@@ -44,11 +44,8 @@ export default function NodeDistMirrorDialog(): React.JSX.Element | null {
     setBusy(true)
     setError(null)
     const result = await saveNodeDistMirrorAndRetry(targetId, text)
-    if (!mountedRef.current) {
-      return
-    }
     if (result.outcome === 'retrying') {
-      closeModal()
+      // Why before the mounted check: another modal may have replaced this one mid-save.
       result.retry.catch((cause: unknown) =>
         toastSshConnectFailure(
           targetId,
@@ -59,6 +56,12 @@ export default function NodeDistMirrorDialog(): React.JSX.Element | null {
           )
         )
       )
+      if (mountedRef.current) {
+        closeModal()
+      }
+      return
+    }
+    if (!mountedRef.current) {
       return
     }
     setBusy(false)

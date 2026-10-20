@@ -125,14 +125,51 @@ describe('Use a Node.js mirror', () => {
   })
 
   it('shows no offer once a mirror was tried, only the setting link', () => {
-    render(<Host status={{ ...blocked, nodeDownloadBlocked: { mirror: 'tried' } }} />)
+    const tried: SshManagedServerStatus = { ...blocked, nodeDownloadBlocked: { mirror: 'tried' } }
+    useAppStore.getState().setSshConnectionState('ssh-1', {
+      targetId: 'ssh-1',
+      status: 'error',
+      error: 'x',
+      reconnectAttempt: 0,
+      managedServer: tried
+    })
+    render(<Host status={tried} />)
     expect(screen.queryByRole('button', { name: 'Use a Node.js mirror…' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Open mirror setting' }))
-    expect(useAppStore.getState().activeView).toBe('settings')
-    expect(useAppStore.getState().settingsNavigationTarget).toMatchObject({
-      pane: 'advanced',
-      sectionId: 'settings-network'
+    const state = useAppStore.getState()
+    expect(state.activeView).toBe('settings')
+    expect(state.settingsNavigationTarget).toMatchObject({ pane: 'advanced' })
+    expect(state.settingsSearchInputQuery).toBe('mirror')
+    expect(state.activeModal).toBe('none')
+  })
+
+  it('offers nothing in a paired browser, whose settings are not this computer’s', () => {
+    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    try {
+      render(<Host status={blocked} />)
+      expect(screen.queryByRole('button')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('opens the setting instead when a mirror was set after the toast appeared', () => {
+    useAppStore.getState().setSshConnectionState('ssh-1', {
+      targetId: 'ssh-1',
+      status: 'error',
+      error: 'x',
+      reconnectAttempt: 0,
+      managedServer: blocked
     })
+    toastSshConnectFailure('ssh-1', new Error('x'), 'Connection failed')
+    const [, options] = toastError.mock.calls[0]
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the action reads only nodeDistMirrorUrl.
+    useAppStore.setState({
+      settings: { nodeDistMirrorUrl: 'https://m.example/node' } as GlobalSettings
+    })
+    act(() => options.action.onClick())
+    expect(useAppStore.getState().activeModal).toBe('none')
+    expect(useAppStore.getState().activeView).toBe('settings')
   })
 
   it('puts the same recovery on the connect-failure toast for this computer’s targets', () => {

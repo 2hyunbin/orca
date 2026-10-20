@@ -60,15 +60,10 @@ export function nodeDownloadBlockedText(blocked: SshManagedServerNodeDownloadBlo
   }
 }
 
-export function nodeMirrorOfferLabel(): string {
-  return translate('auto.components.settings.nodeDistMirrorDialog.action', 'Use a Node.js mirror…')
-}
-
-export function nodeMirrorSettingsLabel(): string {
-  return translate(
-    'auto.components.settings.nodeDistMirrorDialog.openSetting',
-    'Open mirror setting'
-  )
+export function nodeMirrorRecoveryLabel(recovery: NodeMirrorRecovery): string {
+  return recovery === 'offer'
+    ? translate('auto.components.settings.nodeDistMirrorDialog.action', 'Use a Node.js mirror…')
+    : translate('auto.components.settings.nodeDistMirrorDialog.openSetting', 'Open mirror setting')
 }
 
 /** The shared validator's refusal, in the user's language. */

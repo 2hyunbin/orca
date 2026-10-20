@@ -1,41 +1,35 @@
 import type { SshManagedServerStatus } from '../../../../shared/ssh-types'
 import { useAppStore } from '@/store'
+import { nodeMirrorRecoveryLabel } from '@/ssh/ssh-host-node-download-copy'
 import {
-  nodeMirrorOfferLabel,
-  nodeMirrorRecovery,
-  nodeMirrorSettingsLabel
-} from '@/ssh/ssh-host-node-download-copy'
-import {
-  openNodeDistMirrorDialog,
-  openNodeDistMirrorSettings
+  openNodeMirrorRecovery,
+  thisComputerNodeMirrorRecovery
 } from '@/ssh/node-dist-mirror-recovery'
 import { Button } from '../ui/button'
 
 /** The way out of a setup that couldn't download Node.js: set a mirror, or check the one set. */
 export function SshHostNodeMirrorAction({
   targetId,
-  status
+  status,
+  ownerEnvironmentId = null
 }: {
   targetId: string
   status: SshManagedServerStatus | undefined
+  ownerEnvironmentId?: string | null
 }): React.JSX.Element | null {
   const configuredMirror = useAppStore((s) => s.settings?.nodeDistMirrorUrl)
-  const recovery = nodeMirrorRecovery(status, configuredMirror)
+  const recovery = thisComputerNodeMirrorRecovery(status, ownerEnvironmentId, configuredMirror)
   if (!recovery) {
     return null
   }
-  return recovery === 'offer' ? (
+  return (
     <Button
       type="button"
       size="xs"
       variant="outline"
-      onClick={() => openNodeDistMirrorDialog(targetId)}
+      onClick={() => openNodeMirrorRecovery(targetId, recovery)}
     >
-      {nodeMirrorOfferLabel()}
-    </Button>
-  ) : (
-    <Button type="button" size="xs" variant="link" onClick={openNodeDistMirrorSettings}>
-      {nodeMirrorSettingsLabel()}
+      {nodeMirrorRecoveryLabel(recovery)}
     </Button>
   )
 }

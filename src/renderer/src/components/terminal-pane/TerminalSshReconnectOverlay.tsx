@@ -203,9 +203,13 @@ export function TerminalSshReconnectOverlay({
               {error}
             </div>
           ) : null}
-          {!targetRemoved && !sshOwnerEnvironmentId ? (
+          {!targetRemoved ? (
             <div className="mt-2 empty:hidden">
-              <SshHostNodeMirrorAction targetId={targetId} status={managedServer} />
+              <SshHostNodeMirrorAction
+                targetId={targetId}
+                status={managedServer}
+                ownerEnvironmentId={sshOwnerEnvironmentId}
+              />
             </div>
           ) : null}
         </div>

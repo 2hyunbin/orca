@@ -3,7 +3,11 @@ import {
   NODE_DIST_MIRROR_SUGGESTION,
   saveNodeDistMirrorAndRetry
 } from './node-dist-mirror-recovery'
-import { isSshConnectInFlight, resetSshConnectInFlightForTests } from './ssh-connect-in-flight'
+import {
+  beginSshConnect,
+  isSshConnectInFlight,
+  resetSshConnectInFlightForTests
+} from './ssh-connect-in-flight'
 
 function deps() {
   const calls: string[] = []
@@ -55,6 +59,15 @@ describe('save a Node.js mirror and retry', () => {
       reason
     })
     expect(d.save).not.toHaveBeenCalled()
+    expect(d.connect).not.toHaveBeenCalled()
+  })
+
+  it('saves but leaves a connect already dialing to finish on its own', async () => {
+    const d = deps()
+    beginSshConnect('ssh-1')
+    const result = await saveNodeDistMirrorAndRetry('ssh-1', 'https://mirror.example/node', d)
+    expect(result.outcome).toBe('retrying')
+    expect(d.save).toHaveBeenCalled()
     expect(d.connect).not.toHaveBeenCalled()
   })
 

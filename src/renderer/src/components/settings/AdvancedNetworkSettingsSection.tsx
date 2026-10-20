@@ -12,7 +12,6 @@ import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { getAdvancedNetworkSearchEntries } from './advanced-network-search'
 import { NodeDistMirrorSettingField } from './NodeDistMirrorSettingField'
-import { NODE_DIST_MIRROR_SETTINGS_SECTION_ID } from '@/ssh/node-dist-mirror-recovery'
 import { SearchableSetting } from './SearchableSetting'
 import { matchesSettingsSearch, normalizeSettingsSearchQuery } from './settings-search'
 import { translate } from '@/i18n/i18n'
@@ -226,7 +225,6 @@ export function AdvancedNetworkSettingsSection({
         'mirror',
         'nodejs'
       ]}
-      id={NODE_DIST_MIRROR_SETTINGS_SECTION_ID}
       className="space-y-3"
     >
       <div className="flex items-center justify-between gap-4">

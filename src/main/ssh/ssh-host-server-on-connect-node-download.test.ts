@@ -61,7 +61,13 @@ describe('a managed-server setup that could not download Node', () => {
           nodeDownloadBlocked: { mirror }
         })
       })
-      expect(unservedHostServerMessage(result)).toContain('Node.js download mirror')
+      const message = unservedHostServerMessage(result)
+      expect(message).toContain('Neither this computer nor this host could download Node.js')
+      if (mirror === 'unsupported') {
+        expect(message).not.toContain('mirror')
+      } else {
+        expect(message).toContain(mirror === 'tried' ? 'Check the mirror' : 'Set a Node.js')
+      }
     }
   )
 

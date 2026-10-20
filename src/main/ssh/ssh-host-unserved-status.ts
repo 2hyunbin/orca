@@ -1,4 +1,5 @@
 /** What a connect publishes when the managed server doesn't serve the host; there is no fallback. */
+import type { NodeDistMirrorAttempt } from '../../shared/node-dist-mirror'
 import type { SshManagedServerStatus } from '../../shared/ssh-types'
 import type { HostServerOnConnectResult } from './ssh-host-server-on-connect'
 
@@ -31,8 +32,14 @@ const NOEXEC_MESSAGE =
 const CONTACT_LOST_MESSAGE =
   'Orca lost contact with this host while setting up its server. Nothing on the host was stopped. Connect again to continue.'
 
-const NODE_DOWNLOAD_BLOCKED_MESSAGE =
-  'Neither this computer nor this host could download Node.js, which Orca’s server needs. Set a Node.js download mirror in Settings > Advanced > Network, or check the network on either machine, then connect again.'
+const NODE_DOWNLOAD_BLOCKED_MESSAGES: Record<NodeDistMirrorAttempt, string> = {
+  unset:
+    'Neither this computer nor this host could download Node.js, which Orca’s server needs. Set a Node.js download mirror in Settings > Advanced > Network, or check the network on both machines, then connect again.',
+  tried:
+    'Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror in Settings > Advanced > Network, then connect again.',
+  unsupported:
+    'Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.'
+}
 
 /** Untranslated twin of the renderer's status line, for logs and callers without the catalog. */
 export function unservedHostServerMessage(decision: UnservedDecision): string {
@@ -57,7 +64,7 @@ export function unservedHostServerMessage(decision: UnservedDecision): string {
         return CONTACT_LOST_MESSAGE
       }
       return decision.nodeDownloadBlocked
-        ? NODE_DOWNLOAD_BLOCKED_MESSAGE
+        ? NODE_DOWNLOAD_BLOCKED_MESSAGES[decision.nodeDownloadBlocked.mirror]
         : 'Orca couldn’t start its server on this host. Try connecting again.'
   }
 }

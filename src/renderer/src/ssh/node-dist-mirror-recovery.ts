@@ -3,31 +3,63 @@ import {
   normalizeNodeDistMirrorUrl,
   type NodeDistMirrorRefusal
 } from '../../../shared/node-dist-mirror'
+import type { SshManagedServerStatus } from '../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
+import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
 import { useAppStore } from '@/store'
-import { trackSshConnect } from './ssh-connect-in-flight'
+import { isSshConnectInFlight, trackSshConnect } from './ssh-connect-in-flight'
+import { nodeMirrorRecovery, type NodeMirrorRecovery } from './ssh-host-node-download-copy'
 
 export const NODE_DIST_MIRROR_SUGGESTION = 'https://npmmirror.com/mirrors/node/'
 
-/** Where "Open mirror setting" lands; the Network section always renders, its fields may not. */
-export const NODE_DIST_MIRROR_SETTINGS_SECTION_ID = 'settings-network'
+/**
+ * The recovery this window can carry out. Only this desktop's own SSH targets qualify: the mirror
+ * setting lives in its main process, not on another server or in a paired browser.
+ */
+export function thisComputerNodeMirrorRecovery(
+  status: SshManagedServerStatus | undefined,
+  ownerEnvironmentId: string | null,
+  configuredMirror = useAppStore.getState().settings?.nodeDistMirrorUrl
+): NodeMirrorRecovery | null {
+  if (ownerEnvironmentId || isPairedWebClientWindow()) {
+    return null
+  }
+  return nodeMirrorRecovery(status, configuredMirror)
+}
 
-export function openNodeDistMirrorDialog(targetId: string): void {
-  useAppStore.getState().openModal('node-dist-mirror', { targetId })
+/** Decided again on click: a toast's action can outlive a mirror set in Settings meanwhile. */
+export function runNodeMirrorRecovery(targetId: string): void {
+  const { sshConnectionStates } = useAppStore.getState()
+  const recovery = thisComputerNodeMirrorRecovery(
+    sshConnectionStates.get(targetId)?.managedServer,
+    null
+  )
+  if (recovery) {
+    openNodeMirrorRecovery(targetId, recovery)
+  }
+}
+
+export function openNodeMirrorRecovery(targetId: string, recovery: NodeMirrorRecovery): void {
+  if (recovery === 'offer') {
+    useAppStore.getState().openModal('node-dist-mirror', { targetId })
+  } else {
+    openNodeDistMirrorSettings()
+  }
 }
 
 export function readNodeDistMirrorDialogTarget(data: Record<string, unknown>): string | null {
   return typeof data.targetId === 'string' && data.targetId ? data.targetId : null
 }
 
-export function openNodeDistMirrorSettings(): void {
-  const { openSettingsPage, openSettingsTarget } = useAppStore.getState()
+// Why a search, not a scroll target: it also opens the collapsed fields when only the environment
+// variable set the mirror.
+function openNodeDistMirrorSettings(): void {
+  const { openSettingsPage, openSettingsTarget, setSettingsSearchQuery } = useAppStore.getState()
   openSettingsPage()
-  openSettingsTarget({
-    pane: 'advanced',
-    repoId: null,
-    sectionId: NODE_DIST_MIRROR_SETTINGS_SECTION_ID
-  })
+  openSettingsTarget({ pane: 'advanced', repoId: null })
+  setSettingsSearchQuery(
+    translate('auto.components.settings.general.search.nodeDistMirror', 'mirror')
+  )
 }
 
 export type SaveNodeDistMirrorResult =
@@ -74,6 +106,10 @@ export async function saveNodeDistMirrorAndRetry(
               'Orca couldn’t save the mirror.'
             )
     }
+  }
+  // Why: a connect already dialing keeps its own attempt; a second one would race it.
+  if (isSshConnectInFlight(targetId)) {
+    return { outcome: 'retrying', retry: Promise.resolve() }
   }
   return { outcome: 'retrying', retry: trackSshConnect(targetId, deps.connect(targetId)) }
 }
