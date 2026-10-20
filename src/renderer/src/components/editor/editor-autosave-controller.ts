@@ -10,7 +10,7 @@ import {
   type EditorSaveQuiesceDetail
 } from './editor-autosave'
 import { flushPendingEditorChange } from './editor-pending-flush'
-import { editorBufferViewIds } from '@/store/slices/editor/buffers/editor-buffer-record'
+import { flushEditorBufferViews } from './editor-buffer-flush'
 import {
   autosaveSubscriberInputsEqual,
   getAutosaveSubscriberInputs
@@ -71,9 +71,7 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
     }
     // Why: a sibling tab of the file may have typed (and closed) while this save ran; those
     // newer edits now live only here, so the tab stays open to save them.
-    for (const id of editorBufferViewIds(store.getState(), fileId)) {
-      flushPendingEditorChange(id)
-    }
+    flushEditorBufferViews(store.getState, fileId)
     if (store.getState().openFiles.find((openFile) => openFile.id === fileId)?.isDirty) {
       settle('kept-open')
       return

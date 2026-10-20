@@ -51,6 +51,7 @@ export type EditorFilesSlice = {
   /** Drafts an older session held in a second tab of a file, kept until dismissed. */
   recoveredEditorDrafts: RecoveredEditorDraft[]
   dismissRecoveredEditorDraft: (draft: RecoveredEditorDraft) => void
+  addRecoveredEditorDrafts: (drafts: RecoveredEditorDraft[]) => void
   activeFileId: string | null
   activeFileIdByWorktree: Record<string, string | null> // worktreeId -> last active file
   activeTabTypeByWorktree: Record<string, WorkspaceVisibleTabType> // worktreeId -> last active tab type

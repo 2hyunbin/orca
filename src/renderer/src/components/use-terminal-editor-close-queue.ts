@@ -1,8 +1,7 @@
 import { useCallback } from 'react'
 import { useAppStore } from '../store'
 import { needsSavePromptOnClose } from '@/store/slices/editor/buffers/editor-buffer-close-rule'
-import { editorBufferViewIds } from '@/store/slices/editor/buffers/editor-buffer-record'
-import { flushPendingEditorChange } from './editor/editor-pending-flush'
+import { flushEditorBufferViews } from './editor/editor-buffer-flush'
 import { appendUniqueOpenFileIds } from './terminal/unsaved-close-queue'
 import { isPinnedActiveEditorTab } from './terminal-workspace-model'
 import { selectWorkspaceSurface } from '@/lib/workspace-surface-reveal'
@@ -122,9 +121,7 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
       // Why first: a delayed editor's text must be in the draft before any prompt, so the save
       // a prompt makes is the file's final text and no queued sibling closes over newer edits.
       for (const fileId of pendingEditorCloseQueueRef.current) {
-        for (const viewId of editorBufferViewIds(useAppStore.getState(), fileId)) {
-          flushPendingEditorChange(viewId)
-        }
+        flushEditorBufferViews(useAppStore.getState, fileId)
       }
       advanceEditorCloseQueue()
     },

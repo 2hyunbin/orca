@@ -11,7 +11,8 @@ import {
   ORCA_EDITOR_FILE_SAVED_EVENT,
   type EditorFileSavedDetail
 } from './editor-autosave'
-import { flushPendingEditorChange, hasPendingEditorChange } from './editor-pending-flush'
+import { hasPendingEditorChange } from './editor-pending-flush'
+import { flushEditorBufferViews } from './editor-buffer-flush'
 import {
   clearSelfWrite,
   recordSelfWrite,
@@ -46,12 +47,6 @@ export type EditorSaveQueue = {
   bumpSaveGeneration: (fileId: string) => void
   syncAutoSave: () => void
   dispose: () => void
-}
-
-function flushPendingBufferChanges(state: AppState, fileId: string, autosave?: boolean): void {
-  for (const id of editorBufferViewIds(state, fileId)) {
-    flushPendingEditorChange(id, autosave)
-  }
 }
 
 function hasPendingBufferChange(state: AppState, fileId: string): boolean {
@@ -129,7 +124,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           return 'skipped'
         }
 
-        flushPendingBufferChanges(state, file.id, trigger === 'autosave')
+        flushEditorBufferViews(store.getState, file.id, trigger === 'autosave')
         const draft = store.getState().editorDrafts[file.id]
         // Why: a write since this request queued already saved newer text than its fallback.
         if (draft === undefined && (completedWrites.get(recordId) ?? 0) !== queuedAfterWrites) {
@@ -225,7 +220,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
   const quiesceFileSave = async (fileId: string): Promise<void> => {
     // Why: rich markdown debounces serialization, so force the pending draft out before we cancel timers.
-    flushPendingBufferChanges(store.getState(), fileId)
+    flushEditorBufferViews(store.getState, fileId)
     const recordId = recordIdOf(fileId)
     const pendingSave = saveQueue.get(recordId)
     clearRecordAutoSaveTimer(recordId)

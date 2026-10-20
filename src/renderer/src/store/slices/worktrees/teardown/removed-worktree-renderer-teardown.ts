@@ -50,7 +50,7 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   // refresh may already have dropped these tabs.
   deleteWorkspaceChatDrafts(beforeRemoval.chatDraftKeys)
   flushSharedEditorViewsBeforeClose(
-    get(),
+    get,
     get()
       .openFiles.filter((file) => file.worktreeId === worktreeId)
       .map((file) => file.id)

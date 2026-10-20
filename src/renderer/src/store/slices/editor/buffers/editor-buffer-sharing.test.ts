@@ -10,7 +10,11 @@ import {
 } from '@/components/editor/editor-autosave-controller-test-fixture'
 import { createEditorSaveQueue } from '@/components/editor/editor-save-queue'
 import { __clearSelfWriteRegistryForTests } from '@/components/editor/editor-self-write-registry'
-import { registerPendingEditorFlush } from '@/components/editor/editor-pending-flush'
+import {
+  nextEditorEditSequence,
+  registerPendingEditorFlush
+} from '@/components/editor/editor-pending-flush'
+import { flushEditorBufferViews } from '@/components/editor/editor-buffer-flush'
 import { assertEditorBufferInvariant } from '@/store/editor-buffer-record-lifecycle'
 import { buildEditorSessionData } from '@/lib/workspace-session'
 import {
@@ -159,6 +163,38 @@ describe('one editor buffer record per physical file', () => {
 
     expect(disk.files.get(FILE)).toBe('rich edit in B')
     expect(tab(store, a)?.isDirty).toBe(false)
+  })
+
+  it('two rich views flushed together: the newest edit wins and the other is recovered', () => {
+    const a = openTab(store, 'wt-1', { filePath: '/repo/a.md', relativePath: 'a.md' })
+    const b = openTab(store, 'wt-2', { filePath: '/repo/a.md', relativePath: 'a.md' })
+    // Each serializes its own whole cached document, as the rich editor does.
+    const richView = (id: string, text: string) => {
+      const editedAt = nextEditorEditSequence()
+      let pending = true
+      return registerPendingEditorFlush(
+        id,
+        () => {
+          if (pending) {
+            pending = false
+            type(store, id, text)
+          }
+        },
+        undefined,
+        () => (pending ? editedAt : null)
+      )
+    }
+    const releaseB = richView(b, 'whole doc from B')
+    const releaseA = richView(a, 'whole doc from A, edited last')
+
+    flushEditorBufferViews(store.getState, a)
+    releaseA()
+    releaseB()
+
+    expect(store.getState().editorDrafts[a]).toBe('whole doc from A, edited last')
+    expect(store.getState().recoveredEditorDrafts).toMatchObject([
+      { worktreeId: 'wt-2', draft: 'whole doc from B' }
+    ])
   })
 
   it('runs one autosave timer for the record', async () => {

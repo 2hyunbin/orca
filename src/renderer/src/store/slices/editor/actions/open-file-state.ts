@@ -17,6 +17,7 @@ export function createOpenFileState(
   | 'editorBufferIndex'
   | 'recoveredEditorDrafts'
   | 'dismissRecoveredEditorDraft'
+  | 'addRecoveredEditorDrafts'
   | 'activeFileId'
   | 'activeFileIdByWorktree'
   | 'activeTabTypeByWorktree'
@@ -29,6 +30,10 @@ export function createOpenFileState(
     editorBuffers: {},
     editorBufferIndex: EMPTY_EDITOR_BUFFER_INDEX,
     recoveredEditorDrafts: [],
+    addRecoveredEditorDrafts: (drafts) =>
+      set((s) => ({
+        recoveredEditorDrafts: appendRecoveredEditorDrafts(s.recoveredEditorDrafts, drafts)
+      })),
     dismissRecoveredEditorDraft: (draft) =>
       set((s) => ({
         // Why re-cap: a draft held for this launch only may fit once another is dismissed.

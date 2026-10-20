@@ -75,7 +75,7 @@ export function createCloseFileAction(
 ): Pick<EditorSlice, 'closeFile'> {
   return {
     closeFile: (fileId, opts) => {
-      flushSharedEditorViewsBeforeClose(get(), [fileId])
+      flushSharedEditorViewsBeforeClose(get, [fileId])
       // Why: capture untitled+dirty state before set() mutates the store, so cleanup of throwaway untitled files can decide after removal.
       const preClose = get().openFiles.find((f) => f.id === fileId)
       // Why: stale same-owner records survive tab close; retain other owners and pending drafts.

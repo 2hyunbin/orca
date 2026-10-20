@@ -1,5 +1,9 @@
 import type { OpenFile } from '../types/open-file'
 import { flushPendingEditorChange } from '@/components/editor/editor-pending-flush'
+import {
+  flushEditorBufferViews,
+  type EditorFlushState
+} from '@/components/editor/editor-buffer-flush'
 import { editorBufferViewIds, type EditorBufferIndex } from './editor-buffer-record'
 
 type EditorBufferViewState = {
@@ -52,12 +56,12 @@ export function needsSavePromptOnClose(
  * once its tab leaves the record, its late commit is rejected and a sibling keeps old text.
  */
 export function flushSharedEditorViewsBeforeClose(
-  state: EditorBufferViewState,
+  getState: () => EditorFlushState,
   fileIds: Iterable<string>
 ): void {
   for (const fileId of fileIds) {
-    if (editorBufferViewIds(state, fileId).length > 1) {
-      flushPendingEditorChange(fileId)
+    if (editorBufferViewIds(getState(), fileId).length > 1) {
+      flushEditorBufferViews(getState, fileId)
     }
   }
 }
