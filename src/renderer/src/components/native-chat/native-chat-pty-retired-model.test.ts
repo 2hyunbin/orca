@@ -50,6 +50,9 @@ describe('grok inventory and session selection', () => {
   it.each([false, true])('keeps a live model omitted by discovery (cached: %s)', async (cached) => {
     seedNativeChatAppliedSessionOptions('pty-1', 'grok', { model: 'grok-4.5', effort: 'high' })
     const tracked = readNativeChatSessionOptionCache('pty-1')
+    if (tracked === null) {
+      throw new Error('Expected the seeded session option cache')
+    }
     const { surface, persisted } = createGrokSurface({
       initialModels: cached ? discoveredGrok5() : undefined
     })
