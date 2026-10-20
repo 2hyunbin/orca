@@ -8,6 +8,7 @@ import type { TerminalPaneLifecycleRefs } from './use-terminal-pane-lifecycle-re
 import type { UseTerminalPaneLifecycleDeps } from './terminal-pane-lifecycle-types'
 import type { PtyConnectionDeps } from './pty-connection-types'
 import { resolveParkRevealLiveTuiLeafIds } from './park-reveal-live-tui-leaves'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   mapRestoredPaneTitlesByPaneId,
   replayLayoutWithOneShotParkIntent
