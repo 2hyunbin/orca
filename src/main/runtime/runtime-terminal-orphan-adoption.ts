@@ -16,6 +16,7 @@ import { validateRuntimeTerminalOrphanTopology } from './runtime-terminal-orphan
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../persistence/restoring-sessions/workspace-session-write-rollback'
 import { worktreeIdsEqual } from '../../shared/worktree/id'
+import type { DurableProfileStateMutation } from '../persistence/loading-store/store-runtime-state'
 
 type RuntimeTerminalOrphanAdoptionPorts = {
   getPty: (handle: string) => RuntimePtyWorktreeRecord | null
@@ -30,6 +31,8 @@ type RuntimeTerminalOrphanAdoptionPorts = {
   getMobileSnapshots: () => Iterable<RuntimeMobileSessionTabsSnapshot>
   getSession: (worktreeId: string) => WorkspaceSessionState | null
   setSession: (worktreeId: string, session: WorkspaceSessionState) => void
+  /** The store's durable transaction; without one, `flushSession` writes and the rollback is manual. */
+  runDurableMutation?: <T>(mutate: () => DurableProfileStateMutation<T>) => Promise<T>
   flushSession: () => Promise<void>
   hydrateSession: (worktreeId: string) => void
   notifySessionChanged: (worktreeId: string) => void
@@ -233,20 +236,43 @@ export async function adoptRuntimeTerminalOrphansFromInventory(args: {
     topologyGroups,
     getDisplayTitle: ports.getDisplayTitle
   })
-  let staged: WorkspaceSessionState | null = null
-  try {
+  const stage = (): DurableProfileStateMutation<Error | undefined> => {
     ports.setSession(workspace.id, persisted)
-    staged = ports.getSession(workspace.id)
-    await ports.flushSession()
-  } catch (error) {
-    const current = ports.getSession(workspace.id)
-    if (staged && current) {
-      const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(session, staged, current)
-      if (rolledBack !== current) {
-        ports.setSession(workspace.id, rolledBack)
+    const staged = ports.getSession(workspace.id)
+    return {
+      value: undefined,
+      rollback: () => {
+        const current = ports.getSession(workspace.id)
+        if (!staged || !current) {
+          return
+        }
+        const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(session, staged, current)
+        if (rolledBack !== current) {
+          ports.setSession(workspace.id, rolledBack)
+        }
       }
     }
-    throw error
+  }
+  if (ports.runDurableMutation) {
+    // Why the store's transaction: only its rollback phase skips the topology-fence rebase, which
+    // treats a write below the fence (this rollback) as a stale renderer replay and keeps the adoption.
+    const refusal = await ports.runDurableMutation(() =>
+      // A durable write queued ahead may have changed the session this adoption was checked against.
+      ports.getSession(workspace.id) === session
+        ? stage()
+        : { value: new Error('terminal_topology_conflict'), persist: false }
+    )
+    if (refusal) {
+      throw refusal
+    }
+  } else {
+    const { rollback } = stage()
+    try {
+      await ports.flushSession()
+    } catch (error) {
+      rollback?.()
+      throw error
+    }
   }
   for (const { claim, pty, paneKey } of validated) {
     ports.recordAdoptedSurface(pty, claim.tabId, paneKey)

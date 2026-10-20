@@ -45,6 +45,7 @@ export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends O
     if (!sessionWorktreeId) {
       throw new Error('terminal_orphan_competing_owner')
     }
+    const runDurableMutation = store.runDurableMutation?.bind(store)
     const worktreeConnectionId = workspace.connectionId
     let worktreeWslDistro: string | null = null
     if (!worktreeConnectionId && workspace.repo) {
@@ -77,6 +78,7 @@ export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends O
         getMobileSnapshots: () => this.mobileSessionTabsByWorktree.values(),
         getSession: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
         setSession: (worktreeId, next) => this.setWorkspaceSessionForWorktree(worktreeId, next),
+        ...(runDurableMutation ? { runDurableMutation } : {}),
         flushSession: () => this.flushWorkspaceSessionOrThrowAsync(),
         hydrateSession: (worktreeId) =>
           this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
