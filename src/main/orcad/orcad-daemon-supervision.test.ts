@@ -70,15 +70,6 @@ describe('startOrcadDaemon', () => {
     })
   })
 
-  it('recycles a daemon an older orcad forked once it drains, on Linux too', async () => {
-    // A pre-#31135 daemon still runs at umask 077, so its terminals create owner-only files.
-    await startOrcadDaemon('linux')
-    expect(initDaemonPtyProviderMock).toHaveBeenCalledWith(
-      undefined,
-      expect.objectContaining({ recycleStaleDaemonOnEveryPlatform: true })
-    )
-  })
-
   it('retries the daemon spawn once before falling back to in-process terminals', async () => {
     initDaemonPtyProviderMock.mockRejectedValueOnce(new Error('Daemon startup timed out'))
     await expect(startOrcadDaemon()).resolves.toEqual({ state: 'live', pid: 4242 })

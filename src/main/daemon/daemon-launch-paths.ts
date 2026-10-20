@@ -43,7 +43,7 @@ export function getDaemonEntryPath(): string {
 /**
  * The version a stale daemon is replaced against once its sessions drain, or null to keep it.
  * Desktop: macOS only, where TCC attribution pins the daemon to the bundle that launched it.
- * orcad opts in everywhere: an older slot's daemon keeps that slot's code and umask (#31135).
+ * orcad opts in everywhere: another version's daemon keeps that version's code and umask (#31135).
  */
 export function resolveStaleDaemonRecycleVersion(onEveryPlatform = false): string | null {
   const environment = getAppEnvironment()
