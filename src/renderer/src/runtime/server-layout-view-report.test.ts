@@ -65,7 +65,7 @@ const { setServers, mirroredStore, install, uninstallAll } = createServerHarness
 beforeEach(() => {
   hoisted.owners.clear()
   hoisted.resync.mockReset().mockResolvedValue(undefined)
-  hoisted.call.mockReset().mockResolvedValue({ reported: true })
+  hoisted.call.mockReset().mockResolvedValue({ ok: true })
   streams.all.length = 0
   resetWebSessionTabsSyncTestState()
   resetFrameDrawnServerWorkspacesForTests()

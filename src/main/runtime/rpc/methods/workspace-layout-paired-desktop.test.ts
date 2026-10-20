@@ -134,6 +134,18 @@ describe('layout.reportView', () => {
     expect(reported).toHaveBeenCalledWith('desktop-1', { 'wt-1': 'g2', 'wt-2': null })
   })
 
+  it('refuses a caller with no connection to tie the report to', async () => {
+    const { OrcaRuntimeService, RpcDispatcher } = await switchedBuild(true)
+    const runtime = new OrcaRuntimeService()
+    const reported = vi.spyOn(runtime, 'reportClientView')
+    const reply = await new RpcDispatcher({ runtime }).dispatch(
+      request('layout.reportView', { activeGroupByWorkspace: { 'wt-1': 'g2' } }),
+      { callerScope: PAIRED_DESKTOP, clientKind: 'runtime' }
+    )
+    expect(reply.ok).toBe(false)
+    expect(reported).not.toHaveBeenCalled()
+  })
+
   it.each([
     [{}],
     [{ activeGroupByWorkspace: { 'wt-1': 7 } }],

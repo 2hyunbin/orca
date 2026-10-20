@@ -113,11 +113,12 @@ export const LAYOUT_VIEW_REPORT_METHODS = [
     permission: 'workspace',
     params: LayoutReportViewParams,
     handler: async (params, { runtime, connectionId, signal }) => {
-      // Why: without a connection, or after it closed, nothing would ever drop the report.
-      if (connectionId && !signal?.aborted) {
-        runtime.reportClientView(connectionId, params.activeGroupByWorkspace)
+      // A report outlives the call, so it needs a connection whose close drops it (as sidebarInputs.reportView).
+      if (connectionId === undefined || signal?.aborted) {
+        throw new Error('client_disconnected')
       }
-      return { reported: connectionId !== undefined }
+      runtime.reportClientView(connectionId, params.activeGroupByWorkspace)
+      return { ok: true }
     }
   })
 ]
