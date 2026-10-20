@@ -7,6 +7,8 @@ import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id
 import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
+import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-session-contracts'
+import { withMainSessionTabRows } from '../../session-tabs/main-session-tab-rows'
 import type { RuntimeStore } from '../../runtime-store-contract'
 import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 import {
@@ -54,7 +56,23 @@ class MainSurfacePublisher {
     this.index.start()
     this.lastWindowGraph = { windowId, graph }
     this.installed = this.index.surfaces()
-    return composeMainTerminalSurfaces(graph, this.installed, this.host.registered)
+    const composed = composeMainTerminalSurfaces(graph, this.installed, this.host.registered)
+    return graph.mobileSessionTabs
+      ? {
+          ...composed,
+          mobileSessionTabs: graph.mobileSessionTabs.map((rows) => this.withMainRows(rows))
+        }
+      : composed
+  }
+
+  /** A workspace main owns publishes main's terminal and editor rows; any other, the window's. */
+  private withMainRows(
+    published: RuntimeMobileSessionTabsSnapshot
+  ): RuntimeMobileSessionTabsSnapshot {
+    const projected = this.installed?.worktreeIds.has(published.worktree)
+      ? this.index.sessionTabsOf(published.worktree)
+      : null
+    return projected ? withMainSessionTabRows(published, projected) : published
   }
 
   /** The pane main's layout binds a terminal to, read fresh; null when no pane main owns holds it. */
