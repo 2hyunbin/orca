@@ -133,11 +133,14 @@ class MainSurfacePublisher {
   }
 }
 
-const byRuntime = new WeakMap<object, MainSurfacePublisher>()
+/** The runtime a publisher belongs to; any runtime instance, held weakly. */
+type SurfacesOwner = WeakKey
+
+const byRuntime = new WeakMap<SurfacesOwner, MainSurfacePublisher>()
 
 /** The runtime's publisher of main's panes, made on its first graph. */
 export function mainTerminalSurfaces(
-  runtime: object,
+  runtime: SurfacesOwner,
   host: () => MainTerminalSurfacesHost
 ): MainSurfacePublisher {
   let state = byRuntime.get(runtime)
@@ -149,7 +152,7 @@ export function mainTerminalSurfaces(
 }
 
 /** The runtime's publisher when it has installed a graph; null before that. */
-export function startedMainTerminalSurfaces(runtime: object): MainSurfacePublisher | null {
+export function startedMainTerminalSurfaces(runtime: SurfacesOwner): MainSurfacePublisher | null {
   return byRuntime.get(runtime) ?? null
 }
 
@@ -158,7 +161,7 @@ export function startedMainTerminalSurfaces(runtime: object): MainSurfacePublish
  * too, so its membership no longer says the window has the tab.
  */
 export function windowListsTab(
-  runtime: object,
+  runtime: SurfacesOwner,
   tabs: ReadonlyMap<string, unknown>,
   tabId: string
 ): boolean {

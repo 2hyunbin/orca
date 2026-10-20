@@ -10,11 +10,11 @@ import {
   mainTerminalSurfaces,
   type MainTerminalSurfacesHost
 } from '../terminal/surface/main-terminal-surfaces'
-import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
 import type { WorkspaceLayoutReads } from '../workspace-layout-stream'
 import type {
   RuntimeMobileSessionTabsResult,
-  RuntimeSyncedTab
+  RuntimeSyncedTab,
+  RuntimeSyncWindowGraph
 } from '../../../shared/runtime-types'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
