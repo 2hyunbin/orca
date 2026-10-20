@@ -8,11 +8,11 @@ import type { LiveTerminalAdoption } from './workspace-layout-terminal-adoption'
 import type { SleepingAgentSessionRecord } from '../agent-session-resume'
 import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
-import type { EditorTabView } from '../editor-tab-view-types'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
 import type { TerminalPaneLayoutNode, TerminalPaneSplitDirection } from '../terminal-tab-types'
 import type { PaneSide } from './terminal-pane-tree'
 import type { PaneOutcomeChanges } from './workspace-layout-pane-outcomes'
+import type { LayoutEditorView } from './layout-editor-view'
 import type { LayoutEditorFile, LayoutTerminalCreation } from './workspace-layout-model'
 
 type On = { workspace: string }
@@ -122,7 +122,7 @@ export type LayoutCommand =
       /** Present for edit-mode files, which are restored after restart. */
       file?: LayoutEditorFile
       /** What the tab shows beyond its file; not saved. */
-      view?: EditorTabView
+      view?: LayoutEditorView
       groupId?: string
       preview?: boolean
       /** Editor tabs whose view reported an unsaved draft: a preview among them is not replaced. */

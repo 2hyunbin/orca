@@ -7,6 +7,7 @@ import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
 import { SleepCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
 import { RenameTabsCommand } from './workspace-layout-rename-tabs-params'
+import { EditorFileRecord, EditorViewRecord } from './workspace-layout-editor-file-params'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -122,17 +123,6 @@ const NewGroupSplit = z
   })
   .optional()
 
-/** An edit-mode file's restorable record, as the window saves it. */
-const EditorFileRecord = z.object({
-  filePath: z.string().min(1),
-  relativePath: z.string(),
-  language: z.string(),
-  runtimeEnvironmentId: z.string().nullable().optional(),
-  externalSshTargetId: z.string().min(1).optional(),
-  readOnly: z.literal(true).optional(),
-  liveTail: z.literal(true).optional()
-})
-
 /**
  * An editor tab under the id the window drew it with: its callers act on the tab at once. Main
  * places it and replaces the group's preview by the same rules as the window.
@@ -143,6 +133,7 @@ const OpenEditorTabCommand = z.object({
   fileId: z.string().min(1),
   contentType: z.enum(['editor', 'diff', 'conflict-review', 'check-details']),
   file: EditorFileRecord.optional(),
+  view: EditorViewRecord.optional(),
   groupId: z.string().min(1).optional(),
   preview: z.literal(true).optional(),
   createdAt: z.number().int().nonnegative().optional(),

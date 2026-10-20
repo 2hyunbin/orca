@@ -1,12 +1,12 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
-import type { EditorTabView } from '../editor-tab-view-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { applied, refuse, workspaceOrEmpty, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { editorOpenFileId } from './workspace-layout-editor-open-file-id'
 import { sameEditorFile } from './workspace-layout-editor-tab-file'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
+import type { LayoutEditorView } from './layout-editor-view'
 import type {
   LayoutContentTab,
   LayoutEditorFile,
@@ -116,7 +116,7 @@ function withEditorView(
   model: WorkspaceLayoutModel,
   key: string,
   tabId: string,
-  view: EditorTabView | undefined
+  view: LayoutEditorView | undefined
 ): WorkspaceLayoutModel {
   if (!view) {
     return model

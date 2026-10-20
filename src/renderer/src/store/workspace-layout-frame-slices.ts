@@ -22,6 +22,9 @@ import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { projectHydratedBrowserSession } from './slices/browser/browser-hydration-state'
 import { buildHydratedEditorSessionState } from './slices/editor/actions/hydrated-editor-session-state'
+import { openFileOfLayoutEditorView } from './slices/editor/tabs/open-file-layout-view'
+import type { OpenFile } from './slices/editor/types/open-file'
+import type { EditorTabView } from '../../../shared/editor-tab-view-types'
 import { migrateHydratedEditorTabsAndGroups } from './slices/editor/file-ids/hydrated-editor-file-ids'
 import { buildHydratedTabState } from './slices/tabs-hydration'
 import { buildByIdIndex } from './slices/worktree-by-id-index'
@@ -36,7 +39,7 @@ export type LayoutFrameSliceInput = {
   layouts: WorkspaceLayoutCache
   facts: LayoutContentFacts
   view: DesktopLayoutView
-  /** Whether this window holds an editor file's record: frames carry only edit-mode files'. */
+  /** Whether this window holds an editor file's record: frames carry edit-mode files' and views. */
   holdsEditorFile?: (worktreeId: string, fileId: string) => boolean
 }
 
@@ -137,6 +140,48 @@ function withShownTabs(
   )
 }
 
+const fileKey = (worktreeId: string, fileId: string): string => `${worktreeId}\0${fileId}`
+
+type FramedViewFile = { view: EditorTabView; file: OpenFile }
+
+/** Each editor tab's open file as its frame's view rebuilds it, by workspace and file id. */
+function framedViewFiles(layouts: WorkspaceLayoutCache): Map<string, FramedViewFile> {
+  const files = new Map<string, FramedViewFile>()
+  for (const [key, layout] of Object.entries(layouts)) {
+    for (const tab of layout.tabs) {
+      if (tab.editorView && !files.has(fileKey(key, tab.entityId))) {
+        files.set(fileKey(key, tab.entityId), {
+          view: tab.editorView.view,
+          file: openFileOfLayoutEditorView(tab.editorView, { ...tab, worktreeId: key })
+        })
+      }
+    }
+  }
+  return files
+}
+
+/** A file a frame's view shows: its saved record takes the view, else the view rebuilds it. */
+function withFramedViewFiles(
+  openFiles: OpenFile[],
+  framed: ReadonlyMap<string, FramedViewFile>
+): OpenFile[] {
+  if (framed.size === 0) {
+    return openFiles
+  }
+  const placed = new Set<string>()
+  const files = openFiles.map((file) => {
+    const framedFile = framed.get(fileKey(file.worktreeId, file.id))
+    if (!framedFile) {
+      return file
+    }
+    placed.add(fileKey(file.worktreeId, file.id))
+    // An edit tab on a conflicted file: the saved record is the file, the view its conflict.
+    return { ...file, ...framedFile.view }
+  })
+  const rebuilt = [...framed].flatMap(([key, { file }]) => (placed.has(key) ? [] : [file]))
+  return [...files, ...rebuilt]
+}
+
 export function buildLayoutFrameSlices({
   layouts,
   facts,
@@ -179,14 +224,21 @@ export function buildLayoutFrameSlices({
       view.activeTabId && rows.validTabIds.has(view.activeTabId) ? view.activeTabId : null
   })
 
-  const tabs = buildHydratedTabState(session, workspaceKeys, holdsEditorFile)
+  const framed = framedViewFiles(layouts)
+  const tabs = buildHydratedTabState(
+    session,
+    workspaceKeys,
+    (worktreeId, fileId) =>
+      framed.has(fileKey(worktreeId, fileId)) || holdsEditorFile?.(worktreeId, fileId) === true
+  )
   const editor = buildHydratedEditorSessionState(session, workspaceKeys, null)
+  const openFiles = withFramedViewFiles(editor.state.openFiles, framed)
   const browser = projectHydratedBrowserSession(
     {
       activeWorktreeId: null,
       activeTabType: 'terminal',
       activeTabTypeByWorktree: editor.state.activeTabTypeByWorktree,
-      openFiles: editor.state.openFiles,
+      openFiles,
       tabsByWorktree: rows.tabsByWorktree
     },
     session,
@@ -202,7 +254,7 @@ export function buildLayoutFrameSlices({
     activeTabIdByWorktree,
     ...editorTabs,
     groupsByWorktree: withShownTabs(editorTabs.groupsByWorktree),
-    openFiles: editor.state.openFiles,
+    openFiles,
     editorDrafts: editor.state.editorDrafts,
     markdownFrontmatterVisible: editor.state.markdownFrontmatterVisible,
     activeFileIdByWorktree: editor.state.activeFileIdByWorktree,

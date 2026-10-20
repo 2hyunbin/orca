@@ -172,7 +172,10 @@ describe('moveTabToWorkspace', () => {
 
   it('carries what the tab shows beyond its file', () => {
     const { ctx, model } = twoWorkspaces()
-    const view = { mode: 'diff' } as const
+    const view = {
+      view: { mode: 'diff' },
+      file: FILE
+    } as const
     const withView: WorkspaceLayoutModel = {
       ...model,
       workspaces: {

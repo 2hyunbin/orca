@@ -19,6 +19,7 @@ import {
   type WorkspaceLayout
 } from './workspace-layout-model'
 import { tabExecutionHostId } from './workspace-layout-tab-host'
+import type { LayoutEditorView } from './layout-editor-view'
 
 export type PublishedPane = {
   leafId: string
@@ -61,6 +62,8 @@ export type PublishedTab = {
   isPreview?: boolean
   agentSessionAgent?: AgentType
   terminal?: PublishedTerminal
+  /** What a non-plain editor tab shows, so a window lacking its open file can rebuild it. */
+  editorView?: LayoutEditorView
 }
 
 export type PublishedEditorFile = Pick<
@@ -111,6 +114,19 @@ function publishTab(
       'isPreview',
       'agentSessionAgent'
     ])
+  }
+  const editorView = workspace.editorViews?.[tab.id]
+  if (editorView) {
+    const { file } = editorView
+    published.editorView = {
+      view: editorView.view,
+      file: {
+        filePath: file.filePath,
+        relativePath: file.relativePath,
+        language: file.language,
+        ...pickStoredFields(file, ['runtimeEnvironmentId', 'externalSshTargetId', 'readOnly'])
+      }
+    }
   }
   if (tab.kind === 'terminal') {
     const panes = collectLayoutLeafIdsInOrder(tab.panes.root).map((leafId): PublishedPane => {
