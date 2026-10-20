@@ -24,7 +24,12 @@ export const SURFACE_PTYS = { [HEADLESS_LEAF_ID]: 'pty-a', [HEADLESS_SECOND_LEAF
 type Runtime = InstanceType<typeof OrcaRuntimeService>
 
 /** A saved tab split in two, each pane bound to a live terminal. */
-export function surfaceRuntime(): {
+export function surfaceRuntime(
+  opts: {
+    /** The terminals the host's process inventory lists; every scenario terminal by default. */
+    hostLists?: () => readonly string[]
+  } = {}
+): {
   runtime: Runtime
   store: ReturnType<typeof makeRuntimeStoreWithWorkspaceSession>
   /** Every terminal the runtime asked the PTY host to stop. */
@@ -89,7 +94,11 @@ export function surfaceRuntime(): {
     },
     getForegroundProcess: async () => null,
     listProcesses: vi.fn(async () =>
-      Object.values(SURFACE_PTYS).map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'sh' }))
+      (opts.hostLists?.() ?? Object.values(SURFACE_PTYS)).map((id) => ({
+        id,
+        cwd: TEST_WORKTREE_PATH,
+        title: 'sh'
+      }))
     )
   })
   for (const ptyId of Object.values(SURFACE_PTYS)) {
@@ -129,9 +138,12 @@ export function mountedSurfaceGraph(): RuntimeSyncWindowGraph {
 }
 
 /** Handles are minted at random; each is replaced by its first-seen position. */
-function normaliseHandles(value: unknown): unknown {
+function normaliseHandles(value: unknown, ignored: readonly string[]): unknown {
   const names = new Map<string, string>()
   return JSON.parse(JSON.stringify(value), (key, field) => {
+    if (ignored.includes(key)) {
+      return undefined
+    }
     if ((key === 'handle' || key === 'terminal') && typeof field === 'string') {
       const name = names.get(field) ?? `handle-${names.size + 1}`
       names.set(field, name)
@@ -141,8 +153,14 @@ function normaliseHandles(value: unknown): unknown {
   })
 }
 
-/** Every reply the scenario's readers get, in one JSON document. */
-export async function captureSurfaceReplies(runtime: Runtime): Promise<string> {
+/**
+ * Every reply the scenario's readers get, in one JSON document. `ignore` drops fields a newer host
+ * adds, which older readers skip, so the fields they do read compare byte for byte.
+ */
+export async function captureSurfaceReplies(
+  runtime: Runtime,
+  opts: { ignore?: readonly string[] } = {}
+): Promise<string> {
   const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
   const shown: RuntimeTerminalShow[] = []
   for (const terminal of listed.terminals) {
@@ -150,15 +168,18 @@ export async function captureSurfaceReplies(runtime: Runtime): Promise<string> {
   }
   const status = runtime.getStatus()
   return JSON.stringify(
-    normaliseHandles({
-      list: listed,
-      show: shown,
-      status: {
-        graphStatus: status.graphStatus,
-        liveTabCount: status.liveTabCount,
-        liveLeafCount: status.liveLeafCount
-      }
-    })
+    normaliseHandles(
+      {
+        list: listed,
+        show: shown,
+        status: {
+          graphStatus: status.graphStatus,
+          liveTabCount: status.liveTabCount,
+          liveLeafCount: status.liveLeafCount
+        }
+      },
+      opts.ignore ?? []
+    )
   )
 }
 

@@ -58,6 +58,15 @@ class MainSurfacePublisher {
     return pane ? { worktreeId: pane.worktreeId, tabId: pane.tabId, leafId: pane.leafId } : null
   }
 
+  /** A pane main owns: the terminal its layout binds and whether it has a status; null otherwise. */
+  paneOf(tabId: string, leafId: string): { ptyId: string | null; hasStatus: boolean } | null {
+    const surfaces = this.index.surfaces()
+    const pane = surfaces.leaves.find((leaf) => leaf.tabId === tabId && leaf.leafId === leafId)
+    return pane
+      ? { ptyId: pane.ptyId, hasStatus: surfaces.statusPanes.has(`${tabId}::${leafId}`) }
+      : null
+  }
+
   /** Whether main lists the workspace's terminals. */
   ownsWorkspace(worktreeId: string): boolean {
     return this.index.surfaces().worktreeIds.has(worktreeId)
