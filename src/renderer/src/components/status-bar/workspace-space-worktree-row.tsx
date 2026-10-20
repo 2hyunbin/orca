@@ -1,5 +1,6 @@
 import { AlertTriangle, FolderSearch, GitBranch, Server, Trash2 } from 'lucide-react'
 import type { WorkspaceSpaceWorktree } from '../../../../shared/workspace-space-types'
+import type { GitStatusEntry } from '../../../../shared/git-status-types'
 import { cn } from '@/lib/utils'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -28,12 +29,14 @@ import { WorkspaceDecisionHoverCard } from './workspace-space-decision-hover-car
 import { WorkspaceSpaceStatusBadge } from './workspace-space-status-badge'
 import { describeWorktreeDeleteError } from '../sidebar/worktree-delete-error-display'
 import { formatShortTimeAgo } from '@/lib/short-time-ago'
+import { WorkspaceSpaceChanges } from './workspace-space-changes'
 
 export function WorkspaceSpaceWorktreeRow({
   worktree,
   selected,
   inspected,
   decisionDetails,
+  changedFiles,
   gitRefreshState,
   deleteState,
   onToggleSelected,
@@ -46,6 +49,7 @@ export function WorkspaceSpaceWorktreeRow({
   selected: boolean
   inspected: boolean
   decisionDetails: WorkspaceDecisionDetails
+  changedFiles?: readonly GitStatusEntry[]
   gitRefreshState?: WorkspaceGitRefreshState
   deleteState?: WorkspaceSpaceDeleteState
   onToggleSelected: () => void
@@ -57,7 +61,13 @@ export function WorkspaceSpaceWorktreeRow({
   const isDeleting = deleteState?.isDeleting ?? false
   const deleteError = deleteState?.error ? describeWorktreeDeleteError(deleteState.error) : null
   const canForceDelete = deleteState?.canForceDelete ?? false
-  const canDelete = isWorkspaceSpaceRowReadyToDelete(worktree, decisionDetails) && !isDeleting
+  const canSelect = isWorkspaceSpaceRowReadyToDelete(worktree, decisionDetails) && !isDeleting
+  const canDelete =
+    worktree.canDelete &&
+    !worktree.isMainWorktree &&
+    worktree.status === 'ok' &&
+    decisionDetails.canOpenWorkspace &&
+    !isDeleting
   const handleForceDelete = (event: React.MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault()
     event.stopPropagation()
@@ -68,8 +78,12 @@ export function WorkspaceSpaceWorktreeRow({
       role="button"
       tabIndex={0}
       aria-busy={isDeleting}
+      data-current={inspected ? 'true' : undefined}
       onClick={onInspect}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return
+        }
         if (event.key !== 'Enter' && event.key !== ' ') {
           return
         }
@@ -83,8 +97,8 @@ export function WorkspaceSpaceWorktreeRow({
       )}
     >
       <CheckButton
-        checked={canDelete && selected}
-        disabled={!canDelete}
+        checked={canSelect && selected}
+        disabled={!canSelect}
         label={translate(
           'auto.components.status.bar.WorkspaceSpaceManagerPanel.0d1c78d749',
           'Select {{value0}}',
@@ -173,27 +187,35 @@ export function WorkspaceSpaceWorktreeRow({
             <Trash2 className="size-3.5" />
           </Button>
         ) : null}
-        <HoverCard openDelay={250} closeDelay={120}>
-          <HoverCardTrigger asChild>
-            <span
-              className="inline-flex"
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              <WorkspaceSpaceStatusBadge
-                worktree={worktree}
-                decisionDetails={decisionDetails}
-                deleteState={deleteState}
-              />
-            </span>
-          </HoverCardTrigger>
-          <WorkspaceDecisionHoverCard
+        {!isDeleting && !deleteState?.error && changedFiles && changedFiles.length > 0 ? (
+          <WorkspaceSpaceChanges
             worktree={worktree}
-            details={decisionDetails}
-            gitRefreshState={gitRefreshState}
-            onOpenWorkspace={onOpenWorkspace}
+            entries={changedFiles}
+            canOpen={decisionDetails.canOpenWorkspace}
           />
-        </HoverCard>
+        ) : (
+          <HoverCard openDelay={250} closeDelay={120}>
+            <HoverCardTrigger asChild>
+              <span
+                className="inline-flex"
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <WorkspaceSpaceStatusBadge
+                  worktree={worktree}
+                  decisionDetails={decisionDetails}
+                  deleteState={deleteState}
+                />
+              </span>
+            </HoverCardTrigger>
+            <WorkspaceDecisionHoverCard
+              worktree={worktree}
+              details={decisionDetails}
+              gitRefreshState={gitRefreshState}
+              onOpenWorkspace={onOpenWorkspace}
+            />
+          </HoverCard>
+        )}
       </div>
     </div>
   )
@@ -217,6 +239,23 @@ export function WorkspaceSpaceWorktreeRow({
             'Delete workspace'
           )}
         </ContextMenuItem>
+        {!canDelete ? (
+          <div className="max-w-64 px-2 py-1.5 text-xs text-muted-foreground">
+            {isDeleting
+              ? translate('workspaceSpace.delete.pending', 'Deletion is in progress.')
+              : worktree.isMainWorktree
+                ? translate('workspaceSpace.delete.main', 'The main worktree is protected.')
+                : !decisionDetails.canOpenWorkspace
+                  ? translate(
+                      'workspaceSpace.delete.unmanaged',
+                      'This workspace is no longer managed by Orca.'
+                    )
+                  : translate(
+                      'workspaceSpace.delete.unavailable',
+                      'This workspace is protected or unavailable.'
+                    )}
+          </div>
+        ) : null}
       </ContextMenuContent>
     </ContextMenu>
   )

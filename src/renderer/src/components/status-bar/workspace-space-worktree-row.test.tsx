@@ -68,6 +68,44 @@ afterEach(() => {
 })
 
 describe('WorkspaceSpaceWorktreeRow context menu', () => {
+  it.each([
+    { changedFileCount: null },
+    { changedFileCount: 3 },
+    { dirtyEditorBufferCount: 1 },
+    { liveTerminalCount: 1 },
+    { issueLabel: '#123' },
+    { isActive: true }
+  ])('allows an explicit deletion while keeping bulk selection protected: %j', (readiness) => {
+    const onDelete = vi.fn()
+    render(
+      <WorkspaceSpaceWorktreeRow
+        worktree={{ ...worktree, isMainWorktree: false, canDelete: true }}
+        selected={false}
+        inspected={false}
+        decisionDetails={{ ...decisionDetails, ...readiness }}
+        onToggleSelected={() => {}}
+        onInspect={() => {}}
+        onOpenWorkspace={() => {}}
+        onDelete={onDelete}
+        onForceDelete={() => {}}
+      />
+    )
+    expect(
+      screen.getByRole('checkbox', { name: 'Select workspace' }).hasAttribute('disabled')
+    ).toBe(true)
+    fireEvent.contextMenu(
+      screen.getByText('workspace').closest('[data-slot="context-menu-trigger"]')!
+    )
+    expect(
+      screen
+        .getByText('Delete workspace')
+        .closest('[role="menuitem"]')
+        ?.getAttribute('data-disabled')
+    ).toBeNull()
+    fireEvent.click(screen.getByText('Delete workspace'))
+    expect(onDelete).toHaveBeenCalledOnce()
+  })
+
   it('shows the existing workspace activity timestamp with its full time on hover', () => {
     const lastActivityAt = Date.now() - 2 * 60 * 60 * 1000
     render(

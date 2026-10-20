@@ -61,6 +61,26 @@ describe('UsageRow', () => {
     expect(markup).not.toContain('<button')
   })
 
+  it('renders a row detail line under a placeholder', () => {
+    const markup = renderToStaticMarkup(
+      <UsageRow
+        p={{ ...signedOutCodex, provider: 'minimax', error: 'Not configured on devbox' }}
+        display="used"
+        state={{
+          kind: 'unavailable',
+          statusLabel: 'Not configured on devbox',
+          detail: 'Its sign-in is saved on this computer only.'
+        }}
+        showSignInAction={false}
+        now={mocks.now}
+      />
+    )
+
+    expect(markup).toContain('Not configured on devbox')
+    expect(markup).toContain('Its sign-in is saved on this computer only.')
+    expect(markup).not.toContain('Sign in')
+  })
+
   it('keeps the bar fill consistent with the remaining percentage label', () => {
     const markup = renderToStaticMarkup(
       <UsageRow
