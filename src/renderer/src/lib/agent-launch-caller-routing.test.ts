@@ -118,7 +118,7 @@ describe('agent launch caller routing', () => {
     mockLaunchAgentInWebHostTab.mockResolvedValue({
       delivered: true,
       failureNotified: false,
-      surfaceOpened: true
+      outcome: { status: 'created' }
     })
   })
 
@@ -241,7 +241,7 @@ describe('agent launch caller routing', () => {
     await expect(result?.promptDeliveryResult).resolves.toEqual({
       delivered: true,
       failureNotified: false,
-      surfaceOpened: true
+      outcome: { status: 'created' }
     })
     expect(mockLaunchAgentInWebHostTab).toHaveBeenCalledOnce()
     expect(mockLaunchAgentInWebHostTab).toHaveBeenCalledWith(

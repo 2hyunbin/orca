@@ -70,7 +70,8 @@ describe('launchAgentInNewTab initial cwd', () => {
     mockIsWebRuntimeSessionActive.mockReturnValue(false)
     mockLaunchAgentInWebHostTab.mockResolvedValue({
       delivered: true,
-      failureNotified: false
+      failureNotified: false,
+      outcome: { status: 'created' }
     })
   })
 
