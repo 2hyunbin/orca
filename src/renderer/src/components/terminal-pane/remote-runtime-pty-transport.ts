@@ -607,7 +607,7 @@ export function createRemoteRuntimePtyTransport(
       phase,
       epoch: recovery.currentEpoch,
       attempt: recovery.attemptCount,
-      ...(recovery.hasOwnerRefresh || surfacedErrorMessages.has(ownerChanged)
+      ...((recovery.isActive && recovery.hasOwnerRefresh) || surfacedErrorMessages.has(ownerChanged)
         ? { reason: 'ownership' as const }
         : {})
     }
@@ -3625,7 +3625,7 @@ export function createRemoteRuntimePtyTransport(
     },
 
     retryRecovery() {
-      if (surfacedErrorMessages.has(ownerChanged)) {
+      if (recovery.hasOwnerRefresh || surfacedErrorMessages.has(ownerChanged)) {
         return recovery.retryNow()
       }
       if (

@@ -1,5 +1,6 @@
 import { LEAF_1, LEAF_2, unboundSplitLayout } from './terminal-pane-tab-detach-fixture'
 import type { AppState } from '@/store/types'
+import type { TerminalPaneController } from './use-terminal-pane-controller'
 import type { ConnectPanePtySession } from './pty-connection/connect-pane-pty-session'
 import { REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS } from './remote-runtime-pty-recovery-state'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -52,6 +53,8 @@ function unreachable(): Error {
     code: 'remote_runtime_unavailable'
   })
 }
+
+const callsTo = (method: string) => runtimeCall.mock.calls.filter(([r]) => r.method === method)
 
 // Every exit from binding a remote pane must leave one owner: the host's answer, or the transport's own retry.
 describe('remote runtime pane binding ownership', () => {
@@ -228,13 +231,9 @@ describe('remote runtime pane binding ownership', () => {
         }
         const unacceptedSubscription = subscriptionCallbacks
         const unacceptedStream = latestSubscribePayload().streamId
-        const resolves = runtimeCall.mock.calls.filter(
-          ([r]) => r.method === 'terminal.resolvePane'
-        ).length
+        const resolves = callsTo('terminal.resolvePane').length
         refuse(unacceptedStream)
-        expect(
-          runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.resolvePane')
-        ).toHaveLength(resolves)
+        expect(callsTo('terminal.resolvePane')).toHaveLength(resolves)
         expect(transport.getRecoveryState?.()).toMatchObject({
           phase: 'disconnected',
           reason: 'ownership'
@@ -279,9 +278,7 @@ describe('remote runtime pane binding ownership', () => {
           expect(transport.getRecoveryState?.().phase).toBe('connected')
           expect(subscribeFrameCount()).toBe(frameCount + 1)
         }
-        expect(runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.create')).toHaveLength(
-          0
-        )
+        expect(callsTo('terminal.create')).toHaveLength(0)
       } finally {
         transport.destroy?.()
         vi.useRealTimers()
@@ -319,8 +316,23 @@ describe('remote runtime pane binding ownership', () => {
         if (contactLoss) {
           expect(await connecting).toBeUndefined()
           await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+          vi.doMock('react-dom', () => ({ createPortal: (element: unknown) => element }))
+          vi.doMock('./use-wsl-host-unavailable-reason', () => ({
+            useWslHostUnavailableReason: () => null
+          }))
+          const { TerminalPaneRecoveryPortals } = await import('./TerminalPaneRuntimePortals')
+          const portals = TerminalPaneRecoveryPortals({
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only recovery fields are read; the portal and WSL hook are inert rendering dependencies.
+            controller: {
+              managedPanes: [{ id: 1 }],
+              ptyRecoveryStatesByPaneId: { 1: transport.getRecoveryState?.() },
+              paneTransportsRef: { current: new Map([[1, transport]]) }
+            } as unknown as TerminalPaneController
+          })
+          const banner = portals?.props.children[0]
+          expect(banner?.props.phase).toBe('disconnected')
           reachable = true
-          expect(transport.retryRecovery?.()).toBe(true)
+          expect(banner?.props.onReconnect()).toBe(true)
         }
         await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe('terminal-1'))
         emitSnapshot(latestSubscribePayload().streamId, 'recovered$ ')
@@ -331,12 +343,8 @@ describe('remote runtime pane binding ownership', () => {
         expect(transport.isConnected()).toBe(true)
         expect(transport.getRecoveryState?.().phase).toBe('connected')
         expect(onError).not.toHaveBeenCalled()
-        expect(runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.create')).toHaveLength(
-          1
-        )
-        expect(
-          runtimeCall.mock.calls.filter(([r]) => r.method === 'terminal.resolvePane')
-        ).toHaveLength(contactLoss ? 2 : 1)
+        expect(callsTo('terminal.create')).toHaveLength(1)
+        expect(callsTo('terminal.resolvePane')).toHaveLength(contactLoss ? 2 : 1)
       } finally {
         transport.destroy?.()
         vi.useRealTimers()
