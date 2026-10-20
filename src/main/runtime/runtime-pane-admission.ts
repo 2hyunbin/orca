@@ -10,6 +10,11 @@ import type { PaneStartStatuses } from './pane-start-statuses'
 
 type Spawn = NonNullable<RuntimePtyController['spawn']>
 type PaneStartStatusSink = Pick<PaneStartStatuses, 'set' | 'clear'>
+/**
+ * Layout-owner build: how a start goes, for a pane main already held or one that should stay
+ * when its start fails (`keepOnFailure`), so the pane shows the failure.
+ */
+export type PaneStartArgs = { startStatus?: { sink: PaneStartStatusSink; keepOnFailure: boolean } }
 type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
   worktreeId: string
   tabId: string
@@ -128,12 +133,7 @@ export async function startInAdmittedPane<T>(
 export async function spawnInAdmittedPane(
   store: RuntimeStore | null | undefined,
   controller: Pick<RuntimePtyController, 'spawn'>,
-  args: AdmittedSpawnArgs,
-  /**
-   * Layout-owner build: how a start goes, for a pane main already held or one that should stay
-   * when its start fails (`keepOnFailure`), so the pane shows the failure.
-   */
-  startStatus?: { sink: PaneStartStatusSink; keepOnFailure: boolean }
+  { startStatus, ...args }: AdmittedSpawnArgs & PaneStartArgs
 ): ReturnType<Spawn> {
   const { groupId: _groupId, afterTabId: _afterTabId, ...spawnArgs } = args
   const { outcome, result } = await startInAdmittedPane(

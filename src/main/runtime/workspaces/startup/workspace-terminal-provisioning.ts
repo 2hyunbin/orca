@@ -114,10 +114,14 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
           })
         )
       },
-      applyDefaultTabs: async (worktreeId, tabs) =>
-        applied(
-          await this.applyLayoutCommand({ type: 'applyDefaultTabs', workspace: worktreeId, tabs })
-        ),
+      applyDefaultTabs: async (worktreeId, tabs) => {
+        const reply = await this.applyLayoutCommand({
+          type: 'applyDefaultTabs',
+          workspace: worktreeId,
+          tabs
+        })
+        return applied(reply) && reply.ok ? (reply.result.createdTabs ?? []) : null
+      },
       getPtyId: (handle) => this.getLivePtyForHandle(handle)?.pty.ptyId,
       recordSetupCompletionToken: (ptyId, token) =>
         this.setupCompletionTokenByPtyId.set(ptyId, token)

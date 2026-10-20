@@ -16,6 +16,7 @@ export type WorktreeProvisionTerminalOptions = {
   env?: Record<string, string>
   activate?: boolean
   surfaceOwner?: false
+  keepPaneOnStartFailure?: true
 }
 
 export type WorktreeTerminalProvisioningHost = {
@@ -30,7 +31,11 @@ export type WorktreeTerminalProvisioningHost = {
   setTabColor: (handle: string, color: string) => Promise<void>
   /** Layout-owner build: main writes the tabs, titles, colours and mark in one command. False
    *  when it refused them. */
-  applyDefaultTabs?: (worktreeId: string, tabs: DefaultTerminalTab[]) => Promise<boolean>
+  /** The tabs main made; none when the workspace already had them; null when main refused. */
+  applyDefaultTabs?: (
+    worktreeId: string,
+    tabs: DefaultTerminalTab[]
+  ) => Promise<readonly { tabId: string }[] | null>
   getPtyId: (handle: string) => string | undefined
   recordSetupCompletionToken: (ptyId: string, token: string) => void
 }
@@ -122,17 +127,18 @@ async function startDefaultTabsInLayout(
       ...(template.color ? { color: template.color } : {})
     }
   }))
-  if (
-    !(await applyDefaultTabs(
-      worktreeId,
-      panes.map(({ tab }) => tab)
-    ))
-  ) {
+  const createdTabs = await applyDefaultTabs(
+    worktreeId,
+    panes.map(({ tab }) => tab)
+  )
+  if (!createdTabs) {
     console.warn(`[worktree-create] Main refused the default tabs for ${worktreeId}`)
     return []
   }
+  // A workspace already given its default tabs gets none again, so only the ones made start.
+  const created = new Set(createdTabs.map(({ tabId }) => tabId))
   const handles: string[] = []
-  for (const { template, tab } of panes) {
+  for (const { template, tab } of panes.filter(({ tab }) => created.has(tab.tabId))) {
     const command = template.command?.trim()
     try {
       const terminal = await host.createTerminal(selector, {
@@ -233,6 +239,8 @@ export async function provisionWorktreeTerminals(
         title: 'Setup',
         command,
         env,
+        // Switch point: a setup main could not start stays in its pane, showing why.
+        ...(ORCA_LAYOUT_OWNER_IS_MAIN ? { keepPaneOnStartFailure: true as const } : {}),
         ...surfacing
       })
       setupTerminalHandle = setupTerminal.handle

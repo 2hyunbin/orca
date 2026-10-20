@@ -140,10 +140,12 @@ export async function createRuntimeFolderWorktree(args: {
   let warning: string | undefined
   let didSpawnStartup = false
   let startupTerminal: CreateWorktreeResult['startupTerminal']
-  if (args.startup && deps.ptySpawnAvailable) {
+  // Switch point: main starts the agent even with no terminal service, so its pane shows why not.
+  if (args.startup && (deps.ptySpawnAvailable || ORCA_LAYOUT_OWNER_IS_MAIN)) {
     try {
-      if (args.startupLaunchRuntime instanceof Error) {
-        throw args.startupLaunchRuntime
+      const launchRuntime = args.startupLaunchRuntime
+      if (launchRuntime instanceof Error && !ORCA_LAYOUT_OWNER_IS_MAIN) {
+        throw launchRuntime
       }
       const terminal = await deps.createTerminal(`id:${worktree.id}`, {
         command: args.startup.command,
@@ -152,7 +154,11 @@ export async function createRuntimeFolderWorktree(args: {
         env: args.startup.env,
         ...(args.startup.launchConfig ? { launchConfig: args.startup.launchConfig } : {}),
         ...(args.createdWithAgent ? { launchAgent: args.createdWithAgent } : {}),
-        ...(args.startupLaunchRuntime ? { launchRuntime: args.startupLaunchRuntime } : {}),
+        ...(launchRuntime instanceof Error
+          ? { startFailure: launchRuntime }
+          : launchRuntime
+            ? { launchRuntime }
+            : {}),
         ...(args.startup.viewMode ? { viewMode: args.startup.viewMode } : {}),
         startupCommandDelivery: args.startup.startupCommandDelivery,
         telemetry: args.startup.telemetry,
@@ -199,7 +205,8 @@ export async function createRuntimeFolderWorktree(args: {
     (!shouldActivate || deps.provisionInBackground?.() === true) &&
     deps.ptySpawnAvailable &&
     shouldSeedWorktreePrimaryTerminal({
-      hasPrimarySurface: didSpawnStartup,
+      // Switch point: a failed agent start keeps its pane, so no shell is seeded beside it.
+      hasPrimarySurface: didSpawnStartup || (ORCA_LAYOUT_OWNER_IS_MAIN && Boolean(args.startup)),
       // Background attribution-only creates have historically omitted the shell.
       callerProvidesSurface: args.promisedAgentChat === true || args.createdWithAgent !== undefined
     })

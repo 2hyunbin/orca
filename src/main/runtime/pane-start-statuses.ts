@@ -1,6 +1,7 @@
 // Main's start of a pane's terminal, while the pane has none (layout-owner build): live state laid
 // over the published layout like a pane's live title, never saved. A start ends in a binding,
-// which clears it, or a failure, which the pane keeps until it binds or closes.
+// which clears it, or a failure, which stays until main's next start into the pane. Shown only
+// while the pane has no terminal; keys are never reused, so a closed pane's entry is inert.
 
 import type {
   PaneStartStatus,

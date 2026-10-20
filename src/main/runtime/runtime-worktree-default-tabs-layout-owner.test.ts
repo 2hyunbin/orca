@@ -28,7 +28,7 @@ function fakeHost() {
     setTabColor: vi.fn(async () => {}),
     applyDefaultTabs: vi.fn(async (_worktreeId, tabs) => {
       applied.push(tabs)
-      return true
+      return tabs
     }),
     getPtyId: () => undefined,
     recordSetupCompletionToken: vi.fn()
@@ -81,10 +81,17 @@ describe('layout-owner build: a worktree’s default tabs, window or none', () =
 
   it('starts no default tab main refused, and seeds the worktree’s one shell as today', async () => {
     const { host, createTerminal } = fakeHost()
-    vi.mocked(host.applyDefaultTabs!).mockResolvedValue(false)
+    vi.mocked(host.applyDefaultTabs!).mockResolvedValue(null)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     await provision(host, false)
     expect(createTerminal.mock.calls.map(([, options]) => options)).toEqual([{}])
     warn.mockRestore()
+  })
+
+  it('starts none of the tabs when the workspace already had its default tabs', async () => {
+    const { host, createTerminal } = fakeHost()
+    vi.mocked(host.applyDefaultTabs!).mockResolvedValue([])
+    await provision(host, true)
+    expect(createTerminal).not.toHaveBeenCalled()
   })
 })

@@ -7,16 +7,9 @@ import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-
 import { agentLaunchTokenFor } from '../../../agent-launch/agent-launch-token'
 import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
 import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { PaneStartStatuses } from '../../pane-start-statuses'
 
 export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
-  protected abstract markPaneLiveTitlesDirty(): void
-
-  /** Switch point: main's starts into panes it already holds, published until each binds. */
-  protected readonly paneStartStatuses = ORCA_LAYOUT_OWNER_IS_MAIN
-    ? new PaneStartStatuses(() => this.markPaneLiveTitlesDirty())
-    : null
+  protected abstract paneStartStatusArgs: dependencies.PaneStartArgsOf
 
   async createTerminal(
     worktreeSelector?: string,
@@ -140,69 +133,60 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
             launchConfig: effectiveLaunchConfig,
             launchAgent
           })
-          result = await dependencies.spawnInAdmittedPane(
-            this.store,
-            this.ptyController,
-            {
-              ...initialSize,
-              cwd,
-              command: sequencedStartupCommand
-                ? launchOpts.command
-                : (agentTeamsPlan?.command ?? launchOpts.command),
-              launchAgent: launchOpts.launchAgent,
-              commandDelivery: 'provider',
-              startupCommandDelivery: launchOpts.startupCommandDelivery,
-              env,
-              envToDelete: dependencies.mergeTerminalEnvDeletionKeys(
-                launchOpts.envToDelete,
-                agentTeamsPlan?.envToDelete
-              ),
-              resumeProviderSession: launchOpts.resumeProviderSession,
-              telemetry: launchOpts.telemetry,
-              connectionId: workspace.connectionId,
-              worktreeId: workspace.id,
-              preAllocatedHandle,
-              tabId,
-              leafId,
-              ...dependencies.spawnShellInputs(launchOpts),
-              ...(terminalColorQueryReplies ? { terminalColorQueryReplies } : {}),
-              terminalKittyKeyboardProtocol: launchOpts.terminalKittyKeyboardProtocol,
-              ...(launchOpts.agentSessionClaim
-                ? {
-                    agentSessionEnsure: {
-                      claim: launchOpts.agentSessionClaim,
-                      surface: {
-                        worktreeId: workspace.id,
-                        tabId,
-                        leafId,
-                        terminalHandle: preAllocatedHandle
-                      }
+          result = await dependencies.spawnInAdmittedPane(this.store, this.ptyController, {
+            ...initialSize,
+            cwd,
+            command: sequencedStartupCommand
+              ? launchOpts.command
+              : (agentTeamsPlan?.command ?? launchOpts.command),
+            launchAgent: launchOpts.launchAgent,
+            commandDelivery: 'provider',
+            startupCommandDelivery: launchOpts.startupCommandDelivery,
+            env,
+            envToDelete: dependencies.mergeTerminalEnvDeletionKeys(
+              launchOpts.envToDelete,
+              agentTeamsPlan?.envToDelete
+            ),
+            resumeProviderSession: launchOpts.resumeProviderSession,
+            telemetry: launchOpts.telemetry,
+            connectionId: workspace.connectionId,
+            worktreeId: workspace.id,
+            preAllocatedHandle,
+            tabId,
+            leafId,
+            ...dependencies.spawnShellInputs(launchOpts),
+            ...(terminalColorQueryReplies ? { terminalColorQueryReplies } : {}),
+            terminalKittyKeyboardProtocol: launchOpts.terminalKittyKeyboardProtocol,
+            ...(launchOpts.agentSessionClaim
+              ? {
+                  agentSessionEnsure: {
+                    claim: launchOpts.agentSessionClaim,
+                    surface: {
+                      worktreeId: workspace.id,
+                      tabId,
+                      leafId,
+                      terminalHandle: preAllocatedHandle
                     }
                   }
-                : {}),
-              ...(launchOpts.agentSessionCreateOperationId
-                ? {
-                    agentSessionCreateOperationId: launchOpts.agentSessionCreateOperationId
-                  }
-                : {}),
-              ...dependencies.callerSpawnScope(launchOpts),
-              ...(launchOpts.onPtySpawnCommitted
-                ? { onPtySpawnCommitted: reportPtySpawnCommitted }
-                : {}),
-              ...(adoptedBeforeLaunch ? { adoptedStablePane: adoptedBeforeLaunch } : {}),
-              ...dependencies.newTabIn(launchOpts),
-              ...(launchOpts.afterTabId ? { afterTabId: launchOpts.afterTabId } : {}),
-              ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
-              ...(!adoptedBeforeLaunch && launchOpts.isNewSession ? { isNewSession: true } : {}),
-              ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS
-            },
-            this.paneStartStatuses
-              ? {
-                  sink: this.paneStartStatuses,
-                  keepOnFailure: launchOpts.keepPaneOnStartFailure === true
                 }
-              : undefined
-          )
+              : {}),
+            ...(launchOpts.agentSessionCreateOperationId
+              ? {
+                  agentSessionCreateOperationId: launchOpts.agentSessionCreateOperationId
+                }
+              : {}),
+            ...dependencies.callerSpawnScope(launchOpts),
+            ...(launchOpts.onPtySpawnCommitted
+              ? { onPtySpawnCommitted: reportPtySpawnCommitted }
+              : {}),
+            ...(adoptedBeforeLaunch ? { adoptedStablePane: adoptedBeforeLaunch } : {}),
+            ...dependencies.newTabIn(launchOpts),
+            ...(launchOpts.afterTabId ? { afterTabId: launchOpts.afterTabId } : {}),
+            ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
+            ...(!adoptedBeforeLaunch && launchOpts.isNewSession ? { isNewSession: true } : {}),
+            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS,
+            ...this.paneStartStatusArgs(launchOpts)
+          })
         } finally {
           releaseStablePaneCreate?.()
         }

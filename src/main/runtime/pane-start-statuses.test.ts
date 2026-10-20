@@ -45,8 +45,7 @@ describe('a start into a pane main holds', () => {
           return { id: 'pty-1' }
         })
       },
-      ARGS,
-      { sink: register, keepOnFailure: false }
+      { ...ARGS, startStatus: { sink: register, keepOnFailure: false } }
     )
     expect(seen).toEqual({ status: 'starting' })
     expect(register.get(PANE_KEY)).toBeNull()
@@ -64,8 +63,7 @@ describe('a start into a pane main holds', () => {
             throw new Error('shell not found')
           })
         },
-        ARGS,
-        { sink: register, keepOnFailure: false }
+        { ...ARGS, startStatus: { sink: register, keepOnFailure: false } }
       )
     ).rejects.toThrow('shell not found')
     expect(register.get(PANE_KEY)).toEqual({ status: 'failed', reason: 'shell not found' })
@@ -81,7 +79,10 @@ describe('a start into a pane main holds', () => {
     const kept = storeAnswering('admitted')
     const { register } = statuses()
     await expect(
-      spawnInAdmittedPane(kept.runtimeStore, failing, ARGS, { sink: register, keepOnFailure: true })
+      spawnInAdmittedPane(kept.runtimeStore, failing, {
+        ...ARGS,
+        startStatus: { sink: register, keepOnFailure: true }
+      })
     ).rejects.toThrow('no pty')
     expect(kept.store.withdrawTerminalPane).not.toHaveBeenCalled()
     expect(register.get(PANE_KEY)?.status).toBe('failed')
@@ -89,9 +90,9 @@ describe('a start into a pane main holds', () => {
     const taken = storeAnswering('admitted')
     const untouched = statuses()
     await expect(
-      spawnInAdmittedPane(taken.runtimeStore, failing, ARGS, {
-        sink: untouched.register,
-        keepOnFailure: false
+      spawnInAdmittedPane(taken.runtimeStore, failing, {
+        ...ARGS,
+        startStatus: { sink: untouched.register, keepOnFailure: false }
       })
     ).rejects.toThrow('no pty')
     expect(taken.store.withdrawTerminalPane).toHaveBeenCalledTimes(1)

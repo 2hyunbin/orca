@@ -95,4 +95,27 @@ describe('closeExitedSplitPaneInSession', () => {
       closeExitedSplitPaneInSession(LOCAL_EXECUTION_HOST_ID, lone, right, cleanExit)
     ).toBeNull()
   })
+
+  it('keeps a tab’s last pane behind its card when its process failed or died unused', () => {
+    const session = splitSession()
+    const lone: WorkspaceSessionState = {
+      ...session,
+      terminalLayoutsByTabId: {
+        [TAB]: {
+          root: { type: 'leaf', leafId: RIGHT },
+          activeLeafId: RIGHT,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [RIGHT]: 'pty-right' }
+        }
+      }
+    }
+    const exit = (facts: Partial<typeof cleanExit>) =>
+      closeExitedSplitPaneInSession(LOCAL_EXECUTION_HOST_ID, lone, right, {
+        ...cleanExit,
+        ...facts
+      })
+    expect(exit({ exitCode: 1 })).toBe(lone)
+    expect(exit({ freshSpawn: true, inputSeen: false, shown: false })).toBe(lone)
+    expect(exit({ freshSpawn: true, inputSeen: true })).toBeNull()
+  })
 })
