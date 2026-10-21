@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { WorkspaceSleepOutcome } from '../../../../shared/workspace-sleep'
 import { workspaceSleepTarget } from './workspace-sleep-target'
 
 /** One per host asked to stop the workspace's chats. */
@@ -54,6 +55,13 @@ function describeSleepFailure(error: unknown): string {
   )
 }
 
+function describeVmSuspendFailure(): string {
+  return translate(
+    'auto.components.sidebar.sleep.worktree.flow.vm.running',
+    "The workspace's terminals stopped, but its machine couldn't be suspended and is still running."
+  )
+}
+
 function describeChatStopFailure(): string {
   return translate(
     'auto.components.sidebar.sleep.worktree.flow.chat.partial',
@@ -64,9 +72,13 @@ function describeChatStopFailure(): string {
 export async function runSleepWorktrees(
   worktreeIds: readonly string[]
 ): Promise<WorkspaceSleepResult[]> {
-  const { errors, results } = await sleepWorktreesReportingFailures(worktreeIds, {
-    markChatsAsleep: true
-  })
+  const { errors, results, vmStillRunningIds } = await sleepWorktreesReportingFailures(
+    worktreeIds,
+    { markChatsAsleep: true }
+  )
+  if (vmStillRunningIds.length > 0) {
+    toast.warning(describeVmSuspendFailure())
+  }
   if (errors.length > 0) {
     // Why: callers are fire-and-forget; surface actionable teardown failures after restoring retryable UI state.
     toast.error(
@@ -91,6 +103,8 @@ export type WorktreeSleepOutcome = {
   /** Every workspace not verifiably slept, including one whose chat stop went unconfirmed. */
   failedWorktreeIds: string[]
   errors: string[]
+  /** Slept, but the VM suspend failed: the workspace is asleep and its machine still runs. */
+  vmStillRunningIds: string[]
   results: WorkspaceSleepResult[]
 }
 
@@ -103,7 +117,7 @@ export async function sleepWorktreesReportingFailures(
   // Why unique: both copies of a twin share one id, and sleeping it sleeps the whole workspace.
   const worktreeIds = [...new Set(requestedWorktreeIds)]
   if (worktreeIds.length === 0) {
-    return { failedWorktreeIds: [], errors: [], results: [] }
+    return { failedWorktreeIds: [], errors: [], vmStillRunningIds: [], results: [] }
   }
   const state = useAppStore.getState()
   const errors: string[] = []
@@ -122,7 +136,7 @@ export async function sleepWorktreesReportingFailures(
     targets.length > 0
       ? await window.api.worktrees
           .sleep({ targets, markChatsAsleep: options.markChatsAsleep === true })
-          .catch((error: unknown) =>
+          .catch((error: unknown): WorkspaceSleepOutcome[] =>
             targets.map(({ worktreeId }) => ({
               worktreeId,
               failure: error instanceof Error ? error.message : String(error),
@@ -132,6 +146,7 @@ export async function sleepWorktreesReportingFailures(
           )
       : []
   const results: WorkspaceSleepResult[] = []
+  const vmStillRunningIds: string[] = []
   for (const outcome of outcomes) {
     if (outcome.failure !== undefined) {
       console.error('[sleep-worktree] sleep failed', outcome)
@@ -139,6 +154,10 @@ export async function sleepWorktreesReportingFailures(
       errors.push(describeSleepFailure(new Error(outcome.failure)))
     } else if (outcome.chatFailed) {
       errors.push(describeChatStopFailure())
+    }
+    if (outcome.vmSuspendFailure !== undefined) {
+      console.error('[sleep-worktree] VM suspend failed', outcome)
+      vmStillRunningIds.push(outcome.worktreeId)
     }
     const completed = outcome.failure === undefined && !outcome.chatFailed
     results.push(
@@ -157,6 +176,7 @@ export async function sleepWorktreesReportingFailures(
       ])
     ],
     errors: [...new Set(errors)],
+    vmStillRunningIds,
     results
   }
 }

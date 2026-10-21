@@ -16,6 +16,7 @@ import {
 import type { WorkspaceSleepPlatform } from './workspace-sleep-platform'
 import type { LaunchHostRepo } from '../worktree-launch-host-repo'
 import type { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
+import type { RestoredPane, StartedPty } from '../terminal/recovery/restored-pane-start'
 import {
   explicitKey,
   observeTerminals,
@@ -40,6 +41,10 @@ export type WorkspaceSleepRuntime = {
   ensureStructuredAgentSessionHost: () => Promise<void>
   notifyWorkspaceSleep: (notice: WorkspaceSleepNotice) => void
   wakeRecordsForWorktree: (worktreeId: string) => SleepingAgentSessionRecord[]
+  resumeSleptWorkspaceAgents: (worktreeId: string) => Promise<void>
+  ensureRestoredPaneStarted: (pane: RestoredPane) => Promise<StartedPty | null>
+  /** The window's wake of its own completed-agent hibernation, which main does not hold. */
+  wakeWindowHibernatedAgents: (worktreeId: string) => void
 }
 
 /** The paired server's answer, as a call that throws its refusal with the code kept. */
@@ -101,6 +106,30 @@ export class WorkspaceSleepCoordinator {
   /** The window or a phone opened the workspace; a sleep still running leaves its VM up. */
   noteReopened(worktreeId: string): void {
     this.reopenings.set(worktreeId, (this.reopenings.get(worktreeId) ?? 0) + 1)
+  }
+
+  /**
+   * A phone opened the workspace: main resumes the agents its sleep left running, behind any sleep
+   * still queued, and finishes only once they started, so a later sleep or delete waits for them.
+   */
+  wake(worktreeId: string): Promise<void> {
+    this.noteReopened(worktreeId)
+    return queueTerminalWorkspaceCommand(this.runtime, `id:${worktreeId}`, {
+      kind: 'wake',
+      run: async () => {
+        await this.runtime.resumeSleptWorkspaceAgents(worktreeId)
+        this.runtime.wakeWindowHibernatedAgents(worktreeId)
+      }
+    })
+  }
+
+  /** A slept pane was opened: main resumes it, queued like any wake, and the opener attaches. */
+  resumePane(pane: RestoredPane): Promise<boolean> {
+    this.noteReopened(pane.worktreeId)
+    return queueTerminalWorkspaceCommand(this.runtime, `id:${pane.worktreeId}`, {
+      kind: 'wake',
+      run: async () => (await this.runtime.ensureRestoredPaneStarted(pane)) !== null
+    })
   }
 
   private deps(): WorkspaceSleepDeps {

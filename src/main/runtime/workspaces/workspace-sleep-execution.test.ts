@@ -338,4 +338,18 @@ describe('sleepWorkspaces', () => {
     await sleepWorkspaces(d, enqueue, { targets: [local('wt-1')] })
     expect(log).toEqual(['started wt-1', 'terminals wt-1', 'chats wt-1', 'ended wt-1'])
   })
+
+  it('reports a VM that would not suspend apart from the sleep, which still ended asleep', async () => {
+    const notices: unknown[] = []
+    const { deps: d } = deps({
+      notify: (notice) => notices.push(notice),
+      suspendVm: async () => {
+        throw new Error('vm busy')
+      }
+    })
+    const [outcome] = await sleepWorkspaces(d, queued(), { targets: [local('wt-1')] })
+    expect(outcome?.failure).toBeUndefined()
+    expect(outcome?.vmSuspendFailure).toBe('vm busy')
+    expect(notices.at(-1)).toEqual(expect.objectContaining({ phase: 'ended', slept: true }))
+  })
 })

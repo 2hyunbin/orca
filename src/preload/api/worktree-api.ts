@@ -97,6 +97,8 @@ export type WorktreeApi = {
   sleep: (request: WorkspaceSleepRequest) => Promise<WorkspaceSleepOutcome[]>
   /** The user opened a workspace whose sleep main is still running. */
   sleepReopened: (worktreeId: string) => Promise<void>
+  /** Main resumes a slept pane; true once it runs, so the pane's own spawn attaches to it. */
+  resumeSleptPane: (pane: { worktreeId: string; tabId: string; leafId: string }) => Promise<boolean>
   remove: (args: {
     worktreeId: string
     hostId?: ExecutionHostId

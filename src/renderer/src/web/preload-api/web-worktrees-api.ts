@@ -190,6 +190,7 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
       ),
     // A web client runs no VM, so a reopen during a sleep changes nothing.
     sleepReopened: async () => {},
+    resumeSleptPane: async () => false,
     remove: async ({ worktreeId, hostId, force, allowUnverifiedPtyStop, skipArchive }) => {
       invalidateRuntimeWorktreeCaches()
       return callRuntimeResult<RemoveWorktreeResult>(

@@ -5,6 +5,7 @@ import {
 import { requestBackgroundTerminalWorktreeMount } from '@/components/terminal/background-terminal-worktree-mount'
 import { useAppStore } from '@/store'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
+import { isWorkspaceSleepRecord } from '../../../shared/workspace-sleep'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
 import { getSleepingRecordTabId } from './sleeping-agent-wake-requests'
 import { resolveActivationPtyListScope } from './worktree-activation-pty-inventory'
@@ -158,9 +159,10 @@ function getCanonicalPassiveWakeRecords(
  * spawn is awaited.
  */
 export function wakeSleepingAgentsForWorktreeInBackground(worktreeId: string): void {
+  // Why: main resumes a workspace sleep's records; this wakes only the window's own hibernation.
   const worktreeRecords = Object.values(
     useAppStore.getState().sleepingAgentSessionsByPaneKey
-  ).filter((record) => record.worktreeId === worktreeId)
+  ).filter((record) => record.worktreeId === worktreeId && !isWorkspaceSleepRecord(record))
   // Why: nothing is slept here, so there is no wake work. Skipping is what keeps
   // a phone browsing many worktrees from permanently background-mounting each one
   // (and reattaching its PTYs) on the desktop host it is paired to.

@@ -23,7 +23,7 @@ import type {
   OrcaRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup
 } from '../../terminal/launch/mobile-terminal-startup'
 import type { OrcaRuntimeWithStopTerminalsForWorktree as SessionEditHost } from '../../terminal/stop/worktree-terminal-stop'
-import { claimWindowWakeRecordForPane, isWindowWakeSleepRecord } from './window-wake-sleep-record'
+import { claimSleepRecordForPane, isUnclaimedRunningSleepRecord } from './sleep-record-pane-claim'
 import {
   buildHeadlessMobileSessionTabGroups,
   cloneTerminalLayoutSnapshot
@@ -137,33 +137,22 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     return this.getPaneSleepingAgentRecord(worktreeId, tab)?.origin === 'worktree-sleep'
   }
 
-  /**
-   * The record the host window's cold restore would resume this pane from, if the pane owns it.
-   * Why: a running agent's worktree-sleep record is relaunched in a fresh tab by the window's
-   * worktree activation, so resuming it in the pane as well would run one transcript twice.
-   */
+  /** The record main resumes this pane from, when the pane owns one. */
   protected getPaneOwnedResumeRecord(
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab
   ): SleepingAgentSessionRecord | null {
     const record = this.getPaneSleepingAgentRecord(worktreeId, tab)
-    if (!record) {
-      return null
-    }
     // Why: an originless record predates capture origins and carries no proof of which pane or
     // host wrote it, so it is left (record kept) for the window's legacy cleanup (#29303).
-    // A host with no window right now has no window wake, so the pane owns the record and claims it.
     const paneOwned =
-      record.origin === 'live' ||
-      record.origin === 'quit' ||
-      (record.origin === 'worktree-sleep' &&
-        (record.state === 'done' || !this.getAvailableAuthoritativeWindow()))
+      record?.origin === 'live' || record?.origin === 'quit' || record?.origin === 'worktree-sleep'
     return paneOwned ? record : null
   }
 
   /**
-   * The pane's resume launch: undefined when it owns no record, `{}` (plain shell, record kept,
-   * as the window does) when the record cannot be resumed here or the window will wake it.
+   * The pane's resume launch: undefined when it owns no record, `{}` (plain shell, record kept)
+   * when the record cannot be resumed here or another resume took it.
    */
   protected async resolvePaneOwnedResumeStartup(
     worktreeId: string,
@@ -171,9 +160,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
   ): Promise<MobileTerminalResumeCommand | Record<string, never> | undefined> {
     const record = this.getPaneOwnedResumeRecord(worktreeId, tab)
     if (!record) {
-      const unowned = this.getPaneSleepingAgentRecord(worktreeId, tab)
-      // Why: a fresh launch would drop the conversation and its recorded flags (#29672).
-      return unowned && isWindowWakeSleepRecord(unowned) ? {} : undefined
+      return undefined
     }
     // Why: nothing here spends the record, so a session another pane also records could be
     // resumed twice (two writers on one transcript), as could one already live in another pane.
@@ -198,14 +185,12 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     } catch {
       return {}
     }
-    if (!resume || !isWindowWakeSleepRecord(record)) {
+    if (!resume || !isUnclaimedRunningSleepRecord(record)) {
       return resume ?? {}
     }
     const hostId = this.getWorkspaceSessionHostIdForWorktree(worktreeId)
-    const claimed = await claimWindowWakeRecordForPane(
+    const claimed = await claimSleepRecordForPane(
       (edit) => this.commitWorkspaceSessionEdit(hostId, edit),
-      // Why: a window that attached during the awaits above now owns this record's wake.
-      () => Boolean(this.getAvailableAuthoritativeWindow()),
       record
     )
     return claimed ? resume : {}

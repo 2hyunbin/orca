@@ -11,10 +11,10 @@ import {
 } from '../orca-runtime-test-fixtures.spec'
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
-// The host's own pane-owned capture form (#11598), which no window wake relaunches.
+// The host's own pane-owned capture form (#11598), which no wake resumes a second time.
 const PANE_OWNED = { origin: 'worktree-sleep', state: 'done', restoreOnTabOpenOnly: true }
 
-// A running agent's workspace sleep: the window's wake relaunches it, and a windowless host has none.
+// An older window capture of a running agent's workspace sleep, which main resumes in its pane.
 function makeWorkingSleepStore(overrides: Partial<SleepingAgentSessionRecord> = {}) {
   const record: SleepingAgentSessionRecord = {
     paneKey: PANE_KEY,
@@ -248,14 +248,37 @@ describe('opening a workspace-slept running agent on a host with no window', () 
     expect(spawnedCommand(retried.spawn)).toContain('provider-session-1')
   })
 
-  it('opens a plain shell, not a fresh agent, when a window will wake the record', async () => {
+  it('resumes in the pane with a window present too: main is the one executor', async () => {
     const fixture = makeWorkingSleepStore()
     withClaudeLaunchedTab(fixture)
     const { opened, spawn } = openPane(fixture.runtimeStore, 'openable', { withWindow: true })
 
     await opened
     expect(spawn).toHaveBeenCalledOnce()
-    expect(spawnedCommand(spawn)).toBe('')
-    expect(fixture.getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toBeDefined()
+    expect(spawnedCommand(spawn)).toContain('provider-session-1')
+    expect(fixture.getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toMatchObject(
+      PANE_OWNED
+    )
+  })
+
+  it("resumes on a phone's open of the workspace, and its queued wake ends with the resume", async () => {
+    const fixture = makeWorkingSleepStore()
+    let landSpawn!: (pty: { id: string }) => void
+    const { runtime, spawn } = openPane(fixture.runtimeStore, 'blocked', {
+      spawn: () => new Promise((resolve) => (landSpawn = resolve))
+    })
+    const resumeSleepingAgents = vi.fn()
+    Object.defineProperty(runtime, 'notifier', { value: { resumeSleepingAgents } })
+
+    await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
+      notifyClients: false,
+      clientKind: 'mobile'
+    })
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+    expect(spawnedCommand(spawn)).toContain('provider-session-1')
+    // Rule 3: the wake's queue step is still running until the resume spawn lands.
+    expect(resumeSleepingAgents).not.toHaveBeenCalled()
+    landSpawn({ id: 'persisted-pty' })
+    await vi.waitFor(() => expect(resumeSleepingAgents).toHaveBeenCalledWith(TEST_WORKTREE_ID))
   })
 })
