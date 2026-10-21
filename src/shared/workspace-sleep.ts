@@ -1,3 +1,4 @@
+import type { SleepingAgentSessionRecord } from './agent-session-resume'
 import type { ExecutionHostId } from './execution-host'
 
 /** A host that runs part of a workspace: this desktop's main, or a paired server. */
@@ -40,4 +41,6 @@ export type WorkspaceSleepNotice =
       /** The terminals main proved stopped, as the window's PTY ids; null when the stop failed. */
       stoppedPtyIds: string[] | null
       slept: boolean
+      /** The agents main recorded for wake, which the window reads; null when another host keeps them. */
+      records: SleepingAgentSessionRecord[] | null
     }

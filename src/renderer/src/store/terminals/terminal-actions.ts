@@ -1,3 +1,4 @@
+import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import type { TerminalState } from './terminal-state'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TabSplitTarget } from '../slices/tabs/tabs-slice-contract'
@@ -30,8 +31,9 @@ import type {
 } from './terminal-contracts'
 
 /** Main's answer for a sleep it ran: every PTY stopped, or only `stoppedPtyIds` before it failed. */
+/** Main's answer to a sleep it ran; on success, the wake records it keeps (null: another host's). */
 export type HostTerminalStop =
-  | { failed: false }
+  | { failed: false; records: readonly SleepingAgentSessionRecord[] | null }
   | { failed: true; stoppedPtyIds: readonly string[] }
 
 export type TerminalActions = {

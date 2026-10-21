@@ -24,7 +24,9 @@ const mocks = vi.hoisted(() => {
     worktreesByRepo: {},
     detectedWorktreesByRepo: {}
   }
+  const listeners = new Set<(next: typeof state) => void>()
   return {
+    listeners,
     clearWorktreeSleepIntent: vi.fn(),
     markWorktreeSleepIntent: vi.fn(),
     state,
@@ -34,7 +36,11 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: () => mocks.state
+    getState: () => mocks.state,
+    subscribe: (listener: (next: typeof mocks.state) => void) => {
+      mocks.listeners.add(listener)
+      return () => mocks.listeners.delete(listener)
+    }
   }
 }))
 
@@ -57,12 +63,14 @@ import {
   sleepWorktreesReportingFailures
 } from './sleep-worktree-flow'
 import { fakeMainSleep } from './sleep-worktree-test-main'
+import { followWorkspaceSleep } from './workspace-sleep-follower'
 
 let main = fakeMainSleep()
+const sleepReopened = vi.fn(async () => {})
 function answerWith(answer: (target: WorkspaceSleepTarget) => Partial<WorkspaceSleepOutcome>) {
   main = fakeMainSleep(answer)
   vi.stubGlobal('window', {
-    api: { worktrees: { sleep: main.sleep } },
+    api: { worktrees: { sleep: main.sleep, sleepReopened } },
     requestAnimationFrame: vi.fn()
   })
 }
@@ -364,5 +372,25 @@ describe('runSleepWorktree', () => {
 
     expect(main.requests[0]?.targets).toHaveLength(1)
     expect(mocks.state.shutdownWorktreeBrowsers).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells main when the user opens the workspace before its sleep ends', async () => {
+    sleepReopened.mockClear()
+    followWorkspaceSleep({ worktreeId: 'wt-1', phase: 'started' })
+    // The user picks the workspace while main still runs its sleep.
+    mocks.state.activeWorktreeId = 'wt-1'
+    for (const listener of mocks.listeners) {
+      listener(mocks.state)
+    }
+    followWorkspaceSleep({
+      worktreeId: 'wt-1',
+      phase: 'ended',
+      slept: true,
+      stoppedPtyIds: [],
+      records: null
+    })
+    await Promise.resolve()
+    expect(sleepReopened).toHaveBeenCalledWith('wt-1')
+    expect(mocks.listeners.size).toBe(0)
   })
 })

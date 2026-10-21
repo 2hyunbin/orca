@@ -15,12 +15,27 @@ import { preserveSidebarWorktreePosition } from './sleep-worktree-sidebar-positi
 
 type FollowedSleep = {
   settle: (stop: HostTerminalStop) => void
+  stopWatchingReopen: () => void
   teardown: Promise<void>
   /** The selection to put back if the sleep fails and the user picked nothing meanwhile. */
   selectionBeforeSleep: WorkspaceSelection | null
 }
 
 const followed = new Map<string, FollowedSleep>()
+
+/** Tells main once if the user opens the workspace before its sleep ends: its VM then keeps running. */
+function watchReopenDuringSleep(worktreeId: string): () => void {
+  const unsubscribe = useAppStore.subscribe((state) => {
+    if (state.activeWorktreeId === worktreeId) {
+      unsubscribe()
+      // Best effort: a missed note only suspends a VM the user can resume.
+      void Promise.resolve()
+        .then(() => window.api.worktrees.sleepReopened(worktreeId))
+        .catch(() => {})
+    }
+  })
+  return unsubscribe
+}
 
 /**
  * The window's side of a sleep main runs, whoever asked: on `started` it hides the workspace and
@@ -31,7 +46,9 @@ export function followWorkspaceSleep(notice: WorkspaceSleepNotice): void {
   const { worktreeId } = notice
   if (notice.phase === 'started') {
     // A newer sleep of the same workspace replaces an unfinished one.
-    followed.get(worktreeId)?.settle({ failed: true, stoppedPtyIds: [] })
+    const previous = followed.get(worktreeId)
+    previous?.stopWatchingReopen()
+    previous?.settle({ failed: true, stoppedPtyIds: [] })
     const state = useAppStore.getState()
     const wasActive = state.activeWorktreeId === worktreeId
     const selectionBeforeSleep = wasActive ? captureWorkspaceSelection(state) : null
@@ -53,13 +70,21 @@ export function followWorkspaceSleep(notice: WorkspaceSleepNotice): void {
     ).catch((error: unknown) => {
       console.warn('[sleep-worktree] panes kept awake', { worktreeId, error })
     })
-    followed.set(worktreeId, { settle, teardown, selectionBeforeSleep })
+    followed.set(worktreeId, {
+      settle,
+      teardown,
+      selectionBeforeSleep,
+      stopWatchingReopen: watchReopenDuringSleep(worktreeId)
+    })
     return
   }
   const entry = followed.get(worktreeId)
   followed.delete(worktreeId)
+  entry?.stopWatchingReopen()
   entry?.settle(
-    notice.slept ? { failed: false } : { failed: true, stoppedPtyIds: notice.stoppedPtyIds ?? [] }
+    notice.slept
+      ? { failed: false, records: notice.records }
+      : { failed: true, stoppedPtyIds: notice.stoppedPtyIds ?? [] }
   )
   void (entry?.teardown ?? Promise.resolve()).then(() => {
     const state = useAppStore.getState()

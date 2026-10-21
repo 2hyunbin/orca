@@ -102,7 +102,7 @@ export function observeTerminals(runtime: ObservingRuntime, selector: string) {
 }
 
 /** The sync key of an `id:` selector routed by the repo rows; null when only a lookup can say. */
-function explicitKey(
+export function explicitKey(
   repos: readonly LaunchHostRepo[],
   selector: string,
   hostId?: string | null

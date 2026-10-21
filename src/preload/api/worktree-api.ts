@@ -95,6 +95,8 @@ export type WorktreeApi = {
   }) => Promise<GitWorktreeInfo[]>
   /** Main sleeps each workspace on its hosts; the window shows the outcome. */
   sleep: (request: WorkspaceSleepRequest) => Promise<WorkspaceSleepOutcome[]>
+  /** The user opened a workspace whose sleep main is still running. */
+  sleepReopened: (worktreeId: string) => Promise<void>
   remove: (args: {
     worktreeId: string
     hostId?: ExecutionHostId

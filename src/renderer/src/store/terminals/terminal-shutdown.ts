@@ -1,3 +1,4 @@
+import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import { shutdownBufferCaptures } from '@/components/terminal-pane/shutdown-buffer-captures'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
@@ -56,15 +57,19 @@ export function createTerminalShutdownActions(
         teardownOwner.kind === 'resolved' ? teardownOwner.runtimeEnvironmentId : null
       // Only renderer-bound ids emit pane exit callbacks; raw RPC handles never enter this guard.
       const exitGuardPtyIds = rendererShutdownPtyIds
-      const sleepingAgentSessionRecords = keepIdentifiers
-        ? collectSleepingAgentSessionRecordsForWorktree(get(), worktreeId, {
-            paneKeys: opts?.sleepingPaneKeys,
-            ...(shutdownReason === 'manual-sleep' ? { captureMode: 'manual-worktree-sleep' } : {}),
-            ...(shutdownReason === 'auto-hibernate-completed-agent'
-              ? { captureMode: 'completed-agent-hibernation' }
-              : {})
-          })
-        : {}
+      // Main records a sleep it runs; the window takes main's records from its answer below.
+      let sleepingAgentSessionRecords: Record<string, SleepingAgentSessionRecord> =
+        keepIdentifiers && !hostStop
+          ? collectSleepingAgentSessionRecordsForWorktree(get(), worktreeId, {
+              paneKeys: opts?.sleepingPaneKeys,
+              ...(shutdownReason === 'manual-sleep'
+                ? { captureMode: 'manual-worktree-sleep' }
+                : {}),
+              ...(shutdownReason === 'auto-hibernate-completed-agent'
+                ? { captureMode: 'completed-agent-hibernation' }
+                : {})
+            })
+          : {}
       const retainedCompletionEvidence =
         shutdownReason === 'auto-hibernate-completed-agent'
           ? collectHibernatedCompletionEvidenceForWorktree(
@@ -109,6 +114,9 @@ export function createTerminalShutdownActions(
               guards.settlePartialRendererStop([...stop.stoppedPtyIds])
               throw new Error('host_terminal_stop_failed')
             }
+            sleepingAgentSessionRecords = Object.fromEntries(
+              (stop.records ?? []).map((record) => [record.paneKey, record])
+            )
           } else {
             if (runtimeEnvironmentId && !backendOwnsPtyTeardown) {
               // Backend ownership is opt-in; the owner RPC prevents remote PTY leaks.
@@ -183,7 +191,7 @@ export function createTerminalShutdownActions(
 
       guards.commitHandlerSnapshots()
       // Switch point: main records a sleep's resumes once the terminals stopped (none on removal).
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && !hostStop) {
         recordPaneSleepThroughLayoutOwner(get(), worktreeId, sleepingAgentSessionRecords)
       }
       commitTerminalShutdownState({

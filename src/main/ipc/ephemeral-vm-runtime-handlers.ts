@@ -28,8 +28,6 @@ import {
 import { getRuntimeRecipeContext } from './ephemeral-vm-recipe-context'
 import { invalidateRuntimeEnvironmentTransport } from './runtime-environments/runtime-environments'
 import { attachEphemeralVmRuntimeToWorkspace } from '../ephemeral-vm-runtime-attachment'
-import { suspendEphemeralVmWorkspace } from '../ephemeral-vm-workspace-suspend'
-import { setWorkspaceVmSuspend } from '../ephemeral-vm-workspace-suspend-slot'
 
 export type EphemeralVmCleanupCommandResult = {
   runtimeId: string
@@ -151,7 +149,6 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   )
 
   // Sleep suspends a workspace's VM from main, after its chats stop.
-  setWorkspaceVmSuspend((workspaceId) => suspendEphemeralVmWorkspace(store, workspaceId))
 
   ipcMain.handle(
     'ephemeralVm:resumeWorkspace',

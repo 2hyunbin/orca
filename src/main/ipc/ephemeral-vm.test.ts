@@ -49,7 +49,7 @@ vi.mock('./runtime-environments/runtime-environments', () => ({
 }))
 
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
-import { getWorkspaceVmSuspend } from '../ephemeral-vm-workspace-suspend-slot'
+import { suspendEphemeralVmWorkspace } from '../ephemeral-vm-workspace-suspend'
 
 const tempDirs: string[] = []
 
@@ -667,7 +667,8 @@ describe('registerEphemeralVmHandlers', () => {
       ].join('\n')
     )
 
-    registerEphemeralVmHandlers(makeStore(repoPath) as never)
+    const store = makeStore(repoPath)
+    registerEphemeralVmHandlers(store as never)
     const provisioned = (await handlers.get('ephemeralVm:provision')?.(null, {
       repoId: 'repo-1',
       recipeId: 'cloud-sandbox'
@@ -683,7 +684,7 @@ describe('registerEphemeralVmHandlers', () => {
     expect(runningResume).toEqual(expect.objectContaining({ status: 'running' }))
     expect(existsSync(join(repoPath, 'resume-mode.txt'))).toBe(false)
 
-    await getWorkspaceVmSuspend()?.('workspace-1')
+    await suspendEphemeralVmWorkspace(store as never, 'workspace-1')
     expect(listEphemeralVmRuntimes(userDataPath)).toEqual([
       expect.objectContaining({ status: 'suspended' })
     ])

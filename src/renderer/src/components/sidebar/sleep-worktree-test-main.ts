@@ -25,7 +25,8 @@ export function fakeMainSleep(
         worktreeId: target.worktreeId,
         phase: 'ended',
         slept: outcome.failure === undefined,
-        stoppedPtyIds: outcome.failure === undefined ? null : []
+        stoppedPtyIds: outcome.failure === undefined ? null : [],
+        records: null
       })
       outcomes.push(outcome)
     }

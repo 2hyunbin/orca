@@ -7,4 +7,8 @@ export function registerWorktreeSleepHandlers(context: WorktreeIpcContext): void
   ipcMain.handle('worktrees:sleep', (_event, request: WorkspaceSleepRequest) =>
     context.runtime.sleepWorkspaces(request)
   )
+  // The user opened a workspace whose sleep is still running: its VM keeps running.
+  ipcMain.handle('worktrees:sleepReopened', (_event, worktreeId: string) =>
+    context.runtime.noteWorkspaceReopened(worktreeId)
+  )
 }
