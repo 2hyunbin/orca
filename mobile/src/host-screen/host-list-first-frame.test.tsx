@@ -8,8 +8,8 @@ import type { Section } from '../worktree/workspace-list-types'
 import type { HostSidebarFeedRead } from './host-sidebar-feed-reader'
 import { FEED_ROWS, liveRow, phoneView } from './host-sidebar-feed.test-fixture'
 
-const readers = vi.hoisted(() => ({
-  onRead: [] as ((read: HostSidebarFeedRead) => void)[]
+const readers = vi.hoisted((): { onRead: ((read: HostSidebarFeedRead) => void)[] } => ({
+  onRead: []
 }))
 
 vi.mock('./host-sidebar-feed-reader', () => ({
@@ -118,12 +118,12 @@ describe("the host list's first frame under the feed", () => {
   it("opens the list again on the host's last installed feed, not on worktree.ps", async () => {
     await open('host-1')
     await read({ installed: INSTALLED, unavailable: false })
-    const desktopShape = drawn
+    const desktopList = drawn
     act(() => renderers.splice(0).forEach((renderer) => renderer.unmount()))
 
     await open('host-1')
     expect(kind).toBe('ready')
-    expect(drawn).toEqual(desktopShape)
+    expect(drawn).toEqual(desktopList)
   })
 
   it("never opens one host's list on another's feed", async () => {
