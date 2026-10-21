@@ -72,7 +72,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
         await this.setMobileSessionTabProps(`id:${worktreeId}`, { tabId, color })
       },
-      getPtyId: (handle) => this.getLivePtyForHandle(handle)?.pty.ptyId,
+      getPtyId: (handle) => this.getLivePtyRecordForHandle(handle)?.pty.ptyId,
       recordSetupCompletionToken: (ptyId, token) =>
         this.setupCompletionTokenByPtyId.set(ptyId, token)
     }
@@ -132,7 +132,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
         })
         return applied(reply) && reply.ok ? (reply.result.createdTabs ?? []) : null
       },
-      getPtyId: (handle) => this.getLivePtyForHandle(handle)?.pty.ptyId,
+      getPtyId: (handle) => this.getLivePtyRecordForHandle(handle)?.pty.ptyId,
       recordSetupCompletionToken: (ptyId, token) =>
         this.setupCompletionTokenByPtyId.set(ptyId, token)
     }
@@ -151,7 +151,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
 
   protected getWorktreeStartupReadinessHost(): WorktreeStartupReadinessHost {
     return {
-      getPtyId: (handle) => this.getLivePtyForHandle(handle)?.pty.ptyId ?? null,
+      getPtyId: (handle) => this.getLivePtyRecordForHandle(handle)?.pty.ptyId ?? null,
       getForegroundProcess: (ptyId) => this.ptyController!.getForegroundProcess(ptyId),
       hasChildProcesses: (ptyId) =>
         this.ptyController!.hasChildProcesses?.(ptyId) ?? Promise.resolve(false),

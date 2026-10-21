@@ -120,7 +120,7 @@ export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRun
     if (!opts.resumeProviderSession || !created.tab.terminal) {
       return
     }
-    const pty = this.getLivePtyForHandle(created.tab.terminal)?.pty
+    const pty = this.getLivePtyRecordForHandle(created.tab.terminal)?.pty
     // Why: an SSH pane's status rows belong to the relay on that host.
     if (!pty?.paneKey || pty.connectionId) {
       return

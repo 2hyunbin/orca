@@ -142,11 +142,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
         record = this.handles.get(handle)
       }
     }
-    if (
-      !record ||
-      record.runtimeId !== this.runtimeId ||
-      !(record.tabId.startsWith('pty:') || this.mainBindsTerminalsOwnHandle(handle, record))
-    ) {
+    if (!record || record.runtimeId !== this.runtimeId || !record.tabId.startsWith('pty:')) {
       return null
     }
     if (!record.ptyId) {
@@ -162,20 +158,32 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   }
 
   /**
-   * Layout-owner builds: the terminal's own handle (the one it was created under) after the pane
-   * main's layout binds it to adopted it. Main lists its panes with or without a window, so the
-   * adoption no longer means a window drew the pane; the handle still names the terminal.
+   * The handle's live terminal, for a caller with no leaf path of its own. Layout-owner builds:
+   * main lists its panes with or without a window, so the pane main binds a terminal to may have
+   * adopted the terminal's own handle (the one it was created under); that handle still names it.
+   * The own-handle check stands in for the leaf's epoch fence: a new incarnation drops it.
    */
-  private mainBindsTerminalsOwnHandle(handle: string, record: TerminalHandleRecord): boolean {
+  protected getLivePtyRecordForHandle(handle: string): {
+    record: TerminalHandleRecord
+    pty: RuntimePtyWorktreeRecord
+  } | null {
+    const live = this.getLivePtyForHandle(handle)
+    if (live || !ORCA_LAYOUT_OWNER_IS_MAIN) {
+      return live
+    }
+    const record = this.handles.get(handle)
     if (
-      !ORCA_LAYOUT_OWNER_IS_MAIN ||
-      !record.ptyId ||
+      !record?.ptyId ||
+      record.runtimeId !== this.runtimeId ||
       this.handleByPtyId.get(record.ptyId) !== handle
     ) {
-      return false
+      return null
     }
     const pane = startedMainTerminalSurfaces(this)?.findPaneForPty(record.ptyId)
-    return pane?.tabId === record.tabId && pane.leafId === record.leafId
+    const pty = this.ptysById.get(record.ptyId)
+    return pty && pane?.tabId === record.tabId && pane.leafId === record.leafId
+      ? { record, pty }
+      : null
   }
 
   protected assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void {

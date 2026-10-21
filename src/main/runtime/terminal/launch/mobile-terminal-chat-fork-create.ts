@@ -174,7 +174,7 @@ export abstract class OrcaRuntimeWithMobileChatForkCreate extends OrcaRuntimeWit
       }
       const tab = created.tab
       const pty =
-        typeof tab.terminal === 'string' ? this.getLivePtyForHandle(tab.terminal)?.pty : null
+        typeof tab.terminal === 'string' ? this.getLivePtyRecordForHandle(tab.terminal)?.pty : null
       if (
         typeof tab.terminal !== 'string' ||
         !pty ||
@@ -222,7 +222,7 @@ export abstract class OrcaRuntimeWithMobileChatForkCreate extends OrcaRuntimeWit
         ) {
           throw new Error('terminal_reveal_identity_mismatch')
         }
-        if (this.getLivePtyForHandle(tab.terminal)?.pty.incarnationId !== tab.incarnationId) {
+        if (this.getLivePtyRecordForHandle(tab.terminal)?.pty.incarnationId !== tab.incarnationId) {
           throw new Error('terminal_reveal_identity_mismatch')
         }
       } catch (error) {
