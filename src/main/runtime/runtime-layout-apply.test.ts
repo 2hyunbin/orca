@@ -18,10 +18,13 @@ vi.mock('../persistence/moving-wsl-projects/wsl-move-scope-guard', () => ({
 const CLOSE = { type: 'closePane', workspace: 'wt-1', tabId: 'tab-1', leafId: 'leaf-1' } as const
 
 function storeWith() {
-  const applyLayoutCommand = vi.fn(async (): Promise<LayoutApplyOutcome> => ({
-    ok: true,
-    result: {}
-  }))
+  // A close takes every tab it names, as main's store does for an unpinned tab.
+  const applyLayoutCommand = vi.fn(
+    async (command: WindowLayoutCommand): Promise<LayoutApplyOutcome> => ({
+      ok: true,
+      result: command.type === 'closeTabs' ? { closed: [...command.tabIds], refused: [] } : {}
+    })
+  )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply path reads only applyLayoutCommand.
   const store = { applyLayoutCommand } as unknown as RuntimeStore
   return { store, applyLayoutCommand }
@@ -148,6 +151,25 @@ describe('applyWindowLayoutCommand', () => {
       kind: 'tab',
       tabId: 'term-1'
     })
+  })
+
+  it('leaves the launches of a tab the close refused alone', async () => {
+    const { store, applyLayoutCommand } = storeWith()
+    applyLayoutCommand.mockResolvedValueOnce({
+      ok: true,
+      result: { closed: [], refused: [{ tabId: 'tab-1', code: 'tab_pinned' }] }
+    })
+    const close: WindowLayoutCommand = {
+      type: 'closeTabs',
+      workspace: 'wt-1',
+      tabIds: ['tab-1'],
+      refusePinned: true,
+      recordClose: 'user'
+    }
+
+    await applyWindowLayoutCommand(store, () => ['local'], close)
+
+    expect(mocks.markAgentLaunchesClosedByUser).not.toHaveBeenCalled()
   })
 
   it('leaves a cleanup close’s launches alone, and a workspace main lacks to today’s close', async () => {
