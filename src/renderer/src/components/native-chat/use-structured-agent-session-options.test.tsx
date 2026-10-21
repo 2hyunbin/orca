@@ -273,7 +273,12 @@ describe('useStructuredAgentSessionOptions', () => {
   it('refreshes inventory after a live answer while keeping the chat choice', async () => {
     let settleCatalog!: (value: unknown) => void
     answer({
-      options: () => Promise.resolve(LIVE_OPTIONS),
+      options: () =>
+        Promise.resolve(
+          settleCatalog
+            ? { ...LIVE_OPTIONS, models: [...HOST_CATALOG.models, ...LIVE_OPTIONS.models] }
+            : LIVE_OPTIONS
+        ),
       modelCatalog: () => new Promise((resolve) => (settleCatalog = resolve))
     })
     const { result, unmount } = renderOptions(ATTACHED, mutateWith(async () => null).mutate)
@@ -501,7 +506,7 @@ describe('useStructuredAgentSessionOptions', () => {
         await result.current.setStructuredOption('model', 'gpt-5.6-luna')
       })
       expect(setOptionCalls(calls)).toEqual([{ key: 'model', value: 'gpt-5.6-luna' }])
-      expect(mocks.hold).toHaveBeenCalledTimes(1)
+      expect(mocks.hold).not.toHaveBeenCalled()
       unmount()
     })
   })
@@ -509,6 +514,7 @@ describe('useStructuredAgentSessionOptions', () => {
   describe('before the provider starts', () => {
     it('keeps a picked effort visible after a model pick during startup', async () => {
       answer({
+        modelCatalog: async () => ({ origin: 'unknown' }),
         options: async () => ({
           models: ['opus', 'sonnet'].map((id) => ({
             id,

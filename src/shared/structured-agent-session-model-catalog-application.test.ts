@@ -125,12 +125,9 @@ describe('structured option state from the host model catalog', () => {
     expect(silent.valueSource).toBe('unknown')
   })
 
-  it('settles on the built-in list on an unknown or empty host answer, and keeps a host list', () => {
+  it('settles on the built-in list on an unknown host answer, and keeps a host list', () => {
     const seeded = createStructuredAgentSessionOptionState('codex', SEED)
-    for (const answer of [
-      { origin: 'unknown' as const },
-      { origin: 'probe' as const, models: [], fetchedAt: 1 }
-    ]) {
+    for (const answer of [{ origin: 'unknown' as const }]) {
       const settled = applyStructuredAgentSessionModelCatalog(seeded, SEED, answer, LAUNCH)
       expect(settled.catalogSource).toBe('builtin')
       expect(settled.catalog).toBe(seeded.catalog)
@@ -138,6 +135,22 @@ describe('structured option state from the host model catalog', () => {
       // The host list stays.
       expect(applyStructuredAgentSessionModelCatalog(hosted, SEED, answer, LAUNCH)).toBe(hosted)
     }
+  })
+
+  it('keeps known empty inventory distinct from an unavailable observation', () => {
+    const seeded = createStructuredAgentSessionOptionState('codex', SEED)
+    const hosted = applyStructuredAgentSessionModelCatalog(seeded, SEED, HOST_CATALOG, LAUNCH)
+    const empty = applyStructuredAgentSessionModelCatalog(
+      hosted,
+      SEED,
+      { origin: 'probe', models: [], fetchedAt: 2 },
+      LAUNCH
+    )
+    expect(empty.catalog?.models).toEqual([])
+    expect(empty.record).toBe(hosted.record)
+    expect(
+      applyStructuredAgentSessionModelCatalog(hosted, SEED, { origin: 'unknown' }, LAUNCH)
+    ).toBe(hosted)
   })
 
   it('refreshes inventory after a live answer while retaining the chat’s own selection', () => {
@@ -150,7 +163,16 @@ describe('structured option state from the host model catalog', () => {
       }
     )
     expect(live.catalogSource).toBe('live')
-    const refreshed = applyStructuredAgentSessionModelCatalog(live, SEED, HOST_CATALOG, LAUNCH)
+    const refreshed = applyStructuredAgentSessionModelCatalog(live, SEED, HOST_CATALOG, {
+      ...LAUNCH,
+      holdControls: true
+    })
+    for (const agent of ['grok', 'pi']) {
+      const sourced = { ...live, record: { ...live.record, agent } }
+      expect(applyStructuredAgentSessionModelCatalog(sourced, SEED, HOST_CATALOG, LAUNCH)).toBe(
+        sourced
+      )
+    }
     expect(refreshed.catalog?.models.map((row) => row.id)).toEqual(['gpt-hosted', 'gpt-live'])
     expect(refreshed.record).toBe(live.record)
     const snapshot = structuredAgentSessionOptionSnapshot(live)

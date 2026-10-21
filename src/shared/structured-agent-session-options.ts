@@ -50,7 +50,7 @@ export function structuredAgentSessionOptionCatalog(
 
 export type StructuredAgentSessionOptionState = {
   catalog: AgentSessionOptionCatalog | null
-  /** What produced `catalog`; a weaker source never replaces a stronger one. `seed` is the
+  /** What answered `catalog`, not proof of current child eligibility. `seed` is the
    *  built-in list before the host answered (shown as the quiet placeholder); `builtin` is the
    *  same list once the host said it has none, usable but naming nothing the host may replace. */
   catalogSource: 'seed' | 'builtin' | 'host' | 'live' | null
@@ -117,8 +117,8 @@ export function finishedListingIds(catalog: AgentSessionModelCatalogResult): str
 /**
  * Applies the host's stored model catalog: models only, no current selection
  * and no record writes, so nothing here reads as a committed value — the pick
- * stays provisional until a live options result confirms it. Exact child
- * controls survive inventory refreshes.
+ * stays provisional until an options result confirms it. Retained controls
+ * are presentation while the owner awaits a matching projection.
  */
 export function applyStructuredAgentSessionModelCatalog(
   state: StructuredAgentSessionOptionState,
@@ -135,19 +135,24 @@ export function applyStructuredAgentSessionModelCatalog(
       : catalog.models.map((model) =>
           discoveredModel(model, catalog.fastModeSupport?.supported === true)
         )
-  if (catalog.origin === 'unknown' || models.length === 0) {
+  if (catalog.origin === 'unknown') {
     return settleStructuredAgentSessionBuiltinCatalog(state)
   }
   const selected = state.record.values.model?.value
-  const currentRow =
-    state.catalogSource === 'live' || options.holdControls
-      ? state.catalog?.models.find((row) => row.id === selected)
-      : undefined
+  const currentRow = options.holdControls
+    ? state.catalog?.models.find((row) => row.id === selected)
+    : undefined
   const inventory = models.map((row) =>
     currentRow?.id === row.id ? { ...row, options: currentRow.options } : row
   )
   if (currentRow && !inventory.some((row) => row.id === currentRow.id)) {
-    inventory.push({ ...currentRow, isDefault: false })
+    inventory.push({
+      id: currentRow.id,
+      label: currentRow.label,
+      description: currentRow.description,
+      options: currentRow.options,
+      isDefault: false
+    })
   }
   // The host says whether its listed default is what this launch runs; an older host never says,
   // so the client's own knowledge of the agent stands in. A reopened chat may keep its own model.

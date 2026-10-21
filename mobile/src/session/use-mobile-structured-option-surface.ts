@@ -10,6 +10,7 @@ import type {
 /** The picker surface over a structured chat's options: picks, `/`-opened pickers, snapshots. */
 export function useMobileStructuredOptionSurface(args: {
   demandModelCatalog: () => void
+  lockSnapshot: (snapshot: SessionOptionDescriptor[]) => SessionOptionDescriptor[]
   optionSnapshot: SessionOptionDescriptor[]
   setStructuredOption: (id: string, value: SessionOptionValue) => Promise<boolean>
   /** The latest option state, which a settled pick's snapshot is read from. */
@@ -35,9 +36,11 @@ export function useMobileStructuredOptionSurface(args: {
   const setOption = useCallback(
     async (id: string, value: SessionOptionValue) => {
       await setStructuredOption(id, value)
-      return { snapshot: structuredAgentSessionShownSnapshot(optionStateRef.current) }
+      return {
+        snapshot: args.lockSnapshot(structuredAgentSessionShownSnapshot(optionStateRef.current))
+      }
     },
-    [optionStateRef, setStructuredOption]
+    [args.lockSnapshot, optionStateRef, setStructuredOption]
   )
 
   const optionSurface = useMemo<SessionOptionsSurface>(

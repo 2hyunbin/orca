@@ -7,7 +7,6 @@ import type {
 } from '../../../src/shared/agent-session-wire'
 import type { SessionOptionDescriptor } from '../../../src/shared/native-chat-session-options'
 import type { RpcClient } from '../transport/rpc-client'
-import type { StructuredAgentSessionMutate } from './mobile-structured-agent-session-rpc'
 import { useMobileStructuredAgentOptions } from './use-mobile-structured-agent-options'
 
 const HOST_LIST: AgentSessionModelCatalogResult = {
@@ -48,8 +47,10 @@ type Props = { rpc: RpcClient; fence: number }
 
 async function mount(initial: Props) {
   const frames: string[][] = []
+  const effortFrames: (boolean | undefined)[] = []
   let snapshot: readonly SessionOptionDescriptor[] = []
-  const mutate: StructuredAgentSessionMutate = vi.fn()
+  const mutate = vi.fn().mockResolvedValue({ status: 'rejected' })
+  let latest!: ReturnType<typeof useMobileStructuredAgentOptions>
   function Probe(props: Props): null {
     const options = useMobileStructuredAgentOptions({
       agent: 'codex',
@@ -60,7 +61,9 @@ async function mount(initial: Props) {
       mutate,
       hostSupport: { permissionModes: true }
     })
+    latest = options
     frames.push(modelChoices(options.optionSnapshot))
+    effortFrames.push(options.optionSnapshot.find((row) => row.id === 'effort')?.settable)
     snapshot = options.optionSnapshot
     return null
   }
@@ -70,7 +73,10 @@ async function mount(initial: Props) {
   })
   return {
     frames,
+    effortFrames,
     snapshot: () => snapshot,
+    options: () => latest,
+    mutate,
     update: (next: Props) =>
       act(async () => {
         renderer?.update(createElement(Probe, next))
@@ -125,16 +131,66 @@ describe('the phone picker’s first frame', () => {
           ]
         }
       ],
-      current: { model: 'A', effort: 'high', defaulted: [] }
+      current: { model: 'A', effort: 'high', permissionMode: 'ask', defaulted: [] }
     }
     let replacement = false
     let answer!: (value: AgentSessionOptionsResult) => void
+    let raw = HOST_LIST
+    let reads = 0
+    let optionsAnswer = () => Promise.resolve(child)
     const rpc = client(
-      () => Promise.resolve(HOST_LIST),
-      () => (replacement ? new Promise((resolve) => (answer = resolve)) : Promise.resolve(child))
+      () => Promise.resolve(raw),
+      () => {
+        reads += 1
+        return replacement ? new Promise((resolve) => (answer = resolve)) : optionsAnswer()
+      }
     )
     const harness = await mount({ rpc, fence: 1 })
     const effort = () => harness.snapshot().find((row) => row.id === 'effort')
+    expect(effort()?.settable).toBe(true)
+    const baseline = reads
+    const beforeUnchanged = harness.effortFrames.length
+    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
+    expect(reads).toBe(baseline)
+    expect(effort()?.settable).toBe(true)
+    expect(harness.effortFrames.slice(beforeUnchanged).every((settable) => settable === true)).toBe(
+      true
+    )
+    const staleSetter = harness.options().setStructuredOption
+    let oldAnswer!: (value: AgentSessionOptionsResult) => void
+    optionsAnswer = () =>
+      new Promise((resolve) => {
+        oldAnswer = resolve
+      })
+    await act(async () => {
+      await staleSetter('permissionMode', 'full-access')
+    })
+    let currentAnswer!: (value: AgentSessionOptionsResult) => void
+    optionsAnswer = () =>
+      new Promise((resolve) => {
+        currentAnswer = resolve
+      })
+    const highOnly = {
+      ...child,
+      models: child.models.map((row) => ({ ...row, efforts: [row.efforts[1]!] }))
+    }
+    raw = { origin: 'probe', fetchedAt: 2_000, models: highOnly.models }
+    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
+    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
+    expect(await staleSetter('effort', 'low')).toBe(false)
+    expect(harness.mutate).toHaveBeenCalledTimes(1)
+    await act(async () => oldAnswer(child))
+    expect(effort()?.settable).toBe(false)
+    expect(reads).toBe(baseline + 2)
+    await act(async () => currentAnswer(highOnly))
+    expect(effort()).toBeUndefined()
+    expect(await staleSetter('effort', 'low')).toBe(false)
+    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
+    expect(reads).toBe(baseline + 2)
+    expect(effort()).toBeUndefined()
+    optionsAnswer = () => Promise.resolve(child)
+    raw = HOST_LIST
+    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
     expect(effort()?.settable).toBe(true)
     replacement = true
     await harness.update({ rpc, fence: 2 })

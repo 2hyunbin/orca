@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { AgentSessionModelCatalogResult } from '../../../src/shared/agent-session-wire'
 import type { AgentSessionOptionCatalog } from '../../../src/shared/agent-session-option-catalog'
 import type { StructuredAgentSessionOptionRecord } from '../../../src/shared/structured-agent-session-option-state'
-import {
-  applyStructuredAgentSessionModelCatalog,
-  settleStructuredAgentSessionBuiltinCatalog,
-  type StructuredAgentSessionOptionState
-} from '../../../src/shared/structured-agent-session-options'
+import type { StructuredAgentSessionOptionState } from '../../../src/shared/structured-agent-session-options'
 import type { RpcClient } from '../transport/rpc-client'
 import {
   isHostModelListingWaitInFlight,
@@ -35,7 +31,10 @@ export function useMobileHostModelCatalogUpgrade(args: {
   worktree?: string
   fence: number | null
   optionCatalog: AgentSessionOptionCatalog | null
-  holdControls?: boolean
+  receiveCatalog: (
+    catalog: AgentSessionModelCatalogResult | null,
+    event: 'demand' | 'progress' | 'settled'
+  ) => void
   activeOptionRecordRef: MutableRefObject<StructuredAgentSessionOptionRecord>
   /** A listing landed after the chat's options were read, which answered without it. */
   onListingLanded?: () => void
@@ -56,7 +55,8 @@ export function useMobileHostModelCatalogUpgrade(args: {
     updateOptionState,
     worktree
   } = args
-  const holdControls = args.holdControls === true
+  const receiver = useRef(args.receiveCatalog)
+  receiver.current = args.receiveCatalog
   const [rereads, setRereads] = useState(0)
   const recheck = useCallback(() => setRereads((count) => count + 1), [])
   useEffect(() => {
@@ -75,27 +75,20 @@ export function useMobileHostModelCatalogUpgrade(args: {
           )
         : callAgentSession(client, 'agentSession.modelCatalog', params)
     // A pick made meanwhile stays on the record; a listing only replaces the list it is picked from.
-    const apply = (catalog: AgentSessionModelCatalogResult): void => {
+    const apply = (
+      catalog: AgentSessionModelCatalogResult,
+      settled = false,
+      event: 'demand' | 'progress' = 'demand'
+    ): void => {
       if (stale) {
         return
       }
-      updateOptionState((current) =>
-        current.record === activeOptionRecordRef.current
-          ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
-              newLaunch,
-              holdControls
-            })
-          : current
-      )
+      receiver.current(catalog, settled ? 'settled' : event)
     }
     // A refused or failed read is no list: the built-in one becomes usable, naming nothing.
     const settleBuiltin = (): void => {
       if (!stale) {
-        updateOptionState((current) =>
-          current.record === activeOptionRecordRef.current
-            ? settleStructuredAgentSessionBuiltinCatalog(current)
-            : current
-        )
+        receiver.current(null, 'demand')
       }
     }
     const key = `${agent}\u0000${sessionId}`
@@ -109,8 +102,8 @@ export function useMobileHostModelCatalogUpgrade(args: {
             return
           }
           if (listed) {
-            apply(listed)
-            if (listed.origin !== 'unknown') {
+            apply(listed, !listed.listingInProgress && listed.origin !== 'unknown', 'progress')
+            if (listed.origin !== 'unknown' && !listed.listingInProgress) {
               onListingLanded?.()
             }
           } else {
@@ -140,7 +133,6 @@ export function useMobileHostModelCatalogUpgrade(args: {
       leave?.()
     }
   }, [
-    holdControls,
     activeOptionRecordRef,
     agent,
     client,

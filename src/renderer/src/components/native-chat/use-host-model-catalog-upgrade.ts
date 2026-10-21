@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import {
   readAgentSessionUnavailable,
   type AgentSessionUnavailable
@@ -7,7 +7,6 @@ import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-se
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { AgentSessionOptionCatalog } from '../../../../shared/agent-session-option-catalog'
 import {
-  applyStructuredAgentSessionModelCatalog,
   settleStructuredAgentSessionBuiltinCatalog,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
@@ -61,7 +60,10 @@ export function useHostModelCatalogUpgrade(args: {
   providerRunning?: boolean
   /** A listing landed after the chat's options were read, which answered without it. */
   onListingLanded?: () => void
-  holdControls?: boolean
+  receiveCatalog: (
+    catalog: AgentSessionModelCatalogResult | null,
+    event: 'demand' | 'progress' | 'settled'
+  ) => void
   activeOptionRecordRef: MutableRefObject<StructuredAgentSessionOptionRecord>
   updateOptionState: (
     update: (current: StructuredAgentSessionOptionState) => StructuredAgentSessionOptionState
@@ -80,7 +82,8 @@ export function useHostModelCatalogUpgrade(args: {
     updateOptionState,
     worktree
   } = args
-  const holdControls = args.holdControls === true
+  const receiver = useRef(args.receiveCatalog)
+  receiver.current = args.receiveCatalog
   const waitKey = `${structuredAgentSessionHostKey(target)}\u0000${agent}\u0000${sessionId}`
   const [verdict, setVerdict] = useState<{
     key: string
@@ -115,7 +118,14 @@ export function useHostModelCatalogUpgrade(args: {
         'agentSession.modelCatalog',
         waitForListing ? { ...params, waitForListing } : params
       )
-    const apply = (catalog: AgentSessionModelCatalogResult | null): void => {
+    const apply = (
+      catalog: AgentSessionModelCatalogResult | null,
+      settled = false,
+      event: 'demand' | 'progress' = 'demand'
+    ): void => {
+      if (stale) {
+        return
+      }
       const next = readAgentSessionUnavailable(catalog?.unavailable)
       setVerdict((current) => {
         const shown = current?.key === waitKey ? current.unavailable : null
@@ -130,16 +140,7 @@ export function useHostModelCatalogUpgrade(args: {
       if (catalog && newLaunch) {
         recordHostModelCatalogSnapshot(target, agent, worktree ?? '', catalog)
       }
-      updateOptionState((current) =>
-        current.record !== activeOptionRecordRef.current
-          ? current
-          : catalog
-            ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
-                newLaunch,
-                holdControls
-              })
-            : settleStructuredAgentSessionBuiltinCatalog(current)
-      )
+      receiver.current(catalog, settled ? 'settled' : event)
     }
     let leave: (() => void) | null = null
     const waitForListing = (): void => {
@@ -147,8 +148,12 @@ export function useHostModelCatalogUpgrade(args: {
         waitKey,
         () => read(true),
         (catalog) => {
-          apply(catalog)
-          if (catalog && catalog.origin !== 'unknown') {
+          apply(
+            catalog,
+            catalog !== null && !catalog.listingInProgress && catalog.origin !== 'unknown',
+            'progress'
+          )
+          if (catalog && catalog.origin !== 'unknown' && !catalog.listingInProgress) {
             onListingLanded?.()
           }
         }
@@ -185,7 +190,6 @@ export function useHostModelCatalogUpgrade(args: {
       leave?.()
     }
   }, [
-    holdControls,
     activeOptionRecordRef,
     agent,
     enabled,
