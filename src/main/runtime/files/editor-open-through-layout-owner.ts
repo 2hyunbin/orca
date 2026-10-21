@@ -11,6 +11,9 @@ import type {
 } from '../../../shared/runtime-file-contracts'
 import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import type { RuntimeNotifier } from '../runtime-notifier-contract'
+import type { RuntimeFileCommandHost } from './file-command-host'
+import { isChatScratchWorktreeId } from './chat-scratch-file-root'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 export type EditorFileOpen = RuntimeEditorFileOpen
 
@@ -22,8 +25,36 @@ export type EditorOpenHost = {
   revealEditorTab?: (reveal: RuntimeEditorTabReveal) => void
   /** Today's open, through the window: a paired server owns the workspace's layout. */
   openInWindow: (open: EditorFileOpen) => void
-  /** Lists main's tab on clients now (session.tabs); a no-op where a window's view lists it. */
-  republishSessionTabs: (worktreeId: string) => void
+  publishHeadlessTabs?: (worktreeId: string) => void
+}
+
+export function createRuntimeEditorFileOpener(
+  host: Pick<EditorOpenHost, 'applyLayoutCommand' | 'groupFor' | 'publishHeadlessTabs'> & {
+    getNotifier(): RuntimeNotifier | null | undefined
+  }
+): RuntimeFileCommandHost['openFile'] {
+  return async (worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation, position) => {
+    if (isChatScratchWorktreeId(worktreeId)) {
+      throw new Error('chat_scratch_not_openable')
+    }
+    const notifier = host.getNotifier()
+    const open = { worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation, position }
+    if (ORCA_LAYOUT_OWNER_IS_MAIN || !notifier?.openFile) {
+      await openEditorFileThroughLayoutOwner(
+        {
+          ...host,
+          revealEditorTab: (shown) => notifier?.revealEditorTab?.(shown),
+          openInWindow: (inWindow) => openEditorFileInWindow(notifier, inWindow)
+        },
+        open
+      )
+      if (!notifier?.openFile) {
+        host.publishHeadlessTabs?.(worktreeId)
+      }
+    } else {
+      openEditorFileInWindow(notifier, open)
+    }
+  }
 }
 
 export async function openEditorFileThroughLayoutOwner(
@@ -58,8 +89,6 @@ export async function openEditorFileThroughLayoutOwner(
     }
     throw new Error(`editor_open_refused: ${reply.code}`)
   }
-  // After the apply's commit: the reply follows the operation's end flush.
-  host.republishSessionTabs(open.worktreeId)
   const tabId = reply.result.tabId
   if (tabId) {
     host.revealEditorTab?.({ ...open, tabId, frameSeq: reply.frameSeq })

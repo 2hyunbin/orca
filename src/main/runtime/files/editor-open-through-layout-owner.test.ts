@@ -12,7 +12,6 @@ function host(replies: LayoutApplyReply[], groupId?: string) {
   const sent: WindowLayoutCommand[] = []
   const reveal = vi.fn()
   const openInWindow = vi.fn()
-  const republish = vi.fn()
   const value: EditorOpenHost = {
     applyLayoutCommand: async (command) => {
       sent.push(command)
@@ -20,10 +19,9 @@ function host(replies: LayoutApplyReply[], groupId?: string) {
     },
     groupFor: () => groupId,
     revealEditorTab: reveal,
-    openInWindow,
-    republishSessionTabs: republish
+    openInWindow
   }
-  return { value, sent, reveal, openInWindow, republish }
+  return { value, sent, reveal, openInWindow }
 }
 
 describe('a file main opens itself', () => {
@@ -41,7 +39,6 @@ describe('a file main opens itself', () => {
     ])
     expect(h.sent[0]).not.toHaveProperty('fileId')
     expect(h.reveal).toHaveBeenCalledWith({ ...OPEN, tabId: 'main-tab', frameSeq: 7 })
-    expect(h.republish).toHaveBeenCalledWith('wt')
   })
 
   it('opens by main’s own rule when the reported group has closed', async () => {
@@ -62,7 +59,6 @@ describe('a file main opens itself', () => {
     await openEditorFileThroughLayoutOwner(h.value, OPEN)
     expect(h.openInWindow).toHaveBeenCalledWith(OPEN)
     expect(h.reveal).not.toHaveBeenCalled()
-    expect(h.republish).not.toHaveBeenCalled()
   })
 
   it('fails the open main refused', async () => {
@@ -70,7 +66,6 @@ describe('a file main opens itself', () => {
     await expect(openEditorFileThroughLayoutOwner(h.value, OPEN)).rejects.toThrow(
       'editor_open_refused: workspace_not_found'
     )
-    expect(h.republish).not.toHaveBeenCalled()
   })
 
   it('needs no window', async () => {

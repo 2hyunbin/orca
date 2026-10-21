@@ -43,15 +43,6 @@ export abstract class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends O
     this.scheduleMobileSessionTabsChanged(worktreeId)
   }
 
-  /** A windowless host lists editor tabs from its saved session: one main just wrote shows at once. */
-  protected republishHeadlessSessionTabs(worktreeId: string): void {
-    if (this.getAvailableAuthoritativeWindow()) {
-      return
-    }
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, { force: true })
-    this.notifyMobileSessionTabsChanged(worktreeId)
-  }
-
   scheduleMobileSessionTabsAgentStatusHeartbeatForWorktree(worktreeId: string): void {
     if (this.mobileSessionTabListeners.size === 0) {
       return

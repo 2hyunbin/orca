@@ -20,10 +20,6 @@ class RuntimeWithEditorOpenGroup extends OrcaRuntimeService {
   groupForTest(worktreeId: string): string | undefined {
     return this.editorOpenGroupFor(worktreeId)
   }
-
-  republishForTest(worktreeId: string): void {
-    this.republishHeadlessSessionTabs(worktreeId)
-  }
 }
 
 /** A host whose saved view shows the first of two groups. */
@@ -43,8 +39,7 @@ function twoGroupHost() {
         groupFor: (id) => runtime.groupForTest(id),
         openInWindow: () => {
           throw new Error('opened through the window')
-        },
-        republishSessionTabs: (id) => runtime.republishForTest(id)
+        }
       },
       { worktreeId: TEST_WORKTREE_ID, filePath: '/tmp/worktree-a/a.ts', relativePath: 'a.ts' }
     )
@@ -75,19 +70,6 @@ describe('a file main opens lands in the group the window shows', () => {
     await host.open()
 
     expect(host.groupOfFile()).toBe('g1')
-  })
-
-  it('a windowless host lists the file on session.tabs right after the open', async () => {
-    const host = twoGroupHost()
-    const listed = async () =>
-      (await host.runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs.map((tab) =>
-        'filePath' in tab ? tab.filePath : tab.type
-      )
-    expect(await listed()).not.toContain('/tmp/worktree-a/a.ts')
-
-    await host.open()
-
-    expect(await listed()).toContain('/tmp/worktree-a/a.ts')
   })
 })
 
