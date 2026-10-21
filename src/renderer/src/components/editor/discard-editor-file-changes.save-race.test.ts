@@ -32,11 +32,14 @@ function gate(): { wait: Promise<void>; open: () => void } {
 /** Holds the next disk write until the returned release runs. */
 function holdNextWrite(disk: FakeEditorDisk): () => void {
   const { wait, open } = gate()
-  const write = disk.fs.writeFile.getMockImplementation()
-  disk.fs.writeFile.mockImplementationOnce(async (args: unknown) => {
-    await wait
-    return write?.(args)
-  })
+  // Why: the held write is always the first, so it lands unconditionally.
+  disk.fs.writeFile.mockImplementationOnce(
+    async ({ filePath, content }: { filePath: string; content: string }) => {
+      await wait
+      disk.files.set(filePath, content)
+      return { ok: true }
+    }
+  )
   return open
 }
 

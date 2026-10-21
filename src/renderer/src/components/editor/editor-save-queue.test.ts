@@ -33,11 +33,14 @@ function holdNextWrite(disk: FakeEditorDisk): () => void {
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
-  const write = disk.fs.writeFile.getMockImplementation()
-  disk.fs.writeFile.mockImplementationOnce(async (args: unknown) => {
-    await gate
-    return write?.(args)
-  })
+  // Why: the held write is always the first, so it lands unconditionally.
+  disk.fs.writeFile.mockImplementationOnce(
+    async ({ filePath, content }: { filePath: string; content: string }) => {
+      await gate
+      disk.files.set(filePath, content)
+      return { ok: true }
+    }
+  )
   return release
 }
 
@@ -64,7 +67,6 @@ describe('editor save queue: one running and one queued save per record', () => 
   beforeEach(() => {
     disk = stubEditorWindowWithDisk(createFakeEditorDisk({ [PATH]: '' }))
     store = createEditorStore()
-    store.setState({ settings: { ...store.getState().settings, editorAutoSave: false } })
     store.setState({ openFiles: [tab('a')] })
     withLoadedBaselines(store, disk)
     queue = createEditorSaveQueue(store)
@@ -179,7 +181,6 @@ describe('editor save queue: one running and one queued save per record', () => 
   it('settle drops the autosave timer', async () => {
     vi.useFakeTimers()
     try {
-      store.setState({ settings: { ...store.getState().settings, editorAutoSave: true } })
       edit('a', 'a')
       queue.syncAutoSave()
       await queue.settleFileSaves('a')
