@@ -65,13 +65,8 @@ export function openAgentSessionTabThroughLayoutOwner(open: AgentSessionTabOpen)
       if (!open.activate) {
         return
       }
+      // As the window's own open: the chat is selected in its group; the focused group stays.
       const current = useAppStore.getState()
-      const groupId = current.unifiedTabsByWorktree[worktreeId]?.find(
-        (t) => t.id === shownId
-      )?.groupId
-      if (groupId) {
-        current.focusGroup(worktreeId, groupId)
-      }
       current.activateTab(shownId, { worktreeId })
       current.setActiveTabType('agent-session', worktreeId)
     },
