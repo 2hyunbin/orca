@@ -44,6 +44,10 @@ function isServerRouted(command: WindowLayoutCommand): command is ServerRoutedCo
   if (command.type === 'renameTab' && command.kind === 'custom') {
     return !isWebTerminalSurfaceTabId(command.tabId)
   }
+  // This desktop's guess that a launched agent exited must not clear the server's relaunch record.
+  if (command.type === 'setTabProps' && command.clearLaunchAgent) {
+    return false
+  }
   return ROUTED.has(command.type)
 }
 

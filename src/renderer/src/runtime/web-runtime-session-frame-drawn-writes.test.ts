@@ -5,7 +5,11 @@ import {
   closeWebRuntimeSessionTab
 } from './web-runtime-session-tab-lifecycle'
 import { closeWebRuntimeTerminal, updateWebRuntimePaneLayout } from './web-runtime-terminal-actions'
-import { resetWebSessionCloseReplaysForTests } from './web-session-close-replay'
+import {
+  resetWebSessionCloseReplaysForTests,
+  takeDueWebSessionCloseReplays
+} from './web-session-close-replay'
+import { appPairedTerminalTabCloseIntentStore } from './paired-terminal-tab-close-intent-store'
 import { createPairedTerminalTabCloseIntentTestStore } from '../store/terminals/paired-terminal-tab-close-intent.test-fixture'
 import {
   peekWebSessionFocusIntent,
@@ -149,7 +153,7 @@ describe('a desktop close of a frame-drawn server tab', () => {
     expect(mocks.redraw).toHaveBeenCalledWith(ENVIRONMENT_ID, WORKTREE_ID)
   })
 
-  it('does not redraw a close that never reached the server', async () => {
+  it('holds a close that never reached the server for replay, and does not redraw it', async () => {
     frameDrawn(true)
     answering(refusal('runtime_unavailable'))
     await expect(
@@ -161,6 +165,14 @@ describe('a desktop close of a frame-drawn server tab', () => {
       })
     ).resolves.toBe('failed')
     expect(mocks.redraw).not.toHaveBeenCalled()
+    // The next session.tabs receipt resends it, as for a mirror-drawn workspace.
+    const held = takeDueWebSessionCloseReplays(
+      appPairedTerminalTabCloseIntentStore,
+      ENVIRONMENT_ID,
+      WORKTREE_ID,
+      new Set(['host-tab-1'])
+    )
+    expect(held.map((replay) => replay.hostTabIds)).toEqual([['host-tab-1']])
   })
 
   it('keeps today’s close intent and no redraw for a server without layout intents', async () => {

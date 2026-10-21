@@ -198,7 +198,9 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
       { type: 'createTerminalTab', tabId: TAB_1, leafId: LEAF_ID },
       { type: 'sleep', tabId: TAB_1, paneKeys: [], records: [] },
       { type: 'wake', tabId: TAB_1, paneKeys: ['k'] },
-      { type: 'renameTab', tabId: TAB_1, kind: 'custom', title: 'named' }
+      { type: 'renameTab', tabId: TAB_1, kind: 'custom', title: 'named' },
+      // A desktop's guess that the launched agent exited never clears the server's relaunch record.
+      { type: 'setTabProps', tabId: TAB_1, clearLaunchAgent: true }
     ]
     for (const command of offList) {
       expect(send(store, command).taken).toBe(false)

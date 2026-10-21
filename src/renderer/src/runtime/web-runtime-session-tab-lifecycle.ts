@@ -227,6 +227,8 @@ async function callWebRuntimeSessionTabMethod(
   // Switch point: frames draw this workspace's tabs and focus, so the mirror's intent ledgers skip it.
   const frameDrawn = isServerFrameDrawnWorkspace(environmentId, args.worktreeId)
   const immediateHostTabId = toHostSessionTabId(args.tabId)
+  // The host's id for this tab; a frame-drawn close that never arrived is held under it for replay.
+  let closeHostTabId = immediateHostTabId
   if (isClose && !frameDrawn) {
     // Why: record before async id resolution so a stale snapshot cannot flash the closed tab back.
     closeIntentTabIds.add(immediateHostTabId)
@@ -243,6 +245,7 @@ async function callWebRuntimeSessionTabMethod(
         worktreeId: args.worktreeId,
         tabId: args.tabId
       }) ?? toHostSessionTabId(args.tabId)
+    closeHostTabId = hostTabId
     if (isClose && !frameDrawn) {
       // Why: suppress until the host confirms removal, else an in-flight pre-close snapshot flashes the tab back.
       closeIntentTabIds.add(hostTabId)
@@ -330,7 +333,11 @@ async function callWebRuntimeSessionTabMethod(
     if (undeliveredUserClose) {
       // Why: clearing here let the host's next snapshot bring back a tab the user closed (STA-6224).
       // The resolved host id was added last and is the one the host knows.
-      holdUndeliveredUserClose(intentOwner, args.worktreeId, [...closeIntentTabIds].toReversed())
+      holdUndeliveredUserClose(
+        intentOwner,
+        args.worktreeId,
+        frameDrawn ? [closeHostTabId] : [...closeIntentTabIds].toReversed()
+      )
     } else {
       for (const hostTabId of closeIntentTabIds) {
         if (hostHasNoSuchTab) {
