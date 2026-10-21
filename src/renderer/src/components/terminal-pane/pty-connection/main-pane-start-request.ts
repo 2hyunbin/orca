@@ -74,9 +74,9 @@ export function startPaneThroughMainThenAttach(
     return today()
   }
   if (session.mainStartAttach) {
-    // Why: the attach to main's own start found no terminal; asking again would loop on a pane
+    // Why main's own code: the attach to main's start found no terminal; asking again would loop on a pane
     // whose terminal ends at once.
-    showStartRefusal(session, 'pty_exited')
+    showStartRefusal(session, 'terminal_not_started')
     return Promise.resolve(null)
   }
   return new Promise((resolve) => {

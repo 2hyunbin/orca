@@ -363,6 +363,8 @@ export type LayoutContext = {
    * status, or to a terminal that ended, names what the pane restores from. Absent: live.
    */
   isBindingLive?: (paneKey: string, ptyId: string) => boolean
+  /** Whether the live bound terminal is an empty shell a hibernated agent left: startPane replaces it. */
+  retiresBinding?: (paneKey: string, ptyId: string) => boolean
 }
 
 export type LayoutApplyResult<Model> =

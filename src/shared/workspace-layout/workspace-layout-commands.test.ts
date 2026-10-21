@@ -350,6 +350,31 @@ describe('layout command refusals', () => {
     ).toMatchObject({ ok: true, effects: { startPaneKeys: [paneKey] } })
   })
 
+  it('startPane replaces an empty shell a hibernated agent left, as a restart does', () => {
+    const { model, tabB, leafB } = setup()
+    const paneKey = `${tabB}:${leafB}`
+    const workspace = model.workspaces[WS]!
+    const bound: WorkspaceLayoutModel = {
+      ...model,
+      workspaces: {
+        ...model.workspaces,
+        [WS]: { ...workspace, leaves: { ...workspace.leaves, [leafB]: { ptyId: 'pty-b' } } }
+      }
+    }
+    const start = { type: 'startPane', workspace: WS, paneKey } as const
+
+    const applied = applyLayoutCommand(bound, start, {
+      ...context,
+      retiresBinding: (key, ptyId) => key === paneKey && ptyId === 'pty-b'
+    })
+
+    expect(applied).toMatchObject({
+      ok: true,
+      effects: { stopPtyIds: ['pty-b'], startPaneKeys: [paneKey] }
+    })
+    expect(applied.ok && applied.model.workspaces[WS]!.leaves?.[leafB]?.ptyId).toBeUndefined()
+  })
+
   it('a record-only sleep and wake change the resume record and stop or start nothing', () => {
     const { model, tabB, leafB } = setup()
     const paneKey = `${tabB}:${leafB}`

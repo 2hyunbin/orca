@@ -103,6 +103,15 @@ export class RestoredPaneStarter {
     return start
   }
 
+  /** A stopped terminal is no pane's start any more, so a restart into its pane starts afresh. */
+  forget(ptyId: string): void {
+    for (const [key, started] of this.started) {
+      if (started === ptyId) {
+        this.started.delete(key)
+      }
+    }
+  }
+
   // A live terminal another workspace owns is never this pane's: it starts fresh instead.
   private isOwnLive(pane: RestoredPane, ptyId: string | null | undefined): ptyId is string {
     return (

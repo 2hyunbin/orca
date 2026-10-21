@@ -50,7 +50,7 @@ export type PaneLayoutChange<T> = {
 }
 
 /** The runtime's live facts a command reads; the stored layout cannot know them. */
-export type LayoutLiveContext = Pick<LayoutContext, 'isBindingLive'>
+export type LayoutLiveContext = Pick<LayoutContext, 'isBindingLive' | 'retiresBinding'>
 
 export function admitPaneToSession(
   hostId: ExecutionHostId,

@@ -207,7 +207,7 @@ describe('a restored pane main starts (layout-owner build)', () => {
     expect(transport.connect).toHaveBeenCalledTimes(2)
     expect(deps.onPtyErrorRef.current).toHaveBeenCalledWith(
       1,
-      'The terminal could not start: pty_exited'
+      'The terminal could not start: terminal_not_started'
     )
   })
 

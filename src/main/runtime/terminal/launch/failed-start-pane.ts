@@ -1,6 +1,8 @@
 // Layout-owner build: main's starts publish their status on the pane, and a start main could not
 // make leaves its pane showing why, whether it failed before the pane was written or after.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { isHibernationDoneRecord } from '../../../../shared/hibernation-done-record'
+import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
@@ -52,12 +54,31 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
         isBindingLive: (paneKey: string, ptyId: string) =>
           (this.ptysById.get(ptyId)?.connected === true ||
             this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict.status === 'unverifiable') &&
-          !this.paneStartStatuses?.peek(paneKey)
+          !this.paneStartStatuses?.peek(paneKey),
+        // Why local only: a remote or SSH terminal may hold output this host never saw.
+        retiresBinding: (paneKey: string, ptyId: string) => {
+          const pty = this.ptysById.get(ptyId)
+          const record =
+            this.getWorkspaceSessionForWorktree(workspace)?.sleepingAgentSessionsByPaneKey?.[
+              paneKey
+            ]
+          return (
+            pty?.connected === true &&
+            pty.connectionId === null &&
+            !isRemoteRuntimePtyId(ptyId) &&
+            pty.lastOutputAt == null &&
+            record !== undefined &&
+            isHibernationDoneRecord(record)
+          )
+        }
       },
       onEffects: (effects) =>
         runLayoutPaneStarts({ type: command.type, workspace }, effects, {
           start: (pane) => this.ensureRestoredPaneStarted(pane),
-          stop: (ptyId) => this.ptyController?.kill(ptyId) ?? false
+          stop: (ptyId) => {
+            this.forgetRestoredPaneStart(ptyId)
+            return this.ptyController?.kill(ptyId) ?? false
+          }
         })
     }
   }

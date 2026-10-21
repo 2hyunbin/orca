@@ -73,10 +73,11 @@ async function desktopRuntime(
   })
   const started = deferred<{ id: string }>()
   const spawn = vi.fn((_args: { command?: string; sessionId?: string }) => started.promise)
+  const kill = vi.fn(() => true)
   runtime.setPtyController({
     spawn,
     write: () => true,
-    kill: () => true,
+    kill,
     getForegroundProcess: async () => null,
     listProcesses: async () => []
   })
@@ -92,7 +93,14 @@ async function desktopRuntime(
       clientKind: 'runtime'
     })
   }
-  return { runtime, spawn, started, getSession: fixture.getSession, setSession: fixture.setSession }
+  return {
+    runtime,
+    spawn,
+    kill,
+    started,
+    getSession: fixture.getSession,
+    setSession: fixture.setSession
+  }
 }
 
 const startPane = { type: 'startPane', workspace: TEST_WORKTREE_ID, tabId: 'host-tab' } as const
@@ -154,6 +162,27 @@ describe('a client’s startPane in the layout-owner build', () => {
 
     await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
     expect(runtime.startStatusOf(PANE_KEY)).not.toMatchObject({ status: 'failed' })
+  })
+
+  it('replaces the empty shell a hibernated agent left and resumes the agent', async () => {
+    const { runtime, spawn, kill, started, getSession, setSession } = await desktopRuntime()
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    started.resolve({ id: 'persisted-pty' })
+    await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
+    await vi.waitFor(() => expect(runtime.startStatusOf(PANE_KEY)).toBeNull())
+    // The agent hibernated: its record says done, and its shell has printed nothing since.
+    setSession({
+      ...getSession(),
+      sleepingAgentSessionsByPaneKey: { [PANE_KEY]: { ...RECORD, state: 'done' } }
+    })
+    spawn.mockClear()
+    spawn.mockResolvedValue({ id: 'resumed-pty' })
+
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    expect(kill).toHaveBeenCalledWith('persisted-pty')
+    expect(spawn.mock.calls[0]?.[0].command).toContain('provider-session-1')
   })
 
   it('shows the pane starting in the frame its reply names', async () => {

@@ -45,6 +45,9 @@ export function startPane(
     return refuse('pane_not_found')
   }
   const leaf = workspace.leaves?.[pane.leafId]
+  if (leaf?.ptyId && context.retiresBinding?.(command.paneKey, leaf.ptyId)) {
+    return restartPane(model, { ...command, type: 'restartPane' })
+  }
   // A live terminal comes first: a running agent's resume record does not make its pane asleep.
   const live = leaf?.ptyId && (context.isBindingLive?.(command.paneKey, leaf.ptyId) ?? true)
   if (live || context.isStarting?.(pane.leafId)) {

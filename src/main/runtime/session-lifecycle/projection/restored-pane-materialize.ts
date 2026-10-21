@@ -89,6 +89,11 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     return this.restoredPanes.ensureStarted(pane, trigger)
   }
 
+  /** Main is stopping this terminal to restart its pane: its earlier start no longer stands. */
+  forgetRestoredPaneStart(ptyId: string): void {
+    this.restoredPanes?.forget(ptyId)
+  }
+
   /** Whether main's layout binds the pane to this terminal now: a view's ack names its current one. */
   isRestoredPaneBoundTo(pane: RestoredPane, ptyId: string): boolean {
     return this.storedPaneBinding(pane) === ptyId
