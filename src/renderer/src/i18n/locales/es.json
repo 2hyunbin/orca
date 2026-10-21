@@ -18595,6 +18595,7 @@
         "permissionFullAccessCodexDescription": "Nunca pregunta; puede editar cualquier archivo y usar la red",
         "permissionFullAccessSharedDescription": "Nunca pregunta antes de ediciones o comandos",
         "pasteFailed": "Error al pegar.",
+        "tooManySkills": "Tu mensaje no se envió a {{agent}}. Selecciona como máximo {{limit}} archivos de habilidades e inténtalo de nuevo.",
         "commandAttachmentsUnsupported": "Quita los archivos adjuntos antes de usar un comando de la sesión de chat.",
         "optionValueShort": {
           "minimal": "Mín.",
@@ -20294,6 +20295,7 @@
   },
   "aiVault": {
     "antigravityReferenceDescription": "Continúa en una nueva conversación de la CLI de Antigravity usando esta transcripción como referencia.",
+    "searchHitSourceHost": "Encontrada en {{value0}}",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → CLI",
     "continueInCli": "Continuar en la CLI",

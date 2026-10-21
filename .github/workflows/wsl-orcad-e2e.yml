@@ -9,6 +9,7 @@ name: WSL orcad E2E
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    # This lane drives host RPC, not UI; pr.yml owns mobile bundle/render checks.
     paths:
       - 'src/main/wsl/**'
       - 'src/main/runtime/**'
@@ -21,11 +22,8 @@ on:
       - 'src/main/orcad/**'
       - 'src/main/server/**'
       - 'src/main/persistence/**'
-      - 'mobile/src/**'
       - 'src/main/ipc/*wsl*'
       - 'src/shared/**'
-      - 'src/renderer/src/components/native-chat/**'
-      - 'src/renderer/src/lib/*agent-session*'
       - 'config/scripts/*orcad*'
       - 'package.json'
       - 'pnpm-lock.yaml'
