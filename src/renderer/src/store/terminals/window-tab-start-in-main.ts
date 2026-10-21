@@ -130,17 +130,22 @@ export function startWindowTabInMain(
     (reply) => releaseOnceDrawn(store, tab.id, leafId, reply?.terminal?.ptyId ?? null, mark),
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
-      // No terminal ran it: a later start of the pane runs the tab's startup, as before.
-      if (startup && store.getState().terminalLayoutsByTabId[tab.id]) {
-        store.setState({
-          pendingStartupByTabId: { ...store.getState().pendingStartupByTabId, [tab.id]: startup }
-        })
-      }
       if (message === 'host_not_owned') {
-        // Main does not hold the tab: the pane starts its own terminal, as before.
+        // Main started nothing and does not hold the tab: the pane starts its own, as before.
+        if (startup) {
+          store.setState({
+            pendingStartupByTabId: { ...store.getState().pendingStartupByTabId, [tab.id]: startup }
+          })
+        }
         clearWindowTabMark(store, paneKey, mark)
         return
       }
+      if (message === 'terminal_pane_owner_changed') {
+        // Another owner's terminal runs in the pane; it attaches to that one.
+        clearWindowTabMark(store, paneKey, mark)
+        return
+      }
+      // Not given back: main's start may have run it before failing, and a second run is worse.
       // Main kept the pane, failed with why; its frame shows the same until then.
       const starts = store.getState().terminalPaneStartsByPaneKey
       if (starts[paneKey] === mark) {

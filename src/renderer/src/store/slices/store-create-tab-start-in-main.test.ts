@@ -157,7 +157,7 @@ describe("a new tab's first terminal, started by main in a layout-owner build", 
     expect(store.getState().terminalPaneStartsByPaneKey[PANE_KEY]).toBeUndefined()
   })
 
-  it('keeps the tab’s startup when main’s start fails, for the pane’s next start', async () => {
+  it('never runs a failed start’s startup again, which main may have run before failing', async () => {
     const store = storeWithWorktree()
     store.getState().createTab(WORKTREE, undefined, undefined, {
       id: TAB,
@@ -169,7 +169,18 @@ describe("a new tab's first terminal, started by main in a layout-owner build", 
     mocks.create!.reject(new Error('shell not found'))
     await settle()
 
-    expect(store.getState().pendingStartupByTabId[TAB]).toMatchObject({ command: 'make dev' })
+    expect(store.getState().pendingStartupByTabId[TAB]).toBeUndefined()
+  })
+
+  it('attaches to the terminal that won the pane instead of showing a failure', async () => {
+    const store = storeWithWorktree()
+    store.getState().createTab(WORKTREE, undefined, undefined, { id: TAB, initialLeafId: LEAF })
+    await settle()
+
+    mocks.create!.reject(new Error('terminal_pane_owner_changed'))
+    await settle()
+
+    expect(store.getState().terminalPaneStartsByPaneKey[PANE_KEY]).toBeUndefined()
   })
 
   it('starts its own terminal, with its startup, when main does not hold the tab', async () => {
