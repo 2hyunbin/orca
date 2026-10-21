@@ -3,6 +3,7 @@ import { SidebarInputsFeed } from '../../main/runtime/sidebar-inputs/sidebar-inp
 import { testDomain } from '../../main/runtime/sidebar-inputs/sidebar-inputs-feed.test-fixture'
 import type { SidebarInputsChangedEvent } from '../sidebar-list/sidebar-inputs-feed-contract'
 import { indexSidebarFeed } from '../sidebar-list/sidebar-feed-index'
+import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { WorkspaceRowsSnapshotSchema, type WorkspaceRow } from '../sidebar-list/workspace-rows'
 import { SidebarFeedReader, type SidebarFeedReaderRead } from './sidebar-feed-reader'
 import { installSidebarFeedSnapshot, type SidebarFeedSnapshot } from './sidebar-feed-snapshot'
@@ -37,7 +38,7 @@ function row(index: number, overrides: Partial<WorkspaceRow> = {}): WorkspaceRow
   }
 }
 
-const identity = (index: number): string => `local|repo-1::/w/${index}`
+const identity = (index: number) => composeWorktreeHostIdentity('local', `repo-1::/w/${index}`)
 
 async function settle(): Promise<void> {
   for (let tick = 0; tick < 20; tick += 1) {
