@@ -98,7 +98,9 @@ export function useNewWorkspaceExecutionTarget(args: {
               await remoteAgentDetectionRead.request(client, { connectionId })
             )
           : localAgentDetectionRead.interpret(
-              await localAgentDetectionRead.request(client, repoId ? { repoId } : undefined)
+              await (repoId
+                ? localAgentDetectionRead.request(client, { repoId })
+                : localAgentDetectionRead.request(client))
             )
         if (!stale) {
           setDetectedAgentIdsState({
