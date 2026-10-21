@@ -3827,8 +3827,8 @@
             "connectedHostCount_one": "{{count}} 台のホスト",
             "connectedHostCount_other": "{{count}} 台のホスト",
             "connecting": "接続中…",
-            "moreSshHosts_one": "他 {{count}} 台の SSH ホスト…",
-            "moreSshHosts_other": "他 {{count}} 台の SSH ホスト…",
+            "moreSshHosts_one": "他 {{count}} 台の SSH ホストを検索…",
+            "moreSshHosts_other": "他 {{count}} 台の SSH ホストを検索…",
             "runtime_unavailable_transport_up": "Orca は利用できません",
             "runtime_workspace_window_closed": "ワークスペースウィンドウを閉じた"
           },
@@ -12850,7 +12850,6 @@
         "SshTargetList": {
           "addedInOrca": "Orca で追加",
           "fromConfig": "~/.ssh/config から",
-          "showMore": "{{count}} をもっと見る",
           "selectGroup": "このグループをすべて選択",
           "filteredCount": "{{total}} 件中 {{count}} 件",
           "selectManualGroup": "Orca で追加したホストをすべて選択",

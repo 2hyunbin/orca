@@ -4085,8 +4085,8 @@
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
             "connecting": "Connecting…",
-            "moreSshHosts_one": "{{count}} more SSH host…",
-            "moreSshHosts_other": "{{count}} more SSH hosts…"
+            "moreSshHosts_one": "Search {{count}} more SSH host…",
+            "moreSshHosts_other": "Search {{count}} more SSH hosts…"
           },
           "StatusBar": {
             "9659e38343": "Ports",
@@ -13136,7 +13136,6 @@
         "SshTargetList": {
           "addedInOrca": "Added in Orca",
           "fromConfig": "From ~/.ssh/config",
-          "showMore": "Show {{count}} more",
           "selectGroup": "Select all in this group",
           "filteredCount": "{{count}} of {{total}}",
           "selectManualGroup": "Select all hosts added in Orca",

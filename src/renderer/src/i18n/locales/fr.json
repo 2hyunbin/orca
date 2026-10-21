@@ -3936,8 +3936,8 @@
             "connectedHostCount_one": "{{count}} hôte",
             "connectedHostCount_other": "{{count}} hôtes",
             "connecting": "Connexion…",
-            "moreSshHosts_one": "{{count}} autre hôte SSH…",
-            "moreSshHosts_other": "{{count}} autres hôtes SSH…",
+            "moreSshHosts_one": "Rechercher parmi {{count}} autre hôte SSH…",
+            "moreSshHosts_other": "Rechercher parmi {{count}} autres hôtes SSH…",
             "runtime_unavailable_transport_up": "Orque indisponible"
           },
           "StatusBar": {
@@ -12958,7 +12958,6 @@
         "SshTargetList": {
           "addedInOrca": "Ajoutés dans Orca",
           "fromConfig": "Depuis ~/.ssh/config",
-          "showMore": "Afficher {{count}} plus",
           "selectGroup": "Tout sélectionner dans ce groupe",
           "filteredCount": "{{count}} sur {{total}}",
           "selectManualGroup": "Sélectionner tous les hôtes ajoutés dans Orca",

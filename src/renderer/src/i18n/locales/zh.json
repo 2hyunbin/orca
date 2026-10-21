@@ -3827,8 +3827,8 @@
             "connectedHostCount_one": "{{count}} 个主机",
             "connectedHostCount_other": "{{count}} 个主机",
             "connecting": "正在连接…",
-            "moreSshHosts_one": "另外 {{count}} 个 SSH 主机…",
-            "moreSshHosts_other": "另外 {{count}} 个 SSH 主机…",
+            "moreSshHosts_one": "搜索另外 {{count}} 个 SSH 主机…",
+            "moreSshHosts_other": "搜索另外 {{count}} 个 SSH 主机…",
             "runtime_unavailable_transport_up": "Orca 不可用",
             "runtime_workspace_window_closed": "工作区窗口已关闭"
           },
@@ -12850,7 +12850,6 @@
         "SshTargetList": {
           "addedInOrca": "在 Orca 中添加",
           "fromConfig": "来自 ~/.ssh/config",
-          "showMore": "显示 {{count}} 更多",
           "selectGroup": "选择此组中的全部",
           "filteredCount": "{{count}} / {{total}}",
           "selectManualGroup": "选择所有在 Orca 中添加的主机",

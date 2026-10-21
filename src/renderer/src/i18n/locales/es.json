@@ -3822,8 +3822,8 @@
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
             "connecting": "Conectando…",
-            "moreSshHosts_one": "{{count}} host SSH más…",
-            "moreSshHosts_other": "{{count}} hosts SSH más…",
+            "moreSshHosts_one": "Buscar entre {{count}} host SSH más…",
+            "moreSshHosts_other": "Buscar entre {{count}} hosts SSH más…",
             "runtime_unavailable_transport_up": "Orca no disponible",
             "runtime_workspace_window_closed": "Ventana del espacio de trabajo cerrada"
           },
@@ -12845,7 +12845,6 @@
         "SshTargetList": {
           "addedInOrca": "Añadidos en Orca",
           "fromConfig": "De ~/.ssh/config",
-          "showMore": "Mostrar {{count}} más",
           "selectGroup": "Seleccionar todo este grupo",
           "filteredCount": "{{count}} de {{total}}",
           "selectManualGroup": "Seleccionar todos los hosts añadidos en Orca",

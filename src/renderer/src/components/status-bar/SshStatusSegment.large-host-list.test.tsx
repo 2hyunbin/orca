@@ -6,7 +6,9 @@ import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
 import type { SshConnectionState, SshConnectionStatus } from '../../../../shared/ssh-types'
+import type { Repo } from '../../../../shared/repo-types'
 import { SshStatusSegment } from './SshStatusSegment'
+import { SSH_STATUS_MENU_IDLE_ROW_LIMIT } from './ssh-status-menu-rows'
 
 function noSettings(): GlobalSettings | null {
   return null
@@ -15,6 +17,7 @@ function noSettings(): GlobalSettings | null {
 const state = {
   sshTargetLabels: new Map<string, string>(),
   sshConnectionStates: new Map<string, SshConnectionState>(),
+  repos: new Array<Pick<Repo, 'id' | 'connectionId'>>(),
   runtimeEnvironments: new Array<PublicKnownRuntimeEnvironment>(),
   runtimeStatusByEnvironmentId: new Map<string, RuntimeEnvironmentStatus>(),
   settings: noSettings(),
@@ -70,6 +73,7 @@ beforeEach(() => {
     ['ssh-9000', connectionState('ssh-9000', 'connected')],
     ['ssh-13000', connectionState('ssh-13000', 'reconnecting')]
   ])
+  state.repos = [{ id: 'repo-1', connectionId: 'ssh-12345' }]
 })
 
 afterEach(() => {
@@ -80,7 +84,7 @@ describe('the status menu with a very large imported SSH host list', () => {
   it('renders a bounded number of idle host rows instead of one per imported host', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     const connectButtons = screen.queryAllByRole('button', { name: 'Connect' })
-    expect(connectButtons.length).toBeLessThanOrEqual(20)
+    expect(connectButtons.length).toBeLessThanOrEqual(SSH_STATUS_MENU_IDLE_ROW_LIMIT + 1)
     expect(document.body.getElementsByTagName('*').length).toBeLessThan(2_000)
   })
 
@@ -92,9 +96,18 @@ describe('the status menu with a very large imported SSH host list', () => {
     expect(screen.queryByText('node-13691')).toBeNull()
   })
 
+  it('keeps an idle host that owns a project, even deep in the config', () => {
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    expect(screen.getByText('node-12345')).toBeTruthy()
+  })
+
   it('points the hidden idle hosts at the searchable SSH hosts settings', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
-    fireEvent.click(screen.getByText(`${IMPORTED_HOST_COUNT - 2 - 15} more SSH hosts…`))
+    fireEvent.click(
+      screen.getByText(
+        `Search ${IMPORTED_HOST_COUNT - 2 - SSH_STATUS_MENU_IDLE_ROW_LIMIT} more SSH hosts…`
+      )
+    )
     expect(state.openSettingsTarget).toHaveBeenCalledWith({
       pane: 'ssh',
       repoId: null,

@@ -1,8 +1,8 @@
-import { useState } from 'react'
 import type { SshConnectionState, SshTarget } from '../../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
-import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
+import { VirtualizedList } from '../virtualized-list'
+import { useSettingsContentScrollElement } from './settings-content-scroll-element'
 import type { SshTargetBusyAction } from './ssh-target-action-state'
 import {
   groupSshTargetsBySource,
@@ -36,8 +36,8 @@ function groupTitle(group: SshTargetGroup): React.JSX.Element {
   return <>{translate('auto.components.settings.SshTargetList.fromConfig', 'From ~/.ssh/config')}</>
 }
 
-// Why: a generated ~/.ssh/config can import >10k hosts; rendering every card cost GBs of DOM.
-export const SSH_TARGET_LIST_PAGE_SIZE = 100
+// Why: a generated ~/.ssh/config can import >10k hosts; a card each cost GBs of DOM, so rows window.
+const SSH_TARGET_ROW_ESTIMATE_PX = 52
 
 const NOT_LIST_CONTEXT = '[role="dialog"], [role="alertdialog"], [role="menu"], pre, textarea'
 
@@ -74,7 +74,7 @@ export function SshTargetList({
   onServerChanged
 }: SshTargetListProps): React.JSX.Element {
   const groups = groupSshTargetsBySource(targets)
-  const [shownByGroup, setShownByGroup] = useState<Partial<Record<SshTargetGroupId, number>>>({})
+  const scrollElement = useSettingsContentScrollElement()
   const isMac = navigator.userAgent.includes('Mac')
 
   return (
@@ -98,8 +98,6 @@ export function SshTargetList({
       {groups.map((group) => {
         const ids = group.targets.map((target) => target.id)
         const checkState = sshTargetGroupCheckState(selection.selected, ids)
-        const shownCount = shownByGroup[group.id] ?? SSH_TARGET_LIST_PAGE_SIZE
-        const hiddenCount = group.targets.length - shownCount
         return (
           <section
             key={group.id}
@@ -136,49 +134,35 @@ export function SshTargetList({
                 </span>
               </span>
             </div>
-            <div className="divide-y divide-border/40">
-              {group.targets.slice(0, shownCount).map((target) => (
-                <SshTargetCard
+            <VirtualizedList
+              rows={group.targets}
+              getRowKey={(target) => target.id}
+              scrollElement={scrollElement}
+              estimateRowHeightPx={SSH_TARGET_ROW_ESTIMATE_PX}
+              renderRow={(target) => (
+                // Why per-row borders: windowed rows are absolutely positioned, so divide-y can't reach them.
+                <div
                   key={target.id}
-                  target={target}
-                  state={connectionStates.get(target.id)}
-                  testing={testingIds.has(target.id)}
-                  busyAction={busyActionForTarget(target.id)}
-                  selected={selection.selected.has(target.id)}
-                  onSelectClick={selection.click}
-                  onConnect={onConnect}
-                  onDisconnect={onDisconnect}
-                  onTest={onTest}
-                  onEdit={onEdit}
-                  onRemove={() => onRemove(target)}
-                  onServerChanged={onServerChanged}
-                />
-              ))}
-            </div>
-            {hiddenCount > 0 ? (
-              <div className="border-t border-border/40 p-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  onClick={() =>
-                    setShownByGroup((prev) => ({
-                      ...prev,
-                      [group.id]: shownCount + SSH_TARGET_LIST_PAGE_SIZE
-                    }))
-                  }
+                  data-first-row={target === group.targets[0] ? 'true' : undefined}
+                  className="border-t border-border/40 data-[first-row=true]:border-t-0"
                 >
-                  {translate(
-                    'auto.components.settings.SshTargetList.showMore',
-                    'Show {{count}} more',
-                    {
-                      count: Math.min(hiddenCount, SSH_TARGET_LIST_PAGE_SIZE)
-                    }
-                  )}
-                </Button>
-              </div>
-            ) : null}
+                  <SshTargetCard
+                    target={target}
+                    state={connectionStates.get(target.id)}
+                    testing={testingIds.has(target.id)}
+                    busyAction={busyActionForTarget(target.id)}
+                    selected={selection.selected.has(target.id)}
+                    onSelectClick={selection.click}
+                    onConnect={onConnect}
+                    onDisconnect={onDisconnect}
+                    onTest={onTest}
+                    onEdit={onEdit}
+                    onRemove={() => onRemove(target)}
+                    onServerChanged={onServerChanged}
+                  />
+                </div>
+              )}
+            />
           </section>
         )
       })}

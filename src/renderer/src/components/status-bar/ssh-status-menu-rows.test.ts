@@ -15,6 +15,7 @@ describe('splitSshStatusMenuRows', () => {
         target('d', 'auth-failed'),
         target('e', 'connected')
       ],
+      new Set(),
       1
     )
     expect(rows.connected.map((row) => row.id)).toEqual(['e'])
@@ -22,8 +23,18 @@ describe('splitSshStatusMenuRows', () => {
     expect(rows.hiddenIdleCount).toBe(2)
   })
 
+  it('fills the idle cap with hosts that own projects before the rest of the config', () => {
+    const rows = splitSshStatusMenuRows(
+      [target('a', 'disconnected'), target('b', 'disconnected'), target('c', 'disconnected')],
+      new Set(['c']),
+      2
+    )
+    expect(rows.inactive.map((row) => row.id)).toEqual(['c', 'a'])
+    expect(rows.hiddenIdleCount).toBe(1)
+  })
+
   it('hides nothing at or under the limit', () => {
-    const rows = splitSshStatusMenuRows([target('a', 'disconnected')], 1)
+    const rows = splitSshStatusMenuRows([target('a', 'disconnected')], new Set(), 1)
     expect(rows.hiddenIdleCount).toBe(0)
     expect(rows.inactive).toHaveLength(1)
   })

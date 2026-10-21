@@ -56,6 +56,7 @@ export function SshStatusSegment({
 }): React.JSX.Element | null {
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
+  const repos = useAppStore((s) => s.repos)
   const settings = useAppStore((s) => s.settings)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const runtimeStatusByEnvironmentId = useAppStore((s) => s.runtimeStatusByEnvironmentId)
@@ -67,6 +68,10 @@ export function SshStatusSegment({
   const [menuOpen, setMenuOpen] = useState(false)
   const [repairTarget, setRepairTarget] = useState<{ id: string; label: string } | null>(null)
 
+  const projectHostIds = useMemo(
+    () => new Set(repos.flatMap((repo) => (repo.connectionId ? [repo.connectionId] : []))),
+    [repos]
+  )
   const hostLabelOverrides = useMemo(() => getHostDisplayLabelOverrides(settings), [settings])
   const userManagedEnvironments = runtimeEnvironments.filter(isListedRemoteServer)
   // Why the registry: a managed server and its SSH host are one machine, shown on its active route.
@@ -137,7 +142,7 @@ export function SshStatusSegment({
     connected: connectedTargets,
     inactive: disconnectedTargets,
     hiddenIdleCount
-  } = splitSshStatusMenuRows(targets)
+  } = splitSshStatusMenuRows(targets, projectHostIds)
   const connectRuntimeHost = useCallback(
     async (environmentId: string): Promise<void> => {
       if (await connectRuntimeHostAndReloadProjects(environmentId)) {

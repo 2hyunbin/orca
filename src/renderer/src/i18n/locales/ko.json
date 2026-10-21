@@ -3827,8 +3827,8 @@
             "connectedHostCount_one": "호스트 {{count}}개",
             "connectedHostCount_other": "호스트 {{count}}개",
             "connecting": "연결 중…",
-            "moreSshHosts_one": "SSH 호스트 {{count}}개 더 보기…",
-            "moreSshHosts_other": "SSH 호스트 {{count}}개 더 보기…",
+            "moreSshHosts_one": "SSH 호스트 {{count}}개 더 검색…",
+            "moreSshHosts_other": "SSH 호스트 {{count}}개 더 검색…",
             "runtime_unavailable_transport_up": "Orca를 사용할 수 없습니다.",
             "runtime_workspace_window_closed": "워크스페이스 창이 닫혔습니다."
           },
@@ -12850,7 +12850,6 @@
         "SshTargetList": {
           "addedInOrca": "Orca에서 추가함",
           "fromConfig": "~/.ssh/config에서 가져옴",
-          "showMore": "{{count}} 더 보기",
           "selectGroup": "이 그룹 모두 선택",
           "filteredCount": "{{total}}개 중 {{count}}개",
           "selectManualGroup": "Orca에서 추가한 호스트 모두 선택",
