@@ -4,7 +4,6 @@ import { translate } from '@/i18n/i18n'
 import { useClipboardTextCopyFeedback } from '@/hooks/use-clipboard-text-copy-feedback'
 import {
   cancelHostAccountSignIn,
-  isLostHostAnswer,
   hasHostAccountSignIn,
   readHostAccountSignIn,
   submitHostAccountSignInCode,
@@ -15,23 +14,9 @@ import {
   type HostAccountSignInProvider
 } from '../../../../shared/host-account-sign-in-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import { toast } from 'sonner'
 import { Button } from '../ui/button'
+import { showHostCancelFailure } from './account-add-cancel-target'
 import { Input } from '../ui/input'
-
-/** A Cancel the server could not be told about yet; the sign-in keeps asking it to stop. */
-function showHostCancelFailure(error: unknown): void {
-  // Why only lost answers: a refusal means the flow already ended, which the pane shows itself.
-  if (!isLostHostAnswer(error)) {
-    return
-  }
-  toast.error(
-    translate('accounts.hostSignIn.cancelFailed', 'Could not reach the server to cancel yet.'),
-    {
-      description: error instanceof Error ? error.message : String(error)
-    }
-  )
-}
 
 function CopyButton(props: { text: string; label: string }): React.JSX.Element {
   const { copyText, status } = useClipboardTextCopyFeedback(props.text)

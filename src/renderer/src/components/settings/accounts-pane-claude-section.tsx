@@ -21,6 +21,11 @@ import {
 } from './claude-sign-in-link-menu'
 import { addClaudeAccountOnHost } from '@/runtime/runtime-host-account-sign-in-client'
 import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
+import {
+  accountAdditionShownInPrompt,
+  cancelAccountAddition,
+  trackAccountAddition
+} from './account-add-cancel-target'
 
 export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -56,16 +61,18 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
   // Why the server's own login for a remote owner: one here would sign in this device, not it.
   const addClaudeAccount = (copyLink: boolean): Promise<void> =>
     runClaudeAccountAction('adding', () =>
-      accountOwner.kind === 'environment'
-        ? addClaudeAccountOnHost(accountOwner)
-        : withCopiedClaudeLink(
-            copyLink,
-            window.api.claudeAccounts.add({
-              runtime: accountRuntime.runtime,
-              wslDistro: accountRuntime.wslDistro,
-              copyLink
-            })
-          )
+      trackAccountAddition('claude', accountOwner, () =>
+        accountOwner.kind === 'environment'
+          ? addClaudeAccountOnHost(accountOwner)
+          : withCopiedClaudeLink(
+              copyLink,
+              window.api.claudeAccounts.add({
+                runtime: accountRuntime.runtime,
+                wslDistro: accountRuntime.wslDistro,
+                copyLink
+              })
+            )
+      )
     )
   return (
     <section key="claude-accounts" id="accounts-claude" className="space-y-4 scroll-mt-6">
@@ -134,12 +141,16 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
                 />
               ) : null}
             </ButtonGroup>
-            {/* Why: this desktop's own login only; a server sign-in has Cancel in its prompt. */}
-            {claudeAction === 'adding' && !isRemoteAccountScope ? (
+            {/* Why: follows the running addition; hidden only where its server's prompt has Cancel. */}
+            {claudeAction === 'adding' && !accountAdditionShownInPrompt('claude', accountOwner) ? (
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={() => void window.api.claudeAccounts.cancelPendingLogin()}
+                onClick={() =>
+                  void cancelAccountAddition('claude', () =>
+                    window.api.claudeAccounts.cancelPendingLogin()
+                  )
+                }
                 className="gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 <X className="size-3" />

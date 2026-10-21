@@ -13,6 +13,11 @@ import type { AccountsPaneSectionModel } from './accounts-pane-types'
 import { renderCodexAccountRow } from './accounts-pane-codex-account-row'
 import { addCodexAccountOnHost } from '@/runtime/runtime-host-account-sign-in-client'
 import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
+import {
+  accountAdditionShownInPrompt,
+  cancelAccountAddition,
+  trackAccountAddition
+} from './account-add-cancel-target'
 
 export function renderCodexAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -161,13 +166,15 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
               size="xs"
               onClick={() =>
                 void runCodexAccountAction('adding', () =>
-                  // Why the server's own login for a remote owner: one here would sign in this device.
-                  accountOwner.kind === 'environment'
-                    ? addCodexAccountOnHost(accountOwner)
-                    : window.api.codexAccounts.add({
-                        runtime: accountRuntime.runtime,
-                        wslDistro: accountRuntime.wslDistro
-                      })
+                  trackAccountAddition('codex', accountOwner, () =>
+                    // Why the server's own login for a remote owner: one here would sign in this device.
+                    accountOwner.kind === 'environment'
+                      ? addCodexAccountOnHost(accountOwner)
+                      : window.api.codexAccounts.add({
+                          runtime: accountRuntime.runtime,
+                          wslDistro: accountRuntime.wslDistro
+                        })
+                  )
                 )
               }
               disabled={
@@ -182,12 +189,16 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
               )}
               {translate('auto.components.settings.AccountsPane.b0e948a4f9', 'Add Account')}
             </Button>
-            {/* Why: this desktop's own login only; a server sign-in has Cancel in its prompt. */}
-            {codexAction === 'adding' && !isRemoteAccountScope ? (
+            {/* Why: follows the running addition; hidden only where its server's prompt has Cancel. */}
+            {codexAction === 'adding' && !accountAdditionShownInPrompt('codex', accountOwner) ? (
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={() => void window.api.codexAccounts.cancelPendingLogin()}
+                onClick={() =>
+                  void cancelAccountAddition('codex', () =>
+                    window.api.codexAccounts.cancelPendingLogin()
+                  )
+                }
                 className="gap-1.5"
               >
                 <X />
