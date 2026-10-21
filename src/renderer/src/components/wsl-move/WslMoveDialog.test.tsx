@@ -112,7 +112,7 @@ describe('preview', () => {
 
   it('lets a start settle an earlier unfinished move', () => {
     const markup = preview({ preview: { outcome: 'refused', code: 'wsl_move_already_in_flight' } })
-    expect(markup).toContain('Starting this move finishes or undoes it first.')
+    expect(markup).toContain('A move of Ubuntu is still finishing.')
     expect(markup).not.toMatch(/disabled=""[^>]*>Move 1 project/)
   })
 

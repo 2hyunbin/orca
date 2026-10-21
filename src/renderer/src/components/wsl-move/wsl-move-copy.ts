@@ -48,12 +48,12 @@ export function wslMoveRefusalMessage(
       return context === 'preview'
         ? translate(
             'wslMove.refusal.alreadyInFlightPreview',
-            'An earlier move into {{distro}} has not finished. Starting this move finishes or undoes it first.',
+            'A move of {{distro}} is still finishing. Starting this move first finishes or undoes it where Orca can.',
             { distro }
           )
         : translate(
             'wslMove.refusal.alreadyInFlight',
-            'An earlier move into {{distro}} has not finished, and Orca could not settle it with the {{distro}} host yet. Connect the host in Settings, then try again.',
+            'A move of {{distro}} is still finishing, so this one did not start. Keep the {{distro}} host connected and try again later.',
             { distro }
           )
     case 'wsl_move_nothing_new':
