@@ -148,9 +148,11 @@ export class WorkspaceLifecycleQueue {
           return
         }
         creation.worktreeId = worktreeId
-        if (start.keyOf && !creation.key && !creation.settling) {
-          creation.key = start.keyOf(worktreeId)
-          creation.entry = this.bindCreate(creation.key)
+        const key = start.keyOf?.(worktreeId)
+        // Why not behind a delete: that delete is the previous occupant's, never this new one's.
+        if (key && !creation.key && !creation.settling && !this.deletePending(key)) {
+          creation.key = key
+          creation.entry = this.bindCreate(key)
         }
         this.revision.bump()
       },
@@ -218,6 +220,10 @@ export class WorkspaceLifecycleQueue {
 
   isPaused(key: string): boolean {
     return this.queues.get(key)?.paused != null
+  }
+
+  private deletePending(key: string): boolean {
+    return this.queues.get(key)?.entries.some((entry) => entry.kind === 'delete') === true
   }
 
   private queueFor(key: string): WorkspaceQueue {

@@ -322,6 +322,25 @@ describe('WorkspaceLifecycleQueue creates', () => {
   })
 })
 
+describe('WorkspaceLifecycleQueue create fencing', () => {
+  it('never puts a new create behind the previous occupant’s delete', async () => {
+    const queue = new WorkspaceLifecycleQueue()
+    const log: string[] = []
+    const sleep = gated(log, 'sleep', 'sleep', 'slept')
+    void queue.submit(KEY, sleep.command)
+    const deleting = queue.submit(KEY, gated(log, 'delete', 'delete', 'deleted').command)
+    const creation = queue.openCreate({ creationId: 'c1', repoId: 'repo-1', keyOf: () => KEY })
+    creation.named('repo-1::/wt')
+    // The delete still waits on the sleep alone; the create is not one of its commands.
+    expect(queue.hints()).toEqual({ [KEY]: { kind: 'delete', queuedBehind: 0 } })
+    creation.close()
+    sleep.release()
+    await flush()
+    expect(log).toEqual(['start sleep', 'end sleep', 'start delete'])
+    void deleting
+  })
+})
+
 describe('WorkspaceLifecycleQueue membership', () => {
   /** A listing whose fresh scan the test applies by hand. */
   function listing() {
