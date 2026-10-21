@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import type { TextInput } from 'react-native'
+import { hostOs } from '../platform/host-os'
 import { bindTerminalTextFieldSubmit } from './terminal-text-field-submit-binding'
 import { bindTerminalTextFieldSubmit as bindOnWeb } from './terminal-text-field-submit-binding.web'
+
+vi.mock('../platform/host-os', () => ({ hostOs: vi.fn(() => 'android') }))
 
 /** A ref holding whatever the platform hands back, which on RN Web is the DOM node. */
 const asField = (node: unknown): TextInput | null =>
@@ -180,6 +183,14 @@ describe('live terminal keyboard chords', () => {
     vi.spyOn(event, 'getModifierState').mockReturnValue(true)
     field.dispatchEvent(event)
     expect(event.defaultPrevented).toBe(false)
+    expect(onChord).not.toHaveBeenCalled()
+  })
+
+  it.each(['ios', 'web'] as const)('leaves %s keyboard handling unchanged', (os) => {
+    vi.mocked(hostOs).mockReturnValueOnce(os)
+    const { key, onChord } = setup()
+    expect(key('Tab').defaultPrevented).toBe(false)
+    expect(key('c', { ctrlKey: true }).defaultPrevented).toBe(false)
     expect(onChord).not.toHaveBeenCalled()
   })
 

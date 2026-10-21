@@ -1,4 +1,5 @@
 import type { TextInput } from 'react-native'
+import { hostOs } from '../platform/host-os'
 import { createTerminalKeyChordInput } from './terminal-key-chord-input'
 import { getTerminalLiveSpecialKeyId } from './terminal-live-input'
 import type { TerminalLiveAccessoryInput } from './terminal-live-accessory-input'
@@ -33,6 +34,7 @@ export function bindTerminalTextFieldSubmit(
     event.preventDefault()
     onSubmit()
   }
+  const captureAndroidChords = hostOs() === 'android'
   let composing = false
   const startComposition = (): void => {
     composing = true
@@ -45,6 +47,7 @@ export function bindTerminalTextFieldSubmit(
       return
     }
     if (
+      !captureAndroidChords ||
       !onKeyChord ||
       event.defaultPrevented ||
       composing ||
