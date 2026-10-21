@@ -29,10 +29,7 @@ import {
   FAKE_AGENT_WINDOWS_SHELL
 } from './helpers/fake-agent-command-override'
 import { FAKE_CODEX_LAUNCH_PROBES_SOURCE } from './helpers/fake-codex-launch-probes'
-
-const LAYOUT_OWNER_BUILD = existsSync(
-  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
-)
+import { LAYOUT_OWNER_BUILD } from './helpers/layout-owner-build'
 
 type SpawnEvent = { args: string[]; pid: number }
 type TerminalIdentity = Pick<
@@ -389,15 +386,12 @@ async function faultProjectionAndActivate(
     .toBe(true)
 
   await page.evaluate(
-    ({ activeTabId, identities, worktreeId, stripBindings }) => {
+    ({ activeTabId, identities, worktreeId }) => {
       const store = window.__store
       if (!store) {
         throw new Error('Renderer store unavailable')
       }
       store.setState((state) => {
-        if (!stripBindings) {
-          return {}
-        }
         const tabsByWorktree = { ...state.tabsByWorktree }
         tabsByWorktree[worktreeId] = (tabsByWorktree[worktreeId] ?? []).map((tab) =>
           identities.some((identity) => identity.tabId === tab.id) ? { ...tab, ptyId: null } : tab
@@ -428,10 +422,9 @@ async function faultProjectionAndActivate(
     },
     {
       activeTabId,
-      identities: terminals.map(({ tabId, leafId }) => ({ tabId, leafId })),
-      worktreeId,
-      // Why: with the switch on the window's bindings are main's frames, which no window write drops.
-      stripBindings: !LAYOUT_OWNER_BUILD
+      // Why none with the switch on: main's frames own the bindings, and no window write drops one.
+      identities: LAYOUT_OWNER_BUILD ? [] : terminals,
+      worktreeId
     }
   )
   await ensureTerminalVisible(page)
