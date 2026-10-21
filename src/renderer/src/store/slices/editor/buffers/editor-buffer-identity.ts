@@ -36,16 +36,20 @@ export function editorBufferPathKey(filePath: string, windows: boolean): string 
     : `${slashed.slice(0, serverEnd).toLowerCase()}${slashed.slice(serverEnd)}`
 }
 
-/** The path key of a file on a resolved owner. Remote paths fold only when they prove Windows. */
-export function editorBufferOwnerPathKey(
-  filePath: string,
-  owner: { environmentId: string | null; hostId: string | null }
-): string {
-  const localWindows =
+type EditorPathOwner = { environmentId: string | null; hostId: string | null }
+
+/** The owner is this machine and this client is the local Windows desktop app. */
+export function isLocalWindowsEditorOwner(owner: EditorPathOwner): boolean {
+  return (
     parseExecutionHostId(owner.hostId)?.kind === 'local' &&
     !owner.environmentId &&
     isLocalWindowsDesktopClient()
-  return editorBufferPathKey(filePath, localWindows)
+  )
+}
+
+/** The path key of a file on a resolved owner. Remote paths fold only when they prove Windows. */
+export function editorBufferOwnerPathKey(filePath: string, owner: EditorPathOwner): string {
+  return editorBufferPathKey(filePath, isLocalWindowsEditorOwner(owner))
 }
 
 /**
