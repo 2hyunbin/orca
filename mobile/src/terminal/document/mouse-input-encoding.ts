@@ -1,8 +1,22 @@
 import { notify } from './host-notify'
 import type { TerminalDocumentScope } from './document-scope'
 import { ESC } from './escape-introducers'
-import { scrollNormalBufferLines } from './normal-buffer-smooth-scroll'
 import { viewportToMouseReportCell } from './mouse-report-cell'
+
+export function scrollNormalBufferLines(scope: TerminalDocumentScope, lines: number) {
+  const terminal = scope.term
+  if (!terminal) {
+    return
+  }
+  const beforeY = terminal.buffer.active.viewportY
+  terminal.scrollLines(lines)
+  if (terminal === scope.pendingTerm && terminal.buffer.active.viewportY !== beforeY) {
+    scope.pendingReplayScrollAnchorRows = Math.max(
+      0,
+      terminal.buffer.active.baseY - terminal.buffer.active.viewportY
+    )
+  }
+}
 
 export function isAlternateBufferActive(scope: TerminalDocumentScope) {
   try {

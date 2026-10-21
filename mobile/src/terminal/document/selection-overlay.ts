@@ -2,7 +2,7 @@ import { getCellHeight, getTotalScale } from './cell-metrics'
 import { cellToViewportPx } from './cell-geometry'
 import type { TerminalDocumentScope } from './document-scope'
 import { notify } from './host-notify'
-import { scrollNormalBufferLines } from './normal-buffer-smooth-scroll'
+import { scrollNormalBufferLines } from './mouse-input-encoding'
 import { applyXtermSelection, selRange } from './selection-range'
 import { viewportPoint, viewportToCell } from './viewport-cell'
 

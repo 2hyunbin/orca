@@ -1,22 +1,8 @@
 import { getCellHeight, getTotalScale } from './cell-metrics'
 import { updateScrollIndicator } from './viewport-transform'
+import { scrollNormalBufferLines } from './mouse-input-encoding'
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
-
-export function scrollNormalBufferLines(scope: TerminalDocumentScope, lines: number) {
-  const terminal = scope.term
-  if (!terminal) {
-    return
-  }
-  const beforeY = terminal.buffer.active.viewportY
-  terminal.scrollLines(lines)
-  if (terminal === scope.pendingTerm && terminal.buffer.active.viewportY !== beforeY) {
-    scope.pendingReplayScrollAnchorRows = Math.max(
-      0,
-      terminal.buffer.active.baseY - terminal.buffer.active.viewportY
-    )
-  }
-}
 
 export function clampNormalScrollLines(scope: TerminalDocumentScope, lines: number) {
   if (!scope.term || !scope.term.buffer || !scope.term.buffer.active || lines === 0) {
