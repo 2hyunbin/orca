@@ -62,4 +62,5 @@ If changing code around `git`, `gh`, source-control, or review behavior read [`d
 
 # Tests
 
-Avoid adding low-value tests. These might be fine for development but offer low value when checked in. [Anti-patterns](./docs/reference/test-antipatterns.md)
+1. Avoid adding low-value tests. These might be fine for development but offer low value when checked in. [Anti-patterns](./docs/reference/test-antipatterns.md)
+2. Keep CI times fast. Smartly run tests. Don't add slow tests
