@@ -10,7 +10,7 @@ class AudioEngine {
 
     public private(set) var voiceIOFormat: AVAudioFormat
     public private(set) var isRecording = false
-    private var wasRecordingBeforeInterruption = false
+    private var interruptionIntent = RecordingInterruptionIntent()
 
     public var onMicDataCallback: ((Data) -> Void)?
     public var onInputVolumeCallback: ((Float) -> Void)?
@@ -240,7 +240,25 @@ class AudioEngine {
         input.isVoiceProcessingBypassed = bypass
     }
 
-    func toggleRecording(_ val: Bool) -> Bool {
+    func toggleRecording(_ val: Bool, preservingInterruptionIntent: Bool = false) -> Bool {
+        if !preservingInterruptionIntent {
+            // An explicit stop also cancels a resume queued before JavaScript cancelled dictation.
+            interruptionIntent.cancel()
+        }
+        if val {
+            do {
+                // System keyboard dictation can leave an existing engine's session inactive.
+                try AVAudioSession.sharedInstance().setActive(true)
+                if !avAudioEngine.isRunning {
+                    try avAudioEngine.start()
+                }
+            } catch {
+                isRecording = false
+                avAudioEngine.inputNode.isVoiceProcessingInputMuted = true
+                print("Could not activate microphone recording: \(error)")
+                return false
+            }
+        }
         isRecording = val
         if !isRecording {
             avAudioEngine.inputNode.isVoiceProcessingInputMuted = true
@@ -256,28 +274,21 @@ class AudioEngine {
     }
 
     func stopRecordingAndPlayer(clearInterruptionResume: Bool = true){
-        if clearInterruptionResume {
-            wasRecordingBeforeInterruption = false
-        }
         do {
             try AVAudioSession.sharedInstance().setActive(false)
         } catch {
             print("Could not set the audio session to inactive: \(error)")
         }
-        toggleRecording(false)
+        toggleRecording(false, preservingInterruptionIntent: !clearInterruptionResume)
         speechPlayer.stop()
         updateOutputVolume()
     }
 
-    func resumeRecordingAndPlayer(){
-        do {
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Could not set the audio session to active: \(error)")
-        }
-        self.checkEngineIsRunning()
-        isRecording = toggleRecording(true)
+    @discardableResult
+    func resumeRecordingAndPlayer() -> Bool {
+        guard toggleRecording(true) else { return false }
         speechPlayer.play()
+        return true
     }
 
     func tearDown() {
@@ -322,25 +333,24 @@ class AudioEngine {
 
         switch type {
         case .began:
-            wasRecordingBeforeInterruption = isRecording
+            interruptionIntent.began(wasRecording: isRecording)
             self.stopRecordingAndPlayer(clearInterruptionResume: false)
             onAudioInterruptionCallback?("began")
         case .ended:
-            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
-                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-                if options.contains(.shouldResume) && wasRecordingBeforeInterruption {
-                    // Interruption ended. Resume playback.
-                    self.resumeRecordingAndPlayer()
-                    wasRecordingBeforeInterruption = false
-                    onAudioInterruptionCallback?("ended")
-                } else {
-                    wasRecordingBeforeInterruption = false
-                    // Interruption ends. Don't resume playback.
-                    onAudioInterruptionCallback?("blocked")
-                }
+            let rawOptions = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let shouldResume = AVAudioSession.InterruptionOptions(rawValue: rawOptions).contains(.shouldResume)
+            switch interruptionIntent.ended(shouldResume: shouldResume, isRecording: isRecording) {
+            case .resume:
+                let resumed = resumeRecordingAndPlayer()
+                onAudioInterruptionCallback?(resumed ? "ended" : "blocked")
+            case .blocked:
+                onAudioInterruptionCallback?("blocked")
+            case .none:
+                break // A newer explicit start already owns the microphone.
             }
         @unknown default:
-            fatalError("Unknown type: \(type)")
+            stopRecordingAndPlayer()
+            onAudioInterruptionCallback?("blocked")
         }
     }
 
