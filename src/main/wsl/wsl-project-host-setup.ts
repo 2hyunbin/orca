@@ -70,7 +70,7 @@ export async function placeExistingFolderSetup(
 ): Promise<
   { hosted: ProjectHostSetupResult } | { placement: Exclude<ProjectPlacement, WslPlacement> }
 > {
-  if (!isAbsolute(args.path)) {
+  if (caller.owner === 'runtime' && !isAbsolute(args.path)) {
     throw new Error('Project path must be an absolute path')
   }
   const owner: PlacementOwner =
