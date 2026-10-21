@@ -1,10 +1,18 @@
-import { Suspense, lazy, useEffect, type ComponentType, type PropsWithChildren } from 'react'
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useLayoutEffect,
+  type ComponentType,
+  type PropsWithChildren
+} from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { describe, expect, it } from 'vitest'
 import {
   RouteScreenPaintProvider,
   createRouteScreenPaintReporter,
   reportAfterFirstPaint,
+  useRouteScreenPaintHold,
   withRouteScreenPaintReport
 } from './page-first-paint'
 
@@ -187,5 +195,42 @@ describe('which commit the page reports its frame from', () => {
       route.arrive()
     })
     expect(reports).toBe(1)
+  })
+})
+
+describe('a screen whose view is still arriving when it commits', () => {
+  it('reports its frame only once what it held for is released', async () => {
+    const clock = frames()
+    let posted = 0
+    const report = createRouteScreenPaintReporter(clock.scheduler, () => {
+      posted += 1
+    })
+    const held: { release: (() => void) | null } = { release: null }
+    function OpeningDrawer() {
+      const hold = useRouteScreenPaintHold()
+      useLayoutEffect(() => {
+        held.release = hold?.() ?? null
+      }, [hold])
+      return null
+    }
+    const Screen = lazy(async () => withRouteScreenPaintReport({ default: OpeningDrawer }))
+
+    await act(async () => {
+      create(
+        <RouteScreenPaintProvider report={report}>
+          <Suspense fallback={null}>
+            <Screen />
+          </Suspense>
+        </RouteScreenPaintProvider>
+      )
+    })
+    clock.tick()
+    clock.tick()
+    expect(posted).toBe(0)
+
+    held.release?.()
+    clock.tick()
+    clock.tick()
+    expect(posted).toBe(1)
   })
 })
