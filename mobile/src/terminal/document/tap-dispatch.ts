@@ -73,6 +73,13 @@ export function armLongPress(scope: TerminalDocumentScope, touch: Touch) {
       return
     }
     enterSelect(scope, c.col, c.row)
+    // Keep the long-press finger on the selection instead of scrolling beneath it.
+    if (scope.sel && scope.touchDispatch.mode === 'surface') {
+      scope.sel.activeHandle = 'end'
+      scope.touchDispatch.mode = 'select-drag'
+      scope.touchDispatch.touchId = scope.longPressOrigin.identifier
+      scope.tapCandidate = null
+    }
   }, LONG_PRESS_MS)
 }
 

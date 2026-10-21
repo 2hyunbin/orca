@@ -1379,6 +1379,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "Rechercher des hôtes…",
+        "noHostsMatch": "Aucun hôte ne correspond.",
+        "moreHosts_one": "{{count}} autre hôte. Recherchez-le par son nom.",
+        "moreHosts_other": "{{count}} autres hôtes. Recherchez par nom pour en trouver un."
+      },
       "BrowserCookieImportDisclosure": {
         "title": "Connexions Google non importées",
         "description": "Connectez-vous à Google directement dans Orca."
