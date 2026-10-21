@@ -2,7 +2,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useState,
   type ComponentType,
   type PropsWithChildren,
   type ReactElement
@@ -91,58 +90,6 @@ export function RouteScreenPaintProvider({
   )
 }
 
-/** Holds a screen's first-paint report until the returned release; none outside a page route. */
-export type RouteScreenPaintHold = () => () => void
-
-const RouteScreenPaintHoldContext = createContext<RouteScreenPaintHold | null>(null)
-
-/**
- * For a view that is still arriving when its screen commits (a drawer sliding up): held from a
- * layout effect, which runs before the report is scheduled, the shell's frame stays up until then.
- */
-export function useRouteScreenPaintHold(): RouteScreenPaintHold | null {
-  return useContext(RouteScreenPaintHoldContext)
-}
-
-/** Runs `report` once nothing holds it, and answers with the take-back for either wait. */
-function createHeldReport() {
-  let holds = 0
-  let waiting: (() => void) | null = null
-  let cancel: (() => void) | null = null
-  const run = (report: () => () => void) => {
-    cancel = report()
-  }
-  return {
-    hold: (): (() => void) => {
-      holds += 1
-      let released = false
-      return () => {
-        if (released) {
-          return
-        }
-        released = true
-        holds -= 1
-        if (holds === 0 && waiting !== null) {
-          const next = waiting
-          waiting = null
-          next()
-        }
-      }
-    },
-    report: (report: () => () => void): (() => void) => {
-      if (holds === 0) {
-        run(report)
-      } else {
-        waiting = () => run(report)
-      }
-      return () => {
-        waiting = null
-        cancel?.()
-      }
-    }
-  }
-}
-
 /**
  * The screen behind a deferred route, reporting the commit that drew it. Applied where the route
  * manifest resolves the chunk, because the wrapper above the router commits with the suspense
@@ -155,15 +102,10 @@ export function withRouteScreenPaintReport(module: {
   const Screen = module.default
   function RouteScreenPaintReport(props: Record<string, unknown>): ReactElement {
     const report = useContext(RouteScreenPaintContext)
-    const [held] = useState(createHeldReport)
     // Returned as the cleanup: a route swapped out before its frame lands would otherwise uncover
     // the view on the way out, over the fallback of whatever replaced it.
-    useEffect(() => held.report(report), [held, report])
-    return (
-      <RouteScreenPaintHoldContext.Provider value={held.hold}>
-        <Screen {...props} />
-      </RouteScreenPaintHoldContext.Provider>
-    )
+    useEffect(() => report(), [report])
+    return <Screen {...props} />
   }
   return { default: RouteScreenPaintReport }
 }

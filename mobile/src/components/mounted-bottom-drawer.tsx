@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { View, Pressable, useWindowDimensions, ScrollView, Keyboard, Modal } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
@@ -24,7 +24,6 @@ import {
   useBottomDrawerModalHostBackClaim
 } from './bottom-drawer-modal-host-scope'
 import { useResponsiveLayout } from '../layout/responsive-layout'
-import { useRouteScreenPaintHold } from '../mobile-web-shell/bridge/page-first-paint'
 import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
 import { useBackClaim } from '../navigation/use-back-claim'
 import { currentSoftKeyboardHeight, subscribeSoftKeyboard } from '../platform/keyboard-occlusion'
@@ -68,22 +67,6 @@ export function MountedBottomDrawer({
 }: MountedBottomDrawerProps) {
   const translateY = useSharedValue(0)
   const progress = useSharedValue(0)
-  // A drawer opening as its page screen mounts keeps the shell's frame up until it is up.
-  const holdFirstPaint = useRouteScreenPaintHold()
-  const releaseFirstPaintRef = useRef<(() => void) | null>(null)
-  const openingAtMountRef = useRef(visible)
-  useLayoutEffect(() => {
-    if (!openingAtMountRef.current || holdFirstPaint === null) {
-      return
-    }
-    const release = holdFirstPaint()
-    releaseFirstPaintRef.current = release
-    return release
-  }, [holdFirstPaint])
-  const releaseFirstPaint = useCallback(() => {
-    releaseFirstPaintRef.current?.()
-    releaseFirstPaintRef.current = null
-  }, [])
   const keyboardOffset = useSharedValue(0)
   const scrollOffsetY = useSharedValue(0)
   const scrollRef = useRef<ScrollView>(null)
@@ -141,9 +124,7 @@ export function MountedBottomDrawer({
     if (visible) {
       translateY.value = 0
       scrollOffsetY.value = 0
-      progress.value = withTiming(1, { duration: BOTTOM_DRAWER_SHOW_DURATION_MS }, () => {
-        runOnJS(releaseFirstPaint)()
-      })
+      progress.value = withTiming(1, { duration: BOTTOM_DRAWER_SHOW_DURATION_MS })
     } else {
       Keyboard.dismiss()
       setKeyboardInset(0)
@@ -153,7 +134,7 @@ export function MountedBottomDrawer({
         }
       })
     }
-  }, [onHidden, releaseFirstPaint, visible])
+  }, [onHidden, visible])
 
   // Why: KeyboardAvoidingView and useAnimatedKeyboard are both unreliable
   // inside Modal (iOS ignores KAV; Android needs adjustNothing for
