@@ -1,4 +1,3 @@
-import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import { useAppStore } from '@/store'
 import { writeTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
@@ -13,6 +12,7 @@ import { stablePaneHasLivePty } from '@/lib/sleeping-agent-pane-ownership'
 import {
   clearPaneSpawnDeferral,
   getPaneSpawnDeferral,
+  notifyPaneStartupStateChanged,
   setPaneSpawnDeferral
 } from '@/lib/pane-spawn-deferral-registry'
 import {

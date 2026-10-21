@@ -8,7 +8,7 @@ import {
 } from './mobile-native-chat-eligibility'
 import { useMobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
 import { mobileNativeChatLaunchDraftSeeds } from './mobile-native-chat-draft-store'
-import { mobileSessionTabsEqual } from './mobile-terminal-records'
+import { mobileSessionTabsEqual, type MobileTerminalSessionTab } from './mobile-terminal-records'
 
 vi.mock('lucide-react-native', () => ({ MessageSquare: () => null, SquareTerminal: () => null }))
 vi.mock('./use-mobile-session-view-mode', async () => {
@@ -18,6 +18,7 @@ vi.mock('./use-mobile-session-view-mode', async () => {
       const [chat, setChat] = useState(true)
       const setTabView = useCallback((_id: string, view: string) => setChat(view === 'chat'), [])
       return {
+        ready: true,
         isTabChatView: () => chat,
         setTabView,
         toggleTabChatView: () => setChat((value) => !value)
@@ -46,9 +47,11 @@ it.each([undefined, 'Keep this editable'])(
       state: 'shell',
       basis: 'cold'
     }
-    let tab: MobileNativeChatTab & { id: string; terminal: string | null } = {
+    let tab: MobileTerminalSessionTab & Pick<MobileNativeChatTab, 'launchAgent'> = {
       type: 'terminal',
       id: 'tab',
+      title: 'Agent',
+      isActive: true,
       terminal: null,
       status: 'pending-handle',
       incarnationId: 'birth',
