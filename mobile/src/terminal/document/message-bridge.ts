@@ -63,12 +63,11 @@ export function startMessageBridge(scope: TerminalDocumentScope) {
   }
   // The WebGL atlas retains missing glyphs if it paints before the bundled font finishes loading.
   if (document.fonts && !document.fonts.check('13px "Orca Nerd Font Symbols"', '\ue0b0')) {
-    void document.fonts
+    return document.fonts
       .load('13px "Orca Nerd Font Symbols"', '\ue0b0')
       .then(reportReady, reportReady)
-  } else {
-    reportReady()
   }
+  reportReady()
 }
 
 export function stopMessageBridge(scope: TerminalDocumentScope) {
