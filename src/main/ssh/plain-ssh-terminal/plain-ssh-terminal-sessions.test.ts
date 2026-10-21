@@ -1,0 +1,177 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as pty from 'node-pty'
+import type { SshTarget } from '../../../shared/ssh-types'
+import type { PlainSshTerminalEvent } from '../../../shared/plain-ssh-terminal'
+import {
+  closeAllPlainSshTerminals,
+  closePlainSshTerminal,
+  openPlainSshTerminal,
+  resizePlainSshTerminal,
+  writePlainSshTerminal,
+  type PlainSshTerminalDeps
+} from './plain-ssh-terminal-sessions'
+
+const lambda: SshTarget = {
+  id: 'lambda',
+  label: 'lambda',
+  source: 'ssh-config',
+  configHost: 'lambda',
+  host: 'lambda',
+  port: 22,
+  username: ''
+}
+
+type FakePty = {
+  file: string
+  args: string[]
+  options: pty.IPtyForkOptions
+  write: ReturnType<typeof vi.fn>
+  resize: ReturnType<typeof vi.fn>
+  kill: ReturnType<typeof vi.fn>
+  emitData: (data: string) => void
+  emitExit: (exitCode: number) => void
+}
+
+const spawned: FakePty[] = []
+
+function fakeSpawn(file: string, args: string[] | string, options: pty.IPtyForkOptions): pty.IPty {
+  let onData: ((data: string) => void) | null = null
+  let onExit: ((event: { exitCode: number }) => void) | null = null
+  const fake: FakePty = {
+    file,
+    args: Array.isArray(args) ? args : [args],
+    options,
+    write: vi.fn(),
+    resize: vi.fn(),
+    kill: vi.fn(() => fake.emitExit(129)),
+    emitData: (data) => onData?.(data),
+    emitExit: (exitCode) => onExit?.({ exitCode })
+  }
+  spawned.push(fake)
+  const proc = {
+    cols: 80,
+    rows: 24,
+    write: fake.write,
+    resize: fake.resize,
+    kill: fake.kill,
+    destroy: vi.fn(),
+    onData: (listener: (data: string) => void) => {
+      onData = listener
+      return { dispose: () => {} }
+    },
+    onExit: (listener: (event: { exitCode: number }) => void) => {
+      onExit = listener
+      return { dispose: () => {} }
+    }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the sessions module only calls the IPty members this fake implements.
+  return proc as unknown as pty.IPty
+}
+
+function deps(overrides: Partial<PlainSshTerminalDeps> = {}): PlainSshTerminalDeps {
+  return {
+    getTarget: (id) => (id === lambda.id ? lambda : undefined),
+    isMoveBlocked: () => true,
+    findSsh: () => '/usr/bin/ssh',
+    mayConfigClaimAlias: () => true,
+    loadPtySpawn: async () => fakeSpawn,
+    homeDir: () => '/home/me',
+    platform: 'linux',
+    ...overrides
+  }
+}
+
+function open(
+  d: PlainSshTerminalDeps,
+  targetId: unknown = 'lambda',
+  owner = 1,
+  events: PlainSshTerminalEvent[] = []
+): ReturnType<typeof openPlainSshTerminal> {
+  return openPlainSshTerminal(d, { targetId, cols: 100, rows: 30, owner }, (event) => {
+    events.push(event)
+    return true
+  })
+}
+
+afterEach(() => {
+  closeAllPlainSshTerminals()
+  spawned.length = 0
+})
+
+describe('plain SSH terminal sessions', () => {
+  it('spawns ssh itself with an argv array in the home directory, never a shell', async () => {
+    const result = await open(deps())
+    expect(result).toMatchObject({ ok: true, label: 'lambda' })
+    expect(spawned).toHaveLength(1)
+    expect(spawned[0]).toMatchObject({ file: '/usr/bin/ssh', args: ['--', 'lambda'] })
+    expect(spawned[0].options).toMatchObject({ cols: 100, rows: 30, cwd: '/home/me' })
+  })
+
+  it('refuses an unknown, internal or non-string target without spawning', async () => {
+    const internal: SshTarget = {
+      ...lambda,
+      id: 'hop',
+      owner: { type: 'on-demand-runtime', runtimeId: 'r1' }
+    }
+    const d = deps({ getTarget: (id) => (id === 'hop' ? internal : undefined) })
+    expect(await open(d, 'nope')).toEqual({ ok: false, reason: 'unknown-target' })
+    expect(await open(d, 'hop')).toEqual({ ok: false, reason: 'unknown-target' })
+    expect(await open(d, { id: 'lambda' })).toEqual({ ok: false, reason: 'unknown-target' })
+    expect(spawned).toHaveLength(0)
+  })
+
+  it('refuses a host whose move isn’t blocked: Orca’s own terminals serve it', async () => {
+    expect(await open(deps({ isMoveBlocked: () => false }))).toEqual({
+      ok: false,
+      reason: 'not-blocked'
+    })
+    expect(spawned).toHaveLength(0)
+  })
+
+  it('names OpenSSH Client when Windows has no ssh.exe, with no shell workaround', async () => {
+    const result = await open(deps({ findSsh: () => null, platform: 'win32' }))
+    expect(result).toMatchObject({ ok: false, reason: 'ssh-missing' })
+    expect(result.ok ? '' : 'message' in result ? result.message : '').toContain('OpenSSH Client')
+  })
+
+  it('keeps one session per host', async () => {
+    const first = await open(deps())
+    const second = await open(deps())
+    expect(second).toEqual({
+      ok: false,
+      reason: 'already-open',
+      sessionId: first.ok ? first.sessionId : ''
+    })
+    expect(spawned).toHaveLength(1)
+  })
+
+  it('forwards output and exit, and only its owner can write, resize or close it', async () => {
+    const events: PlainSshTerminalEvent[] = []
+    const result = await open(deps(), 'lambda', 7, events)
+    const sessionId = result.ok ? result.sessionId : ''
+    spawned[0].emitData('Welcome to lambda\r\n')
+    writePlainSshTerminal(sessionId, 8, 'rm -rf /\r')
+    resizePlainSshTerminal(sessionId, 8, 10, 10)
+    closePlainSshTerminal(sessionId, 8)
+    expect(spawned[0].write).not.toHaveBeenCalled()
+    expect(spawned[0].resize).not.toHaveBeenCalled()
+    expect(spawned[0].kill).not.toHaveBeenCalled()
+    writePlainSshTerminal(sessionId, 7, 'ls\r')
+    resizePlainSshTerminal(sessionId, 7, 120, 40)
+    expect(spawned[0].write).toHaveBeenCalledWith('ls\r')
+    expect(spawned[0].resize).toHaveBeenCalledWith(120, 40)
+    closePlainSshTerminal(sessionId, 7)
+    expect(events).toEqual([
+      { kind: 'data', sessionId, data: 'Welcome to lambda\r\n' },
+      { kind: 'exit', sessionId, exitCode: 129 }
+    ])
+    // Ended: a new one may open.
+    expect(await open(deps())).toMatchObject({ ok: true })
+  })
+
+  it('hangs up every session on quit', async () => {
+    await open(deps())
+    closeAllPlainSshTerminals()
+    expect(spawned[0].kill).toHaveBeenCalledTimes(1)
+  })
+})
