@@ -23,14 +23,7 @@ export function useNativeChatComposerHandle(
   ref: ForwardedRef<NativeChatComposerHandle>,
   args: UseNativeChatComposerHandleArgs
 ): (event: ClipboardEventLike) => void {
-  const {
-    textareaRef,
-    isComposing,
-    setDraft,
-    setActiveSuggestion,
-    pastedTextEditor,
-    ...pasteArgs
-  } = args
+  const { textareaRef, isComposing, setDraft, setActiveSuggestion, ...pasteArgs } = args
   const { insertTypedText, appendText, acceptsText, insertPastedText, focus, contains } =
     useNativeChatTypedInsertion({
       textareaRef,
@@ -44,7 +37,7 @@ export function useNativeChatComposerHandle(
     pastesInline: args.pastesInline,
     scopeKey: args.attachmentScopeKey ?? '',
     // Without a draft scope there is no draft for a pending paste to settle in.
-    scopeEditor: args.attachmentScopeKey ? pastedTextEditor : null,
+    scopeEditor: args.attachmentScopeKey ? args.pastedTextEditor : null,
     resolveAttachmentOwner: args.resolveAttachmentOwner,
     insertTypedText: insertPastedText,
     setNotice: args.setNotice
