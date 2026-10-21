@@ -128,7 +128,7 @@ it('wires rendered file links through the preview screen to navigation', async (
     }
   }
   const rendered = await render()
-  const markdown = rendered.root.find((node) => node.type === 'MobileFileMarkdownPreview')
+  const markdown = rendered.root.find((node) => String(node.type) === 'MobileFileMarkdownPreview')
   await act(async () => markdown.props.onOpenFile('docs/details.md'))
   expect(push).toHaveBeenCalledWith({
     pathname: '/h/[hostId]/files/preview/[worktreeId]',
