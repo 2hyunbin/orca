@@ -24,6 +24,7 @@ import {
   awaitRepoOwnerHostKnown,
   refreshWslRegistrationAfterFailure
 } from './repo-owner-host-readiness'
+import { selectWorktreesByRepo } from '../workspace-record-selectors'
 
 export function createRepoAddActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -182,7 +183,7 @@ export function createRepoAddActions(
         // The returned row names its owner; a WSL path's is its distro's server, not the picked host.
         const executionHostId = getRepoExecutionHostId(repo)
         await get().fetchWorktrees(repo.id, { executionHostId })
-        const folderWorktree = get().worktreesByRepo[repo.id]?.find(
+        const folderWorktree = selectWorktreesByRepo(get())[repo.id]?.find(
           (worktree) => getWorktreeExecutionHostId(worktree, repo) === executionHostId
         )
         if (folderWorktree) {

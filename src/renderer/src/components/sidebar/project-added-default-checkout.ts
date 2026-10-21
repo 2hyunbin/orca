@@ -11,6 +11,10 @@ import { parseWslUncPath } from '../../../../shared/wsl-paths'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { finalizeImportedRepoAfterSkip } from './add-repo-skip-finalization'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
+import {
+  selectDetectedWorktreesByRepo,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 
 type DefaultCheckoutHandoffReason = EventProps<'add_repo_default_checkout_handoff'>['reason']
 
@@ -92,7 +96,7 @@ async function revealDetectedHiddenLinkedExternalWorktrees(
   const state = useAppStore.getState()
   if (
     !hasDetectedHiddenLinkedExternalWorktrees(
-      state.detectedWorktreesByRepo[repoId],
+      selectDetectedWorktreesByRepo(state)[repoId],
       executionHostId
     )
   ) {
@@ -125,7 +129,7 @@ async function findDetectedDefaultCheckout(
   reason: DefaultCheckoutHandoffReason
 }> {
   const state = useAppStore.getState()
-  const detected = state.detectedWorktreesByRepo[repoId]
+  const detected = selectDetectedWorktreesByRepo(state)[repoId]
   const detectedDefaultCheckout = getDetectedProjectDefaultCheckout(detected, executionHostId)
   if (!detectedDefaultCheckout) {
     return {
@@ -156,7 +160,7 @@ async function findDetectedDefaultCheckout(
   }
   const worktree = getProjectDefaultCheckout(
     getProjectWorktreesForHost(
-      useAppStore.getState().worktreesByRepo[repoId] ?? [],
+      selectWorktreesByRepo(useAppStore.getState())[repoId] ?? [],
       executionHostId
     )
   )
@@ -200,7 +204,7 @@ export async function openProjectDefaultCheckout({
 }): Promise<void> {
   let defaultCheckout = getProjectDefaultCheckout(
     getProjectWorktreesForHost(
-      useAppStore.getState().worktreesByRepo[repoId] ?? [],
+      selectWorktreesByRepo(useAppStore.getState())[repoId] ?? [],
       executionHostId
     )
   )
