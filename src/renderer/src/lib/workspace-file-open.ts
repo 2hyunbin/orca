@@ -19,7 +19,7 @@ import { openLinkedFileInEditor } from './editor-file-link-open'
 import type { EditorOpenLinkIntent } from '@/store/slices/editor/types/editor-open-link-intent'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { activateAndRevealWorkspace } from './worktree-activation'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from './worktree-runtime-owner'
+import { runtimeEnvironmentIdUnlessTwin } from './resolve-owner'
 import { FILE_DOC_PREVIEW_RUNTIME_CAPABILITY } from '../../../shared/files-runtime-capabilities'
 
 type ChangeOpenRequest = {
@@ -172,7 +172,7 @@ export function openWorkspaceFile(request: WorkspaceFileOpenRequest): WorkspaceF
     )
     const previewEnvironmentId =
       plan.status === 'doc-preview'
-        ? runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, target.worktreeId)
+        ? runtimeEnvironmentIdUnlessTwin(state, target.worktreeId)
         : null
     if (
       plan.status !== 'unsupported' &&

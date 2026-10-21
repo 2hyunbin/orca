@@ -1,6 +1,6 @@
 import { basename } from '@/lib/path'
 import { activateBrowserWorkspaceTab } from '@/lib/browser-workspace-tab-activation'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import type { AppState } from '@/store/types'
 import type { CreateBrowserTabOptions } from '@/store/slices/browser/browser-slice-contract'
 import { browserPageDocLocationsEqual } from '../../../shared/browser-page-doc-location'
@@ -22,10 +22,7 @@ export function openFilePreviewTab(
     plan.status === 'doc-preview'
       ? { kind: 'workspace-doc', worktreeId: params.worktreeId, filePath: params.filePath }
       : null
-  const inferredRuntimeEnvironmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
-    state,
-    params.worktreeId
-  )
+  const inferredRuntimeEnvironmentId = runtimeEnvironmentIdUnlessTwin(state, params.worktreeId)
   const previewRuntimeEnvironmentId = params.clientLocal ? null : inferredRuntimeEnvironmentId
   const existing = findWorkspaceShowingPage(
     state,

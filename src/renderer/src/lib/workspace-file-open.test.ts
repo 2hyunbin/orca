@@ -32,8 +32,8 @@ vi.mock('./file-preview', () => ({
 }))
 vi.mock('./workspace-surface-reveal', () => ({ selectWorkspaceSurface: mocks.select }))
 vi.mock('./worktree-activation', () => ({ activateAndRevealWorkspace: mocks.activate }))
-vi.mock('./worktree-runtime-owner', () => ({
-  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: () => mocks.environmentId
+vi.mock('./resolve-owner', () => ({
+  runtimeEnvironmentIdUnlessTwin: () => mocks.environmentId
 }))
 
 beforeEach(() => {

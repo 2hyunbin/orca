@@ -76,7 +76,15 @@ vi.mock('@/store', () => ({
       ...(mocks.twin
         ? localAndSshTwinRows('repo-1', 'wt-1')
         : {
-            repos: [{ id: 'repo-1', connectionId: mocks.connectionId }],
+            repos: [
+              {
+                id: 'repo-1',
+                connectionId: mocks.connectionId,
+                ...(mocks.environmentId
+                  ? { executionHostId: `runtime:${mocks.environmentId}` }
+                  : {})
+              }
+            ],
             worktreesByRepo: { 'repo-1': [{ id: 'wt-1', repoId: 'repo-1' }] }
           })
     })

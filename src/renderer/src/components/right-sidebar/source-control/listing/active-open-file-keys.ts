@@ -1,7 +1,7 @@
 import type { DiffSource } from '@/store/slices/editor'
 import type { AppState } from '@/store/types'
 import { getRelativePathInsideRoot } from '@/lib/path'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { getBrowserPageRuntimeEnvironmentId } from '@/components/browser-pane/describe-page/browser-page-url-display'
 import { browserFileUrlToAbsolutePath } from '@/components/browser-pane/describe-page/browser-artifact-upload'
 import { canOpenBrowserFileInWorkspaceEditor } from '@/components/browser-pane/navigate/browser-file-editor-open'
@@ -42,10 +42,7 @@ export function getActiveOpenFileSignature(
     filePath = page.docLocation.filePath
   } else if (
     !page.docLocation &&
-    !getBrowserPageRuntimeEnvironmentId(
-      page,
-      runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)
-    ) &&
+    !getBrowserPageRuntimeEnvironmentId(page, runtimeEnvironmentIdUnlessTwin(state, worktreeId)) &&
     canOpenBrowserFileInWorkspaceEditor(state, worktreeId)
   ) {
     filePath = browserFileUrlToAbsolutePath(page.url)
