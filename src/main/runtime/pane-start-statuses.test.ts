@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeStore } from './runtime-store-contract'
 import { spawnInAdmittedPane } from './runtime-pane-admission'
+import { PaneOwnerContentionError } from '../ipc/pty/pane/pane-spawn-operation'
 import {
   bindingOf,
   PaneStartStatuses,
@@ -144,6 +145,63 @@ describe('a start into a pane main holds', () => {
     ).rejects.toThrow('no pty')
     expect(taken.store.withdrawTerminalPane).toHaveBeenCalledTimes(1)
     expect(untouched.register.get(PANE_KEY, UNBOUND)).toBeNull()
+  })
+})
+
+describe('a reconnect into a pane main already holds', () => {
+  const RECONNECT = { ...ARGS, paneSpawnOperation: { mustExist: true } }
+
+  it('shows the pane starting without asking for admission, then clears', async () => {
+    const { register } = statuses()
+    const { store, runtimeStore } = storeAnswering('exists')
+    let seen: unknown
+    await spawnInAdmittedPane(
+      runtimeStore,
+      {
+        spawn: vi.fn(async () => {
+          seen = register.get(PANE_KEY, UNBOUND)
+          return { id: 'pty-1' }
+        })
+      },
+      { ...RECONNECT, startStatus: { sink: register, keepOnFailure: false } }
+    )
+    expect(seen).toEqual({ status: 'starting' })
+    expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
+    expect(store.admitTerminalPane).not.toHaveBeenCalled()
+  })
+
+  it('keeps the pane showing why when its start fails', async () => {
+    const { register } = statuses()
+    const { runtimeStore } = storeAnswering('exists')
+    await expect(
+      spawnInAdmittedPane(
+        runtimeStore,
+        {
+          spawn: vi.fn(async () => {
+            throw new Error('shell not found')
+          })
+        },
+        { ...RECONNECT, startStatus: { sink: register, keepOnFailure: false } }
+      )
+    ).rejects.toThrow('shell not found')
+    expect(register.get(PANE_KEY, UNBOUND)).toEqual({ status: 'failed', reason: 'shell not found' })
+  })
+
+  it('shows no failure when another owner won the pane, which attaches to the winner', async () => {
+    const { register } = statuses()
+    const { runtimeStore } = storeAnswering('exists')
+    await expect(
+      spawnInAdmittedPane(
+        runtimeStore,
+        {
+          spawn: vi.fn(async () => {
+            throw new PaneOwnerContentionError()
+          })
+        },
+        { ...RECONNECT, startStatus: { sink: register, keepOnFailure: false } }
+      )
+    ).rejects.toThrow('terminal_pane_owner_changed')
+    expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
   })
 })
 

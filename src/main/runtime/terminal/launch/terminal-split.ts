@@ -63,7 +63,8 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
           ...(cwd ? { cwd } : {}),
           command: opts.command,
           env: opts.env,
-          envToDelete: opts.envToDelete
+          envToDelete: opts.envToDelete,
+          activate: opts.activate
         }
       )
     }

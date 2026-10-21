@@ -147,36 +147,39 @@ export async function spawnInAdmittedPane(
   { startStatus, ...args }: AdmittedSpawnArgs & PaneStartArgs
 ): ReturnType<Spawn> {
   const { groupId: _groupId, afterTabId: _afterTabId, ...spawnArgs } = args
-  if (args.paneSpawnOperation?.mustExist) {
-    // SAFETY: Callers require spawn; a reconnect into its own pane takes no admission or status.
-    return controller.spawn!(spawnArgs)
-  }
   const paneKey = `${args.tabId}:${args.leafId}`
   let admittedAs: TerminalPaneAdmissionOutcome | undefined
   startStatus?.sink.set(paneKey, { status: 'starting' })
   let run: { outcome: TerminalPaneAdmissionOutcome | undefined; result: Awaited<ReturnType<Spawn>> }
+  const start = async (
+    admitted: TerminalPaneAdmissionOutcome | undefined
+  ): Promise<Awaited<ReturnType<Spawn>>> => {
+    if (admitted !== undefined && admitted !== 'admitted' && admitted !== 'exists') {
+      // A tab main recorded closed, or a split whose parent pane left the layout.
+      throw new Error(admitted === 'tab_closed' ? admitted : 'terminal_split_source_not_found')
+    }
+    admittedAs = admitted
+    // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
+    return controller.spawn!(spawnArgs)
+  }
   try {
-    run = await startInAdmittedPane(
-      store,
-      admissionFor(args),
-      hostIdOf(args),
-      async (admitted) => {
-        if (admitted !== undefined && admitted !== 'admitted' && admitted !== 'exists') {
-          // A tab main recorded closed, or a split whose parent pane left the layout.
-          throw new Error(admitted === 'tab_closed' ? admitted : 'terminal_split_source_not_found')
-        }
-        admittedAs = admitted
-        // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
-        return controller.spawn!(spawnArgs)
-      },
-      startStatus?.keepOnFailure
-    )
+    // A reconnect into its own pane skips admission: the pane is already written.
+    run = args.paneSpawnOperation?.mustExist
+      ? { outcome: undefined, result: await start('exists') }
+      : await startInAdmittedPane(
+          store,
+          admissionFor(args),
+          hostIdOf(args),
+          start,
+          startStatus?.keepOnFailure
+        )
   } catch (error) {
     // A pane that stays (kept to show the failure, or one main already held) shows why; one
-    // closed while it started is gone, so nothing is left to show.
+    // closed while it started is gone, and one another owner won attaches to the winner.
     if (
       startStatus &&
       admittedAs &&
+      !(error instanceof PaneOwnerContentionError) &&
       (startStatus.keepOnFailure || admittedAs === 'exists') &&
       paneStillWritten(store, args)
     ) {

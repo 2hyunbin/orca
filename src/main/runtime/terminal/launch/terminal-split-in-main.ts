@@ -24,6 +24,8 @@ export type SplitPaneInMainOptions = {
   command?: string
   env?: Record<string, string>
   envToDelete?: string[]
+  /** False for a split no one asked to see (an agent team's); phones keep their active tab. */
+  activate?: boolean
   /** The window's own split keeps a pane whose start failed, showing why, as its spawn did. */
   keepPaneOnStartFailure?: boolean
 }
@@ -140,7 +142,7 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
       tabId: source.tabId,
       leafId,
       title: null,
-      activate: true,
+      activate: opts.activate !== false,
       split: { splitFromLeafId: source.leafId, direction: opts.direction }
     })
     return {

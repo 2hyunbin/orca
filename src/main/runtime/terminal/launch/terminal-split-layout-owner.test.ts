@@ -124,6 +124,18 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
     ).toBe(true)
   })
 
+  it('a split no one asked to see leaves the phones’ active tab alone; one asked for takes it', async () => {
+    const { runtime, handle } = setup()
+    const listed = () => runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    const before = (await listed()).activeTabId
+
+    await runtime.splitTerminal(handle, { direction: 'vertical', activate: false })
+    expect((await listed()).activeTabId).toBe(before)
+
+    const shown = await runtime.splitTerminal(handle, { direction: 'horizontal' })
+    expect((await listed()).activeTabId).toBe(`${TAB_ID}::${shown.leafId}`)
+  })
+
   it('the window’s own split keeps its proposed pane id, folder and size', async () => {
     const { runtime, leafIds, spawn } = setup()
 
