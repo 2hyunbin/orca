@@ -214,7 +214,7 @@ export function getAllWorktreeMetaForHost(
 export function getWorktreeLineageMetadata(
   state: WorktreeMetaState
 ): { id: string; meta: WorktreeMeta }[] {
-  const rows = new Map(
+  const rows = new Map<string, { id: string; meta: WorktreeMeta }>(
     Object.entries(state.worktreeMeta).map(([id, meta]) => [
       composeWorktreeHostIdentity(meta.hostId, id),
       { id, meta }

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import type { WorktreeLineage } from './worktree/lineage-types'
 import type { Worktree } from './worktree/types'
-import type { WorktreeLineageBoundary } from './resolved-worktree-lineage'
+import type { LineageRow, WorktreeLineageBoundary } from './resolved-worktree-lineage'
 import {
   projectResolvedWorktreeLineage,
   resolveWorktreeLineageParents,
@@ -256,7 +256,7 @@ describe('cross-store lineage contract', () => {
       { rows: [child, parent], edge: { parentWorktreeId: 'parent' }, parent: undefined }
     ]
     for (const item of cases) {
-      const parents = resolveWorktreeLineageParents(item.rows, (row) =>
+      const parents = resolveWorktreeLineageParents<LineageRow>(item.rows, (row) =>
         row === child ? item.edge : null
       )
       expect(parents.get(child)).toBe(item.parent)

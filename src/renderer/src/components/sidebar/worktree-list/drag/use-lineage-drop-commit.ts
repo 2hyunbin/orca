@@ -27,7 +27,10 @@ export function useWorktreeLineageDropCommit(args: {
   const { worktreeMap, lineageById: worktreeLineageById } = useAppStore(getLineageInputs)
   const assignWorktreeParent = useAppStore((s) => s.assignWorktreeParent)
   const updateWorktreeLineage = useAppStore((s) => s.updateWorktreeLineage)
-  const selectedKeys = (ids: readonly string[], copies?: DraggedWorktreeCopies): string[] =>
+  const selectedKeys = (
+    ids: readonly string[],
+    copies?: DraggedWorktreeCopies
+  ): readonly string[] =>
     copies ? copies.filter((copy) => ids.includes(copy.id)).map(getWorktreeHostIdentity) : ids
 
   const getEligibleLineageDropTarget = useCallback(

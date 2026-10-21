@@ -53,7 +53,7 @@ export function resolveWorktreeCreateParent(
   if (usable) {
     return {
       parentWorkspace: worktreeWorkspaceKey(usable),
-      ...(picked.instanceId && pickedHost !== executionHostId
+      ...(picked?.instanceId && pickedHost !== executionHostId
         ? {
             parentWorktreeRef: {
               worktreeId: picked.id,

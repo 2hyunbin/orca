@@ -20,8 +20,11 @@ export function getSortedWorktreeRankIndex(sortedIds: readonly string[]): Map<st
   return index
 }
 
-type LineageState = Pick<AppState, 'worktreesByRepo'> &
-  Partial<Pick<AppState, 'folderWorkspaces' | 'worktreeLineageById' | 'workspaceLineageByChildKey'>>
+type LineageState = {
+  worktreesByRepo: Readonly<Record<string, readonly Worktree[]>>
+} & Partial<
+  Pick<AppState, 'folderWorkspaces' | 'worktreeLineageById' | 'workspaceLineageByChildKey'>
+>
 const noEdges = {}
 const inputCache = new WeakMap<
   object,

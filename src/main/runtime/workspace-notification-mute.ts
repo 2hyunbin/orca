@@ -80,8 +80,10 @@ export function isWorkspaceHiddenBySidebarFilters(
     )
   }
   const snapshot = getWorktreeLineageCandidates(deps.store)
-  const rows = new Map(snapshot.rows.map((row) => [getWorktreeHostIdentity(row), row]))
-  const listedByIdentity = new Map(
+  const rows = new Map<string, Worktree>(
+    snapshot.rows.map((row) => [getWorktreeHostIdentity(row), row])
+  )
+  const listedByIdentity = new Map<string, Worktree>(
     (deps.resolvedWorktrees ?? []).map((row) => {
       const owners = snapshot.reposById.get(row.repoId) ?? []
       const owned =
