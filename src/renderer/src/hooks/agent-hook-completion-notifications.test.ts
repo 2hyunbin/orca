@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TerminalNotificationEvent } from '@/components/terminal-pane/use-notification-dispatch'
 import type { ParsedAgentStatusPayload } from '../../../shared/agent-status-types'
 import { createHookListenerState } from '../../../shared/agent-hook-listener/listener-state'
 import { normalizeHookPayload } from '../../../shared/agent-hook-listener'
@@ -153,10 +154,15 @@ describe('agent hook completion notifications', () => {
   it('retires the forwarded alert on a later real start, while rebinding leaves it alone', async () => {
     const dismiss = vi.fn(async () => ({ dismissed: 0 }))
     vi.stubGlobal('window', { api: { notifications: { dismiss } } })
-    dispatchTerminalNotification.mockReturnValue({
-      notificationId: 'forwarded',
-      executionHost: 'runtime:host-b'
-    })
+    dispatchTerminalNotification.mockImplementation(
+      (_worktreeId: string, event: TerminalNotificationEvent) => {
+        event.onNotificationRequested?.({
+          notificationId: 'forwarded',
+          executionHost: 'runtime:host-b'
+        })
+        return true
+      }
+    )
     const { observeAgentHookCompletionForNotification: observe } =
       await import('./agent-hook-completion-notifications')
     const status = (

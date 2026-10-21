@@ -1,5 +1,8 @@
 import type { LiveNotificationRetirement } from '../../../shared/notification-settings-types'
-import type { AgentCompletionStatusSnapshot } from '@/components/terminal-pane/agent-completion-coordinator-types'
+import type {
+  AgentCompletionCoordinator,
+  AgentCompletionStatusSnapshot
+} from '@/components/terminal-pane/agent-completion-coordinator-types'
 
 export function createAgentHookNotificationRetirement(getPtyId: () => string | null) {
   let owed: { alert: LiveNotificationRetirement; source: string; at: number }[] = []
@@ -16,7 +19,7 @@ export function createAgentHookNotificationRetirement(getPtyId: () => string | n
           payload.agentType
         ])
       : ''
-  return {
+  const retirement = {
     accepts: (payload: AgentCompletionStatusSnapshot | undefined): boolean =>
       !payload || sourceFor(payload) === source,
     record: (
@@ -56,6 +59,22 @@ export function createAgentHookNotificationRetirement(getPtyId: () => string | n
     clear: (): void => {
       owed = []
       source = ''
-    }
+    },
+    wrapCoordinator: (coordinator: AgentCompletionCoordinator): AgentCompletionCoordinator => ({
+      ...coordinator,
+      seedHookStatus: (payload) => {
+        retirement.clear()
+        coordinator.seedHookStatus(payload)
+      },
+      observeHookStatus: (payload) => {
+        retirement.observe(payload)
+        coordinator.observeHookStatus(payload)
+      },
+      dispose: () => {
+        retirement.clear()
+        coordinator.dispose()
+      }
+    })
   }
+  return retirement
 }

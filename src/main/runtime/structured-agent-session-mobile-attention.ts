@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import type { AgentJournalCursor } from '../../shared/agent-session-journal-types'
 // Execution-host delivery for work without a proven connected desktop mirror.
 import type { AgentSessionStatusSummary } from '../../shared/agent-session-wire'
@@ -134,4 +135,25 @@ export function createStructuredAttentionMobileDelivery(
     reconcile: deps.reconcile,
     onTurnStarted: deps.onTurnStarted
   }
+}
+
+export function subscribeStructuredAgentSessionAttention(
+  host: StructuredAgentSessionHost,
+  delivery: StructuredAttentionMobileDelivery
+): void {
+  // Teardown drops the host and its subscribers together.
+  host.subscribeTurnCompletions({
+    id: 'host-attention-delivery',
+    includePrompts: true,
+    emit: (event) => {
+      if (event.type === 'end') {
+        return
+      }
+      const sessionId =
+        event.type === 'prompt' ? event.prompt.sessionId : event.completion.sessionId
+      delivery.deliver(event, host.readStatusSummary(sessionId), host.phoneAlertCaller(event))
+    },
+    onState: delivery.reconcile,
+    onTurnStarted: delivery.onTurnStarted
+  })
 }

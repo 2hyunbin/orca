@@ -1,6 +1,6 @@
 import { sameAgentStatusTerminalOwner } from '../../../../shared/agent-status-terminal-owner'
 import { isWslHookRelayConnectionId } from '../../../../shared/wsl-hook-relay-contract'
-import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
+import { pickHostTurnEnd, type AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
 import {
   resolveAgentStatusIdentity,
   shouldSuppressInheritedTerminalStatus
@@ -237,7 +237,8 @@ export function createAgentStatusEventApplicator(args: {
           ? { evidenceObservedAt: data.evidenceObservedAt }
           : {}),
         stateStartedAt: data.stateStartedAt,
-        ...(Number.isFinite(data.turnStartedAt) ? { turnStartedAt: data.turnStartedAt } : {})
+        ...(Number.isFinite(data.turnStartedAt) ? { turnStartedAt: data.turnStartedAt } : {}),
+        ...pickHostTurnEnd(data)
       },
       routing: {
         tabId: ownerTabId,

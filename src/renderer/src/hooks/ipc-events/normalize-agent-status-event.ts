@@ -2,6 +2,7 @@ import type { AgentCompletionStatusSnapshot } from '@/components/terminal-pane/a
 import type { AgentStatusMetadata } from '../../store/slices/agent-status-contract'
 import {
   normalizeAgentStatusPayload,
+  pickHostTurnEnd,
   type AgentStatusIpcPayload,
   type ParsedAgentStatusPayload
 } from '../../../../shared/agent-status-types'
@@ -53,6 +54,7 @@ export function agentHookNotificationSnapshot(
     ? {
         ...payload,
         stateStartedAt: data.stateStartedAt,
+        ...pickHostTurnEnd(data),
         runId: data.runId,
         executionId: data.executionId,
         terminalHandle: data.terminalHandle,
@@ -62,5 +64,5 @@ export function agentHookNotificationSnapshot(
         isReplay: replayed,
         restoredUnconfirmed: data.restoredUnconfirmed
       }
-    : payload
+    : { ...payload, ...pickHostTurnEnd(data) }
 }

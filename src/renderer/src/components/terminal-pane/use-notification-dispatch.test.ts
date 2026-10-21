@@ -47,10 +47,21 @@ describe('dispatchTerminalNotification', () => {
   })
 
   it('uses a live pane key when marking inactive worktree attention', () => {
-    dispatchTerminalNotification('wt-primary', {
+    const onNotificationRequested = vi.fn()
+    const requested = dispatchTerminalNotification('wt-primary', {
       source: 'agent-task-complete',
       terminalTitle: 'codex',
-      paneKey
+      paneKey,
+      onNotificationRequested
+    })
+
+    expect(requested).toBe(true)
+    expect(onNotificationRequested).toHaveBeenCalledWith({
+      notificationId: buildAgentNotificationId({
+        worktreeId: 'wt-primary',
+        paneKey,
+        stateStartedAt: mockState.agentStatusByPaneKey[paneKey].stateStartedAt
+      })
     })
 
     expect(window.api.notifications.dispatch).toHaveBeenCalledWith(
