@@ -123,8 +123,8 @@ export function getExecutionHostIdForWorktree(
 }
 
 /**
- * {@link resolveOwner}, except an id no row places resolves to this app instead of `missing` — or,
- * for a folder, to the server its saved session names, or a web client's only server.
+ * {@link resolveOwner}, except an id no row places and no caller names a host resolves to this app
+ * instead of `missing` — or, for a folder, to its saved session's server or a web client's only one.
  */
 export function resolveOwnerOrLocal(
   state: WorktreeRuntimeOwnerState,
