@@ -1,6 +1,6 @@
 import type { RuntimeClientEventStreamMessage } from '../../../src/shared/runtime-client-events'
 import type { RpcClient } from '../transport/rpc-client'
-import type { HostSidebarFeedTriggers } from '../host-screen/use-host-sidebar-feed'
+import type { HostSidebarFeedTriggers } from '../host-screen/host-sidebar-feed-connection'
 
 const WORKTREE_REFRESH_MS = 3000
 

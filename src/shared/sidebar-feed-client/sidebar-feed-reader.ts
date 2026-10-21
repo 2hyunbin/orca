@@ -60,11 +60,6 @@ export class SidebarFeedReader {
     private readonly onRead: (read: SidebarFeedReaderRead) => void
   ) {}
 
-  /** The id of the last read sent; 0 before the first. */
-  get lastRequestId(): number {
-    return this.state.lastRequestId
-  }
-
   /** Reads past every notice so far, superseding a read in flight; returns that read's id. */
   refresh(): number {
     this.failures = 0

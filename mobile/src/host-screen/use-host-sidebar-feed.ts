@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../src/shared/sidebar-inputs-switch'
 import type { SidebarFeedDomains } from '../../../src/shared/sidebar-list/sidebar-feed-domains'
-import {
-  SidebarFeedReader,
-  type SidebarFeedNotice,
-  type SidebarFeedReaderRead
+import type {
+  SidebarFeedNotice,
+  SidebarFeedReader
 } from '../../../src/shared/sidebar-feed-client/sidebar-feed-reader'
 import {
   isReadableSidebarFeed,
@@ -12,16 +11,10 @@ import {
 } from '../../../src/shared/sidebar-feed-client/sidebar-feed-snapshot'
 import { RememberedSidebarFeeds } from '../../../src/shared/sidebar-feed-client/remembered-sidebar-feeds'
 import type { RpcClient } from '../transport/rpc-client'
-import type { UnvalidatedRpcRequestPort } from '../transport/unvalidated-rpc-request-port'
-import { hostSidebarFeedTransport } from './host-sidebar-feed-operations'
-
-/** What the worktree refresh drives the feed with. */
-export type HostSidebarFeedTriggers = {
-  refresh: () => void
-  changed: (notice: SidebarFeedNotice) => void
-  /** Each new install; returns the unsubscribe. */
-  onInstalled: (listener: () => void) => () => void
-}
+import {
+  createHostSidebarFeedReader,
+  type HostSidebarFeedTriggers
+} from './host-sidebar-feed-connection'
 
 export type HostSidebarFeedRead = {
   snapshot: SidebarFeedSnapshot | null
@@ -39,21 +32,6 @@ export type HostSidebarFeedControls = {
   feed: HostSidebarFeed
   /** Stable for the screen's life, so the refresh lifecycle never restarts for them. */
   triggers: HostSidebarFeedTriggers
-}
-
-// A read that fails with the connection up gets no ready to repeat it; back off so a failing host is not hammered.
-const RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000]
-
-/** The page's reader of one host connection's feed. */
-export function createHostSidebarFeedReader(
-  client: UnvalidatedRpcRequestPort,
-  onRead: (read: SidebarFeedReaderRead) => void
-): SidebarFeedReader {
-  return new SidebarFeedReader(
-    hostSidebarFeedTransport(client),
-    { retryDelayMs: (failures) => RETRY_DELAYS_MS[failures] ?? null },
-    onRead
-  )
 }
 
 const NOTHING_READ: HostSidebarFeedRead = { snapshot: null, unavailable: false }

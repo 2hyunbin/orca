@@ -5,10 +5,10 @@ import { buildSidebarFeedCatalog } from '../../../src/shared/sidebar-list/sideba
 import { buildHostFeedView } from '../../../mobile/src/host-screen/host-sidebar-feed-inputs'
 import { buildHostFeedSections } from '../../../mobile/src/host-screen/host-sidebar-feed-sections'
 import {
-  createHostSidebarFeedReader,
   readHostSidebarFeed,
   type HostSidebarFeedRead
 } from '../../../mobile/src/host-screen/use-host-sidebar-feed'
+import { createHostSidebarFeedReader } from '../../../mobile/src/host-screen/host-sidebar-feed-connection'
 import { readHostMethodReply } from '../../../mobile/src/host-screen/host-sidebar-feed-operations'
 import {
   hostPlatformRead,

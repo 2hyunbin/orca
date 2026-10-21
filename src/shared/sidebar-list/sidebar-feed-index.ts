@@ -27,16 +27,17 @@ import type { WorkspaceRow } from './workspace-rows'
 type FeedRow = WorkspaceRow | PairedServerWorkspaceRow
 const workspaceByRow = new WeakMap<
   FeedRow,
-  { identity: string; read: SidebarFeedWorkspace | null }
+  { identity: string | undefined; read: SidebarFeedWorkspace | null }
 >()
 
+/** `identity`: the key a host's own row is listed under; a paired server's row carries its own. */
 function readRemembered(
   row: FeedRow,
-  identity: string,
-  read: () => SidebarFeedWorkspace | null
+  read: () => SidebarFeedWorkspace | null,
+  identity?: string
 ): SidebarFeedWorkspace | null {
   const remembered = workspaceByRow.get(row)
-  if (remembered?.identity === identity) {
+  if (remembered && remembered.identity === identity) {
     return remembered.read
   }
   const next = read()
@@ -48,10 +49,10 @@ function readFeedWorkspaces(domains: SidebarFeedDomains): SidebarFeedWorkspace[]
   return [
     ...[...domains.workspaces].flatMap(
       ([identity, row]) =>
-        readRemembered(row, identity, () => readFeedWorkspaceRow(identity, row)) ?? []
+        readRemembered(row, () => readFeedWorkspaceRow(identity, row), identity) ?? []
     ),
     ...[...domains.pairedServerRows.values()].flatMap(
-      (row) => readRemembered(row, row.key, () => readFeedPairedServerRow(row)) ?? []
+      (row) => readRemembered(row, () => readFeedPairedServerRow(row)) ?? []
     )
   ]
 }
