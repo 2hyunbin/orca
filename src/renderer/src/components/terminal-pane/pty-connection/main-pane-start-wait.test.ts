@@ -17,7 +17,7 @@ const store = vi.hoisted(() => {
     },
     setStarts: (starts: Starts) => {
       state = { ...state, terminalPaneStartsByPaneKey: starts }
-      for (const listener of [...listeners]) {
+      for (const listener of listeners) {
         listener(state)
       }
     }
