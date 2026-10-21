@@ -127,10 +127,6 @@ function collectUiRouting(
   if (ui.lastActiveWorktreeId && orcadMigrationOwnerMatchesScope(ui.lastActiveWorktreeId, scope)) {
     result.lastActiveWorktreeId = unqualifyOrcadMigrationOwnerKey(ui.lastActiveWorktreeId)
   }
-  const filterRepoIds = ui.filterRepoIds.filter((repoId) => orcadMigrationOwnsRepoId(scope, repoId))
-  if (filterRepoIds.length > 0) {
-    result.filterRepoIds = filterRepoIds
-  }
   const dotfiles = Object.entries(ui.showDotfilesByWorktree ?? {})
     .filter(([ownerKey]) => orcadMigrationOwnerMatchesScope(ownerKey, scope))
     .map(([ownerKey, enabled]) => [unqualifyOrcadMigrationOwnerKey(ownerKey), enabled] as const)
@@ -149,7 +145,7 @@ function collectUiRouting(
   if (manualOrder.length > 0) {
     result.manualRepoOrder = manualOrder
   }
-  // Host filters stay behind: they name this desktop's hosts (ORCAD_MIGRATION_UI_ROUTING_MERGE).
+  // Sidebar filters stay behind: they belong to this desktop's window (ORCAD_MIGRATION_UI_ROUTING_MERGE).
   const eligible = session ? collectEligibleSessionIdentity(session, scope) : null
   const sourceTabIds = collectSourceOwnedTabIds(state, scope)
   const acknowledgements = Object.entries(ui.acknowledgedAgentsByPaneKey ?? {}).filter(

@@ -74,14 +74,15 @@ function prepareMobileSelections(
 
 type UiRoutingKey = keyof OrcadMigrationUiRoutingState
 type UiRoutingFieldMerge<K extends UiRoutingKey> =
-  /** Names the desktop's own hosts, which mean nothing in the server's sidebar; ignored here. */
+  /** A filter of one desktop window (its hosts, its repos); the server keeps its own. Ignored here. */
   | 'desktop-only'
   /** Folds a moved value into this profile; the server's own value always stands. */
   | ((ui: PersistedState['ui'], value: NonNullable<OrcadMigrationUiRoutingState[K]>) => void)
 
 /**
  * Every moved sidebar field is per-window view state, so none may refuse a move: what the server
- * already shows stands, and the desktop's value fills only what the server never set. A new field
+ * already shows stands, and the desktop's value fills only what the server never set.
+ * Acknowledgements keep the later time. A new field
  * must pick its merge here; refusals belong to catalog and session identity, never to view state.
  */
 export const ORCAD_MIGRATION_UI_ROUTING_MERGE: {
@@ -93,11 +94,6 @@ export const ORCAD_MIGRATION_UI_ROUTING_MERGE: {
   lastActiveWorktreeId: (ui, value) => {
     ui.lastActiveWorktreeId ??= value
   },
-  filterRepoIds: (ui, value) => {
-    if (ui.filterRepoIds.length === 0) {
-      ui.filterRepoIds = structuredClone(value)
-    }
-  },
   manualRepoOrder: (ui, value) => {
     if (!ui.manualRepoOrder?.length) {
       ui.manualRepoOrder = structuredClone(value)
@@ -107,16 +103,19 @@ export const ORCAD_MIGRATION_UI_ROUTING_MERGE: {
     ui.showDotfilesByWorktree = { ...structuredClone(value), ...ui.showDotfilesByWorktree }
   },
   acknowledgedAgentsByPaneKey: (ui, value) => {
-    ui.acknowledgedAgentsByPaneKey = {
-      ...structuredClone(value),
-      ...ui.acknowledgedAgentsByPaneKey
+    // The later acknowledgement covers the earlier one, so a retry never revives an unread mark.
+    const merged = { ...ui.acknowledgedAgentsByPaneKey }
+    for (const [paneKey, at] of Object.entries(value)) {
+      merged[paneKey] = Math.max(merged[paneKey] ?? 0, at)
     }
+    ui.acknowledgedAgentsByPaneKey = merged
   },
   setupScriptPromptDismissedRepoIds: (ui, value) => {
     ui.setupScriptPromptDismissedRepoIds = [
       ...new Set([...(ui.setupScriptPromptDismissedRepoIds ?? []), ...value])
     ]
   },
+  filterRepoIds: 'desktop-only',
   workspaceHostScope: 'desktop-only',
   visibleWorkspaceHostIds: 'desktop-only',
   workspaceHostOrder: 'desktop-only',

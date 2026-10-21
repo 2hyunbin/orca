@@ -140,12 +140,13 @@ describe('source client-state migration', () => {
     })
   })
 
-  it("never sends the desktop's host filters, which an older server refuses when they differ", () => {
+  it("never sends the desktop's sidebar filters, which an older server refuses when they differ", () => {
     const current = state()
     current.ui.workspaceHostScope = 'ssh:target-1'
     current.ui.visibleWorkspaceHostIds = ['ssh:target-1']
     current.ui.workspaceHostOrder = ['ssh:target-1']
     current.ui.automationHostFilter = { kind: 'host', hostKey: 'host:desktop:ssh:target-1' }
+    current.ui.filterRepoIds = ['repo-1']
     current.ui.lastActiveRepoId = 'repo-1'
 
     const result = collectOrcadMigrationSourceClientState(

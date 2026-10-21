@@ -67,7 +67,7 @@ describe('destination client-state migration', () => {
     expect(destination.ui).toMatchObject({
       lastActiveRepoId: 'repo-1',
       lastActiveWorktreeId: 'repo-1::/worktree',
-      filterRepoIds: ['repo-1'],
+      filterRepoIds: [],
       showDotfilesByWorktree: { 'repo-1::/worktree': false }
     })
   })
@@ -159,5 +159,36 @@ describe('destination client-state migration', () => {
       manualRepoOrder: [{ hostId: 'local', repoId: 'server-repo' }],
       acknowledgedAgentsByPaneKey: { 'server-tab:leaf': 5, 'tab-1:leaf': 9, 'tab-2:leaf': 2 }
     })
+  })
+
+  it("ignores an older desktop's host filters on a server already scoped elsewhere", () => {
+    const destination = state()
+    destination.ui = {
+      ...getDefaultUIState(),
+      workspaceHostScope: 'runtime:other',
+      visibleWorkspaceHostIds: ['runtime:other'],
+      workspaceHostOrder: ['runtime:other'],
+      automationHostFilter: { kind: 'host', hostKey: 'host:desktop:self' },
+      filterRepoIds: ['server-repo'],
+      acknowledgedAgentsByPaneKey: { 'tab-1:leaf': 1 }
+    }
+    const before = structuredClone(destination.ui)
+    applyPreparedOrcadMigrationClientState(
+      prepareOrcadMigrationClientState(
+        {
+          uiRouting: {
+            workspaceHostScope: 'local',
+            visibleWorkspaceHostIds: ['local'],
+            workspaceHostOrder: ['local'],
+            automationHostFilter: { kind: 'host', hostKey: 'host:runtime:environment-1:self' },
+            filterRepoIds: ['repo-1'],
+            acknowledgedAgentsByPaneKey: { 'tab-1:leaf': 7 }
+          }
+        },
+        destination
+      ),
+      destination
+    )
+    expect(destination.ui).toEqual({ ...before, acknowledgedAgentsByPaneKey: { 'tab-1:leaf': 7 } })
   })
 })
