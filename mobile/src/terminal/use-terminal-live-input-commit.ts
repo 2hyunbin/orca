@@ -34,7 +34,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
   sendLiveTerminalInputRef,
   setLiveInputCapture
 }: TerminalLiveInputCommitOptions<TTabType>): TerminalLiveInputCommitHandlers {
-  const liveInputInteractionGenerationRef = useRef(0)
+  const interactionGenerationRef = useRef(0)
   const liveInputTextRef = useRef('')
   const endedSessionTextRef = useRef<{
     readonly handle: string
@@ -58,7 +58,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
     [setLiveInputCapture]
   )
   const advanceLiveInputInteractionGeneration = useCallback(() => {
-    liveInputInteractionGenerationRef.current += 1
+    interactionGenerationRef.current += 1
   }, [])
   const {
     applyLiveInputMirror,
@@ -209,10 +209,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
     ]
   )
 
-  const getLiveInputInteractionGeneration = useCallback(
-    () => liveInputInteractionGenerationRef.current,
-    []
-  )
+  const getLiveInputInteractionGeneration = useCallback(() => interactionGenerationRef.current, [])
 
   const handleLiveInputSelectionChange = useCallback(
     ({ nativeEvent }: TerminalLiveInputSelectionChangeEvent) => {
