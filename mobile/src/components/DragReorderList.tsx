@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { GripVertical } from 'lucide-react-native'
@@ -83,13 +83,14 @@ export function DragReorderList<ItemT>({
 
   const keySignature = keys.join(KEY_SEPARATOR)
   const dragActiveCallbackRef = useRef(onDragActiveChange)
-  const currentCatalogRef = useRef<string | null>(keySignature)
+  const catalog = useMemo(() => ({ keySignature }), [keySignature])
+  const currentCatalogRef = useRef<typeof catalog | null>(catalog)
   useLayoutEffect(() => {
-    currentCatalogRef.current = keySignature
+    currentCatalogRef.current = catalog
     return () => {
       currentCatalogRef.current = null
     }
-  }, [keySignature])
+  }, [catalog])
   useEffect(() => {
     dragActiveCallbackRef.current = onDragActiveChange
   }, [onDragActiveChange])
@@ -177,13 +178,13 @@ export function DragReorderList<ItemT>({
     (orderedKeys: string[]) => {
       // Why: a cancelled or no-op drag should not trigger a persisted write.
       if (
-        currentCatalogRef.current === keySignature &&
+        currentCatalogRef.current === catalog &&
         orderedKeys.join(KEY_SEPARATOR) !== keySignature
       ) {
         onReorder(orderedKeys)
       }
     },
-    [onReorder, keySignature]
+    [onReorder, keySignature, catalog]
   )
 
   // Why: screen-reader users can't long-press-drag; the handle exposes

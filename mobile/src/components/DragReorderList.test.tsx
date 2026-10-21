@@ -254,7 +254,12 @@ describe('catalog changes during a drag', () => {
     })
     await fixture.updateItems(['a', 'b'])
     expect(fixture.onActive.mock.calls).toEqual([[true]])
+    probe.deferJS = true
     await act(async () => fixture.gesture.finalize!({ absoluteY: 180, translationY: 80 }, true))
+    await fixture.updateItems(['a', 'b'])
+    await act(async () => {
+      probe.jsQueue.splice(0).forEach((fn) => fn())
+    })
     expect(fixture.onReorder.mock.calls).toEqual([[['b', 'a']]])
     await act(async () => fixture.root.unmount())
   })
@@ -271,7 +276,10 @@ describe('late gesture callbacks', () => {
     await act(async () => fixture.root.unmount())
   })
 
-  it('does not save a completed drop queued before a catalog replacement', async () => {
+  it.each([
+    ['a', 'b', 'c'],
+    ['b', 'a']
+  ])('does not save a completed drop queued before catalog %j replaces it', async (...ids) => {
     const fixture = await mounted()
     await act(async () => {
       fixture.gesture.start!({ absoluteY: 100, translationY: 0 }, true)
@@ -279,11 +287,29 @@ describe('late gesture callbacks', () => {
       probe.deferJS = true
       fixture.gesture.finalize!({ absoluteY: 180, translationY: 80 }, true)
     })
-    await fixture.updateItems(['a', 'b', 'c'])
+    await fixture.updateItems(ids)
     await act(async () => {
       probe.jsQueue.splice(0).forEach((fn) => fn())
     })
     expect(fixture.onReorder).not.toHaveBeenCalled()
+    await act(async () => fixture.root.unmount())
+  })
+
+  it('does not revive a queued drop when the original row order returns', async () => {
+    const fixture = await mounted()
+    await act(async () => {
+      fixture.gesture.start!({ absoluteY: 100, translationY: 0 }, true)
+      fixture.gesture.update!({ absoluteY: 180, translationY: 80 }, true)
+      probe.deferJS = true
+      fixture.gesture.finalize!({ absoluteY: 180, translationY: 80 }, true)
+    })
+    await fixture.updateItems(['b', 'a'])
+    await fixture.updateItems(['a', 'b'])
+    await act(async () => {
+      probe.jsQueue.splice(0).forEach((fn) => fn())
+    })
+    expect(fixture.onReorder).not.toHaveBeenCalled()
+    expect(positions()).toEqual({ a: 0, b: 1 })
     await act(async () => fixture.root.unmount())
   })
 
