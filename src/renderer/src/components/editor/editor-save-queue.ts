@@ -11,7 +11,7 @@ import {
   type EditorFileSavedDetail
 } from './editor-autosave'
 import { flushPendingEditorBuffer, hasPendingEditorBufferChange } from './editor-pending-flush'
-import { createAutoSaveHolds, editorFileHoldKey } from './editor-autosave-holds'
+import { createAutoSaveHolds, editorPathHoldKey } from './editor-autosave-holds'
 import { editorBufferIdOfView } from '@/store/slices/editor/buffers/editor-buffer-views'
 import {
   clearSelfWrite,
@@ -111,9 +111,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     }
 
     flushPendingEditorBuffer(store.getState(), fileId, trigger === 'autosave')
-    // Why: a record left clean (saved by the save ahead, discarded, reloaded) has nothing to write.
+    // Why: edits saved by the save ahead, discarded or reloaded since the request leave nothing to write.
     const isDirty = store.getState().openFiles.find((file) => file.id === fileId)?.isDirty === true
-    if (!isDirty && (trigger === 'autosave' || request.queued)) {
+    if (!isDirty && request.requestedDirty && trigger !== 'overwrite') {
       return trigger === 'autosave' ? 'failed' : 'written'
     }
     const contentToSave = store.getState().editorDrafts[fileId] ?? request.fallbackContent
@@ -203,7 +203,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       return 'failed'
     }
     // Why: an edit tab, its unstaged diff and a combined-diff section can all write one file.
-    return withEditorFileWriteLock(editorFileHoldKey(store.getState(), view), () =>
+    return withEditorFileWriteLock(editorPathHoldKey(store.getState(), view, view.filePath), () =>
       writeSave(view.id, request)
     )
   })
@@ -215,7 +215,10 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   ): Promise<EditorSaveResult> => {
     const key = recordKeyOf(file.id)
     clearScheduledAutoSave(key)
-    return slots.enqueue(key, { fileId: file.id, fallbackContent, trigger })
+    const requestedDirty = store
+      .getState()
+      .openFiles.some((tab) => tab.id === file.id && tab.isDirty)
+    return slots.enqueue(key, { fileId: file.id, fallbackContent, trigger, requestedDirty })
   }
 
   const settleFileSaves = async (fileId: string): Promise<void> => {

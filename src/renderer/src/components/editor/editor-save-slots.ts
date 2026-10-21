@@ -4,8 +4,8 @@ export type EditorSaveRequest = {
   fileId: string
   fallbackContent: string
   trigger: EditorSaveTrigger
-  /** It waited behind a running save, which may have left nothing to write. */
-  queued: boolean
+  /** Dirty when asked: finding the tab clean later means its edits were saved or dropped. */
+  requestedDirty: boolean
 }
 
 type SaveSlot = {
@@ -26,28 +26,26 @@ const ignore = (): void => undefined
 export function createEditorSaveSlots(
   run: (request: EditorSaveRequest) => Promise<EditorSaveResult>
 ): {
-  enqueue: (key: string, request: Omit<EditorSaveRequest, 'queued'>) => Promise<EditorSaveResult>
+  enqueue: (key: string, request: EditorSaveRequest) => Promise<EditorSaveResult>
   /** Waits for the running and queued saves; cancels neither. */
   settle: (key: string) => Promise<void>
   clear: () => void
 } {
   const slots = new Map<string, SaveSlot>()
 
-  const enqueue = (
-    key: string,
-    { fileId, fallbackContent, trigger }: Omit<EditorSaveRequest, 'queued'>
-  ): Promise<EditorSaveResult> => {
+  const enqueue = (key: string, incoming: EditorSaveRequest): Promise<EditorSaveResult> => {
     const slot = slots.get(key)
     if (slot?.queued) {
       // Why: the queued save reads the latest text when it runs, so a later request joins it.
       const { request } = slot.queued
-      request.fallbackContent = fallbackContent
-      if (TRIGGER_RANK[trigger] > TRIGGER_RANK[request.trigger]) {
-        request.trigger = trigger
+      request.fallbackContent = incoming.fallbackContent
+      request.requestedDirty ||= incoming.requestedDirty
+      if (TRIGGER_RANK[incoming.trigger] > TRIGGER_RANK[request.trigger]) {
+        request.trigger = incoming.trigger
       }
       return slot.queued.promise
     }
-    const request: EditorSaveRequest = { fileId, fallbackContent, trigger, queued: !!slot }
+    const request = { ...incoming }
     const promise = (slot?.running ?? Promise.resolve()).then(() => {
       const current = slots.get(key)
       if (current?.queued?.request === request) {

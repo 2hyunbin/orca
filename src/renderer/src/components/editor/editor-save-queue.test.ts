@@ -154,7 +154,7 @@ describe('editor save queue: one running and one queued save per record', () => 
     expect(disk.files.get(PATH)).toBe('from edit')
   })
 
-  it('settle waits for the running and queued saves and cancels neither', async () => {
+  it('settle (rename, delete, hot exit) drains the running and queued saves, cancelling neither', async () => {
     edit('a', 'a')
     const release = holdNextWrite(disk)
     const first = queue.queueSave(file('a'), 'a')

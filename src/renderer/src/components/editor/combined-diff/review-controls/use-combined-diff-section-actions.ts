@@ -203,7 +203,7 @@ export function useCombinedDiffSectionActions({
         const context = getEditorFileOperationContext(state, owner, worktree?.path ?? null)
         // Why: shares the file's write lock with editor tabs saving the same path.
         const writeResult = await withEditorFileWriteLock(
-          editorPathHoldKey(state, owner, absolutePath) ?? absolutePath,
+          editorPathHoldKey(state, owner, absolutePath),
           () =>
             writeEditorSave(
               context,

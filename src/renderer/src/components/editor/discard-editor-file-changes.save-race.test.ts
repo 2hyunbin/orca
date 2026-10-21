@@ -1,0 +1,136 @@
+// Why: "Don't Save" must never let a save queued (or not yet writing) put the dropped text on disk.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { requestEditorFileSave } from './editor-autosave'
+import { attachEditorAutosaveController } from './editor-autosave-controller'
+import { discardEditorFileChangesAndClose } from './discard-editor-file-changes'
+import { trackEditorBaselineRestamp } from './editor-save-disk-precondition'
+import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
+import {
+  createEditorStore,
+  createFakeEditorDisk,
+  stubEditorWindowWithDisk,
+  withLoadedBaselines,
+  type FakeEditorDisk
+} from './editor-autosave-controller-test-fixture'
+
+const storeRef = vi.hoisted((): { current: ReturnType<typeof createEditorStore> | null } => ({
+  current: null
+}))
+vi.mock('@/store', () => ({ useAppStore: { getState: () => storeRef.current?.getState() } }))
+vi.mock('@/lib/connection-context', () => ({ getConnectionIdForFile: () => undefined }))
+
+const PATH = '/repo/a.ts'
+
+function gate(): { wait: Promise<void>; open: () => void } {
+  let open = (): void => {}
+  const wait = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  return { wait, open }
+}
+
+/** Holds the next disk write until the returned release runs. */
+function holdNextWrite(disk: FakeEditorDisk): () => void {
+  const { wait, open } = gate()
+  const write = disk.fs.writeFile.getMockImplementation()
+  disk.fs.writeFile.mockImplementationOnce(async (args: unknown) => {
+    await wait
+    return write?.(args)
+  })
+  return open
+}
+
+describe("Don't Save against running and queued saves", () => {
+  let disk: FakeEditorDisk
+  let store: ReturnType<typeof createEditorStore>
+  let detach: () => void
+
+  const edit = (text: string): void => {
+    store.getState().setEditorDraft(PATH, text)
+    store.getState().markFileDirty(PATH, true)
+  }
+  const written = (): string[] => disk.fs.writeFile.mock.calls.map(([args]) => args.content)
+
+  function setUp(files: Record<string, string>): void {
+    disk = stubEditorWindowWithDisk(createFakeEditorDisk(files))
+    store = createEditorStore()
+    storeRef.current = store
+    store.setState({
+      browserTabsByWorktree: {},
+      tabsByWorktree: {},
+      activeBrowserTabIdByWorktree: {},
+      unifiedTabsByWorktree: {}
+    })
+    store.getState().openFile({
+      filePath: PATH,
+      relativePath: 'a.ts',
+      worktreeId: 'wt-1',
+      language: 'typescript',
+      mode: 'edit'
+    })
+    withLoadedBaselines(store, createFakeEditorDisk({ [PATH]: '' }))
+    detach = attachEditorAutosaveController(store)
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setUp({ [PATH]: '' })
+  })
+
+  afterEach(() => {
+    detach()
+    vi.useRealTimers()
+    __clearSelfWriteRegistryForTests()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps the running save and never writes the queued newest text', async () => {
+    edit('a')
+    const release = holdNextWrite(disk)
+    const running = requestEditorFileSave({ fileId: PATH })
+    await vi.advanceTimersByTimeAsync(0)
+    edit('ab')
+    const queued = requestEditorFileSave({ fileId: PATH })
+
+    const discard = discardEditorFileChangesAndClose(PATH)
+    release()
+    await Promise.all([running, queued, discard])
+
+    expect(written()).toEqual(['a'])
+    expect(disk.files.get(PATH)).toBe('a')
+  })
+
+  it('keeps the running save and never writes a queued autosave', async () => {
+    edit('a')
+    const release = holdNextWrite(disk)
+    const running = requestEditorFileSave({ fileId: PATH })
+    await vi.advanceTimersByTimeAsync(0)
+    edit('ab')
+    // The autosave timer fires and queues behind the running save.
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const discard = discardEditorFileChangesAndClose(PATH)
+    release()
+    await Promise.all([running, discard])
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(written()).toEqual(['a'])
+    expect(disk.files.get(PATH)).toBe('a')
+  })
+
+  it('a save not yet writing does not recreate a file deleted on disk', async () => {
+    disk.files.delete(PATH)
+    edit('a')
+    const restamp = gate()
+    trackEditorBaselineRestamp(PATH, restamp.wait)
+    const save = requestEditorFileSave({ fileId: PATH })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const discard = discardEditorFileChangesAndClose(PATH)
+    restamp.open()
+    await Promise.all([save, discard])
+
+    expect(disk.fs.writeFile).not.toHaveBeenCalled()
+    expect(disk.files.has(PATH)).toBe(false)
+  })
+})
