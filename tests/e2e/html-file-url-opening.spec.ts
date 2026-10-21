@@ -48,6 +48,23 @@ test('opens HTML from Explorer as a preview and lets the user edit its source', 
       }, url)
     )
     .toBe('Rendered by default')
+  await electronApp.evaluate(async ({ webContents }, fileUrl) => {
+    const guest = webContents.getAllWebContents().find((contents) => contents.getURL() === fileUrl)
+    await guest?.executeJavaScript(
+      'const input = document.createElement("input"); input.id = "preview-state"; input.value = "Keep my input"; document.body.append(input)'
+    )
+  }, url)
+  await row.click()
+  await expect
+    .poll(() =>
+      electronApp.evaluate(async ({ webContents }, fileUrl) => {
+        const guest = webContents
+          .getAllWebContents()
+          .find((contents) => contents.getURL() === fileUrl)
+        return guest?.executeJavaScript('document.querySelector("#preview-state")?.value ?? null')
+      }, url)
+    )
+    .toBe('Keep my input')
   await orcaPage.screenshot({ path: testInfo.outputPath('html-default-preview.png') })
   await orcaPage.getByRole('button', { name: 'Open source file', exact: true }).click()
   await expect(orcaPage.locator('.editor-header-path')).toContainText(name)
@@ -63,6 +80,16 @@ test('opens HTML from Explorer as a preview and lets the user edit its source', 
   await expect(
     orcaPage.getByRole('button', { name: 'Open source file', exact: true })
   ).toBeVisible()
+  await expect
+    .poll(() =>
+      electronApp.evaluate(async ({ webContents }, fileUrl) => {
+        const guest = webContents
+          .getAllWebContents()
+          .find((contents) => contents.getURL() === fileUrl)
+        return guest?.executeJavaScript('document.body.textContent ?? ""')
+      }, url)
+    )
+    .toContain('Source updated')
   const previewTab = orcaPage.locator('[data-tab-id]').filter({ hasText: 'HTML default' })
   await expect(previewTab).toHaveCount(1)
   await expect(previewTab).toBeVisible()

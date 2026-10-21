@@ -285,6 +285,76 @@ function clickBranchRow(path = 'src/branch.ts', init: MouseEventInit = {}): void
 
 describe('SourceControl preview row opens', () => {
   it.each(['untracked', 'unstaged', 'staged'] as const)(
+    'keeps the current-file indicator on an HTML browser preview in %s',
+    (area) => {
+      resetState({
+        gitStatusByWorktree: {
+          [mocks.activeWorktree.id]: [
+            gitEntry({
+              path: 'report one.html',
+              area,
+              status: area === 'untracked' ? area : 'modified'
+            })
+          ]
+        },
+        activeTabTypeByWorktree: { [mocks.activeWorktree.id]: 'browser' },
+        activeBrowserTabIdByWorktree: { [mocks.activeWorktree.id]: 'browser-1' },
+        browserTabsByWorktree: {
+          [mocks.activeWorktree.id]: [{ id: 'browser-1', activePageId: 'page-html' }]
+        },
+        browserPagesByWorkspace: {
+          'browser-1': [
+            { id: 'page-web', url: 'https://example.com' },
+            { id: 'page-html', url: 'file:///repo/wt/report%20one.html#section' }
+          ]
+        }
+      })
+      renderSourceControl()
+
+      expect(
+        container
+          .querySelector('[data-source-control-path="report one.html"]')
+          ?.getAttribute('data-current')
+      ).toBe('true')
+    }
+  )
+
+  it.each([mocks.activeWorktree.id, 'other-workspace'])(
+    'matches a workspace document only to its owning workspace: %s',
+    (documentWorktreeId) => {
+      resetState({
+        repos: [{ ...mocks.activeRepo, connectionId: 'ssh-1' }],
+        gitStatusByWorktree: { [mocks.activeWorktree.id]: [gitEntry({ path: 'test.html' })] },
+        activeTabTypeByWorktree: { [mocks.activeWorktree.id]: 'browser' },
+        activeBrowserTabIdByWorktree: { [mocks.activeWorktree.id]: 'browser-1' },
+        browserTabsByWorktree: {
+          [mocks.activeWorktree.id]: [{ id: 'browser-1', activePageId: 'page-html' }]
+        },
+        browserPagesByWorkspace: {
+          'browser-1': [
+            {
+              id: 'page-html',
+              url: 'data:text/html,',
+              docLocation: {
+                kind: 'workspace-doc',
+                worktreeId: documentWorktreeId,
+                filePath: '/repo/wt/test.html'
+              }
+            }
+          ]
+        }
+      })
+      renderSourceControl()
+
+      expect(
+        container
+          .querySelector('[data-source-control-path="test.html"]')
+          ?.getAttribute('data-current')
+      ).toBe(documentWorktreeId === mocks.activeWorktree.id ? 'true' : null)
+    }
+  )
+
+  it.each(['untracked', 'unstaged', 'staged'] as const)(
     'renders HTML when opening a row in %s',
     (area) => {
       resetState({

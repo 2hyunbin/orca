@@ -6,7 +6,7 @@ import type {
   GitBranchCompareSummary
 } from '../../../../../../shared/git-diff-compare-types'
 import type { GitStatusEntry } from '../../../../../../shared/git-status-types'
-import { buildActiveOpenFileSignature, buildActiveOpenRowKeys } from './active-open-file-keys'
+import { getActiveOpenFileSignature, buildActiveOpenRowKeys } from './active-open-file-keys'
 import type { FlatEntry } from './use-selection'
 import {
   isSourceControlSplitOpenModifier,
@@ -47,22 +47,9 @@ export function useSourceControlRowOpening({
     [activeGroupIdByWorktree, activeWorktreeId, createEmptySplitGroup, groupsByWorktree, isMac]
   )
 
-  // Why: a stable string signature keeps this selector referentially stable so the panel re-renders only when the active editor file changes; null when the tab isn't an editor.
-  const activeOpenFileSignature = useAppStore((s) => {
-    if (!activeWorktreeId || s.activeTabTypeByWorktree?.[activeWorktreeId] !== 'editor') {
-      return null
-    }
-    const activeFileId = s.activeFileIdByWorktree?.[activeWorktreeId]
-    if (!activeFileId) {
-      return null
-    }
-    const activeFile = s.openFiles?.find(
-      (file) => file.id === activeFileId && file.worktreeId === activeWorktreeId
-    )
-    return activeFile
-      ? buildActiveOpenFileSignature(activeFile.diffSource, activeFile.relativePath)
-      : null
-  })
+  const activeOpenFileSignature = useAppStore((s) =>
+    getActiveOpenFileSignature(s, activeWorktreeId, worktreePath)
+  )
   const activeOpenAvailableRowKeys = useMemo(() => {
     const keys = new Set<string>()
     for (const entry of visibleSelectionEntries) {

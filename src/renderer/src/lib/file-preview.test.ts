@@ -124,6 +124,70 @@ function mockOpenDocument(filePath: string): void {
 }
 
 describe('openFileInBrowserTab', () => {
+  it.each(['remote-host', undefined])(
+    'does not reuse a server-owned file URL for a client-local open: %s',
+    (browserRuntimeEnvironmentId) => {
+      mocks.environmentId = 'remote-host'
+      mocks.browserTabsByWorktree = { 'wt-1': [{ id: 'browser-remote' }] }
+      mocks.browserPagesByWorkspace = {
+        'browser-remote': [
+          { id: 'page-remote', url: 'file:///tmp/report.html', browserRuntimeEnvironmentId }
+        ]
+      }
+
+      openFileInBrowserTab({
+        filePath: '/tmp/report.html',
+        worktreeId: 'wt-1',
+        clientLocal: true
+      })
+
+      expect(mocks.createBrowserTab).toHaveBeenCalledWith('wt-1', 'file:///tmp/report.html', {
+        title: 'report.html',
+        targetGroupId: undefined,
+        browserRuntimeEnvironmentId: null,
+        activate: true
+      })
+      expect(mocks.setActiveBrowserPage).not.toHaveBeenCalled()
+    }
+  )
+
+  it('reuses an explicitly local page in a paired workspace', () => {
+    mocks.environmentId = 'remote-host'
+    mocks.browserTabsByWorktree = { 'wt-1': [{ id: 'browser-local' }] }
+    mocks.browserPagesByWorkspace = {
+      'browser-local': [
+        { id: 'page-local', url: 'file:///tmp/report.html', browserRuntimeEnvironmentId: null }
+      ]
+    }
+
+    openFileInBrowserTab({
+      filePath: '/tmp/report.html',
+      worktreeId: 'wt-1',
+      clientLocal: true
+    })
+
+    expect(mocks.setActiveBrowserPage).toHaveBeenCalledWith('browser-local', 'page-local')
+    expect(mocks.createBrowserTab).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse a remotely pinned page in a local workspace', () => {
+    mocks.browserTabsByWorktree = { 'wt-1': [{ id: 'browser-remote' }] }
+    mocks.browserPagesByWorkspace = {
+      'browser-remote': [
+        {
+          id: 'page-remote',
+          url: 'file:///tmp/report.html',
+          browserRuntimeEnvironmentId: 'remote-host'
+        }
+      ]
+    }
+
+    openFileInBrowserTab({ filePath: '/tmp/report.html', worktreeId: 'wt-1' })
+
+    expect(mocks.createBrowserTab).toHaveBeenCalledOnce()
+    expect(mocks.setActiveBrowserPage).not.toHaveBeenCalled()
+  })
+
   it.each([undefined, 'group-2', 'group-3'])(
     'reuses a local file on an inactive page within the requested group: %s',
     (targetGroupId) => {

@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => {
     open: vi.fn(),
     select: vi.fn(),
     activate: vi.fn(),
+    environmentId: null as string | null,
     state: {
       activeWorktreeId: 'current',
       gitStatusByWorktree,
+      runtimeStatusByEnvironmentId: new Map<string, { status: { capabilities: string[] } }>(),
       openBranchDiff: vi.fn(),
       openDiff: vi.fn(),
       openFileForLink: vi.fn(),
@@ -30,10 +32,15 @@ vi.mock('./file-preview', () => ({
 }))
 vi.mock('./workspace-surface-reveal', () => ({ selectWorkspaceSurface: mocks.select }))
 vi.mock('./worktree-activation', () => ({ activateAndRevealWorkspace: mocks.activate }))
+vi.mock('./worktree-runtime-owner', () => ({
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: () => mocks.environmentId
+}))
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.state.gitStatusByWorktree = {}
+  mocks.environmentId = null
+  mocks.state.runtimeStatusByEnvironmentId.clear()
   mocks.resolve.mockReturnValue({ status: 'not-a-workspace-doc' })
   mocks.open.mockReturnValue({ status: 'browser-tab' })
   mocks.plan.mockReturnValue({ status: 'browser-tab' })
@@ -174,6 +181,60 @@ it('falls back to the editor when the owning host cannot preview HTML', () => {
   openWorkspaceFile({ kind: 'file', file })
   expect(mocks.state.openFile).toHaveBeenCalledWith(file, undefined)
   expect(mocks.open).not.toHaveBeenCalled()
+})
+
+it.each([null, false])(
+  'keeps source available when the paired host has no known scoped preview support: %s',
+  (supported) => {
+    mocks.environmentId = 'paired-host'
+    mocks.plan.mockReturnValue({ status: 'doc-preview' })
+    if (supported === false) {
+      mocks.state.runtimeStatusByEnvironmentId.set('paired-host', { status: { capabilities: [] } })
+    }
+    const file = sourceFile('/repo/report.html')
+
+    expect(openWorkspaceFile({ kind: 'file', file })).toEqual({
+      surface: 'editor',
+      fileId: file.filePath
+    })
+    expect(mocks.state.openFile).toHaveBeenCalledWith(file, undefined)
+    expect(mocks.open).not.toHaveBeenCalled()
+    expect(
+      openWorkspaceFile({ ...htmlLink, file: { ...htmlLink.file, worktreeId: 'current' } })
+    ).toEqual({ surface: 'editor', fileId: 'html-source' })
+    expect(mocks.open).not.toHaveBeenCalled()
+    expect(
+      openWorkspaceFile({
+        kind: 'uncommitted',
+        worktreeId: 'current',
+        worktreePath: '/repo',
+        entry: { path: 'report.html', status: 'modified', area: 'unstaged' }
+      })
+    ).toEqual({ surface: 'diff' })
+    expect(mocks.state.openDiff).toHaveBeenCalled()
+  }
+)
+
+it('defaults to scoped previews only when the paired host advertises support', () => {
+  mocks.environmentId = 'paired-host'
+  mocks.plan.mockReturnValue({ status: 'doc-preview' })
+  mocks.state.runtimeStatusByEnvironmentId.set('paired-host', {
+    status: { capabilities: ['files.readDocPreview'] }
+  })
+
+  expect(openWorkspaceFile({ kind: 'file', file: sourceFile('/repo/report.html') })).toEqual({
+    surface: 'preview'
+  })
+  expect(mocks.open).toHaveBeenCalledOnce()
+  expect(mocks.state.openFile).not.toHaveBeenCalled()
+})
+
+it('retains explicit preview behavior on an older paired host', () => {
+  mocks.environmentId = 'paired-host'
+  mocks.open.mockReturnValue({ status: 'doc-preview' })
+
+  expect(openWorkspaceFile(request)).toEqual({ surface: 'preview' })
+  expect(mocks.state.openFile).not.toHaveBeenCalled()
 })
 
 const branchRequest = {

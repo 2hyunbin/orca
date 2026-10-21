@@ -19,6 +19,8 @@ import { openLinkedFileInEditor } from './editor-file-link-open'
 import type { EditorOpenLinkIntent } from '@/store/slices/editor/types/editor-open-link-intent'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { activateAndRevealWorkspace } from './worktree-activation'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from './worktree-runtime-owner'
+import { FILE_DOC_PREVIEW_RUNTIME_CAPABILITY } from '../../../shared/files-runtime-capabilities'
 
 type ChangeOpenRequest = {
   worktreeId: string
@@ -168,7 +170,17 @@ export function openWorkspaceFile(request: WorkspaceFileOpenRequest): WorkspaceF
       target.filePath,
       target.clientLocal
     )
-    if (plan.status !== 'unsupported') {
+    const previewEnvironmentId =
+      plan.status === 'doc-preview'
+        ? runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, target.worktreeId)
+        : null
+    if (
+      plan.status !== 'unsupported' &&
+      (!previewEnvironmentId ||
+        state.runtimeStatusByEnvironmentId
+          ?.get(previewEnvironmentId)
+          ?.status?.capabilities?.includes(FILE_DOC_PREVIEW_RUNTIME_CAPABILITY) === true)
+    ) {
       if (request.kind === 'link') {
         activateAndRevealWorkspace(target.worktreeId, {
           providesInitialSurface: true,

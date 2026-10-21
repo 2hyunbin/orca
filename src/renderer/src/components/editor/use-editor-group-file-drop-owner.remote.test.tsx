@@ -11,6 +11,7 @@ import {
 } from '@/lib/remote-workspace-drop-test-fixtures'
 import { joinPath } from '@/lib/path'
 import { useEditorGroupFileDropOwner } from './use-editor-group-file-drop-owner'
+import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
 
 const mocks = vi.hoisted(() => ({
   importPaths: vi.fn(),
@@ -41,12 +42,19 @@ function dropFile(target: Element, name = 'shot.png'): void {
 
 beforeEach(() => {
   seedRemoteDropWorkspaces()
+  const response = createCompatibleRuntimeStatusResponse('owner-runtime')
+  if (!response.ok) {
+    throw new Error('Expected a compatible runtime fixture')
+  }
   useAppStore.setState({
     openFile: mocks.openFile,
     setActiveTabType: mocks.setActiveTabType,
     browserTabsByWorktree: {},
     browserPagesByWorkspace: {},
-    unifiedTabsByWorktree: {}
+    unifiedTabsByWorktree: {},
+    runtimeStatusByEnvironmentId: new Map([
+      ['owner-runtime', { status: response.result, checkedAt: Date.now() }]
+    ])
   })
   mocks.prepare.mockImplementation(async ({ paths }: { paths: string[] }) => ({
     paths,
@@ -137,6 +145,24 @@ describe('editor group OS file drops on remote workspaces', () => {
       expect(mocks.openFile).not.toHaveBeenCalled()
     }
   )
+
+  it('opens uploaded HTML source when the runtime cannot serve scoped previews', async () => {
+    useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
+    const view = render(<EditorStrip worktreeId="wt-runtime" groupId="group-runtime" />)
+
+    dropFile(view.getByTestId('strip'), 'report.html')
+
+    await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(1))
+    expect(mocks.openFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePath: joinPath(RUNTIME_PATH, '.orca/drops/report.html'),
+        worktreeId: 'wt-runtime',
+        runtimeEnvironmentId: 'owner-runtime'
+      }),
+      { suppressActiveRuntimeFallback: false, targetGroupId: 'group-runtime' }
+    )
+    expect(useAppStore.getState().browserTabsByWorktree['wt-runtime'] ?? []).toHaveLength(0)
+  })
 
   it('refuses an HTML preview when its workspace changes hosts during upload', async () => {
     let finish: (result: {
