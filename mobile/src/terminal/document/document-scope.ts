@@ -341,6 +341,7 @@ function createTerminalDocumentState(): TerminalDocumentState {
     scheduledFrames: [],
     framesStopped: false,
     touchGesture: {
+      active: false,
       lastX: 0,
       lastY: 0,
       lastTime: 0,

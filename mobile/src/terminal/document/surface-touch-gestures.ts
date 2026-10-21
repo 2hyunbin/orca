@@ -30,6 +30,7 @@ type TerminalGestureSurface = HTMLElement & { __orcaSurfaceHandlersAttached?: bo
 
 /** The live touch gesture: the last point, the velocity, and the pinch it may be in. */
 export type TerminalTouchState = {
+  active: boolean
   lastX: number
   lastY: number
   lastTime: number
@@ -131,6 +132,7 @@ export function attachSurfaceEventHandlers(
         scope.touchGesture.velY = 0
         scope.touchGesture.accumDelta = 0
       }
+      scope.touchGesture.active = touches.length > 0
     },
     { capture: true, passive: true }
   )
@@ -141,7 +143,7 @@ export function attachSurfaceEventHandlers(
       if (targetSurface !== scope.surface || dispatcherShouldBlockSurface(scope)) {
         return
       }
-      if (!scope.term) {
+      if (!scope.term || !scope.touchGesture.active) {
         return
       }
       e.preventDefault()
@@ -222,7 +224,7 @@ export function attachSurfaceEventHandlers(
       if (targetSurface !== scope.surface || dispatcherShouldBlockSurface(scope)) {
         return
       }
-      if (!scope.term) {
+      if (!scope.term || !scope.touchGesture.active) {
         return
       }
 
@@ -255,6 +257,7 @@ export function attachSurfaceEventHandlers(
       }
 
       if (touches.length === 0) {
+        scope.touchGesture.active = false
         // Why: velY is the speed of the last move; a finger that then rested has none to launch.
         const rested = Date.now() - scope.touchGesture.lastTime > RELEASE_VELOCITY_MAX_AGE_MS
         let vel = rested ? 0 : scope.touchGesture.velY
@@ -314,6 +317,7 @@ export function startSurfaceTouchGestures(scope: TerminalDocumentScope) {
 
 /** Ruling 21: the momentum loop, which would keep scrolling into the terminal that replaced it. */
 export function stopSurfaceTouchGestures(scope: TerminalDocumentScope) {
+  scope.touchGesture.active = false
   if (scope.touchGesture.momentumId !== null) {
     cancelAnimationFrame(scope.touchGesture.momentumId)
     scope.touchGesture.momentumId = null
