@@ -238,8 +238,9 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
       return { ...structured, source: opts.screen ? 'screen-unavailable' : 'stream' }
     }
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    const target = ORCA_LAYOUT_OWNER_IS_MAIN ? await this.startRestoredHandlePane(handle) : handle
-    if (target !== handle) {
+    const starting = ORCA_LAYOUT_OWNER_IS_MAIN ? this.startRestoredHandlePane(handle) : null
+    if (starting) {
+      const target = await starting
       return { ...(await this.readTerminal(target, opts, providerSnapshot)), handle }
     }
     const pty = this.getLivePtyForHandle(handle)

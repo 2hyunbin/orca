@@ -5,37 +5,48 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import { OrcaRuntimeWithGetTerminalInteractiveWait } from '../wait/terminal-interactive-wait'
 import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
 import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from '../../orca-runtime-core'
+import type { RestoredPane } from '../recovery/restored-pane-start'
 
 export abstract class OrcaRuntimeWithRestoredHandlePaneStart extends OrcaRuntimeWithGetTerminalInteractiveWait {
   /**
-   * The handle to act on: the caller's, or, while the saved pane it names has just been started
-   * here and main's layout has not yet bound it, the started terminal's own handle. The caller's
-   * handle adopts the terminal when the binding lands (adoptFirstPtyForLeafHandle).
+   * Null unless the handle names a saved pane main holds with no terminal yet; then the started
+   * terminal's own handle, to act on until main's layout binds the pane and the caller's handle
+   * adopts the terminal (adoptFirstPtyForLeafHandle). Null keeps the caller synchronous.
    */
-  async startRestoredHandlePane(
+  startRestoredHandlePane(
     handle: string,
     bounds: { signal?: AbortSignal; timeoutMs?: number } = {}
-  ): Promise<string> {
+  ): Promise<string> | null {
+    const pane = this.restoredPaneToStart(handle)
+    if (!pane) {
+      return null
+    }
+    return withinCallerBounds(this.ensureRestoredPaneStarted(pane), {
+      ...bounds,
+      startTimeoutMs: MOBILE_TERMINAL_SURFACE_TIMEOUT_MS
+    }).then((ptyId) => {
+      const pty = ptyId === null ? undefined : this.ptysById.get(ptyId)
+      if (!pty) {
+        throw new Error('terminal_not_found')
+      }
+      return this.issuePtyHandle(pty)
+    })
+  }
+
+  private restoredPaneToStart(handle: string): RestoredPane | null {
     if (!ORCA_LAYOUT_OWNER_IS_MAIN || this.getLivePtyForHandle(handle)) {
-      return handle
+      return null
     }
-    const { leaf } = this.getLiveLeafForHandle(handle)
-    if (leaf.ptyId || !startedMainTerminalSurfaces(this)?.ownsWorkspace(leaf.worktreeId)) {
-      return handle
+    let leaf
+    try {
+      leaf = this.getLiveLeafForHandle(handle).leaf
+    } catch {
+      // The caller's own path answers a stale, not-ready or structured-worker handle as before.
+      return null
     }
-    const ptyId = await withinCallerBounds(
-      this.ensureRestoredPaneStarted({
-        worktreeId: leaf.worktreeId,
-        tabId: leaf.tabId,
-        leafId: leaf.leafId
-      }),
-      { ...bounds, startTimeoutMs: MOBILE_TERMINAL_SURFACE_TIMEOUT_MS }
-    )
-    const pty = ptyId === null ? undefined : this.ptysById.get(ptyId)
-    if (!pty) {
-      throw new Error('terminal_not_found')
-    }
-    return this.issuePtyHandle(pty)
+    return !leaf.ptyId && startedMainTerminalSurfaces(this)?.ownsWorkspace(leaf.worktreeId)
+      ? { worktreeId: leaf.worktreeId, tabId: leaf.tabId, leafId: leaf.leafId }
+      : null
   }
 }
 

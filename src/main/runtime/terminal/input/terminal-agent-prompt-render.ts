@@ -141,16 +141,16 @@ export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRun
     }
   ): Promise<RuntimeTerminalWait> {
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    const starting = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? this.startRestoredHandlePane(handle, options ?? {})
+      : null
+    if (starting) {
       const startedAt = Date.now()
-      return this.startRestoredHandlePane(handle, options ?? {}).then(async (target) => {
-        if (target === handle) {
-          return this.terminalWait.wait(handle, options)
-        }
+      return starting.then(async (target) => {
         // The start spent part of the caller's deadline.
         const timeoutMs = options?.timeoutMs
         const left = timeoutMs && timeoutMs > 0 ? timeoutMs - (Date.now() - startedAt) : timeoutMs
-        if (left !== undefined && timeoutMs && timeoutMs > 0 && left <= 0) {
+        if (timeoutMs && timeoutMs > 0 && left !== undefined && left <= 0) {
           throw new Error('timeout')
         }
         return {
