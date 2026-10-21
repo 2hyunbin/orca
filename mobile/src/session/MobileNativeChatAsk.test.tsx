@@ -63,6 +63,25 @@ afterEach(() => {
 })
 
 describe('MobileNativeChatAsk single-select auto-advance', () => {
+  it('signposts hidden options and updates after the keyboard changes the available height', () => {
+    render({ questions: [indent] })
+    const scroll = () => tree.root.find((node) => isHost(node, 'ScrollView') && node.props.onLayout)
+    const hints = () =>
+      tree.root.findAll(
+        (node) =>
+          isHost(node, 'Text') && JSON.stringify(node.props.children).includes('Scroll to see all')
+      )
+    act(() => {
+      scroll().props.onLayout({ nativeEvent: { layout: { height: 300 } } })
+      scroll().props.onContentSizeChange(300, 280)
+    })
+    expect(hints()).toHaveLength(0)
+    act(() => scroll().props.onLayout({ nativeEvent: { layout: { height: 160 } } }))
+    expect(hints()).toHaveLength(1)
+    act(() => scroll().props.onLayout({ nativeEvent: { layout: { height: 300 } } }))
+    expect(hints()).toHaveLength(0)
+  })
+
   it('moves to the next question after a pick and sends after the last one', async () => {
     const onAnswer = render({ questions: [indent, fruit] })
 

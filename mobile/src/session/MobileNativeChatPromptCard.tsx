@@ -83,7 +83,7 @@ export function MobileNativeChatPromptCard({
   // card keeps its selections.
   return (
     <>
-      <View style={collapsedPrompt ? styles.collapsed : undefined}>{card}</View>
+      <View style={collapsedPrompt ? styles.collapsed : styles.expanded}>{card}</View>
       {collapsedPrompt ? (
         <MobileNativeChatPromptStrip
           title={collapsedPrompt.title}
@@ -94,4 +94,7 @@ export function MobileNativeChatPromptCard({
   )
 }
 
-const styles = StyleSheet.create({ collapsed: { display: 'none' } })
+const styles = StyleSheet.create({
+  collapsed: { display: 'none' },
+  expanded: { flexShrink: 1, minHeight: 0 }
+})
