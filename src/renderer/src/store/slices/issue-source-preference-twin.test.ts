@@ -6,6 +6,8 @@ import {
   type RuntimeEnvironmentCallRequest
 } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
+import { buildTaskPageRepoSourceState } from '../../components/task-page-cache-selectors'
+import { getTaskPageRepoCacheInput } from '../../components/task-page-source-context'
 
 const localTwin: Repo = {
   id: 'twin',
@@ -89,5 +91,17 @@ describe('issue-source preference on a repo id with a row on two hosts', () => {
       })
     )
     expect(store.getState().repos[0]).toEqual(localTwin)
+  })
+
+  it('names each twin’s host in the Tasks source state, even when both rows share a path', () => {
+    // Why no executionHostId: older SSH rows carry only connectionId.
+    const { executionHostId: _local, ...unstampedLocal } = localTwin
+    const samePathSsh: Repo = { ...unstampedLocal, addedAt: 2, connectionId: 'server' }
+    const states = buildTaskPageRepoSourceState(
+      [unstampedLocal, samePathSsh].map(getTaskPageRepoCacheInput),
+      []
+    )
+
+    expect(states.map((s) => s.hostId)).toEqual(['local', 'ssh:server'])
   })
 })

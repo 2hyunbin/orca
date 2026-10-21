@@ -15,7 +15,7 @@ import { hasUpstreamCandidateDivergence, hasDivergentSources } from '../../task-
 import IssueSourceIndicator from '@/components/github/IssueSourceIndicator'
 import IssueSourceSelector, { issueSourceChipClass } from '@/components/github/IssueSourceSelector'
 import RepoBadgeLabel from '@/components/repo/RepoBadgeLabel'
-import { getRepoExecutionHostId } from '../../../../../shared/execution-host'
+import { repoMatchesHostIdentity } from '@/store/slices/repo-host-identity'
 export function TaskPageGitHubFilters({
   model
 }: {
@@ -212,8 +212,8 @@ export function TaskPageGitHubFilters({
         return (
           <div className="flex flex-wrap items-center gap-2">
             {rows.map((s) => {
-              // Why the path: a twin's rows share the id, and each row has its own preference.
-              const repo = selectedRepos.find((r) => r.id === s.repoId && r.path === s.repoPath)
+              // Why the host: a twin's rows share the id (and maybe the path); each row has its own preference.
+              const repo = selectedRepos.find((r) => repoMatchesHostIdentity(r, s.repoId, s.hostId))
               const showRepoBadgeLabel = selectedRepos.length > 1 && repo
               const selectorRenderable = hasUpstreamCandidateDivergence(s)
               // Why: render the indicator standalone — it has its own chip styles, so nesting it in our chip would double-border it.
@@ -253,12 +253,7 @@ export function TaskPageGitHubFilters({
                     origin={s.sources.originCandidate}
                     upstream={s.sources.upstreamCandidate}
                     onChange={(next) => {
-                      void setIssueSourcePreference(
-                        repo.id,
-                        repo.path,
-                        next,
-                        getRepoExecutionHostId(repo)
-                      )
+                      void setIssueSourcePreference(repo.id, repo.path, next, s.hostId)
                     }}
                   />
                 </div>

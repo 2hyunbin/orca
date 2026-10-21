@@ -96,6 +96,7 @@ describe('task page cache selectors', () => {
       {
         repoId: 'repo-1',
         repoPath: '/repo/one',
+        hostId: 'local',
         sourceKey: 'repo-1::local',
         sources: null,
         error: null

@@ -92,7 +92,9 @@ describe('createGitHubSlice.evictGitHubRepoCaches', () => {
     const runtimeKey = workItemsCacheKey('repo-1', 20, '', 'runtime:owner-env')
     const sourceKey = workItemsCacheKey('repo-1', 20, '', getTaskSourceCacheScope(sourceContext))
     store.setState({
-      repos: [{ id: 'repo-1', path: '/repo/one', name: 'one', kind: 'git' }],
+      repos: [
+        { id: 'repo-1', path: '/repo/one', displayName: 'one', badgeColor: '#000', addedAt: 1 }
+      ],
       updateRepo,
       workItemsInvalidationNonce: 4,
       workItemsCache: {
@@ -100,7 +102,7 @@ describe('createGitHubSlice.evictGitHubRepoCaches', () => {
         [runtimeKey]: { data: [], fetchedAt: 1 },
         [sourceKey]: { data: [], fetchedAt: 1 }
       }
-    } as unknown as Partial<AppState>)
+    })
     await store.getState().setIssueSourcePreference('repo-1', '/repo/one', 'origin', 'local')
 
     expect(store.getState().workItemsCache).toEqual({
