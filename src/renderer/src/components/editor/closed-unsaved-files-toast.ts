@@ -32,8 +32,7 @@ export async function reopenClosedUnsavedFiles(
     try {
       const state = useAppStore.getState()
       const worktreeId = state.activeWorktreeId
-      const worktree = worktreeId ? state.getKnownWorktreeById(worktreeId) : null
-      if (!worktreeId || !worktree) {
+      if (!worktreeId) {
         throw new Error('No active workspace')
       }
       const operationProvenance = captureEditorFileOperationProvenance(
@@ -42,6 +41,16 @@ export async function reopenClosedUnsavedFiles(
         undefined,
         false
       )
+      // Why the provenance owner: a same-id workspace on another host must not supply the path.
+      const ownerHostId = operationProvenance.generation.route.executionHostId
+      const activeHostId = state.activeWorkspaceExecutionHostId
+      const worktree = state.getKnownWorktreeById(
+        worktreeId,
+        ownerHostId ?? activeHostId ?? undefined
+      )
+      if (!worktree || (ownerHostId && activeHostId && activeHostId !== ownerHostId)) {
+        throw new Error('Active workspace owner is ambiguous')
+      }
       const context = getEditorFileOperationContext(
         state,
         { worktreeId, operationProvenance },
@@ -53,7 +62,7 @@ export async function reopenClosedUnsavedFiles(
         context.connectionId,
         context.target,
         {
-          recoveredDocument: { originalName: file.filePath, content: file.content },
+          recoveredDocument: { originalPath: file.filePath, content: file.content },
           operationProvenance,
           expectedSshConnectionGeneration: context.expectedSshConnectionGeneration,
           expectedSshTargetId: context.expectedSshTargetId,

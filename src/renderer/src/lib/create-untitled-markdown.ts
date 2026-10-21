@@ -16,6 +16,7 @@ import {
 import { requestMarkdownTemplateSelection } from './markdown-template-picker-request'
 import { basename, joinPath } from './path'
 import type { EditorFileOperationProvenance } from './editor-file-operation-owner'
+import { getDiskBaselineSignature } from '../../../shared/disk-baseline-signature'
 
 export type UntitledMarkdownFileInfo = {
   filePath: string
@@ -30,7 +31,8 @@ export type UntitledMarkdownFileInfo = {
 
 type CreateUntitledMarkdownOptions = {
   template?: MarkdownDocumentTemplate
-  recoveredDocument?: { originalName: string; content: string }
+  /** Recovered text goes into a new `<name> (recovered)<ext>` file, never the original path. */
+  recoveredDocument?: { originalPath: string; content: string }
   now?: Date
   operationProvenance?: EditorFileOperationProvenance
   expectedSshTargetId?: string
@@ -53,12 +55,8 @@ export async function createUntitledMarkdownFile(
   target: RuntimeClientTarget,
   options: CreateUntitledMarkdownOptions = {}
 ): Promise<UntitledMarkdownFileInfo> {
-  const originalName = basename(options.recoveredDocument?.originalName ?? '')
-  const dot = originalName.lastIndexOf('.')
-  const ext = options.recoveredDocument ? (dot > 0 ? originalName.slice(dot) : '') : '.md'
-  const baseName = options.recoveredDocument
-    ? (dot > 0 ? originalName.slice(0, dot) : originalName) || 'untitled'
-    : 'untitled'
+  const recovered = options.recoveredDocument
+  const fileNameFor = recovered ? recoveredFileName(recovered.originalPath) : untitledFileName
   const MAX_ATTEMPTS = 100
   const context = {
     target,
@@ -74,11 +72,9 @@ export async function createUntitledMarkdownFile(
       requireOperationAssertion(options.assertOperationCurrent)()
     }
   }
-  const templateContent = options.recoveredDocument
-    ? options.recoveredDocument.content
-    : options.template
-      ? await readMarkdownDocumentTemplateContent(context, options.template)
-      : null
+  const templateContent = options.template
+    ? await readMarkdownDocumentTemplateContent(context, options.template)
+    : null
 
   // Why: createFile uses the 'wx' flag, so pathExists is only a hint. Another
   // create can still win the race after our last probe, especially when the
@@ -89,11 +85,7 @@ export async function createUntitledMarkdownFile(
   // Why: existence probing must go through the same runtime/SSH-aware file
   // surface as creation; the shell probe only sees the client filesystem.
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const fileName = options.recoveredDocument
-      ? `${baseName} (recovered${attempt === 1 ? '' : ` ${attempt}`})${ext}`
-      : attempt === 1
-        ? `${baseName}${ext}`
-        : `${baseName}-${attempt}${ext}`
+    const fileName = fileNameFor(attempt)
     const filePath = joinPath(worktreePath, fileName)
 
     assertCurrent()
@@ -104,24 +96,33 @@ export async function createUntitledMarkdownFile(
     try {
       assertCurrent()
       await createRuntimePath(context, filePath, 'file')
-      if (templateContent !== null) {
+      const content =
+        recovered?.content ??
+        (templateContent === null
+          ? null
+          : applyMarkdownTemplatePlaceholders(templateContent, {
+              title: getMarkdownTemplateTitleForFileName(fileName),
+              filename: fileName,
+              now: options.now
+            }))
+      if (content !== null) {
+        let written: Awaited<ReturnType<typeof writeRuntimeFile>>
         try {
           assertCurrent()
-          await writeRuntimeFile(
-            context,
-            filePath,
-            options.recoveredDocument
-              ? templateContent
-              : applyMarkdownTemplatePlaceholders(templateContent, {
-                  title: getMarkdownTemplateTitleForFileName(fileName),
-                  filename: fileName,
-                  now: options.now
-                })
-          )
+          // Why guarded: only the empty file this create made may be filled, never another writer's.
+          written = await writeRuntimeFile(context, filePath, content, undefined, {
+            expectedSignature: getDiskBaselineSignature('')
+          })
         } catch (error) {
           assertCurrent()
-          await deleteRuntimePath(context, filePath).catch(() => undefined)
+          // Why: recovered text must never cost a file that replaced ours; a template leftover may go.
+          if (!recovered) {
+            await deleteRuntimePath(context, filePath).catch(() => undefined)
+          }
           throw error
+        }
+        if (!written.ok) {
+          continue
         }
       }
 
@@ -131,7 +132,7 @@ export async function createUntitledMarkdownFile(
         worktreeId,
         language: detectLanguage(fileName),
         isUntitled: true,
-        deleteUntouchedOnClose: templateContent === null ? undefined : false,
+        deleteUntouchedOnClose: recovered || templateContent !== null ? false : undefined,
         operationProvenance: options.operationProvenance,
         mode: 'edit'
       }
@@ -186,6 +187,18 @@ export async function createUntitledMarkdownFileWithTemplateSelection(
     expectedExecutionHostId,
     assertOperationCurrent
   })
+}
+
+function untitledFileName(attempt: number): string {
+  return attempt === 1 ? 'untitled.md' : `untitled-${attempt}.md`
+}
+
+function recoveredFileName(originalPath: string): (attempt: number) => string {
+  const name = basename(originalPath)
+  const dot = name.lastIndexOf('.')
+  const stem = (dot > 0 ? name.slice(0, dot) : name) || 'untitled'
+  const ext = dot > 0 ? name.slice(dot) : ''
+  return (attempt) => `${stem} (recovered${attempt === 1 ? '' : ` ${attempt}`})${ext}`
 }
 
 function requireOperationAssertion(assertCurrent: (() => void) | undefined): () => void {

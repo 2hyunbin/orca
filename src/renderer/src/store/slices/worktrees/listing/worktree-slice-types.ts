@@ -86,8 +86,6 @@ export type RuntimeWorktreeMetaUpdates = Omit<Partial<WorktreeMeta>, 'pushTarget
 }
 
 export type FencedWorktreeMergeArgs = {
-  /** Reads live state so a purge can flush delayed editor views first. */
-  getState?: () => AppState
   repoId: string
   hostId: ExecutionHostId
   ownerWasMissingAtStart: boolean

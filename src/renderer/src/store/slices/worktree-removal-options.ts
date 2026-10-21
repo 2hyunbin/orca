@@ -22,6 +22,4 @@ export type RemoveWorktreeOptions = {
   sameIdSurvivingHostId?: ExecutionHostId
   /** Both scan owners are in this cleanup batch, so neither is a survivor. */
   ignoreWorkspaceCleanupScanSurvivors?: boolean
-  /** The user confirmed a dialog listing the unsaved files, so they are discarded, not offered back. */
-  unsavedEditsConfirmed?: boolean
 }

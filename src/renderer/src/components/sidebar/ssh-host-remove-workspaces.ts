@@ -24,8 +24,7 @@ export type ClearSshHostWorkspacesResult = {
  */
 async function clearSshHostWorkspacesImpl(
   resolution: SshHostRemoveResolution,
-  mode: 'delete-remote' | 'forget-local',
-  unsavedEditsConfirmed: boolean
+  mode: 'delete-remote' | 'forget-local'
 ): Promise<ClearSshHostWorkspacesResult> {
   const store = useAppStore.getState()
   const forgetLocalOnly = mode === 'forget-local'
@@ -40,7 +39,7 @@ async function clearSshHostWorkspacesImpl(
     const result = await store.removeWorktree(
       { id: worktreeId, executionHostId: hostId },
       false,
-      forgetLocalOnly ? { mode: 'forget-local', unsavedEditsConfirmed } : { unsavedEditsConfirmed }
+      forgetLocalOnly ? { mode: 'forget-local' } : undefined
     )
     if (!result.ok) {
       failedIds.push(worktreeId)
@@ -55,7 +54,7 @@ async function clearSshHostWorkspacesImpl(
   // clearing Orca's records without a successful remote call.
   for (const repoId of resolution.hostRepoIds) {
     try {
-      await store.removeProject(repoId, { hostId, unsavedEditsConfirmed })
+      await store.removeProject(repoId, { hostId })
     } catch {
       failedIds.push(repoId)
     }
@@ -75,11 +74,9 @@ async function clearSshHostWorkspacesImpl(
 
 export async function clearSshHostWorkspaces(
   resolution: SshHostRemoveResolution,
-  mode: 'delete-remote' | 'forget-local',
-  /** The dialog listed the unsaved editor files these removals close. */
-  unsavedEditsConfirmed = false
+  mode: 'delete-remote' | 'forget-local'
 ): Promise<ClearSshHostWorkspacesResult> {
   return runEnclosingWorktreeRemoval({ hostId: toSshExecutionHostId(resolution.targetId) }, () =>
-    clearSshHostWorkspacesImpl(resolution, mode, unsavedEditsConfirmed)
+    clearSshHostWorkspacesImpl(resolution, mode)
   )
 }

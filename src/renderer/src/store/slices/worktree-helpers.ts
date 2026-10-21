@@ -56,7 +56,6 @@ export {
   withoutErasedRequiredWorktreeFields
 } from './worktree-meta-update-application'
 import type { RendererRemoveWorktreeResult } from './renderer-remove-worktree-result'
-import type { RemovalUnsavedEditsOptions } from './worktrees/teardown/removed-workspace-unsaved-files'
 
 export type WorktreeFetchOptions = {
   requireAuthoritative?: boolean
@@ -362,10 +361,7 @@ export type WorktreeSlice = {
    * Called by the `worktrees:changed` listener on server-side deletions and
    * one-shot at hydration time. See design §4.4.
    */
-  purgeWorktreeTerminalState: (
-    worktreeTargets: WorktreePurgeTargets,
-    options?: RemovalUnsavedEditsOptions
-  ) => void
+  purgeWorktreeTerminalState: (worktreeTargets: WorktreePurgeTargets) => void
   /**
    * Retires every client-store row (repos, project host setups, worktree +
    * detected-worktree rows, and their tab/PTY/browser/editor cascade) owned by a

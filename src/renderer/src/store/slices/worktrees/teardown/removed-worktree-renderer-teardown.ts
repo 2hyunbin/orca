@@ -12,7 +12,7 @@ import { detachedHeadAutoDerivedDisplayNames } from '../metadata/detached-head-d
 import { applyRemoveWorktreeSuccessState } from './remove-worktree-store-cleanup'
 import { purgeOrphanedRuntimeSshProjects } from './orphaned-runtime-ssh-project-purge'
 import { deleteWorkspaceChatDrafts } from './removed-worktree-chat-drafts'
-import { flushWorkspacePendingEdits } from './removed-workspace-unsaved-files'
+import { flushAllPendingEditorBuffers } from '@/components/editor/editor-pending-flush'
 import type { WorktreeStateBeforeRemoval } from './worktree-state-before-removal'
 
 /**
@@ -31,7 +31,6 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   beforeRemoval: WorktreeStateBeforeRemoval
   /** The catalog the host's removal produced, when the host stamps it. */
   catalogVersion?: WorktreeCatalogVersion
-  unsavedEditsConfirmed?: boolean
 }): Promise<void> {
   const { set, get, worktreeId, hostId, requiredExecutionHostId, beforeRemoval } = args
   // Why first: a listing scanned before this removal must not be applied after it and bring
@@ -92,11 +91,9 @@ export async function tearDownRemovedWorktreeRendererState(args: {
 
   // Why: dispose parked terminal watchers only on explicit deletion; identity migration/remounts must keep buffered PTY state.
   disposeRemovedWorktreeParkedTerminalWatchers(worktreeId, beforeRemoval.terminalPtyIds)
-  // Why: delayed editor views must commit text the teardown may need to offer back.
-  flushWorkspacePendingEdits(get(), [worktreeId])
-  applyRemoveWorktreeSuccessState(set, worktreeId, tabIds, requiredExecutionHostId ?? hostId, {
-    unsavedEditsConfirmed: args.unsavedEditsConfirmed
-  })
+  // Why: delayed views must commit text the teardown may offer back.
+  flushAllPendingEditorBuffers()
+  applyRemoveWorktreeSuccessState(set, worktreeId, tabIds, requiredExecutionHostId ?? hostId)
   // Remove the orphaned project for the destroyed SSH target so it can't surface as a dead project in the composer.
   // Why after the row drops: the project purge clears the selection, which must clear with the row.
   await purgeOrphanedRuntimeSshProjects(get, runtimeCleanup.destroyedSshTargetIds)
@@ -112,24 +109,4 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   // Optional-chained: minimal store assemblies (some unit tests) omit the generation slices.
   get().prunePullRequestGenerationRecords?.(liveWorktreeKeys)
   get().pruneCommitMessageGenerationRecords?.(liveWorktreeKeys)
-}
-
-export async function snapshotRemovedWorktreeName(
-  worktreeId: string,
-  hostId: ExecutionHostId | undefined,
-  displayName: string | undefined
-): Promise<void> {
-  const worktreeDisplayName = displayName?.trim()
-  if (worktreeDisplayName && hostId) {
-    try {
-      await window.api.automations?.snapshotWorkspaceName?.({
-        workspaceId: worktreeId,
-        hostId,
-        displayName: worktreeDisplayName
-      })
-    } catch (error) {
-      // Best-effort labels must not block workspace removal.
-      console.warn('Failed to snapshot automation workspace name:', error)
-    }
-  }
 }

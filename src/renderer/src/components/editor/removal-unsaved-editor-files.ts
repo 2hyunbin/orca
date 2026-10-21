@@ -5,7 +5,12 @@ import type { WorktreePurgeTarget } from '@/store/slices/worktree-helpers'
 import { worktreePurgeClosedFileIds } from '@/store/slices/worktrees/teardown/worktree-purge-closed-files'
 import { canAutoSaveOpenFile } from './editor-autosave'
 import { flushPendingEditorBuffer } from './editor-pending-flush'
-import { editorModelSiblingTabs, editorTabModelUri } from './editor-save-disk-precondition'
+import {
+  editorModelSiblingTabs,
+  editorTabModelUri,
+  isCodeViewTab
+} from './editor-save-disk-precondition'
+import { editorModelRegistry } from '@/lib/editor-model-registry'
 
 /**
  * Savable tabs among `closedIds` holding unsaved text whose every view (shared model, shared
@@ -31,6 +36,29 @@ export function lastViewUnsavedFiles(state: AppState, closedIds: ReadonlySet<str
     }
   }
   return result
+}
+
+/** Every view that shows `file`'s text: tabs on its model and views of its record. */
+export function unsavedTextViewIds(state: AppState, file: OpenFile): string[] {
+  return [
+    ...new Set([
+      file.id,
+      ...editorModelSiblingTabs(state, file).map((tab) => tab.id),
+      ...editorBufferSiblingViewIds(state, file.id)
+    ])
+  ]
+}
+
+/** The freshest text of `file`: its live code model, else a draft any view sharing it holds. */
+export function currentUnsavedText(state: AppState, file: OpenFile): string | undefined {
+  const registry = isCodeViewTab(state, file) ? editorModelRegistry.get() : null
+  const model = registry?.editor.getModel(registry.Uri.parse(editorTabModelUri(state, file)))
+  if (model) {
+    return model.getValue()
+  }
+  return unsavedTextViewIds(state, file)
+    .map((id) => state.editorDrafts?.[id])
+    .find((draft) => draft !== undefined)
 }
 
 /** Commits text delayed views (rich Markdown, CSV, notebook) still hold for these tabs. */

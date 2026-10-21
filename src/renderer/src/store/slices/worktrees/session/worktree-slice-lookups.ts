@@ -15,8 +15,8 @@ import type {
   TerminalRecoveryRemountResult
 } from '../../../terminals/terminal-tab-recovery-ledger'
 import { settleAttentionRemovedBy } from '../../workspace-attention/attention-removal-follow-up'
-import { flushWorkspacePendingEdits } from '../teardown/removed-workspace-unsaved-files'
 import { selectWorktreesByRepo } from '../../../workspace-record-selectors'
+import { flushAllPendingEditorBuffers } from '@/components/editor/editor-pending-flush'
 
 export function createSetRenamingWorktreeId(
   set: WorktreeSliceSet,
@@ -145,7 +145,7 @@ export function createPurgeWorktreeTerminalState(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['purgeWorktreeTerminalState'] {
-  return (worktreeTargets, options) => {
+  return (worktreeTargets) => {
     const purgeableWorktreeTargets = worktreeTargets.filter((target) => {
       const worktreeId = typeof target === 'string' ? target : target.id
       return worktreeId !== FLOATING_TERMINAL_WORKTREE_ID
@@ -153,13 +153,10 @@ export function createPurgeWorktreeTerminalState(
     if (purgeableWorktreeTargets.length === 0) {
       return
     }
-    // Why before the purge: delayed editor views must commit text the purge may need to offer back.
-    flushWorkspacePendingEdits(
-      get(),
-      purgeableWorktreeTargets.map((target) => (typeof target === 'string' ? target : target.id))
-    )
+    // Why before the purge: delayed views must commit text the purge may offer back.
+    flushAllPendingEditorBuffers()
     settleAttentionRemovedBy(set, get, () =>
-      set((s) => buildWorktreePurgeState(s, purgeableWorktreeTargets, options))
+      set((s) => buildWorktreePurgeState(s, purgeableWorktreeTargets))
     )
   }
 }

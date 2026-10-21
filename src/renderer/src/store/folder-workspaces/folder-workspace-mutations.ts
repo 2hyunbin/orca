@@ -294,9 +294,7 @@ export function createFolderWorkspaceMutationActions(
           // Folder workspaces use the same browser registry key as worktrees;
           // tear down Chromium guests before purging the remaining renderer state.
           await Promise.resolve(get().shutdownWorktreeBrowsers(workspaceKey))
-          get().purgeWorktreeTerminalState([workspaceKey], {
-            unsavedEditsConfirmed: options?.unsavedEditsConfirmed === true
-          })
+          get().purgeWorktreeTerminalState([workspaceKey])
           deleteWorkspaceChatDrafts(chatDraftKeys)
         }
         return true

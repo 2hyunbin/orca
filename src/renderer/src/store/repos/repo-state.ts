@@ -109,8 +109,6 @@ export type DeleteProjectGroupWithContainedProjectsOptions = {
   removeContainedProjects: boolean
   // hostId disambiguates which host's group row to delete when the id exists on multiple hosts.
   hostId?: ExecutionHostId
-  /** The user confirmed a dialog listing the unsaved editor files this closes. */
-  unsavedEditsConfirmed?: boolean
 }
 
 export type AllHostCatalogFetchOptions = {
@@ -247,7 +245,7 @@ export type RepoSlice = {
   ) => Promise<boolean>
   deleteFolderWorkspace: (
     folderWorkspaceId: string,
-    options?: { executionHostId?: ExecutionHostId; unsavedEditsConfirmed?: boolean }
+    options?: { executionHostId?: ExecutionHostId }
   ) => Promise<boolean>
   // options.hostId targets a specific host's row + RPC target when the id exists on multiple hosts; else the group's own host owns the call.
   updateProjectGroup: (
@@ -274,8 +272,6 @@ export type RepoSlice = {
       hostId: ExecutionHostId
       errorFeedback?: 'toast' | 'silent'
       automaticCleanup?: boolean
-      /** The user confirmed a dialog listing the unsaved editor files this closes. */
-      unsavedEditsConfirmed?: boolean
     }
   ) => Promise<void>
   updateProject: (

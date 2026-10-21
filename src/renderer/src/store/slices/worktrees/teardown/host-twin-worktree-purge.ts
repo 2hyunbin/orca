@@ -12,7 +12,6 @@ import { getFolderWorkspaceHostId } from '../../../../../../shared/folder-worksp
 import { getProjectGroupHostId } from '../../project-group-owner-routing'
 import {
   collectRemovedHostTwinState,
-  type RemovedHostTwinState,
   removedHostCanonicalizer,
   twinSelectionPatch
 } from '../../../repos/repo-removal-host-twin-attribution'
@@ -28,10 +27,7 @@ import {
   retirePurgedTabLaunches
 } from './purged-structured-launch-retirement'
 import { buildWorktreePurgeSurfacePatch } from './worktree-purge-surface-patch'
-import {
-  noticeRemovedUnsavedFiles,
-  type RemovalUnsavedEditsOptions
-} from './removed-workspace-unsaved-files'
+import { noticeRemovedUnsavedFiles } from './removed-workspace-unsaved-files'
 import {
   selectDetectedWorktreesByRepo,
   selectFolderWorkspaces,
@@ -147,8 +143,7 @@ export function collectHostTwinPurgeScopes(
 export function buildHostTwinPurgeState(
   s: AppState,
   hostId: ExecutionHostId,
-  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
-  options?: RemovalUnsavedEditsOptions
+  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>
 ): Partial<AppState> {
   const twinIds = new Set(twinHostIds.keys())
   const removed = collectRemovedHostTwinState(s, twinIds, hostId, twinHostIds)
@@ -178,10 +173,23 @@ export function buildHostTwinPurgeState(
       terminalTabs.push({ id: tabId, ptyId: null })
     }
   }
+  // Why: a preview keys its source's editor state, unless a surviving file still uses that source.
+  const survivingFiles = s.openFiles.filter((file) => !removed.fileIds.has(file.id))
+  const previewSourceIds = s.openFiles.flatMap((file) =>
+    removed.fileIds.has(file.id) &&
+    file.markdownPreviewSourceFileId &&
+    !survivingFiles.some(
+      (other) =>
+        other.id === file.markdownPreviewSourceFileId ||
+        other.markdownPreviewSourceFileId === file.markdownPreviewSourceFileId
+    )
+      ? [file.markdownPreviewSourceFileId]
+      : []
+  )
   const doomed = collectSurfacePurgeDoomedIds(s, {
     tabs: terminalTabs,
     browserWorkspaceIds: removed.browserTabIds,
-    fileIds: twinPurgeFileIds(s, removed)
+    fileIds: [...removed.fileIds, ...previewSourceIds]
   })
   // Why: a PTY a kept tab still binds stays live, so its PTY-keyed state must stay with it.
   for (const worktreeId of twinIds) {
@@ -193,7 +201,7 @@ export function buildHostTwinPurgeState(
       }
     }
   }
-  noticeRemovedUnsavedFiles(s, doomed.removedFileIds, options)
+  noticeRemovedUnsavedFiles(s, doomed.removedFileIds)
   const omitters = createWorktreePurgeOmitters(s, new Set(), doomed)
   const tabPrefixedSleeping = {
     sleepingAgentSessionsByPaneKey: omitters.omitByPaneKeyTabPrefix(
@@ -242,21 +250,4 @@ export function buildHostTwinPurgeState(
     }),
     ...twinSelectionPatch(s, twinHostIds, hostId)
   }
-}
-
-export function twinPurgeFileIds(s: AppState, removed: RemovedHostTwinState): Set<string> {
-  // Why: a preview keys its source's editor state, unless a surviving file still uses that source.
-  const survivingFiles = s.openFiles.filter((file) => !removed.fileIds.has(file.id))
-  const previewSourceIds = s.openFiles.flatMap((file) =>
-    removed.fileIds.has(file.id) &&
-    file.markdownPreviewSourceFileId &&
-    !survivingFiles.some(
-      (other) =>
-        other.id === file.markdownPreviewSourceFileId ||
-        other.markdownPreviewSourceFileId === file.markdownPreviewSourceFileId
-    )
-      ? [file.markdownPreviewSourceFileId]
-      : []
-  )
-  return new Set([...removed.fileIds, ...previewSourceIds])
 }

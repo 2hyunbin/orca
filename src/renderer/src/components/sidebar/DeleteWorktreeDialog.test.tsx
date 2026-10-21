@@ -234,8 +234,7 @@ describe('DeleteWorktreeDialog lineage copy', () => {
 
     expect(runWorktreeDeletesInParallel).toHaveBeenCalledWith([workspace], {
       force: false,
-      onForceDeleted: expect.any(Function),
-      unsavedEditsConfirmed: true
+      onForceDeleted: expect.any(Function)
     })
   })
 
@@ -277,8 +276,7 @@ describe('DeleteWorktreeDialog lineage copy', () => {
 
     expect(runWorktreeDeletesInParallel).toHaveBeenCalledWith([child, parent], {
       force: true,
-      onForceDeleted: expect.any(Function),
-      unsavedEditsConfirmed: true
+      onForceDeleted: expect.any(Function)
     })
   })
 
@@ -497,8 +495,7 @@ describe('DeleteWorktreeDialog lineage copy', () => {
 
     expect(runWorktreeDeletesInParallel).toHaveBeenCalledWith([workspace], {
       force: true,
-      onForceDeleted: expect.any(Function),
-      unsavedEditsConfirmed: true
+      onForceDeleted: expect.any(Function)
     })
     const options = vi.mocked(runWorktreeDeletesInParallel).mock.calls[0]?.[1] as
       | { onForceDeleted?: (target: WorktreeRemovalTarget) => void }

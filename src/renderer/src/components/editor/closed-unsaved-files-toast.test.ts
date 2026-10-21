@@ -5,9 +5,13 @@ const mocks = vi.hoisted(() => {
   function nullableActiveWorkspace(): string | null {
     return 'active-wt'
   }
+  function nullableActiveHost(): string | null {
+    return 'ssh:active'
+  }
   const state = {
     activeWorktreeId: nullableActiveWorkspace(),
-    getKnownWorktreeById: vi.fn(() => ({ path: '/active' })),
+    activeWorkspaceExecutionHostId: nullableActiveHost(),
+    getKnownWorktreeById: vi.fn((_id: string, _host?: string) => ({ path: '/active' })),
     openFile: vi.fn()
   }
   return {
@@ -43,9 +47,8 @@ import { reopenClosedUnsavedFiles, showClosedUnsavedFilesToast } from './closed-
 
 function closed(extra: Partial<ClosedUnsavedFile> = {}): ClosedUnsavedFile {
   return {
+    fileId: 'a',
     filePath: '/removed/a.ts',
-    worktreeId: 'gone',
-    language: 'typescript',
     content: 'unsaved text',
     ...extra
   }
@@ -63,6 +66,8 @@ describe('closed unsaved files toast', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.state.activeWorktreeId = 'active-wt'
+    mocks.state.activeWorkspaceExecutionHostId = 'ssh:active'
+    mocks.capture.mockReturnValue({ generation: { route: { executionHostId: 'ssh:active' } } })
     mocks.context.mockReturnValue({ target: { kind: 'local' } })
     mocks.create.mockImplementation(async (_path, worktreeId, _connection, _target, options) => ({
       filePath: '/active/a (recovered).ts',
@@ -87,7 +92,7 @@ describe('closed unsaved files toast', () => {
       undefined,
       { kind: 'local' },
       expect.objectContaining({
-        recoveredDocument: { originalName: '/removed/a.ts', content: 'unsaved text' }
+        recoveredDocument: { originalPath: '/removed/a.ts', content: 'unsaved text' }
       })
     )
     expect(mocks.create).toHaveBeenNthCalledWith(
@@ -97,7 +102,7 @@ describe('closed unsaved files toast', () => {
       undefined,
       { kind: 'local' },
       expect.objectContaining({
-        recoveredDocument: { originalName: '/removed/a.ts', content: '' }
+        recoveredDocument: { originalPath: '/removed/a.ts', content: '' }
       })
     )
     const opened = mocks.state.openFile.mock.calls[0]?.[0]
@@ -115,6 +120,17 @@ describe('closed unsaved files toast', () => {
       kind: 'environment',
       environmentId: 'destination'
     })
+  })
+
+  it('takes the path from the active workspace’s owning host', async () => {
+    await reopenClosedUnsavedFiles([closed()])
+    expect(mocks.state.getKnownWorktreeById).toHaveBeenCalledWith('active-wt', 'ssh:active')
+  })
+
+  it('refuses when the owner route is not the active workspace’s host', async () => {
+    mocks.capture.mockReturnValue({ generation: { route: { executionHostId: 'local' } } })
+    expect(await reopenClosedUnsavedFiles([closed()])).toHaveLength(1)
+    expect(mocks.create).not.toHaveBeenCalled()
   })
 
   it('keeps the payload for retry when no workspace is active', async () => {
@@ -138,7 +154,7 @@ describe('closed unsaved files toast', () => {
     click()
     await vi.waitFor(() => expect(mocks.dismiss).toHaveBeenCalledTimes(1))
     expect(mocks.create).toHaveBeenCalledTimes(3)
-    expect(mocks.create.mock.calls[2]?.[4].recoveredDocument.originalName).toBe('/removed/a.ts')
+    expect(mocks.create.mock.calls[2]?.[4].recoveredDocument.originalPath).toBe('/removed/a.ts')
   })
 
   it('releases the holder after Reopen even if the library retains the callbacks', async () => {

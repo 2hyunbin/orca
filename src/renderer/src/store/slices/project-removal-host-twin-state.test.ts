@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerPendingEditorFlush } from '@/components/editor/editor-pending-flush'
+import { confirmUnsavedDiscard } from './worktrees/teardown/removed-workspace-unsaved-files'
 import {
   createTestStore,
   makeOpenFile,
@@ -233,7 +234,7 @@ function seedTwins(): ReturnType<typeof createTestStore> {
 
 describe('removing a remote project keeps its local twin', () => {
   it.each([false, true])(
-    'flushes twin and exclusive drafts in one scope (confirmed=%s)',
+    'captures twin and exclusive delayed text in one notice (confirmed=%s)',
     async (confirmed) => {
       const store = seedTwins()
       const exclusive = `${PROJECT_ID}::/work/exclusive`
@@ -251,16 +252,20 @@ describe('removing a remote project keeps its local twin', () => {
         ]
       }))
       const flushed: string[] = []
-      const unregister = ['editor:remote-file', exclusiveFile, '/work/same/local.ts'].map((id) =>
+      const unregister = ['editor:remote-file', exclusiveFile].map((id) =>
         registerPendingEditorFlush(id, () => {
           flushed.push(id)
           store.setState((s) => ({ editorDrafts: { ...s.editorDrafts, [id]: `late ${id}` } }))
         })
       )
       try {
-        await store
-          .getState()
-          .removeProject(PROJECT_ID, { hostId: REMOTE_HOST, unsavedEditsConfirmed: confirmed })
+        if (confirmed) {
+          confirmUnsavedDiscard(store.getState, [
+            { id: WORKTREE_ID, hostId: REMOTE_HOST },
+            { id: exclusive, hostId: REMOTE_HOST }
+          ])
+        }
+        await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
         await layoutApplyTestTransport.settle()
         expect([...new Set(flushed)].sort()).toEqual(['editor:remote-file', exclusiveFile].sort())
         expect(store.getState().editorDrafts['/work/same/local.ts']).toBe('unsaved local edit')

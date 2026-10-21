@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import {
+  flushAllPendingEditorBuffers,
   flushPendingEditorBuffer,
   hasPendingEditorBufferChange,
   registerPendingEditorFlush
@@ -42,4 +43,26 @@ it('checks pending changes across panes and retains the remaining registration o
     removeLater()
   }
   expect(hasPendingEditorBufferChange(NO_SHARING, 'panes')).toBe(false)
+})
+
+it('flushes every view before a purge, leaving idle CSV cells open', () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {})
+  const rich = vi.fn(() => {
+    throw new Error('serialize failed')
+  })
+  const changedCell = vi.fn()
+  const idleCell = vi.fn()
+  const removers = [
+    registerPendingEditorFlush('rich', rich),
+    registerPendingEditorFlush('changed', changedCell, () => true),
+    registerPendingEditorFlush('idle', idleCell, () => false)
+  ]
+  try {
+    flushAllPendingEditorBuffers()
+    expect(rich).toHaveBeenCalledTimes(1)
+    expect(changedCell).toHaveBeenCalledTimes(1)
+    expect(idleCell).not.toHaveBeenCalled()
+  } finally {
+    removers.forEach((remove) => remove())
+  }
 })

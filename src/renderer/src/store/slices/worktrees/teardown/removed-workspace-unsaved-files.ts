@@ -1,23 +1,42 @@
 import type { AppState } from '../../../types'
+import type { WorktreePurgeTarget } from '../../worktree-helpers'
 import {
-  flushRemovalPendingEdits,
-  lastViewUnsavedFiles
+  collectRemovalUnsavedFiles,
+  currentUnsavedText,
+  lastViewUnsavedFiles,
+  unsavedTextViewIds
 } from '@/components/editor/removal-unsaved-editor-files'
 import { folderWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '../../../workspace-record-selectors'
 
-/** Set by a removal the user confirmed in a dialog that listed its unsaved files. */
-export type RemovalUnsavedEditsOptions = {
-  unsavedEditsConfirmed?: boolean
-  unsavedNoticeHandled?: boolean
-}
-
 /** Text retained only until the removal notice is dismissed or recovered. */
-export type ClosedUnsavedFile = {
-  filePath: string
-  worktreeId: string
-  language: string
-  content: string
+export type ClosedUnsavedFile = { fileId: string; filePath: string; content: string }
+
+// Why text, not a flag: an edit made after the user confirmed is not what they agreed to discard.
+const confirmedDiscards = new Map<string, string>()
+let pendingNotice: { files: Map<string, ClosedUnsavedFile>; workspaces: Set<string> } | null = null
+
+/** Records the exact text a removal dialog listed when the user confirmed discarding it. */
+export function confirmUnsavedDiscard(
+  getState: () => AppState,
+  targets: readonly WorktreePurgeTarget[]
+): void {
+  const files = collectRemovalUnsavedFiles(getState, targets)
+  const state = getState()
+  const openIds = new Set((state.openFiles ?? []).map((file) => file.id))
+  for (const id of confirmedDiscards.keys()) {
+    if (!openIds.has(id)) {
+      confirmedDiscards.delete(id)
+    }
+  }
+  for (const file of files) {
+    const text = currentUnsavedText(state, file)
+    if (text !== undefined) {
+      for (const id of unsavedTextViewIds(state, file)) {
+        confirmedDiscards.set(id, text)
+      }
+    }
+  }
 }
 
 function workspaceLabel(s: AppState, worktreeId: string): string {
@@ -31,79 +50,54 @@ function workspaceLabel(s: AppState, worktreeId: string): string {
 }
 
 /**
- * Captures removed tabs' unsaved text and offers it back in one toast. Runs inside purge updaters,
- * so the toast waits for the commit. A confirmed removal discards instead.
+ * Captures the unsaved text of tabs a purge closes and offers it back. Runs inside purge updaters,
+ * so one toast per microtask waits for the commit and merges every purge of the batch.
  */
-export function noticeRemovedUnsavedFiles(
-  s: AppState,
-  removedFileIds: ReadonlySet<string>,
-  options?: RemovalUnsavedEditsOptions
-): void {
-  if (
-    options?.unsavedEditsConfirmed ||
-    options?.unsavedNoticeHandled ||
-    removedFileIds.size === 0
-  ) {
-    return
-  }
-  announceClosedUnsavedFiles(s, captureRemovedUnsavedFiles(s, removedFileIds))
-}
-
-export function captureRemovedUnsavedFiles(
-  s: AppState,
-  removedFileIds: ReadonlySet<string>
-): ClosedUnsavedFile[] {
+export function noticeRemovedUnsavedFiles(s: AppState, removedFileIds: ReadonlySet<string>): void {
   try {
-    return captureRemovedText(s, removedFileIds)
+    for (const file of removedFileIds.size > 0 ? lastViewUnsavedFiles(s, removedFileIds) : []) {
+      const content = currentUnsavedText(s, file)
+      if (content === undefined) {
+        console.warn('[editor] removed workspace closed a dirty tab with no text to recover', {
+          filePath: file.filePath
+        })
+      } else if (confirmedDiscards.get(file.id) !== content) {
+        queueNotice({ fileId: file.id, filePath: file.filePath, content }, s, file.worktreeId)
+      } else {
+        // Why deferred: a repeated purge of this batch must still see the confirmation.
+        queueMicrotask(() => confirmedDiscards.delete(file.id))
+      }
+    }
   } catch (error) {
     console.error('[editor] capturing unsaved edits from a removed workspace failed', error)
-    return []
   }
 }
 
-function captureRemovedText(s: AppState, removedFileIds: ReadonlySet<string>): ClosedUnsavedFile[] {
-  const closed: ClosedUnsavedFile[] = []
-  for (const file of lastViewUnsavedFiles(s, removedFileIds)) {
-    const content = s.editorDrafts[file.id]
-    if (content === undefined) {
-      console.warn('[editor] removed workspace closed a dirty tab with no draft text', {
-        filePath: file.filePath,
-        worktreeId: file.worktreeId
-      })
-      continue
-    }
-    closed.push({
-      filePath: file.filePath,
-      worktreeId: file.worktreeId,
-      language: file.language,
-      content
-    })
+function queueNotice(file: ClosedUnsavedFile, s: AppState, worktreeId: string): void {
+  if (!pendingNotice) {
+    pendingNotice = { files: new Map(), workspaces: new Set() }
+    queueMicrotask(showPendingNotice)
   }
-  return closed
+  if (!pendingNotice.files.has(file.fileId)) {
+    pendingNotice.files.set(file.fileId, file)
+    pendingNotice.workspaces.add(workspaceLabel(s, worktreeId))
+  }
 }
 
-export function announceClosedUnsavedFiles(s: AppState, closed: ClosedUnsavedFile[]): void {
-  if (closed.length === 0) {
+function showPendingNotice(): void {
+  const notice = pendingNotice
+  pendingNotice = null
+  if (!notice) {
     return
   }
-  const label = [...new Set(closed.map((file) => workspaceLabel(s, file.worktreeId)))].join(', ')
+  const closed = [...notice.files.values()]
+  const label = [...notice.workspaces].join(', ')
   console.warn('[editor] removed workspace closed files with unsaved edits', {
     workspaces: label,
     filePaths: closed.map((file) => file.filePath)
   })
   // Why lazy: keeps toast and editor-open code out of the store's import graph.
-  queueMicrotask(() => {
-    void import('@/components/editor/closed-unsaved-files-toast').then((module) =>
-      module.showClosedUnsavedFilesToast(closed, label)
-    )
-  })
-}
-
-/** Flushes delayed views of every tab in these workspaces before a purge drops them. */
-export function flushWorkspacePendingEdits(state: AppState, worktreeIds: Iterable<string>): void {
-  const ids = new Set(worktreeIds)
-  flushRemovalPendingEdits(
-    state,
-    (state.openFiles ?? []).filter((file) => ids.has(file.worktreeId)).map((file) => file.id)
+  void import('@/components/editor/closed-unsaved-files-toast').then((module) =>
+    module.showClosedUnsavedFilesToast(closed, label)
   )
 }

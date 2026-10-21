@@ -223,10 +223,7 @@ export function createProjectGroupMutationActions(
         const removableHostIds = removable.map((row) => getRepoExecutionHostId(row))
         for (const hostId of removableHostIds) {
           try {
-            await get().removeProject(projectId, {
-              hostId,
-              unsavedEditsConfirmed: options.unsavedEditsConfirmed === true
-            })
+            await get().removeProject(projectId, { hostId })
           } catch (err) {
             console.error('Failed to remove contained project:', err)
           }
