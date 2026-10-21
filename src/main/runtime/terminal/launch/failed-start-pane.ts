@@ -7,7 +7,11 @@ import type { LayoutApplyReply } from '../../../../shared/workspace-layout/works
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
 import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime-layout-apply'
-import { runLayoutPaneStarts, startsPanes } from '../recovery/layout-command-pane-starts'
+import {
+  runLayoutPaneStarts,
+  startsPanes,
+  stopReplacedTerminals
+} from '../recovery/layout-command-pane-starts'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
 import { PaneOwnerContentionError } from '../../../ipc/pty/pane/pane-spawn-operation'
@@ -73,14 +77,15 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
           )
         }
       },
+      stopBeforeWrite: (ptyIds) =>
+        stopReplacedTerminals(ptyIds, (ptyId) => {
+          this.forgetRestoredPaneStart(ptyId)
+          return this.ptyController?.kill(ptyId) ?? false
+        }),
       onEffects: (effects) =>
-        runLayoutPaneStarts({ type: command.type, workspace }, effects, {
-          start: (pane) => this.ensureRestoredPaneStarted(pane),
-          stop: (ptyId) => {
-            this.forgetRestoredPaneStart(ptyId)
-            return this.ptyController?.kill(ptyId) ?? false
-          }
-        })
+        runLayoutPaneStarts({ type: command.type, workspace }, effects, (pane) =>
+          this.ensureRestoredPaneStarted(pane)
+        )
     }
   }
 

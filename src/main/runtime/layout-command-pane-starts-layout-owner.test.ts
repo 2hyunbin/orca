@@ -185,6 +185,30 @@ describe('a client’s startPane in the layout-owner build', () => {
     expect(spawn.mock.calls[0]?.[0].command).toContain('provider-session-1')
   })
 
+  it('keeps the pane on its terminal and starts nothing when that terminal would not stop', async () => {
+    const { runtime, spawn, kill, started, getSession, setSession } = await desktopRuntime()
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    started.resolve({ id: 'persisted-pty' })
+    await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
+    await vi.waitFor(() => expect(runtime.startStatusOf(PANE_KEY)).toBeNull())
+    setSession({
+      ...getSession(),
+      sleepingAgentSessionsByPaneKey: { [PANE_KEY]: { ...RECORD, state: 'done' } }
+    })
+    spawn.mockClear()
+    kill.mockReturnValue(false)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const reply = await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(kill).toHaveBeenCalledWith('persisted-pty')
+    expect(reply).toMatchObject({ ok: false })
+    expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true)
+    expect(spawn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('shows the pane starting in the frame its reply names', async () => {
     const { runtime } = await desktopRuntime()
 

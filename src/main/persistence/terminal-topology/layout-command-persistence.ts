@@ -73,7 +73,11 @@ export class LayoutCommandPersistence {
   applyLayoutCommand(
     command: LayoutCommand,
     hostIds: readonly string[] = [],
-    run: { live?: LayoutLiveContext; onEffects?: (effects: LayoutEffects) => void } = {}
+    run: {
+      live?: LayoutLiveContext
+      stopBeforeWrite?: (ptyIds: readonly string[]) => boolean
+      onEffects?: (effects: LayoutEffects) => void
+    } = {}
   ): Promise<LayoutApplyOutcome> {
     const context = this[layoutCommandPersistenceContext]
     const resolved = hostIds.length > 0 ? hostIds.map(resolveHostId) : [resolveHostId()]
@@ -84,6 +88,7 @@ export class LayoutCommandPersistence {
       (hostId) => context.sessions.getWorkspaceSession(hostId),
       applyLayout(resolved, command, topologyCommitContext(context), {
         live: run.live,
+        stopBeforeWrite: run.stopBeforeWrite,
         noteEffects: (noted) => (effects = noted)
       })
     )

@@ -605,6 +605,13 @@ function makeRuntimeStoreWithWorkspaceSession(
             command,
             run.live
           )
+          if (
+            change.value.ok &&
+            change.effects?.stopPtyIds.length &&
+            run.stopBeforeWrite?.(change.effects.stopPtyIds) === false
+          ) {
+            return { ok: false, code: 'pane_already_bound' } as const
+          }
           session = change.session ?? session
           if (change.value.ok && change.effects) {
             run.onEffects?.(change.effects)

@@ -21,6 +21,8 @@ import type { TerminalTopologyCommitContext } from './terminal-topology-commit'
 /** The runtime's side of a layout command: live facts in, the routed partition's effects out. */
 export type LayoutCommandRun = {
   live?: LayoutLiveContext
+  /** Stops the terminals the command replaces, before its write; false keeps their bindings. */
+  stopBeforeWrite?: (ptyIds: readonly string[]) => boolean
   noteEffects?: (effects: LayoutEffects) => void
 }
 
@@ -50,6 +52,10 @@ export function commitLayoutCommand(
     return { value: { ok: false, code: 'workspace_not_found' }, persist: false }
   }
   const effects = routed.ok ? changes[0]!.change.effects : undefined
+  // Why before the write: a terminal that would not stop keeps its pane, as a failed stop leaves it.
+  if (effects?.stopPtyIds.length && run.stopBeforeWrite?.(effects.stopPtyIds) === false) {
+    return { value: { ok: false, code: 'pane_already_bound' }, persist: false }
+  }
   if (effects) {
     run.noteEffects?.(effects)
   }
