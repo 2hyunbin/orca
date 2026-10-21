@@ -1,3 +1,4 @@
+import { getRepoExecutionHostId } from '../../shared/execution-host'
 /**
  * A server-run automation's agent, started through the shared launch executor.
  *
@@ -113,15 +114,22 @@ export async function launchHeadlessAutomationAgent(
         throw new Error(TERMINAL_ONLY_MESSAGE)
       },
       createTerminalAgent: async ({ worktreeId, startupPrompt }) => {
-        const launched = await runtime.launchAgentTerminal(`id:${worktreeId}`, {
-          agent,
-          prompt: startupPrompt ?? '',
-          title: run.title,
-          ...(automation.extraAgentArgs ? { extraAgentArgs: automation.extraAgentArgs } : {})
-        })
+        const resolved = await runtime.showManagedTerminalWorkspace(
+          `id:${worktreeId}`,
+          getRepoExecutionHostId(target.repo)
+        )
+        const launched = await runtime.launchAgentTerminal(
+          `id:${worktreeId}`,
+          {
+            agent,
+            prompt: startupPrompt ?? '',
+            title: run.title,
+            ...(automation.extraAgentArgs ? { extraAgentArgs: automation.extraAgentArgs } : {})
+          },
+          { worktree: resolved, repo: target.repo }
+        )
         terminal = launched
-        const shown = await runtime.showManagedWorktree(`id:${launched.worktreeId}`)
-        workspace = { id: launched.worktreeId, displayName: shown.displayName ?? null }
+        workspace = { id: launched.worktreeId, displayName: resolved.displayName ?? null }
         return {
           handle: launched.handle,
           ...(launched.paneKey ? { paneKey: launched.paneKey } : {}),
@@ -157,6 +165,7 @@ async function sendToReusableSession(
     run: Pick<AutomationRun, 'id'>
     runs: readonly AutomationRun[]
     text: string
+    target: Extract<AutomationRunTargetResult, { ok: true }>
   }
 ): Promise<HeadlessAutomationAgentLaunch | null> {
   const { automation, text } = request
@@ -191,7 +200,10 @@ async function sendToReusableSession(
   ) {
     return null
   }
-  const shown = await runtime.showManagedWorktree(`id:${worktreeId}`)
+  const shown = await runtime.showManagedTerminalWorkspace(
+    `id:${worktreeId}`,
+    getRepoExecutionHostId(request.target.repo)
+  )
   return {
     workspaceId: worktreeId,
     workspaceDisplayName: shown.displayName ?? null,

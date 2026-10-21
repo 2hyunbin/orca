@@ -32,9 +32,7 @@ export function AutomationScheduleFields({
     descriptor.kind === 'invalid' ? 'custom' : descriptor.kind
   )
   const [time, setTime] = useState(
-    'hour' in descriptor
-      ? `${String(descriptor.hour).padStart(2, '0')}:${String(descriptor.minute).padStart(2, '0')}`
-      : '09:00'
+    `${String('hour' in descriptor ? descriptor.hour : 9).padStart(2, '0')}:${String('minute' in descriptor ? descriptor.minute : 0).padStart(2, '0')}`
   )
   const [day, setDay] = useState(String('dayOfWeek' in descriptor ? descriptor.dayOfWeek : 1))
   const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)

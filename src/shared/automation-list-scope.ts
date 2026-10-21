@@ -76,7 +76,7 @@ export type AutomationProjectionContext = {
   /** Current registration generation of a saved SSH target; undefined once it is gone. */
   sshTargetGeneration: (targetId: string) => number | undefined
   /** `undefined` = the repo is gone; `null` = a local repo; a string = its SSH connection. */
-  repoConnectionId: (repoId: string) => string | null | undefined
+  repoConnectionId: (repoId: string, automation?: Automation) => string | null | undefined
   /** Host the record's workspace pins it to; omitted means no side knows of a pin. */
   workspaceHost?: (automation: Automation) => AutomationWorkspaceHost
   /** Registration a generation was allocated to; omitted leaves a re-pin unproven. */
@@ -170,7 +170,7 @@ export function projectAutomationSelector(
   if (workspaceHost.kind === 'ssh') {
     return workspacePinSelector(automation, workspaceHost.targetId, context)
   }
-  const connectionId = context.repoConnectionId(getAutomationRunRepoId(automation))
+  const connectionId = context.repoConnectionId(getAutomationRunRepoId(automation), automation)
   if (connectionId === undefined) {
     return orphan(AUTOMATION_ORPHAN_ISSUES.projectMissing)
   }

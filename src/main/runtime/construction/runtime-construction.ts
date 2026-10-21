@@ -83,7 +83,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
   declare protected readonly skillCommands: ServiceState['skillCommands']
 
   abstract showManagedWorktree(
-    worktreeSelector: string
+    ...args: Parameters<ListManagedWorktrees['showManagedWorktree']>
   ): ReturnType<ListManagedWorktrees['showManagedWorktree']>
   abstract resolveProjectRuntimeForWorktree(
     worktreeId: string | null | undefined
@@ -183,7 +183,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     )
     this.automation = new RuntimeAutomationController(store, {
       showRepo: (selector) => runtime.showRepo(selector),
-      showManagedWorktree: (selector) => this.showManagedWorktree(selector)
+      showManagedWorktree: (selector, hostId) => this.showManagedWorktree(selector, hostId)
     })
     // Why: per-device tab selections must survive host restarts, or every phone snaps back to the first tab on return.
     const persistedClientTabSelections = store?.getMobileClientTabSelections?.()

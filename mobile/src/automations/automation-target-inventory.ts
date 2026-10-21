@@ -1,9 +1,8 @@
 import { z } from 'zod'
 import { getRepoMainWorktreeId } from '../../../src/shared/worktree/id'
-import { parseExecutionHostId } from '../../../src/shared/execution-host'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../../src/shared/execution-host'
 import type { AutomationDestination } from '../../../src/shared/automation-owner-precondition'
 import { buildWorkspaceRunContext } from '../../../src/shared/task-source-context'
-import { worktreeCatalogRead } from '../worktree/worktree-catalog-operations'
 import {
   newTabRepoListRead,
   preflightDetectAgentsRead,
@@ -14,6 +13,7 @@ import { buildMobileNewTabAgentOptions } from '../session/mobile-new-tab-agent-o
 import { loadMobileAgentLaunchContext } from '../session/mobile-new-tab-agent-loader'
 import type { RpcClient } from '../transport/rpc-client'
 import {
+  automationWorkspacesRead,
   automationProjectsRead,
   automationSetupsRead,
   automationSshTargetsRead
@@ -28,25 +28,24 @@ const repoSchema = z.object({
   id: z.string(),
   displayName: z.string(),
   path: z.string(),
-  kind: z.string().optional()
+  kind: z.string().optional(),
+  connectionId: z.string().nullish(),
+  executionHostId: z.string().nullish()
 })
 const agentSettingsSchema = z.object({
   defaultTuiAgent: z.unknown().optional(),
   disabledTuiAgents: z.unknown().optional()
 })
 
-export async function loadAutomationTargets(client: RpcClient) {
+export async function loadAutomationTargets(client: RpcClient, limit = 200) {
   const [projects, setups, catalog, repos, ssh] = await Promise.all([
     automationProjectsRead.request(client),
     automationSetupsRead.request(client),
-    worktreeCatalogRead.request(client),
+    automationWorkspacesRead.request(client, { limit }),
     newTabRepoListRead.request(client),
     automationSshTargetsRead.request(client)
   ])
-  const workspaceReply = worktreeCatalogRead.interpret(catalog)
-  if (!workspaceReply.accepted || !workspaceReply.value.worktrees) {
-    throw new Error('Could not read this host’s workspaces. Reconnect and try again.')
-  }
+  const workspaceReply = automationWorkspacesRead.interpret(catalog)
   const repoRows = newTabRepoListRead.interpret(repos).flatMap((raw) => {
     const parsed = repoSchema.safeParse(raw)
     return parsed.success ? [parsed.data] : []
@@ -58,19 +57,40 @@ export async function loadAutomationTargets(client: RpcClient) {
       .setups.filter(
         (setup) =>
           setup.setupState === 'ready' &&
-          repoRows.some((repo) => repo.id === setup.repoId && repo.path === setup.path)
+          repoRows.some(
+            (repo) =>
+              repo.id === setup.repoId &&
+              repo.path === setup.path &&
+              getRepoExecutionHostId(repo) === setup.hostId
+          )
       )
       .map((setup) => ({
         ...setup,
         label:
           projectRows.find((project) => project.id === setup.projectId)?.displayName ??
           setup.displayName,
-        kind: setup.kind ?? repoRows.find((repo) => repo.id === setup.repoId)?.kind
+        kind:
+          setup.kind ??
+          repoRows.find(
+            (repo) =>
+              repo.id === setup.repoId &&
+              repo.path === setup.path &&
+              getRepoExecutionHostId(repo) === setup.hostId
+          )?.kind
       })),
-    workspaces: workspaceReply.value.worktrees.flatMap((raw) => {
-      const parsed = workspaceSchema.safeParse(raw)
+    workspaces: workspaceReply.worktrees.flatMap((raw) => {
+      const row = z.object({ id: z.string() }).passthrough().safeParse(raw)
+      const parsed = workspaceSchema.safeParse(
+        row.success ? { ...row.data, worktreeId: row.data.id } : raw
+      )
       return parsed.success && !parsed.data.isArchived ? [parsed.data] : []
     }),
+    coverage: {
+      limit,
+      totalCount: workspaceReply.totalCount,
+      truncated: workspaceReply.truncated,
+      hostScope: workspaceReply.hostScope
+    },
     sshTargets: automationSshTargetsRead.interpret(ssh).targets
   }
 }
@@ -109,7 +129,8 @@ export async function loadAutomationAgents(
   setup: AutomationSetup,
   workspaceId?: string
 ) {
-  if (workspaceId) {
+  const host = parseExecutionHostId(setup.hostId)
+  if (workspaceId && host?.kind !== 'ssh') {
     const context = await loadMobileAgentLaunchContext({
       client,
       worktreeId: workspaceId,
@@ -121,7 +142,6 @@ export async function loadAutomationAgents(
       context.detectedAgents
     )
   }
-  const host = parseExecutionHostId(setup.hostId)
   const detection =
     host?.kind === 'ssh'
       ? preflightDetectRemoteAgentsRead.request(client, { connectionId: host.targetId })
@@ -146,4 +166,16 @@ export async function loadAutomationAgents(
     ...available.filter((entry) => entry.agent === defaultAgent),
     ...available.filter((entry) => entry.agent !== defaultAgent)
   ]
+}
+
+export function automationSetupKey(
+  setup: Pick<AutomationSetup, 'id' | 'hostId' | 'repoId' | 'path'>
+): string {
+  return JSON.stringify([setup.hostId, setup.id, setup.repoId, setup.path])
+}
+export function workspaceMatchesSetup(
+  workspace: AutomationWorkspace,
+  setup: AutomationSetup
+): boolean {
+  return workspace.repoId === setup.repoId && (workspace.hostId ?? 'local') === setup.hostId
 }

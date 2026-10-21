@@ -1,3 +1,5 @@
+import { findAutomationRepo } from '../../shared/automation-repo-target'
+import { findProjectHostSetup } from '../../shared/project-host-setup-target'
 import type { Store } from '../persistence'
 import type { Automation } from '../../shared/automations-types'
 import { getAutomationLegacyRepoId } from '../../shared/automation-run-identity'
@@ -175,9 +177,10 @@ export function resolveAutomationRunTarget(
     return { ok: false, error: CAPTURED_HOST_REFUSALS[hostIssue] }
   }
 
-  const setup = store
-    .getProjectHostSetups()
-    .find((candidate) => candidate.id === context.projectHostSetupId)
+  const setup = findProjectHostSetup(store.getProjectHostSetups(), {
+    setupId: context.projectHostSetupId,
+    hostId: context.hostId
+  })
   if (!setup) {
     return {
       ok: false,
@@ -200,7 +203,7 @@ export function resolveAutomationRunTarget(
     }
   }
 
-  const repo = store.getRepo(context.repoId)
+  const repo = findAutomationRepo(store.getRepos(), context.repoId, context)
   if (!repo) {
     return {
       ok: false,

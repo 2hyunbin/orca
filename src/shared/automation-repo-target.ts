@@ -1,0 +1,39 @@
+import type { Repo } from './repo-types'
+import type { WorkspaceRunContext } from './task-source-context'
+import { getRepoExecutionHostId, parseExecutionHostId } from './execution-host'
+
+/** A captured target names a row; a legacy bare id must resolve uniquely. */
+export function findAutomationRepo(
+  repos: readonly Repo[],
+  repoId: string,
+  context?: Pick<WorkspaceRunContext, 'hostId' | 'path'> | null,
+  incomingRuntimeAlias = false
+): Repo | undefined {
+  const host = context ? parseExecutionHostId(context.hostId) : null
+  const runtimeAlias = incomingRuntimeAlias && host?.kind === 'runtime'
+  const hostId = runtimeAlias ? 'local' : host?.id
+  const matches = repos.filter(
+    (repo) =>
+      repo.id === repoId &&
+      (!context ||
+        ((runtimeAlias || repo.path === context.path) && getRepoExecutionHostId(repo) === hostId))
+  )
+  return matches.length === 1 ? matches[0] : undefined
+}
+
+export function findAutomationRepoForWrite(
+  repos: readonly Repo[],
+  repoId: string,
+  context: Pick<WorkspaceRunContext, 'hostId' | 'path'> | null | undefined,
+  resolvedRepo?: Repo,
+  incomingRuntimeAlias = true
+): Repo | undefined {
+  return findAutomationRepo(
+    repos,
+    repoId,
+    resolvedRepo
+      ? { hostId: getRepoExecutionHostId(resolvedRepo), path: resolvedRepo.path }
+      : context,
+    !resolvedRepo && incomingRuntimeAlias
+  )
+}

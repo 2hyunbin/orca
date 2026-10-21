@@ -1,3 +1,4 @@
+import { findAutomationRepo } from '../../../shared/automation-repo-target'
 import type { Automation, AutomationRun } from '../../../shared/automations-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import {
@@ -106,7 +107,6 @@ export function automationProjectionContext(
   withUsage: boolean
 ): AutomationProjectionContext {
   const usage = withUsage ? automationUsageSummaries(state) : null
-  const reposById = new Map(state.repos.map((repo) => [repo.id, repo]))
   const targetIdByGeneration = new Map(
     (state.sshTargets ?? []).flatMap((target) =>
       target.generation === undefined ? [] : [[target.generation, target.id] as const]
@@ -116,8 +116,8 @@ export function automationProjectionContext(
     storageAuthority,
     sshTargetGeneration: (targetId) => sshTargetGenerationForConnection(state, targetId),
     sshTargetIdForGeneration: (generation) => targetIdByGeneration.get(generation),
-    repoConnectionId: (repoId) => {
-      const repo = reposById.get(repoId)
+    repoConnectionId: (repoId, automation) => {
+      const repo = findAutomationRepo(state.repos, repoId, automation?.runContext)
       return repo ? repo.connectionId?.trim() || null : undefined
     },
     workspaceHost: (automation) =>

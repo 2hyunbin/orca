@@ -1,3 +1,4 @@
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
 import { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce } from '../session-tabs/structured-session-tab-restoration'
 import { DEFAULT_WORKTREE_LIST_LIMIT } from '../orca-runtime-postlude'
@@ -33,7 +34,7 @@ import {
   type WorkspacePortExecutionHostDeps
 } from '../../ports/workspace-port-execution-host'
 import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
 import { teardownStops } from '../owned-session-teardown-policy'
 
 export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce {
@@ -137,8 +138,8 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
     )
   }
 
-  async showManagedWorktree(worktreeSelector: string) {
-    const worktree = await this.resolveWorktreeSelector(worktreeSelector)
+  async showManagedWorktree(worktreeSelector: string, requiredHostId?: ExecutionHostId) {
+    const worktree = await this.resolveWorktreeSelector(worktreeSelector, requiredHostId)
     return { ...worktree, linkedItems: getWorkspaceAttachments(worktree) }
   }
 
@@ -146,8 +147,17 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
    * The git worktree record behind a terminal workspace. Refuses the floating sentinel, which has
    * no such record — callers that only need to address the workspace want the scope below instead.
    */
-  async showManagedTerminalWorkspace(worktreeSelector: string) {
-    const target = await this.resolveTerminalWorkspaceLaunchTarget(worktreeSelector)
+  async showManagedTerminalWorkspace(worktreeSelector: string, requiredHostId?: ExecutionHostId) {
+    const key = worktreeSelector.startsWith('id:') ? worktreeSelector.slice(3) : worktreeSelector
+    const resolved =
+      requiredHostId && parseWorkspaceKey(key)?.type !== 'folder'
+        ? await this.showManagedWorktree(worktreeSelector, requiredHostId)
+        : undefined
+    const target = await this.resolveTerminalWorkspaceLaunchTarget(
+      worktreeSelector,
+      undefined,
+      resolved
+    )
     if (!target.managedWorktree) {
       throw new Error('selector_not_found')
     }

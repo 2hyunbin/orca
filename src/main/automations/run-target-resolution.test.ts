@@ -175,7 +175,7 @@ describe('resolveAutomationRunTarget projectId drift', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: 'Automation run target no longer matches the selected project host setup.'
+      error: 'Project is not set up on the selected automation host anymore.'
     })
   })
 
@@ -189,7 +189,7 @@ describe('resolveAutomationRunTarget projectId drift', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: 'Repository is no longer attached to the selected automation host.'
+      error: 'Repository for the selected automation host is no longer available.'
     })
   })
 
@@ -201,7 +201,7 @@ describe('resolveAutomationRunTarget projectId drift', () => {
 
     expect(result).toMatchObject({
       ok: false,
-      error: 'Project path for the selected automation host has changed.'
+      error: 'Repository for the selected automation host is no longer available.'
     })
   })
 })

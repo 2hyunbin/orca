@@ -4,7 +4,7 @@ import type { RpcClient } from '../transport/rpc-client'
 import { hostStatusProbe } from '../transport/host-status-probe-operations'
 import { subscribeConnectionRevival } from '../transport/connection-revival-signal'
 import { automationListRead } from './automation-operations'
-import { automationErrorMessage } from './automation-error'
+import { AUTOMATION_OUTCOME_UNKNOWN, automationErrorMessage } from './automation-error'
 import type { MobileAutomationRow } from './automation-reply-schema'
 
 export function useAutomationCatalog(client: RpcClient | null, server: boolean) {
@@ -136,7 +136,8 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
       const value = await action(client)
       if (current()) {
         accept(value)
-        void refresh()
+      } else if (mounted.current) {
+        setActionError(AUTOMATION_OUTCOME_UNKNOWN)
       }
     } catch (failure) {
       if (mounted.current) {
@@ -146,6 +147,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
       locked.current = false
       if (mounted.current) {
         setBusy(false)
+        void refresh()
       }
     }
   }
@@ -155,7 +157,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
     capabilities,
     loaded,
     error: actionError ?? error,
-    setError,
+    setError: setActionError,
     busy,
     connected,
     revision,

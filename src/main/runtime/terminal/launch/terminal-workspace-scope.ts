@@ -121,14 +121,18 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
 
   async resolveTerminalWorkspaceLaunchScope(
     selector: string,
-    createdWorktree?: Worktree
+    createdWorktree?: Worktree,
+    resolvedWorktree?: ResolvedWorktree
   ): Promise<TerminalWorkspaceLaunchScope> {
-    return (await this.resolveTerminalWorkspaceLaunchTarget(selector, createdWorktree)).scope
+    return (
+      await this.resolveTerminalWorkspaceLaunchTarget(selector, createdWorktree, resolvedWorktree)
+    ).scope
   }
 
   protected async resolveTerminalWorkspaceLaunchTarget(
     selector: string,
-    createdWorktree?: Worktree
+    createdWorktree?: Worktree,
+    resolvedWorktree?: ResolvedWorktree
   ): Promise<ResolvedTerminalWorkspaceLaunchTarget> {
     if (isFloatingWorkspaceSelector(selector)) {
       // Why no managed worktree: the floating sentinel has no repo or worktree record behind it.
@@ -156,6 +160,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     const parsed = parseWorkspaceKey(workspaceSelector)
     const worktreeSelector = parsed?.type === 'worktree' ? `id:${parsed.worktreeId}` : selector
     const worktree =
+      resolvedWorktree ??
       resolveCreatedWorktreeTerminalTarget(this.store, selector, createdWorktree) ??
       (await this.resolveWorktreeSelector(worktreeSelector))
     // Why: `getRepo(id)` is host-blind and the same repo id can exist on local, SSH and runtime

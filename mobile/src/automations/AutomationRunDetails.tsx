@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import { getAutomationRunContent } from '../../../src/shared/automation-run-content'
-import { useOpenMobileSession } from '../session/use-open-mobile-session'
+import { mobileSessionRouteTarget } from '../session/mobile-session-route'
+import { hostStackRouteHref } from '../navigation/host-stack-navigation'
+import { useRouteHandoff } from '../navigation/route-handoff'
 import type { RpcClient } from '../transport/rpc-client'
 import { AutomationButton, AutomationMetadata } from './AutomationControls'
 import { automationDate, automationRunStatusLabel } from './automation-run-presentation'
 import { canOpenAutomationRunAgent } from './automation-run-agent'
 import type { MobileAutomationRun } from './automation-reply-schema'
-import { useAutomationRuns } from './use-automation-runs'
+import type { AutomationRunObservation } from './use-automation-runs'
 import { automationStyles as styles } from './automation-styles'
 
 export function AutomationRunDetails(props: {
@@ -17,14 +19,14 @@ export function AutomationRunDetails(props: {
   hostId: string
   executionHost?: ExecutionHostId
   connected: boolean
-  revision: number
+  history: AutomationRunObservation
   onBack: () => void
 }) {
-  const history = useAutomationRuns(props.client, null, props.revision, props.connected)
-  const run = history.runs.find((entry) => entry.id === props.run.id) ?? props.run
+  const history = props.history
+  const run = history.selected ?? props.run
   const [opening, setOpening] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const openSession = useOpenMobileSession()
+  const router = useRouteHandoff()
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -54,13 +56,17 @@ export function AutomationRunDetails(props: {
         )
         return
       }
-      openSession({
-        hostId: props.hostId,
-        worktreeId: run.workspaceId,
-        paneKey: run.terminalPaneKey,
-        name: run.workspaceDisplayName ?? run.title,
-        executionHost: props.executionHost
-      })
+      router.push(
+        hostStackRouteHref(
+          mobileSessionRouteTarget({
+            hostId: props.hostId,
+            worktreeId: run.workspaceId,
+            paneKey: run.terminalPaneKey,
+            name: run.workspaceDisplayName ?? run.title,
+            executionHost: props.executionHost
+          })
+        )
+      )
     } catch {
       if (mounted.current) {
         setError('Could not verify the original agent pane. Reconnect and try again.')
@@ -74,6 +80,17 @@ export function AutomationRunDetails(props: {
   return (
     <View style={styles.stack}>
       <AutomationButton label="All runs" onPress={props.onBack} />
+      {history.error ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {history.error}
+        </Text>
+      ) : null}
+      {history.unavailable ? (
+        <Text style={styles.meta}>
+          This run is no longer in the host’s retained history. Last saved information remains
+          below.
+        </Text>
+      ) : null}
       <Text style={styles.title}>{run.title}</Text>
       <Text style={styles.text}>{automationRunStatusLabel(run.status)}</Text>
       <View style={styles.card}>
@@ -105,6 +122,11 @@ export function AutomationRunDetails(props: {
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
+        </Text>
+      ) : null}
+      {!run.terminalPaneKey || !run.workspaceId ? (
+        <Text style={styles.meta}>
+          The original agent pane is unavailable. Saved output remains here.
         </Text>
       ) : null}
       <AutomationButton

@@ -70,6 +70,12 @@ export function automationTargets(): AutomationTargets {
     workspaces: [
       { worktreeId: 'workspace-1', repoId: 'repo-1', displayName: 'Main', path: '/repo' }
     ],
+    coverage: {
+      limit: 200,
+      totalCount: 1,
+      truncated: false,
+      hostScope: { hostIds: ['local'], omittedHostIds: [] }
+    },
     sshTargets: []
   }
 }

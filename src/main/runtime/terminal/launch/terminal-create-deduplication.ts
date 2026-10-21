@@ -1,3 +1,5 @@
+import type { Repo } from '../../../../shared/repo-types'
+import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import { OrcaRuntimeWithCreateAgentSession } from '../../orca-runtime-create-agent-session'
 import type { RuntimeTerminalCreate } from '../../../../shared/runtime-types'
 import { WORKTREE_CREATE_RESULT_TTL_MS } from '../../orca-runtime-core'
@@ -153,36 +155,47 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
 
   async launchAgentTerminal(
     worktreeSelector: string,
-    opts: { agent: TuiAgent; prompt: string; title?: string; extraAgentArgs?: string }
+    opts: { agent: TuiAgent; prompt: string; title?: string; extraAgentArgs?: string },
+    resolvedTarget?: { worktree: ResolvedWorktree; repo: Repo }
   ): Promise<RuntimeTerminalCreate> {
-    const worktree = await this.resolveWorktreeSelector(worktreeSelector)
+    const worktree =
+      resolvedTarget?.worktree ?? (await this.resolveWorktreeSelector(worktreeSelector))
     // Why: `getRepo(id)` is host-blind; the same repo id on two hosts must build the launch for the
     // host that owns this worktree (#11163).
     const resolution = resolveWorktreeLaunchHost(this.store?.getRepos() ?? [], worktree)
     if (resolution.kind === 'ambiguous') {
       throw new Error('worktree_execution_host_unresolved')
     }
-    const repo = resolution.repo ?? this.store?.getRepo(worktree.repoId)
+    const repo = resolvedTarget?.repo ?? resolution.repo ?? this.store?.getRepo(worktree.repoId)
     if (!repo) {
       throw new Error('Repository for the selected workspace is no longer available.')
     }
     const startup = this.buildStartupForAgent(repo, opts.agent, opts.prompt, undefined, {
       ...(opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : {}),
-      launchScope: await this.resolveTerminalWorkspaceLaunchScope(`id:${worktree.id}`)
+      launchScope: await this.resolveTerminalWorkspaceLaunchScope(
+        `id:${worktree.id}`,
+        undefined,
+        worktree
+      )
     })
     if (startup.launchRuntime instanceof Error) {
       throw startup.launchRuntime
     }
-    const terminal = await this.createTerminal(`id:${worktree.id}`, {
-      command: startup.startup.command,
-      env: startup.startup.env,
-      ...(startup.startup.launchConfig ? { launchConfig: startup.startup.launchConfig } : {}),
-      launchAgent: startup.agent,
-      launchRuntime: startup.launchRuntime,
-      startupCommandDelivery: startup.startup.startupCommandDelivery,
-      telemetry: startup.startup.telemetry,
-      title: opts.title
-    })
+    const terminal = await this.createTerminal(
+      `id:${worktree.id}`,
+      {
+        command: startup.startup.command,
+        env: startup.startup.env,
+        ...(startup.startup.launchConfig ? { launchConfig: startup.startup.launchConfig } : {}),
+        launchAgent: startup.agent,
+        launchRuntime: startup.launchRuntime,
+        startupCommandDelivery: startup.startup.startupCommandDelivery,
+        telemetry: startup.startup.telemetry,
+        title: opts.title
+      },
+      undefined,
+      worktree
+    )
     // Why: agents that read the prompt after they start get it typed in, not on argv.
     if (startup.followup) {
       this.sendStartupFollowupWhenReady(terminal.handle, startup.followup)

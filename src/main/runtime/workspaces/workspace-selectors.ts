@@ -2,7 +2,11 @@ import { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '..
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { splitWorktreeIdForFilesystem, worktreeIdentityKey } from '../../../shared/worktree/id'
 import { branchSelectorMatches, runtimePathsEqual } from '../runtime-worktree-path-identity'
-import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  getWorktreeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
 import {
   runtimeRepoSelectorHostId,
   runtimeRepoSelectorText,
@@ -35,18 +39,23 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     ...args: Parameters<RuntimeWorkspaceCatalog['listResolvedWorktrees']>
   ): ReturnType<RuntimeWorkspaceCatalog['listResolvedWorktrees']>
 
-  protected async resolveWorktreeSelector(selector: string): Promise<ResolvedWorktree> {
+  protected async resolveWorktreeSelector(
+    selector: string,
+    requiredHostId?: ExecutionHostId
+  ): Promise<ResolvedWorktree> {
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(selector)
     // Why only `id:`: every other selector kind is matched across the whole fleet, and their
     // `selector_ambiguous` contract is defined over all repos. Scoping those would silently pick a
     // winner where today they correctly refuse. An `id:` selector already names its repo.
     if (explicitWorktreeId && !this.hasFreshResolvedWorktreeCache()) {
-      const scoped = await this.resolveExplicitWorktreeIdScoped(explicitWorktreeId)
+      const scoped = await this.resolveExplicitWorktreeIdScoped(explicitWorktreeId, requiredHostId)
       if (scoped) {
         return scoped
       }
     }
-    const worktrees = await this.listResolvedWorktrees()
+    const worktrees = (await this.listResolvedWorktrees()).filter(
+      (row) => requiredHostId === undefined || row.hostId === requiredHostId
+    )
     let candidates: ResolvedWorktree[]
 
     if (selector === 'active') {
@@ -69,7 +78,9 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
         const parsed = splitWorktreeIdForFilesystem(worktreeId)
         const repo = parsed ? this.store?.getRepo(parsed.repoId) : null
         const fallback =
-          repo?.connectionId && this.store?.getWorktreeMeta(worktreeId)
+          requiredHostId === undefined &&
+          repo?.connectionId &&
+          this.store?.getWorktreeMeta(worktreeId)
             ? this.buildResolvedWorktreeFromId(worktreeId)
             : null
         if (fallback !== null) {

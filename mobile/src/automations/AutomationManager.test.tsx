@@ -1,13 +1,19 @@
+import { AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY } from '../../../src/shared/automation-runtime-capabilities'
+import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
+import { AutomationEditor } from './AutomationEditor'
+import { automationUpdateParams } from './automation-draft'
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AutomationManager } from './AutomationManager'
 import { AutomationButton, AutomationChoice, AutomationField } from './AutomationControls'
 import { AutomationRunList } from './AutomationRunList'
 import { AutomationRunDetails } from './AutomationRunDetails'
+import { automationSetupKey } from './automation-target-inventory'
 import type * as AutomationInventoryModule from './automation-target-inventory'
 import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
 import {
+  deferred,
   automationClient,
   automationTargets,
   savedAutomation,
@@ -30,13 +36,21 @@ vi.mock('lucide-react-native', () => ({
 }))
 vi.mock('../components/PickerModal', () => ({ PickerModal: 'PickerModal' }))
 vi.mock('../components/ConfirmModal', () => ({ ConfirmModal: 'ConfirmModal' }))
-vi.mock('../session/use-open-mobile-session', () => ({ useOpenMobileSession: () => () => {} }))
+vi.mock('../navigation/route-handoff', () => ({
+  useRouteHandoff: () => ({ push: inventory.push })
+}))
+const inventory = vi.hoisted(() => ({ targets: vi.fn(), agents: vi.fn(), push: vi.fn() }))
 vi.mock('./automation-target-inventory', async (original) => ({
   ...(await original<typeof AutomationInventoryModule>()),
-  loadAutomationTargets: async () => automationTargets(),
-  loadAutomationAgents: async () => [{ agent: 'codex', label: 'Codex' }]
+  loadAutomationTargets: (...args: unknown[]) => inventory.targets(...args),
+  loadAutomationAgents: (...args: unknown[]) => inventory.agents(...args)
 }))
 
+beforeEach(() => {
+  inventory.targets.mockReset().mockImplementation(async () => automationTargets())
+  inventory.agents.mockReset().mockResolvedValue([{ agent: 'codex', label: 'Codex' }])
+  inventory.push.mockClear()
+})
 let tree: ReactTestRenderer | null = null
 afterEach(() => {
   act(() => tree?.unmount())
@@ -62,16 +76,23 @@ async function press(label: string) {
 function text(node: ReactTestInstance): string {
   return JSON.stringify(node.props.children)
 }
-async function mount() {
+async function mount(loseCreate: boolean | 'legacy' = false) {
+  const pendingList = deferred<unknown>()
+  let created = false
   let automation = savedAutomation()
   const oldRun = savedRun()
   const manualRun = { ...savedRun('manual-run'), status: 'dispatched', trigger: 'manual' }
   let runs = [oldRun]
   const port = automationClient((method, params) => {
     if (method === 'status.get') {
-      return { capabilities: [] }
+      return {
+        capabilities: loseCreate === true ? [AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY] : []
+      }
     }
     if (method === 'automation.list') {
+      if (created && loseCreate) {
+        return pendingList.promise
+      }
       return {
         automations: [automation],
         items: [
@@ -105,17 +126,168 @@ async function mount() {
       return { automation }
     }
     if (method === 'automation.create') {
-      return { automation: { ...automation, id: 'created', name: 'Daily review', enabled: true } }
+      automation = {
+        ...automation,
+        id: 'created',
+        name: 'Daily review',
+        enabled: true,
+        ...(params && typeof params === 'object' ? params : {}),
+        baseBranch: null,
+        workspaceId: null
+      }
+      created = true
+      if (loseCreate) {
+        throw markRpcDeliveryUnknown(new Error('reply lost'))
+      }
+      return { automation }
     }
     throw new Error(`Unexpected request: ${method}`)
   })
   await act(async () => {
     tree = create(createElement(AutomationManager, { client: port.client, hostId: 'desktop' }))
   })
-  return port
+  return {
+    ...port,
+    reconcile: () => {
+      automation = { ...automation, enabled: false, futureField: 'external edit' }
+      pendingList.resolve({
+        automations: [automation],
+        items: [{ automationId: automation.id, selector: { kind: 'self' } }]
+      })
+    }
+  }
 }
 
 describe('mobile automation navigation and setup', () => {
+  it('hands the verified original pane to the served-page router and refuses a replacement PTY', async () => {
+    const leaf = '11111111-1111-4111-8111-111111111111'
+    const paneKey = `original-tab:${leaf}`
+    const run = {
+      ...savedRun(),
+      workspaceId: 'repo::/same path',
+      terminalPaneKey: paneKey,
+      terminalPtyId: 'original-pty'
+    }
+    let ptyId = 'original-pty'
+    const port = automationClient(() => ({
+      terminals: [
+        { handle: 'active', tabId: 'active-tab', leafId: leaf, ptyId: 'active-pty' },
+        { handle: 'original', tabId: 'original-tab', leafId: leaf, ptyId }
+      ]
+    }))
+    const history = {
+      runs: [run],
+      selected: run,
+      unavailable: false,
+      cursor: null,
+      loading: false,
+      error: null,
+      loadMore: vi.fn(),
+      reload: vi.fn()
+    }
+    await act(async () => {
+      tree = create(
+        createElement(AutomationRunDetails, {
+          run,
+          client: port.client,
+          hostId: 'paired',
+          executionHost: 'runtime:server',
+          connected: true,
+          history,
+          onBack: vi.fn()
+        })
+      )
+    })
+    await press('Open agent')
+    expect(inventory.push).toHaveBeenCalledWith({
+      pathname: '/h/[hostId]/session/[worktreeId]',
+      params: {
+        hostId: 'paired',
+        worktreeId: run.workspaceId,
+        paneKey,
+        name: run.workspaceDisplayName,
+        executionHost: 'runtime:server'
+      }
+    })
+    inventory.push.mockClear()
+    ptyId = 'replacement-pty'
+    await press('Open agent')
+    expect(inventory.push).not.toHaveBeenCalled()
+    expect(
+      root()
+        .findAll((node) => String(node.type) === 'Text')
+        .some((node) => text(node).includes('original agent pane is no longer available'))
+    ).toBe(true)
+  })
+
+  it.each(['*/90 * * * *', '17 * * * *'])(
+    'keeps initialized input and unedited saved values through inventory revival (%s)',
+    async (rrule) => {
+      const delayed = deferred<ReturnType<typeof automationTargets>>()
+      inventory.targets.mockImplementationOnce(() => delayed.promise)
+      const current = {
+        ...savedAutomation(),
+        rrule,
+        timezone: 'Saved/FutureZone',
+        precheck: { command: 'saved check', timeoutSeconds: 999999 },
+        agentId: 'claude' as const
+      }
+      const onSave = vi.fn()
+      const port = automationClient(() => ({}))
+      const props = {
+        client: port.client,
+        current,
+        busy: false,
+        connected: true,
+        capabilities: [],
+        onCancel: vi.fn(),
+        onDraftChange: vi.fn(),
+        onSave
+      }
+      await act(async () => {
+        tree = create(createElement(AutomationEditor, props))
+      })
+      const field = (label: string) =>
+        root()
+          .findAllByType(AutomationField)
+          .find((node) => node.props.label === label)!
+      expect(field('Name').props.disabled).toBe(true)
+      await act(async () => {
+        delayed.resolve(automationTargets())
+      })
+      await act(async () => {
+        field('Name').props.onChange('Accepted name')
+      })
+      await act(async () => {
+        tree?.update(createElement(AutomationEditor, { ...props, connected: false }))
+      })
+      await act(async () => {
+        tree?.update(createElement(AutomationEditor, props))
+      })
+      expect(field('Name').props.value).toBe('Accepted name')
+      const agent = root()
+        .findAllByType(AutomationChoice)
+        .find((node) => node.props.label === 'Agent')!
+      expect(agent.props.options).toContainEqual({ value: 'claude', label: 'Claude (saved)' })
+      await press('Continue')
+      if (rrule === '17 * * * *') {
+        expect(field('Minute (from HH:MM)').props.value).toBe('09:17')
+        await act(async () => {
+          field('Minute (from HH:MM)').props.onChange('10:17')
+        })
+      }
+      await press('Continue')
+      await press('Save changes')
+      const [draft, original, targets] = onSave.mock.calls[0]!
+      expect(automationUpdateParams(current.id, draft, original, targets)).toEqual({
+        id: current.id,
+        updates: { name: 'Accepted name' }
+      })
+      expect(draft.agentId).toBe('claude')
+      expect(current.enabled).toBe(false)
+    }
+  )
+
   it('opens exact historical and returned manual runs with explicit paths back', async () => {
     const port = await mount()
     await act(async () => {
@@ -204,5 +376,105 @@ describe('mobile automation navigation and setup', () => {
         .findAllByType(AutomationButton)
         .some((node) => node.props.label === 'New automation')
     ).toBe(true)
+  })
+
+  it('preserves an uncertain legacy create without issuing a second uncorrelated write', async () => {
+    const port = await mount('legacy')
+    await press('New automation')
+    await act(async () => {
+      root()
+        .findAllByType(AutomationField)
+        .find((node) => node.props.label === 'Name')!
+        .props.onChange('Legacy create')
+      root()
+        .findAllByType(AutomationField)
+        .find((node) => node.props.label === 'Instructions')!
+        .props.onChange('Keep this draft')
+    })
+    await press('Continue')
+    await press('Continue')
+    await press('Create automation')
+    await press('Create automation')
+    const sent = port.send.mock.calls.filter(([method]) => method === 'automation.create')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.[1]).toMatchObject({ prompt: 'Keep this draft', creationKey: undefined })
+    expect(root().findByType(AutomationEditor)).toBeTruthy()
+    expect(
+      root()
+        .findAll((node) => String(node.type) === 'Text')
+        .some((node) => text(node).includes('may have applied'))
+    ).toBe(true)
+  })
+  it('reconciles a lost create reply before explicitly saving only the revised input', async () => {
+    const targets = automationTargets()
+    const sshSetup = { ...targets.setups[0]!, hostId: 'ssh:builder' as const, path: '/remote/repo' }
+    inventory.targets.mockResolvedValue({
+      ...targets,
+      setups: [...targets.setups, sshSetup],
+      sshTargets: [{ id: 'builder', label: 'Builder', generation: 7 }]
+    })
+    const port = await mount(true)
+    await press('New automation')
+    const field = (label: string) =>
+      root()
+        .findAllByType(AutomationField)
+        .find((node) => node.props.label === label)!
+    await act(async () => {
+      field('Name').props.onChange('Daily review')
+      field('Instructions').props.onChange('Submitted A')
+    })
+    await press('Continue')
+    await press('Continue')
+    await press('Create automation')
+    await press('Back')
+    await press('Back')
+    await act(async () => {
+      field('Instructions').props.onChange('Revised B')
+      root()
+        .findAllByType(AutomationChoice)
+        .find((node) => node.props.label === 'Project and host setup')!
+        .props.onSelect(automationSetupKey(sshSetup))
+    })
+    await press('Continue')
+    await press('Continue')
+    await press('Create automation')
+    const attempts = port.send.mock.calls.filter(([method]) => method === 'automation.create')
+    expect(attempts).toHaveLength(2)
+    expect(attempts[1]?.[1]).toEqual(attempts[0]?.[1])
+    await act(async () => {
+      port.reconcile()
+    })
+    expect(root().findByType(AutomationEditor).props.current.id).toBe('created')
+    expect(root().findByType(AutomationEditor).props.initialDraft.prompt).toBe('Revised B')
+    expect(port.send.mock.calls.filter(([method]) => method === 'automation.create')).toHaveLength(
+      2
+    )
+    expect(port.send.mock.calls.filter(([method]) => method === 'automation.update')).toHaveLength(
+      0
+    )
+    await press('Save changes')
+    expect(port.send).toHaveBeenCalledWith(
+      'automation.update',
+      {
+        id: 'created',
+        updates: {
+          prompt: 'Revised B',
+          repo: 'id:repo-1',
+          workspace: undefined,
+          workspaceMode: 'new_per_run',
+          runContext: {
+            kind: 'workspace-run',
+            projectId: sshSetup.projectId,
+            projectHostSetupId: sshSetup.id,
+            repoId: sshSetup.repoId,
+            path: sshSetup.path,
+            hostId: sshSetup.hostId
+          }
+        },
+        destination: { selector: { kind: 'ssh', targetId: 'builder', targetGeneration: 7 } },
+        expectedOwner: { selector: { kind: 'self' } }
+      },
+      { failWhenDisconnected: true }
+    )
   })
 })

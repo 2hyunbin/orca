@@ -4,9 +4,12 @@ import {
 } from '../../../src/shared/automation-owner-conflict'
 import { isRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 
+export const AUTOMATION_OUTCOME_UNKNOWN =
+  'The host may have applied this action. Refresh to check before trying again.'
+
 export function automationErrorMessage(error: unknown): string {
   if (isRpcDeliveryUnknown(error)) {
-    return 'The host may have applied this action. Refresh to check before trying again.'
+    return AUTOMATION_OUTCOME_UNKNOWN
   }
   const conflict = matchAutomationOwnerConflict(error)
   if (conflict) {

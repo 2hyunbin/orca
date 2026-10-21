@@ -1,3 +1,8 @@
+import { mergeWorktree } from './ipc/worktree-metadata-merge'
+import { getRepoExecutionHostId } from '../shared/execution-host'
+import './runtime/rpc/unused-default-rpc-methods.test-fixture'
+import { OrcaRuntimeService } from './runtime/orca-runtime'
+import { buildHeadlessAutomationWorktreeCreateArgs } from './automations/headless-workspace-create'
 import { closeTestStores, createStore, testState, writeDataFile } from './persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -167,4 +172,143 @@ describe('legacy automation on a repo id two hosts share', () => {
       cwd: '/laptop/twin-feature'
     })
   })
+  it.each(
+    [false, true].flatMap((samePath) => [false, true].map((reversed) => ({ samePath, reversed })))
+  )(
+    'keeps selected targets through runtime, storage, owner, restart and dispatch ($samePath/$reversed)',
+    async ({ samePath, reversed }) => {
+      const remote = { ...sshRow, path: samePath ? localRow.path : sshRow.path }
+      seed(reversed ? [remote, localRow] : [localRow, remote], legacyAutomation())
+      let store = createStore()
+      const runtime = new OrcaRuntimeService(store)
+      const setup = (hostId: string) => {
+        const value = store
+          .getProjectHostSetups()
+          .find((entry) => entry.hostId === hostId && entry.repoId === 'twin')
+        if (!value) {
+          throw new Error('Missing setup')
+        }
+        return {
+          kind: 'workspace-run' as const,
+          projectId: value.projectId,
+          projectHostSetupId: value.id,
+          hostId: value.hostId,
+          repoId: value.repoId,
+          path: value.path
+        }
+      }
+      const local = await runtime.createAutomation(
+        {
+          name: 'Local',
+          prompt: 'Review',
+          agentId: 'codex',
+          repo: 'id:twin',
+          runContext: setup('local'),
+          rrule: '0 9 * * *',
+          dtstart: 1,
+          workspaceMode: 'new_per_run',
+          timezone: 'UTC'
+        },
+        { selector: { kind: 'self' } }
+      )
+      const remoteContext = setup('ssh:ssh-1')
+      const generation = store
+        .listAutomationsForScope()
+        .items.find((entry) => entry.automationId === local.id)?.selector
+      expect(generation).toEqual({ kind: 'self' })
+      const ssh = store.getSshTargets().find((entry) => entry.id === 'ssh-1')
+      if (!ssh?.generation) {
+        throw new Error('Missing registration generation')
+      }
+      const destination = {
+        selector: { kind: 'ssh' as const, targetId: 'ssh-1', targetGeneration: ssh.generation }
+      }
+      const moved = await runtime.updateAutomation(
+        local.id,
+        { repo: 'id:twin', runContext: remoteContext },
+        { expectedOwner: { selector: { kind: 'self' } }, destination }
+      )
+      expect(moved.runContext).toEqual(remoteContext)
+      expect(store.automationOwnerPrecondition(moved.id)).toEqual(destination)
+      await closeTestStores()
+      store = createStore()
+      const saved = store.listAutomations().find((entry) => entry.id === moved.id)
+      if (!saved) {
+        throw new Error('Lost automation')
+      }
+      const resolved = resolveAutomationRunTarget(store, saved)
+      expect(resolved).toMatchObject({
+        ok: true,
+        cwd: remote.path,
+        repo: { connectionId: 'ssh-1' }
+      })
+      if (!resolved.ok) {
+        throw new Error(resolved.error)
+      }
+      const service = new AutomationService(store, { tickMs: 60_000 })
+      const send = vi.fn()
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dispatcher reads only send/isDestroyed from this fake window.
+      service.setWebContents({ isDestroyed: () => false, send } as never)
+      service.setRendererReady()
+      const run = await service.runNow(saved.id)
+      expect(run.status).toBe('dispatching')
+      expect(send).toHaveBeenCalledWith(
+        'automations:dispatchRequested',
+        expect.objectContaining({
+          automation: expect.objectContaining({ runContext: remoteContext })
+        })
+      )
+      expect(
+        buildHeadlessAutomationWorktreeCreateArgs({ automation: saved, run, repo: resolved.repo })
+          .repoSelector
+      ).toEqual({ selector: 'id:twin', hostId: 'ssh:ssh-1' })
+      const workspaces = [localRow, remote].map((repo) => {
+        const git = {
+          path: repo.path,
+          head: 'abc',
+          branch: 'main',
+          isBare: false,
+          isMainWorktree: true
+        }
+        return {
+          ...mergeWorktree(repo.id, git, undefined),
+          hostId: getRepoExecutionHostId(repo),
+          parentWorktreeId: null,
+          childWorktreeIds: [],
+          lineage: null,
+          git
+        }
+      })
+      const relaunchedRuntime = new OrcaRuntimeService(store)
+      Object.assign(relaunchedRuntime, {
+        listResolvedWorktrees: async () => workspaces,
+        hasFreshResolvedWorktreeCache: () => true
+      })
+      for (const repo of [localRow, remote]) {
+        const hostId = getRepoExecutionHostId(repo)
+        const context = setup(hostId)
+        const existing = await relaunchedRuntime.createAutomation(
+          {
+            name: 'Existing',
+            prompt: 'Review',
+            agentId: 'codex',
+            workspace: `id:twin::${repo.path}`,
+            runContext: context,
+            workspaceMode: 'existing',
+            rrule: '0 9 * * *',
+            dtstart: 1,
+            timezone: 'UTC'
+          },
+          repo === localRow ? { selector: { kind: 'self' } } : destination
+        )
+        expect(existing.runContext).toEqual(context)
+        const target = await relaunchedRuntime.showManagedTerminalWorkspace(
+          `id:${existing.workspaceId}`,
+          hostId
+        )
+        expect(target.hostId).toBe(hostId)
+        expect(target.path).toBe(repo.path)
+      }
+    }
+  )
 })

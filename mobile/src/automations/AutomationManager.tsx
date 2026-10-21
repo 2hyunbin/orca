@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react'
+import { useAutomationRuns, type AutomationRunScope } from './use-automation-runs'
+import { useState } from 'react'
+import { useAutomationCreateAttempt } from './use-automation-create-attempt'
 import { ScrollView, Text, View } from 'react-native'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import { toAutomationOwnerPrecondition } from '../../../src/shared/automation-owner-precondition'
-import { AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY } from '../../../src/shared/automation-runtime-capabilities'
 import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
 import { ConfirmModal } from '../components/ConfirmModal'
-import { randomV4Uuid } from '../platform/random-v4-uuid'
 import type { RpcClient } from '../transport/rpc-client'
 import { AutomationButton, AutomationChoice } from './AutomationControls'
 import { AutomationList } from './AutomationList'
@@ -15,17 +15,12 @@ import { AutomationRunList } from './AutomationRunList'
 import { AutomationRunDetails } from './AutomationRunDetails'
 import type { MobileAutomationRow, MobileAutomationRun } from './automation-reply-schema'
 import {
-  automationCreateWrite,
   automationDeleteWrite,
   automationRunWrite,
   automationShowRead,
   automationUpdateWrite
 } from './automation-operations'
-import {
-  automationCreateParams,
-  automationUpdateParams,
-  type AutomationDraft
-} from './automation-draft'
+import { automationUpdateParams, type AutomationDraft } from './automation-draft'
 import type { AutomationTargets } from './automation-target-inventory'
 import { useAutomationCatalog } from './use-automation-catalog'
 import { automationStyles as styles } from './automation-styles'
@@ -33,8 +28,8 @@ import { automationStyles as styles } from './automation-styles'
 type AutomationView =
   | { kind: 'list' }
   | { kind: 'detail'; row: MobileAutomationRow }
-  | { kind: 'editor'; row?: MobileAutomationRow }
-  | { kind: 'run'; run: MobileAutomationRun }
+  | { kind: 'editor'; row?: MobileAutomationRow; initialDraft?: AutomationDraft }
+  | { kind: 'run'; run: MobileAutomationRun; scope: AutomationRunScope }
 const ACTION_OPTIONS = { failWhenDisconnected: true }
 
 export function AutomationManager(props: {
@@ -45,21 +40,58 @@ export function AutomationManager(props: {
   const catalog = useAutomationCatalog(props.client, !!props.executionHost)
   const [view, setView] = useState<AutomationView>({ kind: 'list' })
   const [tab, setTab] = useState<'automations' | 'runs'>('automations')
-  const [filterId, setFilterId] = useState('')
+  const [filter, setFilter] = useState<AutomationRunScope>(null)
+  const filterId = filter?.automationId ?? ''
   const [outcome, setOutcome] = useState('all')
   const [deleting, setDeleting] = useState<MobileAutomationRow | null>(null)
-  const creationKey = useRef('')
+  const createAttempt = useAutomationCreateAttempt(
+    catalog.rows,
+    view.kind === 'editor' && !view.row,
+    (saved, initialDraft) => {
+      catalog.setError(null)
+      setView(
+        initialDraft ? { kind: 'editor', row: saved, initialDraft } : { kind: 'detail', row: saved }
+      )
+    }
+  )
   const disabled = !catalog.connected || catalog.busy
   const row =
     view.kind === 'detail'
       ? (catalog.rows.find((entry) => entry.automation.id === view.row.automation.id) ?? view.row)
       : null
+  const historyScope =
+    view.kind === 'run'
+      ? view.scope
+      : row
+        ? {
+            automationId: row.automation.id,
+            expectedOwner: toAutomationOwnerPrecondition(row.item.selector)
+          }
+        : filter
+  const history = useAutomationRuns(
+    props.client,
+    historyScope,
+    catalog.revision,
+    catalog.connected,
+    view.kind === 'run' ? view.run : undefined
+  )
+  function selectFilter(id: string) {
+    const selected = catalog.rows.find((entry) => entry.automation.id === id)
+    if (!id) {
+      setFilter(null)
+    } else if (selected) {
+      setFilter({
+        automationId: id,
+        expectedOwner: toAutomationOwnerPrecondition(selected.item.selector)
+      })
+    }
+  }
   function allAutomations() {
     setTab('automations')
     setView({ kind: 'list' })
   }
   function allRuns(automationId = '') {
-    setFilterId(automationId)
+    selectFilter(automationId)
     setTab('runs')
     setView({ kind: 'list' })
   }
@@ -120,7 +152,14 @@ export function AutomationManager(props: {
         ),
       ({ run }) => {
         setTab('runs')
-        setView({ kind: 'run', run })
+        setView({
+          kind: 'run',
+          run,
+          scope: {
+            automationId: selected.automation.id,
+            expectedOwner: toAutomationOwnerPrecondition(selected.item.selector)
+          }
+        })
       }
     )
   }
@@ -168,25 +207,13 @@ export function AutomationManager(props: {
               : editing.item
           }
         }
-        const params = automationCreateParams(
-          draft,
-          targets,
-          catalog.capabilities.includes(AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY)
-            ? creationKey.current
-            : undefined
-        )
-        const result = automationCreateWrite.interpret(
-          await automationCreateWrite.request(client, params, ACTION_OPTIONS)
-        )
-        if (!params.destination) {
-          throw new Error('Automation destination was not captured.')
-        }
-        return {
-          automation: result.automation,
-          item: { automationId: result.automation.id, selector: params.destination.selector }
-        }
+        await createAttempt.submit(client, draft, targets, catalog.capabilities)
+        return null
       },
       (saved) => {
+        if (!saved) {
+          return
+        }
         catalog.setRows((previous) => [
           ...previous.filter((entry) => entry.automation.id !== saved.automation.id),
           saved
@@ -235,8 +262,11 @@ export function AutomationManager(props: {
         ) : null}
         {view.kind === 'editor' && props.client ? (
           <AutomationEditor
+            key={view.row?.automation.id ?? 'create'}
             client={props.client}
             current={view.row?.automation}
+            initialDraft={view.initialDraft}
+            onDraftChange={createAttempt.observeDraft}
             capabilities={catalog.capabilities}
             busy={catalog.busy}
             connected={catalog.connected}
@@ -260,14 +290,12 @@ export function AutomationManager(props: {
             />
             <Text style={styles.heading}>Recent runs</Text>
             <AutomationRunList
-              client={props.client}
+              history={history}
               connected={catalog.connected}
-              revision={catalog.revision}
-              filter={row}
               recent
               onSelect={(run) => {
                 setTab('runs')
-                setView({ kind: 'run', run })
+                setView({ kind: 'run', run, scope: historyScope })
               }}
             />
           </>
@@ -279,8 +307,11 @@ export function AutomationManager(props: {
             hostId={props.hostId}
             executionHost={props.executionHost}
             connected={catalog.connected}
-            revision={catalog.revision}
-            onBack={() => allRuns(filterId)}
+            history={history}
+            onBack={() => {
+              setTab('runs')
+              setView({ kind: 'list' })
+            }}
           />
         ) : null}
         {view.kind === 'list' && tab === 'automations' ? (
@@ -290,7 +321,7 @@ export function AutomationManager(props: {
             failed={!!catalog.error}
             disabled={disabled}
             onCreate={() => {
-              creationKey.current = randomV4Uuid()
+              createAttempt.reset()
               setView({ kind: 'editor' })
             }}
             onOpen={(selected) => setView({ kind: 'detail', row: selected })}
@@ -309,7 +340,7 @@ export function AutomationManager(props: {
                   label: entry.automation.name
                 }))
               ]}
-              onSelect={setFilterId}
+              onSelect={selectFilter}
             />
             <AutomationChoice
               label="Outcome"
@@ -324,13 +355,10 @@ export function AutomationManager(props: {
               onSelect={setOutcome}
             />
             <AutomationRunList
-              client={props.client}
               connected={catalog.connected}
-              revision={catalog.revision}
-              filter={catalog.rows.find((entry) => entry.automation.id === filterId) ?? null}
-              automationId={filterId}
+              history={history}
               outcome={outcome}
-              onSelect={(run) => setView({ kind: 'run', run })}
+              onSelect={(run) => setView({ kind: 'run', run, scope: historyScope })}
             />
           </View>
         ) : null}

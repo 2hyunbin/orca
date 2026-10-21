@@ -41,7 +41,7 @@ function harness(options: { startupTerminal?: Record<string, unknown> | null } =
       worktreeId: 'wt-1',
       title: 'Nightly'
     })),
-    showManagedWorktree: vi.fn(async () => ({ displayName: 'repo' })),
+    showManagedTerminalWorkspace: vi.fn(async () => ({ displayName: 'repo' })),
     getAgentStatusRowsForPane: vi.fn((_paneKey: string) => [
       { state: 'done', agentType: 'claude', receivedAt: 2 }
     ]),
@@ -121,11 +121,15 @@ describe('headless automation agent launch', () => {
 
     const launched = await launch(runtime, { agentId: 'hermes' })
 
-    expect(runtime.launchAgentTerminal).toHaveBeenCalledWith('id:wt-1', {
-      agent: 'hermes',
-      prompt: 'fix the flaky test',
-      title: 'Nightly'
-    })
+    expect(runtime.launchAgentTerminal).toHaveBeenCalledWith(
+      'id:wt-1',
+      {
+        agent: 'hermes',
+        prompt: 'fix the flaky test',
+        title: 'Nightly'
+      },
+      { worktree: { displayName: 'repo' }, repo: TARGET.repo }
+    )
     expect(runtime.deliverStartupFollowup).not.toHaveBeenCalled()
     expect(launched.terminalHandle).toBe('term_existing')
   })
@@ -135,12 +139,16 @@ describe('headless automation agent launch', () => {
 
     const launched = await launch(runtime, { extraAgentArgs: '--model opus' })
 
-    expect(runtime.launchAgentTerminal).toHaveBeenCalledWith('id:wt-1', {
-      agent: 'claude',
-      prompt: 'fix the flaky test',
-      title: 'Nightly',
-      extraAgentArgs: '--model opus'
-    })
+    expect(runtime.launchAgentTerminal).toHaveBeenCalledWith(
+      'id:wt-1',
+      {
+        agent: 'claude',
+        prompt: 'fix the flaky test',
+        title: 'Nightly',
+        extraAgentArgs: '--model opus'
+      },
+      { worktree: { displayName: 'repo' }, repo: TARGET.repo }
+    )
     expect(runtime.deliverStartupFollowup).not.toHaveBeenCalled()
     expect(runtime.getStructuredAgentSessionCreateSupport).not.toHaveBeenCalled()
     expect(launched).toEqual({
@@ -166,7 +174,8 @@ describe('headless automation agent launch', () => {
     expect(launched.terminalPaneKey).toBe('tab-1:leaf-1')
     expect(runtime.launchAgentTerminal).toHaveBeenCalledWith(
       'id:wt-1',
-      expect.objectContaining({ agent: 'aider', prompt: '' })
+      expect.objectContaining({ agent: 'aider', prompt: '' }),
+      { worktree: { displayName: 'repo' }, repo: TARGET.repo }
     )
     expect(runtime.deliverStartupFollowup).toHaveBeenCalledTimes(1)
     expect(runtime.deliverStartupFollowup).toHaveBeenCalledWith('term_existing', {
@@ -179,16 +188,20 @@ describe('headless automation agent launch', () => {
   it('creates a new-per-run workspace agent-first with the argv prompt', async () => {
     const runtime = harness()
 
-    const launched = await launch(runtime, {
-      workspaceMode: 'new_per_run',
-      workspaceId: null,
-      extraAgentArgs: '--model opus'
-    })
+    const launched = await launch(
+      runtime,
+      {
+        workspaceMode: 'new_per_run',
+        workspaceId: null,
+        extraAgentArgs: '--model opus'
+      },
+      { worktree: { displayName: 'repo' }, repo: TARGET.repo }
+    )
 
     expect(runtime.createManagedWorktree).toHaveBeenCalledTimes(1)
     const args = runtime.createManagedWorktree.mock.calls[0]![0]
     expect(args).toMatchObject({
-      repoSelector: 'repo-1',
+      repoSelector: { selector: 'id:repo-1', hostId: 'local' },
       activate: false,
       setupDecision: 'skip',
       startupAgent: 'claude',
@@ -240,7 +253,8 @@ describe('headless automation agent launch', () => {
 
     expect(runtime.launchAgentTerminal).toHaveBeenCalledWith(
       'id:wt-1',
-      expect.objectContaining({ prompt: '' })
+      expect.objectContaining({ prompt: '' }),
+      { worktree: { displayName: 'repo' }, repo: TARGET.repo }
     )
     expect(runtime.deliverStartupFollowup).not.toHaveBeenCalled()
   })

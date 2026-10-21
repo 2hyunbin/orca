@@ -101,3 +101,21 @@ export const automationSshTargetsRead = bindDeferredRpcOperation(
     read: rpcResultVariant('ssh-targets', sshInventorySchema)
   })
 )
+
+export const automationWorkspacesRead = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'worktree.mobile-automation-inventory',
+    method: 'worktree.list',
+    acceptance: 'require-result-or-throw',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant(
+      'managed-workspaces',
+      z.object({
+        worktrees: z.array(z.unknown()),
+        totalCount: z.number(),
+        truncated: z.boolean(),
+        hostScope: z.object({ hostIds: z.array(z.string()), omittedHostIds: z.array(z.string()) })
+      })
+    )
+  })
+)

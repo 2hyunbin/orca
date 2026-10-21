@@ -1,10 +1,9 @@
 import { Pressable, Text, View } from 'react-native'
 import { ChevronRight } from 'lucide-react-native'
-import type { RpcClient } from '../transport/rpc-client'
 import { colors } from '../theme/mobile-theme'
-import type { MobileAutomationRow, MobileAutomationRun } from './automation-reply-schema'
+import type { MobileAutomationRun } from './automation-reply-schema'
 import { AutomationButton } from './AutomationControls'
-import { useAutomationRuns } from './use-automation-runs'
+import type { AutomationRunObservation } from './use-automation-runs'
 import {
   automationDate,
   automationRunStatusLabel,
@@ -13,21 +12,14 @@ import {
 import { automationStyles as styles } from './automation-styles'
 
 export function AutomationRunList(props: {
-  client: RpcClient | null
+  history: AutomationRunObservation
   connected: boolean
-  revision: number
-  filter: MobileAutomationRow | null
-  automationId?: string
   outcome?: string
   recent?: boolean
   onSelect: (run: MobileAutomationRun) => void
 }) {
-  const history = useAutomationRuns(props.client, props.filter, props.revision, props.connected)
-  const matches = history.runs.filter(
-    (run) =>
-      (!props.automationId || run.automationId === props.automationId) &&
-      runMatchesOutcome(run, props.outcome ?? 'all')
-  )
+  const history = props.history
+  const matches = history.runs.filter((run) => runMatchesOutcome(run, props.outcome ?? 'all'))
   const visible = props.recent ? matches.slice(0, 3) : matches
   return (
     <View style={styles.stack}>

@@ -1,3 +1,5 @@
+import { mergeWorktree } from '../ipc/worktree-metadata-merge'
+import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -169,6 +171,70 @@ describe('RuntimeManagedWorktreeQueries.listDetected', () => {
 })
 
 describe('RuntimeManagedWorktreeQueries.list host scope', () => {
+  it.each([false, true])(
+    'preserves host twins, expandable coverage and per-host visibility (reversed=%s)',
+    async (reversed) => {
+      const local = folderRepo({ kind: 'git', externalWorktreeVisibility: 'hide' })
+      const ssh = folderRepo({
+        kind: 'git',
+        connectionId: 'builder',
+        externalWorktreeVisibility: 'show'
+      })
+      const repos = reversed ? [ssh, local] : [local, ssh]
+      const rows: ResolvedWorktree[] = [local, ssh].flatMap((repo) =>
+        Array.from({ length: 202 }, (_, index) => {
+          const git: GitWorktreeInfo = {
+            path: index === 0 ? repo.path : `/outside/work-${index}`,
+            head: 'abc',
+            branch: `branch-${index}`,
+            isBare: false,
+            isMainWorktree: index === 0
+          }
+          return {
+            ...mergeWorktree(repo.id, git, undefined),
+            hostId: repo.connectionId ? ('ssh:builder' as const) : ('local' as const),
+            parentWorktreeId: null,
+            childWorktreeIds: [],
+            lineage: null,
+            git
+          }
+        })
+      )
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: list only reads this store surface.
+      const store = {
+        getRepos: () => repos,
+        getRepo: () => repos[0],
+        getAllWorktreeMeta: () => ({}),
+        getWorktreeMeta: () => undefined,
+        getSettings: () => settings
+      } as unknown as RuntimeStore
+      const catalog = queries(store, {
+        listResolved: async () => rows,
+        listKnownHostIds: () => ['local', 'ssh:builder']
+      })
+      const first = await catalog.list(undefined, 200)
+      expect(first).toMatchObject({
+        totalCount: 203,
+        truncated: true,
+        hostScope: { hostIds: ['local', 'ssh:builder'], omittedHostIds: [] }
+      })
+      const complete = await catalog.list(undefined, first.totalCount)
+      expect(complete.truncated).toBe(false)
+      expect(
+        complete.worktrees
+          .filter((row) => row.id === `${local.id}::${local.path}`)
+          .map((row) => row.hostId)
+          .sort()
+      ).toEqual(['local', 'ssh:builder'])
+      expect(complete.worktrees.filter((row) => row.hostId === 'local')).toHaveLength(1)
+      expect(
+        complete.worktrees.some(
+          (row) => row.path === '/outside/work-201' && row.hostId === 'ssh:builder'
+        )
+      ).toBe(true)
+    }
+  )
+
   // Measured on hardware before this fix, same runtime and same refusing SSH host in the same
   // second: the UNSCOPED listing reported `omittedHostIds: ["local","ssh:ssh-scope-refused"]` with
   // `--host` selectors, while the SCOPED listing reported `{"hostIds":[],"omittedHostIds":[]}`.

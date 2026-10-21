@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Switch, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import type { RpcClient } from '../transport/rpc-client'
 import type { MobileAutomation } from './automation-reply-schema'
 import { MOBILE_TUI_AGENT_LABELS } from '../tasks/mobile-tui-agents'
 import type { MobileNewTabAgentOption } from '../session/mobile-new-tab-agent-options'
-import { AUTOMATION_EXTRA_AGENT_ARGS_RUNTIME_CAPABILITY } from '../../../src/shared/automation-runtime-capabilities'
+import { AutomationAdvancedFields } from './AutomationAdvancedFields'
 import { formatAutomationSchedule } from '../../../src/shared/automation-schedules'
 import {
   AutomationButton,
@@ -14,6 +14,8 @@ import {
 } from './AutomationControls'
 import { AutomationScheduleFields } from './AutomationScheduleFields'
 import {
+  automationSetupKey,
+  workspaceMatchesSetup,
   loadAutomationAgents,
   loadAutomationTargets,
   type AutomationTargets
@@ -29,26 +31,30 @@ import { automationStyles as styles } from './automation-styles'
 export function AutomationEditor(props: {
   client: RpcClient
   current?: MobileAutomation
+  initialDraft?: AutomationDraft
+  onDraftChange: (draft: AutomationDraft) => void
   busy: boolean
   connected: boolean
   capabilities: readonly string[]
   onCancel: () => void
   onSave: (draft: AutomationDraft, original: AutomationDraft, targets: AutomationTargets) => void
 }) {
-  const [draft, setDraft] = useState(() => newAutomationDraft(props.current))
+  const [draft, setDraft] = useState(() => props.initialDraft ?? newAutomationDraft(props.current))
   const original = useRef(newAutomationDraft(props.current))
   const initialized = useRef(false)
   const [targets, setTargets] = useState<AutomationTargets | null>(null)
   const [agents, setAgents] = useState<MobileNewTabAgentOption[]>([])
   const [agentsLoading, setAgentsLoading] = useState(true)
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(props.initialDraft ? 3 : 1)
   const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [inventoryLimit, setInventoryLimit] = useState(200)
   const [reload, setReload] = useState(0)
-  const disabled = props.busy || !props.connected
-  const setup = targets?.setups.find((entry) => entry.id === draft.setupId)
+  const disabled = props.busy || !props.connected || !targets
+  const setup = targets?.setups.find((entry) => automationSetupKey(entry) === draft.setupId)
   const workspaces =
-    targets?.workspaces.filter((workspace) => workspace.repoId === setup?.repoId) ?? []
+    targets?.workspaces.filter((workspace) => setup && workspaceMatchesSetup(workspace, setup)) ??
+    []
 
   useEffect(() => {
     if (!props.connected) {
@@ -56,7 +62,7 @@ export function AutomationEditor(props: {
     }
     let active = true
     const generation = props.client.getGeneration?.()
-    void loadAutomationTargets(props.client)
+    void loadAutomationTargets(props.client, inventoryLimit)
       .then((next) => {
         if (!active || generation !== props.client.getGeneration?.()) {
           return
@@ -67,16 +73,20 @@ export function AutomationEditor(props: {
           initialized.current = true
           const initial = newAutomationDraft(props.current)
           const target =
-            next.setups.find((entry) => entry.id === initial.setupId) ??
+            next.setups.find((entry) => automationSetupKey(entry) === initial.setupId) ??
             (props.current
-              ? next.setups.find((entry) => entry.repoId === props.current?.projectId)
+              ? !props.current.runContext &&
+                next.setups.filter((entry) => entry.repoId === props.current?.projectId).length ===
+                  1
+                ? next.setups.find((entry) => entry.repoId === props.current?.projectId)
+                : undefined
               : next.setups.find((entry) => !entry.hostId.startsWith('runtime:')))
-          initial.setupId = target?.id ?? initial.setupId
+          initial.setupId = target ? automationSetupKey(target) : initial.setupId
           if (!props.current && target?.kind === 'folder') {
             initial.workspaceMode = 'existing'
           }
           original.current = { ...initial }
-          setDraft(initial)
+          setDraft(props.initialDraft ?? initial)
         }
       })
       .catch((failure: unknown) => {
@@ -87,7 +97,7 @@ export function AutomationEditor(props: {
     return () => {
       active = false
     }
-  }, [props.client, props.connected, props.current, reload])
+  }, [props.client, props.connected, props.current, reload, inventoryLimit])
 
   useEffect(() => {
     if (!setup || !props.connected) {
@@ -127,6 +137,10 @@ export function AutomationEditor(props: {
     }
   }, [props.client, props.connected, setup, draft.workspaceMode, draft.workspaceId])
 
+  useEffect(() => {
+    props.onDraftChange(draft)
+  }, [draft, props.onDraftChange])
+
   const agentOptions = agents.map((option) => ({ value: option.agent, label: option.label }))
   if (draft.agentId && !agentOptions.some((option) => option.value === draft.agentId)) {
     agentOptions.unshift({
@@ -139,7 +153,7 @@ export function AutomationEditor(props: {
     setError(null)
   }
   function next() {
-    const validation = validateAutomationDraft(draft, step)
+    const validation = validateAutomationDraft(draft, step, props.current)
     if (validation) {
       setError(validation)
       return
@@ -174,7 +188,7 @@ export function AutomationEditor(props: {
             <AutomationButton
               label="Retry project loading"
               onPress={() => setReload((value) => value + 1)}
-              disabled={disabled}
+              disabled={props.busy || !props.connected}
             />
           ) : null}
         </View>
@@ -202,7 +216,7 @@ export function AutomationEditor(props: {
               ...(targets?.setups
                 .filter((entry) => !entry.hostId.startsWith('runtime:'))
                 .map((entry) => ({
-                  value: entry.id,
+                  value: automationSetupKey(entry),
                   label: entry.label,
                   subtitle: `${entry.displayName} · ${entry.path}`
                 })) ?? []),
@@ -218,7 +232,7 @@ export function AutomationEditor(props: {
             ]}
             disabled={disabled || !targets}
             onSelect={(setupId) => {
-              const target = targets?.setups.find((entry) => entry.id === setupId)
+              const target = targets?.setups.find((entry) => automationSetupKey(entry) === setupId)
               change({
                 setupId,
                 workspaceId: '',
@@ -246,16 +260,43 @@ export function AutomationEditor(props: {
             <AutomationChoice
               label="Existing workspace"
               value={draft.workspaceId}
-              options={workspaces.map((workspace) => ({
-                value: workspace.worktreeId,
-                label: workspace.displayName || workspace.path,
-                subtitle: workspace.path
-              }))}
+              options={[
+                ...workspaces.map((workspace) => ({
+                  value: workspace.worktreeId,
+                  label: workspace.displayName || workspace.path,
+                  subtitle: workspace.path
+                })),
+                ...(props.current &&
+                draft.workspaceId &&
+                !workspaces.some((workspace) => workspace.worktreeId === draft.workspaceId)
+                  ? [
+                      {
+                        value: draft.workspaceId,
+                        label: 'Saved workspace',
+                        subtitle: draft.workspaceId
+                      }
+                    ]
+                  : [])
+              ]}
               onSelect={(workspaceId) =>
                 change({ workspaceId, agentId: props.current?.agentId ?? null })
               }
               disabled={disabled || !targets}
             />
+          ) : null}
+          {targets?.coverage.truncated ? (
+            <AutomationButton
+              label="Load more workspaces"
+              onPress={() =>
+                setInventoryLimit(Math.max(inventoryLimit + 200, targets.coverage.totalCount))
+              }
+              disabled={props.busy || !props.connected}
+            />
+          ) : null}
+          {setup && targets?.coverage.hostScope.omittedHostIds.includes(setup.hostId) ? (
+            <Text style={styles.meta}>
+              This host’s workspace inventory is incomplete. Refresh or load more workspaces.
+            </Text>
           ) : null}
           <AutomationChoice
             label={agentsLoading ? 'Agent · detecting…' : 'Agent'}
@@ -277,69 +318,12 @@ export function AutomationEditor(props: {
             onPress={() => setAdvanced(!advanced)}
           />
           {advanced ? (
-            <View style={styles.stack}>
-              {draft.workspaceMode === 'new_per_run' ? (
-                <AutomationField
-                  label="Base branch (optional)"
-                  value={draft.baseBranch}
-                  onChange={(baseBranch) => change({ baseBranch })}
-                  disabled={disabled}
-                />
-              ) : null}
-              <AutomationChoice
-                label="Workspace setup script"
-                value={draft.setupDecision}
-                options={[
-                  { value: 'inherit', label: 'Use project settings' },
-                  { value: 'run', label: 'Run setup script' },
-                  { value: 'skip', label: 'Skip setup script' }
-                ]}
-                onSelect={(setupDecision) => change({ setupDecision })}
-                disabled={disabled}
-              />
-              {draft.workspaceMode === 'existing' ? (
-                <View style={styles.row}>
-                  <Text style={[styles.text, styles.grow]}>Reuse agent session</Text>
-                  <Switch
-                    accessibilityLabel="Reuse agent session"
-                    value={draft.reuseSession}
-                    onValueChange={(reuseSession) => change({ reuseSession })}
-                    disabled={disabled}
-                  />
-                </View>
-              ) : null}
-              <AutomationField
-                label="Extra agent arguments"
-                value={draft.extraAgentArgs}
-                onChange={(extraAgentArgs) => change({ extraAgentArgs })}
-                disabled={
-                  disabled ||
-                  !props.capabilities.includes(AUTOMATION_EXTRA_AGENT_ARGS_RUNTIME_CAPABILITY)
-                }
-              />
-              <AutomationField
-                label="Precheck command (optional)"
-                value={draft.precheckCommand}
-                onChange={(precheckCommand) => change({ precheckCommand })}
-                disabled={disabled}
-              />
-              {draft.precheckCommand ? (
-                <AutomationField
-                  label="Precheck timeout (seconds)"
-                  value={draft.precheckTimeout}
-                  onChange={(precheckTimeout) => change({ precheckTimeout })}
-                  numeric
-                  disabled={disabled}
-                />
-              ) : null}
-              <AutomationField
-                label="Missed-run grace (minutes)"
-                value={draft.grace}
-                onChange={(grace) => change({ grace })}
-                numeric
-                disabled={disabled}
-              />
-            </View>
+            <AutomationAdvancedFields
+              draft={draft}
+              change={change}
+              disabled={disabled}
+              capabilities={props.capabilities}
+            />
           ) : null}
         </>
       ) : step === 2 ? (

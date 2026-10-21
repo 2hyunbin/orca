@@ -2,7 +2,13 @@ import type { TuiAgent } from '../../../src/shared/tui-agent'
 import type { RpcSendParams } from '../transport/rpc-params-contract'
 import type { MobileAutomation } from './automation-reply-schema'
 import type { AutomationTargets } from './automation-target-inventory'
-import { automationTargetContext, automationTargetDestination } from './automation-target-inventory'
+import {
+  automationTargetContext,
+  automationTargetDestination,
+  automationSetupKey,
+  workspaceMatchesSetup
+} from './automation-target-inventory'
+import { acceptsAutomationDraftSchedule } from '../../../src/shared/automation-schedule-input-gate'
 import { isValidAutomationSchedule } from '../../../src/shared/automation-schedule-parsing'
 import { MAX_AUTOMATION_PRECHECK_TIMEOUT_SECONDS } from '../../../src/shared/automation-precheck'
 
@@ -29,7 +35,9 @@ export function newAutomationDraft(current?: MobileAutomation): AutomationDraft 
     name: current?.name ?? '',
     prompt: current?.prompt ?? '',
     agentId: current?.agentId ?? null,
-    setupId: current?.runContext?.projectHostSetupId ?? '',
+    setupId: current?.runContext
+      ? automationSetupKey({ ...current.runContext, id: current.runContext.projectHostSetupId })
+      : '',
     workspaceId: current?.workspaceId ?? '',
     workspaceMode: current?.workspaceMode ?? 'new_per_run',
     rrule: current?.rrule ?? '0 9 * * 1-5',
@@ -44,7 +52,11 @@ export function newAutomationDraft(current?: MobileAutomation): AutomationDraft 
   }
 }
 
-export function validateAutomationDraft(draft: AutomationDraft, step: number): string | null {
+export function validateAutomationDraft(
+  draft: AutomationDraft,
+  step: number,
+  saved?: MobileAutomation
+): string | null {
   if (!draft.name.trim() || !draft.prompt.trim() || !draft.agentId) {
     return 'Add a name, instructions and an agent.'
   }
@@ -54,18 +66,31 @@ export function validateAutomationDraft(draft: AutomationDraft, step: number): s
   if (step < 2) {
     return null
   }
-  if (!isValidAutomationSchedule(draft.rrule)) {
+  if (
+    !acceptsAutomationDraftSchedule({
+      customSchedule: draft.rrule,
+      savedRrule: saved?.rrule ?? null,
+      validate: isValidAutomationSchedule
+    })
+  ) {
     return 'Enter a valid cron or RRULE schedule.'
   }
-  try {
-    new Intl.DateTimeFormat('en', { timeZone: draft.timezone }).format()
-  } catch {
-    return 'Enter a valid time zone, such as America/Los_Angeles.'
+  if (draft.timezone !== saved?.timezone) {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: draft.timezone }).format()
+    } catch {
+      return 'Enter a valid time zone, such as America/Los_Angeles.'
+    }
   }
-  if (!Number.isInteger(Number(draft.grace)) || Number(draft.grace) < 0) {
+  if (
+    draft.grace !== String(saved?.missedRunGraceMinutes) &&
+    (!Number.isInteger(Number(draft.grace)) || Number(draft.grace) < 0)
+  ) {
     return 'Missed-run grace must be zero or a positive number of minutes.'
   }
   if (
+    (draft.precheckCommand !== (saved?.precheck?.command ?? '') ||
+      draft.precheckTimeout !== String(saved?.precheck?.timeoutSeconds ?? 60)) &&
     draft.precheckCommand.trim() &&
     (!Number.isInteger(Number(draft.precheckTimeout)) ||
       Number(draft.precheckTimeout) < 1 ||
@@ -133,12 +158,12 @@ export function automationCreateParams(
   targets: AutomationTargets,
   creationKey?: string
 ): RpcSendParams<'automation.create'> {
-  const setup = targets.setups.find((entry) => entry.id === draft.setupId)
+  const setup = targets.setups.find((entry) => automationSetupKey(entry) === draft.setupId)
   if (!setup || !draft.agentId) {
     throw new Error('Choose a project and agent on this host.')
   }
   const workspace = targets.workspaces.find(
-    (entry) => entry.worktreeId === draft.workspaceId && entry.repoId === setup.repoId
+    (entry) => entry.worktreeId === draft.workspaceId && workspaceMatchesSetup(entry, setup)
   )
   if (draft.workspaceMode === 'existing' && !workspace) {
     throw new Error('Choose an existing workspace in this project.')

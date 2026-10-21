@@ -1,3 +1,5 @@
+import type { Repo } from '../../../shared/repo-types'
+import { findAutomationRepoForWrite } from '../../../shared/automation-repo-target'
 import { randomUUID } from 'node:crypto'
 import { invalidateLocalWorktreeMetadataPruneInputs } from '../../local-worktree-metadata-prune-gate'
 import type {
@@ -7,7 +9,6 @@ import type {
   AutomationUpdateInput
 } from '../../../shared/automations-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
-import type { WorkspaceRunContext } from '../../../shared/task-source-context'
 import { normalizeAutomationPrecheck } from '../../../shared/automation-precheck'
 import {
   assertAutomationExtraAgentArgs,
@@ -56,7 +57,7 @@ export function listAutomations(state: PersistedState): Automation[] {
 export function createAutomation(
   operations: AutomationDefinitionOperations,
   input: AutomationCreateInput,
-  options?: { destination?: AutomationDestination }
+  options?: { destination?: AutomationDestination; resolvedRepo?: Repo }
 ): Automation {
   if (input.creationKey) {
     const existing = (operations.state.automations ?? []).find(
@@ -66,7 +67,12 @@ export function createAutomation(
       return existing
     }
   }
-  const repo = operations.state.repos.find((entry) => entry.id === input.projectId)
+  const repo = findAutomationRepoForWrite(
+    operations.state.repos,
+    input.projectId,
+    input.runContext,
+    options?.resolvedRepo
+  )
   const now = Date.now()
   const workspaceId = input.workspaceMode === 'existing' ? (input.workspaceId ?? null) : null
   const workspaceSshPin = automationWorkspaceSshPin(operations.state, workspaceId)
@@ -132,7 +138,11 @@ export function updateAutomation(
   operations: AutomationDefinitionOperations,
   id: string,
   updates: AutomationUpdateInput,
-  options?: { expectedOwner?: AutomationOwnerPrecondition; destination?: AutomationDestination }
+  options?: {
+    expectedOwner?: AutomationOwnerPrecondition
+    destination?: AutomationDestination
+    resolvedRepo?: Repo
+  }
 ): Automation {
   const index = (operations.state.automations ?? []).findIndex((entry) => entry.id === id)
   if (index === -1) {
@@ -159,9 +169,15 @@ export function updateAutomation(
     Object.entries(updates).filter(([, value]) => value !== undefined)
   ) as AutomationUpdateInput
   const repoId = updates.projectId ?? current.projectId
-  const repo = operations.state.repos.find((entry) => entry.id === repoId)
   const selectorMoveRequested =
     updates.projectId !== undefined || options?.destination !== undefined
+  const repo = findAutomationRepoForWrite(
+    operations.state.repos,
+    repoId,
+    updates.runContext ?? (selectorMoveRequested ? undefined : current.runContext),
+    options?.resolvedRepo,
+    !!updates.runContext
+  )
   const schedulerOwner =
     selectorMoveRequested && repo ? getAutomationSchedulerOwner(repo) : current.schedulerOwner
   const contexts = getAutomationContextsForRepo(repo, operations.state.projectHostSetups ?? [])
@@ -263,26 +279,7 @@ export function updateAutomation(
   return updated
 }
 
-/**
- * Writes the run target a legacy record resolved to, once: a record that already has one keeps it,
- * so a stamp can never retarget an automation the user or a migration placed.
- */
-export function stampLegacyAutomationRunContext(
-  operations: AutomationDefinitionOperations,
-  id: string,
-  runContext: WorkspaceRunContext
-): boolean {
-  const current = (operations.state.automations ?? []).find((entry) => entry.id === id)
-  if (!current || current.runContext) {
-    return false
-  }
-  // Replaced, not patched in place: the list projection caches on array identity.
-  operations.state.automations = operations.state.automations.map((entry) =>
-    entry.id === id ? { ...entry, runContext } : entry
-  )
-  operations.flush()
-  return true
-}
+export { stampLegacyAutomationRunContext } from './automation-context-migration'
 
 export function deleteAutomation(
   operations: AutomationDefinitionOperations,

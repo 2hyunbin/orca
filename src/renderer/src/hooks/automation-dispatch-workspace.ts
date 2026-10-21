@@ -1,3 +1,4 @@
+import { findAutomationRepo } from '../../../shared/automation-repo-target'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
@@ -37,12 +38,18 @@ export function resolveAutomationDispatchWorkspace(
   run: AutomationRun
 ) {
   const runRepoId = getAutomationRunRepoId(automation)
-  const repo = state.repos.find((entry) => entry.id === runRepoId)
+  const repo = findAutomationRepo(state.repos, runRepoId, automation.runContext)
   const automationWorkspaceScope = parseWorkspaceKey(automation.workspaceId ?? '')
   const automationWorktree = automation.workspaceId
     ? automationWorkspaceScope?.type === 'folder'
       ? state.getKnownWorktreeById(automation.workspaceId)
-      : state.allWorktrees().find((entry) => entry.id === automation.workspaceId)
+      : state
+          .allWorktrees()
+          .find(
+            (entry) =>
+              entry.id === automation.workspaceId &&
+              (!automation.runContext || entry.hostId === automation.runContext.hostId)
+          )
     : null
   const context: AutomationDispatchWorkspaceContext = {
     workspaceId: automation.workspaceId,
@@ -89,7 +96,8 @@ export async function prepareAutomationDispatchWorkspace(args: {
     automationWorkspaceScope?.type === 'folder'
       ? folderWorkspaceHostId !== null && folderWorkspaceHostId === runHostId
       : !automation.runContext?.repoId ||
-        automationWorktree?.repoId === automation.runContext.repoId
+        (automationWorktree?.repoId === automation.runContext.repoId &&
+          automationWorktree.hostId === automation.runContext.hostId)
   if (automation.workspaceMode === 'existing' && automationWorktree && !workspaceMatchesRunTarget) {
     await markDispatchResult({
       runId: run.id,
