@@ -19,8 +19,15 @@ import {
 import { getLocalProjectWorktreeGitOptions } from '../../project-runtime-git-options'
 import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
 import { isFloatingWorkspaceSelector } from '../../../shared/floating-workspace-worktree'
+import { HeadlessMarkdownDocuments } from '../files/headless-markdown-document'
 
 export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends RuntimeHeadlessTabGroups {
+  private readonly headlessMarkdown = new HeadlessMarkdownDocuments({
+    requireStore: () => this.requireStore(),
+    resolveRuntimeFileTarget: (selector) => this.resolveRuntimeFileTarget(selector),
+    getSession: (id) => this.getWorkspaceSessionForWorktree(id),
+    setSession: (id, session) => this.setWorkspaceSessionForWorktree(id, session)
+  })
   protected abstract getListedBrowserTabsByPageId(worktreeId: string): Map<string, BrowserTabInfo>
   protected abstract resolveMobileMarkdownWorktreeId(
     ...args: Parameters<
@@ -177,7 +184,7 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
   ): Promise<RuntimeMarkdownReadTabResult> {
     const worktreeId = await this.resolveMobileMarkdownWorktreeId(worktreeSelector, tabId)
     if (!this.notifier?.readMobileMarkdownTab) {
-      throw new Error('renderer_unavailable')
+      return this.headlessMarkdown.read(worktreeId, tabId)
     }
     return await this.notifier.readMobileMarkdownTab(worktreeId, tabId)
   }
@@ -190,7 +197,7 @@ export abstract class OrcaRuntimeWithPersistHeadlessTerminalTitle extends Runtim
   ): Promise<RuntimeMarkdownSaveTabResult> {
     const worktreeId = await this.resolveMobileMarkdownWorktreeId(worktreeSelector, tabId)
     if (!this.notifier?.saveMobileMarkdownTab) {
-      throw new Error('renderer_unavailable')
+      return this.headlessMarkdown.save(worktreeId, tabId, baseVersion, content)
     }
     return await this.notifier.saveMobileMarkdownTab(worktreeId, tabId, baseVersion, content)
   }

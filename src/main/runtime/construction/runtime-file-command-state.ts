@@ -148,7 +148,7 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
         position
       }
       // Switch point: main writes the tab itself, window or none; a window only shows it.
-      return ORCA_LAYOUT_OWNER_IS_MAIN
+      return ORCA_LAYOUT_OWNER_IS_MAIN || !this.notifier?.openFile
         ? openEditorFileThroughLayoutOwner(
             {
               applyLayoutCommand: (command) => this.applyLayoutCommand(command),
