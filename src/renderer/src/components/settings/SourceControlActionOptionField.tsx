@@ -55,29 +55,26 @@ export function SourceControlActionExtraArgsField({
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="min-w-0">
       <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="-ml-2 h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-        >
+        <Button type="button" variant="ghost" size="xs" className="-ml-1.5">
           {label}
-          <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} />
+          <ChevronDown className={cn('transition-transform', open && 'rotate-180')} />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 pt-1">
-        <Input
-          aria-label={label}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          disabled={disabled}
-          placeholder={placeholder}
-          spellCheck={false}
-          className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
-        />
-        <p className="text-[11px] text-muted-foreground">
-          {sourceControlActionRouteHint('terminals')}
-        </p>
+      <CollapsibleContent>
+        <div className="mt-1 space-y-2">
+          <Input
+            aria-label={label}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            disabled={disabled}
+            placeholder={placeholder}
+            spellCheck={false}
+            className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            {sourceControlActionRouteHint('terminals')}
+          </p>
+        </div>
       </CollapsibleContent>
     </Collapsible>
   )
