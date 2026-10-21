@@ -1,3 +1,11 @@
+import { CODEX_SESSION_OPTION_CATALOG } from '../../shared/agent-session-option-catalog-claude-codex'
+import {
+  applyStructuredAgentSessionOptions,
+  createStructuredAgentSessionOptionState
+} from '../../shared/structured-agent-session-options'
+import { structuredAgentSessionMessageSelection } from '../../shared/structured-agent-session-option-view'
+import { captureStructuredExecutionOptions } from '../native-chat/agent-session-wire/structured-agent-session-execution-options'
+import { claudeAndCodexAgents } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import { describe, expect, it, vi } from 'vitest'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { optionSession } from './codex-structured-option-session.test-fixture'
@@ -322,4 +330,49 @@ it('exposes the configured applied speed under the exact child identity without 
   ).toMatchObject({ active: { serviceTier: 'priority' }, next: { serviceTier: 'default' } })
   expect(adapter.readAppliedInputOptions({ ...input, acquisitionGeneration: 'retired' })).toBeNull()
   await adapter.closeAll()
+})
+
+it('sends an accepted literal from a delayed client snapshot after another client changes the host model', async () => {
+  const literal = 'retired-literal'
+  const model = {
+    id: 'model-b',
+    label: 'Model B',
+    isDefault: true,
+    defaultEffort: 'medium',
+    efforts: [{ value: 'medium', label: 'Medium' }]
+  }
+  const clientA = applyStructuredAgentSessionOptions(
+    createStructuredAgentSessionOptionState('codex'),
+    CODEX_SESSION_OPTION_CATALOG,
+    {
+      models: [model],
+      current: { model: literal, defaulted: [], acceptedInputSources: { model: 'saved' } }
+    }
+  )
+  const request = vi.fn(async (method: string, _params?: Record<string, unknown>) =>
+    method === 'turn/start' ? { turn: { id: 'literal-turn' } } : { config: {} }
+  )
+  const session = optionSession(request)
+  seedMessageDefaults(session)
+  session.options = new Map([['model', model.id]])
+  session.reportedOptions = { model: model.id, effort: 'medium' }
+  const captured = captureStructuredExecutionOptions(
+    { agents: claudeAndCodexAgents(), agent: 'codex', persistedOptions: { model: model.id } },
+    undefined,
+    structuredAgentSessionMessageSelection(clientA)
+  )
+  if ('refusal' in captured) {
+    throw new Error('accepted snapshot was refused')
+  }
+  expect(captured.options).toEqual({ model: literal })
+  const turnOptions = await resolvedCodexMessageOptions(session, captured.options)
+  expect(Object.fromEntries(session.options)).toEqual({ model: model.id })
+  await startCodexTurn(session, {
+    clientMessageId: 'delayed-client',
+    body: USER_MESSAGE,
+    turnOptions
+  })
+  expect(
+    request.mock.calls.filter(([method]) => method === 'turn/start').map(([, params]) => params)
+  ).toMatchObject([{ threadId: 'thread-1', clientUserMessageId: 'delayed-client', model: literal }])
 })

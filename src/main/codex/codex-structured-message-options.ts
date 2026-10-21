@@ -77,7 +77,8 @@ export async function resolvedCodexMessageOptions(
       choices.fastMode === 'true' ||
       (choices.serviceTier && choices.serviceTier !== CODEX_DEFAULT_SERVICE_TIER))
   ) {
-    await applyCodexStructuredSessionOption(selected, 'model', model)
+    // Captured message input is already accepted; the provider judges the literal model.
+    selected.options.set('model', model)
     if (!defaultEffort && choices.effort === undefined) {
       selected.options.delete('effort')
     }
