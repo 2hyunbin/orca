@@ -16,7 +16,8 @@ function compileProviderExec(output, arch = process.arch) {
     [
       ...(mac
         ? ['clang', '-arch', arch === 'x64' ? 'x86_64' : 'arm64', '-mmacosx-version-min=12.0']
-        : []),
+        : // This C-only helper uses no name-service plugins; static libc keeps newer builders from raising the host floor.
+          ['-static']),
       '-O2',
       '-Wall',
       '-Wextra',
