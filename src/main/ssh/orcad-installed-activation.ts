@@ -225,9 +225,13 @@ export async function activateInstalledOrcad(
 
   const unstopped = incumbent ? await stopTransactionIncumbent(options, incumbent, lock) : null
   if (unstopped) {
+    // A stop that may still land keeps admission closed; one never sent leaves the server serving.
+    if (!unstopped.stopMayBeUnderway) {
+      await reopenIncumbentAdmission(options)
+    }
     return notActivated(
       'orcad_outgoing_stop_incomplete',
-      `${unstopped} No snapshot was taken and the candidate was not started. Orca requires ` +
+      `${unstopped.reason} No snapshot was taken and the candidate was not started. Orca requires ` +
         'matching runtime readiness before signaling an incumbent and confirmed exit before ' +
         'snapshotting.'
     )

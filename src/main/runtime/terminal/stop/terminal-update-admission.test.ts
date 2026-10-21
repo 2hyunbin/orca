@@ -19,15 +19,32 @@ describe('TerminalUpdateAdmission', () => {
     expect(fence.close(60_000)).toBe(61_000)
     await expect(fence.admit(undefined)).rejects.toBeInstanceOf(TerminalUpdateAdmissionClosedError)
     advance(60_000)
-    ;(await fence.admit(undefined))()
+    const admitted = await fence.admit(undefined)
+    expect(admitted.attachOnly).toBe(false)
+    admitted.release()
+  })
+
+  it('admits a reattach to a live session while closed only as attach-only', async () => {
+    const { fence } = admission(['pty-live'])
+    const requireAttachOnly = vi.fn()
+    ;(await fence.hold('pty-live', async () => () => {}, requireAttachOnly))()
+    expect(requireAttachOnly).not.toHaveBeenCalled()
+
+    fence.close(60_000)
+    ;(await fence.hold('pty-live', async () => () => {}, requireAttachOnly))()
+    expect(requireAttachOnly).toHaveBeenCalledTimes(1)
   })
 
   it('releases admission when the lease it holds cannot be taken', async () => {
     const { fence } = admission()
     await expect(
-      fence.hold(undefined, async () => {
-        throw new Error('lock deadline')
-      })
+      fence.hold(
+        undefined,
+        async () => {
+          throw new Error('lock deadline')
+        },
+        undefined
+      )
     ).rejects.toThrow('lock deadline')
     fence.close(60_000)
     await expect(fence.waitForSpawnsToSettle(0)).resolves.toBe(true)
@@ -37,7 +54,7 @@ describe('TerminalUpdateAdmission', () => {
     vi.useFakeTimers()
     try {
       const { fence } = admission()
-      const release = await fence.admit(undefined)
+      const { release } = await fence.admit(undefined)
       fence.close(60_000)
       const settled = fence.waitForSpawnsToSettle(10_000)
       await vi.advanceTimersByTimeAsync(10_000)

@@ -14,6 +14,12 @@ export class TerminalUpdateAdmissionClosedError extends Error {
   }
 }
 
+export type WorktreeTerminalSpawnLeaseOptions = {
+  refuseSleptWorktree?: boolean
+  reattachSessionId?: string
+  requireAttachOnly?: () => void
+}
+
 /** Live sessions the daemon vouches for; null when it could not answer. */
 type ListLiveSessionIds = () => Promise<readonly string[] | null>
 
@@ -44,10 +50,13 @@ export class TerminalUpdateAdmission {
   }
 
   /**
-   * Admits a spawn and holds it in flight until the returned release runs. While closed, only a
-   * reattach to a session the daemon still runs is admitted: it adds nothing to the census.
+   * Admits a spawn and holds it in flight until `release` runs. While closed, only a reattach to a
+   * session the daemon still runs is admitted, and only `attachOnly`: should that session exit
+   * first, the spawn must fail rather than start a terminal the census never saw.
    */
-  async admit(reattachSessionId: string | undefined): Promise<() => void> {
+  async admit(
+    reattachSessionId: string | undefined
+  ): Promise<{ release: () => void; attachOnly: boolean }> {
     // Counted before any await, so a census closing admission meanwhile waits for this spawn.
     this.spawnsInFlight += 1
     let released = false
@@ -66,7 +75,7 @@ export class TerminalUpdateAdmission {
       }
     }
     if (!this.isClosed()) {
-      return release
+      return { release, attachOnly: false }
     }
     // An unanswered daemon never vouches a session alive, so that reattach is refused too.
     const live = reattachSessionId ? await this.listLiveSessionIds().catch(() => null) : null
@@ -74,16 +83,23 @@ export class TerminalUpdateAdmission {
       release()
       throw new TerminalUpdateAdmissionClosedError()
     }
-    return release
+    return { release, attachOnly: true }
   }
 
-  /** Holds `acquire`'s lease in flight too, so a census waits for it as for the spawn it guards. */
+  /**
+   * Holds `acquire`'s lease in flight too, so a census waits for it as for the spawn it guards.
+   * `requireAttachOnly` runs when the spawn was admitted only as an attach.
+   */
   async hold(
     reattachSessionId: string | undefined,
-    acquire: () => Promise<() => void>
+    acquire: () => Promise<() => void>,
+    requireAttachOnly: (() => void) | undefined
   ): Promise<() => void> {
-    const releaseAdmission = await this.admit(reattachSessionId)
+    const { release: releaseAdmission, attachOnly } = await this.admit(reattachSessionId)
     try {
+      if (attachOnly) {
+        requireAttachOnly?.()
+      }
       const releaseLease = await acquire()
       return () => {
         releaseLease()

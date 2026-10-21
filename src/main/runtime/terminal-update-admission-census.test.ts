@@ -1,6 +1,7 @@
 // An update counts the server's terminals, then stops it: a terminal started between the two
 // would die with the stop, uncounted. The last census closes admission so none can start.
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { z } from 'zod'
 import {
   ORCAD_UPDATE_ADMISSION_FENCE_MS,
   OrcadTerminalCensusParamsSchema
@@ -24,7 +25,9 @@ const { TEST_WORKTREE_ID, store } = await import('./orca-runtime-test-fixtures.s
 const idle = { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 7 }
 const target = spawnWorktreeTarget(TEST_WORKTREE_ID, null)
 
-function census(runtime: InstanceType<typeof OrcaRuntimeService>, params: object) {
+type CensusRequest = Omit<z.input<typeof OrcadTerminalCensusParamsSchema>, 'activatedAt'>
+
+function census(runtime: InstanceType<typeof OrcaRuntimeService>, params: CensusRequest) {
   // Parsed as the server parses it, so a field the server does not know is dropped here too.
   const parsed = OrcadTerminalCensusParamsSchema.parse({ activatedAt: 1, ...params })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only `runtime` from its context.
@@ -32,7 +35,7 @@ function census(runtime: InstanceType<typeof OrcaRuntimeService>, params: object
 }
 
 // What the SSH and WSL updates send as the last count before the stop.
-const updateRecount = {
+const updateRecount: CensusRequest = {
   releaseFinishedAutomationTerminals: true,
   closeAdmissionForMs: ORCAD_UPDATE_ADMISSION_FENCE_MS
 }
@@ -79,10 +82,14 @@ describe("an update's last terminal census", () => {
     await census(runtime, updateRecount)
 
     listLiveDaemonPtyIds.mockResolvedValue(['pty-live'])
+    const requireAttachOnly = vi.fn()
     const release = await runtime.acquireWorktreeTerminalSpawn(target, {
-      reattachSessionId: 'pty-live'
+      reattachSessionId: 'pty-live',
+      requireAttachOnly
     })
     release()
+    // Should the session exit before the attach lands, the spawn fails instead of starting one.
+    expect(requireAttachOnly).toHaveBeenCalledTimes(1)
     listLiveDaemonPtyIds.mockResolvedValue(null)
     await expect(
       runtime.acquireWorktreeTerminalSpawn(target, { reattachSessionId: 'pty-live' })

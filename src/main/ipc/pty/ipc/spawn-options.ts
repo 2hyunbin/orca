@@ -128,7 +128,13 @@ export async function buildPtyIpcSpawnOptions(
     ? await acquireWorktreeSpawn.call(
         runtime,
         spawnWorktreeTarget(args.worktreeId, args.connectionId),
-        { reattachSessionId: args.sessionId }
+        {
+          // A pre-adopted stable pane attaches to its live owner, not a new terminal.
+          reattachSessionId: ctx.preAdoptedStablePane?.owner.ptyId ?? args.sessionId,
+          requireAttachOnly: () => {
+            ctx.spawnOptions = { ...ctx.spawnOptions, attachOnly: true }
+          }
+        }
       )
     : undefined
   return null

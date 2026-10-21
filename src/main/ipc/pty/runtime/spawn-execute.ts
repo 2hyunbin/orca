@@ -27,7 +27,10 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
         {
           refuseSleptWorktree: args.refuseSleptWorktree,
           // A pre-adopted stable pane attaches to its live owner, not a new terminal.
-          reattachSessionId: ctx.preAdoptedStablePane?.owner.ptyId ?? args.sessionId
+          reattachSessionId: ctx.preAdoptedStablePane?.owner.ptyId ?? args.sessionId,
+          requireAttachOnly: () => {
+            ctx.spawnOptions = { ...ctx.spawnOptions, attachOnly: true }
+          }
         }
       )
     : undefined

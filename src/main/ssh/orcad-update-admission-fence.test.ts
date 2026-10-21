@@ -152,4 +152,20 @@ describe("an update's terminal admission fence", () => {
     expect(releaseIncumbentAdmission).toHaveBeenCalledTimes(1)
     expect(admission.isClosed()).toBe(false)
   })
+
+  it.each([
+    ['SIGNAL_FAILED', false],
+    ['STILL_RUNNING', true]
+  ])(
+    'after a stop answering %s, reopens admission only if no stop can still land',
+    async (answer, underway) => {
+      vi.mocked(execCommand).mockImplementation(async (_conn, command) =>
+        command.includes('kill -TERM') ? answer : host.exec(command)
+      )
+      const { result } = deploy()
+
+      await expect(result).resolves.toMatchObject({ code: 'orcad_outgoing_stop_incomplete' })
+      expect(admission.isClosed()).toBe(underway)
+    }
+  )
 })
