@@ -53,6 +53,7 @@ export function useProviderAccountList<Provider extends 'claude' | 'codex'>(
     void loadAccounts().catch((error: unknown) => {
       console.error(`Failed to load ${provider} accounts:`, error)
     })
+    return undefined
   }, [loadAccounts, observe, provider, syncKey, target])
   return { accounts, setAccounts, accountsLoaded, loadAccounts, mountedRef }
 }

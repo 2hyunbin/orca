@@ -3,6 +3,7 @@ import type {
   AgentJournalSnapshot,
   AgentJournalItemBody
 } from '../../../shared/agent-session-journal-types'
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { agentSessionRecordFixture } from '../../../shared/agent-session-record.test-fixture'
 import { readStructuredSessionRecovery } from './structured-agent-session-recovery-read'
 const prepare = vi.hoisted(() => vi.fn())
@@ -39,7 +40,10 @@ it('does no discovery on ordinary reads and drops preparation superseded by a se
       startedAt: 1,
       completedAt: 2
     },
-    { kind: 'status', text: 'limited', failure: { kind: 'usageLimitReached' } }
+    {
+      kind: 'status',
+      ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })
+    }
   ]
   snapshot.items = bodies.map((body, sequence) => ({
     itemId: sequence ? 'limit' : 'turn',
