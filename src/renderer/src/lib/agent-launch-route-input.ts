@@ -25,6 +25,11 @@ import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { readLocalRuntimeCapabilitiesOrUnknown } from '@/runtime/local-runtime-capabilities'
 import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-session-owner'
 import { pairedHostClientCapabilities } from '@/runtime/paired-host-client-capabilities'
+import {
+  selectDetectedWorktreesByRepo,
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 import { readHostStructuredAgents } from '@/runtime/host-structured-agents'
 import { lastVerifiedRuntimeStatus } from '../../../shared/runtime-host-status'
 
@@ -94,10 +99,10 @@ export function selectAgentLaunchRouteView(state: AppState): AgentLaunchRouteVie
     lastRouteView = {
       settings: state.settings,
       runtimeStatusByEnvironmentId: state.runtimeStatusByEnvironmentId,
-      worktreesByRepo: state.worktreesByRepo,
-      folderWorkspaces: state.folderWorkspaces,
+      worktreesByRepo: selectWorktreesByRepo(state),
+      folderWorkspaces: selectFolderWorkspaces(state),
       repos: state.repos,
-      detectedWorktreesByRepo: state.detectedWorktreesByRepo,
+      detectedWorktreesByRepo: selectDetectedWorktreesByRepo(state),
       projectGroups: state.projectGroups,
       restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
       activeWorktreeId: state.activeWorktreeId,
@@ -237,10 +242,10 @@ export function buildAgentLaunchRouteInput(
       workspaceId: workspace.worktreeId,
       requestedCwd: tuiCustomization?.cwd,
       workspacePath: workspace.worktreeId
-        ? findWorktreeById(store.worktreesByRepo ?? {}, workspace.worktreeId)?.path
+        ? findWorktreeById(selectWorktreesByRepo(store) ?? {}, workspace.worktreeId)?.path
         : undefined,
       resolveFolderWorkspacePath: (folderWorkspaceId) =>
-        store.folderWorkspaces?.find((entry) => entry.id === folderWorkspaceId)?.folderPath
+        selectFolderWorkspaces(store)?.find((entry) => entry.id === folderWorkspaceId)?.folderPath
     }),
     ...hostStructuredAgentsInput(store, executionHostId)
   }

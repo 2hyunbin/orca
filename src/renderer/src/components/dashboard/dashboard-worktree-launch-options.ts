@@ -15,6 +15,7 @@ import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
 import { worktreeLaunchWorkspace, type AgentLaunchRouteView } from '@/lib/agent-launch-route-input'
 import { agentsOfferedForLaunch } from '@/lib/host-chat-program'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 export type DashboardLaunchDetectionState = Pick<
   AppState,
@@ -41,7 +42,7 @@ function buildDashboardLaunchCatalog(state: DashboardLaunchOptionState): Dashboa
     groupsById: new Map((state.projectGroups ?? []).map((group) => [group.id, group])),
     reposById: new Map((state.repos ?? []).map((repo) => [repo.id, repo])),
     worktreesByRepoAndId: new Map(
-      Object.entries(state.worktreesByRepo ?? {}).map(([repoId, worktrees]) => [
+      Object.entries(selectWorktreesByRepo(state) ?? {}).map(([repoId, worktrees]) => [
         repoId,
         new Map(worktrees.map((worktree) => [worktree.id, worktree]))
       ])

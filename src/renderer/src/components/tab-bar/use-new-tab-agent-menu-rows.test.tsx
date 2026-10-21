@@ -59,7 +59,7 @@ vi.mock('@/lib/agent-launch-route-input', () => ({
     hostStructuredAgents: ['claude', 'codex', 'opencode']
   })
 }))
-import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
+import { useAgentMenuObservation, useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
 const initial = useAppStore.getState()
 beforeEach(() => {
   mocks.support.mockReset()
@@ -191,4 +191,28 @@ it('holds initial capability acquisition, then exposes truthful failure and know
     executionHostId: 'local'
   })
   expect(getStatus).toHaveBeenCalledTimes(1)
+})
+
+// Last: the host's published snapshot is module state that later cases would read.
+it('picks a host-run chat without its CLI, but never its terminal', () => {
+  mocks.publishing = true
+  mocks.detection.mockReturnValue({ detectedIds: ['claude'] })
+  const hook = renderHook(() => useAgentMenuObservation('one', true, { kind: 'local' }))
+  act(() =>
+    mocks.subscribe.mock.calls[0][3].onEvent({
+      type: 'availability',
+      agents: [{ agent: 'codex', state: 'available', chatProgram: 'installable' }]
+    })
+  )
+  const { model, selectionFor } = hook.result.current
+  expect(model.state === 'settled' && model.rows).toContainEqual({
+    kind: 'chat',
+    agent: 'codex',
+    executionHostId: 'local'
+  })
+  expect(selectionFor('codex', 'chat')).toMatchObject({
+    ready: true,
+    choice: { route: 'structured-native-chat' }
+  })
+  expect(selectionFor('codex', 'terminal').ready).toBe(false)
 })
