@@ -16,6 +16,7 @@ import {
 import type { WorkspaceSleepPlatform } from './workspace-sleep-platform'
 import type { LaunchHostRepo } from '../worktree-launch-host-repo'
 import type { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
+import { WORKSPACE_DELETED_ERROR } from './workspace-lifecycle-command'
 import type { PairedServerRowsProducer } from '../sidebar-inputs/paired-server-rows-producer'
 
 // Bounds the wait for a paired server's rows to show a sleep; a slow server must not hold the queue.
@@ -71,6 +72,16 @@ function environmentCall(platform: WorkspaceSleepPlatform | null, environmentId:
   return call
 }
 
+/** A sleep that kept the workspace open, left a chat unconfirmed, or left its VM running. */
+function needsWindowToast(outcome: WorkspaceSleepOutcome): boolean {
+  // A delete that cancelled the sleep removed the workspace; nothing was kept open.
+  return (
+    (outcome.failure !== undefined && outcome.failure !== WORKSPACE_DELETED_ERROR) ||
+    outcome.chatFailed ||
+    outcome.vmSuspendFailure !== undefined
+  )
+}
+
 /** Runs workspace sleeps for one runtime: what each part needs, and which ones were reopened. */
 export class WorkspaceSleepCoordinator {
   /** Bumped when a workspace is reopened; a sleep compares it before suspending the VM. */
@@ -94,6 +105,12 @@ export class WorkspaceSleepCoordinator {
     const sleeping = this.sleep({
       targets: [{ worktreeId, terminalHost: self, chatHosts: [self] }],
       markChatsAsleep: opts.markChatsAsleep !== false
+    }).then((outcomes) => {
+      // Why: the phone shows no sleep failure, so the desktop does, as for its own Sleep.
+      for (const outcome of outcomes.filter(needsWindowToast)) {
+        this.runtime.notifyWorkspaceSleep({ worktreeId, phase: 'failed', outcome })
+      }
+      return outcomes
     })
     if (opts.replyOnAcceptance) {
       void sleeping.catch((error: unknown) =>

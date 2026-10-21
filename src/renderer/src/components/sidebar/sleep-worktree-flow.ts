@@ -76,13 +76,35 @@ export async function runSleepWorktrees(
     worktreeIds,
     { markChatsAsleep: true }
   )
-  if (vmStillRunningIds.length > 0) {
+  toastSleepFailures(new Set(worktreeIds).size, errors, vmStillRunningIds.length > 0)
+  return results
+}
+
+/** A phone or CLI's sleep that did not fully succeed: the same toast as the window's own Sleep. */
+export function toastWorkspaceSleepOutcome(outcome: WorkspaceSleepOutcome): void {
+  const errors = outcomeErrors(outcome)
+  toastSleepFailures(1, errors, outcome.vmSuspendFailure !== undefined)
+}
+
+function outcomeErrors(outcome: WorkspaceSleepOutcome): string[] {
+  if (outcome.failure !== undefined) {
+    return [describeSleepFailure(new Error(outcome.failure))]
+  }
+  return outcome.chatFailed ? [describeChatStopFailure()] : []
+}
+
+function toastSleepFailures(
+  workspaceCount: number,
+  errors: readonly string[],
+  vmStillRunning: boolean
+): void {
+  if (vmStillRunning) {
     toast.warning(describeVmSuspendFailure())
   }
   if (errors.length > 0) {
     // Why: callers are fire-and-forget; surface actionable teardown failures after restoring retryable UI state.
     toast.error(
-      new Set(worktreeIds).size === 1
+      workspaceCount === 1
         ? translate(
             'auto.components.sidebar.sleep.worktree.flow.8bc3fc0671',
             'Failed to sleep workspace'
@@ -96,7 +118,6 @@ export async function runSleepWorktrees(
       }
     )
   }
-  return results
 }
 
 export type WorktreeSleepOutcome = {
@@ -151,10 +172,8 @@ export async function sleepWorktreesReportingFailures(
     if (outcome.failure !== undefined) {
       console.error('[sleep-worktree] sleep failed', outcome)
       failedWorktreeIds.add(outcome.worktreeId)
-      errors.push(describeSleepFailure(new Error(outcome.failure)))
-    } else if (outcome.chatFailed) {
-      errors.push(describeChatStopFailure())
     }
+    errors.push(...outcomeErrors(outcome))
     if (outcome.vmSuspendFailure !== undefined) {
       console.error('[sleep-worktree] VM suspend failed', outcome)
       vmStillRunningIds.push(outcome.worktreeId)

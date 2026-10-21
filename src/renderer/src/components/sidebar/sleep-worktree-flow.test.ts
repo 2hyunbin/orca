@@ -30,7 +30,8 @@ const mocks = vi.hoisted(() => {
     clearWorktreeSleepIntent: vi.fn(),
     markWorktreeSleepIntent: vi.fn(),
     state,
-    toastError: vi.fn()
+    toastError: vi.fn(),
+    toastWarning: vi.fn()
   }
 })
 
@@ -44,7 +45,7 @@ vi.mock('@/store', () => ({
   }
 }))
 
-vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
+vi.mock('sonner', () => ({ toast: { error: mocks.toastError, warning: mocks.toastWarning } }))
 vi.mock('@/lib/worktree-sleep-intent', () => ({
   clearWorktreeSleepIntent: mocks.clearWorktreeSleepIntent,
   markWorktreeSleepIntent: mocks.markWorktreeSleepIntent,
@@ -75,6 +76,8 @@ function answerWith(answer: (target: WorkspaceSleepTarget) => Partial<WorkspaceS
   })
 }
 
+const VM_STILL_RUNNING =
+  "The workspace's terminals stopped, but its machine couldn't be suspended and is still running."
 const HOST_UNCONFIRMED =
   'The host could not confirm terminal shutdown. The workspace was kept open; check the connection and try again.'
 
@@ -98,6 +101,7 @@ describe('runSleepWorktree', () => {
     mocks.markWorktreeSleepIntent.mockClear()
     mocks.clearWorktreeSleepIntent.mockClear()
     mocks.toastError.mockClear()
+    mocks.toastWarning.mockClear()
     mocks.state.activeWorktreeId = null
     mocks.state.activeWorkspaceExecutionHostId = null
     mocks.state.tabsByWorktree = {}
@@ -392,5 +396,41 @@ describe('runSleepWorktree', () => {
     await Promise.resolve()
     expect(sleepReopened).toHaveBeenCalledWith('wt-1')
     expect(mocks.listeners.size).toBe(0)
+  })
+
+  it("shows a phone's failed sleep with the copy of the window's own Sleep", () => {
+    followWorkspaceSleep({
+      worktreeId: 'wt-1',
+      phase: 'failed',
+      outcome: {
+        worktreeId: 'wt-1',
+        failure: 'terminal_liveness_unavailable',
+        chatFailed: false,
+        receipts: []
+      }
+    })
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      'Failed to sleep workspace',
+      expect.objectContaining({ description: HOST_UNCONFIRMED })
+    )
+  })
+
+  it('says the machine still runs, not "kept open", when only the VM would not suspend', async () => {
+    answerWith(() => ({ vmSuspendFailure: 'vm busy' }))
+    await runSleepWorktree('wt-1')
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastWarning).toHaveBeenCalledWith(VM_STILL_RUNNING)
+    // The workspace slept: nothing rolls it back.
+    expect(mocks.clearWorktreeSleepIntent).not.toHaveBeenCalled()
+  })
+
+  it("shows a phone's sleep whose VM would not suspend with the same copy", () => {
+    followWorkspaceSleep({
+      worktreeId: 'wt-1',
+      phase: 'failed',
+      outcome: { worktreeId: 'wt-1', vmSuspendFailure: 'vm busy', chatFailed: false, receipts: [] }
+    })
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastWarning).toHaveBeenCalledWith(VM_STILL_RUNNING)
   })
 })

@@ -46,6 +46,8 @@ export type WorkspaceSleepNotice =
       /** The agents main recorded for wake, which the window reads; null when another host keeps them. */
       records: SleepingAgentSessionRecord[] | null
     }
+  /** A phone or CLI's sleep that did not fully succeed; the window shows its own Sleep's toast. */
+  | { worktreeId: string; phase: 'failed'; outcome: WorkspaceSleepOutcome }
 
 /**
  * A record a workspace sleep left, which main alone resumes: a pane-owned capture (#11598) or an
