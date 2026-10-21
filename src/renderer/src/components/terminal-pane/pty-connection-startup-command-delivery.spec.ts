@@ -218,6 +218,65 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
       expect(transport.sendInputAccepted).not.toHaveBeenCalled()
     })
 
+    it('pastes the draft itself when main gives back a start the pane captured while it waited', async () => {
+      vi.doMock('../../../../shared/layout-owner-switch', () => ({
+        ORCA_LAYOUT_OWNER_IS_MAIN: true
+      }))
+      onTestFinished(() => {
+        vi.doUnmock('../../../../shared/layout-owner-switch')
+      })
+      const { connectPanePty } = await import('./pty-connection')
+      const { noteMainStartsPane, forgetMainStartedPane } =
+        await import('@/store/terminals/main-started-pane-view')
+      const paneKey = makePaneKey('tab-1', LEAF_1)
+      const ptyId = 'pty-own-spawn'
+      const transport = createMockTransport(ptyId)
+      const onData: { current: ((data: string) => void) | null } = { current: null }
+      transport.connect.mockImplementation(
+        async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
+          onData.current = callbacks.onData ?? null
+          return ptyId
+        }
+      )
+      transportFactoryQueue.push(transport)
+      // Mounted while the window's mark said main was starting it, with main holding its draft.
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+        terminalPaneStartsByPaneKey: { [paneKey]: { status: 'starting' } }
+      }
+      noteMainStartsPane(paneKey, {})
+      const deps = createDeps({
+        startup: {
+          command: 'codex',
+          launchAgent: 'codex',
+          launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
+          launchToken: 'token-given-back',
+          draftPrompt: 'look at this'
+        }
+      })
+      vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('codex')
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane, manager and deps fakes carry every member connectPanePty reads, as in this file's other tests.
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      await flushAsyncTicks()
+      expect(transport.connect).not.toHaveBeenCalled()
+
+      // host_not_owned: main started nothing and gave the startup back, then dropped the mark.
+      forgetMainStartedPane(paneKey)
+      mockStoreState = { ...mockStoreState, terminalPaneStartsByPaneKey: {} }
+      for (const listener of storeSubscribers) {
+        listener(mockStoreState)
+      }
+      await flushAsyncTicks()
+      onData.current?.('\x1b[?2004h\x1b[2K\u203a ')
+      await flushAsyncTicks()
+
+      expect(transport.sendInputAccepted).toHaveBeenCalledWith(
+        '\x1b[200~look at this\x1b[201~',
+        'launch'
+      )
+    })
+
     it('seeds a working status from Command Code thinking output without a startup prompt', async () => {
       const { connectPanePty } = await import('./pty-connection')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }

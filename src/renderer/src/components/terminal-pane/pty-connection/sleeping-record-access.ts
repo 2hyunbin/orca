@@ -150,6 +150,13 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
   }
   // Why: reserve before deferred connect so the creation sidecar cannot time out during setup and strand this pane's live scanner.
   session.ownsStartupDraftPaste = session.claimStartupDraftPasteDelivery()
+  // Main gave back a start this pane captured while it waited: the draft is this pane's again.
+  session.reclaimStartupDraftFromMain = (): void => {
+    if (session.mainStartedPaneView && !peekMainStartedPaneView(session.cacheKey)) {
+      session.mainStartedPaneView = undefined
+      session.ownsStartupDraftPaste = session.claimStartupDraftPasteDelivery()
+    }
+  }
   if (session.paneStartup?.launchConfig) {
     useAppStore
       .getState()

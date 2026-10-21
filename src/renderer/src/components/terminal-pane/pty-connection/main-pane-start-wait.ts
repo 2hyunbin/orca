@@ -54,6 +54,7 @@ export function waitsForMainPaneStart(
     }
     // Main's start ended: the pane is bound to its terminal now, or main took it back.
     adoptMainBinding(session, state)
+    session.reclaimStartupDraftFromMain?.()
     unsubscribe()
     waiting.delete(session)
     const index = session.waitTeardowns.indexOf(unsubscribe)
