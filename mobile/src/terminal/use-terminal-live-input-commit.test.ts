@@ -29,6 +29,7 @@ type TerminalLiveInputCommitHarness = {
   readonly getHandlers: () => TerminalLiveInputCommitHandlers
   readonly handlers: TerminalLiveInputCommitHandlers
   readonly sent: readonly string[]
+  readonly setActiveHandle: (next: string) => void
   readonly setActiveSessionTabType: (next: string | undefined) => void
   readonly setConnected: (next: boolean) => void
   readonly setSendResult: (next: boolean) => void
@@ -36,13 +37,15 @@ type TerminalLiveInputCommitHarness = {
 }
 
 type TerminalLiveInputCommitHarnessOptions = {
+  readonly send?: TerminalLiveInputSender
   readonly sendResult?: boolean
 }
 
 function createTerminalLiveInputCommitHarness({
+  send,
   sendResult = true
 }: TerminalLiveInputCommitHarnessOptions = {}): TerminalLiveInputCommitHarness {
-  const activeHandle = 'terminal-a'
+  let activeHandle = 'terminal-a'
   const activeHandleRef: RefObject<string | null> = { current: activeHandle }
   const activeSessionTabTypeRef: RefObject<string | null> = { current: 'terminal' }
   const captures: string[] = []
@@ -57,9 +60,9 @@ function createTerminalLiveInputCommitHarness({
   const sent: string[] = []
   let currentSendResult = sendResult
   const sendLiveTerminalInputRef: RefObject<TerminalLiveInputSender> = {
-    current: async (_handle, bytes) => {
+    current: async (handle, bytes) => {
       sent.push(bytes)
-      return currentSendResult
+      return send ? send(handle, bytes) : currentSendResult
     }
   }
   // Refs never re-render; only these variables re-run the hook's clear effects.
@@ -101,6 +104,15 @@ function createTerminalLiveInputCommitHarness({
     },
     handlers,
     sent,
+    setActiveHandle: (next: string): void => {
+      activeHandle = next
+      activeHandleRef.current = next
+      liveInputTerminalHandles.add(next)
+      liveInputTerminalHandlesRef.current.add(next)
+      act(() => {
+        renderer?.update(createElement(Harness))
+      })
+    },
     setActiveSessionTabType: (next: string | undefined): void => {
       currentActiveSessionTabType = next
       // Ref and prop derive from the same activeSessionTab in the real route, so
@@ -160,6 +172,112 @@ describe('terminal live input commit hook', () => {
       unmount()
     }
   })
+
+  it.each([
+    { initialAccepted: true, conversionAccepted: true },
+    { initialAccepted: false, conversionAccepted: true },
+    { initialAccepted: true, conversionAccepted: false }
+  ])(
+    'waits for a late conversion before Enter (initial=$initialAccepted, conversion=$conversionAccepted)',
+    async ({ initialAccepted, conversionAccepted }) => {
+      vi.useFakeTimers()
+      let acceptInitial: (accepted: boolean) => void = () => {}
+      let acceptConversion: (accepted: boolean) => void = () => {}
+      const { handlers, sent, unmount } = createTerminalLiveInputCommitHarness({
+        send: async (_handle, bytes) => {
+          if (bytes === 'ᄉᆞ') {
+            return new Promise<boolean>((resolve) => {
+              acceptInitial = resolve
+            })
+          }
+          if (bytes === '\x7f\x7f서') {
+            return new Promise<boolean>((resolve) => {
+              acceptConversion = resolve
+            })
+          }
+          return true
+        }
+      })
+      try {
+        changeLiveInput(handlers, 'ᄉᆞ', false)
+        const submitted = handlers.handleLiveInputSubmit()
+        changeLiveInput(handlers, '서', false)
+        acceptInitial(initialAccepted)
+        await vi.advanceTimersByTimeAsync(0)
+        expect(sent).toEqual(['ᄉᆞ', '\x7f\x7f서'])
+
+        acceptConversion(conversionAccepted)
+        expect(await submitted).toBe(initialAccepted && conversionAccepted)
+        expect(sent).toEqual(
+          initialAccepted && conversionAccepted ? ['ᄉᆞ', '\x7f\x7f서', '\r'] : ['ᄉᆞ', '\x7f\x7f서']
+        )
+      } finally {
+        unmount()
+      }
+    }
+  )
+
+  it('suppresses Enter when a prefix before the held commit was refused', async () => {
+    vi.useFakeTimers()
+    let acceptPrefix: (accepted: boolean) => void = () => {}
+    const { handlers, sent, unmount } = createTerminalLiveInputCommitHarness({
+      send: async (_handle, bytes) =>
+        bytes === '하'
+          ? new Promise<boolean>((resolve) => {
+              acceptPrefix = resolve
+            })
+          : true
+    })
+    try {
+      changeLiveInput(handlers, '하', false)
+      changeLiveInput(handlers, '하ᄉᆞ', false)
+      const submitted = handlers.handleLiveInputSubmit()
+      acceptPrefix(false)
+      expect(await submitted).toBe(false)
+      expect(sent).toEqual(['하', 'ᄉᆞ'])
+    } finally {
+      unmount()
+    }
+  })
+
+  it.each(['terminal-a', 'terminal-b'])(
+    'preserves newer input on %s after a rapid terminal transition',
+    async (nextHandle) => {
+      vi.useFakeTimers()
+      let acceptInitial: (accepted: boolean) => void = () => {}
+      const targets: string[] = []
+      const { captures, getHandlers, handlers, sent, setActiveHandle, unmount } =
+        createTerminalLiveInputCommitHarness({
+          send: async (handle, bytes) => {
+            targets.push(handle)
+            return bytes === 'ᄉᆞ'
+              ? new Promise<boolean>((resolve) => {
+                  acceptInitial = resolve
+                })
+              : true
+          }
+        })
+      try {
+        changeLiveInput(handlers, 'ᄉᆞ', false)
+        const submitted = handlers.handleLiveInputSubmit()
+        changeLiveInput(handlers, '서', false)
+        setActiveHandle('terminal-b')
+        if (nextHandle === 'terminal-a') {
+          setActiveHandle('terminal-a')
+        }
+        changeLiveInput(getHandlers(), '새ᄋᆞ', false)
+        acceptInitial(true)
+        expect(await submitted).toBe(false)
+        expect(captures.at(-1)).toBe('새ᄋᆞ')
+        expect(sent).toEqual(['ᄉᆞ', '새'])
+        expect(await getHandlers().handleLiveInputSubmit()).toBe(true)
+        expect(sent).toEqual(['ᄉᆞ', '새', 'ᄋᆞ', '\r'])
+        expect(targets).toEqual(['terminal-a', nextHandle, nextHandle, nextHandle])
+      } finally {
+        unmount()
+      }
+    }
+  )
 
   it.each(['Tab', 'accessory Enter', 'external send'] as const)(
     'ends a false-reported jamo editing session before %s and starts fresh',
