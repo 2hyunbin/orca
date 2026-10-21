@@ -87,6 +87,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   agentArgs?: string | null
   sessionOptions?: Readonly<Record<string, string>>
   resolveSessionOptions?: (agent: TuiAgent) => Readonly<Record<string, string>> | undefined
+  sessionOptionsYieldToAgentArgs?: true
   repoConnectionId: string | null
   repoHost: RepoHostFields & { path: string }
   detectedAgentsPromise: Promise<string[]> | null
@@ -160,6 +161,8 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     : buildDirectWorkItemStartup({
         agent: effectiveAgent,
         agentArgs: args.agentArgs,
+        sessionOptions,
+        sessionOptionsYieldToAgentArgs: args.sessionOptionsYieldToAgentArgs,
         draftContent: args.draftContent,
         promptDelivery: args.promptDelivery,
         settings: args.settings,

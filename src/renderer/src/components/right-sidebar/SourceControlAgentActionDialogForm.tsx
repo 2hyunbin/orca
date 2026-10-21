@@ -188,9 +188,7 @@ export function SourceControlAgentActionDialogForm({
               <TriangleAlert className="mt-px size-3 shrink-0" />
               <span>{statusCopy}</span>
             </p>
-          ) : !agentArgsApply &&
-            selectedAgent &&
-            selectedRecipe.launchPreferences?.agentId === selectedAgent ? (
+          ) : selectedAgent && selectedRecipe.launchPreferences?.agentId === selectedAgent ? (
             <p className="text-[11px] text-muted-foreground">
               {describeSourceControlActionModel(selectedAgent, selectedRecipe.launchPreferences)}
             </p>

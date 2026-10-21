@@ -27,7 +27,10 @@ import type { TuiAgent } from '../../../shared/tui-agent'
 import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
 import type { LaunchSource } from '../../../shared/telemetry-events'
 import { translate } from '@/i18n/i18n'
-import { resolveSourceControlActionSessionOptions } from '../../../shared/source-control-action-launch-preferences'
+import {
+  resolveSourceControlActionSessionOptions,
+  sourceControlActionLaunchOptions
+} from '../../../shared/source-control-action-launch-preferences'
 
 type StartFixChecksAgentArgs = {
   repoId: string
@@ -175,7 +178,6 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       )
       return false
     }
-    const sessionOptions = resolveSourceControlActionSessionOptions(recipe, agent)
     let revealFailed = false
     const result = launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),
@@ -184,7 +186,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
       groupId: args.groupId ?? targetWorktreeId,
       prompt: commandInput,
       agentArgs: recipe.agentArgs,
-      ...(sessionOptions ? { sessionOptions } : {}),
+      ...sourceControlActionLaunchOptions(recipe, agent),
       promptDelivery: 'submit-after-ready',
       launchPlatform,
       launchSource: args.launchSource,
@@ -240,6 +242,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     promptDelivery: 'submit-after-ready',
     agentArgs: recipe.agentArgs,
     resolveSessionOptions: (agent) => resolveSourceControlActionSessionOptions(recipe, agent),
+    sessionOptionsYieldToAgentArgs: recipe.launchPreferencesYieldToAgentArgs,
     ...(agentOverride.kind === 'agent' ? { agentOverride: agentOverride.agent } : {}),
     openModalFallback: args.openModalFallback
   })

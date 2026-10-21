@@ -137,3 +137,50 @@ describe('one copy of each chat-picked flag', () => {
     expect(result.appliedSessionOptions).toEqual({ model: 'gpt-5.5' })
   })
 })
+
+describe('a saved permission mode on terminals', () => {
+  it.each([
+    [
+      'claude',
+      'accept-edits',
+      '--dangerously-skip-permissions',
+      "'--permission-mode' 'acceptEdits'"
+    ],
+    ['claude', 'ask', '--permission-mode auto --verbose', "'--verbose'"],
+    ['codex', 'auto', '--dangerously-bypass-approvals-and-sandbox', "'--approve-for-me'"],
+    [
+      'codex',
+      'full-access',
+      '-a never -c sandbox_mode=read-only',
+      "'--dangerously-bypass-approvals-and-sandbox'"
+    ],
+    ['grok', 'ask', '--permission-mode bypassPermissions', ''],
+    // No terminal flag for these modes: the raw arguments stay exactly as they were.
+    [
+      'antigravity',
+      'accept-edits',
+      '--dangerously-skip-permissions',
+      "'--dangerously-skip-permissions'"
+    ],
+    ['opencode', 'full-access', '--print-logs', "'--print-logs'"]
+  ] as const)('%s %s replaces %s', (agent, permissionMode, agentArgs, expectedArgs) => {
+    const plain = launch({ agent, agentArgs: '' }).command
+    const result = launch({
+      agent,
+      agentArgs,
+      sessionOptions: { permissionMode },
+      sessionOptionsOverrideAgentArgs: true
+    })
+    expect(result.command).toBe(expectedArgs ? `${plain} ${expectedArgs}` : plain)
+  })
+
+  it('yields to a permission flag the caller keeps', () => {
+    const result = launch({
+      agent: 'claude',
+      agentArgs: '--dangerously-skip-permissions',
+      sessionOptions: { permissionMode: 'ask' }
+    })
+    expect(result.command).toBe("claude '--dangerously-skip-permissions'")
+    expect(result.appliedSessionOptions).toEqual({})
+  })
+})

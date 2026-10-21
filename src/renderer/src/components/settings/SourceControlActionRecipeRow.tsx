@@ -26,10 +26,11 @@ import {
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
 import {
+  SourceControlActionExtraArgsField,
   SourceControlActionOptionField,
   SourceControlActionOptionsPlaceholder
 } from './SourceControlActionOptionField'
-import { useSourceControlActionChatAgent } from './use-source-control-action-chat-agent'
+import { useSourceControlActionAgent } from './use-source-control-action-agent'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
 
@@ -43,7 +44,7 @@ type SourceControlActionRecipeRowProps<ActionId extends AiActionId> = {
   hasUnsavedChanges?: boolean
   repoOverrideNote?: React.ReactNode
   onAgentChange: (actionId: ActionId, value: string) => void
-  /** Launch actions only; text actions run headless through CLI arguments. */
+  /** Launch actions only, for chats and terminals alike; text actions run headless through CLI arguments. */
   launchPreferences?: SourceControlActionLaunchPreferences
   onLaunchPreferencesChange?: (
     actionId: ActionId,
@@ -90,7 +91,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
   onDiscard,
   onSave
 }: SourceControlActionRecipeRowProps<ActionId>): React.JSX.Element {
-  const actual = useSourceControlActionChatAgent(selectedAgent, defaultTuiAgent)
+  const actual = useSourceControlActionAgent(selectedAgent, defaultTuiAgent)
   const isLaunchAction = !AI_TEXT_ACTION_ID_SET.has(actionId)
   const templateDirty =
     hasUnsavedChanges ?? JSON.stringify(draftValue) !== JSON.stringify(baseValue)
@@ -155,17 +156,21 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
         </div>
       </div>
       <div className="mt-3 grid items-start gap-3 sm:grid-cols-[220px_1fr]">
-        {isLaunchAction && actual.status === 'pending' ? (
-          <SourceControlActionOptionsPlaceholder />
-        ) : isLaunchAction && actual.status === 'ready' && actual.chat ? (
-          <div>
-            {onLaunchPreferencesChange ? (
+        {isLaunchAction ? (
+          <div className="grid min-w-0 gap-2">
+            {actual.status === 'pending' ? (
+              <SourceControlActionOptionsPlaceholder />
+            ) : onLaunchPreferencesChange ? (
               <SourceControlActionModelPicker
                 agent={actual.agent}
                 value={launchPreferences}
                 onChange={(value) => onLaunchPreferencesChange(actionId, value)}
               />
             ) : null}
+            <SourceControlActionExtraArgsField
+              value={draftValue.agentArgs}
+              onChange={(value) => onAgentArgsChange(actionId, value)}
+            />
           </div>
         ) : (
           <SourceControlActionOptionField

@@ -33,7 +33,7 @@ function getRecipeOverrideFieldLabel(field: SourceControlActionRecipeOverrideFie
         'Command template'
       )
     case 'launchPreferences':
-      return translate('settings.sourceControl.actionModel.chatOptions', 'Chat options')
+      return translate('settings.sourceControl.actionModel.launchOptions', 'Model and permissions')
   }
   // Fail at compile time if the override-field union grows a new variant.
   const _exhaustive: never = field

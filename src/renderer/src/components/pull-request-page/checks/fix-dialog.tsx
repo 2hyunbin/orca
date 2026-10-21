@@ -64,16 +64,7 @@ export function ChecksFixDialog({
           )
         )
       }}
-      onStart={({ agent, commandInput, agentArgs, sessionOptions }) =>
-        startFixChecksFromDialog({
-          targetRepoId,
-          item,
-          agent,
-          commandInput,
-          agentArgs,
-          sessionOptions
-        })
-      }
+      onStart={(launch) => startFixChecksFromDialog({ targetRepoId, item, ...launch })}
     />
   )
 }

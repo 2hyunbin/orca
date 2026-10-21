@@ -431,7 +431,10 @@ describe('an agent with no structured session', () => {
       chatOptions: { model: 'action-model', fastMode: 'false' }
     })
     expect(h.createTerminalAgent.mock.calls[0]?.[0]).not.toHaveProperty('chatOptions')
-    expect(h.createTerminalAgent.mock.calls[0]?.[0]).not.toHaveProperty('options')
+    // The saved choice reaches the terminal too; its converter keeps only what has a flag.
+    expect(h.createTerminalAgent.mock.calls[0]?.[0]).toMatchObject({
+      options: { model: 'action-model', fastMode: 'false' }
+    })
     expect(h.calls).toEqual(['createTerminalAgent'])
     expect(result.receipt).toMatchObject({ reason: 'agent_without_structured_session' })
   })

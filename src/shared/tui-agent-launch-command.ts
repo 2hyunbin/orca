@@ -73,7 +73,7 @@ export function resolveAgentLaunchCommand(args: {
       return {
         ok: false,
         error:
-          'Agent command override conflicts with the requested launch preferences. Remove model or effort flags from the command override.'
+          'Agent command override conflicts with the requested launch preferences. Remove model, effort or permission flags from the command override.'
       }
     }
   }
@@ -109,4 +109,33 @@ function insertBeforeTerminator(
 ): string[] {
   const terminator = agentArgTerminatorIndex(agent, tokens)
   return [...tokens.slice(0, terminator), ...inserted, ...tokens.slice(terminator)]
+}
+
+/** A launch's saved choice as terminal startup inputs: flags that replace conflicting raw ones, or,
+ *  when it yields to these CLI arguments, only the pieces they do not set themselves. */
+export function terminalSessionOptionInputs(args: {
+  agent: TuiAgent
+  sessionOptions: Readonly<Record<string, SessionOptionValue>> | undefined
+  yieldToAgentArgs?: boolean
+  agentArgs: string | null | undefined
+  shell: AgentStartupShell
+}): {
+  sessionOptions?: Record<string, SessionOptionValue>
+  sessionOptionsOverrideAgentArgs?: true
+} {
+  const tokens = args.agentArgs?.trim()
+    ? tokenizeStartupCommand(args.agentArgs.trim(), args.shell)
+    : null
+  const sessionOptions =
+    args.sessionOptions && args.yieldToAgentArgs && tokens?.ok
+      ? resolveAgentSessionOptionLaunch(
+          args.agent,
+          { ...args.sessionOptions },
+          tokens.tokens,
+          false
+        ).appliedValues
+      : args.sessionOptions && { ...args.sessionOptions }
+  return sessionOptions && Object.keys(sessionOptions).length > 0
+    ? { sessionOptions, sessionOptionsOverrideAgentArgs: true }
+    : {}
 }

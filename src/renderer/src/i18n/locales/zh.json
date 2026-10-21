@@ -233,9 +233,12 @@
         "agentDefault": "智能体默认",
         "effortDefault": "默认",
         "savedModel": "设置中的模型：{{value0}}",
-        "permissionsDefault": "与新聊天相同",
-        "chatOptions": "聊天选项",
-        "savedChatOptions": "已保存的聊天选项：{{value0}}。旧版服务器使用其新聊天权限设置。"
+        "permissionsDefaultHint": "除非此操作设置了自己的 CLI 参数，否则终端使用智能体权限。",
+        "chatsOnly": "仅适用于聊天",
+        "terminalsOnly": "仅适用于终端",
+        "extraArgs": "额外 CLI 参数",
+        "launchOptions": "模型和权限",
+        "savedLaunchOptions": "已保存的选项：{{value0}}。旧版服务器使用其自身的权限设置。"
       }
     }
   },
@@ -13512,8 +13515,6 @@
           "SourceControlAgentActionDialogForm": {
             "7ec6abbf2a": "重置",
             "f4f3c9ca4a": "提示词模板",
-            "fe119187bb": "--model sonnet",
-            "bc8dc39f4b": "CLI 参数",
             "b99c33cec5": "设置",
             "15c5d85706": "智能体",
             "3e8f21954f": "错误",

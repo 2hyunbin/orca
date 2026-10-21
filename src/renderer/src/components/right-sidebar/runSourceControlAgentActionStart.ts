@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { sourceControlActionRecipeMatchesTarget } from './source-control-action-recipe-match'
 import { resolveSourceControlAgentSaveTarget } from './source-control-agent-action-dialog-support'
-import { resolveSourceControlActionSessionOptions } from '../../../../shared/source-control-action-launch-preferences'
+import { sourceControlActionLaunchOptions } from '../../../../shared/source-control-action-launch-preferences'
 
 type RunSourceControlAgentActionStartArgs = {
   selectedAgent: TuiAgent
@@ -38,8 +38,9 @@ type RunSourceControlAgentActionStartArgs = {
     commandInput: string
     /** Omitted when CLI arguments do not apply, so the launch resolves the global setting. */
     agentArgs?: string
-    /** The action's saved model and effort, on either route. */
+    /** The action's saved choice, on either route. */
     sessionOptions?: Readonly<Record<string, string>>
+    sessionOptionsYieldToAgentArgs?: true
   }) => boolean | Promise<boolean>
   onSaveAgentDefault?: (
     target: SourceControlAiWriteTarget,
@@ -89,7 +90,7 @@ export async function runSourceControlAgentActionStart({
   // an empty string would beat that fallback and silently suppress them.
   const launchAgentArgs = agentArgsApply ? agentArgs : undefined
   // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
-  const sessionOptions = resolveSourceControlActionSessionOptions(recipe, selectedAgent)
+  const launchOptions = sourceControlActionLaunchOptions(recipe, selectedAgent)
   const notifyLaunchAccepted = (): void => {
     if (launchAcceptedNotified) {
       return
@@ -102,7 +103,7 @@ export async function runSourceControlAgentActionStart({
       agent: selectedAgent,
       commandInput: trimmedCommandInput,
       agentArgs: launchAgentArgs,
-      ...(sessionOptions ? { sessionOptions } : {})
+      ...launchOptions
     })
     if (launched) {
       notifyLaunchAccepted()
@@ -115,7 +116,7 @@ export async function runSourceControlAgentActionStart({
       groupId: groupId ?? worktreeId,
       prompt: trimmedCommandInput,
       agentArgs: launchAgentArgs,
-      ...(sessionOptions ? { sessionOptions } : {}),
+      ...launchOptions,
       promptDelivery,
       launchPlatform,
       launchSource

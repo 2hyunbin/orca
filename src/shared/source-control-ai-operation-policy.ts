@@ -210,10 +210,15 @@ export function resolveSourceControlActionRecipe(input: {
   const repoKeepsGlobalAgent = repoRecipe.agentId === undefined
   const launchPreferences =
     repoRecipe.launchPreferences ?? (repoKeepsGlobalAgent ? globalLaunchPreferences : undefined)
+  const inheritsChoiceUnderOwnArgs =
+    launchPreferences !== undefined &&
+    repoRecipe.launchPreferences === undefined &&
+    repoRecipe.agentArgs !== undefined
   return {
     ...globalWithoutModel,
     commandInputTemplate,
     ...(launchPreferences ? { launchPreferences } : {}),
+    ...(inheritsChoiceUnderOwnArgs ? { launchPreferencesYieldToAgentArgs: true as const } : {}),
     ...(repoRecipe.agentId !== undefined ? { agentId: repoRecipe.agentId } : {}),
     ...(typeof repoRecipe.commandInputTemplate === 'string'
       ? { commandInputTemplate: repoRecipe.commandInputTemplate.trim() }

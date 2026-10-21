@@ -233,9 +233,12 @@
         "agentDefault": "Predeterminado del agente",
         "effortDefault": "Predeterminado",
         "savedModel": "Modelo de Configuración: {{value0}}",
-        "permissionsDefault": "Igual que los chats nuevos",
-        "chatOptions": "Opciones del chat",
-        "savedChatOptions": "Opciones de chat guardadas: {{value0}}. Los servidores antiguos usan sus permisos para los chats nuevos."
+        "permissionsDefaultHint": "Las terminales usan los Permisos de agentes salvo que esta acción defina sus propios argumentos CLI.",
+        "chatsOnly": "Solo se aplica a los chats",
+        "terminalsOnly": "Solo se aplica a las terminales",
+        "extraArgs": "Argumentos CLI adicionales",
+        "launchOptions": "Modelo y permisos",
+        "savedLaunchOptions": "Opciones guardadas: {{value0}}. Los servidores antiguos usan su propia configuración de permisos."
       }
     }
   },
@@ -13515,8 +13518,6 @@
             "ea4788705e": "Cancelar",
             "7ec6abbf2a": "Reiniciar",
             "f4f3c9ca4a": "Plantilla de prompt",
-            "fe119187bb": "--model sonnet",
-            "bc8dc39f4b": "Argumentos CLI",
             "b99c33cec5": "Ajustes",
             "15c5d85706": "Agente",
             "3e8f21954f": "error",

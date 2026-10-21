@@ -8,6 +8,7 @@ import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
 import { STRUCTURED_LAUNCH_SEED_OPTION_IDS } from './native-chat-session-option-defaults'
+import { terminalPermissionModeArgs } from './agent-permission-mode-terminal-args'
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
   agentChatPermissionModes,
@@ -31,20 +32,68 @@ export function sourceControlActionPermissionModes(
   return support ? offeredChatPermissionModes(support, false) : []
 }
 
-/** Structured controls only; terminal-composed options have no chat implementation. */
-export function sourceControlActionChatOptions(agent: TuiAgent, modelId: string): CatalogOption[] {
+/** The one route a saved choice reaches, for the hint under its control; null reaches both. */
+export type SourceControlActionChoiceRoute = 'chats' | 'terminals' | null
+
+function optionReachesChats(agent: TuiAgent, option: CatalogOption): boolean {
+  return (
+    !option.apply.composedIntoModel &&
+    (isAgentSessionHandleProvider(agent)
+      ? STRUCTURED_LAUNCH_SEED_OPTION_IDS.some((id) => id === option.id)
+      : option.id === 'effort')
+  )
+}
+
+type SourceControlActionOption = { option: CatalogOption; route: SourceControlActionChoiceRoute }
+
+/** The picked model's options that a chat seeds or a terminal flag carries. */
+export function sourceControlActionOptions(
+  agent: TuiAgent,
+  modelId: string
+): SourceControlActionOption[] {
   const catalog = getAgentSessionOptionCatalog(agent)
   const options =
     findCatalogModel(catalog ?? { models: [], modelApply: {} }, modelId)?.options ??
     catalog?.unknownModelOptions ??
     []
-  return options.filter(
-    (option) =>
-      !option.apply.composedIntoModel &&
-      (isAgentSessionHandleProvider(agent)
-        ? STRUCTURED_LAUNCH_SEED_OPTION_IDS.some((id) => id === option.id)
-        : option.id === 'effort')
-  )
+  return options.flatMap((option): SourceControlActionOption[] => {
+    const chats = optionReachesChats(agent, option)
+    const terminals = Boolean(option.apply.launchArgs || option.apply.composedIntoModel)
+    if (!chats && !terminals) {
+      return []
+    }
+    return [{ option, route: !terminals ? 'chats' : !chats ? 'terminals' : null }]
+  })
+}
+
+export function sourceControlActionPermissionModeRoute(
+  agent: TuiAgent,
+  mode: AgentChatPermissionMode
+): SourceControlActionChoiceRoute {
+  return terminalPermissionModeArgs(agent, mode) ? null : 'chats'
+}
+
+/** The action's choice as launch inputs, with whether this repository's own CLI arguments outrank
+ *  an inherited choice on terminals. */
+export function sourceControlActionLaunchOptions(
+  recipe: Pick<
+    SourceControlActionRecipe,
+    'agentId' | 'launchPreferences' | 'launchPreferencesYieldToAgentArgs'
+  >,
+  agent: TuiAgent
+): {
+  sessionOptions?: Readonly<Record<string, string>>
+  sessionOptionsYieldToAgentArgs?: true
+} {
+  const sessionOptions = resolveSourceControlActionSessionOptions(recipe, agent)
+  return sessionOptions
+    ? {
+        sessionOptions,
+        ...(recipe.launchPreferencesYieldToAgentArgs
+          ? { sessionOptionsYieldToAgentArgs: true as const }
+          : {})
+      }
+    : {}
 }
 
 /** The resolved agent alone can receive its bound action choice. */

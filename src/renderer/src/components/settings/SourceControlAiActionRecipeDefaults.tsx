@@ -31,7 +31,7 @@ import { SourceControlActionRecipeRow } from './SourceControlActionRecipeRow'
 import { SourceControlActionRepoOverrideNote } from './SourceControlActionRepoOverrideNote'
 import { useSourceControlActionRecipeDraftState } from './source-control-action-recipe-draft-state'
 import { translate } from '@/i18n/i18n'
-import { useSourceControlActionAgentInventory } from './use-source-control-action-chat-agent'
+import { useSourceControlActionAgentInventory } from './use-source-control-action-agent'
 
 type SourceControlAiActionRecipeDefaultsProps = {
   config: SourceControlAiSettings

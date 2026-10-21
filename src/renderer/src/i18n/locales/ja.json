@@ -233,9 +233,12 @@
         "agentDefault": "Agent の既定",
         "effortDefault": "既定",
         "savedModel": "設定のモデル: {{value0}}",
-        "permissionsDefault": "新しいチャットと同じ",
-        "chatOptions": "チャットオプション",
-        "savedChatOptions": "保存されたチャットオプション: {{value0}}。古いサーバーでは、新しいチャット用の権限が使用されます。"
+        "permissionsDefaultHint": "このアクションが独自の CLI 引数を設定しない限り、ターミナルでは Agent の権限が使用されます。",
+        "chatsOnly": "チャットにのみ適用",
+        "terminalsOnly": "ターミナルにのみ適用",
+        "extraArgs": "追加の CLI 引数",
+        "launchOptions": "モデルと権限",
+        "savedLaunchOptions": "保存されたオプション: {{value0}}。古いサーバーでは、サーバー側の権限設定が使用されます。"
       }
     }
   },
@@ -13512,8 +13515,6 @@
           "SourceControlAgentActionDialogForm": {
             "7ec6abbf2a": "リセット",
             "f4f3c9ca4a": "コマンドテンプレート",
-            "fe119187bb": "--model sonnet",
-            "bc8dc39f4b": "CLI 引数",
             "b99c33cec5": "設定",
             "15c5d85706": "Agent",
             "3e8f21954f": "エラー",

@@ -145,7 +145,7 @@ export function agentLaunchSurfaceFactory(
       viewMode,
       accountEnv
     }) => {
-      const launchPreferences = toAgentLaunchPreferences(options)
+      const launchPreferences = toAgentLaunchPreferences(options, agent)
       let promptRodeLaunchCommand = false
       const hasEarlyTab = earlyTab !== null
       if (earlyTab?.closedByUser()) {

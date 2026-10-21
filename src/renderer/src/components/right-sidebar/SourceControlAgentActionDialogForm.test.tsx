@@ -124,7 +124,7 @@ describe('SourceControlAgentActionDialogForm', () => {
     expect(markup).toContain('Resolve the merge conflicts reported for this pull request.')
   })
 
-  it('qualifies saved permissions without changing the model-only summary', () => {
+  it('names the saved choice on chat and terminal launches alike', () => {
     const recipe = {
       agentId: 'codex' as const,
       launchPreferences: {
@@ -133,8 +133,8 @@ describe('SourceControlAgentActionDialogForm', () => {
         permissionMode: 'ask' as const
       }
     }
-    expect(renderForm({ recipe, agentArgsApply: false })).toContain(
-      'Older servers use their permissions for new chats.'
+    expect(renderForm({ recipe, agentArgsApply: true })).toContain(
+      'Older servers use their own permission settings.'
     )
     expect(
       renderForm({

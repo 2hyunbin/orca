@@ -27,10 +27,10 @@ export type AiActionId = AiTextActionId | SourceControlLaunchActionId
 /** The bound agent namespace is independent of the recipe’s default-agent selection. */
 export type SourceControlActionLaunchPreferences = {
   agentId: TuiAgent
-  /** Absent: the chat starts on the agent's remembered selection. */
+  /** Absent: a chat starts on the agent's remembered selection, a terminal on its arguments. */
   model?: string
   options?: Record<string, string>
-  /** Absent: the chat takes the new-chat permission default. */
+  /** Absent: a chat takes the new-chat default, a terminal Agent Permissions or its own arguments. */
   permissionMode?: AgentChatPermissionMode
 }
 
@@ -38,8 +38,11 @@ export type SourceControlActionRecipe = {
   agentId?: TuiAgent | CustomAgentId | null
   commandInputTemplate?: string
   agentArgs?: string
-  /** Only the bound agent’s chat receives these values. */
+  /** Only the bound agent receives these values, on a chat or a terminal. */
   launchPreferences?: SourceControlActionLaunchPreferences
+  /** Resolved only, never saved: the choice is inherited from Global while this repository sets
+   *  its own CLI arguments, so on terminals a flag those arguments set wins over the choice. */
+  launchPreferencesYieldToAgentArgs?: true
 }
 
 export type SourceControlAiActionDefaults = Partial<Record<AiActionId, SourceControlActionRecipe>>

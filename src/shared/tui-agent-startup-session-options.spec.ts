@@ -136,7 +136,7 @@ describe('tui agent startup session options', () => {
     ).toEqual({
       ok: false,
       error:
-        'Agent command override conflicts with the requested launch preferences. Remove model or effort flags from the command override.'
+        'Agent command override conflicts with the requested launch preferences. Remove model, effort or permission flags from the command override.'
     })
   })
 

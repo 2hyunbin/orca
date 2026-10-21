@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 import './settings-persistence-test-fixture'
 import React from 'react'
@@ -19,15 +19,6 @@ import { RepositorySourceControlAiEnablement } from './RepositorySourceControlAi
 import { SourceControlAiActionRecipeDefaults } from './SourceControlAiActionRecipeDefaults'
 import { useAppStore } from '../../store'
 import { TooltipProvider } from '../ui/tooltip'
-import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
-import { resetHostStructuredAgentsForTests } from '@/runtime/host-structured-agents'
-import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY as CATALOG } from '../../../../shared/protocol-version'
-vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: vi.fn() }))
-afterEach(() => {
-  resetHostStructuredAgentsForTests()
-  setLocalRuntimeCapabilitiesForTests(null)
-})
 describe('RepositorySourceControlAiEnablement', () => {
   it('describes repo enablement as Source Control AI action visibility', () => {
     const markup = renderToStaticMarkup(
@@ -47,34 +38,19 @@ describe('RepositorySourceControlAiEnablement', () => {
 })
 
 describe('RepositorySourceControlAiActionRows', () => {
-  it.each([
-    ['codex', true],
-    ['codex', false],
-    ['opencode', true],
-    ['opencode', false]
-  ] as const)(
-    'waits for shared inventory and registration before choosing launch editors (%s chat=%s)',
-    async (agent, chat) => {
-      resetHostStructuredAgentsForTests()
-      setLocalRuntimeCapabilitiesForTests([CATALOG])
-      let register: (value: unknown) => void = () => {}
-      vi.mocked(callRuntimeRpc).mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            register = resolve
-          })
-      )
+  it.each(['codex', 'opencode'] as const)(
+    'shows one launch section for chats and terminals once detection settles (%s)',
+    async (agent) => {
       useAppStore.getState().clearLocalDetectedAgents()
       const settings = useAppStore.getState().settings!
-      const launchPreferences = {
-        agentId: agent === 'codex' && chat ? ('claude' as const) : agent,
-        permissionMode: 'ask' as const,
-        model: 'saved',
-        options: { fastMode: 'false' }
-      }
       const recipe = {
         agentId: null,
-        launchPreferences,
+        launchPreferences: {
+          agentId: agent,
+          permissionMode: 'ask' as const,
+          model: 'saved',
+          options: { fastMode: 'false' }
+        },
         agentArgs: '--saved-cli',
         commandInputTemplate: 'kept-template'
       }
@@ -96,12 +72,7 @@ describe('RepositorySourceControlAiActionRows', () => {
         value: { preflight: { detectAgents } }
       })
       useAppStore.setState({
-        settings: {
-          ...settings,
-          defaultTuiAgent: 'claude',
-          nativeChatProviders: { claude: !chat, codex: chat, opencode: true },
-          sourceControlAi: source
-        },
+        settings: { ...settings, defaultTuiAgent: 'claude', sourceControlAi: source },
         settingsSearchQuery: '',
         localDetectedAgentIdsByContext: {}
       })
@@ -144,39 +115,25 @@ describe('RepositorySourceControlAiActionRows', () => {
       expect(ensure).toHaveBeenCalledTimes(2)
       expect(detectAgents).toHaveBeenCalledTimes(1)
       for (const card of cards) {
-        expect(card.textContent).not.toContain('CLI arguments')
         expect(card.textContent).not.toContain('Model')
-        expect(card.querySelector('input')).toBeNull()
         expect(card.querySelectorAll('[aria-hidden="true"] .h-8')).toHaveLength(1)
-      }
-      if (!chat) {
-        await act(async () => {
-          register({ agents: [] })
-        })
+        expect(card.querySelector('input')?.value).toBe('--saved-cli')
       }
       await act(async () => {
         finish([agent])
       })
-      if (chat && agent === 'opencode') {
-        for (const card of cards) {
-          expect(card.textContent).not.toContain('CLI arguments')
-          expect(card.textContent).not.toContain('Permissions')
-        }
-      }
-      await act(async () => {
-        register({ agents: [{ agent: 'opencode', capabilities: { imagePrompts: true } }] })
-      })
       for (const card of cards) {
-        expect(card.textContent?.includes('Model')).toBe(chat && agent === 'codex')
-        expect(card.textContent?.includes('Permissions')).toBe(chat)
-        expect(card.textContent?.includes('CLI arguments')).toBe(!chat)
-        expect(card.querySelector('input')?.value).toBe(chat ? undefined : '--saved-cli')
+        expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
+        expect(card.textContent).toContain('Permissions')
+        // OpenCode's terminal has no permission flag, so its saved mode reaches chats only.
+        expect(card.textContent?.includes('Applies to chats only')).toBe(agent === 'opencode')
+        expect(card.textContent).toContain('Extra CLI arguments')
+        expect(card.querySelector('input')?.value).toBe('--saved-cli')
         expect(card.querySelector('textarea')?.value).toBe('kept-template')
       }
       expect(JSON.stringify(source.actions.fixCommitFailure)).toBe(originalRecipe)
       expect(writeConfig).not.toHaveBeenCalled()
       expect(onEdit).not.toHaveBeenCalled()
-      expect(ensure).toHaveBeenCalledTimes(2)
     }
   )
 

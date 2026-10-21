@@ -309,7 +309,8 @@ async function createSurface(
  *  workspace and the terminal of an existing one start the same agent. */
 function terminalLaunchInputs(intent: AgentLaunchIntent) {
   return {
-    ...(intent.sessionOptions ? { options: intent.sessionOptions } : {}),
+    // A caller's saved chat choice applies to the terminal too; the converter keeps what has a flag.
+    options: intent.sessionOptions ?? intent.chatOptions,
     // `null` is a value the caller meant, so this tests for absence rather than falsiness.
     ...(intent.agentArgs !== undefined ? { agentArgs: intent.agentArgs } : {}),
     ...(intent.cwd ? { cwd: intent.cwd } : {}),

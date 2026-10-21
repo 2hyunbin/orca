@@ -233,9 +233,12 @@
         "agentDefault": "에이전트 기본값",
         "effortDefault": "기본값",
         "savedModel": "설정의 모델: {{value0}}",
-        "permissionsDefault": "새 채팅과 동일",
-        "chatOptions": "채팅 옵션",
-        "savedChatOptions": "저장된 채팅 옵션: {{value0}}. 이전 서버는 새 채팅에 서버의 권한 설정을 사용합니다."
+        "permissionsDefaultHint": "이 작업에 자체 CLI 인수가 없으면 터미널은 에이전트 권한을 사용합니다.",
+        "chatsOnly": "채팅에만 적용",
+        "terminalsOnly": "터미널에만 적용",
+        "extraArgs": "추가 CLI 인수",
+        "launchOptions": "모델 및 권한",
+        "savedLaunchOptions": "저장된 옵션: {{value0}}. 이전 서버는 서버의 권한 설정을 사용합니다."
       }
     }
   },
@@ -13512,8 +13515,6 @@
           "SourceControlAgentActionDialogForm": {
             "7ec6abbf2a": "재설정",
             "f4f3c9ca4a": "프롬프트 템플릿",
-            "fe119187bb": "--model sonnet",
-            "bc8dc39f4b": "CLI 인수",
             "b99c33cec5": "설정",
             "15c5d85706": "에이전트",
             "3e8f21954f": "오류",

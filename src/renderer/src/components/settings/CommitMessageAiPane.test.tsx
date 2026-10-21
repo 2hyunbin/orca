@@ -121,7 +121,7 @@ describe('CommitMessageAiPane', () => {
           instructionsByOperation: {},
           customAgentCommand: '',
           actions: {
-            fixChecks: {
+            commitMessage: {
               agentId: 'codex'
             }
           },

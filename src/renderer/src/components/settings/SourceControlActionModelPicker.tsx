@@ -5,7 +5,8 @@ import {
 import type { SourceControlActionLaunchPreferences } from '../../../../shared/source-control-ai-actions'
 import {
   sourceControlActionAgentPicksModel,
-  sourceControlActionChatOptions,
+  sourceControlActionOptions,
+  sourceControlActionPermissionModeRoute,
   sourceControlActionPermissionModes
 } from '../../../../shared/source-control-action-launch-preferences'
 import { isAgentChatPermissionMode } from '../../../../shared/agent-chat-permission-mode'
@@ -13,12 +14,13 @@ import {
   nativeChatPermissionModeLabel,
   nativeChatPermissionPickerTitle
 } from '../native-chat/native-chat-permission-mode-labels'
-import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
+import { encodeCatalogOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { Select, SelectContent, SelectItem } from '../ui/select'
 import {
   SourceControlActionOptionField,
-  SourceControlActionOptionTrigger
+  SourceControlActionOptionTrigger,
+  sourceControlActionRouteHint
 } from './SourceControlActionOptionField'
 import { translate } from '@/i18n/i18n'
 
@@ -62,7 +64,8 @@ export function SourceControlActionModelPicker({
     catalog && selected?.model && !findCatalogModel(catalog, selected.model)
       ? selected.model
       : undefined
-  const options = selected?.model ? sourceControlActionChatOptions(agent, selected.model) : []
+  const options = selected?.model ? sourceControlActionOptions(agent, selected.model) : []
+  const defaultLabel = translate('settings.sourceControl.actionModel.effortDefault', 'Default')
   return (
     <div className="grid min-w-0 gap-2">
       {catalog ? (
@@ -101,7 +104,19 @@ export function SourceControlActionModelPicker({
         </SourceControlActionOptionField>
       ) : null}
       {modes.length > 0 ? (
-        <SourceControlActionOptionField label={nativeChatPermissionPickerTitle()}>
+        <SourceControlActionOptionField
+          label={nativeChatPermissionPickerTitle()}
+          hint={
+            permissionMode
+              ? sourceControlActionRouteHint(
+                  sourceControlActionPermissionModeRoute(agent, permissionMode)
+                )
+              : translate(
+                  'settings.sourceControl.actionModel.permissionsDefaultHint',
+                  'Terminals use Agent Permissions unless this action sets its own CLI arguments.'
+                )
+          }
+        >
           <Select
             value={permissionMode ?? AGENT_DEFAULT_VALUE}
             disabled={disabled}
@@ -115,22 +130,10 @@ export function SourceControlActionModelPicker({
           >
             <SourceControlActionOptionTrigger
               disabled={disabled}
-              label={
-                permissionMode
-                  ? nativeChatPermissionModeLabel(permissionMode)
-                  : translate(
-                      'settings.sourceControl.actionModel.permissionsDefault',
-                      'Same as new chats'
-                    )
-              }
+              label={permissionMode ? nativeChatPermissionModeLabel(permissionMode) : defaultLabel}
             />
             <SelectContent>
-              <SelectItem value={AGENT_DEFAULT_VALUE}>
-                {translate(
-                  'settings.sourceControl.actionModel.permissionsDefault',
-                  'Same as new chats'
-                )}
-              </SelectItem>
+              <SelectItem value={AGENT_DEFAULT_VALUE}>{defaultLabel}</SelectItem>
               {[
                 ...modes,
                 ...(permissionMode && !modes.includes(permissionMode) ? [permissionMode] : [])
@@ -144,7 +147,7 @@ export function SourceControlActionModelPicker({
         </SourceControlActionOptionField>
       ) : null}
       {selected?.model
-        ? options.map((option) => {
+        ? options.map(({ option, route }) => {
             const choices =
               option.kind.type === 'select'
                 ? option.kind.choices
@@ -160,7 +163,11 @@ export function SourceControlActionModelPicker({
                   ]
             const current = selected.options?.[option.id]
             return (
-              <SourceControlActionOptionField key={option.id} label={option.label}>
+              <SourceControlActionOptionField
+                key={option.id}
+                label={option.label}
+                hint={sourceControlActionRouteHint(route)}
+              >
                 <Select
                   value={current ?? AGENT_DEFAULT_VALUE}
                   disabled={disabled}
@@ -169,8 +176,8 @@ export function SourceControlActionModelPicker({
                     const encoded =
                       next === AGENT_DEFAULT_VALUE
                         ? null
-                        : encodeStructuredAgentSessionOptionValue(
-                            option.id,
+                        : encodeCatalogOptionValue(
+                            option.kind,
                             option.kind.type === 'boolean' ? next === 'true' : next
                           )
                     const values = {
@@ -185,13 +192,11 @@ export function SourceControlActionModelPicker({
                     label={
                       current
                         ? (choices.find((choice) => choice.value === current)?.label ?? current)
-                        : translate('settings.sourceControl.actionModel.effortDefault', 'Default')
+                        : defaultLabel
                     }
                   />
                   <SelectContent>
-                    <SelectItem value={AGENT_DEFAULT_VALUE}>
-                      {translate('settings.sourceControl.actionModel.effortDefault', 'Default')}
-                    </SelectItem>
+                    <SelectItem value={AGENT_DEFAULT_VALUE}>{defaultLabel}</SelectItem>
                     {choices.map((choice) => (
                       <SelectItem key={choice.value} value={choice.value}>
                         {choice.label}
