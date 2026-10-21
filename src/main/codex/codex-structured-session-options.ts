@@ -1,3 +1,7 @@
+import type {
+  StructuredAgentSessionLiveOptions,
+  StructuredAgentCurrentModelObservation
+} from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import { agentSessionEffortLevels } from '../../shared/agent-session-effort-levels'
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
@@ -14,12 +18,12 @@ import {
   composeCodexSessionOptionCatalog,
   fetchCodexModelCatalogListing,
   readCodexStructuredSessionOptionCatalog,
-  type CodexModelCatalogListing,
   type CodexSessionOptionCatalog
 } from './codex-structured-model-catalog'
 import {
   codexAcquireCatalogListing,
-  codexSessionCapabilities
+  codexSessionCapabilities,
+  codexCurrentModelObservation
 } from './codex-structured-catalog-entry'
 export { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
 
@@ -70,14 +74,19 @@ async function prepareCodexCurrentCapabilities(session: CodexSession, timeoutMs?
     session.currentModelCapabilities = fact
   }
   const captured = fact
+  let observation: StructuredAgentCurrentModelObservation | undefined
   const pending = (captured.pending ??= fetchCodexModelCatalogListing({
     connection,
     timeoutMs,
-    configuration: false
+    configuration: false,
+    currentModel: captured.model,
+    observeCurrentModel: (value) => {
+      observation = value
+    }
   })
-    .then((listing) => listing.models.find((row) => row.id === captured.model))
+    .then(() => observation)
     .catch(() => undefined))
-  const row = await pending
+  const acquired = await pending
   return () => {
     if (
       session.currentModelCapabilities !== captured ||
@@ -94,8 +103,8 @@ async function prepareCodexCurrentCapabilities(session: CodexSession, timeoutMs?
     if (captured.pending === pending) {
       delete captured.pending
     }
-    if (row) {
-      captured.row = row
+    if (acquired) {
+      captured.observation = acquired
     }
   }
 }
@@ -112,12 +121,12 @@ export async function readCodexStructuredSessionOptions(input: {
 
 function composeLiveCodexCatalog(
   session: CodexSession,
-  listing: CodexModelCatalogListing
+  listing: ReturnType<typeof codexSessionCapabilities>
 ): CodexSessionOptionCatalog {
   const model = session.options.get('model') ?? session.reportedOptions.model
   const effort = session.options.get('effort') ?? session.reportedOptions.effort
   const serviceTier = session.options.get('serviceTier')
-  return composeCodexSessionOptionCatalog(listing, {
+  const catalog = composeCodexSessionOptionCatalog(listing, {
     current: {
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
@@ -130,12 +139,13 @@ function composeLiveCodexCatalog(
         }
       : {})
   })
+  return { ...catalog, fastModeSupport: listing.fastModeSupport }
 }
 
 export async function readLiveCodexSessionOptions(
   session: CodexSession,
   timeoutMs: number | undefined
-): Promise<AgentSessionOptionsResult> {
+): Promise<StructuredAgentSessionLiveOptions> {
   return (await prepareLiveCodexSessionOptions(session, timeoutMs))()
 }
 
@@ -143,14 +153,17 @@ export async function readLiveCodexSessionOptions(
 export async function prepareLiveCodexSessionOptions(
   session: CodexSession,
   timeoutMs: number | undefined
-): Promise<() => AgentSessionOptionsResult> {
+): Promise<() => StructuredAgentSessionLiveOptions> {
   const [apply] = await Promise.all([
     prepareCodexCurrentCapabilities(session, timeoutMs),
     session.catalogAccess?.demand?.()
   ])
   return () => {
     apply()
-    return composeLiveCodexCatalog(session, codexSessionCapabilities(session))
+    return {
+      ...composeLiveCodexCatalog(session, codexSessionCapabilities(session)),
+      currentModelObservation: codexCurrentModelObservation(session)
+    }
   }
 }
 

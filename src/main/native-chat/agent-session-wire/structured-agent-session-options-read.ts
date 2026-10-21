@@ -21,8 +21,8 @@ import { saveStructuredAgentSessionListing } from './structured-agent-session-st
 import { independentAgentModelCatalog } from '../agent-model-catalog/agent-model-catalog-discovery'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import {
-  structuredAgentSessionOptionModels,
-  structuredAgentSessionCurrentModelOptions
+  structuredAgentSessionCapabilityView,
+  structuredAgentSessionOptionModels
 } from './structured-agent-session-option-models'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
@@ -36,7 +36,10 @@ export {
 type RestingOptions = Pick<
   AgentSessionOptionsResult,
   'models' | 'listedModelIds' | 'fastModeSupport' | 'current'
->
+> & {
+  inventory: AgentSessionModelCatalogResult
+  fallback: AgentSessionOptionsResult['models']
+}
 
 /** What the asking client takes: whether it reads an answer that names no model. */
 export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
@@ -134,11 +137,13 @@ async function readStructuredAgentSessionOptionsAtRest(
   // The tier the chat's own model runs; the record keeps the saved one for a model that offers it.
   const serviceTier = savedEffectiveServiceTier(saved, models)
   return {
+    inventory: catalog,
+    fallback: catalog.origin === 'unknown' ? (listed ?? []) : [],
     models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
-    ...(listedModelIds ? { listedModelIds } : {}),
     ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
       ? { fastModeSupport: catalog.fastModeSupport }
       : {}),
+    ...(listedModelIds ? { listedModelIds } : {}),
     current: {
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
@@ -197,7 +202,12 @@ export async function readStructuredAgentSessionOptions(
     (rested ??= await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader))
   let options: Omit<AgentSessionOptionsResult, 'rewind'>
   if (live) {
-    const { catalogListing, ...answer } = live
+    const {
+      catalogListing,
+      currentModelObservation: _observation,
+      fastModeRestriction: _restriction,
+      ...answer
+    } = live
     options = answer
     // A child with no listing of its own reads the saved one, as at rest, so a row reads the same.
     // With no record there is nothing saved to read, and the answer stays the child's own.
@@ -217,7 +227,8 @@ export async function readStructuredAgentSessionOptions(
       options = { ...answer, listedModelIds }
     }
   } else {
-    options = await atRest()
+    const { inventory: _inventory, fallback: _fallback, ...answer } = await atRest()
+    options = answer
   }
   // Re-acquired after the reads above: the handle they saw may have closed and reopened since.
   const session = await context.conversation(sessionId)
@@ -272,19 +283,17 @@ export async function readStructuredAgentSessionOptions(
   )
   const independent = independentAgentModelCatalog(agent)
   if (independent) {
-    const inventory = await atRest()
+    const { inventory, fallback, listedModelIds } = await atRest()
     const sameChild =
       started.kind !== 'rest' && (await context.conversation(sessionId)).child === started.child
-    options = structuredAgentSessionCurrentModelOptions(
-      {
-        ...options,
-        models: inventory.models,
-        listedModelIds: inventory.listedModelIds,
-        fastModeSupport: inventory.fastModeSupport,
-        current
-      },
-      sameChild ? live : null
+    const { listedServiceTiers: _tiers, ...view } = structuredAgentSessionCapabilityView(
+      inventory,
+      current.model,
+      sameChild ? live?.currentModelObservation : undefined,
+      fallback,
+      sameChild ? live?.fastModeRestriction : undefined
     )
+    options = { ...options, ...view, listedModelIds, current }
     const projected = sameChild
       ? adapter.projectOptions?.(sessionId, {
           ...saved,

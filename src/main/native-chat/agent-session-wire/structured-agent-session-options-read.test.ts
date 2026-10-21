@@ -1,3 +1,16 @@
+import {
+  adapterFor as claudeAdapterFor,
+  fakeClaude,
+  identityFor as claudeIdentityFor
+} from '../../claude/claude-structured-session-test-support'
+import { claudeFallbackModelOptions } from '../../claude/claude-structured-session-options'
+import type {
+  StructuredAgentSessionLiveOptions,
+  StructuredAgentSessionAdapter
+} from './structured-agent-session-adapter'
+import { optionSession } from '../../codex/codex-structured-option-session.test-fixture'
+import { readLiveCodexSessionOptions } from '../../codex/codex-structured-session-options'
+import { projectCodexSessionOptions } from '../../codex/codex-structured-service-tier'
 // A chat's options at rest come from the host catalog without waiting on a listing.
 
 import { describe, expect, it, vi } from 'vitest'
@@ -240,18 +253,19 @@ describe('a chat at rest, read by the host', () => {
     items: AgentJournalItemBody[] = [],
     wroteBeforeOpen = false,
     models = listed,
-    verified = true
+    verified = true,
+    liveOptions?: StructuredAgentSessionLiveOptions
   ) {
     const record = { ...restingRecord(), ...facts }
     const resting = {
-      child: null,
-      params: { provider: 'codex' },
+      child: liveOptions ? { fence: 1 } : null,
+      params: { provider: record.provider },
       journal: restingJournal(items, wroteBeforeOpen)
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
       deps: {
-        adapter: {},
+        adapter: liveOptions ? { readOptions: async () => liveOptions } : {},
         agents: claudeAndCodexAgents(),
         store: { getRecord: () => record },
         modelCatalog: catalog(models, verified)
@@ -274,6 +288,74 @@ describe('a chat at rest, read by the host', () => {
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
     const read = await readAtRest(facts, items, wroteBeforeOpen)
     expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+  })
+
+  it('keeps installed High when a Claude answer has only presentation seeds', async () => {
+    const installed = [
+      {
+        id: 'opus',
+        label: 'Opus',
+        efforts: [{ value: 'high', label: 'High' }],
+        supportsFastMode: true
+      }
+    ]
+    const answer: StructuredAgentSessionLiveOptions = {
+      models: claudeFallbackModelOptions(),
+      current: { model: 'opus', effort: 'high' }
+    }
+    const read = () =>
+      readAtRest(
+        { provider: 'claude', options: { model: 'opus', effort: 'high' } },
+        [],
+        false,
+        installed,
+        true,
+        answer
+      )
+    expect((await read()).models).toEqual(installed)
+    answer.currentModelObservation = {
+      source: 'claude-child',
+      model: 'opus',
+      capabilities: { fast: false }
+    }
+    expect((await read()).models[0]).toMatchObject({
+      efforts: installed[0]?.efforts,
+      supportsFastMode: false
+    })
+    answer.currentModelObservation.capabilities.effort = { choices: [] }
+    expect((await read()).models[0]?.efforts).toEqual([])
+    delete answer.currentModelObservation
+    expect((await read()).models[0]?.efforts).toEqual(installed[0]?.efforts)
+    const raw = [{ value: 'opus', supportsEffort: true, supportedEffortLevels: ['low', 'high'] }]
+    const claude = fakeClaude({ routes: { list_models: () => raw } })
+    const adapter = claudeAdapterFor(claude)
+    await adapter.acquire({
+      identity: claudeIdentityFor(),
+      fence: 7,
+      spawnToken: 'spawn-low',
+      options: { model: 'opus', effort: 'high' }
+    })
+    const chat = picking(
+      { model: 'opus', effort: 'high' },
+      installed,
+      undefined,
+      adapter.projectPickOptions,
+      'claude'
+    )
+    expect(await chat.pick('effort', 'low')).toMatchObject({
+      ok: true,
+      value: { options: { model: 'opus', effort: 'low' } }
+    })
+    await expect(
+      adapter.setOption({ sessionId: SESSION, fence: 7, key: 'effort', value: 'low' })
+    ).resolves.toMatchObject({ effort: 'low' })
+    expect(installed[0]?.efforts).toEqual([{ value: 'high', label: 'High' }])
+    claude.routes.list_models = () => []
+    expect(await chat.pick('effort', 'low')).toMatchObject({ ok: false })
+    await expect(
+      adapter.setOption({ sessionId: SESSION, fence: 7, key: 'effort', value: 'low' })
+    ).resolves.toMatchObject({ effort: 'low' })
+    await adapter.closeAll()
   })
 
   it('uses held rows as menus without projecting an unverified default effort', async () => {
@@ -329,9 +411,11 @@ describe('a chat at rest, read by the host', () => {
     ) => {
       models: AgentSessionModelOption[]
       options: Record<string, string>
-    }
+    },
+    projectPickOptions?: StructuredAgentSessionAdapter['projectPickOptions'],
+    provider = 'codex'
   ) {
-    let record: AgentSessionRecord = { ...restingRecord(), options }
+    let record: AgentSessionRecord = { ...restingRecord(), options, provider }
     const store = {
       getRecord: () => record,
       replaceSessionOptions: vi.fn(),
@@ -344,7 +428,7 @@ describe('a chat at rest, read by the host', () => {
       store,
       agents: claudeAndCodexAgents(),
       modelCatalog: catalog(models),
-      adapter: { projectOptions }
+      adapter: { projectOptions, projectPickOptions }
     }
     const ctx = { sessionId: SESSION, fence: 1, publish: vi.fn(), now: () => 0 }
     return {
@@ -390,10 +474,61 @@ describe('a chat at rest, read by the host', () => {
       ]
     }
     const inventory = [{ id: 'B', label: 'B', isDefault: false, efforts: [] }]
-    const chat = picking({ model: 'A', effort: 'high' }, inventory, (_id, options) => ({
-      models: [...inventory, child],
-      options: { ...options }
-    }))
+    const session = optionSession(
+      vi.fn(async () => ({
+        data: [
+          {
+            model: 'A',
+            supportedReasoningEfforts: child.efforts.map((row) => ({ reasoningEffort: row.value }))
+          }
+        ],
+        nextCursor: null
+      }))
+    )
+    session.options = new Map([
+      ['model', 'A'],
+      ['effort', 'high']
+    ])
+    const installedStore = new AgentModelCatalogStore()
+    installedStore.recordSuccess(
+      'scope',
+      'codex',
+      { models: inventory, complete: true, origin: 'probe' },
+      'discovery'
+    )
+    session.catalogAccess = { store: installedStore, fingerprint: 'scope', accountHomePath: '/qa' }
+
+    const chat = picking(
+      { model: 'A', effort: 'high' },
+      inventory,
+      (_id, options) =>
+        projectCodexSessionOptions(session, options) ?? {
+          models: inventory,
+          options: { ...options }
+        }
+    )
+    const live = { child: { fence: 1 }, params: { provider: 'codex' }, journal: restingJournal() }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies every field read by the host options path.
+    const context = {
+      deps: {
+        adapter: { readOptions: () => readLiveCodexSessionOptions(session, 100) },
+        agents: claudeAndCodexAgents(),
+        store: { getRecord: chat.record },
+        modelCatalog: catalog(inventory)
+      },
+      serialize: (_id: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => live,
+      conversation: async () => live
+    } as unknown as StructuredAgentSessionMutationContext
+    const answer = await readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: true
+    })
+    expect(answer.models.find((row) => row.id === 'A')?.efforts).toEqual(child.efforts)
+    expect(answer.listedModelIds).toEqual(['B'])
+    expect(answer).not.toHaveProperty('currentModelObservation')
+    expect(answer).not.toHaveProperty('fastModeRestriction')
+    expect(answer).not.toHaveProperty('installed')
+    expect(answer).not.toHaveProperty('listedServiceTiers')
     expect(await chat.pick('effort', 'low')).toMatchObject({
       ok: true,
       value: { options: { model: 'A', effort: 'low' } }

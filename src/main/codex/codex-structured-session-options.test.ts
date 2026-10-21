@@ -12,7 +12,6 @@ import {
   readCodexStructuredSessionOptions,
   readCodexStructuredSessionOptionCatalog,
   readLiveCodexSessionOptions,
-  prepareLiveCodexSessionOptions,
   restoredCodexSessionOptions
 } from './codex-structured-session-options'
 import { reportedCodexThreadOptions } from './codex-structured-service-tier'
@@ -711,87 +710,4 @@ describe('Codex option picks before the model list arrives', () => {
     )
     pending.resolve({ data: [], nextCursor: null })
   })
-})
-
-it('uses real child A controls with production access to B and rejects predecessor replies', async () => {
-  let efforts: { reasoningEffort: string }[] | undefined = [
-    { reasoningEffort: 'low' },
-    { reasoningEffort: 'high' }
-  ]
-  const request = vi.fn(async (_method: string) => ({
-    data: [
-      {
-        model: 'A',
-        ...(efforts ? { supportedReasoningEfforts: efforts } : {})
-      }
-    ],
-    nextCursor: null
-  }))
-  const session = optionSession(request)
-  session.options = new Map([
-    ['model', 'A'],
-    ['effort', 'high']
-  ])
-  const store = new AgentModelCatalogStore()
-  store.recordSuccess(
-    'scope',
-    'codex',
-    {
-      origin: 'probe',
-      complete: true,
-      models: [{ id: 'B', label: 'B', efforts: [], isDefault: true }]
-    },
-    'discovery'
-  )
-  session.catalogAccess = {
-    store,
-    fingerprint: 'scope',
-    accountHomePath: '/account',
-    read: (verified) => {
-      const entry = store.get('scope')
-      return entry && (!verified || store.verified(entry)) ? entry : null
-    },
-    demand: async () => {}
-  }
-  expect(
-    (await readLiveCodexSessionOptions(session, 100)).models.find((row) => row.id === 'A')?.efforts
-  ).toEqual([
-    { value: 'low', label: 'Low' },
-    { value: 'high', label: 'High' }
-  ])
-  await expect(applyCodexStructuredSessionOption(session, 'effort', 'low')).resolves.toMatchObject({
-    effort: 'low'
-  })
-  expect(store.get('scope')?.models.map((row) => row.id)).toEqual(['B'])
-  expect(request.mock.calls.every((args) => args[0] === 'model/list')).toBe(true)
-  efforts = undefined
-  await readLiveCodexSessionOptions(session, 100)
-  await expect(applyCodexStructuredSessionOption(session, 'effort', 'high')).resolves.toMatchObject(
-    {
-      effort: 'high'
-    }
-  )
-  efforts = []
-  await readLiveCodexSessionOptions(session, 100)
-  await expect(applyCodexStructuredSessionOption(session, 'effort', 'low')).rejects.toThrow(
-    'does not support low'
-  )
-  expect(session.options.get('effort')).toBe('high')
-  const late = await prepareLiveCodexSessionOptions(session, 100)
-  session.fence += 1
-  expect(late().models.find((row) => row.id === 'A')?.effortsKnown).toBe(false)
-  efforts = [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }]
-  const predecessorReply = await request('model/list')
-  const pending = Promise.withResolvers<typeof predecessorReply>()
-  request.mockImplementationOnce(() => pending.promise)
-  const reading = prepareLiveCodexSessionOptions(session, 100)
-  session.connection = optionSession(request).connection
-  pending.resolve(predecessorReply)
-  expect((await reading)().models.find((row) => row.id === 'A')?.effortsKnown).toBe(false)
-  expect(
-    (await readLiveCodexSessionOptions(session, 100)).models.find((row) => row.id === 'A')?.efforts
-  ).toEqual([
-    { value: 'low', label: 'Low' },
-    { value: 'high', label: 'High' }
-  ])
 })

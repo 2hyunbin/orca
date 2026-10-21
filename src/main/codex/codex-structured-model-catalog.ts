@@ -3,6 +3,7 @@ import type {
   AgentSessionOptionChoice,
   AgentSessionOptionsResult
 } from '../../shared/agent-session-wire'
+import type { StructuredAgentCurrentModelObservation } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import { effectiveServiceTier } from '../../shared/structured-agent-session-effective-tier'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import { structuredAgentSessionOptionModels } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
@@ -104,6 +105,8 @@ export async function fetchCodexModelCatalogListing(input: {
   deadlineMs?: number
   cwd?: string
   configuration?: false
+  currentModel?: string
+  observeCurrentModel?: (observation: StructuredAgentCurrentModelObservation) => void
 }): Promise<CodexModelCatalogListing> {
   const deadline = input.deadlineMs === undefined ? null : Date.now() + input.deadlineMs
   const remainingTimeout = (): number | undefined => {
@@ -133,6 +136,19 @@ export async function fetchCodexModelCatalogListing(input: {
     const rows = Array.isArray(response?.data) ? response.data : []
     for (const row of rows) {
       const parsed = modelOption(row)
+      if (parsed && parsed.id === input.currentModel) {
+        input.observeCurrentModel?.({
+          source: 'codex-child',
+          model: parsed.id,
+          capabilities: {
+            ...(parsed.effortsKnown !== false
+              ? { effort: { choices: parsed.efforts, default: parsed.defaultEffort } }
+              : {}),
+            ...(parsed.serviceTiers !== undefined ? { tiers: parsed.serviceTiers } : {}),
+            ...(parsed.supportsFastMode !== undefined ? { fast: parsed.supportsFastMode } : {})
+          }
+        })
+      }
       if (!parsed && record(row)?.hidden !== true) {
         complete = false
       }

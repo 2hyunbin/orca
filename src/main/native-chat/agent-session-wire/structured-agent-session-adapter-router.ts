@@ -161,6 +161,9 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
   projectOptions: StructuredAgentSessionAdapter['projectOptions'] = (sessionId, options) =>
     this.liveOwnerOrNull(sessionId)?.projectOptions?.(sessionId, options)
 
+  projectPickOptions: StructuredAgentSessionAdapter['projectPickOptions'] = async (...args) =>
+    this.liveOwnerOrNull(args[0])?.projectPickOptions?.(...args)
+
   prepareReadOptions = (input: { sessionId: string; fence: number }) =>
     this.liveOwnerOrNull(input.sessionId)?.prepareReadOptions?.(input)
 

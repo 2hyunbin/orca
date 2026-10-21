@@ -1,3 +1,4 @@
+import { structuredAgentSessionCapabilityView } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import { agentSessionOptionAdmitted } from '../runtime/agent-session-record-options'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { applyCodexStructuredSessionOption } from '../codex/codex-structured-session-options'
@@ -484,6 +485,49 @@ describe('unknown versus explicitly empty effort across host and adapters', () =
       ]
       session.connection.applyFlagSettings = async () => {}
       session.connection.getSettings = async () => ({ effective: { effortLevel: 'high' } })
+      const installed = {
+        models: [
+          {
+            ...row,
+            efforts: [{ value: 'high', label: 'High' }],
+            effortsKnown: undefined,
+            supportsFastMode: true
+          }
+        ]
+      }
+      const read = async () => {
+        const answer = await readClaudeStructuredSessionOptions(session, undefined)
+        return structuredAgentSessionCapabilityView(
+          installed,
+          'opus',
+          answer.currentModelObservation,
+          [],
+          answer.fastModeRestriction
+        )
+      }
+      expect((await read()).models[0]?.efforts).toEqual(known ? [] : installed.models[0]?.efforts)
+      const rawRead = session.connection.supportedModels
+      session.connection.supportedModels = async () => []
+      expect((await read()).models[0]?.efforts).toEqual(installed.models[0]?.efforts)
+      session.connection.supportedModels = async () => {
+        throw new Error('unavailable')
+      }
+      expect((await read()).models[0]?.efforts).toEqual(installed.models[0]?.efforts)
+      session.connection.supportedModels = async () => [{ value: 'opus', supportsFastMode: false }]
+      expect((await read()).models[0]?.supportsFastMode).toBe(false)
+      session.connection.supportedModels = rawRead
+      expect((await read()).models[0]?.supportsFastMode).toBe(true)
+      for (const reason of ['pending', 'preference', 'sdk_opt_in_required']) {
+        session.fastModeDisabledReason = reason
+        expect((await read()).models[0]?.supportsFastMode).toBe(true)
+      }
+      session.fastModeDisabledReason = 'account-disabled'
+      expect((await read()).models[0]?.supportsFastMode).toBe(false)
+      delete session.fastModeDisabledReason
+
+      expect(agentSessionOptionAdmitted('claude', installed.models, 'opus', 'effort', 'low')).toBe(
+        false
+      )
       const applied = setClaudeStructuredOption(
         session,
         { key: 'effort', value: 'high' },

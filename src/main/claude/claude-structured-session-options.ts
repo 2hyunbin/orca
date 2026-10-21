@@ -278,6 +278,27 @@ export function claudeStructuredSessionOptionsFrom(
   readMutationSequence = session.optionMutationSequence
 ): StructuredAgentSessionLiveOptions {
   const discovered = listedModels(catalog ? { models: catalog } : null)
+  const reported = readClaudeCurrentModel(session)
+  const selected = reported.id
+    ? discovered.find((row) => row.id === reported.id || row.resolvedModel === reported.id)
+    : undefined
+  const currentModelObservation: StructuredAgentSessionLiveOptions['currentModelObservation'] =
+    selected
+      ? {
+          source: 'claude-child',
+          model: [selected.id, selected.resolvedModel].includes(
+            session.options.get('model') ?? null
+          )
+            ? (session.options.get('model') ?? selected.id)
+            : (reported.id ?? selected.id),
+          capabilities: {
+            ...(selected.effortsKnown !== false
+              ? { effort: { choices: selected.efforts, default: selected.defaultEffort } }
+              : {}),
+            ...(selected.supportsFastMode !== undefined ? { fast: selected.supportsFastMode } : {})
+          }
+        }
+      : undefined
   const listed = discovered.length > 0 ? discovered : seedModels()
   const current = readClaudeCurrentModel(session)
   const model = currentModelId(listed, current.id)
@@ -321,6 +342,8 @@ export function claudeStructuredSessionOptionsFrom(
   ]
   return {
     models: wireClaudeModels(models),
+    ...(currentModelObservation ? { currentModelObservation } : {}),
+    fastModeRestriction: claudeFastModeSupport([], session.fastModeDisabledReason),
     ...(support ? { fastModeSupport: support } : {}),
     current: {
       model,
