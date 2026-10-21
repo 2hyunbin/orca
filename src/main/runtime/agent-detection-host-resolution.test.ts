@@ -79,6 +79,46 @@ describe('OrcaRuntimeService.resolveAgentDetectionHost', () => {
     )
   })
 
+  it('resolves the selected repo before a workspace exists (#20060)', async () => {
+    const wslRepo: Repo = { ...local, path: '\\\\wsl.localhost\\Debian\\home\\neil\\repo' }
+    const { runtime, selector } = makeRuntime([wslRepo])
+    expect(await runtime.resolveAgentDetectionHost(undefined, local.id)).toEqual({
+      kind: 'local',
+      context: {
+        projectRuntime: {
+          status: 'resolved',
+          runtime: expect.objectContaining({ kind: 'wsl', distro: 'Debian' })
+        }
+      }
+    })
+    expect(selector).not.toHaveBeenCalled()
+  })
+
+  it('keeps repo detection on its configured runtime for a Windows path', async () => {
+    const { runtime } = makeRuntime([local])
+    expect(await runtime.resolveAgentDetectionHost(undefined, local.id)).toMatchObject({
+      kind: 'local',
+      context: { projectRuntime: { runtime: { kind: 'wsl', distro: 'Ubuntu' } } }
+    })
+  })
+
+  it('refuses an unknown or ambiguous repo instead of probing the host default', async () => {
+    const { runtime } = makeRuntime([local, { ...local, executionHostId: 'runtime:other' }])
+    await expect(runtime.resolveAgentDetectionHost(undefined, local.id)).rejects.toThrow(
+      'selector_ambiguous'
+    )
+    await expect(runtime.resolveAgentDetectionHost(undefined, 'missing')).rejects.toThrow(
+      'repo_not_found'
+    )
+  })
+
+  it('refuses a repo owned by another runtime', async () => {
+    const { runtime } = makeRuntime([{ ...local, executionHostId: 'runtime:other' }])
+    await expect(runtime.resolveAgentDetectionHost(undefined, local.id)).rejects.toThrow(
+      'workspace_on_other_runtime'
+    )
+  })
+
   it("routes by the host's own worktree record", async () => {
     const ssh: Repo = { ...local, path: '/srv/r1', executionHostId: 'ssh:build-host' }
     const { runtime, selector } = makeRuntime([ssh, local])

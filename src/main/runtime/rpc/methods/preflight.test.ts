@@ -68,8 +68,8 @@ describe('preflight RPC methods', () => {
     const refreshed = await dispatcher.dispatch(makeRequest('preflight.refreshAgents', null))
 
     // An older client sends no workspace and keeps the host-default probe.
-    expect(resolveAgentDetectionHost).toHaveBeenNthCalledWith(1, undefined)
-    expect(resolveAgentDetectionHost).toHaveBeenNthCalledWith(2, undefined)
+    expect(resolveAgentDetectionHost).toHaveBeenNthCalledWith(1, undefined, undefined)
+    expect(resolveAgentDetectionHost).toHaveBeenNthCalledWith(2, undefined, undefined)
     expect(detectInstalledAgentsWithShellPathHydrationMock).toHaveBeenCalledWith(undefined)
     expect(refreshShellPathAndDetectAgentsMock).toHaveBeenCalledWith(undefined)
     expect(detected).toMatchObject({ ok: true, result: ['codex'] })
@@ -116,6 +116,28 @@ describe('preflight RPC methods', () => {
     expect(wsl).toMatchObject({ ok: true, result: ['codex'] })
     expect(detectInstalledAgentsWithShellPathHydrationMock).toHaveBeenCalledTimes(1)
     expect(ssh).toMatchObject({ ok: false, error: { message: SSH_HOST_NOT_SERVED_MESSAGE } })
+  })
+
+  it('forwards a repo target before workspace creation and rejects malformed ids', async () => {
+    detectInstalledAgentsWithShellPathHydrationMock.mockResolvedValueOnce(['codex'])
+    const resolveAgentDetectionHost = vi.fn(() => ({ kind: 'local' }) as const)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dispatcher reads only these two runtime members.
+    const runtime = {
+      getRuntimeId: () => 'runtime',
+      resolveAgentDetectionHost
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
+    const response = await dispatcher.dispatch(
+      makeRequest('preflight.detectAgents', { repoId: 'r1' })
+    )
+    expect(resolveAgentDetectionHost).toHaveBeenCalledWith(undefined, 'r1')
+    expect(response).toMatchObject({ ok: true, result: ['codex'] })
+    resolveAgentDetectionHost.mockClear()
+    const malformed = await dispatcher.dispatch(
+      makeRequest('preflight.detectAgents', { repoId: '' })
+    )
+    expect(malformed).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+    expect(resolveAgentDetectionHost).not.toHaveBeenCalled()
   })
 
   it('refuses agent detection on an SSH target this host does not serve', async () => {
