@@ -3,10 +3,10 @@ import type { WorktreeCreationRequest } from '@/lib/pending-worktree-creation'
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
 import type * as BackgroundMountModule from '@/components/terminal/background-terminal-worktree-mount'
 
-const { requestMount, mainStarts } = vi.hoisted(() => ({
-  requestMount: vi.fn(),
-  mainStarts: [] as unknown[]
-}))
+const { requestMount, mainStarts } = vi.hoisted(() => {
+  const started: unknown[] = []
+  return { requestMount: vi.fn(), mainStarts: started }
+})
 
 vi.mock('@/components/terminal/background-terminal-worktree-mount', async (importOriginal) => ({
   ...(await importOriginal<typeof BackgroundMountModule>()),

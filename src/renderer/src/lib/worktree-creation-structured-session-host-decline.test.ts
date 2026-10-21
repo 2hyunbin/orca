@@ -6,7 +6,10 @@ import { getDefaultSettings } from '../../../shared/constants'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { WorktreeCreationRequest } from '@/lib/pending-worktree-creation'
 
-const mocks = vi.hoisted(() => ({ createSupport: vi.fn(), mainStarts: [] as unknown[] }))
+const mocks = vi.hoisted(() => {
+  const mainStarts: unknown[] = []
+  return { createSupport: vi.fn(), mainStarts }
+})
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() } }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
