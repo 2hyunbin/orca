@@ -36,7 +36,9 @@ export function codexModelCatalogDiscovery({
       ...(deps.prepareCodexCatalogProbeHome
         ? { prepareHome: deps.prepareCodexCatalogProbeHome }
         : {}),
-      resolveEnvironment: () => environment.resolveAgentEnvironment('codex'),
+      resolveEnvironment: environment.resolveBaseEnvironment,
+      resolveSavedEnvironment: () => environment.resolveBaseEnvironment(true),
+      resolveEnv: () => deps.resolveAgentLaunchEnv?.('codex') ?? {},
       refreshEnvironmentAfterMiss: environment.refreshAfterMissingProgram,
       ...(deps.resolveCodexCommand ? { resolveCommand: deps.resolveCodexCommand } : {})
     })
@@ -50,6 +52,7 @@ export function claudeListingDeps({
 }: StructuredAgentModelCatalogContext): ClaudeModelCatalogProbeDeps {
   return {
     resolveInheritedEnv: environment.resolveBaseEnvironment,
+    resolveSavedEnvironment: () => environment.resolveBaseEnvironment(true),
     refreshEnvironmentAfterMiss: environment.refreshAfterMissingProgram,
     resolveAuthPolicy: deps.resolveClaudeAuthPolicy,
     ...(deps.resolveClaudeCommand ? { resolveCommand: deps.resolveClaudeCommand } : {}),

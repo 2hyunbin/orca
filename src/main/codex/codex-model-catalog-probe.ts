@@ -18,6 +18,9 @@ import type {
 } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 
 export type CodexModelCatalogProbeDeps = CodexStructuredInvocationDeps & {
+  /** Existing captured environment only: saved preference reads never recover a missing CLI. */
+  resolveSavedEnvironment?: () => Promise<NodeJS.ProcessEnv>
+  resolveEnv?: () => Record<string, string>
   resolveLaunchArgs?: () => Promise<string[]> | string[]
   resolveAccountKind?: (home: string) => AgentSessionAccountKind | undefined
   /** The sync a launch runs on this home first, so the probe reads the login a launch would. */
@@ -46,10 +49,20 @@ function definedEnv(env: NodeJS.ProcessEnv | undefined): Record<string, string> 
 export function createCodexModelCatalogProbe(
   deps: CodexModelCatalogProbeDeps
 ): AgentModelCatalogProbe {
-  const resolve = async (accountHome: Parameters<AgentModelCatalogProbe>[0], cwd?: string) => {
+  const resolve = async (
+    accountHome: Parameters<AgentModelCatalogProbe>[0],
+    cwd?: string,
+    savedOnly = false
+  ) => {
     const accountHomePath = requireLegacyAgentSessionAccountHome(accountHome).path
+    const overlay = { ...deps.resolveEnv?.() }
     const { command, environment } = await resolveCodexStructuredInvocation({
       ...deps,
+      resolveEnvironment: async () => ({
+        ...(await (savedOnly ? deps.resolveSavedEnvironment?.() : deps.resolveEnvironment?.())),
+        ...overlay
+      }),
+      ...(savedOnly ? { refreshEnvironmentAfterMiss: undefined } : {}),
       ...(cwd ? { resolveWorkingDirectory: () => cwd } : {})
     })
     const args = [
@@ -58,7 +71,7 @@ export function createCodexModelCatalogProbe(
     ]
     const env = { ...definedEnv(environment), CODEX_HOME: accountHomePath }
     return {
-      identity: { command, args, cwd },
+      identity: { command, args, cwd, overlay: Object.entries(overlay).sort() },
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
         deps.prepareHome?.(accountHomePath)
         const run = deps.runSession ?? runCodexAppServerSession

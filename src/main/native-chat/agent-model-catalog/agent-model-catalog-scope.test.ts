@@ -11,6 +11,8 @@ describe('installed catalog invocation identity', () => {
     'keeps %s scope stable across shell captures while distinguishing launch inputs',
     async (agent) => {
       let capture = 'first'
+      let catalogFile = '/catalog/A.json'
+      const overlay = () => ({ CATALOG_FILE: catalogFile })
       let command = '/installed/agent'
       const launchArgs = (name: string) =>
         agent === 'claude'
@@ -23,13 +25,14 @@ describe('installed catalog invocation identity', () => {
           ? createClaudeModelCatalogProbe({
               resolveCommand: () => command,
               resolveInheritedEnv: async () => environment(),
-              resolveEnv: () => ({}),
+              resolveEnv: overlay,
               resolveAuthPolicy: () => ({ account: 'system' }),
               resolveLaunchArgs: () => args
             })
           : createCodexModelCatalogProbe({
               resolveCommand: () => command,
               resolveEnvironment: async () => environment(),
+              resolveEnv: overlay,
               resolveLaunchArgs: () => args
             })
       const key = async (account = '/account', cwd = '/project') => {
@@ -44,6 +47,10 @@ describe('installed catalog invocation identity', () => {
       }
       const first = await key()
       capture = 'second'
+      expect(await key()).toBe(first)
+      catalogFile = '/catalog/B.json'
+      expect(await key()).not.toBe(first)
+      catalogFile = '/catalog/A.json'
       expect(await key()).toBe(first)
       expect(await key('/other-account')).not.toBe(first)
       expect(await key('/account', '/other-project')).not.toBe(first)

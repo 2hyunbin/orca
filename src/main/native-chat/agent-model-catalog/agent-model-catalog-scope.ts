@@ -37,7 +37,7 @@ export async function resolveAgentModelCatalogScope(
   }
   const probe = deps.probes?.[params.agent]
   if (params.legacy) {
-    const resolved = await probe?.resolveLegacy?.(home).catch(() => null)
+    const resolved = params.savedOnly ? null : await probe?.resolveLegacy?.(home).catch(() => null)
     return {
       base,
       fingerprint: agentModelCatalogScopeFingerprint(base, 'legacy-account'),
@@ -52,7 +52,10 @@ export async function resolveAgentModelCatalogScope(
   if (!cwd) {
     return { base, fingerprint: base, exact: false }
   }
-  const resolved = await probe?.resolve?.(home, cwd).catch(() => null)
+  const resolution = params.savedOnly
+    ? probe?.resolve?.(home, cwd, true)
+    : probe?.resolve?.(home, cwd)
+  const resolved = await resolution?.catch(() => null)
   if (probe?.resolve && !resolved) {
     return null
   }

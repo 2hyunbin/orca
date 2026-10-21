@@ -20,7 +20,7 @@ import {
   resolveClaudeStructuredInvocation,
   type ClaudeStructuredLaunchPartDeps
 } from './claude-structured-launch-resolution'
-import type { ClaudeEnvDeps } from './claude-structured-child-env'
+import { resolveClaudeChildEnvSources, type ClaudeEnvDeps } from './claude-structured-child-env'
 import type {
   AgentModelCatalogProbe,
   AgentModelCatalogSuccess
@@ -32,8 +32,10 @@ import {
 
 export type ClaudeModelCatalogProbeDeps = ClaudeEnvDeps &
   Pick<ClaudeStructuredLaunchPartDeps, 'resolveAuthPolicy'> & {
-    /** Test seam; production runs the shared supervised listing. */
+    /** Existing captured environment only: saved preference reads never recover a missing CLI. */
+    resolveSavedEnvironment?: () => Promise<Record<string, string>>
     resolveLaunchArgs?: () => Promise<string[]> | string[]
+    /** Test seam; production runs the shared supervised listing. */
     runListing?: typeof runAgentModelCatalogListing
   }
 
@@ -98,7 +100,11 @@ export async function runClaudeListing(
 export function createClaudeModelCatalogProbe(
   deps: ClaudeModelCatalogProbeDeps
 ): AgentModelCatalogProbe {
-  const resolve = async (accountHome: Parameters<AgentModelCatalogProbe>[0], cwd?: string) => {
+  const resolve = async (
+    accountHome: Parameters<AgentModelCatalogProbe>[0],
+    cwd?: string,
+    savedOnly = false
+  ) => {
     const configuredArgs = claudeStructuredLaunchArgs(
       cwd ? ((await deps.resolveLaunchArgs?.()) ?? []) : []
     )
@@ -114,17 +120,29 @@ export function createClaudeModelCatalogProbe(
       ...userArgs
     ]
     const args = argsFor(true)
+    const launchDeps = {
+      ...deps,
+      ...(savedOnly
+        ? {
+            resolveInheritedEnv: deps.resolveSavedEnvironment,
+            refreshEnvironmentAfterMiss: undefined
+          }
+        : {}),
+      ...(cwd ? { resolveWorkingDirectory: () => cwd } : {})
+    }
+    const sources = await resolveClaudeChildEnvSources(launchDeps)
     const { command, env } = await resolveClaudeStructuredInvocation(
-      { ...deps, ...(cwd ? { resolveWorkingDirectory: () => cwd } : {}) },
+      launchDeps,
       (base) => ({
         ...base,
         ...claudeConfigDirEnvPatch(requireLegacyAgentSessionAccountHome(accountHome).path, {
           env: base
         })
-      })
+      }),
+      sources
     )
     return {
-      identity: { command, args, cwd },
+      identity: { command, args, cwd, overlay: Object.entries(sources.overlay ?? {}).sort() },
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
         const outcome = await runClaudeBackgroundAttempts({
           agentId: 'claude',

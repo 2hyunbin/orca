@@ -11,7 +11,11 @@ export type AgentModelCatalogProbe = ((
   options?: { signal?: AbortSignal; workspacePath?: string; cwd?: string }
 ) => Promise<AgentModelCatalogSuccess>) & {
   resolveLegacy?: (home: AgentSessionAccountHome) => Promise<AgentModelCatalogResolvedProbe>
-  resolve?: (home: AgentSessionAccountHome, cwd: string) => Promise<AgentModelCatalogResolvedProbe>
+  resolve?: (
+    home: AgentSessionAccountHome,
+    cwd: string,
+    savedOnly?: boolean
+  ) => Promise<AgentModelCatalogResolvedProbe>
 }
 
 export { independentAgentModelCatalog } from '../../../shared/agent-model-catalog-ownership'
