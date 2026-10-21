@@ -1,8 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionNotFoundError } from '../../../daemon/daemon-errors'
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { PANE_NOT_LIVE_ERROR } from '../../../../shared/pane-attach-only-view'
-import { attachOnlyViewOf, attachViewWithoutOwner } from './attach-only-view'
+import {
+  attachOnlyViewOf,
+  attachViewAfterHiddenStart,
+  attachViewWithoutOwner
+} from './attach-only-view'
+import {
+  _resetHiddenRendererPtyDeliveryGateForTest,
+  markRuntimeOwnedHiddenRendererPty,
+  recordHiddenRendererPtyDataDrop,
+  unmarkHiddenRendererPty
+} from '../../pty-hidden-delivery-gate'
 import { attemptStablePaneAttach } from './stable-pane-attach'
 import type { StablePaneOwner } from './stable-owner'
 
@@ -78,6 +88,31 @@ describe("a window's attach-only view of a pane main starts", () => {
       PANE_NOT_LIVE_ERROR
     )
     expect(spawn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("a view's attach to a pane main started hidden", () => {
+  beforeEach(() => {
+    _resetHiddenRendererPtyDeliveryGateForTest()
+    markRuntimeOwnedHiddenRendererPty('pty-1')
+    recordHiddenRendererPtyDataDrop('pty-1', 64)
+  })
+  const unmark = (id: string): void => void unmarkHiddenRendererPty(id)
+
+  it('paints once: its snapshot holds what main dropped, so the reveal asks no second restore', async () => {
+    await attachViewAfterHiddenStart('pty-1', unmark, async () => ({ id: 'pty-1', snapshot: 'x' }))
+    expect(unmarkHiddenRendererPty('pty-1').droppedWhileHidden).toBe(false)
+  })
+
+  it('keeps the drops for a restore when the attach fails, carries no snapshot, or lands elsewhere', async () => {
+    await expect(
+      attachViewAfterHiddenStart('pty-1', unmark, () => Promise.reject(new Error('lost')))
+    ).rejects.toThrow('lost')
+    expect(unmarkHiddenRendererPty('pty-1').droppedWhileHidden).toBe(true)
+    await attachViewAfterHiddenStart('pty-1', unmark, async () => ({ id: 'pty-1' }))
+    expect(unmarkHiddenRendererPty('pty-1').droppedWhileHidden).toBe(true)
+    await attachViewAfterHiddenStart('pty-1', unmark, async () => ({ id: 'pty-2', snapshot: 'x' }))
+    expect(unmarkHiddenRendererPty('pty-1').droppedWhileHidden).toBe(true)
   })
 })
 

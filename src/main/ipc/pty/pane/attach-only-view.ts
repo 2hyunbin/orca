@@ -1,6 +1,7 @@
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { SessionNotFoundError } from '../../../daemon/daemon-errors'
 import { PANE_NOT_LIVE_ERROR } from '../../../../shared/pane-attach-only-view'
+import { retireHiddenRendererPtyDropMemory } from '../../pty-hidden-delivery-gate'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -33,4 +34,27 @@ export async function attachViewWithoutOwner(
 /** The spawn's attach-only flag; a build without the switch keeps today's start. */
 export function attachOnlyViewOf(args: { attachOnlyView?: unknown }): true | undefined {
   return ORCA_LAYOUT_OWNER_IS_MAIN && args.attachOnlyView === true ? true : undefined
+}
+
+/**
+ * Layout-owner build: main started the pane hidden, dropping its output; the view's attach
+ * snapshot, taken after this unmark, holds those bytes, so the view paints once, not twice.
+ */
+export async function attachViewAfterHiddenStart<T extends object>(
+  ptyId: string,
+  unmarkHidden: (id: string) => void,
+  attach: () => Promise<T>
+): Promise<T> {
+  unmarkHidden(ptyId)
+  const attached = await attach()
+  // Why a snapshot of the same id: a local attach carries none, and another id's drops may postdate it.
+  if (
+    'id' in attached &&
+    attached.id === ptyId &&
+    'snapshot' in attached &&
+    typeof attached.snapshot === 'string'
+  ) {
+    retireHiddenRendererPtyDropMemory(ptyId)
+  }
+  return attached
 }

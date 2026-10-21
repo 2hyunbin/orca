@@ -145,6 +145,11 @@ export function recordHiddenRendererPtyDataDrop(
   return { shouldEmitRestoreMarker: true, hiddenDropEpisode: episode }
 }
 
+/** Retires drop memory a view's attach snapshot covers: taken after the unmark, it holds every dropped byte. */
+export function retireHiddenRendererPtyDropMemory(id: string): void {
+  droppedSinceHiddenPtys.delete(id)
+}
+
 /** Renderer process replaced (reload / crash): its ref-counted interest
  *  holds and hidden marks died with it, so keeping them would gate (or
  *  force-feed) PTYs no live renderer party asked about. Runtime-owned marks
