@@ -13,7 +13,8 @@ const env = vi.hoisted(() => ({
   captureEnabled: false,
   foreground: new Set<(state: string) => void>(),
   slowReply: Promise.resolve<RpcResponse | null>(null),
-  deferReply: false
+  deferReply: false,
+  refuseRead: false
 }))
 
 vi.mock('expo-router', () => ({
@@ -105,6 +106,9 @@ const client = {
   getState: () => (env.connected ? 'connected' : 'reconnecting'),
   sendRequest: async (): Promise<RpcResponse> => {
     env.reads += 1
+    if (env.refuseRead) {
+      throw new Error('speech.models.list unavailable')
+    }
     if (!env.connected) {
       throw new Error('relay session not connected')
     }
@@ -196,6 +200,7 @@ beforeEach(() => {
   env.slowReply = Promise.resolve(null)
   env.deferReply = false
   env.enabled = true
+  env.refuseRead = false
 })
 
 afterEach(() => {
@@ -310,6 +315,32 @@ describe('the mic follows the host dictation mode', () => {
       }
     })
     await act(async () => answer(setupReply('toggle', false)))
+    expect(micBinding()).toBe('hold')
+    expect(env.captureEnabled).toBe(true)
+  })
+
+  it('keeps disabled settings when a reconnect read fails', async () => {
+    env.connected = true
+    env.enabled = false
+    await render()
+    env.connected = false
+    await render()
+    env.refuseRead = true
+    env.connected = true
+    await render()
+    expect(micBinding()).toBe('hidden')
+    expect(env.captureEnabled).toBe(false)
+  })
+
+  it('keeps legacy controls when the host omits the enabled field', async () => {
+    env.connected = true
+    env.deferReply = true
+    env.slowReply = Promise.resolve({
+      id: 'legacy',
+      ok: true,
+      result: { dictationMode: 'hold', models: [] }
+    })
+    await render()
     expect(micBinding()).toBe('hold')
     expect(env.captureEnabled).toBe(true)
   })
