@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
-import type { Terminal } from '@xterm/xterm'
+import type { ITheme, Terminal } from '@xterm/xterm'
+import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type {
   PlainSshTerminalEvent,
   PlainSshTerminalOpenResult
@@ -12,6 +13,8 @@ import { useEffectiveMacOptionAsAlt } from '@/lib/keyboard-layout/use-effective-
 import { composeActiveTerminalTheme } from '@/components/terminal-pane/terminal-appearance'
 import { getBuiltinTheme, resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
 import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
+import { resolveTerminalMinimumContrastRatio } from '@/lib/terminal-contrast-correction'
+import { syncPreviewTerminalLigatures } from '@/components/dashboard-popout/preview-terminal-ligatures'
 import {
   buildPreviewAppearanceOptions,
   buildPreviewTerminalOptions
@@ -59,6 +62,23 @@ export function plainSshOpenFailureText(
   }
 }
 
+function resolveThemeColors(
+  settings: GlobalSettings | null,
+  systemPrefersDark: boolean
+): { theme: ITheme | null; mode: 'dark' | 'light' } {
+  if (!settings) {
+    return { theme: null, mode: 'dark' }
+  }
+  const appearance = resolveEffectiveTerminalAppearance(settings, systemPrefersDark)
+  return {
+    theme: composeActiveTerminalTheme(
+      appearance.theme ?? getBuiltinTheme(appearance.themeName),
+      settings
+    ),
+    mode: appearance.mode
+  }
+}
+
 /** One plain SSH session on Orca's standalone terminal; it starts on mount and hangs up on unmount. */
 export function PlainSshTerminalView({
   targetId,
@@ -94,16 +114,7 @@ export function PlainSshTerminalView({
       return
     }
     const mountSettings = settingsRef.current
-    const appearance = mountSettings
-      ? resolveEffectiveTerminalAppearance(mountSettings, systemPrefersDarkRef.current)
-      : null
-    const theme =
-      mountSettings && appearance
-        ? composeActiveTerminalTheme(
-            appearance.theme ?? getBuiltinTheme(appearance.themeName),
-            mountSettings
-          )
-        : null
+    const { theme, mode } = resolveThemeColors(mountSettings, systemPrefersDarkRef.current)
     const kittyKeyboardModes = new TerminalKittyKeyboardModeTracker({ kittyKeyboard: true })
     let sessionId: string | null = null
     const standalone = openStandaloneTerminal({
@@ -113,7 +124,7 @@ export function PlainSshTerminalView({
         terminalInput: null,
         macOptionIsMeta: macOptionAsAltRef.current === 'true',
         theme,
-        themeMode: appearance?.mode ?? 'dark',
+        themeMode: mode,
         cols: 80,
         rows: 24,
         scrollback: SCROLLBACK_ROWS
@@ -192,7 +203,11 @@ export function PlainSshTerminalView({
         // Exits are always kept: a session that ended before its id arrived must still end here.
         if (event.kind === 'exit') {
           early.push(event)
-        } else if (earlyDataChars + event.data.length <= EARLY_DATA_CHAR_LIMIT) {
+        } else if (
+          // Why: once a session drops output, later chunks would leave a hole mid escape sequence.
+          !droppedEarlyChars.has(event.sessionId) &&
+          earlyDataChars + event.data.length <= EARLY_DATA_CHAR_LIMIT
+        ) {
           earlyDataChars += event.data.length
           early.push(event)
         } else {
@@ -268,17 +283,29 @@ export function PlainSshTerminalView({
     }
   }, [targetId])
 
-  // Why: font and Option-as-Alt changes must land without hanging up ssh.
+  // Why: appearance and Option-as-Alt changes must land live; reopening would hang up ssh.
   useEffect(() => {
     const terminal = terminalRef.current
-    if (terminal) {
-      Object.assign(
-        terminal.options,
-        buildPreviewAppearanceOptions(settings, macOptionAsAlt === 'true')
+    if (!terminal) {
+      return
+    }
+    const { theme, mode } = resolveThemeColors(settings, systemPrefersDark)
+    Object.assign(terminal.options, {
+      ...buildPreviewAppearanceOptions(settings, macOptionAsAlt === 'true'),
+      theme: theme ?? undefined,
+      minimumContrastRatio: resolveTerminalMinimumContrastRatio(
+        theme?.background,
+        mode,
+        settings?.terminalMinimumContrastRatio
       )
+    })
+    syncPreviewTerminalLigatures(terminal, settings)
+    // Why the guard: a minimized panel measures 0x0, and fitting would shrink the remote pty to 2x1.
+    const container = containerRef.current
+    if (!hidden && container && container.offsetWidth > 0 && container.offsetHeight > 0) {
       fitRef.current?.fit()
     }
-  }, [settings, macOptionAsAlt])
+  }, [settings, systemPrefersDark, macOptionAsAlt, hidden])
 
   useEffect(() => {
     if (!hidden) {

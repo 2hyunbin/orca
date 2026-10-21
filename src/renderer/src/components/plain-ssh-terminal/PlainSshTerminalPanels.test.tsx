@@ -14,6 +14,8 @@ import { OpenPlainSshTerminalButton } from './OpenPlainSshTerminalButton'
 import { PlainSshTerminalPanels } from './PlainSshTerminalPanels'
 import { removePlainSshPanel } from '@/ssh/plain-ssh-terminal-panels'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useAppStore } from '@/store'
+import { getDefaultSettings } from '../../../../shared/constants'
 
 const written: string[] = []
 
@@ -35,9 +37,12 @@ vi.mock('@/components/standalone-terminal/open-standalone-terminal', () => ({
     dispose: () => {}
   })
 }))
+const fit = vi.fn()
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
-    fit(): void {}
+    fit(): void {
+      fit()
+    }
   }
 }))
 
@@ -86,6 +91,18 @@ afterEach(() => {
   act(() => removePlainSshPanel('lambda'))
   cleanup()
 })
+
+/** The open reply arrives when the test says, so nothing races it. */
+function deferOpen(): (result: PlainSshTerminalOpenResult) => void {
+  let resolve: (result: PlainSshTerminalOpenResult) => void = () => {}
+  open.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done
+      })
+  )
+  return (result) => resolve(result)
+}
 
 function Harness({ status }: { status: SshManagedServerStatus | undefined }): React.JSX.Element {
   return (
@@ -143,12 +160,12 @@ describe('plain SSH terminal', () => {
   })
 
   it('keeps output when ssh is killed by a signal, even with exit code 0', async () => {
-    open.mockResolvedValue({ ok: true, sessionId: 's4', label: 'lambda' })
+    const resolveOpen = deferOpen()
     const user = userEvent.setup()
     render(<Harness status={blocked} />)
     await user.click(screen.getByRole('button', { name: 'Open plain SSH terminal' }))
     await waitFor(() => expect(open).toHaveBeenCalled())
-    await act(async () => {})
+    await act(async () => resolveOpen({ ok: true, sessionId: 's4', label: 'lambda' }))
     act(() => emit({ kind: 'exit', sessionId: 's4', exitCode: 0, signal: 9 }))
     expect(await screen.findByText(/ssh was stopped \(signal 9\)/)).toBeInTheDocument()
   })
@@ -176,17 +193,40 @@ describe('plain SSH terminal', () => {
   })
 
   it('keeps a failed login readable, with no shell to fall back to', async () => {
-    open.mockResolvedValue({ ok: true, sessionId: 's2', label: 'lambda' })
+    const resolveOpen = deferOpen()
     const user = userEvent.setup()
     render(<Harness status={blocked} />)
     await user.click(screen.getByRole('button', { name: 'Open plain SSH terminal' }))
     await waitFor(() => expect(open).toHaveBeenCalled())
-    await act(async () => {})
+    await act(async () => resolveOpen({ ok: true, sessionId: 's2', label: 'lambda' }))
     act(() => emit({ kind: 'exit', sessionId: 's2', exitCode: 255 }))
     expect(await screen.findByText(/ssh exited with code 255/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Close and end session' }))
     expect(screen.queryByText('Plain SSH · lambda')).toBeNull()
+  })
+
+  it('never refits a minimized window, which would shrink the remote terminal to 2x1', async () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(600)
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(400)
+    try {
+      const resolveOpen = deferOpen()
+      const user = userEvent.setup()
+      render(<Harness status={blocked} />)
+      await user.click(screen.getByRole('button', { name: 'Open plain SSH terminal' }))
+      await act(async () => resolveOpen({ ok: true, sessionId: 's6', label: 'lambda' }))
+      await user.click(screen.getByRole('button', { name: 'Minimize' }))
+      fit.mockClear()
+      act(() =>
+        useAppStore.setState({
+          settings: { ...getDefaultSettings('/home/me'), terminalFontSize: 18 }
+        })
+      )
+      expect(fit).not.toHaveBeenCalled()
+    } finally {
+      width.mockRestore()
+      height.mockRestore()
+    }
   })
 
   it('shows why it can’t open, e.g. no OpenSSH on Windows', async () => {
@@ -202,12 +242,12 @@ describe('plain SSH terminal', () => {
   })
 
   it('hangs up when its window closes', async () => {
-    open.mockResolvedValue({ ok: true, sessionId: 's3', label: 'lambda' })
+    const resolveOpen = deferOpen()
     const user = userEvent.setup()
     render(<Harness status={blocked} />)
     await user.click(screen.getByRole('button', { name: 'Open plain SSH terminal' }))
     await waitFor(() => expect(open).toHaveBeenCalled())
-    await act(async () => {})
+    await act(async () => resolveOpen({ ok: true, sessionId: 's3', label: 'lambda' }))
     await user.click(screen.getByRole('button', { name: 'Close and end session' }))
     expect(close).toHaveBeenCalledWith({ sessionId: 's3' })
   })
