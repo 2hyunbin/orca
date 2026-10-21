@@ -112,21 +112,7 @@ export function seedModels(): ListedModel[] {
   }))
 }
 
-/** Whether `currentModelId` falls back to the list's default, which the chat never chose. */
+/** The default placeholder names no model the chat chose or the agent reported. */
 export function currentModelIsDefaulted(reportedModel: string | undefined): boolean {
   return !reportedModel || reportedModel === 'default'
-}
-
-export function currentModelId(models: ListedModel[], reportedModel: string | undefined): string {
-  const matched = reportedModel
-    ? models.find(
-        (model) =>
-          model.id === reportedModel ||
-          model.resolvedModel === reportedModel ||
-          (reportedModel === 'default' && model.isDefault)
-      )
-    : undefined
-  return (
-    matched?.id ?? reportedModel ?? models.find((model) => model.isDefault)?.id ?? models[0]!.id
-  )
 }

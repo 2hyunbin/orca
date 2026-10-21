@@ -1,6 +1,5 @@
 import type { AgentSessionFastModeState } from '../../shared/agent-session-wire'
 import {
-  currentModelId,
   currentModelIsDefaulted,
   listedModels,
   record,
@@ -187,7 +186,7 @@ export function claudeStructuredSessionOptionsFrom(
   const discovered = listedModels(catalog ? { models: catalog } : null)
   const listed = discovered.length > 0 ? discovered : seedModels()
   const current = readClaudeCurrentModel(session)
-  const model = currentModelId(listed, current.id)
+  const model = current.id === 'default' ? undefined : current.id
   const models = structuredAgentSessionOptionModels(listed, model, (row) => ({
     ...row,
     resolvedModel: null

@@ -7,6 +7,7 @@ import type {
 import type { AgentSessionRewindSupport } from '../../../../shared/agent-session-rewind'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { AgentSessionOptionCatalog } from '../../../../shared/agent-session-option-catalog'
+import { usesInstalledAgentModelCatalog } from '../../../../shared/agent-model-catalog-ownership'
 import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
 import {
   applyStructuredAgentSessionModelCatalog,
@@ -129,9 +130,9 @@ export function useStructuredAgentSessionOptionState(args: {
   }, [contextKey])
   const isCurrentContext = useCallback(() => contextRef.current === contextKey, [contextKey])
   const writes = useRef({ count: 0, readback: false })
-  const coherentCatalog = useStructuredAgentSessionHostCapability(
-    target,
-    AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
+  const coherentCatalog = usesInstalledAgentModelCatalog(
+    agent,
+    useStructuredAgentSessionHostCapability(target, AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY)
   )
   const optionIdentityRef = useRef(identity)
   useEffect(() => {
@@ -258,7 +259,7 @@ export function useStructuredAgentSessionOptionState(args: {
             newLaunch,
             coherentCatalog
           })
-        : { ...settleStructuredAgentSessionBuiltinCatalog(current), listingInProgress: false }
+        : settleStructuredAgentSessionBuiltinCatalog(current, false)
     )
     if (!coherentCatalog && catalog && catalog.origin !== 'unknown' && !catalog.listingInProgress) {
       rereadOptions()

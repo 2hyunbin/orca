@@ -9,6 +9,7 @@ import { createCoalescingKeyedRunner } from '../../../src/shared/coalescing-keye
 import type { RpcClient } from '../transport/rpc-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentSessionOptionCatalog } from '../../../src/shared/agent-session-option-catalog'
+import { usesInstalledAgentModelCatalog } from '../../../src/shared/agent-model-catalog-ownership'
 import { cloneStructuredAgentSessionOptionRecord } from '../../../src/shared/structured-agent-session-option-state'
 import {
   createStructuredAgentSessionOptionState,
@@ -40,8 +41,9 @@ export function useMobileStructuredOptionState(args: {
     optionStamp,
     newLaunch,
     worktree,
-    coherentCatalog = false
+    coherentCatalog: hostCoherentCatalog = false
   } = args
+  const coherentCatalog = usesInstalledAgentModelCatalog(agent ?? '', hostCoherentCatalog)
   const [optionState, setOptionState] = useState(() =>
     createStructuredAgentSessionOptionState(agent ?? 'codex', optionCatalog)
   )
@@ -120,7 +122,7 @@ export function useMobileStructuredOptionState(args: {
             newLaunch,
             coherentCatalog
           })
-        : { ...settleStructuredAgentSessionBuiltinCatalog(current), listingInProgress: false }
+        : settleStructuredAgentSessionBuiltinCatalog(current, false)
     )
     if (!coherentCatalog && catalog && catalog.origin !== 'unknown' && !catalog.listingInProgress) {
       readRef.current?.()

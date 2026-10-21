@@ -10,7 +10,7 @@ import {
   STRUCTURED_LAUNCH_SEED_OPTION_IDS
 } from './native-chat-session-option-defaults'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
-import { independentAgentModelCatalog } from './agent-model-catalog-ownership'
+import { usesInstalledAgentModelCatalog } from './agent-model-catalog-ownership'
 import {
   structuredAgentSessionDescribedModel,
   structuredAgentSessionShownModel
@@ -88,9 +88,13 @@ export function createStructuredAgentSessionOptionState(
 /** The host answered with no list (none saved, a failed read, or an older host): the built-in
  *  list becomes usable, still naming nothing until a host or session list does. */
 export function settleStructuredAgentSessionBuiltinCatalog(
-  state: StructuredAgentSessionOptionState
+  state: StructuredAgentSessionOptionState,
+  listingInProgress = state.listingInProgress
 ): StructuredAgentSessionOptionState {
-  return state.catalogSource === 'seed' ? { ...state, catalogSource: 'builtin' } : state
+  const catalogSource = state.catalogSource === 'seed' ? 'builtin' : state.catalogSource
+  return catalogSource === state.catalogSource && state.listingInProgress === listingInProgress
+    ? state
+    : { ...state, catalogSource, listingInProgress }
 }
 
 function isListedModelRow(row: unknown): row is { id: string } {
@@ -127,10 +131,12 @@ export function applyStructuredAgentSessionModelCatalog(
   catalog: AgentSessionModelCatalogResult,
   options: { newLaunch: boolean; coherentCatalog?: boolean }
 ): StructuredAgentSessionOptionState {
-  if (
-    state.catalogSource === 'live' &&
-    !(options.coherentCatalog && independentAgentModelCatalog(state.record.agent))
-  ) {
+  const installed = usesInstalledAgentModelCatalog(state.record.agent, options.coherentCatalog)
+  const listingInProgress = installed && catalog.listingInProgress === true
+  if (Boolean(state.listingInProgress) !== listingInProgress) {
+    state = { ...state, listingInProgress }
+  }
+  if (state.catalogSource === 'live' && !installed) {
     return state
   }
   const models =
@@ -139,11 +145,8 @@ export function applyStructuredAgentSessionModelCatalog(
       : catalog.models.map((model) =>
           discoveredModel(model, catalog.fastModeSupport?.supported === true)
         )
-  if (catalog.origin === 'unknown') {
-    const settled = settleStructuredAgentSessionBuiltinCatalog(state)
-    return Boolean(settled.listingInProgress) === (catalog.listingInProgress === true)
-      ? settled
-      : { ...settled, listingInProgress: catalog.listingInProgress === true }
+  if (catalog.origin === 'unknown' || (!installed && models.length === 0)) {
+    return settleStructuredAgentSessionBuiltinCatalog(state)
   }
   // The host says whether its listed default is what this launch runs; an older host never says,
   // so the client's own knowledge of the agent stands in. A reopened chat may keep its own model.
@@ -159,8 +162,7 @@ export function applyStructuredAgentSessionModelCatalog(
       models,
       ...(namesDefault ? { defaultModelIsCliDefault: true } : {})
     },
-    verifiedModelIds: finishedListingIds(catalog),
-    listingInProgress: catalog.listingInProgress === true,
+    ...(installed ? { verifiedModelIds: finishedListingIds(catalog) } : {}),
     catalogSource: state.catalogSource === 'live' ? 'live' : 'host'
   }
 }
@@ -174,6 +176,7 @@ export function applyStructuredAgentSessionOptions(
   launch: { newLaunch: boolean; coherentCatalog?: boolean } = { newLaunch: false }
 ): StructuredAgentSessionOptionState {
   const { current } = result
+  const installed = usesInstalledAgentModelCatalog(state.record.agent, launch.coherentCatalog)
   // A value the host supplied from a catalog default is context for the picker, not the chat's own.
   replaceStructuredAgentSessionAnsweredValues(
     state.record,
@@ -192,22 +195,19 @@ export function applyStructuredAgentSessionOptions(
   )
   return {
     ...state,
-    catalog:
-      launch.coherentCatalog && independentAgentModelCatalog(state.record.agent)
-        ? state.catalog
-        : structuredAgentSessionOptionCatalog(seed, result),
+    catalog: installed ? state.catalog : structuredAgentSessionOptionCatalog(seed, result),
     fastModeRestricted:
+      installed &&
       result.fastModeSupport?.supported === false &&
       result.fastModeSupport.reason !== 'model-not-supported',
-    catalogSource: launch.coherentCatalog && state.catalogSource === 'seed' ? 'seed' : 'live',
+    catalogSource: installed && state.catalogSource === 'seed' ? 'seed' : 'live',
     olderHost: current.defaulted === undefined ? true : undefined,
     defaultsUnsent: current.defaulted !== undefined && !launch.newLaunch ? true : undefined,
-    verifiedModelIds:
-      launch.coherentCatalog && independentAgentModelCatalog(state.record.agent)
-        ? state.verifiedModelIds
-        : result.listedModelIds?.length
-          ? result.listedModelIds
-          : undefined,
+    verifiedModelIds: installed
+      ? state.verifiedModelIds
+      : result.listedModelIds?.length
+        ? result.listedModelIds
+        : undefined,
     permissionMode: result.current.permissionMode ?? null
   }
 }

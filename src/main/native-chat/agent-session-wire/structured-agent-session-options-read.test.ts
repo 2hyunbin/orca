@@ -1,5 +1,13 @@
 import { structuredAgentSessionCapabilityView } from './structured-agent-session-option-models'
 import { claudeFallbackModelOptions } from '../../claude/claude-structured-session-options'
+import { acquired, fakeClaude } from '../../claude/claude-structured-session-test-support'
+import { getAgentSessionOptionCatalog } from '../../../shared/agent-session-option-catalog'
+import {
+  applyStructuredAgentSessionModelCatalog,
+  applyStructuredAgentSessionOptions,
+  createStructuredAgentSessionOptionState
+} from '../../../shared/structured-agent-session-options'
+import { structuredAgentSessionSendSelection } from '../../../shared/structured-agent-session-option-view'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
 // A chat's options at rest come from the host catalog without waiting on a listing.
 
@@ -322,6 +330,29 @@ describe('a chat at rest, read by the host', () => {
     const firstRun = picking({ model: 'opus' }, installed, undefined, 'claude')
     firstRun.ran('opus', { effort: 'low' })
     expect(firstRun.record().options).toEqual({ model: 'opus', effort: 'low' })
+  })
+
+  it('pins the installed default on first Send when a live Claude child names no model', async () => {
+    const adapter = await acquired(fakeClaude({ settings: { effective: {}, sources: [] } }))
+    const live = await adapter.readOptions({ sessionId: SESSION, fence: 7 })
+    expect(live.current.model).toBeUndefined()
+    const installed = [{ id: 'opus[1m]', label: 'Installed Opus', isDefault: true, efforts: [] }]
+    const answer = await readAtRest({ provider: 'claude' }, [], false, installed, true, live)
+    expect(answer.current).toMatchObject({ model: 'opus[1m]', defaulted: [] })
+    const seed = getAgentSessionOptionCatalog('claude')!
+    const launch = { newLaunch: true, coherentCatalog: true }
+    const state = applyStructuredAgentSessionOptions(
+      applyStructuredAgentSessionModelCatalog(
+        createStructuredAgentSessionOptionState('claude', seed),
+        seed,
+        { origin: 'probe', models: installed, fetchedAt: 1 },
+        launch
+      ),
+      seed,
+      answer,
+      launch
+    )
+    expect(structuredAgentSessionSendSelection(state)).toEqual({ model: 'opus[1m]' })
   })
 
   it('resolves only an unsaved reported identity against installed rows', async () => {

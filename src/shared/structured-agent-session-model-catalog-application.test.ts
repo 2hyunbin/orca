@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { structuredAgentSessionSendSelection } from './structured-agent-session-option-view'
 import { getAgentSessionOptionCatalog } from './agent-session-option-catalog'
+import { structuredAgentSessionSeedCatalog } from './structured-agent-session-seed-catalog'
 import type { AgentSessionModelCatalogResult } from './agent-session-wire'
 import {
   applyStructuredAgentSessionModelCatalog,
@@ -8,6 +9,7 @@ import {
   createStructuredAgentSessionOptionState,
   settleStructuredAgentSessionBuiltinCatalog,
   structuredAgentSessionOptionSnapshot,
+  canSetStructuredAgentSessionOption,
   commitStructuredAgentSessionOption
 } from './structured-agent-session-options'
 
@@ -144,7 +146,7 @@ describe('structured option state from the host model catalog', () => {
       hosted,
       SEED,
       { origin: 'probe', models: [], fetchedAt: 2 },
-      LAUNCH
+      { ...LAUNCH, coherentCatalog: true }
     )
     expect(empty.catalog?.models).toEqual([])
     expect(empty.record).toBe(hosted.record)
@@ -179,6 +181,83 @@ describe('structured option state from the host model catalog', () => {
     const model = snapshot.find((descriptor) => descriptor.id === 'model')!
     expect(model.kind.type === 'select' ? model.kind.currentValue : null).toBe('gpt-live')
   })
+
+  it('shows Pi live choices immediately and keeps them after a late, narrower host list', () => {
+    const seed = structuredAgentSessionSeedCatalog('pi')!
+    const models = [
+      { id: 'A', label: 'A', isDefault: true, efforts: [] },
+      { id: 'B', label: 'B', isDefault: false, efforts: [] }
+    ]
+    const launch = { ...LAUNCH, coherentCatalog: true }
+    const live = applyStructuredAgentSessionOptions(
+      createStructuredAgentSessionOptionState('pi', seed),
+      seed,
+      { models, current: { model: 'A', defaulted: [] } },
+      launch
+    )
+    const choices = (state: typeof live) => structuredAgentSessionOptionSnapshot(state)[0]?.kind
+    expect(choices(live)).toMatchObject({ choices: [{ value: 'A' }, { value: 'B' }] })
+    const settled = applyStructuredAgentSessionModelCatalog(
+      live,
+      seed,
+      { origin: 'probe', models: [models[0]!], fetchedAt: 1 },
+      launch
+    )
+    expect(choices(settled)).toEqual(choices(live))
+    expect(canSetStructuredAgentSessionOption(settled, 'model', 'B')).toBe(true)
+  })
+
+  it.each([
+    ['codex', false],
+    ['pi', true]
+  ] as const)(
+    '%s keeps live controls usable after a warm listing, options, and terminal receipt',
+    (agent, coherentCatalog) => {
+      const seed = structuredAgentSessionSeedCatalog(agent)!
+      const efforts = [
+        { value: 'low', label: 'Low' },
+        { value: 'high', label: 'High' }
+      ]
+      const models = [
+        {
+          id: 'A',
+          label: 'A',
+          isDefault: true,
+          efforts,
+          serviceTiers: [{ value: 'priority', label: 'Fast' }]
+        },
+        { id: 'B', label: 'B', isDefault: false, efforts, supportsFastMode: true }
+      ]
+      const launch = { ...LAUNCH, coherentCatalog }
+      const pending = applyStructuredAgentSessionModelCatalog(
+        createStructuredAgentSessionOptionState(agent, seed),
+        seed,
+        { origin: 'probe', models, fetchedAt: 1, listingInProgress: true },
+        launch
+      )
+      const live = applyStructuredAgentSessionOptions(
+        pending,
+        seed,
+        {
+          models,
+          fastModeSupport: { supported: true },
+          current: { model: 'A', effort: 'low', serviceTier: 'default', defaulted: [] }
+        },
+        launch
+      )
+      const settled = applyStructuredAgentSessionModelCatalog(
+        live,
+        seed,
+        { origin: 'probe', models: [models[0]!], fetchedAt: 2 },
+        launch
+      )
+      expect(settled.listingInProgress).not.toBe(true)
+      expect(canSetStructuredAgentSessionOption(settled, 'effort', 'high')).toBe(true)
+      expect(canSetStructuredAgentSessionOption(settled, 'serviceTier', 'priority')).toBe(true)
+      const fast = commitStructuredAgentSessionOption(settled, 'model', 'B')
+      expect(canSetStructuredAgentSessionOption(fast, 'fastMode', true)).toBe(true)
+    }
+  )
 })
 
 it('keeps one flat selection across inventory/answer arrival order and child replacement', () => {
