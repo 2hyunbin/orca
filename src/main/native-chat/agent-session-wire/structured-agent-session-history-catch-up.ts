@@ -72,7 +72,9 @@ export function createHistoryCatchUpBatch() {
 }
 
 export type HistoryCatchUpContext<View> = {
-  view: View
+  /** What the chat already holds, read once on first use: an agent that reads its own history first
+   *  touches the journal only when there is something to add. */
+  view: () => View
   history: StructuredAgentSessionHistoryJournal
   journal: StructuredAgentSessionTransitionJournal
   signal: AbortSignal
@@ -140,7 +142,8 @@ export async function runHistoryCatchUp<View>(input: {
       return 'skipped'
     }
     const epoch = history.epoch
-    const view = input.readView(history)
+    let planned: { view: View } | undefined
+    const view = (): View => (planned ??= { view: input.readView(history) }).view
     const plan = await input.prepare({
       view,
       history,
@@ -172,7 +175,7 @@ export async function runHistoryCatchUp<View>(input: {
             if (
               current.epoch !== epoch ||
               sink.journalHistory?.() !== history ||
-              !input.sameView(view, input.readView(history))
+              !input.sameView(view(), input.readView(history))
             ) {
               return []
             }
