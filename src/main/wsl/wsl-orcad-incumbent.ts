@@ -6,7 +6,10 @@
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
 import { parsePairingCode } from '../../shared/pairing'
 import { ORCAD_MANAGED_REMOTE_PORT } from '../../shared/orcad-managed-runtime'
-import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
+import {
+  type OrcadTerminalCensus,
+  UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
+} from '../../shared/orcad-terminal-census'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { probeActiveOrcadReadiness } from '../ssh/orcad-active-readiness'
 import { orcadBoundPort } from '../managed-server/lifecycle/orcad-managed-bound-port'
@@ -15,7 +18,11 @@ import { wakeStoppedManagedOrcad } from '../managed-server/lifecycle/orcad-manag
 import type { OrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
 import type { OrcadSlotOptions } from '../ssh/orcad-recovery-slot'
 import { readRemoteOrcadBuildHash } from '../managed-server/install/orcad-remote-build-hash'
-import { requestOrcadTerminalCensus } from '../ssh/orcad-terminal-census-client'
+import {
+  requestOrcadTerminalCensus,
+  type OrcadTerminalCensusRequestOptions
+} from '../ssh/orcad-terminal-census-client'
+import { updateTerminalCounts } from '../ssh/orcad-fenced-stop'
 import { tunneledOrcadPairingCode } from '../ssh/orcad-tunneled-pairing'
 import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
@@ -26,20 +33,20 @@ export type WslOrcadIncumbent = {
   census: OrcadTerminalCensus
   /** The incumbent's proven readiness; null when it could not be started or proven. */
   readiness: ServeReadiness | null
-  /** Counts again (no wake) just before activation stops the incumbent; never zero unread. */
+  /**
+   * Counts again (no wake) just before activation stops the incumbent, closing its terminal
+   * admission first so none starts before the stop; never zero unread.
+   */
   recount: () => Promise<OrcadTerminalCensus>
-}
-
-const UNVERIFIABLE: OrcadTerminalCensus = {
-  liveSessions: null,
-  startedSinceActivation: null,
-  daemonProtocolVersion: null
+  /** Reopens the admission `recount` closed, when the incumbent keeps running. */
+  releaseAdmission: () => Promise<void>
 }
 
 const UNREADABLE: WslOrcadIncumbent = {
-  census: UNVERIFIABLE,
+  census: UNVERIFIABLE_ORCAD_TERMINAL_CENSUS,
   readiness: null,
-  recount: async () => UNVERIFIABLE
+  recount: async () => UNVERIFIABLE_ORCAD_TERMINAL_CENSUS,
+  releaseAdmission: async () => {}
 }
 
 export type WslOrcadIncumbentDependencies = {
@@ -104,16 +111,23 @@ export async function readWslOrcadIncumbent(
   } catch {
     return UNREADABLE
   }
-  const recount = (): Promise<OrcadTerminalCensus> =>
-    countIncumbentTerminals(args, readiness, activatedAt, dependencies)
-  return { census: await recount(), readiness, recount }
+  const counts = updateTerminalCounts((options) =>
+    countIncumbentTerminals(args, readiness, activatedAt, dependencies, options)
+  )
+  return {
+    census: await counts.countFirst(),
+    readiness,
+    recount: counts.recountCensus,
+    releaseAdmission: counts.releaseIncumbentAdmission
+  }
 }
 
 async function countIncumbentTerminals(
   args: { context: OrcadRemoteContext<WslOrcadHostTarget>; slot: OrcadSlotOptions },
   readiness: ServeReadiness,
   activatedAt: number,
-  dependencies: WslOrcadIncumbentDependencies
+  dependencies: WslOrcadIncumbentDependencies,
+  options: OrcadTerminalCensusRequestOptions
 ): Promise<OrcadTerminalCensus> {
   let forward: StartedPortForward | null = null
   try {
@@ -124,17 +138,16 @@ async function countIncumbentTerminals(
     )
     const offer = parsePairingCode(tunneledOrcadPairingCode(readiness, forward.entry.localPort))
     if (!offer) {
-      return UNVERIFIABLE
+      return UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
     }
-    // Why release: finished automation shells would otherwise defer every update, as on SSH.
     return await dependencies.census(
       pairedRuntimeConnectionFromOffer(offer),
       activatedAt,
       undefined,
-      { releaseFinishedAutomationTerminals: true }
+      options
     )
   } catch {
-    return UNVERIFIABLE
+    return UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
   } finally {
     await forward?.close().catch(() => {})
   }
