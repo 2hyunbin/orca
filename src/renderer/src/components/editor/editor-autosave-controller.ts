@@ -1,5 +1,4 @@
 import {
-  getOpenFilesForExternalFileChange,
   ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT,
   ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT,
   ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
@@ -8,6 +7,8 @@ import {
   type EditorSaveFileDetail,
   type EditorSaveQuiesceDetail
 } from './editor-autosave'
+import { editorSaveKeyOfFile, pathMutationSaveKeys } from './editor-autosave-holds'
+import type { OpenFile } from '@/store/slices/editor'
 import { flushPendingEditorBuffer } from './editor-pending-flush'
 import {
   autosaveSubscriberInputsEqual,
@@ -26,8 +27,14 @@ const NOT_SAVED_MESSAGE = "The file wasn't saved. Try saving again."
 
 export function attachEditorAutosaveController(store: AppStoreApi): () => void {
   const saveQueue = createEditorSaveQueue(store)
-  const { queueSave, quiesceFileSave, clearAutoSaveTimer, bumpSaveGeneration, syncAutoSave } =
-    saveQueue
+  const {
+    queueSave,
+    quiesceFileSave,
+    clearAutoSaveTimer,
+    bumpSaveGeneration,
+    holdAutoSave,
+    syncAutoSave
+  } = saveQueue
 
   const { handleSaveDirtyFiles, handlePrepareHotExit } = createEditorRestartSaveHandlers({
     store,
@@ -117,10 +124,17 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
     }
     detail.claim()
 
-    const matchingFiles =
-      'fileId' in detail
-        ? store.getState().openFiles.filter((file) => file.id === detail.fileId)
-        : getOpenFilesForExternalFileChange(store.getState().openFiles, detail)
+    const state = store.getState()
+    let matchingFiles: OpenFile[]
+    if ('fileId' in detail) {
+      matchingFiles = state.openFiles.filter((file) => file.id === detail.fileId)
+    } else {
+      // Why: a git discard rewrites the file under every workspace showing it, and the guarded
+      // write's compare fallback (older hosts) can't refuse a save that read disk just before git.
+      const keys = pathMutationSaveKeys(state, detail)
+      detail.onHold?.(holdAutoSave(keys))
+      matchingFiles = state.openFiles.filter((file) => keys.has(editorSaveKeyOfFile(state, file)))
+    }
 
     await Promise.all(matchingFiles.map((file) => quiesceFileSave(file.id)))
     detail.resolve()
