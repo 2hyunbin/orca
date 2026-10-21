@@ -319,4 +319,22 @@ describe('a chat tab on a host with no window', () => {
       ])
     }
   )
+
+  it('closes a chat whose open is still queued when its close arrives', async () => {
+    const { runtime, state } = createRuntime()
+    useChatHost({ getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] }) })
+
+    // Not awaited between: the close reaches main while the open is still in its queue.
+    void runtime.publishStructuredAgentSessionTab({
+      workspaceId: WT,
+      sessionId: 'chat-1',
+      agent: 'codex',
+      activate: true
+    })
+    runtime.onStructuredSessionTabHidden('chat-1')
+    await settled()
+    await settled()
+
+    expect(savedChatIds(state)).toEqual([])
+  })
 })

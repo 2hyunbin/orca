@@ -309,7 +309,7 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('content tabs drawn from main’s fram
     expect(layoutApplyTestTransport.sent).toEqual([])
     expect(tabOf('chat-a')).toBeUndefined()
 
-    // Main places listed chats itself (agent-session-tab-layout-commands.ts): in the active
+    // Main places listed chats itself (chatTabLayoutCommand): in the active
     // group, in listing order.
     const commands = ['chat-a', 'chat-b'].map((sessionId) => ({
       type: 'openAgentSessionTab' as const,
