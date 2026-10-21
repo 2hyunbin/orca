@@ -72,15 +72,19 @@ describe('host lists with a 13,692-host ssh config', () => {
   it('Settings > Servers SSH host picker', async () => {
     const onChange = vi.fn()
     render(
-      <SshTargetSelect
-        targets={names.map(sshTarget)}
-        value=""
-        onChange={onChange}
-        placeholder="Choose an SSH host"
-      />
+      <>
+        <label htmlFor="ssh-host">SSH host</label>
+        <SshTargetSelect
+          id="ssh-host"
+          targets={names.map(sshTarget)}
+          value=""
+          onChange={onChange}
+          placeholder="Choose an SSH host"
+        />
+      </>
     )
     expect(nodeCount()).toBeLessThan(50)
-    fireEvent.click(screen.getByRole('combobox', { name: 'Choose an SSH host' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'SSH host' }))
     const search = await screen.findByRole('combobox', { name: 'Search hosts…' })
     expect(nodeCount()).toBeLessThan(NODE_BUDGET)
     fireEvent.change(search, { target: { value: lastName } })

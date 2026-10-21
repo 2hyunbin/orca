@@ -45,6 +45,20 @@ describe('boundHostList', () => {
     expect(all.hiddenCount).toBe(10)
   })
 
+  it('ranks pinned matches too, so an exact pinned name survives a long pinned set', () => {
+    const hosts = [...Array.from({ length: 60 }, (_, i) => host(`node-${i}-prod`)), host('prod')]
+    const pinnedIds = new Set(hosts.map((h) => h.id))
+    const { shown } = boundHostList(hosts, { query: 'prod', pinnedIds, limit: 50 })
+    expect(shown[0]?.id).toBe('prod')
+  })
+
+  it('keeps input order when not searching, so a row never jumps when it is pinned', () => {
+    const { shown } = boundHostList([host('local'), host('a'), host('b')], {
+      pinnedIds: new Set(['b'])
+    })
+    expect(shown.map((h) => h.id)).toEqual(['local', 'a', 'b'])
+  })
+
   it('narrows pinned hosts by the query too', () => {
     const { shown } = boundHostList([host('a1'), host('b1')], {
       query: 'b',

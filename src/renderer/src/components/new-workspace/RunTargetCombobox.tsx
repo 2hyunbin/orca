@@ -308,8 +308,9 @@ export default function RunTargetCombobox({
               onConnectHost={(option) => void connectHost(option)}
               onSetLocation={setLocation}
             />
-            <HostListOverflowNote hiddenCount={hiddenHostCount} />
           </div>
+          {/* Why outside the listbox: the note is not an option. */}
+          <HostListOverflowNote hiddenCount={hiddenHostCount} />
           {hasAddHost ? (
             <AddHostSubmenuRow
               open={submenu === 'add-host'}

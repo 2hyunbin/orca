@@ -7,28 +7,26 @@ export type BoundedHostList<T> = {
   hiddenCount: number
 }
 
-type MatchRank = 'exact' | 'prefix' | 'contains' | null
-
-function rankHost(host: { label: string; searchText?: string }, needle: string): MatchRank {
+/** 0 exact name, 1 name prefix, 2 substring of the name or `searchText`; null for no match. */
+function matchRank(host: { label: string; searchText?: string }, needle: string): number | null {
   const label = host.label.toLowerCase()
   if (label === needle) {
-    return 'exact'
+    return 0
   }
   if (label.startsWith(needle)) {
-    return 'prefix'
+    return 1
   }
   if (label.includes(needle) || host.searchText?.toLowerCase().includes(needle)) {
-    return 'contains'
+    return 2
   }
   return null
 }
 
 /**
- * The one choke point for drawing a list of hosts. Pinned hosts (current value, checked or muted
- * ones) come first so state stays visible; the rest are ranked by `query`: exact names, then
- * prefixes, then substrings (of the label or `searchText`). Pinned and other matches each get
- * their own `limit`, so a long pinned set never crowds out what the user is searching for, and
- * typing a host's full name always reaches it.
+ * The one choke point for drawing a list of hosts. Matches are ranked exact name, then prefix, then
+ * substring, so typing a host's full name always reaches it. Pinned hosts (current value, checked or
+ * muted ones) get their own `limit` so a long pinned set never crowds out other results, and both
+ * pools are cut by rank. Rows keep their input order (ties included), so clicking a row never moves it.
  */
 export function boundHostList<T extends { id: string; label: string; searchText?: string }>(
   hosts: readonly T[],
@@ -36,22 +34,21 @@ export function boundHostList<T extends { id: string; label: string; searchText?
 ): BoundedHostList<T> {
   const { pinnedIds, limit = HOST_LIST_ROW_LIMIT } = options
   const needle = (options.query ?? '').trim().toLowerCase()
-  const pinned: T[] = []
-  const ranked: Record<Exclude<MatchRank, null>, T[]> = { exact: [], prefix: [], contains: [] }
-  for (const host of hosts) {
-    const rank = rankHost(host, needle)
-    if (rank === null) {
-      continue
+  const ranked: { host: T; rank: number; index: number }[] = []
+  hosts.forEach((host, index) => {
+    const rank = matchRank(host, needle)
+    if (rank !== null) {
+      ranked.push({ host, rank, index })
     }
-    if (pinnedIds?.has(host.id)) {
-      pinned.push(host)
-    } else {
-      ranked[rank].push(host)
-    }
-  }
-  const matches = [...ranked.exact, ...ranked.prefix, ...ranked.contains]
+  })
+  // Stable sort: equal ranks stay in input order.
+  ranked.sort((a, b) => a.rank - b.rank)
+  const pinned = ranked.filter((entry) => pinnedIds?.has(entry.host.id) === true)
+  const others = ranked.filter((entry) => pinnedIds?.has(entry.host.id) !== true)
+  const kept = [...pinned.slice(0, limit), ...others.slice(0, limit)]
+  kept.sort((a, b) => a.rank - b.rank || a.index - b.index)
   return {
-    shown: [...pinned.slice(0, limit), ...matches.slice(0, limit)],
-    hiddenCount: Math.max(0, pinned.length - limit) + Math.max(0, matches.length - limit)
+    shown: kept.map((entry) => entry.host),
+    hiddenCount: Math.max(0, pinned.length - limit) + Math.max(0, others.length - limit)
   }
 }

@@ -23,7 +23,6 @@ export function SshTargetSelect({
       onChange={onChange}
       options={targets}
       placeholder={placeholder}
-      ariaLabel={placeholder}
     />
   )
 }

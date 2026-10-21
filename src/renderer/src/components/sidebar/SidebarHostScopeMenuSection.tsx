@@ -137,23 +137,26 @@ export function SidebarHostScopeMenuSection({
         {rows.searchable ? (
           <HostListSearchField value={rows.query} onChange={rows.setQuery} inMenu />
         ) : null}
-        {rows.shown.map((host) => (
-          <DropdownMenuCheckboxItem
-            key={host.id}
-            checked={!allVisible && checkedRowIds.has(host.id)}
-            disabled={!allVisible && checkedRowIds.has(host.id) && checkedRowIds.size <= 1}
-            onCheckedChange={() => toggleHost(host)}
-            onSelect={(e) => e.preventDefault()}
-            className="min-h-11 items-start py-1.5"
-          >
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate">{host.label}</span>
-              <span className="text-[11px] font-normal text-muted-foreground">
-                {getHostMetadata(host)}
+        {/* Why a max height: up to 50 host rows plus pinned ones must scroll, not run off screen. */}
+        <div className="max-h-80 overflow-y-auto scrollbar-sleek">
+          {rows.shown.map((host) => (
+            <DropdownMenuCheckboxItem
+              key={host.id}
+              checked={!allVisible && checkedRowIds.has(host.id)}
+              disabled={!allVisible && checkedRowIds.has(host.id) && checkedRowIds.size <= 1}
+              onCheckedChange={() => toggleHost(host)}
+              onSelect={(e) => e.preventDefault()}
+              className="min-h-11 items-start py-1.5"
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate">{host.label}</span>
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  {getHostMetadata(host)}
+                </span>
               </span>
-            </span>
-          </DropdownMenuCheckboxItem>
-        ))}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </div>
         <HostListOverflowNote hiddenCount={rows.hiddenCount} />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
