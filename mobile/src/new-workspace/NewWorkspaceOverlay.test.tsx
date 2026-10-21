@@ -19,6 +19,7 @@ vi.mock('expo-router', () => ({ useRouter: () => router }))
 vi.mock('../components/HostProtocolGate', () => ({
   HostProtocolGate: ({ children }: { children: ReactNode }) => children
 }))
+vi.mock('./open-host-list-instead', () => ({ OpenHostListInstead: 'OpenHostListInstead' }))
 vi.mock('../mobile-web-shell/MobileWebShellScreen', () => ({
   MobileWebShellScreen: ({
     onOverlayLoad
@@ -83,5 +84,17 @@ describe("the New Workspace overlay's loading drawer", () => {
     act(() => layer().props.onCancel())
 
     expect(router.back).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the host list instead when the page cannot show here', () => {
+    act(() => {
+      renderer = create(createElement(NewWorkspaceOverlay, { hostId: 'desk' }))
+    })
+
+    act(() => shell.report!({ kind: 'unavailable' }))
+
+    expect(
+      renderer!.root.find((node) => String(node.type) === 'OpenHostListInstead').props.hostId
+    ).toBe('desk')
   })
 })

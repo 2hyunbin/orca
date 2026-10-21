@@ -244,7 +244,7 @@ export default function RootLayout() {
               name="new-workspace"
               options={{
                 headerShown: false,
-                // Draws nothing of its own: the drawer is the page's, over a dimmed Home.
+                // Draws nothing of its own: the drawer is the page's, over Home.
                 presentation: 'transparentModal',
                 animation: 'none',
                 contentStyle: { backgroundColor: 'transparent' }

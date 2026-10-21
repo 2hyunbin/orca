@@ -9,9 +9,8 @@ import { ProtocolBlockScreen } from './ProtocolBlockScreen'
 type Props = {
   hostId: string | undefined
   children: ReactNode
-  /** In place of the full-screen spinner, for a route drawn over another screen, which a later
-   *  pending window then leaves uncovered too. */
-  pending?: ReactNode
+  /** For a route drawn over another screen: nothing shows while status is pending, not a spinner. */
+  transparentWhilePending?: boolean
   /** In place of the block screen, for a route that hands a blocked host to the host list. */
   blocked?: ReactNode
 }
@@ -21,7 +20,7 @@ type Props = {
 export function HostProtocolGate({
   hostId,
   children,
-  pending: pendingView,
+  transparentWhilePending = false,
   blocked: blockedView
 }: Props) {
   const { client, state } = useHostClient(hostId)
@@ -34,7 +33,7 @@ export function HostProtocolGate({
   const blocked = compatVerdict.kind === 'blocked'
   const pending = statusPending && resolvedHostIdRef.current !== hostKey
   const holdBack = pending && mountedHostIdRef.current !== hostKey
-  const covered = pending && pendingView === undefined
+  const covered = pending && !transparentWhilePending
 
   // Why: React can replay or discard a render, so the latches record committed
   // outcomes only — a discarded children render must not count as mounted.
@@ -51,8 +50,8 @@ export function HostProtocolGate({
     }
   })
 
-  if (holdBack && pendingView !== undefined) {
-    return pendingView
+  if (holdBack && transparentWhilePending) {
+    return null
   }
   if (holdBack) {
     // Why: nothing is mounted yet for this host, so hold the routes back entirely

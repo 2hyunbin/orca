@@ -35,12 +35,7 @@ import { useResponsiveLayout } from '../layout/responsive-layout'
 import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-native-verbs'
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
-import {
-  shellOverlayExits,
-  useReportedShellOverlayLoad,
-  type ShellOverlayLoad
-} from './shell-overlay-load'
-import { OpenHostListInstead } from '../new-workspace/open-host-list-instead'
+import { useReportedShellOverlayLoad, type ShellOverlayLoad } from './shell-overlay-load'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
 import { hostProfileUnreadableLine, pageFaultLine } from './shell-lifecycle-log'
 import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
@@ -112,9 +107,8 @@ function Failed({
 
 export type MobileWebShellScreenProps = {
   hostId: string
-  /** `overlay` for a transparent modal over the screen that opened it, whose page draws a drawer:
-   *  the caller dims that screen until `onOverlayLoad` says the page painted. */
-  presentation?: 'screen' | 'overlay'
+  /** Makes this an overlay: transparent over the screen that opened it, whose page draws a drawer.
+   *  The caller shows the wait and the exits; this shows nothing until the page has painted. */
   onOverlayLoad?: (load: ShellOverlayLoad) => void
   /** The screen this shell stands in for, which the page cannot derive from a document served at `/`. */
   route: BridgeInitRoute
@@ -141,12 +135,11 @@ export function MobileWebShellScreen({
   route,
   appNamesRoute,
   onRouteParamClear,
-  presentation = 'screen',
   onOverlayLoad,
   runtime
 }: MobileWebShellScreenProps) {
   const insets = useSafeAreaInsets()
-  const overlay = presentation === 'overlay'
+  const overlay = onOverlayLoad !== undefined
   const router = useRouter()
   const navigation = useNavigation()
   const popShellStack = useShellStackPop()
@@ -321,7 +314,7 @@ export function MobileWebShellScreen({
     sendBack: bridge.sendBack,
     setOptions: navigation.setOptions
   })
-  useReportedShellOverlayLoad(overlay ? onOverlayLoad : undefined, state, pageFrame)
+  useReportedShellOverlayLoad(onOverlayLoad, state, pageFrame)
 
   // A profile read that rejected never becomes a host, so the session would otherwise sit in
   // `ready` behind an un-hidden view with nothing serving it and the page asking forever.
@@ -341,9 +334,9 @@ export function MobileWebShellScreen({
     }
   }, [hostId, unreadable])
 
-  // The overlay's caller draws the wait; what it cannot show is the host list's to explain.
+  // The overlay's caller draws the wait and the exits.
   if (overlay && state.kind !== 'ready') {
-    return shellOverlayExits(state.kind) ? <OpenHostListInstead hostId={hostId} /> : null
+    return null
   }
   if (state.kind === 'route-unavailable') {
     return <PageRouteUnavailableScreen hostId={hostId} />

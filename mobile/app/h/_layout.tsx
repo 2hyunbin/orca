@@ -119,11 +119,7 @@ export default function HostGroupLayout() {
   // changes so a fold/rotation doesn't remount the navigator and reset the
   // navigation stack — only the sidebar pane toggles in and out.
   return (
-    <HostProtocolGate
-      hostId={hostId}
-      // An overlay route keeps the screen it opened over in sight while waiting.
-      {...(overlayRoute ? { pending: null } : {})}
-    >
+    <HostProtocolGate hostId={hostId} transparentWhilePending={overlayRoute}>
       <View style={[styles.row, overlayRoute && styles.transparent]}>
         {showSidebar && sidebarOpen ? (
           <View style={[styles.sidebar, { width: sidebarWidth }]}>

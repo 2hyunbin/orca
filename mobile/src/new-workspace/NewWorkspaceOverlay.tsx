@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'expo-router'
 import { HostProtocolGate } from '../components/HostProtocolGate'
 import { MobileWebShellScreen } from '../mobile-web-shell/MobileWebShellScreen'
@@ -16,8 +16,10 @@ const LOADING: ShellOverlayLoad = { kind: 'loading', download: null }
 export function NewWorkspaceOverlay({ hostId }: { hostId: string }) {
   const router = useRouter()
   const [load, setLoad] = useState(LOADING)
+  // Stable, so a drag in progress keeps its handler across the download's re-renders.
+  const cancel = useCallback(() => router.back(), [router])
   const route = shellScreenRoute({ pathname: `/h/${encodeURIComponent(hostId)}/new-workspace` })
-  if (route === null) {
+  if (route === null || load.kind === 'unavailable') {
     return <OpenHostListInstead hostId={hostId} />
   }
   return (
@@ -25,21 +27,15 @@ export function NewWorkspaceOverlay({ hostId }: { hostId: string }) {
       {/* The gate every `/h` route gets from its layout, which this one sits outside of to overlay Home. */}
       <HostProtocolGate
         hostId={hostId}
-        pending={null}
+        transparentWhilePending
         blocked={<OpenHostListInstead hostId={hostId} />}
       >
-        <MobileWebShellScreen
-          key={hostId}
-          hostId={hostId}
-          route={route}
-          presentation="overlay"
-          onOverlayLoad={setLoad}
-        />
+        <MobileWebShellScreen hostId={hostId} route={route} onOverlayLoad={setLoad} />
       </HostProtocolGate>
       <NewWorkspaceLoadingDrawer
         visible={load.kind === 'loading'}
         download={load.kind === 'loading' ? load.download : null}
-        onCancel={() => router.back()}
+        onCancel={cancel}
       />
     </>
   )

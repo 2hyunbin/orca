@@ -8,22 +8,37 @@ export type ShellOverlayDownload = { receivedBytes: number; totalBytes: number }
 export type ShellOverlayLoad =
   | { kind: 'loading'; download: ShellOverlayDownload | null }
   | { kind: 'painted' }
+  /** The page cannot show here: an older desktop, a wall, a failure, or no connection. */
+  | { kind: 'unavailable' }
 
-/** What an overlay cannot show in place of its page's drawer: the host list says it full screen. */
-export function shellOverlayExits(kind: MobileWebShellSessionState['kind']): boolean {
-  return kind === 'route-unavailable' || kind === 'wall' || kind === 'failed' || kind === 'offline'
+function overlayLoadOf(
+  state: MobileWebShellSessionState,
+  pageFrame: ShellPageFrame
+): ShellOverlayLoad['kind'] {
+  switch (state.kind) {
+    case 'route-unavailable':
+    case 'wall':
+    case 'failed':
+    case 'offline':
+      return 'unavailable'
+    case 'checking':
+    case 'fetching':
+    case 'activating':
+    case 'ready':
+      return pageFrame === 'painted' ? 'painted' : 'loading'
+  }
 }
 
 /**
- * Reports an overlay shell's load to the route that draws its loading state, which outlives the
- * shell's own state screens so one view covers every stage.
+ * Reports an overlay shell's load to the route that draws its loading state and its exits, which
+ * outlive the shell's own state screens so one view covers every stage.
  */
 export function useReportedShellOverlayLoad(
   onLoad: ((load: ShellOverlayLoad) => void) | undefined,
   state: MobileWebShellSessionState,
   pageFrame: ShellPageFrame
 ): void {
-  const painted = pageFrame === 'painted'
+  const kind = overlayLoadOf(state, pageFrame)
   const receivedBytes = state.kind === 'fetching' ? state.receivedBytes : null
   const totalBytes = state.kind === 'fetching' ? state.totalBytes : 0
   // Before paint, so the caller's view swaps in the same frame the WebView is shown.
@@ -32,12 +47,12 @@ export function useReportedShellOverlayLoad(
       return
     }
     onLoad(
-      painted
-        ? { kind: 'painted' }
-        : {
-            kind: 'loading',
+      kind === 'loading'
+        ? {
+            kind,
             download: receivedBytes === null ? null : { receivedBytes, totalBytes }
           }
+        : { kind }
     )
-  }, [onLoad, painted, receivedBytes, totalBytes])
+  }, [kind, onLoad, receivedBytes, totalBytes])
 }
