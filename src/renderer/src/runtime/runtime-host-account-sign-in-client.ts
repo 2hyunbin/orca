@@ -84,7 +84,7 @@ function advance(attempt: Attempt, status: HostAccountSignInStatus): void {
 }
 
 /** Only a lost answer is worth asking again; a refusal or a re-paired server is final. */
-function isRetryable(error: unknown): boolean {
+export function isLostHostAnswer(error: unknown): boolean {
   const reason = classifyTerminalProcessInspectionFailure(error)
   return reason === 'timeout' || reason === 'transport_loss'
 }
@@ -99,7 +99,7 @@ export async function retryLostAnswers<T>(
     try {
       return await request()
     } catch (error) {
-      if (!isRetryable(error) || Date.now() >= giveUpAt) {
+      if (!isLostHostAnswer(error) || Date.now() >= giveUpAt) {
         throw error
       }
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
@@ -126,7 +126,13 @@ async function follow(attempt: Attempt): Promise<HostAccountSignInStatus> {
     throw new Error(CANCELLED_MESSAGE[attempt.provider])
   }
   attempt.stage = 'starting'
-  advance(attempt, await call(attempt, 'accounts.hostSignInStart', { provider: attempt.provider }))
+  // Why retrying is safe: the host answers a repeated start with this owner's running flow.
+  advance(
+    attempt,
+    await retryLostAnswers(() =>
+      call(attempt, 'accounts.hostSignInStart', { provider: attempt.provider })
+    )
+  )
   attempt.stage = 'following'
   for (;;) {
     const status = attempt.status
@@ -187,10 +193,18 @@ function runHostAccountSignIn(
     done: null
   }
   attempts.set(key, attempt)
-  const done = follow(attempt).finally(() => {
-    attempts.delete(key)
-    notify()
-  })
+  const done = follow(attempt)
+    .catch((error: unknown) => {
+      // Why: after a Cancel, whatever ended the run is what the person asked for.
+      if (attempt.cancelRequested && attempt.status?.phase !== 'signedIn') {
+        throw new Error(CANCELLED_MESSAGE[provider])
+      }
+      throw error
+    })
+    .finally(() => {
+      attempts.delete(key)
+      notify()
+    })
   attempt.done = done
   return done
 }

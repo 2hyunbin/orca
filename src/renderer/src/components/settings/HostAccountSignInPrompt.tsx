@@ -3,6 +3,7 @@ import { Check, Copy, ExternalLink } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { useClipboardTextCopyFeedback } from '@/hooks/use-clipboard-text-copy-feedback'
 import {
+  isLostHostAnswer,
   readHostAccountSignIn,
   submitHostAccountSignInCode,
   subscribeHostAccountSignIns
@@ -18,6 +19,10 @@ import { Input } from '../ui/input'
 
 /** A Cancel the server could not be told about yet; the sign-in keeps asking it to stop. */
 export function showHostCancelFailure(error: unknown): void {
+  // Why only lost answers: a refusal means the flow already ended, which the pane shows itself.
+  if (!isLostHostAnswer(error)) {
+    return
+  }
   toast.error(
     translate('accounts.hostSignIn.cancelFailed', 'Could not reach the server to cancel yet.'),
     {
