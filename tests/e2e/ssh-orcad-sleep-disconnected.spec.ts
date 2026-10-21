@@ -1,8 +1,9 @@
 /**
  * Sleeping a workspace on an orcad-managed SSH host while the network to that host is gone: the
- * host cannot confirm the stop, so the workspace stays open and visible (Hide sleeping on) with
- * today's "kept open" toast, its shell keeps running on the host, and sleeping again once the
- * network is back puts it to sleep. Loss of contact is never taken as the terminals exiting.
+ * host cannot confirm the stop, so the workspace stays open with today's "kept open" toast and its
+ * shell keeps running on the host; sleeping again once the network is back puts it to sleep. Loss
+ * of contact is never taken as the terminals exiting. (The seeded workspace is the default branch,
+ * which Hide sleeping never hides, so the row stays either way.)
  */
 import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
@@ -50,20 +51,16 @@ test('sleep on a disconnected SSH host keeps the workspace open, and sleeping ag
       const { page, seeded } = await launchManagedWorkspace(fixture)
       const tabId = await openTerminalTab(page, seeded.worktreeId)
       await echoMarker(page, tabId, 'BEFORE_SLEEP')
-      await page.evaluate(() => window.__store!.getState().setShowSleepingWorkspaces(false))
-      const row = page
-        .locator(`[data-worktree-sidebar] [data-worktree-id="${seeded.worktreeId}"]`)
-        .first()
-
       proxy.cut('silent')
       await sleepFromSidebar(page, seeded.worktreeId)
       await expect(page.getByText(KEPT_OPEN).first()).toBeVisible({ timeout: 90_000 })
-      // Unconfirmed, so neither hidden as asleep nor counted as exited.
-      await expect(row).toBeVisible()
+      // Unconfirmed, so not counted as exited: the window keeps the terminal bound.
       expect(await livePtys(page, seeded.worktreeId)).toBeGreaterThan(0)
       await page.screenshot({ path: testInfo.outputPath('kept-open.png') })
 
       proxy.restore()
+      // The same shell answers once the network is back: the failed sleep never stopped it.
+      await echoMarker(page, tabId, 'AFTER_RESTORE')
       await expect
         .poll(
           async () => {
@@ -75,7 +72,6 @@ test('sleep on a disconnected SSH host keeps the workspace open, and sleeping ag
           { timeout: 180_000, intervals: [5_000] }
         )
         .toBe(0)
-      await expect(row).toBeHidden({ timeout: 30_000 })
     })
   } finally {
     await proxy?.close()

@@ -28,6 +28,8 @@ import { registerRuntimeEnvironmentRepairHandler } from './runtime-environment-r
 import { advanceRuntimeEnvironmentTransportGeneration } from './runtime-environment-transport-generation'
 import { resetSharedControlSupport } from './runtime-environment-shared-control-support'
 import { RUNTIME_ENVIRONMENT_HANDLER_CHANNELS } from './runtime-environment-handler-channels'
+import { setWorkspaceSleepEnvironments } from '../../runtime/workspaces/workspace-sleep-environment-slot'
+import { runtimeEnvironmentWorkspaceSleep } from './runtime-environment-workspace-sleep'
 import { registerOrcadRuntimeLifecycleHandlers } from './orcad-runtime-lifecycle-handlers'
 import { registerOrcadRuntimeConversionHandlers } from './orcad-runtime-conversion-handlers'
 import { registerOrcadDeltaMoveHandlers } from './orcad-delta-move-handlers'
@@ -120,6 +122,7 @@ const pendingSubscriptions = new Map<string, PendingRuntimeSubscription>()
 let stopPreferenceWatch: (() => void) | undefined
 
 export function registerRuntimeEnvironmentHandlers(store: Store): void {
+  setWorkspaceSleepEnvironments(runtimeEnvironmentWorkspaceSleep)
   stopPreferenceWatch?.()
   stopPreferenceWatch = watchRuntimeEnvironmentPreference(store, getUserDataPath())
   for (const pending of pendingSubscriptions.values()) {
