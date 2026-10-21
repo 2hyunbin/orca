@@ -21,6 +21,7 @@ const written: string[] = []
 vi.mock('@/components/standalone-terminal/open-standalone-terminal', () => ({
   openStandaloneTerminal: () => ({
     terminal: {
+      options: {},
       cols: 80,
       rows: 24,
       loadAddon: () => {},
@@ -150,6 +151,28 @@ describe('plain SSH terminal', () => {
     await act(async () => {})
     act(() => emit({ kind: 'exit', sessionId: 's4', exitCode: 0, signal: 9 }))
     expect(await screen.findByText(/ssh was stopped \(signal 9\)/)).toBeInTheDocument()
+  })
+
+  it('still ends a session whose exit arrives before its open reply', async () => {
+    let resolveOpen: (result: PlainSshTerminalOpenResult) => void = () => {}
+    open.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = resolve
+        })
+    )
+    const user = userEvent.setup()
+    render(<Harness status={blocked} />)
+    await user.click(screen.getByRole('button', { name: 'Open plain SSH terminal' }))
+    act(() => {
+      // A flood from another window's session must not crowd out this session's exit.
+      emit({ kind: 'data', sessionId: 'other', data: 'y'.repeat(300 * 1024) })
+      emit({ kind: 'data', sessionId: 's5', data: 'Permission denied (publickey).\r\n' })
+      emit({ kind: 'exit', sessionId: 's5', exitCode: 255 })
+    })
+    await act(async () => resolveOpen({ ok: true, sessionId: 's5', label: 'lambda' }))
+    expect(await screen.findByText(/ssh exited with code 255/)).toBeInTheDocument()
+    expect(written).toEqual(['Permission denied (publickey).\r\n'])
   })
 
   it('keeps a failed login readable, with no shell to fall back to', async () => {

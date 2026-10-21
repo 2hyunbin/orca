@@ -221,6 +221,18 @@ describe('plain SSH terminal sessions', () => {
     expect(spawned[0].resume).toHaveBeenCalledTimes(1)
   })
 
+  it('resumes a paused ssh before hanging up, or Windows would never report its exit', async () => {
+    const result = await open(deps(), 'lambda', 1)
+    const order: string[] = []
+    spawned[0].resume.mockImplementation(() => order.push('resume'))
+    spawned[0].kill.mockImplementation(() => order.push('kill'))
+    spawned[0].emitData('x'.repeat(600 * 1024))
+    expect(spawned[0].pause).toHaveBeenCalledTimes(1)
+    closePlainSshTerminal(result.ok ? result.sessionId : '', 1)
+    expect(order).toEqual(['resume', 'kill'])
+    spawned[0].emitExit(129)
+  })
+
   it('reports a signal kill, which is not a clean logout', async () => {
     const events: PlainSshTerminalEvent[] = []
     const result = await open(deps(), 'lambda', 1, events)

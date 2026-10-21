@@ -12,7 +12,10 @@ import { useEffectiveMacOptionAsAlt } from '@/lib/keyboard-layout/use-effective-
 import { composeActiveTerminalTheme } from '@/components/terminal-pane/terminal-appearance'
 import { getBuiltinTheme, resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
 import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
-import { buildPreviewTerminalOptions } from '@/components/dashboard-popout/preview-terminal-options'
+import {
+  buildPreviewAppearanceOptions,
+  buildPreviewTerminalOptions
+} from '@/components/dashboard-popout/preview-terminal-options'
 import { openStandaloneTerminal } from '@/components/standalone-terminal/open-standalone-terminal'
 import { removePlainSshPanel } from '@/ssh/plain-ssh-terminal-panels'
 
@@ -22,8 +25,8 @@ export type PlainSshTerminalPhase =
   | { kind: 'failed'; message: string }
   | { kind: 'ended'; exitCode: number; signal?: number }
 
-/** Output ssh may print before the open reply lands; more than this is never a login banner. */
-const EARLY_EVENT_LIMIT = 256
+/** Output held while the open reply is in flight; a login banner or prompt is far smaller. */
+const EARLY_DATA_CHAR_LIMIT = 256 * 1024
 const SCROLLBACK_ROWS = 5_000
 
 export function plainSshOpenFailureText(
@@ -124,6 +127,8 @@ export function PlainSshTerminalView({
         api.write({ sessionId, data })
         return true
       },
+      // Why: this xterm is the SSH session's only emulator, so remote programs wait on its replies.
+      answersQueries: true,
       getSettings: () => settingsRef.current,
       getMacOptionAsAlt: () => macOptionAsAltRef.current,
       getTerminalInput: () => null
@@ -148,6 +153,7 @@ export function PlainSshTerminalView({
     let phase: 'opening' | 'open' | 'done' = 'opening'
     let disposed = false
     const early: PlainSshTerminalEvent[] = []
+    let earlyDataChars = 0
     // Why: output dropped past the early cap was never rendered, but main still counts it unacked.
     const droppedEarlyChars = new Map<string, number>()
     let unsubscribe: () => void = () => {}
@@ -155,6 +161,7 @@ export function PlainSshTerminalView({
       phase = 'done'
       sessionId = null
       early.length = 0
+      earlyDataChars = 0
       droppedEarlyChars.clear()
       unsubscribe()
       if (next) {
@@ -182,9 +189,13 @@ export function PlainSshTerminalView({
     }
     unsubscribe = api.onEvent((event) => {
       if (phase === 'opening') {
-        if (early.length < EARLY_EVENT_LIMIT) {
+        // Exits are always kept: a session that ended before its id arrived must still end here.
+        if (event.kind === 'exit') {
           early.push(event)
-        } else if (event.kind === 'data') {
+        } else if (earlyDataChars + event.data.length <= EARLY_DATA_CHAR_LIMIT) {
+          earlyDataChars += event.data.length
+          early.push(event)
+        } else {
           droppedEarlyChars.set(
             event.sessionId,
             (droppedEarlyChars.get(event.sessionId) ?? 0) + event.data.length
@@ -216,6 +227,7 @@ export function PlainSshTerminalView({
         if (dropped) {
           api.ack({ sessionId: id, chars: dropped })
         }
+        earlyDataChars = 0
         for (const event of early.splice(0)) {
           if (phase === 'open' && event.sessionId === id) {
             handle(event, id)
@@ -255,6 +267,18 @@ export function PlainSshTerminalView({
       fitRef.current = null
     }
   }, [targetId])
+
+  // Why: font and Option-as-Alt changes must land without hanging up ssh.
+  useEffect(() => {
+    const terminal = terminalRef.current
+    if (terminal) {
+      Object.assign(
+        terminal.options,
+        buildPreviewAppearanceOptions(settings, macOptionAsAlt === 'true')
+      )
+      fitRef.current?.fit()
+    }
+  }, [settings, macOptionAsAlt])
 
   useEffect(() => {
     if (!hidden) {

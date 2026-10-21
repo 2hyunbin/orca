@@ -82,6 +82,11 @@ function releaseSlot(targetId: string, slot: Slot): void {
 function hangUp(session: Session, forceAfterMs: number): void {
   if (!session.hungUp) {
     session.hungUp = true
+    if (session.paused) {
+      // Why: a paused Windows pty never reads its socket's end, so it would never report exit.
+      session.paused = false
+      session.proc.resume()
+    }
     try {
       session.proc.kill()
     } catch {
@@ -182,6 +187,9 @@ export async function openPlainSshTerminal(
   sessions.set(session.id, session)
   slot.session = session
   proc.onData((data) => {
+    if (session.hungUp) {
+      return
+    }
     if (!sink({ kind: 'data', sessionId: session.id, data })) {
       releaseSlot(target.id, slot)
       return

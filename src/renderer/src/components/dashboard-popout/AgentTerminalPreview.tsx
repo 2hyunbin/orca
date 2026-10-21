@@ -187,6 +187,7 @@ export function AgentTerminalPreview({
           kittyKeyboardModes,
           sessionKey: ptyId,
           sendInput: (data) => previewApi.input(ptyId, data),
+          answersQueries: false,
           getSettings: () => settingsRef.current,
           getMacOptionAsAlt: () => macOptionAsAltRef.current,
           getTerminalInput: () => terminalInputRef.current

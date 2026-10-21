@@ -30,8 +30,13 @@ export type StandaloneTerminalArgs = {
   kittyKeyboardModes: TerminalKittyKeyboardModeTracker
   /** Names the session for paste planning; a remote-runtime pty id routes as remote. */
   sessionKey: string
-  /** The user's keystrokes and pastes, never xterm's replies to output. */
+  /** The user's keystrokes and pastes, plus xterm's replies to output when `answersQueries`. */
   sendInput: (data: string) => boolean | Promise<boolean>
+  /**
+   * True when this xterm is the session's only emulator, so programs wait on its replies to
+   * cursor, device and keyboard queries. A mirror (the preview) leaves them to the real pane.
+   */
+  answersQueries: boolean
   getSettings: () => GlobalSettings | null
   getMacOptionAsAlt: () => MacOptionAsAlt
   getTerminalInput: () => DashboardCardTerminalInput | null
@@ -75,7 +80,7 @@ export function openStandaloneTerminal(args: StandaloneTerminalArgs): Standalone
       pendingUserInputSignals--
     }
     // Why: core's signal distinguishes real input from parser replies, so typing survives live replay without forwarding synthetic CPR/DA bytes.
-    if (userInputDisposable ? !signaledUserInput : replayDepth > 0) {
+    if (!args.answersQueries && (userInputDisposable ? !signaledUserInput : replayDepth > 0)) {
       return
     }
     void args.sendInput(data)
