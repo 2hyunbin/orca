@@ -11,13 +11,25 @@ function compileProviderExec(output, arch = process.arch) {
   }
   mkdirSync(dirname(output), { recursive: true })
   const mac = process.platform === 'darwin'
+  const glibc = !mac && Boolean(process.report.getReport().header.glibcVersionRuntime)
   execFileSync(
     mac ? '/usr/bin/xcrun' : process.env.CC || 'cc',
     [
       ...(mac
         ? ['clang', '-arch', arch === 'x64' ? 'x86_64' : 'arm64', '-mmacosx-version-min=12.0']
-        : // This C-only helper uses no name-service plugins; static libc keeps newer builders from raising the host floor.
-          ['-static']),
+        : glibc
+          ? [
+              resolve(__dirname, '../../native/provider-exec/glibc-compat.c'),
+              ...[
+                '__libc_start_main',
+                'fstat',
+                'lstat',
+                'fstatat',
+                '__isoc23_strtol',
+                '__isoc23_strtoll'
+              ].map((symbol) => `-Wl,--wrap=${symbol}`)
+            ]
+          : []),
       '-O2',
       '-Wall',
       '-Wextra',

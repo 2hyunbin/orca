@@ -379,9 +379,6 @@ jobs:
             # The image's source-built Git needs no RPM; missing tools come from AlmaLinux.
             dnf --disablerepo='epel*' install -y git procps-ng unzip which xz
           fi
-          if ! rpm -q glibc-static >/dev/null 2>&1; then
-            dnf --disablerepo='epel*' install -y glibc-static
-          fi
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref }}
@@ -451,9 +448,6 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" -w /work \
             quay.io/pypa/manylinux2014_x86_64@sha256:6f74cabeac2432570aa4bfdb29f7c1f30313d4d6654d764c44e574b6ffdd4ed5 bash -s <<'GLIBC217_COMPAT_SLOT'
           set -eu
-          if ! rpm -q glibc-static >/dev/null 2>&1; then
-            yum install -y glibc-static
-          fi
           export PATH="$(dirname "$COMPAT_NODE"):$PATH"
           node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217
           node config/scripts/build-orcad-prebuilds.mjs --require-slots linux-x64-glibc217
