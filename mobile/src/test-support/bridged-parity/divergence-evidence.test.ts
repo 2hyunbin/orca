@@ -1,7 +1,17 @@
+import { absentResultExplainsResiduals } from './absent-result-evidence'
 import { describe, expect, it } from 'vitest'
 import { readBridgeHostMessage } from '../../mobile-web-shell/bridge/bridge-envelope'
 import type { Recording, RecordingScenario } from '../rpc-recording/recording-scenario'
 import type { BridgeRpcClientDiagnostic } from '../../mobile-web-shell/bridge/bridge-rpc-client'
+import { recordingDifferences, valueDifferences } from '../rpc-recording/golden-difference'
+import { classifyBridgedParity } from './divergence-classes'
+import {
+  createBridgePortPair,
+  type BridgePortPair
+} from '../../mobile-web-shell/bridge/bridge-port-pair-test-harness'
+import type { RpcClient } from '../../transport/rpc-client'
+import { ScriptedRpcTransport } from '../rpc-recording/scripted-rpc-transport'
+import { agentHistoryHostStatusRead } from '../../agent-history/mobile-agent-history-operations'
 import {
   divergingFields,
   paramsMismatchEvidence,
@@ -20,6 +30,23 @@ const scenario = (steps: RecordingScenario['steps']): RecordingScenario => ({
   schedules: [],
   steps
 })
+
+function classify(
+  expected: Recording,
+  actual: Recording,
+  scenarios: RecordingScenario[] = [],
+  pairs: Parameters<typeof absentResultExplainsResiduals>[3] = []
+) {
+  const explained = absentResultExplainsResiduals(expected, actual, scenarios, pairs)
+  return classifyBridgedParity({
+    fixedByReplyMeta: false,
+    threwWhileRecording: false,
+    divergingFields: divergingFields(expected, actual),
+    absentResultExplainsResiduals: explained,
+    paramsMismatch: null,
+    refusalReleasedStream: false
+  })
+}
 
 const recording = (
   observation: Partial<Recording['checkpoints'][number]['observation']>
@@ -96,6 +123,134 @@ describe('undoing the counterfactual', () => {
 })
 
 describe('the fields that diverged', () => {
+  it('keeps later wire differences and occurrence-aligned shared checkpoints despite list changes', () => {
+    const expected = recording({
+      sender: [{ ordinal: 1, settlement: { value: { id: 'frame-2' } } }],
+      payloads: [{ ordinal: 1, json: 'subscribe' }, { json: 'frame-2' }]
+    })
+    const actual = recording({
+      sender: [{ ordinal: 2, settlement: { value: { id: 'frame-1' } } }],
+      payloads: [{ ordinal: 2, json: 'worktree' }, { json: 'frame-1' }]
+    })
+    expect(divergingFields(expected, actual)[0]).toBe('sender[0].ordinal')
+    expect(classify(expected, actual)).toBe('unclassified')
+    expected.checkpoints.push(...structuredClone(expected.checkpoints))
+    actual.checkpoints.unshift({ ...structuredClone(actual.checkpoints[0]!), id: 'extra' })
+    actual.checkpoints.push(...structuredClone(actual.checkpoints.slice(1)))
+    expect(
+      recordingDifferences(expected, actual, true).map(
+        ({ checkpoint, field, path }) => `${checkpoint}:${field}${path}`
+      )
+    ).toEqual(
+      ['only', 'only#2'].flatMap((key) =>
+        [
+          'sender[0].ordinal',
+          'sender[0].settlement.value.id',
+          'payloads[0].json',
+          'payloads[0].ordinal',
+          'payloads[1].json'
+        ].map((path) => `${key}:${path}`)
+      )
+    )
+    const fields = divergingFields(expected, actual)
+    expect(fields[0]).toBe('checkpoints')
+    expect(classify(expected, actual)).toBe('unclassified')
+    expect(
+      valueDifferences({ a: null, b: { $rpc: 'undefined' }, c: [1, 2], d: {} }, { c: [3], d: [] })
+    ).toMatchObject([
+      { path: '.a', expected: null, expectedPresent: true, actualPresent: false },
+      { path: '.b', expected: { $rpc: 'undefined' }, actualPresent: false },
+      { path: '.c.length', expected: 2, actual: 1 },
+      { path: '.c[0]', expected: 1, actual: 3 },
+      { path: '.c[1]', expectedPresent: true, actualPresent: false },
+      { path: '.d', expected: {}, actual: [] }
+    ])
+  })
+
+  it('attributes a real malformed exchange without excusing valid wire changes beside it', async () => {
+    const pairs: BridgePortPair<RpcClient>[] = []
+    const native = new ScriptedRpcTransport()
+    const bridge = new ScriptedRpcTransport(
+      () => 0,
+      undefined,
+      (rpc) => {
+        const pair = createBridgePortPair({ rpc })
+        pairs.push(pair)
+        for (let round = 0; round < 4; round += 1) {
+          pair.drainNow()
+        }
+        return pair.client
+      }
+    )
+    const pair = pairs[0]!
+    try {
+      const nativeReply = native.client.sendRequest('status.get', {})
+      const bridgeReply = bridge.client
+        .sendRequest('status.get', {})
+        .catch((error: unknown) => error)
+      await pair.flush()
+      native.complete('status.get#1', {}, { ok: true })
+      bridge.complete('status.get#1', {}, { ok: true })
+      const [reply, error] = await Promise.all([nativeReply, bridgeReply])
+      await pair.flush()
+      const message = 'The host sent a reply this app could not read (status.get)'
+      expect(() => agentHistoryHostStatusRead.interpret(reply)).toThrow(message)
+      if (!(error instanceof Error)) {
+        throw new Error('missing actual bridge refusal')
+      }
+      const snapshot = (transport: ScriptedRpcTransport, text: string) =>
+        recording({
+          sender: structuredClone(transport.requests),
+          payloads: structuredClone(transport.payloads),
+          state: { screenState: { kind: 'error', message: text } }
+        })
+      const expected = snapshot(native, message)
+      const actual = snapshot(bridge, error.message)
+      const injected = {
+        ...scenario([
+          { complete: 'status.get#1', params: {}, reply: { ok: true } },
+          { checkpoint: 'only' }
+        ]),
+        operation: 'aiVault.history-scan'
+      }
+      expect(classify(expected, actual, [injected], pairs)).toBe('result-absent-settlement')
+      const changed = structuredClone(actual)
+      changed.checkpoints[0]!.observation.payloads = [
+        { name: 'status.get#1', ordinal: 2, json: '{"id":"frame-1","method":"wrong"}' }
+      ]
+      expect(classify(expected, changed, [injected], pairs)).toBe('unclassified')
+      const sibling = scenario([{ checkpoint: 'only' }])
+      sibling.id = 'normal'
+      const combined = (injection: Recording, normal: Recording): Recording => ({
+        scenario: 'matrix',
+        checkpoints: [
+          { ...normal.checkpoints[0]!, id: 'normal:only' },
+          { ...injection.checkpoints[0]!, id: 's:only' }
+        ]
+      })
+      expect(
+        classify(
+          combined(expected, expected),
+          combined(actual, changed),
+          [sibling, injected],
+          [pair, pair]
+        )
+      ).toBe('unclassified')
+      expect(
+        classify(
+          expected,
+          actual,
+          [{ ...injected, steps: [{ checkpoint: 'only' }, injected.steps[0]!] }],
+          pairs
+        )
+      ).toBe('unclassified')
+    } finally {
+      pair.client.close()
+      pair.host.dispose()
+      native.dispose()
+      bridge.dispose()
+    }
+  })
   it('reports every one, not the first', () => {
     const expected = recording({ sender: [{ ordinal: 1 }], effects: [{ name: 'a' }] })
     const actual = recording({ sender: [{ ordinal: 2 }], effects: [{ name: 'b' }] })

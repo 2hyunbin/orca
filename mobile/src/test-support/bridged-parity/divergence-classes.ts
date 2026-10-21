@@ -53,14 +53,12 @@ export type BridgedParityEvidence = {
   /** The run threw before there was a recording to compare. */
   threwWhileRecording: boolean
   /**
-   * Field paths that differ, in the order `compareGolden` walks them, or `checkpoints` when the
-   * checkpoint lists themselves do. Only the first names the golden: it is the divergence that
-   * takes the replay off course, and everything after it is a consequence of a run that is already
-   * somewhere else. The rest is kept because a failure that has to be read wants all of it.
+   * Every differing leaf, plus checkpoint-list disagreement. No first-path shortcut can certify
+   * that later siblings are ordinal-only or consequences of a malformed exchange.
    */
   divergingFields: readonly string[]
-  /** The scenario scripts a reply that is `ok` and carries no `result` key. */
-  scriptsAbsentResultReply: boolean
+  /** Every nonordinal difference was traced to its own injected exchange and actual refusal. */
+  absentResultExplainsResiduals: boolean
   /** Null unless the throw was the scripted transport refusing one request's params. */
   paramsMismatch: ParamsMismatchEvidence | null
   /** The page refused a frame on a stream it held and released that stream because of it. */
@@ -87,8 +85,8 @@ function settlementField(path: string): boolean {
   return path.endsWith('.settlement') || path.includes('.settlement.')
 }
 
-function ordinalField(path: string): boolean {
-  return path.endsWith('.ordinal')
+export function ordinalField(path: string): boolean {
+  return /^(sender|payloads|effects)\[\d+\]\.ordinal$/.test(path)
 }
 
 /**
@@ -110,23 +108,17 @@ export function classifyBridgedParity(evidence: BridgedParityEvidence): BridgedP
     if (movedOnlyKeysScriptedUndefined(evidence.paramsMismatch)) {
       return 'params-undefined'
     }
-    return evidence.scriptsAbsentResultReply && evidence.refusalReleasedStream
-      ? 'result-absent-stream-release'
-      : 'unclassified'
+    return evidence.refusalReleasedStream ? 'result-absent-stream-release' : 'unclassified'
   }
-  const [first] = evidence.divergingFields
-  if (first === undefined) {
+  if (evidence.divergingFields.length === 0) {
     return 'unclassified'
   }
-  // Before the partition below, not after: a reply shape the page drops cannot move a write
-  // ordinal, so an ordinal that moved first is the bridge's hop and not the partition's doing. Most
-  // of the matrix carries an absent-result reply somewhere, and testing that first would swallow
-  // every ordinal finding in the corpus.
-  if (ordinalField(first)) {
+  const residuals = evidence.divergingFields.filter((path) => !ordinalField(path))
+  if (residuals.length === 0) {
     return 'write-ordinal'
   }
-  if (evidence.scriptsAbsentResultReply) {
-    return settlementField(first) ? 'result-absent-settlement' : 'result-absent-observation'
+  if (evidence.absentResultExplainsResiduals) {
+    return settlementField(residuals[0]!) ? 'result-absent-settlement' : 'result-absent-observation'
   }
   return 'unclassified'
 }

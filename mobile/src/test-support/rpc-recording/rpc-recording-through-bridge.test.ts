@@ -1,3 +1,4 @@
+import { absentResultExplainsResiduals } from '../bridged-parity/absent-result-evidence'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readBridgeHostMessage } from '../../mobile-web-shell/bridge/bridge-envelope'
@@ -34,9 +35,7 @@ import {
   divergingFields,
   paramsMismatchEvidence,
   recordingWithoutRpcMeta,
-  refusalReleasedStream,
   refusedFrames,
-  scriptsAbsentResultReply,
   withReplyMeta
 } from '../bridged-parity/divergence-evidence'
 import { familyGoldens, pilotGoldens } from './derived-goldens'
@@ -284,9 +283,17 @@ async function verdict(
     fixedByReplyMeta: asIf.recording !== null && asIfFields.length === 0,
     threwWhileRecording: asIf.recording === null,
     divergingFields: asIfFields,
-    scriptsAbsentResultReply: scenarios.some(scriptsAbsentResultReply),
+    absentResultExplainsResiduals:
+      asIf.recording !== null &&
+      absentResultExplainsResiduals(
+        expected.recording,
+        recordingWithoutRpcMeta(asIf.recording),
+        scenarios,
+        asIf.pairs
+      ),
     paramsMismatch: paramsMismatchEvidence(asIf.thrown, failing, asIf.pairs.at(-1)?.toShell ?? []),
-    refusalReleasedStream: asIf.pairs.some((pair) => refusalReleasedStream(pair.diagnostics))
+    // A thrown replay has no complete residual set; a scenario-wide refusal is not causal proof.
+    refusalReleasedStream: false
   }
   const name = classifyBridgedParity(evidence)
   counts[name] += 1
