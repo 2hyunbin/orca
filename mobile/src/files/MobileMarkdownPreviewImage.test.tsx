@@ -1,11 +1,12 @@
 import { createElement } from 'react'
+import type { ImageProps } from 'react-native'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, expect, it, vi } from 'vitest'
 import { MobileMarkdownPreviewImage } from './MobileMarkdownPreviewImage'
 
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
-  Image: Object.assign((props: object) => createElement('Image', props), {
+  Image: Object.assign((props: ImageProps) => createElement('Image', props), {
     getSize: (_uri: string, loaded: (width: number, height: number) => void) => loaded(600, 220)
   }),
   Pressable: 'Pressable',
@@ -38,11 +39,17 @@ it('shows the loaded image and expands it in the existing image viewer', async (
   await act(async () => {
     tree = create(createElement(MobileMarkdownPreviewImage, props))
   })
-  const image = tree!.root.findByType('Image')
+  const image = tree!.root.find((node) => String(node.type) === 'Image')
   expect(image.props.source.uri).toBe('data:image/png;base64,cG5n')
-  expect(tree!.root.findByType('Image').props.style.aspectRatio).toBe(600 / 220)
-  await act(async () => tree!.root.findByType('Pressable').props.onPress())
-  expect(tree!.root.findByType('ImageViewer').props.uri).toBe('data:image/png;base64,cG5n')
+  expect(tree!.root.find((node) => String(node.type) === 'Image').props.style.aspectRatio).toBe(
+    600 / 220
+  )
+  await act(async () =>
+    tree!.root.find((node) => String(node.type) === 'Pressable').props.onPress()
+  )
+  expect(tree!.root.find((node) => String(node.type) === 'ImageViewer').props.uri).toBe(
+    'data:image/png;base64,cG5n'
+  )
 })
 
 it('retries a refused image without hiding the surrounding document', async () => {
@@ -52,7 +59,13 @@ it('retries a refused image without hiding the surrounding document', async () =
   await act(async () => {
     tree = create(createElement(MobileMarkdownPreviewImage, props))
   })
-  expect(tree!.root.findByType('LoadError').props.message).toContain('Unable to reach')
-  await act(async () => tree!.root.findByType('LoadError').props.onRetry())
-  expect(tree!.root.findByType('Image').props.source.uri).toBe('data:image/png;base64,cG5n')
+  expect(tree!.root.find((node) => String(node.type) === 'LoadError').props.message).toContain(
+    'Unable to reach'
+  )
+  await act(async () =>
+    tree!.root.find((node) => String(node.type) === 'LoadError').props.onRetry()
+  )
+  expect(tree!.root.find((node) => String(node.type) === 'Image').props.source.uri).toBe(
+    'data:image/png;base64,cG5n'
+  )
 })
