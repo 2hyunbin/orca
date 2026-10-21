@@ -1734,7 +1734,7 @@
               "activeTab": "tab1",
               "groups": [
                 {
-                  "tabs": ["tab1", "tab2"],
+                  "tabs": ["tab1", "tab2", "tab3"],
                   "active": "tab1"
                 }
               ],
@@ -1757,6 +1757,11 @@
                   "pinned": true,
                   "tree": "leaf2",
                   "paneTitles": []
+                },
+                {
+                  "type": "markdown",
+                  "tab": "tab3",
+                  "title": "README.md"
                 }
               ]
             },
@@ -1764,7 +1769,7 @@
               "activeTab": "tab1",
               "groups": [
                 {
-                  "tabs": ["tab1", "tab2"],
+                  "tabs": ["tab1", "tab2", "tab3"],
                   "active": "tab1"
                 }
               ],
@@ -1787,6 +1792,11 @@
                   "pinned": true,
                   "tree": "leaf2",
                   "paneTitles": []
+                },
+                {
+                  "type": "markdown",
+                  "tab": "tab3",
+                  "title": "README.md"
                 }
               ]
             }
@@ -1797,7 +1807,7 @@
               "activeTab": "tab1",
               "groups": [
                 {
-                  "tabs": ["tab1", "tab2"],
+                  "tabs": ["tab1", "tab2", "tab3"],
                   "active": "tab1"
                 }
               ],
@@ -1820,6 +1830,11 @@
                   "pinned": true,
                   "tree": "leaf2",
                   "paneTitles": []
+                },
+                {
+                  "type": "markdown",
+                  "tab": "tab3",
+                  "title": "README.md"
                 }
               ]
             },

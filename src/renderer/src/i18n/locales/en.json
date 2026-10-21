@@ -4084,7 +4084,13 @@
             "runtime_workspace_window_closed": "Workspace window closed",
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
-            "connecting": "Connecting…"
+            "connecting": "Connecting…",
+            "searchSshHosts": "Search SSH hosts…",
+            "noMatchingSshHosts": "No SSH hosts match.",
+            "moreSshHostMatches_one": "{{count}} more match. Keep typing to narrow it down.",
+            "moreSshHostMatches_other": "{{count}} more matches. Keep typing to narrow them down.",
+            "moreSshHosts_one": "Find {{count}} more SSH host…",
+            "moreSshHosts_other": "Find among {{count}} more SSH hosts…"
           },
           "StatusBar": {
             "9659e38343": "Ports",
