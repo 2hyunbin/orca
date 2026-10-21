@@ -5,6 +5,7 @@ import type {
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { readClaudeStructuredSessionSettings } from './claude-structured-session-acquisition-options'
 import { openClaudeSession, readClaudeStartupFacts } from './claude-structured-session-startup'
+import { catchUpClaudeTranscript } from './claude-transcript-catch-up'
 import type {
   ClaudeSession,
   ClaudeStructuredSessionAdapterDeps,
@@ -55,8 +56,29 @@ export async function openClaudeStructuredSession(input: {
       })
   })
   const result = await waitForPromiseWithSignal(opened, request.signal)
-  if (sessions.get(request.sessionId) !== session || request.signal.aborted) {
-    throw new Error('claude session closed before startup completed')
+  const current = () => {
+    if (sessions.get(request.sessionId) !== session || request.signal.aborted) {
+      throw new Error('claude session closed before startup completed')
+    }
+  }
+  current()
+  // The stored leaf is set only on a resume, and is the chat's last completed turn.
+  const leafUuid = session.turnEndLeafUuid
+  if (resumesTranscript && leafUuid && session.events) {
+    await waitForPromiseWithSignal(
+      catchUpClaudeTranscript({
+        sessionId: request.sessionId,
+        providerSessionId: session.providerSessionId,
+        leafUuid,
+        claudeConfigDir: session.initialization.claudeConfigDir,
+        sink: session.events,
+        signal: request.signal,
+        assertCurrent: current,
+        ...(deps.logger ? { logger: deps.logger } : {})
+      }),
+      request.signal
+    )
+    current()
   }
   return { link: session.link, ...result }
 }

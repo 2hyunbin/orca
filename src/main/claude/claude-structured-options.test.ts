@@ -55,6 +55,7 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
       proof: createClaudeInitProof(),
       account: undefined,
       resumesTranscript: false,
+      claudeConfigDir: '/claude-home',
       onLateRefusal: () => {}
     }
   }

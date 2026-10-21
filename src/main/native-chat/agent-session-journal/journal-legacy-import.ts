@@ -294,7 +294,7 @@ async function decodeReplacementItems(input: {
  * the reducer renders it as one. Everything else stays a message item with its
  * blocks bounded in place.
  */
-function legacyItemBody(
+export function legacyItemBody(
   message: NativeChatMessage,
   limits: JournalPayloadLimits
 ): AgentJournalItemBody {

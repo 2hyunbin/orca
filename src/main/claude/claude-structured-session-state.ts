@@ -219,6 +219,8 @@ export type ClaudeSession = {
     proof: ClaudeInitProof
     account: ClaudeStructuredLaunch['account']
     resumesTranscript: boolean
+    /** The account home the child writes its transcript in, pinned at launch. */
+    claudeConfigDir: string
     onLateRefusal: (error: Error) => void
   }
 }

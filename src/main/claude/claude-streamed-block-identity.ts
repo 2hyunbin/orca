@@ -5,7 +5,10 @@ import { claudeRecord, claudeText } from './claude-structured-item-translation'
 // uuid, and the block's final `assistant` frame carries yet another; only
 // `message.id` ties them together. The block's first stream frame mints the
 // journal identity, and the final frame lands on it in block order instead of
-// appending a duplicate under its own uuid.
+// appending a duplicate under its own uuid. The identity is the block's source,
+// `message.id` and block index, because Claude saves each block as a transcript
+// row carrying both (`apiBlockIndex`) and never a stream_event uuid: a reader of
+// the transcript can tell which rows the chat already shows.
 
 export type ClaudeStreamedTextDelta = {
   identity: AgentJournalItemIdentity
@@ -40,6 +43,11 @@ export type ClaudeStreamedBlockRegistry = {
   clear: () => void
 }
 
+/** A content block's transcript-stable id: what a streamed row and its saved transcript row share. */
+export function claudeSourceBlockId(messageId: string, index: number): string {
+  return `block:${messageId}:${index}`
+}
+
 function scopeKey(sessionId: string, parentToolUseId: string | null): string {
   return `${sessionId}/${parentToolUseId ?? ''}`
 }
@@ -65,7 +73,11 @@ export function createClaudeStreamedBlockRegistry(
     uuid: string,
     startedAt: number
   ): StreamedBlock => {
-    const identity: AgentJournalItemIdentity = { provider: 'claude', sessionId, uuid }
+    const identity: AgentJournalItemIdentity = {
+      provider: 'claude',
+      sessionId,
+      uuid: streamed.messageId ? claudeSourceBlockId(streamed.messageId, index) : uuid
+    }
     const block = { identity, startedAt }
     streamed.blocks.set(index, block)
     streamed.awaitingFinal.push(block)

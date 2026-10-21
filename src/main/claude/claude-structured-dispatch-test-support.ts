@@ -46,6 +46,7 @@ export function sessionFor(send: Mock = vi.fn().mockResolvedValue(undefined)): C
       proof: createClaudeInitProof(),
       account: undefined,
       resumesTranscript: false,
+      claudeConfigDir: '/claude-home',
       onLateRefusal: () => {}
     }
   }

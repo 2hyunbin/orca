@@ -210,10 +210,11 @@ describe('Claude structured journal translation', () => {
       finalUuid: 'assistant-final-1',
       chunks: ['ST', 'REAMOK_ELEC_64E632']
     })
+    // The block's source, which its saved transcript row also carries; never a stream frame's uuid.
     const streamedIdentity = {
       provider: 'claude',
       sessionId: 'claude-session',
-      uuid: 'block-start-1'
+      uuid: 'block:msg_01:0'
     }
 
     for (const event of turn.start) {
@@ -299,7 +300,9 @@ describe('Claude structured journal translation', () => {
 
     const items: AgentJournalRenderItem[] = journal.snapshot().items
     const assistant = assistantMessages(items)
-    expect(assistant.map((item) => item.itemId)).toEqual(['claude:claude-session:count-start'])
+    expect(assistant.map((item) => item.itemId)).toEqual([
+      'claude:claude-session:block%3Amsg_count%3A0'
+    ])
     expect(assistant[0]?.body).toEqual({
       kind: 'message',
       role: 'assistant',

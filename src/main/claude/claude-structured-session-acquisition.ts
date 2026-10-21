@@ -274,6 +274,7 @@ export async function acquireClaudeSession({
         proof: initProof,
         account: launch.account,
         resumesTranscript: launch.resumesTranscript,
+        claudeConfigDir: launch.claudeConfigDir,
         onLateRefusal: (error) => callbacks.handleExit(sessionId, attempt, error)
       },
       ...(deps.mintLinkId ? { linkId: deps.mintLinkId() } : {}),
