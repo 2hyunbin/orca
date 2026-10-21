@@ -126,12 +126,12 @@ export async function applyWindowLayoutCommand(
     }
     return reply
   }
-  // A pane's sleeping record lives with the pane, in each partition that holds its tab.
-  if (command.type === 'sleep' || command.type === 'wake') {
-    return store.applyLayoutCommand(command, holders, run)
-  }
   if (command.type !== 'closePane') {
-    return store.applyLayoutCommand(command, [hostIds[0]], run)
+    // A pane's sleeping record lives with the pane, in each partition that holds its tab.
+    const target = command.type === 'sleep' || command.type === 'wake' ? holders : [hostIds[0]]
+    return run
+      ? store.applyLayoutCommand(command, target, run)
+      : store.applyLayoutCommand(command, target)
   }
   const { workspace, tabId, leafId } = command
   // A launch still starting in the pane the user closed stops, and says so (as the legacy close).

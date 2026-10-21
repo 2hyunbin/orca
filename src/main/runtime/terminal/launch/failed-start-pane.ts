@@ -38,23 +38,19 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     : null
 
   /**
-   * Layout-owner build: main's side of a client's layout command, its live start statuses in and
-   * its startPane, wake and restartPane effects out. Undefined with the switch off.
+   * Layout-owner build: main's side of a client's startPane, wake or restartPane, its live start
+   * statuses in and its effects out. Undefined for any other command, and with the switch off.
    */
   protected layoutCommandRun(command: WindowLayoutCommand): LayoutCommandRunOptions | undefined {
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || command.type === 'renameTabs' || !startsPanes(command)) {
       return undefined
-    }
-    const live = {
-      isBindingLive: (paneKey: string, ptyId: string) =>
-        this.ptysById.get(ptyId)?.connected === true && !this.paneStartStatuses?.peek(paneKey)
-    }
-    if (command.type === 'renameTabs' || !startsPanes(command)) {
-      return { live }
     }
     const { workspace } = command
     return {
-      live,
+      live: {
+        isBindingLive: (paneKey: string, ptyId: string) =>
+          this.ptysById.get(ptyId)?.connected === true && !this.paneStartStatuses?.peek(paneKey)
+      },
       onEffects: (effects) =>
         runLayoutPaneStarts({ type: command.type, workspace }, effects, {
           start: (pane) => this.ensureRestoredPaneStarted(pane),
