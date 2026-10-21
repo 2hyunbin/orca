@@ -79,13 +79,25 @@ function releaseSlot(targetId: string, slot: Slot): void {
   }
 }
 
+/**
+ * Why: on Windows node-pty records the exit before it emits one, and a native call in that gap
+ * throws ("already exited"). From an IPC listener that would reach the fatal main-process guard.
+ */
+function onLivePty(session: Session, call: (proc: pty.IPty) => void): void {
+  try {
+    call(session.proc)
+  } catch {
+    // Exited; its exit event follows.
+  }
+}
+
 function hangUp(session: Session, forceAfterMs: number): void {
   if (!session.hungUp) {
     session.hungUp = true
     if (session.paused) {
       // Why: a paused Windows pty never reads its socket's end, so it would never report exit.
       session.paused = false
-      session.proc.resume()
+      onLivePty(session, (proc) => proc.resume())
     }
     try {
       session.proc.kill()
@@ -197,7 +209,7 @@ export async function openPlainSshTerminal(
     session.unacked += data.length
     if (!session.paused && session.unacked > PAUSE_ABOVE_UNACKED) {
       session.paused = true
-      proc.pause()
+      onLivePty(session, (live) => live.pause())
     }
   })
   proc.onExit(({ exitCode, signal }) => {
@@ -225,7 +237,7 @@ function ownedSession(sessionId: unknown, owner: number): Session | null {
 export function writePlainSshTerminal(sessionId: unknown, owner: number, data: unknown): void {
   const session = ownedSession(sessionId, owner)
   if (session && typeof data === 'string') {
-    session.proc.write(data)
+    onLivePty(session, (proc) => proc.write(data))
   }
 }
 
@@ -237,7 +249,9 @@ export function resizePlainSshTerminal(
 ): void {
   const session = ownedSession(sessionId, owner)
   if (session) {
-    session.proc.resize(clampSize(cols, session.proc.cols), clampSize(rows, session.proc.rows))
+    onLivePty(session, (proc) =>
+      proc.resize(clampSize(cols, proc.cols), clampSize(rows, proc.rows))
+    )
   }
 }
 
@@ -249,7 +263,7 @@ export function ackPlainSshTerminal(sessionId: unknown, owner: number, chars: un
   session.unacked = Math.max(0, session.unacked - chars)
   if (session.paused && session.unacked < RESUME_BELOW_UNACKED) {
     session.paused = false
-    session.proc.resume()
+    onLivePty(session, (proc) => proc.resume())
   }
 }
 

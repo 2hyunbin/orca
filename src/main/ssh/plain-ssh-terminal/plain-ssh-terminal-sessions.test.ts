@@ -233,6 +233,18 @@ describe('plain SSH terminal sessions', () => {
     spawned[0].emitExit(129)
   })
 
+  it('swallows native calls on a pty that exited but hasn’t reported it, as Windows does', async () => {
+    const result = await open(deps(), 'lambda', 1)
+    const sessionId = result.ok ? result.sessionId : ''
+    const exited = (): never => {
+      throw new Error('Cannot resize a pty that has already exited')
+    }
+    spawned[0].resize.mockImplementation(exited)
+    spawned[0].write.mockImplementation(exited)
+    expect(() => resizePlainSshTerminal(sessionId, 1, 100, 30)).not.toThrow()
+    expect(() => writePlainSshTerminal(sessionId, 1, 'ls\r')).not.toThrow()
+  })
+
   it('reports a signal kill, which is not a clean logout', async () => {
     const events: PlainSshTerminalEvent[] = []
     const result = await open(deps(), 'lambda', 1, events)
