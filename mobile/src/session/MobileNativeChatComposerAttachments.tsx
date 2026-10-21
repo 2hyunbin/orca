@@ -1,3 +1,4 @@
+import { isRenderableImageUri } from './mobile-native-chat-image-preview'
 import {
   ActivityIndicator,
   Image,
@@ -7,18 +8,13 @@ import {
   Text,
   View
 } from 'react-native'
-import { FileText, Image as ImageIcon, X } from 'lucide-react-native'
+import { FileText, ImageIcon, X } from 'lucide-react-native'
 import { colors, radii, spacing } from '../theme/mobile-theme'
 import { formatPreviewByteLength } from '../files/mobile-file-preview-response'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import type { PendingNativeChatFile } from './mobile-native-chat-file-attachment'
-import { isRenderableImageUri } from './mobile-native-chat-image-preview'
 
 const THUMB_SIZE = 58
-const NO_FILES: readonly PendingNativeChatFile[] = []
-
-/** `name` labels an image whose preview the phone can't load, such as a bare host path. */
-type StripImage = Pick<PendingNativeChatImage, 'id' | 'previewUri'> & { name?: string }
 
 /** The card's second line: the file's type, then its size. */
 function composerFileMeta(file: Pick<PendingNativeChatFile, 'name' | 'mime' | 'byteLength'>) {
@@ -28,15 +24,15 @@ function composerFileMeta(file: Pick<PendingNativeChatFile, 'name' | 'mime' | 'b
   return `${type} · ${formatPreviewByteLength(file.byteLength)}`
 }
 
-/** The composer and queued editor use the same attachment strip. */
+/** Everything riding on the next send, inside the composer box above the text. */
 export function MobileNativeChatComposerAttachments({
   images,
-  files = NO_FILES,
+  files,
   onRemoveImage,
   onRemoveFile
 }: {
-  images: readonly StripImage[]
-  files?: readonly PendingNativeChatFile[]
+  images: readonly PendingNativeChatImage[]
+  files: readonly PendingNativeChatFile[]
   onRemoveImage?: (id: string) => void
   onRemoveFile?: (id: string) => void
 }): React.JSX.Element | null {
@@ -51,36 +47,27 @@ export function MobileNativeChatComposerAttachments({
       style={styles.strip}
       contentContainerStyle={styles.stripContent}
     >
-      {images.map((image) =>
-        isRenderableImageUri(image.previewUri) ? (
-          <View key={image.id} style={styles.thumb}>
+      {images.map((image) => (
+        <View key={image.id} style={styles.thumb}>
+          {isRenderableImageUri(image.previewUri) ? (
             <Image
               source={{ uri: image.previewUri }}
               style={styles.thumbImage}
               resizeMode="cover"
             />
-            {onRemoveImage ? (
-              <RemoveBadge label="Remove image" onPress={() => onRemoveImage(image.id)} />
-            ) : null}
-          </View>
-        ) : (
-          // A bare host path: an icon and the file's name, as the transcript draws it.
-          <View key={image.id} style={styles.fileCard}>
-            <View style={styles.fileIcon}>
-              <ImageIcon size={17} color={colors.textSecondary} strokeWidth={2} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <ImageIcon size={18} color={colors.textMuted} />
+              <Text style={styles.fileMeta} numberOfLines={1}>
+                {image.reference?.alt || image.path.split(/[\\/]/).pop() || 'Image'}
+              </Text>
             </View>
-            <Text style={[styles.fileName, styles.fileText]} numberOfLines={1}>
-              {image.name ?? 'Image'}
-            </Text>
-            {onRemoveImage ? (
-              <RemoveBadge
-                label={`Remove ${image.name ?? 'image'}`}
-                onPress={() => onRemoveImage(image.id)}
-              />
-            ) : null}
-          </View>
-        )
-      )}
+          )}
+          {onRemoveImage ? (
+            <RemoveBadge label="Remove image" onPress={() => onRemoveImage(image.id)} />
+          ) : null}
+        </View>
+      ))}
       {files.map((file) => (
         <View key={file.id} style={styles.fileCard}>
           <View style={styles.fileIcon}>
@@ -133,6 +120,11 @@ const styles = StyleSheet.create({
     height: THUMB_SIZE,
     borderRadius: radii.composerItem,
     backgroundColor: colors.composerControl
+  },
+  imagePlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   thumbImage: {
     width: '100%',

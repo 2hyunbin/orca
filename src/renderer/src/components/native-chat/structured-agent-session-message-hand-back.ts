@@ -1,3 +1,5 @@
+import { promptTextContent } from './native-chat-prompt-document-text'
+import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { AgentJournalMessageItem } from '../../../../shared/agent-session-journal-types'
 import { structuredAgentSessionDraftScopeKey } from './native-chat-composer-draft-store'
 import { appendNativeChatDraftCache } from './native-chat-draft-cache'
@@ -16,7 +18,8 @@ export function returnMessageToComposer(
   attachmentIdPrefix: string,
   blocks: AgentJournalMessageItem['blocks'],
   /** Each image's SSH connection, in block order. */
-  imageConnectionIds?: readonly (string | null)[]
+  imageConnectionIds?: readonly (string | null)[],
+  options?: { skills?: readonly { name: string; path: string }[]; textPolicy?: 'append-repeated' }
 ): boolean {
   // Its `[Image #k]` markers become chips for its k-th image, by the ids its images get below.
   const imageIds = blocks.flatMap((block, index) =>
@@ -29,27 +32,63 @@ export function returnMessageToComposer(
       return []
     }
     const connectionId = imageConnectionIds?.[image++]
-    return block.path
-      ? [
-          {
-            id: `${attachmentIdPrefix}-${index}`,
-            path: block.path,
-            ...(connectionId ? { connectionId } : {})
-          }
-        ]
-      : []
+    const { type: _type, ...reference } = block
+    return [
+      {
+        id: `${attachmentIdPrefix}-${index}`,
+        path: block.path ?? '',
+        reference,
+        ...(connectionId ? { connectionId } : {})
+      }
+    ]
   })
   // One step, so a crash never leaves chips without their images, and a second return of the
   // message is skipped by its image ids whatever was typed since.
-  return appendNativeChatDraftCache(
-    composerScopeKey,
-    promptMarkersToImageReferences(
-      structuredAgentSessionMessageText({ kind: 'message', role: 'user', blocks }),
-      imageIds
-    ),
-    undefined,
-    images
+  const text = promptMarkersToImageReferences(
+    structuredAgentSessionMessageText({ kind: 'message', role: 'user', blocks }),
+    imageIds
   )
+  const document = options?.skills?.length ? promptTextContent(text) : undefined
+  for (const paragraph of document?.content ?? []) {
+    paragraph.content = paragraph.content?.flatMap((node) => {
+      if (node.type !== 'text' || !node.text) {
+        return [node]
+      }
+      const parts = []
+      let remaining = node.text
+      while (remaining) {
+        const match = options?.skills
+          ?.map((skill) => {
+            const token = `$${skill.name}`
+            let at = remaining.indexOf(token)
+            while (at !== -1 && /[\w:-]/u.test(remaining.charAt(at + token.length))) {
+              at = remaining.indexOf(token, at + 1)
+            }
+            return { skill, at }
+          })
+          .filter(({ at }) => at >= 0)
+          .sort((left, right) => left.at - right.at)[0]
+        if (!match) {
+          parts.push({ type: 'text', text: remaining })
+          break
+        }
+        if (match.at > 0) {
+          parts.push({ type: 'text', text: remaining.slice(0, match.at) })
+        }
+        parts.push({
+          type: 'nativeChatSkill',
+          attrs: { token: `$${match.skill.name}`, path: match.skill.path }
+        })
+        remaining = remaining.slice(match.at + match.skill.name.length + 1)
+      }
+      return parts
+    })
+  }
+  const addition: Pick<NativeChatComposerDraftAddition, 'document' | 'textPolicy'> = {
+    ...(document ? { document } : {}),
+    ...(options?.textPolicy ? { textPolicy: options.textPolicy } : {})
+  }
+  return appendNativeChatDraftCache(composerScopeKey, text, undefined, images, addition)
 }
 
 /**

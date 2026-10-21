@@ -13,13 +13,11 @@ type Metrics = { offset: number; viewport: number; content: number }
 export function MobileQueuedMessageScrollList({
   messageIds,
   newestIsPersons,
-  editingMessageId,
   children
 }: {
   messageIds: readonly string[]
   /** The newest card has no sender: the person just queued it, so the list shows it. */
   newestIsPersons: boolean
-  editingMessageId?: string
   /** Rows, given `reveal` to keep an edited row in view. */
   children: (reveal: (row: LayoutRectangle) => void) => ReactNode
 }): React.JSX.Element {
@@ -28,15 +26,6 @@ export function MobileQueuedMessageScrollList({
   const shownIds = useRef<ReadonlySet<string>>(new Set(messageIds))
   const flashed = useRef(false)
   const [cues, setCues] = useState({ above: false, below: false })
-  const [editedRow, setEditedRow] = useState<{
-    messageId: string
-    layout: LayoutRectangle
-  } | null>(null)
-  const revealPending = useRef(false)
-  const activeRow = editedRow?.messageId === editingMessageId ? editedRow?.layout : undefined
-  if (editedRow && !activeRow) {
-    setEditedRow(null)
-  }
   useLayoutEffect(() => {
     const newest = messageIds.at(-1)
     const appended =
@@ -44,7 +33,6 @@ export function MobileQueuedMessageScrollList({
     shownIds.current = new Set(messageIds)
     // Reveal the committed own append even when a simultaneous removal keeps content size equal.
     if (appended && newestIsPersons) {
-      revealPending.current = false
       scrollRef.current?.scrollToEnd({ animated: false })
     }
   }, [messageIds, newestIsPersons])
@@ -59,20 +47,12 @@ export function MobileQueuedMessageScrollList({
         scrollRef.current?.flashScrollIndicators()
       }
     }
-    // A reveal before the list grows can be clamped against its old dimensions.
-    if (
-      activeRow &&
-      revealPending.current &&
-      (next.viewport !== undefined || next.content !== undefined)
-    ) {
-      revealPending.current = !scrollToRow(activeRow)
-    }
   }
   // The nearest scroll that shows the whole row, as desktop's editor does, clear of the edge fades.
-  const scrollToRow = (row: LayoutRectangle) => {
+  const reveal = (row: LayoutRectangle) => {
     const { offset, viewport, content } = metrics.current
     if (viewport === 0) {
-      return false
+      return
     }
     const rowBottom = row.y + row.height
     // Never past the content's end, which may not have caught up with a row that just grew.
@@ -83,30 +63,17 @@ export function MobileQueuedMessageScrollList({
     } else if (bottom > offset + viewport) {
       scrollRef.current?.scrollTo({ y: bottom - viewport, animated: false })
     }
-    return content >= rowBottom && viewport >= bottom - top
-  }
-  const reveal = (row: LayoutRectangle) => {
-    if (editingMessageId !== undefined) {
-      setEditedRow({ messageId: editingMessageId, layout: row })
-    }
-    revealPending.current = !scrollToRow(row)
   }
   return (
     <View>
       <ScrollView
         ref={scrollRef}
-        // Keep the image strip and controls together even when the editor exceeds the preview cap.
-        style={{
-          maxHeight: Math.max(QUEUE_LIST_MAX_HEIGHT, (activeRow?.height ?? 0) + 2 * spacing.lg)
-        }}
+        style={styles.scroll}
         nestedScrollEnabled
         showsVerticalScrollIndicator
         persistentScrollbar
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={32}
-        onTouchMove={() => {
-          revealPending.current = false
-        }}
         onScroll={(event) => measure({ offset: event.nativeEvent.contentOffset.y })}
         onLayout={(event) => measure({ viewport: event.nativeEvent.layout.height })}
         onContentSizeChange={(_width, height) => measure({ content: height })}
@@ -139,6 +106,7 @@ function ListEdgeFade({ edge }: { edge: 'top' | 'bottom' }): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  scroll: { maxHeight: QUEUE_LIST_MAX_HEIGHT },
   fade: { position: 'absolute', left: 0, right: 0, height: spacing.lg },
   fadeTop: { top: 0 },
   fadeBottom: { bottom: 0 }

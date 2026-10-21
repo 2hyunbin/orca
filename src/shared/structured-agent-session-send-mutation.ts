@@ -1,6 +1,9 @@
 import type { AgentJournalItemBody, AgentJournalMessageItem } from './agent-session-journal-types'
 import type { AgentSessionMutationEnvelope } from './agent-session-wire'
 import type { z } from 'zod'
+import type { SendImageRefBlock } from './rpc-contract/structured-agent-session-message-params'
+
+export type ComposerImageReference = Omit<z.infer<typeof SendImageRefBlock>, 'type'>
 import type { SendBody } from './rpc-contract/structured-agent-session-message-params'
 import { structuredAgentSessionPayloadFingerprint } from './structured-agent-session-mutation'
 
@@ -85,6 +88,7 @@ export function structuredAgentSessionMessageSendMutation(
 export type StructuredAgentSessionAttachment = {
   path: string
   previewUri: string
+  reference?: ComposerImageReference
   /** The SSH connection a remote image lives on; kept by the client, never sent. */
   connectionId?: string
 }
@@ -99,7 +103,10 @@ export function structuredAgentSessionSendBody(
     role: 'user',
     blocks: [
       ...(text.trim().length > 0 ? [{ type: 'text' as const, text: text.trimEnd() }] : []),
-      ...attachments.map((attachment) => ({ type: 'image-ref' as const, path: attachment.path }))
+      ...attachments.map((attachment) => ({
+        type: 'image-ref' as const,
+        ...(attachment.reference ?? { path: attachment.path })
+      }))
     ]
   }
 }

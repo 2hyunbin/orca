@@ -303,5 +303,11 @@ export function pageRouteRefusalVerdict(
 /** Every served route's grants, so `route-handoff.web.ts` keeps each hop in the page, plus the read
  *  of a workspace key that page opens in-page. */
 function hostAreaGrants(entries: readonly MobileWebPageRoute[]): string[] {
-  return [...new Set([...entries.flatMap(effectiveRouteGrants), 'native.storage.read'])]
+  return [
+    ...new Set([
+      ...entries.flatMap(effectiveRouteGrants),
+      'native.storage.read',
+      'native.storage.write'
+    ])
+  ]
 }

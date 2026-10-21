@@ -1,3 +1,4 @@
+import { resetMobileNativeChatDraftStoreForTests } from './mobile-native-chat-draft-store'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,7 +54,6 @@ type HookArgs = Parameters<typeof useMobileNativeChatImageAttachments>[0]
 type Hook = ReturnType<typeof useMobileNativeChatImageAttachments>
 
 const SCOPE_A = 'h\0w\0tab-a'
-const SCOPE_B = 'h\0w\0tab-b'
 
 function baseArgs(overrides: Partial<HookArgs> & Pick<HookArgs, 'client'>): HookArgs {
   return {
@@ -74,7 +74,7 @@ function baseArgs(overrides: Partial<HookArgs> & Pick<HookArgs, 'client'>): Hook
   }
 }
 
-describe('native chat image upload borrowing and feedback', () => {
+describe('native chat image upload feedback', () => {
   let renderer: ReactTestRenderer | null = null
   let hook: Hook | null = null
 
@@ -85,6 +85,7 @@ describe('native chat image upload borrowing and feedback', () => {
 
   beforeEach(() => {
     pick.mockReset()
+    resetMobileNativeChatDraftStoreForTests()
     // Stale markers and write locks live at module scope (they outlive the
     // screen), so they also outlive a test.
     resetMobileNativeChatStaleInputForTests()
@@ -101,35 +102,6 @@ describe('native chat image upload borrowing and feedback', () => {
       renderer = create(createElement(Harness, { args }))
     })
   }
-
-  function update(args: HookArgs): void {
-    act(() => {
-      renderer!.update(createElement(Harness, { args }))
-    })
-  }
-
-  it('uses the current client for a later Attach from an open queued edit', async () => {
-    pick.mockResolvedValue([{ base64: 'AAAA', uri: 'file:///a.jpg' }])
-    const original = makeClient([])
-    const replacement = makeClient([methodNotFound('start'), ok('save', '/tmp/replaced.png')])
-    const args = baseArgs({ client: original })
-    mount(args)
-    const borrowed = hook!.forQueuedEdit
-    update({
-      ...args,
-      client: replacement,
-      getActiveWorktreeConnectionId: async () => 'new-connection'
-    })
-    const image = vi.fn()
-    await act(async () => borrowed.upload({ onStart: () => {}, onImage: image }))
-    expect(original.calls).toEqual([])
-    expect(replacement.calls[0]?.params).toMatchObject({ connectionId: 'new-connection' })
-    expect(image).toHaveBeenCalledWith(expect.objectContaining({ path: '/tmp/replaced.png' }))
-    update({ ...args, scopeKey: SCOPE_B })
-    await act(async () => borrowed.upload({ onStart: () => {}, onImage: image }))
-    expect(original.calls).toEqual([])
-    expect(image).toHaveBeenCalledTimes(1)
-  })
 
   it('settles partial composer photos before success then error feedback', async () => {
     pick.mockResolvedValue([

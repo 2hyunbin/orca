@@ -52,3 +52,56 @@ export function moveDragReorderKey(
   }
   return next
 }
+
+export type DragReorderMove = { movedId: string } & ({ beforeId: string } | { afterId: string })
+
+export function dragReorderMove(keys: string[], movedId: string): DragReorderMove | null {
+  const at = keys.indexOf(movedId)
+  if (at === -1) {
+    return null
+  }
+  const beforeId = keys[at + 1]
+  const afterId = keys[at - 1]
+  return beforeId ? { movedId, beforeId } : afterId ? { movedId, afterId } : null
+}
+
+export function dragReorderTop(
+  positions: DragReorderPositions,
+  sizes: Record<string, number>,
+  key: string
+): number {
+  'worklet'
+  const index = positions[key] ?? 0
+  let top = 0
+  for (const other of Object.keys(positions)) {
+    if ((positions[other] ?? 0) < index) {
+      top += sizes[other] ?? 0
+    }
+  }
+  return top
+}
+
+export function dragReorderTarget(
+  positions: DragReorderPositions,
+  sizes: Record<string, number>,
+  key: string,
+  top: number
+): number {
+  'worklet'
+  const from = positions[key] ?? 0
+  let target = from
+  let offset = 0
+  for (const other of orderedKeysFromDragReorderPositions(positions)) {
+    const height = sizes[other] ?? 0
+    const index = positions[other] ?? 0
+    const midpoint = offset + height / 2
+    if (index < from && top < midpoint) {
+      target = Math.min(target, index)
+    }
+    if (index > from && top + (sizes[key] ?? 0) > midpoint) {
+      target = index
+    }
+    offset += height
+  }
+  return target
+}

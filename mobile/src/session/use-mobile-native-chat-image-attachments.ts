@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { structuredSessionOperationId } from './structured-session-operation-id'
+import { useCallback, useRef, useState } from 'react'
 import { buildAgentTuiClearInputForText } from '../../../src/shared/agent-tui-input-clear'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
@@ -8,10 +9,10 @@ import {
   type PendingNativeChatImage
 } from './mobile-native-chat-image-attachment'
 import {
-  NO_NATIVE_CHAT_IMAGE_ATTACHMENTS,
-  withScopeAttachments,
-  type MobileNativeChatImagesByScope
-} from './mobile-native-chat-image-scope-state'
+  readMobileNativeChatDraft,
+  updateMobileNativeChatDraftImages,
+  useMobileNativeChatDraftImages
+} from './mobile-native-chat-draft-store'
 import {
   MOBILE_NATIVE_CHAT_IMAGE_SETTLE_MS,
   pasteMobileNativeChatImagePaths
@@ -33,10 +34,6 @@ import {
 import { useMobileNativeChatImageUpload } from './use-mobile-native-chat-image-upload'
 import type { PendingNativeChatFile } from './mobile-native-chat-file-attachment'
 import type { StructuredMobileSendAttachment } from './use-mobile-structured-send-with-outcome'
-import {
-  mobileQueuedEditComposerImages,
-  type MobileQueuedEditComposerImages
-} from './mobile-queued-edit-images'
 
 type CurrentRef<T> = { readonly current: T }
 type ShowToast = (message: string, durationMs?: number) => void
@@ -122,26 +119,21 @@ export function useMobileNativeChatImageAttachments({
   onAttachSuccess,
   onError,
   sleep = defaultSleep
-}: Args): MobileNativeChatImageAttachments & {
-  /** This chat box's photo upload and attachment list, lent to a queued card's editor. */
-  readonly forQueuedEdit: MobileQueuedEditComposerImages
-} {
-  const [attachmentsByScope, setAttachmentsByScope] = useState<MobileNativeChatImagesByScope>({})
+}: Args): MobileNativeChatImageAttachments {
   const idCounter = useRef(0)
-  const attachments =
-    (scopeKey ? attachmentsByScope[scopeKey] : undefined) ?? NO_NATIVE_CHAT_IMAGE_ATTACHMENTS
+  const [idPrefix] = useState(() => `img-${structuredSessionOperationId()}`)
+  const attachments = useMobileNativeChatDraftImages(scopeKey)
 
   const addUploadedImages = useCallback(
     (scope: string, uploadedImages: Omit<PendingNativeChatImage, 'id'>[]) => {
-      setAttachmentsByScope((prev) => ({
-        ...prev,
-        [scope]: appendPendingNativeChatImages(prev[scope] ?? [], uploadedImages, idCounter)
-      }))
+      updateMobileNativeChatDraftImages(scope, (current) =>
+        appendPendingNativeChatImages(current, uploadedImages, idCounter, idPrefix)
+      )
     },
-    []
+    [idPrefix]
   )
 
-  const { attachImage, isAttaching, uploadImages } = useMobileNativeChatImageUpload({
+  const { attachImage, isAttaching } = useMobileNativeChatImageUpload({
     client,
     activeHandleRef,
     getActiveWorktreeConnectionId,
@@ -160,12 +152,8 @@ export function useMobileNativeChatImageAttachments({
       if (!scope) {
         return
       }
-      setAttachmentsByScope((prev) =>
-        withScopeAttachments(
-          prev,
-          scope,
-          (prev[scope] ?? []).filter((attachment) => attachment.id !== id)
-        )
+      updateMobileNativeChatDraftImages(scope, (current) =>
+        current.filter((attachment) => attachment.id !== id)
       )
     },
     [scopeKey]
@@ -190,8 +178,7 @@ export function useMobileNativeChatImageAttachments({
       const sentAt = Date.now()
       try {
         const scope = scopeKey
-        const pendingImages =
-          (scope ? attachmentsByScope[scope] : undefined) ?? NO_NATIVE_CHAT_IMAGE_ATTACHMENTS
+        const pendingImages = scope ? readMobileNativeChatDraft(scope).images : []
         // Only stored files: one still uploading holds Send in the composer.
         const storedFiles = structuredNativeChat
           ? files.flatMap((file) =>
@@ -212,12 +199,8 @@ export function useMobileNativeChatImageAttachments({
           )
           if (outcome !== 'rejected') {
             const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
-            setAttachmentsByScope((prev) =>
-              withScopeAttachments(
-                prev,
-                scope,
-                (prev[scope] ?? []).filter((attachment) => !sentIds.has(attachment.id))
-              )
+            updateMobileNativeChatDraftImages(scope, (current) =>
+              current.filter((attachment) => !sentIds.has(attachment.id))
             )
             onFilesSent?.(storedFiles.map((file) => file.id))
           }
@@ -319,12 +302,8 @@ export function useMobileNativeChatImageAttachments({
             // flight keeps waiting for its own send. 'unknown' clears too: the
             // send usually DID land, and a kept chip would double-send the image.
             const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
-            setAttachmentsByScope((prev) =>
-              withScopeAttachments(
-                prev,
-                scope,
-                (prev[scope] ?? []).filter((attachment) => !sentIds.has(attachment.id))
-              )
+            updateMobileNativeChatDraftImages(scope, (current) =>
+              current.filter((attachment) => !sentIds.has(attachment.id))
             )
           }
           return outcome !== 'rejected'
@@ -345,7 +324,6 @@ export function useMobileNativeChatImageAttachments({
     },
     [
       activeHandleRef,
-      attachmentsByScope,
       baseSend,
       client,
       connState,
@@ -362,10 +340,5 @@ export function useMobileNativeChatImageAttachments({
     ]
   )
 
-  const forQueuedEdit = useMemo(
-    () => mobileQueuedEditComposerImages(scopeKey, uploadImages, addUploadedImages),
-    [addUploadedImages, scopeKey, uploadImages]
-  )
-
-  return { attachments, isAttaching, attachImage, removeAttachment, sendNativeChat, forQueuedEdit }
+  return { attachments, isAttaching, attachImage, removeAttachment, sendNativeChat }
 }

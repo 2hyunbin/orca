@@ -1,3 +1,4 @@
+import { isLoneStructuredAgentSessionConversationCommand } from '../../../../shared/structured-agent-session-composer'
 import type { JSONContent } from '@tiptap/react'
 import { splitImageReferences } from '../../../../shared/native-chat-image-reference'
 
@@ -40,14 +41,29 @@ export function withoutImageReferenceNodes(
 export function appendPromptDocumentText(
   document: JSONContent | undefined,
   before: string,
-  after: string
+  after: string,
+  incoming?: JSONContent
 ): JSONContent | undefined {
-  if (!document || before === after) {
+  if (before === after) {
     return document
   }
   const kept = before.trimEnd()
-  if (kept === '') {
-    return promptTextContent(after)
+  if (
+    kept === '' ||
+    isLoneStructuredAgentSessionConversationCommand(kept) ||
+    !after.startsWith(kept)
+  ) {
+    return incoming ?? (document ? promptTextContent(after) : undefined)
+  }
+  if (incoming) {
+    const trimmed = appendPromptDocumentText(document ?? promptTextContent(before), before, kept)
+    return {
+      type: 'doc',
+      content: [...(trimmed?.content ?? []), { type: 'paragraph' }, ...(incoming.content ?? [])]
+    }
+  }
+  if (!document) {
+    return undefined
   }
   const blocks = [...(document.content ?? [])]
   while (blocks.length > 0) {

@@ -1,30 +1,33 @@
-import { useCallback, useEffect, type ReactNode } from 'react'
-import { StyleSheet, View } from 'react-native'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { GripVertical } from 'lucide-react-native'
+import { DragReorderRow, type DragSharedState } from './DragReorderRow'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react'
+import { View } from 'react-native'
 import Animated, {
   measure,
   runOnJS,
   scrollTo,
-  useAnimatedStyle,
   useFrameCallback,
   useSharedValue,
-  withSpring,
   type AnimatedRef,
   type SharedValue
 } from 'react-native-reanimated'
-import { colors, spacing } from '../theme/mobile-theme'
-import { triggerMediumImpact, triggerSelection } from '../platform/haptics'
+import { triggerSelection } from '../platform/haptics'
 import {
-  clampDragReorderIndex,
+  dragReorderTarget,
+  dragReorderMove,
+  type DragReorderMove,
   dragReorderPositionsFromKeys,
   moveDragReorderKey,
-  orderedKeysFromDragReorderPositions,
   type DragReorderPositions
 } from './drag-reorder-positions'
 
-const ROW_SPRING = { damping: 28, stiffness: 350 }
-const LONG_PRESS_ACTIVATION_MS = 200
 // Why: joins row keys into a change-detection signature; NUL cannot occur in
 // a key, so the joined string is unambiguous.
 const KEY_SEPARATOR = '\u0000'
@@ -33,23 +36,16 @@ const KEY_SEPARATOR = '\u0000'
 const AUTO_SCROLL_EDGE = 72
 const AUTO_SCROLL_MAX_SPEED = 560
 
-type DragSharedState = {
-  positions: SharedValue<DragReorderPositions>
-  activeKey: SharedValue<string | null>
-  activeTop: SharedValue<number>
-  dragStartTop: SharedValue<number>
-  dragStartScrollY: SharedValue<number>
-  dragTranslationY: SharedValue<number>
-  dragPointerAbsY: SharedValue<number>
-}
-
 export type DragReorderListProps<ItemT> = {
   items: ItemT[]
   itemKey: (item: ItemT) => string
-  rowHeight: number
-  renderRow: (item: ItemT) => ReactNode
+  rowHeight?: number
+  scopeKey?: string
+  rowPresentation?: 'settings' | 'plain'
+  renderRow: (item: ItemT, handle: ReactNode) => ReactNode
   /** Called with every item key in the new order after a drop changes it. */
-  onReorder: (orderedKeys: string[]) => void
+  onReorder?: (orderedKeys: string[]) => void
+  onMove?: (move: DragReorderMove) => void
   /** Lets the owning screen disable its ScrollView while a row is held. */
   onDragActiveChange?: (active: boolean) => void
   scrollRef: AnimatedRef<Animated.ScrollView>
@@ -61,15 +57,36 @@ export function DragReorderList<ItemT>({
   items,
   itemKey,
   rowHeight,
+  scopeKey = '',
+  rowPresentation = 'settings',
   renderRow,
   onReorder,
+  onMove,
   onDragActiveChange,
   scrollRef,
   scrollOffsetY,
   scrollContentHeight
 }: DragReorderListProps<ItemT>): React.JSX.Element {
   const keys = items.map(itemKey)
-  const count = keys.length
+  const keySignature = keys.join(KEY_SEPARATOR)
+  const [measured, setMeasured] = useState<Record<string, number>>({})
+  const sizes = useSharedValue<Record<string, number>>({})
+  const initialPositions = useSharedValue<DragReorderPositions>({})
+  const rowSizes = useMemo(
+    () =>
+      Object.fromEntries(
+        (keySignature ? keySignature.split(KEY_SEPARATOR) : []).map((key) => [
+          key,
+          rowHeight ?? measured[key] ?? 0
+        ])
+      ),
+    [keySignature, rowHeight, measured]
+  )
+  const ready = keys.every((key) => rowSizes[key] > 0)
+  const height = Object.values(rowSizes).reduce((sum, size) => sum + size, 0)
+  const onMeasure = useCallback((key: string, height: number) => {
+    setMeasured((current) => (current[key] === height ? current : { ...current, [key]: height }))
+  }, [])
   const positions = useSharedValue<DragReorderPositions>(dragReorderPositionsFromKeys(keys))
   const activeKey = useSharedValue<string | null>(null)
   const activeTop = useSharedValue(0)
@@ -78,22 +95,22 @@ export function DragReorderList<ItemT>({
   const dragTranslationY = useSharedValue(0)
   const dragPointerAbsY = useSharedValue(0)
 
-  // Why: rows can be added, removed, or reordered by the owning screen;
-  // rebuild the position map whenever the rendered key order changes.
-  const keySignature = keys.join(KEY_SEPARATOR)
+  const signature = `${scopeKey}${KEY_SEPARATOR}${keySignature}`
+  const currentSignature = useRef(signature)
+  useLayoutEffect(() => {
+    currentSignature.current = signature
+  }, [signature])
   useEffect(() => {
-    positions.value = dragReorderPositionsFromKeys(
-      keySignature ? keySignature.split(KEY_SEPARATOR) : []
-    )
-  }, [keySignature, positions])
+    sizes.value = rowSizes
+  }, [rowSizes, sizes])
 
   const updateDragPosition = (key: string): void => {
     'worklet'
     const rawTop =
       dragStartTop.value + dragTranslationY.value + (scrollOffsetY.value - dragStartScrollY.value)
-    const top = Math.min(Math.max(rawTop, 0), Math.max(0, (count - 1) * rowHeight))
+    const top = Math.min(Math.max(rawTop, 0), Math.max(0, height - (sizes.value[key] ?? 0)))
     activeTop.value = top
-    const target = clampDragReorderIndex(Math.round(top / rowHeight), count)
+    const target = dragReorderTarget(positions.value, sizes.value, key, top)
     if (positions.value[key] !== target) {
       positions.value = moveDragReorderKey(positions.value, key, target)
       runOnJS(triggerSelection)()
@@ -136,23 +153,34 @@ export function DragReorderList<ItemT>({
     updateDragPosition(key)
   }, false)
 
+  const dragActiveCallback = useRef(onDragActiveChange)
+  useLayoutEffect(() => {
+    dragActiveCallback.current = onDragActiveChange
+  }, [onDragActiveChange])
   const setAutoScrollActive = autoScroll.setActive
   const handleDragActiveChange = useCallback(
     (active: boolean) => {
       setAutoScrollActive(active)
-      onDragActiveChange?.(active)
+      dragActiveCallback.current?.(active)
     },
-    [setAutoScrollActive, onDragActiveChange]
+    [setAutoScrollActive]
   )
 
   const commitReorder = useCallback(
-    (orderedKeys: string[]) => {
+    (orderedKeys: string[], movedId: string) => {
       // Why: a cancelled or no-op drag should not trigger a persisted write.
-      if (orderedKeys.join(KEY_SEPARATOR) !== keySignature) {
-        onReorder(orderedKeys)
+      if (
+        currentSignature.current === signature &&
+        orderedKeys.join(KEY_SEPARATOR) !== keySignature
+      ) {
+        onReorder?.(orderedKeys)
+        const move = dragReorderMove(orderedKeys, movedId)
+        if (move) {
+          onMove?.(move)
+        }
       }
     },
-    [onReorder, keySignature]
+    [onReorder, onMove, keySignature, signature]
   )
 
   // Why: screen-reader users can't long-press-drag; the handle exposes
@@ -170,12 +198,25 @@ export function DragReorderList<ItemT>({
       const next = [...keys]
       next.splice(fromIndex, 1)
       next.splice(toIndex, 0, key)
-      onReorder(next)
+      commitReorder(next, key)
     },
-    [keys, onReorder]
+    [keys, commitReorder]
   )
 
+  useEffect(() => {
+    if (activeKey.value !== null) {
+      handleDragActiveChange(false)
+    }
+    activeKey.value = null
+    positions.value = dragReorderPositionsFromKeys(
+      keySignature ? keySignature.split(KEY_SEPARATOR) : []
+    )
+  }, [signature, keySignature, positions, activeKey, handleDragActiveChange])
+  useEffect(() => () => handleDragActiveChange(false), [handleDragActiveChange])
+
   const shared: DragSharedState = {
+    sizes,
+    initialPositions,
     positions,
     activeKey,
     activeTop,
@@ -186,164 +227,24 @@ export function DragReorderList<ItemT>({
   }
 
   return (
-    <View style={{ height: count * rowHeight }}>
+    <View style={ready ? { height } : undefined}>
       {items.map((item) => (
         <DragReorderRow
           key={itemKey(item)}
           rowKey={itemKey(item)}
           rowHeight={rowHeight}
+          ready={ready}
+          presentation={rowPresentation}
+          onMeasure={onMeasure}
           shared={shared}
           scrollOffsetY={scrollOffsetY}
           updateDragPosition={updateDragPosition}
           onDragActiveChange={handleDragActiveChange}
           onCommit={commitReorder}
           onAccessibilityMove={moveRowByAccessibilityAction}
-        >
-          {renderRow(item)}
-        </DragReorderRow>
+          renderContent={(handle) => renderRow(item, handle)}
+        />
       ))}
     </View>
   )
 }
-
-function DragReorderRow({
-  rowKey,
-  rowHeight,
-  shared,
-  scrollOffsetY,
-  updateDragPosition,
-  onDragActiveChange,
-  onCommit,
-  onAccessibilityMove,
-  children
-}: {
-  rowKey: string
-  rowHeight: number
-  shared: DragSharedState
-  scrollOffsetY: SharedValue<number>
-  updateDragPosition: (key: string) => void
-  onDragActiveChange: (active: boolean) => void
-  onCommit: (orderedKeys: string[]) => void
-  onAccessibilityMove: (key: string, delta: number) => void
-  children: ReactNode
-}): React.JSX.Element {
-  const {
-    positions,
-    activeKey,
-    activeTop,
-    dragStartTop,
-    dragStartScrollY,
-    dragTranslationY,
-    dragPointerAbsY
-  } = shared
-
-  const pan = Gesture.Pan()
-    .activateAfterLongPress(LONG_PRESS_ACTIVATION_MS)
-    .shouldCancelWhenOutside(false)
-    .onStart((event) => {
-      const index = positions.value[rowKey] ?? 0
-      dragStartTop.value = index * rowHeight
-      dragStartScrollY.value = scrollOffsetY.value
-      dragTranslationY.value = 0
-      dragPointerAbsY.value = event.absoluteY
-      activeTop.value = dragStartTop.value
-      activeKey.value = rowKey
-      runOnJS(onDragActiveChange)(true)
-      runOnJS(triggerMediumImpact)()
-    })
-    .onUpdate((event) => {
-      dragTranslationY.value = event.translationY
-      dragPointerAbsY.value = event.absoluteY
-      updateDragPosition(rowKey)
-    })
-    .onFinalize(() => {
-      if (activeKey.value !== rowKey) {
-        return
-      }
-      activeKey.value = null
-      const orderedKeys = orderedKeysFromDragReorderPositions(positions.value)
-      runOnJS(onCommit)(orderedKeys)
-      runOnJS(onDragActiveChange)(false)
-    })
-
-  const rowStyle = useAnimatedStyle(() => {
-    const index = positions.value[rowKey] ?? 0
-    if (activeKey.value === rowKey) {
-      return {
-        top: activeTop.value,
-        zIndex: 2,
-        elevation: 4,
-        shadowOpacity: 0.3,
-        backgroundColor: colors.bgRaised,
-        transform: [{ scale: 1.02 }]
-      }
-    }
-    return {
-      top: withSpring(index * rowHeight, ROW_SPRING),
-      zIndex: 0,
-      elevation: 0,
-      shadowOpacity: 0,
-      backgroundColor: colors.bgPanel,
-      transform: [{ scale: 1 }]
-    }
-  }, [positions, activeKey, activeTop, rowKey, rowHeight])
-
-  return (
-    <Animated.View style={[styles.row, { height: rowHeight }, rowStyle]}>
-      <View style={styles.rowContent}>{children}</View>
-      <GestureDetector gesture={pan}>
-        <Animated.View
-          style={styles.handle}
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel="Drag to reorder"
-          accessibilityHint="Use the move up and move down actions to reorder without dragging"
-          accessibilityActions={[
-            { name: 'moveUp', label: 'Move up' },
-            { name: 'moveDown', label: 'Move down' }
-          ]}
-          onAccessibilityAction={(event) => {
-            if (event.nativeEvent.actionName === 'moveUp') {
-              onAccessibilityMove(rowKey, -1)
-            } else if (event.nativeEvent.actionName === 'moveDown') {
-              onAccessibilityMove(rowKey, 1)
-            }
-          }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <GripVertical size={18} color={colors.textMuted} />
-        </Animated.View>
-      </GestureDetector>
-      <View style={styles.rowSeparator} />
-    </Animated.View>
-  )
-}
-
-const styles = StyleSheet.create({
-  row: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8
-  },
-  rowContent: {
-    flex: 1
-  },
-  handle: {
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md
-  },
-  rowSeparator: {
-    position: 'absolute',
-    bottom: 0,
-    left: spacing.md,
-    right: spacing.md,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.borderSubtle
-  }
-})

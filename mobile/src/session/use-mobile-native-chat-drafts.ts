@@ -24,6 +24,8 @@ import { useMobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-lau
 import type { MobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
 import {
   clearMobileNativeChatDraftForSend,
+  hydrateMobileNativeChatDraft,
+  useMobileNativeChatDraftHydrated,
   editMobileNativeChatDraft,
   readMobileNativeChatDraftEditGeneration,
   setMobileNativeChatDraftText,
@@ -98,6 +100,12 @@ export function useMobileNativeChatDrafts(args: {
   const draftKey = mobileNativeChatScopeKey(hostId, worktreeId, tabId)
   const pendingKey = draftKey && sessionId ? `${draftKey}\0${sessionId}` : null
   const composerText = useMobileNativeChatDraft(draftKey)
+  const draftHydrated = useMobileNativeChatDraftHydrated(draftKey)
+  useEffect(() => {
+    if (draftKey) {
+      void hydrateMobileNativeChatDraft(draftKey).catch(() => undefined)
+    }
+  }, [draftKey])
   const [pendingBySession, setPendingBySession] = useState<
     Record<string, MobileNativeChatPendingMessage[]>
   >({})
@@ -118,7 +126,7 @@ export function useMobileNativeChatDrafts(args: {
     messages,
     launchDraft,
     launchDraftCreatedAt,
-    chatActive,
+    chatActive: chatActive && draftHydrated,
     transcriptLoading,
     setDraftText: setMobileNativeChatDraftText
   })

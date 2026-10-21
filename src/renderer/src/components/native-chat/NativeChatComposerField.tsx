@@ -1,3 +1,4 @@
+import type { ComposerImageReference } from '../../../../shared/structured-agent-session-send-mutation'
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { ClipboardEventHandler, KeyboardEventHandler, RefObject } from 'react'
@@ -89,6 +90,7 @@ export type NativeChatComposerImageAttachment = {
   /** Empty while `pending`: the clipboard image has no agent-readable path yet. */
   path: string
   connectionId?: string
+  reference?: ComposerImageReference
   /** Clipboard thumbnail (blob/data URL) rendered before — and after — the file
    *  lands, so the chip never waits on a disk round-trip to show something. */
   previewUrl?: string

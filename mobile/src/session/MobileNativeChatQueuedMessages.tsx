@@ -175,7 +175,6 @@ export function MobileNativeChatQueuedMessages({
           <MobileQueuedMessageScrollList
             messageIds={cards.map((card) => card.messageId)}
             newestIsPersons={!cards.at(-1)?.attribution}
-            editingMessageId={editor?.messageId}
           >
             {(reveal) =>
               cards.map((card) => {

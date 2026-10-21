@@ -29,7 +29,6 @@ import type {
 } from './mobile-structured-queued-message-feed'
 import type { MobileStructuredAgentMutate } from './use-mobile-structured-agent-mutation'
 import type { RpcClient } from '../transport/rpc-client'
-import type { MobileQueuedEditComposerImages } from './mobile-queued-edit-images'
 import {
   useMobileStructuredQueuedEdit,
   type MobileQueuedMessageInlineEditor
@@ -38,11 +37,7 @@ import {
 const CLEAR_DELETE_CONCURRENCY = 8
 
 /** `onCopied` runs once the card's text is in the composer, before its Delete leaves. */
-export type MobileQueuedMessageEdit = (
-  messageId: string,
-  onCopied?: () => void,
-  composerImages?: MobileQueuedEditComposerImages
-) => Promise<boolean>
+export type MobileQueuedMessageEdit = (messageId: string, onCopied?: () => void) => Promise<boolean>
 
 export type MobileStructuredQueuedMessageControls = {
   /** Host-held drafts as cards above the composer. */
@@ -81,10 +76,6 @@ export function useMobileStructuredQueuedMessageControls(args: {
   /** The active pane's live composer, Edit's copy target; absent = Edit refuses. False when
    *  nothing was copied. */
   appendComposerText: ((text: string) => boolean) | undefined
-  /** The host can replace a queued card's images in place. */
-  imagesCapable?: boolean
-  /** The agent takes images, so the editor offers Attach. */
-  acceptsImages?: boolean
   onSendError: (message: string) => void
   /** Called on any accepted card action, so the route can retire a held failure banner. */
   onActionResolved?: () => void
@@ -202,13 +193,13 @@ export function useMobileStructuredQueuedMessageControls(args: {
     [mutate, onSendError, resolved]
   )
   const edit = useCallback<MobileQueuedMessageEdit>(
-    async (messageId, onCopied, composerImages) => {
+    async (messageId, onCopied) => {
       if (args.editCapable) {
         if (!args.enabled) {
           onSendError('Reconnect to edit.')
           return false
         }
-        return beginInlineEdit(messageId, composerImages)
+        return beginInlineEdit(messageId)
       }
       const card = cards.find((candidate) => candidate.messageId === messageId)
       // Copy-first: the text is in the composer before any RPC can fail, so no

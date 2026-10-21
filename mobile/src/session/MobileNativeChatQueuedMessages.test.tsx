@@ -166,7 +166,7 @@ describe('MobileNativeChatQueuedMessages', () => {
     expect(button('Edit queued message').props.editable).toBe(false)
   })
 
-  it("shows a card's image count before Steer, names a lone image, and edits images in place", async () => {
+  it("shows a card's image count before Steer and names a lone image", async () => {
     const shot = { type: 'image-ref' as const, path: '/host/tmp/shot.png' }
     const mounted = await mount({
       cards: [
@@ -178,39 +178,6 @@ describe('MobileNativeChatQueuedMessages', () => {
     expect(texts(mounted)).toEqual(expect.arrayContaining(['shot.png', 'text of b', 1, 2]))
     expect(mounted.root.findAllByProps({ accessibilityLabel: '2 images' })).toHaveLength(1)
     expect(mounted.root.findAllByProps({ accessibilityLabel: 'More actions' })).toHaveLength(2)
-    const remove = vi.fn()
-    const attach = vi.fn()
-    await act(async () =>
-      mounted.update(
-        createElement(MobileNativeChatQueuedMessages, {
-          cards: [card({ messageId: 'a', text: '', images: [shot] })],
-          editor: {
-            messageId: 'a',
-            text: '',
-            saving: false,
-            canSave: true,
-            change: vi.fn(),
-            save: vi.fn(async () => true),
-            cancel: vi.fn(),
-            images: {
-              tiles: [
-                { id: 'kept-1', previewUri: shot.path, name: 'shot.png' },
-                { id: 'added-1', previewUri: 'data:image/png;base64,AA', name: 'Photo' }
-              ],
-              uploading: false,
-              attach,
-              remove
-            }
-          }
-        })
-      )
-    )
-    // The host's path can't load on the phone: its tile is an icon and the file's name.
-    expect(nodeTypes(mounted.root)).toEqual(expect.arrayContaining(['ImageIcon', 'Image']))
-    act(() => mounted.root.findByProps({ accessibilityLabel: 'Remove shot.png' }).props.onPress())
-    expect(remove).toHaveBeenCalledWith('kept-1')
-    act(() => mounted.root.findByProps({ accessibilityLabel: 'Attach image' }).props.onPress())
-    expect(attach).toHaveBeenCalledOnce()
   })
 
   it('draws a plain waiting card as one compact row with no caption', async () => {

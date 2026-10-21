@@ -15,7 +15,7 @@ export const NativeChatSkill = Node.create({
   atom: true,
   selectable: true,
   addNodeView: () => ReactNodeViewRenderer(NativeChatSkillPill),
-  addAttributes: () => ({ token: { default: '' } }),
+  addAttributes: () => ({ token: { default: '' }, path: { default: '' } }),
   renderText: ({ node }) => node.attrs.token,
   renderHTML: ({ node }) => [
     'span',

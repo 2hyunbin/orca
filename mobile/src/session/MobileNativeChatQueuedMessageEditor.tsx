@@ -9,12 +9,11 @@ import {
   type StyleProp,
   type ViewStyle
 } from 'react-native'
-import { Check, ImagePlus, X } from 'lucide-react-native'
+import { Check, X } from 'lucide-react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
 import { useTextInputContentHeight } from '../platform/text-input-content-height'
-import { MobileNativeChatComposerAttachments } from './MobileNativeChatComposerAttachments'
 
 const BUTTON_SIZE = 28
 const ICON_SIZE = 16
@@ -29,7 +28,8 @@ const BUTTON_GAP = spacing.xs
 const TOUCH_TARGET_HEIGHT = 44
 const TARGET_OVERHANG = (TOUCH_TARGET_HEIGHT - FIELD_MIN_HEIGHT) / 2
 
-/** Inline controls keep editing available while a prompt occupies the chat box. */
+/** The editor that replaces a queued card's row: the composer's text field, with an X and a
+ *  checkmark beside it, so it needs no line of its own for Cancel and Save. */
 export function MobileNativeChatQueuedMessageEditor({
   editor,
   attribution
@@ -48,19 +48,12 @@ export function MobileNativeChatQueuedMessageEditor({
   const saveDisabled = editor.saving || !editor.canSave
   // Saving keeps the light fill behind the spinner; only an unsavable edit dims the checkmark.
   const saveOff = !editor.canSave && !editor.saving
-  const images = editor.images
   return (
     <View style={styles.editor} testID="queued-card-editor">
       {attribution ? (
         <Text style={styles.attribution} numberOfLines={1}>
           {attribution}
         </Text>
-      ) : null}
-      {images ? (
-        <MobileNativeChatComposerAttachments
-          images={images.tiles}
-          onRemoveImage={editor.saving ? undefined : images.remove}
-        />
       ) : null}
       <View style={styles.line}>
         <TextInput
@@ -84,29 +77,12 @@ export function MobileNativeChatQueuedMessageEditor({
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
-        {images?.attach ? (
-          <EditorButton
-            label="Attach image"
-            disabled={editor.saving || images.uploading}
-            busy={images.uploading}
-            targetStyle={styles.leadTarget}
-            squareStyle={[styles.buttonRaised, editor.saving && styles.disabled]}
-            pressedStyle={styles.raisedPressed}
-            onPress={images.attach}
-          >
-            {images.uploading ? (
-              <ActivityIndicator size="small" color={colors.textSecondary} />
-            ) : (
-              <ImagePlus size={ICON_SIZE} color={colors.textSecondary} strokeWidth={2} />
-            )}
-          </EditorButton>
-        ) : null}
         <EditorButton
           label="Cancel editing"
           disabled={editor.saving}
-          targetStyle={images?.attach ? styles.midTarget : styles.leadTarget}
+          targetStyle={styles.cancelTarget}
           squareStyle={[styles.buttonRaised, editor.saving && styles.disabled]}
-          pressedStyle={styles.raisedPressed}
+          pressedStyle={styles.cancelPressed}
           onPress={editor.cancel}
         >
           <X size={ICON_SIZE} color={colors.textSecondary} strokeWidth={2} />
@@ -219,12 +195,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   // Each target reaches its neighbours: the field, the middle of the gap, the editor's edge.
-  leadTarget: {
+  cancelTarget: {
     paddingLeft: FIELD_GAP,
     paddingRight: BUTTON_GAP / 2
-  },
-  midTarget: {
-    paddingHorizontal: BUTTON_GAP / 2
   },
   saveTarget: {
     paddingLeft: BUTTON_GAP / 2,
@@ -242,7 +215,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.borderSubtle
   },
-  raisedPressed: {
+  cancelPressed: {
     backgroundColor: colors.bgPanel
   },
   // The composer's Send and the old Save pill's light fill.

@@ -1,3 +1,4 @@
+import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 import type { JSONContent } from '@tiptap/react'
 import type {
@@ -49,14 +50,15 @@ export function appendNativeChatDraftCache(
   text: string,
   owner?: NativeChatComposerDraftOwner,
   /** A returned message's images, saved in the same step as the text whose chips name them. */
-  images?: readonly NativeChatComposerDraftImage[]
+  images?: readonly NativeChatComposerDraftImage[],
+  options?: Pick<NativeChatComposerDraftAddition, 'document' | 'textPolicy'>
 ): boolean {
   if (text === '' && !images?.length) {
     return true
   }
   const previous = readNativeChatDraftCache(scopeKey)
   // Durable now: the copy it came from (a send handed back, a queued card) goes right after this.
-  const durable = appendToNativeChatComposerDraft(scopeKey, { text, images }, owner)
+  const durable = appendToNativeChatComposerDraft(scopeKey, { text, images, ...options }, owner)
   // Why: an addition the draft already held adds nothing, so a composer must not show it again.
   if (readNativeChatDraftCache(scopeKey) !== previous) {
     appendListeners.get(scopeKey)?.forEach((listener) => listener(text, previous))
@@ -122,9 +124,10 @@ export function appendNativeChatAttachmentCache(
   }
   // Preview URLs can retain the full clipboard Blob, so only the path is kept.
   appendToNativeChatComposerDraft(scopeKey, {
-    images: appended.map(({ id, path, connectionId }) => ({
+    images: appended.map(({ id, path, connectionId, reference }) => ({
       id,
       path,
+      ...(reference ? { reference } : {}),
       ...(connectionId ? { connectionId } : {})
     })),
     ...(options?.fromUser ? { fromUser: true } : {})

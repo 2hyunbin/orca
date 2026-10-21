@@ -1,3 +1,4 @@
+import { resetMobileNativeChatDraftStoreForTests } from './mobile-native-chat-draft-store'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { buildAgentTuiClearInputForText } from '../../../src/shared/agent-tui-input-clear'
@@ -69,6 +70,7 @@ function baseArgs(overrides: Partial<HookArgs> & Pick<HookArgs, 'client'>): Hook
     connState: 'connected',
     scopeKey: SCOPE_A,
     enabled: true,
+    structuredNativeChat: false,
     showToast: vi.fn(),
     onSendError: vi.fn(),
     baseSend: vi.fn().mockResolvedValue('accepted'),
@@ -91,6 +93,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     pick.mockReset()
     // Stale markers and write locks live at module scope (they outlive the
     // screen), so they also outlive a test.
+    resetMobileNativeChatDraftStoreForTests()
     resetMobileNativeChatStaleInputForTests()
     resetMobileNativeChatTerminalWritesForTests()
   })
@@ -127,13 +130,8 @@ describe('useMobileNativeChatImageAttachments', () => {
       await hook!.attachImage('library')
     })
 
-    expect(hook!.attachments).toEqual([
-      {
-        id: 'img-1',
-        path: '/tmp/a.png',
-        previewUri: 'file:///a.jpg'
-      }
-    ])
+    expect(hook!.attachments.map(({ path }) => path)).toEqual(['/tmp/a.png'])
+    expect(hook!.attachments[0]?.previewUri).toBe('file:///a.jpg')
     expect(client.calls.some((c) => c.method === 'terminal.send')).toBe(false)
   })
 
@@ -584,7 +582,7 @@ describe('useMobileNativeChatImageAttachments', () => {
 
     // The user gives up on the image and removes its chip, then sends plain text.
     await act(async () => {
-      hook!.removeAttachment('img-1')
+      hook!.removeAttachment(hook!.attachments[0]!.id)
     })
     expect(hook!.attachments).toEqual([])
     let accepted = false
@@ -712,7 +710,7 @@ describe('useMobileNativeChatImageAttachments', () => {
     expect(hook!.attachments).toHaveLength(1)
 
     await act(async () => {
-      hook!.removeAttachment('img-1')
+      hook!.removeAttachment(hook!.attachments[0]!.id)
     })
     let accepted = true
     await act(async () => {
@@ -756,7 +754,7 @@ describe('useMobileNativeChatImageAttachments', () => {
       await hook!.sendNativeChat('hi')
     })
     await act(async () => {
-      hook!.removeAttachment('img-1')
+      hook!.removeAttachment(hook!.attachments[0]!.id)
     })
 
     let retry: Promise<boolean> | null = null
@@ -797,7 +795,7 @@ describe('useMobileNativeChatImageAttachments', () => {
       await hook!.sendNativeChat('hi')
     })
     await act(async () => {
-      hook!.removeAttachment('img-1')
+      hook!.removeAttachment(hook!.attachments[0]!.id)
     })
 
     // Lease lost: the heal is a terminal.send too, so it must not be attempted.
@@ -861,13 +859,13 @@ describe('useMobileNativeChatImageAttachments', () => {
       await hook!.sendNativeChat('second')
     })
     await act(async () => {
-      hook!.removeAttachment('img-2')
+      hook!.removeAttachment(hook!.attachments[0]!.id)
     })
 
     activeHandleRef.current = 'term-1'
     update(args)
     await act(async () => {
-      hook!.removeAttachment('img-1')
+      hook!.removeAttachment(hook!.attachments[0]!.id)
     })
     await act(async () => {
       expect(await hook!.sendNativeChat('retry first')).toBe(true)
