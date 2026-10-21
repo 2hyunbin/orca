@@ -218,6 +218,9 @@ export function init(
 }
 
 export function write(scope: TerminalDocumentScope, data: string) {
+  if (scope.pendingTerm) {
+    scope.pendingReplayScrollAnchorRows = 0
+  }
   updateMouseModeFromData(scope, data, true)
   enqueueWrite(scope, data)
   pumpWrites(scope, scope.terminalGeneration)

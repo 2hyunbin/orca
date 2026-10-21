@@ -389,3 +389,47 @@ describe('pending replay scroll policy', () => {
     }
   )
 })
+
+describe('live output during pending replay', () => {
+  it.each([
+    { reset: false, wheelDeltas: [], expectedViewport: 177 },
+    { reset: false, wheelDeltas: [-10], expectedViewport: 166 },
+    { reset: false, wheelDeltas: [-10, 10], expectedViewport: 177 },
+    { reset: true, wheelDeltas: [], expectedViewport: 176 },
+    { reset: true, wheelDeltas: [-10], expectedViewport: 176 },
+    { reset: true, wheelDeltas: [-10, 10], expectedViewport: 176 }
+  ])(
+    'uses the pending viewport after live reset=$reset and wheels=$wheelDeltas',
+    async ({ reset, wheelDeltas, expectedViewport }) => {
+      const harness = createReplayHarness()
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(true, 81)
+      await harness.parse()
+      for (const deltaY of wheelDeltas) {
+        harness.scope.committedSurface!.dispatchEvent(
+          new WheelEvent('wheel', { deltaY, deltaMode: 1, bubbles: true, cancelable: true })
+        )
+        harness.flushFrames()
+      }
+      const resetSnapshot = harness.snapshot.replaceAll('ROW_', 'RESET_')
+      const liveOutput = reset ? '\x1bc' + resetSnapshot : '\r\nLIVE'
+      handleMsg(harness.scope, { type: 'write', data: liveOutput })
+      harness.releaseWrites()
+      await harness.parse()
+      harness.deferWrites(false)
+      harness.replay(true, 82, reset ? resetSnapshot : harness.snapshot + liveOutput)
+      await harness.drain()
+      harness.releaseWrites()
+
+      const buffer = harness.scope.committedTerm!.buffer.active
+      expect(buffer.viewportY).toBe(expectedViewport)
+      expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe(
+        reset ? 'RESET_199' : 'LIVE'
+      )
+      expect(harness.scope.pendingTerm).toBeNull()
+    }
+  )
+})
