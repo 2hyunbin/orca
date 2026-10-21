@@ -211,6 +211,10 @@
       "readFailed": "Agent設定を読み込めませんでした。ホストへの接続を確認して再試行してください。",
       "saveFailed": "Agent設定を保存できませんでした。ホストへの接続を確認して再試行してください。",
       "hostDefaults": "選択したホストで起動する新しいAgentの既定値。",
+      "defaultOpensAs": "{{value0}}の開き方",
+      "defaultOpensAsChat": "チャット",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "このコンピューターから起動する新しい{{value0}}セッション（ペアリングしたホスト上も含む）に適用されます。プロバイダーのスイッチと連動します。",
       "save": "保存",
       "clearDefault": "デフォルトの Agent をクリア"
     },

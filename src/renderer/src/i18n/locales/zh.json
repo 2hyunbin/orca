@@ -211,6 +211,10 @@
       "readFailed": "无法读取智能体设置。请检查主机连接并重试。",
       "saveFailed": "无法保存智能体设置。请检查主机连接并重试。",
       "hostDefaults": "所选主机上新智能体的默认设置。",
+      "defaultOpensAs": "{{value0}} 的打开方式",
+      "defaultOpensAsChat": "聊天",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "适用于从这台电脑启动的新 {{value0}} 会话，包括在已配对主机上启动的会话。与提供方中的开关一致。",
       "save": "保存",
       "clearDefault": "清除默认智能体"
     },

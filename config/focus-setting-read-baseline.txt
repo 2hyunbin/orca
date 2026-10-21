@@ -257,7 +257,7 @@
 4 src/renderer/src/lib/workspace-browser-tab-open.ts
 1 src/renderer/src/lib/worktree-activation.ts
 1 src/renderer/src/lib/worktree-jump-navigation.ts
-1 src/renderer/src/lib/worktree-runtime-owner.ts # typed owner resolver and the legacy-fallback adapter the folds moved to (round 3 F0); F8 deleted the deprecated pair
+1 src/renderer/src/lib/worktree-runtime-owner.ts # a setup terminal with no row spawns on the focused runtime
 17 src/renderer/src/runtime/runtime-jira-client.ts
 2 src/renderer/src/runtime/runtime-jira-summary-client.ts
 1 src/renderer/src/runtime/runtime-jira-target.ts
