@@ -1,29 +1,33 @@
-import { Moon, Play } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
-import type { SpawnDeferralReason } from '../../../../shared/host-spawn-admission'
+import {
+  DEFAULT_SPAWN_ADMISSION_LIMITS,
+  type SpawnDeferralReason
+} from '../../../../shared/host-spawn-admission'
 
 function sleepingReasonDetail(reason: SpawnDeferralReason): string {
   switch (reason) {
     case 'paused':
       return translate(
         'auto.components.terminal.pane.TerminalSleepingPaneOverlay.pausedDetail',
-        'Automatic restores are paused because the host stopped unexpectedly. Your session is saved.'
+        'Automatic restores are paused because the computer running this session stopped unexpectedly.'
       )
     case 'live_cap':
       return translate(
         'auto.components.terminal.pane.TerminalSleepingPaneOverlay.liveCapDetail',
-        'Enough agents are already running on this host. Your session is saved.'
+        'Orca has reached its automatic restore limit of {{limit}} agents on the computer running this session.',
+        { limit: DEFAULT_SPAWN_ADMISSION_LIMITS.maxLiveAutomatic }
       )
     case 'pressure':
       return translate(
         'auto.components.terminal.pane.TerminalSleepingPaneOverlay.pressureDetail',
-        'The host is under heavy load. Your session is saved.'
+        'The computer running this session is under heavy load.'
       )
     case 'deadline':
       return translate(
         'auto.components.terminal.pane.TerminalSleepingPaneOverlay.deadlineDetail',
-        'The host was busy restoring other terminals. Your session is saved.'
+        'The computer running this session was busy reopening other terminals.'
       )
   }
 }
@@ -49,18 +53,19 @@ export function TerminalSleepingPaneOverlay({
         role="status"
         className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs"
       >
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
-            <Moon className="size-4" />
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-foreground">
+            {translate(
+              'auto.components.terminal.pane.TerminalSleepingPaneOverlay.title',
+              'Resume your session'
+            )}
           </div>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="text-sm font-medium text-foreground">
-              {translate(
-                'auto.components.terminal.pane.TerminalSleepingPaneOverlay.title',
-                'Sleeping — click to resume'
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground">{sleepingReasonDetail(reason)}</div>
+          <div className="text-xs text-muted-foreground">{sleepingReasonDetail(reason)}</div>
+          <div className="text-xs text-muted-foreground">
+            {translate(
+              'auto.components.terminal.pane.TerminalSleepingPaneOverlay.savedDetail',
+              'Your conversation is saved. Resume whenever you’re ready.'
+            )}
           </div>
         </div>
         <div className="flex justify-end gap-2">

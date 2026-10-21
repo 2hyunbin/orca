@@ -3576,13 +3576,14 @@
             "workspaceGone": "Son espace de travail n'est plus disponible."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Les restaurations automatiques sont en pause car l'hôte s'est arrêté de façon inattendue. Votre session est enregistrée.",
-            "liveCapDetail": "Assez d'agents sont déjà en cours d'exécution sur cet hôte. Votre session est enregistrée.",
-            "pressureDetail": "L'hôte est fortement sollicité. Votre session est enregistrée.",
-            "deadlineDetail": "L'hôte était occupé à restaurer d'autres terminaux. Votre session est enregistrée.",
-            "title": "En veille — cliquez pour reprendre",
+            "pausedDetail": "Les restaurations automatiques sont en pause car l’ordinateur qui exécute cette session s’est arrêté de façon inattendue.",
+            "liveCapDetail": "Orca a atteint sa limite de restauration automatique de {{limit}} agents sur l’ordinateur qui exécute cette session.",
+            "pressureDetail": "L’ordinateur qui exécute cette session est fortement sollicité.",
+            "deadlineDetail": "L’ordinateur qui exécute cette session était occupé à rouvrir d’autres terminaux.",
+            "title": "Reprenez votre session",
             "resume": "Reprendre",
-            "resumeAutomaticRestores": "Reprendre les restaurations automatiques"
+            "resumeAutomaticRestores": "Reprendre les restaurations automatiques",
+            "savedDetail": "Votre conversation est enregistrée. Reprenez quand vous le souhaitez."
           },
           "WslHostUnavailableBanner": {
             "turnOn": "Activer"

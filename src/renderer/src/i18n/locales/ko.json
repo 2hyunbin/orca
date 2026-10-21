@@ -3468,13 +3468,14 @@
             "workspaceGone": "작업 공간을 더 이상 사용할 수 없습니다."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "호스트가 예기치 않게 중지되어 자동 복원이 일시 중지되었습니다. 세션이 저장되었습니다.",
-            "liveCapDetail": "이 호스트에서 이미 충분한 에이전트가 실행 중입니다. 세션이 저장되었습니다.",
-            "pressureDetail": "호스트에 부하가 심합니다. 세션이 저장되었습니다.",
-            "deadlineDetail": "호스트가 다른 터미널을 복원하느라 바빴습니다. 세션이 저장되었습니다.",
-            "title": "슬립 중 — 클릭하여 재개",
+            "pausedDetail": "이 세션을 실행하는 컴퓨터가 예기치 않게 중지되어 자동 복원이 일시 중지되었습니다.",
+            "liveCapDetail": "이 세션을 실행하는 컴퓨터에서 Orca의 자동 복원 한도인 에이전트 {{limit}}개에 도달했습니다.",
+            "pressureDetail": "이 세션을 실행하는 컴퓨터에 부하가 심합니다.",
+            "deadlineDetail": "이 세션을 실행하는 컴퓨터가 다른 터미널을 다시 여느라 바빴습니다.",
+            "title": "세션 재개",
             "resume": "재개",
-            "resumeAutomaticRestores": "자동 복원 재개"
+            "resumeAutomaticRestores": "자동 복원 재개",
+            "savedDetail": "대화가 저장되어 있습니다. 준비되면 재개하세요."
           },
           "WslHostUnavailableBanner": {
             "turnOn": "켜기"

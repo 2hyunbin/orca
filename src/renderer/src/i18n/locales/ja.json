@@ -3468,13 +3468,14 @@
             "workspaceGone": "ワークスペースは利用できなくなりました。"
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "ホストが予期せず停止したため、自動復元は一時停止しています。セッションは保存されています。",
-            "liveCapDetail": "このホストではすでに十分な数の Agent が実行されています。セッションは保存されています。",
-            "pressureDetail": "ホストに高い負荷がかかっています。セッションは保存されています。",
-            "deadlineDetail": "ホストが他のターミナルの復元で忙しかったためです。セッションは保存されています。",
-            "title": "スリープ中 — クリックして再開",
+            "pausedDetail": "このセッションを実行しているコンピューターが予期せず停止したため、自動復元は一時停止しています。",
+            "liveCapDetail": "このセッションを実行しているコンピューターで、Orca の自動復元の上限（{{limit}} エージェント）に達しました。",
+            "pressureDetail": "このセッションを実行しているコンピューターに高い負荷がかかっています。",
+            "deadlineDetail": "このセッションを実行しているコンピューターは、他のターミナルを再開する処理で混み合っていました。",
+            "title": "セッションを再開",
             "resume": "再開",
-            "resumeAutomaticRestores": "自動復元を再開"
+            "resumeAutomaticRestores": "自動復元を再開",
+            "savedDetail": "会話は保存されています。準備ができたら再開してください。"
           },
           "WslHostUnavailableBanner": {
             "turnOn": "オンにする"

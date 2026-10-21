@@ -3468,13 +3468,14 @@
             "workspaceGone": "其工作区已不可用。"
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "由于主机意外停止，自动恢复已暂停。您的会话已保存。",
-            "liveCapDetail": "此主机上已有足够多的智能体在运行。您的会话已保存。",
-            "pressureDetail": "主机负载过高。您的会话已保存。",
-            "deadlineDetail": "主机正忙于恢复其他终端。您的会话已保存。",
-            "title": "休眠中 — 点击恢复",
+            "pausedDetail": "由于运行此会话的计算机意外停止，自动恢复已暂停。",
+            "liveCapDetail": "运行此会话的计算机已达到 Orca 自动恢复 {{limit}} 个智能体的上限。",
+            "pressureDetail": "运行此会话的计算机负载过高。",
+            "deadlineDetail": "运行此会话的计算机当时正忙于重新打开其他终端。",
+            "title": "恢复会话",
             "resume": "恢复",
-            "resumeAutomaticRestores": "继续自动恢复"
+            "resumeAutomaticRestores": "继续自动恢复",
+            "savedDetail": "您的对话已保存。准备好后即可恢复。"
           },
           "WslHostUnavailableBanner": {
             "turnOn": "开启"

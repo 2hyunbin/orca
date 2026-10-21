@@ -3463,13 +3463,14 @@
             "workspaceGone": "Su espacio de trabajo ya no está disponible."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Las restauraciones automáticas están en pausa porque el host se detuvo de forma inesperada. Tu sesión está guardada.",
-            "liveCapDetail": "Ya hay suficientes agentes en ejecución en este host. Tu sesión está guardada.",
-            "pressureDetail": "El host está bajo mucha carga. Tu sesión está guardada.",
-            "deadlineDetail": "El host estaba ocupado restaurando otras terminales. Tu sesión está guardada.",
-            "title": "En suspensión — haz clic para reanudar",
+            "pausedDetail": "Las restauraciones automáticas están en pausa porque el equipo que ejecuta esta sesión se detuvo de forma inesperada.",
+            "liveCapDetail": "Orca ha alcanzado el límite de restauración automática de {{limit}} agentes en el equipo que ejecuta esta sesión.",
+            "pressureDetail": "El equipo que ejecuta esta sesión está bajo mucha carga.",
+            "deadlineDetail": "El equipo que ejecuta esta sesión estaba ocupado reabriendo otras terminales.",
+            "title": "Reanuda tu sesión",
             "resume": "Reanudar",
-            "resumeAutomaticRestores": "Reanudar las restauraciones automáticas"
+            "resumeAutomaticRestores": "Reanudar las restauraciones automáticas",
+            "savedDetail": "Tu conversación está guardada. Reanuda cuando quieras."
           },
           "WslHostUnavailableBanner": {
             "turnOn": "Activar"

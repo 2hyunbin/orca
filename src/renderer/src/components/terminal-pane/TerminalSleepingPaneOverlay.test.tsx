@@ -7,18 +7,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalSleepingPaneOverlay } from './TerminalSleepingPaneOverlay'
 
 vi.mock('@/i18n/i18n', () => ({
-  translate: (_key: string, fallback: string) => fallback
+  translate: (_key: string, fallback: string, options?: { limit: number }) =>
+    fallback.replace('{{limit}}', String(options?.limit))
 }))
 
 afterEach(cleanup)
 
 describe('TerminalSleepingPaneOverlay', () => {
-  it('says the session is asleep, why, and that it is saved', () => {
+  it('explains why the session did not reopen and how to continue', () => {
     render(<TerminalSleepingPaneOverlay reason="paused" onResume={vi.fn()} />)
 
-    expect(screen.getByText('Sleeping — click to resume')).toBeInTheDocument()
-    expect(screen.getByText(/paused because the host stopped unexpectedly/)).toBeInTheDocument()
-    expect(screen.getByText(/Your session is saved/)).toBeInTheDocument()
+    expect(screen.getByText('Resume your session')).toBeInTheDocument()
+    expect(
+      screen.getByText(/paused because the computer running this session stopped unexpectedly/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Your conversation is saved. Resume whenever you’re ready./)
+    ).toBeInTheDocument()
   })
 
   it('resumes once from the button and from anywhere on the pane', async () => {
@@ -26,9 +31,14 @@ describe('TerminalSleepingPaneOverlay', () => {
     const user = userEvent.setup()
     render(<TerminalSleepingPaneOverlay reason="live_cap" onResume={onResume} />)
 
+    expect(
+      screen.getByText(
+        'Orca has reached its automatic restore limit of 8 agents on the computer running this session.'
+      )
+    ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Resume' }))
     expect(onResume).toHaveBeenCalledOnce()
-    await user.click(screen.getByText('Sleeping — click to resume'))
+    await user.click(screen.getByText('Resume your session'))
     expect(onResume).toHaveBeenCalledTimes(2)
   })
 

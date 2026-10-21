@@ -3731,13 +3731,14 @@
             "workspaceGone": "Its workspace is no longer available."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Automatic restores are paused because the host stopped unexpectedly. Your session is saved.",
-            "liveCapDetail": "Enough agents are already running on this host. Your session is saved.",
-            "pressureDetail": "The host is under heavy load. Your session is saved.",
-            "deadlineDetail": "The host was busy restoring other terminals. Your session is saved.",
-            "title": "Sleeping — click to resume",
+            "pausedDetail": "Automatic restores are paused because the computer running this session stopped unexpectedly.",
+            "liveCapDetail": "Orca has reached its automatic restore limit of {{limit}} agents on the computer running this session.",
+            "pressureDetail": "The computer running this session is under heavy load.",
+            "deadlineDetail": "The computer running this session was busy reopening other terminals.",
+            "title": "Resume your session",
             "resume": "Resume",
-            "resumeAutomaticRestores": "Resume automatic restores"
+            "resumeAutomaticRestores": "Resume automatic restores",
+            "savedDetail": "Your conversation is saved. Resume whenever you’re ready."
           },
           "WslHostUnavailableBanner": {
             "turnOn": "Turn on"
