@@ -40,7 +40,9 @@ vi.mock('../../shared/runtime-environments', async (importOriginal) => ({
 }))
 
 import { listDesktopBrowserBridgeCandidates } from './desktop-browser-bridge-wiring'
+import en from '../../renderer/src/i18n/locales/en.json'
 import {
+  DESKTOP_BROWSER_BRIDGE_ROUTING_OPT_OUT_LABEL,
   DESKTOP_BROWSER_BRIDGE_ROUTING_SETTING_LABEL,
   DESKTOP_BROWSER_BRIDGE_SETTING_LABEL,
   DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE
@@ -81,8 +83,7 @@ describe('which managed hosts may attach the desktop browser bridge', () => {
     expect(candidates.map((candidate) => candidate.targetId)).toEqual(['absent', 'on'])
   })
 
-  // #31421: with the switch on, an unrouted host was told only to turn that switch on.
-  it('holds back a host whose pages browse from this device, and tells the host which setting', () => {
+  it('holds back a host whose pages browse from this device', () => {
     targets.push(host('routed'), host('opted-out'))
     settings.current = { browserSshWorkspaceRoutingDisabledTargetIds: ['opted-out'] }
     expect(
@@ -90,12 +91,24 @@ describe('which managed hosts may attach the desktop browser bridge', () => {
     ).toEqual(['routed'])
     settings.current = { browserSshWorkspaceRoutingEnabled: false }
     expect(listDesktopBrowserBridgeCandidates('/user-data', connected)).toEqual([])
+  })
+})
 
-    expect(DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE).toContain(
-      DESKTOP_BROWSER_BRIDGE_SETTING_LABEL
+// #31421: with the switch on, an unrouted host was told only to turn that switch on.
+describe('the error a host gets while no desktop is attached', () => {
+  it('names the routing setting as the desktop UI labels it', () => {
+    const copy = en.settings.browser.sshWorkspaceRouting
+    expect(DESKTOP_BROWSER_BRIDGE_ROUTING_SETTING_LABEL).toBe(
+      `Settings › ${en.auto.components.settings.Settings.c46215ea03} › ${copy.rowTitle}`
     )
-    expect(DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE).toContain(
-      DESKTOP_BROWSER_BRIDGE_ROUTING_SETTING_LABEL
-    )
+    expect(`${DESKTOP_BROWSER_BRIDGE_ROUTING_OPT_OUT_LABEL}:`).toBe(copy.disabledHosts)
+    for (const label of [
+      DESKTOP_BROWSER_BRIDGE_SETTING_LABEL,
+      DESKTOP_BROWSER_BRIDGE_ROUTING_SETTING_LABEL,
+      DESKTOP_BROWSER_BRIDGE_ROUTING_OPT_OUT_LABEL,
+      copy.optionHost
+    ]) {
+      expect(DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE).toContain(label)
+    }
   })
 })
