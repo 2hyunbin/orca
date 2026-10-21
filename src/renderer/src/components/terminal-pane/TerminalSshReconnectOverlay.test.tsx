@@ -395,6 +395,16 @@ describe('TerminalSshReconnectOverlay', () => {
     )
     expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-target-1' })
 
+    // A connect already in flight may clear the refusal, so the button waits for it.
+    rerender(
+      <TerminalSshReconnectOverlay
+        targetId="ssh-target-1"
+        targetLabel="lambda"
+        status="connecting"
+      />
+    )
+    expect(screen.getByRole('button', { name: 'Move anyway…' })).toBeDisabled()
+
     // A remote server's move is that server's own; this desktop can't drive it.
     rerender(
       <TerminalSshReconnectOverlay

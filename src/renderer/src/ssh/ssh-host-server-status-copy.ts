@@ -81,7 +81,8 @@ export function sshConnectFailureText(
   fallback: string
 ): string {
   const status = state?.managedServer
-  return status?.kind === 'relay' ? unservedLine(status).text : fallback
+  // Why uncapped: the pane and toast have no "Details", and a refusal's way out comes last.
+  return status?.kind === 'relay' ? unservedLine(status, Number.POSITIVE_INFINITY).text : fallback
 }
 
 export function sshTargetConnectFailureText(
@@ -247,7 +248,7 @@ function linkedProjectsLine(
 const REFUSAL_INLINE_CHARS = 280
 
 /** Names what refuses the move; main writes that reason, with the way out, in English. */
-function refusedLine(detail: string | undefined): SshHostServerStatusLine {
+function refusedLine(detail: string | undefined, inlineChars: number): SshHostServerStatusLine {
   const reason = detail?.trim()
   if (!reason) {
     return {
@@ -258,10 +259,7 @@ function refusedLine(detail: string | undefined): SshHostServerStatusLine {
       )
     }
   }
-  const inline =
-    reason.length > REFUSAL_INLINE_CHARS
-      ? `${reason.slice(0, REFUSAL_INLINE_CHARS).trimEnd()}…`
-      : reason
+  const inline = reason.length > inlineChars ? `${reason.slice(0, inlineChars).trimEnd()}…` : reason
   return {
     tone: 'destructive',
     text: translate(
@@ -274,7 +272,8 @@ function refusedLine(detail: string | undefined): SshHostServerStatusLine {
 }
 
 function unservedLine(
-  status: Extract<NonNullable<SshConnectionState['managedServer']>, { kind: 'relay' }>
+  status: Extract<NonNullable<SshConnectionState['managedServer']>, { kind: 'relay' }>,
+  refusalChars = REFUSAL_INLINE_CHARS
 ): SshHostServerStatusLine {
   switch (status.reason) {
     case 'relay_terminals_live':
@@ -305,7 +304,7 @@ function unservedLine(
     case 'source_changed':
       return sourceChangedLine()
     case 'refused':
-      return refusedLine(status.detail)
+      return refusedLine(status.detail, refusalChars)
     case 'deferred':
     case 'failed': {
       const blocked = blockedNodeDownload(status)

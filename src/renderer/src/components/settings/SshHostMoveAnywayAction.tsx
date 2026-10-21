@@ -3,6 +3,7 @@ import type { SshManagedServerStatus, SshTarget } from '../../../../shared/ssh-t
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
 import { sshHostServerReassurance } from '@/ssh/ssh-host-server-setup-copy'
+import { trackSshConnect } from '@/ssh/ssh-connect-in-flight'
 import { Button } from '../ui/button'
 import {
   Dialog,
@@ -57,7 +58,8 @@ export function SshHostMoveAnywayDialog({
     setError(null)
     try {
       await api.allowMoveLeavingBehind({ sshTargetId: target.id })
-      await window.api.ssh.connect({ targetId: target.id })
+      // Tracked so Retry and the row's Connect join this connect instead of dialing a second.
+      await trackSshConnect(target.id, window.api.ssh.connect({ targetId: target.id }))
       if (mountedRef.current) {
         setOpen(false)
       }
@@ -114,10 +116,12 @@ export function SshHostMoveAnywayDialog({
 /** The same way out where the refusal shows outside Settings, e.g. a disconnected terminal pane. */
 export function SshHostMoveAnywayButton({
   target,
-  status
+  status,
+  disabled = false
 }: {
   target: Pick<SshTarget, 'id' | 'label'>
   status: SshManagedServerStatus | undefined
+  disabled?: boolean
 }): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   if (!canMoveSshHostAnyway(status)) {
@@ -125,7 +129,13 @@ export function SshHostMoveAnywayButton({
   }
   return (
     <>
-      <Button type="button" size="xs" variant="outline" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        size="xs"
+        variant="outline"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
         {translate('auto.components.settings.moveAnyway.action', 'Move anyway…')}
       </Button>
       {/* The connect it runs publishes the new status, so nothing here refreshes. */}

@@ -216,6 +216,8 @@ export function TerminalSshReconnectOverlay({
                 <SshHostMoveAnywayButton
                   target={{ id: targetId, label: targetLabel }}
                   status={managedServer}
+                  // A connect in flight may clear the refusal; a click would start a second one.
+                  disabled={isConnecting}
                 />
               )}
             </div>

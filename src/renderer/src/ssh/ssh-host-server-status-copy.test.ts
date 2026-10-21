@@ -310,14 +310,15 @@ describe('SSH host server status line', () => {
     expect(sshConnectFailureText(state, 'raw')).toContain('already holds different saved state')
   })
 
-  it('keeps a long refusal readable inline and whole behind Details', () => {
-    const detail = `This SSH host cannot move yet: ${'saved tabs and panes (a); '.repeat(60)}.`
-    const line = sshHostServerStatusLine(plain, {
-      managedServer: { kind: 'relay', reason: 'refused', detail }
-    })
+  it('caps a long refusal in the Settings row, but not where there is no Details', () => {
+    const detail = `This SSH host cannot move yet: ${'saved tabs and panes (a); '.repeat(60)}then connect again.`
+    const state = { managedServer: { kind: 'relay' as const, reason: 'refused' as const, detail } }
+    const line = sshHostServerStatusLine(plain, state)
     expect(line?.detail).toBe(detail)
     expect(line?.text.length).toBeLessThan(400)
     expect(line?.text).toContain('This SSH host cannot move yet')
+    // The terminal pane and toast keep the way out, which comes last.
+    expect(sshConnectFailureText(state, 'raw')).toContain('then connect again.')
   })
 
   it('keeps the plain refusal line when main named no reason', () => {
