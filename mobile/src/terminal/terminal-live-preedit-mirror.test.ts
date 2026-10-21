@@ -378,8 +378,20 @@ const twoSetFields = [
 describe('terminal live mirror with iOS keyboard edits', () => {
   it.each([
     { keyboard: 'Cheonjiin', fields: cheonjiinFields },
-    { keyboard: 'two-set', fields: twoSetFields }
-  ])('replays captured $keyboard edits for both receiver deletion units', ({ fields }) => {
+    { keyboard: 'two-set', fields: twoSetFields },
+    {
+      keyboard: 'autocorrect around a held Korean tail',
+      fields: ['teh 하', 'teh 하ᄉᆞ', 'the 하ᄉᆞ', 'the 하세 ']
+    },
+    {
+      keyboard: 'replacement of an already-sent Korean prefix',
+      fields: ['안녕하', '안녕하ᄉᆞ', '반가ᄉᆞ', '반가워 ']
+    },
+    {
+      keyboard: 'delete-all with a held Korean tail',
+      fields: ['안녕하', '안녕하ᄉᆞ', '', '새 입력 ']
+    }
+  ])('replays $keyboard edits for both receiver deletion units', ({ fields }) => {
     const run = runMirrorSequence(fields.map((text) => ({ text, composing: false })))
     const segmenter = new Intl.Segmenter('ko', { granularity: 'grapheme' })
     for (const receiver of ['code-point', 'grapheme']) {
@@ -395,9 +407,9 @@ describe('terminal live mirror with iOS keyboard edits', () => {
           received += character
         }
       }
-      expect(received, receiver).toBe('안녕하세요')
+      expect(received, receiver).toBe(fields.at(-1))
     }
-    expect(run.sentText).toBe('안녕하세요')
+    expect(run.sentText).toBe(fields.at(-1))
     expect(run.heldText).toBe('')
   })
 

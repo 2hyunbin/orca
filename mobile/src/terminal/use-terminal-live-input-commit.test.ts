@@ -161,6 +161,97 @@ describe('terminal live input commit hook', () => {
     }
   })
 
+  it.each(['Tab', 'accessory Enter', 'external send'] as const)(
+    'ends a false-reported jamo editing session before %s and starts fresh',
+    async (boundary) => {
+      vi.useFakeTimers()
+      const { handlers, sent, captures, unmount } = createTerminalLiveInputCommitHarness()
+      try {
+        changeLiveInput(handlers, '안녕하', false)
+        changeLiveInput(handlers, '안녕하ᄉᆞ', false)
+        if (boundary === 'Tab') {
+          handlers.handleLiveInputKeyPress({ nativeEvent: { key: 'Tab' } })
+        } else if (boundary === 'accessory Enter') {
+          expect(await handlers.handleLiveInputAccessoryBytes({ bytes: '\r' })).toEqual({
+            kind: 'handled'
+          })
+        } else {
+          expect(await handlers.flushPendingLiveInputBeforeExternalSend('terminal-a')).toBe(true)
+        }
+        await vi.advanceTimersByTimeAsync(0)
+        const control = boundary === 'Tab' ? '\t' : boundary === 'accessory Enter' ? '\r' : ''
+        expect(sent.join('')).toBe(`안녕하ᄉᆞ${control}`)
+        expect(captures.at(-1)).toBe('')
+
+        changeLiveInput(handlers, '새', false)
+        expect(await handlers.handleLiveInputSubmit()).toBe(true)
+        await vi.advanceTimersByTimeAsync(3000)
+        expect(sent.join('')).toBe(`안녕하ᄉᆞ${control}새\r`)
+      } finally {
+        unmount()
+      }
+    }
+  )
+
+  it('edits only held jamo with accessory deletion before converting the remaining tail', async () => {
+    vi.useFakeTimers()
+    const { handlers, sent, captures, unmount } = createTerminalLiveInputCommitHarness()
+    try {
+      changeLiveInput(handlers, '안녕하', false)
+      changeLiveInput(handlers, '안녕하ᄉᆞ', false)
+      expect(
+        await handlers.handleLiveInputAccessoryBytes({ bytes: '\x7f', localEdit: 'backspace' })
+      ).toEqual({ kind: 'handled' })
+      expect(captures.at(-1)).toBe('안녕하ᄉ')
+      expect(
+        await handlers.handleLiveInputAccessoryBytes({ bytes: '\x1b[3~', localEdit: 'delete' })
+      ).toEqual({ kind: 'handled' })
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(captures.at(-1)).toBe('안녕하ᄉ')
+      expect(sent.join('')).toBe('안녕하')
+
+      changeLiveInput(handlers, '안녕하세', false)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(sent.join('')).toBe('안녕하세')
+    } finally {
+      unmount()
+    }
+  })
+
+  it.each(['mode clear', 'disconnect', 'nonterminal tab', 'other terminal send'] as const)(
+    'discards a held jamo tail on %s without corrupting fresh input',
+    async (boundary) => {
+      vi.useFakeTimers()
+      const harness = createTerminalLiveInputCommitHarness()
+      const { handlers, sent, captures, unmount } = harness
+      try {
+        changeLiveInput(handlers, '안녕하', false)
+        changeLiveInput(handlers, '안녕하ᄉᆞ', false)
+        await vi.advanceTimersByTimeAsync(0)
+        if (boundary === 'mode clear') {
+          handlers.clearPendingLiveInputCommit()
+        } else if (boundary === 'disconnect') {
+          harness.setConnected(false)
+          harness.setConnected(true)
+        } else if (boundary === 'nonterminal tab') {
+          harness.setActiveSessionTabType('chat')
+          harness.setActiveSessionTabType('terminal')
+        } else {
+          expect(await handlers.flushPendingLiveInputBeforeExternalSend('terminal-b')).toBe(true)
+        }
+        await vi.advanceTimersByTimeAsync(3000)
+        expect(captures.at(-1)).toBe('')
+        expect(sent.join('')).toBe('안녕하')
+
+        changeLiveInput(harness.getHandlers(), '새', false)
+        expect(await harness.getHandlers().handleLiveInputSubmit()).toBe(true)
+        expect(sent.join('')).toBe('안녕하새\r')
+      } finally {
+        unmount()
+      }
+    }
+  )
+
   it('Given Hangul composition and no marked-text report When steps arrive Then no jamo leaks', async () => {
     // Given
     vi.useFakeTimers()
