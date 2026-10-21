@@ -20,7 +20,11 @@ import {
   loadWorkspaceStartModules,
   startWorkspaceAgent
 } from '@/lib/launch-parity-workspace-start.test-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { isWslShellName } from '../../../../shared/local-windows-terminal-runtime'
+import { isWslUncPath } from '../../../../shared/wsl-paths'
 import {
+  LAUNCH_LEAF_ID,
   LAUNCH_TAB_ID,
   LAUNCH_TOKEN,
   PANE_GRID,
@@ -29,12 +33,24 @@ import {
   type WindowLaunchCase
 } from '../../../../shared/launch-parity-window-request.test-fixture'
 
-// Main's answer to the window's layout commands, as a switch-on build sends them.
-vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
-  (
+const windowTabCreates = vi.hoisted((): unknown[] => [])
+// Main's answer to the window's layout commands, as a switch-on build sends them; a window tab's
+// first start main runs is recorded, not started.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
+  const client = (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
   ).runtimeRpcClientWithLayoutApply(await importOriginal())
-)
+  return {
+    ...client,
+    callRuntimeRpc: (...args: Parameters<typeof client.callRuntimeRpc>) => {
+      if (args[1] === 'terminal.create') {
+        windowTabCreates.push(args[2])
+        return new Promise(() => {})
+      }
+      return client.callRuntimeRpc(...args)
+    }
+  }
+})
 
 const holder = vi.hoisted((): LaunchStoreHolder => ({ store: null }))
 vi.mock('@/store', async () =>
@@ -148,7 +164,47 @@ async function openTab(c: WindowLaunchCase) {
   return { modules, store, worktreeId, tab }
 }
 
-/** Mounts the tab's pane the way TerminalPane does and returns the pty:spawn request it sends. */
+/** A tab the window put in WSL keeps its own spawn (windowTabStartsInMain). */
+function startsInMain(c: WindowLaunchCase): boolean {
+  const cwd = c.request.cwd ?? c.workspace.path
+  return (
+    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    !isWslShellName(String(c.request.shellOverride ?? '')) &&
+    !isWslUncPath(cwd)
+  )
+}
+
+/**
+ * Switch-on: the `terminal.create` a window tab's first start sends main in place of the pane's
+ * spawn (L252) carries the same start facts; main adds the pane identity env, grid and fallback.
+ */
+function mainCreateParams(c: WindowLaunchCase): Record<string, unknown> {
+  const spawn = windowSpawnRequest(c)
+  // The tab's own startup cwd, which the pane's spawn falls back from to the workspace path.
+  const cwd = c.request.cwd ?? (c.producer.kind === 'transcript-continue' ? c.producer.cwd : null)
+  return {
+    worktree: `id:${launchWorkspaceId(c.workspace)}`,
+    windowTab: true,
+    tabId: LAUNCH_TAB_ID,
+    leafId: LAUNCH_LEAF_ID,
+    ...(cwd ? { cwd } : {}),
+    ...(c.request.shellOverride ? { shell: c.request.shellOverride } : {}),
+    command: spawn.command,
+    ...(spawn.startupCommandDelivery
+      ? { startupCommandDelivery: spawn.startupCommandDelivery }
+      : {}),
+    env: c.request.agentEnv ?? {},
+    launchConfig: spawn.launchConfig,
+    launchToken: LAUNCH_TOKEN,
+    launchAgent: spawn.launchAgent,
+    telemetry: spawn.telemetry
+  }
+}
+
+/**
+ * Mounts the tab's pane the way TerminalPane does and returns the pty:spawn request it sends, or
+ * the `terminal.create` its tab sent main instead.
+ */
 async function paneSpawnRequest(c: WindowLaunchCase): Promise<unknown> {
   const { modules, store, worktreeId, tab } = await openTab(c)
   const spawn = vi.fn(async (_request: Record<string, unknown>) => ({ id: 'pty-1' }))
@@ -201,6 +257,21 @@ async function paneSpawnRequest(c: WindowLaunchCase): Promise<unknown> {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane fixtures model every member connectPanePty reads, as in pty-connection-startup-command-delivery.test.ts.
   modules.pane.connectPanePty(pane as never, createManager(1) as never, deps as never)
   await flushAsyncTicks(20)
+  const [create] = windowTabCreates
+  if (create && typeof create === 'object' && 'leafId' in create && 'launchToken' in create) {
+    // Main never answers here; whatever the pane spawns in the meantime runs none of the startup.
+    for (const [request] of spawn.mock.calls) {
+      expect(request).toMatchObject({ command: undefined })
+      expect(request).not.toHaveProperty('telemetry')
+      expect(request).not.toHaveProperty('launchToken')
+    }
+    return JSON.parse(
+      JSON.stringify(create)
+        .replaceAll(tab.id, LAUNCH_TAB_ID)
+        .replaceAll(String(create.leafId), LAUNCH_LEAF_ID)
+        .replaceAll(String(create.launchToken), LAUNCH_TOKEN)
+    )
+  }
   const [request] = spawn.mock.calls[0] ?? []
   // Fixed ids so the table can name them; the color replies are this harness's theme.
   const { terminalColorQueryReplies: _theme, ...rest } = request ?? {}
@@ -222,6 +293,7 @@ describe('window-tab producers: the pty:spawn request a real pane sends', () => 
   }, 240_000)
 
   afterEach(async () => {
+    windowTabCreates.length = 0
     await restoreTerminalTestGlobals()
     vi.unstubAllGlobals()
   })
@@ -229,7 +301,9 @@ describe('window-tab producers: the pty:spawn request a real pane sends', () => 
   it.each([...WINDOW_LAUNCH_CASES, ...PLUS_LAUNCH_CASES, ...WORKSPACE_START_LAUNCH_CASES])(
     'row $row: $name',
     async (c) => {
-      expect(await paneSpawnRequest(c)).toEqual(windowSpawnRequest(c))
+      expect(await paneSpawnRequest(c)).toEqual(
+        startsInMain(c) ? mainCreateParams(c) : windowSpawnRequest(c)
+      )
     }
   )
 })
