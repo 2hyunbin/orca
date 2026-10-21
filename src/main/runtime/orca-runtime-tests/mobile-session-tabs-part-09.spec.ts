@@ -302,7 +302,11 @@ describe('OrcaRuntimeService', () => {
       expect(tap.spawn.mock.calls[0]?.[0]).toMatchObject({ spawnIntent: 'user-resume' })
     })
 
-    function makeRuntimeWithOtherPaneHolder(ptyIds: string[], verdict?: 'exited' | 'unverifiable') {
+    function makeRuntimeWithOtherPaneHolder(
+      ptyIds: string[],
+      verdict?: 'exited' | 'unverifiable',
+      registered = true
+    ) {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep')
       const parked = makeParkedRuntime(runtimeStore, {
         livePtyIds: ptyIds,
@@ -317,10 +321,17 @@ describe('OrcaRuntimeService', () => {
           ]
         }
       })
-      registerBoundPty(parked.runtime, 'other-pty', TEST_WORKTREE_ID, null, {
-        tabId: 'other-tab',
-        leafId: HEADLESS_SECOND_LEAF_ID
-      })
+      const otherPane = { tabId: 'other-tab', leafId: HEADLESS_SECOND_LEAF_ID }
+      if (registered) {
+        registerBoundPty(parked.runtime, 'other-pty', TEST_WORKTREE_ID, null, otherPane)
+      } else {
+        // A restart: main's layout saved the pane; its terminal has not re-registered yet.
+        bindPaneFirst(parked.runtime, {
+          ...otherPane,
+          worktreeId: TEST_WORKTREE_ID,
+          ptyId: 'other-pty'
+        })
+      }
       return parked
     }
 
@@ -352,25 +363,7 @@ describe('OrcaRuntimeService', () => {
     })
 
     it('does not resume while the other holder has no host terminal record yet', async () => {
-      const { runtimeStore } = makeParkedSessionStore('worktree-sleep')
-      const { runtime, spawn } = makeParkedRuntime(runtimeStore, {
-        deps: {
-          getAgentProviderSessionSnapshot: () => [
-            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guard reads only paneKey and providerSession.
-            {
-              paneKey: `other-tab:${HEADLESS_SECOND_LEAF_ID}`,
-              providerSession: { key: 'session_id', id: 'provider-session-1' }
-            } as never
-          ]
-        }
-      })
-      // A restart: the other pane is saved in main's layout, its terminal not yet re-registered.
-      bindPaneFirst(runtime, {
-        worktreeId: TEST_WORKTREE_ID,
-        tabId: 'other-tab',
-        leafId: HEADLESS_SECOND_LEAF_ID,
-        ptyId: 'other-pty'
-      })
+      const { runtime, spawn } = makeRuntimeWithOtherPaneHolder([], undefined, false)
 
       await userActivate(runtime)
 
