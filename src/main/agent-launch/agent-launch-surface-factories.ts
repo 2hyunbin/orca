@@ -4,7 +4,11 @@
  * implements, not part of the sequencing it runs.
  */
 
-import type { AgentLaunchIntent, AgentLaunchPrompt } from '../../shared/agent-launch-intent'
+import type {
+  AgentLaunchIntent,
+  AgentLaunchPrompt,
+  AgentLaunchMode
+} from '../../shared/agent-launch-intent'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentLaunchParams } from '../../shared/rpc-contract/agent-launch-params'
@@ -165,13 +169,13 @@ function terminalLaunchOptions(intent: Pick<AgentLaunchIntent, 'sessionOptions' 
 }
 
 /** Refuses, before anything exists, an OpenCode terminal its host cannot verify, read as that
- *  terminal will receive it; the chat choice counts only where the terminal is already certain. */
+ *  terminal will receive it, after the shared preflight determines the actual route. */
 export function assertTerminalLaunchAdmissible(
-  intent: AgentLaunchIntent | AgentLaunchParams
+  intent: AgentLaunchIntent | AgentLaunchParams,
+  mode: AgentLaunchMode
 ): void {
   if (intent.reuseTerminal || intent.target.kind === 'create-worktree') {
-    const terminal = intent.reuseTerminal || intent.surface === 'terminal'
-    const options = terminal ? terminalLaunchOptions(intent) : intent.sessionOptions
+    const options = mode === 'terminal' ? terminalLaunchOptions(intent) : intent.sessionOptions
     const preferences = toAgentLaunchPreferences(options, intent.agent)
     assertOpenCodeModelLaunchPreferencesAbsent(intent.agent, preferences)
   }

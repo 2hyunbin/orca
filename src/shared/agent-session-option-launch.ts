@@ -18,6 +18,7 @@ import { decodeCatalogOptionValue } from './structured-agent-session-option-code
 
 export type ResolvedSessionOptionLaunch = {
   args: string[]
+  permissionArgs?: readonly string[]
   appliedValues: Record<string, SessionOptionValue>
 }
 
@@ -91,6 +92,7 @@ export function resolveAgentSessionOptionLaunch(
   }
   return {
     args: [...resolved.args, ...permissionArgs],
+    permissionArgs,
     appliedValues: { ...resolved.appliedValues, [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: permission }
   }
 }

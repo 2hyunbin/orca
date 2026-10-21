@@ -69,6 +69,31 @@ describe.each(['posix', 'powershell', 'cmd'] as const)('argument values on %s', 
     expect(result.appliedSessionOptions).toEqual({ model: 'opus', effort: 'xhigh' })
   })
 
+  it('records policy without defeated selectors, protecting values and the terminator', () => {
+    const result = launchAgent(
+      'claude',
+      { model: 'opus', permissionMode: 'ask' },
+      '--append-system-prompt "--dangerously-skip-permissions" --model haiku --dangerously-skip-permissions -- literal',
+      true
+    )
+    const tokens = [
+      '--append-system-prompt',
+      '--dangerously-skip-permissions',
+      '--permission-mode',
+      'default',
+      '--',
+      'literal'
+    ]
+    expect(tokenizeStartupCommand(result.resumeLaunch.agentCommand, shell)).toMatchObject({
+      ok: true,
+      tokens: ['claude', ...tokens]
+    })
+    expect(tokenizeStartupCommand(result.resumeLaunch.agentArgs ?? '', shell)).toMatchObject({
+      ok: true,
+      tokens
+    })
+  })
+
   it('recognizes a real model flag after a prompt whose value is --', () => {
     const result = launch('--append-system-prompt "--" --model haiku')
     expect(result.argv).toMatchObject({

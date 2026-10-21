@@ -43,6 +43,22 @@ describe('one copy of each chat-picked flag', () => {
     }
   )
 
+  it('treats spaced Codex config model and effort as raw pins or removes them when overridden', () => {
+    const agentArgs = '-c " model = o3" -c " model_reasoning_effort = low" -c model_verbosity=low'
+    const inputs = {
+      agent: 'codex' as const,
+      agentArgs,
+      sessionOptions: { model: 'gpt-5.5', effort: 'high' }
+    }
+    expect(launch(inputs).appliedSessionOptions).toEqual({})
+    const saved = launch({ ...inputs, sessionOptionsOverrideAgentArgs: true })
+    expect(saved.appliedSessionOptions).toEqual(inputs.sessionOptions)
+    expect(saved.resumeLaunch).toEqual({
+      agentCommand: "codex '-c' 'model_verbosity=low'",
+      agentArgs: "'-c' 'model_verbosity=low'"
+    })
+  })
+
   it('sends only the configured Grok model without the picked model effort', () => {
     const result = launch({
       agent: 'grok',
@@ -168,7 +184,7 @@ describe('a saved permission mode on terminals', () => {
     [
       'codex',
       'ask',
-      '-a never -s danger-full-access --yolo -c approvals_reviewer=auto_review -c model_verbosity=low',
+      '-a never -s danger-full-access --yolo --not-so-yolo -c " approvals_reviewer = auto_review" -c "default_permissions = workspace" -c model_verbosity=low',
       `'-c' 'model_verbosity=low' '-a' 'on-request' '-s' 'read-only' '-c' 'approvals_reviewer="user"'`
     ],
     ['codex', 'auto', '--dangerously-bypass-approvals-and-sandbox', "'--approve-for-me'"],
@@ -178,7 +194,12 @@ describe('a saved permission mode on terminals', () => {
       '-a never -c sandbox_mode=read-only',
       "'--dangerously-bypass-approvals-and-sandbox'"
     ],
-    ['grok', 'ask', '--permission-mode bypassPermissions', "'--permission-mode' 'default'"],
+    [
+      'grok',
+      'ask',
+      '--permission-mode bypassPermissions --always-approve --yolo --dangerously-skip-permissions',
+      "'--permission-mode' 'default'"
+    ],
     // No terminal flag for these modes: the raw arguments stay exactly as they were.
     ['antigravity', 'ask', '--dangerously-skip-permissions', "'--dangerously-skip-permissions'"],
     [

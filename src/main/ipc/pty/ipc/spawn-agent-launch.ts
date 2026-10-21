@@ -111,7 +111,9 @@ export async function planPaneAgentLaunch(ctx: PtyIpcSpawnState): Promise<void> 
       }
     }
   }
-  const intent = await resolveUnlaunchedIntent(params.data, runtime, null)
+  const { intent } = await resolveUnlaunchedIntent(params.data, runtime, null, {
+    terminalOnly: true
+  })
   if (intent.target.kind !== 'existing') {
     throw new Error('agent_launch_request_invalid')
   }

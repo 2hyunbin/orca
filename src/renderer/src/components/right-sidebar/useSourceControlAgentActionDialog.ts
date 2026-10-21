@@ -246,10 +246,10 @@ export function useSourceControlAgentActionDialog({
     isStarting,
     detectedAgents,
     disabledAgents,
-    onAutoStart: ({ detectedAgents: agentsForLaunch, saveTargetValue: matchedTargetValue }) =>
+    onAutoStart: ({ detectedAgents: agentsForLaunch }) =>
       startWithDetectedAgents({
         detectedAgents: agentsForLaunch,
-        saveTargetValueOverride: matchedTargetValue
+        saveTargetValueOverride: 'none'
       })
   })
 

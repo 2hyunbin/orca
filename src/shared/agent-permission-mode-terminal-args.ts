@@ -42,6 +42,7 @@ const TERMINAL_PERMISSION_FLAGS: Partial<Record<AgentType, TerminalPermissionFla
       '--approve-for-me',
       '--dangerously-bypass-approvals-and-sandbox',
       '--full-auto',
+      '--not-so-yolo',
       '--yolo'
     ]
   },
@@ -51,7 +52,7 @@ const TERMINAL_PERMISSION_FLAGS: Partial<Record<AgentType, TerminalPermissionFla
       'full-access': split(YOLO_TUI_AGENT_ARGS.grok)
     },
     valueFlags: ['--permission-mode'],
-    booleanFlags: []
+    booleanFlags: ['--always-approve', '--yolo', '--dangerously-skip-permissions']
   },
   // Why no Ask: its CLI has no per-launch flag that forces prompts over the user's own setting.
   antigravity: {
@@ -89,7 +90,9 @@ export function removeTerminalPermissionArgs(
   if (agent === 'codex') {
     // Why: Codex also reads its approval and sandbox policy from `-c key=value` overrides.
     kept = removeAgentArgOption(agent, kept, ['-c', '--config'], (value) =>
-      /^(approval_policy|sandbox_mode|approvals_reviewer)=/.test(value ?? '')
+      /^\s*(approval_policy|sandbox_mode|approvals_reviewer|default_permissions)\s*=/.test(
+        value ?? ''
+      )
     )
   }
   return removeAgentArgOption(agent, kept, flags.booleanFlags, undefined, false)

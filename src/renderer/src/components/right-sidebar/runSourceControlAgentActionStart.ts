@@ -16,7 +16,7 @@ import {
 import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
-import { sourceControlActionRecipeMatchesTarget } from './source-control-action-recipe-match'
+import { sourceControlActionRecipeSaveMatchesTarget } from './source-control-action-recipe-match'
 import { resolveSourceControlAgentSaveTarget } from './source-control-agent-action-dialog-support'
 import { sourceControlActionLaunchOptions } from '../../../../shared/source-control-action-launch-preferences'
 
@@ -97,6 +97,7 @@ export async function runSourceControlAgentActionStart({
   // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
   // Why: a recipe being saved launches as it will resolve once saved, so the next launch matches.
   let launchRecipe = recipe
+  let recipeToSave = recipe
   if (saveTarget && settings) {
     const saved = saveSourceControlActionRecipe({
       target: saveTarget,
@@ -105,6 +106,10 @@ export async function runSourceControlAgentActionStart({
       actionId,
       recipe
     })
+    recipeToSave =
+      ('sourceControlAi' in saved
+        ? saved.sourceControlAi.actions?.[actionId]
+        : saved.update.sourceControlAi?.actionOverrides?.[actionId]) ?? recipe
     launchRecipe = resolveSourceControlActionRecipe({
       settings:
         'sourceControlAi' in saved
@@ -183,17 +188,17 @@ export async function runSourceControlAgentActionStart({
 
   const launchRecipeAlreadySaved = Boolean(
     saveTarget &&
-    sourceControlActionRecipeMatchesTarget({
+    sourceControlActionRecipeSaveMatchesTarget({
       actionId,
       target: saveTarget,
-      recipe,
+      recipe: recipeToSave,
       settings,
       repo
     })
   )
   if (saveTarget && onSaveAgentDefault && !launchRecipeAlreadySaved) {
     try {
-      await onSaveAgentDefault(saveTarget, actionId, recipe)
+      await onSaveAgentDefault(saveTarget, actionId, recipeToSave)
     } catch (error) {
       // Why: the prompt already reached the agent; a failed recipe save must not strand the
       // caller's accepted-launch bookkeeping (neither onLaunched nor onLaunchAborted would fire).

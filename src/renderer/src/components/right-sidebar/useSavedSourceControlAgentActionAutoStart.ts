@@ -35,10 +35,7 @@ type UseSavedSourceControlAgentActionAutoStartArgs = {
   isStarting: boolean
   detectedAgents: TuiAgent[]
   disabledAgents: TuiAgent[] | undefined
-  onAutoStart: (args: {
-    detectedAgents: TuiAgent[]
-    saveTargetValue: SavedSourceControlAgentActionTargetValue
-  }) => Promise<boolean>
+  onAutoStart: (args: { detectedAgents: TuiAgent[] }) => Promise<boolean>
 }
 
 type SavedSourceControlAgentActionAutoStartResult = {
@@ -265,10 +262,7 @@ export function useSavedSourceControlAgentActionAutoStart({
       return
     }
     autoStartedOpenCycleRef.current = openCycle
-    void onAutoStart({
-      detectedAgents,
-      saveTargetValue: matchedSavedReceiptTargetValue
-    })
+    void onAutoStart({ detectedAgents })
       .then((launched) => {
         if (!launched) {
           revealDialog()

@@ -1,3 +1,4 @@
+import { decideAgentLaunchIntentMode } from '../../../agent-launch/agent-launch-intent-mode'
 /**
  * Turning `agent.launch` params into the intent the executor runs: the caller's workspace selector
  * resolved to an id, and a reused terminal checked. Nothing here creates anything.
@@ -7,6 +8,10 @@ import type { AgentLaunchIntent, AgentLaunchTarget } from '../../../../shared/ag
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { assertTerminalLaunchAdmissible } from '../../../agent-launch/agent-launch-surface-factories'
 import type { AgentLaunchParams } from '../../../../shared/rpc-contract/agent-launch-params'
+import {
+  resolveAgentLaunchModeOnHost,
+  type AgentLaunchModeReceipt
+} from '../../../agent-launch/agent-launch-mode'
 import type { EarlyAgentLaunchTab } from './agent-launch-tab-publication'
 
 /**
@@ -91,10 +96,28 @@ async function validateReusedTerminal(
 export async function resolveUnlaunchedIntent(
   params: AgentLaunchParams,
   runtime: OrcaRuntimeService,
-  early: EarlyAgentLaunchTab | null
-): Promise<AgentLaunchIntent> {
-  assertTerminalLaunchAdmissible(params)
+  early: EarlyAgentLaunchTab | null,
+  modeOptions: { terminalOnly?: boolean; callerRendersStructured?: boolean } = {}
+): Promise<{ intent: AgentLaunchIntent; decidedMode: AgentLaunchModeReceipt }> {
   const intent = await agentLaunchIntent(params, runtime, early?.paneKey)
   await validateReusedTerminal(intent, runtime)
-  return intent
+  const preflight = decideAgentLaunchIntentMode({ intent, runtime, ...modeOptions })
+  const decidedMode =
+    intent.target.kind === 'existing'
+      ? await resolveAgentLaunchModeOnHost(
+          runtime,
+          preflight,
+          intent.target.worktree,
+          intent.agent,
+          undefined,
+          {
+            phase: 'before-effects',
+            agent: intent.agent,
+            workspacePath: intent.target.workspacePath,
+            cwd: intent.cwd
+          }
+        )
+      : preflight
+  assertTerminalLaunchAdmissible(intent, decidedMode.mode)
+  return { intent, decidedMode }
 }

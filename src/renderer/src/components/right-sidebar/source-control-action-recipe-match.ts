@@ -9,7 +9,10 @@ import {
   type SourceControlActionId,
   type SourceControlActionRecipe
 } from '../../../../shared/source-control-ai-actions'
-import type { SourceControlAiWriteTarget } from '../../../../shared/source-control-ai-recipe-save'
+import {
+  saveSourceControlActionRecipe,
+  type SourceControlAiWriteTarget
+} from '../../../../shared/source-control-ai-recipe-save'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { Repo } from '../../../../shared/repo-types'
 
@@ -75,11 +78,7 @@ function readSavedSourceControlActionRecipeAtTarget(input: {
     if (!repoRecipe) {
       return null
     }
-    return resolveSourceControlActionRecipe({
-      actionId: input.actionId,
-      settings: input.settings,
-      repo: input.repo
-    })
+    return repoRecipe
   }
   const source = normalizeSourceControlAiSettings(
     input.settings?.sourceControlAi,
@@ -119,7 +118,10 @@ export function sourceControlActionRecipeMatchesTarget(input: {
     return false
   }
   const current = normalizeSourceControlActionRecipeForComparison(input.actionId, input.recipe)
-  const saved = normalizeSourceControlActionRecipeForComparison(input.actionId, savedRecipe)
+  const saved = normalizeSourceControlActionRecipeForComparison(
+    input.actionId,
+    input.target.type === 'repo' ? resolveSourceControlActionRecipe(input) : savedRecipe
+  )
   if (!sourceControlActionRecipesMatch(current, saved)) {
     return false
   }
@@ -127,4 +129,31 @@ export function sourceControlActionRecipeMatchesTarget(input: {
     return true
   }
   return (input.customAgentCommand ?? '').trim() === readSavedCustomAgentCommandAtTarget(input)
+}
+
+export function sourceControlActionRecipeSaveMatchesTarget(
+  input: Parameters<typeof sourceControlActionRecipeMatchesTarget>[0]
+): boolean {
+  const stored = readSavedSourceControlActionRecipeAtTarget(input)
+  if (!stored || !input.settings) {
+    return false
+  }
+  const saved = saveSourceControlActionRecipe({ ...input, settings: input.settings })
+  const planned =
+    'sourceControlAi' in saved
+      ? saved.sourceControlAi.actions?.[input.actionId]
+      : saved.update.sourceControlAi?.actionOverrides?.[input.actionId]
+  // A complete save owns these fields; inherited equal values do not establish that ownership.
+  return Boolean(
+    planned &&
+    stored.agentId === planned.agentId &&
+    stored.commandInputTemplate === planned.commandInputTemplate &&
+    stored.agentArgs === planned.agentArgs &&
+    sourceControlActionRecipesMatch(
+      normalizeSourceControlActionRecipeForComparison(input.actionId, stored),
+      normalizeSourceControlActionRecipeForComparison(input.actionId, planned)
+    ) &&
+    (!isCustomAgentId(planned.agentId) ||
+      (input.customAgentCommand ?? '').trim() === readSavedCustomAgentCommandAtTarget(input))
+  )
 }
