@@ -106,7 +106,9 @@ describe('Codex captured message choices', () => {
   })
 
   it('sends saved literal model and effort after the installed choices change', async () => {
-    const request = vi.fn(async () => ({ turn: { id: 'turn-1' } }))
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'turn-1' }
+    }))
     const session = optionSession(request)
     seedMessageDefaults(session)
     for (const model of ['model-b', 'retired-model']) {

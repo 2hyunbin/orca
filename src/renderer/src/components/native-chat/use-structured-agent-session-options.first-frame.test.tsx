@@ -172,7 +172,7 @@ describe('a new chat picker’s first frame', () => {
       models: [{ id: 'A', label: 'Old child A', isDefault: false, efforts: EFFORTS }],
       current: { model: 'A', effort: 'low', permissionMode: 'ask', defaulted: [] }
     }
-    let raw = { ...listed([{ id: 'A', label: 'Installed A' }]), listingInProgress: false }
+    let raw: Listed = listed([{ id: 'A', label: 'Installed A' }])
     const next = deferred<AgentSessionModelCatalogResult>()
     mocks.call.mockImplementation(
       (_target: unknown, method: string, params: { waitForListing?: boolean }) =>
@@ -206,7 +206,7 @@ describe('a new chat picker’s first frame', () => {
     await act(async () =>
       next.resolve({
         ...raw,
-        listingInProgress: false,
+        listingInProgress: undefined,
         models: raw.models.map((row) => ({ ...row, efforts: [EFFORTS[1]!] }))
       })
     )
