@@ -30,6 +30,10 @@ import {
 } from './helpers/fake-agent-command-override'
 import { FAKE_CODEX_LAUNCH_PROBES_SOURCE } from './helpers/fake-codex-launch-probes'
 
+const LAYOUT_OWNER_BUILD = existsSync(
+  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
+)
+
 type SpawnEvent = { args: string[]; pid: number }
 type TerminalIdentity = Pick<
   RuntimeTerminalSummary,
@@ -385,12 +389,15 @@ async function faultProjectionAndActivate(
     .toBe(true)
 
   await page.evaluate(
-    ({ activeTabId, identities, worktreeId }) => {
+    ({ activeTabId, identities, worktreeId, stripBindings }) => {
       const store = window.__store
       if (!store) {
         throw new Error('Renderer store unavailable')
       }
       store.setState((state) => {
+        if (!stripBindings) {
+          return {}
+        }
         const tabsByWorktree = { ...state.tabsByWorktree }
         tabsByWorktree[worktreeId] = (tabsByWorktree[worktreeId] ?? []).map((tab) =>
           identities.some((identity) => identity.tabId === tab.id) ? { ...tab, ptyId: null } : tab
@@ -422,7 +429,9 @@ async function faultProjectionAndActivate(
     {
       activeTabId,
       identities: terminals.map(({ tabId, leafId }) => ({ tabId, leafId })),
-      worktreeId
+      worktreeId,
+      // Why: with the switch on the window's bindings are main's frames, which no window write drops.
+      stripBindings: !LAYOUT_OWNER_BUILD
     }
   )
   await ensureTerminalVisible(page)
