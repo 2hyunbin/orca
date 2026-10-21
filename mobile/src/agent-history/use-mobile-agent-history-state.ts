@@ -181,6 +181,13 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
     [activeWorktree, client, clientGeneration, connState, hostId, worktrees, worktreesLoaded]
   )
 
+  const feed = useMemo(() => (client ? mobileStructuredSessionStatusFeed(client) : null), [client])
+  const names = useSyncExternalStore(
+    feed?.subscribe ?? noSubscription,
+    feed?.getNamingSnapshot ?? noNames,
+    noNames
+  )
+
   // Initial + reconnect load. Why: scope switches reuse the host's 15s cache
   // (force:false) so a tab tap is cheap; only an explicit refresh bypasses it.
   useEffect(() => {
@@ -220,12 +227,6 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
     [connState, forceReconnect, hostId, loadSessions, scope]
   )
 
-  const feed = useMemo(() => (client ? mobileStructuredSessionStatusFeed(client) : null), [client])
-  const names = useSyncExternalStore(
-    feed?.subscribe ?? noSubscription,
-    feed?.getNamingSnapshot ?? noNames,
-    noNames
-  )
   const namedScreenState = useMemo<AgentHistoryScreenState>(() => {
     if (screenState.kind !== 'ready') {
       return screenState
