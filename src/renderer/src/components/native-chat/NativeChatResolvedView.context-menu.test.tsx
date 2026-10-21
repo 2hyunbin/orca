@@ -179,6 +179,25 @@ describe('NativeChatResolvedView image menu ownership', () => {
     }
   )
 
+  it('reports a clipboard write failure without announcing success while the write is pending', async () => {
+    const write = Promise.withResolvers<void>()
+    mocks.fetch.mockResolvedValue({ ok: true, blob: async () => new Blob(['original image']) })
+    mocks.writeClipboardImage.mockReturnValue(write.promise)
+    render(<RetainedBridgeChat />)
+
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'original.png' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy image' }))
+
+    await waitFor(() => expect(mocks.writeClipboardImage).toHaveBeenCalledOnce())
+    expect(mocks.success).not.toHaveBeenCalled()
+    expect(mocks.error).not.toHaveBeenCalled()
+
+    await act(async () => write.reject(new Error('Clipboard unavailable')))
+
+    expect(mocks.error).toHaveBeenCalledWith("Couldn't copy image", { description: undefined })
+    expect(mocks.success).not.toHaveBeenCalled()
+  })
+
   it('removes the portaled menu and captured image when the retained bridge owner hides', async () => {
     const capturedImage = Promise.withResolvers<Blob>()
     mocks.fetch.mockResolvedValue({ ok: true, blob: () => capturedImage.promise })

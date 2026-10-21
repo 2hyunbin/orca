@@ -41,7 +41,7 @@ describe('copyImageToClipboard', () => {
     writeClipboardImage.mockReturnValue(write.promise)
     let finished = false
 
-    const copying = copyImageToClipboard(async () => png).then(() => {
+    const copying = copyImageToClipboard(png).then(() => {
       finished = true
     })
 
@@ -55,23 +55,11 @@ describe('copyImageToClipboard', () => {
     expect(finished).toBe(true)
   })
 
-  it('propagates a source read failure without writing to the clipboard', async () => {
-    const error = new Error('Source unavailable')
-
-    await expect(
-      copyImageToClipboard(async () => {
-        throw error
-      })
-    ).rejects.toBe(error)
-
-    expect(writeClipboardImage).not.toHaveBeenCalled()
-  })
-
   it('propagates a decode failure without writing to the clipboard', async () => {
     const error = new Error('Invalid image')
     decode.mockRejectedValue(error)
 
-    await expect(copyImageToClipboard(async () => png)).rejects.toBe(error)
+    await expect(copyImageToClipboard(png)).rejects.toBe(error)
 
     expect(writeClipboardImage).not.toHaveBeenCalled()
   })
@@ -80,6 +68,6 @@ describe('copyImageToClipboard', () => {
     const error = new Error('Clipboard unavailable')
     writeClipboardImage.mockRejectedValue(error)
 
-    await expect(copyImageToClipboard(async () => png)).rejects.toBe(error)
+    await expect(copyImageToClipboard(png)).rejects.toBe(error)
   })
 })

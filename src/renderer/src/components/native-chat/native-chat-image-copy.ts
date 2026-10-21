@@ -60,7 +60,7 @@ export function keepPreviewOpenForChatMenu(event: {
 
 export async function copyNativeChatImage(image: NativeChatCopyImage): Promise<void> {
   try {
-    await copyImageToClipboard(image)
+    await copyImageToClipboard(await image())
     toast.success(translate('components.native-chat.composer.imageCopied', 'Image copied'))
   } catch (error) {
     toast.error(
