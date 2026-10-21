@@ -1,7 +1,7 @@
 import type { RuntimeClientTarget } from '../../../../../shared/runtime-client-target'
 import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
-import type { BrowserTabInfo, BrowserTabListResult } from '../../../../../shared/runtime-types'
+import type { BrowserTabInfo } from '../../../../../shared/runtime-types'
 import { isRemoteBrowserPageMissingError } from './remote-browser-stream-errors'
 import type {
   RemoteBrowserOperationToken,
@@ -26,8 +26,6 @@ export type RemoteBrowserPageSessionDeps = {
   getWorktreeSelector(): string
   getCurrentUrl(): string
   readStoredHandle(): RemoteBrowserPageHandle | null
-  /** Ids the host may already name this tab's page by: the page's own, then its browser tab's. */
-  getHostPageIdCandidates(): readonly string[]
   writeStoredHandle(handle: RemoteBrowserPageHandle): void
   removeStoredHandle(remotePageId: string): void
   applyTabInfo(tab: Pick<BrowserTabInfo, 'url' | 'title'>): void
@@ -62,15 +60,10 @@ export class RemoteBrowserPageSession {
     }
     const existingHandle = this.deps.readStoredHandle()
     if (existingHandle?.environmentId !== token.environmentId) {
-      // Switch point: a frame-drawn host tab arrives without a handle, so bind the host's page first.
+      // Switch point: a frame-drawn host tab has no handle, but its row id is the host's page id.
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        const adopted = await this.findHostPage(token)
-        if (!tokens.isCurrent(token)) {
-          return null
-        }
-        if (adopted) {
-          tokens.setRemotePage(adopted)
-          this.deps.writeStoredHandle({ environmentId: token.environmentId, remotePageId: adopted })
+        const adopted = await this.adoptHostPage(token)
+        if (adopted !== undefined) {
           return adopted
         }
       }
@@ -130,27 +123,32 @@ export class RemoteBrowserPageSession {
     }
   }
 
-  /** The host's existing page for this tab, or null when it has none or cannot say. */
-  private async findHostPage(token: RemoteBrowserOperationToken): Promise<string | null> {
-    const candidates = this.deps.getHostPageIdCandidates()
-    if (candidates.length === 0) {
-      return null
+  /** The row's own id when the host runs that page; undefined sends the caller on to create it. */
+  private async adoptHostPage(
+    token: RemoteBrowserOperationToken
+  ): Promise<string | null | undefined> {
+    const { tokens } = this.deps
+    const provisional = token.tabId
+    const probe = { ...token, remotePageId: provisional }
+    const release = (): void => {
+      if (tokens.remotePage === provisional) {
+        tokens.setRemotePage(null)
+      }
     }
+    tokens.setRemotePage(provisional)
     try {
-      const listed = await this.deps.callRpc<Partial<BrowserTabListResult> | null>(
-        { kind: 'environment', environmentId: token.environmentId },
-        'browser.tabList',
-        { worktree: this.deps.getWorktreeSelector() },
-        { timeoutMs: 15_000, suppressFeatureInteraction: true }
-      )
-      const hostPageIds = new Set(
-        Array.isArray(listed?.tabs) ? listed.tabs.map((tab) => tab.browserPageId) : []
-      )
-      return candidates.find((id) => hostPageIds.has(id)) ?? null
+      // tabShow also starts a saved page the host has not opened yet.
+      if (!(await this.fetchTabInfo(probe)) || !tokens.isCurrent(probe)) {
+        release()
+        return null
+      }
     } catch {
-      // A host that cannot list its pages gets today's create rather than a failed pane.
-      return null
+      // Not found, or a host that cannot say: create as before; a handle-less row has nothing to close.
+      release()
+      return tokens.isCurrent(token) ? undefined : null
     }
+    this.deps.writeStoredHandle({ environmentId: token.environmentId, remotePageId: provisional })
+    return provisional
   }
 
   private async createRemotePage(token: RemoteBrowserOperationToken): Promise<string | null> {

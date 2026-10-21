@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import type { BrowserPage } from '../../../../shared/browser-workspace-types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   RemoteBrowserPageSession,
   type RemoteBrowserPageSessionDeps
@@ -494,7 +495,6 @@ describe('hydrateBrowserSession remote page handle seeding', () => {
       getWorktreeSelector: () => WT,
       getCurrentUrl: () => deps.currentUrl,
       readStoredHandle: () => store.getState().remoteBrowserPageHandlesByPageId['page-1'] ?? null,
-      getHostPageIdCandidates: () => ['page-1'],
       writeStoredHandle: (handle) => store.getState().setRemoteBrowserPageHandle('page-1', handle),
       removeStoredHandle: (remotePageId) =>
         store.getState().removeRemoteBrowserPageHandle('page-1', remotePageId),
@@ -554,16 +554,18 @@ describe('hydrateBrowserSession remote page handle seeding', () => {
     })
 
     const resolved = await session.ensureRemotePage({
+      tabId: 'page-1',
       environmentId: 'env-1',
       generation: 1,
       remotePageId: null
-    } as never)
+    })
 
     expect(closeMissingRemotePage).not.toHaveBeenCalled()
-    // Switch-on asks the host for an existing page first (browser.tabList); it has none here.
-    const created = callRpc.mock.calls.filter(([, method]) => method !== 'browser.tabList')
-    expect(created.map(([, method]) => method)).toEqual(['browser.tabCreate'])
-    expect(created[0]?.[2]).toMatchObject({ url: 'https://example.com/saved' })
+    // Switch-on first probes the row id with tabShow; the restarted runtime has no such page.
+    expect(callRpc.mock.calls.map(([, method]) => method)).toEqual(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? ['browser.tabShow', 'browser.tabCreate'] : ['browser.tabCreate']
+    )
+    expect(callRpc.mock.calls.at(-1)?.[2]).toMatchObject({ url: 'https://example.com/saved' })
     expect(resolved).toBe('remote-page-2')
   })
 })

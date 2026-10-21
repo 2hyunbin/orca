@@ -13,29 +13,38 @@ vi.mock('../../../../../shared/layout-owner-switch', () => ({
   }
 }))
 
-type ListReply = { tabs: { browserPageId: string }[] } | Error | Record<string, never>
+/** What the host answers to tabShow for the row's own id. */
+type ShowReply = 'runs' | 'not-found' | 'other-error'
 
-function setup(args: { list: ListReply; switchOn?: boolean; onList?: () => void }) {
+function rpcError(code: string): Error {
+  return Object.assign(new Error(code), { code })
+}
+
+function setup(args: { show: ShowReply; switchOn?: boolean; onShow?: () => void }) {
   layoutOwner.isMain = args.switchOn ?? true
-  const identity = { tabId: 'desktop-page-1', environmentId: 'env-1', generationBump: false }
   const tokens = new RemoteBrowserOperationTokens({
     isMounted: () => true,
     isActive: () => true,
-    getTabId: () => identity.tabId,
-    getEnvironmentId: () => identity.environmentId,
+    // A frame-drawn row is named by the host's page id.
+    getTabId: () => 'host-page-1',
+    getEnvironmentId: () => 'env-1',
     browserPageExists: () => true
   })
   const calls: { method: string; params: unknown }[] = []
+  const closedMissing: (string | null)[] = []
   let stored: RemoteBrowserPageHandle | null = null
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake answers each method with the reply shape its caller reads.
   const callRpc = (async (_target: unknown, method: string, params?: unknown) => {
     calls.push({ method, params })
-    if (method === 'browser.tabList') {
-      args.onList?.()
-      if (args.list instanceof Error) {
-        throw args.list
+    if (method === 'browser.tabShow') {
+      args.onShow?.()
+      if (args.show === 'not-found') {
+        throw rpcError('browser_tab_not_found')
       }
-      return args.list
+      if (args.show === 'other-error') {
+        throw rpcError('method_not_found')
+      }
+      return { tab: { url: 'https://example.test/', title: 'Example' } }
     }
     if (method === 'browser.tabCreate') {
       return { browserPageId: 'created-page' }
@@ -48,8 +57,6 @@ function setup(args: { list: ListReply; switchOn?: boolean; onList?: () => void 
     getWorktreeSelector: () => 'id:wt-1',
     getCurrentUrl: () => 'about:blank',
     readStoredHandle: () => stored,
-    // The frame-drawn row's page id was minted here; its browser tab id is the host's page id.
-    getHostPageIdCandidates: () => ['desktop-page-1', 'host-page-1'],
     writeStoredHandle: (handle) => {
       stored = handle
     },
@@ -57,71 +64,67 @@ function setup(args: { list: ListReply; switchOn?: boolean; onList?: () => void 
       stored = null
     },
     applyTabInfo: () => {},
-    closeMissingRemotePage: () => {}
+    closeMissingRemotePage: (id) => closedMissing.push(id)
   })
   return {
-    session,
     tokens,
     calls,
+    closedMissing,
     stored: () => stored,
     ensure: () => session.ensureRemotePage(tokens.createOperationToken()!),
-    creates: () => calls.filter((call) => call.method === 'browser.tabCreate').length
+    methods: () => calls.map((call) => call.method)
   }
 }
 
 describe('RemoteBrowserPageSession.ensureRemotePage without a stored handle', () => {
-  it('adopts the page the host already runs for this tab instead of creating a second one', async () => {
-    const harness = setup({
-      list: { tabs: [{ browserPageId: 'other-page' }, { browserPageId: 'host-page-1' }] }
-    })
+  // A saved page a restarted host has not started is woken by this same tabShow (see
+  // orca-runtime-serve-browser-restore.test.ts).
+  it('adopts the page the host runs under the row id instead of creating a second one', async () => {
+    const harness = setup({ show: 'runs' })
 
     await expect(harness.ensure()).resolves.toBe('host-page-1')
 
-    expect(harness.creates()).toBe(0)
+    expect(harness.methods()).toEqual(['browser.tabShow'])
+    expect(harness.calls[0]?.params).toEqual({ worktree: 'id:wt-1', page: 'host-page-1' })
     expect(harness.tokens.remotePage).toBe('host-page-1')
     expect(harness.stored()).toEqual({ environmentId: 'env-1', remotePageId: 'host-page-1' })
-    expect(harness.calls[0]).toEqual({ method: 'browser.tabList', params: { worktree: 'id:wt-1' } })
   })
 
-  it('creates a page when the host has none for this tab', async () => {
-    const harness = setup({ list: { tabs: [{ browserPageId: 'other-page' }] } })
+  it('creates a page when the host has none under the row id, closing nothing', async () => {
+    const harness = setup({ show: 'not-found' })
 
     await expect(harness.ensure()).resolves.toBe('created-page')
 
-    expect(harness.creates()).toBe(1)
+    expect(harness.methods()).toEqual(['browser.tabShow', 'browser.tabCreate'])
+    expect(harness.closedMissing).toEqual([])
     expect(harness.stored()).toEqual({ environmentId: 'env-1', remotePageId: 'created-page' })
   })
 
-  it.each([
-    ['fails', new Error('Unknown method: browser.tabList')],
-    ['answers without a tab list', {}]
-  ])('falls back to creating a page when the host lookup %s', async (_label, list) => {
-    const harness = setup({ list })
+  it('creates a page when the host probe fails any other way', async () => {
+    const harness = setup({ show: 'other-error' })
 
     await expect(harness.ensure()).resolves.toBe('created-page')
 
-    expect(harness.creates()).toBe(1)
+    expect(harness.methods()).toEqual(['browser.tabShow', 'browser.tabCreate'])
+    expect(harness.closedMissing).toEqual([])
   })
 
-  it('adopts nothing when the pane moved on during the lookup', async () => {
+  it('adopts nothing when the pane moved on during the probe', async () => {
     let harness: ReturnType<typeof setup> | null = null
-    harness = setup({
-      list: { tabs: [{ browserPageId: 'host-page-1' }] },
-      onList: () => harness?.tokens.supersedeOperations()
-    })
+    harness = setup({ show: 'runs', onShow: () => harness?.tokens.supersedeOperations() })
 
     await expect(harness.ensure()).resolves.toBeNull()
 
-    expect(harness.creates()).toBe(0)
+    expect(harness.methods()).toEqual(['browser.tabShow'])
     expect(harness.stored()).toBeNull()
     expect(harness.tokens.remotePage).toBeNull()
   })
 
   it('keeps creating directly with the layout-owner switch off', async () => {
-    const harness = setup({ list: { tabs: [{ browserPageId: 'host-page-1' }] }, switchOn: false })
+    const harness = setup({ show: 'runs', switchOn: false })
 
     await expect(harness.ensure()).resolves.toBe('created-page')
 
-    expect(harness.calls.map((call) => call.method)).toEqual(['browser.tabCreate'])
+    expect(harness.methods()).toEqual(['browser.tabCreate'])
   })
 })

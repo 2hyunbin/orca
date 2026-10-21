@@ -72,7 +72,7 @@ export function createHarness() {
   let subscribeAttempts = 0
   let closeBeforeNextSubscribeRejects = false
 
-  const callRpc = (async (_target: unknown, method: string) => {
+  const callRpc = (async (_target: unknown, method: string, params?: { page?: string }) => {
     rpcLog.push(method)
     if (method === 'status.get') {
       if (statusGate) {
@@ -87,6 +87,10 @@ export function createHarness() {
         const gate = tabShowGate
         tabShowGate = null
         await gate.wait
+      }
+      // The host holds only pages it created or the pane was handed; the row id is not one.
+      if (params?.page === identity.tabId) {
+        throw rpcError('browser_tab_not_found', 'Browser page was not found')
       }
       return { tab: { url: 'https://example.test/', title: 'Example' } }
     }
@@ -171,7 +175,6 @@ export function createHarness() {
     getWorktreeSelector: () => 'worktree:wt-1',
     getCurrentUrl: () => 'https://example.test/',
     readStoredHandle: () => storedHandle,
-    getHostPageIdCandidates: () => [identity.tabId, 'workspace-1'],
     writeStoredHandle: (handle) => {
       storedHandle = handle
     },
