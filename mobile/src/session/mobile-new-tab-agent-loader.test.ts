@@ -17,6 +17,202 @@ function createClient(
 }
 
 describe('mobile new-tab agent loading', () => {
+  it('detects agents for a folder workspace on its owning host without resolving a repo', async () => {
+    const client = createClient(async (method, params) => {
+      if (method === 'settings.get') {
+        return { ok: true, result: { settings: {} } }
+      }
+      if (method === 'preflight.detectAgents') {
+        expect(params).toEqual({ worktreeId: 'folder:fw-1' })
+        return { ok: true, result: ['claude'] }
+      }
+      throw new Error(`unexpected request: ${method}`)
+    })
+    await expect(
+      loadMobileNewTabAgentOptions({
+        client,
+        worktreeId: 'folder:fw-1',
+        hostRefusesOtherRuntime: true
+      })
+    ).resolves.toEqual([{ agent: 'claude', label: 'Claude' }])
+    expect(client.sendRequest.mock.calls.map(([method]) => method)).toEqual([
+      'preflight.detectAgents',
+      'settings.get'
+    ])
+  })
+
+  function folderClient(args: {
+    connectionId?: string | null
+    groupConnectionId?: string
+    groupExecutionHostId?: string
+    executionHostId?: string
+    repos?: unknown[]
+    missing?: boolean
+    duplicate?: boolean
+    refused?: boolean
+  }) {
+    return createClient(async (method, params) => {
+      if (method === 'settings.get') {
+        return { ok: true, result: { settings: {} } }
+      }
+      if (method === 'folderWorkspace.list') {
+        return {
+          ok: true,
+          result: {
+            folderWorkspaces: args.missing
+              ? []
+              : [
+                  {
+                    id: 'fw-1',
+                    folderPath: '/project',
+                    projectGroupId: 'pg-1',
+                    connectionId: args.connectionId,
+                    executionHostId: args.executionHostId
+                  },
+                  ...(args.duplicate
+                    ? [
+                        {
+                          id: 'fw-1',
+                          folderPath: '/project',
+                          projectGroupId: 'pg-1',
+                          connectionId: 'other-ssh'
+                        }
+                      ]
+                    : [])
+                ]
+          }
+        }
+      }
+      if (method === 'projectGroup.list') {
+        return {
+          ok: true,
+          result: {
+            groups: [
+              {
+                id: 'pg-1',
+                connectionId: args.groupConnectionId,
+                executionHostId: args.groupExecutionHostId
+              }
+            ]
+          }
+        }
+      }
+      if (method === 'repo.list') {
+        return { ok: true, result: { repos: args.repos ?? [] } }
+      }
+      if (method === 'preflight.detectAgents') {
+        expect(params).toEqual({ worktreeId: 'folder:fw-1' })
+        return args.refused
+          ? { ok: false, error: { code: 'runtime_error', message: WORKSPACE_ON_OTHER_RUNTIME } }
+          : { ok: true, result: ['claude'] }
+      }
+      if (method === 'preflight.detectRemoteAgents') {
+        expect(params).toEqual({
+          connectionId: args.executionHostId?.startsWith('ssh:')
+            ? args.executionHostId.slice(4)
+            : (args.connectionId ?? args.groupConnectionId ?? 'repo-ssh')
+        })
+        return { ok: true, result: ['claude'] }
+      }
+      throw new Error(`unexpected request: ${method}`)
+    })
+  }
+
+  it.each([
+    ['local', {}, 'preflight.detectAgents'],
+    ['group SSH', { groupConnectionId: 'group-ssh' }, 'preflight.detectRemoteAgents'],
+    [
+      'workspace connection overrides group runtime',
+      { connectionId: 'own-ssh', groupExecutionHostId: 'runtime:other' },
+      'preflight.detectRemoteAgents'
+    ],
+    [
+      'workspace SSH override',
+      { connectionId: 'own-ssh', groupConnectionId: 'group-ssh' },
+      'preflight.detectRemoteAgents'
+    ],
+    [
+      'explicit host pin',
+      { executionHostId: 'ssh:pinned', groupConnectionId: 'group-ssh' },
+      'preflight.detectRemoteAgents'
+    ],
+    [
+      'inferred repo SSH',
+      {
+        repos: [{ path: '/project/repo', projectGroupId: 'pg-1', executionHostId: 'ssh:repo-ssh' }]
+      },
+      'preflight.detectRemoteAgents'
+    ]
+  ])('resolves an older host folder catalog: %s', async (_label, args, method) => {
+    const client = folderClient(args)
+    await expect(
+      loadMobileNewTabAgentOptions({ client, worktreeId: 'folder:fw-1' })
+    ).resolves.toEqual([{ agent: 'claude', label: 'Claude' }])
+    expect(client.sendRequest.mock.calls.at(-1)?.[0]).toBe(method)
+  })
+
+  it.each([
+    ['missing', { missing: true }],
+    ['duplicate identity', { duplicate: true }],
+    ['group runtime', { groupExecutionHostId: 'runtime:other', groupConnectionId: 'private-ssh' }],
+    [
+      'inferred runtime',
+      {
+        repos: [
+          {
+            path: '/project/repo',
+            projectGroupId: 'pg-1',
+            executionHostId: 'runtime:other',
+            connectionId: 'private-ssh'
+          }
+        ]
+      }
+    ],
+    [
+      'ambiguous',
+      {
+        repos: [
+          { path: '/project/local', projectGroupId: 'pg-1' },
+          { path: '/project/remote', projectGroupId: 'pg-1', connectionId: 'ssh-1' }
+        ]
+      }
+    ],
+    ['other runtime', { executionHostId: 'runtime:other', connectionId: 'server-private-ssh' }]
+  ])('does not probe the wrong host for a %s folder', async (_label, args) => {
+    const client = folderClient(args)
+    await expect(
+      loadMobileNewTabAgentOptions({ client, worktreeId: 'folder:fw-1' })
+    ).rejects.toThrow()
+    expect(client.sendRequest.mock.calls.some(([method]) => method.startsWith('preflight.'))).toBe(
+      false
+    )
+  })
+
+  it('does not fall back to probing locally when an older host refuses the folder catalog', async () => {
+    const client = createClient(async (method) => {
+      if (method === 'settings.get') {
+        return { ok: true, result: { settings: {} } }
+      }
+      return { ok: false, error: { code: 'method_not_found', message: 'Unknown method' } }
+    })
+    await expect(
+      loadMobileNewTabAgentOptions({ client, worktreeId: 'folder:fw-1' })
+    ).rejects.toThrow('Unknown method')
+    expect(client.sendRequest.mock.calls.some(([method]) => method.startsWith('preflight.'))).toBe(
+      false
+    )
+  })
+
+  it('preserves a modern host folder ownership refusal', async () => {
+    await expect(
+      loadMobileNewTabAgentOptions({
+        client: folderClient({ refused: true }),
+        worktreeId: 'folder:fw-1',
+        hostRefusesOtherRuntime: true
+      })
+    ).rejects.toBeInstanceOf(MobileWorkspaceOnOtherRuntimeError)
+  })
+
   it('detects agents locally for the floating workspace without listing repos', async () => {
     const client = createClient(async (method) => {
       if (method === 'settings.get') {
