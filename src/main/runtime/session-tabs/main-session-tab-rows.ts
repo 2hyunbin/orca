@@ -4,7 +4,7 @@
 // focused pane, dirty state and live terminal titles (main's copy of the view lags a debounced
 // save), the rows main's model does not hold (browser, chat, diff and other view-only editor rows)
 // and the facts only the window has (terminal theme, agent status, launch drafts, a markdown
-// view's mode, file id and draft version).
+// view's mode, file id, draft version and untitled flag).
 
 import type { RuntimeMobileSessionSnapshotTab } from '../../../shared/runtime-mobile-session-tab-contracts'
 import { orderIdOf, placeInMainGroups, withStrayIn } from './main-session-tab-group-placement'
@@ -92,7 +92,9 @@ function withWindowFacts(row: Row, windowRow: Row | undefined, rules: MergeRules
       isDirty: windowRow.isDirty,
       mode: windowRow.mode,
       sourceFileId: windowRow.sourceFileId,
-      documentVersion: windowRow.documentVersion
+      documentVersion: windowRow.documentVersion,
+      // The saved session never records untitled; a phone save must not make its file.
+      ...(windowRow.isUntitled ? { isUntitled: true as const } : {})
     }
   }
   if (row.type === 'file' && windowRow?.type === 'file') {
