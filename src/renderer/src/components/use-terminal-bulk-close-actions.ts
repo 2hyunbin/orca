@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useAppStore } from '../store'
+import { needsSavePromptOnClose } from '@/store/slices/editor/buffers/editor-buffer-close-rule'
 import { closeTerminalTab } from './terminal/terminal-tab-actions'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { closeBrowserWorkspaceTabOnHosts } from '@/runtime/browser-workspace-tab-close'
@@ -27,6 +28,7 @@ export function useTerminalBulkCloseActions(
       }
       const state = useAppStore.getState()
       const dirtyFileIds: string[] = []
+      const closingIds = new Set(tabIds)
       for (const id of tabIds) {
         const unifiedTab = (state.unifiedTabsByWorktree[activeWorktreeId] ?? []).find(
           (candidate) => candidate.id === id || candidate.entityId === id
@@ -69,8 +71,7 @@ export function useTerminalBulkCloseActions(
         } else if (
           state.openFiles.some((file) => file.worktreeId === activeWorktreeId && file.id === id)
         ) {
-          const file = state.openFiles.find((candidate) => candidate.id === id)
-          if (file?.isDirty) {
+          if (needsSavePromptOnClose(state, id, closingIds)) {
             dirtyFileIds.push(id)
             continue
           }
@@ -151,10 +152,13 @@ export function useTerminalBulkCloseActions(
       },
       (fileIds) => {
         const selectedIds = new Set(fileIds)
-        const files = useAppStore.getState().openFiles.filter((file) => selectedIds.has(file.id))
-        const dirtyFileIds = files.filter((file) => file.isDirty).map((file) => file.id)
+        const state = useAppStore.getState()
+        const files = state.openFiles.filter((file) => selectedIds.has(file.id))
+        const dirtyFileIds: string[] = []
         for (const file of files) {
-          if (!file.isDirty) {
+          if (needsSavePromptOnClose(state, file.id, selectedIds)) {
+            dirtyFileIds.push(file.id)
+          } else {
             closeFile(file.id)
           }
         }

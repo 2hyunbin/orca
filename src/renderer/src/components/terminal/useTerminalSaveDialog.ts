@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { OpenFile } from '@/store/slices/editor'
+import { needsSavePromptOnClose } from '@/store/slices/editor/buffers/editor-buffer-close-rule'
 import { ORCA_EDITOR_SAVE_AND_CLOSE_EVENT } from '@/components/editor/editor-autosave'
 import { discardEditorFileChangesAndClose } from '@/components/editor/discard-editor-file-changes'
 
@@ -29,8 +30,7 @@ export function useTerminalSaveDialog({
 
   const requestCloseFile = useCallback(
     (fileId: string) => {
-      const file = openFiles.find((openFile) => openFile.id === fileId)
-      if (file?.isDirty) {
+      if (needsSavePromptOnClose({ openFiles }, fileId)) {
         setSaveDialogFileId(fileId)
         return
       }
