@@ -10,6 +10,7 @@ import {
   makeWorkspaceSessionWithHeadlessTerminal
 } from './orca-runtime-test-fixtures.spec'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 describe('terminal rename before renderer graph hydration', () => {
   it.each(['Media Engine Orch', null])(
@@ -147,7 +148,9 @@ describe('terminal view rename characterization', () => {
 })
 
 describe('terminal query erased boundary regressions', () => {
-  it('keeps the cached-null pane failure when a later binding read is valid', () => {
+  // paneOfPty reads the record's pane once, so a value that changes between reads cannot split one
+  // summary (L80); a plain record never does that.
+  it('summarizes from one read of the pane, though a later read would differ', () => {
     class SummaryRuntime extends OrcaRuntimeService {
       summarize() {
         const pty = this.recordPtyWorktree('changing-binding', 'missing', { connected: false })
@@ -159,8 +162,11 @@ describe('terminal query erased boundary regressions', () => {
         })
         const issueHandle = vi.fn(() => 'handle')
         Object.defineProperty(this, 'issuePtyHandle', { value: issueHandle })
-        expect(() => this.buildPtyTerminalSummary(pty, new Map())).toThrow(TypeError)
-        expect(reads).toBeGreaterThanOrEqual(2)
+        expect(this.buildPtyTerminalSummary(pty, new Map())).toMatchObject({
+          orphaned: true,
+          tabId: 'pty:changing-binding'
+        })
+        expect(reads).toBe(ORCA_LAYOUT_OWNER_IS_MAIN ? 0 : 1)
         expect(issueHandle).toHaveBeenCalledExactlyOnceWith(pty)
       }
     }
