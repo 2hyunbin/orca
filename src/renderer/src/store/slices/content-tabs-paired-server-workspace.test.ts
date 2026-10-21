@@ -11,8 +11,8 @@ import { createStoreCascadesMockApi } from './store-cascades-test-harness'
 import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
 
 const mocks = vi.hoisted(() => ({
-  store: null as unknown,
-  hostCalls: [] as { target: RuntimeClientTarget; method: string }[]
+  store: ((): unknown => null)(),
+  hostCalls: ((): { target: RuntimeClientTarget; method: string }[] => [])()
 }))
 
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {

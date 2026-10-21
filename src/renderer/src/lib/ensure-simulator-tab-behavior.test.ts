@@ -157,13 +157,21 @@ function expectNotSurfaced(store: DrawnStore, tab: Tab): void {
   expect(state.activeTabType).not.toBe('simulator')
 }
 
+type MockWorktreeRow = { id: string; hostId?: ExecutionHostId; runtimeOwnerEnvironmentId?: string }
+type MockTabRow = {
+  id: string
+  groupId: string
+  worktreeId?: string
+  executionHostId?: ExecutionHostId
+  contentType: string
+  label?: string
+}
+
 const mockStoreState = vi.hoisted(() => ({
   activeGroupIdByWorktree: {} as Record<string, string>,
-  activeWorkspaceExecutionHostId: null as ExecutionHostId | null,
+  activeWorkspaceExecutionHostId: ((): ExecutionHostId | null => null)(),
   activeWorktreeId: 'wt-1',
-  allWorktrees: vi.fn(
-    () => [] as { id: string; hostId?: ExecutionHostId; runtimeOwnerEnvironmentId?: string }[]
-  ),
+  allWorktrees: vi.fn((): MockWorktreeRow[] => []),
   activateTab: vi.fn(),
   createEmptySplitGroup: vi.fn(),
   createUnifiedTab: vi.fn(),
@@ -187,17 +195,7 @@ const mockStoreState = vi.hoisted(() => ({
   settings: { mobileEmulatorEnabled: true },
   setActiveTab: vi.fn(),
   setActiveTabType: vi.fn(),
-  unifiedTabsByWorktree: {} as Record<
-    string,
-    {
-      id: string
-      groupId: string
-      worktreeId?: string
-      executionHostId?: ExecutionHostId
-      contentType: string
-      label?: string
-    }[]
-  >
+  unifiedTabsByWorktree: ((): Record<string, MockTabRow[]> => ({}))()
 }))
 
 function stubCreatedSimulatorTab(groupId: string): void {
