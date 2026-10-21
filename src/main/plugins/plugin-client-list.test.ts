@@ -52,7 +52,7 @@ function serviceOff(userDataPath: string) {
     workerState: () => ({ state: 'inactive', restarts: 0 }),
     activationError: () => null,
     contentPacks: {
-      vmRecipes: { preview: () => [] },
+      vmRecipes: { preview: () => [], previewMachineProviders: () => [] },
       commands: { preview: () => [] }
     }
   } as unknown as PluginService
