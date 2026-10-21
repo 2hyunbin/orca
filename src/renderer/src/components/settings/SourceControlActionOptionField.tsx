@@ -1,4 +1,8 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '../ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { SelectTrigger, SelectValue } from '../ui/select'
@@ -33,7 +37,8 @@ export function sourceControlActionRouteHint(route: SourceControlActionChoiceRou
       : null
 }
 
-/** The action's free-text arguments, appended to terminal launches only. */
+/** The action's free-text arguments, appended to terminal launches only. An advanced setting: it
+ *  starts collapsed while empty, and opening or closing it saves nothing. */
 export function SourceControlActionExtraArgsField({
   value,
   placeholder,
@@ -45,20 +50,36 @@ export function SourceControlActionExtraArgsField({
   disabled?: boolean
   onChange: (value: string) => void
 }): React.JSX.Element {
+  const [open, setOpen] = useState(() => value.trim() !== '')
+  const label = translate('settings.sourceControl.actionModel.extraArgs', 'Extra CLI arguments')
   return (
-    <SourceControlActionOptionField
-      label={translate('settings.sourceControl.actionModel.extraArgs', 'Extra CLI arguments')}
-      hint={sourceControlActionRouteHint('terminals')}
-    >
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        disabled={disabled}
-        placeholder={placeholder}
-        spellCheck={false}
-        className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
-      />
-    </SourceControlActionOptionField>
+    <Collapsible open={open} onOpenChange={setOpen} className="min-w-0">
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+        >
+          {label}
+          <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-2 pt-1">
+        <Input
+          aria-label={label}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          placeholder={placeholder}
+          spellCheck={false}
+          className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          {sourceControlActionRouteHint('terminals')}
+        </p>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 

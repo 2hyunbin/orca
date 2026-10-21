@@ -4,11 +4,13 @@ import {
   isAgentChatPermissionMode,
   type AgentChatPermissionMode
 } from './agent-chat-permission-mode'
-import { agentArgTerminatorIndex, removeAgentArgOption } from './agent-session-option-agent-args'
+import { removeAgentArgOption } from './agent-session-option-agent-args'
+import { CODEX_TERMINAL_ASK_ARGS } from './codex-permission-policy'
 import { AUTO_TUI_AGENT_ARGS, YOLO_TUI_AGENT_ARGS } from './tui-agent-permissions'
 
 type TerminalPermissionFlags = {
-  /** A mode left out has no terminal flag; `ask` is the CLI's own prompting, so no flag. */
+  /** A mode left out has no terminal flag, so it applies to chats only. Ask is stated, not left to
+   *  the CLI's default, because the user's own config may default to no prompts. */
   modes: Partial<Record<AgentChatPermissionMode, readonly string[]>>
   /** Raw permission flags a saved mode replaces, Agent Permissions' YOLO/Auto arguments included. */
   valueFlags: readonly string[]
@@ -21,7 +23,7 @@ const split = (args: string | undefined): readonly string[] => args?.split(' ') 
 const TERMINAL_PERMISSION_FLAGS: Partial<Record<AgentType, TerminalPermissionFlags>> = {
   claude: {
     modes: {
-      ask: [],
+      ask: ['--permission-mode', 'default'],
       'accept-edits': ['--permission-mode', 'acceptEdits'],
       auto: split(AUTO_TUI_AGENT_ARGS.claude),
       'full-access': split(YOLO_TUI_AGENT_ARGS.claude)
@@ -31,7 +33,7 @@ const TERMINAL_PERMISSION_FLAGS: Partial<Record<AgentType, TerminalPermissionFla
   },
   codex: {
     modes: {
-      ask: [],
+      ask: CODEX_TERMINAL_ASK_ARGS,
       auto: split(AUTO_TUI_AGENT_ARGS.codex),
       'full-access': split(YOLO_TUI_AGENT_ARGS.codex)
     },
@@ -44,12 +46,16 @@ const TERMINAL_PERMISSION_FLAGS: Partial<Record<AgentType, TerminalPermissionFla
     ]
   },
   grok: {
-    modes: { ask: [], 'full-access': split(YOLO_TUI_AGENT_ARGS.grok) },
+    modes: {
+      ask: ['--permission-mode', 'default'],
+      'full-access': split(YOLO_TUI_AGENT_ARGS.grok)
+    },
     valueFlags: ['--permission-mode'],
     booleanFlags: []
   },
+  // Why no Ask: its CLI has no per-launch flag that forces prompts over the user's own setting.
   antigravity: {
-    modes: { ask: [], 'full-access': split(YOLO_TUI_AGENT_ARGS.antigravity) },
+    modes: { 'full-access': split(YOLO_TUI_AGENT_ARGS.antigravity) },
     valueFlags: [],
     booleanFlags: ['--dangerously-skip-permissions']
   }
@@ -79,18 +85,12 @@ export function removeTerminalPermissionArgs(
   if (!flags) {
     return [...tokens]
   }
-  let kept = flags.valueFlags.length
-    ? removeAgentArgOption(agent, tokens, flags.valueFlags)
-    : [...tokens]
+  let kept = removeAgentArgOption(agent, tokens, flags.valueFlags)
   if (agent === 'codex') {
     // Why: Codex also reads its approval and sandbox policy from `-c key=value` overrides.
     kept = removeAgentArgOption(agent, kept, ['-c', '--config'], (value) =>
-      /^(approval_policy|sandbox_mode)=/.test(value ?? '')
+      /^(approval_policy|sandbox_mode|approvals_reviewer)=/.test(value ?? '')
     )
   }
-  const terminator = agentArgTerminatorIndex(agent, kept)
-  return [
-    ...kept.slice(0, terminator).filter((token) => !flags.booleanFlags.includes(token)),
-    ...kept.slice(terminator)
-  ]
+  return removeAgentArgOption(agent, kept, flags.booleanFlags, undefined, false)
 }

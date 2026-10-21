@@ -23,6 +23,8 @@ vi.mock('sonner', () => ({
 }))
 
 import { runSourceControlAgentActionStart } from './runSourceControlAgentActionStart'
+import { getDefaultSettings } from '../../../../shared/constants'
+import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 
 function buildArgs(
   overrides: Partial<Parameters<typeof runSourceControlAgentActionStart>[0]> = {}
@@ -432,6 +434,44 @@ it('executes the actual bound namespace while saving the literal default recipe'
   expect(mocks.onSaveAgentDefault).toHaveBeenLastCalledWith(
     { type: 'global' },
     'resolveComments',
+    recipe
+  )
+})
+
+// Saved to the repository, the copied choice owns the action there, as on every later launch.
+it('launches a recipe being saved to the repository as its next launch will', async () => {
+  vi.clearAllMocks()
+  const base = getDefaultSettings('/tmp')
+  const terra = { agentId: 'codex' as const, model: 'gpt-5.6-terra' }
+  const fixCommitFailure = { agentId: null, commandInputTemplate: '', launchPreferences: terra }
+  const settings = {
+    ...base,
+    sourceControlAi: { ...base.sourceControlAi!, actions: { fixCommitFailure } }
+  }
+  const legacy = { agentArgs: '--model gpt-5.6-sol' }
+  const repo = {
+    id: 'repo-1',
+    sourceControlAi: { actionOverrides: { fixCommitFailure: legacy } }
+  }
+  const shown = resolveSourceControlActionRecipe({ settings, repo, actionId: 'fixCommitFailure' })
+  mocks.launchAgentInNewTab.mockReturnValue({ surface: { kind: 'local-terminal', tabId: 't' } })
+  const agentArgs = '--model gpt-5.6-luna'
+  const recipe = { ...shown, agentArgs }
+  const args = { recipe, agentArgs, settings, repo, saveTargetValue: 'repo', repoId: 'repo-1' }
+
+  await runSourceControlAgentActionStart(buildArgs({ ...args, actionId: 'fixCommitFailure' }))
+
+  expect(shown.launchPreferencesYieldToAgentArgs).toBe(true)
+  expect(mocks.launchAgentInNewTab.mock.lastCall?.[0]).toMatchObject({
+    agentArgs,
+    sessionOptions: { model: 'gpt-5.6-terra' }
+  })
+  expect(mocks.launchAgentInNewTab.mock.lastCall?.[0]).not.toHaveProperty(
+    'sessionOptionsYieldToAgentArgs'
+  )
+  expect(mocks.onSaveAgentDefault).toHaveBeenCalledWith(
+    { type: 'repo', repoId: 'repo-1' },
+    'fixCommitFailure',
     recipe
   )
 })

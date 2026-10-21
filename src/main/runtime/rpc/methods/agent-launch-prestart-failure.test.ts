@@ -43,6 +43,7 @@ type Launch = {
   agent: string
   target: { kind: string; worktree?: string; create?: Readonly<Record<string, unknown>> }
   sessionOptions?: Readonly<Record<string, unknown>>
+  chatOptions?: Readonly<Record<string, string>>
   reuseTerminal?: { handle: string }
   cwd?: string
   surface?: string
@@ -237,6 +238,13 @@ describe('a launch whose terminal fails', () => {
 
   it.each([
     { ...CREATE_LAUNCH, agent: 'opencode', sessionOptions: { model: 'private-proof/model-b' } },
+    // A saved chat choice is what an explicit terminal starts with, so it is refused the same way.
+    {
+      ...CREATE_LAUNCH,
+      agent: 'opencode',
+      surface: 'terminal',
+      chatOptions: { model: 'private-proof/model-b' }
+    },
     {
       ...EXISTING_LAUNCH,
       agent: 'opencode',

@@ -5,6 +5,9 @@ import { normalizeSourceControlAiSettings } from '../../../../shared/source-cont
 import type { RepoSourceControlAiOverrides } from '../../../../shared/source-control-ai-types'
 import type { SourceControlAiRepoUpdate } from '../../../../shared/source-control-ai-recipe-save'
 import { useRepositorySourceControlAiGlobalUx } from './repository-source-control-ai-global-ux'
+import { withRepoAiActionLaunchPreferences } from './repository-source-control-ai-action-agent-draft'
+import { getDefaultSettings } from '../../../../shared/constants'
+import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 
 const source = normalizeSourceControlAiSettings(undefined, undefined)
 
@@ -232,5 +235,39 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     expect(result.current.displayRepoAi.enabled).toBeUndefined()
     expect(result.current.displayRepoAi.actionOverrides?.fixCommitFailure?.agentId).toBe('codex')
     expect(result.current.saveError).toBe('Failed to save Source Control AI settings.')
+  })
+})
+
+describe('a legacy partial repository override', () => {
+  it('keeps the agent it shows and its empty args when its choice is set or reset', () => {
+    const base = getDefaultSettings('/tmp')
+    const terra = { agentId: 'codex' as const, model: 'gpt-5.6-terra' }
+    const fixCommitFailure = {
+      agentId: 'codex' as const,
+      commandInputTemplate: '',
+      launchPreferences: terra
+    }
+    const settings = {
+      ...base,
+      sourceControlAi: { ...base.sourceControlAi!, actions: { fixCommitFailure } }
+    }
+    const legacy = { actionOverrides: { fixCommitFailure: { agentArgs: '' } } }
+    const set = (value?: typeof terra) =>
+      resolveSourceControlActionRecipe({
+        settings,
+        repo: {
+          sourceControlAi: withRepoAiActionLaunchPreferences(
+            legacy,
+            settings,
+            'fixCommitFailure',
+            value
+          )
+        },
+        actionId: 'fixCommitFailure'
+      })
+    const luna = { ...terra, model: 'gpt-5.6-luna' }
+    expect(set(luna)).toMatchObject({ agentId: 'codex', agentArgs: '', launchPreferences: luna })
+    expect(set()).toMatchObject({ agentId: 'codex', agentArgs: '' })
+    expect(set().launchPreferences).toBeUndefined()
   })
 })

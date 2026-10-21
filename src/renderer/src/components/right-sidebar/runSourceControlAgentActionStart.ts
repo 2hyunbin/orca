@@ -9,7 +9,11 @@ import type {
   SourceControlActionRecipe,
   SourceControlLaunchActionId
 } from '../../../../shared/source-control-ai-actions'
-import type { SourceControlAiWriteTarget } from '../../../../shared/source-control-ai-recipe-save'
+import {
+  saveSourceControlActionRecipe,
+  type SourceControlAiWriteTarget
+} from '../../../../shared/source-control-ai-recipe-save'
+import { resolveSourceControlActionRecipe } from '../../../../shared/source-control-ai-operation-policy'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { sourceControlActionRecipeMatchesTarget } from './source-control-action-recipe-match'
@@ -89,8 +93,29 @@ export async function runSourceControlAgentActionStart({
   // Why: `undefined` is what makes the launch fall back to the global Agents arguments;
   // an empty string would beat that fallback and silently suppress them.
   const launchAgentArgs = agentArgsApply ? agentArgs : undefined
+  const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
   // The dialog edits agent, arguments and prompt; the model stays the saved one for that agent.
-  const launchOptions = sourceControlActionLaunchOptions(recipe, selectedAgent)
+  // Why: a recipe being saved launches as it will resolve once saved, so the next launch matches.
+  let launchRecipe = recipe
+  if (saveTarget && settings) {
+    const saved = saveSourceControlActionRecipe({
+      target: saveTarget,
+      settings,
+      repo,
+      actionId,
+      recipe
+    })
+    launchRecipe = resolveSourceControlActionRecipe({
+      settings:
+        'sourceControlAi' in saved
+          ? { ...settings, sourceControlAi: saved.sourceControlAi }
+          : settings,
+      repo:
+        'update' in saved ? { sourceControlAi: saved.update.sourceControlAi ?? undefined } : repo,
+      actionId
+    })
+  }
+  const launchOptions = sourceControlActionLaunchOptions(launchRecipe, selectedAgent)
   const notifyLaunchAccepted = (): void => {
     if (launchAcceptedNotified) {
       return
@@ -156,7 +181,6 @@ export async function runSourceControlAgentActionStart({
     return false
   }
 
-  const saveTarget = resolveSourceControlAgentSaveTarget(saveTargetValue, repoId)
   const launchRecipeAlreadySaved = Boolean(
     saveTarget &&
     sourceControlActionRecipeMatchesTarget({

@@ -110,22 +110,7 @@ function resolveModelOptionLaunch(
   const { model, options: modelOptions } = launchOptionsFor(catalog, modelId)
   const appliedValues: Record<string, SessionOptionValue> = {}
   const args: string[] = []
-  const modelValues = Object.fromEntries(
-    modelOptions.flatMap((option) => {
-      const explicitValue = decodeCatalogOptionValue(option.kind, values[option.id])
-      if (explicitValue !== undefined) {
-        if (
-          !model &&
-          option.kind.type === 'select' &&
-          !option.kind.choices.some((choice) => choice.value === explicitValue)
-        ) {
-          return []
-        }
-        return [[option.id, explicitValue]]
-      }
-      return model && includeCatalogDefaults ? [[option.id, option.kind.defaultValue]] : []
-    })
-  )
+  const modelValues = launchModelValues(model, modelOptions, values, includeCatalogDefaults)
   const modelOverridden =
     modelId !== null && isOverriddenByAgentArgs(catalog.modelApply, trailingAgentArgs)
   const appliesModel = Boolean(modelId && catalog.modelApply.launchArgs && !modelOverridden)
@@ -161,4 +146,46 @@ function resolveModelOptionLaunch(
     appliedValues[option.id] = value
   }
   return { args, appliedValues }
+}
+
+function launchModelValues(
+  model: CatalogModel | null,
+  options: readonly CatalogOption[],
+  values: Readonly<Record<string, unknown>>,
+  includeCatalogDefaults: boolean
+): Record<string, SessionOptionValue> {
+  return Object.fromEntries(
+    options.flatMap((option) => {
+      const raw = values[option.id]
+      const explicitValue = decodeCatalogOptionValue(
+        option.kind,
+        typeof raw === 'string' || typeof raw === 'boolean' ? raw : undefined
+      )
+      if (explicitValue !== undefined) {
+        if (
+          !model &&
+          option.kind.type === 'select' &&
+          !option.kind.choices.some((choice) => choice.value === explicitValue)
+        ) {
+          return []
+        }
+        return [[option.id, explicitValue]]
+      }
+      return model && includeCatalogDefaults ? [[option.id, option.kind.defaultValue]] : []
+    })
+  )
+}
+
+/** The model id a launch passes, with the options its argv composes into it (Cursor) folded in. */
+export function composeAgentLaunchModel(
+  agent: AgentType,
+  values: Readonly<Record<string, unknown>>
+): string | undefined {
+  const modelId = typeof values.model === 'string' ? values.model.trim() : ''
+  const catalog = getAgentSessionOptionLaunchCatalog(agent)
+  if (!modelId || !catalog?.composeModelValue) {
+    return modelId || undefined
+  }
+  const { model, options } = launchOptionsFor(catalog, modelId)
+  return catalog.composeModelValue(modelId, launchModelValues(model, options, values, false))
 }

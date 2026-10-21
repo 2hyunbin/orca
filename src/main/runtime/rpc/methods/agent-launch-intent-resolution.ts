@@ -5,7 +5,7 @@
 
 import type { AgentLaunchIntent, AgentLaunchTarget } from '../../../../shared/agent-launch-intent'
 import type { OrcaRuntimeService } from '../../orca-runtime'
-import { assertOpenCodeModelLaunchPreferencesAbsent } from '../../../opencode/opencode-model-startup-plan'
+import { assertTerminalLaunchAdmissible } from '../../../agent-launch/agent-launch-surface-factories'
 import type { AgentLaunchParams } from '../../../../shared/rpc-contract/agent-launch-params'
 import type { EarlyAgentLaunchTab } from './agent-launch-tab-publication'
 
@@ -93,9 +93,7 @@ export async function resolveUnlaunchedIntent(
   runtime: OrcaRuntimeService,
   early: EarlyAgentLaunchTab | null
 ): Promise<AgentLaunchIntent> {
-  if (params.reuseTerminal || params.target.kind === 'create-worktree') {
-    assertOpenCodeModelLaunchPreferencesAbsent(params.agent, params.sessionOptions)
-  }
+  assertTerminalLaunchAdmissible(params)
   const intent = await agentLaunchIntent(params, runtime, early?.paneKey)
   await validateReusedTerminal(intent, runtime)
   return intent

@@ -146,7 +146,31 @@ describe('a saved permission mode on terminals', () => {
       '--dangerously-skip-permissions',
       "'--permission-mode' 'acceptEdits'"
     ],
-    ['claude', 'ask', '--permission-mode auto --verbose', "'--verbose'"],
+    [
+      'claude',
+      'ask',
+      '--permission-mode auto --verbose',
+      "'--verbose' '--permission-mode' 'default'"
+    ],
+    // A required value that looks like a permission flag, and a positional after one, both stay.
+    [
+      'claude',
+      'ask',
+      "--append-system-prompt '--dangerously-skip-permissions' --dangerously-skip-permissions hi",
+      "'--append-system-prompt' '--dangerously-skip-permissions' 'hi' '--permission-mode' 'default'"
+    ],
+    [
+      'claude',
+      'ask',
+      '-- --dangerously-skip-permissions',
+      "'--permission-mode' 'default' '--' '--dangerously-skip-permissions'"
+    ],
+    [
+      'codex',
+      'ask',
+      '-a never -s danger-full-access --yolo -c approvals_reviewer=auto_review -c model_verbosity=low',
+      `'-c' 'model_verbosity=low' '-a' 'on-request' '-s' 'read-only' '-c' 'approvals_reviewer="user"'`
+    ],
     ['codex', 'auto', '--dangerously-bypass-approvals-and-sandbox', "'--approve-for-me'"],
     [
       'codex',
@@ -154,8 +178,9 @@ describe('a saved permission mode on terminals', () => {
       '-a never -c sandbox_mode=read-only',
       "'--dangerously-bypass-approvals-and-sandbox'"
     ],
-    ['grok', 'ask', '--permission-mode bypassPermissions', ''],
+    ['grok', 'ask', '--permission-mode bypassPermissions', "'--permission-mode' 'default'"],
     // No terminal flag for these modes: the raw arguments stay exactly as they were.
+    ['antigravity', 'ask', '--dangerously-skip-permissions', "'--dangerously-skip-permissions'"],
     [
       'antigravity',
       'accept-edits',

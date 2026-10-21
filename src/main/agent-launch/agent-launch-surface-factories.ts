@@ -7,6 +7,9 @@
 import type { AgentLaunchIntent, AgentLaunchPrompt } from '../../shared/agent-launch-intent'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import type { TuiAgent } from '../../shared/tui-agent'
+import type { AgentLaunchParams } from '../../shared/rpc-contract/agent-launch-params'
+import { toAgentLaunchPreferences } from '../../shared/agent-launch-preferences'
+import { assertOpenCodeModelLaunchPreferencesAbsent } from '../opencode/opencode-model-startup-plan'
 
 /** How a surface is built once the executor has decided which one. Injected because an
  *  orchestration worker's session carries a redrive subscription and a mailbox a plain launch
@@ -156,12 +159,30 @@ export type AgentLaunchWorkspaceFactory = {
   }): Promise<{ worktreeId: string; workspacePath?: string; connectionId: string | null }>
 }
 
+/** The options a terminal leg starts with: a caller's saved chat choice applies to it too. */
+function terminalLaunchOptions(intent: Pick<AgentLaunchIntent, 'sessionOptions' | 'chatOptions'>) {
+  return intent.sessionOptions ?? intent.chatOptions
+}
+
+/** Refuses, before anything exists, an OpenCode terminal its host cannot verify, read as that
+ *  terminal will receive it; the chat choice counts only where the terminal is already certain. */
+export function assertTerminalLaunchAdmissible(
+  intent: AgentLaunchIntent | AgentLaunchParams
+): void {
+  if (intent.reuseTerminal || intent.target.kind === 'create-worktree') {
+    const terminal = intent.reuseTerminal || intent.surface === 'terminal'
+    const options = terminal ? terminalLaunchOptions(intent) : intent.sessionOptions
+    const preferences = toAgentLaunchPreferences(options, intent.agent)
+    assertOpenCodeModelLaunchPreferencesAbsent(intent.agent, preferences)
+  }
+}
+
 /** What every route that builds a terminal agent passes on, so the startup terminal of a new
  *  workspace and the terminal of an existing one start the same agent. */
 export function terminalLaunchInputs(intent: AgentLaunchIntent) {
   return {
-    // A caller's saved chat choice applies to the terminal too; the converter keeps what has a flag.
-    options: intent.sessionOptions ?? intent.chatOptions,
+    // Projected for this agent by each terminal builder, which keeps only what has a flag.
+    options: terminalLaunchOptions(intent),
     // `null` is a value the caller meant, so this tests for absence rather than falsiness.
     ...(intent.agentArgs !== undefined ? { agentArgs: intent.agentArgs } : {}),
     ...(intent.cwd ? { cwd: intent.cwd } : {}),

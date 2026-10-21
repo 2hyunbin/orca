@@ -115,7 +115,7 @@ export async function planPaneAgentLaunch(ctx: PtyIpcSpawnState): Promise<void> 
   if (intent.target.kind !== 'existing') {
     throw new Error('agent_launch_request_invalid')
   }
-  const launchPreferences = toAgentLaunchPreferences(intent.sessionOptions)
+  const launchPreferences = toAgentLaunchPreferences(intent.sessionOptions, intent.agent)
   const planned = await runtime.planAgentPaneLaunch(intent.target.worktree, {
     startupAgent: intent.agent,
     ...(intent.agentArgs !== undefined ? { agentArgs: intent.agentArgs } : {}),

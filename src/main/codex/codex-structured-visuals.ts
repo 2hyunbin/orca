@@ -7,7 +7,7 @@ import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import { isCodexAppServerRequestError } from './codex-app-server-request-error'
 import { isCodexMethodNotFoundError } from './codex-app-server-session'
-import type { CodexStructuredPermissionPolicy } from './codex-structured-permission-policy'
+import type { CodexStructuredPermissionPolicy } from '../../shared/codex-permission-policy'
 
 /** Why short: both requests answer from local state in milliseconds, and the user's first prompt
  *  waits behind them; past this the thread opens without whatever has not answered. */
