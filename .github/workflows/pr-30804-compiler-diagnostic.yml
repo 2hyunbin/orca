@@ -1,0 +1,69 @@
+name: PR 30804 compiler diagnostic
+on:
+  push:
+    branches: [brennanb2025/bug-terminal-pane-remains-stuck-in-chatview-when]
+    paths: [config/scripts/pr-30804-compiler-diagnostic.mjs]
+permissions:
+  contents: read
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+jobs:
+  memory:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 20
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: none
+          node-version: '24'
+      - run: node config/scripts/pr-30804-compiler-diagnostic.mjs strict
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pr-30804-strict-memory
+          path: |
+            .build/pr-30804-compiler-diagnostic/*.json
+            .build/pr-30804-compiler-diagnostic/*.resources.txt
+      - run: node config/scripts/pr-30804-compiler-diagnostic.mjs head-node
+        if: always()
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pr-30804-head-node-memory
+          path: |
+            .build/pr-30804-compiler-diagnostic/*.json
+            .build/pr-30804-compiler-diagnostic/*.resources.txt
+      - run: node config/scripts/pr-30804-compiler-diagnostic.mjs baseline-node
+        if: always()
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pr-30804-baseline-node-memory
+          path: |
+            .build/pr-30804-compiler-diagnostic/*.json
+            .build/pr-30804-compiler-diagnostic/*.resources.txt
+  windows-probe:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 20
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: none
+      - run: node config/scripts/pr-30804-compiler-diagnostic.mjs windows-probe
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pr-30804-windows-baseline-probe
+          path: |
+            .build/pr-30804-compiler-diagnostic/*.json
+            .build/pr-30804-compiler-diagnostic/*.resources.txt
