@@ -3824,8 +3824,10 @@
             "connecting": "Conectando…",
             "searchSshHosts": "Buscar hosts SSH…",
             "noMatchingSshHosts": "Ningún host SSH coincide.",
-            "moreSshHosts_one": "{{count}} host SSH más. Búscalo por nombre.",
-            "moreSshHosts_other": "{{count}} hosts SSH más. Busca por nombre para encontrar uno.",
+            "moreSshHostMatches_one": "{{count}} coincidencia más. Sigue escribiendo para acotar.",
+            "moreSshHostMatches_other": "{{count}} coincidencias más. Sigue escribiendo para acotar.",
+            "moreSshHosts_one": "Buscar {{count}} host SSH más…",
+            "moreSshHosts_other": "Buscar entre {{count}} hosts SSH más…",
             "runtime_unavailable_transport_up": "Orca no disponible",
             "runtime_workspace_window_closed": "Ventana del espacio de trabajo cerrada"
           },

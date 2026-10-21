@@ -24,8 +24,12 @@ import {
   runtimePairingRepairRoute
 } from '../../../../shared/runtime-environments'
 import { RuntimeHostStatusRow } from './RuntimeHostStatusRow'
-import { connectedHostCountLabel, connectingHostsLabel } from './ssh-status-segment-copy'
-import { SshStatusMenuHostSearch } from './SshStatusMenuHostSearch'
+import {
+  connectedHostCountLabel,
+  connectingHostsLabel,
+  moreSshHostsLabel
+} from './ssh-status-segment-copy'
+import { SshHostFindPopover } from './SshHostFindPopover'
 import { splitSshStatusMenuRows } from './ssh-status-menu-rows'
 import { SshTargetStatusRow } from './SshTargetStatusRow'
 import { syncSshConfigTargetsPassively } from '../../lib/ssh-config-passive-sync'
@@ -63,8 +67,8 @@ export function SshStatusSegment({
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [hostQuery, setHostQuery] = useState('')
-  const hostSearchInputRef = useRef<HTMLInputElement>(null)
+  const [findOpen, setFindOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const [repairTarget, setRepairTarget] = useState<{ id: string; label: string } | null>(null)
 
   const projectHostIds = useMemo(
@@ -140,11 +144,8 @@ export function SshStatusSegment({
   const {
     connected: connectedTargets,
     inactive: disconnectedTargets,
-    hiddenIdleCount,
-    queryMatched
-  } = splitSshStatusMenuRows(targets, { projectHostIds, query: hostQuery })
-  // Why in the menu and not a Settings link: web clients connect hosts here but have no SSH pane.
-  const showHostSearch = hostQuery !== '' || hiddenIdleCount > 0
+    hiddenIdleCount
+  } = splitSshStatusMenuRows(targets, { projectHostIds })
   const connectRuntimeHost = useCallback(
     async (environmentId: string): Promise<void> => {
       if (await connectRuntimeHostAndReloadProjects(environmentId)) {
@@ -194,9 +195,6 @@ export function SshStatusSegment({
       open={menuOpen}
       onOpenChange={(open) => {
         setMenuOpen(open)
-        if (!open) {
-          setHostQuery('')
-        }
         if (open) {
           void hydrateRuntimeEnvironmentStatuses()
           void syncSshConfigTargetsPassively()
@@ -206,6 +204,7 @@ export function SshStatusSegment({
     >
       <DropdownMenuTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           className="inline-flex items-center gap-1.5 cursor-pointer rounded px-1 py-0.5 hover:bg-accent/70"
           aria-label={translate(
@@ -262,24 +261,11 @@ export function SshStatusSegment({
         align="start"
         sideOffset={8}
         className="w-[min(20rem,calc(100vw-1rem))]"
-        onKeyDown={(event) => {
-          // Why: the search box is not a menu item, so arrows can't reach it; typing from the
-          // menu goes there instead of Radix typeahead.
-          const input = hostSearchInputRef.current
-          if (
-            !input ||
-            event.target === input ||
-            event.key.length !== 1 ||
-            event.key === ' ' ||
-            event.metaKey ||
-            event.ctrlKey ||
-            event.altKey
-          ) {
-            return
+        onCloseAutoFocus={(event) => {
+          // Why: the host search takes focus as the menu closes; the trigger must not take it back.
+          if (findOpen) {
+            event.preventDefault()
           }
-          event.preventDefault()
-          setHostQuery((query) => query + event.key)
-          input.focus()
         }}
       >
         <div className="px-2 pt-1.5 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
@@ -314,15 +300,15 @@ export function SshStatusSegment({
             onRepair={() => openRepair(host)}
           />
         ))}
-        <SshStatusMenuHostSearch
-          rows={disconnectedTargets}
-          searchable={showHostSearch}
-          query={hostQuery}
-          onQueryChange={setHostQuery}
-          hiddenIdleCount={hiddenIdleCount}
-          queryMatched={queryMatched}
-          inputRef={hostSearchInputRef}
-        />
+        {disconnectedTargets.map((t) => (
+          <SshTargetStatusRow key={t.id} targetId={t.id} label={t.label} status={t.status} />
+        ))}
+        {hiddenIdleCount > 0 ? (
+          // Why a search and not a Settings link: web clients connect hosts here but have no SSH pane.
+          <DropdownMenuItem onSelect={() => setFindOpen(true)}>
+            {moreSshHostsLabel(hiddenIdleCount)}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {
@@ -337,6 +323,12 @@ export function SshStatusSegment({
           )}
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <SshHostFindPopover
+        open={findOpen}
+        onOpenChange={setFindOpen}
+        targets={targets}
+        anchorRef={triggerRef}
+      />
       {repairTarget && (
         <RuntimeRepairDialog
           open

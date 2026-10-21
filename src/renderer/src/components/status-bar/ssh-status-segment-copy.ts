@@ -22,12 +22,12 @@ export function moreSshHostsLabel(count: number): string {
   return count === 1
     ? translate(
         'auto.components.status.bar.SshStatusSegment.moreSshHosts_one',
-        '{{count}} more SSH host. Search by name to find it.',
+        'Find {{count}} more SSH host…',
         { count }
       )
     : translate(
         'auto.components.status.bar.SshStatusSegment.moreSshHosts_other',
-        '{{count}} more SSH hosts. Search by name to find one.',
+        'Find among {{count}} more SSH hosts…',
         { count }
       )
 }
@@ -44,4 +44,18 @@ export function noMatchingSshHostsLabel(): string {
     'auto.components.status.bar.SshStatusSegment.noMatchingSshHosts',
     'No SSH hosts match.'
   )
+}
+
+export function moreSshHostMatchesLabel(count: number): string {
+  return count === 1
+    ? translate(
+        'auto.components.status.bar.SshStatusSegment.moreSshHostMatches_one',
+        '{{count}} more match. Keep typing to narrow it down.',
+        { count }
+      )
+    : translate(
+        'auto.components.status.bar.SshStatusSegment.moreSshHostMatches_other',
+        '{{count}} more matches. Keep typing to narrow them down.',
+        { count }
+      )
 }

@@ -3938,8 +3938,10 @@
             "connecting": "Connexion…",
             "searchSshHosts": "Rechercher des hôtes SSH…",
             "noMatchingSshHosts": "Aucun hôte SSH ne correspond.",
-            "moreSshHosts_one": "{{count}} autre hôte SSH. Recherchez-le par son nom.",
-            "moreSshHosts_other": "{{count}} autres hôtes SSH. Recherchez par nom pour en trouver un.",
+            "moreSshHostMatches_one": "{{count}} autre résultat. Continuez à taper pour affiner.",
+            "moreSshHostMatches_other": "{{count}} autres résultats. Continuez à taper pour affiner.",
+            "moreSshHosts_one": "Trouver {{count}} autre hôte SSH…",
+            "moreSshHosts_other": "Chercher parmi {{count}} autres hôtes SSH…",
             "runtime_unavailable_transport_up": "Orque indisponible"
           },
           "StatusBar": {

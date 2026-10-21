@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { splitSshStatusMenuRows, type SshStatusMenuTarget } from './ssh-status-menu-rows'
+import {
+  findSshHostMatches,
+  splitSshStatusMenuRows,
+  type SshStatusMenuTarget
+} from './ssh-status-menu-rows'
 
 function target(id: string, status: SshStatusMenuTarget['status']): SshStatusMenuTarget {
   return { id, label: id, status }
@@ -31,28 +35,37 @@ describe('splitSshStatusMenuRows', () => {
     expect(rows.hiddenIdleCount).toBe(1)
   })
 
-  it('narrows every not-connected host by a case-insensitive label match', () => {
+  it('keeps config order and hides nothing at or under the limit', () => {
     const rows = splitSshStatusMenuRows(
-      [
-        target('web-1', 'disconnected'),
-        target('db-1', 'disconnected'),
-        target('db-2', 'error'),
-        target('web-2', 'auth-failed'),
-        target('db-3', 'connected')
-      ],
-      { query: ' WEB ' }
+      [target('a', 'disconnected'), target('b', 'error'), target('c', 'disconnected')],
+      { projectHostIds: new Set(['c']), idleRowLimit: 2 }
     )
-    expect(rows.connected.map((row) => row.id)).toEqual(['db-3'])
-    expect(rows.inactive.map((row) => row.id)).toEqual(['web-2', 'web-1'])
-    expect(rows.queryMatched).toBe(true)
-    expect(splitSshStatusMenuRows([target('a', 'disconnected')], { query: 'z' }).queryMatched).toBe(
-      false
-    )
+    expect(rows.hiddenIdleCount).toBe(0)
+    expect(rows.inactive.map((row) => row.id)).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('findSshHostMatches', () => {
+  it('ranks an exact name ahead of any number of prefix and substring matches', () => {
+    const targets = [
+      ...Array.from({ length: 30 }, (_, index) => target(`prod-${index}`, 'disconnected')),
+      target('east-prod', 'disconnected'),
+      target('PROD', 'disconnected')
+    ]
+    const { matches, moreCount } = findSshHostMatches(targets, ' prod ', 5)
+    expect(matches[0]?.id).toBe('PROD')
+    expect(matches).toHaveLength(5)
+    expect(moreCount).toBe(27)
+    expect(findSshHostMatches(targets, 'east', 5).matches.map((row) => row.id)).toEqual([
+      'east-prod'
+    ])
   })
 
-  it('hides nothing at or under the limit', () => {
-    const rows = splitSshStatusMenuRows([target('a', 'disconnected')], { idleRowLimit: 1 })
-    expect(rows.hiddenIdleCount).toBe(0)
-    expect(rows.inactive).toHaveLength(1)
+  it('leaves out connected hosts, which the menu already lists', () => {
+    const { matches } = findSshHostMatches(
+      [target('web-1', 'connected'), target('web-2', 'disconnected')],
+      'web'
+    )
+    expect(matches.map((row) => row.id)).toEqual(['web-2'])
   })
 })

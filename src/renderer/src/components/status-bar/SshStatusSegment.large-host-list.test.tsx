@@ -8,7 +8,7 @@ import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-s
 import type { SshConnectionState, SshConnectionStatus } from '../../../../shared/ssh-types'
 import type { Repo } from '../../../../shared/repo-types'
 import { SshStatusSegment } from './SshStatusSegment'
-import { SSH_STATUS_MENU_IDLE_ROW_LIMIT } from './ssh-status-menu-rows'
+import { SSH_HOST_FIND_RESULT_LIMIT, SSH_STATUS_MENU_IDLE_ROW_LIMIT } from './ssh-status-menu-rows'
 
 function noSettings(): GlobalSettings | null {
   return null
@@ -40,14 +40,7 @@ vi.mock('@/components/ui/dropdown-menu', () => {
   const content = ({ children }: PropsWithChildren) => <div>{children}</div>
   return {
     DropdownMenu: content,
-    DropdownMenuContent: ({
-      children,
-      onKeyDown
-    }: PropsWithChildren<{ onKeyDown?: React.KeyboardEventHandler<HTMLDivElement> }>) => (
-      <div data-testid="menu-content" tabIndex={-1} onKeyDown={onKeyDown}>
-        {children}
-      </div>
-    ),
+    DropdownMenuContent: content,
     DropdownMenuItem: ({ children, onSelect }: PropsWithChildren<{ onSelect?: () => void }>) => (
       <div role="menuitem" onClick={onSelect}>
         {children}
@@ -108,77 +101,39 @@ describe('the status menu with a very large imported SSH host list', () => {
     expect(screen.getByText('node-12345')).toBeTruthy()
   })
 
-  it('says how many idle hosts are hidden and finds any of them by name', () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
-    const hidden = IMPORTED_HOST_COUNT - 2 - SSH_STATUS_MENU_IDLE_ROW_LIMIT
-    expect(screen.getByText(`${hidden} more SSH hosts. Search by name to find one.`)).toBeTruthy()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search SSH hosts…' }), {
-      target: { value: 'NODE-13691' }
-    })
-    expect(screen.getByText('node-13691')).toBeTruthy()
-    expect(screen.queryByText('node-00000')).toBeNull()
-    // Connected hosts stay listed while searching; the reconnecting one does not match.
-    expect(screen.getByText('node-09000')).toBeTruthy()
-    expect(screen.queryByText(/more SSH hosts/)).toBeNull()
-  })
-
-  it('sends letters typed in the menu to the host search', () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
-    fireEvent.keyDown(screen.getByTestId('menu-content'), { key: 'n' })
-    const search = screen.getByRole<HTMLInputElement>('combobox', { name: 'Search SSH hosts…' })
-    expect(search.value).toBe('n')
-    expect(document.activeElement).toBe(search)
-  })
-
-  it('moves the active result with arrows and connects it with Enter', async () => {
-    const connect = vi.fn(async () => undefined)
-    vi.stubGlobal('api', { ssh: { connect } })
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
-    const search = screen.getByRole('combobox', { name: 'Search SSH hosts…' })
-    fireEvent.change(search, { target: { value: 'node-1369' } })
-    fireEvent.keyDown(search, { key: 'ArrowDown' })
-    const active = screen.getByRole('option', { selected: true })
-    expect(active.textContent).toContain('node-13691')
-    expect(search.getAttribute('aria-activedescendant')).toBe(active.id)
-    fireEvent.keyDown(search, { key: 'Enter' })
-    await vi.waitFor(() => expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-13691' }))
-    vi.unstubAllGlobals()
-  })
-
-  it('never lets Enter reach a failed host the search did not match', async () => {
+  it('offers a search for the hidden hosts that connects the exact host typed', async () => {
     const connect = vi.fn(async () => undefined)
     vi.stubGlobal('api', { ssh: { connect } })
     state.sshConnectionStates.set('ssh-5', connectionState('ssh-5', 'auth-failed'))
-    const scrollIntoView = vi
-      .spyOn(Element.prototype, 'scrollIntoView')
-      .mockImplementation(() => {})
     render(<SshStatusSegment compact={false} iconOnly={false} />)
-    const search = screen.getByRole('combobox', { name: 'Search SSH hosts…' })
+    const hidden = IMPORTED_HOST_COUNT - 3 - SSH_STATUS_MENU_IDLE_ROW_LIMIT
+    fireEvent.click(screen.getByRole('menuitem', { name: `Find among ${hidden} more SSH hosts…` }))
+    const search = await screen.findByRole('combobox')
     fireEvent.change(search, { target: { value: 'node-13691' } })
-    expect(screen.queryByText('node-00005')).toBeNull()
-    fireEvent.keyDown(search, { key: 'ArrowDown' })
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(screen.getByRole('option', { name: /node-13691/ })).toBeTruthy()
+    expect(screen.queryByRole('option', { name: /node-00005/ })).toBeNull()
     fireEvent.keyDown(search, { key: 'Enter' })
     await vi.waitFor(() => expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-13691' }))
     expect(connect).toHaveBeenCalledTimes(1)
-    scrollIntoView.mockRestore()
     vi.unstubAllGlobals()
   })
 
-  it('says when no idle host matches the search', () => {
+  it('caps the search results and says how many more match', async () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
-    fireEvent.change(screen.getByRole('combobox', { name: 'Search SSH hosts…' }), {
-      target: { value: 'no-such-host' }
-    })
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Find among/ }))
+    const search = await screen.findByRole('combobox')
+    fireEvent.change(search, { target: { value: 'node-1' } })
+    expect(screen.getAllByRole('option').length).toBeLessThanOrEqual(SSH_HOST_FIND_RESULT_LIMIT)
+    expect(screen.getByText(/more matches\. Keep typing/)).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'no-such-host' } })
     expect(screen.getByText('No SSH hosts match.')).toBeTruthy()
-    expect(screen.queryAllByRole('button', { name: 'Connect' })).toHaveLength(0)
   })
 
-  it('shows no search box when every idle host fits', () => {
+  it('offers no search when every idle host fits', () => {
     state.sshTargetLabels = new Map([['ssh-1', 'solo']])
     state.sshConnectionStates = new Map()
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('solo')).toBeTruthy()
-    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /^Find/ })).toBeNull()
   })
 })

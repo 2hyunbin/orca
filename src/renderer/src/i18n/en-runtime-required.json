@@ -2522,8 +2522,10 @@
             "d09ec41831": "Remote Hosts",
             "fbb3f9f05e": "conflict",
             "fd9a3c600e": "error",
-            "moreSshHosts_one": "{{count}} more SSH host. Search by name to find it.",
-            "moreSshHosts_other": "{{count}} more SSH hosts. Search by name to find one."
+            "moreSshHostMatches_one": "{{count}} more match. Keep typing to narrow it down.",
+            "moreSshHostMatches_other": "{{count}} more matches. Keep typing to narrow them down.",
+            "moreSshHosts_one": "Find {{count}} more SSH host…",
+            "moreSshHosts_other": "Find among {{count}} more SSH hosts…"
           },
           "StatusBar": {
             "06741a2f3d": "Open MiniMax usage details",

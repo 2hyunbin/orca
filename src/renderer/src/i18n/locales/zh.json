@@ -3829,8 +3829,10 @@
             "connecting": "正在连接…",
             "searchSshHosts": "搜索 SSH 主机…",
             "noMatchingSshHosts": "没有匹配的 SSH 主机。",
-            "moreSshHosts_one": "另有 {{count}} 个 SSH 主机，请按名称搜索。",
-            "moreSshHosts_other": "另有 {{count}} 个 SSH 主机，请按名称搜索。",
+            "moreSshHostMatches_one": "还有 {{count}} 个匹配项，继续输入以缩小范围。",
+            "moreSshHostMatches_other": "还有 {{count}} 个匹配项，继续输入以缩小范围。",
+            "moreSshHosts_one": "在另外 {{count}} 个 SSH 主机中查找…",
+            "moreSshHosts_other": "在另外 {{count}} 个 SSH 主机中查找…",
             "runtime_unavailable_transport_up": "Orca 不可用",
             "runtime_workspace_window_closed": "工作区窗口已关闭"
           },

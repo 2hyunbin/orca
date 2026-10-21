@@ -16,7 +16,7 @@ import {
 } from '@/ssh/ssh-connect-in-flight'
 import type { SshConnectionStatus } from '../../../../shared/ssh-types'
 
-/** One connect attempt from the hosts menu, from its Connect button or Enter in its search. */
+/** One connect attempt from the hosts menu: a row's Connect button or a pick in its host search. */
 export async function connectSshTargetFromStatusMenu(targetId: string): Promise<void> {
   if (isSshConnectInFlight(targetId)) {
     return
@@ -39,16 +39,11 @@ export async function connectSshTargetFromStatusMenu(targetId: string): Promise<
 export function SshTargetStatusRow({
   targetId,
   label,
-  status,
-  optionId,
-  active
+  status
 }: {
   targetId: string
   label: string
   status: SshConnectionStatus
-  /** Set when the row is a result of the menu's host search (a listbox option). */
-  optionId?: string
-  active?: boolean
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const mountedRef = useMountedRef()
@@ -87,13 +82,7 @@ export function SshTargetStatusRow({
   }, [mountedRef, recordFeatureInteraction, targetId])
 
   return (
-    <div
-      id={optionId}
-      role={optionId ? 'option' : undefined}
-      aria-selected={optionId ? active === true : undefined}
-      data-active={active ? 'true' : undefined}
-      className="flex items-center gap-2.5 rounded-sm px-2 py-1.5 data-[active=true]:bg-accent"
-    >
+    <div className="flex items-center gap-2.5 px-2 py-1.5">
       <span className={`size-1.5 shrink-0 rounded-full ${statusColor(status)}`} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[12px] font-medium">{label}</div>
