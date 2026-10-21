@@ -381,6 +381,7 @@ describe('CLI identity resume through the existing launch owner', () => {
       const later = useAppStore
         .getState()
         .createUnifiedTab('wt-1', 'editor', { id: 'R', entityId: 'R' })
+      await redrawFromMain()
       const beforeNoop = useAppStore.getState()
       move({
         kind: 'reorder',
@@ -408,6 +409,7 @@ describe('CLI identity resume through the existing launch owner', () => {
         entityId: 'other',
         split: { splitDirection: 'right', sourceGroupId: e.groupId }
       })
+      await redrawFromMain()
       clearWebSessionFocusIntent(structuredAgentSessionFocusOwner({ kind: 'local' }), 'wt-1')
       if (first === 'inventory') {
         applyStructuredSessionTabSnapshots([snapshot(sessionId)])
