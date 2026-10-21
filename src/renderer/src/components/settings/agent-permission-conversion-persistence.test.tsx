@@ -7,6 +7,7 @@ import { useAppStore } from '../../store'
 import { AgentsPane } from './AgentsPane'
 import { persist } from './settings-persistence-test-fixture'
 import { TooltipProvider } from '../ui/tooltip'
+import { resolveTuiAgentLaunchArgs } from '../../../../shared/tui-agent-launch-defaults'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 vi.mock('@/hooks/useDetectedAgents', () => ({
@@ -51,7 +52,10 @@ function argumentsInput(label: string): HTMLInputElement {
   if (!(row instanceof HTMLElement)) {
     throw new Error('Missing agent row')
   }
-  fireEvent.click(within(row).getByRole('button', { name: 'Expand agent settings' }))
+  const expand = within(row).queryByRole('button', { name: 'Expand agent settings' })
+  if (expand) {
+    fireEvent.click(expand)
+  }
   const input = within(row).getByPlaceholderText('No default arguments')
   if (!(input instanceof HTMLInputElement)) {
     throw new Error('Missing Arguments input')
@@ -59,14 +63,64 @@ function argumentsInput(label: string): HTMLInputElement {
   return input
 }
 
+it.each([
+  '--model opus --dangerously-skip-permissions',
+  '--dangerously-skip-permissions --model opus'
+])('retires the acknowledged recipe %s before chip removal and neutral events', async (recipe) => {
+  savedArguments('--model opus', 'full-access')
+  render(<AgentsHarness />)
+  const input = argumentsInput('Claude')
+  const remove = () =>
+    screen.getByRole('button', { name: /Remove .* and use Claude's own settings/ })
+  fireEvent.click(remove())
+  await waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+  const user = userEvent.setup()
+  await user.click(input)
+  await user.clear(input)
+  await user.type(input, recipe)
+  await user.keyboard('{Enter}')
+  await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
+  expect(persist).toHaveBeenCalledTimes(2)
+  expect(useAppStore.getState().settings?.agentPermissionOverrides?.claude).toBe('full-access')
+  expect(resolveTuiAgentLaunchArgs('claude', useAppStore.getState().settings ?? {})).toBe(
+    '--dangerously-skip-permissions --model opus'
+  )
+  expect(input.value).toBe('--model opus')
+  fireEvent.click(remove())
+  await waitFor(() => expect(persist).toHaveBeenCalledTimes(3))
+  await user.click(input)
+  await user.tab()
+  await user.click(input)
+  await user.keyboard('{Enter}')
+  expect(persist).toHaveBeenCalledTimes(3)
+  expect(toast.success).toHaveBeenCalledTimes(1)
+  expect(useAppStore.getState().settings?.agentPermissionOverrides?.claude).toBe('own')
+  await user.click(input)
+  await user.type(input, ' --dangerously-skip-permissions')
+  await user.keyboard('{Escape}')
+  expect(input.value).toBe('--model opus')
+  await user.tab()
+  fireEvent.change(input, { target: { value: '  --model opus  ' } })
+  fireEvent.blur(input)
+  expect(input.value).toBe('--model opus')
+  expect(persist).toHaveBeenCalledTimes(3)
+})
+
 it('retains failed conversion through the ordinary callback and announces only the saved retry', async () => {
-  persist.mockRejectedValueOnce(new Error('Settings disk is unavailable'))
+  savedArguments('--model opus')
+  const save = deferredSave()
   render(<AgentsHarness />)
   const input = argumentsInput('Claude')
   fireEvent.change(input, { target: { value: '--permission-mode auto --model opus' } })
   fireEvent.blur(input)
   await waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+  act(() => savedArguments(''))
+  expect(input.isConnected).toBe(true)
+  await act(async () => save.reject(new Error('Settings disk is unavailable')))
   await waitFor(() => expect(input.readOnly).toBe(false))
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+    'Claude settings could not be saved. Try again.'
+  )
   expect(toast.success).not.toHaveBeenCalled()
   expect(useAppStore.getState().settings?.agentPermissionDefault).toBe('ask')
   expect(useAppStore.getState().settings?.agentPermissionOverrides?.claude).toBeUndefined()
@@ -79,6 +133,14 @@ it('retains failed conversion through the ordinary callback and announces only t
   )
   expect(useAppStore.getState().settings?.agentPermissionOverrides?.claude).toBe('auto')
   expect(useAppStore.getState().settings?.agentDefaultArgs?.claude).toBe('--model opus')
+  await waitFor(() => expect(input.value).toBe('--model opus'))
+  act(() => savedArguments('--later'))
+  expect(input.value).toBe('--later')
+  fireEvent.change(input, { target: { value: '--dirty' } })
+  act(() => savedArguments(''))
+  expect(input.value).toBe('--dirty')
+  fireEvent.keyDown(input, { key: 'Escape' })
+  expect(input.value).toBe('')
 })
 
 it('describes terminal-only conversion without claiming new native chats', async () => {
@@ -92,6 +154,16 @@ it('describes terminal-only conversion without claiming new native chats', async
   expect(useAppStore.getState().settings?.agentPermissionOverrides?.gemini).toBe('full-access')
   expect(useAppStore.getState().settings?.agentDefaultArgs?.gemini).toBe('')
 })
+
+function savedArguments(value: string, choice: 'ask' | 'full-access' = 'ask') {
+  useAppStore.setState(({ settings }) => ({
+    settings: settings && {
+      ...settings,
+      agentPermissionDefault: choice,
+      agentDefaultArgs: { claude: value }
+    }
+  }))
+}
 
 function savedEnvironment(env: Record<string, string>, agent = 'claude') {
   const settings = useAppStore.getState().settings

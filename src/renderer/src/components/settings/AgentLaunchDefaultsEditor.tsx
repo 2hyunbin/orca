@@ -92,11 +92,23 @@ export function AgentDefaultArgsInput({
   permissionChip?: React.ReactNode
   note?: string
 }): React.JSX.Element {
-  const [argsDraft, setArgsDraft] = useState(argsOverride)
+  const [draft, setDraft] = useState<string | null>(null)
+  const argsDraft = draft ?? argsOverride
   const { pending, write } = useAgentLaunchFieldWrite()
   const commitArgs = (): void => {
-    const value = argsDraft.trim()
-    write(value, () => onSaveArgs(value))
+    if (pending || draft === null) {
+      return
+    }
+    const value = draft.trim()
+    if (value === argsOverride) {
+      setDraft(null)
+      return
+    }
+    write(
+      value,
+      () => onSaveArgs(value),
+      () => setDraft((current) => (current === draft ? null : current))
+    )
   }
 
   return (
@@ -109,7 +121,7 @@ export function AgentDefaultArgsInput({
         <Input
           value={argsDraft}
           readOnly={pending}
-          onChange={(event) => setArgsDraft(event.target.value)}
+          onChange={(event) => setDraft(event.target.value)}
           onBlur={commitArgs}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -117,8 +129,7 @@ export function AgentDefaultArgsInput({
               event.currentTarget.blur()
             }
             if (event.key === 'Escape') {
-              setArgsDraft(argsOverride)
-              event.currentTarget.blur()
+              setDraft(null)
             }
           }}
           placeholder={
@@ -128,16 +139,17 @@ export function AgentDefaultArgsInput({
           spellCheck={false}
           className="h-7 flex-1 font-mono text-xs"
         />
-        {argsOverride !== defaultArgs && (
+        {(argsOverride !== defaultArgs || argsDraft !== defaultArgs) && (
           <Button
             type="button"
             variant="ghost"
             size="xs"
             onClick={() => {
+              setDraft(argsDraft)
               write(
                 defaultArgs,
                 () => onSaveArgs(defaultArgs),
-                () => setArgsDraft(defaultArgs)
+                () => setDraft((current) => (current === argsDraft ? null : current))
               )
             }}
             className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"

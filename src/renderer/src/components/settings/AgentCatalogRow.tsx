@@ -293,7 +293,7 @@ export function AgentCatalogRow({
               />
               <div className="mt-2">
                 <AgentDefaultArgsInput
-                  key={`${agentId}:${argsOverride}`}
+                  key={agentId}
                   defaultArgs={defaultArgs}
                   argsOverride={argsOverride}
                   onSaveArgs={onSaveArgs}

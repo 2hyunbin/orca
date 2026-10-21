@@ -405,6 +405,38 @@ describe('host launch settings form', () => {
     })
   })
 
+  it.each([false, true])(
+    'retains failed Arguments and follows acknowledged host text (typed=%s)',
+    async (typed) => {
+      const settings = (value: string) =>
+        projectAgentLaunchSettings({
+          ...(typed ? { agentPermissionDefault: 'ask' as const } : {}),
+          agentDefaultArgs: { claude: value }
+        })
+      transport.read.mockResolvedValue(settings('--host-marker'))
+      transport.mutate
+        .mockRejectedValueOnce(new Error('unknown acknowledgement'))
+        .mockResolvedValue(settings('--host-normalized'))
+      const view = render(pane(17))
+      const args = await screen.findByDisplayValue('--host-marker')
+      fireEvent.change(args, { target: { value: '--next-marker' } })
+      fireEvent.blur(args)
+      await screen.findByRole('alert')
+      expect(args).toHaveProperty('value', '--next-marker')
+      fireEvent.blur(args)
+      await screen.findByDisplayValue('--host-normalized')
+      expect(transport.mutate.mock.calls[1]?.[1]).toEqual({
+        type: typed ? 'user-arguments' : 'arguments',
+        agent: 'claude',
+        value: '--next-marker'
+      })
+      fireEvent.change(args, { target: { value: '--unsubmitted' } })
+      view.rerender(pane(18))
+      await screen.findByDisplayValue('--host-marker')
+      expect(screen.queryByDisplayValue('--unsubmitted')).toBeNull()
+    }
+  )
+
   it('does not display launch controls or local defaults for an old server', async () => {
     transport.read.mockResolvedValue(null)
     render(pane(17))
