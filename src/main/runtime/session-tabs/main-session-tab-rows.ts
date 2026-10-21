@@ -141,6 +141,7 @@ export function withMainSessionTabRows(
   const windowOnlyIds = new Set(windowOnly.map((row) => row.id))
   const merged = withWindowOnlyRows(rows, published.tabs, windowOnlyIds)
   const listed = new Map(merged.map((row) => [row.id, row]))
+  const windowActive = published.activeTabId ? listed.get(published.activeTabId) : undefined
   const windowGroups = new Map((published.tabGroups ?? []).map((group) => [group.id, group]))
   const tabGroups: RuntimeMobileSessionTabGroup[] = (projected.tabGroups ?? []).map((group) => {
     const tabOrder = withWindowOnlyIds(
@@ -148,15 +149,15 @@ export function withMainSessionTabRows(
       windowGroups.get(group.id)?.tabOrder ?? [],
       windowOnlyIds
     )
-    // The tab the window shows in this group, when main's group still holds it.
-    const windowActive = windowGroups.get(group.id)?.activeTabId
+    // The tab the window shows in this group, when main's group still holds it; while main's
+    // selection stands (the window selects a row main lacks), main's groups stay as main has them.
+    const shown = windowActive ? windowGroups.get(group.id)?.activeTabId : undefined
     return {
       ...group,
       tabOrder,
-      ...(windowActive && tabOrder.includes(windowActive) ? { activeTabId: windowActive } : {})
+      ...(shown && tabOrder.includes(shown) ? { activeTabId: shown } : {})
     }
   })
-  const windowActive = published.activeTabId ? listed.get(published.activeTabId) : undefined
   const activeGroupIndex = (activeRow: Row | undefined): number => {
     const byRow = activeRow
       ? tabGroups.findIndex((group) => group.tabOrder.includes(orderIdOf(activeRow)))
@@ -164,8 +165,12 @@ export function withMainSessionTabRows(
     if (byRow !== -1) {
       return byRow
     }
-    const groupId = windowActive ? published.activeGroupId : projected.activeGroupId
-    return tabGroups.findIndex((group) => group.id === groupId)
+    const byWindow = windowActive
+      ? tabGroups.findIndex((group) => group.id === published.activeGroupId)
+      : -1
+    return byWindow !== -1
+      ? byWindow
+      : tabGroups.findIndex((group) => group.id === projected.activeGroupId)
   }
   const placed = new Set(tabGroups.flatMap((group) => group.tabOrder))
   // A window-only row in a group main does not hold joins the active group: groups and their
@@ -195,7 +200,7 @@ export function withMainSessionTabRows(
   }
   const selection = windowActive
     ? {
-        activeGroupId: activeGroup?.id ?? published.activeGroupId,
+        activeGroupId: activeGroup?.id ?? projected.activeGroupId,
         activeTabId: windowActive.id,
         activeTabType: windowActive.type
       }

@@ -252,4 +252,66 @@ describe('session.tabs rows from main (layout-owner build, before D3b)', () => {
     ])
     expect(merged).toMatchObject({ activeGroupId: 'g2', activeTabId: 'u::a' })
   })
+
+  it("keeps each group's shown tab as main has it while main's selection stands", () => {
+    const merged = withMainSessionTabRows(
+      windowSnapshot([terminal('t::a'), terminal('t::new'), file('f1')], ['t', 'f1'], 't::new'),
+      mainProjection([terminal('t::a'), file('f1')], ['t', 'f1'], 'f1'),
+      NONE_EXITED
+    )
+
+    expect(merged).toMatchObject({ activeTabId: 'f1', activeTabType: 'file' })
+    expect(merged.tabGroups?.[0]?.activeTabId).toBe('f1')
+    expect(merged.tabs.filter((tab) => tab.isActive).map((tab) => tab.id)).toEqual(['f1'])
+  })
+
+  it("puts a stray row the window selects into main's active group", () => {
+    const published: RuntimeMobileSessionTabsSnapshot = {
+      ...windowSnapshot([terminal('t::a'), terminal('u::a'), browser('b1')], ['t'], 'b1'),
+      activeGroupId: 'g3',
+      tabGroups: [
+        { id: 'g', activeTabId: 't', tabOrder: ['t'] },
+        { id: 'g2', activeTabId: 'u', tabOrder: ['u'] },
+        { id: 'g3', activeTabId: 'b1', tabOrder: ['b1'] }
+      ]
+    }
+    const projected: MainSessionTabRows = {
+      ...mainProjection([terminal('t::a'), terminal('u::a')], ['t'], 'u::a'),
+      activeGroupId: 'g2',
+      tabGroups: [
+        { id: 'g', activeTabId: 't', tabOrder: ['t'] },
+        { id: 'g2', activeTabId: 'u', tabOrder: ['u'] }
+      ]
+    }
+
+    const merged = withMainSessionTabRows(published, projected, NONE_EXITED)
+
+    expect(merged.tabGroups?.[1]).toEqual({ id: 'g2', activeTabId: 'b1', tabOrder: ['u', 'b1'] })
+    expect(merged).toMatchObject({ activeGroupId: 'g2', activeTabId: 'b1' })
+  })
+
+  it("takes a markdown edit view's dirty state from the window", () => {
+    const markdown = (isDirty: boolean) => ({
+      type: 'markdown' as const,
+      id: 'm1',
+      title: 'README.md',
+      filePath: '/wt/README.md',
+      relativePath: 'README.md',
+      language: 'markdown' as const,
+      mode: 'edit' as const,
+      sourceFileId: '/wt/README.md',
+      sourceFilePath: '/wt/README.md',
+      sourceRelativePath: 'README.md',
+      documentVersion: 'file:/wt/README.md',
+      isDirty,
+      isActive: false
+    })
+    const merged = withMainSessionTabRows(
+      windowSnapshot([markdown(true)], ['m1'], 'm1'),
+      mainProjection([markdown(false)], ['m1'], 'm1'),
+      NONE_EXITED
+    )
+
+    expect(merged.tabs[0]).toMatchObject({ id: 'm1', isDirty: true })
+  })
 })

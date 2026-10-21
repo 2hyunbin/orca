@@ -24,7 +24,7 @@ export type MainTerminalSurfacesHost = {
   homeHostId: (key: string) => ExecutionHostId | null
   /** Whether the PTY registry holds the terminal. */
   registered: (ptyId: string) => boolean
-  /** Whether main has seen the terminal exit (its record kept, disconnected). */
+  /** Whether the host certified the terminal exited (not merely disconnected or unverifiable). */
   exited: (ptyId: string) => boolean
   /** Main's start status of a pane, as the layout stream publishes it. */
   paneStartFact: PaneStartFactOf
