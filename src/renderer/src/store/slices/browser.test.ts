@@ -5,12 +5,11 @@ import { makeAnnotation } from './browser-annotation-test-fixture'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
+import { createBrowserMockApi, settingsWithRuntime } from './browser-slice-test-harness'
 import {
-  createBrowserMockApi,
   createTestStoreDrawnFromMain,
-  settingsWithRuntime,
   type BrowserTestStore
-} from './browser-slice-test-harness'
+} from './browser-slice-drawn-from-main.test-fixture'
 
 const createWebRuntimeSessionBrowserTabMock = vi.hoisted(() => vi.fn())
 const runtimeEnvironmentTransportCall = vi.fn()

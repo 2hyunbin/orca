@@ -5,10 +5,10 @@ import type { AppState } from '../types'
 import {
   createBrowserMockApi,
   createTestStore,
-  createTestStoreDrawnFromMain,
   resetBrowserRuntimeMocks,
   settingsWithRuntime
 } from './browser-slice-test-harness'
+import { createTestStoreDrawnFromMain } from './browser-slice-drawn-from-main.test-fixture'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
 
 const createWebRuntimeSessionBrowserTabMock = vi.hoisted(() => vi.fn())

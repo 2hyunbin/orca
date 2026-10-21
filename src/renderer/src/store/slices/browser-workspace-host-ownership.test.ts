@@ -6,9 +6,9 @@ import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.
 import {
   createBrowserMockApi,
   createTestStore,
-  createTestStoreDrawnFromMain,
   resetBrowserRuntimeMocks
 } from './browser-slice-test-harness'
+import { createTestStoreDrawnFromMain } from './browser-slice-drawn-from-main.test-fixture'
 
 const createWebRuntimeSessionBrowserTabMock = vi.hoisted(() => vi.fn())
 const runtimeEnvironmentCall = vi.fn()

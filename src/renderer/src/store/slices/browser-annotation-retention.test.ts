@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GRAB_BUDGET } from '../../../../shared/browser-grab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
-import { createBrowserMockApi, createTestStoreDrawnFromMain } from './browser-slice-test-harness'
+import { createBrowserMockApi } from './browser-slice-test-harness'
+import { createTestStoreDrawnFromMain } from './browser-slice-drawn-from-main.test-fixture'
 import { makeAnnotation } from './browser-annotation-test-fixture'
 
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>

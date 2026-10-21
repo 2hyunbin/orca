@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
 import type { LayoutEditorView } from '../../../shared/workspace-layout/layout-editor-view'
-import { projectSessionTabs } from '../../../shared/workspace-layout/old-client/old-client-session-tabs-projection'
+import { projectSessionTabs } from '../../../shared/workspace-layout/old-client/old-client-session-tab-rows'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import {

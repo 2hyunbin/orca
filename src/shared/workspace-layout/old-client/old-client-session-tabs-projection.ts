@@ -20,11 +20,7 @@ import type { TabGroupLayoutNode } from '../../tab-types'
 import type { TerminalLayoutSnapshot } from '../../terminal-tab-types'
 import { pruneGroupLayout } from '../../workspace-session-terminal-tab-close'
 import { diffTabRow, editorTabRow } from './old-client-session-editor-rows'
-import {
-  agentSessionRowId,
-  publishedTabOrderId,
-  terminalRowId
-} from './old-client-session-tab-rows'
+import { agentSessionRowId, publishedTabOrderId, terminalRowId } from './old-client-session-row-ids'
 import { collectLayoutLeafIdsInOrder } from '../terminal-pane-tree'
 import {
   BLANK_BROWSER_TAB_STATE,

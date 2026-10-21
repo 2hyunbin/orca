@@ -3,10 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BROWSER_ANNOTATION_VIEWPORT_MESSAGE_PREFIX } from '../../../../../shared/browser-annotation-viewport-bridge'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
-import {
-  createBrowserMockApi,
-  createTestStoreDrawnFromMain
-} from '@/store/slices/browser-slice-test-harness'
+import { createBrowserMockApi } from '@/store/slices/browser-slice-test-harness'
+import { createTestStoreDrawnFromMain } from '@/store/slices/browser-slice-drawn-from-main.test-fixture'
 import { makeAnnotation } from '@/store/slices/browser-annotation-test-fixture'
 import { syncGuestAnnotationViewportBridge } from '../annotate/guest-annotation-viewport-bridge'
 import { createBrowserPageWebviewLoadingHandlers } from './browser-page-webview-loading-handlers'

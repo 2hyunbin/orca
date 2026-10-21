@@ -3,12 +3,14 @@ import type { AppState } from '../types'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import {
   createBrowserMockApi,
-  createTestStoreDrawnFromMain,
-  onePaneGroup,
   resetBrowserRuntimeMocks,
   runtimeStatuses,
   settingsWithRuntime
 } from './browser-slice-test-harness'
+import {
+  createTestStoreDrawnFromMain,
+  onePaneGroup
+} from './browser-slice-drawn-from-main.test-fixture'
 
 const createWebRuntimeSessionBrowserTabMock = vi.hoisted(() => vi.fn())
 const runtimeEnvironmentCall = vi.fn()
