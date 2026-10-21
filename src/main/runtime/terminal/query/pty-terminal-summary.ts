@@ -17,6 +17,8 @@ import type { TerminalHandleRecord } from '../../runtime-terminal-contracts'
 import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
 
 export type LiveTerminalPty = ReturnType<
   OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
@@ -140,7 +142,11 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
         record = this.handles.get(handle)
       }
     }
-    if (!record || record.runtimeId !== this.runtimeId || !record.tabId.startsWith('pty:')) {
+    if (
+      !record ||
+      record.runtimeId !== this.runtimeId ||
+      !(record.tabId.startsWith('pty:') || this.mainBindsTerminalsOwnHandle(handle, record))
+    ) {
       return null
     }
     if (!record.ptyId) {
@@ -153,6 +159,23 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     // Why: renderer adoption can race with CLI reads; keep ptyId → handle populated so summaries don't mint a second handle for the same terminal.
     this.handleByPtyId.set(record.ptyId, handle)
     return { record, pty }
+  }
+
+  /**
+   * Layout-owner builds: the terminal's own handle (the one it was created under) after the pane
+   * main's layout binds it to adopted it. Main lists its panes with or without a window, so the
+   * adoption no longer means a window drew the pane; the handle still names the terminal.
+   */
+  private mainBindsTerminalsOwnHandle(handle: string, record: TerminalHandleRecord): boolean {
+    if (
+      !ORCA_LAYOUT_OWNER_IS_MAIN ||
+      !record.ptyId ||
+      this.handleByPtyId.get(record.ptyId) !== handle
+    ) {
+      return false
+    }
+    const pane = startedMainTerminalSurfaces(this)?.findPaneForPty(record.ptyId)
+    return pane?.tabId === record.tabId && pane.leafId === record.leafId
   }
 
   protected assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void {
