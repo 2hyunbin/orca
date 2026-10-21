@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- prototype: the overlay presentation pushes this past 400; split before a real PR */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation, useRouter } from 'expo-router'
@@ -38,6 +39,7 @@ import { useResponsiveLayout } from '../layout/responsive-layout'
 import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-native-verbs'
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
+import { useShellOverlay } from './ShellSheetPlaceholder'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
 import { hostProfileUnreadableLine, pageFaultLine } from './shell-lifecycle-log'
 import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
@@ -133,9 +135,10 @@ function DevFacts({
 
 export type MobileWebShellScreenProps = {
   hostId: string
-  /** `sheet` for a route presented as a native drawer: no status bar sits above the view, and a
-   *  screen the page hands over replaces the drawer instead of stacking on it. */
-  presentation?: 'screen' | 'sheet'
+  /** `overlay` for a transparent modal over the screen that opened it: the page draws its own
+   *  sheet, loading shows a placeholder of that sheet, a screen the page hands over replaces this
+   *  one, and a host that cannot serve the page opens the host list instead. */
+  presentation?: 'screen' | 'overlay'
   /** The screen this shell stands in for, which the page cannot derive from a document served at `/`. */
   route: BridgeInitRoute
   /** False for the catch-all, whose pathnames have no screen in this app. */
@@ -165,6 +168,7 @@ export function MobileWebShellScreen({
   runtime
 }: MobileWebShellScreenProps) {
   const insets = useSafeAreaInsets()
+  const overlay = presentation === 'overlay'
   const router = useRouter()
   const navigation = useNavigation()
   const popShellStack = useShellStackPop()
@@ -205,10 +209,7 @@ export function MobileWebShellScreen({
   // IME insets are zeroed, so `visualViewport` never shrinks. The keyboard covers the view like a
   // native screen, and the page lifts by the height native screens read.
   const keyboardInset = Math.max(0, useKeyboardOcclusion())
-  const pageInsets = pageSafeAreaInsets({
-    insets,
-    topCovered: noticeShown || presentation === 'sheet'
-  })
+  const pageInsets = pageSafeAreaInsets({ insets, topCovered: noticeShown })
   const { snapshot, unreadable, readStorage, refreshStorage, writeStorage, readWorkspaceKey } =
     usePageHostSnapshot(hostId, route.pathname, ownsHostArea)
   // Declared before the bridge so the handler it is handed already belongs to this session: the
@@ -284,9 +285,8 @@ export function MobileWebShellScreen({
     onNavigate: (href: string) => {
       // Wide, this host's route is the area-owning session below: back to it, or in place of this
       // one from a cold deep link, never a second on top. `dismissTo` takes the href's params.
-      if (presentation === 'sheet') {
-        router.replace(href)
-        return
+      if (overlay) {
+        return void router.replace(href)
       }
       if (isWideLayout && isHostRouteOf(href, hostId)) {
         router.dismissTo(href)
@@ -342,6 +342,7 @@ export function MobileWebShellScreen({
     sendBack: bridge.sendBack,
     setOptions: navigation.setOptions
   })
+  const shellOverlay = useShellOverlay(overlay, hostId, state, snapshot?.host, popShellStack)
 
   // A profile read that rejected never becomes a host, so the session would otherwise sit in
   // `ready` behind an un-hidden view with nothing serving it and the page asking forever.
@@ -361,6 +362,9 @@ export function MobileWebShellScreen({
     }
   }, [hostId, unreadable])
 
+  if (shellOverlay.screen !== undefined) {
+    return shellOverlay.screen
+  }
   if (state.kind === 'route-unavailable') {
     return <PageRouteUnavailableScreen hostId={hostId} />
   }
@@ -393,6 +397,7 @@ export function MobileWebShellScreen({
     <View
       style={[
         styles.shellRoot,
+        overlay && { backgroundColor: 'transparent' },
         // Edge-to-edge like a native screen: the page pads for the bars itself from the insets
         // `init` carries. The banner takes the status bar strip when it shows.
         { paddingTop: noticeShown ? insets.top : 0 }
@@ -446,7 +451,9 @@ export function MobileWebShellScreen({
           }
         }}
       />
-      <ShellPageCover label={SHELL_OPENING_LABEL} visible={pageFrame === 'unpainted'} />
+      {shellOverlay.cover(pageFrame === 'unpainted') ?? (
+        <ShellPageCover label={SHELL_OPENING_LABEL} visible={pageFrame === 'unpainted'} />
+      )}
       <DevFacts state={state} droppedBinaryFrames={droppedBinaryFrames} />
     </View>
   )

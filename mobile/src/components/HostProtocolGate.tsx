@@ -9,11 +9,20 @@ import { ProtocolBlockScreen } from './ProtocolBlockScreen'
 type Props = {
   hostId: string | undefined
   children: ReactNode
+  /** In place of the full-screen spinner, for a route drawn over another screen. */
+  pending?: ReactNode
+  /** In place of the block screen, for a route that hands a blocked host to the host list. */
+  blocked?: ReactNode
 }
 
 // Why: single choke point above every /h/[hostId] route so a blocked verdict replaces the
 // whole host UI (sidebar + detail stack) while the host list and other hosts stay usable.
-export function HostProtocolGate({ hostId, children }: Props) {
+export function HostProtocolGate({
+  hostId,
+  children,
+  pending: pendingView,
+  blocked: blockedView
+}: Props) {
   const { client, state } = useHostClient(hostId)
   const gates = useHostStatusGates({ hostId, client, connState: state })
   const { compatVerdict, statusPending } = gates
@@ -40,6 +49,9 @@ export function HostProtocolGate({ hostId, children }: Props) {
     }
   })
 
+  if (holdBack && pendingView !== undefined) {
+    return pendingView
+  }
   if (holdBack) {
     // Why: nothing is mounted yet for this host, so hold the routes back entirely
     // rather than letting them mount (and fire their connect RPCs) pre-verdict.
@@ -53,7 +65,7 @@ export function HostProtocolGate({ hostId, children }: Props) {
     )
   }
   if (blocked) {
-    return <ProtocolBlockScreen verdict={compatVerdict} />
+    return blockedView ?? <ProtocolBlockScreen verdict={compatVerdict} />
   }
   // Why: the host sidebar needs the same status fields; sharing the result avoids a second status.get per route.
   return (
@@ -67,7 +79,9 @@ export function HostProtocolGate({ hostId, children }: Props) {
         >
           {children}
         </View>
-        {pending ? (
+        {pending && pendingView !== undefined ? (
+          pendingView
+        ) : pending ? (
           // Why: once the stack is mounted, unmounting it for a pending status.get destroys
           // in-flight nested navigation, so cover it instead. Mount effects underneath still
           // run — they wait for connState 'connected' and every capability-dependent call

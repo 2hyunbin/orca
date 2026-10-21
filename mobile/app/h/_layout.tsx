@@ -16,6 +16,8 @@ import { HostStack } from '../../src/navigation/host-stack'
 import { HostSidebarRevealContext } from '../../src/layout/host-sidebar-reveal'
 import { HostAreaServingContext } from '../../src/mobile-web-shell/host-area-serving'
 import { usePageOwnsHostArea } from '../../src/mobile-web-shell/page-owns-host-area'
+import { isTransparentPageRoute } from '../../src/new-workspace/transparent-page-route'
+import { OverlayGateBlocked, OverlayGatePending } from '../../src/new-workspace/overlay-gate-views'
 
 // Keep at least this much room for the detail pane when resizing the sidebar.
 const MIN_DETAIL_WIDTH = 320
@@ -117,8 +119,13 @@ export default function HostGroupLayout() {
   // changes so a fold/rotation doesn't remount the navigator and reset the
   // navigation stack — only the sidebar pane toggles in and out.
   return (
-    <HostProtocolGate hostId={hostId}>
-      <View style={styles.row}>
+    <HostProtocolGate
+      hostId={hostId}
+      {...(isTransparentPageRoute(pathname) && hostId
+        ? { pending: <OverlayGatePending />, blocked: <OverlayGateBlocked hostId={hostId} /> }
+        : {})}
+    >
+      <View style={[styles.row, isTransparentPageRoute(pathname) && styles.transparent]}>
         {showSidebar && sidebarOpen ? (
           <View style={[styles.sidebar, { width: sidebarWidth }]}>
             <HostScreen
@@ -149,6 +156,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     backgroundColor: colors.bgBase
+  },
+  transparent: {
+    backgroundColor: 'transparent'
   },
   sidebar: {
     borderRightWidth: 1,

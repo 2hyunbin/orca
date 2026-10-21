@@ -14,6 +14,7 @@ import Animated, {
 import { spacing } from '../theme/mobile-theme'
 import { resolveBottomDrawerFillHeight } from './bottom-drawer-fill-height'
 import { resolveBottomDrawerKeyboardInset } from './bottom-drawer-keyboard-inset'
+import { useTakeInstantDrawerEnter } from './instant-drawer-enter'
 import { BOTTOM_DRAWER_HIDE_DURATION_MS } from './bottom-drawer-constants'
 import { bottomDrawerStyles as styles } from './bottom-drawer-styles'
 import {
@@ -118,11 +119,12 @@ export function MountedBottomDrawer({
     setWindowEpoch((epoch) => epoch + 1)
   }, [interactive, visible])
 
+  const takeInstantEnter = useTakeInstantDrawerEnter()
   useEffect(() => {
     if (visible) {
       translateY.value = 0
       scrollOffsetY.value = 0
-      progress.value = withTiming(1, { duration: SHOW_DURATION })
+      progress.value = takeInstantEnter() ? 1 : withTiming(1, { duration: SHOW_DURATION })
     } else {
       Keyboard.dismiss()
       setKeyboardInset(0)

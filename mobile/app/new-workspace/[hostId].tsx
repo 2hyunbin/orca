@@ -4,10 +4,11 @@ import { MobileWebShellScreen } from '../../src/mobile-web-shell/MobileWebShellS
 import { shellScreenRoute } from '../../src/mobile-web-shell/shell-screen-route'
 import { PageRouteUnavailableScreen } from '../../src/mobile-web-shell/PageRouteUnavailableScreen'
 import { firstParam } from '../../src/navigation/route-param-reader'
+import { OverlayGateBlocked, OverlayGatePending } from '../../src/new-workspace/overlay-gate-views'
 
 /**
- * Home's New Workspace drawer: a native form sheet over Home whose content is the page's
- * `/h/<host>/new-workspace` route. The loading, download and failure states render in the drawer.
+ * Home's New Workspace drawer: a transparent modal over Home whose content is the page's
+ * `/h/<host>/new-workspace` route, which draws the host screen's own Create Workspace sheet.
  */
 export default function NewWorkspaceDrawerRoute() {
   const params = useLocalSearchParams<{ hostId?: string | string[] }>()
@@ -20,8 +21,12 @@ export default function NewWorkspaceDrawerRoute() {
   }
   // The gate every `/h` route gets from its layout; this route sits outside `/h` to present over Home.
   return (
-    <HostProtocolGate hostId={hostId}>
-      <MobileWebShellScreen key={hostId} hostId={hostId} route={route} presentation="sheet" />
+    <HostProtocolGate
+      hostId={hostId}
+      pending={<OverlayGatePending animateIn />}
+      blocked={<OverlayGateBlocked hostId={hostId} />}
+    >
+      <MobileWebShellScreen key={hostId} hostId={hostId} route={route} presentation="overlay" />
     </HostProtocolGate>
   )
 }

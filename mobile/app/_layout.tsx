@@ -244,11 +244,10 @@ export default function RootLayout() {
               name="new-workspace/[hostId]"
               options={{
                 headerShown: false,
-                presentation: 'formSheet',
-                sheetAllowedDetents: [0.85],
-                sheetGrabberVisible: true,
-                sheetCornerRadius: 16,
-                contentStyle: { backgroundColor: colors.bgBase }
+                // The page draws the drawer; this screen is only the transparent layer it sits on.
+                presentation: 'transparentModal',
+                animation: 'none',
+                contentStyle: { backgroundColor: 'transparent' }
               }}
             />
           </Stack>

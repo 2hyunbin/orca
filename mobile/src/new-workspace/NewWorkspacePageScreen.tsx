@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocalSearchParams } from 'expo-router'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { InlineDrawerPresentation } from '../components/inline-drawer-presentation'
+import { BOTTOM_DRAWER_HIDE_DURATION_MS } from '../components/bottom-drawer-constants'
+import { InstantDrawerEnterContext } from '../components/instant-drawer-enter'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
 import { hostNewWorktreeSessionRoute } from '../host-new-worktree-session-route'
 import { useHostWorktreeRows } from '../home/use-host-worktree-rows'
@@ -15,8 +16,8 @@ import { useHostStatusGates } from '../transport/host-status-gates'
 const NO_HOST_LABELS: ReadonlyMap<ExecutionHostId, string> = new Map()
 
 /**
- * The Create Workspace form as a whole screen: the native drawer route hosts this page, so the
- * form fills that drawer and its pickers replace it in place rather than opening sheets of their own.
+ * The host screen's Create Workspace sheet, alone on a transparent page that the native modal route
+ * lays over Home. It opens already in place: the shell's placeholder sheet stood there while loading.
  */
 export function NewWorkspacePageScreen() {
   const params = useLocalSearchParams<{ hostId?: string | string[] }>()
@@ -26,11 +27,13 @@ export function NewWorkspacePageScreen() {
   const { hostCapabilities } = useHostStatusGates({ hostId, client, connState })
   const worktrees = useHostWorktreeRows(client, connState === 'connected', hostId)
   const worktreePaths = useMemo(() => worktrees.map((worktree) => worktree.path), [worktrees])
+  const [instantEnter] = useState(() => ({ consumed: false }))
+  const [visible, setVisible] = useState(true)
 
   return (
-    <InlineDrawerPresentation>
+    <InstantDrawerEnterContext.Provider value={instantEnter}>
       <NewWorktreeModalController
-        visible
+        visible={visible}
         client={client}
         hostCapabilities={hostCapabilities}
         hostId={hostId}
@@ -46,8 +49,14 @@ export function NewWorkspacePageScreen() {
             )
           )
         }
-        onClose={() => router.back()}
+        onClose={() => {
+          // The sheet slides out first; the native modal under it then goes without a frame.
+          setVisible(false)
+          setTimeout(() => router.back(), CLOSE_AFTER_SLIDE_MS)
+        }}
       />
-    </InlineDrawerPresentation>
+    </InstantDrawerEnterContext.Provider>
   )
 }
+
+const CLOSE_AFTER_SLIDE_MS = BOTTOM_DRAWER_HIDE_DURATION_MS + 16
