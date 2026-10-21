@@ -1,3 +1,4 @@
+import { attachOnlyViewOf } from '../pane/attach-only-view'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { resolveAgentLaunchPaneVerdict } from '../../../agent-launch/agent-launch-pane-attachment'
 import { AGENT_LAUNCH_PANE_REFUSED_CODE } from '../../../../shared/agent-launch-pane-verdict'
@@ -107,7 +108,11 @@ export async function beginPtyIpcSpawn(
       ? pendingRuntimePaneCreatesByOwnerKey.get(earlyReservationKey)
       : undefined
     if (pendingRuntimeCreate) {
-      await pendingRuntimeCreate.promise
+      const created = await pendingRuntimeCreate.promise
+      // Why: main's start just attached this terminal; a second provider attach adds a round trip.
+      if (attachOnlyViewOf(args) && created && created.id === args.sessionId) {
+        return created
+      }
     }
   }
   ctx.earlyStablePaneOwner =
