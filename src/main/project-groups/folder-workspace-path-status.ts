@@ -1,3 +1,4 @@
+import { stat as statLocalPath } from 'node:fs/promises'
 import { isPathInsideOrEqual } from '../../shared/cross-platform-path'
 import type {
   FolderWorkspacePathStatus,
@@ -7,7 +8,6 @@ import { getProjectGroupSubtreeIds } from '../../shared/project-groups'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
-import { statLocalFolderWithDeadline } from '../providers/working-directory-validation'
 
 type FolderWorkspacePathStatusStore = {
   getRepos: () => Repo[]
@@ -112,8 +112,7 @@ async function statFolderPath(
   }
 
   try {
-    // Why bounded: a dead network mount never answers; a timeout reads as `unavailable`.
-    const stats = await statLocalFolderWithDeadline(path)
+    const stats = await statLocalPath(path)
     return stats.isDirectory()
       ? { path, exists: true }
       : { path, exists: false, reason: 'not-directory' }

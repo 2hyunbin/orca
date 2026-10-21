@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises'
 import type { Store } from '../../../persistence'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { isWslUncPath } from '../../../../shared/wsl-paths'
@@ -9,10 +10,6 @@ import {
   assertFolderWorkspacePathUsable,
   getFolderWorkspacePathStatus
 } from '../../../project-groups/folder-workspace-path-status'
-import {
-  WorkingDirectoryValidationAbortedError,
-  statLocalFolderWithDeadline
-} from '../../../providers/working-directory-validation'
 import {
   isWslMoveWorkspaceBlocked,
   WslMoveProjectFencedError
@@ -78,13 +75,10 @@ export async function localStartupCwdDirectoryExists(path: string): Promise<bool
   if (isWslUncPath(path)) {
     return true
   }
+  // Why async: a statSync on a dead network mount would freeze the whole main process.
   try {
-    return (await statLocalFolderWithDeadline(path)).isDirectory()
-  } catch (error) {
-    // Why: an unanswered folder is not a missing one, so it refuses the start instead of falling back.
-    if (error instanceof WorkingDirectoryValidationAbortedError) {
-      assertFolderWorkspacePathUsable({ path, exists: false, reason: 'unavailable' })
-    }
+    return (await stat(path)).isDirectory()
+  } catch {
     return false
   }
 }

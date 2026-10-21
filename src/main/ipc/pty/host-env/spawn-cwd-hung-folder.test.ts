@@ -1,7 +1,7 @@
 import type * as Fs from 'node:fs'
 import type * as FsPromises from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type DirectoryStats = { isDirectory(): boolean }
 
@@ -20,10 +20,6 @@ vi.mock('node:fs', async (importOriginal) => ({
 }))
 
 import { localStartupCwdDirectoryExists } from './spawn-cwd'
-import {
-  _resetWorkingDirectoryValidationStateForTest,
-  LOCAL_FOLDER_CHECK_TIMEOUT_MS
-} from '../../../providers/working-directory-validation'
 
 const HUNG_DIR = '/Volumes/nas/repo/src'
 const directoryStats = { isDirectory: () => true }
@@ -38,11 +34,6 @@ function blockFor(ms: number): void {
 beforeEach(() => {
   statMock.mockReset()
   statSyncMock.mockReset()
-  _resetWorkingDirectoryValidationStateForTest()
-})
-
-afterEach(() => {
-  vi.useRealTimers()
 })
 
 describe('the worktree-fallback folder check on a mount that stopped answering', () => {
@@ -60,26 +51,14 @@ describe('the worktree-fallback folder check on a mount that stopped answering',
     await expect(exists).resolves.toBe(true)
   })
 
-  it('fails the start with the existing "cannot verify this folder" refusal at the time limit', async () => {
-    vi.useFakeTimers()
+  it('keeps main responsive while a hung folder check waits', async () => {
     statMock.mockReturnValue(new Promise<DirectoryStats>(() => {}))
-    const exists = Promise.resolve(localStartupCwdDirectoryExists(HUNG_DIR))
-    exists.catch(() => {})
+    const settled = vi.fn()
+    void Promise.resolve(localStartupCwdDirectoryExists(HUNG_DIR)).then(settled, settled)
 
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
-    await expect(exists).rejects.toThrow(`folder_workspace_path_unavailable:${HUNG_DIR}`)
-  })
-
-  it('treats a slow folder that answers inside the limit exactly as before', async () => {
-    vi.useFakeTimers()
-    statMock.mockReturnValue(
-      new Promise((resolve) =>
-        setTimeout(() => resolve(directoryStats), LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
-      )
-    )
-    const exists = Promise.resolve(localStartupCwdDirectoryExists(HUNG_DIR))
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
-    await expect(exists).resolves.toBe(true)
+    const timerFired = await new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 10))
+    expect(timerFired).toBe(true)
+    expect(settled).not.toHaveBeenCalled()
   })
 
   it('still reads a missing folder as missing so the start can fall back', async () => {

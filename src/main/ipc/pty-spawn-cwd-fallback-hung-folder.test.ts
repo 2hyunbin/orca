@@ -3,10 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { statSyncMock, spawnMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { registerPtyHandlers } from './pty/register-handlers'
-import {
-  _resetWorkingDirectoryValidationStateForTest,
-  LOCAL_FOLDER_CHECK_TIMEOUT_MS
-} from '../providers/working-directory-validation'
 
 type DirectoryStats = { isDirectory(): boolean }
 
@@ -83,35 +79,31 @@ function spawnWithWorktreeFallback(cwd: string): Promise<unknown> {
 const { handlers, mainWindow } = setupPtyIpcSuite()
 
 beforeEach(() => {
-  _resetWorkingDirectoryValidationStateForTest()
   statMock.mockReset()
   // The provider still validates through the suite's statSync fake; the folder check reads stat.
   statMock.mockImplementation(async () => directoryStats)
 })
 
 describe('pty:spawn with the worktree-folder fallback on a mount that stopped answering', () => {
-  it('fails the start with the existing folder refusal within the limit and spawns nothing', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  it('waits on a hung saved folder without blocking main or calling statSync', async () => {
     statMock.mockReturnValue(new Promise<DirectoryStats>(() => {}))
     registerPtyHandlers(mainWindow as never)
 
-    const start = spawnWithWorktreeFallback(SAVED_CWD)
-    start.catch(() => {})
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
+    const settled = vi.fn()
+    void spawnWithWorktreeFallback(SAVED_CWD).then(settled, settled)
+    const timerFired = await new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 50))
 
-    await expect(start).rejects.toThrow(`folder_workspace_path_unavailable:${SAVED_CWD}`)
+    expect(timerFired).toBe(true)
+    expect(settled).not.toHaveBeenCalled()
     expect(spawnMock).not.toHaveBeenCalled()
     expect(statSyncMock).not.toHaveBeenCalledWith(SAVED_CWD)
   })
 
-  it('starts in a slow saved folder that answers inside the limit', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    statMock.mockImplementation(() => statAnsweringAfter(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100))
+  it('starts in a slow saved folder once it answers', async () => {
+    statMock.mockImplementation(() => statAnsweringAfter(50))
     registerPtyHandlers(mainWindow as never)
 
-    const start = spawnWithWorktreeFallback(SAVED_CWD)
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
-    const result = await start
+    const result = await spawnWithWorktreeFallback(SAVED_CWD)
 
     const [, , options] = spawnMock.mock.calls.at(-1) as [string, string[], { cwd: string }]
     expect(options.cwd).toBe(SAVED_CWD)

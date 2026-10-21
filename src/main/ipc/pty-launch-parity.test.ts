@@ -85,8 +85,8 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../providers/working-directory-validation', async (importOriginal) =>
-  (await import('./pty-ipc-mock-registry')).folderStatModuleMock(await importOriginal())
+vi.mock('node:fs/promises', async (importOriginal) =>
+  (await import('./pty-ipc-mock-registry')).fsPromisesModuleMock(await importOriginal())
 )
 vi.mock('../telemetry/client', () =>
   import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
