@@ -105,7 +105,11 @@ function PlainSshTerminalCard({ panel }: { panel: PlainSshPanel }): React.JSX.El
       {message ? (
         <p className="px-3 py-1.5 text-xs text-destructive [overflow-wrap:anywhere]">{message}</p>
       ) : null}
-      <div className="min-h-0 flex-1">
+      {/* An empty terminal under a failed open's error would read as a live session. */}
+      <div
+        data-plain-ssh-screen
+        className={cn('min-h-0 flex-1', phase.kind === 'failed' && 'hidden')}
+      >
         <PlainSshTerminalView
           targetId={panel.targetId}
           hidden={panel.minimized}

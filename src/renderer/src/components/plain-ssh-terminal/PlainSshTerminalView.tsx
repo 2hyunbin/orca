@@ -314,5 +314,13 @@ export function PlainSshTerminalView({
     }
   }, [hidden])
 
-  return <div ref={containerRef} className="size-full min-h-0 overflow-hidden px-2 py-1" />
+  // Why the theme's background: fit leaves a remainder of pixels beside the grid that must not show the card.
+  const background = resolveThemeColors(settings, systemPrefersDark).theme?.background
+  return (
+    <div
+      ref={containerRef}
+      className="size-full min-h-0 overflow-hidden px-2 py-1"
+      style={background ? { backgroundColor: background } : undefined}
+    />
+  )
 }
