@@ -40,8 +40,13 @@ export type OrcadRollbackOptions = {
   bindHost: string
   port: number
   census: OrcadTerminalCensus
-  /** Epoch ms after which `census`'s admission fence may lapse, so the stop must not be sent. */
-  stopBy?: number
+  /**
+   * Counts again under the host lock just before the stop, closing the server's terminal admission
+   * first so nothing starts before it; any failure must read as unverifiable.
+   */
+  recountCensus: () => Promise<OrcadTerminalCensus>
+  /** Reopens the admission `recountCensus` closed, when the rollback leaves the server serving. */
+  releaseIncumbentAdmission: () => Promise<void>
   /** Expected build hash of the rollback target, from the client's copy of those bytes. */
   targetBuildHash: string
   /** The rollback target's daemon protocol facts, from the same copy. */

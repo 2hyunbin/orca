@@ -1,10 +1,26 @@
 // Once orcad begins to stop, a terminal it admits dies with it uncounted, so admission stays closed
 // until exit: past an update census's 60 s fence, and past a deferring desktop's reopen.
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TerminalUpdateAdmission } from '../runtime/terminal/stop/terminal-update-admission'
-import { installOrcadShutdownSignals } from './orcad-lifecycle'
-import { prepareOrcadManagedStop } from './orcad-managed-stop-admission'
-import { bindOrcadStopTerminalAdmission } from './orcad-stop-terminal-admission'
+import type { installOrcadShutdownSignals } from './orcad-lifecycle'
+import type { prepareOrcadManagedStop } from './orcad-managed-stop-admission'
+import type * as Holder from './orcad-stop-terminal-admission'
+
+// Fresh per test: the holder remembers, for the process, that a stop began.
+let stops: {
+  installOrcadShutdownSignals: typeof installOrcadShutdownSignals
+  prepareOrcadManagedStop: typeof prepareOrcadManagedStop
+  holder: typeof Holder
+}
+beforeEach(async () => {
+  vi.resetModules()
+  stops = {
+    installOrcadShutdownSignals: (await import('./orcad-lifecycle')).installOrcadShutdownSignals,
+    prepareOrcadManagedStop: (await import('./orcad-managed-stop-admission'))
+      .prepareOrcadManagedStop,
+    holder: await import('./orcad-stop-terminal-admission')
+  }
+})
 
 let now = 1_000
 let admission = new TerminalUpdateAdmission(
@@ -18,7 +34,7 @@ function freshAdmission(): TerminalUpdateAdmission {
     async () => [],
     () => now
   )
-  bindOrcadStopTerminalAdmission(admission)
+  stops.holder.bindOrcadStopTerminalAdmission(admission)
   return admission
 }
 
@@ -40,7 +56,7 @@ describe('orcad stop terminal admission', () => {
   it('closes admission when a managed stop begins, before anything else it prepares', async () => {
     freshAdmission()
     let closedFirst = false
-    await prepareOrcadManagedStop(
+    await stops.prepareOrcadManagedStop(
       {
         schemaVersion: 1,
         transactionId: 't',
@@ -64,13 +80,19 @@ describe('orcad stop terminal admission', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     freshAdmission()
     let closedAtStop = false
-    const shutdown = installOrcadShutdownSignals(async () => {
+    const shutdown = stops.installOrcadShutdownSignals(async () => {
       closedAtStop = admission.isClosed()
       return new Promise<void>(() => {})
     })
 
     expect(shutdown('idle')).toBe(true)
     expect(closedAtStop).toBe(true)
+    expectHeldPastEveryReopen()
+  })
+
+  it('holds admission for a stop that began before the runtime bound it', () => {
+    stops.holder.holdOrcadTerminalAdmissionUntilExit()
+    freshAdmission()
     expectHeldPastEveryReopen()
   })
 })

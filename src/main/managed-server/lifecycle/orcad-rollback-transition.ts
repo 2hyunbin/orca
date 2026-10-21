@@ -33,6 +33,7 @@ import {
   withOrcadRollbackRescue
 } from '../activation/orcad-activation-transaction-transitions'
 import { writeOrcadActivationTransaction } from '../activation/orcad-activation-transaction-store'
+import { recountUnderLock, reopenAdmission } from './orcad-rollback-admission'
 import { execOrcadRemoteOr, withoutAbortSignal } from '../install/orcad-remote-runtime-control'
 import { execOrcadStateMutationOr } from '../host-state/orcad-state-mutation-exec'
 import {
@@ -124,6 +125,10 @@ export async function rollbackOrcadLocked(
   if (barrierTarget.state === 'refused') {
     return { outcome: 'refused', code: barrierTarget.code, reason: barrierTarget.reason }
   }
+  const recounted = await recountUnderLock(options, now)
+  if (recounted.refusal) {
+    return recounted.refusal
+  }
 
   const startedAt = now()
   let transaction: OrcadRollbackTransaction = createOrcadRollbackTransaction({
@@ -135,9 +140,15 @@ export async function rollbackOrcadLocked(
     rescueDirName: orcadRollbackRescueDirName(incumbent.version, startedAt.getTime()),
     now: startedAt
   })
-  await writeOrcadActivationTransaction(options, transaction)
-  // The census's fence lapses on its own; a stop after that could kill a terminal admitted since.
-  if (options.stopBy !== undefined && now().getTime() > options.stopBy) {
+  try {
+    await writeOrcadActivationTransaction(options, transaction)
+  } catch (error) {
+    await reopenAdmission(options)
+    throw error
+  }
+  // The recount's fence lapses on its own; a stop after that could kill a terminal admitted since.
+  if (now().getTime() > recounted.stopBy) {
+    await reopenAdmission(options)
     return {
       outcome: 'refused',
       code: 'orcad_rollback_census_unavailable',

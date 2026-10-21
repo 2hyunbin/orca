@@ -87,7 +87,6 @@ export function restartManagedOrcadEnvironment(
     if (!context.activationRecord.active) {
       return { outcome: 'not-restarted', reason: 'This host has no activated Orca server.' }
     }
-    // Fenced like an update's last count: no terminal may start between this count and the stop.
     const counts = updateTerminalCounts((options) =>
       collectManagedTerminalCensus(
         userDataPath,
@@ -97,27 +96,23 @@ export function restartManagedOrcadEnvironment(
         options
       )
     )
-    const stopBy = Date.now() + ORCAD_UPDATE_ADMISSION_STOP_BY_MS
-    const census = await counts.recountCensus()
+    // Unfenced: a host with terminals is refused before anything waits on its lock.
+    const census = await counts.countFirst()
     if (census.liveSessions !== 0) {
-      await counts.releaseIncumbentAdmission()
       return { outcome: 'terminals-running', liveSessions: census.liveSessions }
     }
     const slot = managedOrcadSlot(context, deployment.remotePort)
-    // Reopened only where nothing was stopped; a woken server starts with admission open.
-    const stopped = await reopeningAdmissionUnless(
-      (outcome) => outcome.state !== 'kept' || outcome.mayBeStopping === true,
-      counts.releaseIncumbentAdmission,
-      () =>
-        withOrcadActivationLock(
-          slot,
-          (lock) => stopRetiringIdleDaemon(slot, lock, stopBy),
-          (): StopOutcome => ({
-            state: 'kept',
-            reason: 'An update, rollback or recovery holds this host; try again when it finishes.'
-          })
-        )
+    const stopped = await withOrcadActivationLock(
+      slot,
+      (lock) => recountThenStop(slot, lock, counts),
+      (): StopOutcome => ({
+        state: 'kept',
+        reason: 'An update, rollback or recovery holds this host; try again when it finishes.'
+      })
     )
+    if (stopped.state === 'terminals-running') {
+      return { outcome: 'terminals-running', liveSessions: stopped.liveSessions }
+    }
     if (stopped.state === 'kept') {
       return { outcome: 'not-restarted', reason: stopped.reason }
     }
@@ -165,6 +160,33 @@ type StopOutcome =
   | { state: 'daemon-kept'; version: string; reason: string }
   /** orcad keeps serving, or may still be stopping: nothing is started. */
   | { state: 'kept'; reason: string; mayBeStopping?: true }
+  /** The fenced recount under the lock found terminals: nothing was stopped. */
+  | { state: 'terminals-running'; liveSessions: number | null }
+
+/**
+ * Under the host lock, like an update's last count: only the lock holder closes or reopens the
+ * server's terminal admission, so a restart that loses the lock never clears another's fence.
+ */
+async function recountThenStop(
+  slot: OrcadSlotOptions,
+  lock: OrcadActivationLockControl,
+  counts: ReturnType<typeof updateTerminalCounts>
+): Promise<StopOutcome> {
+  const stopBy = Date.now() + ORCAD_UPDATE_ADMISSION_STOP_BY_MS
+  const census = await counts.recountCensus()
+  // Reopened only where nothing was stopped; a woken server starts with admission open.
+  return reopeningAdmissionUnless(
+    (outcome) =>
+      outcome.state === 'retired' ||
+      outcome.state === 'daemon-kept' ||
+      (outcome.state === 'kept' && outcome.mayBeStopping === true),
+    counts.releaseIncumbentAdmission,
+    async (): Promise<StopOutcome> =>
+      census.liveSessions === 0
+        ? stopRetiringIdleDaemon(slot, lock, stopBy)
+        : { state: 'terminals-running', liveSessions: census.liveSessions }
+  )
+}
 
 /** The rollback's managed stop: orcad retires its daemon only when no session exists then. */
 async function stopRetiringIdleDaemon(
