@@ -26,6 +26,10 @@ export type ClaudeCommandOptions = {
   keepStdinOpen?: boolean
   /** BROWSER for Claude, as Claude's own host sees the path. */
   browser?: string
+  /** Every output chunk as Claude prints it. */
+  onOutput?: (text: string) => void
+  /** Hands over a writer for Claude's stdin; needs `keepStdinOpen`. */
+  onStdin?: (write: (text: string) => void) => void
 }
 
 export function runClaudeCommandProcess(
@@ -127,6 +131,7 @@ export function runClaudeCommandProcess(
       terminateClaudeProcess(child, interactiveLogin, afterKill)
     }
     const appendOutput = (chunk: Buffer): void => {
+      options?.onOutput?.(chunk.toString())
       output = `${output}${chunk.toString()}`
       if (output.length > MAX_COMMAND_OUTPUT_CHARS) {
         output = output.slice(-MAX_COMMAND_OUTPUT_CHARS)
@@ -174,6 +179,15 @@ export function runClaudeCommandProcess(
     stderr?.on('data', appendOutput)
     child.on('error', onError)
     child.on(completionEvent, onDone)
+    const stdin = options?.keepStdinOpen && !interactiveLogin ? child.stdin : null
+    if (stdin && options?.onStdin) {
+      // Why the guard: a write after the login ended would throw EPIPE on a destroyed stream.
+      options.onStdin((text) => {
+        if (!settled && !stdin.destroyed) {
+          stdin.write(text)
+        }
+      })
+    }
     if (options?.signal?.aborted) {
       onAbort()
     } else {

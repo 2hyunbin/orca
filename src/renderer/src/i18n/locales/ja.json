@@ -6839,7 +6839,6 @@
           "4e32e030b2": "ローカルに保存されます。Orca は使用量の更新のために platform.minimax.io のみに送信します。",
           "remoteServerFallback": "リモートサーバー",
           "loadAccountsFailed": "プロバイダーアカウントを読み込めませんでした。",
-          "remoteScopeAccounts": "{{value0}} が管理するアカウントを表示しています。アカウントの追加や再認証はそのサーバー上で行ってください。",
           "accountScopePrefix": "アカウントスコープ",
           "accountScopeRemoteServerUnnamed": "リモートサーバー",
           "remoteScopeLocalAccountsKept": "このデスクトップで管理されているアカウントはそのまま残っています。デフォルトランタイムをローカルデスクトップに戻すと表示されます。",
