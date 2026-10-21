@@ -11,7 +11,7 @@ const TRUST_DIALOGS = [
   'sidebar/OrcaYamlTrustDialog.tsx',
   'editor/IpynbViewer.tsx',
   'settings/PluginInstallDialog.tsx',
-  'settings/PluginMarketplacePreviewDialog.tsx',
+  'settings/PluginUpdateAllDialog.tsx',
   'settings/PluginMarketplaceSourceDialog.tsx',
   'settings/PluginRemoveDialog.tsx',
   'settings/PluginRollbackDialog.tsx'
