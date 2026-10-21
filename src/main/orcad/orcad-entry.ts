@@ -45,7 +45,6 @@ import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
 import { orcadWsPortOptions } from './orcad-ws-port-policy'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { placeUnshownLiveTerminalsBestEffort } from '../runtime/terminal/adoption/unshown-live-terminal-placement'
-import { subscribeHookStatusTitles } from '../runtime/terminal/layout/hook-status-title-subscription'
 
 export { parseArgs }
 
@@ -291,8 +290,6 @@ async function startOrcadRuntime(
     () => runtime
   )
   registerCleanup(runtime.attachAgentStatusStore(agentHookServer))
-  // Why here too: no window titles this host's agent tabs (switch point inside).
-  registerCleanup(subscribeHookStatusTitles(agentHookServer, runtime))
 
   // Why the headless entry point rather than registerPtyHandlers directly: this is the
   // same call `--serve` makes, and it threads the store through. Without the store the

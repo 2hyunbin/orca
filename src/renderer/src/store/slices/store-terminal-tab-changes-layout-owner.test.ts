@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
+import type * as ResolveOwnerModule from '@/lib/resolve-owner'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
@@ -15,6 +16,7 @@ type Reply = { ok: boolean; result?: object; code?: string }
 
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: true,
+  twin: false,
   toggled: vi.fn(),
   callRuntimeRpc: vi.fn(
     async (
@@ -36,6 +38,18 @@ vi.mock('../../../../shared/layout-owner-switch', () => ({
   }
 }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
+vi.mock('@/lib/resolve-owner', async (importOriginal) => {
+  const actual = await importOriginal<typeof ResolveOwnerModule>()
+  return {
+    ...actual,
+    runtimeEnvironmentIdForWorkspaceOwner: (
+      ...args: Parameters<typeof actual.runtimeEnvironmentIdForWorkspaceOwner>
+    ) =>
+      mocks.twin
+        ? { kind: 'ambiguous' as const }
+        : actual.runtimeEnvironmentIdForWorkspaceOwner(...args)
+  }
+})
 vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }
 }))
@@ -88,6 +102,7 @@ const answered = async (): Promise<void> => {
 
 beforeEach(() => {
   mocks.layoutOwnerIsMain = true
+  mocks.twin = false
   mocks.callRuntimeRpc.mockReset()
   mocks.toggled.mockReset()
   mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
@@ -312,6 +327,20 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
   it('titles a tab main has no tab-bar entry for as today', async () => {
     const { store, tabId } = await storeWithTab()
     store.setState({ unifiedTabsByWorktree: { [WORKTREE]: [] } })
+
+    store
+      .getState()
+      .setGeneratedTabTitlesFromAgentPrompts([
+        { paneKey: makePaneKey(tabId, LEAF), prompt: 'Refactor the auth middleware' }
+      ])
+
+    expect(sent()).toEqual([])
+    expect(row(store).generatedTitle).toBe('Refactor the auth middleware')
+  })
+
+  it('titles a twin, whose owner the window cannot resolve and main refuses, as today', async () => {
+    const { store, tabId } = await storeWithTab()
+    mocks.twin = true
 
     store
       .getState()

@@ -10,7 +10,7 @@ import {
   type TabChange
 } from './tab-change-through-layout-owner'
 import { findRenamableUnifiedTab } from './renamable-unified-tab'
-import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
+import { runtimeEnvironmentIdForWorkspaceOwner } from '@/lib/resolve-owner'
 
 type RoutedActions = Pick<
   TerminalSlice,
@@ -52,7 +52,12 @@ export function routeTerminalTabChangesThroughLayoutOwner(
         state.unifiedTabsByWorktree,
         getTabIdFromPaneKey(update.paneKey) ?? ''
       )
-      return !tab || runtimeEnvironmentIdUnlessTwin(state, tab.worktreeId) !== null
+      if (!tab) {
+        return true
+      }
+      // A twin (an owner the window cannot resolve) main refuses, so the window titles it as before.
+      const owner = runtimeEnvironmentIdForWorkspaceOwner(state, { workspaceId: tab.worktreeId })
+      return owner.kind !== 'resolved' || owner.environmentId !== null
     })
     if (local.length > 0) {
       actions.setGeneratedTabTitlesFromAgentPrompts(local)

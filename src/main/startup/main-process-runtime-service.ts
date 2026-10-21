@@ -44,7 +44,6 @@ import {
 import { startAgentStateRulesLiveUpdates } from '../runtime/agent-state-rules/agent-state-rules-live-update'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
-import { subscribeHookStatusTitles } from '../runtime/terminal/layout/hook-status-title-subscription'
 
 export function getDesktopWindowStatus(): RuntimeDesktopWindowStatus {
   const activation = state.desktopActivationGate
@@ -154,7 +153,6 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
     recordObservedAgentStatusPaneIdentity(observedPaneIdentities, enriched, runtime)
   )
   agentHookServer.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
-  subscribeHookStatusTitles(agentHookServer, runtime)
   // Switch point: main keeps the resume record of each pane it holds from the status it accepts.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
     agentHookServer.subscribeEnrichedStatus((enriched) =>

@@ -8,6 +8,7 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../../shared/runtime-types'
 import { translateSessionTabMove } from '../../../shared/workspace-layout/old-client/old-client-method-translation'
+import { resolveSessionTabRow } from '../../../shared/workspace-layout/old-client/old-client-session-tab-rows'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
 
@@ -19,8 +20,8 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
   ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']>
 
   /**
-   * The move in main's layout, checked against the rows the client was shown and refused with
-   * today's codes. Null for a workspace main does not own: today's path moves it.
+   * The move in main's layout, read against the rows the client was shown. Null when main does not
+   * own the workspace or cannot read the move: today's path moves it, or refuses it with its codes.
    */
   protected async moveTabInMainLayout(
     worktreeId: string,
@@ -41,9 +42,16 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
       throw new Error('tab_not_found')
     }
     const rows = this.toMobileSessionTabsResult(shown)
-    const translation = translateSessionTabMove(worktreeId, workspace, rows, move)
-    if (!translation.ok) {
-      throw new Error(translation.code)
+    // A group showing a tab main's layout lacks (a diff, a preview) moves as today, and so does a
+    // move main cannot read as one: today's path checks it against those rows and answers.
+    const groupsHeld = (rows.tabGroups ?? [])
+      .filter((group) => group.id === move.targetGroupId || group.tabOrder.includes(move.tabId))
+      .every((group) => group.tabOrder.every((rowId) => resolveSessionTabRow(workspace, rowId)))
+    const translation = groupsHeld
+      ? translateSessionTabMove(worktreeId, workspace, rows, move)
+      : null
+    if (!translation?.ok) {
+      return null
     }
     for (const command of translation.commands) {
       if (command.type !== 'moveTab' && command.type !== 'splitGroup') {
