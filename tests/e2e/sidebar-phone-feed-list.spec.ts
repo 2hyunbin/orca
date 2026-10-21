@@ -17,6 +17,7 @@ import { pairMobileClient } from './helpers/paired-mobile-client'
 import { launchPhoneMirrorTopology } from './helpers/phone-mirror-topology'
 import {
   desktopSidebarOutline,
+  outlineRows,
   openPhoneFeedList,
   type ListOutline
 } from './helpers/phone-feed-list'
@@ -40,12 +41,14 @@ async function expectPhoneMatchesDesktop(
         desktop = await desktopSidebarOutline(page)
         shown = await phone.outline()
         // Why the change too: the phone hears a change later, so both still agree on the old list.
-        return shown.join('\n') === desktop.join('\n') && showsChange(shown)
+        return (
+          outlineRows(shown).join('\n') === outlineRows(desktop).join('\n') && showsChange(shown)
+        )
       },
       { timeout: 30_000 }
     )
     .toBe(true)
-    .catch(() => expect(shown).toEqual(desktop))
+    .catch(() => expect(outlineRows(shown)).toEqual(outlineRows(desktop)))
   expect(shown.some((line) => line.startsWith('ITEM '))).toBe(true)
   return shown
 }
@@ -84,7 +87,8 @@ test.describe('switch on', () => {
         setupDecision: 'skip'
       })
     }
-    const list = await openPhoneFeedList(phone)
+    // The phone last opened the desktop's workspace, so it highlights that row.
+    const list = await openPhoneFeedList(phone, { worktreeId: activeId })
     try {
       const first = await expectPhoneMatchesDesktop(orcaPage, list)
       expect(first.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)

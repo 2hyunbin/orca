@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { readMirroredKeyOrStore, subscribeMirroredKey } from '../storage/mirrored-storage-keys'
 import { LAST_VISITED_WORKTREE_STORAGE_KEY } from './last-visited-worktree-repo'
-import type { HostVisit, LastVisitedWorktreeOnHost } from './host-list-highlight'
+import type { LastVisitedWorktreeOnHost } from './host-list-highlight'
 import {
   readLastVisitedWorktreeOnHost,
   subscribeLastVisitedWorktree
@@ -11,9 +11,11 @@ import {
  * The workspace this phone last opened on `hostId`: stored, then each visit noted in this context
  * (a list tap) or written through this context's store (in the app, a session page's write).
  * A web page's store is its load-time copy, so a visit another page makes reaches it on reload.
- * Undefined until the stored visit is read.
+ * Null until the stored visit is read, and when this phone has opened nothing there.
  */
-export function useLastVisitedWorktreeOnHost(hostId: string | undefined): HostVisit {
+export function useLastVisitedWorktreeOnHost(
+  hostId: string | undefined
+): LastVisitedWorktreeOnHost | null {
   const [visited, setVisited] = useState<{
     hostId: string
     value: LastVisitedWorktreeOnHost | null
@@ -48,12 +50,7 @@ export function useLastVisitedWorktreeOnHost(hostId: string | undefined): HostVi
           setVisited({ hostId, value: readLastVisitedWorktreeOnHost(raw, hostId) })
         }
       })
-      .catch(() => {
-        // Unreadable reads as never opened, so the list still shows the desktop's selection.
-        if (!stale && !noted) {
-          setVisited({ hostId, value: null })
-        }
-      })
+      .catch(() => {})
     return () => {
       stale = true
       unsubscribeNotes()
@@ -62,5 +59,5 @@ export function useLastVisitedWorktreeOnHost(hostId: string | undefined): HostVi
   }, [hostId])
 
   // Keyed by host so a switch to another host never shows the last one's visit.
-  return visited && visited.hostId === hostId ? visited.value : undefined
+  return visited && visited.hostId === hostId ? visited.value : null
 }
