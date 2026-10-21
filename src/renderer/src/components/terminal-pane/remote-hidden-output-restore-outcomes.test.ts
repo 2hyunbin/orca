@@ -162,11 +162,11 @@ function createMockTransport(initialPtyId: string | null = null): MockTransport 
     sendInput: vi.fn(() => true),
     claimViewport: vi.fn(() => true),
     resize: vi.fn(() => true),
-    isConnected: vi.fn(() => ptyId !== null),
     getPtyId: vi.fn(() => ptyId),
     getConnectionId: vi.fn(() => null),
     serializeBuffer: undefined
   } as MockTransport
+  transport.isConnected = vi.fn(() => ptyId !== null)
   const sendInput = transport.sendInput as unknown as (data: string) => boolean
   transport.sendInputImmediate = vi.fn((data: string) => sendInput(data))
   transport.sendInputAccepted = vi.fn(async (data: string) => sendInput(data))

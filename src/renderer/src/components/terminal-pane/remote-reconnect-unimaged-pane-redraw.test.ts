@@ -102,6 +102,7 @@ async function connectVisibleRemotePane(
   const deps = buildPaneConnectionDeps(() => mockStoreState, {
     isVisibleRef: { current: opts.visible ?? true }
   })
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocks stub only the members connectPanePty reaches; a missing one fails the test.
   const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
   await flushAsyncTicks(6)
   expect(onStreamRecovered).not.toBeNull()
@@ -139,10 +140,9 @@ describe('a reconnected remote pane the host could not image', () => {
     transportFactoryQueue = []
     mockStoreState = createInitialStoreState(() => mockStoreState)
     await installTerminalTestGlobals()
-    ;(window.api.platform as unknown as Record<string, unknown>).get = vi.fn(() => ({
-      platform: 'darwin',
-      osRelease: '25.0.0'
-    }))
+    Object.assign(window.api.platform, {
+      get: vi.fn(() => ({ platform: 'darwin', osRelease: '25.0.0' }))
+    })
   })
 
   afterEach(async () => {
