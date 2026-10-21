@@ -424,7 +424,8 @@ export default function BrowserAddressBar({
             {leadingIcon ?? <Globe className="size-4 shrink-0 text-muted-foreground" />}
             <Input
               ref={inputRef}
-              {...{ value, onFocus: handleFocus }}
+              value={value}
+              onFocus={handleFocus}
               onMouseDown={addressBarClickSelect.onMouseDown}
               onClick={addressBarClickSelect.onClick}
               onBlur={handleBlur}
@@ -464,8 +465,7 @@ export default function BrowserAddressBar({
             }}
           >
             <BrowserAddressBarSuggestionList
-              suggestions={suggestions}
-              selectedValue={selectedValue}
+              {...{ suggestions, selectedValue }}
               onSelectedValueChange={setSelectedValueOverride}
               onSelect={handleSelect}
             />
