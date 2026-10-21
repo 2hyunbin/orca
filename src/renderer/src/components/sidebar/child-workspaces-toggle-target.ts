@@ -13,11 +13,11 @@ import {
   getPublishedVisibleWorktreeShortcutTargets
 } from './visible-worktrees'
 import { buildVisibleWorktreeOptionsFromState } from './visible-worktree-options-from-state'
-import { getWorktreeLineageGroupKey } from './worktree-list/grouping/group-keys'
+import { getWorktreeLineageGroupKey } from '../../../../shared/sidebar-list/group-keys'
 import {
   getHostScopedWorktreeLineageInputs,
   getWorktreeLineageAncestors
-} from './worktree-lineage-projection'
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 type ChildWorkspacesToggleState = Pick<
   AppState,
@@ -51,7 +51,10 @@ function getParentWorktree(
   state: ChildWorkspacesToggleState,
   target: Worktree
 ): Worktree | undefined {
-  const worktrees = getAllWorktreesFromState(state).filter((worktree) => !worktree.isArchived)
+  // Why: the sidebar nests a child only under a parent on the same host, and archived rows never render.
+  const worktrees = getAllWorktreesFromState(state).filter(
+    (worktree) => worktree.hostId === target.hostId && !worktree.isArchived
+  )
   const { worktreeMap, lineageById } = getHostScopedWorktreeLineageInputs(
     worktrees,
     state.worktreeLineageById,
@@ -60,7 +63,7 @@ function getParentWorktree(
   return getWorktreeLineageAncestors(target, lineageById, worktreeMap)[0]
 }
 
-/** Resolves the target's rendered chip, falling back to its parent's chip. */
+/** Resolves the target's rendered chip, falling back to its same-host parent's chip. */
 export function resolveChildWorkspacesToggleGroupKey(
   state: ChildWorkspacesToggleState,
   renderedChipKeys: ReadonlySet<string>,

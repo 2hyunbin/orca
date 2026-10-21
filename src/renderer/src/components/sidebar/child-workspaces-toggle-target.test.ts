@@ -141,10 +141,7 @@ describe('resolveChildWorkspacesToggleGroupKey', () => {
   })
 
   it('uses host-qualified keys and ignores same-id rows on another host', () => {
-    const remoteParent = worktree('parent', {
-      hostId: 'ssh:box',
-      instanceId: 'remote-parent-instance'
-    })
+    const remoteParent = worktree('parent', { hostId: 'ssh:box' })
     const remoteChild = worktree('child', { hostId: 'ssh:box' })
     const remoteKey = `lineage:${getWorktreeHostIdentity(remoteParent)}`
     const state = toggleState({

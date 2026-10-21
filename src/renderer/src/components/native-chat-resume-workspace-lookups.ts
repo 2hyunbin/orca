@@ -2,8 +2,12 @@ import { useMemo } from 'react'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getSidebarLineageAncestors
-} from '@/components/sidebar/worktree-lineage-projection'
-import { getAllWorktreesFromState, getWorktreeOnHostFromState } from '@/store/selectors'
+} from '../../../shared/sidebar-list/worktree-lineage-projection'
+import {
+  getAllWorktreesFromState,
+  getWorktreeMapFromState,
+  getWorktreeOnHostFromState
+} from '@/store/selectors'
 import {
   composeWorktreeHostIdentity,
   getWorktreeHostIdentity
@@ -56,7 +60,10 @@ export function useLineageAncestors(
         .filter((worktree) => !worktree.isArchived)
         .map((worktree) => [getWorktreeHostIdentity(worktree), worktree])
     )
-    const cyclic = getCyclicProjectedWorktreeLineageIds(worktreeLineageById, rows)
+    const cyclic = getCyclicProjectedWorktreeLineageIds(
+      worktreeLineageById,
+      getWorktreeMapFromState(state)
+    )
     return new Map(
       workspaces.map((group) => {
         // Why: a row with no host id (older metadata) is still the chat's workspace.

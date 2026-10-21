@@ -9,6 +9,18 @@ import {
   listSupportedWindowsShellOverrides
 } from '../windows-terminal-shell'
 import { TERMINAL_PANE_SPLIT_SOURCES } from '../feature-education-telemetry'
+import { OptionalExecutionHostId } from './worktree-params'
+
+// Why refused at the boundary rather than at spawn: only the host knows the allowlist, and a
+// relay-side throw reaches the caller as an opaque spawn failure after the round trip.
+export const WindowsShellOverrideParam = z
+  .string()
+  .refine(isSupportedWindowsShellOverride, {
+    message: `shell must be one of: ${listSupportedWindowsShellOverrides().join(', ')}`
+  })
+  // Why here: the host is authoritative, so it canonicalizes even when a client did not; the
+  // spawn path exact-matches `.exe` spellings and must never see `cmd` or `Git-Bash`.
+  .transform((shell) => canonicalizeWindowsShellOverride(shell) ?? shell)
 
 export const TerminalHandle = z.object({
   terminal: requiredString('Missing terminal handle'),
@@ -28,6 +40,14 @@ export const TerminalReadKittyFile = TerminalHandle.extend({
 
 export const TerminalFocus = TerminalHandle.extend({
   navigation: z.enum(['caller', 'host']).optional()
+})
+
+/** `terminal.reveal` takes no handle: a pane a paired server owns has none on this host. */
+export const TerminalReveal = z.object({
+  worktreeId: requiredString('Missing worktree id').pipe(z.string().max(1024)),
+  tabId: requiredString('Missing tab id').pipe(z.string().max(128)),
+  leafId: requiredString('Missing leaf id').pipe(z.string().max(128)).optional(),
+  executionHostId: OptionalExecutionHostId
 })
 
 /**
@@ -111,6 +131,11 @@ export const TerminalRename = TerminalHandle.extend({
   })
 })
 
+// An explicit empty string clears the pane; an omitted title must not clear it.
+export const TerminalSetPaneTitle = TerminalHandle.extend({
+  title: z.string()
+})
+
 export const TerminalSend = TerminalHandle.extend({
   text: OptionalString,
   enter: z.unknown().optional(),
@@ -167,6 +192,13 @@ export const TerminalSetViewerColors = z.object({
   colors: TerminalColorQueryReplyColorsParam
 })
 
+/** The provider session a terminal's launch resumes. */
+export const ResumeProviderSessionParam = z.object({
+  key: z.enum(['session_id', 'conversation_id']),
+  id: z.string().min(1).max(512),
+  transcriptPath: z.string().min(1).max(32_768).optional()
+})
+
 export const TerminalCreateParams = z.object({
   worktree: OptionalString,
   clientMutationId: z.string().min(1).max(128).optional(),
@@ -187,13 +219,7 @@ export const TerminalCreateParams = z.object({
         .optional()
     })
     .optional(),
-  resumeProviderSession: z
-    .object({
-      key: z.enum(['session_id', 'conversation_id']),
-      id: z.string().min(1).max(512),
-      transcriptPath: z.string().min(1).max(32_768).optional()
-    })
-    .optional(),
+  resumeProviderSession: ResumeProviderSessionParam.optional(),
   launchToken: OptionalString,
   launchAgent: z.string().refine(isTuiAgent).optional(),
   terminalKittyKeyboardProtocol: z.boolean().optional(),
@@ -207,17 +233,7 @@ export const TerminalCreateParams = z.object({
   tabId: OptionalString,
   leafId: OptionalString,
   spawnIntent: SpawnIntentParam.optional(),
-  // Why refused at the boundary rather than at spawn: only the host knows the allowlist, and a
-  // relay-side throw reaches the caller as an opaque spawn failure after the round trip.
-  shell: z
-    .string()
-    .refine(isSupportedWindowsShellOverride, {
-      message: `shell must be one of: ${listSupportedWindowsShellOverrides().join(', ')}`
-    })
-    // Why here: the host is authoritative, so it canonicalizes even when a client did not; the
-    // spawn path exact-matches `.exe` spellings and must never see `cmd` or `Git-Bash`.
-    .transform((shell) => canonicalizeWindowsShellOverride(shell) ?? shell)
-    .optional()
+  shell: WindowsShellOverrideParam.optional()
 })
 
 export const TerminalSplit = TerminalHandle.extend({

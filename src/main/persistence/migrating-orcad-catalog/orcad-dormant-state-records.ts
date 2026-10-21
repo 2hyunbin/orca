@@ -1,14 +1,10 @@
-import {
-  initializeCanonicalLineage,
-  writeCanonicalLineage
-} from '../loading-store/canonical-workspace-lineage'
 import type {
   OrcadMigrationDormantStatePayload,
   OrcadMigrationManifest
-} from '../../../shared/orcad-migration-manifest'
+} from '../../../shared/orcad-migration/orcad-migration-manifest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { SparsePreset } from '../../../shared/worktree/create-types'
-import type { LineageEdge } from '../../../shared/worktree/lineage-types'
+import type { WorkspaceLineage, WorktreeLineage } from '../../../shared/worktree/lineage-types'
 import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { omitDefaultWorktreeMetaFields } from '../../../shared/worktree/meta-persisted-defaults'
 import { assertOrcadDestinationCanonicalMetadata } from './orcad-destination-worktree-metadata'
@@ -39,8 +35,9 @@ type RegistryUpdate = { key: string; value: RetiredNameRegistry }
 
 export type PreparedOrcadMigrationDormantState = {
   payload: OrcadMigrationDormantStatePayload | undefined
-  newLineageEdges: KeyedRow<LineageEdge>[]
   newWorktreeMeta: KeyedRow<WorktreeMeta>[]
+  newWorktreeLineage: KeyedRow<WorktreeLineage>[]
+  newWorkspaceLineage: KeyedRow<WorkspaceLineage>[]
   newSparsePresets: SparsePreset[]
   retiredNameUpdates: RegistryUpdate[]
   retirementNamespaceUpdates: RegistryUpdate[]
@@ -62,17 +59,14 @@ export function prepareOrcadMigrationDormantState(
     key: entry.worktreeId,
     value: structuredClone(entry.meta)
   }))
-  const incoming: PersistedState = {
-    ...state,
-    lineageByChildInstance: undefined,
-    worktreeLineageById: Object.fromEntries(
-      payload.worktreeLineage.map((entry) => [entry.worktreeId, entry.lineage])
-    ),
-    workspaceLineageByChildKey: Object.fromEntries(
-      payload.workspaceLineage.map((entry) => [entry.childWorkspaceKey, entry.lineage])
-    )
-  }
-  initializeCanonicalLineage(incoming)
+  const worktreeLineage = payload.worktreeLineage.map((entry) => ({
+    key: entry.worktreeId,
+    value: structuredClone(entry.lineage)
+  }))
+  const workspaceLineage = payload.workspaceLineage.map((entry) => ({
+    key: entry.childWorkspaceKey,
+    value: structuredClone(entry.lineage)
+  }))
   const existingPresets = new Map(
     Object.values(state.sparsePresetsByRepo)
       .flat()
@@ -88,19 +82,21 @@ export function prepareOrcadMigrationDormantState(
   })
   return {
     payload,
-    newLineageEdges: selectNewKeyedRows(
-      (payload.edges ?? Object.values(incoming.lineageByChildInstance ?? {})).map((edge) => ({
-        key: edge.child.instanceId,
-        value: { ...structuredClone(edge), child: { ...edge.child, hostId: 'local' as const } }
-      })),
-      state.lineageByChildInstance ?? {},
-      'lineage_edge'
-    ),
     newWorktreeMeta: selectNewKeyedRows(
       worktreeMeta,
       state.worktreeMeta,
       'worktree_meta',
       omitDefaultWorktreeMetaFields
+    ),
+    newWorktreeLineage: selectNewKeyedRows(
+      worktreeLineage,
+      state.worktreeLineageById,
+      'worktree_lineage'
+    ),
+    newWorkspaceLineage: selectNewKeyedRows(
+      workspaceLineage,
+      state.workspaceLineageByChildKey,
+      'workspace_lineage'
     ),
     newSparsePresets,
     retiredNameUpdates: payload.retiredWorktreeNames.map((entry) => ({
@@ -137,8 +133,11 @@ export function applyPreparedOrcadMigrationDormantState(
   for (const entry of prepared.newWorktreeMeta) {
     state.worktreeMeta[entry.key] = entry.value
   }
-  for (const { value: edge } of prepared.newLineageEdges) {
-    writeCanonicalLineage(state, edge)
+  for (const entry of prepared.newWorktreeLineage) {
+    state.worktreeLineageById[entry.key] = entry.value
+  }
+  for (const entry of prepared.newWorkspaceLineage) {
+    state.workspaceLineageByChildKey[entry.key] = entry.value
   }
   for (const preset of prepared.newSparsePresets) {
     state.sparsePresetsByRepo[preset.repoId] = [
@@ -190,7 +189,8 @@ function emptyPreparedDormantState(): PreparedOrcadMigrationDormantState {
   return {
     payload: undefined,
     newWorktreeMeta: [],
-    newLineageEdges: [],
+    newWorktreeLineage: [],
+    newWorkspaceLineage: [],
     newSparsePresets: [],
     retiredNameUpdates: [],
     retirementNamespaceUpdates: [],

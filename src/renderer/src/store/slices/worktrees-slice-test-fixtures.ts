@@ -1,5 +1,3 @@
-import { createWorktreeIdentity } from '../../../../shared/worktree/identity'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { vi } from 'vitest'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -37,15 +35,6 @@ export function makeWorktree(
     lastActivityAt: 0,
     ...overrides
   }
-}
-
-export function makeIdentifiedWorktree(
-  hostId: ExecutionHostId,
-  instanceId: string,
-  id = 'repo1::/path/child'
-) {
-  const identity = createWorktreeIdentity({ worktreeId: id, executionHostId: hostId, instanceId })
-  return { ...makeWorktree({ id, repoId: id.split('::')[0], hostId, instanceId }), identity }
 }
 
 export function makeTerminalTab(

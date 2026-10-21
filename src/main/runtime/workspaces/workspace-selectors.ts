@@ -1,8 +1,13 @@
 import { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
-import { splitWorktreeIdForFilesystem, worktreeIdComparisonKey } from '../../../shared/worktree/id'
+import { splitWorktreeIdForFilesystem, worktreeIdentityKey } from '../../../shared/worktree/id'
 import { branchSelectorMatches, runtimePathsEqual } from '../runtime-worktree-path-identity'
 import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../../../shared/execution-host'
+import {
+  runtimeRepoSelectorHostId,
+  runtimeRepoSelectorText,
+  type RuntimeRepoSelector
+} from '../runtime-repo-selector'
 import type {
   WorktreeLineageInput,
   WorktreeLineageResolution
@@ -14,7 +19,8 @@ import type { WorkspaceKey } from '../../../shared/folder-workspace-types'
 import type { Repo } from '../../../shared/repo-types'
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
-import { areWorktreePathsEqual, mergeWorktree } from '../../ipc/worktree-logic'
+import { areWorktreePathsEqual } from '../../git/worktree-path-comparison'
+import { mergeWorktree } from '../../ipc/worktree-metadata-merge'
 
 export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree {
   protected abstract hasFreshResolvedWorktreeCache(
@@ -54,10 +60,10 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
       const worktreeId = explicitWorktreeId ?? selector.slice(3)
       candidates = worktrees.filter((worktree) => worktree.id === worktreeId)
       if (candidates.length === 0) {
-        const comparisonKey = worktreeIdComparisonKey(worktreeId)
-        candidates = comparisonKey
-          ? worktrees.filter((worktree) => worktreeIdComparisonKey(worktree.id) === comparisonKey)
-          : candidates
+        const comparisonKey = worktreeIdentityKey(worktreeId)
+        candidates = worktrees.filter(
+          (worktree) => worktreeIdentityKey(worktree.id) === comparisonKey
+        )
       }
       if (candidates.length === 0) {
         const parsed = splitWorktreeIdForFilesystem(worktreeId)
@@ -117,11 +123,15 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     throw new Error('selector_not_found')
   }
 
+  /** `childRepo` scopes the parent to the new worktree's execution host (#12757). */
   protected resolveLineageForWorktreeCreate(
     input?: WorktreeLineageInput,
-    _childRepo?: Repo
+    childRepo?: Repo
   ): Promise<WorktreeLineageResolution> {
-    return this.worktreeLineage.resolveCreate(input)
+    return this.worktreeLineage.resolveCreate(
+      input,
+      childRepo ? getRepoExecutionHostId(childRepo) : undefined
+    )
   }
 
   protected getOrchestrationDbIfAvailable(): OrchestrationDb | null {
@@ -136,14 +146,6 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
 
   hydrateInferredWorktreeLineage(): Promise<void> {
     return this.worktreeLineage.hydrate()
-  }
-
-  listLineageSnapshot() {
-    return this.worktreeLineage.listLineageSnapshot()
-  }
-
-  listLineageEdges() {
-    return this.worktreeLineage.listLineageEdges()
   }
 
   listWorktreeLineage(): Promise<Record<string, WorktreeLineage>> {
@@ -175,11 +177,15 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     )
   }
 
-  protected async resolveRepoSelector(selector: string): Promise<Repo> {
+  protected async resolveRepoSelector(selector: RuntimeRepoSelector): Promise<Repo> {
     if (!this.store) {
       throw new Error('repo_not_found')
     }
-    const candidates = this.selectReposBySelector(selector)
+    const matches = this.selectReposBySelector(runtimeRepoSelectorText(selector))
+    const hostId = runtimeRepoSelectorHostId(selector)
+    const candidates = hostId
+      ? matches.filter((repo) => getRepoExecutionHostId(repo) === hostId)
+      : matches
 
     if (candidates.length === 1) {
       return candidates[0]

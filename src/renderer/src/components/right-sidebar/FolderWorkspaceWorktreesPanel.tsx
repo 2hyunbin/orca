@@ -1,4 +1,3 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import WorktreeCard from '@/components/sidebar/WorktreeCard'
 import { stopNestedWorktreeCardBubble } from '@/components/sidebar/worktree-list/rows/header-event-guards'
 import {
@@ -50,7 +49,7 @@ export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
     worktree: Worktree,
     ancestorIds: ReadonlySet<string> = new Set()
   ): React.JSX.Element => {
-    const lineageChildren = lineageChildrenByParentId.get(getWorktreeHostIdentity(worktree)) ?? []
+    const lineageChildren = lineageChildrenByParentId.get(worktree.id) ?? []
     const lineageCollapsed = collapsedLineageWorktreeIds.has(worktree.id)
     const nextAncestorIds = new Set([...ancestorIds, worktree.id])
     const safeLineageChildren = lineageChildren.filter((child) => !nextAncestorIds.has(child.id))

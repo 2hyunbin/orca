@@ -1,4 +1,3 @@
-import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 import type { WorkspaceAttachmentMutation } from '../../../../shared/workspace-attachment-mutation'
 import type { WorkspaceReferenceTerminalContext } from '@/lib/workspace-attachment-terminal-origin'
 import type { CreateWorktreeCallOptions } from './worktrees/create/worktree-create-payload'
@@ -137,6 +136,8 @@ export type WorktreeSlice = {
   sortEpoch: number
   /** sortEpoch after the settle window; the sidebar sort reads this (see store/settled-sort-epoch.ts). */
   settledSortEpoch: number
+  /** Bumped by sortOrder-only changes, which skip sortEpoch so live Smart can't loop on its own saves. */
+  sortOrderEpoch: number
   /**
    * Worktree IDs that have been activated at least once during this app
    * session. The first activation of a worktree is special: its
@@ -184,16 +185,10 @@ export type WorktreeSlice = {
     executionHostId?: ExecutionHostId
   }) => Promise<void>
   updateWorktreeLineage: (
-    reference: SelectedWorktreeReference,
-    args: {
-      parent?: SelectedWorktreeReference
-      noParent?: boolean
-    }
+    worktreeId: string,
+    args: { parentWorktreeId?: string; noParent?: boolean }
   ) => Promise<void>
-  assignWorktreeParent: (
-    reference: SelectedWorktreeReference,
-    args: { parent: SelectedWorktreeReference }
-  ) => Promise<void>
+  assignWorktreeParent: (worktreeId: string, args: { parentWorktreeId: string }) => Promise<void>
   createWorktree: (
     repoId: string,
     name: string,
@@ -285,7 +280,11 @@ export type WorktreeSlice = {
    * the shortcut action visible even though pinned worktrees also remain in
    * their normal sidebar groups.
    */
-  setWorktreesPinnedAndReveal: (worktreeIds: readonly string[], isPinned: boolean) => void
+  /** Each target names its copy; a host-less id two hosts publish is skipped, not guessed. */
+  setWorktreesPinnedAndReveal: (
+    targets: readonly Pick<Worktree, 'id' | 'hostId'>[],
+    isPinned: boolean
+  ) => void
   observeTerminalGitHubPullRequestLink: (
     worktreeId: string,
     link: TerminalGitHubPRLink,

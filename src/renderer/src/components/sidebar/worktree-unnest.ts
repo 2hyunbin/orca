@@ -1,25 +1,24 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { AppState } from '@/store/types'
-import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 
-// Context-menu and drag clears share one failure toast.
+/**
+ * Clear the parent link on each worktree and report a single failure toast.
+ *
+ * Shared by the context menu's "Remove parent link" and the drag-to-reorder un-nest. Both
+ * fire-and-forget, and `updateWorktreeLineage` rejects when the owner route can't be resolved,
+ * so neither may call it bare — the rejection would surface as an unhandled promise rejection
+ * and the action would look like it succeeded.
+ */
 export async function unnestWorktrees(
-  references: readonly (SelectedWorktreeReference | null)[],
+  worktreeIds: readonly string[],
   updateWorktreeLineage: AppState['updateWorktreeLineage']
 ): Promise<void> {
-  if (references.length === 0) {
+  if (worktreeIds.length === 0) {
     return
   }
   try {
-    await Promise.all(
-      references.map((reference) => {
-        if (!reference) {
-          throw new Error('selector_not_found')
-        }
-        return updateWorktreeLineage(reference, { noParent: true })
-      })
-    )
+    await Promise.all(worktreeIds.map((id) => updateWorktreeLineage(id, { noParent: true })))
   } catch (err) {
     console.error('Failed to unnest workspace:', err)
     toast.error(

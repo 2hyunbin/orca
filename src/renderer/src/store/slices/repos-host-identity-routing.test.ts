@@ -371,7 +371,7 @@ describe('repo slice host identity routing', () => {
     expect(ptyKill).toHaveBeenCalledWith('local-pty')
     expect(ptyKill).not.toHaveBeenCalledWith('remote-pty')
   })
-  it('preserves ambiguous hostless worktree state when two hosts collide on repoId and path', async () => {
+  it('keeps a tab with no host evidence when two hosts collide on repoId and path', async () => {
     const sharedWorktreeId = 'same-repo::/shared'
     const localWorktree = makeWorktree({
       id: sharedWorktreeId,
@@ -395,8 +395,10 @@ describe('repo slice host identity routing', () => {
     await store.getState().removeProject('same-repo', { hostId: 'local' })
 
     expect(store.getState().worktreesByRepo['same-repo']).toEqual([remoteWorktree])
-    // Unowned legacy state must not be attributed to the removed host.
-    expect(store.getState().tabsByWorktree[sharedWorktreeId]).toHaveLength(1)
+    // Why kept: nothing says which host this tab is on, so it may be the surviving twin's.
+    expect(store.getState().tabsByWorktree[sharedWorktreeId]?.map((tab) => tab.id)).toEqual([
+      'shared-tab'
+    ])
     expect(store.getState().lastVisitedAtByWorktreeId[sharedWorktreeId]).toBe(10)
   })
 
@@ -475,7 +477,11 @@ describe('repo slice host identity routing', () => {
       params: { repo: 'same-repo' },
       timeoutMs: 15_000
     })
-    expect(reposRemoveForHost).not.toHaveBeenCalled()
+    // Host-scoped residue cleanup for the runtime row only; the local row is never addressed.
+    expect(reposRemoveForHost).toHaveBeenCalledWith({
+      repoId: 'same-repo',
+      hostId: 'runtime:env-1'
+    })
     expect(reposRemove).not.toHaveBeenCalled()
     expect(store.getState().repos).toEqual([localDuplicate])
     expect(store.getState().worktreesByRepo['same-repo']).toEqual([localWorktree])

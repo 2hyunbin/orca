@@ -8,20 +8,12 @@ import { isWorktreeMetaOwnedByRepo } from '../worktree-metadata-ownership'
 import { isFolderRepo } from '../../shared/repo-kind'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import type { Repo } from '../../shared/repo-types'
-import type { ExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import { mergeWorktree } from '../ipc/worktree-metadata-merge'
-import { projectWorktreeLineageWithHostPeers } from '../worktree-lineage-host-peers'
+import { projectResolvedWorktreeLineage } from '../../shared/resolved-worktree-lineage'
 
-type CreationEvidenceStore = Pick<Store, 'getRepos' | 'getWorktreeMeta' | 'getAllWorktreeMeta'> &
-  Partial<
-    Pick<
-      Store,
-      | 'getWorktreeMetaForHost'
-      | 'getAllWorktreeMetaForHost'
-      | 'getAllWorktreeLineage'
-      | 'getLineageEdges'
-    >
-  >
+type CreationEvidenceStore = Pick<Store, 'getRepos' | 'getWorktreeMeta'> &
+  Partial<Pick<Store, 'getWorktreeMetaForHost' | 'getAllWorktreeLineage'>>
 
 function readOwnedMetadata(
   store: CreationEvidenceStore,
@@ -68,6 +60,60 @@ export function resolveCreatedWorktreeTerminalTarget(
     { ...meta, hostId: routing.hostId },
     routing.repo.displayName
   )
-  const projected = projectWorktreeLineageWithHostPeers(store, routing.repo, [target])[0]
+  const lineageById = store.getAllWorktreeLineage?.() ?? {}
+  const relatedIds = new Set([target.id])
+  for (const lineage of Object.values(lineageById)) {
+    if (lineage.parentWorktreeId === target.id) {
+      relatedIds.add(lineage.worktreeId)
+    }
+  }
+  // Include ancestors so the existing projection can reject stale edges and cycles.
+  for (const id of relatedIds) {
+    const parentId = lineageById[id]?.parentWorktreeId
+    if (parentId) {
+      relatedIds.add(parentId)
+    }
+  }
+  const rows = [target]
+  for (const id of relatedIds) {
+    if (id === target.id) {
+      continue
+    }
+    const parsedRelated = splitWorktreeIdForFilesystem(id)
+    if (!parsedRelated) {
+      continue
+    }
+    const relatedRepos = repos.filter(
+      (repo) => repo.id === parsedRelated.repoId && getRepoExecutionHostId(repo) === routing.hostId
+    )
+    if (relatedRepos.length !== 1) {
+      continue
+    }
+    const relatedRepo = relatedRepos[0]
+    const relatedMeta = readOwnedMetadata(
+      store,
+      id,
+      relatedRepo,
+      routing.hostId,
+      repos.filter((repo) => repo.id === parsedRelated.repoId).length
+    )
+    if (!relatedMeta) {
+      continue
+    }
+    rows.push(
+      mergeWorktree(
+        relatedRepo.id,
+        {
+          path: parsedRelated.worktreePath,
+          head: '',
+          branch: '',
+          isBare: false,
+          isMainWorktree: false
+        },
+        { ...relatedMeta, hostId: routing.hostId }
+      )
+    )
+  }
+  const projected = projectResolvedWorktreeLineage(rows, lineageById)[0]
   return projected ? { ...projected, git: worktree } : null
 }

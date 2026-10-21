@@ -60,7 +60,6 @@ export type WslMoveProjectionInput = {
     | 'worktreeMeta'
     | 'worktreeMetaByIdentity'
     | 'worktreeIdentityAliases'
-    | 'lineageByChildInstance'
     | 'worktreeLineageById'
     | 'workspaceLineageByChildKey'
     | 'automations'
@@ -95,7 +94,6 @@ export const WSL_MOVE_PROJECTED_STATE_FIELDS = [
   'mobileClientTabSelectionsByDeviceId',
   'worktreeMeta',
   'worktreeMetaByIdentity',
-  'lineageByChildInstance',
   'worktreeLineageById',
   'workspaceLineageByChildKey',
   'automations',
@@ -196,14 +194,6 @@ export function projectWslMoveState(
         id,
         withoutKeys([meta], HOST_BINDINGS.worktreeMeta)[0]
       ])
-    ),
-    lineageByChildInstance: Object.fromEntries(
-      Object.entries(state.lineageByChildInstance ?? {})
-        .filter(([, edge]) => ownerInScope(edge.child.locator))
-        .map(([instance, edge]) => [
-          instance,
-          { ...edge, child: { instanceId: edge.child.instanceId, locator: edge.child.locator } }
-        ])
     ),
     worktreeLineageById: pickKeys(state.worktreeLineageById, ownerInScope),
     workspaceLineageByChildKey: pickKeys(state.workspaceLineageByChildKey, ownerInScope),

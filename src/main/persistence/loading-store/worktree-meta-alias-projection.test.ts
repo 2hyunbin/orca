@@ -422,10 +422,11 @@ describe('worktree meta alias projection', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The preceding Store save produced the PersistedState snapshot read by this test.
     const onDisk = JSON.parse(readPersistedStateJson(dataFile)) as PersistedState
     expect(Object.hasOwn(onDisk, 'worktreeMetaByIdentity')).toBe(false)
-    // Unowned legacy lineage stays diagnostic rather than becoming an active edge.
+    // The locator map and its lineage companions are all still there, untouched by the projection.
     expect(Object.keys(onDisk.worktreeMeta)).toEqual([worktreeId(0)])
-    expect(onDisk.worktreeLineageById).toEqual({})
-    expect(onDisk.workspaceLineageByChildKey).toEqual({})
-    expect(onDisk.legacyLineageRemainder).toBeDefined()
+    expect(Object.keys(onDisk.worktreeLineageById)).toEqual([`${REPO_ID}::/tmp/child`])
+    expect(Object.keys(onDisk.workspaceLineageByChildKey)).toEqual([
+      `worktree:${REPO_ID}::/tmp/child`
+    ])
   })
 })

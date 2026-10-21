@@ -1,3 +1,4 @@
+import { deriveCliWriterTopology } from './cli-writer-observation'
 import { transitionHookPresence } from '../../../shared/agent-hook-presence-transition'
 import {
   reconcileRemoteCodexState,
@@ -21,6 +22,7 @@ import {
 import { isStaleGrokTurnEnd } from './server-grok-status-rules'
 import { resolveCancelVerdictLatch } from './server-cancel-verdict-latch'
 import { AgentHookServerStatusApplication } from './server-status-application'
+import { claimsPaneAfterExit } from './agent-exit-evidence'
 
 export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusApplication {
   protected readonly claudeOwedNotificationExpiry = new ClaudeOwedNotificationExpiryTimers(
@@ -48,7 +50,8 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     onAccepted?: () => void,
     origin: AgentStatusObservationOrigin = 'hook',
     observedAt?: number,
-    mutationBefore?: EnrichedAgentHookEventPayload
+    mutationBefore?: EnrichedAgentHookEventPayload,
+    newRun = false
   ): EnrichedAgentHookEventPayload | undefined {
     const transitioned = transitionHookPresence(
       incoming,
@@ -67,6 +70,16 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
         endedPresence: payload.agentPresence
       })
       return undefined
+    }
+    const priorExit =
+      this.agentExitedAtByPaneKey.get(this.resolvePaneKeyAlias(payload.paneKey)) ??
+      this.agentExitedAtByPaneKey.get(payload.paneKey)
+    // Why the incoming presence: the transition may stamp a stale owner over the sender's own identity.
+    if (
+      priorExit &&
+      claimsPaneAfterExit({ ...payload, agentPresence: incoming.agentPresence }, priorExit)
+    ) {
+      this.forgetAgentExit(payload.paneKey)
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Main admits enriched legacy rows; the shared view declares their base event type.
     const previous = this.state.lastStatusByPaneKey.get(payload.paneKey) as
@@ -102,7 +115,8 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
               agentType: previous.payload.agentType,
               state: previous.payload.state,
               updatedAt: previous.receivedAt,
-              restoredUnconfirmed: previous.restoredUnconfirmed
+              restoredUnconfirmed: previous.restoredUnconfirmed,
+              agentPresence: previous.providerSessionOnly ? undefined : previous.agentPresence
             }
           : undefined,
       incoming: terminalOwnedPayload.payload.agentType,
@@ -127,10 +141,16 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     if (terminalOwnedPayload.providerSessionOnly) {
       // Why: identity-only rows survive replay but must not emit prompt telemetry or a fabricated status.
       onAccepted?.()
-      const enriched = {
-        ...this.attachStatusTiming(terminalOwnedPayload, now),
-        observation: this.stampObservation(terminalOwnedPayload, origin, now)
-      }
+      const enriched = deriveCliWriterTopology(
+        {
+          ...this.attachStatusTiming(terminalOwnedPayload, now),
+          observation: this.stampObservation(terminalOwnedPayload, origin, now)
+        },
+        rowBefore,
+        this.cliWriterExecutionMatches,
+        newRun,
+        incoming.agentPresence?.process
+      )
       this.clearAssistantMessageRetry(enriched.paneKey)
       this.runtimeObservedStatusPaneKeys.delete(enriched.paneKey)
       if (!this.writeLegacyStatusRow(enriched)) {
@@ -245,16 +265,27 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     }
     // Why carried forward only within one host: main's OSC parse resolves the handle, so a later
     // hook must not erase its terminal join; a connection change must not inherit another host's.
-    const { claudeRunningNonAgentTask: _unpaired, ...unpairedPayload } = effectivePayload
+    // Why drop the settled list: it vouches for this replay's transition only, not for the stored row.
+    const {
+      claudeRunningNonAgentTask: _unpaired,
+      claudeSettledRequests: _settled,
+      ...unpairedPayload
+    } = effectivePayload
     const runningNonAgentTask = pairedClaudeNonAgentWork(previous, effectivePayload)
     const pairedPayload =
       runningNonAgentTask === undefined
         ? unpairedPayload
         : { ...unpairedPayload, claudeRunningNonAgentTask: runningNonAgentTask }
-    const enriched = {
-      ...this.attachStatusTiming(pairedPayload, now, observedAt),
-      observation: this.stampObservation(pairedPayload, origin, observedAt ?? now)
-    }
+    const enriched = deriveCliWriterTopology(
+      {
+        ...this.attachStatusTiming(pairedPayload, now, observedAt),
+        observation: this.stampObservation(pairedPayload, origin, observedAt ?? now)
+      },
+      rowBefore,
+      this.cliWriterExecutionMatches,
+      newRun,
+      incoming.agentPresence?.process
+    )
     if (
       typeof enriched.payload.turnCompletedAt === 'number' &&
       Number.isFinite(enriched.payload.turnCompletedAt)

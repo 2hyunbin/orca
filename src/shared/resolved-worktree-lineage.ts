@@ -1,6 +1,5 @@
 import type { WorktreeLineage } from './worktree/lineage-types'
 import type { Worktree } from './worktree/types'
-import { getWorktreeHostIdentity } from './worktree/host-qualified-identity'
 
 export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
   parentWorktreeId: string | null
@@ -8,37 +7,37 @@ export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
   lineage: WorktreeLineage | null
 }
 
-export function indexWorktreesByInstance<T extends { instanceId?: string }>(
-  worktrees: Iterable<T>,
-  instanceKey: (row: T, instance: string) => string = (_row, instance) => instance
-): Map<string, T | null> {
-  const byInstance = new Map<string, T | null>()
-  for (const worktree of worktrees) {
-    if (worktree.instanceId) {
-      const key = instanceKey(worktree, worktree.instanceId)
-      byInstance.set(key, byInstance.has(key) ? null : worktree)
-    }
-  }
-  return byInstance
+/** The execution host is the only lineage boundary. */
+export type WorktreeLineageBoundary = Pick<Worktree, 'hostId'>
+
+export function sharesWorktreeLineageBoundary(
+  child: WorktreeLineageBoundary,
+  parent: WorktreeLineageBoundary
+): boolean {
+  return child.hostId === undefined || parent.hostId === undefined || child.hostId === parent.hostId
+}
+
+export function sharesResolvedWorktreeLineageBoundary(child: Worktree, parent: Worktree): boolean {
+  return sharesWorktreeLineageBoundary(child, parent)
 }
 
 export function isValidResolvedWorktreeLineageEdge(
-  child: Pick<Worktree, 'id' | 'hostId' | 'instanceId'>,
-  parent: Pick<Worktree, 'id' | 'hostId' | 'instanceId'>,
+  child: Worktree,
+  parent: Worktree,
   lineage: WorktreeLineage
 ): boolean {
   return (
-    getWorktreeHostIdentity(child) !== getWorktreeHostIdentity(parent) &&
-    Boolean(child.instanceId && parent.instanceId) &&
+    child.id !== parent.id &&
+    lineage.worktreeId === child.id &&
+    lineage.parentWorktreeId === parent.id &&
+    sharesResolvedWorktreeLineageBoundary(child, parent) &&
     child.instanceId === lineage.worktreeInstanceId &&
     parent.instanceId === lineage.parentWorktreeInstanceId
   )
 }
 
-export function getCyclicChildKeys<Key>(
-  parentByChild: ReadonlyMap<Key, Key>,
-  rank: (key: Key) => { createdAt: number; instanceId: string }
-): Set<Key> {
+/** The children on a cycle of a child-to-parent map, whatever the keys are. */
+export function getCyclicLineageChildKeys<Key>(parentByChild: ReadonlyMap<Key, Key>): Set<Key> {
   const processed = new Set<Key>()
   const cyclic = new Set<Key>()
 
@@ -52,15 +51,9 @@ export function getCyclicChildKeys<Key>(
     while (currentId !== undefined && parentByChild.has(currentId) && !processed.has(currentId)) {
       const cycleStart = pathIndexById.get(currentId)
       if (cycleStart !== undefined) {
-        const newest = path.slice(cycleStart).reduce((winner, key) => {
-          const candidate = rank(key)
-          const best = rank(winner)
-          return candidate.createdAt > best.createdAt ||
-            (candidate.createdAt === best.createdAt && candidate.instanceId < best.instanceId)
-            ? key
-            : winner
-        })
-        cyclic.add(newest)
+        for (let index = cycleStart; index < path.length; index += 1) {
+          cyclic.add(path[index])
+        }
         break
       }
       pathIndexById.set(currentId, path.length)
@@ -75,69 +68,38 @@ export function getCyclicChildKeys<Key>(
   return cyclic
 }
 
-export function getConnectedWorktreeLineageInstances(
-  seedInstances: readonly string[],
+export function getCyclicWorktreeLineageChildIds(
+  lineageByChildId: ReadonlyMap<string, WorktreeLineage>
+): Set<string> {
+  return getCyclicLineageChildKeys(
+    new Map([...lineageByChildId].map(([childId, lineage]) => [childId, lineage.parentWorktreeId]))
+  )
+}
+
+export function getConnectedWorktreeLineageIds(
+  seedIds: readonly string[],
   lineageById: Readonly<Record<string, WorktreeLineage>>
 ): Set<string> {
-  const edges = Object.values(lineageById)
-  const adjacency = new Map<string, Set<string>>()
-  const connectedInstances = new Set(seedInstances)
-  for (const edge of edges) {
-    for (const [from, to] of [
-      [edge.worktreeInstanceId, edge.parentWorktreeInstanceId],
-      [edge.parentWorktreeInstanceId, edge.worktreeInstanceId]
-    ]) {
-      const adjacent = adjacency.get(from) ?? new Set<string>()
-      adjacent.add(to)
-      adjacency.set(from, adjacent)
-    }
+  const childrenByParentId = new Map<string, string[]>()
+  for (const [childId, lineage] of Object.entries(lineageById)) {
+    const children = childrenByParentId.get(lineage.parentWorktreeId) ?? []
+    children.push(childId)
+    childrenByParentId.set(lineage.parentWorktreeId, children)
   }
-
-  const pending = [...connectedInstances]
-  for (const instance of pending) {
-    for (const adjacent of adjacency.get(instance) ?? []) {
-      if (!connectedInstances.has(adjacent)) {
-        connectedInstances.add(adjacent)
+  const connected = new Set(seedIds)
+  const pending = [...connected]
+  for (const id of pending) {
+    for (const adjacent of [
+      lineageById[id]?.parentWorktreeId,
+      ...(childrenByParentId.get(id) ?? [])
+    ]) {
+      if (adjacent && !connected.has(adjacent)) {
+        connected.add(adjacent)
         pending.push(adjacent)
       }
     }
   }
-  return connectedInstances
-}
-
-export function selectResolvedWorktreeLineage<
-  T extends Pick<Worktree, 'id' | 'hostId' | 'instanceId'>
->(
-  worktrees: readonly T[],
-  getLineage: (child: T) => WorktreeLineage | null | undefined,
-  instanceKey: (row: T, instance: string) => string = (_row, instance) => instance
-) {
-  const byInstance = indexWorktreesByInstance(worktrees, instanceKey)
-  const selected = new Map<string, { lineage: WorktreeLineage; parent: T }>()
-  const parents = new Map<string, string>()
-  for (const child of worktrees) {
-    const lineage = getLineage(child)
-    const parent = lineage && byInstance.get(instanceKey(child, lineage.parentWorktreeInstanceId))
-    if (
-      !lineage ||
-      !parent ||
-      !byInstance.get(instanceKey(child, lineage.worktreeInstanceId)) ||
-      !isValidResolvedWorktreeLineageEdge(child, parent, lineage)
-    ) {
-      continue
-    }
-    const key = getWorktreeHostIdentity(child)
-    selected.set(key, { lineage, parent })
-    parents.set(key, getWorktreeHostIdentity(parent))
-  }
-  const suppressed = getCyclicChildKeys(parents, (key) => ({
-    createdAt: selected.get(key)?.lineage.createdAt ?? 0,
-    instanceId: selected.get(key)?.lineage.worktreeInstanceId ?? ''
-  }))
-  for (const key of suppressed) {
-    selected.delete(key)
-  }
-  return { selected, suppressed }
+  return connected
 }
 
 export function projectResolvedWorktreeLineage<T extends Worktree>(
@@ -145,28 +107,51 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   knownPeers: readonly Worktree[] = []
 ): WorktreeWithResolvedLineage<T>[] {
-  const all = [...worktrees, ...knownPeers]
-  const { selected } = selectResolvedWorktreeLineage(
-    all,
-    (child) => lineageById[getWorktreeHostIdentity(child)] ?? lineageById[child.id]
-  )
-  const children = new Map<string, string[]>()
-  for (const child of all) {
-    const edge = selected.get(getWorktreeHostIdentity(child))
-    if (!edge) {
-      continue
+  const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
+  const indicesById = new Map<string, number[]>()
+  allWorktrees.forEach((worktree, index) => {
+    const indices = indicesById.get(worktree.id) ?? []
+    indices.push(index)
+    indicesById.set(worktree.id, indices)
+  })
+  const validLineageByChildIndex = new Map<number, WorktreeLineage>()
+  const parentIndexByChildIndex = new Map<number, number>()
+  const childIdsByParentIndex = new Map<number, string[]>()
+
+  allWorktrees.forEach((child, childIndex) => {
+    const lineage = lineageById[child.id]
+    if (!lineage) {
+      return
     }
-    const key = getWorktreeHostIdentity(edge.parent)
-    children.set(key, [...(children.get(key) ?? []), child.id])
+    const parentIndices = (indicesById.get(lineage.parentWorktreeId) ?? []).filter((index) =>
+      isValidResolvedWorktreeLineageEdge(child, allWorktrees[index], lineage)
+    )
+    // A locator can exist on several hosts. An ambiguous parent must not be selected by row order.
+    if (parentIndices.length !== 1) {
+      return
+    }
+    validLineageByChildIndex.set(childIndex, lineage)
+    parentIndexByChildIndex.set(childIndex, parentIndices[0])
+  })
+
+  for (const index of getCyclicLineageChildKeys(parentIndexByChildIndex)) {
+    validLineageByChildIndex.delete(index)
+    parentIndexByChildIndex.delete(index)
   }
-  return worktrees.map((worktree) => {
-    const key = getWorktreeHostIdentity(worktree)
-    const edge = selected.get(key)
+
+  for (const [childIndex, parentIndex] of parentIndexByChildIndex) {
+    const children = childIdsByParentIndex.get(parentIndex) ?? []
+    children.push(allWorktrees[childIndex].id)
+    childIdsByParentIndex.set(parentIndex, children)
+  }
+
+  return worktrees.map((worktree, index) => {
+    const lineage = validLineageByChildIndex.get(index) ?? null
     return {
       ...worktree,
-      parentWorktreeId: edge?.parent.id ?? null,
-      childWorktreeIds: children.get(key) ?? [],
-      lineage: edge?.lineage ?? null
+      parentWorktreeId: lineage?.parentWorktreeId ?? null,
+      childWorktreeIds: childIdsByParentIndex.get(index) ?? [],
+      lineage
     }
   })
 }

@@ -1,4 +1,3 @@
-import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 import { buildWorktreeDragPreviewOffsets } from './worktree-drag-preview-offsets'
 import {
   getWorktreeSidebarBoundaryDrop,
@@ -28,10 +27,7 @@ export type WorktreeSidebarStatusDropTarget = {
 }
 
 export type WorktreeSidebarTrackedStatusDropTarget = {
-  target: WorktreeSidebarStatusDropTarget & {
-    lineageParentId: string | null
-    lineageParentReference?: SelectedWorktreeReference
-  }
+  target: WorktreeSidebarStatusDropTarget & { lineageParentId: string | null }
   preview: WorktreeSidebarDropPreview | null
   x: number
   y: number

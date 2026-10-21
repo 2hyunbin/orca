@@ -1,3 +1,4 @@
+import type { WorkspaceKey } from '../../../shared/folder-workspace-types'
 import type { BrowserPage, BrowserWorkspace } from '../../../shared/browser-workspace-types'
 import { remapBrowserPageDocLocation } from '../../../shared/browser-page-doc-location'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
@@ -8,56 +9,7 @@ import {
   isWorktreeHostIdentity
 } from '../../../shared/worktree/host-qualified-identity'
 import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
-
-type WorktreeNamingRow = { worktreeId: string }
-
-/**
- * A session map keyed by pane, tab or environment whose VALUE names the worktree it belongs to.
- * Returns the repointed record, or null when no row named the old id — so the caller assigns to
- * the concrete field and the row type is never widened.
- */
-function repointRowRecord<Row extends WorktreeNamingRow>(
-  record: Record<string, Row> | undefined,
-  oldWorktreeId: string,
-  newWorktreeId: string
-): Record<string, Row> | null {
-  if (!record) {
-    return null
-  }
-  let changed = false
-  const next: Record<string, Row> = { ...record }
-  for (const [key, row] of Object.entries(record)) {
-    if (row?.worktreeId !== oldWorktreeId) {
-      continue
-    }
-    next[key] = { ...row, worktreeId: newWorktreeId }
-    changed = true
-  }
-  return changed ? next : null
-}
-
-/** Same, but each value is an array of such rows. */
-function repointRowArrays<Row extends WorktreeNamingRow>(
-  record: Record<string, Row[]> | undefined,
-  oldWorktreeId: string,
-  newWorktreeId: string
-): Record<string, Row[]> | null {
-  if (!record) {
-    return null
-  }
-  let changed = false
-  const next: Record<string, Row[]> = { ...record }
-  for (const [key, rows] of Object.entries(record)) {
-    if (!Array.isArray(rows) || !rows.some((row) => row?.worktreeId === oldWorktreeId)) {
-      continue
-    }
-    next[key] = rows.map((row) =>
-      row?.worktreeId === oldWorktreeId ? { ...row, worktreeId: newWorktreeId } : row
-    )
-    changed = true
-  }
-  return changed ? next : null
-}
+import { repointRowArrays, repointRowRecord } from './worktree-identity-row-repoint'
 
 /**
  * Re-keys every worktreeId-keyed record in `state` from `oldWorktreeId` to `newWorktreeId`. Mutates `state` in place;
@@ -271,6 +223,15 @@ export function migrateWorktreeIdentity(
       session.clientHostedBrowserCloseIntentsByEnvironment = nextCloseIntents
       sessionChanged = true
     }
+    const nextPairedTabCloseIntents = repointRowArrays(
+      session.pairedTerminalTabCloseIntentsByEnvironment,
+      oldWorktreeId,
+      newWorktreeId
+    )
+    if (nextPairedTabCloseIntents) {
+      session.pairedTerminalTabCloseIntentsByEnvironment = nextPairedTabCloseIntents
+      sessionChanged = true
+    }
     return sessionChanged
   }
 
@@ -281,6 +242,41 @@ export function migrateWorktreeIdentity(
     const prior = newMeta.priorWorktreeIds ?? []
     if (!prior.includes(oldWorktreeId)) {
       newMeta.priorWorktreeIds = [...prior, oldWorktreeId]
+      changed = true
+    }
+  }
+
+  changed = moveKey(state.worktreeLineageById) || changed
+  const movedLineage = state.worktreeLineageById[newWorktreeId]
+  if (movedLineage && movedLineage.worktreeId === oldWorktreeId) {
+    movedLineage.worktreeId = newWorktreeId
+    // Why: moveKey reports nothing when the record already sat under the new key, so flag the repair
+    // ourselves or the caller skips the save and the stale id comes back on reload.
+    changed = true
+  }
+  // Why: children carry this as parentWorktreeId; keep the denormalized path-derived id consistent (parentWorktreeInstanceId is stable).
+  for (const lineage of Object.values(state.worktreeLineageById)) {
+    if (lineage.parentWorktreeId === oldWorktreeId) {
+      lineage.parentWorktreeId = newWorktreeId
+      changed = true
+    }
+  }
+
+  if (oldWorkspaceKey in state.workspaceLineageByChildKey) {
+    const lineage = state.workspaceLineageByChildKey[oldWorkspaceKey]
+    state.workspaceLineageByChildKey[newWorkspaceKey] = {
+      ...lineage,
+      childWorkspaceKey: newWorkspaceKey
+    }
+    delete state.workspaceLineageByChildKey[oldWorkspaceKey]
+    changed = true
+  }
+  for (const [childKey, lineage] of Object.entries(state.workspaceLineageByChildKey)) {
+    if (lineage.parentWorkspaceKey === oldWorkspaceKey) {
+      state.workspaceLineageByChildKey[childKey as WorkspaceKey] = {
+        ...lineage,
+        parentWorkspaceKey: newWorkspaceKey
+      }
       changed = true
     }
   }

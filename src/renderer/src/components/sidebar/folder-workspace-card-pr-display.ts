@@ -1,14 +1,12 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { AppState } from '@/store/types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
-import { getLineageChildWorktree } from '../right-sidebar/folder-workspace-attached-worktrees'
+import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { buildParentPrChecksRows } from '@/components/right-sidebar/parent-pr-checks-rows'
 import type { ParentPrChecksRow } from '@/components/right-sidebar/parent-pr-checks-row-types'
 import type { WorktreeCardPrDisplay } from './worktree-card-pr-display'
-import { getProjectedWorktreeLineageChildrenByParentId } from './worktree-lineage-projection'
+import { getProjectedWorktreeLineageChildrenByParentId } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 type FolderWorkspaceCardPrDisplayArgs = {
   folderWorkspaceId: string
@@ -74,25 +72,23 @@ function getAttachedWorktreesForFolderWorkspaceCard({
   'folderWorkspaceId' | 'workspaceLineageByChildKey' | 'worktreeLineageById' | 'worktreeMap'
 >): Worktree[] {
   const folderKey = folderWorkspaceKey(folderWorkspaceId)
-  const directChildren = Object.entries(workspaceLineageByChildKey ?? {})
-    .filter(([, lineage]) => lineage.parentWorkspaceKey === folderKey)
-    .map(([key, lineage]) => getLineageChildWorktree(lineage, worktreeMap, key))
+  const directChildren = Object.values(workspaceLineageByChildKey ?? {})
+    .filter((lineage) => lineage.parentWorkspaceKey === folderKey)
+    .map((lineage) => getWorkspaceLineageChild(lineage, worktreeMap))
     .filter((worktree): worktree is Worktree => worktree !== null)
 
-  const included = new Map(
-    directChildren.map((worktree) => [getWorktreeHostIdentity(worktree), worktree])
-  )
+  const included = new Map(directChildren.map((worktree) => [worktree.id, worktree]))
   const childrenByParentId = getProjectedWorktreeLineageChildrenByParentId(
     worktreeLineageById ?? {},
     worktreeMap
   )
   const queue = [...directChildren]
   for (let index = 0; index < queue.length; index += 1) {
-    for (const child of childrenByParentId.get(getWorktreeHostIdentity(queue[index])) ?? []) {
-      if (child.isArchived || included.has(getWorktreeHostIdentity(child))) {
+    for (const child of childrenByParentId.get(queue[index].id) ?? []) {
+      if (child.isArchived || included.has(child.id)) {
         continue
       }
-      included.set(getWorktreeHostIdentity(child), child)
+      included.set(child.id, child)
       queue.push(child)
     }
   }
@@ -112,6 +108,24 @@ function parentPrChecksRowToCardDisplay(row: ParentPrChecksRow): WorktreeCardPrD
     ...(row.reviewUrl ? { url: row.reviewUrl } : {}),
     status: row.checkTone
   }
+}
+
+function getWorkspaceLineageChild(
+  lineage: WorkspaceLineage,
+  worktreeMap: ReadonlyMap<string, Worktree>
+): Worktree | null {
+  const childScope = parseWorkspaceKey(lineage.childWorkspaceKey)
+  if (childScope?.type !== 'worktree') {
+    return null
+  }
+  const worktree = worktreeMap.get(childScope.worktreeId)
+  if (!worktree || worktree.isArchived) {
+    return null
+  }
+  if (lineage.childInstanceId && lineage.childInstanceId !== worktree.instanceId) {
+    return null
+  }
+  return worktree
 }
 
 function compareReviewDisplays(left: WorktreeCardPrDisplay, right: WorktreeCardPrDisplay): number {

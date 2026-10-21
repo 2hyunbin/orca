@@ -10,8 +10,6 @@ type WorktreeSnapshot = {
   allWorktrees: Worktree[]
   worktreeMap: Map<string, Worktree>
   worktreesById: Map<string, Worktree[]>
-  worktreesByIdentity: Map<string, Worktree | null>
-  identityCandidates: Map<string, Worktree[]>
 }
 
 // Why: Zustand reruns selectors on every write, so identity projections need
@@ -62,28 +60,7 @@ function getWorktreeSnapshot(worktreesByRepo: AppState['worktreesByRepo']): Work
       worktreesById.set(worktreeId, [worktree])
     }
   }
-  const worktreesByIdentity = new Map<string, Worktree | null>()
-  const identityCandidates = new Map<string, Worktree[]>()
-  for (const row of allWorktrees) {
-    if (row.identity) {
-      const candidates = identityCandidates.get(row.identity.key) ?? []
-      candidates.push(row)
-      identityCandidates.set(row.identity.key, candidates)
-      const ownerKey = JSON.stringify([row.hostId, row.identity.key])
-      worktreesByIdentity.set(ownerKey, worktreesByIdentity.has(ownerKey) ? null : row)
-      worktreesByIdentity.set(
-        row.identity.key,
-        worktreesByIdentity.has(row.identity.key) ? null : row
-      )
-    }
-  }
-  const snapshot = {
-    allWorktrees,
-    worktreeMap,
-    worktreesById,
-    worktreesByIdentity,
-    identityCandidates
-  }
+  const snapshot = { allWorktrees, worktreeMap, worktreesById }
   worktreeSnapshotCache.set(worktreesByRepo, snapshot)
   return snapshot
 }
@@ -120,18 +97,6 @@ export function getIndexedWorktreeById(
   return getWorktreeSnapshot(worktreesByRepo).worktreeMap.get(worktreeId)
 }
 
-export function getIndexedWorktreeByIdentity(
-  worktreesByRepo: AppState['worktreesByRepo'],
-  identity: string,
-  hostId?: Worktree['hostId']
-): Worktree | undefined {
-  return (
-    getWorktreeSnapshot(worktreesByRepo).worktreesByIdentity.get(
-      hostId ? JSON.stringify([hostId, identity]) : identity
-    ) ?? undefined
-  )
-}
-
 export function getIndexedRepoMap(repos: AppState['repos']): Map<string, Repo> {
   const cachedMap = repoMapCache.get(repos)
   if (cachedMap) {
@@ -140,11 +105,4 @@ export function getIndexedRepoMap(repos: AppState['repos']): Map<string, Repo> {
   const repoMap = new Map(repos.map((repo) => [repo.id, repo]))
   repoMapCache.set(repos, repoMap)
   return repoMap
-}
-
-export function getIndexedWorktreeIdentityCandidates(
-  worktreesByRepo: AppState['worktreesByRepo'],
-  identity: string
-): readonly Worktree[] {
-  return getWorktreeSnapshot(worktreesByRepo).identityCandidates.get(identity) ?? []
 }

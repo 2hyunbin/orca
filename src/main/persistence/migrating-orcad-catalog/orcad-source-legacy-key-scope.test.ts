@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getDefaultPersistedState } from '../../../shared/constants'
-import {
-  ORCAD_MIGRATION_MANIFEST_VERSION,
-  type OrcadMigrationManifest
-} from '../../../shared/orcad-migration-manifest'
+import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
+import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orcad-migration-manifest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { Repo } from '../../../shared/repo-types'
 import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
@@ -134,8 +132,7 @@ describe('legacy unqualified keys for a repo id two hosts share', () => {
 
     expect(state.worktreeMeta).toEqual(before.worktreeMeta)
     expect(state.automations).toEqual(before.automations)
-    expect(state.worktreeLineageById).toEqual({})
-    expect(state.lineageByChildInstance).toBeDefined()
+    expect(state.worktreeLineageById).toEqual(before.worktreeLineageById)
     expect(state.sparsePresetsByRepo).toEqual(before.sparsePresetsByRepo)
     expect(state.ui.lastActiveRepoId).toBe(REPO_A.id)
     expect(state.ui.filterRepoIds).toEqual([REPO_A.id])

@@ -173,7 +173,8 @@ export function normalizeHookPayload(
         agentType: previousStatus.payload.agentType,
         state: previousStatus.payload.state,
         updatedAt: previousReceivedAt,
-        restoredUnconfirmed: previousStatus.restoredUnconfirmed
+        restoredUnconfirmed: previousStatus.restoredUnconfirmed,
+        agentPresence: previousStatus.providerSessionOnly ? undefined : previousStatus.agentPresence
       },
       incoming: source,
       now: Date.now()
@@ -224,7 +225,9 @@ export function normalizeHookPayload(
   // Why: presence needs the agent's own process; without it the hook cannot speak for liveness.
   const agentProcess =
     source === 'claude' ? readAgentProcessIdentity(record.agentProcess) : undefined
-  const agentPresence = agentProcess ? { agent: source, process: agentProcess } : undefined
+  const agentPresence = agentProcess
+    ? { agent: source, process: agentProcess, sessionOwner: true as const }
+    : undefined
   const sessionEndReason = readString(hookPayloadRecord, 'reason')
   if (
     eventName === 'SessionEnd' &&
@@ -301,13 +304,13 @@ export function normalizeHookPayload(
           : undefined
         : hasExplicitUserPrompt(
             source,
-            eventName,
+            dispatched.eventName,
             extractedPrompt,
             dispatched.resolvedPromptText,
             dispatched.hasTranscriptPromptEvidence
           ),
     promptInteractionKey: dispatched.promptInteractionKey,
-    hookEventName: typeof eventName === 'string' ? eventName : undefined,
+    hookEventName: typeof dispatched.eventName === 'string' ? dispatched.eventName : undefined,
     providerPromptId:
       source === 'grok' ? (grokActiveTurn?.promptId ?? providerPromptId) : providerPromptId,
     grokPromptBoundary: grokActiveTurn ? true : undefined,

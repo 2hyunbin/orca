@@ -4,8 +4,6 @@ import { ProtectedSecretPersistence } from '../../protected-secret-persistence'
 import { serializeSelectiveProfileStateDomains } from './profile-state-authority-writes'
 import { StateSerializationSecretHandlingOperations } from './state-serialization-secret-handling'
 
-const lineageDomains = ['worktreeLineageById', 'workspaceLineageByChildKey']
-
 function previousReplacements(state: Record<string, unknown>, domains: ReadonlySet<string>) {
   const parsed: unknown = JSON.parse(Buffer.from(JSON.stringify(state), 'utf8').toString('utf8'))
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -219,8 +217,7 @@ describe('selective profile domain serialization', () => {
     expect(serialization.buildStateDomainsToSave(domains)?.replacements).toEqual([
       { domain: 'workspaceSession', payload: '"session"' },
       { domain: 'automations', payload: JSON.stringify(capturedAutomations) },
-      { domain: 'worktreeIdentityAliases', payload: JSON.stringify(capturedAliases) },
-      ...lineageDomains.map((domain) => ({ domain, payload: '{}' }))
+      { domain: 'worktreeIdentityAliases', payload: JSON.stringify(capturedAliases) }
     ])
     expect(state.automations).not.toBe(capturedAutomations)
     expect(state.worktreeIdentityAliases).toBeUndefined()
@@ -234,12 +231,10 @@ describe('selective profile domain serialization', () => {
       protectedSecrets: new ProtectedSecretPersistence()
     })
     const domains = new Set(['workspaceSession', 'automations', 'worktreeIdentityAliases'])
-    lineageDomains.forEach((domain) => domains.add(domain))
     const expected = previousReplacements(
       {
         workspaceSession: state.workspaceSession,
-        automations: state.automations,
-        ...Object.fromEntries(lineageDomains.map((domain) => [domain, {}]))
+        automations: state.automations
       },
       domains
     )
@@ -258,8 +253,7 @@ describe('selective profile domain serialization', () => {
     expect(built?.replacements).toEqual(expected)
     expect(stringifiedObjects.map((value) => Object.keys(value))).toEqual([
       ['workspaceSession'],
-      ['automations'],
-      ...lineageDomains.map((domain) => [domain])
+      ['automations']
     ])
     expect(parseCount).toBe(0)
     expect(encodeCount).toBe(0)

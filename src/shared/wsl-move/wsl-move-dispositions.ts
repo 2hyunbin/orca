@@ -67,21 +67,17 @@ export const PERSISTED_STATE_DISPOSITIONS = {
     item: 15,
     note: 'The destination mints its own canonical identities for the moved metadata.'
   },
-  lineageByChildInstance: moveDisposition(16),
-  legacyLineageRemainder: notApplicableDisposition(
-    16,
-    'Read-only migration diagnostics stay on the source.'
-  ),
   worktreeLineageById: moveDisposition(16),
   workspaceLineageByChildKey: moveDisposition(17),
   settings: notApplicableDisposition(62, 'Desktop-global; see SETTINGS_KEYS_NAMING_A_PATH.'),
   ui: { disposition: 'per-field', item: 38 },
   githubCache: notApplicableDisposition(21, 'Cache keyed by repoId, which the move keeps.'),
   workspaceSession: { disposition: 'per-field', item: 22 },
-  workspaceSessionsByHostId: notApplicableDisposition(
-    22,
-    "WSL projects live in 'local', i.e. workspaceSession."
-  ),
+  workspaceSessionsByHostId: {
+    disposition: 'rewrite-desktop',
+    item: 22,
+    note: "The desktop seeds the WSL host's session from the moved 'local' rows (D1b-7c)."
+  },
   remoteLayoutSnapshots: { disposition: 'rewrite-desktop', item: 47 },
   sshTargets: notApplicableDisposition(62),
   sshTargetGenerationCounter: notApplicableDisposition(62),
@@ -117,6 +113,10 @@ export const WORKSPACE_SESSION_DISPOSITIONS = {
   workspaceDocHistory: moveDisposition(30),
   activeConnectionIdsAtShutdown: notApplicableDisposition(60),
   clientHostedBrowserCloseIntentsByEnvironment: moveDisposition(29),
+  pairedTerminalTabCloseIntentsByEnvironment: notApplicableDisposition(
+    60,
+    'Closes owed to a paired runtime host, not to a local or WSL project.'
+  ),
   tabsByWorktree: moveDisposition(22),
   openFilesByWorktree: moveDisposition(26),
   activeFileIdByWorktree: moveDisposition(27),

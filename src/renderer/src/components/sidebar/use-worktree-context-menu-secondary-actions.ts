@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
-import { useAppStore } from '@/store'
-import { captureSelectedWorktree } from '@/lib/selected-worktree-reference'
+import type { useAppStore } from '@/store'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { unnestWorktrees } from './worktree-unnest'
 import { shouldSuppressContextMenuFollowUpClick } from './worktree-context-menu-policy'
@@ -12,9 +11,7 @@ export function useWorktreeContextMenuSecondaryActions(args: {
 }) {
   const handleRemoveParentLink = useCallback(() => {
     void unnestWorktrees(
-      args.activeContextWorktrees.map((row) =>
-        captureSelectedWorktree(useAppStore.getState(), row)
-      ),
+      args.activeContextWorktrees.map((item) => item.id),
       args.updateWorktreeLineage
     )
   }, [args])

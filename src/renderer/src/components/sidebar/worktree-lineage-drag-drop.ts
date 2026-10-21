@@ -1,6 +1,6 @@
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getLineageRenderInfo } from './worktree-lineage-projection'
+import { getLineageRenderInfo } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 const WORKTREE_CARD_CONTENT_TARGET_SELECTOR = '[data-worktree-card-parent-content]'
 const WORKTREE_DRAG_ROW_SELECTOR = '[data-worktree-drag-id]'
@@ -55,7 +55,7 @@ export function getWorktreeLineageDropTargetId(args: {
     return null
   }
 
-  return rowTarget.getAttribute('data-worktree-host-identity')
+  return rowTarget.getAttribute('data-worktree-drag-id')
 }
 
 export function getReorderedWorktreeIdsToUnnest(args: {

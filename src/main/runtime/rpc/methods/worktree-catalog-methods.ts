@@ -16,13 +16,6 @@ import {
 
 export const WORKTREE_CATALOG_METHODS = [
   defineMethod({
-    name: 'worktree.lineageList',
-    permission: 'workspace',
-    params: null,
-    handler: async (_params, { runtime }) => runtime.listLineageSnapshot()
-  }),
-
-  defineMethod({
     name: 'worktree.ps',
     permission: 'workspace',
     params: WorktreePsParams,

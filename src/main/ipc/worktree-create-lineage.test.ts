@@ -1,4 +1,3 @@
-import type { Repo } from '../../shared/repo-types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CreateWorktreeArgs } from '../../shared/worktree/create-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -9,6 +8,10 @@ import {
   assertAttachableParentWorkspace,
   recordWorkspaceLineageForCreatedWorktree
 } from './worktree-remote'
+import {
+  hostWorktreeTarget,
+  type HostWorktreeTarget
+} from '../../shared/worktree/host-qualified-identity'
 
 const CHILD_ID = 'repo-1::/repos/child'
 const PARENT_ID = 'repo-1::/repos/parent'
@@ -67,15 +70,13 @@ function createStore(options: {
   const folderWorkspaceIds = new Set(options.folderWorkspaceIds ?? [])
   return {
     getWorktreeMeta: vi.fn((id: string) => metaById[id]),
-    getRepos: vi.fn((): Repo[] => []),
-    getAllWorktreeMetaForHost: vi.fn((_hostId: ExecutionHostId) => metaById),
     getWorktreeMetaForHost: vi.fn(
       (_id: string, _hostId: ExecutionHostId): WorktreeMeta | undefined => undefined
     ),
     getFolderWorkspace: vi.fn((id: string) =>
       folderWorkspaceIds.has(id) ? { id, path: `/folders/${id}` } : undefined
     ),
-    setWorktreeLineage: vi.fn((_id: string, lineage: unknown) => lineage),
+    setWorktreeLineage: vi.fn((_target: HostWorktreeTarget, lineage: unknown) => lineage),
     setWorkspaceLineage: vi.fn((lineage: unknown) => lineage)
   }
 }
@@ -107,15 +108,18 @@ describe('recordWorkspaceLineageForCreatedWorktree', () => {
 
     const result = record(store, { parentWorkspace: worktreeWorkspaceKey(PARENT_ID) })
 
-    expect(store.setWorktreeLineage).toHaveBeenCalledWith(CHILD_ID, {
-      worktreeId: CHILD_ID,
-      worktreeInstanceId: 'child-instance',
-      parentWorktreeId: PARENT_ID,
-      parentWorktreeInstanceId: 'parent-instance',
-      origin: 'manual',
-      capture: { source: 'manual-action', confidence: 'explicit' },
-      createdAt: CREATED_AT
-    })
+    expect(store.setWorktreeLineage).toHaveBeenCalledWith(
+      hostWorktreeTarget({ id: CHILD_ID, hostId: 'local' }),
+      {
+        worktreeId: CHILD_ID,
+        worktreeInstanceId: 'child-instance',
+        parentWorktreeId: PARENT_ID,
+        parentWorktreeInstanceId: 'parent-instance',
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' },
+        createdAt: CREATED_AT
+      }
+    )
     expect(result.lineage).toMatchObject({
       parentWorktreeId: PARENT_ID,
       parentWorktreeInstanceId: 'parent-instance',
@@ -143,50 +147,27 @@ describe('recordWorkspaceLineageForCreatedWorktree', () => {
     const result = record(store, { parentWorkspace: worktreeWorkspaceKey(foreignParentId) })
 
     expect(store.setWorktreeLineage).toHaveBeenCalledWith(
-      CHILD_ID,
+      hostWorktreeTarget({ id: CHILD_ID, hostId: 'local' }),
       expect.objectContaining({ parentWorktreeId: foreignParentId })
     )
     expect(result.lineage).toMatchObject({ parentWorktreeId: foreignParentId })
     expect(result.workspaceLineage).toMatchObject({
       parentWorkspaceKey: worktreeWorkspaceKey(foreignParentId)
     })
-    expect(result.lineage).toMatchObject({ parentWorktreeInstanceId: 'parent-instance' })
+    expect(store.getWorktreeMetaForHost).toHaveBeenCalledWith(foreignParentId, 'local')
   })
 
-  it('records both lineage records when the parent is on another host', () => {
+  it('skips both lineage records when the parent is on another host', () => {
     const store = createStore({
       metaById: { [PARENT_ID]: parentMeta({ hostId: 'ssh:other-host' }) }
     })
-    const result = record(store, { parentWorkspace: worktreeWorkspaceKey(PARENT_ID) })
-    expect(result.lineage).toMatchObject({ parentWorktreeInstanceId: 'parent-instance' })
-    expect(result.workspaceLineage).toMatchObject({ parentInstanceId: 'parent-instance' })
-  })
 
-  it('records an identity-selected parent on its own host despite a colliding locator', () => {
-    const store = createStore({
-      metaById: { [PARENT_ID]: parentMeta({ instanceId: 'wrong-instance' }) }
-    })
-    store.getRepos.mockReturnValue([
-      {
-        id: 'repo-1',
-        path: '/repos',
-        displayName: 'repo',
-        badgeColor: 'blue',
-        addedAt: 1,
-        connectionId: 'other-host'
-      }
-    ])
-    store.getAllWorktreeMetaForHost.mockReturnValue({
-      [PARENT_ID]: parentMeta({ hostId: 'ssh:other-host' })
-    })
-    const result = record(store, {
-      parentWorkspace: 'identity:wt2:ssh%3Aother-host:parent-instance'
-    })
-    expect(result.lineage).toMatchObject({
-      parentWorktreeId: PARENT_ID,
-      parentWorktreeInstanceId: 'parent-instance'
-    })
-    expect(result.workspaceLineage).toMatchObject({ parentInstanceId: 'parent-instance' })
+    const result = record(store, { parentWorkspace: worktreeWorkspaceKey(PARENT_ID) })
+
+    expect(store.setWorktreeLineage).not.toHaveBeenCalled()
+    expect(result.lineage).toBeNull()
+    expect(store.setWorkspaceLineage).not.toHaveBeenCalled()
+    expect(result.workspaceLineage).toBeNull()
   })
 
   it('skips worktree lineage when the parent has no instance identity', () => {

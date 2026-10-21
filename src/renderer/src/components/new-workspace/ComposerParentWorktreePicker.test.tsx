@@ -36,7 +36,7 @@ const popoverMock = vi.hoisted(() => ({
 const indexSpies = vi.hoisted(() => ({
   getIndexedAllWorktrees: vi.fn(),
   getIndexedWorktreeMap: vi.fn(),
-  getIndexedWorktreesById: vi.fn()
+  getIndexedWorktreeById: vi.fn()
 }))
 
 vi.mock('@/i18n/i18n', () => ({
@@ -57,7 +57,7 @@ vi.mock('@/store/worktree-repo-index', async (importOriginal) => {
   const actual = await importOriginal<typeof WorktreeRepoIndex>()
   indexSpies.getIndexedAllWorktrees.mockImplementation(actual.getIndexedAllWorktrees)
   indexSpies.getIndexedWorktreeMap.mockImplementation(actual.getIndexedWorktreeMap)
-  indexSpies.getIndexedWorktreesById.mockImplementation(actual.getIndexedWorktreesById)
+  indexSpies.getIndexedWorktreeById.mockImplementation(actual.getIndexedWorktreeById)
   return { ...actual, ...indexSpies }
 })
 
@@ -192,7 +192,7 @@ beforeEach(() => {
   storeState.workspaceLineageByChildKey = {}
   indexSpies.getIndexedAllWorktrees.mockClear()
   indexSpies.getIndexedWorktreeMap.mockClear()
-  indexSpies.getIndexedWorktreesById.mockClear()
+  indexSpies.getIndexedWorktreeById.mockClear()
 })
 
 afterEach(cleanup)
@@ -204,13 +204,14 @@ describe('ComposerParentWorktreePicker', () => {
     render(<ComposerParentWorktreePicker repoId={REPO_ID} value="alpha" onChange={vi.fn()} />)
 
     // The closed trigger resolves one name from the shared index; it never enumerates.
-    expect(indexSpies.getIndexedWorktreesById).toHaveBeenCalled()
+    expect(indexSpies.getIndexedWorktreeById).toHaveBeenCalled()
     expect(indexSpies.getIndexedAllWorktrees).not.toHaveBeenCalled()
     expect(indexSpies.getIndexedWorktreeMap).not.toHaveBeenCalled()
 
     fireEvent.click(trigger())
 
     expect(indexSpies.getIndexedAllWorktrees).toHaveBeenCalled()
+    expect(indexSpies.getIndexedWorktreeMap).toHaveBeenCalled()
   })
 
   it('shows "No parent" on the closed trigger when nothing is picked', () => {
@@ -272,7 +273,7 @@ describe('ComposerParentWorktreePicker', () => {
     expect(candidateLabels().join(' ')).toContain('Other repo')
   })
 
-  it('offers parents from other projects and hosts', () => {
+  it('offers another project on the same host and excludes another host', () => {
     seed([
       makeWorktree({ id: 'same', displayName: 'Same host', hostId: 'local', projectId: 'proj1' }),
       makeWorktree({
@@ -301,7 +302,7 @@ describe('ComposerParentWorktreePicker', () => {
     fireEvent.click(trigger())
 
     expect(candidateLabels().join(' ')).toContain('Same host')
-    expect(candidateLabels().join(' ')).toContain('Other host')
+    expect(candidateLabels().join(' ')).not.toContain('Other host')
     expect(candidateLabels().join(' ')).toContain('Other project')
   })
 

@@ -1,4 +1,3 @@
-import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { appliedWorktreeCatalogVersionPatch } from '../listing/worktree-catalog-version-state'
@@ -6,7 +5,9 @@ import type { CreateWorktreeResult } from '../../../../../../shared/worktree/cre
 import {
   getProjectHostSetupForRepoHost,
   repoHostId,
-  withRepoHostOwnership
+  withRepoHostOwnership,
+  worktreeHostMatchOptions,
+  worktreeMatchesHost
 } from '../listing/worktree-host-ownership'
 
 /** Folds a fresh create result into the worktree, lineage and base-status maps. */
@@ -25,12 +26,19 @@ export function applyCreatedWorktree(
       getProjectHostSetupForRepoHost(s, repoId, hostId)
     )
     const current = s.worktreesByRepo[repoId] ?? []
-    const alreadyPresent = current.some((w) => w.id === createdWorktree.id)
-    const nextWorktrees = alreadyPresent
-      ? current.map((worktree) =>
-          worktree.id === createdWorktree.id ? { ...worktree, ...createdWorktree } : worktree
-        )
-      : [...current, createdWorktree]
+    // Why host-scoped: a same-id twin on another host must neither absorb nor lend its stamp.
+    const matchOptions = worktreeHostMatchOptions(s, repoId, hostId)
+    const nextWorktrees: typeof current = []
+    let merged = false
+    for (const worktree of current) {
+      const sameCopy =
+        worktree.id === createdWorktree.id && worktreeMatchesHost(worktree, hostId, matchOptions)
+      nextWorktrees.push(sameCopy ? { ...worktree, ...createdWorktree } : worktree)
+      merged ||= sameCopy
+    }
+    if (!merged) {
+      nextWorktrees.push(createdWorktree)
+    }
     return {
       // Why: a listing scanned before this create must not be applied after it.
       ...appliedWorktreeCatalogVersionPatch(s, repoId, hostId, result.catalogVersion),
@@ -42,8 +50,7 @@ export function applyCreatedWorktree(
         ? {
             workspaceLineageByChildKey: {
               ...s.workspaceLineageByChildKey,
-              [composeWorktreeHostIdentity(hostId, result.workspaceLineage.childWorkspaceKey)]:
-                result.workspaceLineage
+              [result.workspaceLineage.childWorkspaceKey]: result.workspaceLineage
             }
           }
         : {}),
@@ -51,7 +58,7 @@ export function applyCreatedWorktree(
         ? {
             worktreeLineageById: {
               ...s.worktreeLineageById,
-              [composeWorktreeHostIdentity(hostId, result.lineage.worktreeId)]: result.lineage
+              [result.lineage.worktreeId]: result.lineage
             }
           }
         : {}),

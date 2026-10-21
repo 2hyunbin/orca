@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildRows } from './worktree-list/grouping/build-rows'
-import { getLineageGroupKey, getWorktreeLineageGroupKey } from './worktree-list/grouping/group-keys'
-import { getLineageRenderInfo, getWorktreeLineageAncestors } from './worktree-lineage-projection'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
+import {
+  getLineageGroupKey,
+  getWorktreeLineageGroupKey
+} from '../../../../shared/sidebar-list/group-keys'
+import {
+  getLineageRenderInfo,
+  getWorktreeLineageAncestors
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { worktree, repoMap } from './worktree-list-groups-test-fixtures'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -244,7 +250,7 @@ describe('buildRows workspace lineage nesting', () => {
     expect(rows.filter((row) => row.type === 'item').map((row) => row.depth)).toEqual([0, 0])
   })
 
-  it('suppresses one cyclic edge and keeps every participant visible', () => {
+  it('keeps mixed cyclic lineage participants visible as roots', () => {
     const parentLineage: WorktreeLineage = {
       ...lineage,
       worktreeId: parent.id,
@@ -275,7 +281,7 @@ describe('buildRows workspace lineage nesting', () => {
     ).toEqual([
       [grandchild.id, 0],
       [child.id, 0],
-      [parent.id, 1]
+      [parent.id, 0]
     ])
   })
 
@@ -319,9 +325,9 @@ describe('buildRows workspace lineage nesting', () => {
 
   it.each([
     ['repo', { repoId: 'other-repo' }, [0, 1]],
-    ['host', { hostId: 'ssh:other-host' as const }, [0, 1]],
+    ['host', { hostId: 'ssh:other-host' as const }, [0, 0]],
     ['project', { projectId: 'github:other/project' }, [0, 1]]
-  ] as const)('resolves lineage across a different %s', (_label, boundary, depths) => {
+  ] as const)('applies the known %s lineage boundary', (_label, boundary, depths) => {
     const boundedParent = {
       ...parent,
       repoId: 'repo-1',

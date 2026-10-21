@@ -3,14 +3,15 @@ import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import { normalizeFeatureInteractionTelemetryBuckets } from '../../../shared/feature-interactions'
 import { normalizeFolderWorkspaceDiffComments } from '../../folder-workspace-diff-comments'
 import { normalizeFolderWorkspaces } from '../../../shared/folder-workspaces'
-import { normalizeOrcadMigrationEvictedReceipts } from '../../../shared/orcad-migration-evicted-receipts'
-import { normalizeOrcadMigrationImportReceipts } from '../../../shared/orcad-migration-manifest-validation'
-import { normalizeOrcadMigrationStagedCatalogs } from '../../../shared/orcad-migration-staged-catalog-validation'
-import { initializeCanonicalLineage } from './canonical-workspace-lineage'
+import { normalizeOrcadMigrationEvictedReceipts } from '../../../shared/orcad-migration/orcad-migration-evicted-receipts'
+import { normalizeOrcadMigrationImportReceipts } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
+import { normalizeOrcadMigrationStagedCatalogs } from '../../../shared/orcad-migration/orcad-migration-staged-catalog-validation'
+import { normalizeWorkspaceLineageByChildKey } from '../applying-settings/ui-interaction-merge'
 import {
   normalizeSshRemotePtyLease,
   normalizeSshTarget
 } from '../leasing-ssh-ptys/ssh-normalization'
+import { migrateExistingHostsRemoteCliControl } from '../leasing-ssh-ptys/ssh-remote-cli-control-migration'
 import {
   normalizeLegacyPaneKeyAliasEntries,
   normalizeMigrationUnsupportedPtyEntries
@@ -41,14 +42,6 @@ export function normalizeLoadedProfileState(
   // Ordered: the host partitions drop the global fields this slice already owns.
   const workspaceSession = normalizeLoadedLocalSession(parsed, defaults, markNeedsSave)
 
-  const lineageState = {
-    ...parsed,
-    worktreeMetaByIdentity: hydrateWorktreeMetaAliasProjection(parsed)
-  }
-  if (initializeCanonicalLineage(lineageState)) {
-    markNeedsSave()
-  }
-
   return {
     ...defaults,
     ...parsed,
@@ -71,13 +64,13 @@ export function normalizeLoadedProfileState(
     ...(parsed.worktreeMetaByIdentity === undefined
       ? {}
       : { worktreeMetaByIdentity: hydrateWorktreeMetaAliasProjection(parsed) }),
-    lineageByChildInstance: lineageState.lineageByChildInstance,
-    legacyLineageRemainder: lineageState.legacyLineageRemainder,
-    worktreeLineageById: lineageState.worktreeLineageById,
+    worktreeLineageById: parsed.worktreeLineageById ?? {},
     mobileClientTabSelectionsByDeviceId: normalizePersistedMobileClientTabSelections(
       parsed.mobileClientTabSelectionsByDeviceId
     ),
-    workspaceLineageByChildKey: lineageState.workspaceLineageByChildKey,
+    workspaceLineageByChildKey: normalizeWorkspaceLineageByChildKey(
+      parsed.workspaceLineageByChildKey
+    ),
     settings: normalizeLoadedGlobalSettings(parsed, terminal, profile),
     // Why: legacy 'recent' meant the smart sort; migrate once on the raw value so a fresh 'recent' default isn't remigrated.
     ui: normalizeLoadedUiState(
@@ -97,7 +90,11 @@ export function normalizeLoadedProfileState(
       workspaceSession,
       markNeedsSave
     ),
-    sshTargets: (parsed.sshTargets ?? []).map(normalizeSshTarget),
+    sshTargets: migrateExistingHostsRemoteCliControl(
+      (parsed.sshTargets ?? []).map(normalizeSshTarget),
+      parsed.settings?.sshRemoteCliControlExistingHostsMigrated === true,
+      markNeedsSave
+    ),
     deletedSshConfigAliases: Array.isArray(parsed.deletedSshConfigAliases)
       ? parsed.deletedSshConfigAliases.filter((alias): alias is string => typeof alias === 'string')
       : [],

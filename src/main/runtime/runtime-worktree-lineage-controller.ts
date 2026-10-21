@@ -1,19 +1,25 @@
 import type { WorktreeLineage, WorkspaceLineage } from '../../shared/worktree/lineage-types'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import type { WorkspaceKey } from '../../shared/folder-workspace-types'
 import {
   folderWorkspaceKey,
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../shared/workspace-scope'
-import { indexWorktreesByInstance } from '../../shared/resolved-worktree-lineage'
-import { getWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
-import { readSavedLineageEdges, readSavedWorktreeOwners } from '../saved-worktree-lineage-catalog'
+import { sharesResolvedWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
+import {
+  readAllWorktreeMetaForHost,
+  worktreeRowTarget
+} from '../persistence/host-qualified-worktree-meta'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
+import { getRepoOwnedWorktreeMeta } from '../worktree-metadata-ownership'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
   RuntimeLineageError,
+  enforceCreateLineageHostBoundary,
   resolveRuntimeWorktreeCreateLineage,
   type ResolvedWorkspaceParent,
   type WorktreeLineageCandidate,
@@ -23,17 +29,47 @@ import {
 
 type RuntimeWorktreeLineageDependencies = {
   getStore(): RuntimeStore | null
-  getCachedWorktrees(): readonly ResolvedWorktree[] | null
   getDb(): OrchestrationDb | null
   resolveWorktree(selector: string): Promise<ResolvedWorktree>
   listResolvedWorktrees(): Promise<ResolvedWorktree[]>
   showTerminal(handle: string): Promise<{ worktreeId: string }>
 }
 
+/**
+ * Read-only and ownership-scoped like the resolved list: the migrating per-host accessor would adopt
+ * another host's legacy row into this host just to answer a validation.
+ */
+function savedInstanceIdReader(
+  store: RuntimeStore,
+  hostId: ExecutionHostId | undefined
+): (id: string) => string | undefined {
+  if (!hostId) {
+    return (id) => store.getWorktreeMeta(id)?.instanceId
+  }
+  const repos = store.getRepos()
+  const ownerCounts = new Map<string, number>()
+  for (const repo of repos) {
+    ownerCounts.set(repo.id, (ownerCounts.get(repo.id) ?? 0) + 1)
+  }
+  const reposOnHost = new Map(
+    repos.filter((repo) => getRepoExecutionHostId(repo) === hostId).map((repo) => [repo.id, repo])
+  )
+  const metaById = readAllWorktreeMetaForHost(store, hostId)
+  return (id) => {
+    const repo = reposOnHost.get(getRepoIdFromWorktreeId(id))
+    return repo
+      ? getRepoOwnedWorktreeMeta(repo, id, metaById, ownerCounts.get(repo.id) ?? 0)?.instanceId
+      : undefined
+  }
+}
+
 export class RuntimeWorktreeLineageController {
   constructor(private readonly deps: RuntimeWorktreeLineageDependencies) {}
 
-  async resolveCreate(input?: WorktreeLineageInput): Promise<WorktreeLineageResolution> {
+  async resolveCreate(
+    input?: WorktreeLineageInput,
+    childHostId?: ExecutionHostId
+  ): Promise<WorktreeLineageResolution> {
     const resolution = await resolveRuntimeWorktreeCreateLineage(input, {
       resolveParent: (selector) => this.resolveParent(selector),
       resolveWorktreeParent: (selector) => this.resolveWorktreeParent(selector),
@@ -51,7 +87,7 @@ export class RuntimeWorktreeLineageController {
         }
       }
     })
-    return resolution
+    return enforceCreateLineageHostBoundary(resolution, childHostId)
   }
 
   async resolveParent(selector: string): Promise<ResolvedWorkspaceParent> {
@@ -88,37 +124,53 @@ export class RuntimeWorktreeLineageController {
   }
 
   validateParent(child: ResolvedWorktree, parent: ResolvedWorktree): void {
-    const store = this.deps.getStore()
-    if (!store || !child.instanceId || !parent.instanceId) {
-      return
+    if (child.id === parent.id) {
+      throw new RuntimeLineageError('LINEAGE_PARENT_CYCLE', 'A worktree cannot parent itself.')
     }
-    const owners = readSavedWorktreeOwners(store)
-    const byInstance = indexWorktreesByInstance(owners)
-    const edges = new Map(readSavedLineageEdges(store).map((edge) => [edge.child.instanceId, edge]))
-    if (byInstance.get(parent.instanceId) === null) {
+    if (!sharesResolvedWorktreeLineageBoundary(child, parent)) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_CONTEXT_CONFLICT',
-        'Parent instance identity is ambiguous.'
+        'Parent worktree must be on the same execution host.'
       )
     }
-    let cursor: string | undefined = parent.instanceId
+    const store = this.deps.getStore()
+    let readSavedInstanceId: ((id: string) => string | undefined) | undefined
+    // Why: saved metadata, not the resolved-worktree cache, which the reparent itself invalidates;
+    // an unknown node would end the walk and let a longer loop through.
+    const instanceIdOf = (id: string): string | undefined => {
+      if (id === child.id || id === parent.id) {
+        return id === child.id ? child.instanceId : parent.instanceId
+      }
+      readSavedInstanceId ??= store
+        ? savedInstanceIdReader(store, child.hostId ?? parent.hostId)
+        : () => undefined
+      return readSavedInstanceId(id)
+    }
+    let cursor: string | undefined = parent.id
     const visited = new Set<string>()
     while (cursor) {
-      if (cursor === child.instanceId) {
+      if (cursor === child.id) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_CYCLE',
           'Parent selector would create a lineage cycle.'
         )
       }
+      // Why: a loop saved before this walk read saved data must not block unrelated parents.
       if (visited.has(cursor)) {
         break
       }
       visited.add(cursor)
-      // Resolved endpoints remain authoritative; intermediate owners come only from saved metadata.
-      if (cursor !== parent.instanceId && !byInstance.get(cursor)) {
+      const lineage = store?.getWorktreeLineage?.(cursor)
+      if (!lineage) {
         break
       }
-      cursor = edges.get(cursor)?.parent.instanceId
+      if (
+        instanceIdOf(cursor) !== lineage.worktreeInstanceId ||
+        instanceIdOf(lineage.parentWorktreeId) !== lineage.parentWorktreeInstanceId
+      ) {
+        break
+      }
+      cursor = lineage.parentWorktreeId
     }
   }
 
@@ -146,16 +198,9 @@ export class RuntimeWorktreeLineageController {
     if (!store?.getWorktreeLineage || !store.setWorktreeLineage) {
       return
     }
-    const existing = new Set([
-      ...(store.getLineageEdges?.() ?? []).map((edge) => edge.child.instanceId),
-      ...Object.values(store.getAllWorktreeLineage?.() ?? {}).map((row) => row.worktreeInstanceId),
-      ...Object.values(store.getAllWorkspaceLineage?.() ?? {}).flatMap((row) =>
-        row.childInstanceId ? [row.childInstanceId] : []
-      )
-    ])
     for (const worktree of await this.deps.listResolvedWorktrees()) {
       if (
-        existing.has(worktree.instanceId ?? '') ||
+        store.getWorktreeLineage(worktree.id) ||
         !worktree.instanceId ||
         isWslMoveWorktreeBlocked(worktree.id, worktree.hostId, worktree.path)
       ) {
@@ -169,7 +214,7 @@ export class RuntimeWorktreeLineageController {
       if (
         !candidate?.parent.instanceId ||
         candidate.parent.type !== 'worktree' ||
-        getWorktreeHostIdentity(candidate.parent.worktree) === getWorktreeHostIdentity(worktree)
+        candidate.parent.worktree.id === worktree.id
       ) {
         continue
       }
@@ -178,7 +223,11 @@ export class RuntimeWorktreeLineageController {
       } catch {
         continue
       }
-      store.setWorktreeLineage(worktree.id, {
+      const target = worktreeRowTarget(store, worktree)
+      if (!target) {
+        continue
+      }
+      store.setWorktreeLineage(target, {
         worktreeId: worktree.id,
         worktreeInstanceId: worktree.instanceId,
         parentWorktreeId: candidate.parent.worktree.id,
@@ -191,25 +240,13 @@ export class RuntimeWorktreeLineageController {
     }
   }
 
-  async listLineageSnapshot() {
-    await this.hydrate()
-    const store = this.deps.getStore()
-    return {
-      edges: store?.getLineageEdges?.() ?? [],
-      lineage: store?.getAllWorktreeLineage?.() ?? {},
-      workspaceLineage: store?.getAllWorkspaceLineage?.() ?? {}
-    }
-  }
-
-  async listLineageEdges() {
-    return (await this.listLineageSnapshot()).edges
-  }
-
   async listWorktreeLineage(): Promise<Record<string, WorktreeLineage>> {
-    return (await this.listLineageSnapshot()).lineage
+    await this.hydrate()
+    return this.deps.getStore()?.getAllWorktreeLineage?.() ?? {}
   }
 
   async listWorkspaceLineage(): Promise<Record<WorkspaceKey, WorkspaceLineage>> {
-    return (await this.listLineageSnapshot()).workspaceLineage
+    await this.hydrate()
+    return this.deps.getStore()?.getAllWorkspaceLineage?.() ?? {}
   }
 }

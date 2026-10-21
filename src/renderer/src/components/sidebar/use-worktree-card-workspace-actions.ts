@@ -1,3 +1,4 @@
+import { draggedWorktreeCopiesOf } from './worktree-list/drag/dragged-worktree-copies'
 import React, { useCallback } from 'react'
 
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
@@ -133,15 +134,16 @@ export function useWorktreeCardWorkspaceActions({
         event.preventDefault()
         return
       }
-      const draggedWorktrees =
-        isMultiSelected && selectedWorktrees && selectedWorktrees.length > 1
-          ? [...selectedWorktrees]
-          : [worktree]
+      const draggedCopies = draggedWorktreeCopiesOf(
+        worktree,
+        selectedWorktrees,
+        Boolean(isMultiSelected && selectedWorktrees && selectedWorktrees.length > 1)
+      )
       writeWorkspaceDragData(
         event.dataTransfer,
-        draggedWorktrees.map((row) => row.id)
+        draggedCopies.map((copy) => copy.id)
       )
-      onCardDragStart?.(event, worktree, draggedWorktrees)
+      onCardDragStart?.(event, worktree.id, draggedCopies)
     },
     [isDeleting, isMultiSelected, onCardDragStart, selectedWorktrees, worktree]
   )

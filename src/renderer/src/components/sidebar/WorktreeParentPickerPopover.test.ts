@@ -1,4 +1,3 @@
-import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -47,14 +46,6 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
   }
 }
 
-const childReference: SelectedWorktreeReference = {
-  id: 'child',
-  hostId: 'ssh:remote',
-  target: { kind: 'local' },
-  kind: 'legacy'
-}
-const parentReference = { ...childReference, id: 'parent' }
-
 describe('selectWorktreeParent', () => {
   it('closes and assigns the selected parent to the captured child', () => {
     const assignWorktreeParent = vi.fn().mockResolvedValue(undefined)
@@ -62,15 +53,15 @@ describe('selectWorktreeParent', () => {
     const showError = vi.fn()
 
     selectWorktreeParent({
-      childReference,
-      parentReference,
+      childWorktreeId: 'child',
+      parentWorktreeId: 'parent',
       assignWorktreeParent,
       close,
       showError
     })
 
     expect(close).toHaveBeenCalledTimes(1)
-    expect(assignWorktreeParent).toHaveBeenCalledWith(childReference, { parent: parentReference })
+    expect(assignWorktreeParent).toHaveBeenCalledWith('child', { parentWorktreeId: 'parent' })
     expect(showError).not.toHaveBeenCalled()
   })
 
@@ -81,8 +72,8 @@ describe('selectWorktreeParent', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     selectWorktreeParent({
-      childReference,
-      parentReference,
+      childWorktreeId: 'child',
+      parentWorktreeId: 'parent',
       assignWorktreeParent,
       close,
       showError
@@ -98,8 +89,8 @@ describe('selectWorktreeParent', () => {
     const close = vi.fn()
 
     selectWorktreeParent({
-      childReference: null,
-      parentReference,
+      childWorktreeId: null,
+      parentWorktreeId: 'parent',
       assignWorktreeParent,
       close,
       showError: vi.fn()
@@ -232,7 +223,7 @@ describe('parent picker keyboard input', () => {
         preventDefault,
         stopPropagation
       } as unknown as React.KeyboardEvent<HTMLInputElement>,
-      candidates: [makeWorktree({ id: 'parent' })],
+      candidates: [{ id: 'parent' }],
       activeIndex: 0,
       moveHighlight,
       selectParent

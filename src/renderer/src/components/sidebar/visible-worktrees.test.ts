@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeVisibleWorktreeIds, computeVisibleWorktrees } from './compute-visible-worktrees'
+import { computeVisibleWorktreeIds } from './compute-visible-worktrees'
 import { getPairedDeviceIdsByEnvironment } from '../../../../shared/workspace-creator-visibility'
 import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -908,28 +908,4 @@ describe('computeVisibleWorktreeIds', () => {
 
     expect(result).toEqual([parent.id, child.id])
   })
-})
-
-it('preserves bare-ID send requests across hidden owners and catalog orders', () => {
-  const local = { ...makeWorktree('same'), hostId: 'local' as const }
-  const remote = { ...makeWorktree('same', 'repo2'), hostId: 'ssh:remote' as const }
-  const cases: [Worktree[], string[], Worktree[]][] = [
-    [[remote], [], [remote]],
-    [[local, remote], [], [remote]],
-    [[remote, local], [], [local]],
-    [[local, remote], ['repo1'], [local]],
-    [[local, remote], ['repo2'], [remote]],
-    [[local, { ...remote, isArchived: true }], [], [local]],
-    [[{ ...remote, isArchived: true }], [], []],
-    [[], [], []]
-  ]
-  for (const [rows, visibleRepoIds, expected] of cases) {
-    const catalog = Object.fromEntries(rows.map((row) => [row.repoId, [row]]))
-    const opts = visibleOptions({
-      filterRepoIds: visibleRepoIds.length ? visibleRepoIds : ['hidden'],
-      visibleWorkspaceHostIds: ['local', 'ssh:remote'],
-      forcedVisibleWorktreeIds: ['same', 'same']
-    })
-    expect(computeVisibleWorktrees(catalog, [], opts)).toEqual(expected)
-  }
 })

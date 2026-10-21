@@ -1,4 +1,3 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -161,11 +160,9 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
     })
 
     expect(result.rootChildWorktrees.map((worktree) => worktree.id)).toEqual([parent.id])
-    expect(
-      result.lineageChildrenByParentId
-        .get(getWorktreeHostIdentity(parent))
-        ?.map((worktree) => worktree.id)
-    ).toEqual([nested.id])
+    expect(result.lineageChildrenByParentId.get(parent.id)?.map((worktree) => worktree.id)).toEqual(
+      [nested.id]
+    )
   })
 
   it('includes an exact inline-only legacy descendant under an attached root', () => {
@@ -191,11 +188,9 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
       worktreesByRepo: { 'repo-1': [parent, inlineNested] }
     })
 
-    expect(
-      result.lineageChildrenByParentId
-        .get(getWorktreeHostIdentity(parent))
-        ?.map((worktree) => worktree.id)
-    ).toEqual([nested.id])
+    expect(result.lineageChildrenByParentId.get(parent.id)?.map((worktree) => worktree.id)).toEqual(
+      [nested.id]
+    )
   })
 
   it('keeps a stale side-map entry authoritative over valid inline lineage', () => {
@@ -223,7 +218,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
     expect(result.lineageChildrenByParentId.size).toBe(0)
   })
 
-  it('includes descendants from other projects and execution hosts', () => {
+  it('includes another project while rejecting another execution host', () => {
     const parent = makeWorktree({
       id: 'repo-1::/parent',
       instanceId: 'parent',
@@ -254,10 +249,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
       worktreesByRepo: { 'repo-1': [parent, hostChild, projectChild] }
     })
 
-    expect(result.lineageChildrenByParentId.get(getWorktreeHostIdentity(parent))).toEqual([
-      hostChild,
-      projectChild
-    ])
+    expect(result.lineageChildrenByParentId.get(parent.id)).toEqual([projectChild])
   })
 
   it('does not attach cyclic legacy descendants', () => {

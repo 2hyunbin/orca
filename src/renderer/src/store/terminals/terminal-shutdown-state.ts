@@ -39,8 +39,6 @@ export function commitTerminalShutdownState({
   tabs: readonly TerminalTab[]
   worktreeId: string
 }): void {
-  const removedTabIds = new Set(tabs.map((tab) => tab.id))
-  const partial = (get().tabsByWorktree[worktreeId] ?? []).some((tab) => !removedTabIds.has(tab.id))
   settleAttentionRemovedBy(set, get, () =>
     set((state) => {
       const tabsByWorktree = keepIdentifiers
@@ -48,9 +46,7 @@ export function commitTerminalShutdownState({
         : {
             ...state.tabsByWorktree,
             [worktreeId]: (state.tabsByWorktree[worktreeId] ?? []).map((tab, index) =>
-              tabs.some((removed) => removed.id === tab.id)
-                ? clearTransientTerminalState(tab, index)
-                : tab
+              clearTransientTerminalState(tab, index)
             )
           }
       // Why copy-on-write everywhere below: a worktree whose panes already exited hits
@@ -69,7 +65,7 @@ export function commitTerminalShutdownState({
       }
       const suppressedPtyExitIds = copyOnWriteRecord(state.suppressedPtyExitIds)
       const pendingPtyShutdownIds = copyOnWriteRecord(state.pendingPtyShutdownIds)
-      const pendingCodexPaneRestartIds = copyOnWriteRecord(state.pendingCodexPaneRestartIds)
+      const pendingPaneAccountRestarts = copyOnWriteRecord(state.pendingPaneAccountRestarts)
       const codexRestartNoticeByPtyId = copyOnWriteRecord(state.codexRestartNoticeByPtyId)
       for (const ptyId of exitGuardPtyIds) {
         if (state.suppressedPtyExitIds[ptyId] !== true) {
@@ -86,13 +82,12 @@ export function commitTerminalShutdownState({
         }
         // Sleeping terminals retain restart intent, but a wake can receive a different live PTY id.
         if (!keepIdentifiers) {
-          pendingCodexPaneRestartIds.delete(ptyId)
+          pendingPaneAccountRestarts.delete(ptyId)
         }
         codexRestartNoticeByPtyId.delete(ptyId)
       }
 
       const runtimePaneTitlesByTabId = copyOnWriteRecord(state.runtimePaneTitlesByTabId)
-      const pendingSetupSplitByTabId = copyOnWriteRecord(state.pendingSetupSplitByTabId)
       const pendingIssueCommandSplitByTabId = copyOnWriteRecord(
         state.pendingIssueCommandSplitByTabId
       )
@@ -101,7 +96,6 @@ export function commitTerminalShutdownState({
       const lastTerminalInputAtByPaneKey = copyOnWriteRecord(state.lastTerminalInputAtByPaneKey)
 
       for (const tab of tabs) {
-        pendingSetupSplitByTabId.delete(tab.id)
         pendingIssueCommandSplitByTabId.delete(tab.id)
         const panePrefix = `${tab.id}:`
         for (const paneKey of Object.keys(state.lastTerminalInputAtByPaneKey)) {
@@ -128,9 +122,8 @@ export function commitTerminalShutdownState({
         runtimePaneTitlesByTabId: runtimePaneTitlesByTabId.read(),
         suppressedPtyExitIds: suppressedPtyExitIds.read(),
         pendingPtyShutdownIds: pendingPtyShutdownIds.read(),
-        pendingCodexPaneRestartIds: pendingCodexPaneRestartIds.read(),
+        pendingPaneAccountRestarts: pendingPaneAccountRestarts.read(),
         codexRestartNoticeByPtyId: codexRestartNoticeByPtyId.read(),
-        pendingSetupSplitByTabId: pendingSetupSplitByTabId.read(),
         pendingIssueCommandSplitByTabId: pendingIssueCommandSplitByTabId.read(),
         terminalLayoutsByTabId: terminalLayoutsByTabId.read(),
         ...removeTabsAttention(
@@ -160,29 +153,16 @@ export function commitTerminalShutdownState({
         }
       }
     })
-  } else if (partial) {
-    get().clearSleepingAgentSessionsByPaneKey(
-      Object.keys(get().sleepingAgentSessionsByPaneKey).filter((key) =>
-        tabs.some((tab) => key.startsWith(`${tab.id}:`))
-      )
-    )
   } else {
     get().clearSleepingAgentSessionsByWorktree(worktreeId)
   }
 
-  if (partial) {
-    for (const tab of tabs) {
-      get().dropAgentStatusByTabPrefix(tab.id)
-      get().clearPaneForegroundAgentByTabPrefix(tab.id)
-    }
-  } else {
-    get().dropAgentStatusByWorktree(worktreeId, {
-      shutdownReason,
-      sleepingPaneKeys,
-      retainedCompletionEvidence
-    })
-    get().clearPaneForegroundAgentByWorktree(worktreeId)
-  }
+  get().dropAgentStatusByWorktree(worktreeId, {
+    shutdownReason,
+    sleepingPaneKeys,
+    retainedCompletionEvidence
+  })
+  get().clearPaneForegroundAgentByWorktree(worktreeId)
   const settledPtyIds = exitGuardPtyIds.filter((ptyId) => !get().isPtyShutdownPending(ptyId))
   markCommittedPtyShutdowns(settledPtyIds)
   settleDeferredPtyShutdownExits(settledPtyIds, 'committed')

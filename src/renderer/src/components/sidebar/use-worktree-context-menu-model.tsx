@@ -1,13 +1,11 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import { captureSelectedWorktree } from '@/lib/selected-worktree-reference'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
-import { useAllWorktrees, useRepoById, useRepoMap } from '@/store/selectors'
+import { useAllWorktrees, useRepoById, useRepoMap, useWorktreeMap } from '@/store/selectors'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getLineageRenderInfo
-} from './worktree-lineage-projection'
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getWorkspaceStatus } from './workspace-status'
 import { getEligibleWorktreeParents } from './worktree-parent-candidates'
 import {
@@ -17,11 +15,13 @@ import {
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getDeleteStateForWorktreeHost } from './worktree-delete-state-host-match'
 import {
+  EMPTY_AGENT_STATUS_BY_PANE_KEY,
   EMPTY_BROWSER_TABS_BY_WORKTREE,
   EMPTY_CYCLIC_LINEAGE_IDS,
   EMPTY_DELETE_STATE_BY_WORKTREE_ID,
   EMPTY_PTY_IDS_BY_TAB_ID,
   EMPTY_TABS_BY_WORKTREE,
+  EMPTY_UNIFIED_TABS_BY_WORKTREE,
   EMPTY_WORKSPACE_LINEAGE_BY_CHILD_KEY,
   EMPTY_WORKTREE_LINEAGE_BY_ID,
   hasWorktreeParentLink,
@@ -30,10 +30,7 @@ import {
   shouldRemoveProjectFromContextMenu
 } from './worktree-context-menu-policy'
 import { useWorktreeContextMenuCommands } from './use-worktree-context-menu-commands'
-import {
-  type PendingParentPicker,
-  useWorktreeParentPickerTransition
-} from './use-worktree-parent-picker-transition'
+import { useWorktreeParentPickerTransition } from './use-worktree-parent-picker-transition'
 import { useWorktreeContextMenuSecondaryActions } from './use-worktree-context-menu-secondary-actions'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 
@@ -84,19 +81,22 @@ export function useWorktreeContextMenuModel({
   )
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false)
   const createGroupDialogActiveRef = useRef(false)
-  const [parentPicker, setParentPicker] = useState<PendingParentPicker | null>(null)
+  const [parentPicker, setParentPicker] = useState<{
+    childWorktreeId: string
+    anchorElement: HTMLElement
+  } | null>(null)
   const [parentPickerOpen, setParentPickerOpen] = useState(false)
-  const pendingParentPickerRef = useRef<PendingParentPicker | null>(null)
+  const pendingParentPickerRef = useRef<{
+    childWorktreeId: string
+    anchorElement: HTMLElement
+  } | null>(null)
   const parentPickerFallbackTimerRef = useRef<number | null>(null)
   const parentPickerUnmountTimerRef = useRef<number | null>(null)
   const lifecycleStartedRef = useRef(false)
   const isDeleting = deleteState?.isDeleting ?? false
   const repoMap = useRepoMap()
+  const worktreeMap = useWorktreeMap()
   const allWorktrees = useAllWorktrees()
-  const worktreeMap = useMemo(
-    () => new Map(allWorktrees.map((row) => [getWorktreeHostIdentity(row), row])),
-    [allWorktrees]
-  )
   // Why: these maps feed only items rendered inside the OPEN dropdown, yet delete
   // teardown replaces them on every set(). Gate them behind menuOpen via stable
   // empty sentinels so the (common) closed wrapper stays inert to that churn. The
@@ -123,6 +123,12 @@ export function useWorktreeContextMenuModel({
   const browserTabsByWorktree = useAppStore((s) =>
     selectMenuScopedMap(menuOpen, s.browserTabsByWorktree, EMPTY_BROWSER_TABS_BY_WORKTREE)
   )
+  const unifiedTabsByWorktree = useAppStore((s) =>
+    selectMenuScopedMap(menuOpen, s.unifiedTabsByWorktree, EMPTY_UNIFIED_TABS_BY_WORKTREE)
+  )
+  const agentStatusByPaneKey = useAppStore((s) =>
+    selectMenuScopedMap(menuOpen, s.agentStatusByPaneKey, EMPTY_AGENT_STATUS_BY_PANE_KEY)
+  )
   const deleteStateByWorktreeId = useAppStore((s) =>
     selectMenuScopedMap(menuOpen, s.deleteStateByWorktreeId, EMPTY_DELETE_STATE_BY_WORKTREE_ID)
   )
@@ -139,17 +145,32 @@ export function useWorktreeContextMenuModel({
         hasSleepableWorkspaceActivity(item.id, {
           tabsByWorktree,
           ptyIdsByTabId,
-          browserTabsByWorktree
+          browserTabsByWorktree,
+          unifiedTabsByWorktree,
+          agentStatusByPaneKey
         })
       ),
-    [activeContextWorktrees, browserTabsByWorktree, ptyIdsByTabId, tabsByWorktree]
+    [
+      activeContextWorktrees,
+      agentStatusByPaneKey,
+      browserTabsByWorktree,
+      ptyIdsByTabId,
+      tabsByWorktree,
+      unifiedTabsByWorktree
+    ]
   )
   const lineageMenuActions = useWorkspaceLineageMenuActions({
     enabled: !isMultiContext,
     parent: worktree,
     worktrees: allWorktrees,
     lineageById: worktreeLineageById,
-    activity: { tabsByWorktree, ptyIdsByTabId, browserTabsByWorktree }
+    activity: {
+      tabsByWorktree,
+      ptyIdsByTabId,
+      browserTabsByWorktree,
+      unifiedTabsByWorktree,
+      agentStatusByPaneKey
+    }
   })
   const lineageDescendantCount = lineageMenuActions.descendants.length
   const subtreeSleepableWorktrees = lineageMenuActions.sleepableTargets
@@ -222,7 +243,6 @@ export function useWorktreeContextMenuModel({
             lineageById: worktreeLineageById,
             worktreeMap,
             repoMap,
-            repos: useAppStore.getState().repos,
             cyclicLineageIds
           }).length
         : 0,
@@ -287,6 +307,7 @@ export function useWorktreeContextMenuModel({
   )
 
   const commands = useWorktreeContextMenuCommands({
+    getState: useAppStore.getState,
     activeContextWorktrees,
     batchDeleteWorktrees,
     createGroupDialogActiveRef,
@@ -318,8 +339,7 @@ export function useWorktreeContextMenuModel({
       setParentPicker,
       setParentPickerOpen,
       unmountTimerRef: parentPickerUnmountTimerRef,
-      worktreeId: worktree.id,
-      childReference: captureSelectedWorktree(useAppStore.getState(), worktree)
+      worktreeId: worktree.id
     })
   const { handleRemoveParentLink, suppressOpeningPointerEvent } =
     useWorktreeContextMenuSecondaryActions({

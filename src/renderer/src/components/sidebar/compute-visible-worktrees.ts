@@ -2,23 +2,16 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import { getIndexedAllWorktrees, getIndexedWorktreesById } from '@/store/worktree-repo-index'
-import { filterWorkspaceRows } from '../../../../shared/workspace-view/workspace-row-filters'
+import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
+import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import { selectVisibleSidebarWorktrees } from '../../../../shared/sidebar-list/visible-worktrees'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
-import {
-  getFilteredLineageAncestorIndex,
-  getSortedWorktreeRankIndex
-} from './visible-worktree-indexes'
-import {
-  getCyclicProjectedWorktreeLineageIds,
-  getLineageRenderInfo
-} from './worktree-lineage-projection'
+import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
 
-// Why its own module: the sidebar filter pipeline is a pure function of its options, and keeping
-// it free of the store lets the store's own attention slice ask it without an import cycle.
+// Why its own module: the store's attention slice asks it without an import cycle. The filter
+// rules live in the shared builder; this binds them to the window's store index and activity facts.
 
 export type VisibleWorktreeOptions = {
   filterRepoIds: readonly string[]
@@ -43,122 +36,39 @@ export type VisibleWorktreeOptions = {
   injectLineageAncestors?: boolean
   preserveLineageParentOrder?: boolean
   forcedVisibleWorktreeIds?: readonly string[]
+  /** The sorted keys are host identities (the stamp sort's), not bare ids, so a same-id pair keeps two ranks. */
+  sortedByHostIdentity?: boolean
   /** Exempt from the sleeping sweep only; unlike forcedVisibleWorktreeIds, every other filter still applies. */
   sleepingSweepExemptWorktreeIds?: ReadonlySet<string>
 }
 
 export function computeVisibleWorktrees(
   worktreesByRepo: Record<string, Worktree[]>,
-  sortedIds: string[],
+  sortedKeys: readonly string[],
   opts: VisibleWorktreeOptions
 ): Worktree[] {
-  let all: Worktree[] = getIndexedAllWorktrees(worktreesByRepo)
-
-  // Ancestors obey host and project boundaries; the explicit send target can bypass them.
-  const boundaryFilters = sidebarWorkspaceRowFilters(opts)
-  const facts = buildDesktopWorkspaceRowFactReader(opts)
-  const lineageAncestorById = getFilteredLineageAncestorIndex(worktreesByRepo, {
-    visibleHostIds: boundaryFilters.visibleHostIds,
-    repoIds: opts.filterRepoIds,
-    repoMap: opts.repoMap,
-    defaultHostId: opts.defaultHostId,
-    hostIdForRow: facts.hostId
+  const rankByKey = getSortedWorktreeRankIndex(sortedKeys)
+  const keyOf = opts.sortedByHostIdentity
+    ? getWorktreeHostIdentity
+    : (worktree: Worktree) => worktree.id
+  return selectVisibleSidebarWorktrees({
+    rows: getIndexedAllWorktrees(worktreesByRepo),
+    ancestorByIdentity: getLineageAncestorIndex(worktreesByRepo),
+    rankOf: (worktree) => rankByKey.get(keyOf(worktree)),
+    filters: sidebarWorkspaceRowFilters(opts),
+    facts: buildDesktopWorkspaceRowFactReader(opts),
+    worktreeLineageById: opts.worktreeLineageById,
+    filterRepoIds: opts.filterRepoIds,
+    injectLineageAncestors: opts.injectLineageAncestors,
+    preserveLineageParentOrder: opts.preserveLineageParentOrder,
+    forcedVisibleWorktreeIds: opts.forcedVisibleWorktreeIds
   })
-  const selectedRepoIds = opts.filterRepoIds.length > 0 ? new Set(opts.filterRepoIds) : null
-
-  all = filterWorkspaceRows(
-    all,
-    sidebarWorkspaceRowFilters(opts),
-    buildDesktopWorkspaceRowFactReader(opts)
-  )
-
-  if (opts.forcedVisibleWorktreeIds && opts.forcedVisibleWorktreeIds.length > 0) {
-    const includedIds = new Set(all.map((worktree) => worktree.id))
-    for (const worktreeId of opts.forcedVisibleWorktreeIds) {
-      if (includedIds.has(worktreeId)) {
-        continue
-      }
-      const worktree = getIndexedWorktreesById(worktreesByRepo, worktreeId).findLast(
-        (row) => !row.isArchived
-      )
-      if (worktree) {
-        includedIds.add(worktreeId)
-        all.push(worktree)
-      }
-    }
-  }
-
-  // Apply cached sort order. Items not yet in the cache (e.g. brand-new
-  // worktrees before the next sortEpoch bump) are appended at the end.
-  // Manual placement belongs to the parent, even when a hidden child has a higher rank.
-  if (opts.injectLineageAncestors !== false && opts.preserveLineageParentOrder) {
-    all = addVisibleLineageAncestors(
-      all,
-      lineageAncestorById,
-      opts.worktreeLineageById,
-      selectedRepoIds
-    )
-  }
-  const orderIndex = getSortedWorktreeRankIndex(sortedIds)
-  all.sort((a, b) => {
-    const ai = orderIndex.get(a.id) ?? Infinity
-    const bi = orderIndex.get(b.id) ?? Infinity
-    return ai - bi
-  })
-
-  return opts.injectLineageAncestors === false || opts.preserveLineageParentOrder
-    ? all
-    : addVisibleLineageAncestors(
-        all,
-        lineageAncestorById,
-        opts.worktreeLineageById,
-        selectedRepoIds
-      )
-}
-
-function addVisibleLineageAncestors(
-  worktrees: Worktree[],
-  worktreeById: Map<string, Worktree>,
-  lineageById: Record<string, WorktreeLineage>,
-  selectedRepoIds: ReadonlySet<string> | null
-): Worktree[] {
-  const result: Worktree[] = []
-  const included = new Set<string>()
-  const visiting = new Set<string>()
-  const cyclicLineageIds = getCyclicProjectedWorktreeLineageIds(lineageById, worktreeById)
-
-  const addWithAncestors = (worktree: Worktree): void => {
-    const identity = getWorktreeHostIdentity(worktree)
-    if (included.has(identity) || visiting.has(identity)) {
-      return
-    }
-    visiting.add(identity)
-    const lineage = getLineageRenderInfo(worktree, lineageById, worktreeById, cyclicLineageIds)
-    if (
-      lineage.state === 'valid' &&
-      (!selectedRepoIds || selectedRepoIds.has(lineage.parent.repoId))
-    ) {
-      // Why: a repository filter is an explicit boundary; other filters keep
-      // valid ancestors so visible children retain their hierarchy.
-      addWithAncestors(lineage.parent)
-    }
-    visiting.delete(identity)
-    if (!included.has(identity)) {
-      included.add(identity)
-      result.push(worktree)
-    }
-  }
-
-  for (const worktree of worktrees) {
-    addWithAncestors(worktree)
-  }
-  return result
 }
 
 export function computeVisibleWorktreeIds(
   worktreesByRepo: Record<string, Worktree[]>,
-  sortedIds: string[],
+  sortedKeys: readonly string[],
   opts: VisibleWorktreeOptions
 ): string[] {
-  return computeVisibleWorktrees(worktreesByRepo, sortedIds, opts).map((worktree) => worktree.id)
+  return computeVisibleWorktrees(worktreesByRepo, sortedKeys, opts).map((worktree) => worktree.id)
 }

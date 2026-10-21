@@ -1,13 +1,10 @@
-import {
-  refreshLegacyLineage,
-  removeOwnedLineage
-} from '../loading-store/canonical-workspace-lineage'
 import { existsSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { FOLDER_WORKSPACE_INSTANCE_SEPARATOR } from '../../../shared/worktree/id'
 import { isWindowsAbsolutePathLike } from '../../../shared/cross-platform-path'
 import { isWslUncPath } from '../../../shared/wsl-paths'
+import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   areTaskSourceContextsEqual,
   normalizeStoredTaskSourceContext
@@ -82,9 +79,9 @@ export function gcStaleWorktreeMeta(state: PersistedState): number {
     if (existsSync(worktreePath)) {
       continue
     }
-    removeOwnedLineage(state, key, LOCAL_EXECUTION_HOST_ID)
     delete state.worktreeMeta[key]
-    refreshLegacyLineage(state)
+    delete state.worktreeLineageById[key]
+    delete state.workspaceLineageByChildKey[worktreeWorkspaceKey(key)]
     // Identity rows are companions too: a surviving alias would re-attach this dead metadata to a
     // worktree later created at the same repoId::path, and nothing else ever reclaims them.
     removeWorktreeMetadataForHost(state, key, LOCAL_EXECUTION_HOST_ID)
@@ -141,7 +138,8 @@ export function normalizeWorktreeLinkedItemMetadata(state: PersistedState): bool
       Object.keys(state.workspaceLineageByChildKey).length > 0
     state.worktreeMeta = {}
     // Legacy lineage belongs to the discarded locator projection; canonical host state does not.
-    refreshLegacyLineage(state)
+    state.worktreeLineageById = {}
+    state.workspaceLineageByChildKey = {}
     changed ||= rawWorktreeMeta !== undefined || hadLineage
   }
   for (const [key, meta] of Object.entries(state.worktreeMeta)) {
@@ -150,7 +148,8 @@ export function normalizeWorktreeLinkedItemMetadata(state: PersistedState): bool
     if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) {
       delete state.worktreeMeta[key]
       // Legacy lineage belongs to this corrupt locator row; canonical host state is independent.
-      refreshLegacyLineage(state)
+      delete state.worktreeLineageById[key]
+      delete state.workspaceLineageByChildKey[worktreeWorkspaceKey(key)]
       changed = true
       continue
     }

@@ -1,11 +1,3 @@
-import {
-  resolveSelectedWorktree,
-  selectedWorktreeTransport,
-  type SelectedWorktreeReference
-} from '@/lib/selected-worktree-reference'
-export { listWorktreeLineageForRuntime } from './worktree-lineage-list'
-import { listWorktreeLineageForRuntime } from './worktree-lineage-list'
-import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type {
@@ -15,14 +7,17 @@ import type {
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import { callRuntimeRpc } from '../../../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
-import { getRuntimeTargetHostId } from '../../../../runtime/runtime-client-target'
+import { getRuntimeTargetHostId, type HostRoute } from '../../../../runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '../../../../runtime/runtime-worktree-selector'
+import { worktreeWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { replaceWorktreeInRepoLists } from '../listing/worktree-owner-settings'
 import {
-  mergeLineageForHost,
-  mergeWorkspaceLineageForHost,
-  projectWorktreeLineageToWorkspaceLineage
-} from './worktree-lineage-host-merge'
+  withRepoHostOwnership,
+  worktreeHostMatchOptions,
+  worktreeMatchesHost
+} from '../listing/worktree-host-ownership'
+import { mergeLineageForHost, mergeWorkspaceLineageForHost } from './worktree-lineage-host-merge'
 import { beginWorktreeLineageRefresh } from './worktree-lineage-readiness'
 import type {
   BackgroundRuntimeRefreshOptions,
@@ -45,113 +40,134 @@ function captureLineageAtRequestStart(
   }
 }
 
-export async function setWorktreeLineageForRuntime(
+export async function listWorktreeLineageForRuntime(
   target: RuntimeClientTarget,
-  reference: SelectedWorktreeReference,
-  args: { parentWorktreeId?: string; noParent?: boolean },
-  selector: string
+  options: BackgroundRuntimeRefreshOptions = {}
+): Promise<{
+  worktreeLineageById: Readonly<Record<string, WorktreeLineage>>
+  workspaceLineageByChildKey: Readonly<Record<string, WorkspaceLineage>>
+}> {
+  type LineageListResponse = {
+    lineage?: Record<string, WorktreeLineage>
+    workspaceLineage?: Record<string, WorkspaceLineage>
+  }
+  const normalizeLineageResponse = (
+    value: Record<string, WorktreeLineage> | LineageListResponse
+  ) =>
+    Object.hasOwn(value, 'lineage') || Object.hasOwn(value, 'workspaceLineage')
+      ? {
+          worktreeLineageById: (value as LineageListResponse).lineage ?? {},
+          workspaceLineageByChildKey: (value as LineageListResponse).workspaceLineage ?? {}
+        }
+      : {
+          worktreeLineageById: value as Record<string, WorktreeLineage>,
+          workspaceLineageByChildKey: {}
+        }
+  if (target.kind === 'local') {
+    return normalizeLineageResponse(await window.api.worktrees.listLineage())
+  }
+  return normalizeLineageResponse(
+    await callRuntimeRpc<{
+      lineage: Record<string, WorktreeLineage>
+      workspaceLineage?: Record<string, WorkspaceLineage>
+    }>(target, 'worktree.lineageList', undefined, {
+      timeoutMs: 15_000,
+      reuseRecentCompatibilityFailure: options.reuseRecentCompatibilityFailure
+    })
+  )
+}
+
+export function projectWorktreeLineageToWorkspaceLineage(
+  worktreeId: string,
+  lineage: WorktreeLineage | null,
+  current: Record<string, WorkspaceLineage>
+): Record<string, WorkspaceLineage> {
+  const childWorkspaceKey = worktreeWorkspaceKey(worktreeId)
+  const next = { ...current }
+  if (!lineage) {
+    delete next[childWorkspaceKey]
+    return next
+  }
+  next[childWorkspaceKey] = {
+    childWorkspaceKey,
+    childInstanceId: lineage.worktreeInstanceId,
+    parentWorkspaceKey: worktreeWorkspaceKey(lineage.parentWorktreeId),
+    parentInstanceId: lineage.parentWorktreeInstanceId,
+    origin: lineage.origin,
+    capture: lineage.capture,
+    ...(lineage.taskId ? { taskId: lineage.taskId } : {}),
+    ...(lineage.orchestrationRunId ? { orchestrationRunId: lineage.orchestrationRunId } : {}),
+    ...(lineage.coordinatorHandle ? { coordinatorHandle: lineage.coordinatorHandle } : {}),
+    ...(lineage.createdByTerminalHandle
+      ? { createdByTerminalHandle: lineage.createdByTerminalHandle }
+      : {}),
+    createdAt: lineage.createdAt
+  }
+  return next
+}
+
+export async function setWorktreeLineageForRuntime(
+  route: HostRoute,
+  worktreeId: string,
+  args: { parentWorktreeId?: string; noParent?: boolean }
 ): Promise<WorktreeLineageUpdateResult> {
+  const { target } = route
   if (target.kind === 'local') {
     return {
-      reference,
-      lineage: await window.api.worktrees.updateLineage({
-        worktreeId: selector,
-        ...(args.parentWorktreeId ? { parentWorktreeId: args.parentWorktreeId } : {}),
-        ...(args.noParent === true ? { noParent: true } : {})
-      })
+      target,
+      hostId: route.at,
+      lineage: await window.api.worktrees.updateLineage({ worktreeId, ...args })
     }
   }
   const result = await callRuntimeRpc<{ worktree: WorktreeWithLineage }>(
     target,
     'worktree.set',
     {
-      worktree: selector,
+      worktree: toRuntimeWorktreeSelector(worktreeId),
       ...(args.parentWorktreeId
-        ? {
-            parentWorktree: args.parentWorktreeId.startsWith('identity:')
-              ? args.parentWorktreeId
-              : toRuntimeWorktreeSelector(args.parentWorktreeId)
-          }
+        ? { parentWorktree: toRuntimeWorktreeSelector(args.parentWorktreeId) }
         : {}),
       ...(args.noParent === true ? { noParent: true } : {})
     },
     { timeoutMs: 15_000 }
   )
   return {
-    reference,
-    lineage: result.worktree.lineage ?? null
+    target,
+    hostId: getRuntimeTargetHostId(target),
+    lineage: result.worktree.lineage ?? null,
+    updatedRemoteWorktree: result.worktree
   }
 }
 
+/** Projects a local write onto this host's rows only; a same-id twin on a server keeps its own. */
 export function projectLocalWorktreeLineageUpdate(
-  state: AppState,
+  state: Pick<AppState, 'repos' | 'worktreesByRepo'>,
+  hostId: ExecutionHostId,
   worktreeId: string,
-  lineage: WorktreeLineage | null,
-  child: Worktree,
-  previousParentInstanceId?: string
+  lineage: WorktreeLineage | null
 ): Record<string, Worktree[]> {
-  const worktreesByRepo = state.worktreesByRepo
-  const authority = selectedWorktreeTransport(state, child)
-  const parentRow = (instance: string | undefined, id: string | undefined) => {
-    const matches = Object.values(worktreesByRepo)
-      .flat()
-      .filter((row) => {
-        const target = selectedWorktreeTransport(state, row)
-        return (
-          instance &&
-          row.instanceId === instance &&
-          row.id === id &&
-          target &&
-          authority &&
-          getRuntimeTargetHostId(target) === getRuntimeTargetHostId(authority)
-        )
-      })
-    return matches.length === 1 ? matches[0] : undefined
-  }
-  const previousChild: WorktreeWithLineage = child
-  const previousLineage =
-    state.worktreeLineageById[composeWorktreeHostIdentity(child.hostId, child.id)]
-  const oldParent = parentRow(
-    previousParentInstanceId,
-    previousLineage?.parentWorktreeId ?? previousChild.parentWorktreeId ?? undefined
-  )
-  const newParent = parentRow(lineage?.parentWorktreeInstanceId, lineage?.parentWorktreeId)
-  const retainsOldChild =
-    oldParent &&
-    Object.values(worktreesByRepo)
-      .flat()
-      .some((row) => {
-        const sibling: WorktreeWithLineage = row
-        const edge =
-          sibling.lineage === undefined
-            ? state.worktreeLineageById[composeWorktreeHostIdentity(row.hostId, row.id)]
-            : sibling.lineage
-        const target = selectedWorktreeTransport(state, row)
-        return (
-          row !== child &&
-          row.id === worktreeId &&
-          edge?.parentWorktreeInstanceId === oldParent.instanceId &&
-          target &&
-          authority &&
-          getRuntimeTargetHostId(target) === getRuntimeTargetHostId(authority)
-        )
-      })
+  const { worktreesByRepo } = state
   let nextByRepo = worktreesByRepo
   for (const [repoId, worktrees] of Object.entries(worktreesByRepo)) {
+    const options = worktreeHostMatchOptions(state, repoId, hostId)
     let repoChanged = false
     const projected = worktrees.map((worktree) => {
-      const current: WorktreeWithLineage = worktree
-      const hadChild =
-        current.childWorktreeIds?.includes(worktreeId) === true && worktree === oldParent
-      const isParent = worktree === newParent
+      if (!worktreeMatchesHost(worktree, hostId, options)) {
+        return worktree
+      }
+      const current = worktree as WorktreeWithLineage
+      const hadChild = current.childWorktreeIds?.includes(worktreeId) ?? false
+      const isParent =
+        lineage?.parentWorktreeId === worktree.id &&
+        lineage.parentWorktreeInstanceId === worktree.instanceId
       let childWorktreeIds = current.childWorktreeIds
-      if (hadChild && !retainsOldChild) {
+      if (hadChild) {
         childWorktreeIds = childWorktreeIds?.filter((id) => id !== worktreeId)
       }
       if (isParent && !childWorktreeIds?.includes(worktreeId)) {
         childWorktreeIds = [...(childWorktreeIds ?? []), worktreeId]
       }
-      if (worktree === child) {
+      if (worktree.id === worktreeId) {
         repoChanged = true
         return {
           ...worktree,
@@ -177,38 +193,33 @@ export function projectLocalWorktreeLineageUpdate(
 
 export function applyWorktreeLineageUpdate(
   set: Parameters<StateCreator<AppState>>[0],
+  worktreeId: string,
   result: WorktreeLineageUpdateResult
 ): void {
   set((s) => {
-    const child = resolveSelectedWorktree(s, result.reference)?.row
-    if (!child?.identity) {
-      throw new Error('selector_not_found')
-    }
-    const worktreeId = child.id
-    const hostId = child.hostId ?? result.reference.hostId
-    const key = composeWorktreeHostIdentity(hostId, worktreeId)
     const next = { ...s.worktreeLineageById }
     if (result.lineage) {
-      next[key] = result.lineage
+      next[worktreeId] = result.lineage
     } else {
-      delete next[key]
+      delete next[worktreeId]
     }
-    const previous: WorktreeWithLineage = child
-    const worktreesByRepo = projectLocalWorktreeLineageUpdate(
-      s,
-      worktreeId,
-      result.lineage,
-      child,
-      s.worktreeLineageById[key]?.parentWorktreeInstanceId ??
-        previous.lineage?.parentWorktreeInstanceId
-    )
+    // Why the result's host: focus can name the twin of a row another host just answered for.
+    const worktreesByRepo =
+      result.target.kind === 'local'
+        ? projectLocalWorktreeLineageUpdate(s, result.hostId, worktreeId, result.lineage)
+        : result.updatedRemoteWorktree
+          ? replaceWorktreeInRepoLists(
+              s,
+              withRepoHostOwnership(result.updatedRemoteWorktree, result.hostId),
+              result.hostId
+            )
+          : s.worktreesByRepo
     return {
       worktreeLineageById: next,
       workspaceLineageByChildKey: projectWorktreeLineageToWorkspaceLineage(
         worktreeId,
         result.lineage,
-        s.workspaceLineageByChildKey,
-        hostId
+        s.workspaceLineageByChildKey
       ),
       worktreesByRepo,
       sortEpoch: s.sortEpoch + 1
@@ -244,23 +255,7 @@ export function applyHostLineageRefresh(
     ) {
       return s
     }
-    let worktreesByRepo = s.worktreesByRepo
-    for (const child of Object.values(s.worktreesByRepo).flat()) {
-      const key = composeWorktreeHostIdentity(child.hostId, child.id)
-      if (s.worktreeLineageById[key] === worktreeLineageById[key]) {
-        continue
-      }
-      worktreesByRepo = projectLocalWorktreeLineageUpdate(
-        { ...s, worktreesByRepo },
-        child.id,
-        worktreeLineageById[key] ?? null,
-        Object.values(worktreesByRepo)
-          .flat()
-          .find((row) => row.id === child.id && row.hostId === child.hostId) ?? child,
-        s.worktreeLineageById[key]?.parentWorktreeInstanceId
-      )
-    }
-    return { worktreeLineageById, workspaceLineageByChildKey, worktreesByRepo }
+    return { worktreeLineageById, workspaceLineageByChildKey }
   })
 }
 

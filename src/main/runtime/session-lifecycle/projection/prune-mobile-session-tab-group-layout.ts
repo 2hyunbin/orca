@@ -53,10 +53,10 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
   protected mergeMobileSessionTabGroups(
     worktreeId: string,
     groups: readonly RuntimeMobileSessionTabGroup[],
-    terminalTabs: readonly RuntimeMobileSessionTerminalTab[],
+    tabs: readonly RuntimeMobileSessionSnapshotTab[],
     activeTab: RuntimeMobileSessionTerminalTab | null
   ): RuntimeMobileSessionTabGroup[] {
-    return mergeMobileSessionTabGroups(worktreeId, groups, terminalTabs, activeTab)
+    return mergeMobileSessionTabGroups(worktreeId, groups, tabs, activeTab)
   }
 
   protected buildHeadlessMobileSessionTabGroups(
@@ -148,7 +148,9 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
           const leaf = this.leaves.get(this.getLeafKey(candidate.parentTabId, candidate.leafId))
           return leaf ? this.getLeafDisplayRecord(leaf) : null
         },
-        getTrackedTitle: (ptyId) => this.getUnpersistedTrackedTitleForPty(ptyId)
+        getTrackedTitle: (ptyId) => this.getUnpersistedTrackedTitleForPty(ptyId),
+        getPtyTitleObservedAtEpochMs: (ptyId) =>
+          ptyId ? (this.ptysById.get(ptyId)?.lastOscTitleEpochMs ?? null) : null
       }
     )
   }

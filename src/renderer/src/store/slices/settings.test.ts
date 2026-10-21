@@ -415,7 +415,7 @@ describe('createSettingsSlice runtime switching', () => {
         worktreeId: 'repo-env-1::/env-1/repo',
         parentWorktreeId: 'repo-env-1::/env-1/parent'
       },
-      [`runtime:env-2|${env2Lineage.worktreeId}`]: env2Lineage
+      [env2Lineage.worktreeId]: env2Lineage
     })
     expect(store.getState().activeWorktreeId).toBe('repo-env-1::/env-1/repo')
     expect(store.getState().openFiles).toEqual([

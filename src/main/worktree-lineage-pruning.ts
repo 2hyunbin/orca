@@ -1,30 +1,17 @@
-import { edgeToWorktreeLineage, edgeToWorkspaceLineage } from '../shared/worktree/lineage-edge'
 import { randomUUID } from 'node:crypto'
 import type { Repo } from '../shared/repo-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../shared/worktree/lineage-types'
 import type { GitWorktreeInfo } from '../shared/worktree/types'
 import { getRepoExecutionHostId } from '../shared/execution-host'
-import { isWorkspaceKey, parseWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
+import { isWorkspaceKey, parseWorkspaceKey } from '../shared/workspace-scope'
 import { splitWorktreeId } from '../shared/worktree/id'
 import { worktreeRetentionPathComparisonKey } from './worktree-retention-path-comparison'
 import type { Store } from './persistence'
 import { isWslMoveRepoBlocked } from './persistence/moving-wsl-projects/wsl-move-background-backoff'
-import { writeWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
+import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 
 type WorktreeLineagePruningStore = Pick<Store, 'getRepos' | 'getWorktreeMeta' | 'setWorktreeMeta'> &
-  Partial<
-    Pick<
-      Store,
-      | 'getLineageEdges'
-      | 'getAllWorktreeMeta'
-      | 'getAllWorktreeMetaForHost'
-      | 'setWorktreeMetaForHost'
-      | 'getAllWorktreeLineage'
-      | 'getAllWorkspaceLineage'
-      | 'removeWorktreeLineage'
-      | 'removeWorkspaceLineage'
-    >
-  >
+  Partial<Pick<Store, 'getAllWorktreeLineage' | 'getAllWorkspaceLineage' | 'removeWorktreeLineage'>>
 
 function worktreeIdBelongsToRepo(worktreeId: string, repoPrefix: string): boolean {
   return worktreeId.startsWith(repoPrefix)
@@ -72,20 +59,8 @@ export function pruneLineageForMissingRepoWorktrees(
   ) {
     return
   }
-  const ownEdges = store
-    .getLineageEdges?.()
-    .filter((edge) => edge.child.hostId === getRepoExecutionHostId(repo))
-  const worktreeLineage = ownEdges
-    ? Object.fromEntries(
-        ownEdges.flatMap((edge) => {
-          const lineage = edgeToWorktreeLineage(edge)
-          return lineage ? [[lineage.worktreeId, lineage]] : []
-        })
-      )
-    : store.getAllWorktreeLineage()
-  const workspaceLineage = ownEdges
-    ? Object.fromEntries(ownEdges.map((edge) => [edge.child.locator, edgeToWorkspaceLineage(edge)]))
-    : (store.getAllWorkspaceLineage?.() ?? {})
+  const worktreeLineage = store.getAllWorktreeLineage()
+  const workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
   const repoPrefix = `${repo.id}::`
   // Why: one empty observation cannot prove every registered lineage edge disappeared at once.
   if (
@@ -114,10 +89,9 @@ export function pruneLineageForMissingRepoWorktrees(
     return false
   }
   const expectedHostId = getRepoExecutionHostId(repo)
-  const ownedMeta = store.getAllWorktreeMetaForHost?.(expectedHostId)
   const repoOwners = store.getRepos().filter((candidate) => candidate.id === repo.id)
   const canMutateWorktree = (worktreeId: string): boolean => {
-    const hostId = (ownedMeta?.[worktreeId] ?? store.getWorktreeMeta(worktreeId))?.hostId
+    const hostId = store.getWorktreeMeta(worktreeId)?.hostId
     return hostId ? hostId === expectedHostId : repoOwners.length === 1
   }
   for (const childWorkspaceKey of Object.keys(workspaceLineage)) {
@@ -125,38 +99,36 @@ export function pruneLineageForMissingRepoWorktrees(
     if (
       childScope?.type === 'worktree' &&
       worktreeIdBelongsToRepo(childScope.worktreeId, repoPrefix) &&
-      (ownEdges !== undefined || canMutateWorktree(childScope.worktreeId)) &&
+      canMutateWorktree(childScope.worktreeId) &&
       !isLive(childScope.worktreeId) &&
       isWorkspaceKey(childWorkspaceKey)
     ) {
-      store.removeWorkspaceLineage?.(
-        childWorkspaceKey,
-        workspaceLineage[childWorkspaceKey]?.childInstanceId ?? undefined
+      store.removeWorktreeLineage(
+        hostWorktreeTarget({ id: childScope.worktreeId, hostId: expectedHostId })
       )
     }
   }
   for (const [childId, lineage] of Object.entries(worktreeLineage)) {
     if (
       worktreeIdBelongsToRepo(childId, repoPrefix) &&
-      (ownEdges !== undefined || canMutateWorktree(childId)) &&
+      canMutateWorktree(childId) &&
       !isLive(childId)
     ) {
       // Why: a proven-missing path must not transfer its lineage to a future checkout at that path.
-      store.removeWorktreeLineage(childId, lineage.worktreeInstanceId)
-      store.removeWorkspaceLineage?.(worktreeWorkspaceKey(childId), lineage.worktreeInstanceId)
+      store.removeWorktreeLineage(hostWorktreeTarget({ id: childId, hostId: expectedHostId }))
     }
     if (
       worktreeIdBelongsToRepo(lineage.parentWorktreeId, repoPrefix) &&
       canMutateWorktree(lineage.parentWorktreeId) &&
       !isLive(lineage.parentWorktreeId)
     ) {
-      const parentMeta =
-        ownedMeta?.[lineage.parentWorktreeId] ?? store.getWorktreeMeta(lineage.parentWorktreeId)
+      const parentMeta = store.getWorktreeMeta(lineage.parentWorktreeId)
       if (parentMeta?.instanceId === lineage.parentWorktreeInstanceId) {
         // Why: rotate a proven-missing parent's identity once so path reuse cannot validate old lineage.
-        writeWorktreeMetaForHost(store, lineage.parentWorktreeId, expectedHostId, {
-          instanceId: randomUUID()
-        })
+        store.setWorktreeMeta(
+          hostWorktreeTarget({ id: lineage.parentWorktreeId, hostId: expectedHostId }),
+          { instanceId: randomUUID() }
+        )
       }
     }
   }

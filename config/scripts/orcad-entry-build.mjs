@@ -6,9 +6,7 @@ import { basename, dirname, join } from 'node:path'
 import { ORCAD_SERVER_ENTRY_FILENAME } from '../../src/shared/orcad-artifacts.ts'
 
 const root = join(import.meta.dirname, '..', '..')
-const { isLayoutOwnerBuild, layoutOwnerDefine } = createRequire(import.meta.url)(
-  '../layout-owner-build.cjs'
-)
+const { turnedOnDarkBuildDefines } = createRequire(import.meta.url)('../dark-build-switches.cjs')
 
 export const ORCAD_ENTRY_POINT = 'src/main/orcad/main.ts'
 export const ORCAD_LAUNCHER_ENTRY_POINT = 'src/main/orcad/launcher.ts'
@@ -22,7 +20,8 @@ export const ORCAD_CHILD_ENTRY_POINTS = {
   sessionScanner: 'src/main/ai-vault/session-scanner-service-entry.ts',
   workerThreadChildProcess:
     'src/main/worker-thread-child-process/worker-thread-child-process-entry.ts',
-  claudeProfileSetup: 'src/main/claude-accounts/claude-profile-setup-worker-entry.ts'
+  claudeProfileSetup: 'src/main/claude-accounts/claude-profile-setup-worker-entry.ts',
+  sttWorker: 'src/main/speech/stt-worker.ts'
 }
 
 /** Each child ships flat beside orcad.js under its source basename; the runtime resolvers look there. */
@@ -40,7 +39,7 @@ export const ORCAD_COMMONJS_MODULE_OPTIONS = {
   define: {
     'import.meta.url': '__orcadModuleUrl',
     // Why only when on: an undeclared switch already reads as off, so other builds keep their bytes.
-    ...(isLayoutOwnerBuild() ? { ORCA_LAYOUT_OWNER: layoutOwnerDefine() } : {})
+    ...turnedOnDarkBuildDefines()
   },
   logOverride: { 'empty-import-meta': 'error' }
 }

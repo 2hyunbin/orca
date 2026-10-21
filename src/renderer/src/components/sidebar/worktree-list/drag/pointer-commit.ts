@@ -70,6 +70,7 @@ export function commitWorktreePointerDrop(args: PointerDropCommitArgs): void {
   } else if (boardDropTarget.status) {
     args.onDropWorktreesOnWorkspaceBoard({
       worktreeIds: drag.reorderDraggedIds,
+      draggedCopies: drag.draggedCopies,
       status: boardDropTarget.status,
       // Why: the target counts rendered cards, but the groups are the full
       // lane. Board search can make those two differ.
@@ -88,10 +89,10 @@ export function commitWorktreePointerDrop(args: PointerDropCommitArgs): void {
             y: event.clientY
           })
         : NO_WORKTREE_SIDEBAR_DROP_TARGET,
-      drag.draggedWorktrees ?? []
+      drag.draggedIds
     )
     if (preferredStatusTarget.lineageParentId) {
-      ctx.commitWorktreeLineageParentDrop(drag.draggedWorktrees ?? [], preferredStatusTarget)
+      ctx.commitWorktreeLineageParentDrop(drag.draggedIds, preferredStatusTarget.lineageParentId)
       ctx.clearWorktreeDrag()
       return
     }
@@ -126,7 +127,7 @@ export function commitWorktreePointerDrop(args: PointerDropCommitArgs): void {
         })
       })
       ctx.clearReorderedWorktreeParents({
-        draggedWorktrees: drag.draggedWorktrees ?? [],
+        draggedIds: drag.draggedIds,
         sourceGroupKey: drag.sourceGroupKey
       })
     } else if (ctx.scrollRef.current) {
@@ -145,7 +146,7 @@ export function commitWorktreePointerDrop(args: PointerDropCommitArgs): void {
         y: event.clientY
       })
       if (target.lineageParentId) {
-        ctx.commitWorktreeLineageParentDrop(drag.draggedWorktrees ?? [], target)
+        ctx.commitWorktreeLineageParentDrop(drag.draggedIds, target.lineageParentId)
       } else {
         commitStatusOrPinDrop(args, target, statusDrop?.dropIndex ?? null)
       }

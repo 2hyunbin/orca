@@ -1,5 +1,3 @@
-import { isOpenFileOwnedByWorktree } from '@/lib/unified-tab-host-ownership'
-import type { WorktreePurgeTarget } from '../../worktree-helpers'
 import type { AppState } from '../../../types'
 import { forgetAgentHibernationTabOutput } from '@/lib/agent-hibernation-output-activity'
 import { forgetForegroundTerminalTabs } from '@/lib/foreground-terminal-tabs'
@@ -17,12 +15,41 @@ export type WorktreePurgeDoomedIds = {
 
 export function collectWorktreePurgeDoomedIds(
   s: AppState,
-  worktreeIdSet: Set<string>,
-  ownerTabIds?: ReadonlySet<string>,
-  ownerTargets?: readonly WorktreePurgeTarget[]
+  worktreeIdSet: Set<string>
+): WorktreePurgeDoomedIds {
+  const tabs: { id: string; ptyId: string | null }[] = []
+  const browserWorkspaceIds: string[] = []
+  const fileIds: string[] = []
+  for (const id of worktreeIdSet) {
+    tabs.push(...(s.tabsByWorktree[id] ?? []))
+    for (const workspace of s.browserTabsByWorktree[id] ?? []) {
+      browserWorkspaceIds.push(workspace.id)
+    }
+    // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't retain removed worktrees for the session.
+    forgetDetachedHeadAutoDerivedDisplayName(id)
+  }
+  for (const file of s.openFiles) {
+    if (worktreeIdSet.has(file.worktreeId)) {
+      fileIds.push(file.id)
+      if (file.markdownPreviewSourceFileId) {
+        fileIds.push(file.markdownPreviewSourceFileId)
+      }
+    }
+  }
+  return collectSurfacePurgeDoomedIds(s, { tabs, browserWorkspaceIds, fileIds })
+}
+
+/** Doomed ids for named surfaces, which may sit in a workspace that stays (a surviving twin's). */
+export function collectSurfacePurgeDoomedIds(
+  s: AppState,
+  surfaces: {
+    tabs: readonly { id: string; ptyId: string | null }[]
+    browserWorkspaceIds: Iterable<string>
+    fileIds: Iterable<string>
+  }
 ): WorktreePurgeDoomedIds {
   // Collect every tab id (and removed file id) we are about to orphan.
-  const doomedTabIds = new Set<string>(ownerTabIds)
+  const doomedTabIds = new Set<string>()
   // Why: some terminal/agent maps are keyed by ptyId, not tabId; collect durable wake hints too since slept panes have left the live index.
   const doomedPtyIds = new Set<string>()
   const addDoomedPtyId = (ptyId: string | null | undefined): void => {
@@ -41,27 +68,15 @@ export function collectWorktreePurgeDoomedIds(
       addDoomedPtyId(ptyId)
     }
   }
-  const doomedBrowserWorkspaceIds = new Set<string>()
+  const doomedBrowserWorkspaceIds = new Set(surfaces.browserWorkspaceIds)
   const doomedPageIds = new Set<string>()
-  const removedFileIds = new Set<string>()
-  for (const id of worktreeIdSet) {
-    for (const tab of s.tabsByWorktree[id] ?? []) {
-      if (ownerTabIds && !ownerTabIds.has(tab.id)) {
-        continue
-      }
-      doomedTabIds.add(tab.id)
-      // Null-tolerant like the omit* helpers below: some callers pass partial state omitting this slice (production store always inits to {}).
-      addDoomedTabPtyIds(tab.id, tab.ptyId)
-      // Why: a removed worktree's panes are gone, so drop their hibernation output epochs from the module-level map (a future pane mints a fresh leafId at epoch 0).
-      forgetAgentHibernationTabOutput(tab.id)
-    }
-    for (const workspace of s.browserTabsByWorktree[id] ?? []) {
-      if (!ownerTabIds || ownerTabIds.has(workspace.id)) {
-        doomedBrowserWorkspaceIds.add(workspace.id)
-      }
-    }
-    // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't retain removed worktrees for the session.
-    forgetDetachedHeadAutoDerivedDisplayName(id)
+  const removedFileIds = new Set(surfaces.fileIds)
+  for (const tab of surfaces.tabs) {
+    doomedTabIds.add(tab.id)
+    // Null-tolerant like the omit* helpers below: some callers pass partial state omitting this slice (production store always inits to {}).
+    addDoomedTabPtyIds(tab.id, tab.ptyId)
+    // Why: a removed worktree's panes are gone, so drop their hibernation output epochs from the module-level map (a future pane mints a fresh leafId at epoch 0).
+    forgetAgentHibernationTabOutput(tab.id)
   }
   // Why: same rationale for doomed tabs' foreground last-seen timestamps and agent-startup delivery guards — retired tab ids never recur.
   forgetForegroundTerminalTabs(doomedTabIds)
@@ -73,22 +88,6 @@ export function collectWorktreePurgeDoomedIds(
   for (const workspaceId of doomedBrowserWorkspaceIds) {
     for (const page of s.browserPagesByWorkspace[workspaceId] ?? []) {
       doomedPageIds.add(page.id)
-    }
-  }
-  for (const file of s.openFiles) {
-    if (
-      ownerTargets
-        ? ownerTargets.some((target) =>
-            target.hostId
-              ? isOpenFileOwnedByWorktree(file, { id: target.id, hostId: target.hostId })
-              : file.worktreeId === target.id
-          )
-        : worktreeIdSet.has(file.worktreeId)
-    ) {
-      removedFileIds.add(file.id)
-      if (file.markdownPreviewSourceFileId) {
-        removedFileIds.add(file.markdownPreviewSourceFileId)
-      }
     }
   }
   return {

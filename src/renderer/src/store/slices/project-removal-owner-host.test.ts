@@ -9,6 +9,7 @@ import {
   makeLayout,
   makeOpenFile,
   makeTab,
+  makeUnifiedTab,
   makeWorktree
 } from './store-test-helpers'
 import { purgeOrphanedRuntimeSshProjects } from './worktrees/teardown/orphaned-runtime-ssh-project-purge'
@@ -177,7 +178,8 @@ describe('project removal stays on its owner host (#13071)', () => {
     expect(reposRemoveForHost).toHaveBeenCalledWith({ repoId: 'same-repo', hostId: 'ssh:target-1' })
   })
 
-  it('preserves ambiguous tabs and removes owned editor state when another host shares the id', async () => {
+  // Why: the twin id's state is shared, so only the tabs stamped with the removed host go.
+  it('drops the removed host’s terminal and editor state under a worktree id the other host also publishes', async () => {
     const store = createTestStore()
     const worktreeId = 'same-repo::/work/same'
     const sshTwin = makeWorktree({ id: worktreeId, repoId: 'same-repo', hostId: 'ssh:target-1' })
@@ -190,6 +192,18 @@ describe('project removal stays on its owner host (#13071)', () => {
         ]
       },
       tabsByWorktree: { [worktreeId]: [makeTab({ id: 'tab-1', worktreeId })] },
+      unifiedTabsByWorktree: {
+        [worktreeId]: [
+          makeUnifiedTab({ id: 'tab-1', worktreeId, groupId: 'g', executionHostId: 'local' }),
+          makeUnifiedTab({
+            id: '/work/same/a.ts',
+            worktreeId,
+            groupId: 'g',
+            contentType: 'editor',
+            executionHostId: 'local'
+          })
+        ]
+      },
       terminalLayoutsByTabId: { 'tab-1': makeLayout() },
       ptyIdsByTabId: { 'tab-1': ['pty-1'] },
       activeTabId: 'tab-1',
@@ -201,12 +215,13 @@ describe('project removal stays on its owner host (#13071)', () => {
 
     const state = store.getState()
     expect(state.worktreesByRepo['same-repo']).toEqual([sshTwin])
-    expect(state.tabsByWorktree[worktreeId]).toHaveLength(1)
-    expect(state.terminalLayoutsByTabId['tab-1']).toBeDefined()
-    expect(state.ptyIdsByTabId['tab-1']).toEqual(['pty-1'])
-    expect(state.activeTabId).toBe('tab-1')
+    expect(state.tabsByWorktree[worktreeId] ?? []).toEqual([])
+    expect(state.unifiedTabsByWorktree[worktreeId] ?? []).toEqual([])
+    expect(state.terminalLayoutsByTabId['tab-1']).toBeUndefined()
+    expect(state.ptyIdsByTabId['tab-1']).toBeUndefined()
+    expect(state.activeTabId).toBeNull()
     expect(state.openFiles).toEqual([])
-    expect(state.activeFileIdByWorktree[worktreeId]).toBeNull()
+    expect(state.activeFileIdByWorktree[worktreeId]).toBeFalsy()
   })
 })
 

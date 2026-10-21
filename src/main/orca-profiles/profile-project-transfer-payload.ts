@@ -1,12 +1,8 @@
-import { getAllWorktreeMetaForHost } from '../persistence/loading-store/worktree-identity-metadata'
-import { canonicalWorktreeIdentity } from '../../shared/worktree/identity'
-import { composeWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
-import { refreshLegacyLineage } from '../persistence/loading-store/canonical-workspace-lineage'
-import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { randomUUID } from 'node:crypto'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import { projectHostSetupProjectionFromRepos } from '../../shared/project-host-setup-projection'
 import type { SshTarget } from '../../shared/ssh-types'
+import type { WorkspaceKey } from '../../shared/folder-workspace-types'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import type { Repo } from '../../shared/repo-types'
 import type { SparsePreset } from '../../shared/worktree/create-types'
@@ -32,8 +28,9 @@ export type TransferPayload = {
    *  does not reissue a name whose old directory still holds agent state. */
   retiredNameRegistry: RetiredNameRegistry | undefined
   retiredNameRegistriesByNamespace: Record<string, RetiredNameRegistry>
-  lineageByChildInstance?: PersistedState['lineageByChildInstance']
   worktreeMeta: PersistedState['worktreeMeta']
+  worktreeLineageById: PersistedState['worktreeLineageById']
+  workspaceLineageByChildKey: PersistedState['workspaceLineageByChildKey']
   workspaceSession?: PersistedState['workspaceSession']
   workspaceSessionsByHostId?: Partial<Record<ExecutionHostId, PersistedState['workspaceSession']>>
   sshTargets: SshTarget[]
@@ -84,6 +81,48 @@ function rekeyWorktreeIdRecord<T>(
   return next
 }
 
+function rekeyLineageRecord(
+  record: PersistedState['worktreeLineageById'],
+  worktreeIds: ReadonlySet<string>,
+  oldRepoId: string,
+  newRepoId: string
+): PersistedState['worktreeLineageById'] {
+  const next: PersistedState['worktreeLineageById'] = {}
+  for (const [oldKey, lineage] of Object.entries(record)) {
+    if (!worktreeIds.has(oldKey) && !worktreeIds.has(lineage.parentWorktreeId)) {
+      continue
+    }
+    const newKey = rekeyWorktreeId(oldRepoId, newRepoId, oldKey)
+    next[newKey] = {
+      ...structuredClone(lineage),
+      worktreeId: rekeyWorktreeId(oldRepoId, newRepoId, lineage.worktreeId),
+      parentWorktreeId: rekeyWorktreeId(oldRepoId, newRepoId, lineage.parentWorktreeId)
+    }
+  }
+  return next
+}
+
+function rekeyWorkspaceLineageRecord(
+  record: PersistedState['workspaceLineageByChildKey'],
+  oldRepoId: string,
+  newRepoId: string
+): PersistedState['workspaceLineageByChildKey'] {
+  const next: PersistedState['workspaceLineageByChildKey'] = {}
+  for (const [oldKey, lineage] of Object.entries(record)) {
+    const newChildKey = rekeyWorkspaceKey(oldRepoId, newRepoId, oldKey as WorkspaceKey)
+    const newParentKey = rekeyWorkspaceKey(oldRepoId, newRepoId, lineage.parentWorkspaceKey)
+    if (newChildKey === oldKey && newParentKey === lineage.parentWorkspaceKey) {
+      continue
+    }
+    next[newChildKey] = {
+      ...structuredClone(lineage),
+      childWorkspaceKey: newChildKey,
+      parentWorkspaceKey: newParentKey
+    }
+  }
+  return next
+}
+
 export function createTransferPayload(args: {
   sourceState: TransferProfileState
   sourceRepo: Repo
@@ -94,45 +133,11 @@ export function createTransferPayload(args: {
   const oldRepoId = sourceRepo.id
   const newRepoId = targetRepo.id
   const worktreeIds = collectTransferWorktreeIds(sourceState, oldRepoId)
-  const sourceMeta = getAllWorktreeMetaForHost(
-    { state: sourceState },
-    getRepoExecutionHostId(sourceRepo)
-  )
-  const sourceInstances = new Set(
-    Object.entries(sourceMeta)
-      .filter(([id]) => worktreeIds.has(id))
-      .map(([, meta]) => meta.instanceId)
-  )
   const targetProjection = projectHostSetupProjectionFromRepos([targetRepo])
   const targetProjectId =
     targetProjection.setups[0]?.projectId ?? targetProjection.projects[0]?.id ?? null
   return {
     repo: targetRepo,
-    lineageByChildInstance: Object.fromEntries(
-      Object.entries(sourceState.lineageByChildInstance ?? {}).flatMap(([instance, edge]) => {
-        const child = parseWorkspaceKey(edge.child.locator)
-        if (
-          child?.type !== 'worktree' ||
-          !worktreeIds.has(child.worktreeId) ||
-          !sourceInstances.has(edge.child.instanceId)
-        ) {
-          return []
-        }
-        return [
-          [
-            instance,
-            {
-              ...structuredClone(edge),
-              child: {
-                ...edge.child,
-                locator: rekeyWorkspaceKey(oldRepoId, newRepoId, edge.child.locator),
-                hostId: getRepoExecutionHostId(targetRepo)
-              }
-            }
-          ]
-        ]
-      })
-    ),
     sparsePresets: (sourceState.sparsePresetsByRepo[oldRepoId] ?? []).map((preset) => ({
       ...structuredClone(preset),
       repoId: newRepoId
@@ -142,12 +147,29 @@ export function createTransferPayload(args: {
       sourceState,
       sourceRepo
     ),
-    worktreeMeta: rekeyWorktreeIdRecord(sourceMeta, worktreeIds, oldRepoId, newRepoId, (meta) => ({
-      ...structuredClone(meta),
-      ...(targetProjectId ? { projectId: targetProjectId } : {}),
-      hostId: getRepoExecutionHostId(targetRepo),
-      projectHostSetupId: targetRepo.id
-    })),
+    worktreeMeta: rekeyWorktreeIdRecord(
+      sourceState.worktreeMeta,
+      worktreeIds,
+      oldRepoId,
+      newRepoId,
+      (meta) => ({
+        ...structuredClone(meta),
+        ...(targetProjectId ? { projectId: targetProjectId } : {}),
+        hostId: getRepoExecutionHostId(targetRepo),
+        projectHostSetupId: targetRepo.id
+      })
+    ),
+    worktreeLineageById: rekeyLineageRecord(
+      sourceState.worktreeLineageById,
+      worktreeIds,
+      oldRepoId,
+      newRepoId
+    ),
+    workspaceLineageByChildKey: rekeyWorkspaceLineageRecord(
+      sourceState.workspaceLineageByChildKey,
+      oldRepoId,
+      newRepoId
+    ),
     ...(includeSessions
       ? {
           workspaceSession: extractSessionForTransfer(
@@ -190,28 +212,13 @@ export function applyPayloadToTarget(
     ),
 
     worktreeMeta: { ...targetState.worktreeMeta, ...payload.worktreeMeta },
-    lineageByChildInstance: {
-      ...targetState.lineageByChildInstance,
-      ...payload.lineageByChildInstance
+    worktreeLineageById: { ...targetState.worktreeLineageById, ...payload.worktreeLineageById },
+    workspaceLineageByChildKey: {
+      ...targetState.workspaceLineageByChildKey,
+      ...payload.workspaceLineageByChildKey
     },
     sshTargets: mergeSshTargets(targetState.sshTargets, payload.sshTargets)
   }
-  next.worktreeMetaByIdentity = { ...targetState.worktreeMetaByIdentity }
-  next.worktreeIdentityAliases = { ...targetState.worktreeIdentityAliases }
-  for (const [id, meta] of Object.entries(payload.worktreeMeta)) {
-    if (!meta.instanceId) {
-      continue
-    }
-    const hostId = getRepoExecutionHostId(payload.repo)
-    const identity = canonicalWorktreeIdentity({
-      worktreeId: id,
-      instanceId: meta.instanceId,
-      executionHostId: hostId
-    })
-    next.worktreeMetaByIdentity[identity] = meta
-    next.worktreeIdentityAliases[composeWorktreeHostIdentity(hostId, id)] = [identity]
-  }
-  refreshLegacyLineage(next)
   if (payload.workspaceSession) {
     next.workspaceSession = mergeWorkspaceSessions(
       targetState.workspaceSession,

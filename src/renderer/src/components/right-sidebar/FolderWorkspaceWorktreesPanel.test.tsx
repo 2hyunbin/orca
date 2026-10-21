@@ -504,7 +504,7 @@ describe('FolderWorkspaceWorktreesPanel', () => {
     expect(renderedCardIds()).toEqual([parent.id, child.id, grandchild.id])
   })
 
-  it('renders both participants after suppressing one cyclic edge', () => {
+  it('renders both participants of an upstream-stripped cycle as roots', () => {
     const first = makeWorktree({
       id: 'repo-1::/cycle-a',
       displayName: 'Cycle A',
@@ -529,11 +529,12 @@ describe('FolderWorkspaceWorktreesPanel', () => {
 
     renderPanel()
 
+    // Why: the lineage projection drops cyclic child ids upstream, so the panel only ever sees roots.
     const ids = renderedCardIds()
     expect(new Set(ids).size).toBe(ids.length)
     expect([...ids].sort()).toEqual([first.id, second.id])
-    expect(cardFor(first.id)?.parentElement).not.toBe(cardFor(second.id)?.parentElement)
-    expect(latestPropsFor(first.id)?.lineageChildCount).toBe(1)
+    expect(cardFor(first.id)?.parentElement).toBe(cardFor(second.id)?.parentElement)
+    expect(latestPropsFor(first.id)?.lineageChildCount).toBe(0)
     expect(latestPropsFor(second.id)?.lineageChildCount).toBe(0)
   })
 

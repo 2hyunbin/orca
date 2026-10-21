@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getCyclicProjectedWorktreeLineageIds } from './worktree-lineage-projection'
+import { getCyclicProjectedWorktreeLineageIds } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import {
   getReorderedWorktreeIdsToUnnest,
   getWorktreeLineageDropTargetId,
@@ -124,7 +124,6 @@ describe('getWorktreeLineageDropTargetId', () => {
     const { container, target } = makeTarget({ worktreeId: 'child', top: 100, bottom: 200 })
     const parentRow = document.createElement('div')
     parentRow.setAttribute('data-worktree-drag-id', 'parent')
-    parentRow.setAttribute('data-worktree-host-identity', 'parent')
     parentRow.append(container.firstElementChild!)
     container.append(parentRow)
 
@@ -265,7 +264,6 @@ function makeTarget(args: {
   const container = document.createElement('div')
   const row = document.createElement('div')
   row.setAttribute('data-worktree-drag-id', args.worktreeId)
-  row.setAttribute('data-worktree-host-identity', args.worktreeId)
   const content = document.createElement('div')
   content.setAttribute('data-worktree-card-parent-content', '')
   content.getBoundingClientRect = () => ({ top: args.top, bottom: args.bottom }) as DOMRect

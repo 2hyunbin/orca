@@ -1,4 +1,3 @@
-import { removedOwnerTabIds } from './worktree-removal-owner'
 import type { AppState } from '../../../types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { NativeChatComposerDraftOwner } from '@/components/native-chat/native-chat-composer-draft-storage'
@@ -28,28 +27,29 @@ export type WorkspaceChatDraftKeys = {
  * and the listing refresh that starts can drop the tab lists these keys are found through.
  */
 export function captureWorkspaceChatDraftKeys(
-  state: Pick<AppState, 'tabsByWorktree' | 'unifiedTabsByWorktree'> &
-    Partial<Pick<AppState, 'worktreesByRepo'>>,
+  state: Pick<AppState, 'tabsByWorktree' | 'unifiedTabsByWorktree'>,
   workspaces: readonly {
     readonly workspaceId: string
     readonly executionHostId: ExecutionHostId | null | undefined
+    /** Limits the tab-found keys to these tab/conversation ids, for an id another host also holds. */
+    readonly onlyEntityIds?: ReadonlySet<string>
   }[]
 ): WorkspaceChatDraftKeys {
   const owners: NativeChatComposerDraftOwner[] = []
   const conversations: string[] = []
   const terminalTabIds: string[] = []
-  for (const { workspaceId, executionHostId } of workspaces) {
+  for (const { workspaceId, executionHostId, onlyEntityIds } of workspaces) {
+    const included = (entityId: string): boolean => !onlyEntityIds || onlyEntityIds.has(entityId)
     if (executionHostId) {
       owners.push({ workspaceId, executionHostId })
     }
-    const tabIds = removedOwnerTabIds(state, workspaceId, executionHostId ?? undefined)
     for (const tab of state.unifiedTabsByWorktree[workspaceId] ?? []) {
-      if (tabIds.has(tab.id) && tab.contentType === 'agent-session') {
+      if (tab.contentType === 'agent-session' && included(tab.entityId)) {
         conversations.push(structuredAgentSessionDraftScopeKey(tab.entityId))
       }
     }
     for (const tab of state.tabsByWorktree[workspaceId] ?? []) {
-      if (tabIds.has(tab.id)) {
+      if (included(tab.id)) {
         terminalTabIds.push(tab.id)
       }
     }

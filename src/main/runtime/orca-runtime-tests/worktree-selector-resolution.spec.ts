@@ -30,6 +30,7 @@ import {
   makeWorktreeMeta,
   store
 } from '../orca-runtime-test-fixtures.spec'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 const LOCAL_CHILD_REPO = {
   id: 'child-repo',
@@ -191,7 +192,7 @@ describe('OrcaRuntimeService', () => {
       getRepo: () => remoteRepo,
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...metaById[worktreeId], ...meta }
         return metaById[worktreeId]
       }
@@ -336,25 +337,29 @@ describe('OrcaRuntimeService', () => {
     )
   })
 
-  it('accepts an explicit parent worktree on another execution host', async () => {
+  // #12757: create must refuse the cross-host edge that update refuses and the renderer drops.
+  it('refuses an explicit parent worktree on another execution host before creating', async () => {
     const runtime = new OrcaRuntimeService(store)
     const resolveLineage = runtime['resolveLineageForWorktreeCreate'].bind(runtime)
 
     await expect(
       resolveLineage({ parentWorktree: `id:${TEST_WORKTREE_ID}` }, SSH_CHILD_REPO)
-    ).resolves.toMatchObject({ kind: 'lineage' })
+    ).rejects.toMatchObject({ code: 'LINEAGE_PARENT_CONTEXT_CONFLICT' })
     await expect(
       resolveLineage({ parentWorktree: `id:${TEST_WORKTREE_ID}` }, LOCAL_CHILD_REPO)
     ).resolves.toMatchObject({ kind: 'lineage' })
   })
 
-  it('preserves an inferred parent on another execution host', async () => {
+  it('drops an inferred parent on another execution host with a warning', async () => {
     const runtime = new OrcaRuntimeService(store)
     const resolveLineage = runtime['resolveLineageForWorktreeCreate'].bind(runtime)
 
     await expect(
       resolveLineage({ cwdParentWorktree: `id:${TEST_WORKTREE_ID}` }, SSH_CHILD_REPO)
-    ).resolves.toMatchObject({ kind: 'lineage' })
+    ).resolves.toEqual({
+      kind: 'none',
+      warnings: [expect.objectContaining({ code: 'LINEAGE_PARENT_CONTEXT_CONFLICT' })]
+    })
   })
 
   it('does not reuse stale in-flight worktree scans after creating a worktree', async () => {

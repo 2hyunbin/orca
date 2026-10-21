@@ -13,6 +13,7 @@ import {
   resolveScopedWorktreeIdRow,
   type RepoWorktreeRowDeps
 } from './repo-worktree-row-resolution'
+import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 function repo(
   id: string,
@@ -46,14 +47,14 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
   listFolderWorkspaces: ReturnType<typeof vi.fn<RepoWorktreeRowDeps['listFolderWorkspaces']>>
 } {
   const metaById: Record<string, WorktreeMeta> = {}
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Scoped resolution reads only the methods supplied by this store double.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a partial store mock; the code under test reads only the members it defines.
   const store = {
-    getRepos: () => repos.map((owner) => ({ ...owner })),
+    getRepos: () => repos,
     getAllWorktreeMeta: () => metaById,
     getAllWorktreeLineage: () => ({}),
     getProjects: () => [],
     getSettings: () => ({}),
-    setWorktreeMeta: (worktreeId: string, updates: Partial<WorktreeMeta>) => {
+    setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, updates: Partial<WorktreeMeta>) => {
       const next = { ...metaById[worktreeId], ...updates } as WorktreeMeta
       metaById[worktreeId] = next
       return next
@@ -68,14 +69,12 @@ function createDeps(repos: Repo[]): RepoWorktreeRowDeps & {
 }
 
 describe('host-qualified scoped worktree resolution', () => {
-  it('scans only owners connected by instance across execution hosts', async () => {
+  it('projects cross-repository lineage by scanning only related repos on the selected host', async () => {
     const childRepo = repo('child-repo', '/child-repo', { executionHostId: 'local' })
-    const parentRepo = repo('parent-repo', '/parent-repo', {
+    const parentRepo = repo('parent-repo', '/parent-repo', { executionHostId: 'local' })
+    const remoteParent = repo('parent-repo', '/remote-parent-repo', {
       connectionId: 'builder',
       executionHostId: 'ssh:builder'
-    })
-    const remoteParent = repo('parent-repo', '/remote-parent-repo', {
-      executionHostId: 'local'
     })
     const unrelated = repo('unrelated', '/unrelated', { executionHostId: 'local' })
     const deps = createDeps([childRepo, parentRepo, remoteParent, unrelated])
@@ -88,7 +87,7 @@ describe('host-qualified scoped worktree resolution', () => {
     })
     deps.metaById[parentId] = mergeWorktreeMetaForWrite(undefined, {
       instanceId: 'parent-instance',
-      hostId: 'ssh:builder',
+      hostId: 'local',
       projectId: 'parent-project'
     })
     const lineage: WorktreeLineage = {
@@ -113,7 +112,7 @@ describe('host-qualified scoped worktree resolution', () => {
     expect(deps.scanRepo.mock.calls.map(([owner]) => owner)).toEqual([childRepo, parentRepo])
 
     deps.scanRepo.mockClear()
-    await expect(resolveScopedWorktreeIdRow(deps, parentId, 'ssh:builder')).resolves.toMatchObject({
+    await expect(resolveScopedWorktreeIdRow(deps, parentId, 'local')).resolves.toMatchObject({
       childWorktreeIds: [childId]
     })
     expect(deps.scanRepo.mock.calls.map(([owner]) => owner)).toEqual([parentRepo, childRepo])
@@ -270,7 +269,7 @@ describe('host-qualified scoped worktree resolution', () => {
     const deps = createDeps([local, remote, repo('unrelated', '/unrelated/repo')])
     const worktreeId = 'folders::/shared/folder'
     deps.listFolderWorkspaces.mockImplementation((owner) =>
-      owner.executionHostId === remote.executionHostId
+      owner === remote
         ? ([
             {
               id: worktreeId,

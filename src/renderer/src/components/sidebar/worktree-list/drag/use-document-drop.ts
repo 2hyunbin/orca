@@ -25,26 +25,26 @@ export function useWorktreeDocumentDrop(args: {
         clearWorktreeDrag()
         return
       }
-      const container = ctx.scrollRef.current
-      const target = ctx.getEligibleLineageDropTarget(
-        container
-          ? getPointerDropStatusTarget({
-              container,
-              x: event.clientX,
-              y: event.clientY
-            })
-          : NO_WORKTREE_SIDEBAR_DROP_TARGET,
-        session.draggedWorktrees ?? []
-      )
-      if (target.lineageParentId) {
-        event.preventDefault()
-        event.stopPropagation()
-        ctx.commitWorktreeLineageParentDrop(session.draggedWorktrees ?? [], target)
-        clearWorktreeDrag()
-        return
-      }
       const drop = ctx.computeWorktreeDrop(event.clientY)
       if (!drop) {
+        const container = ctx.scrollRef.current
+        const target = ctx.getEligibleLineageDropTarget(
+          container
+            ? getPointerDropStatusTarget({
+                container,
+                x: event.clientX,
+                y: event.clientY
+              })
+            : NO_WORKTREE_SIDEBAR_DROP_TARGET,
+          session.draggedIds
+        )
+        if (target.lineageParentId) {
+          event.preventDefault()
+          event.stopPropagation()
+          ctx.commitWorktreeLineageParentDrop(session.draggedIds, target.lineageParentId)
+          clearWorktreeDrag()
+          return
+        }
         const statusDrop = target.status
           ? ctx.computeWorktreeStatusDrop({
               pointerY: event.clientY,
@@ -81,7 +81,7 @@ export function useWorktreeDocumentDrop(args: {
         })
       })
       ctx.clearReorderedWorktreeParents({
-        draggedWorktrees: session.draggedWorktrees ?? [],
+        draggedIds: session.draggedIds,
         sourceGroupKey: session.sourceGroupKey
       })
       clearWorktreeDrag()

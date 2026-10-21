@@ -1,17 +1,22 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
-import type { Repo } from '../../../../shared/repo-types'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { Worktree } from '../../../../shared/worktree/types'
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 
 type WorktreesByRepo = Record<string, Worktree[]>
 
-/** Cached host-qualified rows keep lineage scans stable across unrelated store writes. */
+/**
+ * Non-archived rows by host identity — the map `computeVisibleWorktrees` hands to
+ * the lineage projection.
+ *
+ * Why cached: `getSidebarLineageParentsByIdentity` keys its memo on this map's
+ * identity, so a per-call Map is a guaranteed miss that re-walks every workspace
+ * and re-runs cycle detection on each PTY, tab and agent-status write.
+ *
+ * Why not the store's `getIndexedWorktreeMap`: this index excludes archived rows
+ * (an archived parent resolving as a valid ancestor would inject a phantom row),
+ * and keeps both rows of a two-host id collision.
+ */
 const lineageAncestorIndexCache = new WeakMap<WorktreesByRepo, Map<string, Worktree>>()
-const filteredAncestorIndexCache = new WeakMap<
-  WorktreesByRepo,
-  WeakMap<ReadonlyMap<string, Repo>, Map<string, Map<string, Worktree>>>
->()
 
 export function getLineageAncestorIndex(worktreesByRepo: WorktreesByRepo): Map<string, Worktree> {
   const cached = lineageAncestorIndexCache.get(worktreesByRepo)
@@ -28,48 +33,8 @@ export function getLineageAncestorIndex(worktreesByRepo: WorktreesByRepo): Map<s
   return index
 }
 
-export function getFilteredLineageAncestorIndex(
-  worktreesByRepo: WorktreesByRepo,
-  scope: {
-    visibleHostIds?: readonly ExecutionHostId[] | null
-    repoIds: readonly string[]
-    repoMap: ReadonlyMap<string, Repo>
-    defaultHostId: ExecutionHostId
-    hostIdForRow: (row: Worktree) => ExecutionHostId | null
-  }
-): Map<string, Worktree> {
-  const { visibleHostIds, repoIds, hostIdForRow } = scope
-  const index = getLineageAncestorIndex(worktreesByRepo)
-  if (!visibleHostIds && repoIds.length === 0) {
-    return index
-  }
-  let byRepoMap = filteredAncestorIndexCache.get(worktreesByRepo)
-  if (!byRepoMap) {
-    byRepoMap = new WeakMap()
-    filteredAncestorIndexCache.set(worktreesByRepo, byRepoMap)
-  }
-  let byFilter = byRepoMap.get(scope.repoMap)
-  if (!byFilter) {
-    byFilter = new Map()
-    byRepoMap.set(scope.repoMap, byFilter)
-  }
-  const key = JSON.stringify([visibleHostIds, repoIds, scope.defaultHostId])
-  let filtered = byFilter.get(key)
-  if (!filtered) {
-    filtered = new Map(
-      [...index].filter(
-        ([, row]) =>
-          (!visibleHostIds || visibleHostIds.includes(hostIdForRow(row)!)) &&
-          (repoIds.length === 0 || repoIds.includes(row.repoId))
-      )
-    )
-    byFilter.set(key, filtered)
-  }
-  return filtered
-}
-
 /**
- * Rank of each id in the frozen sidebar sort order. Keyed on the array the sort
+ * Rank of each key in the frozen sidebar sort order. Keyed on the array the sort
  * hook already holds identity-stable across unrelated store writes.
  */
 const sortedWorktreeRankIndexCache = new WeakMap<readonly string[], Map<string, number>>()

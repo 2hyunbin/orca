@@ -17,6 +17,7 @@ import {
   store,
   withPlatform
 } from '../orca-runtime-test-fixtures.spec'
+import type { HostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 describe('OrcaRuntimeService', () => {
   it('tui-idle times out when PTY data has no agent OSC title transitions', async () => {
@@ -221,7 +222,7 @@ describe('OrcaRuntimeService', () => {
     })
   })
 
-  it('emits instance-validated lineage parents across hosts in mobile summaries', async () => {
+  it('emits only instance- and boundary-validated lineage parents in mobile summaries', async () => {
     // Regression: shipped mobile clients trust parentWorktreeId blindly, so worktree.ps must not emit stale same-path lineage.
     const parentPath = join(tmpdir(), 'worktree-parent')
     const validChildPath = join(tmpdir(), 'worktree-child-valid')
@@ -268,7 +269,7 @@ describe('OrcaRuntimeService', () => {
       ...store,
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
+      setWorktreeMeta: ({ id: worktreeId }: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => {
         metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
         return metaById[worktreeId]
       },
@@ -303,13 +304,13 @@ describe('OrcaRuntimeService', () => {
     expect(staleSummary?.parentWorktreeInstanceId).toBeUndefined()
     const crossHostSummary = worktrees.find((worktree) => worktree.worktreeId === crossHostChildId)
     expect(crossHostSummary).toMatchObject({
-      parentWorktreeId: parentId,
+      parentWorktreeId: null,
       worktreeInstanceId: 'cross-host-child-instance'
     })
-    expect(crossHostSummary?.lineageWorktreeInstanceId).toBe('cross-host-child-instance')
-    expect(crossHostSummary?.parentWorktreeInstanceId).toBe('parent-instance')
+    expect(crossHostSummary?.lineageWorktreeInstanceId).toBeUndefined()
+    expect(crossHostSummary?.parentWorktreeInstanceId).toBeUndefined()
     expect(worktrees.find((worktree) => worktree.worktreeId === parentId)).toMatchObject({
-      childWorktreeIds: [validChildId, crossHostChildId]
+      childWorktreeIds: [validChildId]
     })
   })
 

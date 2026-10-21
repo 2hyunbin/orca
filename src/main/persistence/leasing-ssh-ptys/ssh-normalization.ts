@@ -17,6 +17,7 @@ export type LegacySshTarget = SshTarget & {
   remoteWorkspaceSyncEnabled?: unknown
   remoteWorkspaceSyncGracePeriodSeconds?: unknown
   experimentalPtySourceCreditV1?: unknown
+  allowRemoteCliControlReset?: unknown
 }
 
 // Why: old targets predate configHost; default to label-based lookup so imported SSH aliases still resolve via ssh -G.
@@ -38,6 +39,8 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
   delete target.remoteRuntime
   delete target.remoteRuntimeResolution
   delete target.experimentalPtySourceCreditV1
+  // Why: the one-time remote CLI control reset is retired; its notice flag means nothing now.
+  delete target.allowRemoteCliControlReset
   // Why: prefer the synced grace over stale relayGracePeriodSeconds so a user's "unlimited" (0) survives migration.
   const relayGracePeriodSeconds =
     legacySyncEnabled === true && typeof legacyGracePeriodSeconds === 'number'

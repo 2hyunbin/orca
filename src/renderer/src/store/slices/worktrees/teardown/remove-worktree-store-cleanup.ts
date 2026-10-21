@@ -1,15 +1,13 @@
-import { isOpenFileOwnedByWorktree } from '@/lib/unified-tab-host-ownership'
-import { composeWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import { worktreeWorkspaceKey } from '../../../../../../shared/workspace-scope'
+import { forgetCombinedDiffViewsForWorktrees } from '@/components/editor/combined-diff/remember-view/combined-diff-view-cache'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { removeDeleteStatesForWorktreeIds } from './worktree-delete-state'
 import { removeWorktreeVisitEntries } from '@/lib/worktree-visit-recency'
-import { forgetAmbiguousOwnerWarnings } from '../listing/worktree-owner-settings'
+import { forgetAmbiguousOwnerWarnings } from '@/lib/ambiguous-owner-warning'
 import { omitRecordKeys } from './record-key-omission'
 import { removeWorktreeLayout } from '../../tabs/worktree-layout-lifecycle'
-import { matchesRemovedWorktreeOwner, removalActiveHost } from './worktree-removal-owner'
-import { projectLocalWorktreeLineageUpdate } from '../metadata/worktree-lineage-refresh'
+import { omitSleepingAgentSessionsForWorktrees } from './sleeping-agent-session-omission'
 
 /** Clears worktree-owned renderer state after successful removal so a reused identity cannot inherit stale preferences. */
 export function applyRemoveWorktreeSuccessState(
@@ -21,42 +19,19 @@ export function applyRemoveWorktreeSuccessState(
   // Why outside `set`: it is module-scope, not store state. Dropping it also
   // re-arms the once-per-workspace warning if this id is ever added back.
   forgetAmbiguousOwnerWarnings([worktreeId])
+  forgetCombinedDiffViewsForWorktrees([worktreeId])
   set((s) => {
-    const survivor = Object.values(s.worktreesByRepo)
-      .flat()
-      .some((row) => row.id === worktreeId && !matchesRemovedWorktreeOwner(s, row, executionHostId))
-    const worktreeIds = survivor ? [] : [worktreeId]
-    const ownsFile = (file: (typeof s.openFiles)[number]) =>
-      executionHostId === undefined
-        ? file.worktreeId === worktreeId
-        : isOpenFileOwnedByWorktree(file, { id: worktreeId, hostId: executionHostId })
+    const worktreeIds = [worktreeId]
     const omitByWorktree = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, worktreeIds)
     const omitByTabId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, tabIds)
-    let nextWorktreesByRepo = { ...s.worktreesByRepo }
-    const removedRows = Object.values(s.worktreesByRepo)
-      .flat()
-      .filter(
-        (row) => row.id === worktreeId && matchesRemovedWorktreeOwner(s, row, executionHostId)
-      )
-    for (const row of removedRows) {
-      nextWorktreesByRepo = projectLocalWorktreeLineageUpdate(
-        { ...s, worktreesByRepo: nextWorktreesByRepo },
-        worktreeId,
-        null,
-        row,
-        s.worktreeLineageById[composeWorktreeHostIdentity(row.hostId, worktreeId)]
-          ?.parentWorktreeInstanceId
-      )
-    }
+    const nextWorktreesByRepo = { ...s.worktreesByRepo }
     for (const repoId of Object.keys(nextWorktreesByRepo)) {
-      nextWorktreesByRepo[repoId] = nextWorktreesByRepo[repoId].filter(
-        (w) => w.id !== worktreeId || !matchesRemovedWorktreeOwner(s, w, executionHostId)
-      )
+      nextWorktreesByRepo[repoId] = nextWorktreesByRepo[repoId].filter((w) => w.id !== worktreeId)
     }
     // Why: clean up per-file editor state for the removed worktree so stale drafts/view modes don't accumulate.
     const removedFileIds = new Set<string>()
     for (const file of s.openFiles) {
-      if (!ownsFile(file)) {
+      if (file.worktreeId !== worktreeId) {
         continue
       }
       removedFileIds.add(file.id)
@@ -67,28 +42,19 @@ export function applyRemoveWorktreeSuccessState(
     const omitByFileId = <T>(m: Record<string, T> | undefined) => omitRecordKeys(m, removedFileIds)
     // If the active file belonged to the removed worktree, clear it
     const activeFileCleared = s.activeFileId
-      ? s.openFiles.some((f) => f.id === s.activeFileId && ownsFile(f))
+      ? s.openFiles.some((f) => f.id === s.activeFileId && f.worktreeId === worktreeId)
       : false
-    const removedActiveWorktree =
-      s.activeWorktreeId === worktreeId &&
-      (executionHostId === undefined || removalActiveHost(s) === executionHostId)
+    const removedActiveWorktree = s.activeWorktreeId === worktreeId
     return {
       ...removeWorktreeLayout(s, {
         worktreeIds: new Set(worktreeIds),
         tabIds,
-        activeFileCleared,
-        fileIds: removedFileIds
+        activeFileCleared
       }),
       worktreesByRepo: nextWorktreesByRepo,
-      worktreeLineageById: omitRecordKeys(s.worktreeLineageById, [
-        composeWorktreeHostIdentity(executionHostId, worktreeId),
-        ...removedRows.map((row) => composeWorktreeHostIdentity(row.hostId, worktreeId))
-      ]),
+      worktreeLineageById: omitByWorktree(s.worktreeLineageById),
       workspaceLineageByChildKey: omitRecordKeys(s.workspaceLineageByChildKey, [
-        composeWorktreeHostIdentity(executionHostId, worktreeWorkspaceKey(worktreeId)),
-        ...removedRows.map((row) =>
-          composeWorktreeHostIdentity(row.hostId, worktreeWorkspaceKey(worktreeId))
-        )
+        worktreeWorkspaceKey(worktreeId)
       ]),
       runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
       automaticAgentResumeClaimsByTabId: omitByTabId(s.automaticAgentResumeClaimsByTabId),
@@ -116,7 +82,6 @@ export function applyRemoveWorktreeSuccessState(
       defaultTerminalTabsAppliedByWorktreeId: omitByWorktree(
         s.defaultTerminalTabsAppliedByWorktreeId
       ),
-      activeWorkspaceKey: removedActiveWorktree ? null : s.activeWorkspaceKey,
       activeWorktreeId: removedActiveWorktree ? null : s.activeWorktreeId,
       activeWorkspaceExecutionHostId: removedActiveWorktree
         ? null
@@ -150,15 +115,17 @@ export function applyRemoveWorktreeSuccessState(
       gitBranchCompareRequestStatusHeadByWorktree: omitByWorktree(
         s.gitBranchCompareRequestStatusHeadByWorktree
       ),
-      everActivatedWorktreeIds:
-        !survivor && s.everActivatedWorktreeIds.has(worktreeId)
-          ? new Set([...s.everActivatedWorktreeIds].filter((id) => id !== worktreeId))
-          : s.everActivatedWorktreeIds,
+      everActivatedWorktreeIds: s.everActivatedWorktreeIds.has(worktreeId)
+        ? new Set([...s.everActivatedWorktreeIds].filter((id) => id !== worktreeId))
+        : s.everActivatedWorktreeIds,
       lastVisitedAtByWorktreeId: removeWorktreeVisitEntries(
         s.lastVisitedAtByWorktreeId,
-        new Set([worktreeId]),
+        new Set(worktreeIds),
         executionHostId
       ),
+      // Why: terminal shutdown clears these earlier, but teardown awaits after that and a
+      // provider-session event routed by worktree id can write a record in between (#24784).
+      ...omitSleepingAgentSessionsForWorktrees(s, new Set(worktreeIds)),
       sortEpoch: s.sortEpoch + 1
     }
   })

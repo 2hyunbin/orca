@@ -1,3 +1,4 @@
+import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import { repoHostId } from '../listing/worktree-host-ownership'
 import {
   isUnresolvedOwnerHostId,
@@ -7,6 +8,10 @@ import { adoptFromEndpoint } from '../../../adopt-from-endpoint'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import type { CreateWorktreeResult } from '../../../../../../shared/worktree/create-types'
+import {
+  pickClientWorktreeCreateSettings,
+  type ClientWorktreeCreateSettings
+} from './client-worktree-create-settings'
 import {
   CLIENT_WORKTREE_CREATE_MAX_ATTEMPTS,
   getClientWorktreeCreateCandidate,
@@ -18,7 +23,7 @@ import {
   callRuntimeRpc
 } from '../../../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
-import { runtimeTargetForWorktreeCreate } from '@/lib/repo-runtime-owner'
+import { runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
 import { WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY } from '../../../../../../shared/protocol-version'
 import { showLocalBaseRefUpdateSuggestionToast } from '@/components/sidebar/local-base-ref-suggestion-toast'
 import { requestWorktreeBaseFallbackNotice } from '@/components/worktree-base-fallback-notice'
@@ -32,6 +37,7 @@ import {
   type WorktreeCreateAttempt,
   type WorktreeCreateRequest
 } from './worktree-create-payload'
+import { holdCreatedSidebarWorkspace } from '@/lib/sidebar-pending-layer'
 import {
   notifyWorktreeParentDropped,
   resolveWorktreeCreateParent,
@@ -50,7 +56,7 @@ async function runCreateAttempt(
   request: WorktreeCreateRequest,
   attempt: WorktreeCreateAttempt,
   target: RuntimeTarget,
-  nestWorkspaces?: boolean
+  clientCreateSettings: ClientWorktreeCreateSettings = {}
 ): Promise<CreateAttemptOutcome> {
   const provisionedRoot = request.options?.provisionedRoot
   const create = async (
@@ -78,8 +84,8 @@ async function runCreateAttempt(
             'worktree.create',
             {
               ...buildRuntimeWorktreeCreateParams(request, { ...attempt, parentWorkspace }),
-              // Why: the host's own store default would otherwise decide the layout over the user's choice.
-              ...(nestWorkspaces === undefined ? {} : { nestWorkspaces })
+              // Why: the host's own store defaults would otherwise override the user's choices.
+              ...clientCreateSettings
             },
             { timeoutMs: 10 * 60_000 }
           )
@@ -180,7 +186,9 @@ export function createCreateWorktree(
         throw new Error('The workspace host is unresolved. Choose a host and retry.')
       }
       // Direct SSH still uses desktop IPC; paired runtimes use their captured environment.
-      const target = runtimeTargetForWorktreeCreate(get(), repoId, options?.executionHostId)
+      const target = options?.executionHostId
+        ? (runtimeRpcTargetForAuthorityKey(options.executionHostId) ?? { kind: 'local' as const })
+        : runtimeTargetForRepoOwner(get(), repoId)
       if (!target) {
         throw new Error('The project host is unresolved. Choose a host and retry.')
       }
@@ -190,7 +198,7 @@ export function createCreateWorktree(
         resolveOwnHostId: () => repoHostId(get(), repoId)
       })
       // Why outside the retry loop: a branch-name conflict retry must not re-warn about the same dropped pick.
-      const parent = resolveWorktreeCreateParent(get(), options?.parentWorktreeId, target)
+      const parent = resolveWorktreeCreateParent(get(), options?.parentWorktreeId, creationHostId)
       let warnedParentDropped = false
       const warnParentDroppedOnce = (): void => {
         if (warnedParentDropped) {
@@ -236,12 +244,16 @@ export function createCreateWorktree(
               manualOrder
             },
             target,
-            get().settings?.nestWorkspaces
+            pickClientWorktreeCreateSettings(get().settings)
           )
           if (lostRequestedParent(outcome, parent, target)) {
             warnParentDroppedOnce()
           }
           applyCreatedWorktree(set, repoId, outcome.result, creationHostId)
+          const created = get().getKnownWorktreeById(outcome.result.worktree.id, creationHostId)
+          if (created) {
+            holdCreatedSidebarWorkspace({ worktree: created })
+          }
           const { result } = outcome
           showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree)
           if (result.baseFallback) {

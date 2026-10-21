@@ -1,5 +1,4 @@
-import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { SelectedWorktreeReference } from '@/lib/selected-worktree-reference'
+import type { DraggedWorktreeCopies } from './dragged-worktree-copies'
 import type { WorkspaceKanbanCardTrackedDropTarget } from '../../workspace-kanban-card-pointer-drag-dom'
 import type { WorktreeSidebarDragRect } from '../../worktree-sidebar-drag-autoscroll'
 import type {
@@ -39,7 +38,7 @@ export type WorktreePointerDrag = {
   currentY: number
   worktreeId: string
   draggedIds: readonly string[]
-  draggedWorktrees: readonly Worktree[]
+  draggedCopies: DraggedWorktreeCopies
   reorderDraggedIds: readonly string[]
   reorderUnitDraggedIds: readonly string[]
   sourceGroupKey: string
@@ -56,8 +55,7 @@ export type WorktreePointerDrag = {
 }
 
 export type WorktreeSidebarLineageDropTarget = WorktreeSidebarStatusDropTarget & {
-  lineageParentId?: string | null
-  lineageParentReference?: SelectedWorktreeReference
+  lineageParentId: string | null
 }
 
 export const NO_WORKTREE_SIDEBAR_DROP_TARGET: WorktreeSidebarLineageDropTarget = {
@@ -92,7 +90,7 @@ export function updateLatestWorktreeStatusDropTarget(
   drag.latestStatusDropTarget =
     target.status || target.isPinDrop || target.lineageParentId
       ? {
-          target: { ...target, lineageParentId: target.lineageParentId ?? null },
+          target,
           preview,
           x: drag.currentX,
           y: drag.currentY

@@ -844,35 +844,18 @@ describe('worktree RPC methods', () => {
         createdAt: 1
       }
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This dispatcher only calls the lineage methods supplied by this runtime stub.
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       dedupeWorktreeCreate: passthroughDedupe,
-      listLineageSnapshot: vi.fn().mockResolvedValue({ lineage, workspaceLineage: {}, edges: [] }),
-      listLineageEdges: vi.fn().mockResolvedValue([]),
+      listWorktreeLineage: vi.fn().mockResolvedValue(lineage),
       listWorkspaceLineage: vi.fn().mockResolvedValue({})
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 
     const response = await dispatcher.dispatch(makeRequest('worktree.lineageList'))
 
-    expect(runtime.listLineageSnapshot).toHaveBeenCalledTimes(1)
+    expect(runtime.listWorktreeLineage).toHaveBeenCalled()
+    expect(runtime.listWorkspaceLineage).toHaveBeenCalled()
     expect(response).toMatchObject({ ok: true, result: { lineage, workspaceLineage: {} } })
-  })
-
-  it('persists smart sort order on the runtime server', async () => {
-    const runtime = {
-      getRuntimeId: () => 'test-runtime',
-      dedupeWorktreeCreate: passthroughDedupe,
-      persistManagedWorktreeSortOrder: vi.fn().mockReturnValue({ updated: 2 })
-    } as unknown as OrcaRuntimeService
-    const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
-
-    const response = await dispatcher.dispatch(
-      makeRequest('worktree.persistSortOrder', { orderedIds: ['wt-1', 'wt-2'] })
-    )
-
-    expect(runtime.persistManagedWorktreeSortOrder).toHaveBeenCalledWith(['wt-1', 'wt-2'])
-    expect(response).toMatchObject({ ok: true, result: { updated: 2 } })
   })
 })

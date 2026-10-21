@@ -1,10 +1,9 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getLineageRenderInfo
-} from './worktree-lineage-projection'
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 type ParentEligibilityArgs = {
   child: Worktree
@@ -21,31 +20,25 @@ export function canAssignWorktreeParent({
   worktreeMap,
   cyclicLineageIds: precomputedCyclicLineageIds
 }: ParentEligibilityArgs): boolean {
-  if (getWorktreeHostIdentity(child) === getWorktreeHostIdentity(candidateParent)) {
+  if (child.id === candidateParent.id) {
     return false
   }
 
   const cyclicLineageIds =
     precomputedCyclicLineageIds ?? getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
   const childLineage = getLineageRenderInfo(child, lineageById, worktreeMap, cyclicLineageIds)
-  if (
-    childLineage.state === 'valid' &&
-    getWorktreeHostIdentity(childLineage.parent) === getWorktreeHostIdentity(candidateParent)
-  ) {
+  if (childLineage.state === 'valid' && childLineage.parent.id === candidateParent.id) {
     return false
   }
 
   let current: Worktree | undefined = candidateParent
   const visited = new Set<string>()
   while (current) {
-    if (
-      visited.has(getWorktreeHostIdentity(current)) ||
-      cyclicLineageIds.has(getWorktreeHostIdentity(current))
-    ) {
+    if (visited.has(current.id) || cyclicLineageIds.has(current.id)) {
       return false
     }
-    visited.add(getWorktreeHostIdentity(current))
-    if (getWorktreeHostIdentity(current) === getWorktreeHostIdentity(child)) {
+    visited.add(current.id)
+    if (current.id === child.id) {
       return false
     }
     const lineageInfo = getLineageRenderInfo(current, lineageById, worktreeMap, cyclicLineageIds)

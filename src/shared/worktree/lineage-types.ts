@@ -1,13 +1,4 @@
 import type { WorkspaceKey } from '../folder-workspace-types'
-import type { ExecutionHostId } from '../execution-host'
-
-export type LineageEdge = Omit<
-  WorkspaceLineage,
-  'childWorkspaceKey' | 'childInstanceId' | 'parentWorkspaceKey' | 'parentInstanceId'
-> & {
-  child: { instanceId: string; locator: WorkspaceKey; hostId?: ExecutionHostId }
-  parent: { instanceId?: string; locator: WorkspaceKey }
-}
 
 export type WorktreeLineageOrigin = 'orchestration' | 'cli' | 'manual'
 export type WorktreeLineageCaptureConfidence = 'explicit' | 'inferred'

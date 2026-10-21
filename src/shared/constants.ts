@@ -163,8 +163,6 @@ export function getDefaultPersistedState(homedir: string): PersistedState {
     retiredWorktreeNamesByRepo: {},
     retiredWorktreeNamesByNamespace: {},
     worktreeMeta: {},
-    lineageByChildInstance: {},
-    legacyLineageRemainder: {},
     worktreeLineageById: {},
     workspaceLineageByChildKey: {},
     settings: getDefaultSettings(homedir),

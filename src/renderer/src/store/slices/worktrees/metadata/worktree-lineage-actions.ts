@@ -1,4 +1,3 @@
-import { resolveSelectedWorktree } from '@/lib/selected-worktree-reference'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseExecutionHostId } from '../../../../../../shared/execution-host'
@@ -9,19 +8,15 @@ import {
   refreshWorktreeLineageForTarget,
   setWorktreeLineageForRuntime
 } from './worktree-lineage-refresh'
-import { getRuntimeTargetHostId } from '../../../../runtime/runtime-client-target'
+import { hostRouteForWorktreeOwner } from '../listing/worktree-owner-target'
 
 // Why: this runs inside a catch, so letting the refresh reject would replace the failure it recovers from.
 async function refreshWorktreeLineageBestEffort(
   ownerTarget: RuntimeClientTarget,
   set: WorktreeSliceSet,
-  get: WorktreeSliceGet,
-  refreshRows = false
+  get: WorktreeSliceGet
 ): Promise<void> {
   try {
-    if (refreshRows) {
-      await get().fetchAllWorktrees({ visibilityOwnerHostId: getRuntimeTargetHostId(ownerTarget) })
-    }
     await refreshWorktreeLineageForTarget(ownerTarget, set, get)
   } catch (err) {
     console.error('Failed to refresh worktree lineage after a failed write:', err)
@@ -63,39 +58,19 @@ export function createUpdateWorktreeLineage(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['updateWorktreeLineage'] {
-  return async (reference, args) => {
-    const state = get()
-    const child = resolveSelectedWorktree(state, reference)
-    const parent = resolveSelectedWorktree(state, args.parent)
-    if (
-      !child ||
-      (!args.noParent &&
-        (!parent || getRuntimeTargetHostId(child.target) !== getRuntimeTargetHostId(parent.target)))
-    ) {
-      throw new Error('selector_not_found')
-    }
-    const ownerTarget = child.target
+  return async (worktreeId, args) => {
+    // Why: an unresolvable owner route (ambiguous or missing) rejects rather than skipping — this is a
+    // user-initiated action, and both callers toast the failure. Don't swallow it into a silent no-op.
+    const ownerRoute = hostRouteForWorktreeOwner(get(), worktreeId)
     try {
-      const result = await setWorktreeLineageForRuntime(
-        ownerTarget,
-        reference,
-        {
-          ...(parent ? { parentWorktreeId: parent.selector } : {}),
-          noParent: args.noParent
-        },
-        child.selector
+      applyWorktreeLineageUpdate(
+        set,
+        worktreeId,
+        await setWorktreeLineageForRuntime(ownerRoute, worktreeId, args)
       )
-      if (reference.kind === 'legacy') {
-        await refreshWorktreeLineageBestEffort(ownerTarget, set, get, true)
-      } else {
-        if (args.parent && !resolveSelectedWorktree(get(), args.parent)) {
-          throw new Error('selector_not_found')
-        }
-        applyWorktreeLineageUpdate(set, result)
-      }
     } catch (err) {
       console.error('Failed to update worktree lineage:', err)
-      await refreshWorktreeLineageBestEffort(ownerTarget, set, get, reference.kind === 'legacy')
+      await refreshWorktreeLineageBestEffort(ownerRoute.target, set, get)
       throw err
     }
   }
@@ -105,5 +80,19 @@ export function createAssignWorktreeParent(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['assignWorktreeParent'] {
-  return createUpdateWorktreeLineage(set, get)
+  return async (worktreeId, args) => {
+    const ownerRoute = hostRouteForWorktreeOwner(get(), worktreeId)
+    try {
+      applyWorktreeLineageUpdate(
+        set,
+        worktreeId,
+        await setWorktreeLineageForRuntime(ownerRoute, worktreeId, args)
+      )
+    } catch (err) {
+      console.error('Failed to assign worktree parent:', err)
+      // Unlike the update path this rethrows, so the recovery refresh must not mask the original cause.
+      await refreshWorktreeLineageBestEffort(ownerRoute.target, set, get)
+      throw err
+    }
+  }
 }

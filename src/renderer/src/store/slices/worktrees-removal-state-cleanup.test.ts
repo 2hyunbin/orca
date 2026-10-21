@@ -201,7 +201,10 @@ describe('removeWorktree state cleanup', () => {
 
     // Only the orphaned runtime-owned project setup is purged; the user's SSH project is untouched.
     expect(deleteProjectHostSetup).toHaveBeenCalledTimes(1)
-    expect(deleteProjectHostSetup).toHaveBeenCalledWith({ setupId: 'setup-runtime-ssh' })
+    expect(deleteProjectHostSetup).toHaveBeenCalledWith({
+      setupId: 'setup-runtime-ssh',
+      hostId: 'ssh:runtime-ssh-orca-1'
+    })
   })
 
   it('cleans up editorDrafts for files in the removed worktree', async () => {
@@ -251,15 +254,15 @@ describe('removeWorktree state cleanup', () => {
     store.setState({
       worktreesByRepo: { repo1: [wt] },
       worktreeLineageById: {
-        [`local|${wt.id}`]: childLineage,
-        'local|repo1::/path/wt2': siblingLineage
+        [wt.id]: childLineage,
+        'repo1::/path/wt2': siblingLineage
       }
-    })
+    } as Partial<AppState>)
 
     await store.getState().removeWorktree({ id: wt.id, executionHostId: null })
 
     expect(store.getState().worktreeLineageById).toEqual({
-      'local|repo1::/path/wt2': siblingLineage
+      'repo1::/path/wt2': siblingLineage
     })
   })
 
@@ -480,6 +483,57 @@ describe('removeWorktree state cleanup', () => {
 
     expect(store.getState().tabBarOrderByWorktree).toEqual({
       'repo1::/path/wt2': ['tab-2']
+    })
+  })
+
+  it('cleans up split-tab model state for the removed worktree', async () => {
+    const store = createTestStore()
+    const wt = makeWorktree({ id: 'repo1::/path/wt1', repoId: 'repo1', path: '/path/wt1' })
+
+    store.setState({
+      worktreesByRepo: { repo1: [wt] },
+      pendingReconnectTabByWorktree: {
+        'repo1::/path/wt1': ['tab-1'],
+        'repo1::/path/wt2': ['tab-2']
+      },
+      unifiedTabsByWorktree: {
+        'repo1::/path/wt1': [{ id: 'tab-1', worktreeId: 'repo1::/path/wt1' }],
+        'repo1::/path/wt2': [{ id: 'tab-2', worktreeId: 'repo1::/path/wt2' }]
+      },
+      groupsByWorktree: {
+        'repo1::/path/wt1': [
+          { id: 'group-1', worktreeId: 'repo1::/path/wt1', activeTabId: 'tab-1' }
+        ],
+        'repo1::/path/wt2': [
+          { id: 'group-2', worktreeId: 'repo1::/path/wt2', activeTabId: 'tab-2' }
+        ]
+      },
+      activeGroupIdByWorktree: {
+        'repo1::/path/wt1': 'group-1',
+        'repo1::/path/wt2': 'group-2'
+      },
+      layoutByWorktree: {
+        'repo1::/path/wt1': { type: 'leaf', groupId: 'group-1' },
+        'repo1::/path/wt2': { type: 'leaf', groupId: 'group-2' }
+      }
+    } as unknown as Partial<AppState>)
+
+    await store.getState().removeWorktree({ id: 'repo1::/path/wt1', executionHostId: null })
+
+    expect(store.getState().pendingReconnectTabByWorktree).toEqual({
+      'repo1::/path/wt2': ['tab-2']
+    })
+    expect(store.getState().unifiedTabsByWorktree).toEqual({
+      'repo1::/path/wt2': [{ id: 'tab-2', worktreeId: 'repo1::/path/wt2' }]
+    })
+    expect(store.getState().groupsByWorktree).toEqual({
+      'repo1::/path/wt2': [{ id: 'group-2', worktreeId: 'repo1::/path/wt2', activeTabId: 'tab-2' }]
+    })
+    expect(store.getState().activeGroupIdByWorktree).toEqual({
+      'repo1::/path/wt2': 'group-2'
+    })
+    expect(store.getState().layoutByWorktree).toEqual({
+      'repo1::/path/wt2': { type: 'leaf', groupId: 'group-2' }
     })
   })
 

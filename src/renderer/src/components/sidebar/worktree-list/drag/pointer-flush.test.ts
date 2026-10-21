@@ -42,7 +42,7 @@ function setup() {
       currentY: 300,
       worktreeId: 'child',
       draggedIds: ['child'],
-      draggedWorktrees: [],
+      draggedCopies: [],
       reorderDraggedIds: ['child'],
       reorderUnitDraggedIds: ['child'],
       sourceGroupKey: 'repo',
@@ -63,7 +63,6 @@ function setup() {
       worktreeDragGroups: [],
       worktreeDragUnitGroups: [],
       refreshWorktreeDragSession: () => true,
-      beginWorktreeLineageDrag: vi.fn(),
       getEligibleLineageDropTarget: () => target,
       computeWorktreeDrop: () => ({
         dropIndex: 1,

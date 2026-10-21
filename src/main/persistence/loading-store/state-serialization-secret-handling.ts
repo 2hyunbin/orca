@@ -1,5 +1,3 @@
-import { refreshLegacyLineage } from './canonical-workspace-lineage'
-import { WORKTREE_METADATA_DOMAINS } from './worktree-identity-metadata'
 import {
   serializeCompleteProfileStateDomains,
   serializeSelectiveProfileStateDomains
@@ -34,7 +32,6 @@ export class StateSerializationSecretHandlingOperations {
   constructor(private readonly runtime: StateSerializationSecretHandlingOperationsRuntime) {}
 
   getDurableState(): Omit<PersistedState, 'githubCache'> {
-    refreshLegacyLineage(this.runtime.state)
     const { githubCache: _memoryOnly, ...durable } = this.runtime.state
     return durable
   }
@@ -59,24 +56,7 @@ export class StateSerializationSecretHandlingOperations {
       }
       return encrypted.blob
     }
-    const coupledDomains = new Set(domains)
-    if (domains.has('repos') || domains.has('folderWorkspaces')) {
-      return undefined
-    }
-    if (
-      [
-        ...WORKTREE_METADATA_DOMAINS,
-        'lineageByChildInstance',
-        'legacyLineageRemainder',
-        'worktreeLineageById',
-        'workspaceLineageByChildKey'
-      ].some((domain) => domains.has(domain))
-    ) {
-      refreshLegacyLineage(this.runtime.state)
-      coupledDomains.add('worktreeLineageById')
-      coupledDomains.add('workspaceLineageByChildKey')
-    }
-    for (const domain of coupledDomains) {
+    for (const domain of domains) {
       switch (domain) {
         case 'settings':
           stateToSave[domain] = this.buildSettingsToSave(encrypt)
@@ -114,12 +94,6 @@ export class StateSerializationSecretHandlingOperations {
             )
           }
           break
-        case 'lineageByChildInstance':
-        case 'legacyLineageRemainder':
-        case 'worktreeLineageById':
-        case 'workspaceLineageByChildKey':
-          stateToSave[domain] = this.runtime.state[domain]
-          break
         case 'worktreeIdentityAliases':
           if (this.runtime.state.worktreeIdentityAliases !== undefined) {
             stateToSave[domain] = this.runtime.state.worktreeIdentityAliases
@@ -144,7 +118,7 @@ export class StateSerializationSecretHandlingOperations {
       }
     }
     return {
-      replacements: serializeSelectiveProfileStateDomains(stateToSave, coupledDomains),
+      replacements: serializeSelectiveProfileStateDomains(stateToSave, domains),
       protectedSecretUpdates
     }
   }

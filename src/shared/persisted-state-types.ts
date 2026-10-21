@@ -22,14 +22,14 @@ import type { Project, ProjectHostSetup } from './project-types'
 import type { Repo } from './repo-types'
 import type { SparsePreset } from './worktree/create-types'
 import type { RetiredNameRegistry } from './worktree/retired-name-registry'
-import type { LineageEdge, WorkspaceLineage, WorktreeLineage } from './worktree/lineage-types'
+import type { WorkspaceLineage, WorktreeLineage } from './worktree/lineage-types'
 import type { WorktreeMeta } from './worktree/meta-types'
 import type { WorkspaceSessionState } from './workspace-session-state-types'
-import type { OrcadMigrationEvictedReceipt } from './orcad-migration-evicted-receipts'
+import type { OrcadMigrationEvictedReceipt } from './orcad-migration/orcad-migration-evicted-receipts'
 import type {
   OrcadMigrationImportReceipt,
   OrcadMigrationStagedCatalog
-} from './orcad-migration-manifest'
+} from './orcad-migration/orcad-migration-manifest'
 
 export type LegacyPaneKeyAliasEntry = {
   ptyId: string
@@ -88,8 +88,6 @@ export type PersistedState = {
   worktreeMetaByIdentity?: Record<string, WorktreeMeta>
   /** Host-qualified locator aliases to canonical identity keys. */
   worktreeIdentityAliases?: Record<string, string[]>
-  lineageByChildInstance?: Record<string, LineageEdge>
-  legacyLineageRemainder?: Record<string, WorkspaceLineage | WorktreeLineage>
   worktreeLineageById: Record<string, WorktreeLineage>
   workspaceLineageByChildKey: Record<WorkspaceKey, WorkspaceLineage>
   settings: GlobalSettings
