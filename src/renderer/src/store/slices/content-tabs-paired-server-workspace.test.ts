@@ -1,10 +1,11 @@
 // A workspace a paired server owns (its row names the server, as the app's catalog sets it): its
 // browser and chat tabs open and close as today in both builds, and never reach main's layout.
+// An SSH worktree is laid out by this machine's main but has no host to run a chat on.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type * as RpcClientModule from '@/runtime/runtime-rpc-client'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { toRuntimeExecutionHostId } from '../../../../shared/execution-host'
+import { toRuntimeExecutionHostId, toSshExecutionHostId } from '../../../../shared/execution-host'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
@@ -46,10 +47,13 @@ vi.mock('sonner', () => ({
 createStoreCascadesMockApi()
 
 import { openStructuredAgentSessionProvisionalTab } from '@/lib/structured-agent-session-provisional-tab'
+import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-session-owner'
 
 const SERVER = 'server-1'
 const SERVER_WT = 'repo-s::/srv/app'
 const LOCAL_WT = 'repo-l::/work/app'
+const SSH_WT = 'repo-h::/home/app'
+const SSH_HOST = toSshExecutionHostId('box')
 
 let store: ReturnType<typeof createTestStore>
 let main: TabsDrawnFromMain
@@ -73,16 +77,28 @@ beforeEach(async () => {
           hostId: toRuntimeExecutionHostId(SERVER)
         })
       ],
-      'repo-l': [makeWorktree({ id: LOCAL_WT, repoId: 'repo-l', path: '/work/app' })]
+      'repo-l': [makeWorktree({ id: LOCAL_WT, repoId: 'repo-l', path: '/work/app' })],
+      'repo-h': [
+        makeWorktree({ id: SSH_WT, repoId: 'repo-h', path: '/home/app', hostId: SSH_HOST })
+      ]
     },
     activeWorktreeId: SERVER_WT,
-    groupsByWorktree: { [SERVER_WT]: group(SERVER_WT), [LOCAL_WT]: group(LOCAL_WT) },
-    activeGroupIdByWorktree: { [SERVER_WT]: `group-${SERVER_WT}`, [LOCAL_WT]: `group-${LOCAL_WT}` },
+    groupsByWorktree: {
+      [SERVER_WT]: group(SERVER_WT),
+      [LOCAL_WT]: group(LOCAL_WT),
+      [SSH_WT]: group(SSH_WT)
+    },
+    activeGroupIdByWorktree: {
+      [SERVER_WT]: `group-${SERVER_WT}`,
+      [LOCAL_WT]: `group-${LOCAL_WT}`,
+      [SSH_WT]: `group-${SSH_WT}`
+    },
     layoutByWorktree: {
       [SERVER_WT]: { type: 'leaf', groupId: `group-${SERVER_WT}` },
-      [LOCAL_WT]: { type: 'leaf', groupId: `group-${LOCAL_WT}` }
+      [LOCAL_WT]: { type: 'leaf', groupId: `group-${LOCAL_WT}` },
+      [SSH_WT]: { type: 'leaf', groupId: `group-${SSH_WT}` }
     },
-    unifiedTabsByWorktree: { [SERVER_WT]: [], [LOCAL_WT]: [] }
+    unifiedTabsByWorktree: { [SERVER_WT]: [], [LOCAL_WT]: [], [SSH_WT]: [] }
   })
   main = await drawTabsFromMain(store)
 })
@@ -157,4 +173,11 @@ describe("a paired server's workspace", () => {
       ])
     }
   )
+})
+
+describe('an SSH worktree', () => {
+  it("has no host to run a chat on, where this machine's worktree has its own", () => {
+    expect(resolveStructuredAgentSessionOwner(store.getState(), SSH_WT)).toBeNull()
+    expect(resolveStructuredAgentSessionOwner(store.getState(), LOCAL_WT)).toBe('local')
+  })
 })
