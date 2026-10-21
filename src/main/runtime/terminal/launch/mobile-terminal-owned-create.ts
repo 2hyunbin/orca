@@ -160,7 +160,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
           (_selector, handle) => create(handle)
         )
       : await create()
-    const livePty = this.getLivePtyRecordForHandle(terminal.handle)
+    const livePty = this.getLivePtyForHandle(terminal.handle)
     if (!livePty) {
       throw new Error('terminal_handle_stale')
     }

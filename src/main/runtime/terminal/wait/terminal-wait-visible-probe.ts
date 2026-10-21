@@ -121,7 +121,7 @@ export abstract class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRu
     handle: string,
     signal?: AbortSignal
   ): Promise<{ exitCode: number | null }> {
-    const ptyId = this.getLivePtyRecordForHandle(handle)?.pty.ptyId
+    const ptyId = this.getLivePtyForHandle(handle)?.pty.ptyId
     if (!ptyId) {
       throw new Error('terminal_handle_stale')
     }

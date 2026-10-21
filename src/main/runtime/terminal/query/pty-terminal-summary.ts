@@ -19,6 +19,7 @@ import { structuredWorkerTerminalRefusal } from '../../structured-worker-termina
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 
 export type LiveTerminalPty = ReturnType<
   OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
@@ -142,7 +143,11 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
         record = this.handles.get(handle)
       }
     }
-    if (!record || record.runtimeId !== this.runtimeId || !record.tabId.startsWith('pty:')) {
+    if (
+      !record ||
+      record.runtimeId !== this.runtimeId ||
+      !(record.tabId.startsWith('pty:') || this.windowlessOwnHandle(handle, record))
+    ) {
       return null
     }
     if (!record.ptyId) {
@@ -158,32 +163,23 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   }
 
   /**
-   * The handle's live terminal, for a caller with no leaf path of its own. Layout-owner builds:
-   * main lists its panes with or without a window, so the pane main binds a terminal to may have
-   * adopted the terminal's own handle (the one it was created under); that handle still names it.
-   * The own-handle check stands in for the leaf's epoch fence: a new incarnation drops it.
+   * Layout-owner builds with no window: main lists its own panes, so the pane main binds a
+   * terminal to adopts the terminal's own handle (the one it was created under). Before main
+   * listed panes with no window, that handle stayed the terminal's; it still names the terminal,
+   * as it did. With a window, the adopted handle is the pane's, as a window graph's adoption is.
+   * The own-handle check stands in for the pane's epoch fence: a new incarnation drops it.
    */
-  protected getLivePtyRecordForHandle(handle: string): {
-    record: TerminalHandleRecord
-    pty: RuntimePtyWorktreeRecord
-  } | null {
-    const live = this.getLivePtyForHandle(handle)
-    if (live || !ORCA_LAYOUT_OWNER_IS_MAIN) {
-      return live
-    }
-    const record = this.handles.get(handle)
+  private windowlessOwnHandle(handle: string, record: TerminalHandleRecord): boolean {
     if (
-      !record?.ptyId ||
-      record.runtimeId !== this.runtimeId ||
+      !ORCA_LAYOUT_OWNER_IS_MAIN ||
+      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID ||
+      !record.ptyId ||
       this.handleByPtyId.get(record.ptyId) !== handle
     ) {
-      return null
+      return false
     }
     const pane = startedMainTerminalSurfaces(this)?.findPaneForPty(record.ptyId)
-    const pty = this.ptysById.get(record.ptyId)
-    return pty && pane?.tabId === record.tabId && pane.leafId === record.leafId
-      ? { record, pty }
-      : null
+    return pane?.tabId === record.tabId && pane.leafId === record.leafId
   }
 
   protected assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void {
