@@ -151,7 +151,7 @@ describe('SidebarRetentionOwner', () => {
 
   it('gives each host’s row of a same-id pair its own grace window', async () => {
     const local = worktree('a', { hostId: 'local' })
-    const { world, owner } = harness([local])
+    const { world, owner, bumpRows } = harness([local])
     owner.beginSession('s1')
     await flush()
     world.active = new Set(['a'])
@@ -161,7 +161,7 @@ describe('SidebarRetentionOwner', () => {
     owner.noteActivityChange()
     // A twin listed only after the id went idle was never seen live, so it earns no grace.
     world.worktrees = [local, worktree('a', { hostId: 'ssh:box' })]
-    owner.noteCatalogChange()
+    bumpRows()
     await flush()
     expect(owner.snapshot().retention?.retainedIds).toEqual(['local|a'])
   })
