@@ -12,6 +12,7 @@ import {
   type AskPrompt
 } from '../../../src/shared/native-chat-ask'
 import { AGENT_TUI_CLEAR_INPUT_MAX } from '../../../src/shared/agent-tui-input-clear'
+import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
 import type { AgentType } from '../../../src/shared/native-chat-types'
 import type { RpcClient } from '../transport/rpc-client'
 import { MOBILE_NATIVE_CHAT_QUESTION_STEP_MS } from './mobile-native-chat-answer-stepping'
@@ -28,6 +29,21 @@ function acceptedResponse() {
     ok: true as const,
     result: { send: { accepted: true } },
     _meta: { runtimeId: 'runtime' }
+  }
+}
+
+function waitingStatus(prompt: AskPrompt): AgentStatusEntry {
+  return {
+    agentType: 'omp',
+    state: 'waiting',
+    stateStartedAt: 10,
+    turnStartedAt: 5,
+    updatedAt: 10,
+    prompt: '',
+    paneKey: 'pane',
+    stateHistory: [],
+    toolName: 'ask',
+    interactivePrompt: JSON.stringify(prompt)
   }
 }
 
@@ -51,7 +67,11 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
   async function mount(
     client: RpcClient,
     agent: AgentType,
-    options: { currentAsk?: AskPrompt | null; onSendError?: (message: string) => void } = {}
+    options: {
+      currentAsk?: AskPrompt | null
+      currentAskStatus?: AgentStatusEntry | null
+      onSendError?: (message: string) => void
+    } = {}
   ): Promise<() => Promise<void>> {
     function Harness(): null {
       answerSend = useMobileNativeChatAnswerSend({
@@ -63,7 +83,11 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
         sessionId: 'session',
         streamIdentity: 'host\0worktree\0tab\0session',
         onSendError: options.onSendError ?? vi.fn(),
-        currentAsk: options.currentAsk
+        currentAsk: options.currentAsk,
+        currentAskStatus:
+          options.currentAskStatus === undefined && options.currentAsk
+            ? waitingStatus(options.currentAsk)
+            : options.currentAskStatus
       })
       return null
     }
@@ -77,14 +101,14 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
 
   it('writes OMP groups from the shared key plan, paced, never as pasted labels', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture exercises only the scripted sendRequest port.
-    await mount({ sendRequest } as unknown as RpcClient, 'omp')
     const prompt: AskPrompt = {
       questions: [
         { question: 'q1', multiSelect: false, options: [{ label: 'A' }, { label: 'B' }] },
         { question: 'q2', multiSelect: false, options: [{ label: 'C' }, { label: 'D' }] }
       ]
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture exercises only the scripted sendRequest port.
+    await mount({ sendRequest } as unknown as RpcClient, 'omp', { currentAsk: prompt })
     const selections: AskAnswerSelection[] = [{ indices: [1] }, { indices: [0] }]
     const expected = [
       AGENT_TUI_CLEAR_INPUT_MAX,
@@ -129,7 +153,11 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
         ]
       }
       const onSendError = vi.fn()
-      const options: { currentAsk: AskPrompt | null; onSendError: typeof onSendError } = {
+      const options: {
+        currentAsk: AskPrompt | null
+        currentAskStatus?: AgentStatusEntry
+        onSendError: typeof onSendError
+      } = {
         currentAsk: prompt,
         onSendError
       }
@@ -144,11 +172,19 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
       await expect(answerSend?.answerAsk(prompt, [{ indices: [1] }])).resolves.toBe(false)
       expect(sendRequest).toHaveBeenCalledTimes(1)
       expect(onSendError).toHaveBeenLastCalledWith(
-        'Answer already attempted — check terminal before retrying'
+        'Answer not sent — check terminal before retrying'
       )
       options.currentAsk = null
       await rerender()
       options.currentAsk = prompt
+      await rerender()
+      await expect(answerSend?.answerAsk(prompt, [{ indices: [1] }])).resolves.toBe(false)
+      expect(sendRequest).toHaveBeenCalledTimes(1)
+      options.currentAskStatus = { ...waitingStatus(prompt), stateStartedAt: 15, state: 'blocked' }
+      await rerender()
+      await expect(answerSend?.answerAsk(prompt, [{ indices: [1] }])).resolves.toBe(false)
+      expect(sendRequest).toHaveBeenCalledTimes(1)
+      options.currentAskStatus = { ...waitingStatus(prompt), turnStartedAt: 20, stateStartedAt: 25 }
       await rerender()
       sendRequest.mockResolvedValue(acceptedResponse())
       let next: Promise<boolean> | undefined
@@ -186,5 +222,55 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
     expect(options.onSendError).toHaveBeenCalledWith(
       'Answer partly sent — check chat before retrying'
     )
+  })
+  it.each(['missing status', 'working', 'different turn'] as const)(
+    'stops writes when the prompt has %s',
+    async (change) => {
+      const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
+      const prompt: AskPrompt = {
+        questions: [
+          { question: 'Pick', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] }
+        ]
+      }
+      const options: { currentAsk: AskPrompt; currentAskStatus: AgentStatusEntry | null } = {
+        currentAsk: prompt,
+        currentAskStatus: waitingStatus(prompt)
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the scripted sendRequest port is exercised.
+      const rerender = await mount({ sendRequest } as unknown as RpcClient, 'omp', options)
+      let result: Promise<boolean> | undefined
+      await act(async () => {
+        result = answerSend?.answerAsk(prompt, [{ indices: [1] }])
+      })
+      options.currentAskStatus =
+        change === 'missing status'
+          ? null
+          : {
+              ...waitingStatus(prompt),
+              ...(change === 'working' ? { state: 'working' } : { turnStartedAt: 20 })
+            }
+      await rerender()
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+      await expect(result).resolves.toBe(false)
+      expect(sendRequest).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('refuses a transcript-only OMP question before any terminal write', async () => {
+    const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
+    const prompt: AskPrompt = {
+      questions: [
+        { question: 'Pick', multiSelect: false, options: [{ label: 'A' }, { label: 'B' }] }
+      ]
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the scripted sendRequest port is exercised.
+    await mount({ sendRequest } as unknown as RpcClient, 'omp', {
+      currentAsk: prompt,
+      currentAskStatus: null
+    })
+    await expect(answerSend?.answerAsk(prompt, [{ indices: [1] }])).resolves.toBe(false)
+    expect(sendRequest).not.toHaveBeenCalled()
   })
 })

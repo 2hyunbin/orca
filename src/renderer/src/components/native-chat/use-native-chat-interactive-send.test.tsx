@@ -155,6 +155,20 @@ describe('useNativeChatInteractiveSend', () => {
     expect(mocks.sendNativeChatAskAnswer.mock.calls[0]?.[3]()).toBe(false)
   })
 
+  it.each([undefined, 'not json', JSON.stringify({ questions: [] })])(
+    'refuses OMP writes without canonical live prompt: %s',
+    (interactivePrompt) => {
+      mocks.storeState.agentStatusByPaneKey[PANE_KEY] = {
+        ...waitingQuestion,
+        agentType: 'omp',
+        interactivePrompt
+      }
+      const { result } = renderHook(() => useNativeChatInteractiveSend(PANE_KEY, 'pty-1', 'omp'))
+      act(() => result.current.sendAnswer(PROMPT, [{ indices: [1] }]))
+      expect(mocks.sendNativeChatAskAnswer.mock.calls[0]?.[3]()).toBe(false)
+    }
+  )
+
   it('does nothing when no option is answered', () => {
     const { result } = renderHook(() => useNativeChatInteractiveSend(PANE_KEY, 'pty-1', 'claude'))
 

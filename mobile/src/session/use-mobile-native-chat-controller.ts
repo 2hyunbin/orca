@@ -185,6 +185,7 @@ export function useMobileNativeChatController(args: {
     deviceTokenRef,
     agentRef: activeChatAgentRef,
     currentAsk: nativeChatAskPrompt,
+    currentAskStatus: nativeChatStatus,
     sessionId: activeChatSessionId,
     streamIdentity,
     onSendError

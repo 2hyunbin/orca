@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { sendRuntimePtyInput } from '@/runtime/runtime-terminal-inspection'
 import { sendRuntimePtyInputVerified } from '@/runtime/runtime-terminal-verified-input'
@@ -19,7 +19,9 @@ import {
   sendNativeChatMessage,
   type NativeChatSendHandle
 } from './native-chat-runtime-send'
-import { nativeChatAskDismissKey, parseAskFromStatus } from '../../../../shared/native-chat-ask'
+import { nativeChatAskDismissKey } from '../../../../shared/native-chat-ask'
+import { nativeChatOmpPromptIdentity } from '../../../../shared/native-chat-omp-prompt-identity'
+import { createOmpAnswerRetryFence } from '../../../../shared/native-chat-omp-answer-retry-fence'
 import { inferQuestionAnsweredFromCurrentStatus } from '../terminal-pane/agent-question-answered-inference'
 
 // ESC is the agent-TUI interrupt/cancel key over the PTY (matches how the
@@ -64,7 +66,7 @@ export function useNativeChatInteractiveSend(
   // unmount so a detached setTimeout chain can't keep writing PTY bytes after
   // the view is gone / the user switched away.
   const inFlightRef = useRef<NativeChatSendHandle | null>(null)
-  const attemptedOmpAskRef = useRef<string | null>(null)
+  const [attemptedOmpAsks] = useState(createOmpAnswerRetryFence)
   const cancelInFlight = useCallback(() => {
     inFlightRef.current?.cancel()
     inFlightRef.current = null
@@ -120,35 +122,22 @@ export function useNativeChatInteractiveSend(
       const baselineKey = JSON.stringify([
         targetPtyId,
         askKey,
-        questionStatusBaseline?.stateStartedAt,
-        questionStatusBaseline?.turnStartedAt
+        questionStatusBaseline?.turnStartedAt ?? questionStatusBaseline?.stateStartedAt
       ])
-      if (omp && attemptedOmpAskRef.current === baselineKey) {
+      if (omp && attemptedOmpAsks.blocks(baselineKey)) {
         onDeliverySettled?.(false)
         return { settleAfterMs: 0 }
       }
-      const baselineAskKey = nativeChatAskDismissKey(
-        parseAskFromStatus(
-          questionStatusBaseline?.interactivePrompt,
-          questionStatusBaseline?.toolName
-        )
-      )
+      const baselineIdentity = nativeChatOmpPromptIdentity(questionStatusBaseline, prompt)
       const beforeWrite = (): boolean => {
         const current = useAppStore.getState().agentStatusByPaneKey[paneKey]
         if (
-          (baselineAskKey !== null &&
-            (baselineAskKey !== askKey ||
-              (current?.state !== 'waiting' && current?.state !== 'blocked'))) ||
-          current?.state !== questionStatusBaseline?.state ||
-          current?.stateStartedAt !== questionStatusBaseline?.stateStartedAt ||
-          current?.turnStartedAt !== questionStatusBaseline?.turnStartedAt ||
-          nativeChatAskDismissKey(
-            parseAskFromStatus(current?.interactivePrompt, current?.toolName)
-          ) !== baselineAskKey
+          baselineIdentity === null ||
+          nativeChatOmpPromptIdentity(current, prompt) !== baselineIdentity
         ) {
           return false
         }
-        attemptedOmpAskRef.current = baselineKey
+        attemptedOmpAsks.record(baselineKey)
         return true
       }
       let settledHandle: NativeChatSendHandle | null = null
@@ -190,7 +179,7 @@ export function useNativeChatInteractiveSend(
         settleAfterMs: handle.settleAfterMs
       }
     },
-    [paneKey, targetPtyId, agent, cancelInFlight]
+    [paneKey, targetPtyId, agent, attemptedOmpAsks, cancelInFlight]
   )
 
   const cancelAsk = useCallback(() => {

@@ -1,4 +1,5 @@
 import type { MutableRefObject } from 'react'
+import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
 import type { AskPrompt } from '../../../src/shared/native-chat-ask'
 import type { RpcClient } from '../transport/rpc-client'
 import { useMobileNativeChatPermissionSend } from './mobile-native-chat-permission-send'
@@ -22,6 +23,7 @@ export function useMobileBridgeChatPromptWrites(args: {
   streamIdentity: string
   onSendError: (message: string) => void
   currentAsk?: AskPrompt | null
+  currentAskStatus?: AgentStatusEntry | null
 }): {
   answerAsk: MobileNativeChatAnswerSend['answerAsk']
   cancelAsk: () => Promise<boolean>
@@ -36,6 +38,7 @@ export function useMobileBridgeChatPromptWrites(args: {
     deviceTokenRef,
     agentRef: args.agentRef,
     currentAsk: args.currentAsk,
+    currentAskStatus: args.currentAskStatus,
     sessionId: args.sessionId,
     streamIdentity,
     onSendError

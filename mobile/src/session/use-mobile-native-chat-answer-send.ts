@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MutableRefObject
+} from 'react'
 import {
   buildNativeChatAskAnswerKeys,
   formatAskAnswer,
@@ -7,6 +14,9 @@ import {
   type AskAnswerSelection,
   type AskPrompt
 } from '../../../src/shared/native-chat-ask'
+import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
+import { nativeChatOmpPromptIdentity } from '../../../src/shared/native-chat-omp-prompt-identity'
+import { createOmpAnswerRetryFence } from '../../../src/shared/native-chat-omp-answer-retry-fence'
 import type { RpcClient } from '../transport/rpc-client'
 import { MOBILE_NATIVE_CHAT_QUESTION_STEP_MS } from './mobile-native-chat-answer-stepping'
 import {
@@ -63,6 +73,7 @@ export function useMobileNativeChatAnswerSend(args: {
   streamIdentity: string
   onSendError: (message: string) => void
   currentAsk?: AskPrompt | null
+  currentAskStatus?: AgentStatusEntry | null
 }): MobileNativeChatAnswerSend {
   const {
     client,
@@ -73,17 +84,14 @@ export function useMobileNativeChatAnswerSend(args: {
     sessionId,
     streamIdentity,
     onSendError,
-    currentAsk
+    currentAsk,
+    currentAskStatus
   } = args
-  const currentAskRef = useRef(currentAsk)
+  const currentAskRef = useRef({ prompt: currentAsk, status: currentAskStatus })
   useLayoutEffect(() => {
-    currentAskRef.current = currentAsk
-  }, [currentAsk])
-  const currentAskKey = nativeChatAskDismissKey(currentAsk ?? null)
-  const attemptedOmpAskRef = useRef<string | null>(null)
-  useEffect(() => {
-    attemptedOmpAskRef.current = null
-  }, [currentAskKey, sessionId, streamIdentity])
+    currentAskRef.current = { prompt: currentAsk, status: currentAskStatus }
+  }, [currentAsk, currentAskStatus])
+  const [attemptedOmpAsks] = useState(createOmpAnswerRetryFence)
   const generationRef = useRef(0)
   const activeRouteRef = useRef({ client, enabled, sessionId, streamIdentity })
   activeRouteRef.current = { client, enabled, sessionId, streamIdentity }
@@ -127,9 +135,16 @@ export function useMobileNativeChatAnswerSend(args: {
       const agent = agentRef.current
       const omp = resolveNativeChatTranscriptAgent(agent) === 'omp'
       const askKey = nativeChatAskDismissKey(prompt)
-      const ompAttemptKey = JSON.stringify([streamIdentity, sessionId, handle, askKey])
-      if (omp && attemptedOmpAskRef.current === ompAttemptKey) {
-        onSendError('Answer already attempted — check terminal before retrying')
+      const ompPromptIdentity = nativeChatOmpPromptIdentity(currentAskRef.current.status, prompt)
+      const ompAttemptKey = JSON.stringify([
+        streamIdentity,
+        sessionId,
+        handle,
+        askKey,
+        currentAskRef.current.status?.turnStartedAt ?? currentAskRef.current.status?.stateStartedAt
+      ])
+      if (omp && attemptedOmpAsks.blocks(ompAttemptKey)) {
+        onSendError('Answer not sent — check terminal before retrying')
         return false
       }
       // One composed write sequence per terminal: an answer landing mid-flight
@@ -188,8 +203,10 @@ export function useMobileNativeChatAnswerSend(args: {
             handleRef.current !== handle ||
             agentRef.current !== agent ||
             (omp &&
-              currentAskRef.current !== undefined &&
-              nativeChatAskDismissKey(currentAskRef.current) !== askKey)
+              (ompPromptIdentity === null ||
+                nativeChatOmpPromptIdentity(currentAskRef.current.status, prompt) !==
+                  ompPromptIdentity ||
+                nativeChatAskDismissKey(currentAskRef.current.prompt ?? null) !== askKey))
           ) {
             return false
           }
@@ -206,13 +223,13 @@ export function useMobileNativeChatAnswerSend(args: {
           })
           if (outcome === 'unknown') {
             if (omp) {
-              attemptedOmpAskRef.current = ompAttemptKey
+              attemptedOmpAsks.record(ompAttemptKey)
             }
             sawUnknownOutcome = true
           }
           if (outcome === 'accepted') {
             if (omp) {
-              attemptedOmpAskRef.current = ompAttemptKey
+              attemptedOmpAsks.record(ompAttemptKey)
             }
             sawAcceptedGroup = true
           }
@@ -327,6 +344,7 @@ export function useMobileNativeChatAnswerSend(args: {
     },
     [
       agentRef,
+      attemptedOmpAsks,
       enabled,
       cancelPending,
       client,
