@@ -16,7 +16,10 @@ const base = {
 } as const
 
 /** A row from a scan that ran git (a new run) or answered from the scan cache (`run` reused). */
-function row(overrides: Partial<ScannedIdentityRow> = {}, run: object = {}): ScannedIdentityRow {
+function row(
+  overrides: Partial<ScannedIdentityRow> = {},
+  run: ScannedIdentityRow['gitRun'] = {}
+): ScannedIdentityRow {
   return { ...base, gitRun: run, ...overrides }
 }
 

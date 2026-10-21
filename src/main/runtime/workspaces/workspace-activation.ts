@@ -6,7 +6,7 @@ import {
   resolveRuntimeNavigationTarget
 } from '../../../shared/runtime-navigation'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
-import { hasWindowOnlyWakeRecord } from '../../../shared/workspace-sleep'
+import { phoneWakeReport } from '../../../shared/workspace-sleep'
 import type { Repo } from '../../../shared/repo-types'
 import type { TerminalWorkspaceLaunchScope } from '../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -119,14 +119,15 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
       // Why: main resumes a workspace sleep's agents; only a window wakes its own hibernation.
       if (opts.clientKind === 'mobile') {
         // Not awaited: behind a running sleep it would outlast the phone's request timeout.
-        void this.queueSleepingAgentWake(worktree.id)
+        const worktreeId = worktree.id
+        void this.queueSleepingAgentWake(worktreeId)
         // Why the repo's host: records are partitioned by it, so SSH workspaces are not missed.
         const records = this.store?.getWorkspaceSession?.(getRepoExecutionHostId(repo))
-        sleepingAgentWake =
-          !this.getAvailableAuthoritativeWindow() &&
-          hasWindowOnlyWakeRecord(records?.sleepingAgentSessionsByPaneKey, worktree.id)
-            ? 'unsupported-headless'
-            : 'requested'
+        sleepingAgentWake = phoneWakeReport(
+          records?.sleepingAgentSessionsByPaneKey,
+          worktreeId,
+          Boolean(this.getAvailableAuthoritativeWindow())
+        )
       }
     }
     return { repoId: repo.id, worktreeId: worktree.id, activated: true, sleepingAgentWake }

@@ -272,7 +272,8 @@
         "korean": "한국어",
         "japanese": "日本語",
         "spanish": "Español",
-        "french": "Français"
+        "french": "Français",
+        "portuguese": "Português (Brasil)"
       },
       "statusBar": {
         "claudeToggleDescription": "Show Claude token and cost usage for the active workspace.",
@@ -404,6 +405,10 @@
       "readFailed": "Couldn’t read agent settings. Check the host connection and try again.",
       "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
       "hostDefaults": "Defaults for new agents on the selected host.",
+      "defaultOpensAs": "Open {{value0}} as",
+      "defaultOpensAsChat": "Chat",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "Applies to new {{value0}} sessions launched from this computer, including on paired hosts. Matches its Providers switch.",
       "save": "Save",
       "clearDefault": "Clear default agent",
       "autoPermissions": "Auto",
@@ -3778,7 +3783,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Open In Browser",
-            "9dd880bd56": "Close All Tabs To The Right",
             "1611a1324b": "Close",
             "5d6e89891f": "Duplicate Tab",
             "966feb9ad5": "Split Right",
@@ -3795,7 +3799,6 @@
             "52ce4f4605": "Copy Relative Path",
             "5b85754786": "Copy Path",
             "bfd5797ef4": "Open Markdown Preview",
-            "e5ff31ccaf": "Close All Tabs To The Right",
             "ba1369dd24": "Close All Editor Tabs",
             "1ba8492c5b": "Close",
             "68cc610e7f": "Rename",
@@ -3839,7 +3842,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Tab Color",
             "2f697b3c31": "Change Title",
-            "c1ee099c7e": "Close All Tabs To The Right",
             "8d16f9cd30": "Close Others",
             "89359a36f7": "Close",
             "21132389e9": "Split Right",
@@ -12967,7 +12969,8 @@
           "nodeDownloadBlocked": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Use a Node.js mirror, or check the network on both machines.",
           "nodeDownloadBlockedNoMirror": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.",
           "nodeDownloadBlockedMirrorTried": "Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror setting, then connect again.",
-          "reassurance": "Runs on {{host}}, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to {{host}}."
+          "reassurance": "Runs on {{host}}, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to {{host}}.",
+          "refusedBlockedReason": "Orca isn’t set up on this host yet. {{reason}}"
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -18894,6 +18897,8 @@
         "plan": "Plan",
         "historyRepaired": "Part of this chat's history couldn't be loaded.",
         "historyItemTooLarge": "This part of the chat was too large to show.",
+        "continuedOutside": "Continued outside this chat.",
+        "continuedOutsideRewound": "Continued outside this chat. Earlier replies above are no longer in this conversation's history.",
         "stoppedBeforeStart": "Stopped manually",
         "dismiss": "Dismiss",
         "copyError": "Copy error",
@@ -19237,7 +19242,9 @@
         "send": "Submit",
         "next": "Next",
         "skip": "Skip",
-        "sending": "Sending…"
+        "sending": "Sending…",
+        "terminalRequired": "Answer this OMP question in the terminal.",
+        "openTerminal": "Answer in terminal"
       },
       "ask": {
         "awaiting": "Awaiting user input:",
@@ -19453,16 +19460,13 @@
       "bar": {
         "SortableTabContextMenu": {
           "switchToTerminalView": "Continue with Terminal Agent",
-          "switchToChatView": "Continue in Chat UI",
-          "closeTabsToLeft": "Close All Tabs To The Left"
+          "switchToChatView": "Continue in Chat UI"
         },
         "BrowserTab": {
-          "closeOthers": "Close Others",
-          "closeTabsToLeft": "Close All Tabs To The Left"
+          "closeOthers": "Close Others"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "Close Others",
-          "closeTabsToLeft": "Close All Tabs To The Left"
+          "closeOthers": "Close Others"
         },
         "CopyTabIdMenuItem": {
           "copied": "Tab ID copied",
@@ -19736,6 +19740,13 @@
           "checking": "Checking for changes…",
           "checkingDetails": "Checking…",
           "unavailableDetails": "Details unavailable"
+        },
+        "unsavedEdits": {
+          "discarded_one": "Unsaved edits in {{count}} file will be discarded:",
+          "discarded_other": "Unsaved edits in {{count}} files will be discarded:",
+          "moreFiles": "and {{value}} more",
+          "blocked_one": "Save or close {{count}} unsaved file in {{name}} first",
+          "blocked_other": "Save or close {{count}} unsaved files in {{name}} first"
         }
       }
     },

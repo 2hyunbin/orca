@@ -56,7 +56,7 @@ function withClaudeLaunchedTab(fixture: ReturnType<typeof makeWorkingSleepStore>
 function openPane(
   runtimeStore: unknown,
   windowStatus: 'blocked' | 'openable',
-  opts: { spawn?: () => Promise<{ id: string }>; withWindow?: boolean } = {}
+  opts: { spawn?: () => Promise<{ id: string }>; withWindow?: boolean; tap?: boolean } = {}
 ) {
   const spawn = vi.fn(opts.spawn ?? (() => Promise.resolve({ id: 'persisted-pty' })))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
@@ -83,6 +83,9 @@ function openPane(
         notifyClients: false,
         clientKind: 'runtime'
       })
+    }
+    if (opts.tap === false) {
+      return null
     }
     return runtime.activateMobileSessionTab(
       `id:${TEST_WORKTREE_ID}`,
@@ -264,8 +267,10 @@ describe('opening a workspace-slept running agent on a host with no window', () 
   it("resumes on a phone's open of the workspace, and its queued wake ends with the resume", async () => {
     const fixture = makeWorkingSleepStore()
     let landSpawn!: (pty: { id: string }) => void
+    // No tap: only the phone's open of the workspace starts the resume.
     const { runtime, spawn } = openPane(fixture.runtimeStore, 'blocked', {
-      spawn: () => new Promise((resolve) => (landSpawn = resolve))
+      spawn: () => new Promise((resolve) => (landSpawn = resolve)),
+      tap: false
     })
     const resumeSleepingAgents = vi.fn()
     Object.defineProperty(runtime, 'notifier', { value: { resumeSleepingAgents } })
