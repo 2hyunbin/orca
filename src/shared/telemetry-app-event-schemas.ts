@@ -21,7 +21,6 @@ import {
   workspaceSourceSchema
 } from './telemetry-property-schemas'
 import { workspaceCreatedTimingProperties } from './telemetry-workspace-create-schemas'
-import { TAB_CLOSE_TELEMETRY_SAMPLE_RATE } from './telemetry-tab-event-schemas'
 
 // ── Per-event schemas ───────────────────────────────────────────────────
 
@@ -30,9 +29,7 @@ export const nthRepoAddedSchema = z.number().int().nonnegative().optional()
 
 export const appOpenedSchema = z
   .object({
-    nth_repo_added: nthRepoAddedSchema,
-    tab_close_sampled: z.boolean().optional(),
-    tab_close_sample_rate: z.literal(TAB_CLOSE_TELEMETRY_SAMPLE_RATE).optional()
+    nth_repo_added: nthRepoAddedSchema
   })
   .strict()
 
