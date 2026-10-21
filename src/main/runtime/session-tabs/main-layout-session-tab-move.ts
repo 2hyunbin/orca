@@ -44,6 +44,7 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
     const rows = this.toMobileSessionTabsResult(shown)
     // A group showing a tab main's layout lacks (a diff, a preview) moves as today, and so does a
     // move main cannot read as one: today's path checks it against those rows and answers.
+    // Bridge (ledger L280): goes once main's layout holds every tab a group shows.
     const groupsHeld = (rows.tabGroups ?? [])
       .filter((group) => group.id === move.targetGroupId || group.tabOrder.includes(move.tabId))
       .every((group) => group.tabOrder.every((rowId) => resolveSessionTabRow(workspace, rowId)))
