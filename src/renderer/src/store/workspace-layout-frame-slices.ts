@@ -274,7 +274,9 @@ export function buildLayoutFrameSlices({
       tabsByWorktree: rows.tabsByWorktree
     },
     session,
-    workspaceKeys
+    workspaceKeys,
+    // A frame redraws the window's own selection: one it never made stays none.
+    { unchosenStaysUnset: true }
   )
   const editorTabs = {
     ...tabs,
@@ -293,23 +295,7 @@ export function buildLayoutFrameSlices({
     browserTabsByWorktree: browser.browserTabsByWorktree,
     browserPagesByWorkspace: browser.browserPagesByWorkspace,
     remoteBrowserPageHandlesByPageId: browser.remoteBrowserPageHandlesByPageId,
-    activeBrowserTabIdByWorktree: withUnchosenBrowserTabsUnset(
-      browser.activeBrowserTabIdByWorktree,
-      view
-    ),
+    activeBrowserTabIdByWorktree: browser.activeBrowserTabIdByWorktree,
     activeTabTypeByWorktree: browser.activeTabTypeByWorktree
   }
-}
-
-/** A workspace this window chose no browser tab in keeps none, as a background open leaves it. */
-function withUnchosenBrowserTabsUnset(
-  restored: Record<string, string | null>,
-  view: DesktopLayoutView
-): Record<string, string | null> {
-  return Object.fromEntries(
-    Object.entries(restored).map(([key, tabId]) => [
-      key,
-      view.activeBrowserTabIdByWorktree?.[key] ? tabId : null
-    ])
-  )
 }
