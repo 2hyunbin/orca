@@ -8,12 +8,10 @@ import { readPinnedBunVersion, resolvePinnedBunExecutable } from './pinned-bun-e
 
 const BYTES_PER_GIB = 1024 ** 3
 
-// Peak heap per project, read from `tsc --extendedDiagnostics` and rounded up. node and
-// web are the expensive pair: run together they exceed a 16 GB CI runner, and an
-// out-of-memory runner is killed mid-check, so the job reports a lost runner instead of a
-// type error. Admission is therefore by memory, not by core count alone.
+// Native node peaks at 14.75 GiB RSS on the 16 GB CI runner, so it must run alone.
+// Reservations include resident memory, not only the compiler's reported heap.
 export const TYPECHECK_PROJECTS = [
-  { config: 'config/tsconfig.node.json', heapGib: 7 },
+  { config: 'config/tsconfig.node.json', heapGib: 15 },
   { config: 'config/tsconfig.tc.web.json', heapGib: 6 },
   { config: 'config/tsconfig.tc.cli.json', heapGib: 2 },
   // Cross-layer flow fixtures need both ambient environments; reserve a standalone native batch.
