@@ -201,6 +201,9 @@ describe('execution-host terminal interface flow', () => {
     await vi.advanceTimersByTimeAsync(3000)
     const released = authority.snapshot()[0]
     expect(released).toMatchObject({ state: 'shell', basis: 'hook' })
+    d.result(null)
+    await vi.advanceTimersByTimeAsync(3500)
+    expect(authority.snapshot()[0]).toEqual(released)
     const unavailable = [
       null,
       { foregroundProcess: null, hasChildProcesses: false },
