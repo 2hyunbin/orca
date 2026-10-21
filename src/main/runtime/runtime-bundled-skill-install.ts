@@ -13,10 +13,7 @@ import {
 import { clearSkillDiscoveryCaches } from '../skills/skill-discovery-target'
 import { resolveSkillInstallDestination } from '../skills/skill-install-destinations'
 import type { RuntimeSkillCommandHost } from './runtime-skill-command-contract'
-import {
-  createSkillInstallAuthority,
-  resolveSkillProviderRoots
-} from './runtime-skill-install-authority'
+import { createSkillInstallAuthority } from './runtime-skill-install-authority'
 
 // Why global and installed-only: this is the app's Update skills, which never adds a skill
 // the user did not install. WSL and remote hosts plan on their own host (not here).
@@ -33,7 +30,7 @@ async function appInput(
   return localBundledSkillInput({
     userDataPath: host.getUserDataPath(),
     destination,
-    providerRootOverrides: await resolveSkillProviderRoots(host, destination),
+    claudeConfigDirectory: host.getClaudeConfigDirectory?.({ runtime: 'host' }),
     selection: { installedOnly: true, ...(force ? { force } : {}) }
   })
 }

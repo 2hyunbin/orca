@@ -6,6 +6,10 @@ vi.mock('../../preflight/installed-agent-detection', () => ({
   detectInstalledAgentsWithShellPathHydration: detectMock
 }))
 
+import {
+  CLAUDE_INJECTED_CONFIG_DIR_ENV,
+  CLAUDE_USER_CONFIG_DIR_ENV
+} from '../../../shared/claude-profile-routing'
 import { localBundledSkillInput } from './local-host'
 
 const HOME = join('/', 'home', 'u')
@@ -22,14 +26,14 @@ describe('localBundledSkillInput', () => {
       userDataPath: USER_DATA,
       destination: { scope: 'global', homeDirectory: HOME },
       agents: [],
-      providerRootOverrides: {},
+      claudeConfigDirectory: join(HOME, '.claude'),
       selection: { names: ['orca-cli'], force: 'all', installedOnly: true }
     })
     expect(detectMock).not.toHaveBeenCalled()
-    expect(input).toEqual({
+    expect(input).toMatchObject({
       destination: { scope: 'global', homeDirectory: HOME },
       agents: [],
-      providerRootOverrides: {},
+      providerRootOverrides: { claude: join(HOME, '.claude', 'skills') },
       stateDirectory: join(USER_DATA, 'skill-installs'),
       names: ['orca-cli'],
       force: 'all',
@@ -42,7 +46,6 @@ describe('localBundledSkillInput', () => {
     const input = await localBundledSkillInput({
       userDataPath: USER_DATA,
       destination: { scope: 'global', homeDirectory: HOME },
-      providerRootOverrides: {},
       selection: {}
     })
     expect(input.agents).toEqual(['claude', 'codex'])
@@ -72,5 +75,21 @@ describe('localBundledSkillInput', () => {
       selection: {}
     })
     expect(workspace.providerRootOverrides).toEqual({})
+  })
+
+  it("reads past a CLAUDE_CONFIG_DIR Orca injected, as the app's account router does", async () => {
+    const injected = join(USER_DATA, 'claude-profiles', 'work')
+    vi.stubEnv('CLAUDE_CONFIG_DIR', injected)
+    vi.stubEnv(CLAUDE_INJECTED_CONFIG_DIR_ENV, injected)
+    vi.stubEnv(CLAUDE_USER_CONFIG_DIR_ENV, '')
+    const input = await localBundledSkillInput({
+      userDataPath: USER_DATA,
+      destination: { scope: 'global', homeDirectory: HOME },
+      agents: ['claude'],
+      selection: {}
+    })
+    expect(input.providerRootOverrides).toMatchObject({
+      claude: join(HOME, '.claude', 'skills')
+    })
   })
 })

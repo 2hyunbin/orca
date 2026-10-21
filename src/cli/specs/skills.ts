@@ -105,10 +105,10 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
       '[--local] [--force] [--dry-run] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'skill', 'all', 'agent', 'local', 'force', 'dry-run'],
     notes: [
-      'Runs the same plan as `orca skills install`, but only for skills that already have ' +
-        'a copy of Orca’s here; it never adds a skill.',
-      'Updates each untouched copy where it is, links newly detected agents to the shared ' +
-        'copy, and leaves anything else alone unless you pass --force.',
+      'Runs the same planner as `orca skills install`, but only at locations that already ' +
+        'hold the skill; it never adds a skill, or an existing skill for another agent.',
+      'Updates each untouched copy where it is and leaves anything else alone unless you ' +
+        'pass --force. Use `orca skills install` to add a skill for a newly detected agent.',
       'Updates the global install by default. Use --local to update the current project.',
       'Use --dry-run to print what would change and the plan digest without writing.',
       'With --json, both dry runs and real runs print the plan, and real runs the result.',

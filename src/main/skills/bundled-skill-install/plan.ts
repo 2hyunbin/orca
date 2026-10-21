@@ -34,7 +34,10 @@ export type BundledSkillPlanInput = BundledSkillTargetRequest & {
   names?: readonly string[]
   /** Target paths the user chose to Replace; `all` is `--force`, every replaceable one. */
   force?: readonly string[] | 'all'
-  /** Update: skip a skill with no copy of Orca's anywhere, so it is never newly installed. */
+  /**
+   * Update: plan only locations that already hold something, so an update never spreads a
+   * skill to another agent; a skill with no copy of Orca's anywhere is skipped.
+   */
   installedOnly?: boolean
   /** `<userData>/skill-installs`, where cloud installs keep receipts and journals. */
   stateDirectory: string
@@ -283,10 +286,26 @@ async function planSkill(
   for (const root of agentRoots) {
     planned.push(await planTarget(context, root, shared))
   }
-  if (input.installedOnly && !planned.some((target) => target.holdsOrcaCopy)) {
+  if (!input.installedOnly) {
+    return { name: source.name, digest: context.digest, ops: planned.map((target) => target.op) }
+  }
+  if (!planned.some((target) => target.holdsOrcaCopy)) {
     return null
   }
-  return { name: source.name, digest: context.digest, ops: planned.map((target) => target.op) }
+  // Why the shared slot can stay: an agent's existing link points at it, so writing it repairs
+  // that link rather than adding the skill somewhere new.
+  const linkedToShared = planned
+    .slice(1)
+    .some((target) => target.op.kind === 'keep' && target.op.observed.kind === 'link')
+  const ops = planned
+    .filter((target, index) => isPresent(target.op) || (index === 0 && linkedToShared))
+    .map((target) => target.op)
+  return { name: source.name, digest: context.digest, ops }
+}
+
+/** Something is at the path, or an interrupted swap left a sibling to settle there. */
+function isPresent(op: BundledSkillOp): boolean {
+  return op.observed.kind !== 'absent' || op.restoreFrom !== undefined || op.cleanup.length > 0
 }
 
 /**

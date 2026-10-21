@@ -129,9 +129,8 @@ describe('orca skills install/update', () => {
 
     const text = await run(['update', '--skill', NAME, '--agent', 'claude', '--dry-run'])
 
-    expect(text).toContain(
-      `${NAME}\n  ${paths.shared}: Will update\n  ${paths.claude}: Will link\n`
-    )
+    // Why no Claude line: update never adds the skill for an agent that does not have it.
+    expect(text).toContain(`${NAME}\n  ${paths.shared}: Will update\n\n`)
     expect(text).toMatch(/Plan digest: [0-9a-f]{64}\nRerun without --dry-run to update now\.\n$/u)
     expect(await skillText(paths.shared)).toBe(OLD_TEXT)
     expect(await lstat(paths.claude).catch(() => null)).toBeNull()
@@ -140,7 +139,7 @@ describe('orca skills install/update', () => {
 
   it('executes exactly the ops the dry run printed', async () => {
     await writeCopy(paths.shared, OLD_TEXT)
-    const args = ['update', '--skill', NAME, '--agent', 'claude']
+    const args = ['install', '--skill', NAME, '--agent', 'claude']
 
     const dry = await runJson<DryRunJson>([...args, '--dry-run'])
     const real = await runJson<RunJson>(args)

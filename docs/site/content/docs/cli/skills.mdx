@@ -55,7 +55,7 @@ Orca updates its own skills itself, with no `npx`, Git, Node or network. A copy 
 
 When this Orca build ships a newer version of a skill you installed, the app:
 
-- Shows an **update available** nudge and badge. Linking a newly detected agent to a copy that is already current is offered as **Install for &lt;agent&gt;**, not as an update.
+- Shows an **update available** nudge and badge. Update only touches locations that already hold the skill; it never adds the skill for another agent.
 - Opens **Update skills**, which lists every location and what Update does there: **No change**, **Will update**, **Will link**, or **Left alone** with the reason. A copy left alone has a **Replace** choice (off by default); Replace first moves that copy to `~/.agents/.orca-skill-backups/`, then puts Orca's copy in its place.
 - Runs exactly the plan you reviewed: if a folder changed after you opened the dialog, that skill reports **Changed since you reviewed it** and nothing is written there.
 - Shows the result per skill, for example `Updated · 1 left alone: You've changed this copy`, and a status-bar segment while it runs.
@@ -75,7 +75,7 @@ orca skills update --all --force                         # also replace copies l
 
 - Default scope is **global**; pass `--local` for the current project only (Orca links only into agent folders the project already has).
 - Targets the agents Orca detects on the host plus the shared `.agents/skills` folder. Use `--agent <name>[,<name>…]` to choose (the skills CLI's keys such as `claude-code` still work), or `--agent universal` for the shared folder alone.
-- `update` only touches skills that already have a copy of Orca's here; `install` adds them.
+- `update` only touches locations that already hold the skill; `install` adds it, including for newly detected agents.
 - `--dry-run` prints the plan and its digest without writing. A real run plans again and writes only while the plan still matches.
 - `--json` works for dry runs and real runs. The exit code is 1 when a location failed or changed during the run; folders left alone are warnings.
 

@@ -55,6 +55,8 @@ type Layout = {
   badge?: 'update' | null
   agents?: SkillInstallProviderId[]
   force?: Label[]
+  /** Update rather than install: only locations that already hold the skill. */
+  installedOnly?: boolean
   filesystem?: BundledSkillFilesystem
   /** Paths outside every target that the run must leave byte-identical. */
   untouched?: (home: SkillHome) => string[]
@@ -99,6 +101,24 @@ const LAYOUTS: Layout[] = [
     ],
     text: 'Updated',
     badge: 'update'
+  },
+  {
+    name: 'update: npx Claude-only install, four other agents detected, spreads to none',
+    arrange: async (home) => {
+      await writeNpxLock(home)
+      await writeCopy(home.claude, OLD_TEXT)
+    },
+    agents: ['claude', 'codex', 'cursor', 'gemini', 'grok'],
+    installedOnly: true,
+    ops: [['claude', 'update']],
+    text: 'Updated',
+    badge: 'update',
+    untouched: (home) => [
+      home.shared,
+      home.cursor,
+      join(home.home, '.gemini', 'skills'),
+      join(home.home, '.grok', 'skills')
+    ]
   },
   {
     name: 'already current',
@@ -306,6 +326,7 @@ describe('bundled skill install across real layouts', () => {
     const input = serviceInput(home, {
       agents: layout.agents ?? ['claude'],
       ...(layout.force ? { force: layout.force.map((label) => home[label]) } : {}),
+      ...(layout.installedOnly ? { installedOnly: true } : {}),
       ...(layout.filesystem ? { filesystem: layout.filesystem } : {})
     })
     const untouched = layout.untouched?.(home) ?? []

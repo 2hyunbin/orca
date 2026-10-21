@@ -4,8 +4,14 @@ import {
   type SkillInstallProviderId
 } from '../../../shared/skill-install-providers'
 import { detectInstalledAgentsWithShellPathHydration } from '../../preflight/installed-agent-detection'
-import type { SkillProviderRootOverrides } from '../skill-provider-destinations'
-import { resolveEnvironmentSkillProviderRoots } from '../skill-provider-runtime-roots'
+import {
+  readUserClaudeConfigDir,
+  resolveClaudeDefaultHome
+} from '../../claude-accounts/claude-profile-paths'
+import {
+  resolveEnvironmentSkillProviderRoots,
+  withClaudeSkillProviderRoot
+} from '../skill-provider-runtime-roots'
 import type { BundledSkillServiceInput } from './service'
 import type { BundledSkillTargetRequest } from './targets'
 
@@ -25,8 +31,11 @@ export async function localBundledSkillInput(options: {
   destination: BundledSkillTargetRequest['destination']
   /** `--agent`; detected on this host when omitted. */
   agents?: readonly SkillInstallProviderId[]
-  /** The app adds Orca's own Claude profile; the CLI reads the environment. */
-  providerRootOverrides?: SkillProviderRootOverrides
+  /**
+   * The app passes its account router's answer; otherwise the same rule reads this process's
+   * env, ignoring a CLAUDE_CONFIG_DIR Orca injected into a managed-account terminal.
+   */
+  claudeConfigDirectory?: string | null
   selection: BundledSkillSelection
 }): Promise<BundledSkillServiceInput> {
   const { destination, selection } = options
@@ -37,8 +46,16 @@ export async function localBundledSkillInput(options: {
     destination,
     agents,
     providerRootOverrides:
-      options.providerRootOverrides ??
-      (destination.scope === 'global' ? resolveEnvironmentSkillProviderRoots() : {}),
+      destination.scope === 'global'
+        ? withClaudeSkillProviderRoot(
+            resolveEnvironmentSkillProviderRoots(process.env, destination.homeDirectory),
+            options.claudeConfigDirectory ??
+              resolveClaudeDefaultHome(
+                destination.homeDirectory,
+                readUserClaudeConfigDir(process.env)
+              )
+          )
+        : {},
     stateDirectory: join(options.userDataPath, 'skill-installs'),
     ...(selection.names ? { names: selection.names } : {}),
     ...(selection.force ? { force: selection.force } : {}),

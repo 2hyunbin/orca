@@ -93,6 +93,7 @@ export function serviceInput(
   options: {
     agents?: SkillInstallProviderId[]
     force?: string[]
+    installedOnly?: boolean
     filesystem?: BundledSkillFilesystem
     workspaceDirectory?: string
     providerRootOverrides?: BundledSkillServiceInput['providerRootOverrides']
@@ -111,6 +112,7 @@ export function serviceInput(
     sources: [NEW_SOURCE],
     lockTimeoutMs: 200,
     ...(options.force ? { force: options.force } : {}),
+    ...(options.installedOnly ? { installedOnly: true } : {}),
     ...(options.filesystem ? { filesystem: options.filesystem } : {}),
     ...(options.providerRootOverrides
       ? { providerRootOverrides: options.providerRootOverrides }
