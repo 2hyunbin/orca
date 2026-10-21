@@ -330,11 +330,7 @@
 2 src/renderer/src/runtime/web-session-tabs-sync/global-session-subscription.ts
 1 src/renderer/src/runtime/web-session-tabs-sync/tracking-decisions.ts
 3 src/renderer/src/runtime/web-session-tabs-sync/use-web-session-tabs-sync.ts
-1 src/renderer/src/store/github/repository-routing.ts
 2 src/renderer/src/store/github/visible-hosted-review-refresh-targets.ts
-2 src/renderer/src/store/github/work-item-aggregate-actions.ts
-3 src/renderer/src/store/github/work-item-fetch-actions.ts
-2 src/renderer/src/store/github/work-item-routing.ts
 9 src/renderer/src/store/index.ts
 2 src/renderer/src/store/project-groups/project-group-mutations.ts
 1 src/renderer/src/store/repos/all-host-repo-catalog-actions.ts
@@ -347,7 +343,7 @@
 7 src/renderer/src/store/slices/browser/browser-host-state.ts
 1 src/renderer/src/store/slices/browser/browser-page-conversion-actions.ts
 14 src/renderer/src/store/slices/browser/browser-profile-import-actions.ts
-14 src/renderer/src/store/slices/browser/browser-profile-list-actions.ts
+13 src/renderer/src/store/slices/browser/browser-profile-list-actions.ts
 6 src/renderer/src/store/slices/browser/browser-tab-actions.ts
 1 src/renderer/src/store/slices/browser/create-browser-slice.ts
 1 src/renderer/src/store/slices/browser/paired-browser-tab-creator.ts

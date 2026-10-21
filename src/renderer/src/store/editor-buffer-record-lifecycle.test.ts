@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { create } from 'zustand'
 import { useAppStore } from '@/store'
 import {
@@ -10,7 +10,24 @@ import {
   type EditorBufferRecords
 } from './slices/editor/buffers/editor-buffer-record'
 import type { OpenFile } from './slices/editor/types/open-file'
+import {
+  EMPTY_EDITOR_BUFFER_VIEW_INDEX,
+  type EditorBufferViewIndex
+} from './slices/editor/buffers/editor-buffer-views'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { drawTabsFromMain } from './slices/tabs-drawn-from-main.test-fixture'
+
+// Switch on: main renames the tabs, and its frame rekeys the content (T1 transport, apply mode).
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply(await importOriginal())
+)
+vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeLayoutClientWithTestFrames(await importOriginal())
+)
 
 function openEditTab(filePath = '/repo/a.md', worktreeId = 'wt-1'): string {
   return useAppStore.getState().openFile(
@@ -122,8 +139,10 @@ describe('editor buffer records', () => {
     expect(fileOf(id)?.pendingDiskBaselineVerification).toBe(undefined)
   })
 
-  it('re-keys the record with a self-move and gates the moved dirty tab on both copies', () => {
+  it('re-keys the record with a self-move and gates the moved dirty tab on both copies', async () => {
+    const main = await drawTabsFromMain(useAppStore)
     const id = openEditTab()
+    await main.settle()
     useAppStore.getState().markFileDirty(id, true)
     useAppStore.getState().setLastKnownDiskSignature(id, 'sig-a')
     const watch = watchInvariant()
@@ -140,6 +159,8 @@ describe('editor buffer records', () => {
       ],
       moveOperationId: 'move-1'
     })
+    await main.settle()
+    main.close()
 
     watch.stop()
     expect(result).toEqual({ ok: true })
@@ -218,7 +239,7 @@ describe('editor buffer records', () => {
         )
         return {
           openFiles,
-          editorBuffers: adoptMirroredEditorBuffers(state.editorBuffers, openFiles)
+          editorBuffers: adoptMirroredEditorBuffers(state.editorBuffers, openFiles, state)
         }
       })
 
@@ -231,7 +252,7 @@ describe('editor buffer records', () => {
   })
 
   it('rejects a slice write that changes a mirror field without its record', () => {
-    type State = {
+    type State = EditorBufferViewIndex & {
       openFiles: OpenFile[]
       editorBuffers: EditorBufferRecords
       dirtyMirrorOnly: () => void
@@ -250,6 +271,7 @@ describe('editor buffer records', () => {
           }
         ],
         editorBuffers: {},
+        ...EMPTY_EDITOR_BUFFER_VIEW_INDEX,
         dirtyMirrorOnly: () =>
           set((s) => ({
             openFiles: s.openFiles.map((file) => ({ ...file, isDirty: true }))

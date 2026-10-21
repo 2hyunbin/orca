@@ -60,14 +60,8 @@ export function rejectClaudeDispatchWaiters(
   const retiredWaiters = session.retiredDispatchWaiters.filter((waiter) =>
     named.has(waiter.sentUuid)
   )
-  for (const waiter of activeWaiters) {
-    forgetWaiter(session, waiter)
-    waiter.resolve(null)
-  }
-  for (const waiter of retiredWaiters) {
-    forgetRetiredWaiter(session, waiter)
-  }
-  for (const waiter of [...activeWaiters, ...retiredWaiters]) {
+  // Each released as it is reported: one dropped before its report reads as held by nobody.
+  const report = (waiter: ClaudeDispatchWaiter): void => {
     if (waiter.clientMessageId) {
       onSettledLate?.({
         clientMessageId: waiter.clientMessageId,
@@ -76,6 +70,15 @@ export function rejectClaudeDispatchWaiters(
         ...claudeDispatchRejection(fact)
       })
     }
+  }
+  for (const waiter of activeWaiters) {
+    forgetWaiter(session, waiter)
+    waiter.resolve(null)
+    report(waiter)
+  }
+  for (const waiter of retiredWaiters) {
+    forgetRetiredWaiter(session, waiter)
+    report(waiter)
   }
 }
 
