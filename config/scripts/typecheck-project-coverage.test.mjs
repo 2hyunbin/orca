@@ -29,6 +29,22 @@ function typedFiles(directory) {
 }
 
 describe('typecheck project coverage', () => {
+  it('checks each cross-layer terminal flow fixture in its strict scheduled project', () => {
+    const fixtures = [
+      'src/main/agent-hooks/terminal-interface-host-flow.test.ts',
+      'src/renderer/src/components/native-chat/terminal-interface-replica-flow.test.ts',
+      'src/renderer/src/lib/terminal-interface-startup-flow.test-support.ts',
+      'src/renderer/src/lib/launch-agent-in-new-tab.test.ts',
+      'src/renderer/src/components/sidebar/folder-workspace-composer-submit.test.ts'
+    ]
+    for (const file of fixtures) {
+      const owners = projects.filter((project) => project.files.has(resolve(root, file)))
+      expect(owners.map((owner) => owner.config)).toEqual([
+        'config/tsconfig.terminal-interface.test.json'
+      ])
+    }
+  })
+
   it('keeps CLI tests in the scheduled CLI typecheck project', () => {
     const project = projects.find(({ config }) => config === 'config/tsconfig.tc.cli.json')
     expect(project).toBeDefined()

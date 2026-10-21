@@ -8,6 +8,12 @@
     "../src/preload/api/**/*",
     "../src/shared/**/*"
   ],
+  "exclude": [
+    "../src/renderer/src/components/native-chat/terminal-interface-replica-flow.test.ts",
+    "../src/renderer/src/lib/terminal-interface-startup-flow.test-support.ts",
+    "../src/renderer/src/lib/launch-agent-in-new-tab.test.ts",
+    "../src/renderer/src/components/sidebar/folder-workspace-composer-submit.test.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",

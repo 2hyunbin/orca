@@ -10,7 +10,7 @@ const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithAgentTransitions = ORCA_SIDE
   ? OrcaRuntimeWithSidebarTemporal
   : OrcaRuntimeWithAgentTransitions
 
-export class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSidebarBase {
+export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSidebarBase {
   protected installTerminalInterfaceHost(): void {
     if (this.terminalInterfaces) {
       const authority = this.terminalInterfaces

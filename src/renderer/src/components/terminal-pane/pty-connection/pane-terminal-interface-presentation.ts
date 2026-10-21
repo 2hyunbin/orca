@@ -12,8 +12,9 @@ import { isRemoteExecutionHostPtyId } from '../../../../../shared/remote-executi
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 export function installPaneTerminalInterfacePresentation(session: ConnectPanePtySession): void {
-  const pending = (): boolean =>
-    Boolean(
+  const pending = (): boolean => {
+    const ptyId = session.transport.getPtyId()
+    return Boolean(
       session.disposed ||
       session.pendingStartupCommand ||
       session.startupInjectTimer !== null ||
@@ -23,9 +24,10 @@ export function installPaneTerminalInterfacePresentation(session: ConnectPanePty
       pendingSpawnByPaneKey.has(session.pendingSpawnKey) ||
       isPaneSpawnDeferred(session.cacheKey) ||
       isPaneResumingInPlace(session.cacheKey) ||
-      session.restartReplacementPtyId === session.transport.getPtyId() ||
-      session.deps.isPtyShutdownPending(session.transport.getPtyId())
+      session.restartReplacementPtyId === ptyId ||
+      (ptyId !== null && session.deps.isPtyShutdownPending(ptyId))
     )
+  }
   const releasePresentation = registerTerminalInterfacePresentation(session.cacheKey, {
     ptyId: () => session.transport.getPtyId(),
     incarnation: () => session.remotePtyIncarnationId ?? null,

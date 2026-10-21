@@ -28,6 +28,7 @@
     "../src/wsl-guest/**/*",
     "../src/types/**/*"
   ],
+  "exclude": ["../src/main/agent-hooks/terminal-interface-host-flow.test.ts"],
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node"]

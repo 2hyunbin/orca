@@ -1,18 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeClientEvent } from '../../../../shared/runtime-client-events'
 import type { OrcaRuntimeService } from '../../orca-runtime'
-import {
-  eraseRpcMethods,
-  isStreamingMethod,
-  type RpcContext,
-  type RpcStreamingMethod
-} from '../core'
+import { eraseRpcMethods, isStreamingMethod } from '../core'
 // Why: importing client-events directly trips its module-init cycle through ipc/ssh; the index resolves it.
 import { ALL_RPC_METHODS } from './index'
 
 const subscribeMethod = eraseRpcMethods(ALL_RPC_METHODS).find(
   (method) => method.name === 'runtime.clientEvents.subscribe' && isStreamingMethod(method)
-) as RpcStreamingMethod
+)
+if (!subscribeMethod || !isStreamingMethod(subscribeMethod)) {
+  throw new Error('Missing runtime.clientEvents.subscribe stream')
+}
 
 function makeRuntime(): {
   runtime: OrcaRuntimeService
@@ -27,13 +25,18 @@ function makeRuntime(): {
     ) =>
       () => {}
   )
-  const runtime = {
+  const stub: Pick<
+    OrcaRuntimeService,
+    'onClientEvent' | 'getTerminalInterfaceClientEventSnapshot' | 'registerSubscriptionCleanup'
+  > = {
     onClientEvent,
     getTerminalInterfaceClientEventSnapshot: () => [],
     registerSubscriptionCleanup: (_id: string, cleanup: () => void) => {
       cleanups.push(cleanup)
     }
-  } as unknown as OrcaRuntimeService
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the subscription handler reaches only these checked runtime methods; optional snapshot readers are absent.
+  const runtime = stub as OrcaRuntimeService
   return { runtime, onClientEvent, cleanups }
 }
 
@@ -43,7 +46,7 @@ describe('runtime.clientEvents.subscribe', () => {
 
     const done = subscribeMethod.handler(
       undefined,
-      { runtime, connectionId: 'conn-1', clientKind: 'mobile' } as RpcContext,
+      { runtime, connectionId: 'conn-1', clientKind: 'mobile' },
       () => {}
     )
 
@@ -57,11 +60,7 @@ describe('runtime.clientEvents.subscribe', () => {
   it('keeps non-mobile subscriptions consuming terminal side effects', async () => {
     const { runtime, onClientEvent, cleanups } = makeRuntime()
 
-    const done = subscribeMethod.handler(
-      undefined,
-      { runtime, connectionId: 'conn-1' } as RpcContext,
-      () => {}
-    )
+    const done = subscribeMethod.handler(undefined, { runtime, connectionId: 'conn-1' }, () => {})
 
     expect(onClientEvent).toHaveBeenCalledWith(expect.any(Function), {
       consumesTerminalSideEffects: true
@@ -90,7 +89,7 @@ it('replays rowless state listener-first, filters old peers, and sends the empty
         clientKind: 'runtime',
         caller: { kind: 'desktop' },
         clientCapabilities: capable ? ['terminal.interface.v1'] : []
-      } as RpcContext,
+      },
       (frame) => frames.push(frame)
     )
     expect(onClientEvent).toHaveBeenCalledWith(expect.any(Function), {

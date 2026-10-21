@@ -14,8 +14,8 @@ type HookOwnerHost = {
   enabled: () => boolean
   token: () => string
   generation: () => number
-  row: () => EnrichedAgentHookEventPayload | undefined
-  sameOwner: (row: EnrichedAgentHookEventPayload) => boolean
+  row: () => AgentHookEventPayload | undefined
+  sameOwner: (row: AgentHookEventPayload) => boolean
   retire: () => void
 }
 
