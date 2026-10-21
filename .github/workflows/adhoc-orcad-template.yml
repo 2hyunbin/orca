@@ -69,6 +69,9 @@ jobs:
           retention-days: 7
 
   qualify:
+    permissions:
+      contents: read
+      actions: read
     needs: cache
     if: needs.cache.outputs.hit != 'true'
     uses: ./.github/workflows/node-server-tests.yml
