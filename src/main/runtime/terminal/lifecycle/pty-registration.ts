@@ -114,8 +114,9 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
         : {}),
       ...(binding?.incarnationId ? { incarnationId: binding.incarnationId } : {})
     })
-    // Switch point: bind-first; main's layout already names this pane (L80).
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && paneKey) {
+    // Switch point: bind-first; main's layout already names this pane (L80). A runtime with no
+    // session store (tests only) has no layout to bind in.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN && paneKey && this.store?.getWorkspaceSession) {
       assertPaneBoundAtRegistration(ptyId, paneKey, this.paneOfPty(pty).paneKey)
     }
     const hostScope = this.getOrchestrationCompatibilityHostScope(pty)
