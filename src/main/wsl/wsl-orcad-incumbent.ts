@@ -19,7 +19,7 @@ import {
   requestOrcadTerminalCensus,
   type OrcadTerminalCensusRequestOptions
 } from '../ssh/orcad-terminal-census-client'
-import { updateTerminalCounts } from '../ssh/orcad-update-terminal-counts'
+import { updateTerminalCounts } from '../ssh/orcad-fenced-stop'
 import { tunneledOrcadPairingCode } from '../ssh/orcad-tunneled-pairing'
 import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
