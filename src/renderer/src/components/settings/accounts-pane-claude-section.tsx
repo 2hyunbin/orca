@@ -20,7 +20,7 @@ import {
   withCopiedClaudeLink
 } from './claude-sign-in-link-menu'
 import { addClaudeAccountOnHost } from '@/runtime/runtime-host-account-sign-in-client'
-import { HostAccountSignInPrompt, cancelAccountSignIn } from './HostAccountSignInPrompt'
+import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
 
 export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -119,7 +119,7 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
                 disabled={addDisabled}
                 className="gap-1.5"
               >
-                {claudeAction === 'adding' ? (
+                {claudeAction === 'adding' && !isRemoteAccountScope ? (
                   <Loader2 className="size-3 animate-spin" />
                 ) : (
                   <Plus className="size-3" />
@@ -138,11 +138,7 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={() =>
-                  void cancelAccountSignIn('claude', () =>
-                    window.api.claudeAccounts.cancelPendingLogin()
-                  )
-                }
+                onClick={() => void window.api.claudeAccounts.cancelPendingLogin()}
                 className="gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 <X className="size-3" />

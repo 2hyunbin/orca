@@ -12,7 +12,7 @@ import { getCodexSystemDefaultSubtitle } from './accounts-pane-runtime'
 import type { AccountsPaneSectionModel } from './accounts-pane-types'
 import { renderCodexAccountRow } from './accounts-pane-codex-account-row'
 import { addCodexAccountOnHost } from '@/runtime/runtime-host-account-sign-in-client'
-import { HostAccountSignInPrompt, cancelAccountSignIn } from './HostAccountSignInPrompt'
+import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
 
 export function renderCodexAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -175,7 +175,7 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
               }
               className="gap-1.5"
             >
-              {codexAction === 'adding' ? (
+              {codexAction === 'adding' && !isRemoteAccountScope ? (
                 <Loader2 className="size-3 animate-spin" />
               ) : (
                 <Plus className="size-3" />
@@ -186,11 +186,7 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={() =>
-                  void cancelAccountSignIn('codex', () =>
-                    window.api.codexAccounts.cancelPendingLogin()
-                  )
-                }
+                onClick={() => void window.api.codexAccounts.cancelPendingLogin()}
                 className="gap-1.5"
               >
                 <X />

@@ -230,6 +230,14 @@ export function runningHostAccountSignInOwner(
   return null
 }
 
+/** Whether this client runs a sign-in for `provider` on `owner`, answered by the host yet or not. */
+export function hasHostAccountSignIn(
+  owner: RuntimeClientTarget,
+  provider: HostAccountSignInProvider
+): boolean {
+  return owner.kind === 'environment' && attempts.has(keyOf(owner, provider))
+}
+
 export function subscribeHostAccountSignIns(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

@@ -20512,7 +20512,8 @@
       "open": "Open",
       "enterCode": "Enter this code on that page:",
       "copyCode": "Copy code",
-      "cancelFailed": "Could not reach the server to cancel yet."
+      "cancelFailed": "Could not reach the server to cancel yet.",
+      "cancel": "Cancel"
     },
     "remoteScopeAccountsAddHere": "Showing accounts managed by {{value0}}. New accounts sign in there; you finish in this device’s browser."
   },
