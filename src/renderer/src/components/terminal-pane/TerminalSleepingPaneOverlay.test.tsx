@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, isInaccessible, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalSleepingPaneOverlay } from './TerminalSleepingPaneOverlay'
@@ -33,7 +33,10 @@ describe('TerminalSleepingPaneOverlay', () => {
       expect(screen.getByText('Resume your session')).toBeInTheDocument()
       expect(screen.getByText('This session did not reopen automatically.')).toBeInTheDocument()
       expect(screen.getByText('Use Resume to open this session.')).toBeInTheDocument()
-      expect(screen.queryByText(/Use Resume automatic restores/)).toBeNull()
+      const automaticGuidance = screen.getByText(/Use Resume automatic restores/)
+      expect(automaticGuidance).toHaveClass('invisible')
+      expect(automaticGuidance).toHaveAttribute('aria-hidden', 'true')
+      expect(isInaccessible(automaticGuidance)).toBe(true)
       if (detail) {
         expect(screen.getByText((text) => text.endsWith(detail))).toHaveAttribute(
           'aria-hidden',
@@ -73,6 +76,10 @@ describe('TerminalSleepingPaneOverlay', () => {
     const user = userEvent.setup()
     const { rerender } = render(<TerminalSleepingPaneOverlay reason="paused" onResume={onResume} />)
     expect(screen.queryByRole('button', { name: 'Resume automatic restores' })).toBeNull()
+    const automaticGuidance = screen.getByText(/Use Resume automatic restores/)
+    expect(automaticGuidance).toHaveClass('invisible')
+    expect(automaticGuidance).toHaveAttribute('aria-hidden', 'true')
+    expect(isInaccessible(automaticGuidance)).toBe(true)
 
     rerender(
       <TerminalSleepingPaneOverlay
@@ -81,12 +88,12 @@ describe('TerminalSleepingPaneOverlay', () => {
         onResumeAutomaticRestores={onResumeAutomaticRestores}
       />
     )
+    expect(screen.getByText(/Use Resume automatic restores/)).toBe(automaticGuidance)
+    expect(automaticGuidance).not.toHaveClass('invisible')
+    expect(automaticGuidance).toHaveAttribute('aria-hidden', 'false')
+    expect(automaticGuidance).toBeVisible()
+    expect(isInaccessible(automaticGuidance)).toBe(false)
     await user.click(screen.getByRole('button', { name: 'Resume automatic restores' }))
-    expect(
-      screen.getByText(
-        'Use Resume automatic restores to turn automatic reopening back on for that computer.'
-      )
-    ).toBeInTheDocument()
     expect(onResumeAutomaticRestores).toHaveBeenCalledOnce()
     expect(onResume).not.toHaveBeenCalled()
   })

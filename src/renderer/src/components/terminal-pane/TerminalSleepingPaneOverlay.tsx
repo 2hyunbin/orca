@@ -109,14 +109,15 @@ export function TerminalSleepingPaneOverlay({
                   'Use Resume to open this session.'
                 )}
               </div>
-              {onResumeAutomaticRestores ? (
-                <div>
-                  {translate(
-                    'auto.components.terminal.pane.TerminalSleepingPaneOverlay.automaticResumeGuidance',
-                    'Use Resume automatic restores to turn automatic reopening back on for that computer.'
-                  )}
-                </div>
-              ) : null}
+              <div
+                className={onResumeAutomaticRestores ? undefined : 'invisible'}
+                aria-hidden={!onResumeAutomaticRestores}
+              >
+                {translate(
+                  'auto.components.terminal.pane.TerminalSleepingPaneOverlay.automaticResumeGuidance',
+                  'Use Resume automatic restores to turn automatic reopening back on for that computer.'
+                )}
+              </div>
             </div>
           ) : null}
           <div className="text-xs text-muted-foreground">
