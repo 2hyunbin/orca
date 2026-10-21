@@ -250,7 +250,7 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
   }
 
   /** The wake records this host keeps for one of its workspaces. */
-  sleepRecordsForWorktree(worktreeId: string): SleepingAgentSessionRecord[] {
+  wakeRecordsForWorktree(worktreeId: string): SleepingAgentSessionRecord[] {
     const session = this.store?.getWorkspaceSession?.(
       this.getWorkspaceSessionHostIdForWorktree(worktreeId)
     )
@@ -273,11 +273,11 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
     hostId: ExecutionHostId,
     worktree: { readonly id: string }
   ): Promise<void> {
-    const worktreeId = worktree.id
-    this.noteWorkspaceReopened(worktreeId)
     if (!this.notifier?.resumeSleepingAgents) {
       return
     }
+    const worktreeId = worktree.id
+    this.noteWorkspaceReopened(worktreeId)
     await runWorkspaceLifecycleCommand(
       this.workspaceLifecycle,
       workspaceLifecycleKey(hostId, worktreeId),

@@ -39,7 +39,7 @@ export type WorkspaceSleepRuntime = {
   sleepTerminalsForWorktree: (selector: string) => Promise<RuntimeWorktreeTerminalSleepResult>
   ensureStructuredAgentSessionHost: () => Promise<void>
   notifyWorkspaceSleep: (notice: WorkspaceSleepNotice) => void
-  sleepRecordsForWorktree: (worktreeId: string) => SleepingAgentSessionRecord[]
+  wakeRecordsForWorktree: (worktreeId: string) => SleepingAgentSessionRecord[]
 }
 
 /** The paired server's answer, as a call that throws its refusal with the code kept. */
@@ -119,7 +119,7 @@ export class WorkspaceSleepCoordinator {
         return host.sleepWorkspace(worktreeId, markAsleep)
       },
       suspendVm: platform ? (worktreeId) => platform.suspendVm(worktreeId) : null,
-      ownRecords: (worktreeId) => runtime.sleepRecordsForWorktree(worktreeId),
+      ownRecords: (worktreeId) => runtime.wakeRecordsForWorktree(worktreeId),
       watchReopen: (worktreeId) => {
         const at = this.reopenings.get(worktreeId) ?? 0
         return () => (this.reopenings.get(worktreeId) ?? 0) !== at
