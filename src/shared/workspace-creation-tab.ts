@@ -1,5 +1,3 @@
-import type { RuntimeMobileSessionClientTab } from './runtime-mobile-session-tab-contracts'
-
 /**
  * The tab a workspace was created for: the first tab running the agent it was created with.
  * Derived from the saved `createdWithAgent` and each tab's own agent, so nothing extra is stored and
@@ -36,8 +34,8 @@ export function resolveWorkspaceViewerTab<T>(
 }
 
 /** A host session snapshot's tabs: a chat names its agent, an agent terminal its launch agent. */
-export const SESSION_TAB_IDENTITY: WorkspaceViewerTabIdentity<RuntimeMobileSessionClientTab> = {
-  idOf: (tab) => tab.id,
-  agentOf: (tab) =>
+export const SESSION_TAB_IDENTITY = {
+  idOf: (tab: { id: string }) => tab.id,
+  agentOf: (tab: { type: string; agent?: string; launchAgent?: string }) =>
     tab.type === 'agent-session' ? tab.agent : tab.type === 'terminal' ? tab.launchAgent : undefined
 }
