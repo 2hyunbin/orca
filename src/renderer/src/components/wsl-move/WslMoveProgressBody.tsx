@@ -87,15 +87,24 @@ export function WslMoveProgressBody({
               'wslMove.progress.tooLate',
               'Too late to cancel: the host is already switching over. Keep Orca open until it finishes.'
             )
-          : cancellable
+          : !cancellable
             ? translate(
-                'wslMove.progress.readOnly',
-                'These projects are read-only while they move. You can cancel until the switch starts.'
-              )
-            : translate(
                 'wslMove.progress.switching',
                 'The switch cannot be cancelled. Keep Orca open until it finishes.'
-              )}
+              )
+            : current > 0
+              ? translate(
+                  'wslMove.progress.readOnly',
+                  'These projects are read-only while they move. You can cancel until the switch starts.'
+                )
+              : translate(
+                  'wslMove.progress.cancelUntilSwitch',
+                  'You can cancel until the switch starts.'
+                )}{' '}
+        {translate(
+          'wslMove.progress.closeKeepsGoing',
+          'Closing this dialog does not stop the move; it opens again when the move ends.'
+        )}
       </p>
       <DialogFooter>
         <Button

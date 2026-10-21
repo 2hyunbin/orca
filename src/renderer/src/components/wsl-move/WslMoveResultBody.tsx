@@ -34,12 +34,12 @@ function reloadFailure(reload: WslMoveReloadState): string | null {
     case 'checkpoint-refused':
       return translate(
         'wslMove.result.reloadCheckpointRefused',
-        'Orca could not back up unsaved files, so the window did not reload. Save or close them, then reload.'
+        'Orca could not back up unsaved files, so the window did not reload. Close this dialog, save or close those files, then use Reload now in the notice that stays open.'
       )
     case 'unload-vetoed':
       return translate(
         'wslMove.result.reloadVetoed',
-        'Something kept the window from reloading. Save your work, then reload.'
+        'Something kept the window from reloading. Close this dialog, save your work, then use Reload now in the notice that stays open.'
       )
     case 'never-landed':
     case 'request-failed':
@@ -114,7 +114,7 @@ export function WslMoveResultBody({
           <p>
             {translate(
               'wslMove.result.reset',
-              'The move stopped and everything was put back. The projects work on this computer as before.'
+              'The move stopped and everything was put back. The projects work on this computer as before; paused terminals start again when you open them.'
             )}
           </p>
         ) : null}
@@ -122,7 +122,7 @@ export function WslMoveResultBody({
           <p>
             {translate(
               'wslMove.result.waiting',
-              'The move may have reached the {{distro}} host, but the host is not answering. These projects stay read-only here until it does. Connect the host in Settings, then start the move again to finish it.',
+              'The move may have reached the {{distro}} host, but the host is not answering. These projects stay read-only here until it does. Connect the host in Settings, then open this dialog again and start a move: Orca finishes or undoes this one first.',
               { distro }
             )}
           </p>

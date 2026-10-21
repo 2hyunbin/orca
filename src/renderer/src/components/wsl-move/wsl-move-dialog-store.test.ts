@@ -10,12 +10,15 @@ vi.mock('@/lib/lazy-chunk-recovery-reload', () => ({
   requestLazyChunkRecoveryReload: (...args: unknown[]) => reload(...args)
 }))
 
+const toastMock = vi.fn()
+vi.mock('sonner', () => ({ toast: (...args: unknown[]) => toastMock(...args) }))
+
 const store = await import('./wsl-move-dialog-store')
+const { adoptWslMoveProgress } = await import('./wsl-move-run-adoption')
+const { closeWslMoveDialog, reloadAfterWslMove } = await import('./wsl-move-dialog-close')
 const {
   cancelWslMove,
-  closeWslMoveDialog,
   openWslMoveDialog,
-  reloadAfterWslMove,
   reviewWslMoveAgain,
   setWslMoveSelection,
   skipWslMoveProjects,
@@ -153,6 +156,21 @@ describe('preview', () => {
     expect(state.stage === 'preview' && state.preview?.outcome).toBe('refused')
   })
 
+  it('checks nothing when the project it was opened from cannot move', async () => {
+    await openWslMoveDialog({ distro: 'Ubuntu', only: { kind: 'repo', id: 'held' } })
+    const state = dialog()
+    expect(state.stage === 'preview' && state.selected).toEqual([])
+  })
+
+  it('checks the whole distro again when nothing was listed', async () => {
+    api.preview.mockResolvedValueOnce({ outcome: 'refused', code: 'wsl_move_host_unavailable' })
+    await openWslMoveDialog({ distro: 'Ubuntu' })
+    await store.recheckWslMove()
+    const state = dialog()
+    expect(state.stage === 'preview' && state.preview).toBe(READY)
+    expect(api.preview).toHaveBeenCalledTimes(2)
+  })
+
   it('turns a failed preview call into a refusal, never a stuck spinner', async () => {
     api.preview.mockRejectedValueOnce(new Error('ipc'))
     await openWslMoveDialog({ distro: 'Ubuntu' })
@@ -186,18 +204,32 @@ describe('run', () => {
     expect(api.listUnfinished).toHaveBeenCalled()
   })
 
-  it('cannot be closed or replaced while running, nor before a moved window reloads', async () => {
+  it('only hides while running, shows the result again, and stays until the reload is tried', async () => {
     await openWslMoveDialog({ distro: 'Ubuntu' })
     const run = deferred<WslMoveResult>()
     api.start.mockReturnValueOnce(run.promise)
     const started = startWslMove()
     closeWslMoveDialog()
+    const hidden = dialog()
+    expect(hidden.stage === 'running' && hidden.hidden).toBe(true)
     await openWslMoveDialog({ distro: 'Debian' })
-    expect(dialog().stage).toBe('running')
+    const shown = dialog()
+    expect(shown.stage === 'running' && shown.hidden).toBe(false)
+    closeWslMoveDialog()
     run.resolve({ outcome: 'moved', migrationId: 'm1', phase: 'retained', reloadRequired: true })
     await started
+    const result = dialog()
+    expect(result.stage === 'result' && !result.hidden).toBe(true)
     closeWslMoveDialog()
     expect(dialog().stage).toBe('result')
+    expect(toastMock).not.toHaveBeenCalled()
+    // After a refused reload the dialog may go, leaving a toast that offers the reload.
+    reload.mockResolvedValueOnce('checkpoint-refused')
+    await reloadAfterWslMove()
+    closeWslMoveDialog()
+    const afterRefusal = dialog()
+    expect(afterRefusal.stage === 'result' && afterRefusal.hidden).toBe(true)
+    expect(toastMock).toHaveBeenCalledTimes(1)
   })
 
   it('reports a cancel that came too late', async () => {
@@ -205,6 +237,12 @@ describe('run', () => {
     const run = deferred<WslMoveResult>()
     api.start.mockReturnValueOnce(run.promise)
     void startWslMove()
+    // Refused before the switch: the run was gone or the call failed, not "too late".
+    api.cancel.mockResolvedValueOnce(false)
+    await cancelWslMove()
+    const before = dialog()
+    expect(before.stage === 'running' && before.cancel).toBe('idle')
+    emitProgress({ distro: 'Ubuntu', step: 'switching' })
     api.cancel.mockResolvedValueOnce(false)
     await cancelWslMove()
     const state = dialog()
@@ -234,6 +272,24 @@ describe('run', () => {
     expect(reload).toHaveBeenCalledTimes(1)
     const state = dialog()
     expect(state.stage === 'result' && state.reload).toBe('checkpoint-refused')
+  })
+
+  it('follows a run this window did not start, and asks for the reload when it is done', async () => {
+    adoptWslMoveProgress({ distro: 'Ubuntu', step: 'copying', migrationId: 'm9' })
+    const running = dialog()
+    expect(running.stage === 'running' && running.adopted).toBe(true)
+    adoptWslMoveProgress({ distro: 'Ubuntu', step: 'done', migrationId: 'm9', phase: 'retained' })
+    const state = dialog()
+    expect(state.stage === 'result' && state.result.outcome).toBe('moved')
+    expect(store.wslMoveDialogLocked(state)).toBe(true)
+  })
+
+  it('leaves its own run to its own listener', async () => {
+    await openWslMoveDialog({ distro: 'Ubuntu' })
+    api.start.mockReturnValueOnce(deferred<WslMoveResult>().promise)
+    void startWslMove()
+    adoptWslMoveProgress({ distro: 'Ubuntu', step: 'done', migrationId: 'm1' })
+    expect(dialog().stage).toBe('running')
   })
 
   it('goes back to the same projects after a refusal', async () => {

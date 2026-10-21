@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -16,10 +16,8 @@ import type {
 } from '../../../../shared/wsl-move/wsl-move-driver-types'
 import {
   cancelWslMove,
-  closeWslMoveDialog,
-  mustReload,
+  wslMoveDialogLocked,
   recheckWslMove,
-  reloadAfterWslMove,
   reviewWslMoveAgain,
   setWslMoveSelection,
   skipWslMoveProjects,
@@ -33,6 +31,10 @@ import {
   type WslMoveCatalog
 } from './wsl-move-scope-rows'
 import type { WslMoveBlockerView } from './WslMoveBlockerList'
+import { adoptWslMoveProgress } from './wsl-move-run-adoption'
+import { closeWslMoveDialog, reloadAfterWslMove } from './wsl-move-dialog-close'
+import { RecoverableRenderErrorBoundary } from '../error-boundaries/RecoverableRenderErrorBoundary'
+import { useWslHostsEnabled } from '../sidebar/use-wsl-hosts-enabled'
 import { WslMovePreviewBody, wslMoveNotMovingLines } from './WslMovePreviewBody'
 import { WslMoveProgressBody } from './WslMoveProgressBody'
 import { WslMoveResultBody, wslMoveResultTitle } from './WslMoveResultBody'
@@ -68,8 +70,20 @@ function blockerViews(
 
 /** Root-hosted: entry points in Settings, the sidebar and project settings all open it. */
 export function WslMoveDialogHost(): React.JSX.Element | null {
-  const open = useWslMoveDialogStore((s) => s.dialog.stage !== 'closed')
-  return open ? <WslMoveDialog /> : null
+  const enabled = useWslHostsEnabled()
+  const open = useWslMoveDialogStore(
+    (s) => s.dialog.stage !== 'closed' && !('hidden' in s.dialog && s.dialog.hidden)
+  )
+  // A run this window did not start (it reloaded mid-move) still gets its progress and reload.
+  useEffect(
+    () => (enabled ? window.api.wslMove.onProgress(adoptWslMoveProgress) : undefined),
+    [enabled]
+  )
+  return open ? (
+    <RecoverableRenderErrorBoundary boundaryId="modal.wsl-move" surface="modal" compact>
+      <WslMoveDialog />
+    </RecoverableRenderErrorBoundary>
+  ) : null
 }
 
 function WslMoveDialog(): React.JSX.Element | null {
@@ -79,8 +93,9 @@ function WslMoveDialog(): React.JSX.Element | null {
     return null
   }
   const { distro } = dialog
-  const busy =
-    dialog.stage === 'running' || (dialog.stage === 'result' && mustReload(dialog.result))
+  // Locked until the moved window tries its reload; a running move only hides on close.
+  const locked = wslMoveDialogLocked(dialog)
+  const running = dialog.stage === 'running'
   let title: string
   let body: React.JSX.Element
   switch (dialog.stage) {
@@ -171,11 +186,11 @@ function WslMoveDialog(): React.JSX.Element | null {
     >
       <DialogContent
         className="sm:max-w-lg"
-        showCloseButton={!busy}
+        showCloseButton={!locked}
         data-testid="wsl-move-dialog"
-        // A running move or a pending reload must not be dismissed by a stray click or Esc.
-        onEscapeKeyDown={(event) => busy && event.preventDefault()}
-        onInteractOutside={(event) => busy && event.preventDefault()}
+        // A stray click must not hide a running move, nor Esc skip a pending reload.
+        onEscapeKeyDown={(event) => locked && event.preventDefault()}
+        onInteractOutside={(event) => (locked || running) && event.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

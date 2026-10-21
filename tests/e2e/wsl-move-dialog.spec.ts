@@ -171,13 +171,13 @@ type FakeScript = {
 /** Swaps main's move handlers for a scripted host; the renderer and its bridge stay real. */
 async function installFakeMove(app: ElectronApplication, script: FakeScript): Promise<void> {
   await app.evaluate(({ ipcMain }, fake) => {
-    const state = {
-      starts: [] as unknown[],
-      pending: [] as ((result: unknown) => void)[],
-      results: [...fake.results],
-      unfinished: [] as unknown[],
-      cancelAllowed: true
-    }
+    const state: {
+      starts: unknown[]
+      pending: ((result: unknown) => void)[]
+      results: unknown[]
+      unfinished: unknown[]
+      cancelAllowed: boolean
+    } = { starts: [], pending: [], results: [...fake.results], unfinished: [], cancelAllowed: true }
     Object.assign(globalThis, { __wslMoveFake: state })
     for (const channel of [
       'wslMove:preview',
@@ -210,16 +210,8 @@ async function sendProgress(app: ElectronApplication, event: WslMoveProgressEven
 /** Ends the running start with the next scripted result. */
 async function finishStart(app: ElectronApplication, unfinished: unknown[] = []): Promise<void> {
   await app.evaluate((_electron, nextUnfinished) => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: installFakeMove set this global just above in the same main process.
-    const state = (
-      globalThis as unknown as {
-        __wslMoveFake: {
-          pending: ((result: unknown) => void)[]
-          results: unknown[]
-          unfinished: unknown[]
-        }
-      }
-    ).__wslMoveFake
+    // Set by installFakeMove in this same main process.
+    const state = Reflect.get(globalThis, '__wslMoveFake')
     state.unfinished = nextUnfinished
     state.pending.shift()?.(state.results.shift())
   }, unfinished)
@@ -357,9 +349,12 @@ test('moves projects through preview, blockers, progress and result', async ({},
     await expect(dialog.getByText('14 MB of 34 MB')).toBeVisible()
     await expect(dialog.getByRole('button', { name: 'Cancel move' })).toBeEnabled()
     await proof(page, testInfo, 'progress')
-    // Neither Esc nor another dialog can dismiss a running move.
+    // Closing only hides a running move; the entry point shows it again.
     await page.keyboard.press('Escape')
-    await expect(dialog).toBeVisible()
+    await expect(dialog).toHaveCount(0)
+    await hosts.getByRole('button', { name: `More actions for ${DISTRO} (WSL)` }).click()
+    await page.getByRole('menuitem', { name: 'Move projects from this distro…' }).click()
+    await expect(dialog.getByTestId('wsl-move-progress')).toBeVisible()
     await sendProgress(app, { distro: DISTRO, step: 'switching', migrationId: 'move-1' })
     await expect(dialog.getByRole('button', { name: 'Cancel move' })).toBeDisabled()
 
@@ -371,13 +366,7 @@ test('moves projects through preview, blockers, progress and result', async ({},
     await page.keyboard.press('Escape')
     await expect(dialog).toBeVisible()
     await proof(page, testInfo, 'success')
-    expect(
-      await app.evaluate(
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: installFakeMove set this global in the same main process.
-        () =>
-          (globalThis as unknown as { __wslMoveFake: { starts: unknown[] } }).__wslMoveFake.starts
-      )
-    ).toEqual([
+    expect(await app.evaluate(() => Reflect.get(globalThis, '__wslMoveFake').starts)).toEqual([
       { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [] },
       { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [] }
     ])

@@ -110,6 +110,12 @@ describe('preview', () => {
     expect(markup).not.toContain('out of this move')
   })
 
+  it('lets a start settle an earlier unfinished move', () => {
+    const markup = preview({ preview: { outcome: 'refused', code: 'wsl_move_already_in_flight' } })
+    expect(markup).toContain('Starting this move finishes or undoes it first.')
+    expect(markup).not.toMatch(/disabled=""[^>]*>Move 1 project/)
+  })
+
   it('explains what is not moving and shows a refusal with its reasons', () => {
     const markup = preview({
       notMoving: [{ name: 'old', why: 'Already on the Ubuntu host.' }],
@@ -176,7 +182,8 @@ describe('result', () => {
     expect(wslMoveResultTitle(moved, 'Ubuntu')).toBe('Moved to the Ubuntu host')
     expect(markup).toContain('Reload now')
     expect(markup).toContain('2 automations are off on the host for now')
-    expect(markup).toContain('Browser logins were not copied to the host (no-stable-partition)')
+    expect(markup).toContain('could not identify the host’s browser profile')
+    expect(markup).not.toContain('no-stable-partition')
     expect(markup).toContain('Use on this computer again')
     expect(markup).not.toContain('Close')
   })
@@ -242,7 +249,10 @@ describe('result', () => {
 describe('entry points with the gate closed', () => {
   it('render nothing', async () => {
     vi.resetModules()
-    vi.doMock('../sidebar/use-wsl-hosts-enabled', () => ({ useWslHostsEnabled: () => false }))
+    vi.doMock('../sidebar/use-wsl-hosts-enabled', () => ({
+      useWslHostsEnabled: () => false,
+      useWslHostServerFilesMissing: () => false
+    }))
     vi.doMock('@/store', () => ({
       useAppStore: (selector: (state: { runtimeEnvironments: unknown[] }) => unknown) =>
         selector({

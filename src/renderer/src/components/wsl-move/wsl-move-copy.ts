@@ -14,9 +14,26 @@ export function wslMoveChatsStayCopy(): string {
   )
 }
 
-export function wslMoveRefusalMessage(refusal: WslMoveRefusal, distro: string): string {
+export function wslMoveRefusalMessage(
+  refusal: WslMoveRefusal,
+  distro: string,
+  /** Preview refusals describe what a start would do; results describe what happened. */
+  context: 'preview' | 'result' = 'result'
+): string {
   switch (refusal.code) {
     case 'wsl_move_unavailable':
+      if (refusal.detail === 'preview-failed') {
+        return translate(
+          'wslMove.refusal.previewFailed',
+          'Orca could not check these projects. Try again.'
+        )
+      }
+      if (refusal.detail === 'start-failed') {
+        return translate(
+          'wslMove.refusal.startFailed',
+          'Orca lost contact with the move. Open this dialog again to see where it stands.'
+        )
+      }
       return translate(
         'wslMove.refusal.unavailable',
         'Moving projects to a WSL host is not available in this window.'
@@ -28,15 +45,21 @@ export function wslMoveRefusalMessage(refusal: WslMoveRefusal, distro: string): 
         { distro }
       )
     case 'wsl_move_already_in_flight':
-      return translate(
-        'wslMove.refusal.alreadyInFlight',
-        'An earlier move into {{distro}} has not finished, and the {{distro}} host is not answering about it. Connect the host in Settings, then try again.',
-        { distro }
-      )
+      return context === 'preview'
+        ? translate(
+            'wslMove.refusal.alreadyInFlightPreview',
+            'An earlier move into {{distro}} has not finished. Starting this move finishes or undoes it first.',
+            { distro }
+          )
+        : translate(
+            'wslMove.refusal.alreadyInFlight',
+            'An earlier move into {{distro}} has not finished, and Orca could not settle it with the {{distro}} host yet. Connect the host in Settings, then try again.',
+            { distro }
+          )
     case 'wsl_move_nothing_new':
       return translate(
         'wslMove.refusal.nothingNew',
-        'Every selected project is already on the {{distro}} host.',
+        'These projects are already on the {{distro}} host.',
         { distro }
       )
     case 'wsl_move_host_unavailable':
@@ -78,7 +101,7 @@ export function wslMoveRefusalMessage(refusal: WslMoveRefusal, distro: string): 
     case 'wsl_move_pause_failed':
       return translate(
         'wslMove.refusal.pauseFailed',
-        'Orca could not pause the terminals in these projects, so nothing was moved. Try again.'
+        'Orca could not pause the terminals in these projects, so nothing was moved. Paused terminals start again when you open them. Try again.'
       )
     case 'wsl_move_scope_changed':
       return translate(
@@ -233,13 +256,26 @@ export function wslMoveScopeRefusalReason(reason: string): string {
   }
 }
 
-/** 7f's reasons for leaving the host's browser on a fresh partition; unknown ones read generically. */
+/** 7f's reasons the host's browser starts signed out; an unknown one reads generically. */
 export function wslMoveBrowserLoginsNotCopied(reason: string): string {
-  return translate(
-    'wslMove.result.browserLoginsNotCopied',
-    'Browser logins were not copied to the host ({{reason}}). Sign in again in the host’s browser tabs.',
-    { reason }
-  )
+  switch (reason) {
+    case 'no-stable-partition':
+    case 'destination-environment-missing':
+      return translate(
+        'wslMove.result.browserLoginsHostUnknown',
+        'Browser logins were not copied, because Orca could not identify the host’s browser profile. Sign in again in the host’s browser tabs.'
+      )
+    case 'destination-partition-conflict':
+      return translate(
+        'wslMove.result.browserLoginsConflict',
+        'Browser logins were not copied, because the host’s browser profile is already in use. Sign in again in the host’s browser tabs.'
+      )
+    default:
+      return translate(
+        'wslMove.result.browserLoginsNotCopied',
+        'Browser logins were not copied to the host. Sign in again in the host’s browser tabs.'
+      )
+  }
 }
 
 export function formatWslMoveBytes(bytes: number): string {

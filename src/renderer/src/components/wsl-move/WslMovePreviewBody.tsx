@@ -47,7 +47,7 @@ function countsLine(counts: WslMoveCounts): string {
 
 export function WslMovePreviewBody(props: WslMovePreviewBodyProps): React.JSX.Element {
   const { distro, rows, selected, preview, blockers } = props
-  const ready = preview?.outcome === 'ready' && blockers.length === 0 && selected.length > 0
+  const ready = selected.length > 0 && wslMovePreviewStartable(preview, blockers.length)
   return (
     <>
       <div className="space-y-3 text-sm">
@@ -116,7 +116,7 @@ export function WslMovePreviewBody(props: WslMovePreviewBodyProps): React.JSX.El
         ) : null}
         {preview?.outcome === 'refused' ? (
           <div className="space-y-1 text-destructive" role="alert">
-            <p>{wslMoveRefusalMessage(preview, distro)}</p>
+            <p>{wslMoveRefusalMessage(preview, distro, 'preview')}</p>
             {preview.reasons?.length ? (
               <ul className="list-disc space-y-0.5 pl-5 text-xs">
                 {preview.reasons.map((reason) => (
@@ -155,6 +155,13 @@ export function WslMovePreviewBody(props: WslMovePreviewBodyProps): React.JSX.El
       </DialogFooter>
     </>
   )
+}
+
+/** A start settles an earlier unfinished move first, so that refusal does not block one. */
+export function wslMovePreviewStartable(preview: WslMovePreview | null, blockers: number): boolean {
+  return preview?.outcome === 'ready'
+    ? blockers === 0
+    : preview?.code === 'wsl_move_already_in_flight'
 }
 
 /** Plain-words lines for what the whole-distro preview lists but will not move. */

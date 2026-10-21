@@ -6,7 +6,7 @@
 import { useAppStore } from '@/store'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WslMoveRowRef } from '../../../../shared/wsl-move/wsl-move-driver-types'
-import { useWslHostsEnabled } from '../sidebar/use-wsl-hosts-enabled'
+import { useWslHostsEnabled, useWslHostServerFilesMissing } from '../sidebar/use-wsl-hosts-enabled'
 import { openWslMoveDialog } from './wsl-move-dialog-store'
 import { wslMoveCatalogCandidates, wslMoveTargetForRepo } from './wsl-move-scope-rows'
 
@@ -23,6 +23,7 @@ export function useWslMoveTargetForRepo(
   repo: Pick<Repo, 'path' | 'connectionId' | 'executionHostId'> | null | undefined
 ): string | null {
   const enabled = useWslHostsEnabled()
+  const serverFilesMissing = useWslHostServerFilesMissing()
   const environments = useAppStore((s) => s.runtimeEnvironments)
-  return enabled && repo ? wslMoveTargetForRepo(repo, environments) : null
+  return enabled && !serverFilesMissing && repo ? wslMoveTargetForRepo(repo, environments) : null
 }

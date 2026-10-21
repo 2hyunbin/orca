@@ -14,10 +14,7 @@ import type {
   WslMoveRowRef,
   WslMoveUnfinished
 } from '../../../../shared/wsl-move/wsl-move-driver-types'
-import {
-  requestLazyChunkRecoveryReload,
-  type LazyChunkRecoveryReloadOutcome
-} from '@/lib/lazy-chunk-recovery-reload'
+import type { LazyChunkRecoveryReloadOutcome } from '@/lib/lazy-chunk-recovery-reload'
 
 /** Projects listed with a checkbox; from main's whole-distro preview, or the catalog fallback. */
 export type WslMoveCandidates = { repoIds: string[]; folderWorkspaceIds: string[] }
@@ -41,6 +38,10 @@ export type WslMoveDialogState =
       selected: WslMoveRowRef[]
       progress: WslMoveProgressEvent | null
       cancel: 'idle' | 'requested' | 'too-late'
+      /** Closed by the user; the move goes on and its result opens the dialog again. */
+      hidden?: boolean
+      /** A run this window did not start (e.g. it reloaded mid-move): known only by its progress. */
+      adopted?: boolean
     }
   | {
       stage: 'result'
@@ -48,6 +49,7 @@ export type WslMoveDialogState =
       selected: WslMoveRowRef[]
       result: WslMoveResult
       reload: 'idle' | 'reloading' | LazyChunkRecoveryReloadOutcome
+      hidden?: boolean
     }
 
 export type WslMoveOpenRequest = {
@@ -63,21 +65,29 @@ type Store = {
   unfinished: WslMoveUnfinished[]
 }
 
+export type WslMoveReloadState = Extract<WslMoveDialogState, { stage: 'result' }>['reload']
+
 export const useWslMoveDialogStore = create<Store>()(() => ({
   dialog: { stage: 'closed' },
   unfinished: []
 }))
 
-const setDialog = (dialog: WslMoveDialogState): void => {
+export const setWslMoveDialog = (dialog: WslMoveDialogState): void => {
   useWslMoveDialogStore.setState({ dialog })
 }
-const getDialog = (): WslMoveDialogState => useWslMoveDialogStore.getState().dialog
+const setDialog = setWslMoveDialog
+export const getWslMoveDialog = (): WslMoveDialogState => useWslMoveDialogStore.getState().dialog
+const getDialog = getWslMoveDialog
 
 // Each preview request bumps this; a reply to an older one is dropped.
 let previewToken = 0
+// Each open bumps this, so a slow "Back to projects" never edits a newer dialog.
+let openGeneration = 0
 
 // A refusal a smaller selection may avoid; the checkboxes stay so the user can narrow it.
 const SCOPE_DEPENDENT_REFUSALS = new Set<string>([
+  // Only a start settles an earlier unfinished move, so the projects stay listed for one.
+  'wsl_move_already_in_flight',
   'wsl_move_export_incomplete',
   'wsl_move_manifest_too_large',
   'wsl_move_scope_changed'
@@ -111,6 +121,16 @@ async function previewOf(request: WslMoveRequest): Promise<WslMovePreview> {
   }
 }
 
+/** A moved window that has not tried its reload yet: it must, before anything else. */
+export function wslMoveDialogLocked(dialog: WslMoveDialogState): boolean {
+  return (
+    dialog.stage === 'result' &&
+    mustReload(dialog.result) &&
+    (dialog.reload === 'idle' || dialog.reload === 'reloading')
+  )
+}
+
+/** A move in flight, or one this window must still reload for: never replaced by another. */
 function isBusy(dialog: WslMoveDialogState): boolean {
   return dialog.stage === 'running' || (dialog.stage === 'result' && mustReload(dialog.result))
 }
@@ -124,14 +144,19 @@ export function mustReload(result: WslMoveResult): boolean {
 }
 
 export async function openWslMoveDialog(request: WslMoveOpenRequest): Promise<void> {
-  // A running move, or one waiting on its reload, keeps the dialog until it is done.
-  if (isBusy(getDialog())) {
+  const current = getDialog()
+  // A running move, or one waiting on its reload, keeps the dialog: opening shows it again.
+  if (isBusy(current)) {
+    if (current.stage !== 'closed' && 'hidden' in current && current.hidden) {
+      setDialog({ ...current, hidden: false })
+    }
     return
   }
+  const generation = ++openGeneration
   const token = ++previewToken
   setDialog({ stage: 'loading', distro: request.distro })
   const distroPreview = await previewOf({ distro: request.distro })
-  if (token !== previewToken || getDialog().stage !== 'loading') {
+  if (token !== previewToken || generation !== openGeneration || getDialog().stage !== 'loading') {
     return
   }
   let candidates: WslMoveCandidates = { repoIds: [], folderWorkspaceIds: [] }
@@ -145,8 +170,8 @@ export async function openWslMoveDialog(request: WslMoveOpenRequest): Promise<vo
   }
   const all = refsOf(candidates)
   const only = request.only
-  const selected =
-    only && all.some((ref) => ref.kind === only.kind && ref.id === only.id) ? [only] : all
+  // Opened from one project that cannot move: check nothing; "Not moving" says why.
+  const selected = only ? all.filter((ref) => ref.kind === only.kind && ref.id === only.id) : all
   const wholeDistro = selected.length === all.length && distroPreview.outcome === 'ready'
   setDialog({
     stage: 'preview',
@@ -154,9 +179,9 @@ export async function openWslMoveDialog(request: WslMoveOpenRequest): Promise<vo
     candidates,
     distroPreview,
     selected,
-    preview: wholeDistro || all.length === 0 ? distroPreview : null
+    preview: wholeDistro || selected.length === 0 ? distroPreview : null
   })
-  if (!wholeDistro && all.length > 0) {
+  if (!wholeDistro && selected.length > 0) {
     await recheckWslMove()
   }
 }
@@ -165,6 +190,11 @@ export async function openWslMoveDialog(request: WslMoveOpenRequest): Promise<vo
 export async function recheckWslMove(): Promise<void> {
   const dialog = getDialog()
   if (dialog.stage !== 'preview') {
+    return
+  }
+  // Nothing listed (the distro preview was refused): check the whole distro again.
+  if (dialog.candidates.repoIds.length + dialog.candidates.folderWorkspaceIds.length === 0) {
+    await openWslMoveDialog({ distro: dialog.distro })
     return
   }
   const token = ++previewToken
@@ -229,6 +259,14 @@ export async function startWslMove(): Promise<void> {
   void refreshWslMoveUnfinished()
 }
 
+/** Whether the switch has begun, after which main no longer honours a cancel. */
+export function wslMoveSwitchStarted(progress: WslMoveProgressEvent | null): boolean {
+  return (
+    progress !== null &&
+    (progress.step === 'switching' || progress.step === 'finishing' || progress.step === 'done')
+  )
+}
+
 /** Main honours a cancel only until it asks the host to commit. */
 export async function cancelWslMove(): Promise<void> {
   const dialog = getDialog()
@@ -239,22 +277,8 @@ export async function cancelWslMove(): Promise<void> {
   const stopped = await window.api.wslMove.cancel(dialog.distro).catch(() => false)
   const now = getDialog()
   if (!stopped && now.stage === 'running') {
-    setDialog({ ...now, cancel: 'too-late' })
-  }
-}
-
-/** Reload through restart preparation, which backs up unsaved editors first. */
-export async function reloadAfterWslMove(): Promise<void> {
-  const dialog = getDialog()
-  if (dialog.stage !== 'result' || dialog.reload === 'reloading') {
-    return
-  }
-  setDialog({ ...dialog, reload: 'reloading' })
-  // Resolves only when the reload was refused; a landed reload replaces this document.
-  const outcome = await requestLazyChunkRecoveryReload(window)
-  const now = getDialog()
-  if (now.stage === 'result') {
-    setDialog({ ...now, reload: outcome })
+    // Before the switch a refused cancel means the run was gone or the call failed.
+    setDialog({ ...now, cancel: wslMoveSwitchStarted(now.progress) ? 'too-late' : 'idle' })
   }
 }
 
@@ -265,10 +289,16 @@ export async function reviewWslMoveAgain(): Promise<void> {
     return
   }
   const only = dialog.selected.length === 1 ? dialog.selected[0] : undefined
+  const ownGeneration = openGeneration + 1
   await openWslMoveDialog({ distro: dialog.distro, only })
   const reopened = getDialog()
   // Keep a multi-project selection the user made, within what is still listed.
-  if (reopened.stage === 'preview' && !only) {
+  if (
+    reopened.stage === 'preview' &&
+    reopened.distro === dialog.distro &&
+    ownGeneration === openGeneration &&
+    !only
+  ) {
     const listed = refsOf(reopened.candidates)
     const kept = dialog.selected.filter((ref) =>
       listed.some((c) => c.kind === ref.kind && c.id === ref.id)
@@ -279,12 +309,9 @@ export async function reviewWslMoveAgain(): Promise<void> {
   }
 }
 
-export function closeWslMoveDialog(): void {
-  if (isBusy(getDialog())) {
-    return
-  }
+/** Drops any preview reply still in flight, e.g. when the dialog closes. */
+export function invalidateWslMovePreviews(): void {
   ++previewToken
-  setDialog({ stage: 'closed' })
 }
 
 /** Committed moves whose automations the host has not turned back on yet. */
