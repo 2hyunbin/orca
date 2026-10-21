@@ -20060,6 +20060,7 @@
       "empty": "하위 에이전트를 찾을 수 없습니다."
     },
     "antigravityReferenceDescription": "이 대본을 참고 자료로 사용하여 새로운 Antigravity CLI 대화에서 계속합니다.",
+    "searchHitSourceHost": "{{value0}}에서 찾음",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → CLI",
     "continueInCli": "CLI에서 계속",
