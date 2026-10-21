@@ -6,7 +6,6 @@ import { getProvenCachedWorktrees } from '../cache/worktree-cache'
 import { ActionSheetModal } from '../components/ActionSheetModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { getHostListActionSheetActions } from '../host-list-action-sheet-actions'
-import { hostNewWorktreeRoute } from '../host-route-action-state'
 import { hostRouteWithNotice } from '../host-route-notice'
 import { useResponsiveLayout } from '../layout/responsive-layout'
 import { triggerMediumImpact } from '../platform/haptics'
@@ -29,6 +28,7 @@ import { isResumeTargetConfirmedMissing, type HomeResumeCard } from '../worktree
 import { MobileHomeEmptyState } from './MobileHomeEmptyState'
 import { MobileHomeHostList } from './MobileHomeHostList'
 import { MobileHomeListFooter } from './MobileHomeListFooter'
+import { MobileHomeNewWorkspaceSheet } from './MobileHomeNewWorkspaceSheet'
 import { MobileHomeTopBar } from './MobileHomeTopBar'
 import { useMobileHomeData } from './use-mobile-home-data'
 
@@ -45,6 +45,7 @@ export function MobileHomeScreen() {
   const forceReconnectHost = useForceReconnect()
   const [actionTarget, setActionTarget] = useState<HostProfile | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string } | null>(null)
+  const [newWorkspaceHostId, setNewWorkspaceHostId] = useState<string | null>(null)
 
   const openResume = useCallback(
     (card: HomeResumeCard) => {
@@ -122,7 +123,7 @@ export function MobileHomeScreen() {
               connectedHosts={data.connectedHosts}
               resumeCard={data.resumeCard}
               taskProvidersByHost={data.taskProvidersByHost}
-              onCreateWorkspace={(hostId) => data.router.push(hostNewWorktreeRoute(hostId))}
+              onCreateWorkspace={setNewWorkspaceHostId}
               onOpenAccounts={openMobileAccounts}
               onOpenResume={openResume}
               onOpenTasks={openMobileTasks}
@@ -180,6 +181,13 @@ export function MobileHomeScreen() {
         onConfirm={() => void handleRemove()}
         onCancel={() => setConfirmRemove(null)}
       />
+      {newWorkspaceHostId ? (
+        <MobileHomeNewWorkspaceSheet
+          hostId={newWorkspaceHostId}
+          onCreated={openMobileSession}
+          onClose={() => setNewWorkspaceHostId(null)}
+        />
+      ) : null}
     </SafeAreaView>
   )
 }

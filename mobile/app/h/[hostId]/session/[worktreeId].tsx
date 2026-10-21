@@ -11,7 +11,6 @@ import {
   shellScreenRouteKey
 } from '../../../../src/mobile-web-shell/shell-screen-route'
 import { MobileWebShellScreen } from '../../../../src/mobile-web-shell/MobileWebShellScreen'
-import type { BridgeClearableRouteParam } from '../../../../src/mobile-web-shell/bridge/bridge-route-update'
 import { PageRouteUnavailableScreen } from '../../../../src/mobile-web-shell/PageRouteUnavailableScreen'
 
 /**
@@ -50,7 +49,7 @@ export default withWorkspaceRoute(function MobileSessionScreen() {
   // what the route builder below drops: a cleared key and a key that was never there are the same
   // route.
   const erasePaneKey = useCallback(
-    (param: BridgeClearableRouteParam, value: string) => {
+    (param: 'paneKey', value: string) => {
       if (param !== 'paneKey' || paneKey === '' || value !== paneKey) {
         return
       }

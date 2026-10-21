@@ -27,7 +27,7 @@ export const BRIDGE_ROUTE_PARAM_CLEAR = 'route-param-clear'
  * The params a page may ask to have erased, closed on purpose: a page naming any param would be
  * editing the shell's route rather than spending a request the shell handed it.
  */
-export const BRIDGE_CLEARABLE_ROUTE_PARAMS = ['paneKey', 'action'] as const
+export const BRIDGE_CLEARABLE_ROUTE_PARAMS = ['paneKey'] as const
 
 export type BridgeClearableRouteParam = (typeof BRIDGE_CLEARABLE_ROUTE_PARAMS)[number]
 

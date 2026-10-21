@@ -13,7 +13,6 @@ import {
 } from '../transport/execution-host-scoped-rpc-client'
 import { serverUpdateNeededNotice } from '../host-route-notice'
 import type { ConnectionState } from '../transport/types'
-import { setHostRouteNewWorktreeVisible } from '../host-route-action-state'
 import { leaveHostRoute } from '../host-route-exit'
 import {
   getWorktreeRowIdentity,
@@ -54,7 +53,6 @@ export function useHostWorktreeActions(args: {
     state
   } = args
   const {
-    newWorktreeModalRef,
     newWorktreeModalVisibleRef,
     pinnedIds,
     setActionError,
@@ -63,7 +61,7 @@ export function useHostWorktreeActions(args: {
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
     serverWorkspaces,
-    setRouteActionState,
+    setShowNewWorktree,
     setServerNotice,
     setServerWorkspaces,
     setSleptIds,
@@ -81,18 +79,15 @@ export function useHostWorktreeActions(args: {
     leaveHostRoute(router)
   }, [router])
 
+  // Why the ref too: the catalog poll reads it from callbacks that outlive this render.
   const openNewWorktreeModal = useCallback(() => {
-    const modal = newWorktreeModalRef.current
-    if (!modal) {
-      return
-    }
     newWorktreeModalVisibleRef.current = true
-    modal.open()
-  }, [])
-
-  const setShowNewWorktreeVisible = useCallback((visible: boolean) => {
-    setRouteActionState((current) => setHostRouteNewWorktreeVisible(current, visible))
-  }, [])
+    setShowNewWorktree(true)
+  }, [newWorktreeModalVisibleRef, setShowNewWorktree])
+  const closeNewWorktreeModal = useCallback(() => {
+    newWorktreeModalVisibleRef.current = false
+    setShowNewWorktree(false)
+  }, [newWorktreeModalVisibleRef, setShowNewWorktree])
 
   const updateLocalPins = useCallback(
     (worktreeId: string, pinned: boolean) => {
@@ -303,8 +298,8 @@ export function useHostWorktreeActions(args: {
     navigateFromHostList,
     openFloatingWorkspace,
     openNewWorktreeModal,
+    closeNewWorktreeModal,
     openWorktreeSession,
-    setShowNewWorktreeVisible,
     putWorktreeToSleep,
     togglePin
   }
