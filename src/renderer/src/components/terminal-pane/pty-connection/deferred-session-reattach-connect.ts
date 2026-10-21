@@ -1,6 +1,4 @@
-import { writeTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
-import { STARTUP_CWD_FALLBACK_NOTICE } from './startup-cwd-fallback-notice'
-import { shouldWritePtyOutputForeground } from './foreground-output-scan'
+import { writeStartupCwdFallbackNotice } from './startup-cwd-fallback-notice'
 import { armPaneOwnerRetry } from './pane-owner-recovery'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
@@ -13,7 +11,7 @@ import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold
 import { PANE_NOT_LIVE_ERROR } from '../../../../../shared/pane-attach-only-view'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
-import { mainStartsPane } from './main-starts-pane'
+import { mainStartsPane, startMainPaneOnFirstView } from './main-starts-pane'
 
 import {
   awaitAgentStatusStartupSnapshot,
@@ -220,11 +218,7 @@ function connectDeferredSessionReattach(
           return NOT_REOPENED
         }
         if (!session.deps.isVisibleRef.current) {
-          // Why: a hidden pane's start waits for its first view, as a hidden agent resume does (#29459).
-          session.mainPaneStartOnReveal = () => {
-            session.mainPaneStartOnReveal = null
-            void startFreshInstead()
-          }
+          startMainPaneOnFirstView(session, () => void startFreshInstead())
           return NOT_REOPENED
         }
         // Why the binding stays: main's start reuses its id, which carries the terminal's history.
@@ -249,16 +243,8 @@ function connectDeferredSessionReattach(
         coldRestoreStartup,
         outputCallbacks.generation
       )
-      if (
-        accepted &&
-        isCurrentReattach() &&
-        result &&
-        typeof result === 'object' &&
-        result.startupCwdFallback
-      ) {
-        writeTerminalOutput(session.pane.terminal, STARTUP_CWD_FALLBACK_NOTICE, {
-          foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
-        })
+      if (accepted && isCurrentReattach()) {
+        writeStartupCwdFallbackNotice(session, result)
       }
       session.finishReattachLiveDataDeferral(accepted, outputCallbacks.generation)
       const gen = await preSignalPromise
