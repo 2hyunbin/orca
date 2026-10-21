@@ -254,6 +254,23 @@ describe('a reconnected remote pane the host could not image', () => {
     drive.dispose()
   })
 
+  it('grows a pane at the host minimum height instead of asking for the same clamped size', async () => {
+    const drive = await connectVisibleRemotePane({
+      availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },
+      snapshot: null
+    })
+    drive.pane.terminal.rows = 6
+    vi.useFakeTimers()
+    drive.reconnectWithoutImage()
+    await settle(2_000)
+
+    expect(drive.resizes()).toEqual([
+      [120, 9, { claim: true }],
+      [120, 6, { claim: true }]
+    ])
+    drive.dispose()
+  })
+
   it('puts the row back when the pane unmounts mid-repaint', async () => {
     const drive = await connectVisibleRemotePane({
       availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },

@@ -1,4 +1,8 @@
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
+import {
+  TERMINAL_VIEWPORT_MIN_ROWS,
+  clampTerminalViewport
+} from '../../../../../shared/terminal-viewport'
 import { recordTerminalFreezeBreadcrumb } from '../terminal-freeze-breadcrumbs'
 import { redactPtyIdForDiagnostics } from '../../../../../shared/pty-delivery-diagnostics'
 
@@ -32,11 +36,14 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
       return
     }
     const { cols, rows } = session.pane.terminal
-    if (cols < 1 || rows < 2) {
+    if (cols < 1 || rows < 1) {
       return
     }
-    // Why rows, not cols: a height change does not rewrap the host's scrollback.
-    if (!session.transport.resize(cols, rows - 1, { claim: true })) {
+    // Why rows, not cols: a height change does not rewrap the host's scrollback. Measured on the
+    // host's clamped grid, or a pane at the minimum height would ask for two identical sizes.
+    const hostRows = clampTerminalViewport(cols, rows).rows
+    const nudgeRows = hostRows > TERMINAL_VIEWPORT_MIN_ROWS ? hostRows - 1 : hostRows + 1
+    if (!session.transport.resize(cols, nudgeRows, { claim: true })) {
       return
     }
     recordTerminalFreezeBreadcrumb('remote-program-redraw', {
@@ -46,7 +53,7 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
     const restore = (): void => {
       clearTimeout(timer)
       session.remoteProgramRedrawRestore = null
-      // Why not forwardPtyResize: this put the PTY one row short, so it must put it back even if
+      // Why not forwardPtyResize: this moved the PTY by a row, so it must put it back even if
       // the pane was hidden meanwhile; only a viewer that took the size since owns it now.
       if (session.transport.getPtyId() !== ptyId || session.shouldSuppressDesktopPtyResize()) {
         return
@@ -59,7 +66,7 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
     session.remoteProgramRedrawRestore = restore
   }
 
-  // Why flush rather than cancel: an unmount mid-nudge would otherwise strand the PTY a row short.
+  // Why flush rather than cancel: an unmount mid-nudge would otherwise strand the PTY a row off.
   session.flushRemoteProgramRedraw = function (): void {
     session.remoteProgramRedrawRestore?.()
   }
