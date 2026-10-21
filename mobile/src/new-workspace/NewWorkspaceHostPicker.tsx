@@ -21,10 +21,18 @@ export function NewWorkspaceHostPicker({
   const hosts = useOfferedHosts(hostIds)
   const [open, setOpen] = useState(true)
   const pickedRef = useRef(false)
+  // Nothing to pick (an unreadable catalog, or every offered desktop gone) leaves the overlay rather
+  // than holding an invisible screen over Home.
+  const nothingToPick = hosts !== null && hosts.length === 0
+  useEffect(() => {
+    if (nothingToPick) {
+      router.back()
+    }
+  }, [nothingToPick, router])
   return (
     <PickerModal
       title="Create Workspace On"
-      visible={hosts !== null && open}
+      visible={hosts !== null && !nothingToPick && open}
       options={hostPickerOptions(hosts ?? [])}
       selected=""
       onSelect={(hostId) => {
@@ -41,20 +49,25 @@ export function NewWorkspaceHostPicker({
   )
 }
 
-/** The offered desktops' profiles, in the offered order; `null` until the catalog is read. */
+/** The offered desktops' profiles, in the offered order; `null` until the catalog is read, `[]` if it can't be. */
 function useOfferedHosts(hostIds: readonly string[]): HostProfile[] | null {
   const [hosts, setHosts] = useState<HostProfile[] | null>(null)
   const key = hostIds.join(',')
   useEffect(() => {
     let live = true
-    void loadHostCatalog().then((catalog) => {
-      const profiles = new Map(
-        selectConnectableHostProfiles(catalog).map((host) => [host.id, host] as const)
-      )
-      if (live) {
-        setHosts(key.split(',').flatMap((hostId) => profiles.get(hostId) ?? []))
-      }
-    })
+    void loadHostCatalog()
+      .then((catalog) => {
+        const profiles = new Map(
+          selectConnectableHostProfiles(catalog).map((host) => [host.id, host] as const)
+        )
+        return key.split(',').flatMap((hostId) => profiles.get(hostId) ?? [])
+      })
+      .catch(() => [])
+      .then((offered) => {
+        if (live) {
+          setHosts(offered)
+        }
+      })
     return () => {
       live = false
     }
