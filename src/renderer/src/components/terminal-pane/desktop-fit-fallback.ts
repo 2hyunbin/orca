@@ -41,7 +41,14 @@ export function applyDesktopFitFallbackAfterReplay(
     if (dimensions.shouldApply?.() === false) {
       return
     }
+    const rect = pane.container.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) {
+      return
+    }
     safeFit(pane)
+    if (dimensions.shouldApply?.() === false) {
+      return
+    }
     const stuckAtPriorGrid =
       dimensions.priorCols != null &&
       dimensions.priorRows != null &&

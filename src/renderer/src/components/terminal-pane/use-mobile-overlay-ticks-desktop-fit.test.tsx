@@ -5,10 +5,15 @@ import { hydrateOverrides, setFitOverride } from '@/lib/pane-manager/mobile-fit-
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { PtyTransport } from './pty-transport-types'
 import { useMobileOverlayTicks } from './use-mobile-overlay-ticks'
+import {
+  beginTerminalScrollIntentBufferRebuild,
+  endTerminalScrollIntentBufferRebuild
+} from '@/lib/pane-manager/terminal-scroll-intent-rebuild'
 
 type TestPane = {
   id: number
   terminal: {
+    buffer: { active: { type: 'normal'; viewportY: number; baseY: number } }
     cols: number
     rows: number
     refresh: ReturnType<typeof vi.fn>
@@ -26,6 +31,7 @@ type TestPane = {
 
 function createPane(): TestPane {
   const terminal = {
+    buffer: { active: { type: 'normal' as const, viewportY: 0, baseY: 0 } },
     cols: 49,
     rows: 20,
     refresh: vi.fn(),
@@ -92,15 +98,26 @@ describe('useMobileOverlayTicks desktop-fit restore', () => {
     vi.useRealTimers()
   })
 
-  function mountForPane(pane: TestPane): void {
-    const managerRef = {
+  function mountForPane(pane: TestPane) {
+    let currentPanes = [pane]
+    const managerRef: { current: PaneManager | null } = {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook only reads getPanes; safeFit reads the fixture's pane members.
-      current: { getPanes: () => [pane] } as unknown as PaneManager
+      current: {
+        getPanes: () => currentPanes.map((current) => ({ ...current }))
+      } as unknown as PaneManager
     }
-    const paneTransportsRef = {
+    const paneTransportsRef: { current: ReadonlyMap<number, Pick<PtyTransport, 'getPtyId'>> } = {
       current: new Map([[1, { getPtyId: () => 'pty-1' }]])
     }
-    render(<HookHost managerRef={managerRef} paneTransportsRef={paneTransportsRef} />)
+    const view = render(<HookHost managerRef={managerRef} paneTransportsRef={paneTransportsRef} />)
+    return {
+      managerRef,
+      paneTransportsRef,
+      unmount: view.unmount,
+      setPanes: (panes: TestPane[]) => {
+        currentPanes = panes
+      }
+    }
   }
 
   it('refits and refreshes when mobile-fit is released, not only resize bookkeeping', () => {
@@ -152,5 +169,84 @@ describe('useMobileOverlayTicks desktop-fit restore', () => {
     expect(pane.terminal.rows).toBe(20)
     expect(pane.terminal.refresh).not.toHaveBeenCalled()
     expect(pane.fitAddon.fit).not.toHaveBeenCalled()
+  })
+
+  it('drops both queued restore paths when the manager is replaced', () => {
+    const pane = createPane()
+    const { managerRef } = mountForPane(pane)
+    act(() => setFitOverride('pty-1', 'desktop-fit', 120, 40))
+    managerRef.current = null
+    flushAnimationFrames()
+    act(() => vi.advanceTimersByTime(100))
+    expect(pane.terminal.cols).toBe(49)
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+    expect(pane.fitAddon.fit).not.toHaveBeenCalled()
+  })
+
+  it('uses only the latest restore dimensions after a complete phone ownership cycle', () => {
+    const pane = createPane()
+    pane.fitAddon.proposeDimensions.mockReturnValue(null)
+    pane.fitAddon.fit.mockImplementation(() => {})
+    mountForPane(pane)
+    act(() => {
+      setFitOverride('pty-1', 'mobile-fit', 49, 20)
+      setFitOverride('pty-1', 'desktop-fit', 120, 40)
+      setFitOverride('pty-1', 'mobile-fit', 49, 20)
+      setFitOverride('pty-1', 'desktop-fit', 140, 50)
+    })
+    flushAnimationFrames()
+    act(() => vi.advanceTimersByTime(100))
+    expect(pane.terminal.cols).toBe(140)
+    expect(pane.terminal.rows).toBe(50)
+    expect(pane.terminal.resize).not.toHaveBeenCalledWith(120, 40)
+  })
+
+  it.each(['unmount', 'rebind', 'retirement', 'manager replacement', 'new phone hold'] as const)(
+    'drops replay-deferred restore after %s',
+    async (transition) => {
+      const pane = createPane()
+      const binding = mountForPane(pane)
+      beginTerminalScrollIntentBufferRebuild(pane.terminal)
+      act(() => setFitOverride('pty-1', 'desktop-fit', 120, 40))
+      flushAnimationFrames()
+      act(() => vi.advanceTimersByTime(100))
+      if (transition === 'unmount') {
+        binding.unmount()
+      } else if (transition === 'retirement') {
+        binding.setPanes([])
+      } else if (transition === 'manager replacement') {
+        binding.managerRef.current = null
+      } else if (transition === 'rebind') {
+        binding.paneTransportsRef.current = new Map([[1, { getPtyId: () => 'pty-2' }]])
+      } else {
+        act(() => setFitOverride('pty-1', 'mobile-fit', 49, 20))
+      }
+      endTerminalScrollIntentBufferRebuild(pane.terminal)
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(pane.terminal.cols).toBe(49)
+      expect(pane.terminal.refresh).not.toHaveBeenCalled()
+      expect(pane.fitAddon.fit).not.toHaveBeenCalled()
+    }
+  )
+
+  it('does not restore a replacement terminal that reused a pane id during replay', async () => {
+    const pane = createPane()
+    const replacement = createPane()
+    const binding = mountForPane(pane)
+    beginTerminalScrollIntentBufferRebuild(pane.terminal)
+    act(() => setFitOverride('pty-1', 'desktop-fit', 120, 40))
+    flushAnimationFrames()
+    act(() => vi.advanceTimersByTime(100))
+    binding.setPanes([replacement])
+    endTerminalScrollIntentBufferRebuild(pane.terminal)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(pane.terminal.cols).toBe(49)
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+    expect(replacement.terminal.cols).toBe(49)
+    expect(replacement.terminal.refresh).not.toHaveBeenCalled()
   })
 })

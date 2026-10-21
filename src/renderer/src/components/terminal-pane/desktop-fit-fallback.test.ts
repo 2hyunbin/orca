@@ -37,7 +37,7 @@ function createPane(options: { proposed?: { cols: number; rows: number }; paused
     terminal,
     container: {
       dataset: {},
-      getBoundingClientRect: () => ({ width: 800, height: 600 })
+      getBoundingClientRect: vi.fn(() => ({ width: 800, height: 600 }))
     },
     fitAddon: {
       proposeDimensions: vi.fn(() => options.proposed ?? null),
@@ -89,6 +89,24 @@ describe('desktop fit fallback', () => {
     await Promise.resolve()
     expect(pane.terminal.resize).not.toHaveBeenCalled()
     expect(pane.paintedGrid).toBeNull()
+  })
+
+  it('does not apply deferred desktop geometry after the pane becomes hidden', async () => {
+    const pane = createPane({ paused: true })
+    beginTerminalScrollIntentBufferRebuild(pane.terminal)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture supplies the pane members read by safeFit and repaint.
+    applyDesktopFitFallbackAfterReplay(pane as never, {
+      cols: 120,
+      rows: 40,
+      priorCols: 49,
+      priorRows: 20
+    })
+    pane.container.getBoundingClientRect.mockReturnValue({ width: 0, height: 0 })
+    endTerminalScrollIntentBufferRebuild(pane.terminal)
+    await Promise.resolve()
+    expect(pane.terminal.resize).not.toHaveBeenCalled()
+    expect(pane.paintedGrid).toBeNull()
+    expect(pane.terminal._core._renderService._isPaused).toBe(true)
   })
 })
 
