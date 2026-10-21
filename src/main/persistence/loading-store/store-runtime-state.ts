@@ -91,6 +91,7 @@ export class StoreRuntimeState {
   pendingAutomationRunsAfter: readonly AutomationRun[] | undefined
   githubCacheDirty = false
   githubCacheGeneration = 0
+  readonly githubCacheWriteListeners = new Set<() => void>()
   pendingGithubCacheWrite: Promise<void> | null = null
   readonly staleGithubCacheTempCleanup: Promise<void>
   /** Reclaim compatibility-export temps left by a process killed during rename. */
