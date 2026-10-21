@@ -1,3 +1,4 @@
+import { useAppStore } from '@/store'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { structuredLaunchFailure } from '@/lib/structured-agent-session-launch-failure'
@@ -32,8 +33,8 @@ export async function reportCliChatResumeFailure(
   return false
 }
 
-async function switchIntoOwner(
-  source: CliChatResumeSource,
+export async function switchIntoOwner(
+  source: Pick<CliChatResumeSource, 'agent' | 'tabId' | 'workspaceId'>,
   structuredSession: NonNullable<AiVaultSession['structuredSession']>,
   target: RuntimeClientTarget
 ): Promise<boolean> {
@@ -67,6 +68,22 @@ async function switchIntoOwner(
     undefined,
     target
   )
+  if (shown === 'activated' && structuredSession.workspaceId === source.workspaceId) {
+    const state = useAppStore.getState()
+    const tabs = state.unifiedTabsByWorktree[source.workspaceId] ?? []
+    const chat = tabs.find(
+      (tab) => tab.contentType === 'agent-session' && tab.entityId === structuredSession.sessionId
+    )
+    const group = state.groupsByWorktree[source.workspaceId]?.find((g) =>
+      g.tabOrder.includes(source.tabId)
+    )
+    if (chat && group) {
+      state.moveUnifiedTabToGroup(chat.id, group.id, {
+        index: group.tabOrder.filter((id) => id !== chat.id).indexOf(source.tabId) + 1,
+        activate: true
+      })
+    }
+  }
   return shown === 'activated'
 }
 
@@ -93,10 +110,6 @@ function toastCliChatResumeFailure(source: CliChatResumeSource, error: unknown):
     refusal.details?.reason === 'conversationOpenInTerminal'
   ) {
     toast.error(cliConversationExitGuidance(source.agent, true))
-    return
-  }
-  if (refusal?.details?.reason === 'conversationMovingToTerminal') {
-    toast.error(agentSessionWriteFailureText(refusal, 'read-history'))
     return
   }
   if (refusal?.code === 'agent_session_identity_required') {

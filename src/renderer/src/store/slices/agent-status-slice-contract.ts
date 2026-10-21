@@ -29,15 +29,6 @@ import type {
   SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
 import type { ProgramStatusFacet } from '../../../../shared/program-status/facet'
-import type { TerminalExecutionStamp } from '../../../../shared/terminal-switch'
-import type { CliConversationRowAgent } from '../../../../shared/structured-agent-cli-conversation-adoption'
-
-/** A switched terminal's conversation, before its agent reports one. Presentation only. */
-export type LaunchConversation = {
-  agent: CliConversationRowAgent
-  providerSession: AgentProviderSessionMetadata
-  execution: TerminalExecutionStamp
-}
 
 export type AgentStatusSlice = {
   /** Explicit agent status entries keyed by `${tabId}:${leafId}`; real-time only, not persisted. */
@@ -59,11 +50,6 @@ export type AgentStatusSlice = {
 
   /** Durable agent sessions captured on sleep (not live rows); power the one-click CLI resume on wake. */
   sleepingAgentSessionsByPaneKey: Record<string, SleepingAgentSessionRecord>
-
-  /** The host's switched-terminal identity rows; never a sleeping record or a status. */
-  launchConversationByPaneKey: Record<string, LaunchConversation>
-  /** Null when the pane's PTY exits: a later incarnation, even under the same id, is not it. */
-  setLaunchConversation: (paneKey: string, conversation: LaunchConversation | null) => void
 
   /** Ephemeral launch snapshots keyed by pane; hook payloads lack Orca launch settings, so the renderer supplies them from startup. */
   agentLaunchConfigByPaneKey: Record<string, AgentLaunchConfigRegistryEntry>

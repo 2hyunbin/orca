@@ -99,7 +99,12 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
 
   async shutdown(
     id: string,
-    opts: { immediate?: boolean; keepHistory?: boolean; deadlineMs?: number }
+    opts: {
+      immediate?: boolean
+      keepHistory?: boolean
+      deadlineMs?: number
+      expectedIncarnationId?: string
+    }
   ): Promise<void> {
     if (opts.keepHistory && this.disconnectOnlyPromise) {
       throw new Error('Cannot keep history after daemon disconnect has started')
@@ -119,7 +124,12 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
 
   protected async shutdownWithHistoryLock(
     id: string,
-    opts: { immediate?: boolean; keepHistory?: boolean; deadlineMs?: number }
+    opts: {
+      immediate?: boolean
+      keepHistory?: boolean
+      deadlineMs?: number
+      expectedIncarnationId?: string
+    }
   ): Promise<void> {
     // Why: shutdown can be the first lazy-client operation after restart; connect
     // before killing so a healthy daemon session is not orphaned (#7742). Connect,
@@ -170,6 +180,20 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
         (detection?.status === 'restored' && detection.hasUnreadableRecovery)
       ) {
         this.historyManager?.suspendSession(id)
+      }
+    }
+    if (opts.expectedIncarnationId) {
+      // Older daemons cannot fence kill: compare their fresh inventory immediately before it.
+      const { sessions } = await this.client.request<ListSessionsResult>(
+        'listSessions',
+        undefined,
+        remainingDaemonRequestTimeoutMs(opts.deadlineMs)
+      )
+      if (
+        sessions.find((session) => session.sessionId === id)?.incarnationId !==
+        opts.expectedIncarnationId
+      ) {
+        throw new Error('terminal_handle_stale')
       }
     }
     await this.client.request(

@@ -108,7 +108,6 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
     retainedAgentsByPaneKey: {},
     sleepingAgentSessionsByPaneKey: {},
     agentLaunchConfigByPaneKey: {},
-    launchConversationByPaneKey: {},
     retentionSuppressedPaneKeys: {},
     recentlyClosedAgentStatusTabIds: {},
     recentlyRetiredAgentStatusPaneKeys: {}

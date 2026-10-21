@@ -41,8 +41,7 @@ const TYPED_START_REFUSALS = [
   'agentCommandNotRunnable',
   'runtimeNotInstalled',
   'conversationOpenInTerminal',
-  'conversationOpenElsewhere',
-  'conversationMovingToTerminal'
+  'conversationOpenElsewhere'
 ] as const satisfies readonly (AgentSessionFailureKind &
   AgentSessionRefusalReason<'agent_session_operation_invalid'>)[]
 

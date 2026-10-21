@@ -50,10 +50,10 @@ const SOURCE = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.supported = true
-  mocks.call.mockResolvedValue({ source: SOURCE, generation: 'g1' })
+  mocks.call.mockResolvedValue({ source: SOURCE })
 })
 
-it('stops the chat on its host, opens the same-id resume in its slot, then closes the chat tab', async () => {
+it('stops the chat on its host, opens the same-id resume in its slot, leaves retirement to the admitted host launch', async () => {
   await runNativeChatCliSwitch(SWITCH)
   expect(mocks.call).toHaveBeenCalledWith({ kind: 'local' }, 'agentSession.switchToTerminal', {
     sessionId: 'chat-1'
@@ -63,17 +63,14 @@ it('stops the chat on its host, opens the same-id resume in its slot, then close
       agent: 'codex',
       worktreeId: 'wt-1',
       command: 'codex resume thread-c',
-      // The host's switch generation rides the launch to the owner that creates the terminal.
-      env: { CODEX_HOME: '/accounts/a/home', ORCA_TERMINAL_SWITCH_GENERATION: 'g1' },
+      env: { CODEX_HOME: '/accounts/a/home' },
       providerSession: { key: 'session_id', id: 'thread-c' },
       afterTabId: 'chat-tab',
       resumeOrigin: 'switch'
     })
   )
-  expect(mocks.closeUnifiedTab).toHaveBeenCalledWith('chat-tab')
-  expect(mocks.launch.mock.invocationCallOrder[0]).toBeLessThan(
-    mocks.closeUnifiedTab.mock.invocationCallOrder[0]!
-  )
+  // The committed host launch hides the source; a client receipt never stops today's native child.
+  expect(mocks.closeUnifiedTab).not.toHaveBeenCalled()
 })
 
 it('never sends a switch to a host that does not advertise it', async () => {

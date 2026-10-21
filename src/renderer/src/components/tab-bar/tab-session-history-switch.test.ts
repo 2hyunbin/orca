@@ -1,3 +1,4 @@
+import { switchAiVaultSessionToNativeChat } from '../right-sidebar/ai-vault-session-in-place-switch'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -36,8 +37,16 @@ const mocks = vi.hoisted(() => {
     resumeState: { blocked: boolean; worktreeId: string | null }
     platform: string
   } = { resumeState: { blocked: false, worktreeId: 'repo-1::/repo/wt' }, platform: 'darwin' }
-  return { ...state, resumeInChat: vi.fn(), inPlaceSwitch: false, remoteFeasible: false }
+  return {
+    ...state,
+    switchOwner: vi.fn(async () => true),
+    resumeInChat: vi.fn(),
+    inPlaceSwitch: false,
+    remoteFeasible: false
+  }
 })
+
+vi.mock('./cli-chat-resume-feedback', () => ({ switchIntoOwner: mocks.switchOwner }))
 
 // Staged host answers: its capabilities arrive over IPC at boot, and the platform from preload.
 vi.mock('@/runtime/local-runtime-capabilities', async (importOriginal) => ({
@@ -505,7 +514,7 @@ describe('one pane of a terminal tab', () => {
       false
     )
   })
-  it('presents a switched terminal’s host identity before any prompt, for its own PTY only', () => {
+  it('presents a switched terminal’s host identity before any prompt, without creating turn status', () => {
     makeState()
     const [L1, L2] = [
       '11111111-1111-4111-8111-111111111111',
@@ -533,13 +542,10 @@ describe('one pane of a terminal tab', () => {
         prompt: '',
         agentType: 'codex',
         providerSession: { key: 'session_id', id: 'thread-c' },
-        providerSessionOnly: true,
-        launchExecution: { ptyId: 'pty-1', incarnationId: 'i1' }
+        providerSessionOnly: true
       }
     })
     const state = useAppStore.getState()
-    // Presentation only: no status row and no sleeping recovery record.
-    expect(state.sleepingAgentSessionsByPaneKey).toEqual({})
     expect(state.agentStatusByPaneKey).toEqual({})
     expect(
       resolveCliChatResumeSource(state, {
@@ -548,12 +554,6 @@ describe('one pane of a terminal tab', () => {
       })
     ).toMatchObject({ agent: 'codex', providerSessionId: 'thread-c', ptyId: 'pty-1' })
     expect(paneGate(state, `term-1:${L2}`)).toBe(false)
-    layout({ [L1]: 'pty-9' })
-    expect(paneGate(useAppStore.getState(), pane)).toBe(false)
-    // Its PTY exiting ends it, so a later incarnation under the same id never inherits it.
-    layout({ [L1]: 'pty-1' })
-    useAppStore.getState().setLaunchConversation(pane, null)
-    expect(paneGate(useAppStore.getState(), pane)).toBe(false)
   })
 })
 
@@ -779,3 +779,24 @@ describe('lookupTabSessionHistoryRow', () => {
     expect(readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
   })
 })
+
+it.each(['local', 'runtime:paired-host'] as const)(
+  'History returns an owned same-id conversation on %s even with no local source pane',
+  (executionHostId) => {
+    makeState()
+    mocks.inPlaceSwitch = true
+    mocks.switchOwner.mockClear()
+    const structuredSession = { sessionId: 'owned-codex', workspaceId: WORKTREE_ID }
+    expect(
+      switchAiVaultSessionToNativeChat(row({ agent: 'codex', executionHostId, structuredSession }))
+    ).toBe(true)
+    expect(mocks.switchOwner).toHaveBeenCalledWith(
+      { agent: 'codex', tabId: '', workspaceId: WORKTREE_ID },
+      structuredSession,
+      executionHostId === 'local'
+        ? { kind: 'local' }
+        : { kind: 'environment', environmentId: 'paired-host' }
+    )
+    mocks.inPlaceSwitch = false
+  }
+)

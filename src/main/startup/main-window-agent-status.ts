@@ -25,7 +25,6 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
       launchToken,
       providerSession,
       providerSessionOnly,
-      launchExecution,
       promptInteractionKey,
       restoredUnconfirmed,
       observation,
@@ -57,7 +56,6 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
           stateStartedAt,
           ...(providerSession ? { providerSession } : {}),
           ...(observation ? { observation } : {}),
-          ...(launchExecution ? { launchExecution } : {}),
           providerSessionOnly: true
         })
         return

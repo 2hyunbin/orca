@@ -1,3 +1,6 @@
+import { switchIntoOwner } from '../tab-bar/cli-chat-resume-feedback'
+import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
+import { cliConversationRowsShareAgent } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { useAppStore } from '@/store'
 import { collectAgentPaneConversations } from '@/lib/ai-vault-tab-title-requests'
 import { inPlaceSwitchSupportedNow } from '@/lib/in-place-switch-support'
@@ -32,13 +35,18 @@ export function switchAiVaultSessionToCli(session: AiVaultSession): boolean {
 /** History's "Switch to native chat": in place when a pane in this window last reported the
  *  conversation. False otherwise, so the row opens or reveals its chat in a new tab. */
 export function switchAiVaultSessionToNativeChat(session: AiVaultSession): boolean {
-  if (!inPlaceSwitchSupportedNow(session.executionHostId, session.agent)) {
+  if (
+    !adoptsCliConversations(session.agent) ||
+    !inPlaceSwitchSupportedNow(session.executionHostId, session.agent)
+  ) {
     return false
   }
+  const agent = session.agent
   const state = useAppStore.getState()
   const pane = collectAgentPaneConversations(state, adoptsCliConversations).find(
     (candidate) =>
       candidate.providerSession.id === session.sessionId &&
+      cliConversationRowsShareAgent(candidate.agent, agent) &&
       candidate.executionHostId === session.executionHostId
   )
   const source = pane
@@ -48,7 +56,16 @@ export function switchAiVaultSessionToNativeChat(session: AiVaultSession): boole
       })
     : null
   if (!source) {
-    return false
+    const target = structuredAgentSessionTargetForHost(session.executionHostId)
+    if (!target || !session.structuredSession || !adoptsCliConversations(session.agent)) {
+      return false
+    }
+    void switchIntoOwner(
+      { agent: session.agent, tabId: '', workspaceId: session.structuredSession.workspaceId },
+      session.structuredSession,
+      target
+    )
+    return true
   }
   void runCliChatResume(source)
   return true

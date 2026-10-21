@@ -5,12 +5,7 @@ import {
 } from '../../../shared/agent-session-resume'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
-import { switchStartProcessVerdict } from './structured-session-switch-observation'
-import {
-  OrcaRuntimeWithStructuredSessionSwitchClaims,
-  switchHeldRefusal,
-  switchMovingRefusal
-} from './structured-session-switch-claims'
+import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
 import { getProviderForPty } from '../../ipc/pty/provider/registry'
 import { LocalPtyProvider } from '../../providers/local-pty-provider'
 import { inspectPtyProviderProcess } from '../../providers/pty-process-inspection'
@@ -30,7 +25,7 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../shared/structured-agent-cli-conversation-adoption'
 import { recordConversationKey } from '../../native-chat/structured-conversation-key'
 
-export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithStructuredSessionSwitchClaims {
+export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithGetWorktreePs {
   rememberSavedTerminalLaunchResult(ptyId: string, result: TerminalLaunchResult): void {
     const pty = this.ptysById.get(ptyId)
     if (pty && result.savedResumeDecision) {
@@ -99,7 +94,6 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
     }
     if (event.agentPresence?.process) {
       delete pty.savedTerminalLaunchResult
-      this.noteSwitchStartProcess(pty.ptyId, { agent, id: binding.id }, event.agentPresence.process)
     }
     if (pty.cliConversations?.incarnationId !== pty.incarnationId) {
       pty.cliConversations = { incarnationId: pty.incarnationId, byKey: new Map() }
@@ -136,9 +130,6 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
     providerSessionId: string,
     source?: { workspaceId: string; paneKey: string }
   ): Promise<void> {
-    await this.loadSwitchClaims()
-    this.assertNoPendingSwitch(agent, providerSessionId)
-    await this.assertSwitchStartsEnded(agent, providerSessionId)
     await assertCliConversationWritersExited(
       {
         rows: () => this.getAgentProviderSessionRows(),
@@ -172,81 +163,38 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
           this.terminalSleepStateByHostWorktree.has(
             hostSleepKey(LOCAL_EXECUTION_HOST_ID, workspaceId)
           ),
-        shellAlone: (pane) => this.cliWriterShellAlone(pane)
+        shellAlone: async (pane) => {
+          if (process.platform === 'win32') {
+            const provider = getProviderForPty(pane.ptyId)
+            const inspection = await inspectPtyProviderProcess(provider, pane.ptyId, {
+              expectedIncarnationId: pane.incarnationId,
+              scanChildProcesses: true,
+              ignoreDetached: true
+            })
+            const evidence = inspection.foregroundProcessEvidence
+            return (
+              inspectionShowsShellAlone(inspection) &&
+              (provider instanceof LocalPtyProvider ||
+                (evidence?.ptyId === pane.ptyId &&
+                  evidence.ptyIncarnationId === pane.incarnationId &&
+                  evidence.verdict === 'unverifiable' &&
+                  evidence.reason === 'windows_ssh_foreground_unavailable'))
+            )
+          }
+          const processes = await this.ptyController?.listProcesses?.(LOCAL_EXECUTION_HOST_ID)
+          const entry = processes?.find((candidate) => candidate.id === pane.ptyId)
+          const pty = this.ptysById.get(pane.ptyId)
+          return (
+            !!entry?.rootProcessId &&
+            !!entry.incarnationId &&
+            entry.incarnationId === pty?.incarnationId &&
+            (await posixCliWriterShellAlone(entry.rootProcessId))
+          )
+        }
       },
       agent,
       providerSessionId,
       source && { paneKey: source.paneKey, worktreeId: source.workspaceId }
-    )
-    // A switch spawn admitted during the census either registered first or read this chat's reservation.
-    this.assertNoPendingSwitch(agent, providerSessionId, true)
-  }
-
-  async releaseEndedSwitchStarts(agent: string, id: string): Promise<void> {
-    await this.loadSwitchClaims()
-    await this.assertSwitchStartsEnded(agent, id).catch(() => undefined)
-  }
-
-  /** A switch's start holds its conversation until every agent recorded there is proved exited and
-   *  either its owner proves the execution ended, or its startup settled with that exact shell alone. */
-  private async assertSwitchStartsEnded(agent: string, id: string): Promise<void> {
-    for (const claim of this.switchClaimsFor(agent, id)) {
-      if (!claim.accepted) {
-        throw switchMovingRefusal()
-      }
-      const seen = await this.observeSwitch(claim, true)
-      if (seen.state === 'bound') {
-        await this.noteSwitchBound(claim, seen)
-      }
-      const pane = seen.state === 'bound' ? this.cliWriterPtyPane(seen.ptyId) : null
-      // A root exit is not the agents' exit: a detached one outlives its shell.
-      const agentsExited = (
-        await Promise.all(claim.processes.map(switchStartProcessVerdict))
-      ).every((verdict) => verdict === 'exited')
-      const over =
-        agentsExited &&
-        (seen.state === 'ended' ||
-          (seen.state === 'bound' &&
-            seen.startupSettled &&
-            claim.processes.length > 0 &&
-            pane?.incarnationId === seen.incarnationId &&
-            (await this.cliWriterShellAlone(pane))))
-      if (over) {
-        await this.releaseSwitchClaim(claim)
-        continue
-      }
-      throw seen.state === 'pending' || (seen.state === 'bound' && !seen.startupSettled)
-        ? switchMovingRefusal()
-        : switchHeldRefusal()
-    }
-  }
-
-  private async cliWriterShellAlone(pane: CliWriterPane): Promise<boolean> {
-    if (process.platform === 'win32') {
-      const provider = getProviderForPty(pane.ptyId)
-      const inspection = await inspectPtyProviderProcess(provider, pane.ptyId, {
-        expectedIncarnationId: pane.incarnationId,
-        scanChildProcesses: true,
-        ignoreDetached: true
-      })
-      const evidence = inspection.foregroundProcessEvidence
-      return (
-        inspectionShowsShellAlone(inspection) &&
-        (provider instanceof LocalPtyProvider ||
-          (evidence?.ptyId === pane.ptyId &&
-            evidence.ptyIncarnationId === pane.incarnationId &&
-            evidence.verdict === 'unverifiable' &&
-            evidence.reason === 'windows_ssh_foreground_unavailable'))
-      )
-    }
-    const processes = await this.ptyController?.listProcesses?.(LOCAL_EXECUTION_HOST_ID)
-    const entry = processes?.find((candidate) => candidate.id === pane.ptyId)
-    const pty = this.ptysById.get(pane.ptyId)
-    return (
-      !!entry?.rootProcessId &&
-      !!entry.incarnationId &&
-      entry.incarnationId === pty?.incarnationId &&
-      (await posixCliWriterShellAlone(entry.rootProcessId))
     )
   }
 }

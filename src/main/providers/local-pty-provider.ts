@@ -53,7 +53,6 @@ import {
 } from './local-pty-session-operations'
 import { spawnLocalPty } from './local-pty-spawn'
 import { cancelAllPendingLocalPtySpawns } from './local-pty-spawn-state'
-import { localTerminalSwitchOwner, observeLocalTerminalSwitch } from './local-pty-terminal-switch'
 import { killAllLocalPtys, killOrphanedLocalPtys, shutdownLocalPty } from './local-pty-termination'
 
 export type { LocalPtyProviderOptions } from './local-pty-provider-types'
@@ -82,10 +81,6 @@ export class LocalPtyProvider implements IPtyProvider {
    */
   spawn(args: PtySpawnOptions): Promise<PtySpawnResult> {
     return spawnLocalPty(args, () => this.opts)
-  }
-  readonly terminalSwitches = {
-    owner: async () => localTerminalSwitchOwner(),
-    observe: observeLocalTerminalSwitch
   }
 
   // Local PTYs are always attached -- no-op. Remote providers use this to resubscribe.
@@ -117,7 +112,10 @@ export class LocalPtyProvider implements IPtyProvider {
     return getLocalPtyAppliedSize(id)
   }
 
-  shutdown(id: string, opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void> {
+  shutdown(
+    id: string,
+    opts: { immediate?: boolean; keepHistory?: boolean; expectedIncarnationId?: string }
+  ): Promise<void> {
     return shutdownLocalPty(id, opts)
   }
 

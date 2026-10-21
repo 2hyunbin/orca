@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { assertCliConversationWritersExited } from '../runtime/structured-agent-cli-writers'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, postHookEvent, PANE } from './server.test-fixtures'
 
@@ -61,31 +62,6 @@ describe('a resume launch seeds the pane identity', () => {
         providerSession: RESUMED,
         providerSessionOnly: true
       })
-    ])
-  })
-
-  it('names a switch start’s exact execution, and a new incarnation there re-seeds it', async () => {
-    const server = await startServer()
-    const published = vi.fn()
-    server.setListener(published)
-    const seed = (incarnationId: string) =>
-      server.recordLaunchResumeIdentity({
-        paneKey: PANE,
-        agentType: 'codex',
-        providerSession: RESUMED,
-        launchedAt: Date.now(),
-        execution: { ptyId: 'pty-1', incarnationId }
-      })
-    seed('i1')
-    seed('i1')
-    seed('i2')
-    expect(published.mock.calls.map(([row]) => row.launchExecution)).toEqual([
-      { ptyId: 'pty-1', incarnationId: 'i1' },
-      { ptyId: 'pty-1', incarnationId: 'i2' }
-    ])
-    // A reloaded renderer reads the same stamp from the snapshot.
-    expect(server.getStatusSnapshotForPane(PANE)).toEqual([
-      expect.objectContaining({ launchExecution: { ptyId: 'pty-1', incarnationId: 'i2' } })
     ])
   })
 
@@ -155,7 +131,7 @@ describe('a resume launch seeds the pane identity', () => {
     })
   })
 
-  it('keeps the seeded identity across a host restart', async () => {
+  it('keeps the no-prompt launch identity across restart and refuses idle Codex until its shell is alone', async () => {
     const server = await startServer()
     server.recordLaunchResumeIdentity({
       paneKey: PANE,
@@ -175,6 +151,28 @@ describe('a resume launch seeds the pane identity', () => {
         providerSessionOnly: true
       })
     ])
+    let shellAlone = false
+    const writers = {
+      rows: () => restarted.getStatusSnapshotForPane(PANE),
+      saved: () => [],
+      observation: (row: Parameters<AgentHookServer['readCliWriterObservation']>[0]) =>
+        restarted.readCliWriterObservation(row),
+      terminal: () => ({
+        pane: { ptyId: 'shell', incarnationId: 'shell-1', identity: 'shell:shell-1' }
+      }),
+      links: () => [],
+      sleeping: () => false,
+      shellAlone: async () => shellAlone
+    }
+    await expect(
+      assertCliConversationWritersExited(writers, 'codex', RESUMED.id)
+    ).rejects.toMatchObject({
+      refusal: { details: { reason: 'conversationHeldElsewhere' } }
+    })
+    shellAlone = true
+    await expect(
+      assertCliConversationWritersExited(writers, 'codex', RESUMED.id)
+    ).resolves.toBeUndefined()
   })
 
   it('ignores a pane key that is not a stable tab:leaf key', async () => {

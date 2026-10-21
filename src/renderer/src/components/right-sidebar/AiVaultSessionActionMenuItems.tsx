@@ -37,7 +37,8 @@ export function SessionActionMenuItems({
   onOpenCwd,
   deleteBlockedReason,
   onDelete,
-  inPlaceAgent
+  inPlaceAgent,
+  switchLoading
 }: {
   menuKind?: 'dropdown' | 'context'
   resumeDisabled: boolean
@@ -63,6 +64,7 @@ export function SessionActionMenuItems({
   // Null when Delete is offered; otherwise the tooltip explaining why it isn't.
   deleteBlockedReason: string | null
   onDelete?: () => void
+  switchLoading?: boolean
   inPlaceAgent?: AiVaultAgent
 }) {
   const Item = menuKind === 'context' ? ContextMenuItem : DropdownMenuItem
@@ -130,6 +132,7 @@ export function SessionActionMenuItems({
         onResumeInNewChat={onResumeInNewChat}
         onResumeInNewCli={onResumeInNewCli}
         inPlaceAgent={inPlaceAgent}
+        switchLoading={switchLoading}
       />
       {onCopyResume ? (
         <Item onSelect={onCopyResume}>

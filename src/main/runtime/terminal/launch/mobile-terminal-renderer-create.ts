@@ -37,7 +37,7 @@ export type MobileTerminalCreateOptions = {
   agentPrompt?: string
   launchConfig?: SleepingAgentLaunchConfig
   launchAgent?: TuiAgent
-  /** A switch's start: its spawn admission judges and claims the conversation. */
+  /** A switch's start: its ordinary spawn admission checks the conversation. */
   resumeProviderSession?: AgentProviderSessionMetadata
   resumeOrigin?: 'switch'
   viewMode?: 'terminal' | 'chat'

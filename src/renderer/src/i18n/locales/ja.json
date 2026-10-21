@@ -18390,7 +18390,6 @@
         "runtimeNotInstalled": "{{agent}} はこのチャットを実行しているコンピューターにインストールされていません。最新バージョンの Orca でチャットからインストールしてください。",
         "conversationOpenElsewhere": "Codex はまだ別の場所でこの会話を開いています。そこで閉じてから、もう一度お試しください。",
         "conversationOpenInTerminal": "Orca は {{agent}} がターミナルで終了したことを確認できません。そこで実行中のものを停止するかターミナルを閉じてから、もう一度お試しください。",
-        "conversationMovingToTerminal": "この会話はターミナルに移動中です。そちらで使用するか、少し待ってからもう一度お試しください。",
         "chooseClaudeAccount": "Claude アカウントの設定で選択または追加してください。",
         "chooseClaudeAccountThenRunCommand": "Claude アカウントの設定で選択または追加してから、/{{command}} をもう一度実行してください。",
         "chooseClaudeAccountThenSend": "Claude アカウントの設定で選択または追加してから、メッセージをもう一度送信してください。",
@@ -19124,7 +19123,9 @@
           "exitAgentFirst": "切り替えるには、このターミナルで {{agent}} を終了してください。",
           "waitForReply": "応答が終わるまで待つか停止してから、切り替えてください。",
           "stopUnconfirmed": "{{agent}} が停止したことを確認できませんでした。もう一度お試しください。",
-          "failed": "この会話を CLI に切り替えられませんでした。"
+          "failed": "この会話を CLI に切り替えられませんでした。",
+          "noConversation": "このターミナルには、保存された会話がまだありません。",
+          "unavailable": "{{agent}} の切り替えはまだ利用できません。"
         },
         "BrowserTab": {
           "closeOthers": "その他を閉じる",

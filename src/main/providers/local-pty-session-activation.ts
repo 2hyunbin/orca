@@ -1,5 +1,4 @@
 import type * as pty from 'node-pty'
-import { settleLocalTerminalSwitchStartup } from './local-pty-terminal-switch'
 import { isBracketedPasteSafeShell } from '../../shared/startup-command-submission'
 import {
   discardStagedStartupCommand,
@@ -207,12 +206,9 @@ export function activateLocalPtySession(args: {
         readiness.setStartupCommandCleanup(cleanup)
       },
       {
-        bracketedPasteSafe,
-        onSettled: () => settleLocalTerminalSwitchStartup(id)
+        bracketedPasteSafe
       }
     )
-  } else {
-    settleLocalTerminalSwitchStartup(id)
   }
 
   // Why: publish the OS pid for the memory collector; proc.pid can be briefly 0/undefined before node-pty sees the child.

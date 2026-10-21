@@ -143,9 +143,6 @@ export abstract class DaemonPtySpawnRequest extends DaemonPtyRuntimeState {
           : {}),
         ...(!context.attachOnly && opts.agentSessionEnsure
           ? { agentSessionEnsure: opts.agentSessionEnsure }
-          : {}),
-        ...(!context.attachOnly && opts.switchGeneration
-          ? { switchGeneration: opts.switchGeneration, switchOwner: opts.switchOwner }
           : {})
       }
       return opts.signal

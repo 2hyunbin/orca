@@ -1,17 +1,10 @@
-// `agentSession.switchToTerminal` — the chat's half of moving its conversation into a terminal on
-// the same id. Before any stop it checks the route can hold the start and prepares the recipe; then,
-// in the chat's ordered step, it refuses unless idle, registers one switch generation and stops the
-// agent with proven exit. Only that generation's terminal owner can later end the switch.
-// Gated per agent by `agent-session.structured.switch.v1:<agent>`; a client never falls back to close.
-
-import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
+// Prepare the ordinary same-id resume recipe before the ordered idle-only, proven-exit stop.
 import { inPlaceSwitchEnabled } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import type { AiVaultChatForkSource } from '../../../../shared/ai-vault-resume-preparation'
 import {
   prepareStructuredChatCliTranscript,
   resolveStructuredChatCliSource
 } from '../../../ai-vault/structured-chat-cli-fork'
-import type { SwitchClaim } from '../../session-tabs/structured-session-switch-claims'
 import { defineMethod } from '../core'
 import {
   ensureStructuredHostInstalled,
@@ -25,10 +18,7 @@ export const STRUCTURED_AGENT_SESSION_SWITCH_TO_TERMINAL_METHODS = [
     name: 'agentSession.switchToTerminal',
     permission: 'workspace',
     params: OptionsParams,
-    handler: async (
-      params,
-      ctx
-    ): Promise<{ source: AiVaultChatForkSource; generation: string }> => {
+    handler: async (params, ctx): Promise<{ source: AiVaultChatForkSource }> => {
       requireStructuredCapability(ctx)
       await ensureStructuredHostInstalled(ctx)
       const host = requireStructuredSessionHost(ctx, params.sessionId)
@@ -41,12 +31,6 @@ export const STRUCTURED_AGENT_SESSION_SWITCH_TO_TERMINAL_METHODS = [
         { sessionId: record.sessionId, workspaceId: record.location.workspaceId },
         false
       )
-      const owner = await ctx.runtime.terminalSwitchOwner()
-      if (!owner) {
-        throw agentSessionRefusalError('structured_agent_session_unsupported', {
-          reason: 'hostUnsupported'
-        })
-      }
       const prepared = await prepareStructuredChatCliTranscript(
         source,
         (args) => ctx.runtime.prepareAiVaultSessionResume(args),
@@ -55,29 +39,8 @@ export const STRUCTURED_AGENT_SESSION_SWITCH_TO_TERMINAL_METHODS = [
       if (!prepared.cliForkSource) {
         throw new Error('This chat has no saved conversation available on this host.')
       }
-      // A switch whose owner proved its start over no longer holds the conversation.
-      await ctx.runtime.releaseEndedSwitchStarts(source.agent, source.providerSessionId)
-      let claim: SwitchClaim | undefined
-      try {
-        await host.switchToTerminal(params.sessionId, () => {
-          claim = ctx.runtime.registerSwitchClaim(
-            source.agent,
-            source.providerSessionId,
-            record.sessionId,
-            owner
-          )
-        })
-        if (!claim) {
-          throw new Error('This chat could not switch to a terminal.')
-        }
-        return { source: prepared.cliForkSource, generation: claim.generation }
-      } catch (error) {
-        // No recipe left this host, so nothing can start under the claim.
-        if (claim) {
-          ctx.runtime.dropSwitchClaim(claim)
-        }
-        throw error
-      }
+      await host.switchToTerminal(params.sessionId)
+      return { source: prepared.cliForkSource }
     }
   })
 ]

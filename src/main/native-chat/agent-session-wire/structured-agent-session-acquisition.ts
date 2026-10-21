@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util'
 import { abortSignalReason } from '../../../shared/abort-signal-reason'
-import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import type {
   AgentSessionProcessIdentity,
   AgentSessionRecord
@@ -49,12 +48,9 @@ export async function acquireOwner(
     try {
       await input.assertNoTerminalWriter?.(record)
     } catch (error) {
-      const moving =
-        isAgentSessionRefusalError(error) &&
-        error.refusal.details?.reason === 'conversationMovingToTerminal'
       // Not a code: a code message would travel as the census's own conflict, not this reason.
       throw new AgentSessionPreSpawnError(error, {
-        reason: moving ? 'conversationMovingToTerminal' : 'conversationOpenInTerminal',
+        reason: 'conversationOpenInTerminal',
         message: 'a terminal may still be writing this conversation'
       })
     }

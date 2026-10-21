@@ -115,7 +115,7 @@ export type RuntimePtySpawnArgs = {
   envToDelete?: string[]
   resumeProviderSession?: AgentProviderSessionMetadata
   /** `saved`: built from a pane's saved facts, which the host refuses for a chat's conversation. */
-  resumeOrigin?: 'saved' | 'switch'
+  resumeOrigin?: 'saved'
   connectionId?: string | null
   worktreeId?: string
   preAllocatedHandle?: string

@@ -33,7 +33,10 @@ vi.mock('../terminal-pane/pty-dispatcher', () => ({
     return () => mocks.exitWatchers.delete(ptyId)
   }
 }))
-vi.mock('./cli-chat-resume-source', () => ({ resolveCliChatResumeSource: () => mocks.source }))
+vi.mock('./cli-chat-resume-source', () => ({
+  useCliChatResumeCapability: () => {},
+  resolveCliChatResumeSource: () => mocks.source
+}))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   supportsStructuredAgentSessionCliSource: mocks.sourceCapability,
   supportsStructuredAgentSessionCreateMessage: mocks.createCapability,
@@ -83,6 +86,7 @@ import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { useAppStore } from '@/store'
 import { runCliChatResume } from './cli-chat-resume-run'
+import { switchIntoOwner } from './cli-chat-resume-feedback'
 import {
   resetStructuredAgentLaunchRegistryForTests,
   structuredLaunchStates
@@ -135,6 +139,12 @@ beforeEach(() => {
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAppStore.setState({ activeWorktreeId: 'wt-1' })
   mocks.source = SOURCE
+  mocks.switchCapability.mockResolvedValue(false)
+  mocks.rpc.mockImplementation(async (_target, method) =>
+    method === 'terminal.resolvePane'
+      ? { terminal: { handle: 'handle-1', ptyId: 'pty-1', incarnationId: 'i1' } }
+      : { close: { ptyKilled: true } }
+  )
   mocks.sourceCapability.mockResolvedValue(true)
   mocks.createCapability.mockResolvedValue(true)
   mocks.call.mockImplementation(
@@ -197,6 +207,42 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(isEmptyWorkspaceDefaultSurfacePending('wt-1')).toBe(false)
   })
 
+  it('publishes the returning chat after its source in the source group even while another group is active', async () => {
+    const [source] = seedTabs()
+    const other = useAppStore.getState().createEmptySplitGroup('wt-1', source.groupId, 'right')!
+    useAppStore.getState().focusGroup('wt-1', other)
+    mocks.source = { ...SOURCE, tabId: source.id, paneKey: `${source.id}:leaf` }
+    await runCliChatResume(mocks.source)
+    const chat = tabs().find((tab) => tab.contentType === 'agent-session')!
+    const group = useAppStore
+      .getState()
+      .groupsByWorktree['wt-1'].find((g) => g.id === source.groupId)!
+    expect(chat.groupId).toBe(source.groupId)
+    expect(group.tabOrder[group.tabOrder.indexOf(source.id) + 1]).toBe(chat.id)
+  })
+
+  it('moves an existing owner back to the source group and position after readiness', async () => {
+    const [source] = seedTabs()
+    const other = useAppStore.getState().createEmptySplitGroup('wt-1', source.groupId, 'right')!
+    const chat = useAppStore
+      .getState()
+      .createUnifiedTab('wt-1', 'agent-session', { entityId: 'owner-chat', targetGroupId: other })
+    mocks.switchCapability.mockResolvedValue(true)
+    mocks.call.mockResolvedValue({ ok: true })
+    expect(
+      await switchIntoOwner(
+        { agent: 'codex', tabId: source.id, workspaceId: 'wt-1' },
+        { sessionId: 'owner-chat', workspaceId: 'wt-1' },
+        { kind: 'local' }
+      )
+    ).toBe(true)
+    const group = useAppStore
+      .getState()
+      .groupsByWorktree['wt-1'].find((g) => g.id === source.groupId)!
+    expect(group.tabOrder[group.tabOrder.indexOf(source.id) + 1]).toBe(chat.id)
+    expect(tabs().find((tab) => tab.id === chat.id)?.groupId).toBe(source.groupId)
+  })
+
   it('retires an unsent click during create capability waiting, even if the same source returns', async () => {
     const capability = deferred<boolean>()
     mocks.createCapability.mockReturnValue(capability.promise)
@@ -206,6 +252,12 @@ describe('CLI identity resume through the existing launch owner', () => {
     useAppStore.setState({})
     await running
     mocks.source = SOURCE
+    mocks.switchCapability.mockResolvedValue(false)
+    mocks.rpc.mockImplementation(async (_target, method) =>
+      method === 'terminal.resolvePane'
+        ? { terminal: { handle: 'handle-1', ptyId: 'pty-1', incarnationId: 'i1' } }
+        : { close: { ptyKilled: true } }
+    )
     capability.resolve(true)
     await vi.waitFor(() => expect([...structuredLaunchStates()]).toHaveLength(0))
     expect(mocks.call).not.toHaveBeenCalled()
@@ -324,7 +376,13 @@ describe('CLI identity resume through the existing launch owner', () => {
       kind: 'local'
     })
     expect(closed).toHaveBeenCalledOnce()
-    expect(closed.mock.calls[0]?.[0].detail).toEqual({ tabId: 'tab-1', leafId })
+    expect(closed.mock.calls[0]?.[0].detail).toEqual({
+      tabId: 'tab-1',
+      leafId,
+      expectedPtyId: 'pty-1',
+      preservePty: true,
+      retireSurface: true
+    })
     expect(tabs()).toEqual([])
 
     // A paired source is closed by its host, fenced on the incarnation it started with, so a

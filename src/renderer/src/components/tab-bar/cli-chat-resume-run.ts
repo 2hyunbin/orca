@@ -17,46 +17,76 @@ import { reportCliChatResumeFailure } from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
 import { panePtyId } from '@/lib/ai-vault-tab-title-requests'
 import { subscribeToPtyExit } from '../terminal-pane/pty-dispatcher'
-import { inspectRuntimeTerminalProcess } from '@/runtime/runtime-terminal-inspection'
+import type { RuntimeTerminalResolvePane } from '../../../../shared/runtime-types'
 import { getRemoteRuntimePtyOwner } from '@/runtime/runtime-terminal-stream'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 
-/** The incarnation the execution host reports for a PTY; null when it reports none. */
-const hostPtyIncarnation = (ptyId: string): Promise<string | null> =>
-  inspectRuntimeTerminalProcess(ptyId).then(
-    (inspection) => inspection.foregroundProcessEvidence?.ptyIncarnationId ?? null,
-    () => null
-  )
+/** Capture the existing host handle and incarnation before starting the destination. */
+async function captureSourceTerminal(source: CliChatResumeSource) {
+  const owner = source.ptyId ? getRemoteRuntimePtyOwner(source.ptyId) : null
+  if (isRemoteRuntimePtyId(source.ptyId) && !owner) {
+    return null
+  }
+  const target = owner?.target ?? { kind: 'local' as const }
+  try {
+    const { terminal } = await callRuntimeRpc<{ terminal: RuntimeTerminalResolvePane }>(
+      target,
+      'terminal.resolvePane',
+      {
+        paneKey: source.paneKey,
+        worktreeId: source.workspaceId
+      }
+    )
+    return terminal.incarnationId && (owner || terminal.ptyId === source.ptyId)
+      ? {
+          target,
+          handle: owner?.terminal ?? terminal.handle,
+          incarnationId: terminal.incarnationId
+        }
+      : null
+  } catch {
+    return null
+  }
+}
 
-/** The chat took the conversation, so the terminal pane it came from closes (its tab with it):
- *  only that execution, never a sibling or replacement. A paired host closes it under its own
- *  incarnation fence; a local PTY, whose host may report none, is fenced by its exit, which
- *  precedes any reuse of its id. */
+/** The execution host closes only the captured shell; refused or unknown closes leave it alone. */
 async function retireSwitchedTerminalPane(
   source: CliChatResumeSource,
   sourceExited: () => boolean,
-  expected: Promise<string | null>
+  expected: ReturnType<typeof captureSourceTerminal>
 ): Promise<void> {
-  const pane = parsePaneKey(source.paneKey)
-  const incarnation = await expected
-  const owner = source.ptyId ? getRemoteRuntimePtyOwner(source.ptyId) : null
-  if (owner || isRemoteRuntimePtyId(source.ptyId)) {
-    if (owner && incarnation) {
-      const params = { terminal: owner.terminal, expectedIncarnationId: incarnation }
-      await callRuntimeRpc(owner.target, 'terminal.close', params).catch(() => undefined)
-    }
+  const captured = await expected
+  if (!captured || sourceExited()) {
     return
   }
-  if (
-    pane &&
-    source.ptyId &&
-    (!incarnation || (await hostPtyIncarnation(source.ptyId)) === incarnation) &&
-    !sourceExited() &&
-    panePtyId(useAppStore.getState(), source.paneKey) === source.ptyId
-  ) {
-    const detail: CloseTerminalPaneDetail = { tabId: pane.tabId, leafId: pane.leafId }
-    window.dispatchEvent(new CustomEvent(CLOSE_TERMINAL_PANE_EVENT, { detail }))
+  try {
+    const { close } = await callRuntimeRpc<{ close: { ptyKilled: boolean } }>(
+      captured.target,
+      'terminal.close',
+      {
+        terminal: captured.handle,
+        expectedIncarnationId: captured.incarnationId
+      }
+    )
+    const pane = parsePaneKey(source.paneKey)
+    if (
+      captured.target.kind === 'local' &&
+      close.ptyKilled &&
+      pane &&
+      panePtyId(useAppStore.getState(), source.paneKey) === source.ptyId
+    ) {
+      const detail: CloseTerminalPaneDetail = {
+        tabId: pane.tabId,
+        leafId: pane.leafId,
+        expectedPtyId: source.ptyId,
+        preservePty: true,
+        retireSurface: true
+      }
+      window.dispatchEvent(new CustomEvent(CLOSE_TERMINAL_PANE_EVENT, { detail }))
+    }
+  } catch {
+    /* The source stays readable when its close is unconfirmed. */
   }
 }
 
@@ -124,7 +154,7 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   changed()
   // Why any exit: a reused id's next incarnation starts only after this one exits.
   let sourceExited = false
-  const sourceIncarnation = source.ptyId ? hostPtyIncarnation(source.ptyId) : Promise.resolve(null)
+  const sourceIncarnation = captureSourceTerminal(source)
   const stopExitWatch = source.ptyId
     ? subscribeToPtyExit(source.ptyId, () => {
         sourceExited = true
@@ -153,14 +183,17 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
     clearTimeout(timer)
     return true
   }
+  let inPlace = false
   try {
-    if (
-      target.kind !== 'local' &&
-      !(await waitForPromiseWithSignal(
-        supportsInPlaceSwitch(target, source.agent),
-        controller.signal
-      ))
-    ) {
+    await waitForPromiseWithSignal(sourceIncarnation, controller.signal)
+    if (!isCurrent()) {
+      return
+    }
+    inPlace = await waitForPromiseWithSignal(
+      supportsInPlaceSwitch(target, source.agent),
+      controller.signal
+    )
+    if (target.kind !== 'local' && !inPlace) {
       return
     }
     const cliSourceSupported = await waitForPromiseWithSignal(
@@ -190,17 +223,30 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
           : {})
       }
     })
+    const state = useAppStore.getState()
+    const group = state.groupsByWorktree[source.workspaceId]?.find((g) =>
+      g.tabOrder.includes(source.tabId)
+    )
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan,
       hooks: { beforeCreate: handoff },
       afterTabId: source.tabId,
+      target: group
+        ? {
+            surfaceAddress: {
+              worktreeId: source.workspaceId,
+              targetGroupId: group.id,
+              precedingTabIds: group.tabOrder.slice(0, group.tabOrder.indexOf(source.tabId) + 1)
+            }
+          }
+        : undefined,
       deferPublication: true
     })
     if (!launch) {
       return
     }
     const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
-    if (result.kind === 'structured') {
+    if (result.kind === 'structured' && inPlace) {
       await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
     } else if (
       result.kind === 'failed' &&
@@ -208,14 +254,18 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
       pending.get(key) === controller &&
       (await reportCliChatResumeFailure(source, result.error, target))
     ) {
-      await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      if (inPlace) {
+        await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      }
     }
   } catch (error) {
     if (
       pending.get(key) === controller &&
       (await reportCliChatResumeFailure(source, error, target))
     ) {
-      await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      if (inPlace) {
+        await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      }
     }
   } finally {
     clearTimeout(timer)

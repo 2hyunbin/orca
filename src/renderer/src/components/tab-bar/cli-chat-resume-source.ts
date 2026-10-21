@@ -1,3 +1,6 @@
+import { useAppStore } from '@/store'
+import { useInPlaceSwitchCapability } from '@/lib/in-place-switch-support'
+import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
 import {
   collectAgentPaneConversations,
@@ -64,4 +67,13 @@ export function resolveCliChatResumeSource(
     executionHostId: conversation.executionHostId,
     ptyId: panePtyId(state, conversation.paneKey)
   }
+}
+
+/** Capability settlement must re-render readers even when pane state did not change. */
+export function useCliChatResumeCapability(
+  worktreeId: string,
+  agent = 'codex'
+): boolean | undefined {
+  const host = useAppStore((state) => getExecutionHostIdForWorktree(state, worktreeId))
+  return useInPlaceSwitchCapability(host, agent)
 }

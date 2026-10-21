@@ -18655,7 +18655,6 @@
         "runtimeNotInstalled": "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Orca.",
         "conversationOpenElsewhere": "Codex still has this conversation open somewhere else. Close it there, then try again.",
         "conversationOpenInTerminal": "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
-        "conversationMovingToTerminal": "This conversation is moving to a terminal. Use it there, or wait a moment and try again.",
         "chooseClaudeAccount": "Choose or add one in Claude Accounts settings.",
         "chooseClaudeAccountThenRunCommand": "Choose or add one in Claude Accounts settings, then run /{{command}} again.",
         "chooseClaudeAccountThenSend": "Choose or add one in Claude Accounts settings, then send your message again.",
@@ -19411,7 +19410,9 @@
           "exitAgentFirst": "Exit {{agent}} in this terminal to switch.",
           "waitForReply": "Wait for the reply to finish or stop it, then switch.",
           "stopUnconfirmed": "Couldn't confirm {{agent}} stopped. Try again.",
-          "failed": "Couldn't switch this conversation to the CLI."
+          "failed": "Couldn't switch this conversation to the CLI.",
+          "noConversation": "No saved conversation is available in this terminal yet.",
+          "unavailable": "Switching {{agent}} is not available yet."
         },
         "BrowserTab": {
           "closeOthers": "Close Others",

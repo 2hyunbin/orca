@@ -35,7 +35,12 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
   const chooseFresh = async (): Promise<void> => {
     ctx.spawnOptions.env = { ...ctx.spawnOptions.env }
     args.launchConfig = ctx.effectiveLaunchConfig
-    ctx.resumeAdmission = await chooseSavedResumeFreshLaunch(ctx, args, ctx.stablePaneKey)
+    ctx.resumeAdmission = await chooseSavedResumeFreshLaunch(
+      ctx.deps.runtime,
+      args,
+      ctx.expectedWslDistro,
+      ctx.spawnOptions
+    )
     if (captured && ctx.resumeAdmission) {
       ctx.resumeAdmission.refused = captured.refused
       ctx.resumeAdmission.sourceRecord = captured.sourceRecord

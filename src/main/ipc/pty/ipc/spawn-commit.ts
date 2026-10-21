@@ -1,3 +1,4 @@
+import { retireChatForAdmittedTerminalLaunch } from '../../../runtime/session-tabs/structured-session-terminal-launch-retirement'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { agentHookServer } from '../../../agent-hooks/server'
 import { registerPty } from '../../../memory/pty-registry'
@@ -177,8 +178,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
     worktreeId: args.worktreeId,
     launchedAt: ctx.codexHomeLaunchStartedAt,
     resumeArgvDropped: ctx.codexResumeLaunch.droppedResumeArgv,
-    result: ctx.result,
-    switchGeneration: ctx.spawnOptions.switchGeneration
+    result: ctx.result
   })
   // Why: record the spawn-result pid once here so the memory module needn't reach back into ipc/pty on a hot path (works for in-process and daemon-hosted PTYs).
   const spawnedPid = ctx.result.pid ?? null
@@ -252,6 +252,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
         ? { launchEnv: ctx.baseEnv }
         : {})
   })
+  await retireChatForAdmittedTerminalLaunch(ctx.deps.runtime, args, response)
   return resolvePaneSpawnReservation(
     ctx.paneSpawnReservationKey,
     ctx.paneSpawnReservation,

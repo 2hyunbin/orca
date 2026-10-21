@@ -48,7 +48,6 @@ export const AGENT_SESSION_FAILURE_KINDS = [
   'runtimeNotInstalled',
   'conversationOpenInTerminal',
   'conversationOpenElsewhere',
-  'conversationMovingToTerminal',
   'providerExited',
   'restartFailed',
   'providerRejected',

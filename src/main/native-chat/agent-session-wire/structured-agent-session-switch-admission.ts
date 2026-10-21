@@ -10,18 +10,17 @@ import type { StructuredAgentSessionHostSession } from './structured-agent-sessi
 
 /** In the chat's ordered step: refuses unless nothing is running, starting, queued or owed, then
  *  admits, stops through close's body, and proves the agent gone before anything starts elsewhere. */
-export async function stopIdleStructuredAgentSessionForSwitch<T>(
+export async function stopIdleStructuredAgentSessionForSwitch(
   idle: {
     session: StructuredAgentSessionHostSession | undefined
     delivering: boolean
     idleSweep: {
       owesWork: (sessionId: string, session: StructuredAgentSessionHostSession) => boolean
     }
-    admit: () => T
   },
   stop: () => Promise<unknown>,
   record: () => AgentSessionRecord | null
-): Promise<T> {
+): Promise<void> {
   const { session } = idle
   if (
     idle.delivering ||
@@ -33,11 +32,9 @@ export async function stopIdleStructuredAgentSessionForSwitch<T>(
   ) {
     throw agentSessionRefusalError('agent_session_operation_invalid', { reason: 'turnActive' })
   }
-  const admitted = idle.admit()
   await stop()
   const lease = record()?.lease
   if (!lease || agentSessionLeaseOwnerVerdict(lease) !== 'exited') {
     throw agentSessionRefusalError('agent_session_ownership_unknown', { reason: 'ownerUnproven' })
   }
-  return admitted
 }

@@ -15,7 +15,6 @@ import { AiVaultChatForkSourceSchema } from '../../../../shared/ai-vault-chat-fo
 import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
 import { agentLabel } from '../../../../shared/ai-vault-session-filters'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { TERMINAL_SWITCH_GENERATION_ENV } from '../../../../shared/terminal-switch'
 
 const pending = new Set<string>()
 const listeners = new Set<() => void>()
@@ -49,12 +48,6 @@ export function nativeChatCliSwitchFailureText(error: unknown, agent: AiVaultAge
       { agent: agentLabel(agent) }
     )
   }
-  if (reason === 'conversationHeldElsewhere') {
-    return translate(
-      'components.native-chat.failureWords.conversationMovingToTerminal',
-      'This conversation is moving to a terminal. Use it there, or wait a moment and try again.'
-    )
-  }
   return (
     (refusal ? undefined : readIpcErrorMessage(error)) ||
     translate('components.tab.bar.switch.failed', "Couldn't switch this conversation to the CLI.")
@@ -83,15 +76,12 @@ export async function runNativeChatCliSwitch(args: {
     if (!(await supportsInPlaceSwitch(target, args.agent))) {
       throw new Error(nativeChatCliSwitchFailureText(null, args.agent))
     }
-    const answered = await callStructuredAgentSession<{ source: unknown; generation?: unknown }>(
+    const answered = await callStructuredAgentSession<{ source: unknown }>(
       target,
       'agentSession.switchToTerminal',
       { sessionId: args.sessionId }
     )
     const source = AiVaultChatForkSourceSchema.parse(answered.source)
-    if (typeof answered.generation !== 'string') {
-      throw new Error(nativeChatCliSwitchFailureText(null, args.agent))
-    }
     const state = useAppStore.getState()
     const startup = buildAiVaultResumeStartupForWorktree({
       state,
@@ -103,8 +93,6 @@ export async function runNativeChatCliSwitch(args: {
       agent: source.agent,
       worktreeId: args.workspaceId,
       ...startup,
-      // The host's terminal owner binds this generation to the one start it may protect.
-      env: { ...startup.env, [TERMINAL_SWITCH_GENERATION_ENV]: answered.generation },
       ...(args.chatTabId ? { afterTabId: args.chatTabId } : {}),
       resumeOrigin: 'switch'
     })
@@ -112,10 +100,8 @@ export async function runNativeChatCliSwitch(args: {
     if (outcome && outcome.status !== 'created') {
       throw new Error(outcome.status === 'failed' ? outcome.message : undefined)
     }
-    // The terminal exists, so the chat tab retires; its host close finds the agent already stopped.
-    if (args.chatTabId) {
-      useAppStore.getState().closeUnifiedTab(args.chatTabId)
-    }
+    // The execution host retires only the source presentation after its explicit admitted result.
+    // A tab allocation or generic create receipt says nothing about admission.
   } catch (error) {
     toast.error(nativeChatCliSwitchFailureText(error, args.agent))
   } finally {

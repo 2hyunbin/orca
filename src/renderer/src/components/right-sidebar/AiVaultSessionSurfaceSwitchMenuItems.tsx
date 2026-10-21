@@ -17,7 +17,8 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
   onResumeInNewChat,
   onResumeInNewCli,
   cliPending = false,
-  inPlaceAgent
+  inPlaceAgent,
+  switchLoading = false
 }: {
   action: 'resume' | 'switch'
   menuKind: 'dropdown' | 'context'
@@ -27,6 +28,7 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
   onResumeInNewCli?: (event: Event) => void
   cliPending?: boolean
   /** The agent whose conversation switches in place on its host; unset keeps the new-tab entries. */
+  switchLoading?: boolean
   inPlaceAgent?: AiVaultAgent
 }): React.JSX.Element {
   const inPlace = inPlaceAgent !== undefined
@@ -36,7 +38,7 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
       {onResumeInNewChat ? (
         <Item
           onSelect={onResumeInNewChat}
-          disabled={chatPending}
+          disabled={chatPending || switchLoading}
           aria-busy={chatPending || undefined}
         >
           <MessagesSquare className="size-3.5" />
@@ -51,7 +53,11 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
       {onResumeInNewCli ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Item onSelect={onResumeInNewCli} disabled={cliPending} aria-busy={cliPending}>
+            <Item
+              onSelect={onResumeInNewCli}
+              disabled={cliPending || switchLoading}
+              aria-busy={cliPending}
+            >
               {cliPending ? (
                 <LoadingSpinner className="size-3.5" />
               ) : (

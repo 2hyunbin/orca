@@ -42,13 +42,6 @@ describe('seedResumeLaunchIdentityFromSpawn', () => {
     })
   })
 
-  it('names the exact execution only for a switch start', () => {
-    seed({ switchGeneration: 'g1', result: { id: 'pty-1', incarnationId: 'i1' } })
-    expect(recordLaunchResumeIdentity).toHaveBeenCalledWith(
-      expect.objectContaining({ execution: { ptyId: 'pty-1', incarnationId: 'i1' } })
-    )
-  })
-
   it.each([
     ['a reattached process', { result: { id: 'pty-1', isReattach: true } }],
     ['a Codex resume that fell back to a fresh session', { resumeArgvDropped: true }],

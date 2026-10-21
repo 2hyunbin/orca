@@ -18350,7 +18350,6 @@
         "runtimeNotInstalled": "{{agent}} no está instalado en el equipo que ejecuta este chat. Instálelo desde el chat en una versión actual de Orca.",
         "conversationOpenElsewhere": "Codex aún tiene esta conversación abierta en otro lugar. Ciérrela allí y vuelva a intentarlo.",
         "conversationOpenInTerminal": "Orca no puede confirmar que {{agent}} haya salido en su terminal. Detenga lo que se esté ejecutando allí o cierre la terminal y vuelva a intentarlo.",
-        "conversationMovingToTerminal": "Esta conversación se está trasladando a una terminal. Úsela allí o espere un momento y vuelva a intentarlo.",
         "chooseClaudeAccount": "Elija o agregue una en la configuración de Cuentas de Claude.",
         "chooseClaudeAccountThenRunCommand": "Elija o agregue una en la configuración de Cuentas de Claude y vuelva a ejecutar /{{command}}.",
         "chooseClaudeAccountThenSend": "Elija o agregue una en la configuración de Cuentas de Claude y vuelva a enviar su mensaje.",
@@ -19084,7 +19083,9 @@
           "exitAgentFirst": "Salga de {{agent}} en esta terminal para cambiar.",
           "waitForReply": "Espere a que termine la respuesta o deténgala y luego cambie.",
           "stopUnconfirmed": "No se pudo confirmar que {{agent}} se detuvo. Vuelva a intentarlo.",
-          "failed": "No se pudo cambiar esta conversación a la CLI."
+          "failed": "No se pudo cambiar esta conversación a la CLI.",
+          "noConversation": "Todavía no hay una conversación guardada disponible en este terminal.",
+          "unavailable": "Cambiar {{agent}} todavía no está disponible."
         },
         "BrowserTab": {
           "closeOthers": "Cerrar otras",

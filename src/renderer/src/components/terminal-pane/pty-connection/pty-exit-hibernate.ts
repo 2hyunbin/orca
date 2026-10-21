@@ -257,7 +257,6 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
     // entry so the hover UI only shows what is running *now*.
     useAppStore.getState().removeAgentStatus(session.cacheKey)
     useAppStore.getState().clearPaneForegroundAgent(session.cacheKey)
-    useAppStore.getState().setLaunchConversation(session.cacheKey, null)
     // The runtime graph is the CLI's source for live terminal bindings, so
     // we must republish when a pane loses its PTY instead of waiting for a
     // broader layout change that may never happen.

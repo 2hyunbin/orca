@@ -122,7 +122,6 @@ const REASON_WORDS = {
     runtimeNotInstalled: { fact: 'runtimeNotInstalled', action: 'actFirst' },
     conversationOpenInTerminal: { fact: 'conversationOpenInTerminal', action: 'actFirst' },
     conversationOpenElsewhere: { fact: 'conversationOpenElsewhere', action: 'actFirst' },
-    conversationMovingToTerminal: { fact: 'conversationMovingToTerminal', action: 'actFirst' },
     attachFailed: codeWords('retry')
   },
   agent_session_ownership_unknown: {

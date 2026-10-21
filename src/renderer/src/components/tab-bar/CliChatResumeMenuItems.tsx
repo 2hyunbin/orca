@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { AiVaultSessionSurfaceSwitchMenuItems } from '../right-sidebar/AiVaultSessionSurfaceSwitchMenuItems'
-import { resolveCliChatResumeSource } from './cli-chat-resume-source'
+import { resolveCliChatResumeSource, useCliChatResumeCapability } from './cli-chat-resume-source'
 import { runCliChatResume, useCliChatResumePending } from './cli-chat-resume-run'
 
 export function CliChatResumeMenuItems({
@@ -15,7 +15,8 @@ export function CliChatResumeMenuItems({
   leadingSeparator: boolean
   onComplete?: () => void
 }): React.JSX.Element | null {
-  const [source] = useState(() => resolveCliChatResumeSource(useAppStore.getState(), { tab }))
+  const source = useAppStore(useShallow((state) => resolveCliChatResumeSource(state, { tab })))
+  const capability = useCliChatResumeCapability(tab.worktreeId, source?.agent)
   const pending = useCliChatResumePending(source)
   if (!source) {
     return null
@@ -24,7 +25,8 @@ export function CliChatResumeMenuItems({
     <>
       {leadingSeparator ? <DropdownMenuSeparator /> : null}
       <AiVaultSessionSurfaceSwitchMenuItems
-        action="switch"
+        action={capability === false ? 'resume' : 'switch'}
+        switchLoading={capability === undefined}
         menuKind="dropdown"
         tooltipSide="right"
         chatPending={pending}

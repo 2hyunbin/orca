@@ -331,12 +331,11 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         await holdStopClose(sessionId, () => stopAgent(sessionId, { cause }))
       })
     },
-    /** Close's body behind an idle-only admission with no effect of its own; `admit` registers the
-     *  switch before the stop, in the same step. */
-    switchToTerminal: <T>(id: string, admit: () => T): Promise<T> =>
+    /** Idle admission and proven-exit stop share the session queue. */
+    switchToTerminal: (id: string): Promise<void> =>
       serialize(id, () =>
         switchAdmission.stopIdleStructuredAgentSessionForSwitch(
-          { session: sessions.get(id), delivering: host.deliveryActive(id), idleSweep, admit },
+          { session: sessions.get(id), delivering: host.deliveryActive(id), idleSweep },
           () => holdStopClose(id, () => stopAgent(id, { cause: 'user-close' })),
           () => deps().store.getRecord(id)
         )

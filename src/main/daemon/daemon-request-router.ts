@@ -62,16 +62,15 @@ export class DaemonRequestRouter {
         return {}
       case 'createOrAttach':
         return this.options.admission.createOrAttach(clientId, request)
-      case 'cancelCreateOrAttach': {
-        const { sessionId, requestId } = request.payload
-        const scope = typeof requestId === 'string' ? { clientId, requestId } : { clientId }
-        return { canceled: this.options.preparations.cancel(sessionId, scope) }
-      }
-      case 'observeTerminalSwitch':
-        return this.options.host.switches.observe(
-          request.payload.generation,
-          request.payload.fence === true
-        )
+      case 'cancelCreateOrAttach':
+        return {
+          canceled: this.options.preparations.cancel(request.payload.sessionId, {
+            clientId,
+            ...(typeof request.payload.requestId === 'string'
+              ? { requestId: request.payload.requestId }
+              : {})
+          })
+        }
       case 'closeStartupQueryAuthority':
         return {
           appliedSeq: this.options.host.closeStartupQueryAuthority(request.payload.sessionId)

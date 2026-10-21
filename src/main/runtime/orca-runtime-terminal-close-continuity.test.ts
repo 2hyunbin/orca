@@ -284,6 +284,29 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(canary.ptyId).toBe(survivor.ptyId)
   })
 
+  it('forwards the captured incarnation to the stop and never falls back after a refused stop', async () => {
+    const harness = createHarness({ registerPtyBacked: true })
+    const terminal = (await harness.runtime.listTerminals()).terminals.find(
+      (row) => row.ptyId === PTY_ID
+    )!
+    harness.setVerifiedStopResult(false)
+    await expect(harness.runtime.closeTerminal(terminal.handle, INCARNATION_ID)).rejects.toThrow(
+      'terminal_close_unverifiable'
+    )
+    expect(harness.stopAndWait).toHaveBeenCalledWith(
+      PTY_ID,
+      expect.objectContaining({ expectedIncarnationId: INCARNATION_ID })
+    )
+    expect(harness.kill).not.toHaveBeenCalled()
+    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
+    expect(harness.closeTerminalPane).not.toHaveBeenCalled()
+    harness.setVerifiedStopResult(true)
+    harness.acknowledged.resolve()
+    await expect(
+      harness.runtime.closeTerminal(terminal.handle, INCARNATION_ID)
+    ).resolves.toMatchObject({ ptyKilled: true })
+  })
+
   it('closes nothing when its handle now runs a later incarnation than the caller expected', async () => {
     const harness = createHarness()
     const [{ handle }] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals

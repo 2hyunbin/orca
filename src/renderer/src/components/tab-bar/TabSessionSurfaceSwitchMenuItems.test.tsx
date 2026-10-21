@@ -1,3 +1,4 @@
+vi.mock('@/lib/in-place-switch-support', () => ({ useInPlaceSwitchCapability: () => false }))
 // @vitest-environment happy-dom
 import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -49,7 +50,10 @@ vi.mock('./tab-session-history-switch', async (importOriginal) => ({
   resolveTabSessionHistorySubject: () => mocks.subject
 }))
 
-vi.mock('./cli-chat-resume-source', () => ({ resolveCliChatResumeSource: () => mocks.cliSource }))
+vi.mock('./cli-chat-resume-source', () => ({
+  useCliChatResumeCapability: () => true,
+  resolveCliChatResumeSource: () => mocks.cliSource
+}))
 vi.mock('./cli-chat-resume-run', () => ({
   runCliChatResume: mocks.runCliChatResume,
   useCliChatResumePending: () => false

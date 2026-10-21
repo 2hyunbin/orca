@@ -34,7 +34,7 @@ export class Session {
   private readonly onSessionExit?: (code: number) => void
   private readonly output: SessionOutputPlane
   private readonly producerPause: SessionProducerPause
-  readonly shellReady: SessionShellReadyBarrier
+  private readonly shellReady: SessionShellReadyBarrier
   private readonly termination: SessionTerminationController
   /** Public so the creating host can print its own notice as terminal output. */
   readonly startupIngress: PtyStartupIngress

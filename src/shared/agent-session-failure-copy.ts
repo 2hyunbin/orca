@@ -83,8 +83,6 @@ export const AGENT_SESSION_FAILURE_COPY = {
     'Codex still has this conversation open somewhere else. Close it there, then try again.',
   conversationOpenInTerminal:
     "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
-  conversationMovingToTerminal:
-    'This conversation is moving to a terminal. Use it there, or wait a moment and try again.',
   chooseClaudeAccount: 'Choose or add one in Claude Accounts settings.',
   chooseClaudeAccountThenRunCommand:
     'Choose or add one in Claude Accounts settings, then run /{{command}} again.',

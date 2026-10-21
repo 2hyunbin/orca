@@ -155,11 +155,6 @@ const PIECES: Record<AgentSessionFailureCopyId, (values: AgentSessionFailureCopy
         'components.native-chat.failureWords.conversationOpenElsewhere',
         COPY.conversationOpenElsewhere
       ),
-    conversationMovingToTerminal: () =>
-      translate(
-        'components.native-chat.failureWords.conversationMovingToTerminal',
-        COPY.conversationMovingToTerminal
-      ),
     conversationOpenInTerminal: (values) =>
       translate(
         'components.native-chat.failureWords.conversationOpenInTerminal',

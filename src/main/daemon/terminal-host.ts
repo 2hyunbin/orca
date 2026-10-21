@@ -1,5 +1,4 @@
 import type { Session } from './session'
-import { TerminalHostSwitches } from './terminal-host-switches'
 import type { PtyProcessInspectionOptions } from '../providers/pty-process-inspection'
 import { SessionNotFoundError } from './types'
 import type { SessionInfo, TakePendingOutputResult, TerminalSnapshot } from './types'
@@ -52,7 +51,6 @@ export class TerminalHost {
   private disposePromise: Promise<void> | null = null
   private readonly agentSessionOwners = new ClaimedAgentPtyOwnerRegistry()
   private readonly agentSessionGenerations = new TerminalHostAgentSessionGenerations()
-  readonly switches = new TerminalHostSwitches()
   private readonly authorityGeneration = randomUUID()
   private observationEpoch = 0
   private readonly retiredIncarnations = new Map<
@@ -83,8 +81,13 @@ export class TerminalHost {
     }
     this.assertCreateOrAttachAllowed(opts)
 
-    const creation = Promise.withResolvers<void>()
-    this.pendingCreations.set(opts.sessionId, creation.promise)
+    let settleCreation: () => void = () => {}
+    this.pendingCreations.set(
+      opts.sessionId,
+      new Promise<void>((resolve) => {
+        settleCreation = resolve
+      })
+    )
     try {
       return await createOrAttachClaimedAgentSession({
         options: opts,
@@ -106,7 +109,6 @@ export class TerminalHost {
             killedTombstones: this.killedTombstones,
             spawnSubprocess: this.spawnOptions.spawnSubprocess,
             spawnGate: this.spawnOptions.spawnGate,
-            switches: this.switches,
             onDeadSessionRemoved: (sessionId) => this.agentSessionGenerations.forget(sessionId),
             onSessionCreated: (sessionId, generation, isAlive) =>
               this.agentSessionGenerations.remember(sessionId, generation, isAlive),
@@ -119,7 +121,7 @@ export class TerminalHost {
       })
     } finally {
       this.pendingCreations.delete(opts.sessionId)
-      creation.resolve()
+      settleCreation()
     }
   }
 

@@ -4,7 +4,6 @@ import {
   normalizeAgentProviderSession
 } from '../../../../shared/agent-session-resume'
 import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
-import type { TerminalExecutionStamp } from '../../../../shared/terminal-switch'
 
 /**
  * Record a fresh resume launch's provider session in the hook store, so every reader (phone tab
@@ -21,8 +20,6 @@ export function seedResumeLaunchIdentityFromSpawn(args: {
   /** The Codex resume fell back to a fresh session, so the pane does not hold this one. */
   resumeArgvDropped: boolean
   result: PtySpawnResult
-  /** Set on a chat → terminal switch start: its row then names the exact execution. */
-  switchGeneration?: string
 }): void {
   // Why: a reattached process already reported its own identity; an SSH pane's rows belong to
   // its relay, which owns that host's status.
@@ -35,12 +32,10 @@ export function seedResumeLaunchIdentityFromSpawn(args: {
   ) {
     return
   }
-  const { id: ptyId, incarnationId } = args.result
   seedResumeLaunchIdentity({
     ...args,
     paneKey: args.paneKey,
-    launchedAt: args.launchedAt.getTime(),
-    ...(args.switchGeneration && incarnationId ? { execution: { ptyId, incarnationId } } : {})
+    launchedAt: args.launchedAt.getTime()
   })
 }
 
@@ -54,7 +49,6 @@ export function seedResumeLaunchIdentity(args: {
   resumeProviderSession: unknown
   worktreeId: unknown
   launchedAt: number
-  execution?: TerminalExecutionStamp
 }): void {
   const agent = args.launchAgent
   const providerSession = normalizeAgentProviderSession(args.resumeProviderSession)
@@ -70,7 +64,6 @@ export function seedResumeLaunchIdentity(args: {
     ...(typeof args.worktreeId === 'string' ? { worktreeId: args.worktreeId } : {}),
     agentType: agent,
     providerSession,
-    launchedAt: args.launchedAt,
-    ...(args.execution ? { execution: args.execution } : {})
+    launchedAt: args.launchedAt
   })
 }

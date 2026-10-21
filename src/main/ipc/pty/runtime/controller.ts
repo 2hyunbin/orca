@@ -1,6 +1,4 @@
-import { getProvider, localProvider } from '../provider/registry'
-import { routedTerminalSwitchOwners } from '../../../providers/terminal-switch-owners'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { localProvider } from '../provider/registry'
 import {
   getLocalAutomaticWorkStatus,
   resumeLocalAutomaticWork
@@ -76,11 +74,6 @@ export function installPtyRuntimeController(deps: PtyRuntimeControllerDeps): voi
     clearBuffer: (ptyId) => clearBufferFromRuntimeController(deps, ptyId),
     resetInputModes: (ptyId) => resetInputModesFromRuntimeController(deps, ptyId),
     hasPty: (ptyId) => hasPtyFromRuntimeController(deps, ptyId),
-    // Resolved per call: the local route can move between the daemon and its in-process fallback.
-    terminalSwitches: routedTerminalSwitchOwners(
-      () => getProvider(LOCAL_EXECUTION_HOST_ID),
-      () => [getProvider(LOCAL_EXECUTION_HOST_ID)]
-    ),
     listProcesses: (hostId, opts) => listProcessesFromRuntimeController(deps, hostId, opts),
     listProcessesWithHostScope: (opts) =>
       listProcessesWithHostScopeFromRuntimeController(deps, opts),

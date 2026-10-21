@@ -2,7 +2,7 @@ import { MessagesSquare, SquareTerminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
-import { useAiVaultInPlaceAgent } from '@/lib/in-place-switch-support'
+import { useAiVaultInPlaceAgent, useInPlaceSwitchCapability } from '@/lib/in-place-switch-support'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { ResumeInNewCliTooltipText, SwitchToCliTooltipText } from './ai-vault-session-cli-fork-copy'
 
@@ -17,6 +17,8 @@ export function AiVaultSessionDetailsSwitchButtons({
   onResumeInNewCli?: () => void
 }): React.JSX.Element {
   const inPlaceAgent = useAiVaultInPlaceAgent(session)
+  const switchLoading =
+    useInPlaceSwitchCapability(session.executionHostId, session.agent) === undefined
   return (
     <>
       {onResumeInNewChat ? (
@@ -25,6 +27,7 @@ export function AiVaultSessionDetailsSwitchButtons({
           variant="secondary"
           size="xs"
           draggable={false}
+          disabled={switchLoading}
           onClick={(event) => {
             event.stopPropagation()
             onResumeInNewChat()
@@ -48,6 +51,7 @@ export function AiVaultSessionDetailsSwitchButtons({
               variant="secondary"
               size="xs"
               draggable={false}
+              disabled={switchLoading}
               onClick={(event) => {
                 event.stopPropagation()
                 onResumeInNewCli()

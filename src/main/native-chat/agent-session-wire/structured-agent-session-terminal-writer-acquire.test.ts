@@ -1,3 +1,5 @@
+import { retireChatForAdmittedTerminalLaunch } from '../../runtime/session-tabs/structured-session-terminal-launch-retirement'
+import { setStructuredAgentSessionHost } from './structured-agent-session-registry'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -88,6 +90,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  setStructuredAgentSessionHost(null)
   await host.flushAllStreamedEvents()
   await rm(root, { recursive: true, force: true })
 })
@@ -145,7 +148,7 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
   })
 })
 
-// The switch to a terminal: admitted only when idle, registers before it stops, proves the stop.
+// The switch is idle-only and proves the stop; subsequent sends use ordinary G-acquire.
 it('switches an idle chat to its terminal and a racing send starts no second writer', async () => {
   const order: string[] = []
   const closeSession = vi.mocked(host.deps.adapter.closeSession)
@@ -153,11 +156,9 @@ it('switches an idle chat to its terminal and a racing send starts no second wri
     order.push('stop')
     return true
   })
-  await host.switchToTerminal(SESSION, () => {
-    order.push('claim')
-    terminalWriting = true
-  })
-  expect(order).toEqual(['claim', 'stop'])
+  await host.switchToTerminal(SESSION)
+  expect(order).toEqual(['stop'])
+  terminalWriting = true
   expect(agentSessionLeaseOwnerVerdict(store.getRecord(SESSION)!.lease)).toBe('exited')
   const spawnsBefore = acquire.mock.calls.length
   const raced = await rejection(await send('from another window'))
@@ -179,11 +180,9 @@ it('refuses a switch while the chat is starting, without aborting that start', a
   })
   await send('starts the agent')
   await vi.waitFor(() => expect(signal).toBeDefined())
-  const admit = vi.fn()
-  await expect(host.switchToTerminal(SESSION, admit)).rejects.toMatchObject({
+  await expect(host.switchToTerminal(SESSION)).rejects.toMatchObject({
     refusal: { details: { reason: 'turnActive' } }
   })
-  expect(admit).not.toHaveBeenCalled()
   expect(signal?.aborted).toBe(false)
   release()
 })
@@ -214,4 +213,37 @@ it('starts the chat that holds the conversation for a switch from its terminal',
   expect(await host.switchToChat(SESSION)).toEqual({ ok: true })
   expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('ready')
   expect(vi.mocked(host.deps.adapter.dispatch)).not.toHaveBeenCalled()
+})
+
+// A delayed admitted launch retires presentation only, even if a later send already restarted the chat.
+it('retires only after an explicit admitted launch without stopping a later native child', async () => {
+  setStructuredAgentSessionHost(host)
+  await host.setSessionTabVisibility(SESSION, true)
+  await host.switchToTerminal(SESSION)
+  const runtime = { retireStructuredAgentSessionTabFromSnapshot: vi.fn(() => true) }
+  const args = {
+    resumeOrigin: 'switch',
+    worktreeId: store.getRecord(SESSION)?.location.workspaceId
+  }
+  const decision = {
+    agent: 'codex' as const,
+    providerSession: { key: 'session_id' as const, id: THREAD },
+    verdict: 'admitted' as const
+  }
+  for (const result of [
+    {},
+    { savedResumeDecision: { ...decision, verdict: 'unverifiable' as const } },
+    { savedResumeDecision: decision, isReattach: true }
+  ]) {
+    await retireChatForAdmittedTerminalLaunch(runtime, args, result)
+    expect(store.getVisibleSessionTabIndex()?.sessionIds).toContain(SESSION)
+  }
+  expect(await host.switchToChat(SESSION)).toEqual({ ok: true })
+  const laterChild = host.collaboratorsForTests().sessions.get(SESSION)?.child
+  const closes = vi.mocked(host.deps.adapter.closeSession).mock.calls.length
+  await retireChatForAdmittedTerminalLaunch(runtime, args, { savedResumeDecision: decision })
+  expect(store.getVisibleSessionTabIndex()?.sessionIds).not.toContain(SESSION)
+  expect(runtime.retireStructuredAgentSessionTabFromSnapshot).toHaveBeenCalledWith(SESSION)
+  expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBe(laterChild)
+  expect(host.deps.adapter.closeSession).toHaveBeenCalledTimes(closes)
 })

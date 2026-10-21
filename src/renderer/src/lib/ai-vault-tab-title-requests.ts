@@ -175,7 +175,7 @@ export function panePtyId(state: AppState, paneKey: string): string | undefined 
 }
 
 /** As above, or the conversation the pane's agent last reported once it exited, or the one the
- *  host launched in this exact PTY: a switch is offered when the agent is gone. */
+ *  host launched in the pane: its retained resume identity does not require a first prompt. */
 export function resolvePaneLastAgentConversation<Agent extends AgentType>(
   state: AppState,
   pane: { worktreeId: string; paneKey: string },
@@ -183,15 +183,15 @@ export function resolvePaneLastAgentConversation<Agent extends AgentType>(
 ): AgentPaneConversation<Agent> | null {
   const live = resolvePaneAgentConversation(state, pane, isAgent)
   const retained = state.retainedAgentsByPaneKey[pane.paneKey]
-  const launch = state.launchConversationByPaneKey[pane.paneKey]
+  const saved = state.sleepingAgentSessionsByPaneKey[pane.paneKey]
   const tab = (state.tabsByWorktree[pane.worktreeId] ?? []).find(
     (candidate) => candidate.id === parsePaneKey(pane.paneKey)?.tabId
   )
   const source =
     retained?.entry.paneKey === pane.paneKey && retained.worktreeId === pane.worktreeId
       ? retained
-      : tab && launch && launch.execution.ptyId === panePtyId(state, pane.paneKey)
-        ? { tab, agentType: launch.agent, entry: launch }
+      : tab && saved?.worktreeId === pane.worktreeId
+        ? { tab, agentType: saved.agent, entry: saved }
         : null
   if (live || !source) {
     return live

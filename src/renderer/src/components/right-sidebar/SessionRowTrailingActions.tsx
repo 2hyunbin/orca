@@ -1,4 +1,4 @@
-import { useAiVaultInPlaceAgent } from '@/lib/in-place-switch-support'
+import { useAiVaultInPlaceAgent, useInPlaceSwitchCapability } from '@/lib/in-place-switch-support'
 import type React from 'react'
 import {
   ChevronDown,
@@ -97,6 +97,8 @@ export function SessionRowTrailingActions({
   actionsHidden?: boolean
 }) {
   const inPlaceAgent = useAiVaultInPlaceAgent(session)
+  const switchLoading =
+    useInPlaceSwitchCapability(session.executionHostId, session.agent) === undefined
   const jumpToWorktreeTooltip = aiVaultWorktreeJumpTooltip(worktreeInfo)
 
   return (
@@ -277,6 +279,7 @@ export function SessionRowTrailingActions({
               onResumeInNewChat={onResumeInNewChat}
               onResumeInNewCli={onResumeInNewCli}
               inPlaceAgent={inPlaceAgent}
+              switchLoading={switchLoading}
               onJumpToOriginalPane={onJumpToOriginalPane}
               showJumpToWorktree={showJumpToWorktree}
               jumpWorkspaceId={worktreeInfo?.worktreeId}

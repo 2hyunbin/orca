@@ -1,3 +1,4 @@
+import { retireChatForAdmittedTerminalLaunch } from '../../../runtime/session-tabs/structured-session-terminal-launch-retirement'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { ptySizes } from '../delivery/visibility-state'
 import { commitRuntimePtySize } from './spawn-commit-pty-size'
@@ -244,8 +245,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     worktreeId: args.worktreeId,
     launchedAt: ctx.codexHomeLaunchStartedAt,
     resumeArgvDropped: ctx.codexResumeArgvDropped,
-    result: ctx.result,
-    switchGeneration: ctx.spawnOptions.switchGeneration
+    result: ctx.result
   })
   // Why: runtime-owned/background spawns bypass mounted-pane state, so inventory consumers need an explicit signal.
   ctx.deps.sendPtySpawnedToRenderer(ctx.result.id)
@@ -288,5 +288,6 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       : { snapshotKittyKeyboardFlags: undefined }),
     isReattach: true
   })
+  await retireChatForAdmittedTerminalLaunch(ctx.deps.runtime, args, response)
   return response
 }

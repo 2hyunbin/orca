@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import { useInPlaceSwitchSupported } from '@/lib/in-place-switch-support'
+import { useInPlaceSwitchCapability } from '@/lib/in-place-switch-support'
 import { AI_VAULT_AGENTS } from '../../../../shared/ai-vault-types'
 import { SwitchToCliTooltipText } from '../right-sidebar/ai-vault-session-cli-fork-copy'
 import {
@@ -38,12 +38,12 @@ export function NativeChatTopRightControls({
     return subject?.kind === 'chat' ? subject.request.executionHostScope : null
   })
   const agent = AI_VAULT_AGENTS.find((candidate) => candidate === session.agent)
-  const inPlace = useInPlaceSwitchSupported(hostId, agent)
+  const inPlace = useInPlaceSwitchCapability(hostId, agent)
   const pending = useNativeChatCliSwitchPending(session.sessionId)
   if (find.isOpen) {
     return <NativeChatFindBar find={find} isVisible={session.isVisible} />
   }
-  if (!worktreeId || !hostId || !agent || !inPlace) {
+  if (!worktreeId || !hostId || !agent || (inPlace === false && agent !== 'omp')) {
     return null
   }
   const label = translate('components.tab.bar.switch.toCli', 'Switch to CLI')
@@ -58,9 +58,9 @@ export function NativeChatTopRightControls({
             aria-label={label}
             // Not `disabled` while a reply runs: the tooltip has to say why.
             aria-disabled={working || undefined}
-            disabled={pending}
+            disabled={pending || inPlace !== true}
             onClick={() => {
-              if (!working) {
+              if (!working && inPlace === true) {
                 void runNativeChatCliSwitch({
                   sessionId: session.sessionId,
                   workspaceId: worktreeId,
@@ -75,7 +75,13 @@ export function NativeChatTopRightControls({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={4}>
-          {working ? (
+          {inPlace === false ? (
+            translate(
+              'components.tab.bar.switch.unavailable',
+              'Switching {{agent}} is not available yet.',
+              { agent: session.agent }
+            )
+          ) : working ? (
             translate(
               'components.tab.bar.switch.waitForReply',
               'Wait for the reply to finish or stop it, then switch.'

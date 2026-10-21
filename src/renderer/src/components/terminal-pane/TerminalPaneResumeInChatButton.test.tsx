@@ -22,6 +22,7 @@ vi.mock('@/store', () => ({
     selector({ paneForegroundAgentByPaneKey: {}, agentStatusByPaneKey: {} })
 }))
 vi.mock('../tab-bar/cli-chat-resume-source', () => ({
+  useCliChatResumeCapability: () => true,
   resolveCliChatResumeSource: (_state: unknown, args: unknown) => {
     mocks.resolve(args)
     return mocks.source

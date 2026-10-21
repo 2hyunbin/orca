@@ -29,7 +29,7 @@ export function launchAiVaultSessionInNewTab(args: {
   splitDirection?: TabSplitDirection
   /** Opens in this tab's slot: the next tab in its group. */
   afterTabId?: string
-  /** A chat's switch, whose spawn claims the conversation; set only for a capable host. */
+  /** A chat's switch, whose ordinary spawn admits the resume; set only for a capable host. */
   resumeOrigin?: 'switch'
 }): LaunchAiVaultSessionInNewTabResult {
   const store = useAppStore.getState()

@@ -135,7 +135,6 @@ export type AgentSessionPreSpawnReason = Extract<
   | 'agentCommandNotRunnable'
   | 'runtimeNotInstalled'
   | 'conversationOpenInTerminal'
-  | 'conversationMovingToTerminal'
 >
 
 /** Acquisition failed with first-hand proof that no provider process existed. */

@@ -63,7 +63,6 @@ export function toAgentStatusIpcPayload(
     ...(entry.turnStartedAt !== undefined ? { turnStartedAt: entry.turnStartedAt } : {}),
     ...(entry.providerSession ? { providerSession: entry.providerSession } : {}),
     ...(entry.providerSessionOnly ? { providerSessionOnly: true } : {}),
-    ...(entry.launchExecution ? { launchExecution: entry.launchExecution } : {}),
     ...(entry.promptInteractionKey ? { promptInteractionKey: entry.promptInteractionKey } : {}),
     ...(entry.restoredUnconfirmed ? { restoredUnconfirmed: true } : {}),
     ...(entry.observation ? { observation: entry.observation } : {}),

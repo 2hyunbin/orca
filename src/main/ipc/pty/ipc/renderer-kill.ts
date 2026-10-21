@@ -24,7 +24,12 @@ export type PtyKillIpcDeps = {
   shutdownProviderAndDetectExit: (
     provider: IPtyProvider,
     id: string,
-    opts: { immediate?: boolean; keepHistory?: boolean; deadlineMs?: number }
+    opts: {
+      immediate?: boolean
+      keepHistory?: boolean
+      deadlineMs?: number
+      expectedIncarnationId?: string
+    }
   ) => Promise<boolean>
   rememberSyntheticKillExit: (id: string, incarnationId?: string) => void
   sendPtyExitToRenderer: (payload: { id: string; code: number; incarnationId?: string }) => void

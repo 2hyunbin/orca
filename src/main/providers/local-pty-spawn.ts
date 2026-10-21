@@ -1,9 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import {
-  beginLocalTerminalSwitch,
-  commitLocalTerminalSwitch,
-  endUnstartedLocalTerminalSwitch
-} from './local-pty-terminal-switch'
 import { win32 as pathWin32 } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { JCODE_RUNTIME_DIR_ENV_KEY } from '../../shared/jcode-runtime-dir'
@@ -61,9 +56,7 @@ export async function spawnLocalPty(
     }
   }
   const id = allocatePtyId(reattachId ?? undefined)
-  beginLocalTerminalSwitch(args.switchGeneration, args.switchOwner)
-  let committed = false
-  const spawned = runCancelableLocalPtySpawn(id, async (throwIfCanceled, cancellation) => {
+  return runCancelableLocalPtySpawn(id, async (throwIfCanceled, cancellation) => {
     const incarnationId = randomUUID()
     let plan = createLocalPtyLaunchPlan(args, getOptions)
     if (plan instanceof DeferredLocalPtyLaunchPlan) {
@@ -133,13 +126,6 @@ export async function spawnLocalPty(
         windowsFallbackAttempts: plan.windowsFallbackAttempts
       })
       const spawnResult = pendingSpawn instanceof Promise ? await pendingSpawn : pendingSpawn
-      // The process exists: from here only its own exit ends the switch, whatever throws next.
-      committed = true
-      commitLocalTerminalSwitch(args.switchGeneration, {
-        id,
-        incarnationId,
-        proc: spawnResult.process
-      })
       try {
         checkCanceled()
       } catch (error) {
@@ -150,19 +136,7 @@ export async function spawnLocalPty(
         }
         throw error
       }
-      try {
-        args.onPtySpawnCommitted?.()
-      } catch (error) {
-        // A switch keeps its claim until this exact process exits; stop it so that exit comes.
-        if (args.switchGeneration !== undefined) {
-          try {
-            spawnResult.process.kill('SIGKILL')
-          } finally {
-            destroyPtyProcess(spawnResult.process)
-          }
-        }
-        throw error
-      }
+      args.onPtySpawnCommitted?.()
       plan.shellPath = spawnResult.shellPath
       // Why: a Windows fallback embeds its startup command in argv; honor the winning shell's delivery flag to avoid a double write.
       if (spawnResult.startupCommandDeliveredInShellArgs !== undefined) {
@@ -197,11 +171,5 @@ export async function spawnLocalPty(
         spawnedWslDistro
       })
     })
-  })
-  // A spawn that never committed a process (thrown, canceled, or joined a winner) started nothing.
-  return spawned.finally(() => {
-    if (!committed) {
-      endUnstartedLocalTerminalSwitch(args.switchGeneration)
-    }
   })
 }

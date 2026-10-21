@@ -1,6 +1,6 @@
+import { RESUMABLE_TUI_AGENTS } from '../../../../shared/agent-session-resume'
 import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
 import type { ProgramStatusFacet } from '../../../../shared/program-status/facet'
-import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import type { AppState } from '@/store/types'
 import type {
   AgentProgramStatusUpdate,
@@ -49,19 +49,14 @@ export function applyProviderSessionOnlyUpdate(args: {
   routing: NonNullable<AgentProviderSessionUpdate['routing']>
 }): AgentStatusApplyResult {
   const { store, batch, data, paneKey, routing } = args
-  if (!data.providerSession || data.agentType !== 'pi') {
-    const { agentType: agent, providerSession, launchExecution: execution } = data
-    if (!providerSession || !execution || !adoptsCliConversations(agent)) {
-      return 'dropped'
-    }
-    // Why not a sleeping record: this identity only presents the switched terminal's conversation.
-    store.setLaunchConversation(paneKey, { agent, providerSession, execution })
-    return 'applied'
+  const agent = RESUMABLE_TUI_AGENTS.find((candidate) => candidate === data.agentType)
+  if (!data.providerSession || !agent) {
+    return 'dropped'
   }
   const update: AgentProviderSessionUpdate = {
     kind: 'providerSession',
     paneKey,
-    agent: 'pi',
+    agent,
     providerSession: data.providerSession,
     timing: { updatedAt: data.receivedAt },
     routing,
