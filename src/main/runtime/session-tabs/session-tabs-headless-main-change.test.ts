@@ -3,14 +3,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-session-contracts'
-import { TEST_WORKTREE_ID } from '../orca-runtime-test-fixtures.spec'
-import { HEADLESS_LEAF_ID, HEADLESS_SECOND_LEAF_ID } from '../orca-runtime-test-fixtures.spec'
+import {
+  HEADLESS_LEAF_ID,
+  HEADLESS_SECOND_LEAF_ID,
+  TEST_WORKTREE_ID
+} from '../orca-runtime-test-fixtures.spec'
 import {
   SURFACE_TAB_ID,
   surfaceRuntime
 } from '../terminal/surface/terminal-surface-replies.test-fixture'
 import {
   MOVED_STRIP,
+  SAVED_GROUP_ID,
   SAVED_STRIP,
   moveAndSplitTabs,
   tabStrip,
@@ -137,6 +141,38 @@ describe('session.tabs on a windowless server (switch on)', () => {
         settled?.snapshotVersion
       )
       expect(pushes).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("a rebuild from the saved session pushes main's groups and mints no version", async () => {
+    vi.useFakeTimers()
+    try {
+      const { runtime } = threeTabSurfaceRuntime()
+      runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
+      await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+      await vi.runAllTimersAsync()
+      const settled = runtime.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)
+      const seen: RuntimeMobileSessionTabsResult[] = []
+      runtime.onMobileSessionTabsChanged((snapshot) => {
+        seen.push(snapshot)
+      })
+
+      // What an editor change does: rebuild the rows from the saved session, then push.
+      runtime.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(TEST_WORKTREE_ID, {
+        force: true
+      })
+      runtime.notifyMobileSessionTabsChanged(TEST_WORKTREE_ID)
+      await vi.runAllTimersAsync()
+
+      expect(seen.map((pushed) => pushed.tabGroups?.map((group) => group.id))).toEqual([
+        [SAVED_GROUP_ID]
+      ])
+      expect(tabStrip(seen.at(-1))).toEqual(SAVED_STRIP)
+      expect(runtime.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)?.snapshotVersion).toBe(
+        settled?.snapshotVersion
+      )
     } finally {
       vi.useRealTimers()
     }

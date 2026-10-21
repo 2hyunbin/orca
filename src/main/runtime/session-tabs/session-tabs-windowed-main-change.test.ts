@@ -118,8 +118,17 @@ describe('session.tabs on a windowed server follow main without a window publish
     })
     await vi.runAllTimersAsync()
 
-    expect(seen.at(-1)?.tabs.map((tab) => tab.title)).toEqual(['Build', 'Build'])
-    expect((await listed(runtime)).tabs.map((tab) => tab.title)).toEqual(['Build', 'Build'])
+    const named = (rows: RuntimeMobileSessionTabsResult | undefined) =>
+      (rows?.tabs ?? []).map((tab) => [tab.title, tab.type === 'terminal' && tab.customTitle])
+    // The manual name too, which a paired desktop reads to keep or replace its own.
+    expect(named(seen.at(-1))).toEqual([
+      ['Build', 'Build'],
+      ['Build', 'Build']
+    ])
+    expect(named(await listed(runtime))).toEqual([
+      ['Build', 'Build'],
+      ['Build', 'Build']
+    ])
   })
 
   it('a CLI create reaches the pushed and listed rows', async () => {
