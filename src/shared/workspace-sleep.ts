@@ -25,8 +25,10 @@ export type WorkspaceChatStopReceipt = {
 
 export type WorkspaceSleepOutcome = {
   worktreeId: string
-  /** Why the workspace was kept open: the terminal stop's or the VM suspend's error message. */
+  /** Why the workspace was kept open: the terminal stop's error message. */
   failure?: string
+  /** The terminals and chats slept, but the workspace's VM could not be suspended and still runs. */
+  vmSuspendFailure?: string
   /** A host could not confirm a chat stopped; stopped terminals stay stopped. */
   chatFailed: boolean
   receipts: WorkspaceChatStopReceipt[]
@@ -44,3 +46,27 @@ export type WorkspaceSleepNotice =
       /** The agents main recorded for wake, which the window reads; null when another host keeps them. */
       records: SleepingAgentSessionRecord[] | null
     }
+
+/**
+ * A record a workspace sleep left, which main alone resumes: a pane-owned capture (#11598) or an
+ * older window capture of a still-running agent. Completed-agent hibernation is the window's own.
+ */
+export function isWorkspaceSleepRecord(record: SleepingAgentSessionRecord): boolean {
+  return (
+    record.origin === 'worktree-sleep' &&
+    (record.state !== 'done' || record.restoreOnTabOpenOnly === true)
+  )
+}
+
+/** A record only a window wakes on a phone's open: hibernation, not a sleep's or a tab-open one. */
+export function hasWindowOnlyWakeRecord(
+  records: Readonly<Record<string, SleepingAgentSessionRecord>> | undefined,
+  worktreeId: string
+): boolean {
+  return Object.values(records ?? {}).some(
+    (record) =>
+      record.worktreeId === worktreeId &&
+      record.restoreOnTabOpenOnly !== true &&
+      !isWorkspaceSleepRecord(record)
+  )
+}

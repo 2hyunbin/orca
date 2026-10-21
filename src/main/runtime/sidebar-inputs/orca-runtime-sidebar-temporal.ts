@@ -23,7 +23,8 @@ import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { TerminalUseProducer } from './terminal-use-producer'
 import { createKeyedTrailingEdgeCoalescer } from '../keyed-trailing-edge-coalescer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
-import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
+import { getRepoIdFromWorktreeId, worktreeIdentityKey } from '../../../shared/worktree/id'
+import { getWorktreeIdFromHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import { anySleepKeyNames } from '../terminal/stop/worktree-terminal-sleep-key'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
 import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
@@ -240,11 +241,13 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithDete
 
   private readSidebarRetentionCandidates(): SidebarRetentionCandidates {
     const { facts } = this.workspaceActivityFacts.snapshot()
+    const paused = new Set(
+      (this.workspaceLifecycle?.pausedKeys() ?? []).map(getWorktreeIdFromHostIdentity)
+    )
     return {
       ids: Object.keys(facts),
       // A command whose host never confirmed it keeps the row shown, tabs or not.
-      isActive: (worktreeId) =>
-        worktreeId in facts || this.workspaceLifecycle?.isPausedFor(worktreeId) === true,
+      isActive: (worktreeId) => worktreeId in facts || paused.has(worktreeIdentityKey(worktreeId)),
       // A sleep this host ran (or is running) is definitive: no grace.
       isUnverifiableGap: (worktreeId) =>
         !anySleepKeyNames(this.terminalSleepStateByHostWorktree.keys(), worktreeId) &&

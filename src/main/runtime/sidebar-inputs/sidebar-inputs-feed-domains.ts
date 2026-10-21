@@ -140,7 +140,7 @@ export function sidebarInputsFeedDomains(
       watch: (changed) => workspaceLifecycle.revision.onChange(() => changed(urgent))
     },
     {
-      // Every queued lifecycle command's hint per workspace; no reader yet.
+      // Each workspace's running, waiting or paused lifecycle command, keyed host-qualified.
       name: 'inProgress',
       read: () => workspaceLifecycle.hints(),
       watch: (changed) => workspaceLifecycle.revision.onChange(() => changed(urgent))

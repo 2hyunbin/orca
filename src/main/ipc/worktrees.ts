@@ -45,6 +45,7 @@ const WORKTREE_HANDLER_CHANNELS = [
   'worktrees:remove',
   'worktrees:sleep',
   'worktrees:sleepReopened',
+  'worktrees:resumeSleptPane',
   'worktrees:previewNestedRemoval',
   'worktrees:forgetLocal',
   'worktrees:forceDeletePreservedBranch',

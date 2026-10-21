@@ -52,7 +52,7 @@ function deps(overrides: Partial<WorkspaceSleepDeps> = {}) {
 function queued(queue = new WorkspaceLifecycleQueue()): WorkspaceSleepQueue {
   return {
     submit: (target, command) => queue.submit(target.worktreeId, command),
-    paused: (target) => queue.isPaused(target.worktreeId)
+    paused: (target) => queue.pausedKeys().includes(target.worktreeId)
   }
 }
 const enqueue = queued()
@@ -120,7 +120,7 @@ describe('sleepWorkspaces', () => {
       records: []
     })
     expect(log).not.toContain('vm wt-1')
-    expect(own.isPaused('wt-1')).toBe(true)
+    expect(own.pausedKeys().includes('wt-1')).toBe(true)
   })
 
   it('treats a terminal observed still live as a definite failure, not a pause', async () => {
@@ -137,7 +137,7 @@ describe('sleepWorkspaces', () => {
     const own = new WorkspaceLifecycleQueue()
     const [outcome] = await sleepWorkspaces(d, queued(own), { targets: [local('wt-1')] })
     expect(outcome?.failure).toBe('terminal_worktree_sleep_still_live')
-    expect(own.isPaused('wt-1')).toBe(false)
+    expect(own.pausedKeys().includes('wt-1')).toBe(false)
   })
 
   it('reports a chat stop that answered with a failure, keeps the terminals asleep, no pause', async () => {
@@ -152,7 +152,7 @@ describe('sleepWorkspaces', () => {
     expect(outcome).toEqual(expect.objectContaining({ chatFailed: true }))
     expect(outcome?.failure).toBeUndefined()
     expect(log).toContain('vm wt-1')
-    expect(own.isPaused('wt-1')).toBe(false)
+    expect(own.pausedKeys().includes('wt-1')).toBe(false)
   })
 
   it('pauses only when a paired server never answered the chat stop', async () => {
@@ -169,7 +169,7 @@ describe('sleepWorkspaces', () => {
     const target = { worktreeId: 'wt-r', terminalHost: env, chatHosts: [env] }
     const [outcome] = await sleepWorkspaces(lost.deps, queued(own), { targets: [target] })
     expect(outcome?.chatFailed).toBe(true)
-    expect(own.isPaused('wt-r')).toBe(true)
+    expect(own.pausedKeys().includes('wt-r')).toBe(true)
   })
 
   it("reads a paired server's still-live answer as a plain failure, and a lost one as unconfirmed", async () => {
@@ -188,14 +188,14 @@ describe('sleepWorkspaces', () => {
     const own = new WorkspaceLifecycleQueue()
     const [still] = await sleepWorkspaces(answering.deps, queued(own), { targets: [target] })
     expect(still?.failure).toBe('terminal_worktree_sleep_still_live')
-    expect(own.isPaused('wt-r')).toBe(false)
+    expect(own.pausedKeys().includes('wt-r')).toBe(false)
     const silent = deps({
       callEnvironment: () => async () => {
         throw new Error('timed out')
       }
     })
     await sleepWorkspaces(silent.deps, queued(own), { targets: [target] })
-    expect(own.isPaused('wt-r')).toBe(true)
+    expect(own.pausedKeys().includes('wt-r')).toBe(true)
   })
 
   it("sleeps a paired server's copy on that server, with its PTY ids as the window binds them", async () => {
@@ -337,5 +337,19 @@ describe('sleepWorkspaces', () => {
     const { log, deps: d } = deps({ suspendVm: null })
     await sleepWorkspaces(d, enqueue, { targets: [local('wt-1')] })
     expect(log).toEqual(['started wt-1', 'terminals wt-1', 'chats wt-1', 'ended wt-1'])
+  })
+
+  it('reports a VM that would not suspend apart from the sleep, which still ended asleep', async () => {
+    const notices: unknown[] = []
+    const { deps: d } = deps({
+      notify: (notice) => notices.push(notice),
+      suspendVm: async () => {
+        throw new Error('vm busy')
+      }
+    })
+    const [outcome] = await sleepWorkspaces(d, queued(), { targets: [local('wt-1')] })
+    expect(outcome?.failure).toBeUndefined()
+    expect(outcome?.vmSuspendFailure).toBe('vm busy')
+    expect(notices.at(-1)).toEqual(expect.objectContaining({ phase: 'ended', slept: true }))
   })
 })

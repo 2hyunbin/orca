@@ -31,15 +31,15 @@ import {
   type WorkspacePortExecutionHostDeps
 } from '../../ports/workspace-port-execution-host'
 import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type {
   WorkspaceSleepNotice,
   WorkspaceSleepOutcome,
   WorkspaceSleepRequest
 } from '../../../shared/workspace-sleep'
 import { WorkspaceSleepCoordinator } from './workspace-sleep-runtime'
+import type { RestoredPane } from '../terminal/recovery/restored-pane-start'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
-import { runWorkspaceLifecycleCommand, workspaceLifecycleKey } from './workspace-lifecycle-commands'
 
 import { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
@@ -269,20 +269,19 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
   }
 
   /** A phone's wake, queued: it waits out a sleep still running, and a delete cancels it. Never rejects. */
-  protected async queueSleepingAgentWake(
-    hostId: ExecutionHostId,
-    worktree: { readonly id: string }
-  ): Promise<void> {
-    if (!this.notifier?.resumeSleepingAgents) {
-      return
-    }
-    const worktreeId = worktree.id
-    this.noteWorkspaceReopened(worktreeId)
-    await runWorkspaceLifecycleCommand(
-      this.workspaceLifecycle,
-      workspaceLifecycleKey(hostId, worktreeId),
-      { kind: 'wake', run: async () => this.notifier?.resumeSleepingAgents?.(worktreeId) }
-    ).catch((error: unknown) => console.warn('[runtime] sleeping agent wake failed', error))
+  protected queueSleepingAgentWake(worktreeId: string): Promise<void> {
+    return this.workspaceSleep
+      .wake(worktreeId)
+      .catch((error: unknown) => console.warn('[runtime] sleeping agent wake failed', error))
+  }
+
+  /** The window opened a slept pane; main resumes it and the window attaches. */
+  resumeSleptPane(pane: RestoredPane): Promise<boolean> {
+    return this.workspaceSleep.resumePane(pane)
+  }
+
+  wakeWindowHibernatedAgents(worktreeId: string): void {
+    this.notifier?.resumeSleepingAgents?.(worktreeId)
   }
 
   notifyWorkspaceSleep(notice: WorkspaceSleepNotice): void {

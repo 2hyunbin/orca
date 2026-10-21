@@ -189,6 +189,7 @@ async function sleepWorkspace(
   const reopened = deps.watchReopen(worktreeId)
   deps.notify({ worktreeId, phase: 'started' })
   let failure: string | undefined
+  let vmSuspendFailure: string | undefined
   let unverifiable = false
   let stoppedPtyIds: string[] | null = null
   let chats: ChatStops = { receipts: [], failed: false, lostContact: false }
@@ -219,7 +220,7 @@ async function sleepWorkspace(
       }
     } catch (error) {
       console.error('[workspace-sleep] host suspension failed', { worktreeId, error })
-      failure = messageOf(error)
+      vmSuspendFailure = messageOf(error)
     }
   }
   const records = target.terminalHost.kind === 'self' ? deps.ownRecords(worktreeId) : null
@@ -227,6 +228,7 @@ async function sleepWorkspace(
   return {
     worktreeId,
     ...(failure ? { failure } : {}),
+    ...(vmSuspendFailure ? { vmSuspendFailure } : {}),
     chatFailed: chats.failed,
     receipts: chats.receipts,
     unverifiable: unverifiable || chats.lostContact
