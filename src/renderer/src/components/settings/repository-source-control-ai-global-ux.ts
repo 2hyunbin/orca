@@ -252,9 +252,7 @@ export function useRepositorySourceControlAiGlobalUx({
       const draft =
         current[actionId] ?? readActionRecipeTextDraft(immediateRepoAiRef.current, actionId)
       const currentTemplate =
-        draft.commandInputTemplate.length > 0
-          ? draft.commandInputTemplate
-          : readInheritedCommandTemplate(source, actionId)
+        draft.commandInputTemplate || readInheritedCommandTemplate(source, actionId)
       const separator = currentTemplate.endsWith('\n') || currentTemplate.length === 0 ? '' : ' '
       return patchActionTextDraft(current, immediateRepoAiRef.current, actionId, {
         commandInputTemplate: `${currentTemplate}${separator}{${variable}}`
