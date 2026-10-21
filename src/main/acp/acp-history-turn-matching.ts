@@ -20,6 +20,12 @@ import { emptyJournal, translateHistoryTurn, type AcpHistoryScope } from './acp-
 const ADOPTED_OPENCODE_PREFIXES = ['', 'opencode:']
 const ADOPTED_OPENCODE_SUFFIXES = ['', ':reasoning', ':omission']
 
+/** The saved rows a match reads; both the bound journal and its history view offer them. */
+export type AcpHistoryReadJournal = Pick<
+  StructuredAgentSessionTransitionJournal,
+  'visitItems' | 'item'
+>
+
 /** A turn of the chat's own: its row, and the text of the send that opened it. */
 export type AcpNativeTurn = { itemId: string; text: string }
 
@@ -72,7 +78,7 @@ export function matchAcpHistoryTurns(
 /** The chat's own turns in this conversation, in journal order: each row a send of Orca's opened. */
 export function acpNativeTurns(
   scope: AcpHistoryScope,
-  journal: StructuredAgentSessionTransitionJournal
+  journal: AcpHistoryReadJournal
 ): AcpNativeTurn[] {
   const turns: (AcpNativeTurn & { sequence: number })[] = []
   journal.visitItems((itemId, sequence, body) => {
@@ -85,7 +91,11 @@ export function acpNativeTurns(
       identity.sessionId === scope.sessionId &&
       isProviderTimelineTurnInNamespace(turn.turnId, scope.providerSessionId)
     ) {
-      turns.push({ itemId, sequence, text: messageText(journal.itemBody(turn.userItemId)) })
+      turns.push({
+        itemId,
+        sequence,
+        text: messageText(journal.item(turn.userItemId)?.body ?? null)
+      })
     }
   })
   return turns
@@ -153,10 +163,7 @@ function claimUnprovenSends(
 }
 
 /** Legacy rows a transcript adoption wrote for this provider session, by record id. */
-function adoptedRecordIds(
-  scope: AcpHistoryScope,
-  journal: StructuredAgentSessionTransitionJournal
-): Set<string> {
+function adoptedRecordIds(scope: AcpHistoryScope, journal: AcpHistoryReadJournal): Set<string> {
   const ids = new Set<string>()
   journal.visitItems((itemId) => {
     const identity = parseAgentJournalItemKey(itemId)

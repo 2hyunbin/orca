@@ -3,30 +3,30 @@
 // added once, in the agent's order, after the chat's rows and behind one "Continued outside this
 // chat." divider. Neither OpenCode nor Grok refuses a second writer, and the chat only learns what
 // it streams itself, so its rows are re-derived against the agent's record on every open. The
-// import is staged whole, then written as one settlement: no part of it is ever durable alone.
+// shared runner owns the open envelope and the one checked commit; this reads the replay.
 
 import { createHash } from 'node:crypto'
-import { setImmediate } from 'node:timers/promises'
-import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import { agentSessionHostStatusBody } from '../../shared/agent-session-host-status-rows'
-import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
-import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session-journal-types'
 import {
-  usableJournalHistoryOrigin,
-  type JournalHistoryOrigin
-} from '../native-chat/agent-session-journal/journal-history-origin'
+  agentJournalItemKey,
+  parseAgentJournalItemKey
+} from '../../shared/agent-session-journal-item-key'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session-journal-types'
+import { usableJournalHistoryOrigin } from '../native-chat/agent-session-journal/journal-history-origin'
 import {
   journalLifecycleItemMutation,
-  journalLifecycleMutationItemId
+  journalLifecycleMutationItemId,
+  type JournalLifecycleIdentityMutationInput
 } from '../native-chat/agent-session-journal/journal-lifecycle-mutation'
 import { createLegacyProviderTimelineIdentityScheme } from '../native-chat/agent-session-timeline/provider-timeline-identity'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
-import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
 import {
-  CODEX_RESTORE_MAX_BYTES as HISTORY_MAX_BYTES,
-  CODEX_RESTORE_MAX_OPERATIONS as HISTORY_MAX_OPERATIONS
-} from '../codex/codex-structured-journal-translation-restore'
+  continuedOutsideNotice,
+  continuedOutsideRecordId,
+  createHistoryCatchUpBatch,
+  runHistoryCatchUp,
+  type HistoryCatchUpContext
+} from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
+import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { AcpHistoryJournalOverlay } from './acp-history-journal-overlay'
 import {
   acpHistoryTurns,
@@ -34,7 +34,12 @@ import {
   type AcpLoadHistoryFrame
 } from './acp-history-replay'
 import { translateHistoryTurn, type AcpHistoryScope } from './acp-history-translation'
-import { acpNativeTurns, matchAcpHistoryTurns } from './acp-history-turn-matching'
+import {
+  acpNativeTurns,
+  matchAcpHistoryTurns,
+  type AcpHistoryReadJournal
+} from './acp-history-turn-matching'
+import { acpAgentName } from './acp-structured-agent-definitions'
 
 const CATCH_UP_TIMEOUT_MS = 30_000
 
@@ -49,92 +54,23 @@ export type AcpHistoryCatchUpInput = AcpHistoryScope & {
 
 /** Optional reconciliation: it never fails the open, and a stale or failed one writes nothing. */
 export async function catchUpAcpHistory(input: AcpHistoryCatchUpInput): Promise<void> {
-  const timeoutMs = input.timeoutMs ?? CATCH_UP_TIMEOUT_MS
-  const deadline = Date.now() + timeoutMs
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new Error('catch-up-deadline')), timeoutMs)
-  const check = () => {
-    if (Date.now() >= deadline) {
-      throw new Error('catch-up-deadline')
-    }
-    input.assertCurrent()
-  }
-  const warn = (reason: string, error?: unknown) =>
-    input.logger?.warn('ACP chat did not catch up on turns made outside it', {
-      scope: 'acp-history-catch-up',
-      sessionId: input.sessionId,
-      reason,
-      ...(error === undefined ? {} : { error })
-    })
-  try {
-    const written = await waitForPromiseWithSignal(
-      input.sink.written?.() ?? Promise.resolve({ ok: true }),
-      controller.signal
-    )
-    check()
-    const journal = input.sink.journalItems?.()
-    const history = input.sink.journalHistory?.()
-    if (!written.ok || !journal || !history || !input.sink.tryAppendTransition) {
-      return
-    }
-    const plan = await planAcpHistoryImport(input, journal, history.historyOrigin(), check)
-    if (!plan) {
-      return
-    }
-    let resolved = false
-    const admission = input.sink.tryAppendTransition({
-      lifecycle: true,
-      publish: true,
-      steps: [
-        {
-          kind: 'settlement',
-          settlementId: plan.settlementId,
-          reservedBytes: plan.reservedBytes,
-          resolve: (current) => {
-            try {
-              check()
-            } catch {
-              return []
-            }
-            // Planned against a journal that changed since: the next open plans again.
-            if (
-              current.epoch !== journal.epoch ||
-              journalView(input, current) !== plan.view ||
-              plan.keys.some((key) => current.item(current.canonicalItemId(key)) !== null)
-            ) {
-              return []
-            }
-            resolved = true
-            return plan.mutations
-          }
-        }
-      ]
-    })
-    if (!admission.accepted) {
-      warn(admission.reason)
-      return
-    }
-    const committed = await waitForPromiseWithSignal(
-      input.sink.written?.() ?? Promise.resolve({ ok: true }),
-      controller.signal
-    )
-    if (committed?.ok === false) {
-      warn('write-failed', committed.error)
-    } else if (!resolved) {
-      warn('stale-history')
-    }
-  } catch (error) {
-    warn('import-skipped', error)
-  } finally {
-    clearTimeout(timer)
-  }
+  await runHistoryCatchUp({
+    agentName: acpAgentName(input.agent),
+    scope: 'acp-history-catch-up',
+    sessionId: input.sessionId,
+    sink: input.sink,
+    assertCurrent: input.assertCurrent,
+    timeoutMs: input.timeoutMs ?? CATCH_UP_TIMEOUT_MS,
+    ...(input.logger ? { logger: input.logger } : {}),
+    readView: (history) => journalView(input, history),
+    sameView: (planned, current) => planned === current,
+    prepare: (context) => planAcpHistoryImport(input, context)
+  })
 }
 
 async function planAcpHistoryImport(
   input: AcpHistoryCatchUpInput,
-  journal: StructuredAgentSessionTransitionJournal,
-  origin: JournalHistoryOrigin | null,
-  check: () => void
+  { journal, history, check, yieldTurn }: HistoryCatchUpContext<string>
 ) {
   const turns = acpHistoryTurns(input.frames, input.identity).filter(
     (turn): turn is AcpIdentifiedHistoryTurn => turn.turn !== null
@@ -150,7 +86,7 @@ async function planAcpHistoryImport(
     agentJournalItemKey(
       scheme.turn({ namespace: input.providerSessionId, key: { source: 'provider', value: turn } })
     )
-  const usable = usableJournalHistoryOrigin(origin)
+  const usable = usableJournalHistoryOrigin(history.historyOrigin())
   const handle = usable?.providerHandle
   const importedAt =
     usable &&
@@ -173,58 +109,63 @@ async function planAcpHistoryImport(
   for (const turn of selected) {
     check()
     translateHistoryTurn(input, overlay, turn)
-    await setImmediate()
+    await yieldTurn()
   }
-  const mutations = overlay.created()
-  const first = selected.find((turn) => !kind.has(turn.turn))
-  if (mutations.length === 0) {
+  const created = overlay.created()
+  if (created.length === 0) {
     return null
   }
+  const batch = createHistoryCatchUpBatch()
+  const first = selected.find((turn) => !kind.has(turn.turn))
   if (first && itemIds(journal).length > 0) {
     // The chat's last turn of its own is gone from the agent's history: the divider says so.
     const rewound = natives.length > 0 && ![...matched.values()].includes(natives.length - 1)
-    mutations.unshift(
+    batch.push(
       journalLifecycleItemMutation(
         { turnScope: AGENT_JOURNAL_THREAD_SCOPE },
         {
           provider: 'legacy',
           agent: input.agent,
           sessionId: input.sessionId,
-          recordId: `continued-outside:${first.turn}`
+          recordId: continuedOutsideRecordId(first.turn)
         },
-        agentSessionHostStatusBody(rewound ? 'continued-outside-rewound' : 'continued-outside')
+        continuedOutsideNotice(rewound)
       )
     )
   }
-  const keys = mutations.map(journalLifecycleMutationItemId)
-  const bytes = Buffer.byteLength(JSON.stringify(mutations), 'utf8')
-  if (mutations.length > HISTORY_MAX_OPERATIONS || bytes > HISTORY_MAX_BYTES) {
-    throw new Error('too-large')
+  for (const mutation of created) {
+    batch.push(withIdentity(mutation))
   }
-  const settlementId = `acp-history-import:${createHash('sha256')
-    .update(JSON.stringify([journal.epoch, input.providerSessionId, keys]))
-    .digest('hex')}`
-  return {
-    settlementId,
-    mutations,
-    keys,
-    view: journalView(input, journal),
-    // The existing batch envelope charge, plus the transition's one publication byte.
-    reservedBytes: bytes + settlementId.length + 512
+  return batch.finish('acp-history-import', [
+    journal.epoch,
+    input.providerSessionId,
+    created.map(journalLifecycleMutationItemId)
+  ])
+}
+
+/** Every row the assembler writes is keyed by an identity the journal can parse back. */
+function withIdentity(
+  mutation: ReturnType<AcpHistoryJournalOverlay['created']>[number]
+): JournalLifecycleIdentityMutationInput {
+  if (mutation.identity) {
+    return { ...mutation, identity: mutation.identity }
   }
+  const { itemId, ...rest } = mutation
+  const identity = parseAgentJournalItemKey(itemId)
+  if (!identity) {
+    throw new Error('unkeyed-history-row')
+  }
+  return { ...rest, identity }
 }
 
 /** The saved facts a plan read, compared again when its write runs. */
-function journalView(
-  scope: AcpHistoryScope,
-  journal: StructuredAgentSessionTransitionJournal
-): string {
+function journalView(scope: AcpHistoryScope, journal: AcpHistoryReadJournal): string {
   return createHash('sha256')
     .update(JSON.stringify([itemIds(journal), acpNativeTurns(scope, journal)]))
     .digest('hex')
 }
 
-function itemIds(journal: StructuredAgentSessionTransitionJournal): string[] {
+function itemIds(journal: AcpHistoryReadJournal): string[] {
   const ids: string[] = []
   journal.visitItems((itemId) => {
     ids.push(itemId)
