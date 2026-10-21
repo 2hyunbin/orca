@@ -9,8 +9,7 @@ import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
 import { holdDrawnTabs, type DrawnTabHold } from '@/runtime/layout-owner-drawn-tab-holds'
 import { releaseLayoutApplyHolds } from '@/runtime/layout-apply-hold-release'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
-import type { TabGroupLayoutNode } from '../../../shared/tab-types'
-import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
+import type { SplitRatioIntent } from '../../../shared/workspace-layout/split-ratio-intents'
 import type { PaneSide } from '../../../shared/workspace-layout/terminal-pane-tree'
 import type { LayoutEditorFile } from '../../../shared/workspace-layout/workspace-layout-model'
 import type { EditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
@@ -34,15 +33,15 @@ export type WindowLayoutCommand =
       /** A pane the window already split under its own id. */
       newLeafId?: string
     }
-  | { type: 'closePane'; tabId: string; leafId: string; automatic?: true }
+  | { type: 'closePane'; tabId: string; leafId: string }
   | { type: 'renamePane'; tabId: string; leafId: string; title: string | null }
   | { type: 'equalizePanes'; tabId: string }
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }
-  | { type: 'setPaneRatios'; tabId: string; root: TerminalPaneLayoutNode }
+  | { type: 'setPaneRatios'; tabId: string; ratios: SplitRatioIntent[] }
   | { type: 'setChatPane'; tabId: string; leafId: string | null }
   | { type: 'moveTab'; tabId: string; toGroupId: string; index: number }
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
-  | { type: 'setGroupRatios'; groupLayout: TabGroupLayoutNode }
+  | { type: 'setGroupRatios'; ratios: SplitRatioIntent[] }
   | { type: 'closeTabs'; tabIds: [string]; recordClose?: 'user' | 'cleanup' }
   | ({ type: 'renameTab'; tabId: string } & TabTitle)
   | {
@@ -59,7 +58,7 @@ export type WindowLayoutCommand =
       leafId: string
       groupId: string
       index?: number
-      windowDetach: { ptyId: string | null }
+      windowDetach: { ptyId: string | null; startupCwd?: string }
     }
   | {
       type: 'openBrowserTab'
@@ -138,7 +137,7 @@ export type WindowLayoutCommand =
   | (Omit<CommandOf<'createTerminalTab'>, 'workspace'> & { tabId: string; leafId: string })
 
 /** `call_failed`: the call threw, and a thrown write is rolled back. */
-type WindowRefusalCode = Extract<LayoutApplyReply, { ok: false }>['code'] | 'call_failed'
+export type WindowRefusalCode = Extract<LayoutApplyReply, { ok: false }>['code'] | 'call_failed'
 
 export type LayoutApplyHandlers = {
   apply: (result: LayoutCommandResult) => void
@@ -281,12 +280,21 @@ function handleReply(
 ): void {
   if (reply.ok) {
     handlers.apply(reply.result)
-  } else if (reply.code === 'host_not_owned' && mayBePairedServers(state, worktreeId)) {
+  } else if (refusalActsAsToday(state, worktreeId, reply.code)) {
     handlers.asToday()
   } else {
     console.warn(`[layout-owner] ${command.type} refused:`, reply.code)
     handlers.refused?.(reply.code)
   }
+}
+
+/** A refusal the window answers as today: a twin's, which main may route to a paired server. */
+export function refusalActsAsToday(
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  worktreeId: string,
+  code: WindowRefusalCode
+): boolean {
+  return code === 'host_not_owned' && mayBePairedServers(state, worktreeId)
 }
 
 /** A twin: main may route it to a paired server, whose layout the window still mirrors. */

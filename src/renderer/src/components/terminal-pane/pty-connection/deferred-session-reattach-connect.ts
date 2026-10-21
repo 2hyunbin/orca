@@ -1,4 +1,5 @@
 import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
+import { armPaneOwnerRetry } from './pane-owner-recovery'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
 import { isSshSessionGoneError, recordPtyConnectDiagnostic } from './pty-connect-limits'
@@ -16,6 +17,7 @@ import {
 } from '@/hooks/ipc-events/agent-status-startup-snapshot'
 
 const PANE_OWNER_UNVERIFIED_ERROR = 'terminal_pane_owner_unverified'
+const PANE_OWNER_CHANGED_ERROR = 'terminal_pane_owner_changed'
 
 export function startDeferredSessionReattach(
   session: ConnectPanePtySession,
@@ -74,6 +76,7 @@ function connectDeferredSessionReattach(
 
   let expiredReattachError = false
   let paneOwnerUnverified = false
+  let paneOwnerChanged = false
   let heldByNewerDaemon = false
   const coldRestoreStartup = session.buildColdRestoreAgentResumeStartup()
   const outputCallbacks = session.captureTransportOutputCallbacks(
@@ -89,6 +92,9 @@ function connectDeferredSessionReattach(
       }
       if (message.includes(PANE_OWNER_UNVERIFIED_ERROR)) {
         paneOwnerUnverified = true
+      }
+      if (message.includes(PANE_OWNER_CHANGED_ERROR)) {
+        paneOwnerChanged = true
       }
       session.reportError(message)
     },
@@ -159,7 +165,22 @@ function connectDeferredSessionReattach(
         }
         return NOT_REOPENED
       }
+      if (!result && paneOwnerChanged) {
+        session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
+        const gen = await preSignalPromise
+        if (typeof gen === 'number') {
+          void window.api.pty.clearPendingPaneSerializer(session.cacheKey, gen).catch(() => {})
+        }
+        armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+          connectDeferredSessionReattach(session, deferredReattachSessionId)
+        )
+        session.settlePaneAttachAttempt('failed')
+        return NOT_REOPENED
+      }
       if (!result && paneOwnerUnverified) {
+        armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+          connectDeferredSessionReattach(session, deferredReattachSessionId)
+        )
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
         const gen = await preSignalPromise
         if (typeof gen === 'number') {
@@ -224,8 +245,14 @@ function connectDeferredSessionReattach(
       if (!isCurrentReattach()) {
         return NOT_REOPENED
       }
-      if (message.includes(PANE_OWNER_UNVERIFIED_ERROR)) {
-        session.reportError(message)
+      if (
+        message.includes(PANE_OWNER_UNVERIFIED_ERROR) ||
+        message.includes(PANE_OWNER_CHANGED_ERROR)
+      ) {
+        outputCallbacks.callbacks.onError(message)
+        armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+          connectDeferredSessionReattach(session, deferredReattachSessionId)
+        )
         session.settlePaneAttachAttempt('failed')
         return NOT_REOPENED
       }

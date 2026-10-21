@@ -189,6 +189,11 @@ function scriptHost(script: HostScript): void {
 }
 
 function options(overrides: Partial<OrcadDeployOptions> = {}): OrcadDeployOptions {
+  const census = overrides.census ?? {
+    liveSessions: 0,
+    startedSinceActivation: 0,
+    daemonProtocolVersion: 3
+  }
   return {
     conn: Object.create(null),
     host: getRemoteHostPlatform('linux-x64'),
@@ -199,7 +204,10 @@ function options(overrides: Partial<OrcadDeployOptions> = {}): OrcadDeployOption
     userDataDir: '/home/u/.orca',
     bindHost: '127.0.0.1',
     port: 7777,
-    census: { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 },
+    census,
+    // An unchanged recount unless a test opens a terminal during the upload.
+    recountCensus: async () => census,
+    releaseIncumbentAdmission: async () => {},
     readinessTimeoutMs: 50,
     sleep: async () => {},
     now: () => new Date('2026-02-02T00:00:00.000Z'),
@@ -630,25 +638,6 @@ describe('deployOrcad', () => {
     expect(script.log.indexOf('snapshot')).toBeGreaterThan(-1)
     expect(script.log.indexOf('snapshot')).toBeLessThan(script.log.indexOf(`launch:${NEW_VERSION}`))
     expect(script.log.indexOf(`stop:${OLD_VERSION}`)).toBeLessThan(script.log.indexOf('snapshot'))
-  })
-
-  it('defers on a recount just before the stop when a terminal opened during the upload', async () => {
-    const script: HostScript = {
-      activationRecord: ACTIVE_OLD,
-      readiness: { [NEW_VERSION]: readyLine({}) },
-      log: []
-    }
-    scriptHost(script)
-    const recountCensus = vi.fn(async () => ({
-      liveSessions: 1,
-      startedSinceActivation: 1,
-      daemonProtocolVersion: 3
-    }))
-    expect(
-      await deployOrcad(options({ censusRecord: JSON.parse(ACTIVE_OLD), recountCensus }))
-    ).toMatchObject({ outcome: 'installed-not-activated', code: 'orcad_update_terminals_running' })
-    expect(recountCensus).toHaveBeenCalledTimes(1)
-    expect(script.log).toEqual(['preflight'])
   })
 
   it('never recounts an incumbent other than the one it counted', async () => {

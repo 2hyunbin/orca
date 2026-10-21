@@ -1,7 +1,6 @@
 import { createAiVaultScopeCwdMatcher } from '../../shared/ai-vault-scope-cwd-match'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
-import { noteAiVaultScanReading } from './ai-vault-scan-progress'
 import { yieldToEventLoop } from '../../shared/event-loop-yield'
 import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import {
@@ -65,13 +64,14 @@ export async function scanInScopeSessions(args: ScopeScanArgs): Promise<AiVaultS
       excludedFilePaths: args.alreadyParsedFilePaths,
       issues: args.issues
     })
-    candidates.push(...files.map((file) => ({ agent: layout.agent, file, codexHome: null })))
+    for (const file of files) {
+      candidates.push({ agent: layout.agent, file, codexHome: null })
+    }
   }
   const walked = await walkInScopeSessions(args, scopePaths).finally(clearSessionScopeCwdKnowledge)
   if (candidates.length === 0) {
     return walked
   }
-  noteAiVaultScanReading(args.options.signal, candidates.length)
   // Parse every in-scope candidate (limit === candidate count never early-stops).
   const bucketed = await parseSessionCandidates({
     candidates,
@@ -133,7 +133,10 @@ function walkCandidates(
         files.push(file)
       }
     }
-    all.push(...discoveryFileCandidates(discovery, files, args.options))
+    // Why: one item per push; a history-sized list spread into push() exceeds V8's argument limit.
+    for (const candidate of discoveryFileCandidates(discovery, files, args.options)) {
+      all.push(candidate)
+    }
   }
   pruneSessionScopeCwds(seenPaths)
   // Aliases collapse with the listed files still present, so a listed rollout's

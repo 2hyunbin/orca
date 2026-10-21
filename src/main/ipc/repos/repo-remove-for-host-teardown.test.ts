@@ -53,6 +53,9 @@ describe('repos:removeForHost', () => {
     const { store, runtime, remove } = register([paired])
     await remove(null, { repoId: 'repo-1', hostId: 'runtime:env-1' })
     expect(runtime.removeProject).not.toHaveBeenCalled()
-    expect(store.removeProjectForHost).toHaveBeenCalledWith('repo-1', 'runtime:env-1')
+    expect(store.removeProjectForHost).toHaveBeenCalledWith({
+      id: 'repo-1',
+      executionHostId: 'runtime:env-1'
+    })
   })
 })
