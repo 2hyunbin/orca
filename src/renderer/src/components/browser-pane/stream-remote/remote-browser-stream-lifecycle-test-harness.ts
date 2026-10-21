@@ -72,6 +72,7 @@ export function createHarness() {
   let subscribeAttempts = 0
   let closeBeforeNextSubscribeRejects = false
 
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake answers each method with the reply shape its caller reads.
   const callRpc = (async (_target: unknown, method: string, params?: { page?: string }) => {
     rpcLog.push(method)
     if (method === 'status.get') {
