@@ -127,7 +127,12 @@ export async function openTerminalForDeclinedChat(
     notifyHostDeclined(args.plan.agent)
     return settlement
   }
-  await placeReplacementAfterSource(worktreeId, replacement, current)
+  // Switch point: main places and pins the tab in one step; a pin sent alone would re-sort it.
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    await placeReplacementThroughMain(worktreeId, replacement, current)
+  } else {
+    placeReplacementAfterSource(worktreeId, replacement, current)
+  }
   const placed = useAppStore.getState()
   const group = (placed.groupsByWorktree[worktreeId] ?? []).find((g) => g.id === current.groupId)
   if (
@@ -171,32 +176,33 @@ export async function openTerminalForDeclinedChat(
 }
 
 /** The terminal goes right after the declined chat, pinned as the chat is. */
-function placeReplacementAfterSource(
+function placeReplacementAfterSource(worktreeId: string, replacement: Tab, source: Tab): void {
+  const state = useAppStore.getState()
+  state.moveUnifiedTabToGroup(replacement.id, source.groupId, {
+    activate: false,
+    recordInteraction: false
+  })
+  if (Boolean(source.isPinned) !== Boolean(replacement.isPinned)) {
+    const setPinned = source.isPinned ? state.pinTab : state.unpinTab
+    setPinned(replacement.id, { recordInteraction: false })
+  }
+  insertUnifiedTabAfterAnchor(worktreeId, replacement.id, source.id)
+}
+
+/** One main move puts the terminal after the chat with the chat's pin; resolves once drawn. */
+function placeReplacementThroughMain(
   worktreeId: string,
   replacement: Tab,
   source: Tab
 ): Promise<void> {
-  const placeHere = (): void => {
-    const state = useAppStore.getState()
-    state.moveUnifiedTabToGroup(replacement.id, source.groupId, {
-      activate: false,
-      recordInteraction: false
-    })
-    if (Boolean(source.isPinned) !== Boolean(replacement.isPinned)) {
-      const setPinned = source.isPinned ? state.pinTab : state.unpinTab
-      setPinned(replacement.id, { recordInteraction: false })
-    }
-    insertUnifiedTabAfterAnchor(worktreeId, replacement.id, source.id)
-  }
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
-    placeHere()
-    return Promise.resolve()
-  }
-  // Switch point: main places and pins the tab in one step; a pin sent alone would re-sort it.
   const order = (useAppStore.getState().groupsByWorktree[worktreeId] ?? [])
     .find((group) => group.id === source.groupId)
     ?.tabOrder.filter((id) => id !== replacement.id)
   return new Promise((resolve) => {
+    const placeHere = (): void => {
+      placeReplacementAfterSource(worktreeId, replacement, source)
+      resolve()
+    }
     const sent = sendLayoutCommandToOwner(
       worktreeId,
       {
@@ -206,18 +212,10 @@ function placeReplacementAfterSource(
         index: (order?.indexOf(source.id) ?? -1) + 1,
         isPinned: Boolean(source.isPinned)
       },
-      {
-        apply: () => resolve(),
-        asToday: () => {
-          placeHere()
-          resolve()
-        },
-        refused: () => resolve()
-      }
+      { apply: () => resolve(), asToday: placeHere, refused: () => resolve() }
     )
     if (!sent) {
       placeHere()
-      resolve()
     }
   })
 }
