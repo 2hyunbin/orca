@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocalSearchParams, usePathname } from 'expo-router'
 import { useRouteHandoff } from '../navigation/route-handoff'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -80,7 +80,23 @@ export function useHostScreenController({
 
   useHostScreenIdentity({ client, hostId, state })
   const fetchRepoMetadataOnly = useHostRepoMetadata({ client, connState, hostId, state })
-  const fetchProjectSections = useHostProjectSections({ client, connState, hostId, state })
+  const sidebarFeed = useSwitchedHostSidebarFeed(client, hostId)
+  // Read through a ref so the metadata refresh keeps its identity across installs.
+  const feedRef = useRef(sidebarFeed?.feed)
+  useEffect(() => {
+    feedRef.current = sidebarFeed?.feed
+  }, [sidebarFeed?.feed])
+  const feedCarriesCatalog = useCallback(
+    () => feedRef.current?.kind === 'ready' && feedRef.current.domains.projectCatalog !== null,
+    []
+  )
+  const fetchProjectSections = useHostProjectSections({
+    client,
+    connState,
+    hostId,
+    state,
+    feedCarriesCatalog
+  })
   const fetchRepoMetadata = useCallback<FetchHostRepoMetadata>(
     (options) => {
       void fetchProjectSections(options)
@@ -88,7 +104,6 @@ export function useHostScreenController({
     },
     [fetchProjectSections, fetchRepoMetadataOnly]
   )
-  const sidebarFeed = useSwitchedHostSidebarFeed(client)
   const catalog = useHostWorktreeCatalog({
     client,
     connState,
@@ -125,6 +140,7 @@ export function useHostScreenController({
   const feed = sidebarFeed?.feed ?? null
   const sectionsResult = useHostListSections({
     client,
+    hostId,
     feed,
     displayWorktrees,
     hostPlatform,
@@ -141,7 +157,7 @@ export function useHostScreenController({
     [state.view.filters, uniqueRepos]
   )
   const existingWorktreePaths = useMemo(() => state.worktrees.map((w) => w.path), [state.worktrees])
-  const activeWorktreeScroll = useActiveWorktreeScroll(sectionsResult.sections)
+  const activeWorktreeScroll = useActiveWorktreeScroll(sectionsResult.sections, collapsedGroups)
 
   return {
     actions,

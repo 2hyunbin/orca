@@ -7,10 +7,6 @@ import {
 } from '../../shared/agent-session-hook-outcome'
 import { AGENT_SESSION_TURN_NOTICE_PRESENTATION } from '../../shared/agent-session-turn-notice'
 import type { AgentJournalStatusItem } from '../../shared/agent-session-journal-types'
-import {
-  boundInlineText,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS
-} from '../native-chat/agent-session-journal/journal-payload-bounds'
 import { claudeRecord, claudeText } from './claude-structured-item-translation'
 
 export const CLAUDE_INFORMATIONAL_FRAME_KIND = 'message:system:informational'
@@ -54,11 +50,12 @@ export function claudeInformationalRowBody(
   }
   // A warning that halts the prompt is a hook's outcome, shown whether or not its words are known.
   const halts = message.prevent_continuation === true
-  const row = (halts ? hookOutcomeOf(message, text) : null) ?? {
-    kind: 'status' as const,
-    tone: 'warning',
-    text,
-    ...(halts ? { presentation: AGENT_SESSION_TURN_NOTICE_PRESENTATION } : {})
-  }
-  return { ...row, text: boundInlineText(row.text, DEFAULT_JOURNAL_PAYLOAD_LIMITS).text }
+  return (
+    (halts ? hookOutcomeOf(message, text) : null) ?? {
+      kind: 'status',
+      tone: 'warning',
+      text,
+      ...(halts ? { presentation: AGENT_SESSION_TURN_NOTICE_PRESENTATION } : {})
+    }
+  )
 }

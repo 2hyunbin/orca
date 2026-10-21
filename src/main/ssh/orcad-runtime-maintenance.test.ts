@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listEnvironments } from '../../shared/runtime-environment-store'
+import { ORCAD_UPDATE_ADMISSION_FENCE_MS } from '../../shared/orcad-terminal-census'
 import { recordManagedOrcadMigration } from '../../shared/runtime-environment-managed-orcad-store'
 import { orcadMigrationCutoverFixture } from './orcad-migration-cutover-fixture'
 import { writeOrcadMigrationSourceCutover } from './orcad-migration-cutover-journal'
@@ -145,6 +146,26 @@ describe('updateManagedOrcadEnvironment', () => {
     expect(status.deferredUpdate).toBeNull()
   })
 
+  it('hands the deploy a recount that counts again, so a terminal opened during the upload counts', async () => {
+    const opened = { ...idle, liveSessions: 1, inProcessSessions: 1 }
+    mocks.census.mockResolvedValueOnce(idle).mockResolvedValue(opened)
+    mocks.deploy.mockResolvedValueOnce({ outcome: 'installed-and-activated', fullVersion: 'v3' })
+    await updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    const deployed = mocks.deploy.mock.calls[0]?.[0]
+    expect(deployed?.recountCensus).toBeTypeOf('function')
+    await expect(deployed!.recountCensus()).resolves.toEqual(opened)
+    // Only the last count closes the server's terminal admission; the first precedes the upload.
+    expect(mocks.census.mock.calls.map((call) => call[4])).toEqual([
+      { releaseFinishedAutomationTerminals: true },
+      {
+        releaseFinishedAutomationTerminals: true,
+        closeAdmissionForMs: ORCAD_UPDATE_ADMISSION_FENCE_MS
+      }
+    ])
+    await deployed!.releaseIncumbentAdmission()
+    expect(mocks.census.mock.calls[2]?.[4]).toEqual({ closeAdmissionForMs: 0 })
+  })
+
   it('forwards anew after an activation, since the new slot may bind another port', async () => {
     mocks.deploy.mockResolvedValueOnce({ outcome: 'installed-and-activated', fullVersion: 'v3' })
     await updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
@@ -273,6 +294,24 @@ describe('rollbackManagedOrcadEnvironment', () => {
       fullVersion: MANAGED_PREVIOUS_VERSION
     })
     expect(mocks.rebuildTunnel).toHaveBeenCalledWith(harness.userDataPath, 'environment-1')
+  })
+
+  it('hands the rollback a recount that closes admission, and a reopen that only reopens it', async () => {
+    mocks.rollback.mockResolvedValueOnce({ outcome: 'refused', code: 'x', reason: 'y' })
+    await rollbackManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    const options = mocks.rollback.mock.calls[0]?.[0]
+    // The count here is unfenced; rollbackOrcad recounts under the host lock.
+    expect(mocks.census.mock.calls.map((call) => call[4]?.closeAdmissionForMs)).toEqual([undefined])
+    await options.recountCensus()
+    await options.releaseIncumbentAdmission()
+    expect(mocks.census.mock.calls.map((call) => call[4])).toEqual([
+      { releaseFinishedAutomationTerminals: true },
+      {
+        releaseFinishedAutomationTerminals: true,
+        closeAdmissionForMs: ORCAD_UPDATE_ADMISSION_FENCE_MS
+      },
+      { closeAdmissionForMs: 0 }
+    ])
   })
 })
 
