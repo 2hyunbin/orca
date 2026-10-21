@@ -36,8 +36,9 @@ function readSleepState(page: Page, worktreeId: string): Promise<SleepState> {
       method: 'terminal.list',
       params: { worktree: `id:${id}`, requireFreshPtyLiveness: true }
     })
+    // A liveness read can be briefly unavailable while terminals stop; the poll asks again.
     if (!listed.ok) {
-      throw new Error(listed.error.message)
+      return { windowLivePtys: -1, tabs: -1, hostLiveTerminals: -1 }
     }
     const result = listed.result
     if (
