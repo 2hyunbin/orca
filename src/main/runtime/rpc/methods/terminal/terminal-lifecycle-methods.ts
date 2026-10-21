@@ -52,9 +52,10 @@ export const TERMINAL_LIFECYCLE_METHODS = [
         pairedViewer && params.presentation === 'focused' ? 'background' : params.presentation
       // Switch point: the window's own new tab, which main starts; refused as a pane-named split is.
       if (params.windowTab) {
-        // A paired viewer never draws this host's tabs; its window starts its own host's.
+        // Only this host's own window draws its tabs, by the identity its IPC proved: that channel
+        // also labels itself a client, and a paired viewer's window starts its own host's.
         if (
-          pairedViewer ||
+          context.caller?.kind !== 'desktop' ||
           !params.worktree?.startsWith('id:') ||
           !params.tabId ||
           !params.leafId
