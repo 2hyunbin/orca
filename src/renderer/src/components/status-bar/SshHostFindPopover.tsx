@@ -80,6 +80,7 @@ export function SshHostFindPopover({
               <CommandItem
                 key={target.id}
                 value={target.id}
+                selection="palette"
                 disabled={!canConnectSshStatus(target.status)}
                 onSelect={() => {
                   onOpenChange(false)
