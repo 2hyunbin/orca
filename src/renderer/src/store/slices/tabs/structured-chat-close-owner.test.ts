@@ -95,7 +95,8 @@ describe('closing a structured chat from outside its workspace', () => {
     )
   })
 
-  it('names no host for an unstamped chat whose workspace two hosts publish', async () => {
+  // Switch on, main's layout holds only chats this machine's host placed, so the stamp is a fact.
+  it('an unstamped chat whose workspace two hosts publish: no host off, main’s host on', async () => {
     const store = storeWith(chatTab())
     main = await drawTabsFromMain(store)
 
@@ -103,7 +104,6 @@ describe('closing a structured chat from outside its workspace', () => {
     await main.settle()
 
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      // By design main's frame stamps the chat with the host whose layout holds it, so it stops there.
       expect(mocks.beginClose).toHaveBeenCalledWith(
         expect.objectContaining({ target: { kind: 'local' }, sessionId: 'chat-1' })
       )
