@@ -58,7 +58,7 @@ export function createCodexModelCatalogProbe(
     ]
     const env = { ...definedEnv(environment), CODEX_HOME: accountHomePath }
     return {
-      identity: { command, args, env, cwd },
+      identity: { command, args, cwd },
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
         deps.prepareHome?.(accountHomePath)
         const run = deps.runSession ?? runCodexAppServerSession

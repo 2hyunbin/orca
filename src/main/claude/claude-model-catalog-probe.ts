@@ -123,9 +123,8 @@ export function createClaudeModelCatalogProbe(
         })
       })
     )
-    const launch = { command, args, cwd, env }
     return {
-      identity: launch,
+      identity: { command, args, cwd },
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
         const outcome = await runClaudeBackgroundAttempts({
           agentId: 'claude',
