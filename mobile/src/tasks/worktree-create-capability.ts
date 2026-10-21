@@ -139,12 +139,20 @@ export function useNewWorktreeRuntimeCapabilities(
       return
     }
     let stale = false
+    let refreshVersion = 0
     let retry: ReturnType<typeof setTimeout> | undefined
     let retryDelay = 1_000
     const refresh = async () => {
+      if (stale) {
+        return
+      }
+      const version = ++refreshVersion
       clearTimeout(retry)
       const capabilities = await getCapabilities()
-      if (!stale && capabilities) {
+      if (stale || version !== refreshVersion) {
+        return
+      }
+      if (capabilities) {
         setCapabilityState({
           client,
           generation: client.getGeneration?.(),
@@ -153,7 +161,7 @@ export function useNewWorktreeRuntimeCapabilities(
         })
         retryDelay = 1_000
       }
-      if (!stale && !capabilityProbeRef.current && client.getState() === 'connected') {
+      if (!capabilityProbeRef.current && client.getState() === 'connected') {
         retry = setTimeout(() => void refresh(), retryDelay)
         retryDelay = Math.min(retryDelay * 2, 30_000)
       }

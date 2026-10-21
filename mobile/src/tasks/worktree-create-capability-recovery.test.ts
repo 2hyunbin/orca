@@ -231,4 +231,77 @@ describe('capability probe recovery', () => {
       expect(current?.tasksSupported).toBe(false)
     }
   )
+  it('bounds failed probes over ten minutes and stops all retries on close', async () => {
+    vi.useFakeTimers()
+    const host = connection()
+    host.sendRequest.mockRejectedValue(new Error('offline'))
+    await render(host.client)
+    await act(async () => vi.advanceTimersByTimeAsync(600_000))
+    expect(host.sendRequest).toHaveBeenCalledTimes(24)
+    expect(vi.getTimerCount()).toBe(1)
+    await render(host.client, false)
+    expect(vi.getTimerCount()).toBe(0)
+    await act(async () => vi.advanceTimersByTimeAsync(600_000))
+    expect(host.sendRequest).toHaveBeenCalledTimes(24)
+  })
+
+  it('does not poll a confirmed unsupported host across renders or sheet reopens', async () => {
+    vi.useFakeTimers()
+    const host = connection()
+    host.sendRequest.mockResolvedValue({
+      id: 'old',
+      ok: true,
+      result: { capabilities: [] },
+      _meta: { runtimeId: 'old' }
+    })
+    await render(host.client)
+    for (let reopen = 0; reopen < 20; reopen += 1) {
+      await render(host.client, false)
+      await render(host.client)
+    }
+    await act(async () => vi.advanceTimersByTimeAsync(600_000))
+    expect(host.sendRequest).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it.each(['old-first', 'new-first'])(
+    'leaves no retry or RPC after overlapping reconnect failures settle %s and unmount',
+    async (order) => {
+      vi.useFakeTimers()
+      const host = connection()
+      let failOld: ((reason: Error) => void) | undefined
+      let failNew: ((reason: Error) => void) | undefined
+      host.sendRequest.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failOld = reject
+          })
+      )
+      host.sendRequest.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            failNew = reject
+          })
+      )
+      await render(host.client)
+      await act(async () => host.reconnect())
+      await act(async () => {
+        if (order === 'old-first') {
+          failOld?.(new Error('old offline'))
+        }
+        failNew?.(new Error('new offline'))
+      })
+      if (order === 'new-first') {
+        await act(async () => failOld?.(new Error('old offline')))
+      }
+      expect(vi.getTimerCount()).toBe(1)
+      act(() => renderer?.unmount())
+      renderer = undefined
+      expect(vi.getTimerCount()).toBe(0)
+      await act(async () => vi.advanceTimersByTimeAsync(60_000))
+      expect(host.sendRequest).toHaveBeenCalledTimes(2)
+      host.reconnect()
+      expect(host.sendRequest).toHaveBeenCalledTimes(2)
+    }
+  )
 })
