@@ -130,7 +130,9 @@ export const TERMINAL_LIFECYCLE_METHODS = [
           terminal.executionHostId
         )
       }
-      return { terminal }
+      const publicTerminal = { ...terminal }
+      delete publicTerminal.savedStartupCwd
+      return { terminal: publicTerminal }
     }
   }),
   defineMethod({
