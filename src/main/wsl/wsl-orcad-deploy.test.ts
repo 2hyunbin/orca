@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   wake: vi.fn(),
   adopt: vi.fn(),
   incumbent: vi.fn(),
+  incumbentReadiness: vi.fn(),
   localVersion: vi.fn(),
   readRecord: vi.fn()
 }))
@@ -101,6 +102,7 @@ function launch(kernel = '5.15.167.4-microsoft-standard-WSL2', options = {}) {
     createTransport: transport,
     readRegistryId: async () => '0283592d-be56-40d4-b935-3dc18c3aa007',
     readIncumbent: mocks.incumbent,
+    readIncumbentReadiness: mocks.incumbentReadiness,
     ...options
   })
 }
@@ -428,6 +430,92 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
     await expect(launch()).resolves.toMatchObject({
       outcome: 'deferred',
       forceable: true
+    })
+  })
+
+  describe('the SSH auto-update rules', () => {
+    const newer = {
+      ...activeOld,
+      active: '2.0.0+cd',
+      activeAppVersion: '2.0.0',
+      previous: '1.5.0+ab'
+    }
+    const NEWER_READINESS = { ...INCUMBENT_READINESS, runtimeId: 'r-new' }
+    const policyRefused = {
+      outcome: 'installed-not-activated',
+      fullVersion: '1.5.0+ab',
+      code: 'orcad_activation_policy_refused',
+      reason: 'newer Orca ran this host'
+    }
+
+    function withRecord(record: typeof activeOld): void {
+      mocks.resolveContext.mockImplementation(async (target: WslOrcadHostTarget, connection) => ({
+        activationRecord: record,
+        serverTarget: 'linux-x64-glibc',
+        connection,
+        host,
+        remoteHome: '/home/u',
+        target,
+        userDataDir: '/home/u/.orca'
+      }))
+      mocks.readRecord.mockResolvedValue(record)
+    }
+
+    it('serves a newer build another Orca activated instead of deploying over it', async () => {
+      withRecord(newer)
+      mocks.deploy.mockResolvedValue(policyRefused)
+      mocks.incumbentReadiness.mockResolvedValueOnce(NEWER_READINESS)
+      await expect(launch()).resolves.toEqual({
+        outcome: 'ready',
+        distro: 'Ubuntu-24.04',
+        distroId: '0283592d-be56-40d4-b935-3dc18c3aa007',
+        port: 6791,
+        fullVersion: '2.0.0+cd',
+        pid: 4242,
+        readiness: NEWER_READINESS,
+        holder: 'spawned'
+      })
+      expect(mocks.deploy).not.toHaveBeenCalled()
+      expect(mocks.incumbent).not.toHaveBeenCalled()
+      expect(mocks.prune).not.toHaveBeenCalled()
+    })
+
+    it('does not re-activate the build this host rolled back from', async () => {
+      withRecord({ ...activeOld, rolledBackFrom: '1.5.0+ab' })
+      mocks.deploy.mockResolvedValue({
+        outcome: 'installed-and-activated',
+        fullVersion: '1.5.0+ab',
+        verdict: {}
+      })
+      mocks.incumbentReadiness.mockResolvedValueOnce(INCUMBENT_READINESS)
+      await expect(launch()).resolves.toMatchObject({
+        outcome: 'ready',
+        fullVersion: '1.4.0+aa',
+        readiness: INCUMBENT_READINESS
+      })
+      expect(mocks.deploy).not.toHaveBeenCalled()
+    })
+
+    it('lets an explicit force deploy past both skips', async () => {
+      withRecord({ ...newer, rolledBackFrom: '1.5.0+ab' })
+      mocks.deploy.mockResolvedValueOnce({
+        outcome: 'installed-and-activated',
+        fullVersion: '1.5.0+ab',
+        verdict: {}
+      })
+      await expect(launch(undefined, { force: true })).resolves.toMatchObject({
+        outcome: 'ready',
+        fullVersion: '1.5.0+ab'
+      })
+      expect(mocks.incumbentReadiness).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the deploy gate when the newer build cannot be proven serving', async () => {
+      withRecord(newer)
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      mocks.incumbentReadiness.mockResolvedValueOnce(null)
+      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred', forceable: true })
+      expect(mocks.deploy).toHaveBeenCalledTimes(1)
     })
   })
 

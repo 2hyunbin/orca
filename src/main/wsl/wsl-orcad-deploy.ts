@@ -21,7 +21,10 @@ import {
   managedOrcadSlot,
   probeManagedOrcadReadiness
 } from '../managed-server/lifecycle/orcad-managed-runtime-context'
-import { isWaitingOrcadUpdateDeferral } from '../managed-server/lifecycle/orcad-managed-auto-update'
+import {
+  isWaitingOrcadUpdateDeferral,
+  planManagedOrcadAutoUpdate
+} from '../managed-server/lifecycle/orcad-managed-auto-update'
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
 import { wakeAlreadyActiveOrcad } from '../ssh/orcad-already-active-wake'
 import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
@@ -36,7 +39,11 @@ import { wslDistroHolderKey } from './wsl-distro-holder-record'
 import { readWslDistroRegistryIdShared } from './wsl-distro-registry-id'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport, type WslOrcadHostTransport } from './wsl-orcad-host-transport'
-import { readWslOrcadIncumbent, type WslOrcadIncumbent } from './wsl-orcad-incumbent'
+import {
+  readWslOrcadIncumbent,
+  readWslOrcadIncumbentReadiness,
+  type WslOrcadIncumbent
+} from './wsl-orcad-incumbent'
 import { adoptUnrecordedWslOrcad } from './wsl-orcad-instance-adoption'
 
 /** An update this app carries that the host may not take yet; the incumbent keeps serving. */
@@ -72,6 +79,7 @@ export type WslOrcadDeployOptions = {
   createTransport?: (target: WslOrcadHostTarget) => OrcadHostTransport & { dispose?(): void }
   readRegistryId?: (distro: string) => Promise<string | null>
   readIncumbent?: typeof readWslOrcadIncumbent
+  readIncumbentReadiness?: typeof readWslOrcadIncumbentReadiness
   /** The orcad template to deploy from; defaults to the packaged one (the C10 lane swaps it). */
   templateDir?: string
 }
@@ -148,9 +156,30 @@ async function launchOverTransport(
   })
   const appVersion = getAppEnvironment().getVersion()
   const incumbentVersion = context.activationRecord.active
+  const candidateVersion = readLocalFullVersion(localOrcadDir)
+  if (incumbentVersion && !options.force) {
+    // Why SSH's rules: a newer build or the one just rolled back from must keep serving, not be
+    // deployed over. No failure memory here; a rejected WSL candidate shows up as `rolledBackFrom`.
+    const plan = planManagedOrcadAutoUpdate({
+      record: context.activationRecord,
+      candidateVersion,
+      appVersion,
+      failedBefore: false
+    })
+    if (plan.action === 'skip' && plan.reason !== 'current') {
+      const readiness = await (options.readIncumbentReadiness ?? readWslOrcadIncumbentReadiness)({
+        context,
+        slot
+      })
+      // Unproven: the deploy below still gates on the census and the downgrade refusal.
+      if (readiness) {
+        return readyLaunch({ fullVersion: incumbentVersion, readiness })
+      }
+    }
+  }
   // Only an update asks the incumbent: the same version is a no-op deploy on every connect.
   const incumbent: WslOrcadIncumbent | null =
-    incumbentVersion && incumbentVersion !== readLocalFullVersion(localOrcadDir)
+    incumbentVersion && incumbentVersion !== candidateVersion
       ? await (options.readIncumbent ?? readWslOrcadIncumbent)({
           context,
           slot

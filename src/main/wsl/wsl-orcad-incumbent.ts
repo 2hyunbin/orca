@@ -75,6 +75,42 @@ const DEFAULT_DEPENDENCIES: WslOrcadIncumbentDependencies = {
   census: requestOrcadTerminalCensus
 }
 
+/** Wakes the active slot of any version if it stopped, then proves it serving; null when unproven. */
+export async function readWslOrcadIncumbentReadiness(
+  args: {
+    context: OrcadRemoteContext<WslOrcadHostTarget>
+    slot: OrcadSlotOptions
+  },
+  dependencies: Pick<
+    WslOrcadIncumbentDependencies,
+    'wake' | 'probe' | 'readBuildHash'
+  > = DEFAULT_DEPENDENCIES
+): Promise<ServeReadiness | null> {
+  const active = args.context.activationRecord.active
+  if (!active) {
+    return null
+  }
+  try {
+    const wake = await dependencies.wake(args.slot)
+    if (wake.outcome === 'started') {
+      return wake.readiness
+    }
+    if (wake.outcome !== 'serving') {
+      return null
+    }
+    const remoteInstallDir = managedOrcadInstallDir(args.context, active)
+    return await dependencies.probe(
+      { ...args.slot, remoteInstallDir },
+      {
+        buildHash: await dependencies.readBuildHash(args.slot, remoteInstallDir),
+        fullVersion: active
+      }
+    )
+  } catch {
+    return null
+  }
+}
+
 /**
  * Wakes the active slot if a reboot or idle exit stopped it (its daemon then starts empty, so
  * the census proves zero), then asks it for its census over a bridge closed before returning.
@@ -91,24 +127,8 @@ export async function readWslOrcadIncumbent(
   if (!record.active || !Number.isFinite(activatedAt) || activatedAt < 0) {
     return UNREADABLE
   }
-  let readiness: ServeReadiness
-  try {
-    const wake = await dependencies.wake(args.slot)
-    if (wake.outcome === 'started') {
-      readiness = wake.readiness
-    } else if (wake.outcome === 'serving') {
-      const remoteInstallDir = managedOrcadInstallDir(args.context, record.active)
-      readiness = await dependencies.probe(
-        { ...args.slot, remoteInstallDir },
-        {
-          buildHash: await dependencies.readBuildHash(args.slot, remoteInstallDir),
-          fullVersion: record.active
-        }
-      )
-    } else {
-      return UNREADABLE
-    }
-  } catch {
+  const readiness = await readWslOrcadIncumbentReadiness(args, dependencies)
+  if (!readiness) {
     return UNREADABLE
   }
   const counts = updateTerminalCounts((options) =>
