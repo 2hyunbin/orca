@@ -69,24 +69,6 @@ export async function runOrcadPrebuildSmoke({ slot, prebuildsDir }) {
       `[orcad-prebuilds] ${slot} smoke failed under pinned Node ${NODE_RUNTIME_PIN.version} (exit ${result.code}${result.timedOut ? ', timed out' : ''})`
     )
   }
-  if (!slot.startsWith('win32-')) {
-    const relative = slot.startsWith('darwin-')
-      ? 'provider-exec/Orca Provider Host.app/Contents/MacOS/orca-provider-exec'
-      : 'bin/orca-provider-exec'
-    const contract = runProcessSync({
-      program: node,
-      args: [
-        join(import.meta.dirname, '../../native/provider-exec/protocol-test.mjs'),
-        join(prebuildsDir, slot, relative)
-      ],
-      timeoutMs: 30_000
-    })
-    process.stdout.write(contract.stdout)
-    process.stderr.write(contract.stderr)
-    if (contract.code !== 0 || contract.timedOut) {
-      throw new Error(`[orcad-prebuilds] ${slot} provider gate contract failed`)
-    }
-  }
   console.log(
     `[orcad-prebuilds] ${slot} loads and spawns under pinned Node ${NODE_RUNTIME_PIN.version}`
   )

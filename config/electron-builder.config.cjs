@@ -2,6 +2,7 @@ const { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } = requ
 const { execFileSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
 const {
+  MACOS_FOLDER_USAGE_DESCRIPTIONS,
   applyMacHelperFolderUsageDescriptions
 } = require('./scripts/macos-folder-usage-descriptions.cjs')
 const electronBuilderNativeRebuild = require('./scripts/electron-builder-native-rebuild.cjs')
@@ -66,8 +67,6 @@ const {
 } = require('./scripts/appimage-node-runtime.cjs')
 const { signWindowsUninstallerViaSignPath } = require('./scripts/windows-uninstaller-signing.cjs')
 const { buildMacShipItScheduling } = require('./scripts/macos-shipit-scheduling.cjs')
-const { compileProviderExec } = require('./scripts/build-provider-exec.cjs')
-const { buildMacProviderExecBundle } = require('./scripts/macos-provider-exec-bundle.cjs')
 
 // Why: dev-channel builds must carry the *release* identity — same bundle id,
 // Developer ID signature, and notarization ticket — or Squirrel.Mac refuses to
@@ -216,9 +215,25 @@ const windowsRuntimeResources = existsSync(
   ? createPackagedRuntimeNodeModuleResources('win32')
   : []
 
-const {
-  MAC_USAGE_DESCRIPTIONS: macUsageDescriptions
-} = require('./scripts/macos-usage-descriptions.cjs')
+// Shared with the terminal host helper so its purpose strings cannot drift from the app's.
+const macUsageDescriptions = {
+  NSAppleEventsUsageDescription:
+    'Orca allows terminal-launched developer tools to automate local apps when you request it.',
+  NSBluetoothAlwaysUsageDescription:
+    'Orca allows terminal-launched developer tools to access Bluetooth devices when you request it.',
+  NSBluetoothPeripheralUsageDescription:
+    'Orca allows terminal-launched developer tools to access Bluetooth devices when you request it.',
+  NSCameraUsageDescription: "Application requests access to the device's camera.",
+  NSLocationUsageDescription:
+    'Orca allows terminal-launched developer tools to access location when you request it.',
+  NSLocalNetworkUsageDescription:
+    'Orca allows terminal-launched developer tools to discover and connect to local development servers when you request it.',
+  NSMicrophoneUsageDescription: "Application requests access to the device's microphone.",
+  NSAudioCaptureUsageDescription:
+    'Orca allows terminal-launched developer tools to capture desktop audio when you request it.',
+  NSBonjourServices: ['_http._tcp', '_https._tcp'],
+  ...MACOS_FOLDER_USAGE_DESCRIPTIONS
+}
 // Developer ID team that signs every release-channel mac build.
 const ORCA_MAC_TEAM_ID = '6CX3WHS9HZ'
 
@@ -428,9 +443,6 @@ module.exports = {
         context.packager.appInfo.productFilename
       )
       const architecture = macSliceArch(context.arch, 'local-build compatibility')
-      await buildMacProviderExecBundle(resourcesDir, architecture, macUsageDescriptions, (target) =>
-        signMacStandaloneHelper(target, 'provider host', context.packager)
-      )
       const schedulingAddon = buildMacShipItScheduling(resourcesDir, architecture)
       await signMacStandaloneHelper(schedulingAddon, 'ShipIt scheduling', context.packager)
       const version = context.packager.appInfo.version
@@ -457,7 +469,6 @@ module.exports = {
     let appImageNodeRuntime = null
     if (context.electronPlatformName === 'linux') {
       const targetArch = { 1: 'x64', 3: 'arm64' }[context.arch]
-      compileProviderExec(join(resourcesDir, 'bin', 'orca-provider-exec'), targetArch)
       // Before the floor gate, so the bundled Node is held to the same glibc floor.
       appImageNodeRuntime = await placeAppImageNodeRuntime(resourcesDir, targetArch)
       // Why the arch is passed: symbol-version checks pass happily on a wrong-architecture binary,

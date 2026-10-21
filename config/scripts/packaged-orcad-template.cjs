@@ -20,8 +20,7 @@ const {
 const { join, relative, resolve, sep } = require('node:path')
 const {
   ORCAD_TEMPLATE_MANIFEST_FILENAME,
-  ORCAD_TEMPLATE_TARGETS_DIR,
-  orcadProviderExecArtifacts
+  ORCAD_TEMPLATE_TARGETS_DIR
 } = require('../../src/shared/orcad-artifacts.ts')
 const { verifyPackagedOrcadTemplate } = require('./verify-packaged-orcad-template.cjs')
 const {
@@ -138,17 +137,7 @@ async function finalizePackagedOrcadTemplate(resourcesDir, options) {
     for (const path of machO) {
       await signMacBinary(join(templateDir, ...path.split('/')))
     }
-    const seals = []
-    for (const target of readdirSync(join(templateDir, ORCAD_TEMPLATE_TARGETS_DIR))) {
-      if (!target.startsWith('darwin-')) continue
-      const seal = orcadProviderExecArtifacts(target).find((path) =>
-        path.endsWith('/CodeResources')
-      )
-      const bundle = seal.slice(0, seal.indexOf('/Contents/'))
-      await signMacBinary(join(templateDir, ORCAD_TEMPLATE_TARGETS_DIR, target, bundle))
-      seals.push(`${ORCAD_TEMPLATE_TARGETS_DIR}/${target}/${seal}`)
-    }
-    resealOrcadTemplateManifest(templateDir, [...machO, ...seals])
+    resealOrcadTemplateManifest(templateDir, machO)
   }
   compactPackagedOrcadRipgrep(resourcesDir)
 }

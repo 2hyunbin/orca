@@ -18,7 +18,6 @@ import {
   ORCAD_TEMPLATE_MANIFEST_FILENAME,
   ORCAD_TEMPLATE_TARGETS_DIR,
   orcadNodePtySlotFiles,
-  orcadProviderExecArtifacts,
   orcadTemplateCommonFilenames,
   orcadTemplateTargetFilenames
 } from '../../src/shared/orcad-artifacts.ts'
@@ -46,7 +45,7 @@ const outputDir = join(root, 'out', 'orcad-template')
 const buildDir = join(root, 'out', '.orcad-template-build')
 
 function isExecutable(filename) {
-  return /(?:^|\/)(?:rg|spawn-helper|orca-provider-exec)$/.test(filename)
+  return /(?:^|\/)(?:rg|spawn-helper)$/.test(filename)
 }
 
 function copy(source, destination, executable = false) {
@@ -157,9 +156,6 @@ function stageCompatTarget(compat, basePackageDir) {
   const gaps = findCompatAddonGaps(orcadTemplateTargetFilenames(compat), slotFiles)
   if (gaps.length > 0) {
     throw new Error(`compat target ${compat} would ship base-target addons: ${gaps.join(', ')}`)
-  }
-  for (const filename of orcadProviderExecArtifacts(compat)) {
-    slotFiles.set(filename, join(ORCAD_PREBUILDS_DIR, compat, ...filename.split('/')))
   }
   const files = {}
   for (const filename of orcadTemplateTargetFilenames(compat)) {

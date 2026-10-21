@@ -44,17 +44,6 @@ delete process.env.ELECTRON_RUN_AS_NODE
 
 const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(import.meta.dirname, '../..')
-if (process.platform !== 'win32') {
-  const { compileProviderExec } = require('./build-provider-exec.cjs')
-  compileProviderExec(
-    path.join(
-      repoRoot,
-      'native/provider-exec/.build',
-      `${process.platform}-${process.arch}`,
-      'orca-provider-exec'
-    )
-  )
-}
 const STABLE_NAME_FLAG = '--stable-name'
 const rawForwardedArgs = process.argv.slice(2)
 // Why: keep an escape hatch for tools that key off Electron's stock app name.

@@ -32,7 +32,6 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
-import { orcadProviderExecArtifacts } from '../../src/shared/orcad-artifacts.ts'
 import { NODE_RUNTIME_PIN } from '../../src/shared/node-runtime-pin.ts'
 import {
   assertCompatSlotHost,
@@ -55,8 +54,6 @@ import { ensurePinnedNodeExecutable, preparePinnedNodeDir } from './pinned-node-
 export { readManifest }
 
 const require = createRequire(import.meta.url)
-const { compileProviderExec } = require('./build-provider-exec.cjs')
-const { buildMacProviderExecBundle } = require('./macos-provider-exec-bundle.cjs')
 const ROOT = join(import.meta.dirname, '..', '..')
 // Why outside out/orcad: build:orcad wipes that directory and copies its target's slot from here.
 export const ORCAD_PREBUILDS_DIR = join(ROOT, 'out', 'orcad-prebuilds')
@@ -328,16 +325,6 @@ async function build() {
     console.log(`[orcad-prebuilds] stored ${slot}/${relative}`)
   }
 
-  const providerExec = {}
-  if (process.platform === 'darwin') {
-    await buildMacProviderExecBundle(slotDir, process.arch)
-  } else if (process.platform === 'linux') {
-    compileProviderExec(join(slotDir, 'bin/orca-provider-exec'))
-  }
-  for (const file of orcadProviderExecArtifacts(slot)) {
-    providerExec[file] = sha256Of(join(slotDir, file))
-  }
-
   const libc = detectLibc()
   const { glibc } =
     process.platform === 'linux' ? linuxSlotRecord(slot, slotDir, libc) : { glibc: null }
@@ -352,8 +339,7 @@ async function build() {
       libc,
       glibc,
       napi: SLOT_NAPI_VERSION,
-      files,
-      providerExec
+      files
     }
   })
   writeFileSync(join(PREBUILDS_DIR, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   assertCompatSlotHost,
@@ -23,8 +23,7 @@ import {
 } from './orcad-prebuild-slot-contents.mjs'
 import {
   ORCAD_ADDON_NAPI_VERSION,
-  orcadTemplateTargetFilenames,
-  orcadProviderExecArtifacts
+  orcadTemplateTargetFilenames
 } from '../../src/shared/orcad-artifacts.ts'
 
 const floors = createRequire(import.meta.url)('./verify-linux-glibc-floor.cjs')
@@ -224,15 +223,6 @@ describe('mergeManifest', () => {
 })
 
 describe('findSlotProblems', () => {
-  const providerFiles = (dir, slot) =>
-    Object.fromEntries(
-      orcadProviderExecArtifacts(slot).map((file) => {
-        const path = join(dir, slot, file)
-        mkdirSync(dirname(path), { recursive: true })
-        writeFileSync(path, 'provider-code')
-        return [file, sha256Of(path)]
-      })
-    )
   it('passes only when every named slot is present and every file matches its hash', () => {
     const dir = temp()
     mkdirSync(join(dir, 'darwin-arm64'))
@@ -240,25 +230,10 @@ describe('findSlotProblems', () => {
     const manifest = mergeManifest(
       null,
       next('darwin-arm64', {
-        entry: {
-          ...entry({ 'pty.node': sha256Of(join(dir, 'darwin-arm64', 'pty.node')) }),
-          providerExec: providerFiles(dir, 'darwin-arm64')
-        }
+        entry: entry({ 'pty.node': sha256Of(join(dir, 'darwin-arm64', 'pty.node')) })
       })
     )
     expect(findSlotProblems(manifest, dir, ['darwin-arm64'])).toEqual([])
-    const providerFile = orcadProviderExecArtifacts('darwin-arm64').at(-1)
-    const originalHash = manifest.slots['darwin-arm64'].providerExec[providerFile]
-    delete manifest.slots['darwin-arm64'].providerExec[providerFile]
-    expect(findSlotProblems(manifest, dir, ['darwin-arm64'])).toEqual([
-      `darwin-arm64/${providerFile}: not built`
-    ])
-    manifest.slots['darwin-arm64'].providerExec[providerFile] = originalHash
-    writeFileSync(join(dir, 'darwin-arm64', providerFile), 'torn')
-    expect(findSlotProblems(manifest, dir, ['darwin-arm64'])).toEqual([
-      `darwin-arm64/${providerFile}: sha256 does not match the manifest`
-    ])
-    writeFileSync(join(dir, 'darwin-arm64', providerFile), 'provider-code')
     expect(findSlotProblems(manifest, dir, ['darwin-arm64', 'win32-x64'])).toEqual([
       'win32-x64: not built'
     ])
@@ -278,12 +253,7 @@ describe('findSlotProblems', () => {
     writeFileSync(join(dir, slot, 'pty.node'), 'binary')
     const manifest = mergeManifest(
       null,
-      next(slot, {
-        entry: {
-          ...entry({ 'pty.node': sha256Of(join(dir, slot, 'pty.node')) }),
-          providerExec: providerFiles(dir, slot)
-        }
-      })
+      next(slot, { entry: entry({ 'pty.node': sha256Of(join(dir, slot, 'pty.node')) }) })
     )
     expect(findSlotProblems(manifest, dir, [slot])).toEqual([
       `${slot}/parcel-watcher/watcher.node: not built`
