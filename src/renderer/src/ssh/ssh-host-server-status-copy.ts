@@ -243,6 +243,36 @@ function linkedProjectsLine(
   }
 }
 
+// Why a cap: a refusal can list every blocking tab; the whole text stays behind "Details".
+const REFUSAL_INLINE_CHARS = 280
+
+/** Names what refuses the move; main writes that reason, with the way out, in English. */
+function refusedLine(detail: string | undefined): SshHostServerStatusLine {
+  const reason = detail?.trim()
+  if (!reason) {
+    return {
+      tone: 'destructive',
+      text: translate(
+        'auto.components.settings.sshHostServer.refusedBlocked',
+        'Orca isn’t set up on this host yet: something on the host stops the move.'
+      )
+    }
+  }
+  const inline =
+    reason.length > REFUSAL_INLINE_CHARS
+      ? `${reason.slice(0, REFUSAL_INLINE_CHARS).trimEnd()}…`
+      : reason
+  return {
+    tone: 'destructive',
+    text: translate(
+      'auto.components.settings.sshHostServer.refusedBlockedReason',
+      'Orca isn’t set up on this host yet. {{reason}}',
+      { reason: inline }
+    ),
+    detail: reason
+  }
+}
+
 function unservedLine(
   status: Extract<NonNullable<SshConnectionState['managedServer']>, { kind: 'relay' }>
 ): SshHostServerStatusLine {
@@ -275,15 +305,7 @@ function unservedLine(
     case 'source_changed':
       return sourceChangedLine()
     case 'refused':
-      // `detail` is main's English refusal, so it stays behind "Details".
-      return {
-        tone: 'destructive',
-        text: translate(
-          'auto.components.settings.sshHostServer.refusedBlocked',
-          'Orca isn’t set up on this host yet: something on the host stops the move.'
-        ),
-        ...withDetail(status.detail)
-      }
+      return refusedLine(status.detail)
     case 'deferred':
     case 'failed': {
       const blocked = blockedNodeDownload(status)

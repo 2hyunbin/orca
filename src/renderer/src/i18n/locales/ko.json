@@ -12708,7 +12708,8 @@
           "behindRolledBack": "이 앱보다 오래된 Orca 서버를 실행합니다. 마지막 업데이트가 롤백되었습니다. 서버 업데이트를 사용해 다시 시도하세요.",
           "behindNoTemplate": "이 앱이 업데이트할 수 없는 Orca 서버를 실행합니다. 이 빌드에는 이 호스트용 서버가 없습니다.",
           "behindMigrating": "Orca 서버를 실행합니다. 프로젝트 이동이 끝나면 업데이트됩니다.",
-          "behindCheckFailed": "Orca 서버를 실행합니다. Orca가 이 앱보다 뒤처졌는지 확인하지 못했습니다."
+          "behindCheckFailed": "Orca 서버를 실행합니다. Orca가 이 앱보다 뒤처졌는지 확인하지 못했습니다.",
+          "refusedBlockedReason": "아직 이 호스트에 Orca가 설정되지 않았습니다. {{reason}}"
         },
         "deltaMove": {
           "action": "새 프로젝트 이동…",

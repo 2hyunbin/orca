@@ -17,10 +17,10 @@ import { getManagedOrcadApi } from './use-managed-server-catalog'
 /** Offered only for a refusal that saved state alone causes. */
 export function canMoveSshHostAnyway(status: SshManagedServerStatus | undefined): boolean {
   return Boolean(
-    getManagedOrcadApi() &&
     status?.kind === 'relay' &&
     status.reason === 'refused' &&
-    status.canLeaveBehind
+    status.canLeaveBehind &&
+    getManagedOrcadApi()
   )
 }
 
@@ -35,7 +35,7 @@ export function SshHostMoveAnywayDialog({
   onOpenChange,
   onChanged
 }: {
-  target: SshTarget
+  target: Pick<SshTarget, 'id' | 'label'>
   status: SshManagedServerStatus | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -108,5 +108,34 @@ export function SshHostMoveAnywayDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** The same way out where the refusal shows outside Settings, e.g. a disconnected terminal pane. */
+export function SshHostMoveAnywayButton({
+  target,
+  status
+}: {
+  target: Pick<SshTarget, 'id' | 'label'>
+  status: SshManagedServerStatus | undefined
+}): React.JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  if (!canMoveSshHostAnyway(status)) {
+    return null
+  }
+  return (
+    <>
+      <Button type="button" size="xs" variant="outline" onClick={() => setOpen(true)}>
+        {translate('auto.components.settings.moveAnyway.action', 'Move anyway…')}
+      </Button>
+      {/* The connect it runs publishes the new status, so nothing here refreshes. */}
+      <SshHostMoveAnywayDialog
+        target={target}
+        status={status}
+        open={open}
+        onOpenChange={setOpen}
+        onChanged={() => {}}
+      />
+    </>
   )
 }
