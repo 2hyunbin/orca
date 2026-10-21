@@ -13,6 +13,7 @@ import { MobileLoadErrorState } from '../components/MobileLoadErrorState'
 type Props = {
   preview: MobileFilePreviewResult
   client?: MobileFilePreviewRpcSender | null
+  worktreeId?: string
   relativePath: string
   title: string
   editable: boolean
@@ -84,6 +85,8 @@ export function MobileFilePreviewBody({ preview, ...options }: Props) {
     ) : (
       <MobileFileMarkdownPreview
         relativePath={options.relativePath}
+        client={options.client}
+        worktreeId={options.worktreeId}
         content={preview.content}
         truncated={preview.truncated}
         byteLength={preview.byteLength}

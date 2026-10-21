@@ -23,6 +23,10 @@ vi.mock('lucide-react-native', () => ({
 const { writeText, alert } = vi.hoisted(() => ({ writeText: vi.fn(), alert: vi.fn() }))
 vi.mock('../platform/clipboard', () => ({ useClipboardWriter: () => ({ writeText }) }))
 
+vi.mock('./MobileMarkdownPreviewImage', () => ({
+  MobileMarkdownPreviewImage: 'MobileMarkdownPreviewImage'
+}))
+
 vi.mock('../components/MobileMarkdown', () => ({
   MobileMarkdown: 'MobileMarkdown'
 }))
