@@ -728,44 +728,4 @@ describe('PairedServerRowsProducer', () => {
     expect(call.mock.calls.length).toBe(rowReads + 1)
     expect(catalogCall.mock.calls.length).toBe(reads)
   })
-
-  it('settles a fresh read only on a fetch started after it, never on one in flight', async () => {
-    const { hosts, call, watches } = fakeHosts([{ id: 'box', live: true }])
-    let answer!: (reply: RuntimeRpcResponse<unknown>) => void
-    call.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
-    const producer = new PairedServerRowsProducer({
-      hasDemand: () => true,
-      hostLabelOverrides: () => new Map()
-    })
-    producer.attach(hosts)
-    watches.get('box')?.onChange()
-    await vi.advanceTimersByTimeAsync(0)
-    const reads: boolean[] = []
-    // A read already in flight started before the write's reply: it carries the old value.
-    producer.afterFreshRead('box', (read) => reads.push(read))
-    answer(psReply([row('a', { isPinned: false })]))
-    await vi.advanceTimersByTimeAsync(0)
-    expect(reads).toEqual([])
-    answer(psReply([row('a', { isPinned: true })]))
-    await vi.advanceTimersByTimeAsync(0)
-    expect(reads).toEqual([true])
-  })
-
-  it('ends a fresh read when contact drops, and at once for a server out of contact', async () => {
-    const { hosts, call, watches, state, publishStatus } = fakeHosts([{ id: 'box', live: true }])
-    call.mockImplementation(() => new Promise(() => {}))
-    const producer = new PairedServerRowsProducer({
-      hasDemand: () => true,
-      hostLabelOverrides: () => new Map()
-    })
-    producer.attach(hosts)
-    watches.get('box')?.onChange()
-    const reads: boolean[] = []
-    producer.afterFreshRead('box', (read) => reads.push(read))
-    state.servers = [{ id: 'box', live: false }]
-    publishStatus()
-    expect(reads).toEqual([false])
-    producer.afterFreshRead('box', (read) => reads.push(read))
-    expect(reads).toEqual([false, false])
-  })
 })

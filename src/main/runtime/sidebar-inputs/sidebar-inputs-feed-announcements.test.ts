@@ -44,7 +44,6 @@ async function host() {
     activity: new ProducerRevision(),
     paired: new ProducerRevision(),
     creations: new ProducerRevision(),
-    saving: new ProducerRevision(),
     rows: new ProducerRevision(),
     detected: new ProducerRevision(),
     liveContent: new ProducerRevision()
@@ -80,8 +79,7 @@ async function host() {
     pairedServerRows: {
       revision: revisions.paired,
       snapshot: () => ({ servers: [] }),
-      catalogs: () => [],
-      metaWrites: { revision: revisions.saving, saving: () => ({}) }
+      catalogs: () => []
     } as unknown as SidebarInputsFeedSources['pairedServerRows'],
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: as above.
     workspaceLifecycle: {
@@ -120,7 +118,6 @@ async function host() {
     temporal: { 'retention owner': () => temporal.forEach((listener) => listener()) },
     creations: { 'lifecycle queue': () => revisions.creations.bump() },
     inProgress: { 'lifecycle queue': () => revisions.creations.bump() },
-    saving: { 'paired server meta writes': () => revisions.saving.bump() },
     workspaces: { 'workspace rows producer': () => revisions.rows.bump() },
     detected: { 'detected checkouts producer': () => revisions.detected.bump() },
     liveContent: { 'live content producer': () => revisions.liveContent.bump() },

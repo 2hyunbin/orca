@@ -174,12 +174,6 @@ export function sidebarInputsFeedDomains(
       watch: (changed) => sources.store()?.onUIChanged?.(() => changed(urgent)) ?? (() => {})
     },
     {
-      // The paired-server fields still saving, per row; no reader yet.
-      name: 'saving',
-      read: () => pairedServerRows.metaWrites.saving(),
-      watch: (changed) => pairedServerRows.metaWrites.revision.onChange((change) => changed(change))
-    },
-    {
       name: 'pairedServerHosts',
       read: () =>
         Object.fromEntries(
