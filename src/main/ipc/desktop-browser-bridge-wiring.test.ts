@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { SshConnectionState, SshTarget } from '../../shared/ssh-types'
 
-const { targets } = vi.hoisted(() => {
+const { targets, settings } = vi.hoisted(() => {
   const targets: SshTarget[] = []
-  return { targets }
+  const settings: { current: Partial<GlobalSettings> } = { current: {} }
+  return { targets, settings }
 })
 
 vi.mock('electron', () => ({ webContents: { fromId: () => null } }))
 vi.mock('../browser/browser-manager', () => ({ browserManager: {} }))
 vi.mock('../runtime/rpc/methods', () => ({ ALL_RPC_METHODS: [] }))
-vi.mock('./ssh/ssh-ipc-context', () => ({ persistedStore: null }))
+vi.mock('./ssh/ssh-ipc-context', () => ({
+  persistedStore: { getSettings: () => settings.current }
+}))
 vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
   ensureOrcadManagedTunnel: vi.fn()
 }))
@@ -36,6 +40,11 @@ vi.mock('../../shared/runtime-environments', async (importOriginal) => ({
 }))
 
 import { listDesktopBrowserBridgeCandidates } from './desktop-browser-bridge-wiring'
+import {
+  DESKTOP_BROWSER_BRIDGE_ROUTING_SETTING_LABEL,
+  DESKTOP_BROWSER_BRIDGE_SETTING_LABEL,
+  DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE
+} from '../../shared/desktop-browser-bridge-protocol'
 
 const host = (id: string, extra: Partial<SshTarget> = {}): SshTarget => ({
   id,
@@ -56,6 +65,7 @@ const connected = {
 
 beforeEach(() => {
   targets.length = 0
+  settings.current = {}
 })
 
 describe('which managed hosts may attach the desktop browser bridge', () => {
@@ -69,5 +79,23 @@ describe('which managed hosts may attach the desktop browser bridge', () => {
     const candidates = listDesktopBrowserBridgeCandidates('/user-data', connected)
 
     expect(candidates.map((candidate) => candidate.targetId)).toEqual(['absent', 'on'])
+  })
+
+  // #31421: with the switch on, an unrouted host was told only to turn that switch on.
+  it('holds back a host whose pages browse from this device, and tells the host which setting', () => {
+    targets.push(host('routed'), host('opted-out'))
+    settings.current = { browserSshWorkspaceRoutingDisabledTargetIds: ['opted-out'] }
+    expect(
+      listDesktopBrowserBridgeCandidates('/user-data', connected).map((c) => c.targetId)
+    ).toEqual(['routed'])
+    settings.current = { browserSshWorkspaceRoutingEnabled: false }
+    expect(listDesktopBrowserBridgeCandidates('/user-data', connected)).toEqual([])
+
+    expect(DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE).toContain(
+      DESKTOP_BROWSER_BRIDGE_SETTING_LABEL
+    )
+    expect(DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE).toContain(
+      DESKTOP_BROWSER_BRIDGE_ROUTING_SETTING_LABEL
+    )
   })
 })
