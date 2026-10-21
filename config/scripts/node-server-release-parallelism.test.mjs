@@ -21,17 +21,17 @@ function context({ qualification, producer = 'success', event = 'pull_request', 
 it.each([
   { qualification: 'true', producer: 'success', expected: true },
   { qualification: '', producer: 'success', expected: true },
-  { qualification: 'true', producer: 'failure', expected: true },
-  { qualification: 'true', producer: 'cancelled', expected: true },
-  { qualification: 'true', producer: 'skipped', expected: true },
-  { qualification: '', producer: 'skipped', expected: true },
+  { qualification: 'true', producer: 'failure', expected: false },
+  { qualification: 'true', producer: 'cancelled', expected: false },
+  { qualification: 'true', producer: 'skipped', expected: false },
+  { qualification: '', producer: 'skipped', expected: false },
   { qualification: 'false', producer: 'skipped', expected: true },
   { qualification: 'false', producer: 'skipped', draft: true, expected: false },
   { producer: 'success', event: 'workflow_dispatch', expected: true },
   { producer: 'success', event: 'schedule', expected: true }
-])('starts native setup independently while retaining test-only behavior: %j', (scenario) => {
+])('gates qualification on the bundle while retaining test-only behavior: %j', (scenario) => {
   const ctx = context(scenario)
-  expect(persistence.needs).toBe('changes')
+  expect(persistence.needs).toEqual(['changes', 'mobile_web_bundle'])
   expect(shouldPersist(ctx).coerceString()).toBe(String(scenario.expected))
   expect(shouldPersist(ctx, true).coerceString()).toBe('false')
 })
@@ -112,107 +112,36 @@ it('avoids template download-cache transfers while retaining native and verifica
   }
 })
 
-const mobileWait = persistence.steps.find(
-  (step) => step.name === 'Wait for the qualified mobile bundle'
-)
-const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
-
-function waitForMobile(snapshots) {
-  let now = 0
-  let index = 0
-  const calls = []
-  const github = {
-    rest: { actions: { listJobsForWorkflowRun: 'jobs', listWorkflowRunArtifacts: 'artifacts' } },
-    async paginate(endpoint, input) {
-      calls.push({ endpoint, input })
-      return snapshots[Math.min(index, snapshots.length - 1)][endpoint] ?? []
+it.each(['persistence', 'linux_glibc_floor', 'linux_musl'])(
+  '%s waits through the dependency graph without polling the Actions API',
+  (name) => {
+    const job = workflow.jobs[name]
+    expect(job.needs).toEqual(['changes', 'mobile_web_bundle'])
+    expect(job.steps.some((step) => step.uses?.includes('github-script'))).toBe(false)
+    const evaluate = compileAggregateExpression(job.if, ['needs', 'github', 'inputs'])
+    for (const producer of ['success', 'failure', 'cancelled', 'skipped', 'timed_out']) {
+      const ctx = {
+        ...context({ qualification: 'true', producer }),
+        inputs: { build_template: true }
+      }
+      expect(evaluate(ctx).coerceString()).toBe(String(producer === 'success'))
     }
   }
-  const execute = new AsyncFunction(
-    'github',
-    'context',
-    'Date',
-    'setTimeout',
-    mobileWait.with.script
-  )
-  return {
-    calls,
-    result: execute(
-      github,
-      { repo: { owner: 'owner', repo: 'repo' }, runId: 42 },
-      { now: () => now },
-      (resolve, delay) => {
-        now += delay
-        index++
-        resolve()
-      }
-    )
-  }
-}
-
-const mobileProducer = (conclusion, prefix = 'orcad-template / qualify / ') => ({
-  name: `${prefix}mobile_web_bundle`,
-  status: conclusion ? 'completed' : 'in_progress',
-  conclusion
-})
-const mobileArtifact = { name: 'orcad-mobile-web-bundle', expired: false }
-
-it.each(['', 'orcad-template / ', 'orcad-template / qualify / '])(
-  'waits for the same-run producer to succeed before accepting its artifact (%s)',
-  async (prefix) => {
-    const { result, calls } = waitForMobile([
-      { artifacts: [mobileArtifact] },
-      { jobs: [mobileProducer(undefined, prefix)], artifacts: [mobileArtifact] },
-      {
-        jobs: [mobileProducer('success', prefix)],
-        artifacts: [{ ...mobileArtifact, expired: true }]
-      },
-      { jobs: [mobileProducer('success', prefix)], artifacts: [mobileArtifact] }
-    ])
-    await result
-    expect(calls.filter((call) => call.endpoint === 'jobs')).toHaveLength(4)
-    expect(calls.filter((call) => call.endpoint === 'artifacts')).toHaveLength(2)
-    expect(calls.every((call) => call.input.run_id === 42)).toBe(true)
-    expect(
-      calls
-        .filter((call) => call.endpoint === 'jobs')
-        .every((call) => call.input.filter === 'latest')
-    ).toBe(true)
-  }
 )
 
-it.each(['failure', 'cancelled', 'skipped', 'timed_out', 'action_required', 'startup_failure'])(
-  'rejects a %s producer even when an earlier attempt left an artifact',
-  async (conclusion) => {
-    await expect(
-      waitForMobile([{ jobs: [mobileProducer(conclusion)], artifacts: [mobileArtifact] }]).result
-    ).rejects.toThrow('Mobile bundle production did not succeed')
-  }
-)
-
-it('fails closed when the producer is missing or ambiguous', async () => {
-  await expect(waitForMobile([{}]).result).rejects.toThrow('Timed out')
-  await expect(
-    waitForMobile([{ jobs: [mobileProducer('success'), mobileProducer('success', '')] }]).result
-  ).rejects.toThrow('Ambiguous')
-})
-
-it('prepares every native lane before waiting and builds with the shared page afterward', () => {
+it('prepares every native lane and builds with the shared page', () => {
   for (const name of ['persistence', 'linux_glibc_floor', 'linux_musl']) {
     const job = workflow.jobs[name]
-    const wait = job.steps.findIndex((step) => step.name === mobileWait.name)
-    const download = job.steps.findIndex((step) => step.with?.name === mobileArtifact.name)
+    const download = job.steps.findIndex((step) => step.with?.name === 'orcad-mobile-web-bundle')
     const prepare = job.steps.findIndex(
       (step) =>
         step.uses?.includes('prepare-orcad-prebuilds') ||
         step.run?.includes('pnpm build:orcad-prebuilds')
     )
-    expect(job.needs).toBe('changes')
+    expect(job.needs).toEqual(['changes', 'mobile_web_bundle'])
     expect(prepare).toBeGreaterThan(-1)
-    expect(prepare).toBeLessThan(wait)
-    expect(wait).toBeLessThan(download)
-    expect(job.steps[wait].with.script).toBe(mobileWait.with.script)
-    expect(job.permissions).toEqual({ contents: 'read', actions: 'read' })
+    expect(prepare).toBeLessThan(download)
+    expect(job.permissions).toEqual({ contents: 'read' })
   }
   const alpine = workflow.jobs.linux_musl.steps
   const prepare = alpine.find((step) => step.name === 'Prepare native Alpine artifact')

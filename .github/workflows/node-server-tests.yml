@@ -136,10 +136,9 @@ jobs:
           fi
 
   persistence:
-    needs: changes
+    needs: [changes, mobile_web_bundle]
     permissions:
       contents: read
-      actions: read
     concurrency:
       group: node-server-persistence-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
@@ -147,6 +146,7 @@ jobs:
     # Drafts re-trigger at readiness; inherited caller events must not depend on PR fields.
     if: >-
       ${{ !cancelled() && needs.changes.outputs.should_run != 'false' &&
+      (needs.changes.outputs.qualification == 'false' || needs.mobile_web_bundle.result == 'success') &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
@@ -213,32 +213,6 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arches: ${{ (inputs.build_template && matrix.os == 'windows-2022') && 'x64 arm64' || (runner.arch == 'ARM64' && 'arm64' || 'x64') }}
-      - name: Wait for the qualified mobile bundle
-        if: needs.changes.outputs.qualification != 'false'
-        uses: actions/github-script@v8
-        with: &mobile-bundle-wait
-          script: |
-            const deadline = Date.now() + 15 * 60_000
-            while (Date.now() < deadline) {
-              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-                ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100
-              })
-              const producers = jobs.filter(job => job.name === 'mobile_web_bundle' ||
-                job.name.endsWith(' / mobile_web_bundle'))
-              if (producers.length > 1) throw new Error('Ambiguous mobile bundle producer')
-              const producer = producers[0]
-              if (producer?.status === 'completed') {
-                if (producer.conclusion !== 'success') {
-                  throw new Error(`Mobile bundle production did not succeed: ${producer.conclusion}`)
-                }
-                const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
-                  ...context.repo, run_id: context.runId, per_page: 100
-                })
-                if (artifacts.some(artifact => artifact.name === 'orcad-mobile-web-bundle' && !artifact.expired)) return
-              }
-              await new Promise(resolve => setTimeout(resolve, 5_000))
-            }
-            throw new Error('Timed out waiting for the qualified mobile bundle')
       - uses: actions/download-artifact@v8
         if: needs.changes.outputs.qualification != 'false'
         with:
@@ -379,10 +353,9 @@ jobs:
           overwrite: true
 
   linux_glibc_floor:
-    needs: changes
+    needs: [changes, mobile_web_bundle]
     permissions:
       contents: read
-      actions: read
     concurrency:
       group: node-server-linux_glibc_floor-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
@@ -391,6 +364,7 @@ jobs:
       ${{ !cancelled() &&
       needs.changes.outputs.should_run != 'false' &&
       needs.changes.outputs.qualification != 'false' &&
+      needs.mobile_web_bundle.result == 'success' &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
@@ -438,9 +412,6 @@ jobs:
           pnpm build:orcad-prebuilds
           pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
           pnpm build:orcad-prebuilds --smoke
-      - name: Wait for the qualified mobile bundle
-        uses: actions/github-script@v8
-        with: *mobile-bundle-wait
       - uses: actions/download-artifact@v8
         with:
           name: orcad-mobile-web-bundle
@@ -515,10 +486,9 @@ jobs:
           overwrite: true
 
   linux_musl:
-    needs: changes
+    needs: [changes, mobile_web_bundle]
     permissions:
       contents: read
-      actions: read
     concurrency:
       group: node-server-linux_musl-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
@@ -526,6 +496,7 @@ jobs:
       ${{ !cancelled() &&
       needs.changes.outputs.should_run != 'false' &&
       needs.changes.outputs.qualification != 'false' &&
+      needs.mobile_web_bundle.result == 'success' &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
@@ -566,9 +537,6 @@ jobs:
           pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
           pnpm build:orcad-prebuilds --smoke
           NODE_SERVER_PREPARATION
-      - name: Wait for the qualified mobile bundle
-        uses: actions/github-script@v8
-        with: *mobile-bundle-wait
       - uses: actions/download-artifact@v8
         with:
           name: orcad-mobile-web-bundle
