@@ -84,7 +84,9 @@ export function retireStructuredAgentSessionTab(args: {
 function reacceptHostSessionTabs(
   target: RuntimeClientTarget,
   worktreeId: string,
-  intentOwner: WebSessionIntentOwner
+  intentOwner: WebSessionIntentOwner,
+  /** This machine's host still lists the chat. */
+  stillListed?: { sessionId: string; reopen: () => void }
 ): void {
   // Lazy imports: both refresh paths apply frames through this module.
   const reread =
@@ -98,8 +100,19 @@ function reacceptHostSessionTabs(
           })
         )
       : import('./local-structured-session-tabs-sync/inventory-refresh').then(
-          ({ refreshLocalStructuredSessionWorktreeTabs }) =>
-            refreshLocalStructuredSessionWorktreeTabs(worktreeId, { reacceptCurrentVersion: true })
+          async ({ refreshLocalStructuredSessionWorktreeTabs }) => {
+            const listed = await refreshLocalStructuredSessionWorktreeTabs(worktreeId, {
+              reacceptCurrentVersion: true
+            })
+            if (
+              stillListed &&
+              listed?.tabs.some(
+                (tab) => tab.type === 'agent-session' && tab.sessionId === stillListed.sessionId
+              )
+            ) {
+              stillListed.reopen()
+            }
+          }
         )
   reread.catch((error: unknown) =>
     console.warn('[structured-agent-session] tab re-read after a close failed', error)
@@ -114,7 +127,7 @@ export function beginStructuredAgentSessionTabClose(args: {
   provisional: boolean
   layoutOwner: StructuredLaunchSlotOwner
   onError?: (error: unknown) => void
-  /** Main dropped the tab before the host answered: a host that kept the chat shows it again. */
+  /** Main dropped the tab before the host answered: a host still listing the chat shows it again. */
   reopen?: () => void
 }): void {
   if (args.provisional) {
@@ -147,13 +160,19 @@ export function beginStructuredAgentSessionTabClose(args: {
     if (!hostTabClosed) {
       // The host may still have the chat: let its list show it again.
       clearWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId)
-      args.reopen?.()
     }
     // Why: this machine's host emits its removal frame before the close answers, so only a failure
     // needs a read; a paired server's frames travel apart from its answer, so, as for its terminal
     // closes, every close is followed by a read.
     if (!hostTabClosed || args.target.kind === 'environment') {
-      reacceptHostSessionTabs(args.target, args.worktreeId, intentOwner)
+      reacceptHostSessionTabs(
+        args.target,
+        args.worktreeId,
+        intentOwner,
+        !hostTabClosed && args.reopen
+          ? { sessionId: args.sessionId, reopen: args.reopen }
+          : undefined
+      )
     }
   })
 }

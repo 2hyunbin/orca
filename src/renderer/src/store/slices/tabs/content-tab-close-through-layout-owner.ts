@@ -109,6 +109,17 @@ export function closeContentTabThroughLayoutOwner(
       selectAfterClose(get, tab, close.nextActiveTabId)
     }
   }
+  const closeAsToday = (): void => {
+    closingAsToday.add(tab.id)
+    let closedId: string | null = null
+    try {
+      close.closeHere()
+      closedId = tab.id
+    } finally {
+      closingAsToday.delete(tab.id)
+      settle(closedId)
+    }
+  }
   const sent = sendLayoutApply(
     get(),
     tab.worktreeId,
@@ -125,23 +136,15 @@ export function closeContentTabThroughLayoutOwner(
           settle(null)
         }
       },
-      asToday: () => {
-        closingAsToday.add(tab.id)
-        let closedId: string | null = null
-        try {
-          close.closeHere()
-          closedId = tab.id
-        } finally {
-          closingAsToday.delete(tab.id)
-          settle(closedId)
-        }
-      },
+      asToday: closeAsToday,
       // A tab main no longer holds, or whose workspace it no longer holds, was closed there first
-      // (a host's chat close, a removed workspace).
+      // (a host's chat close, a removed workspace). A workspace main never held draws only here.
       refused: (code) => {
         const shows = get().unifiedTabsByWorktree[tab.worktreeId]?.some((e) => e.id === tab.id)
         if ((code === 'tab_not_found' || code === 'workspace_not_found') && !shows) {
           dropped()
+        } else if (code === 'workspace_not_found') {
+          closeAsToday()
         } else {
           settle(null)
         }

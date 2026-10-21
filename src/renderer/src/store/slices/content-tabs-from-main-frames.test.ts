@@ -269,6 +269,39 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('content tabs drawn from main’s fram
     expect(mainTabs().some((tab) => tab.entityId === sessionId)).toBe(false)
   })
 
+  it('closes a window-only tab of a workspace main does not hold, as main’s tab_not_found does', async () => {
+    const OTHER = 'repo1::/path/wt2'
+    const tab = {
+      id: 'browser-tab-1',
+      entityId: 'browser-1',
+      groupId: 'group-other',
+      worktreeId: OTHER,
+      contentType: 'browser' as const,
+      label: 'Page',
+      customLabel: null,
+      color: null,
+      sortOrder: 0,
+      createdAt: 1
+    }
+    seedStore(store, {
+      unifiedTabsByWorktree: { ...store.getState().unifiedTabsByWorktree, [OTHER]: [tab] },
+      groupsByWorktree: {
+        ...store.getState().groupsByWorktree,
+        [OTHER]: [{ id: 'group-other', worktreeId: OTHER, activeTabId: tab.id, tabOrder: [tab.id] }]
+      }
+    })
+    layoutApplyTestTransport.answerWith({ refuse: 'workspace_not_found' })
+
+    store.getState().closeUnifiedTab(tab.id)
+    await main.settle()
+
+    expect(layoutApplyTestTransport.sentOfType('closeTabs')).toEqual([
+      expect.objectContaining({ workspace: OTHER, tabIds: [tab.id] })
+    ])
+    expect(store.getState().unifiedTabsByWorktree[OTHER] ?? []).toEqual([])
+    layoutApplyTestTransport.answerWith('apply')
+  })
+
   it('draws a listing’s new chats in order once main places them; the listing sends nothing', async () => {
     await redrawWithTerminal()
     applyStructuredSessionTabSnapshots([hostListing(['chat-a', 'chat-b'])])
