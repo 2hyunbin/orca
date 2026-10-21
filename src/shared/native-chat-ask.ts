@@ -5,6 +5,8 @@ import type {
   InteractiveQuestionParser
 } from './native-chat-ask-types'
 import { isInterruptedStatusMessage, type NativeChatMessage } from './native-chat-types'
+import { resolveNativeChatTranscriptAgent } from './native-chat-agent-support'
+import { AGENT_TUI_CLEAR_INPUT_MAX } from './agent-tui-input-clear'
 
 export type { AskOption, AskPrompt, AskQuestion, InteractiveQuestionParser }
 
@@ -38,10 +40,12 @@ function parseCanonicalQuestionsInput(input: unknown): AskPrompt | null {
       questions.push({
         question: text,
         header: 'header' in raw && typeof raw.header === 'string' ? raw.header : undefined,
+        // Why: OpenCode names the flag `multiple`, OMP's ask tool `multi`.
         multiSelect:
           'multiSelect' in raw
             ? raw.multiSelect === true
-            : 'multiple' in raw && raw.multiple === true,
+            : ('multiple' in raw && raw.multiple === true) ||
+              ('multi' in raw && raw.multi === true),
         options
       })
     }
@@ -326,6 +330,74 @@ export function buildCodexAskAnswerKeys(
     groups.push({ raw: ASK_ENTER })
   }
   return groups
+}
+
+// OMP >= 18.2 uses arrows, Space to toggle, and Enter to select.
+export function buildOmpAskAnswerKeys(
+  prompt: AskPrompt,
+  selections: AskAnswerSelection[]
+): AskAnswerKeyGroup[] {
+  if (!hasAskAnswer(prompt, selections)) {
+    return []
+  }
+  const hasSubmitTab = prompt.questions.length > 1 || prompt.questions.some((q) => q.multiSelect)
+  // Clear any draft that would otherwise consume the dialog keys.
+  const groups: AskAnswerKeyGroup[] = [{ raw: AGENT_TUI_CLEAR_INPUT_MAX }]
+  const moveTo = (optionCount: number, row: number): void => {
+    // The recommended option can start highlighted; Up clamps at the first row.
+    const nav = ASK_PREVIOUS_ROW.repeat(optionCount) + ASK_NEXT_ROW.repeat(row)
+    if (nav) {
+      groups.push({ raw: nav })
+    }
+  }
+
+  prompt.questions.forEach((q, qi) => {
+    const sel = selections[qi]
+    const other = (sel?.other ?? '').trim()
+    if (q.multiSelect) {
+      for (const i of sel?.indices ?? []) {
+        moveTo(q.options.length, i)
+        groups.push({ raw: ' ' })
+      }
+      if (other) {
+        // Submitting Other advances to the next question.
+        moveTo(q.options.length, q.options.length)
+        groups.push({ raw: ASK_ENTER }, { text: other }, { raw: ASK_ENTER })
+      } else {
+        // Right advances even when Other is highlighted.
+        groups.push({ raw: ASK_NEXT_TAB })
+      }
+    } else if (other) {
+      moveTo(q.options.length, q.options.length)
+      groups.push({ raw: ASK_ENTER }, { text: answerLabels(q, sel).join(', ') }, { raw: ASK_ENTER })
+    } else if ((sel?.indices.length ?? 0) > 0) {
+      moveTo(q.options.length, sel!.indices[0]!)
+      groups.push({ raw: ASK_ENTER })
+    } else {
+      groups.push({ raw: ASK_NEXT_TAB })
+    }
+  })
+
+  if (hasSubmitTab) {
+    groups.push({ raw: ASK_ENTER })
+  }
+  return groups
+}
+
+/** Build the answer keystrokes for the agent that owns this question card. */
+export function buildNativeChatAskAnswerKeys(
+  agent: string | null | undefined,
+  prompt: AskPrompt,
+  selections: AskAnswerSelection[]
+): AskAnswerKeyGroup[] {
+  const transcriptAgent = resolveNativeChatTranscriptAgent(agent)
+  if (transcriptAgent === 'codex') {
+    return buildCodexAskAnswerKeys(prompt, selections)
+  }
+  if (transcriptAgent === 'omp') {
+    return buildOmpAskAnswerKeys(prompt, selections)
+  }
+  return buildAskAnswerKeys(prompt, selections)
 }
 
 /** Whether any question in `selections` carries an answer worth submitting. */
