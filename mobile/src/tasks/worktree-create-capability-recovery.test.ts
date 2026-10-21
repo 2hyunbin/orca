@@ -110,4 +110,99 @@ describe('capability probe recovery', () => {
     expect(current?.tasksSupported).toBe(true)
     expect(host.sendRequest).toHaveBeenCalledTimes(2)
   })
+  it.each(['before', 'after'])(
+    'ignores a prior connection reply resolved %s the current reply',
+    async (order) => {
+      const host = connection()
+      let resolveOld: ((value: Awaited<ReturnType<typeof host.sendRequest>>) => void) | undefined
+      let resolveNew: ((value: Awaited<ReturnType<typeof host.sendRequest>>) => void) | undefined
+      host.sendRequest.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve
+          })
+      )
+      host.sendRequest.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveNew = resolve
+          })
+      )
+      await render(host.client)
+      await act(async () => host.reconnect())
+      const oldReply = {
+        id: 'old',
+        ok: true,
+        result: { capabilities: ['mobile.tasks.v1', 'worktree.create-idempotency.v1'] },
+        _meta: { runtimeId: 'old' }
+      }
+      const newReply = {
+        id: 'new',
+        ok: true,
+        result: { capabilities: [] },
+        _meta: { runtimeId: 'new' }
+      }
+      await act(async () => {
+        if (order === 'before') {
+          resolveOld?.(oldReply)
+        }
+        resolveNew?.(newReply)
+      })
+      expect(current?.tasksSupported).toBe(false)
+      if (order === 'after') {
+        await act(async () => resolveOld?.(oldReply))
+      }
+      expect(current?.tasksSupported).toBe(false)
+      await expect(current?.getWorktreeCreateCutoverSupport()).resolves.toBe(false)
+      expect(host.sendRequest).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it('shares one pending status barrier between create callers and the sheet', async () => {
+    const host = connection()
+    let resolve: ((value: Awaited<ReturnType<typeof host.sendRequest>>) => void) | undefined
+    host.sendRequest.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        })
+    )
+    await render(host.client)
+    const first = current?.getWorktreeCreateCutoverSupport()
+    const second = current?.getWorktreeCreateCutoverSupport()
+    const launch = current?.getAgentLaunchSupport()
+    expect(host.sendRequest).toHaveBeenCalledTimes(1)
+    await act(async () =>
+      resolve?.({
+        id: 'shared',
+        ok: true,
+        result: { capabilities: ['mobile.tasks.v1', 'worktree.create-idempotency.v1'] },
+        _meta: { runtimeId: 'test' }
+      })
+    )
+    await expect(first).resolves.toBeTruthy()
+    await expect(second).resolves.toBeTruthy()
+    await expect(launch).resolves.toBe(false)
+    expect(current?.tasksSupported).toBe(true)
+  })
+
+  it('cancels backoff while disabled and cannot rearm after unmount', async () => {
+    vi.useFakeTimers()
+    const host = connection()
+    host.sendRequest.mockRejectedValue(new Error('offline'))
+    await render(host.client)
+    await render(host.client, false)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(host.sendRequest).toHaveBeenCalledTimes(1)
+    await render(host.client)
+    expect(host.sendRequest).toHaveBeenCalledTimes(2)
+    act(() => renderer?.unmount())
+    renderer = undefined
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(host.sendRequest).toHaveBeenCalledTimes(2)
+  })
 })
