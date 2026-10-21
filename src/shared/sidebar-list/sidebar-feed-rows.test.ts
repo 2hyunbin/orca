@@ -57,6 +57,7 @@ function domains(overrides: Partial<SidebarFeedDomains>): SidebarFeedDomains {
     activity: new Map(),
     review: new Map(),
     creations: new Map(),
+    inProgress: new Map(),
     pairedServerHosts: new Map(),
     pairedServerRows: new Map(),
     repoIcons: new Map(),
@@ -140,6 +141,55 @@ describe('buildSidebarFeedRows keeps same-id workspaces on two hosts apart', () 
       view({ filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true } })
     )
     expect(outline(built.sectionRows)).toEqual(['ssh:box|r::/w/same@0', 'local|r::/w/other@0'])
+  })
+})
+
+describe('buildSidebarFeedRows hides a workspace the moment its sleep is requested', () => {
+  const repos = [repo('r')]
+  const workspaces = buildWorkspaceRows({
+    worktrees: [worktree('r::/w/a', { hostId: 'local' }), worktree('r::/w/b', { hostId: 'local' })],
+    folderWorkspaces: [],
+    repos,
+    lineageById: {}
+  })
+  const live = { ...IDLE_WORKSPACE_ACTIVITY, terminal: 'live' as const }
+  const hideSleeping = view({
+    filters: { ...NO_WORKSPACE_ROW_FILTERS, hideSleepingWorkspaces: true }
+  })
+  const build = (overrides: Partial<SidebarFeedDomains>) =>
+    outline(
+      buildSidebarFeedRows(
+        domains({
+          workspaces,
+          activity: new Map([
+            ['r::/w/a', live],
+            ['r::/w/b', live]
+          ]),
+          ...overrides
+        }),
+        catalog(repos),
+        hideSleeping
+      ).sectionRows
+    )
+
+  it('hides a live workspace while main runs its sleep', () => {
+    expect(build({})).toEqual(['local|r::/w/a@0', 'local|r::/w/b@0'])
+    expect(
+      build({ inProgress: new Map([['local|r::/w/a', { kind: 'sleep', queuedBehind: 0 }]]) })
+    ).toEqual(['local|r::/w/b@0'])
+  })
+
+  it('brings it back when the sleep went unconfirmed, even with nothing live', () => {
+    expect(
+      build({
+        activity: new Map(),
+        inProgress: new Map([['local|r::/w/a', { kind: 'sleep', queuedBehind: 0, paused: true }]])
+      })
+    ).toEqual(['local|r::/w/a@0'])
+  })
+
+  it('shows it again once a failed sleep ends with its terminals still live', () => {
+    expect(build({ inProgress: new Map() })).toEqual(['local|r::/w/a@0', 'local|r::/w/b@0'])
   })
 })
 

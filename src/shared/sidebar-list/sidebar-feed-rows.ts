@@ -52,7 +52,7 @@ import type { SidebarFeedDomains } from './sidebar-feed-domains'
 import { planSidebarRows } from './sidebar-row-plan'
 import type { SortBy } from './smart-sort'
 import { selectVisibleSidebarWorktrees } from './visible-worktrees'
-import { isIdleWorkspaceActivity } from './workspace-activity-facts'
+import { feedLifecycleHint, isWorkspaceAsleep } from './workspace-sleep-verdict'
 import { prGroupOfReviewFact } from './workspace-review-facts'
 
 /** The host's view settings a reader shows the list with; the host's own phone reads them off ui.get. */
@@ -155,6 +155,10 @@ export function planSidebarFeedRows(
     })
   )
 
+  const hostOf = (worktree: Worktree) => {
+    const repo = repoMap.get(worktree.repoId)
+    return repo ? getWorktreeExecutionHostId(worktree, repo, defaultHostId) : null
+  }
   const visibleWorktrees = selectVisibleSidebarWorktrees({
     rows: allWorktrees,
     ancestorByIdentity,
@@ -164,10 +168,7 @@ export function planSidebarFeedRows(
       isArchived: (worktree) => worktree.isArchived,
       isFolderWorkspace: () => false,
       repoId: (worktree) => worktree.repoId,
-      hostId: (worktree) => {
-        const repo = repoMap.get(worktree.repoId)
-        return repo ? getWorktreeExecutionHostId(worktree, repo, defaultHostId) : null
-      },
+      hostId: hostOf,
       isOtherClient: (worktree) =>
         isWorkspaceOwnedBySomeoneElse(worktree, pairedDeviceIdsByEnvironment),
       isDefaultBranch: (worktree) => factsOf(worktree)?.defaultBranch === true,
@@ -175,13 +176,12 @@ export function planSidebarFeedRows(
       isCliCreated: (worktree) => factsOf(worktree)?.cliCreated === true,
       isDetachedHead: (worktree) => factsOf(worktree)?.detachedHead === true,
       isMainWorktree: (worktree) => worktree.isMainWorktree,
-      isSleeping: (worktree) => {
-        const activity = domains.activity.get(worktree.id)
-        return (
-          !retained.has(getWorktreeHostIdentity(worktree)) &&
-          (!activity || isIdleWorkspaceActivity(activity))
-        )
-      }
+      isSleeping: (worktree) =>
+        isWorkspaceAsleep({
+          hint: feedLifecycleHint(domains.inProgress, worktree.id, hostOf(worktree)),
+          retained: retained.has(getWorktreeHostIdentity(worktree)),
+          activity: domains.activity.get(worktree.id)
+        })
     },
     worktreeLineageById: lineageById,
     filterRepoIds: view.filters.filterRepoIds,

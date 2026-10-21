@@ -49,6 +49,7 @@ const NO_FEED: SidebarFeedDomains = {
   activity: new Map(),
   review: new Map(),
   creations: new Map(),
+  inProgress: new Map(),
   pairedServerHosts: new Map(),
   pairedServerRows: new Map(),
   repoIcons: new Map(),
