@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { AskAnswerSelection, AskPrompt } from '../../../src/shared/native-chat-ask'
 import { MobileNativeChatAsk } from './MobileNativeChatAsk'
@@ -49,7 +49,11 @@ export function MobileNativeChatPromptCard({
 }): React.JSX.Element | null {
   const card =
     ask && requiresTerminal ? (
-      <View style={styles.terminalCard}>
+      <ScrollView
+        style={styles.terminalScroll}
+        contentContainerStyle={styles.terminalCard}
+        keyboardShouldPersistTaps="always"
+      >
         <Text style={styles.explanation}>Answer this OMP question in the terminal.</Text>
         <Pressable
           accessibilityRole="button"
@@ -61,7 +65,7 @@ export function MobileNativeChatPromptCard({
         >
           <Text style={styles.terminalButtonText}>Answer in terminal</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     ) : ask ? (
       <MobileNativeChatAsk
         key={askKey ?? 'ask'}
@@ -103,7 +107,7 @@ export function MobileNativeChatPromptCard({
   // card keeps its selections.
   return (
     <>
-      <View style={collapsedPrompt ? styles.collapsed : undefined}>{card}</View>
+      <View style={collapsedPrompt ? styles.collapsed : ask ? styles.ask : undefined}>{card}</View>
       {collapsedPrompt ? (
         <MobileNativeChatPromptStrip
           title={collapsedPrompt.title}
@@ -115,7 +119,9 @@ export function MobileNativeChatPromptCard({
 }
 
 const styles = StyleSheet.create({
+  ask: { maxHeight: '50%', flexShrink: 1, minHeight: 0 },
   collapsed: { display: 'none' },
+  terminalScroll: { flexShrink: 1, minHeight: 0 },
   terminalCard: {
     backgroundColor: colors.bgPanel,
     borderTopWidth: StyleSheet.hairlineWidth,
