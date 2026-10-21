@@ -14,9 +14,8 @@ import {
   getPreferredPairingOffer,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
-import type { SshTarget } from '../../../shared/ssh-types'
 import type { ServeReadiness } from '../../server/serve-readiness'
-import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
+import type { OrcadHostTarget, OrcadHostTransport } from '../../ssh/orcad-host-transport'
 import { tunneledOrcadPairingCode } from '../../ssh/orcad-tunneled-pairing'
 import {
   getSshConnectionManager,
@@ -33,16 +32,15 @@ export const PAIRING_REPAIR_WINDOW_MS = 10 * 60_000
 // Why remembered briefly: every reconnecting pane would otherwise re-read the host over SSH.
 export const PAIRING_REPAIR_FAILURE_HOLD_MS = 15_000
 
+type ManagedOrcadHostAccess = { target: OrcadHostTarget; connection: OrcadHostTransport }
+
+/** SSH reaches the host over SSH; WSL through its distro, the trust root of its own pairing. */
 export type ManagedOrcadPairingRepairDeps = {
   resolve: (environmentId: string) => KnownRuntimeEnvironment
-  connect: (environment: KnownRuntimeEnvironment) => Promise<{
-    target: SshTarget
-    connection: OrcadHostTransport
-  }>
-  readReadiness: (input: {
-    target: SshTarget
-    connection: OrcadHostTransport
-  }) => Promise<ServeReadiness | null>
+  connect: (environment: KnownRuntimeEnvironment) => Promise<ManagedOrcadHostAccess>
+  readReadiness: (input: ManagedOrcadHostAccess) => Promise<ServeReadiness | null>
+  /** The bridge or tunnel ports the pairing names; defaults to the SSH deployment's. */
+  ports?: (environment: KnownRuntimeEnvironment) => { localPort: number; remotePort: number } | null
   refresh: (environmentId: string, pairingCode: string) => KnownRuntimeEnvironment
   /** Retires every transport still authenticating with the refused token, once per repair. */
   repaired: (environmentId: string) => void | Promise<void>
@@ -166,11 +164,11 @@ export class ManagedOrcadPairingRepairs {
       throw fail(capSpentError(recent.length))
     }
     assertRuntimeEnvironmentNotReconciling(environment)
-    const deployment = getOrcadSshDeployment(environment)
+    const deployment = (this.deps.ports ?? getOrcadSshDeployment)(environment)
     if (!deployment) {
-      throw new OrcadManagedPairingRepairFailedError('this server is not managed over SSH')
+      throw new OrcadManagedPairingRepairFailedError('this server has no managed deployment')
     }
-    // Why counted only once read: losing SSH proves nothing about the pairing.
+    // Why counted only once read: losing contact with the host proves nothing about the pairing.
     const readiness = await this.deps.readReadiness(await this.deps.connect(environment))
     // Why re-read before judging the answer: an update or recovery may have stored a newer pairing
     // while SSH answered; everything after this is synchronous, so the check holds through the write.

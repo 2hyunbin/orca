@@ -1,4 +1,5 @@
 /** The production WSL side of `WslHostService`: one holder, connection manager and supervisor. */
+import { createWslOrcadPairingRecovery } from './wsl-orcad-pairing-repair'
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { parsePairingCode } from '../../shared/pairing'
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
@@ -64,6 +65,7 @@ export function createWslHostConnector(options: {
   }
   const manager = new WslOrcadConnectionManager({
     holder,
+    pairingRecovery: createWslOrcadPairingRecovery(options.userDataPath),
     getPairingOffer: (environmentId) =>
       findWslHostDeployment(options.userDataPath, environmentId)
         ? resolveEnvironmentPairingOffer(options.userDataPath, environmentId)

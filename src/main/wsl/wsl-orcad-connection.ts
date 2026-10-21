@@ -30,7 +30,7 @@ import {
 } from './wsl-orcad-deploy'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
-import { resolveWslOrcadPairing } from './wsl-orcad-pairing-identity'
+import { resolveWslOrcadPairing, type WslOrcadPairingRecovery } from './wsl-orcad-pairing-identity'
 import { trackWslOrcadHostEnvironment } from './wsl-orcad-host-environments'
 import {
   listenWslOrcadStdioBridgeOnPreferredPort,
@@ -80,6 +80,8 @@ export type WslOrcadConnectionDependencies = {
     options: WslOrcadStdioBridgeOptions
   ) => Promise<StartedPortForward>
   verifyIdentity?: (pairingOffer: string, readiness: ServeReadiness) => Promise<OrcadTunnelIdentity>
+  /** Re-pairs a refused enrolled token; without it a refusal fails the connect. */
+  pairingRecovery?: Omit<WslOrcadPairingRecovery, 'environmentId'>
   /** A connection (re)opened, its offer changed, or its status moved; null once it closed. */
   onChange?: (
     distro: string,
@@ -146,6 +148,15 @@ export class WslOrcadConnectionManager {
     return tracked
   }
 
+  /** The persisted enrolled pairing, else the live connection's (a host not yet recorded). */
+  private enrolledOffer(key: string, environmentId: string): PairingOffer | null {
+    const current = this.active.get(key)?.connection
+    return (
+      this.dependencies.getPairingOffer?.(environmentId) ??
+      (current?.environmentId === environmentId ? parsePairingCode(current.pairingOffer) : null)
+    )
+  }
+
   get(distro: string): WslOrcadConnection | null {
     return this.active.get(wslDistroHolderKey(distro))?.connection ?? null
   }
@@ -201,7 +212,7 @@ export class WslOrcadConnectionManager {
       environmentId,
       label,
       intent: options.intent,
-      pairedOffer: this.dependencies.getPairingOffer?.(environmentId) ?? null,
+      pairedOffer: this.enrolledOffer(key, environmentId),
       signal: options.signal,
       holder: this.dependencies.holder,
       createTransport: () => transport
@@ -213,11 +224,10 @@ export class WslOrcadConnectionManager {
       throw new WslOrcadConnectionSupersededError(distro)
     }
     const current = this.active.get(key)
-    const paired =
-      this.dependencies.getPairingOffer?.(environmentId) ??
-      (current?.connection.environmentId === environmentId
-        ? parsePairingCode(current.connection.pairingOffer)
-        : null)
+    const paired = this.enrolledOffer(key, environmentId)
+    const recovery = this.dependencies.pairingRecovery
+      ? { ...this.dependencies.pairingRecovery, environmentId }
+      : undefined
     if (
       current &&
       current.connection.remotePort === launch.port &&
@@ -227,7 +237,8 @@ export class WslOrcadConnectionManager {
         launch,
         current.connection.localPort,
         paired,
-        this.dependencies.verifyIdentity
+        this.dependencies.verifyIdentity,
+        recovery
       )
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
@@ -266,7 +277,8 @@ export class WslOrcadConnectionManager {
         launch,
         forward.entry.localPort,
         paired,
-        this.dependencies.verifyIdentity
+        this.dependencies.verifyIdentity,
+        recovery
       )
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
