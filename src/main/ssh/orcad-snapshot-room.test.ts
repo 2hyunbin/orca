@@ -76,6 +76,7 @@ const deploy = (extra: Partial<Parameters<typeof deployOrcad>[0]> = {}) =>
     census: { ...IDLE, chatWork: 0 },
     restartAdmission: host.restartAdmission(OLD),
     recountCensus: async () => extra.census ?? IDLE,
+    releaseIncumbentAdmission: async () => {},
     ...extra
   })
 

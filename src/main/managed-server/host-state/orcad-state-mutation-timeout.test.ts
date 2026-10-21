@@ -88,7 +88,8 @@ const deploy = (): Promise<unknown> =>
     target: 'linux-x64-glibc',
     census,
     restartAdmission: host.restartAdmission(OLD),
-    recountCensus: async () => census
+    recountCensus: async () => census,
+    releaseIncumbentAdmission: async () => {}
   })
 const rollback = (): Promise<unknown> =>
   rollbackOrcad({

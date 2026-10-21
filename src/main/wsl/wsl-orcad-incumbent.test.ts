@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer } from '../../shared/pairing'
+import { ORCAD_UPDATE_ADMISSION_FENCE_MS } from '../../shared/orcad-terminal-census'
 import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import type { OrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
@@ -138,11 +139,18 @@ describe('readWslOrcadIncumbent', () => {
     expect(deps.wake).toHaveBeenCalledTimes(1)
     expect(deps.listen).toHaveBeenCalledTimes(2)
     expect(close).toHaveBeenCalledTimes(2)
-    // The recount before an older host's Force stop also gets its own bridge, never a wake.
+    // The recount before an older host's Force stop also gets its own bridge, never a wake, and
+    // only it closes terminal admission, so no terminal starts between it and the stop.
     vi.mocked(deps.census).mockResolvedValueOnce({ ...LIVE, liveSessions: 3 })
     await expect(incumbent.recount()).resolves.toMatchObject({ liveSessions: 3 })
+    expect(vi.mocked(deps.census).mock.calls[1]?.[3]).toEqual({
+      releaseFinishedAutomationTerminals: true,
+      closeAdmissionForMs: ORCAD_UPDATE_ADMISSION_FENCE_MS
+    })
+    await incumbent.releaseAdmission()
+    expect(vi.mocked(deps.census).mock.calls[2]?.[3]).toEqual({ closeAdmissionForMs: 0 })
     expect(deps.wake).toHaveBeenCalledTimes(1)
-    expect(close).toHaveBeenCalledTimes(3)
+    expect(close).toHaveBeenCalledTimes(4)
   })
 
   // After a reboot the woken incumbent's daemon starts empty, so the census proves zero.

@@ -85,7 +85,8 @@ const deploy = (): Promise<unknown> =>
     target: 'linux-x64-glibc',
     census,
     restartAdmission: host.restartAdmission(OLD),
-    recountCensus: async () => census
+    recountCensus: async () => census,
+    releaseIncumbentAdmission: async () => {}
   })
 const deployFromNewerApp = (): Promise<unknown> =>
   deployOrcad({
@@ -95,6 +96,7 @@ const deployFromNewerApp = (): Promise<unknown> =>
     census,
     restartAdmission: host.restartAdmission(OLD),
     recountCensus: async () => census,
+    releaseIncumbentAdmission: async () => {},
     appVersion: '1.9.0'
   })
 const rollback = (): Promise<unknown> =>

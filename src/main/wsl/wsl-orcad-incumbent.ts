@@ -16,6 +16,7 @@ import type { OrcadRemoteContext } from '../managed-server/install/orcad-remote-
 import type { OrcadSlotOptions } from '../ssh/orcad-recovery-slot'
 import { readRemoteOrcadBuildHash } from '../managed-server/install/orcad-remote-build-hash'
 import { requestOrcadTerminalCensus } from '../ssh/orcad-terminal-census-client'
+import { updateTerminalCounts } from '../ssh/orcad-update-terminal-counts'
 import {
   orcadRestartAdmissionPort,
   type OrcadIncumbentConnector,
@@ -33,9 +34,13 @@ export type WslOrcadIncumbent = {
   readiness: ServeReadiness | null
   /** Reserves its restart over a fresh bridge (no wake) under the fence; null without readiness. */
   restartAdmission: OrcadRestartAdmissionPort | null
-  /** Fresh proof (no wake) for explicit Force on a host that predates restart admission; never
-   *  zero unread. */
+  /**
+   * Fresh proof (no wake) for explicit Force on a host that predates restart admission, closing
+   * its terminal admission first so none starts before the stop; never zero unread.
+   */
   recount: () => Promise<OrcadTerminalCensus>
+  /** Reopens the admission `recount` closed, when the incumbent keeps running. */
+  releaseAdmission: () => Promise<void>
 }
 
 const UNVERIFIABLE: OrcadTerminalCensus = {
@@ -48,6 +53,7 @@ const UNREADABLE: WslOrcadIncumbent = {
   census: UNVERIFIABLE,
   readiness: null,
   recount: async () => UNVERIFIABLE,
+  releaseAdmission: async () => {},
   restartAdmission: null
 }
 
@@ -116,19 +122,16 @@ export async function readWslOrcadIncumbent(
     return UNREADABLE
   }
   const connect = incumbentConnector(args, readiness, dependencies)
-  // Why release: finished automation shells would otherwise defer every update, as on SSH.
-  const census = await connect((connection) =>
-    dependencies.census(connection, activatedAt, undefined, {
-      releaseFinishedAutomationTerminals: true
-    })
-  ).catch(() => UNVERIFIABLE)
+  const counts = updateTerminalCounts((options) =>
+    connect((connection) => dependencies.census(connection, activatedAt, undefined, options)).catch(
+      () => UNVERIFIABLE
+    )
+  )
   return {
-    census,
+    census: await counts.countFirst(),
     readiness,
-    recount: () =>
-      connect((connection) => dependencies.census(connection, activatedAt)).catch(
-        () => UNVERIFIABLE
-      ),
+    recount: counts.recountCensus,
+    releaseAdmission: counts.releaseIncumbentAdmission,
     restartAdmission: dependencies.restartAdmission(connect, activatedAt)
   }
 }

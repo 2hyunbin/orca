@@ -62,7 +62,9 @@ import {
 } from './orcad-recovery-slot'
 import { orcadSnapshotPath } from './orcad-incumbent-recovery'
 import {
+  abandonIncumbentRestart,
   commitIncumbentRestart,
+  incumbentRecountLapsed,
   reserveIncumbentRestart,
   restartAfterSnapshotFailure,
   restoreAfterRejectedCandidate,
@@ -187,7 +189,8 @@ export async function activateInstalledOrcad(
     const reserved = await reserveIncumbentRestart(options, {
       record,
       candidateVersion: fullVersion,
-      counted: countedLockedRecord(options, record)
+      counted: countedLockedRecord(options, record),
+      now: now().getTime()
     })
     if (reserved.action === 'defer') {
       return notActivated(reserved.code, reserved.reason)
@@ -207,10 +210,17 @@ export async function activateInstalledOrcad(
   try {
     await writeOrcadActivationTransaction(options, transaction)
   } catch (error) {
-    if (restart?.kind === 'host') {
-      await restart.admission.release(restart.token)
-    }
+    // Nothing stopped, so the incumbent keeps serving and must take new work again.
+    await abandonIncumbentRestart(options, restart)
     throw error
+  }
+  if (incumbentRecountLapsed(restart, now().getTime())) {
+    await abandonIncumbentRestart(options, restart)
+    return notActivated(
+      'orcad_update_terminal_census_unavailable',
+      'The terminal count went stale before the current server could be stopped, so nothing ' +
+        'was stopped. Orca will try the update again.'
+    )
   }
   lock.retainOnError()
   // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.
@@ -227,6 +237,10 @@ export async function activateInstalledOrcad(
       )
     }
     if (ended.outcome === 'unconfirmed') {
+      // A stop that was never sent leaves the incumbent serving, so it takes new work again.
+      if (!ended.stopMayBeUnderway) {
+        await abandonIncumbentRestart(options, restart)
+      }
       return notActivated(
         'orcad_outgoing_stop_incomplete',
         `${ended.reason} No snapshot was taken and the candidate was not started. Orca requires ` +

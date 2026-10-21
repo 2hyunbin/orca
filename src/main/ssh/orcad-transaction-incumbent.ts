@@ -18,19 +18,51 @@ import {
 } from './orcad-recovery-slot'
 import { recoverOrcadIncumbent } from './orcad-incumbent-recovery'
 import { errorMessage } from '../../shared/error-message'
+import { ORCAD_UPDATE_ADMISSION_STOP_BY_MS } from '../../shared/orcad-terminal-census'
 
 export type OrcadIncumbentRestart =
   | { kind: 'host'; admission: OrcadRestartAdmissionPort; token: string }
-  | { kind: 'legacy' }
+  /** `recountedAt`: when the recount that closed the older host's terminal admission began. */
+  | { kind: 'legacy'; recountedAt: number }
 type OrcadUpdateDeferral = Extract<OrcadUpdateDecision, { action: 'defer' }>
+
+/** Once the recount may have closed it; a failed reopen only leaves the fence to lapse on its own. */
+export async function reopenIncumbentAdmission(
+  options: Pick<OrcadDeployOptions, 'releaseIncumbentAdmission'>
+): Promise<void> {
+  await options.releaseIncumbentAdmission().catch(() => {})
+}
+
+/** Leaves the incumbent serving: frees its reservation, or reopens an older host's recount fence. */
+export async function abandonIncumbentRestart(
+  options: Pick<OrcadDeployOptions, 'releaseIncumbentAdmission'>,
+  restart: OrcadIncumbentRestart | null
+): Promise<void> {
+  if (restart?.kind === 'host') {
+    await restart.admission.release(restart.token)
+  } else if (restart?.kind === 'legacy') {
+    await reopenIncumbentAdmission(options)
+  }
+}
+
+/** An older host's recount fence lapses on its own; a stop after that could kill a later terminal. */
+export function incumbentRecountLapsed(
+  restart: OrcadIncumbentRestart | null,
+  now: number
+): boolean {
+  return restart?.kind === 'legacy' && now - restart.recountedAt > ORCAD_UPDATE_ADMISSION_STOP_BY_MS
+}
 
 /**
  * Reserves the counted incumbent's restart and replans on the census taken under it, so work
  * started during the upload still defers. Explicit Force can bootstrap a proven older host.
  */
 export async function reserveIncumbentRestart(
-  options: Pick<OrcadDeployOptions, 'restartAdmission' | 'force' | 'census' | 'recountCensus'>,
-  input: { record: OrcadActivationRecord; candidateVersion: string; counted: boolean }
+  options: Pick<
+    OrcadDeployOptions,
+    'restartAdmission' | 'force' | 'census' | 'recountCensus' | 'releaseIncumbentAdmission'
+  >,
+  input: { record: OrcadActivationRecord; candidateVersion: string; counted: boolean; now: number }
 ): Promise<({ action: 'reserved' } & OrcadIncumbentRestart) | OrcadUpdateDeferral> {
   const admission = options.restartAdmission
   const notReserved = (reason: string): OrcadUpdateDeferral => ({
@@ -42,9 +74,11 @@ export async function reserveIncumbentRestart(
     return notReserved('This Orca server cannot reserve a safe restart, so it keeps serving.')
   }
   if (options.force && options.census.restartAdmissionSupported === false) {
-    // A recount that fails reads as unverifiable, never as the older host.
+    // The older host is stopped from outside, so its recount closes terminal admission until the
+    // stop; every attempt that stops nothing reopens it. A failed recount reads as unverifiable.
     const census = await options.recountCensus().catch(() => null)
     if (census?.restartAdmissionSupported !== false) {
+      await reopenIncumbentAdmission(options)
       return notReserved('The older server could not be verified again. Nothing was stopped.')
     }
     const legacyPlan = planOrcadUpdate({
@@ -54,11 +88,11 @@ export async function reserveIncumbentRestart(
       candidateDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL,
       force: true
     })
-    return legacyPlan.action === 'proceed'
-      ? { action: 'reserved', kind: 'legacy' }
-      : legacyPlan.action === 'defer'
-        ? legacyPlan
-        : notReserved(legacyPlan.reason)
+    if (legacyPlan.action === 'proceed') {
+      return { action: 'reserved', kind: 'legacy', recountedAt: input.now }
+    }
+    await reopenIncumbentAdmission(options)
+    return legacyPlan.action === 'defer' ? legacyPlan : notReserved(legacyPlan.reason)
   }
   if (!admission) {
     return notReserved('This Orca server cannot reserve a safe restart, so it keeps serving.')
@@ -92,7 +126,8 @@ export async function reserveIncumbentRestart(
 export type OrcadIncumbentRestartOutcome =
   | { outcome: 'exited' }
   | { outcome: 'refused' }
-  | { outcome: 'unconfirmed'; reason: string }
+  /** `stopMayBeUnderway`: false only when nothing was sent, so the host keeps serving. */
+  | { outcome: 'unconfirmed'; reason: string; stopMayBeUnderway: boolean }
 
 /**
  * Lets the incumbent end itself through its reservation, then waits for its process to go.
@@ -109,12 +144,14 @@ export async function commitIncumbentRestart(
     if (orcadStopFreedTheHost(stopped)) {
       return { outcome: 'exited' }
     }
-    if (stopped === 'still-running' || stopped === 'unconfirmed') {
+    const stopMayBeUnderway = stopped === 'still-running' || stopped === 'unconfirmed'
+    if (stopMayBeUnderway) {
       lock.retain()
     }
     return {
       outcome: 'unconfirmed',
-      reason: `The older server's stop was not confirmed (${stopped}).`
+      reason: `The older server's stop was not confirmed (${stopped}).`,
+      stopMayBeUnderway
     }
   }
   const { admission, token } = restart
@@ -136,7 +173,8 @@ export async function commitIncumbentRestart(
     outcome: 'unconfirmed',
     reason:
       `Could not verify that orcad ${incumbent.version} exited within ` +
-      `${ORCAD_SLOT_STOP_WAIT_SECONDS}s of ${asked} its restart.`
+      `${ORCAD_SLOT_STOP_WAIT_SECONDS}s of ${asked} its restart.`,
+    stopMayBeUnderway: true
   }
 }
 

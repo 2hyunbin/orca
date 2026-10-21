@@ -26,6 +26,12 @@ import {
   type OrcadRestartAdmissionPort
 } from './orcad-restart-admission-client'
 
+export type OrcadTerminalCensusRequestOptions = {
+  releaseFinishedAutomationTerminals?: boolean
+  /** Close the server's terminal admission this long before counting; 0 reopens it. */
+  closeAdmissionForMs?: number
+}
+
 const UNVERIFIABLE: OrcadTerminalCensus = {
   liveSessions: null,
   startedSinceActivation: null,
@@ -41,7 +47,7 @@ export async function collectManagedTerminalCensus(
   environment: KnownRuntimeEnvironment,
   record: OrcadActivationRecord,
   timeoutMs = 15_000,
-  options: { releaseFinishedAutomationTerminals?: boolean } = {}
+  options: OrcadTerminalCensusRequestOptions = {}
 ): Promise<OrcadTerminalCensus> {
   if (!record.active) {
     return { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: null }
@@ -90,7 +96,7 @@ export async function requestOrcadTerminalCensus(
   connection: PairedRuntimeConnection,
   activatedAt: number,
   timeoutMs = 15_000,
-  options: { releaseFinishedAutomationTerminals?: boolean } = {}
+  options: OrcadTerminalCensusRequestOptions = {}
 ): Promise<OrcadTerminalCensus> {
   let restartAdmissionSupported: boolean | undefined
   try {
@@ -101,7 +107,11 @@ export async function requestOrcadTerminalCensus(
         activatedAt,
         ...(options.releaseFinishedAutomationTerminals
           ? { releaseFinishedAutomationTerminals: true }
-          : {})
+          : {}),
+        // Safe for any server: an older one drops the field, and its answer omits the fence.
+        ...(options.closeAdmissionForMs === undefined
+          ? {}
+          : { closeAdmissionForMs: options.closeAdmissionForMs })
       },
       timeoutMs,
       (status) => {

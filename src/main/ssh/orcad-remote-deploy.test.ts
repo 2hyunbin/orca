@@ -237,6 +237,7 @@ function options(overrides: Partial<OrcadDeployOptions> = {}): OrcadDeployOption
     restartAdmission: restartAdmission(),
     // An unchanged recount unless a test opens a terminal during the upload.
     recountCensus: async () => census,
+    releaseIncumbentAdmission: async () => {},
     readinessTimeoutMs: 50,
     sleep: async () => {},
     now: () => new Date('2026-02-02T00:00:00.000Z'),
