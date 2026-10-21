@@ -557,7 +557,7 @@ describe('Claude stream-json connection', () => {
     const session = {
       connection,
       options: new Map<string, string>(),
-      reusableOptions: new Map<string, string>(),
+      appliedInputOptions: new Map<string, string>(),
       reportedOptions: {},
       startup: { state: 'proven' }
     } as unknown as ClaudeSession
