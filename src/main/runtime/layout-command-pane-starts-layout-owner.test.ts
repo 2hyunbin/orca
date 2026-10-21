@@ -2,7 +2,10 @@
 // after the command is written. The reply never carries the effects, a wake keeps the pane's
 // resume record in the pane-owned form, and a failed start shows on the pane and keeps the record.
 import { describe, expect, it, vi } from 'vitest'
-import type { SleepingAgentSessionRecord as SleepingRecord } from '../../shared/agent-session-resume'
+import {
+  isPaneSleepRecord,
+  type SleepingAgentSessionRecord as SleepingRecord
+} from '../../shared/agent-session-resume'
 import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import type { RestoredPaneTrigger } from './terminal/recovery/restored-pane-start'
 
@@ -301,6 +304,22 @@ describe('a client’s wake of a slept pane in the layout-owner build', () => {
     await restarted.runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
     await vi.waitFor(() => expect(restarted.spawn).toHaveBeenCalled())
     expect(restarted.spawn.mock.calls[0]![0].command ?? '').toContain('provider-session-1')
+  })
+
+  it('a woken running pane reads live, not sleeping: its record becomes a running agent’s', async () => {
+    const { runtime, spawn, started, getSession } = await desktopRuntime({ slept: true })
+
+    await runtime.applyLayoutCommand({ ...wake, paneKeys: [PANE_KEY] })
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+    started.resolve({ id: 'persisted-pty' })
+    await vi.waitFor(() =>
+      expect(getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]?.origin).toBe('live')
+    )
+    const record = getSession().sleepingAgentSessionsByPaneKey![PANE_KEY]!
+    // Not a sleep record, so main's layout holds it as the pane's resume record (L254).
+    expect(isPaneSleepRecord(record)).toBe(false)
+    expect(record.providerSession).toEqual(RECORD.providerSession)
+    expect(runtime.startStatusOf(PANE_KEY)).toBeNull()
   })
 
   it('keeps the record when the start fails', async () => {

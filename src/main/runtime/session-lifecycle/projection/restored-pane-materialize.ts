@@ -8,6 +8,8 @@ import type {
 } from '../../terminal/launch/mobile-terminal-startup'
 import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { markResumedRecordLive } from './window-wake-sleep-record'
 import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -32,6 +34,9 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
   protected abstract resolvePaneOwnedResumeStartup(
     ...args: Parameters<MobileSessionNavigation['resolvePaneOwnedResumeStartup']>
   ): ReturnType<MobileSessionNavigation['resolvePaneOwnedResumeStartup']>
+  protected abstract commitWorkspaceSessionEdit(
+    ...args: Parameters<MobileSessionNavigation['commitWorkspaceSessionEdit']>
+  ): ReturnType<MobileSessionNavigation['commitWorkspaceSessionEdit']>
 
   abstract subscribeWorkspaceLayouts(
     listener: Parameters<WorkspaceLayoutStream['subscribe']>[0]
@@ -197,7 +202,17 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
           ...(automatic ? { refuseSleptWorktree: true } : {})
         }
       )
-      return created.tab.ptyId ?? null
+      const ptyId = created.tab.ptyId ?? null
+      // Switch point: under main the resumed agent runs, so its record must not read as a sleep.
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && ptyId && 'resumeProviderSession' in agentStartup) {
+        const hostId = this.getWorkspaceSessionHostIdForWorktree(worktreeId)
+        void markResumedRecordLive(
+          (edit) => this.commitWorkspaceSessionEdit(hostId, edit),
+          `${tab.parentTabId}:${tab.leafId}`,
+          agentStartup.resumeProviderSession
+        ).catch((err: unknown) => console.warn('[layout] could not mark a resumed pane live', err))
+      }
+      return ptyId
     } catch (err) {
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&
