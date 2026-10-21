@@ -3,7 +3,11 @@
 // writers leave); this pins where, so the patch goes only once no partition holds such rows.
 
 import { describe, expect, it, vi } from 'vitest'
-import { LOCAL_EXECUTION_HOST_ID, toSshExecutionHostId } from '../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toSshExecutionHostId,
+  type ExecutionHostId
+} from '../../shared/execution-host'
 import { collectLayoutLeafIdsInOrder } from '../../shared/workspace-layout/terminal-pane-tree'
 import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
 import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../shared/workspace-layout/workspace-layout-legacy-profile.test-fixture'
@@ -34,7 +38,7 @@ vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: 
 
 /** Each patch a writer made: the stored partition, the full saves before and after, the patch. */
 type PatchCall = {
-  hostId: string
+  hostId: ExecutionHostId
   stored: WorkspaceSessionState
   before: WorkspaceSessionState
   full: WorkspaceSessionState
@@ -42,7 +46,7 @@ type PatchCall = {
 }
 const patches = vi.hoisted(() => {
   const calls: PatchCall[] = []
-  const hostIds: string[] = []
+  const hostIds: ExecutionHostId[] = []
   return { calls, hostIds }
 })
 vi.mock('../../shared/workspace-layout/workspace-layout-record-patch', async (importOriginal) => {
@@ -54,7 +58,13 @@ vi.mock('../../shared/workspace-layout/workspace-layout-record-patch', async (im
       full: WorkspaceSessionState
     ) => {
       const patched = actual.patchStoredSession(stored, before, full)
-      patches.calls.push({ hostId: patches.hostIds.shift() ?? '', stored, before, full, patched })
+      patches.calls.push({
+        hostId: patches.hostIds.shift() ?? LOCAL_EXECUTION_HOST_ID,
+        stored,
+        before,
+        full,
+        patched
+      })
       return patched
     }
   }
@@ -78,14 +88,14 @@ const recordsDiffering = (left: WorkspaceSessionState, right: WorkspaceSessionSt
   ].sort()
 
 /** What the partition loads to; the revision is exempt, as every load's tombstone pass bumps it. */
-const reloaded = (hostId: string, session: WorkspaceSessionState) =>
+const reloaded = (hostId: ExecutionHostId, session: WorkspaceSessionState) =>
   stableJson({
     ...saveWorkspaceLayout(loadWorkspaceLayout(hostId, session, nameBasedLoadContext())),
     terminalTopologyRevisionByRepoId: undefined
   })
 
 /** The patches one write made, each with the partition it wrote (in the order it patches them). */
-function captured(hostIds: readonly string[], run: () => void): PatchCall[] {
+function captured(hostIds: readonly ExecutionHostId[], run: () => void): PatchCall[] {
   patches.calls = []
   patches.hostIds = [...hostIds]
   run()
