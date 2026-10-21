@@ -164,10 +164,12 @@ export function AgentDefaultArgsInput({
 }
 
 export function AgentDefaultEnvInput({
+  showEmpty = false,
   defaultEnv,
   envOverride,
   onSaveEnv
 }: {
+  showEmpty?: boolean
   defaultEnv: Record<string, string>
   envOverride: Record<string, string>
   onSaveEnv: (value: Record<string, string>) => void | Promise<void>
@@ -192,7 +194,7 @@ export function AgentDefaultEnvInput({
     }
   }
 
-  if (!defaultEnvText && !draftSeed && draft === null && !pending) {
+  if (!showEmpty && !defaultEnvText && !draftSeed && draft === null && !pending) {
     return null
   }
   return (

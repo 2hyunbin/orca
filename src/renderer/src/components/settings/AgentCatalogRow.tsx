@@ -74,6 +74,7 @@ export type AgentCatalogRowProps = {
   defaultCmd: string
   defaultArgs: string
   defaultEnv: Record<string, string>
+  hasDefaultEnv?: boolean
   isDetected: boolean
   isEnabled: boolean
   isDefault: boolean
@@ -103,6 +104,7 @@ export function AgentCatalogRow({
   defaultCmd,
   defaultArgs,
   defaultEnv,
+  hasDefaultEnv,
   isDetected,
   isEnabled,
   isDefault,
@@ -322,6 +324,7 @@ export function AgentCatalogRow({
                   <AgentDefaultEnvInput
                     key={agentId}
                     defaultEnv={defaultEnv}
+                    showEmpty={hasDefaultEnv}
                     envOverride={envOverride}
                     onSaveEnv={onSaveEnv}
                   />

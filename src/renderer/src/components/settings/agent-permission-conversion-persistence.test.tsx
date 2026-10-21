@@ -305,6 +305,45 @@ it('imports then removes Goose carrier through one whole edit per acknowledgemen
   expect(persist).toHaveBeenCalledTimes(2)
 })
 
+it('keeps Goose Environment editable after Reset and reopen without restoring generated defaults', async () => {
+  savedEnvironment(
+    { goose_mode: 'lowercase-is-distinct', QA_GOOS_KEEP: 'keep', QA_EDITOR_ONE: 'one' },
+    'goose'
+  )
+  useAppStore.setState(({ settings }) => ({
+    settings: settings && {
+      ...settings,
+      agentPermissionOverrides: { goose: 'own' }
+    }
+  }))
+  render(<AgentsHarness />)
+  const input = environmentInput(
+    'goose_mode=lowercase-is-distinct QA_GOOS_KEEP=keep QA_EDITOR_ONE=one'
+  )
+  const row = input.closest('div.py-3')
+  if (!(row instanceof HTMLElement)) {
+    throw new Error('Missing Goose row')
+  }
+  fireEvent.click(within(row).getByRole('button', { name: 'Reset' }))
+  await waitFor(() => expect(persist).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(useAppStore.getState().settings?.agentDefaultEnv?.goose).toEqual({}))
+  await waitFor(() =>
+    expect(within(row).getByPlaceholderText('No default environment')).toHaveProperty('value', '')
+  )
+  fireEvent.click(within(row).getByRole('button', { name: 'Collapse agent settings' }))
+  fireEvent.click(within(row).getByRole('button', { name: 'Expand agent settings' }))
+  const empty = within(row).getByPlaceholderText('No default environment')
+  fireEvent.change(empty, { target: { value: 'QA_AFTER_RESET=yes' } })
+  fireEvent.blur(empty)
+  await waitFor(() =>
+    expect(useAppStore.getState().settings?.agentDefaultEnv?.goose).toEqual({
+      QA_AFTER_RESET: 'yes'
+    })
+  )
+  expect(useAppStore.getState().settings?.agentPermissionOverrides?.goose).toBe('own')
+  expect(persist).toHaveBeenCalledTimes(2)
+})
+
 it('reports one direct local permission action failure without changing saved intent', async () => {
   persist.mockRejectedValueOnce(new Error('private error'))
   render(<AgentsHarness />)
