@@ -4,12 +4,16 @@ import { Terminal } from '@xterm/xterm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalDocumentScope, type TerminalDocumentScope } from './document-scope'
 import { seedWordSelection } from './selection-range'
+import { armLongPress, dispatcherShouldBlockSurface } from './tap-dispatch'
+import { handleDragMove, stopEdgeScroll } from './selection-overlay'
+import { terminalDocumentDouble } from './document-terminal-double.test-support'
 
 const terminals: Terminal[] = []
 
 afterEach(() => {
   terminals.splice(0).forEach((term) => term.dispose())
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 async function fixture(text: string) {
@@ -126,4 +130,46 @@ describe('Unicode selection boundaries across every rendered column', () => {
     expect(f.select).toHaveBeenLastCalledWith(0, 1, 4)
     expect(f.selected()).toBe('next')
   })
+})
+
+it('keeps the Unicode seed while the long-press finger owns a forward or backward drag', async () => {
+  const f = await fixture('가 한글 next')
+  const surface = document.createElement('div')
+  f.scope.term = {
+    ...terminalDocumentDouble().terminal,
+    cols: f.term.cols,
+    rows: f.term.rows,
+    buffer: f.scope.term!.buffer,
+    select: f.select,
+    _core: { _renderService: { dimensions: { css: { cell: { width: 8, height: 15 } } } } }
+  }
+  Object.assign(f.scope, {
+    surface,
+    selectionOverlay: document.createElement('div'),
+    handleStart: document.createElement('div'),
+    handleEnd: document.createElement('div'),
+    selMenu: document.createElement('div'),
+    viewportRect: () => ({ left: 0, top: 50, width: 480, height: 200 }),
+    currentScale: 1,
+    userScale: 1
+  })
+  f.scope.touchDispatch.mode = 'surface'
+  f.scope.touchDispatch.touchId = 7
+  f.scope.tapCandidate = { x: 36, y: 57, t: Date.now(), identifier: 7 }
+  vi.useFakeTimers()
+  armLongPress(f.scope, new Touch({ identifier: 7, target: surface, clientX: 36, clientY: 57 }))
+  vi.advanceTimersByTime(500)
+  expect(f.selected()).toBe('한글')
+  expect(f.scope.sel?.anchor).toEqual({ col: 3, row: 0 })
+  expect(f.scope.sel?.focus).toEqual({ col: 6, row: 0 })
+  expect(f.scope.touchDispatch).toMatchObject({ mode: 'select-drag', touchId: 7 })
+  expect(dispatcherShouldBlockSurface(f.scope)).toBe(true)
+  expect(f.scope.tapCandidate).toBeNull()
+
+  handleDragMove(f.scope, 'end', 11 * 8 + 4, 57)
+  expect(f.selected()).toBe('한글 next')
+  handleDragMove(f.scope, 'end', 4, 57)
+  expect(f.select).toHaveBeenLastCalledWith(0, 0, 4)
+  expect(f.selected()).toBe('가 한')
+  stopEdgeScroll(f.scope)
 })
