@@ -13,23 +13,23 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
 
   /** Attaches the detector; layers above subscribe their readers first. */
   attachAgentStatusStore(store: AgentStatusStoreView): () => void {
-    const detachPhoneAlerts = this.agentTransitions.subscribe(
-      createTerminalAgentMobileAttention({
-        readRow: (paneKey) => this.agentTransitions.latestRow(paneKey),
-        readNotificationSettings: () => this.store?.getSettings().notifications,
-        readWorkspaceLabels: (workspaceId) =>
-          this.store ? readStructuredAttentionWorkspaceLabels(this.store, { workspaceId }) : {},
-        isWorkspaceMuted: (workspaceId) => this.isWorkspaceNotificationMuted(workspaceId),
-        dispatch: (event) => this.mobileNotifications.dispatch(event),
-        retire: (worktreeId, paneKey, before) =>
-          this.mobileNotifications.retireTerminalAttention(worktreeId, paneKey, before),
-        now: Date.now
-      })
-    )
+    const phoneAlerts = createTerminalAgentMobileAttention({
+      readRow: (paneKey) => this.agentTransitions.latestRow(paneKey),
+      readNotificationSettings: () => this.store?.getSettings().notifications,
+      readWorkspaceLabels: (workspaceId) =>
+        this.store ? readStructuredAttentionWorkspaceLabels(this.store, { workspaceId }) : {},
+      isWorkspaceMuted: (workspaceId) => this.isWorkspaceNotificationMuted(workspaceId),
+      dispatch: (event) => this.mobileNotifications.dispatch(event),
+      retire: (worktreeId, paneKey, before) =>
+        this.mobileNotifications.retireTerminalAttention(worktreeId, paneKey, before),
+      now: Date.now
+    })
+    const detachPhoneAlerts = this.agentTransitions.subscribe(phoneAlerts.observe)
     const detachDetector = this.agentTransitions.attach(store)
     return () => {
       detachDetector()
       detachPhoneAlerts()
+      phoneAlerts.dispose()
     }
   }
 }

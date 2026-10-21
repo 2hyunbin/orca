@@ -38,9 +38,7 @@ type DesktopPushServiceOptions = {
 export class DesktopPushService {
   private readonly runtime: OrcaRuntimeService
   private readonly runtimeRpc: OrcaRuntimeRpcServer
-  private readonly registry: DeviceRegistry
   private readonly outbox: PushUnregisterOutbox
-  private readonly client: PushGatewayClient
   private readonly dispatcher: PushDispatcher
   private readonly registerThrottle: PushRegisterThrottle
   private readonly scheduleRetry: (run: () => void, delayMs: number) => void
@@ -54,13 +52,11 @@ export class DesktopPushService {
 
   private constructor(
     options: DesktopPushServiceOptions,
-    registry: DeviceRegistry,
-    client: PushGatewayClient
+    private readonly registry: DeviceRegistry,
+    private readonly client: PushGatewayClient
   ) {
     this.runtime = options.runtime
     this.runtimeRpc = options.runtimeRpc
-    this.registry = registry
-    this.client = client
     this.outbox = options.runtimeRpc.getPushUnregisterOutbox()
     this.dispatcher = new PushDispatcher({ client, registry })
     this.registerThrottle = options.registerThrottle ?? new PushRegisterThrottle()
@@ -179,8 +175,12 @@ export class DesktopPushService {
     if (this.outbox.isUnreadable()) {
       return { registered: false, reason: 'registration_storage_failed' }
     }
-    // A stable gateway ID must not inherit a delete from an earlier registration.
+    // Re-enabling supersedes cleanup of a route still attached locally.
     for (const item of this.outbox.pending().filter((entry) => entry.deviceId === input.deviceId)) {
+      if (this.isRegistrationAttached(item.deviceId, item.registrationId)) {
+        this.outbox.remove(item.reqId)
+        continue
+      }
       if (!(await this.deleteQueued(item.reqId, item.registrationId))) {
         this.scheduleFlushRetry()
         return { registered: false, reason: 'gateway_unreachable' }
@@ -201,8 +201,7 @@ export class DesktopPushService {
     }
     const failure = this.storeRegistration(input, result.registrationId)
     if (failure) {
-      // Why: the gateway now holds a token this host will never push to. Queue its
-      // delete instead of leaking it until the phone happens to register again.
+      // Detached accepted routes need cleanup; attached routes must remain usable.
       this.outbox.enqueue({ registrationId: result.registrationId, deviceId: input.deviceId })
     }
     void this.flushUnregisterOutbox()
@@ -299,10 +298,7 @@ export class DesktopPushService {
           item.deviceId,
           () => {
             // Failed local removal must not delete a still-attached gateway registration.
-            if (
-              this.registry.getDevice(item.deviceId)?.pushRegistration?.registrationId ===
-              item.registrationId
-            ) {
+            if (this.isRegistrationAttached(item.deviceId, item.registrationId)) {
               return Promise.resolve(false)
             }
             return this.deleteQueued(item.reqId, item.registrationId)
@@ -318,6 +314,10 @@ export class DesktopPushService {
       }
     }
     return retryable
+  }
+
+  private isRegistrationAttached(deviceId: string, registrationId: string): boolean {
+    return this.registry.getDevice(deviceId)?.pushRegistration?.registrationId === registrationId
   }
 
   private async deleteQueued(reqId: string, registrationId: string): Promise<boolean> {

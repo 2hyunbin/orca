@@ -6,11 +6,7 @@ import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { mainProcessState as state } from './main-process-state'
 
-// Why: deliberately not gated on cloud sign-in like the relay is — the push gateway
-// authenticates with the host keypair, so an accountless host registers phones on
-// exactly the same path. The runtime is read from shared state because both launch
-// modes have already stored it there; threading it as a parameter would push the
-// launch module past its line budget for no gain.
+// Host-key authentication also supports accountless hosts.
 export function startDesktopPushService(runtimeRpc: OrcaRuntimeRpcServer): void {
   const runtime: OrcaRuntimeService | null = state.runtime
   if (!runtime) {
@@ -25,7 +21,7 @@ export function startDesktopPushService(runtimeRpc: OrcaRuntimeRpcServer): void 
     })
     pushService?.start()
     const stopSources = startRuntimeEnvironmentAgentAlerts(runtime)
-    app.once('before-quit', stopSources)
+    app.once('will-quit', stopSources)
     state.desktopPushService = pushService
   } catch (error) {
     console.warn(

@@ -1,6 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { app } from 'electron'
+import { mainProcessState } from '../../startup/main-process-state'
+import { startDesktopPushService } from '../../startup/main-process-push-startup'
 import { expect, it, vi } from 'vitest'
 import {
   RuntimeMobileNotificationController,
@@ -16,9 +19,21 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(),
   status: vi.fn(),
   retired: vi.fn(),
-  generation: 1
+  generation: 1,
+  runtime: {},
+  runtimeRpc: {}
 }))
-vi.mock('electron', () => ({ app: { getPath: () => '/user-data' } }))
+vi.mock('electron', async () => {
+  const { EventEmitter } = await import('node:events')
+  return { app: Object.assign(new EventEmitter(), { getPath: () => '/user-data' }) }
+})
+vi.mock('../../startup/main-process-state', () => ({ mainProcessState: mocks }))
+vi.mock('../../orca-profiles/profile-cloud-auth-config', () => ({
+  getOrcaPushGatewayUrl: () => ''
+}))
+vi.mock('../../runtime/push/desktop-push-service', () => ({
+  DesktopPushService: { create: () => null }
+}))
 vi.mock('./runtime-environment-mobile-relay-hosts', () => ({
   createRuntimeEnvironmentMobileRelayHosts: () => ({
     list: mocks.list,
@@ -33,29 +48,33 @@ vi.mock('./runtime-environment-transport-routing', () => ({
 vi.mock('./runtime-environment-transport-generation', () => ({
   getRuntimeEnvironmentTransportGeneration: () => mocks.generation
 }))
-import { startRuntimeEnvironmentAgentAlerts } from './runtime-environment-agent-alerts'
 
-it('binds carried news to the verified source and recovers its dismissal after a carrier restart', async () => {
+it('recovers admission and catch-up in scope, survives vetoed quit and reconciles restart dismissal', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   const path = mkdtempSync(join(tmpdir(), 'orca-30900-source-feed-'))
   const source = new RuntimeMobileNotificationController()
   source.configureDismissalStore(join(path, 'source'))
   let carrier = new RuntimeMobileNotificationController()
   carrier.configureDismissalStore(join(path, 'carrier'))
   const events: MobileNotificationEvent[] = []
-  const closed = vi.fn()
   let callbacks: Parameters<typeof subscribeRuntimeEnvironment>[5] | undefined
   let statusChanged = () => {}
   let supported = false
+  let reachable = true
+  let pairingRevision = 7
+  let retired = (_id: string) => {}
   mocks.list.mockImplementation(() => ({
-    environments: [{ id: 'server', pairingRevision: 7 }],
+    environments: [{ id: 'server', pairingRevision }],
     statusByEnvironmentId: new Map([
       [
         'server',
         {
-          status: {
-            runtimeId: 'b',
-            capabilities: supported ? [NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY] : []
-          }
+          status: reachable
+            ? {
+                runtimeId: 'b',
+                capabilities: supported ? [NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY] : []
+              }
+            : undefined
         }
       ]
     ])
@@ -64,16 +83,18 @@ it('binds carried news to the verified source and recovers its dismissal after a
     statusChanged = listener
     return () => {}
   })
-  mocks.retired.mockReturnValue(() => {})
+  mocks.retired.mockImplementation((listener) => {
+    retired = listener
+    return () => {}
+  })
+  mocks.subscribe.mockRejectedValueOnce(new Error('remote_runtime_busy'))
   mocks.subscribe.mockImplementation(
     async (...args: Parameters<typeof subscribeRuntimeEnvironment>) => {
       callbacks = args[5]
-      return { close: closed }
+      return { close: () => {} }
     }
   )
-  mocks.call.mockImplementation(async (host, method, params) => {
-    expect(host).toEqual({ environmentId: 'server' })
-    expect(method).toBe('notifications.getMissedSince')
+  mocks.call.mockImplementation(async (_host, _method, params) => {
     return {
       ok: true,
       _meta: { runtimeId: 'b' },
@@ -85,28 +106,37 @@ it('binds carried news to the verified source and recovers its dismissal after a
   })
   const connect = () => {
     carrier.onDispatched((event) => events.push(event))
-    return startRuntimeEnvironmentAgentAlerts({
+    mocks.runtime = {
       setNotificationSourceHost: carrier.setSourceHost.bind(carrier),
       carrySourceAgentAlert: carrier.carrySourceAlert.bind(carrier),
       getCarriedSourceDeliveries: carrier.carriedSourceDeliveries.bind(carrier)
-    })
+    }
+    startDesktopPushService(mainProcessState.runtimeRpc!)
+    return () => app.emit('will-quit')
   }
   const frame = (result: unknown, runtimeId = 'b') =>
     callbacks?.onEvent({
       type: 'response',
       response: { id: 'source', ok: true, _meta: { runtimeId }, result }
     })
+  const retry = async () => {
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flush()
+  }
   let stop = connect()
   try {
     expect(mocks.subscribe).not.toHaveBeenCalled()
     supported = true
     statusChanged()
     await flush()
-    expect(mocks.subscribe.mock.calls[0]?.slice(1, 4)).toEqual([
-      'server',
-      'notifications.subscribe',
-      { sourceEvents: true }
-    ])
+    expect(vi.getTimerCount()).toBe(1)
+    reachable = false
+    await retry()
+    expect(mocks.subscribe).toHaveBeenCalledTimes(1)
+    expect(carrier.sourceHosts.has('runtime:server')).toBe(true)
+    reachable = true
+    await retry()
+    expect(mocks.subscribe).toHaveBeenCalledTimes(2)
     source.dispatch({
       type: 'notification',
       source: 'agent-task-complete',
@@ -120,6 +150,11 @@ it('binds carried news to the verified source and recovers its dismissal after a
     frame(news, 'another-runtime')
     await flush()
     expect(events).toHaveLength(0)
+    mocks.call.mockRejectedValueOnce(new Error('unreachable'))
+    frame({ type: 'ready', epoch: source.getEpoch() })
+    await flush()
+    expect(events).toHaveLength(0)
+    await retry()
     frame({ type: 'ready', epoch: source.getEpoch() })
     await flush()
     expect(events).toHaveLength(1)
@@ -131,7 +166,18 @@ it('binds carried news to the verified source and recovers its dismissal after a
     frame(news)
     await flush()
     expect(events).toHaveLength(1)
+    app.emit('before-quit', { defaultPrevented: true })
+    callbacks?.onClose()
+    await retry()
+    frame({ type: 'ready', epoch: source.getEpoch() })
+    await flush()
+    expect(mocks.call.mock.lastCall?.[2].lastSeenSeq).toBe(news?.notificationSeq)
+    expect(events).toHaveLength(1)
     const staleCallbacks = callbacks
+    callbacks?.onClose()
+    pairingRevision += 1
+    mocks.generation += 1
+    await retry()
     stop()
     await carrier.closeDismissals()
     source.dismiss('waiting-1')
@@ -155,11 +201,17 @@ it('binds carried news to the verified source and recovers its dismissal after a
       }
     })
     expect(carrier.carriedSourceDeliveries('runtime:server')).toEqual([])
-    expect(closed).toHaveBeenCalledTimes(1)
+    callbacks?.onClose()
+    retired('server')
+    const attempts = mocks.subscribe.mock.calls.length
+    await retry()
+    expect(mocks.subscribe).toHaveBeenCalledTimes(attempts)
+    expect(vi.getTimerCount()).toBe(0)
   } finally {
     stop()
     await source.closeDismissals()
     await carrier.closeDismissals()
+    vi.useRealTimers()
     rmSync(path, { recursive: true, force: true })
   }
 })

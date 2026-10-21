@@ -1,5 +1,4 @@
-// The execution host announces hook news even when no window holds the agent's tab.
-// Keep the window's completion rules until the host supplies one turn-end signal.
+// Share the window policy until host turn-end facts replace residual hook inference.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import { isRecognizedAgentType } from '../../shared/agent-process-recognition'
 import { agentMainAgentVerdict } from '../../shared/agent-main-agent-verdict'
@@ -20,7 +19,7 @@ import type { MobileNotificationDispatchEvent } from './runtime-mobile-notificat
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 import type { StructuredAttentionWorkspaceLabels } from './structured-agent-session-mobile-attention'
 
-/** The window holds a `done` this long (`HOOK_DONE_QUIET_MS`) so a turn that resumes at once is not announced. */
+// Match the window's quiet period for a turn that resumes immediately.
 export const HOST_HOOK_DONE_QUIET_MS = 1_500
 
 export type TerminalAgentMobileAttentionDeps = {
@@ -33,9 +32,7 @@ export type TerminalAgentMobileAttentionDeps = {
   now: () => number
 }
 
-export function createTerminalAgentMobileAttention(
-  deps: TerminalAgentMobileAttentionDeps
-): (change: AgentPaneChange) => void {
+export function createTerminalAgentMobileAttention(deps: TerminalAgentMobileAttentionDeps) {
   const panes = new Map<string, ReturnType<typeof createPane>>()
 
   const announce = (
@@ -55,7 +52,7 @@ export function createTerminalAgentMobileAttention(
     try {
       labels = deps.readWorkspaceLabels(worktreeId)
     } catch {
-      // A label is presentation: without one the alert still goes out, worded generically.
+      // Missing labels must not block delivery.
     }
     const outcome = agentState === 'done' ? agentMainAgentVerdict(row) : null
     const request: NotificationDispatchRequest = {
@@ -74,7 +71,6 @@ export function createTerminalAgentMobileAttention(
       request,
       getRuntimeDesktopSurface().translateNotification
     )
-    // The same eligibility the desktop's own fan-out applies: these preferences gate the phone too.
     const desktopAllowed = settings.enabled && settings.agentTaskComplete
     deps.dispatch({
       type: 'notification',
@@ -91,7 +87,7 @@ export function createTerminalAgentMobileAttention(
   }
 
   const createPane = (paneKey: string, worktreeId: string) => {
-    const identityScope = createAgentCompletionIdentityScope(paneKey, 'host')
+    const identityScope = createAgentCompletionIdentityScope(paneKey, 'hook')
     const state: CompletionState = {
       currentTurn: 0,
       workingStatusObserved: false,
@@ -163,7 +159,7 @@ export function createTerminalAgentMobileAttention(
     return { worktreeId, state, observer, identityScope, notification }
   }
 
-  return (change) => {
+  const observe = (change: AgentPaneChange): void => {
     if (change.kind === 'moved') {
       return
     }
@@ -197,17 +193,27 @@ export function createTerminalAgentMobileAttention(
       ((row.state === 'working' && row.turnCompletedAt !== undefined) ||
         (row.state === 'done' && identity !== pane.state.lastCompletionIdentity?.identity))
     if (change.kind === 'seeded' && !unseenReplay) {
-      pane.state.workingStatusObserved = row.state === 'working'
       pane.state.lastCompletionIdentity = identity
         ? { source: 'hook', identity, agentIdentity: row.agentType ?? null }
         : null
       if (row.turnCompletedAt !== undefined) {
         pane.identityScope.rememberTurnCompletedAt(row.turnCompletedAt)
       }
-      {
-        return
+      if (row.state === 'working' && !row.restoredUnconfirmed) {
+        pane.observer.seedHookStatus(row)
       }
+      return
     }
     pane.observer.observeHookStatus(row)
+  }
+  return {
+    observe,
+    dispose: () => {
+      for (const pane of panes.values()) {
+        pane.notification.clearPendingHookDone()
+        pane.identityScope.dispose(false)
+      }
+      panes.clear()
+    }
   }
 }

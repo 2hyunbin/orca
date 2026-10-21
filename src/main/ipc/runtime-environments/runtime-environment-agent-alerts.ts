@@ -7,7 +7,7 @@ import { subscribeRuntimeEnvironment } from './runtime-environment-transport-rou
 import type { RemoteRuntimeSubscription } from '../../../shared/remote-runtime-client'
 import { getRuntimeEnvironmentTransportGeneration } from './runtime-environment-transport-generation'
 
-/** One source feed per verified server; the existing transport owns reconnect and unsubscribe. */
+/** One desired source feed per verified server, including failed admission attempts. */
 export function startRuntimeEnvironmentAgentAlerts(
   runtime: Pick<
     OrcaRuntimeService,
@@ -38,7 +38,7 @@ export function startRuntimeEnvironmentAgentAlerts(
         status.capabilities?.includes(NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY) === true
       const generation = getRuntimeEnvironmentTransportGeneration(host.id)
       const fence = `${host.pairingRevision}:${status.runtimeId}:${generation}`
-      if (feeds.get(host.id)?.fence === fence) {
+      if (supported && feeds.get(host.id)?.fence === fence) {
         continue
       }
       retire(host.id)
@@ -47,15 +47,32 @@ export function startRuntimeEnvironmentAgentAlerts(
       }
       const controller = new AbortController()
       let stream: RemoteRuntimeSubscription | null = null
+      let attempt: AbortController | null = null
+      let retryTimer: ReturnType<typeof setTimeout> | null = null
+      let retryMs = 1_000
       let sequence = 0
       let epoch: string | undefined
       let chain = Promise.resolve()
-      const current = (): boolean =>
+      const scopeCurrent = (): boolean =>
         !controller.signal.aborted &&
         feeds.get(host.id)?.fence === fence &&
         getRuntimeEnvironmentTransportGeneration(host.id) === generation
+      const retry = (): void => {
+        if (controller.signal.aborted || retryTimer !== null) {
+          return
+        }
+        attempt?.abort()
+        stream?.close()
+        stream = null
+        retryTimer = setTimeout(() => {
+          retryTimer = null
+          open()
+        }, retryMs)
+        retryTimer.unref?.()
+        retryMs = Math.min(retryMs * 2, 30_000)
+      }
       const accept = (value: unknown): void => {
-        if (!current()) {
+        if (!scopeCurrent()) {
           return
         }
         const parsed = SourceAgentAlertEvent.safeParse(value)
@@ -72,117 +89,158 @@ export function startRuntimeEnvironmentAgentAlerts(
         fence,
         stop: () => {
           controller.abort()
+          if (retryTimer !== null) {
+            clearTimeout(retryTimer)
+          }
+          attempt?.abort()
           stream?.close()
         }
       })
       runtime.setNotificationSourceHost(`runtime:${host.id}`, true)
-      subscribeRuntimeEnvironment(
-        app.getPath('userData'),
-        host.id,
-        'notifications.subscribe',
-        { sourceEvents: true },
-        15_000,
-        {
-          onEvent: (payload) => {
-            if (
-              !current() ||
-              payload.type !== 'response' ||
-              !payload.response.ok ||
-              payload.response._meta.runtimeId !== status.runtimeId
-            ) {
-              return
-            }
-            const value = payload.response.result
-            chain = chain
-              .then(async () => {
-                if (
-                  value &&
-                  typeof value === 'object' &&
-                  'type' in value &&
-                  value.type === 'ready'
-                ) {
-                  const nextEpoch =
-                    'epoch' in value && typeof value.epoch === 'string' ? value.epoch : undefined
-                  const delivered = runtime.getCarriedSourceDeliveries(`runtime:${host.id}`)
-                  // The RPC accepts 256 receipts; reconcile the entire bounded ledger across batches.
-                  for (let start = 0; start < Math.max(1, delivered.length); start += 256) {
-                    const missed = await hosts.call(
-                      { environmentId: host.id },
-                      'notifications.getMissedSince',
-                      {
-                        lastSeenSeq: sequence,
-                        epoch: epoch ?? nextEpoch,
-                        sourceEvents: true,
-                        deliveredPushes: delivered.slice(start, start + 256)
-                      },
-                      {
-                        expected: {
-                          pairingRevision: host.pairingRevision,
-                          runtimeId: status.runtimeId
+      const open = (): void => {
+        const latest = hosts.list()
+        const environment = latest.environments.find((entry) => entry.id === host.id)
+        const verified = latest.statusByEnvironmentId.get(host.id)?.status
+        if (!environment) {
+          retire(host.id)
+          return
+        }
+        if (!verified) {
+          retry()
+          return
+        }
+        if (
+          `${environment.pairingRevision}:${verified.runtimeId}:${getRuntimeEnvironmentTransportGeneration(host.id)}` !==
+            fence ||
+          !verified.capabilities?.includes(NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY)
+        ) {
+          reconcile()
+          return
+        }
+        const active = new AbortController()
+        attempt = active
+        const current = (): boolean => scopeCurrent() && !active.signal.aborted
+        subscribeRuntimeEnvironment(
+          app.getPath('userData'),
+          host.id,
+          'notifications.subscribe',
+          { sourceEvents: true },
+          15_000,
+          {
+            onEvent: (payload) => {
+              if (
+                !current() ||
+                payload.type !== 'response' ||
+                !payload.response.ok ||
+                payload.response._meta.runtimeId !== status.runtimeId
+              ) {
+                return
+              }
+              const value = payload.response.result
+              chain = chain
+                .then(async () => {
+                  if (!current()) {
+                    return
+                  }
+                  if (
+                    value &&
+                    typeof value === 'object' &&
+                    'type' in value &&
+                    value.type === 'ready'
+                  ) {
+                    const nextEpoch =
+                      'epoch' in value && typeof value.epoch === 'string' ? value.epoch : undefined
+                    const delivered = runtime.getCarriedSourceDeliveries(`runtime:${host.id}`)
+                    // The RPC accepts 256 receipts; reconcile the entire bounded ledger across batches.
+                    for (let start = 0; start < Math.max(1, delivered.length); start += 256) {
+                      const missed = await hosts.call(
+                        { environmentId: host.id },
+                        'notifications.getMissedSince',
+                        {
+                          lastSeenSeq: sequence,
+                          epoch: epoch ?? nextEpoch,
+                          sourceEvents: true,
+                          deliveredPushes: delivered.slice(start, start + 256)
+                        },
+                        {
+                          expected: {
+                            pairingRevision: host.pairingRevision,
+                            runtimeId: status.runtimeId
+                          }
+                        }
+                      )
+                      if (!current()) {
+                        return
+                      }
+                      if (!missed.ok || missed._meta.runtimeId !== status.runtimeId) {
+                        retry()
+                        return
+                      }
+                      if (nextEpoch !== epoch) {
+                        sequence = 0
+                      }
+                      epoch = nextEpoch
+                      if (
+                        missed.result &&
+                        typeof missed.result === 'object' &&
+                        'dismissedPushes' in missed.result &&
+                        Array.isArray(missed.result.dismissedPushes)
+                      ) {
+                        for (const delivery of missed.result.dismissedPushes) {
+                          accept({
+                            type: 'dismiss',
+                            notificationId: delivery.notificationId,
+                            dismissedDelivery: delivery
+                          })
                         }
                       }
-                    )
-                    if (!current() || !missed.ok || missed._meta.runtimeId !== status.runtimeId) {
-                      return
-                    }
-                    if (nextEpoch !== epoch) {
-                      sequence = 0
-                    }
-                    epoch = nextEpoch
-                    if (
-                      missed.result &&
-                      typeof missed.result === 'object' &&
-                      'dismissedPushes' in missed.result &&
-                      Array.isArray(missed.result.dismissedPushes)
-                    ) {
-                      for (const delivery of missed.result.dismissedPushes) {
-                        accept({
-                          type: 'dismiss',
-                          notificationId: delivery.notificationId,
-                          dismissedDelivery: delivery
-                        })
+                      if (
+                        missed.result &&
+                        typeof missed.result === 'object' &&
+                        'notifications' in missed.result &&
+                        Array.isArray(missed.result.notifications)
+                      ) {
+                        for (const event of missed.result.notifications) {
+                          accept(event)
+                        }
                       }
                     }
-                    if (
-                      missed.result &&
-                      typeof missed.result === 'object' &&
-                      'notifications' in missed.result &&
-                      Array.isArray(missed.result.notifications)
-                    ) {
-                      for (const event of missed.result.notifications) {
-                        accept(event)
-                      }
-                    }
+                    retryMs = 1_000
+                  } else {
+                    accept(value)
                   }
-                } else {
-                  accept(value)
-                }
-              })
-              .catch(() => console.warn('[notifications] Source notification catch-up unavailable'))
+                })
+                .catch(() => {
+                  if (current()) {
+                    console.warn('[notifications] Source notification catch-up unavailable')
+                    retry()
+                  }
+                })
+            },
+            onClose: () => {
+              if (current()) {
+                retry()
+              }
+            }
           },
-          onClose: () => {
+          current,
+          active.signal
+        ).then(
+          (opened) => {
             if (current()) {
-              feeds.delete(host.id)
-              controller.abort()
+              stream = opened
+            } else {
+              opened.close()
+            }
+          },
+          () => {
+            if (current()) {
+              retry()
             }
           }
-        },
-        current,
-        controller.signal
-      ).then(
-        (opened) => {
-          stream = opened
-          if (!current()) {
-            opened.close()
-          }
-        },
-        () => {
-          if (current()) {
-            feeds.delete(host.id)
-            controller.abort()
-          }
-        }
-      )
+        )
+      }
+      open()
     }
   }
   const stopStatus = hosts.onStatusChanged(reconcile)

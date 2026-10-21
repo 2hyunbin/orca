@@ -174,7 +174,7 @@ it('drains a cleanup queued as an empty flush is completing', async () => {
   expect(h.outbox.pending()).toEqual([])
 })
 
-it('preserves the live route when clearing local registration fails, then cleans before re-registering', async () => {
+it('preserves the live route when clearing local registration fails and re-enables it in place', async () => {
   const h = harness()
   await h.service.register({ ...input, deviceId: h.deviceId })
   await h.service.flushUnregisterOutbox()
@@ -191,7 +191,7 @@ it('preserves the live route when clearing local registration fails, then cleans
     registered: true
   })
   await h.service.flushUnregisterOutbox()
-  expect(h.client.deleteDevice).toHaveBeenCalledWith('stable-id')
+  expect(h.client.deleteDevice).not.toHaveBeenCalled()
   expect(h.outbox.pending()).toEqual([])
   expect(h.live()).toBe(true)
   h.service.stop()
@@ -295,13 +295,19 @@ it('reports shutdown as retryable and allows registration after restart', async 
   h.service.stop()
 })
 
-it('uses accepted destination leases across restart, refused renewal and expiry', async () => {
+it('keeps current direct/carried delivery through attached cleanup, refusal, restart and expiry', async () => {
   vi.useFakeTimers({ toFake: ['Date'] })
   const h = harness()
   const start = Date.now()
   const day = 86400_000
   const filter = { sourceAgentAlerts: true, hostAgentAlerts: true }
-  h.client.send.mockResolvedValue({ ok: true, results: [] })
+  const delivered: string[] = []
+  h.client.send.mockImplementation(async (send) => {
+    if (h.live()) {
+      delivered.push(...send.registrationIds)
+    }
+    return { ok: true, results: [] }
+  })
   try {
     await h.service.register({ ...input, deviceId: h.deviceId, filter })
     const saved = new DeviceRegistry(h.path).getDevice(h.deviceId)!.pushRegistration!
@@ -342,6 +348,21 @@ it('uses accepted destination leases across restart, refused renewal and expiry'
         notificationSeq: age * 2,
         notificationEpoch: 'source'
       }
+      if (age === 6.5) {
+        const persist = vi.spyOn(h.registry, 'setPushRegistration').mockImplementationOnce(() => {
+          throw new Error('disk full')
+        })
+        expect(await h.service.register({ ...input, deviceId: h.deviceId, filter })).toMatchObject({
+          registered: false
+        })
+        persist.mockRestore()
+        expect(h.outbox.pending()).toHaveLength(1)
+        h.client.registerDevice.mockResolvedValueOnce({ ok: false, reason: 'unreachable' })
+        expect(await h.service.register({ ...input, deviceId: h.deviceId, filter })).toMatchObject({
+          registered: false
+        })
+        expect(h.registry.getDevice(h.deviceId)!.pushRegistration).toEqual(saved)
+      }
       b.enqueue(event)
       b.enqueue({ ...event, sourcePlan: undefined, executionHostAnnounces: true })
       a.dispatcher.enqueue({
@@ -349,13 +370,6 @@ it('uses accepted destination leases across restart, refused renewal and expiry'
         sourcePlan: { ...sourcePlan, carrier: true },
         executionHost: 'runtime:b'
       })
-      if (age === 6.5) {
-        h.client.registerDevice.mockResolvedValueOnce({ ok: false, reason: 'unreachable' })
-        expect(await h.service.register({ ...input, deviceId: h.deviceId, filter })).toMatchObject({
-          registered: false
-        })
-        expect(h.registry.getDevice(h.deviceId)!.pushRegistration).toEqual(saved)
-      }
     }
     await tick()
     expect(h.client.send.mock.calls.map(([send]) => send.registrationIds)).toEqual([
@@ -363,6 +377,8 @@ it('uses accepted destination leases across restart, refused renewal and expiry'
       ['stable-id']
     ])
     expect(a.sends.map((send) => send.registrationIds)).toEqual([['reg-1']])
+    expect(delivered).toEqual(['stable-id', 'stable-id'])
+    expect(h.client.deleteDevice).not.toHaveBeenCalled()
   } finally {
     h.service.stop()
     vi.useRealTimers()
