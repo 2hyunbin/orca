@@ -7,7 +7,8 @@ import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import { worktreeIdentityKey } from '../../../../shared/worktree/id'
 import type { RuntimeTerminalRead, RuntimeTerminalSummary } from '../../../../shared/runtime-types'
 import { getLatestPtyTitle } from '../../runtime-worktree-status-projection'
-import { parsePaneKey } from '../../../../shared/stable-pane-id'
+import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
+import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
   ptyHoldsRecordedSurface,
   type PtySurfaceTopology
@@ -18,8 +19,6 @@ import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
-import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 
 export type LiveTerminalPty = ReturnType<
   OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
@@ -147,7 +146,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     if (
       !record ||
       record.runtimeId !== this.runtimeId ||
-      !(record.tabId.startsWith('pty:') || this.windowlessOwnHandle(handle, record))
+      !(record.tabId.startsWith('pty:') || this.mainPaneOwnHandle(handle, record))
     ) {
       return null
     }
@@ -164,23 +163,24 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   }
 
   /**
-   * Layout-owner builds with no window: main lists its own panes, so the pane main binds a
-   * terminal to adopts the terminal's own handle (the one it was created under). Before main
-   * listed panes with no window, that handle stayed the terminal's; it still names the terminal,
-   * as it did. With a window, the adopted handle is the pane's, as a window graph's adoption is.
+   * Layout-owner builds: the pane main binds a terminal to adopts the terminal's own handle (the
+   * one it was created under), and that handle keeps naming the terminal, with or without a window.
    * The own-handle check stands in for the pane's epoch fence: a new incarnation drops it.
    */
-  private windowlessOwnHandle(handle: string, record: TerminalHandleRecord): boolean {
+  private mainPaneOwnHandle(handle: string, record: TerminalHandleRecord): boolean {
     if (
       !ORCA_LAYOUT_OWNER_IS_MAIN ||
-      this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID ||
       !record.ptyId ||
+      !isTerminalLeafId(record.leafId) ||
+      !isValidTerminalTabId(record.tabId) ||
       this.handleByPtyId.get(record.ptyId) !== handle
     ) {
       return false
     }
-    const pane = startedMainTerminalSurfaces(this)?.findPaneForPty(record.ptyId)
-    return pane?.tabId === record.tabId && pane.leafId === record.leafId
+    return (
+      this.paneOfPty(this.ptysById.get(record.ptyId)).paneKey ===
+      makePaneKey(record.tabId, record.leafId)
+    )
   }
 
   protected assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void {
