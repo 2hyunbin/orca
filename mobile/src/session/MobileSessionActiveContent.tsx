@@ -231,6 +231,7 @@ export function MobileSessionActiveContent({
       ))}
       <MobileNativeChatOverlay
         controller={nativeChatController}
+        activeSessionTabId={controller.activeSessionTab?.id}
         onOpenFile={handleNativeChatFileTap}
         images={nativeChatImages}
         structuredComposer={nativeChatStructuredComposer}

@@ -1,4 +1,4 @@
-import type { SleepingAgentSessionRecord } from './agent-session-resume'
+import { hasSleptAgentToWake, type SleepingAgentSessionRecord } from './agent-session-resume'
 import type { ExecutionHostId } from './execution-host'
 
 /** A host that runs part of a workspace: this desktop's main, or a paired server. */
@@ -60,15 +60,40 @@ export function isWorkspaceSleepRecord(record: SleepingAgentSessionRecord): bool
   )
 }
 
-/** A record only a window wakes on a phone's open: hibernation, not a sleep's or a tab-open one. */
+/**
+ * Whether a phone's open needs a window to wake this workspace: a slept pane that is neither a
+ * workspace sleep's (main resumes it) nor a running agent's own resume record nor a tab-open one.
+ */
 export function hasWindowOnlyWakeRecord(
   records: Readonly<Record<string, SleepingAgentSessionRecord>> | undefined,
   worktreeId: string
 ): boolean {
-  return Object.values(records ?? {}).some(
+  const windowWoken = Object.entries(records ?? {}).filter(
+    ([, record]) => !isWorkspaceSleepRecord(record)
+  )
+  return hasSleptAgentToWake(Object.fromEntries(windowWoken), worktreeId)
+}
+
+/**
+ * What a phone's open of a workspace woke: main resumes a sleep's running agents itself, a window
+ * wakes its own hibernation, and a headless host without a window cannot wake that.
+ */
+export function phoneWakeReport(
+  records: Readonly<Record<string, SleepingAgentSessionRecord>> | undefined,
+  worktreeId: string,
+  hasWindow: boolean
+): 'requested' | 'unsupported-headless' | 'not-applicable' {
+  if (hasWindow) {
+    return 'requested'
+  }
+  if (hasWindowOnlyWakeRecord(records, worktreeId)) {
+    return 'unsupported-headless'
+  }
+  const mainResumes = Object.values(records ?? {}).some(
     (record) =>
       record.worktreeId === worktreeId &&
-      record.restoreOnTabOpenOnly !== true &&
-      !isWorkspaceSleepRecord(record)
+      record.origin === 'worktree-sleep' &&
+      record.state !== 'done'
   )
+  return mainResumes ? 'requested' : 'not-applicable'
 }

@@ -627,8 +627,9 @@ describe('OrcaRuntimeService', () => {
       clientKind: 'mobile'
     })
 
-    // INV-2: mobile wake never navigates the desktop (no activateWorktree); it routes through the renderer's navigation-free wake.
-    expect(resumeSleepingAgents).toHaveBeenCalledWith(TEST_WORKTREE_ID)
+    // INV-2: mobile wake never navigates the desktop (no activateWorktree). The window's own
+    // hibernation wake runs once main's queued wake has.
+    await vi.waitFor(() => expect(resumeSleepingAgents).toHaveBeenCalledWith(TEST_WORKTREE_ID))
     expect(activateWorktree).not.toHaveBeenCalled()
     expect(result.sleepingAgentWake).toBe('requested')
   })

@@ -34,13 +34,17 @@ describe('windowSaveKeepingMainSleepRecords', () => {
     const stored = {
       sleepingAgentSessionsByPaneKey: { [mainClaimed.paneKey]: mainClaimed }
     } as WorkspaceSessionState
-    const saved = windowSaveKeepingMainSleepRecords(stored, {
-      sleepingAgentSessionsByPaneKey: {
-        [staleWindowCopy.paneKey]: staleWindowCopy,
-        [hibernation.paneKey]: hibernation,
-        [quit.paneKey]: quit
-      }
-    })
+    const saved = windowSaveKeepingMainSleepRecords(
+      stored,
+      {
+        sleepingAgentSessionsByPaneKey: {
+          [staleWindowCopy.paneKey]: staleWindowCopy,
+          [hibernation.paneKey]: hibernation,
+          [quit.paneKey]: quit
+        }
+      },
+      'patch'
+    )
     expect(saved.sleepingAgentSessionsByPaneKey).toEqual({
       [mainClaimed.paneKey]: mainClaimed,
       [hibernation.paneKey]: hibernation,
@@ -48,12 +52,43 @@ describe('windowSaveKeepingMainSleepRecords', () => {
     })
   })
 
-  it('leaves a save without the field untouched', () => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the merge reads only the records field.
-    const stored = {
-      sleepingAgentSessionsByPaneKey: { [mainClaimed.paneKey]: mainClaimed }
-    } as WorkspaceSessionState
+  it('leaves a patch that does not name the field untouched', () => {
     const patch = { activeRepoId: 'repo' }
-    expect(windowSaveKeepingMainSleepRecords(stored, patch)).toBe(patch)
+    expect(windowSaveKeepingMainSleepRecords(stored(), patch, 'patch')).toBe(patch)
+  })
+
+  // The window drops its mirror of a record once main resumed the pane; its next save carries no
+  // records at all, or names the field as undefined. Neither may erase main's.
+  it("keeps main's records through a full save without the field, after the window's resume", () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the merge reads only the records field.
+    const save = { activeRepoId: 'repo' } as WorkspaceSessionState
+    expect(
+      windowSaveKeepingMainSleepRecords(stored(), save, 'set').sleepingAgentSessionsByPaneKey
+    ).toEqual({ [mainClaimed.paneKey]: mainClaimed })
+  })
+
+  it("keeps main's records through a patch that clears the field", () => {
+    const patch = { sleepingAgentSessionsByPaneKey: undefined }
+    expect(
+      windowSaveKeepingMainSleepRecords(stored(), patch, 'patch').sleepingAgentSessionsByPaneKey
+    ).toEqual({ [mainClaimed.paneKey]: mainClaimed })
+  })
+
+  it('never writes a workspace-sleep record the window sends for a pane main holds none for', () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the merge reads only the records field.
+    const empty = {} as WorkspaceSessionState
+    const saved = windowSaveKeepingMainSleepRecords(
+      empty,
+      { sleepingAgentSessionsByPaneKey: { [staleWindowCopy.paneKey]: staleWindowCopy } },
+      'patch'
+    )
+    expect(saved.sleepingAgentSessionsByPaneKey).toBeUndefined()
   })
 })
+
+function stored(): WorkspaceSessionState {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the merge reads only the records field.
+  return {
+    sleepingAgentSessionsByPaneKey: { [mainClaimed.paneKey]: mainClaimed }
+  } as WorkspaceSessionState
+}
