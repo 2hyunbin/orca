@@ -19,6 +19,7 @@ import {
   windowSpawnRequest
 } from '../../shared/launch-parity-window-request.test-fixture'
 import { RpcDispatcher } from '../runtime/rpc/dispatcher'
+import type { RpcDispatchStreamingOptions } from '../runtime/rpc/dispatcher-stream-options'
 import { DESKTOP_RPC_CALLER } from '../runtime/rpc/rpc-caller-identity'
 import { DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES } from './desktop-renderer-runtime-capabilities'
 import { TERMINAL_LIFECYCLE_METHODS } from '../runtime/rpc/methods/terminal/terminal-lifecycle-methods'
@@ -146,7 +147,7 @@ function windowTabCreateParams(request: Record<string, unknown>, agentEnv: Recor
 export async function createWindowTab(
   runtime: OrcaRuntimeService,
   params: Record<string, unknown>,
-  context: Record<string, unknown> = {
+  context: RpcDispatchStreamingOptions = {
     clientId: 'desktop-renderer',
     caller: DESKTOP_RPC_CALLER,
     clientKind: 'runtime',
@@ -155,10 +156,9 @@ export async function createWindowTab(
   }
 ) {
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_LIFECYCLE_METHODS })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the desktop's own runtime:call context (ipc/runtime.ts), as the transport builds it.
   return dispatcher.dispatch(
     { id: 'window-tab', authToken: 'token', method: 'terminal.create', params },
-    context as never
+    context
   )
 }
 
@@ -207,9 +207,9 @@ describe('window-tab lane: terminal.create {windowTab} -> provider', () => {
       commandDelivery: 'provider',
       // Main today stamps the workspace id on folders only (host lane, the same create).
       orcaEnv:
-        workspace.kind === 'folder'
+        workspace.kind === 'folder' || !Array.isArray(window.orcaEnv)
           ? window.orcaEnv
-          : (window.orcaEnv as string[]).filter((key) => key !== 'ORCA_WORKSPACE_ID')
+          : window.orcaEnv.filter((key) => key !== 'ORCA_WORKSPACE_ID')
     })
     expect(trackMock.mock.calls).toEqual([['agent_started', request.telemetry]])
   })

@@ -155,6 +155,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
         initialAgentStatus: { agent: 'command-code', prompt: 'Fix the status' }
       })
 
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane, manager and deps fakes carry every member connectPanePty reads, as in this file's other tests.
       connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
       await flushAsyncTicks()
 
@@ -198,19 +199,17 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
       }
       noteMainStartsPane(makePaneKey('tab-1', LEAF_1), {})
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({
-          startup: {
-            command: 'codex',
-            launchAgent: 'codex',
-            launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
-            launchToken: 'token-1',
-            draftPrompt: 'look at this'
-          }
-        }) as never
-      )
+      const deps = createDeps({
+        startup: {
+          command: 'codex',
+          launchAgent: 'codex',
+          launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
+          launchToken: 'token-1',
+          draftPrompt: 'look at this'
+        }
+      })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane, manager and deps fakes carry every member connectPanePty reads, as in this file's other tests.
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
       // Codex's composer is ready: only main may paste the draft into it.
       onData.current?.('\x1b[?2004h\x1b[2K\u203a ')

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
+import type { AppState } from '../types'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
 import { provideLayoutFrameTerminalPanes } from '@/runtime/layout-frame-terminal-panes'
 import {
@@ -257,17 +258,18 @@ const TELEMETRY = {
 } as const
 
 /** The params main's create gets for a startup, after the ids every start sends. */
-async function startParamsFor(startup: Record<string, unknown>) {
+type TabStartup = AppState['pendingStartupByTabId'][string]
+
+async function startParamsFor(startup: TabStartup) {
   const store = storeWithWorktree()
   store.getState().createTab(WORKTREE, undefined, undefined, {
     id: TAB,
     initialLeafId: LEAF,
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each row is a startup a producer queues; the table keeps them untyped to list them side by side.
-    pendingStartup: startup as never
+    pendingStartup: startup
   })
   await settle()
   const [{ worktree: _w, windowTab: _t, tabId: _tab, leafId: _leaf, ...params }] =
-    terminalCreateCalls().map((call) => call[2] as Record<string, unknown>)
+    terminalCreateCalls().map((call): Record<string, unknown> => ({ ...call[2] }))
   return { store, params }
 }
 
@@ -277,7 +279,7 @@ describe('every start input of a new tab reaches main’s create (L252)', () => 
     clearConsumedAgentStartupDeliveriesForTests()
   })
 
-  it.each([
+  it.each<{ name: string; startup: TabStartup; params: Record<string, unknown> }>([
     {
       name: 'telemetry, which main records once its spawn commits',
       startup: { command: 'codex', launchAgent: 'codex', telemetry: TELEMETRY },
@@ -379,7 +381,7 @@ describe('every start input of a new tab reaches main’s create (L252)', () => 
   })
 
   it('keeps the start’s status prompt for the pane, which seeds it when it attaches', async () => {
-    const startup = {
+    const startup: TabStartup = {
       command: 'cmd',
       launchAgent: 'command-code',
       launchConfig: LAUNCH_CONFIG,
@@ -407,7 +409,7 @@ describe('every start input of a new tab reaches main’s create (L252)', () => 
   })
 
   it('gives the whole startup back when main does not hold the tab', async () => {
-    const startup = {
+    const startup: TabStartup = {
       command: 'codex',
       launchAgent: 'codex',
       launchConfig: LAUNCH_CONFIG,
