@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isSameAgentProcess } from '../../../shared/agent-process-presence'
 
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import type {
@@ -62,13 +63,121 @@ export abstract class AgentHookServerAuthorityEvidence extends AgentHookServerSt
     )
   }
 
-  protected recordCurrentAuthorityObservation(payload: AgentHookEventPayload): void {
-    const evidence = this.toAuthorityEvidence(payload)
-    if (evidence) {
-      this.currentAuthorityObservations.set(evidence.paneKey, evidence)
-      this.persistedAuthorityCommitmentsByPaneKey.set(evidence.paneKey, evidence)
-      this.hydratedLaunchTokenHashByPaneKey.set(evidence.paneKey, evidence.launchTokenHash)
+  setLaunchAuthorityVerifier(
+    verify: NonNullable<typeof this.launchAuthorityVerifier>,
+    subscribe: (listener: (paneKey: string) => void) => () => void
+  ): void {
+    this.unsubscribeLaunchAuthority?.()
+    this.launchAuthorityVerifier = verify
+    const resolve = (paneKey: string): void => this.resolvePendingLaunchAuthority(paneKey)
+    this.unsubscribeLaunchAuthority = subscribe(resolve)
+    for (const paneKey of this.pendingLaunchAuthority.keys()) {
+      resolve(paneKey)
     }
+  }
+
+  protected resolvePendingLaunchAuthority(paneKey: string): void {
+    const owner = this.resolvePaneKeyAlias(paneKey)
+    const pending = this.pendingLaunchAuthority.get(owner)
+    if (!pending) {
+      return
+    }
+    if (
+      this.state.lastStatusByPaneKey.get(owner) !== pending.row ||
+      this.closedAgentStatusPaneKeys.has(owner)
+    ) {
+      this.pendingLaunchAuthority.delete(owner)
+      return
+    }
+    this.admitLaunchAuthority(pending.evidence, pending.row.terminalHandle)
+  }
+
+  private admitLaunchAuthority(
+    evidence: AgentHookAuthorityEvidence,
+    terminalHandle?: string
+  ): boolean {
+    const retained = this.hydratedAuthorityCommitments.filter(
+      (entry) =>
+        !this.revokedHydratedAuthorityCommitments.has(entry) &&
+        entry.launchTokenHash === evidence.launchTokenHash &&
+        entry.connectionId === evidence.connectionId
+    )
+    const eligible =
+      retained.length === 1 && this.resolvePaneKeyAlias(retained[0]!.paneKey) === evidence.paneKey
+    if (!eligible && !this.launchAuthorityVerifier?.(evidence, terminalHandle)) {
+      return false
+    }
+    this.currentAuthorityObservations.set(evidence.paneKey, evidence)
+    this.persistedAuthorityCommitmentsByPaneKey.set(evidence.paneKey, evidence)
+    this.hydratedLaunchTokenHashByPaneKey.set(evidence.paneKey, evidence.launchTokenHash)
+    this.pendingLaunchAuthority.delete(evidence.paneKey)
+    this.scheduleStatusPersist()
+    return true
+  }
+
+  protected recordCurrentAuthorityObservation(payload: AgentHookEventPayload, row = payload): void {
+    const previous = this.pendingLaunchAuthority.get(payload.paneKey)
+    const evidence = this.toAuthorityEvidence(payload)
+    // Status is accepted independently; its credential is not a durable source of authority.
+    if (evidence) {
+      if (!this.admitLaunchAuthority(evidence, payload.terminalHandle)) {
+        this.pendingLaunchAuthority.set(payload.paneKey, {
+          evidence,
+          row,
+          ...(payload.providerSession
+            ? { session: { id: payload.providerSession.id, key: payload.providerSession.key } }
+            : {})
+        })
+      }
+    } else if (
+      previous &&
+      this.sameTerminalOwner(previous.row, payload) &&
+      previous.row.payload.agentType === payload.payload.agentType &&
+      (previous.session
+        ? previous.session.id === payload.providerSession?.id &&
+          previous.session.key === payload.providerSession?.key
+        : !payload.providerSession) &&
+      (previous.row.agentPresence?.process
+        ? payload.agentPresence?.process !== undefined &&
+          isSameAgentProcess(previous.row.agentPresence.process, payload.agentPresence.process)
+        : !payload.agentPresence?.process)
+    ) {
+      previous.row = row
+    } else {
+      this.pendingLaunchAuthority.delete(payload.paneKey)
+    }
+  }
+
+  protected revokeHydratedAuthorityForPaneKeys(
+    paneKeys: ReadonlySet<string>,
+    hash?: string
+  ): boolean {
+    let changed = false
+    for (const commitment of this.hydratedAuthorityCommitments) {
+      if (
+        (!hash || commitment.launchTokenHash === hash) &&
+        (paneKeys.has(commitment.paneKey) ||
+          paneKeys.has(this.resolvePaneKeyAlias(commitment.paneKey)))
+      ) {
+        this.revokedHydratedAuthorityCommitments.add(commitment)
+        changed = true
+      }
+    }
+    for (const paneKey of paneKeys) {
+      const resolvedPaneKey = this.resolvePaneKeyAlias(paneKey)
+      for (const key of new Set([paneKey, resolvedPaneKey])) {
+        if (!hash || this.hydratedLaunchTokenHashByPaneKey.get(key) === hash) {
+          changed = this.hydratedLaunchTokenHashByPaneKey.delete(key) || changed
+        }
+        if (
+          !hash ||
+          this.persistedAuthorityCommitmentsByPaneKey.get(key)?.launchTokenHash === hash
+        ) {
+          changed = this.persistedAuthorityCommitmentsByPaneKey.delete(key) || changed
+        }
+      }
+    }
+    return changed
   }
 
   protected toAuthorityEvidence(

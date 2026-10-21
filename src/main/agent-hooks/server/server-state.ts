@@ -50,11 +50,11 @@ import type {
   StatusFreshnessListener,
   StatusRowMutationListener
 } from './server-types'
-import { RevisionedMap } from './revisioned-map'
+import { AgentHookServerAuthorityState } from './server-authority-state'
 import { forgetAgentExit, type AgentExitEvidence } from './agent-exit-evidence'
 
 /** Shared mutable state for the layered hook-server implementation. */
-export abstract class AgentHookServerState {
+export abstract class AgentHookServerState extends AgentHookServerAuthorityState {
   protected canWriteLegacyStatusRow(entry: AgentHookEventPayload): boolean {
     return canAdmitLegacyAgentStatusEntry(
       this.state,
@@ -143,16 +143,6 @@ export abstract class AgentHookServerState {
   )
   // Why: hydrated rows give UI continuity but aren't evidence of live agent work in this runtime.
   protected runtimeObservedStatusPaneKeys = new Set<string>()
-  protected hydratedAuthorityCommitments: readonly AgentHookAuthorityEvidence[] = Object.freeze([])
-  // Why: revisioned so a persisted-authority change can bypass the write throttle (spool replay and
-  // restored-terminal attestation read these after a crash).
-  protected hydratedLaunchTokenHashByPaneKey = new RevisionedMap<string, string>()
-  protected persistedAuthorityCommitmentsByPaneKey = new RevisionedMap<
-    string,
-    AgentHookAuthorityEvidence
-  >()
-  protected revokedHydratedAuthorityCommitments = new WeakSet<AgentHookAuthorityEvidence>()
-  protected currentAuthorityObservations = new Map<string, AgentHookAuthorityEvidence>()
   protected legacyPaneKeyAliases = new Map<string, PaneKeyAliasEntry>()
   // Why: indexed by every key the retirement fenced, so a re-attach on any of them
   // (owner, physical, or a deleted alias) finds the same record. Bounded like the maps
@@ -277,7 +267,10 @@ export abstract class AgentHookServerState {
   protected abstract boundPaneKeyAliases(): void
   protected abstract getPhysicalPaneKeyForAuthority(paneKey: string, ptyId?: string): string
   protected abstract restoreRetiredPaneFence(fence: RetiredPaneFence): void
-  protected abstract revokeHydratedAuthorityForPaneKeys(paneKeys: ReadonlySet<string>): boolean
+  protected abstract revokeHydratedAuthorityForPaneKeys(
+    paneKeys: ReadonlySet<string>,
+    hash?: string
+  ): boolean
   protected abstract resolvePaneKeyAlias(paneKey: string): string
   protected abstract normalizeHookBodyPaneKeyAlias(body: unknown): unknown
   protected abstract normalizeLocalHookPayload(
@@ -320,7 +313,10 @@ export abstract class AgentHookServerState {
   protected abstract maybeWriteEndpointFile(): void
   protected abstract hydrateLastStatusFromDisk(): void
   protected abstract captureHydratedAuthorityCommitments(): void
-  protected abstract recordCurrentAuthorityObservation(payload: AgentHookEventPayload): void
+  protected abstract recordCurrentAuthorityObservation(
+    payload: AgentHookEventPayload,
+    row?: AgentHookEventPayload
+  ): void
   protected abstract toAuthorityEvidence(
     payload: AgentHookEventPayload | EnrichedAgentHookEventPayload,
     launchTokenHashOverride?: string

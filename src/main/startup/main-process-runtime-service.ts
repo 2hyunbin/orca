@@ -104,10 +104,6 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
       }
     },
     getDesktopWindowStatus,
-    attestAgentHookCompatibilityAuthority: (candidate) =>
-      agentHookServer.attestCompatibilityAuthority(candidate),
-    retireAgentHookCompatibilityAuthority: (paneKey) =>
-      agentHookServer.retirePaneAuthority(paneKey),
     canRecoverPersistentLocalPtys: () => getDaemonProvider() !== null,
     // Why: evaluated per call, not captured — the RPC server that owns the device registry is
     // constructed with this runtime and does not exist yet at this point.
@@ -153,6 +149,10 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
     recordObservedAgentStatusPaneIdentity(observedPaneIdentities, enriched, runtime)
   )
   agentHookServer.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
+  agentHookServer.setLaunchAuthorityVerifier(
+    (candidate, handle) => runtime.verifyAgentHookLaunchAuthority(candidate, handle),
+    (listener) => runtime.subscribeAgentLaunchAuthority(listener)
+  )
   // Switch point: main keeps the resume record of each pane it holds from the status it accepts.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
     agentHookServer.subscribeEnrichedStatus((enriched) =>

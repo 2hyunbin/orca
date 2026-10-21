@@ -1,5 +1,5 @@
-import { deriveCliWriterTopology } from './cli-writer-observation'
 import { createHash } from 'node:crypto'
+import { deriveCliWriterTopology } from './cli-writer-observation'
 
 import { getCohortAtEmit } from '../../telemetry/cohort-classifier'
 import { track } from '../../telemetry/client'
@@ -123,12 +123,17 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
   }
 
   protected writeLegacyStatusRow(entry: EnrichedAgentHookEventPayload): boolean {
-    return admitLegacyAgentStatus(
+    const row = entry.launchToken ? { ...entry, launchToken: undefined } : entry
+    const accepted = admitLegacyAgentStatus(
       this.state,
       'main-status-update',
-      entry,
+      row,
       AGENT_STATUS_2A_CURRENT_PRODUCER_MODE
     )
+    if (accepted) {
+      this.recordCurrentAuthorityObservation(entry, row)
+    }
+    return accepted
   }
   /** `observedAt` is the producer's own clock for evidence that has one (a session journal); it
    *  stamps the evidence and state-start times while `receivedAt` keeps delivery order. */

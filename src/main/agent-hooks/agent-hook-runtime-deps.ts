@@ -38,6 +38,11 @@ export function agentHookRuntimeDeps(
       readChildWorkRecords: (subject) => server.getStructuredChildWork(subject),
       readChildWorkHandles: (subject) => server.getStructuredChildWorkHandles(subject)
     },
+    attestAgentHookCompatibilityAuthority: (candidate) =>
+      server.attestCompatibilityAuthority(candidate),
+    captureAgentHookCompatibilityRetirement: (paneKey) =>
+      server.capturePaneAuthorityRetirement(paneKey),
+    retireAgentHookCompatibilityAuthority: (paneKey) => server.retirePaneAuthority(paneKey),
     readHookCliWriterObservation: (row) => server.readCliWriterObservation(row),
     checkHookAgentPresence: (paneKey, exitedSince) =>
       exitedSince === undefined

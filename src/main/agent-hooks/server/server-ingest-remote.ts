@@ -261,7 +261,7 @@ export abstract class AgentHookServerIngestRemote extends AgentHookServerIngestS
         ? { authorityRestartId: restartedAuthority.authorityRestartId }
         : {}),
       hostTurnRevision: normalizeHostTurnRevision(envelope.hostTurnRevision),
-      launchToken: statusDisposition === 'restart' ? undefined : envelope.launchToken,
+      launchToken: envelope.launchToken,
       tabId,
       worktreeId,
       connectionId: trimmedConnectionId,
@@ -285,7 +285,6 @@ export abstract class AgentHookServerIngestRemote extends AgentHookServerIngestS
           : undefined,
       payload: normalizedPayload
     }
-    this.recordCurrentAuthorityObservation(event)
     this.applyNormalizedStatus(
       event,
       applyClaudeBackgroundWork

@@ -246,6 +246,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           recordPtySurface(pty, tabId, paneKey, spawnSurfaceClaimSequence(this.graphSequence))
         }
         const handle = pty ? this.issuePtyHandle(pty) : preAllocatedHandle
+        this.notifyAgentLaunchAuthority(pty?.paneKey)
         if (pty && !adoptedStablePane && launchOpts.deferMobileSessionPublish !== true) {
           this.publishPtyBackedMobileSessionTerminal(workspace.id, pty, {
             tabId,

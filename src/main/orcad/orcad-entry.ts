@@ -320,6 +320,10 @@ async function startOrcadRuntime(
   // Recovery binds terminal and dispatch identities; only now can startup observations be fenced.
   observedStatusCapture.attach(runtime)
   agentHookServer.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
+  agentHookServer.setLaunchAuthorityVerifier(
+    (candidate, handle) => runtime.verifyAgentHookLaunchAuthority(candidate, handle),
+    (listener) => runtime.subscribeAgentLaunchAuthority(listener)
+  )
   // Why before the RPC server binds: like `--serve`, the first client must find a ready graph.
   const { publishHeadlessRuntimeGraph } = await import('../runtime/headless-runtime-graph')
   publishHeadlessRuntimeGraph(runtime)

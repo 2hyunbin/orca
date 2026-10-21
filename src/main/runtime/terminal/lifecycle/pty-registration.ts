@@ -172,6 +172,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
         this.registerPreAllocatedHandleForPty(ptyId, replacementHandle)
       }
       this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, binding.tabId)
+      this.notifyAgentLaunchAuthority(paneKey)
     }
   }
 

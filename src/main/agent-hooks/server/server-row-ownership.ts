@@ -92,6 +92,9 @@ export abstract class AgentHookServerRowOwnership extends AgentHookServerListene
     after: EnrichedAgentHookEventPayload | null | undefined,
     emit = true
   ): boolean {
+    if (before && !after) {
+      this.pendingLaunchAuthority.delete(before.paneKey)
+    }
     if (
       before?.terminalHandle &&
       this.paneKeyByTerminalHandle.get(before.terminalHandle) === before.paneKey
