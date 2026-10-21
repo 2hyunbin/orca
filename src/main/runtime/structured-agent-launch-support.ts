@@ -91,7 +91,7 @@ export async function resolveHostStructuredAgentLaunchEnvironment(
 ): Promise<Record<string, string>> {
   return {
     ...(await resolveHostAgentBaseEnvironment(settings)),
-    ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) : {})
+    ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings) : {})
   }
 }
 

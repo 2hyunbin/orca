@@ -220,7 +220,8 @@
         "antigravityNotSignedIn": "Not signed in. Chats need an Antigravity sign-in, separate from your agy terminal account.",
         "antigravityAccount": "Account",
         "antigravitySignInNeeded": "Chats need an Antigravity sign-in, separate from your agy terminal account."
-      }
+      },
+      "permissionsDescriptionOwnAgents": "New chats of agents set to their own settings in Settings → Agents. Other agents start chats in their permission there."
     },
     "terminal": {
       "optionLayoutAlt": "ABC or U.S. — Option sends Alt/Esc sequences",
@@ -406,7 +407,18 @@
       "customPermissions": "Custom arguments",
       "replaceWithPermissionMode": "Replace with {{mode}}",
       "expandAgentSettings": "Expand agent settings",
-      "collapseAgentSettings": "Collapse agent settings"
+      "collapseAgentSettings": "Collapse agent settings",
+      "permissionArgsTerminalOnly": "These arguments set {{agent}}’s permissions, so terminals use them and Orca adds no flag. Chats use the Permissions choice above.",
+      "permissionFromArgs": "{{agent}} set to {{mode}} in terminals and new chats.",
+      "permissionOwnAgent": "Use {{agent}}'s own settings",
+      "permissionOwnAll": "Agents' own settings",
+      "permissionOwnDescription": "Orca adds no permission flag in terminals; chats use Settings → Chat.",
+      "permissionChoiceDescription": "Every agent, in terminals and new chats. Change one agent below.",
+      "permissionOwnShort": "Own settings",
+      "permissionWithoutAuto": "Agents without Approve for me",
+      "permissionSameAsAll": "Same as all agents",
+      "permissionChipRemove": "Remove {{flag}} and use {{agent}}'s own settings",
+      "permissionChipTooltip": "Added by Permissions. Remove it to use {{agent}}’s own settings."
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",

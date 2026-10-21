@@ -115,7 +115,8 @@ it.each(['paired-linux', 'local-bash', 'withheld', 'structured-withheld'] as con
         experimentalNativeChat: true,
         nativeChatProviders: { claude: target === 'structured-withheld' },
         terminalWindowsShell: 'C:\\Program Files\\Git\\bin\\bash.exe',
-        agentDefaultArgs: { claude: '--append-system-prompt "don\'t edit"' }
+        agentDefaultArgs: { claude: '--append-system-prompt "don\'t edit"' },
+        agentPermissionOverrides: { claude: 'own' }
       },
       runtimeStatusByEnvironmentId: new Map([
         [

@@ -20,6 +20,12 @@ import {
   AgentDefaultArgsInput,
   AgentDefaultEnvInput
 } from './AgentLaunchDefaultsEditor'
+import {
+  AgentPermissionArgsChip,
+  agentPermissionChoiceLabel,
+  AgentPermissionMenu,
+  type AgentPermissionChoiceRow
+} from './AgentPermissionChoiceControls'
 
 type AgentAvailability = 'enabled' | 'disabled'
 
@@ -83,6 +89,10 @@ export type AgentCatalogRowProps = {
   environmentNames?: readonly string[]
   /** Absent for agents without a configurable permission mode on this host. */
   permission?: AgentRowPermission
+  /** On hosts that store the permission apart from Arguments; replaces `permission`. */
+  permissionChoice?: AgentPermissionChoiceRow
+  /** The text a terminal launch gets, when it differs from the editable Arguments. */
+  launchArgs?: string
   environmentEditor?: React.ReactNode
 }
 
@@ -107,7 +117,9 @@ export function AgentCatalogRow({
   sessionSourceHome,
   environmentNames,
   environmentEditor,
-  permission
+  permission,
+  permissionChoice,
+  launchArgs = argsOverride
 }: AgentCatalogRowProps): React.JSX.Element {
   const envSummary = environmentNames?.join(' ') ?? stringifyAgentDefaultEnvDraft(envOverride)
   const defaultEnvSummary = stringifyAgentDefaultEnvDraft(defaultEnv)
@@ -132,7 +144,7 @@ export function AgentCatalogRow({
       )?.focus()
     })
   }
-  const expandable = isDetected || permission !== undefined
+  const expandable = isDetected || permission !== undefined || permissionChoice !== undefined
 
   return (
     <div className={cn('py-3', !isDetected && 'opacity-70')}>
@@ -158,12 +170,25 @@ export function AgentCatalogRow({
             ) : (
               defaultCmd
             )}
-            {argsOverride && <span className="ml-1.5 text-foreground/70">{argsOverride}</span>}
+            {launchArgs && <span className="ml-1.5 text-foreground/70">{launchArgs}</span>}
             {envSummary && <span className="ml-1.5 text-foreground/60">{envSummary}</span>}
           </div>
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {permissionChoice?.source === 'agent' && (
+            <div className="mr-3 flex h-7 items-center">
+              <button
+                type="button"
+                onClick={openPermission}
+                className="rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <SettingsBadge tone="accent">
+                  {agentPermissionChoiceLabel(permissionChoice.choice, label)}
+                </SettingsBadge>
+              </button>
+            </div>
+          )}
           {permission && permission.mode !== permission.expectedMode && (
             // Right-aligned against the controls so badges line up without reserving width on every row.
             <div className="mr-3 flex h-7 items-center">
@@ -246,6 +271,11 @@ export function AgentCatalogRow({
 
       {expandable && cmdOpen && (
         <div className="mt-3 space-y-3 pl-10">
+          {permissionChoice && (
+            <div ref={permissionRef}>
+              <AgentPermissionMenu agentId={agentId} label={label} permission={permissionChoice} />
+            </div>
+          )}
           {permission && (
             <AgentRowPermissionControl
               label={label}
@@ -267,6 +297,24 @@ export function AgentCatalogRow({
                   defaultArgs={defaultArgs}
                   argsOverride={argsOverride}
                   onSaveArgs={onSaveArgs}
+                  permissionChip={
+                    permissionChoice?.flag && !permissionChoice.argsSetPermission ? (
+                      <AgentPermissionArgsChip
+                        label={label}
+                        flag={permissionChoice.flag}
+                        onRemove={() => permissionChoice.onSelect('own')}
+                      />
+                    ) : undefined
+                  }
+                  note={
+                    permissionChoice?.argsSetPermission
+                      ? translate(
+                          'settings.agents.permissionArgsTerminalOnly',
+                          'These arguments set {{agent}}’s permissions, so terminals use them and Orca adds no flag. Chats use the Permissions choice above.',
+                          { agent: label }
+                        )
+                      : undefined
+                  }
                 />
               </div>
               {environmentEditor ??

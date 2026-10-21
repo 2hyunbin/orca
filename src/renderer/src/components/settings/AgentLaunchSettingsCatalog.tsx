@@ -1,10 +1,29 @@
 import { useMemo } from 'react'
+import { toast } from 'sonner'
 import type {
   AgentLaunchSettings,
   AgentLaunchSettingsMutation
 } from '../../../../shared/agent-launch-settings'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { AUTO_TUI_AGENT_ARGS } from '../../../../shared/tui-agent-permissions'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import {
+  agentPermissionArgs,
+  agentPermissionChoices,
+  PERMISSION_CHOICE_AGENTS,
+  resolveAgentPermission,
+  type AgentPermissionChoice,
+  type AgentPermissionSettings
+} from '../../../../shared/tui-agent-permission-choice'
+import {
+  agentArgsSetPermission,
+  liftAgentPermissionArgs
+} from '../../../../shared/tui-agent-permission-lift'
+import {
+  agentPermissionChoiceLabel,
+  AllAgentsPermissionSetting,
+  type AgentPermissionChoiceRow
+} from './AgentPermissionChoiceControls'
 import type { AgentPermissionsSettingProps } from './AgentPermissionsSetting'
 import { buildAgentRowPermissions } from './agent-row-permission-model'
 import {
@@ -69,6 +88,40 @@ export function AgentLaunchSettingsCatalog({
         : mutation
     void mutate(scopedMutation).catch(() => {})
   }
+  const typed = settings.agentPermission
+  const permissionSettings: AgentPermissionSettings | null = typed
+    ? { agentPermissionDefault: typed.default, agentPermissionOverrides: typed.overrides }
+    : null
+  const choiceRow = (agent: TuiAgent): AgentPermissionChoiceRow | undefined => {
+    const choices = agentPermissionChoices(agent)
+    if (!permissionSettings || choices.length < 2) {
+      return undefined
+    }
+    const resolved = resolveAgentPermission(agent, permissionSettings)
+    return {
+      choices,
+      ...resolved,
+      defaultChoice: resolveAgentPermission(agent, {
+        agentPermissionDefault: permissionSettings.agentPermissionDefault
+      }).choice,
+      onSelect: (choice) => save({ type: 'permission', agent, choice }),
+      flag: agentPermissionArgs(agent, resolved.choice),
+      argsSetPermission: agentArgsSetPermission(agent, typed?.userArgs[agent])
+    }
+  }
+  const saveUserArgs = async (agent: TuiAgent, label: string, value: string): Promise<void> => {
+    const lifted = liftAgentPermissionArgs(agent, value)
+    await mutate({ type: 'user-arguments', agent, value })
+    if (lifted.choice) {
+      toast.success(
+        translate(
+          'settings.agents.permissionFromArgs',
+          '{{agent}} set to {{mode}} in terminals and new chats.',
+          { agent: label, mode: agentPermissionChoiceLabel(lifted.choice, label) }
+        )
+      )
+    }
+  }
   const permissions = buildAgentRowPermissions({
     agents: catalog.map((agent) => agent.id),
     settings,
@@ -84,15 +137,23 @@ export function AgentLaunchSettingsCatalog({
     label: agent.label,
     homepageUrl: agent.homepageUrl,
     defaultCmd: agent.cmd,
-    defaultArgs: getTuiAgentDefaultArgs(agent.id),
-    defaultEnv: getTuiAgentDefaultEnv(agent.id),
+    defaultArgs: typed ? '' : getTuiAgentDefaultArgs(agent.id),
+    defaultEnv: typed ? {} : getTuiAgentDefaultEnv(agent.id),
     isDetected,
     isEnabled: isTuiAgentEnabled(agent.id, settings.disabledTuiAgents),
     isDefault: isDetected && settings.defaultTuiAgent === agent.id,
     cmdOverride: isDetected ? settings.agentCmdOverrides[agent.id] : undefined,
-    argsOverride: resolveTuiAgentLaunchArgs(agent.id, settings.agentDefaultArgs),
-    envOverride: local ? resolveTuiAgentLaunchEnv(agent.id, local.settings.agentDefaultEnv) : {},
-    permission: permissions.rows.get(agent.id),
+    argsOverride: typed
+      ? (typed.userArgs[agent.id] ?? '')
+      : resolveTuiAgentLaunchArgs(agent.id, settings),
+    launchArgs: settings.agentDefaultArgs[agent.id] ?? '',
+    envOverride: !local
+      ? {}
+      : typed
+        ? { ...local.settings.agentDefaultEnv?.[agent.id] }
+        : resolveTuiAgentLaunchEnv(agent.id, { agentDefaultEnv: local.settings.agentDefaultEnv }),
+    permission: typed ? undefined : permissions.rows.get(agent.id),
+    permissionChoice: choiceRow(agent.id),
     onSetDefault: () =>
       save({
         type: 'default',
@@ -100,7 +161,10 @@ export function AgentLaunchSettingsCatalog({
       }),
     onSetEnabled: (enabled) => save({ type: 'availability', agent: agent.id, enabled }),
     onSaveOverride: (value) => mutate({ type: 'command', agent: agent.id, value }),
-    onSaveArgs: (value) => mutate({ type: 'arguments', agent: agent.id, value }),
+    onSaveArgs: (value) =>
+      typed
+        ? saveUserArgs(agent.id, agent.label, value)
+        : mutate({ type: 'arguments', agent: agent.id, value }),
     onSaveEnv: (value) => {
       if (local) {
         local.updateSettings({
@@ -140,17 +204,31 @@ export function AgentLaunchSettingsCatalog({
         )}
         onSetDefault={(agent) => save({ type: 'default', agent })}
       />
-      {renderPermissions({
-        mode: permissions.globalMode,
-        nonAutoMode: settings.nonAutoPermissionMode,
-        majorityMode: permissions.majorityMode,
-        autoAgentLabels: catalog
-          .filter((agent) => agent.id in AUTO_TUI_AGENT_ARGS)
-          .map((agent) => agent.label),
-        onChange: (mode) => save({ type: 'permissions', mode }),
-        onChangeNonAuto: (mode) => save({ type: 'permissions', mode, exceptAuto: true }),
-        autoSupported
-      })}
+      {permissionSettings ? (
+        <AllAgentsPermissionSetting
+          choice={permissionSettings.agentPermissionDefault ?? 'own'}
+          withoutAutoChoice={sharedChoice(
+            PERMISSION_CHOICE_AGENTS.filter(
+              (agent) => !agentPermissionChoices(agent).includes('auto')
+            ).map((agent) => resolveAgentPermission(agent, permissionSettings).choice)
+          )}
+          onChange={(choice) => save({ type: 'permission', choice })}
+          onChangeWithoutAuto={(choice) => save({ type: 'permission', choice, withoutAuto: true })}
+        />
+      ) : null}
+      {permissionSettings
+        ? null
+        : renderPermissions({
+            mode: permissions.globalMode,
+            nonAutoMode: settings.nonAutoPermissionMode,
+            majorityMode: permissions.majorityMode,
+            autoAgentLabels: catalog
+              .filter((agent) => agent.id in AUTO_TUI_AGENT_ARGS)
+              .map((agent) => agent.label),
+            onChange: (mode) => save({ type: 'permissions', mode }),
+            onChangeNonAuto: (mode) => save({ type: 'permissions', mode, exceptAuto: true }),
+            autoSupported
+          })}
       <AgentDetectionCatalog
         detectedAgents={detectedAgents}
         undetectedAgents={undetectedAgents}
@@ -169,4 +247,8 @@ export function AgentLaunchSettingsCatalog({
       />
     </>
   )
+}
+
+function sharedChoice(choices: readonly AgentPermissionChoice[]): AgentPermissionChoice | null {
+  return choices.length > 0 && choices.every((choice) => choice === choices[0]) ? choices[0] : null
 }

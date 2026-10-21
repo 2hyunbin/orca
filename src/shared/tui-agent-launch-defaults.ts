@@ -3,6 +3,15 @@ import type { GlobalSettings } from './global-settings-types'
 import { isTuiAgent } from './tui-agent-config'
 import { YOLO_TUI_AGENT_ARGS, YOLO_TUI_AGENT_ENV } from './tui-agent-permissions'
 import {
+  agentPermissionArgs,
+  agentPermissionEnv,
+  hasTypedAgentPermission,
+  PERMISSION_CHOICE_AGENTS,
+  resolveAgentPermission,
+  sanitizeAgentPermissionUpdates
+} from './tui-agent-permission-choice'
+import { agentArgsSetPermission } from './tui-agent-permission-lift'
+import {
   resolveStartupShell,
   tokenizeStartupCommand,
   type AgentStartupShell
@@ -15,6 +24,15 @@ const UNSUPPORTED_TUI_AGENT_ARGS: Partial<Record<TuiAgent, readonly string[]>> =
   kilo: ['--dangerously-skip-permissions']
 }
 
+/** What a launch reads: the user's Arguments and env plus the stored permission choice. */
+export type AgentLaunchProfileSettings = Partial<
+  Pick<
+    GlobalSettings,
+    'agentDefaultArgs' | 'agentDefaultEnv' | 'agentPermissionDefault' | 'agentPermissionOverrides'
+  >
+>
+
+// What an untouched agent ran with before permissions were stored as a choice; legacy text only.
 export const DEFAULT_TUI_AGENT_ARGS: Partial<Record<TuiAgent, string>> &
   Readonly<Record<string, string | undefined>> = YOLO_TUI_AGENT_ARGS
 
@@ -109,6 +127,22 @@ export function normalizeTuiAgentEnvRecord(
   return normalized
 }
 
+/** Normalizes a settings write's launch profile in place, wherever the write lands. */
+export function sanitizeAgentLaunchProfileUpdates(
+  target: Partial<GlobalSettings>,
+  updates: Partial<GlobalSettings>
+): void {
+  if ('agentDefaultArgs' in updates) {
+    target.agentDefaultArgs = normalizeTuiAgentArgsRecord(updates.agentDefaultArgs)
+    target.agentYoloDefaultsMigrated = true
+  }
+  if ('agentDefaultEnv' in updates) {
+    target.agentDefaultEnv = normalizeTuiAgentEnvRecord(updates.agentDefaultEnv)
+    target.agentYoloDefaultsMigrated = true
+  }
+  sanitizeAgentPermissionUpdates(target, updates)
+}
+
 export function getTuiAgentDefaultArgs(agent: string): string {
   return DEFAULT_TUI_AGENT_ARGS[agent] ?? ''
 }
@@ -117,18 +151,31 @@ export function getTuiAgentDefaultEnv(agent: string): Record<string, string> {
   return { ...DEFAULT_TUI_AGENT_ENV[agent] }
 }
 
+function ownArgs(agent: string, settings: AgentLaunchProfileSettings | null | undefined) {
+  const configured = settings?.agentDefaultArgs
+  const value: unknown = configured && Object.getOwnPropertyDescriptor(configured, agent)?.value
+  return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * The Arguments a terminal launch of this agent gets: Orca's flag for the agent's stored
+ * permission, then the user's own text. Text that sets permissions itself wins, so Orca adds none.
+ * Settings without a stored choice (an older host's published text) already carry the flag.
+ */
 export function resolveTuiAgentLaunchArgs(
   agent: string,
-  configuredArgs: Readonly<Record<string, string | undefined>> | null | undefined
+  settings: AgentLaunchProfileSettings | null | undefined
 ): string {
-  if (
-    configuredArgs &&
-    Object.hasOwn(configuredArgs, agent) &&
-    typeof configuredArgs[agent] === 'string'
-  ) {
-    return configuredArgs[agent] ?? ''
+  const own = ownArgs(agent, settings)
+  if (!hasTypedAgentPermission(settings) || !isTuiAgent(agent)) {
+    return own ?? getTuiAgentDefaultArgs(agent)
   }
-  return getTuiAgentDefaultArgs(agent)
+  const user = own?.trim() ?? ''
+  const flag = agentPermissionArgs(agent, resolveAgentPermission(agent, settings).choice)
+  if (!flag || agentArgsSetPermission(agent, user)) {
+    return user
+  }
+  return user ? `${flag} ${user}` : flag
 }
 
 /**
@@ -141,7 +188,7 @@ export function resolveTuiAgentLaunchArgs(
 export function resolvedTuiAgentArgsBypassPermissions(
   agent: TuiAgent,
   settings:
-    | Partial<Pick<GlobalSettings, 'agentDefaultArgs' | 'terminalWindowsShell'>>
+    | (AgentLaunchProfileSettings & Partial<Pick<GlobalSettings, 'terminalWindowsShell'>>)
     | null
     | undefined,
   platform: NodeJS.Platform
@@ -154,21 +201,59 @@ export function resolvedTuiAgentArgsBypassPermissions(
       terminalWindowsShell: settings?.terminalWindowsShell
     })
   )
-  return tuiAgentArgsBypassPermissions(
-    agent,
-    resolveTuiAgentLaunchArgs(agent, settings?.agentDefaultArgs),
-    shell
-  )
+  return tuiAgentArgsBypassPermissions(agent, resolveTuiAgentLaunchArgs(agent, settings), shell)
 }
 
+/** The env a terminal launch of this agent gets; the user's own entries win over Orca's. */
 export function resolveTuiAgentLaunchEnv(
   agent: string,
-  configuredEnv: Partial<Record<string, Record<string, string>>> | null | undefined
+  settings: AgentLaunchProfileSettings | null | undefined
 ): Record<string, string> {
-  if (configuredEnv && Object.hasOwn(configuredEnv, agent)) {
-    return { ...configuredEnv[agent] }
+  const configured = settings?.agentDefaultEnv
+  const own = configured && Object.hasOwn(configured, agent) ? { ...configured[agent] } : undefined
+  if (!hasTypedAgentPermission(settings) || !isTuiAgent(agent)) {
+    return own ?? getTuiAgentDefaultEnv(agent)
   }
-  return getTuiAgentDefaultEnv(agent)
+  const user = own ?? {}
+  const userNames = new Set(Object.keys(user).map((name) => name.toLowerCase()))
+  const added = Object.entries(
+    agentPermissionEnv(agent, resolveAgentPermission(agent, settings).choice)
+  ).filter(([name]) => !userNames.has(name.toLowerCase()))
+  return { ...Object.fromEntries(added), ...user }
+}
+
+/**
+ * Every agent's Arguments and env as its terminal launch gets them, flags included: what older
+ * clients read, since they treat that text as the permission. Each permission agent gets a key so
+ * an older client never falls back to its own built-in default.
+ */
+export function composeAgentLaunchProfile(
+  settings: AgentLaunchProfileSettings
+): Required<Pick<AgentLaunchProfileSettings, 'agentDefaultArgs' | 'agentDefaultEnv'>> {
+  if (!hasTypedAgentPermission(settings)) {
+    return {
+      agentDefaultArgs: { ...settings.agentDefaultArgs },
+      agentDefaultEnv: { ...settings.agentDefaultEnv }
+    }
+  }
+  const argAgents = new Set([
+    ...Object.keys(settings.agentDefaultArgs ?? {}),
+    ...PERMISSION_CHOICE_AGENTS
+  ])
+  const envAgents = new Set([
+    ...Object.keys(settings.agentDefaultEnv ?? {}),
+    ...PERMISSION_CHOICE_AGENTS.filter(
+      (agent) => Object.keys(agentPermissionEnv(agent, 'full-access')).length > 0
+    )
+  ])
+  return {
+    agentDefaultArgs: Object.fromEntries(
+      [...argAgents].map((agent) => [agent, resolveTuiAgentLaunchArgs(agent, settings)])
+    ),
+    agentDefaultEnv: Object.fromEntries(
+      [...envAgents].map((agent) => [agent, resolveTuiAgentLaunchEnv(agent, settings)])
+    )
+  }
 }
 
 /**

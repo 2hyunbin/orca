@@ -280,7 +280,7 @@ describe('durable execution-host launch settings', () => {
     })
     expect(readState().settings.agentNativeChatPermissionModes).toEqual({ codex: 'auto' })
     expect(readState().settings.nativeChatPermissionMode).toBe(beforeNative)
-    expect(readState().settings.agentDefaultArgs.codex).toBe('--approve-for-me')
+    expect(readState().settings.agentPermissionOverrides).toMatchObject({ codex: 'auto' })
   })
 
   it('recomputes queued intents after a failed write instead of persisting its stale map', async () => {
