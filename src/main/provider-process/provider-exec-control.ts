@@ -34,12 +34,14 @@ export function spawnProviderExecControl(
   const lifetime = options.lifetime ?? 'session'
   const closeRequest = lifetime === 'one-shot' ? 'stdin-end-and-sigterm' : options.closeRequest
   const oneShot = lifetime === 'one-shot' ? 1 : 0
+  const env = resolveProviderChildEnv(launch, options.inheritedEnv ?? process.env)
+  delete env.ELECTRON_RUN_AS_NODE
   const nonce = randomBytes(16).toString('hex')
   const child = spawnProcess({
     program: code.executable,
     args: ['gate', nonce, launch.command, ...launch.args],
     cwd: launch.cwd,
-    env: resolveProviderChildEnv(launch, options.inheritedEnv ?? process.env),
+    env,
     detached: true,
     stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe', 'pipe', code.holdFd()]
   })

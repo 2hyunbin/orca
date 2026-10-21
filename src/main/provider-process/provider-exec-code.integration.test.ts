@@ -83,9 +83,19 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
     const second = await prepareProviderExecCode({ executable: binary, sha256 }, [cache])
     const lost = vi.fn()
     const control = spawnProviderExecControl(
-      { command: '/bin/sh', args: ['-c', 'printf READY; IFS= read -r finish; printf FINAL'] },
+      {
+        command: '/bin/sh',
+        args: [
+          '-c',
+          'test -z "$ELECTRON_RUN_AS_NODE" || exit 1; printf READY; IFS= read -r finish; printf FINAL'
+        ]
+      },
       first,
-      { closeRequest: 'stdin-end-and-sigterm', onProtectionLost: lost }
+      {
+        closeRequest: 'stdin-end-and-sigterm',
+        onProtectionLost: lost,
+        inheritedEnv: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+      }
     )
     const holder = control.child
     holder.stderr.resume()
