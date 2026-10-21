@@ -43,7 +43,7 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
     reportedOptions: {},
     reportedModelMutation: 0,
     confirmedOptions: new Set(),
-    reusableOptions: new Map(),
+    appliedInputOptions: new Map(),
     launchedModel: null,
     fastModeAtStart: false,
     capabilities: [],
@@ -301,6 +301,7 @@ describe('Claude structured Fast mode', () => {
       setClaudeStructuredOption(session, { key: 'model', value: 'haiku' }, undefined)
     ).resolves.toMatchObject({ model: 'haiku', fastMode: 'false' })
     expect(applyFlagSettings).toHaveBeenCalledWith({ fastMode: false }, { timeoutMs: undefined })
+    expect(session.appliedInputOptions.get('fastMode')).toBe('false')
   })
 
   it('keeps Fast on across a model switch while support discovery is transient', async () => {
@@ -351,8 +352,8 @@ describe('Claude structured Fast mode', () => {
     ).resolves.toMatchObject({ model: 'haiku', fastMode: 'false' })
     expect(session.reportedOptions.fastMode).toBe(true)
     expect(session.confirmedOptions.has('fastMode')).toBe(false)
-    expect(session.reusableOptions.get('model')).toBe('haiku')
-    expect(session.reusableOptions.has('fastMode')).toBe(false)
+    expect(session.appliedInputOptions.get('model')).toBe('haiku')
+    expect(session.appliedInputOptions.has('fastMode')).toBe(false)
   })
 
   it('treats an unrecognized provider disabled reason as unavailable', async () => {

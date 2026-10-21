@@ -56,11 +56,6 @@ export type {
   ClaudeStructuredSessionEvent
 } from './claude-structured-session-state'
 
-function backgroundTaskState(session: ClaudeSession): AgentSessionBackgroundTaskState | null {
-  const state = session.backgroundTasks.state
-  return state ? { ...state, supportsTaskStop: true } : null
-}
-
 export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAdapter {
   private readonly sessions = new Map<string, ClaudeSession>()
   private readonly acquisitions = new ClaudeAcquisitionRegistry()
@@ -165,8 +160,10 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
     this.sessions.get(sessionId)?.prompts.bindJournalItemId(journalItemId, promptKey)
   }
 
-  dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) =>
-    dispatchClaudeMessage(this.session(input.sessionId), input, this.deps.requestTimeoutMs)
+  dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) => {
+    const { requestTimeoutMs, logger } = this.deps
+    return dispatchClaudeMessage(this.session(input.sessionId), input, requestTimeoutMs, logger)
+  }
 
   // A rewind forks the kept conversation into a new session, which the next launch makes.
   forkForRewind = claudeForkForRewind
@@ -208,7 +205,8 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
    *  read from the host's child records. */
   backgroundTaskState = (sessionId: string): AgentSessionBackgroundTaskState | null | undefined => {
     const session = this.sessions.get(sessionId)
-    return session ? backgroundTaskState(session) : undefined
+    const state = session?.backgroundTasks.state
+    return session && (state ? { ...state, supportsTaskStop: true } : null)
   }
   backgroundTaskStops: NonNullable<StructuredAgentSessionAdapter['backgroundTaskStops']> = (
     sessionId

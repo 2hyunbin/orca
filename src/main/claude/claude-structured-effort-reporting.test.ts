@@ -29,7 +29,7 @@ function sessionWith(
       optionMutationSequence: 0,
       reportedModelMutation: 0,
       confirmedOptions: new Set<string>(),
-      reusableOptions: new Map(),
+      appliedInputOptions: new Map(),
       connection: {
         supportedModels: async () => {
           calls.push('list_models')
@@ -200,7 +200,7 @@ describe('Claude effort against the model that must run it', () => {
   })
 
   it('sends `max`, which the readback cannot report, when the model advertises it', async () => {
-    // UNREPORTED_EFFORTS still governs: no get_settings, so no false disagreement.
+    // The underlying setting may differ from a transient execution effort.
     const { session, calls } = sessionWith('high', [], { model: 'sonnet', catalog: [SONNET] })
 
     await expect(
@@ -208,7 +208,7 @@ describe('Claude effort against the model that must run it', () => {
     ).resolves.toEqual({ model: 'sonnet', effort: 'max' })
     expect(calls).toEqual(['list_models', 'apply:max'])
     await readClaudeStructuredSessionOptions(session, undefined)
-    expect(session.reusableOptions.get('effort')).toBe('max')
+    expect(session.appliedInputOptions.get('effort')).toBe('max')
     expect(session.confirmedOptions.has('effort')).toBe(false)
   })
 
