@@ -13,6 +13,7 @@ import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-t
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type { RuntimeMobileSessionTerminalTab } from '../../../../shared/runtime-types'
+import { buildHeadlessMobileSessionTerminalTabs } from '../../mobile-session-terminal-projection'
 import {
   RestoredPaneStarter,
   type RestoredPane,
@@ -53,24 +54,19 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
         this.showRestoredPaneStart(`${target.tabId}:${target.leafId}`, { failed: error }),
       start: async (target, plan, startTrigger) => {
         this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(target.worktreeId)
-        const findTab = (): RuntimeMobileSessionTerminalTab | undefined =>
-          this.mobileSessionTabsByWorktree
-            .get(target.worktreeId)
-            ?.tabs.find(
-              (candidate): candidate is RuntimeMobileSessionTerminalTab =>
-                candidate.type === 'terminal' &&
-                candidate.parentTabId === target.tabId &&
-                candidate.leafId === target.leafId
+        // Why main's layout, not the client projection: at relaunch a window's view can ask before
+        // its graph lists the tab, and the projection is not built while a window is attached.
+        const session = this.getWorkspaceSessionForWorktree(target.worktreeId)
+        const tab = session
+          ? buildHeadlessMobileSessionTerminalTabs(
+              target.worktreeId,
+              session.tabsByWorktree?.[target.worktreeId] ?? [],
+              session
+            ).find(
+              (candidate) =>
+                candidate.parentTabId === target.tabId && candidate.leafId === target.leafId
             )
-        let tab = findTab()
-        if (!tab) {
-          // Why: at relaunch a window's view can ask before its graph lists the tab; main's
-          // session already holds it, as a client's activation reads it.
-          this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(target.worktreeId, {
-            allowAttachedWindow: true
-          })
-          tab = findTab()
-        }
+          : undefined
         if (!tab) {
           throw new Error('tab_not_found')
         }
