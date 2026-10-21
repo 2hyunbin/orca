@@ -1,18 +1,6 @@
 import type { AgentIdleEdgeMeta } from '../../../../../shared/terminal-output-side-effects'
 import { idleEdgeSettledAtRest, isClaudeIdleEdge } from '@/lib/agent-idle-edge'
-import { captureNotificationTransportOwner } from '@/attention/notification-subject-owner'
 import { useAppStore } from '@/store'
-import { isFreshNonDoneAgentStatus } from '../../../../../shared/agent-status-types'
-import type {
-  AgentCompletionDispatchMeta,
-  AgentCompletionStatusSnapshot
-} from '../agent-completion-coordinator-types'
-import { resolveCompatibleAgentTypeForOwner } from '../../../../../shared/agent-title-owner'
-import {
-  AGENT_TASK_COMPLETE_NOTIFICATION_GRACE_MS,
-  AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS,
-  canDispatchAgentNotificationAfterGrace
-} from '../agent-task-complete-policy'
 
 import { subscribeAgentTaskCompleteTrackingEnabled } from './agent-task-complete-settings'
 
@@ -21,107 +9,6 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { installAgentIdleWorkingHandlers } from './agent-idle-working-handlers'
 
 export function installAgentTaskCompleteNotify(session: ConnectPanePtySession): void {
-  session.scheduleAgentTaskCompleteNotification = (
-    title: string,
-    options: {
-      allowDoneDetailAfterGrace?: boolean
-      agentStatusSnapshot?: AgentCompletionStatusSnapshot
-      agentCompletionSource?: AgentCompletionDispatchMeta['source']
-    } = {}
-  ): void => {
-    if (
-      !session.syncAgentTaskCompleteTrackingEnabled() ||
-      session.requiresFreshWorkingForAgentTaskCompleteNotification
-    ) {
-      return
-    }
-    session.clearPendingAgentTaskCompleteNotification()
-    let graceElapsed = false
-    const generationAtSchedule = session.agentTaskCompleteNotificationGeneration
-    const agentStatusAtSchedule = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
-    const hasNewerActiveHookStatus = (): boolean => {
-      const currentStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
-      const scheduledAgentType = agentStatusAtSchedule?.agentType
-      const currentAgentForScheduledTurn = resolveCompatibleAgentTypeForOwner(
-        currentStatus?.agentType,
-        scheduledAgentType
-      )
-      const hasDifferentKnownAgent = Boolean(
-        currentStatus?.agentType &&
-        scheduledAgentType &&
-        currentStatus.agentType !== 'unknown' &&
-        scheduledAgentType !== 'unknown' &&
-        currentAgentForScheduledTurn !== scheduledAgentType
-      )
-      return (
-        options.agentCompletionSource === 'process-exit' &&
-        isFreshNonDoneAgentStatus(currentStatus) &&
-        (!agentStatusAtSchedule ||
-          currentStatus.state !== agentStatusAtSchedule.state ||
-          currentStatus.stateStartedAt !== agentStatusAtSchedule.stateStartedAt ||
-          hasDifferentKnownAgent)
-      )
-    }
-
-    const dispatch = (): void => {
-      session.clearPendingAgentTaskCompleteNotification()
-      if (
-        generationAtSchedule !== session.agentTaskCompleteNotificationGeneration ||
-        !session.syncAgentTaskCompleteTrackingEnabled() ||
-        hasNewerActiveHookStatus()
-      ) {
-        return
-      }
-      if (session.disposed) {
-        return
-      }
-      // Why: terminal attention is a visual pane affordance, not an OS
-      // notification. Route through dispatch so stale pane completions are
-      // rejected before unread attention is marked.
-      session.pendingTerminalBellNotification = false
-      session.clearTerminalBellNotificationTimer()
-      session.deps.dispatchNotification({
-        source: 'agent-task-complete',
-        terminalTitle: title,
-        paneKey: session.cacheKey,
-        ptyId: session.transport.getPtyId(),
-        workspaceOwner: captureNotificationTransportOwner(session.transport),
-        ...(options.agentCompletionSource
-          ? { agentCompletionSource: options.agentCompletionSource }
-          : {}),
-        ...(options.agentStatusSnapshot ? { agentStatusSnapshot: options.agentStatusSnapshot } : {})
-      })
-    }
-
-    const dispatchIfDetailed = (): void => {
-      if (hasNewerActiveHookStatus()) {
-        // Why: the confirmed exit belongs to the row captured above; a replaced
-        // active row means a newer turn started during the notification delay.
-        session.clearPendingAgentTaskCompleteNotification()
-        return
-      }
-      if (!graceElapsed) {
-        return
-      }
-      const entry = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
-      if (canDispatchAgentNotificationAfterGrace(entry, options)) {
-        dispatch()
-      }
-    }
-
-    session.agentTaskCompleteStatusUnsubscribe = useAppStore.subscribe(dispatchIfDetailed)
-    session.agentTaskCompleteNotificationGraceTimer = setTimeout(() => {
-      session.agentTaskCompleteNotificationGraceTimer = null
-      graceElapsed = true
-      dispatchIfDetailed()
-    }, AGENT_TASK_COMPLETE_NOTIFICATION_GRACE_MS)
-    // Why: some agents never surface assistant text through hooks. Keep a hard
-    // cap so task-complete notifications still fire instead of waiting forever.
-    session.agentTaskCompleteNotificationMaxTimer = setTimeout(
-      dispatch,
-      AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS
-    )
-  }
   session.agentTaskCompleteSettingsUnsubscribe = subscribeAgentTaskCompleteTrackingEnabled(() => {
     if (session.syncAgentTaskCompleteTrackingEnabled()) {
       session.agentCompletionCoordinator.startProcessTracking()

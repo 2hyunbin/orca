@@ -147,15 +147,21 @@ describe('command-finished drop and a Done that lands after it', () => {
     await restoreTerminalTestGlobals()
   })
 
-  async function connectRunPane(): Promise<{
+  async function connectRunPane(mainAuthority = false): Promise<{
     finishCommand: () => void
     startCommand: () => void
+    startCommandFact: () => void
     typeKey: (data: string) => void
     setStatus: (state: 'working' | 'done') => void
     setEntry: (entry: Partial<AgentStatusEntry>) => void
     paneKey: string
   }> {
     vi.useFakeTimers()
+    if (mainAuthority && mockStoreState.settings) {
+      mockStoreState.settings.terminalMainSideEffectAuthority = true
+    }
+    const { _dispatchTerminalSideEffectBatchForTest } =
+      await import('./terminal-side-effect-facts-handler')
     const { connectPanePty } = await import('./pty-connection')
     const { createTestStore } = await import('@/store/slices/store-test-helpers')
     vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
@@ -185,6 +191,12 @@ describe('command-finished drop and a Done that lands after it', () => {
       paneKey,
       finishCommand: () => dataCallbackRef.current?.('\x1b]133;D;0\x07\x1b]133;A\x07'),
       startCommand: () => dataCallbackRef.current?.('\x1b]133;C\x07'),
+      startCommandFact: () =>
+        _dispatchTerminalSideEffectBatchForTest({
+          ptyId: 'pty-opencode-run',
+          seq: 1,
+          facts: [{ kind: 'command-started' }]
+        }),
       typeKey: (data) => {
         for (const [listener] of pane.terminal.onData.mock.calls) {
           listener(data)
@@ -267,6 +279,13 @@ describe('command-finished drop and a Done that lands after it', () => {
       await vi.advanceTimersByTimeAsync(350 + 1200 + 6000)
 
       pane.startCommand()
+      expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(pane.paneKey)
+    })
+
+    it('dismisses the retained program result when the host reports the next command', async () => {
+      const pane = await connectRunPane(true)
+      pane.setEntry(brewDone)
+      pane.startCommandFact()
       expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(pane.paneKey)
     })
 

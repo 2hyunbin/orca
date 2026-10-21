@@ -120,6 +120,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
         onAgentBecameIdle: session.onAgentBecameIdle,
         onAgentBecameWorking: session.onAgentBecameWorking,
         onAgentExited: session.onAgentExited,
+        onCommandStarted: session.handleCommandStarted,
         onCommandFinished: session.handleCommandFinished,
         onPrLink: (link) =>
           useAppStore

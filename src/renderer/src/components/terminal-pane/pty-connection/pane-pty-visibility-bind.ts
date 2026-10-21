@@ -7,12 +7,8 @@ import { useAppStore } from '@/store'
 import { notifyCodexPaneBoundForStaleSweep } from '@/lib/codex-stale-pane-sweep'
 import { createTerminalGitHubPRLinkDetector } from '../../../../../shared/terminal-github-pr-link-detector'
 import { setRendererPtyVisibilityClaim } from '../pty-renderer-delivery-claims'
-import { AGENT_TASK_COMPLETE_NOTIFICATION_GRACE_MS } from '../agent-task-complete-policy'
 
-import {
-  isAgentTaskCompleteNotificationEnabled,
-  isAgentTaskCompleteTrackingEnabled
-} from './agent-task-complete-settings'
+import { createTerminalNotificationPolicy } from './terminal-notification-policy'
 import { shouldIgnoreStalePanePtyLayoutBinding } from './pane-pty-layout-binding'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -185,117 +181,17 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
     // replace its stale store identity without fresh-spawn exit semantics.
     session.bindActivePanePty(ptyId, { replacePtyId: replacedPtyId })
   }
-  // ─── Attention signal: BEL ────────────────────────────────────────────
-  //
-  // BEL (0x07) is the attention signal. A BEL raises tab- and worktree-level
-  // indicators, and fires an OS notification. The experimental pane marker
-  // clears when the user interacts with the exact pane.
-  //
-  // The one case where BEL falsely fires is when a crashed TUI left DEC
-  // private mode 1004 (focus event reporting) enabled — pane clicks then
-  // emit `\e[I`/`\e[O` into the shell, zsh treats them as unbound keys and
-  // rings the bell. This is specific to terminals with cross-restart
-  // persistence (as we have); our fix is to reset 1004 and friends after
-  // scrollback replay so the mode state matches the fresh shell
-  // underneath. See POST_REPLAY_MODE_RESET in shared/terminal-mode-reset-profiles.ts.
-  session.onBell = (): void => {
-    // Why: restored Claude Code sessions have been observed to emit a real
-    // standalone BEL some time after daemon snapshot reattach, even when Orca
-    // did not just forward focus/control input. Treat the BEL as authoritative
-    // PTY output here; any product-side suppression should be an explicit UX
-    // decision higher up, not a transport-layer guess.
-    session.deps.markTerminalBell({
-      worktreeId: session.deps.worktreeId,
-      tabId: session.deps.tabId,
-      paneKey: session.cacheKey
-    })
-    // Why: agent CLIs often emit BEL in the same completion burst as their
-    // working->idle title change. Delay only the OS notification so the richer
-    // agent-complete notification can win the main-process worktree cooldown.
-    session.pendingTerminalBellNotification = true
-    if (!session.hasPendingAgentTaskCompleteNotification()) {
-      session.scheduleTerminalBellNotification()
-    }
-  }
-
-  session.clearTerminalBellNotificationTimer = (): void => {
-    if (session.terminalBellNotificationTimer !== null) {
-      clearTimeout(session.terminalBellNotificationTimer)
-      session.terminalBellNotificationTimer = null
-    }
-  }
-
-  session.scheduleTerminalBellNotification = (): void => {
-    if (session.terminalBellNotificationTimer !== null) {
-      return
-    }
-    session.terminalBellNotificationTimer = setTimeout(() => {
-      session.terminalBellNotificationTimer = null
-      if (session.disposed) {
-        session.pendingTerminalBellNotification = false
-        return
-      }
-      if (session.hasPendingAgentTaskCompleteNotification()) {
-        return
-      }
-      session.pendingTerminalBellNotification = false
-      session.deps.dispatchNotification({
-        source: 'terminal-bell',
-        paneKey: session.cacheKey,
-        ptyId: session.transport.getPtyId(),
-        workspaceOwner: captureNotificationTransportOwner(session.transport)
-      })
-    }, AGENT_TASK_COMPLETE_NOTIFICATION_GRACE_MS)
-  }
-
-  session.hasPendingAgentTaskCompleteNotification = (): boolean =>
-    isAgentTaskCompleteNotificationEnabled() &&
-    (session.agentCompletionCoordinator.hasPendingHookDoneCompletion() ||
-      session.agentTaskCompleteNotificationGraceTimer !== null ||
-      session.agentTaskCompleteNotificationMaxTimer !== null ||
-      session.agentTaskCompleteStatusUnsubscribe !== null)
-
-  session.clearPendingAgentTaskCompleteNotification = (): void => {
-    if (session.agentTaskCompleteNotificationGraceTimer !== null) {
-      clearTimeout(session.agentTaskCompleteNotificationGraceTimer)
-      session.agentTaskCompleteNotificationGraceTimer = null
-    }
-    if (session.agentTaskCompleteNotificationMaxTimer !== null) {
-      clearTimeout(session.agentTaskCompleteNotificationMaxTimer)
-      session.agentTaskCompleteNotificationMaxTimer = null
-    }
-    if (session.agentTaskCompleteStatusUnsubscribe !== null) {
-      session.agentTaskCompleteStatusUnsubscribe()
-      session.agentTaskCompleteStatusUnsubscribe = null
-    }
-  }
-
-  session.syncAgentTaskCompleteTrackingEnabled = (): boolean => {
-    const enabled = isAgentTaskCompleteTrackingEnabled()
-    const osNotificationsEnabled = isAgentTaskCompleteNotificationEnabled()
-    if (
-      !osNotificationsEnabled &&
-      session.wasAgentTaskCompleteOsNotificationEnabled &&
-      session.pendingTerminalBellNotification
-    ) {
-      session.scheduleTerminalBellNotification()
-    }
-    if (!enabled && session.wasAgentTaskCompleteTrackingEnabled) {
-      // Why: disabling every completion consumer is an event-time boundary.
-      // Drop pending alerts while preserving accepted-hook lifecycle state.
-      session.agentTaskCompleteNotificationGeneration += 1
-      session.requiresFreshWorkingForAgentTaskCompleteNotification = true
-      session.clearPendingAgentTaskCompleteNotification()
-      if (session.pendingTerminalBellNotification) {
-        session.scheduleTerminalBellNotification()
-      }
-    } else if (enabled && !session.wasAgentTaskCompleteTrackingEnabled) {
-      // Why: a pane may have observed work while all completion consumers were
-      // disabled. Re-enabling should not let the next idle event report old work.
-      session.requiresFreshWorkingForAgentTaskCompleteNotification = true
-    }
-    session.wasAgentTaskCompleteTrackingEnabled = enabled
-    session.wasAgentTaskCompleteOsNotificationEnabled = osNotificationsEnabled
-    return enabled
-  }
+  const notificationPolicy = createTerminalNotificationPolicy({
+    paneKey: session.cacheKey,
+    worktreeId: session.deps.worktreeId,
+    tabId: session.deps.tabId,
+    getWorkspaceOwner: () => captureNotificationTransportOwner(session.transport),
+    getPtyId: () => session.transport.getPtyId(),
+    isLive: () => !session.disposed,
+    hasPendingHookDoneCompletion: () =>
+      session.agentCompletionCoordinator.hasPendingHookDoneCompletion(),
+    markTerminalBell: session.deps.markTerminalBell,
+    dispatchNotification: session.deps.dispatchNotification
+  })
+  Object.defineProperties(session, Object.getOwnPropertyDescriptors(notificationPolicy))
 }
