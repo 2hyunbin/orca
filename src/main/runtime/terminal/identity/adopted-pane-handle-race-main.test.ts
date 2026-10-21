@@ -59,6 +59,11 @@ it('gives a restored pane one handle: none before its adoption registers, then t
   const handedOut = before.tabs.flatMap((tab) =>
     tab.type === 'terminal' && tab.status === 'ready' && tab.terminal ? [tab.terminal] : []
   )
+  // The gap only leaves the pane unnamed: it stays in main's layout, and nothing records a close.
+  expect(harness.getSession().terminalLayoutsByTabId[TAB]?.ptyIdsByLeafId?.[HEADLESS_LEAF_ID]).toBe(
+    PTY
+  )
+  expect(harness.getSession().closedTerminalPanesByPaneKey ?? {}).toEqual({})
 
   // The adoption completes: the terminal's own handle, then its registration.
   runtime.registerPreAllocatedHandleForPty(PTY, CONTROLLER_HANDLE)
@@ -74,6 +79,11 @@ it('gives a restored pane one handle: none before its adoption registers, then t
   )
 
   expect(settled).toEqual([CONTROLLER_HANDLE])
+  // Once adopted, the pane names the terminal again, under its exported handle.
+  expect(runtime['paneOfPty'](runtime['ptysById'].get(PTY)).paneKey).toBe(
+    `${TAB}:${HEADLESS_LEAF_ID}`
+  )
+  expect(runtime['getLivePtyForHandle'](CONTROLLER_HANDLE)?.pty.ptyId).toBe(PTY)
   // Any handle handed out in the gap is that same handle, or no longer names the terminal.
   for (const handle of handedOut) {
     expect(handle === CONTROLLER_HANDLE || runtime['getLivePtyForHandle'](handle) === null).toBe(

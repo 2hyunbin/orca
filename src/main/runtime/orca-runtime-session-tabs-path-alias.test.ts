@@ -1,3 +1,4 @@
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
@@ -209,7 +210,13 @@ describe('session tab workspace path aliases', () => {
       if (ownsSession) {
         const listed = await runtime.listMobileSessionTabs(`id:${ALIAS}`)
         expect(listed.worktree).toBe(WORKTREE)
-        expect(listed.tabs).toContainEqual(expect.objectContaining({ id: TAB }))
+        if (ORCA_LAYOUT_OWNER_IS_MAIN && binding === 'unpublished') {
+          // A paired server's workspace: its terminals run on that server, which publishes them;
+          // no local record can stand for one, so nothing is rescued from this host's registry.
+          expect(listed.tabs).not.toContainEqual(expect.objectContaining({ id: TAB }))
+        } else {
+          expect(listed.tabs).toContainEqual(expect.objectContaining({ id: TAB }))
+        }
       } else {
         await expect(runtime.listMobileSessionTabs(`id:${ALIAS}`)).rejects.toThrow(
           'worktree_execution_host_unresolved'
