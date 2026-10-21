@@ -3380,8 +3380,9 @@
     }
   },
   "machines": {
-    "expiryWarning": {},
     "workAtRisk": {
+      "neverPushed_one": "{{count}} branch never pushed",
+      "neverPushed_other": "{{count}} branches never pushed",
       "uncommitted_one": "{{count}} uncommitted change",
       "uncommitted_other": "{{count}} uncommitted changes",
       "unpushed_one": "{{count}} unpushed commit",
