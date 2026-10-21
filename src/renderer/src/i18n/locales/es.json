@@ -19360,7 +19360,11 @@
           "discarded_other": "Se descartarán las ediciones sin guardar de {{count}} archivos:",
           "moreFiles": "y {{value}} más",
           "blocked_one": "Guarda o cierra antes {{count}} archivo sin guardar en {{name}}",
-          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}"
+          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}",
+          "closedToast_one": "Se cerró {{count}} archivo con ediciones sin guardar de {{workspace}}",
+          "closedToast_other": "Se cerraron {{count}} archivos con ediciones sin guardar de {{workspace}}",
+          "reopen": "Reabrir",
+          "reopenFailed": "Algunos archivos no se pudieron reabrir porque no hay ningún espacio de trabajo abierto en su host."
         }
       }
     },

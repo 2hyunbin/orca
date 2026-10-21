@@ -130,7 +130,8 @@ describe('project group dialogs carry the owner host', () => {
 
     expect(mocks.deleteProjectGroupWithContainedProjects).toHaveBeenCalledWith(remoteGroup.id, {
       removeContainedProjects: false,
-      hostId: 'runtime:env-1'
+      hostId: 'runtime:env-1',
+      unsavedEditsConfirmed: true
     })
   })
 })

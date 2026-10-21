@@ -19407,7 +19407,11 @@
           "discarded_other": "{{count}} 個のファイルの未保存の編集は破棄されます：",
           "moreFiles": "ほか {{value}} 件",
           "blocked_one": "先に {{name}} の未保存のファイル {{count}} 個を保存するか閉じてください",
-          "blocked_other": "先に {{name}} の未保存のファイル {{count}} 個を保存するか閉じてください"
+          "blocked_other": "先に {{name}} の未保存のファイル {{count}} 個を保存するか閉じてください",
+          "closedToast_one": "{{workspace}} の未保存の編集がある {{count}} 個のファイルを閉じました",
+          "closedToast_other": "{{workspace}} の未保存の編集がある {{count}} 個のファイルを閉じました",
+          "reopen": "再度開く",
+          "reopenFailed": "ホスト上で開いているワークスペースがないため、一部のファイルを再度開けませんでした。"
         }
       }
     },

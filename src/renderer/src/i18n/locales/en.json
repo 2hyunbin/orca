@@ -19695,7 +19695,11 @@
           "discarded_other": "Unsaved edits in {{count}} files will be discarded:",
           "moreFiles": "and {{value}} more",
           "blocked_one": "Save or close {{count}} unsaved file in {{name}} first",
-          "blocked_other": "Save or close {{count}} unsaved files in {{name}} first"
+          "blocked_other": "Save or close {{count}} unsaved files in {{name}} first",
+          "closedToast_one": "Closed {{count}} file with unsaved edits from {{workspace}}",
+          "closedToast_other": "Closed {{count}} files with unsaved edits from {{workspace}}",
+          "reopen": "Reopen",
+          "reopenFailed": "Some files couldn't be reopened because no workspace on their host is open."
         }
       }
     },

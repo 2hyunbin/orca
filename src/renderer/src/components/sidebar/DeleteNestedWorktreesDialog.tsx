@@ -95,7 +95,10 @@ export function DeleteNestedWorktreesDialog({
     })
     state.markWorktreesDeleting(nestedRows)
     try {
-      const result = await state.removeWorktree(target, true, { approvedNestedWorktrees: plan })
+      const result = await state.removeWorktree(target, true, {
+        approvedNestedWorktrees: plan,
+        unsavedEditsConfirmed: true
+      })
       if (!result.ok) {
         setPlan(null)
         toast.error(

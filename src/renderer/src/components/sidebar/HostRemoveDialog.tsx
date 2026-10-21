@@ -124,7 +124,8 @@ export function HostRemoveDialog({
         // Connected → real remote removal; offline/ghost → local forget.
         const { failedIds } = await clearSshHostWorkspaces(
           sshResolution,
-          isConnected ? 'delete-remote' : 'forget-local'
+          isConnected ? 'delete-remote' : 'forget-local',
+          true
         )
         // Why: don't remove the SSH target (and report success) while some of its
         // workspaces failed to clear — that would strand ghost rows behind a

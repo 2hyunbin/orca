@@ -105,7 +105,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     }
     // Close before the delete toast fires so the two don't overlap.
     closeModal()
-    void runWorktreeDeleteWithToast(removalTarget, displayName)
+    void runWorktreeDeleteWithToast(removalTarget, displayName, { unsavedEditsConfirmed: true })
     if (mountedRef.current) {
       setBusy(null)
     }
@@ -117,7 +117,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     try {
       const result = await useAppStore
         .getState()
-        .removeWorktree(removalTarget, false, { mode: 'forget-local' })
+        .removeWorktree(removalTarget, false, { mode: 'forget-local', unsavedEditsConfirmed: true })
       if (!result.ok) {
         toast.error(result.error)
         if (mountedRef.current) {

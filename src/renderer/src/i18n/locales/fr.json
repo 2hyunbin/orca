@@ -19476,7 +19476,11 @@
           "discarded_other": "Les modifications non enregistrées de {{count}} fichiers seront ignorées :",
           "moreFiles": "et {{value}} de plus",
           "blocked_one": "Enregistrez ou fermez d'abord {{count}} fichier non enregistré dans {{name}}",
-          "blocked_other": "Enregistrez ou fermez d'abord {{count}} fichiers non enregistrés dans {{name}}"
+          "blocked_other": "Enregistrez ou fermez d'abord {{count}} fichiers non enregistrés dans {{name}}",
+          "closedToast_one": "{{count}} fichier avec des modifications non enregistrées de {{workspace}} a été fermé",
+          "closedToast_other": "{{count}} fichiers avec des modifications non enregistrées de {{workspace}} ont été fermés",
+          "reopen": "Rouvrir",
+          "reopenFailed": "Certains fichiers n'ont pas pu être rouverts, car aucun espace de travail n'est ouvert sur leur hôte."
         }
       }
     },

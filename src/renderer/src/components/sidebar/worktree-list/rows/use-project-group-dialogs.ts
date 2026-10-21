@@ -197,7 +197,8 @@ export function useProjectGroupDialogs(args: {
       reportProjectGroupDeleteFailures(
         await deleteProjectGroupWithContainedProjects(deleteDialog.groupId, {
           removeContainedProjects,
-          hostId: deleteDialog.hostId
+          hostId: deleteDialog.hostId,
+          unsavedEditsConfirmed: true
         })
       )
     } finally {
