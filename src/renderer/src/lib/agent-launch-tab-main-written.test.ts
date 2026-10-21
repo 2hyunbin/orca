@@ -34,6 +34,18 @@ vi.mock('@/hooks/ipc-events/terminal-command-state', async (importOriginal) => (
   focusTerminalInitiatedTab
 }))
 
+// What main's frames hold: off (no stream) unless a case opens it.
+const frames = vi.hoisted(() => ({ flowing: false, holdsTab: true }))
+vi.mock('@/runtime/layout-frame-position', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  layoutFramesFlowing: () => frames.flowing
+}))
+vi.mock('@/runtime/layout-frame-terminal-panes', () => ({
+  layoutFrameTerminalTab: () => (frames.holdsTab ? { id: 'main-tab' } : undefined)
+}))
+const revealWorkspaceSurface = vi.hoisted(() => vi.fn())
+vi.mock('./workspace-surface-reveal', () => ({ revealWorkspaceSurface }))
+
 createTabsSliceMockApi()
 
 const { keepAgentLaunchTabMainWrote, _resetUndrawnLaunchTabsForTests } =
@@ -82,7 +94,12 @@ beforeEach(() => {
   focusTerminalInitiatedTab.mockClear()
   store.getState().setActiveWorktree(WT)
 })
-afterEach(() => _resetUndrawnLaunchTabsForTests())
+afterEach(() => {
+  _resetUndrawnLaunchTabsForTests()
+  frames.flowing = false
+  frames.holdsTab = true
+  revealWorkspaceSurface.mockClear()
+})
 
 describe("a launch tab main wrote, in a layout-owner build's window", () => {
   it('keeps the launch pane and prompt on the tab main drew, and makes no tab', () => {
@@ -156,6 +173,46 @@ describe("a launch tab main wrote, in a layout-owner build's window", () => {
     drawMainTab()
 
     expect(launchPane()).toBeUndefined()
+    expect(agentLaunchPanePrompt(TAB_ID)).toBeNull()
+  })
+
+  it('leaves the close of a withdrawn tab to main, and drops what it kept', () => {
+    drawMainTab()
+    keepAgentLaunchTabMainWrote(request({ prompt: 'fix the build' }))
+
+    applyAgentLaunchPaneVerdict({
+      worktreeId: WT,
+      tabId: TAB_ID,
+      leafId: LEAF_ID,
+      verdict: { kind: 'withdrawn' }
+    })
+
+    // Main closes it; the window's own close would send a second one.
+    expect(store.getState().tabsByWorktree[WT]?.map((tab) => tab.id)).toEqual([TAB_ID])
+    expect(launchPane()).toBeUndefined()
+    expect(agentLaunchPanePrompt(TAB_ID)).toBeNull()
+  })
+
+  it('drops a held launch once main closed its tab, never drawn', () => {
+    frames.flowing = true
+    keepAgentLaunchTabMainWrote(request({ prompt: 'fix the build' }))
+    frames.holdsTab = false
+
+    // Any store change: the hold sees main's frames no longer hold the tab.
+    store.setState({})
+    expect(agentLaunchPanePrompt(TAB_ID)).toBeNull()
+    frames.holdsTab = true
+    drawMainTab()
+    expect(launchPane()).toBeUndefined()
+  })
+
+  it('holds nothing and reveals nothing for a tab main already closed', () => {
+    frames.flowing = true
+    frames.holdsTab = false
+
+    keepAgentLaunchTabMainWrote(request({ viewer: 'focus-window', prompt: 'fix the build' }))
+
+    expect(revealWorkspaceSurface).not.toHaveBeenCalled()
     expect(agentLaunchPanePrompt(TAB_ID)).toBeNull()
   })
 })

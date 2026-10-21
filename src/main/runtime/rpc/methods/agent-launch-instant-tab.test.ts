@@ -41,6 +41,10 @@ import {
   setAgentLaunchRecordStore,
   type AgentLaunchRuntimeStubOptions
 } from './agent-launch.test-fixture'
+import {
+  WORKTREE_ID as MAIN_WORKTREE_ID,
+  setupMainOwnedWorkspace
+} from '../../main-owned-workspace-runtime-fixture'
 
 const deliverTerminalAgentLaunchPrompt = vi.hoisted(() => vi.fn(async () => true))
 vi.mock('./agent-launch-terminal-prompt', () => ({ deliverTerminalAgentLaunchPrompt }))
@@ -165,10 +169,7 @@ function hostWithWindow(
         runtime.publishAgentLaunchTab(request)
     ),
     withdrawAgentLaunchPaneInMainLayout: vi.fn(
-      (address: { worktreeId: string; tabId: string; leafId: string }) => {
-        runtime.reportAgentLaunchPaneVerdict(address, { kind: 'withdrawn' })
-        return true
-      }
+      (_address: { worktreeId: string; tabId: string; leafId: string }) => true
     )
   })
 }
@@ -873,11 +874,67 @@ describe.each(['window', 'main'] as const)('the %s owning the layout', (owner) =
       ).rejects.toThrow('agent_session_operation_conflict')
 
       expect(refused.canPublishAgentLaunchTab).not.toHaveBeenCalled()
+      // The window still hears it, to drop what it kept for the launch.
+      await vi.waitFor(() =>
+        expect(refused.reportAgentLaunchPaneVerdict).toHaveBeenCalledWith(
+          expect.objectContaining({ tabId: TAB_ID }),
+          { kind: 'withdrawn' }
+        )
+      )
       expect(refused.publishAgentLaunchTabInMainLayout).toHaveBeenCalledOnce()
       await vi.waitFor(() =>
         expect(refused.withdrawAgentLaunchPaneInMainLayout).toHaveBeenCalledWith(
           expect.objectContaining({ worktreeId: 'wt-7', tabId: TAB_ID, leafId: LEAF_ID })
         )
+      )
+    }
+  )
+
+  it.runIf(owner === 'main')(
+    "writes and takes back the tab in main's real layout, and the window still hears why",
+    async () => {
+      const real = setupMainOwnedWorkspace()
+      const target = { kind: 'existing', worktree: `id:${MAIN_WORKTREE_ID}` }
+      const operationId = nextOperationId()
+      await replayLaunch(
+        hostWithWindow({ terminalPaneKey: PANE_KEY }),
+        { operationId, target },
+        CLI
+      )
+      const refused = coldRecord(hostWithWindow())
+      refused.publishAgentLaunchTabInMainLayout.mockImplementation((request) =>
+        real.runtime.publishAgentLaunchTabInMainLayout(request)
+      )
+      refused.withdrawAgentLaunchPaneInMainLayout.mockImplementation((address) =>
+        real.runtime.withdrawAgentLaunchPaneInMainLayout(address)
+      )
+      const mainTabIds = () =>
+        real.session().tabsByWorktree[MAIN_WORKTREE_ID]?.map((tab) => tab.id) ?? []
+      refused.publishAgentLaunchTab.mockImplementation(() => {
+        throw new Error('main wrote the tab; the window makes none')
+      })
+
+      await expect(
+        replayLaunch(
+          refused,
+          {
+            operationId,
+            target,
+            paneKey: PANE_KEY,
+            prompt: { text: 'other', delivery: 'submit' }
+          },
+          CLI
+        )
+      ).rejects.toThrow('agent_session_operation_conflict')
+
+      // Main wrote the launch's tab, then took it back: nothing ran in it.
+      await expect(
+        refused.publishAgentLaunchTabInMainLayout.mock.results[0]?.value
+      ).resolves.toMatchObject({ tabId: TAB_ID, created: true })
+      await vi.waitFor(() => expect(mainTabIds()).not.toContain(TAB_ID))
+      expect(refused.reportAgentLaunchPaneVerdict).toHaveBeenCalledWith(
+        { worktreeId: MAIN_WORKTREE_ID, tabId: TAB_ID, leafId: LEAF_ID },
+        { kind: 'withdrawn' }
       )
     }
   )

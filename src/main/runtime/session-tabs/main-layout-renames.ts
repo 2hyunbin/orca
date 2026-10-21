@@ -47,6 +47,7 @@ export abstract class OrcaRuntimeWithMainLayoutRenames extends OrcaRuntimeWithMa
     // The graph takes main's latest panes first, so a handle names what main holds now.
     surfaces.republish()
     const pty = this.getLivePtyForHandle(handle)?.pty ?? null
+    // getLiveLeafForHandle checks the graph is ready first, so a reload fails as today's rename.
     const pane = pty ? surfaces.findPaneForPty(pty.ptyId) : this.getLiveLeafForHandle(handle).leaf
     return pane &&
       surfaces.ownsWorkspace(pane.worktreeId) &&
@@ -90,17 +91,19 @@ export abstract class OrcaRuntimeWithMainLayoutRenames extends OrcaRuntimeWithMa
     if (!pane) {
       return null
     }
+    // As today's rename: the name stored, set on the terminal and answered is the one asked for.
+    const written = title || null
     if (pane.pty) {
-      this.stampManualTitle(pane.pty, title)
+      this.stampManualTitle(pane.pty, written)
     }
     await this.applyMainRename({
       type: 'renameTab',
       workspace: pane.worktreeId,
       tabId: pane.tabId,
       kind: 'custom',
-      title: title?.trim() || null
+      title: written
     })
-    return { handle, tabId: pane.tabId, title }
+    return { handle, tabId: pane.tabId, title: written }
   }
 
   /** `terminal.setPaneTitle` of a pane main owns: names that pane in main's layout. */

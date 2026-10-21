@@ -18,11 +18,41 @@ import {
   rememberAgentLaunchPanePrompt
 } from './agent-launch-pane-prompt'
 import { revealWorkspaceSurface } from './workspace-surface-reveal'
+import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
+import { layoutFrameTerminalTab } from '@/runtime/layout-frame-terminal-panes'
 
 type LaunchPane = NonNullable<TerminalTab['agentLaunchPane']>
 
 /** Launch panes of main's tabs this window does not draw yet, by tab id. */
 const undrawn = new Map<string, { pane: LaunchPane; present: () => void; stop: () => void }>()
+
+/** Launch tabs main wrote, which main takes back itself; the newest few, as the prompts are. */
+const MAX_MAIN_WRITTEN_TABS = 32
+const mainWritten = new Set<string>()
+
+function noteMainWritten(tabId: string): void {
+  mainWritten.delete(tabId)
+  mainWritten.add(tabId)
+  for (const oldest of mainWritten) {
+    if (mainWritten.size <= MAX_MAIN_WRITTEN_TABS) {
+      break
+    }
+    mainWritten.delete(oldest)
+  }
+}
+
+/** The launch settled or was taken back: true when main wrote its tab, so main closes it. */
+export function releaseMainWrittenLaunchTab(tabId: string): boolean {
+  return mainWritten.delete(tabId)
+}
+
+/** Drops a held launch: nothing is left for its tab to say, nor its pane to offer. */
+function dropUndrawn(tabId: string): void {
+  undrawn.get(tabId)?.stop()
+  undrawn.delete(tabId)
+  mainWritten.delete(tabId)
+  forgetAgentLaunchPanePrompt(tabId)
+}
 
 function drawnTab(worktreeId: string, tabId: string): TerminalTab | undefined {
   return useAppStore.getState().tabsByWorktree[worktreeId]?.find((tab) => tab.id === tabId)
@@ -46,12 +76,25 @@ function keepLaunchPane(tabId: string, kept: TerminalTab, pane: LaunchPane): voi
   })
 }
 
-function keepWhenDrawn(request: AgentLaunchTabPublishRequest, present: () => void): void {
+/** Main closed the tab before this window drew it: it never will. */
+function goneFromFrames(worktreeId: string, tabId: string): boolean {
+  return layoutFramesFlowing() && !layoutFrameTerminalTab(worktreeId, tabId)
+}
+
+/** False when main's frames no longer hold the tab, so nothing is held. */
+function keepWhenDrawn(request: AgentLaunchTabPublishRequest, present: () => void): boolean {
   const { worktreeId, tabId } = request
   undrawn.get(tabId)?.stop()
+  if (goneFromFrames(worktreeId, tabId)) {
+    dropUndrawn(tabId)
+    return false
+  }
   const stop = useAppStore.subscribe(() => {
     const tab = drawnTab(worktreeId, tabId)
     if (!tab) {
+      if (goneFromFrames(worktreeId, tabId)) {
+        dropUndrawn(tabId)
+      }
       return
     }
     const entry = undrawn.get(tabId)
@@ -63,6 +106,7 @@ function keepWhenDrawn(request: AgentLaunchTabPublishRequest, present: () => voi
     }
   })
   undrawn.set(tabId, { pane: launchPaneOf(request), present, stop })
+  return true
 }
 
 export function keepAgentLaunchTabMainWrote(
@@ -70,6 +114,7 @@ export function keepAgentLaunchTabMainWrote(
 ): AgentLaunchTabPublished {
   const { worktreeId, tabId, leafId, viewer } = request
   const created = request.shownByMain?.created === true
+  noteMainWritten(tabId)
   if (request.prompt) {
     rememberAgentLaunchPanePrompt(tabId, request.prompt)
   }
@@ -84,9 +129,11 @@ export function keepAgentLaunchTabMainWrote(
     keepLaunchPane(tabId, tab, launchPaneOf(request))
     present()
   } else if (created && viewer === 'focus-window') {
-    // The reveal draws the workspace; the tab shows once its frame lands.
-    revealWorkspaceSurface(useAppStore.getState(), worktreeId, [tabId])
-    keepWhenDrawn(request, present)
+    // The reveal draws the workspace; the tab shows once its frame lands. A tab main already
+    // closed reveals nothing.
+    if (keepWhenDrawn(request, present)) {
+      revealWorkspaceSurface(useAppStore.getState(), worktreeId, [tabId])
+    }
   } else {
     // Nobody is moved to an undrawn workspace; its tab keeps the launch when it draws.
     keepWhenDrawn(request, () => {})
@@ -112,10 +159,8 @@ export function applyVerdictToUndrawnLaunchTab(event: AgentLaunchPaneVerdictEven
     entry.pane = { ...entry.pane, outcome: verdict }
     return true
   }
-  // Settled or taken back: nothing is left for the tab to say, nor its pane to offer.
-  entry.stop()
-  undrawn.delete(event.tabId)
-  forgetAgentLaunchPanePrompt(event.tabId)
+  // Settled or taken back.
+  dropUndrawn(event.tabId)
   return true
 }
 
@@ -124,4 +169,5 @@ export function _resetUndrawnLaunchTabsForTests(): void {
     entry.stop()
   }
   undrawn.clear()
+  mainWritten.clear()
 }

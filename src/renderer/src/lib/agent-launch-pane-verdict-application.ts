@@ -9,7 +9,10 @@ import { collectLeafIdsInOrder } from '@/components/terminal-pane/terminal-layou
 import { useAppStore } from '@/store'
 import { forgetAgentLaunchPanePrompt } from './agent-launch-pane-prompt'
 import { settleAgentLaunchPaneStart } from './agent-launch-pane-start'
-import { applyVerdictToUndrawnLaunchTab } from './agent-launch-tab-main-written'
+import {
+  applyVerdictToUndrawnLaunchTab,
+  releaseMainWrittenLaunchTab
+} from './agent-launch-tab-main-written'
 
 export function applyAgentLaunchPaneVerdict(event: AgentLaunchPaneVerdictEvent): void {
   const { worktreeId, tabId, leafId, verdict } = event
@@ -30,6 +33,7 @@ export function applyAgentLaunchPaneVerdict(event: AgentLaunchPaneVerdictEvent):
   switch (verdict.kind) {
     case 'proceed':
       // Settled: the agent attached, or the pane is an ordinary terminal again.
+      releaseMainWrittenLaunchTab(tabId)
       forgetAgentLaunchPanePrompt(tabId)
       state.setTabAgentLaunchPane(tabId, undefined)
       return
@@ -48,6 +52,11 @@ export function applyAgentLaunchPaneVerdict(event: AgentLaunchPaneVerdictEvent):
     }
     case 'withdrawn': {
       forgetAgentLaunchPanePrompt(tabId)
+      // Main takes back a tab it wrote itself; this window only drops what it kept.
+      if (releaseMainWrittenLaunchTab(tabId)) {
+        state.setTabAgentLaunchPane(tabId, undefined)
+        return
+      }
       // The pane alone when the user split the tab while it waited; their split stays.
       if (state.terminalLayoutsByTabId[tabId]?.root?.type === 'leaf') {
         state.closeTab(tabId, {

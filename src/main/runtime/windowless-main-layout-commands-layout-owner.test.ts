@@ -48,6 +48,24 @@ describe('CLI terminal commands on a workspace main owns, with no window', () =>
     expect(fixture.ptyRecord(PTY_A)?.titleUpdatedAt).toEqual(expect.any(Number))
   })
 
+  it('answers with the name it stored, as the window-era rename did', async () => {
+    const fixture = setupMainOwnedWorkspace()
+
+    await expect(
+      fixture.runtime.renameTerminal(fixture.handleOf(PTY_A), ' Build ')
+    ).resolves.toMatchObject({ title: ' Build ' })
+    expect(tabRow(fixture)?.customTitle).toBe(' Build ')
+  })
+
+  it('refuses a handle with no live terminal as the window-era rename did while the graph reloads', async () => {
+    const fixture = setupMainOwnedWorkspace()
+    Object.assign(fixture.runtime, { graphStatus: 'reloading' })
+
+    await expect(fixture.runtime.renameTerminal('term_unknown', 'Build')).rejects.toThrow(
+      'runtime_unavailable'
+    )
+  })
+
   it('names one pane in one frame', async () => {
     const fixture = setupMainOwnedWorkspace({ split: true })
     const handle = fixture.handleOf(PTY_A)

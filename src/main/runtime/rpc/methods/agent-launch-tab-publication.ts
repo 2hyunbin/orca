@@ -222,13 +222,10 @@ export async function publishAgentLaunchTabEarly(
     closedByUser: () => running.closedByUser(),
     report: (verdict) => {
       const address = { worktreeId: workspace.id, tabId: pane.tabId, leafId: pane.leafId }
-      // Switch point: main takes a withdrawn pane of a workspace it owns back itself.
-      if (
-        ORCA_LAYOUT_OWNER_IS_MAIN &&
-        verdict.kind === 'withdrawn' &&
+      // Switch point: main takes a withdrawn pane of a workspace it owns back itself; the window
+      // still hears the verdict, to drop what it kept for the launch.
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && verdict.kind === 'withdrawn') {
         runtime.withdrawAgentLaunchPaneInMainLayout(address)
-      ) {
-        return
       }
       runtime.reportAgentLaunchPaneVerdict(address, verdict)
     }
