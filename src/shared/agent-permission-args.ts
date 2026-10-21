@@ -75,8 +75,12 @@ function isPermissionConfig(value: string | undefined): boolean {
   return CODEX_PERMISSION_CONFIG_ROOTS.some((key) => key === root)
 }
 
-type OptionShape = { values: Set<string>; carriers: Set<string>; switches: Set<string> }
-function optionShape(agent: TuiAgent): OptionShape {
+type PermissionOptionInventory = {
+  values: Set<string>
+  carriers: Set<string>
+  switches: Set<string>
+}
+function permissionOptionInventory(agent: TuiAgent): PermissionOptionInventory {
   const recipes = agentPermissionChoices(agent).flatMap((choice) => {
     const tokens = words(agentPermissionArgs(agent, choice))
     return tokens.map((token, index) => ({ token, next: tokens[index + 1] }))
@@ -103,7 +107,7 @@ function optionShape(agent: TuiAgent): OptionShape {
 
 /** Bounded root-option ownership. Unknown regions stay uncertain, never rejected. */
 function analyzeAgentPermissionWords(agent: TuiAgent, tokens: readonly string[]) {
-  const shape = optionShape(agent)
+  const inventory = permissionOptionInventory(agent)
   const claude = agent === 'claude' || agent === 'claude-agent-teams'
   const required = agentRequiredValueOptions(agent)
   const roles: string[] = []
@@ -117,7 +121,7 @@ function analyzeAgentPermissionWords(agent: TuiAgent, tokens: readonly string[])
       roles[index] = 'positional'
       continue
     }
-    if (token === '--') {
+    if (token === '--' && !uncertain) {
       roles[index] = 'terminator'
       terminated = true
       continue
@@ -128,20 +132,20 @@ function analyzeAgentPermissionWords(agent: TuiAgent, tokens: readonly string[])
       ? token.slice(name.length + (token[name.length] === '=' ? 1 : 0))
       : tokens[index + 1]
     const policy =
-      shape.carriers.has(name) ||
+      inventory.carriers.has(name) ||
       (agent === 'codex' && ['-c', '--config'].includes(name) && isPermissionConfig(value))
     if (policy) {
       carrier = true
     }
     const knownValue =
-      shape.values.has(name) ||
+      inventory.values.has(name) ||
       required.includes(name) ||
       (['claude', 'claude-agent-teams', 'grok', 'codex'].includes(agent) &&
         MODEL_VALUES.includes(name))
     const known =
       knownValue ||
-      shape.carriers.has(name) ||
-      shape.switches.has(name) ||
+      inventory.carriers.has(name) ||
+      inventory.switches.has(name) ||
       (agent === 'codex' && ['--search', '--oss', '--no-alt-screen'].includes(name))
     roles[index] = uncertain || !known ? 'uncertain' : `option:${name}`
     if (!uncertain && known) {
@@ -150,7 +154,7 @@ function analyzeAgentPermissionWords(agent: TuiAgent, tokens: readonly string[])
     if (!known) {
       uncertain = true
     }
-    if (!knownValue || inline) {
+    if (!knownValue || inline || uncertain) {
       continue
     }
     const consumesDash = required.includes(name)

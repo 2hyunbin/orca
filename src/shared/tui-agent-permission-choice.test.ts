@@ -1,3 +1,4 @@
+import { legacyLaunchTextUpdates } from './agent-launch-permission-updates'
 import { describe, expect, it } from 'vitest'
 import {
   agentLaunchSettingsMutationUpdates,
@@ -228,6 +229,22 @@ describe('permission carrier ownership across save, reload and consumers', () =>
       'auto',
       true
     ],
+    [
+      'claude',
+      '--unknown --append-system-prompt --dangerously-skip-permissions',
+      '--unknown --append-system-prompt --dangerously-skip-permissions',
+      '--unknown --append-system-prompt --dangerously-skip-permissions',
+      'auto',
+      true
+    ],
+    [
+      'claude',
+      '--unknown -- --dangerously-skip-permissions',
+      '--unknown -- --dangerously-skip-permissions',
+      '--unknown -- --dangerously-skip-permissions',
+      'auto',
+      true
+    ],
     ['codex', '--yolo', '--yolo', '--yolo', 'auto', true],
     ['codex', '--not-so-yolo', '--not-so-yolo', '--not-so-yolo', 'auto', true],
     ['codex', '--approve-for-me', '', '--approve-for-me', 'auto', true],
@@ -349,6 +366,31 @@ describe('permission carrier ownership across save, reload and consumers', () =>
       expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({ OTHER: '2' })
     }
   )
+
+  it('applies combined old-client carrier edits against the original projection', () => {
+    const host: AgentLaunchSettingsSource = {
+      agentPermissionDefault: 'full-access',
+      agentDefaultEnv: { goose: { KEEP: '1' } }
+    }
+    const updated = {
+      ...host,
+      ...legacyLaunchTextUpdates(
+        host,
+        {
+          agentDefaultArgs: { goose: '--model foo', claude: '--permission-mode auto --model opus' },
+          agentDefaultEnv: { goose: { GOOSE_MODE: 'auto', KEEP: '2' } }
+        },
+        'linux'
+      )
+    }
+    expect(resolveTuiAgentLaunchEnv('goose', updated, 'linux')).toEqual({
+      GOOSE_MODE: 'auto',
+      KEEP: '2'
+    })
+    expect(resolveTuiAgentLaunchArgs('goose', updated)).toBe('--model foo')
+    expect(newChatPermissionModeForSettings('claude', updated)).toBe('auto')
+    expect(updated.agentDefaultArgs?.claude).toBe('--model opus')
+  })
 
   it('uses host environment identity without guessing duplicate Windows values', () => {
     const raw = legacy({}, { goose: { goose_mode: 'auto', KEEP: '1' } })
