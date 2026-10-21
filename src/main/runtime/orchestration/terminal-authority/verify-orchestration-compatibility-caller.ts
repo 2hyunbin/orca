@@ -58,23 +58,37 @@ export abstract class OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller exte
       worktreeId?: string
     },
     claimedHandle?: string
-  ): boolean {
+  ): false | (() => boolean) {
     const handle = this.getAgentStatusTerminalHandleForPaneKey(candidate.paneKey)
     if (!handle || (claimedHandle && claimedHandle !== handle)) {
       return false
     }
     const terminal = this.getOrchestrationDispatchAuthority(handle)
-    return Boolean(
-      terminal &&
-      matchesCurrentLaunch(terminal, candidate.paneKey, candidate.launchTokenHash) &&
-      (terminal.hostScope.kind === 'ssh'
-        ? terminal.hostScope.targetId === candidate.connectionId
-        : terminal.hostScope.kind === 'wsl'
-          ? candidate.connectionId === null ||
-            candidate.connectionId === wslHookRelayConnectionId(terminal.hostScope.distro)
-          : candidate.connectionId === null) &&
-      (!candidate.worktreeId || candidate.worktreeId === terminal.worktreeId)
-    )
+    if (
+      !(
+        terminal &&
+        matchesCurrentLaunch(terminal, candidate.paneKey, candidate.launchTokenHash) &&
+        (terminal.hostScope.kind === 'ssh'
+          ? terminal.hostScope.targetId === candidate.connectionId
+          : terminal.hostScope.kind === 'wsl'
+            ? candidate.connectionId === null ||
+              candidate.connectionId === wslHookRelayConnectionId(terminal.hostScope.distro)
+            : candidate.connectionId === null) &&
+        (!candidate.worktreeId || candidate.worktreeId === terminal.worktreeId)
+      )
+    ) {
+      return false
+    }
+    const incarnation = terminal.processIncarnation
+    return () => {
+      const current = this.getOrchestrationDispatchAuthority(handle)
+      return Boolean(
+        current &&
+        current.processIncarnation === incarnation &&
+        matchesCurrentLaunch(current, candidate.paneKey, candidate.launchTokenHash) &&
+        this.getAgentStatusTerminalHandleForPaneKey(candidate.paneKey) === handle
+      )
+    }
   }
 
   verifyOrchestrationCompatibilityCaller(

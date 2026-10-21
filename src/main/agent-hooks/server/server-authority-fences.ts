@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto'
 import { isSameAgentProcess } from '../../../shared/agent-process-presence'
 import { clearPaneCacheState } from '../../../shared/agent-hook-listener/listener-state'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
+import { structuredStatusLegacyEvent } from './server-structured-status-row'
 import { AgentHookServerAuthorityAliases } from './server-authority-aliases'
 import type {
   EnrichedAgentHookEventPayload,
@@ -13,20 +13,31 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
   /** Capture the execution before an asynchronous proof, independently of the row's later paints. */
   capturePaneAuthorityRetirement(paneKey: string): () => void {
     const owner = this.resolvePaneKeyAlias(paneKey)
-    const row = this.state.lastStatusByPaneKey.get(owner)
+    const subject = this.authoritySubject(owner)
+    const canonical = this.canonicalStatusStore.getParents().find((parent) => parent === subject)
+    const rootIsCurrent = canonical && this.captureTmuxRoot(owner)
+    const row =
+      this.state.lastStatusByPaneKey.get(owner) ??
+      (canonical?.status && structuredStatusLegacyEvent(canonical.status))
     const host = row && { connectionId: row.connectionId, worktreeId: row.worktreeId }
     const agentType = row?.payload.agentType
     const session = row?.providerSession && { ...row.providerSession }
     const process = row?.agentPresence?.process && { ...row.agentPresence.process }
-    const hash = row?.launchToken?.trim()
-      ? createHash('sha256').update(row.launchToken.trim()).digest('hex')
-      : (this.hydratedLaunchTokenHashByPaneKey.get(owner) ??
-        this.pendingLaunchAuthority.get(owner)?.evidence.launchTokenHash)
+    const hash =
+      this.hydratedLaunchTokenHashByPaneKey.get(owner) ??
+      this.pendingLaunchAuthority.get(owner)?.evidence.launchTokenHash
     return () => {
-      const current = this.state.lastStatusByPaneKey.get(owner)
+      const currentSubject = this.authoritySubject(owner)
+      const currentCanonical = this.canonicalStatusStore
+        .getParents()
+        .find((parent) => parent === currentSubject)
+      const current =
+        this.state.lastStatusByPaneKey.get(owner) ??
+        (currentCanonical?.status && structuredStatusLegacyEvent(currentCanonical.status))
       const sameHost = current && row && this.sameTerminalOwner(current, host!)
       const sameExecution =
         sameHost &&
+        (!canonical || (currentSubject === subject && rootIsCurrent?.())) &&
         current.payload.agentType === agentType &&
         (!process ||
           (current.agentPresence?.process !== undefined &&
@@ -34,10 +45,10 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
         (session
           ? current.providerSession?.id === session.id &&
             current.providerSession.key === session.key
-          : process !== undefined || current === row)
-      const currentHash = current?.launchToken?.trim()
-        ? createHash('sha256').update(current.launchToken.trim()).digest('hex')
-        : this.hydratedLaunchTokenHashByPaneKey.get(owner)
+          : process !== undefined || currentSubject === subject)
+      const currentHash =
+        this.currentAuthorityObservations.get(owner)?.evidence.launchTokenHash ??
+        this.pendingLaunchAuthority.get(owner)?.evidence.launchTokenHash
       if (
         sameExecution &&
         this.resolvePaneKeyAlias(paneKey) === owner &&
@@ -57,19 +68,15 @@ export abstract class AgentHookServerAuthorityFences extends AgentHookServerAuth
       ])
       this.revokeHydratedAuthorityForPaneKeys(keys, hash)
       for (const key of keys) {
-        if (this.currentAuthorityObservations.get(key)?.launchTokenHash === hash) {
+        if (this.currentAuthorityObservations.get(key)?.evidence.launchTokenHash === hash) {
           this.currentAuthorityObservations.delete(key)
         }
         if (this.pendingLaunchAuthority.get(key)?.evidence.launchTokenHash === hash) {
           this.pendingLaunchAuthority.delete(key)
         }
       }
-      // A successor may inherit the old credential; retain its status, never that credential's authority.
-      if (current && sameHost && (!currentHash || currentHash === hash)) {
-        this.writeLegacyStatusRow({ ...current, launchToken: undefined })
-      }
       this.scheduleStatusPersist()
-      this.notifyStatusChangeListeners()
+      this.publishAuthorityCorrelation(owner)
     }
   }
 

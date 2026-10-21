@@ -237,7 +237,9 @@ export abstract class AgentHookServerState extends AgentHookServerAuthorityState
     onAccepted?: () => void,
     origin?: AgentStatusObservationOrigin,
     observedAt?: number,
-    mutationBefore?: EnrichedAgentHookEventPayload
+    mutationBefore?: EnrichedAgentHookEventPayload,
+    newRun?: boolean,
+    derivedFrom?: AgentHookEventPayload
   ): EnrichedAgentHookEventPayload | undefined
   protected abstract emitEnrichedStatus(enriched: EnrichedAgentHookEventPayload): void
   protected abstract clearAssistantMessageRetry(paneKey: string): void
@@ -271,7 +273,6 @@ export abstract class AgentHookServerState extends AgentHookServerAuthorityState
     paneKeys: ReadonlySet<string>,
     hash?: string
   ): boolean
-  protected abstract resolvePaneKeyAlias(paneKey: string): string
   protected abstract normalizeHookBodyPaneKeyAlias(body: unknown): unknown
   protected abstract normalizeLocalHookPayload(
     source: AgentHookSource,
@@ -312,17 +313,18 @@ export abstract class AgentHookServerState extends AgentHookServerAuthorityState
   ): EnrichedAgentHookEventPayload | null
   protected abstract maybeWriteEndpointFile(): void
   protected abstract hydrateLastStatusFromDisk(): void
-  protected abstract captureHydratedAuthorityCommitments(): void
   protected abstract recordCurrentAuthorityObservation(
     payload: AgentHookEventPayload,
-    row?: AgentHookEventPayload
-  ): void
+    row?: AgentHookEventPayload,
+    isCurrent?: () => boolean,
+    derivedFrom?: AgentHookEventPayload,
+    subject?: object
+  ): boolean
   protected abstract toAuthorityEvidence(
     payload: AgentHookEventPayload | EnrichedAgentHookEventPayload,
     launchTokenHashOverride?: string
   ): AgentHookAuthorityEvidence | null
   protected abstract serializeStatusFile(): string
-  protected abstract scheduleStatusPersist(): void
   protected abstract runStatusPersist(): void
   protected abstract primeStatusPersistBaseline(onDiskJson: string): void
 

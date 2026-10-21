@@ -1,3 +1,4 @@
+import { ClaudeOwedNotificationExpiryTimers } from '../../../shared/claude-owed-notification-expiry-timers'
 import { createHash } from 'node:crypto'
 import { deriveCliWriterTopology } from './cli-writer-observation'
 
@@ -12,7 +13,10 @@ import type {
 } from '../../../shared/agent-status-observation'
 import { AGENT_STATUS_2A_CURRENT_PRODUCER_MODE } from '../../../shared/agent-status-legacy-adapter'
 import type { AgentStatusState, ParsedAgentStatusPayload } from '../../../shared/agent-status-types'
-import { admitLegacyAgentStatus } from '../../../shared/agent-hook-listener/listener-state'
+import {
+  admitLegacyAgentStatus,
+  canAdmitLegacyAgentStatusEntry
+} from '../../../shared/agent-hook-listener/listener-state'
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import { agentTypeToPromptSentAgentKind } from './server-status-identity'
 import { AgentHookServerStatusDisposition } from './server-status-disposition'
@@ -56,6 +60,14 @@ function resolveTurnStartedAt(
 }
 
 export abstract class AgentHookServerStatusApplication extends AgentHookServerStatusDisposition {
+  protected readonly claudeOwedNotificationExpiry = new ClaudeOwedNotificationExpiryTimers(
+    this.state
+  )
+
+  protected applyDerivedStatus(source: AgentHookEventPayload, event: AgentHookEventPayload) {
+    return this.applyNormalizedStatus(event, undefined, 'hook', undefined, undefined, false, source)
+  }
+
   protected refreshTerminalStatusEvidence(
     previous: EnrichedAgentHookEventPayload,
     mutationBefore?: EnrichedAgentHookEventPayload,
@@ -95,7 +107,7 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
     )
     const firstRuntimeObservation = !this.runtimeObservedStatusPaneKeys.has(refreshed.paneKey)
     this.runtimeObservedStatusPaneKeys.add(refreshed.paneKey)
-    if (!this.writeLegacyStatusRow(refreshed)) {
+    if (!this.writeLegacyStatusRow(refreshed, previous)) {
       return
     }
     this.commitStatusRowMutation(mutationBefore ?? previous, refreshed)
@@ -122,18 +134,34 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
     }
   }
 
-  protected writeLegacyStatusRow(entry: AgentHookEventPayload): boolean {
-    const row = entry.launchToken ? { ...entry, launchToken: undefined } : entry
-    const accepted = admitLegacyAgentStatus(
-      this.state,
-      'main-status-update',
-      row,
-      AGENT_STATUS_2A_CURRENT_PRODUCER_MODE
-    )
-    if (accepted) {
-      this.recordCurrentAuthorityObservation(entry, row)
+  protected writeLegacyStatusRow(
+    entry: AgentHookEventPayload,
+    derivedFrom?: AgentHookEventPayload
+  ): boolean {
+    if (
+      !canAdmitLegacyAgentStatusEntry(
+        this.state,
+        'main-status-update',
+        entry,
+        AGENT_STATUS_2A_CURRENT_PRODUCER_MODE
+      )
+    ) {
+      return false
     }
-    return accepted
+    const candidate = { ...entry }
+    entry.launchToken = undefined
+    if (
+      !admitLegacyAgentStatus(
+        this.state,
+        'main-status-update',
+        entry,
+        AGENT_STATUS_2A_CURRENT_PRODUCER_MODE
+      )
+    ) {
+      return false
+    }
+    this.recordCurrentAuthorityObservation(candidate, entry, undefined, derivedFrom)
+    return true
   }
   /** `observedAt` is the producer's own clock for evidence that has one (a session journal); it
    *  stamps the evidence and state-start times while `receivedAt` keeps delivery order. */

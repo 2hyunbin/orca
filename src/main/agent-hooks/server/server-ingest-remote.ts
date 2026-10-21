@@ -120,7 +120,7 @@ export abstract class AgentHookServerIngestRemote extends AgentHookServerIngestS
         trimmedConnectionId !== null &&
         previous.worktreeId === worktreeId &&
         previous.source === source &&
-        previous.launchToken === envelope.launchToken &&
+        this.generationClaim(previous) === envelope.launchToken &&
         this.getAgentStatusDisposition(paneKey) !== 'suppress'
       ) {
         this.clearPaneState(paneKey, { statusUnavailable: true })

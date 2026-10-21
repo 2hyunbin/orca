@@ -199,6 +199,8 @@ export abstract class AgentHookServerAuthorityAliases extends AgentHookServerAut
       this.pendingLaunchAuthority.set(toPaneKey, {
         ...pending,
         row: transferredStatus,
+        subject: transferredStatus,
+        isCurrent: undefined,
         evidence: Object.freeze({ ...pending.evidence, paneKey: toPaneKey, tabId: owner?.tabId })
       })
     }
@@ -252,10 +254,17 @@ export abstract class AgentHookServerAuthorityAliases extends AgentHookServerAut
     if (authorityObservation) {
       const owner = parsePaneKey(toPaneKey)
       this.currentAuthorityObservations.delete(previousOwnerPaneKey)
-      this.currentAuthorityObservations.set(
-        toPaneKey,
-        Object.freeze({ ...authorityObservation, paneKey: toPaneKey, tabId: owner?.tabId })
-      )
+      this.currentAuthorityObservations.set(toPaneKey, {
+        ...authorityObservation,
+        ...(authorityObservation.subject === previousStatus && transferredStatus
+          ? { row: transferredStatus, subject: transferredStatus, isCurrent: undefined }
+          : {}),
+        evidence: Object.freeze({
+          ...authorityObservation.evidence,
+          paneKey: toPaneKey,
+          tabId: owner?.tabId
+        })
+      })
     }
     const promptDedupe = this.promptSentDedupeByPaneKey.get(previousOwnerPaneKey)
     if (promptDedupe !== undefined) {
