@@ -108,16 +108,6 @@ export function resolveTerminalHostOwnership(
       ? LOCAL_OR_SSH_TERMINAL_HOST
       : UNRESOLVED_TERMINAL_HOST
   }
-  if (
-    purpose === 'spawn' &&
-    state.worktreesByRepo === undefined &&
-    state.detectedWorktreesByRepo === undefined &&
-    state.repos === undefined
-  ) {
-    // Why: narrow unit/legacy adapters can omit all owner catalogs; production stores always provide
-    // them and still fail closed above. The `teardown` purpose never takes this fail-open.
-    return ownershipForRuntimeEnvironmentId(getSingleFocusedRuntimeEnvironmentId(state))
-  }
   return UNRESOLVED_TERMINAL_HOST
 }
 

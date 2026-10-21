@@ -845,14 +845,26 @@ with fewer lines than a single instance logs (20) or at its entry limit is unver
 measured background leaves such minutes out (and is not measured with fewer than half of its 10
 metered). Coverage is any instance, not every one: an instance whose lines are missing while others
 log under-subtracts its re-dials, which can only push toward a trip, never hide one. The instance
-split counts 503s from Cloud Run's request log by `labels.instanceId` (the metric names no
-instance), less each instance's own scheduled 503s; 503s no instance answered count as one instance of their
-own, which can be one of the 2. With a single director the share is half the line, so that one
-instance alone never trips between the lines. A judged minute with no instance count is
-unverifiable. A single instance id must hold its share for all 3 minutes, so a fault that keeps replacing
-instances can pass under the broad line. That read stops at 5,000 lines (the 24 hours to 10-21
-peaked at 1,681): truncated or failed while the fleet is between the two lines, the sample is
-unverifiable. The same measure is the
+split counts each instance's own `/v1/assign` 503s from its runtime-metrics lines
+(`assign503sByCauseDelta`, by `labels.instanceId`; the metric names no instance), less that
+instance's own scheduled 503s. The fleet's non-drain 503s no instance's lines account for (Cloud
+Run's own, a route the director does not count, or an instance that stopped logging) are
+`unattributed`: summed over the 3 judged minutes, since an instance's 30 s lines skew against the
+fleet's minutes, and over the whole fleet line by themselves they trip (no one instance's stall
+explains them; the largest such sum in the 24 hours to 10-21 was 38, against 90). A stalled instance that also stops logging its lines therefore trips, on purpose: the 10-21 07:55Z instance kept logging through its stall. On the recorded 10-21 07:55Z stall this reads 40, 169, 5
+on the stalled instance, where Cloud Run's request log read 54, 155, 5. With a single director the
+share is half the line, so that one instance alone never trips between the lines. A judged minute
+with no instance count is unverifiable. A single instance id must hold its share for all 3
+minutes, so a fault that keeps replacing instances can pass under the broad line.
+
+Each sample makes one Cloud Logging read: the director's runtime metrics, its ledger summaries,
+the cell's seat-behind-row lines and, while the phone path is watched, the cell's own runtime
+metrics, as one OR filter split back client-side. The project allows 60 reads a minute shared by
+every watch and tool; on 2026-10-21 18:39Z twelve watches at about five reads a sample drew 429s
+until c21 and c22 tripped unverifiable. A read is ~200 lines (1,000 is one page and the limit); one
+truncated or failed after its retries makes every log-read rule unverifiable for that sample,
+which counts once toward the streak as any unreadable rule did. The 503 background and the phone
+background are each read once, on their own. The same measure is the
 background and `background-503-per-minute`. Until the
 minutes before `flipped-at` are published (3 minutes past it) the 503 rule is pending, which does
 not add to the streak. The duplicate read also takes `orca_relay_reserve_ledger_summary`, which
