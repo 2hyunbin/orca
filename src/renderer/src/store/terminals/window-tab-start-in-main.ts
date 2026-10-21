@@ -4,6 +4,7 @@
 
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { isSupportedWindowsShellOverride } from '../../../../shared/windows-terminal-shell'
 import type { AppState } from '../types'
@@ -129,13 +130,14 @@ export function startWindowTabInMain(
     (reply) => releaseOnceDrawn(store, tab.id, leafId, reply?.terminal?.ptyId ?? null, mark),
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
+      // No terminal ran it: a later start of the pane runs the tab's startup, as before.
+      if (startup && store.getState().terminalLayoutsByTabId[tab.id]) {
+        store.setState({
+          pendingStartupByTabId: { ...store.getState().pendingStartupByTabId, [tab.id]: startup }
+        })
+      }
       if (message === 'host_not_owned') {
         // Main does not hold the tab: the pane starts its own terminal, as before.
-        if (startup) {
-          store.setState({
-            pendingStartupByTabId: { ...store.getState().pendingStartupByTabId, [tab.id]: startup }
-          })
-        }
         clearWindowTabMark(store, paneKey, mark)
         return
       }
@@ -153,7 +155,10 @@ export function startWindowTabInMain(
   )
 }
 
-/** Keeps the mark until the pane's binding is drawn, so the pane attaches instead of spawning. */
+/**
+ * Keeps the mark until the pane can attach: any binding main draws for it (its start, or a later
+ * rebind), main's own status replacing the mark, or the pane leaving the window.
+ */
 function releaseOnceDrawn(
   store: StartStore,
   tabId: string,
@@ -162,11 +167,16 @@ function releaseOnceDrawn(
   mark: TerminalPaneStart
 ): void {
   const paneKey = makePaneKey(tabId, leafId)
-  const settled = (state: AppState): boolean =>
-    state.terminalPaneStartsByPaneKey[paneKey] !== mark ||
-    ptyId === null ||
-    state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[leafId] === ptyId ||
-    !state.terminalLayoutsByTabId[tabId]
+  const settled = (state: AppState): boolean => {
+    const layout = state.terminalLayoutsByTabId[tabId]
+    return (
+      ptyId === null ||
+      state.terminalPaneStartsByPaneKey[paneKey] !== mark ||
+      Boolean(layout?.ptyIdsByLeafId?.[leafId]) ||
+      !layout ||
+      !collectLeafIds(layout.root).includes(leafId)
+    )
+  }
   if (settled(store.getState())) {
     clearWindowTabMark(store, paneKey, mark)
     return

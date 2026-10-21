@@ -141,6 +141,37 @@ describe("a new tab's first terminal, started by main in a layout-owner build", 
     expect(store.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([TAB])
   })
 
+  it('lets the pane attach to whatever main binds it to', async () => {
+    const store = storeWithWorktree()
+    store.getState().createTab(WORKTREE, undefined, undefined, {
+      id: TAB,
+      initialLeafId: LEAF,
+      pendingStartup: { command: 'make dev' }
+    })
+    await settle()
+    mocks.create!.resolve({ terminal: { ptyId: 'pty-main' } })
+    await settle()
+
+    // Main rebound the pane before the window drew its first terminal.
+    drawBinding(store, 'pty-rebound')
+    expect(store.getState().terminalPaneStartsByPaneKey[PANE_KEY]).toBeUndefined()
+  })
+
+  it('keeps the tab’s startup when main’s start fails, for the pane’s next start', async () => {
+    const store = storeWithWorktree()
+    store.getState().createTab(WORKTREE, undefined, undefined, {
+      id: TAB,
+      initialLeafId: LEAF,
+      pendingStartup: { command: 'make dev' }
+    })
+    await settle()
+
+    mocks.create!.reject(new Error('shell not found'))
+    await settle()
+
+    expect(store.getState().pendingStartupByTabId[TAB]).toMatchObject({ command: 'make dev' })
+  })
+
   it('starts its own terminal, with its startup, when main does not hold the tab', async () => {
     const store = storeWithWorktree()
     store.getState().createTab(WORKTREE, undefined, undefined, {
