@@ -11,6 +11,7 @@ import {
   resolveJsonlRpcPeerOptions,
   type JsonlRpcPeerOptions
 } from './peer-limits'
+import { oversizedReplyRequest, type JsonlRpcRequestOptions } from './peer-oversized-reply'
 
 const recordSchema = z.looseObject({ type: z.string() })
 const responseSchema = z.looseObject({
@@ -50,6 +51,7 @@ type PendingRequest = {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
   timer?: ReturnType<typeof setTimeout>
+  oversizedReply?: 'reject'
 }
 
 /** Transport only: a dialect owns turns, dialogs, and session handles. */
@@ -83,7 +85,12 @@ export class JsonlRpcPeer {
       (record) => this.dispatch(record),
       (rejected) => {
         if (rejected.kind === 'line-too-long') {
-          this.close(new Error('JSON-lines RPC record exceeded the size limit'))
+          const reply = oversizedReplyRequest(rejected, this.limits.maxLineBytes, this.pending)
+          if (reply) {
+            this.rejectPending(reply.id, reply.error)
+          } else {
+            this.close(new Error('JSON-lines RPC record exceeded the size limit'))
+          }
         } else {
           this.diagnose('Ignored non-JSON agent output')
         }
@@ -138,7 +145,7 @@ export class JsonlRpcPeer {
   request(
     command: string,
     params: Record<string, unknown> = {},
-    options: { timeoutMs?: number | null } = {}
+    options: JsonlRpcRequestOptions = {}
   ): Promise<unknown> {
     if (this.terminalError) {
       return Promise.reject(this.terminalError)
@@ -168,7 +175,13 @@ export class JsonlRpcPeer {
               reject(error)
             }, timeoutMs)
       timer?.unref()
-      this.pending.set(id, { command, resolve, reject, timer })
+      this.pending.set(id, {
+        command,
+        resolve,
+        reject,
+        timer,
+        oversizedReply: options.oversizedReply
+      })
       void this.send({ ...params, type: command, id }, controller.signal).catch(
         (error: unknown) => {
           this.rejectPending(id, error instanceof Error ? error : new Error(String(error)))

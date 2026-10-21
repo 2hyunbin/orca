@@ -159,6 +159,25 @@ describe('JSON-lines RPC peer', () => {
     expect(onRecord).not.toHaveBeenCalled()
   })
 
+  it('fails only an opted-in read whose reply is oversized, then keeps the stream', async () => {
+    const onRecord = vi.fn()
+    const { peer, input, reply } = fixture({ onRecord }, { maxLineBytes: 128 })
+    const big = { id: 'orca-1', type: 'response', command: 'get_entries', success: true }
+    const entries = peer.request('get_entries', {}, { oversizedReply: 'reject' })
+    input.write(`${JSON.stringify({ ...big, data: { entries: ['x'.repeat(300)] } })}\n`)
+    await expect(entries).rejects.toThrow('exceeded 128 bytes')
+    reply({ type: 'agent_settled' })
+    const state = peer.request('get_state')
+    reply({ type: 'response', id: 'orca-2', command: 'get_state', success: true, data: {} })
+    expect(await state).toEqual({})
+    expect(onRecord).toHaveBeenCalledExactlyOnceWith({ type: 'agent_settled' })
+    // A read that did not opt in still ends the stream.
+    const plain = expect(peer.request('get_entries')).rejects.toThrow('size limit')
+    input.write(`${JSON.stringify({ ...big, id: 'orca-3', data: 'y'.repeat(300) })}\n`)
+    await plain
+    expect(peer.closed).toBe(true)
+  })
+
   it('enforces pending capacity, and releases it after timeout and invalid response', async () => {
     vi.useFakeTimers()
     const { peer, reply } = fixture({}, { maxPendingRequests: 1, requestTimeoutMs: 10 })
