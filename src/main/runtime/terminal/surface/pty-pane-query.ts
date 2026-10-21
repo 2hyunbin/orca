@@ -4,8 +4,8 @@
 
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
+import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
-import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
 
 export type PtyPane = {
   tabId: string | null
@@ -19,25 +19,34 @@ export type PtyPaneSource = Pick<
   'ptyId' | 'tabId' | 'paneKey' | 'surfaceRecordedAtGraphSequence'
 >
 
-/** How a helper outside the runtime asks for a terminal's pane: `(pty) => paneOfPty(runtime, pty)`. */
+/** How a helper outside the runtime asks for a terminal's pane: the runtime's `paneOfPty`. */
 export type PtyPaneOf = (pty: PtyPaneSource) => PtyPane
 
-const NO_PANE: PtyPane = { tabId: null, paneKey: null, recordedAtGraphSequence: 0 }
+/** The pane main's layout binds a terminal to; null when no pane main owns holds it. */
+export type MainPaneOfPty = (ptyId: string) => { tabId: string; leafId: string } | null
+
+const NO_PANE: PtyPane = Object.freeze({ tabId: null, paneKey: null, recordedAtGraphSequence: 0 })
 
 /** The tab and pane that hold a terminal; null fields when none does or there is no record. */
-export function paneOfPty(runtime: WeakKey, pty: PtyPaneSource | null | undefined): PtyPane {
+export function paneOfPty(
+  pty: PtyPaneSource | null | undefined,
+  mainPaneOf: MainPaneOfPty
+): PtyPane {
   if (!pty) {
     return NO_PANE
   }
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-    const pane = startedMainTerminalSurfaces(runtime)?.findPaneForPty(pty.ptyId)
+    const pane = mainPaneOf(pty.ptyId)
     if (!pane) {
       return NO_PANE
     }
     // Main's binding is current by definition, so no graph statement outranks it.
     return {
       tabId: pane.tabId,
-      paneKey: isTerminalLeafId(pane.leafId) ? makePaneKey(pane.tabId, pane.leafId) : null,
+      paneKey:
+        isValidTerminalTabId(pane.tabId) && isTerminalLeafId(pane.leafId)
+          ? makePaneKey(pane.tabId, pane.leafId)
+          : null,
       recordedAtGraphSequence: Number.POSITIVE_INFINITY
     }
   }

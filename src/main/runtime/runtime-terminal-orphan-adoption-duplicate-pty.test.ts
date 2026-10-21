@@ -80,7 +80,7 @@ function adoptKeptPane(session: WorkspaceSessionState) {
     ports: {
       readSession: () => ({ session, sessionWorktreeId: GIT_KEY, currentRevision: 0 }),
       getPty: () => pty,
-      paneOf: (record) => paneOfPty({}, record),
+      paneOf: (record) => paneOfPty(record, () => null),
       getLeaves: () => [],
       getLeaf: () => undefined,
       getDisplayTitle: () => null,

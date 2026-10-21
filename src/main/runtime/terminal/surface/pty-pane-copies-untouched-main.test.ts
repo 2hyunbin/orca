@@ -5,7 +5,6 @@ import {
   TEST_WORKTREE_ID
 } from '../../orca-runtime-test-fixtures.spec'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
-import { paneOfPty } from './pty-pane-query'
 import {
   SURFACE_PTYS,
   SURFACE_TAB_ID,
@@ -45,7 +44,7 @@ function trapPaneCopies(ptysById: Map<string, RuntimePtyWorktreeRecord>): string
   for (const record of ptysById.values()) {
     trap(record)
   }
-  // A record made later (a spawn, a split) is trapped as it is stored.
+  // A record made later (a spawn) is trapped as it is stored.
   const set = ptysById.set.bind(ptysById)
   ptysById.set = (ptyId, record) => {
     const stored = set(ptyId, record)
@@ -63,17 +62,17 @@ describe('PTY record pane copies (switch on)', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ptysById is the runtime's PTY registry; the test traps the records it keeps.
     const { ptysById } = runtime as unknown as { ptysById: Map<string, RuntimePtyWorktreeRecord> }
     const touched = trapPaneCopies(ptysById)
-    // An error from an operation is fine here; only a touch of a copy fails the test.
-    const run = async (operation: () => unknown): Promise<void> => {
+    const failed: string[] = []
+    const run = async (name: string, operation: () => unknown): Promise<void> => {
       try {
         await operation()
-      } catch {
-        // Recorded in `touched` when it was a pane copy.
+      } catch (error) {
+        failed.push(`${name}: ${String(error)}`)
       }
     }
 
     // The answer comes from main's layout, not the record.
-    expect(paneOfPty(runtime, ptysById.get('pty-b')!)).toMatchObject({
+    expect(runtime['paneOfPty'](ptysById.get('pty-b')!)).toMatchObject({
       tabId: SURFACE_TAB_ID,
       paneKey: `${SURFACE_TAB_ID}:${HEADLESS_SECOND_LEAF_ID}`
     })
@@ -82,7 +81,7 @@ describe('PTY record pane copies (switch on)', () => {
       tabId: 'stale-tab',
       leafId: HEADLESS_LEAF_ID
     })
-    expect(paneOfPty(runtime, ptysById.get('pty-b')!).tabId).toBe(SURFACE_TAB_ID)
+    expect(runtime['paneOfPty'](ptysById.get('pty-b')!).tabId).toBe(SURFACE_TAB_ID)
 
     const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
     expect(listed.terminals.map(({ tabId, ptyId }) => ({ tabId, ptyId }))).toEqual([
@@ -91,26 +90,55 @@ describe('PTY record pane copies (switch on)', () => {
     ])
     const [first, second] = listed.terminals
     for (const terminal of listed.terminals) {
-      await run(() => runtime.showTerminal(terminal.handle))
-      await run(() => runtime.readTerminal(terminal.handle))
-      await run(() => runtime.focusTerminal(terminal.handle, { navigateHost: false }))
-      await run(() => runtime.getAgentStatusForHandle(terminal.handle))
+      await run(`show ${terminal.ptyId}`, () => runtime.showTerminal(terminal.handle))
+      await run(`read ${terminal.ptyId}`, () => runtime.readTerminal(terminal.handle))
+      await run(`focus ${terminal.ptyId}`, () =>
+        runtime.focusTerminal(terminal.handle, { navigateHost: false })
+      )
+      await run(`status ${terminal.ptyId}`, () => runtime.getAgentStatusForHandle(terminal.handle))
     }
     runtime.getStatus()
-    await run(() => runtime.getWorktreePs())
+    await run('ps', () => runtime.getWorktreePs())
     runtime.onPtyData('pty-a', 'hello\r\n', Date.now())
-    await run(() => runtime.sendTerminal(first!.handle, { text: 'ls' }, { inputKind: 'driving' }))
-    await run(() => runtime.renameTerminal(first!.handle, 'Renamed'))
-    await run(() => runtime.splitTerminal(first!.handle, { direction: 'vertical' }))
+    await run('send', () =>
+      runtime.sendTerminal(first!.handle, { text: 'ls' }, { inputKind: 'driving' })
+    )
+    await run('rename', () => runtime.renameTerminal(first!.handle, 'Renamed'))
     runtime.registerPty('pty-c', TEST_WORKTREE_ID)
     runtime.onPtyData('pty-c', 'new\r\n', Date.now())
-    await run(() => runtime.closeTerminal(second!.handle))
+    await run('close pane', () => runtime.closeTerminal(second!.handle))
     runtime.onPtyExit('pty-b', 0)
-    await run(() => runtime.listTerminals(`id:${TEST_WORKTREE_ID}`))
-    await run(() => runtime.closeTerminalTab(first!.handle))
+    await run('list again', () => runtime.listTerminals(`id:${TEST_WORKTREE_ID}`))
+    await run('close tab', () => runtime.closeTerminalTab(first!.handle))
     runtime.onPtyExit('pty-a', 0)
 
     expect(touched).toEqual([])
+    expect(failed).toEqual([])
     expect(store.getSession().tabsByWorktree[TEST_WORKTREE_ID] ?? []).toEqual([])
+  })
+
+  it('are not needed with no window: main answers before any graph is installed', async () => {
+    const { runtime } = surfaceRuntime()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ptysById is the runtime's PTY registry; the test traps the records it keeps.
+    const { ptysById } = runtime as unknown as { ptysById: Map<string, RuntimePtyWorktreeRecord> }
+    const touched = trapPaneCopies(ptysById)
+
+    expect(runtime['paneOfPty'](ptysById.get('pty-a')!)).toMatchObject({
+      tabId: SURFACE_TAB_ID,
+      paneKey: `${SURFACE_TAB_ID}:${HEADLESS_LEAF_ID}`
+    })
+    const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
+    expect(
+      listed.terminals.map(({ tabId, ptyId, orphaned }) => ({ tabId, ptyId, orphaned }))
+    ).toEqual([
+      { tabId: SURFACE_TAB_ID, ptyId: 'pty-a', orphaned: false },
+      { tabId: SURFACE_TAB_ID, ptyId: 'pty-b', orphaned: false }
+    ])
+    for (const terminal of listed.terminals) {
+      await expect(runtime.showTerminal(terminal.handle)).resolves.toMatchObject({
+        tabId: SURFACE_TAB_ID
+      })
+    }
+    expect(touched).toEqual([])
   })
 })

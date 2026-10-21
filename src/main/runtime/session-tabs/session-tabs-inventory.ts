@@ -20,6 +20,7 @@ import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 import type { PaneStartStatuses } from '../pane-start-statuses'
+import { paneOfPty, type PtyPane, type PtyPaneSource } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
   abstract get workspaceLayoutReads(): WorkspaceLayoutReads
@@ -30,7 +31,21 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     windowId: number,
     graph: RuntimeSyncWindowGraph
   ): RuntimeSyncWindowGraph {
-    const host = (): MainTerminalSurfacesHost => ({
+    return mainTerminalSurfaces(this, () => this.mainTerminalSurfacesHost()).withMainSurfaces(
+      windowId,
+      graph
+    )
+  }
+
+  // Layout-owner builds ask main's index, which answers with or without a window's graph.
+  protected paneOfPty(pty: PtyPaneSource | null | undefined): PtyPane {
+    return paneOfPty(pty, (ptyId) =>
+      mainTerminalSurfaces(this, () => this.mainTerminalSurfacesHost()).findPaneForPty(ptyId)
+    )
+  }
+
+  private mainTerminalSurfacesHost(): MainTerminalSurfacesHost {
+    return {
       store: () => this.store,
       reads: () => this.workspaceLayoutReads,
       homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
@@ -40,8 +55,7 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       publish: (publisher, next) => {
         this.syncWindowGraph(publisher, next)
       }
-    })
-    return mainTerminalSurfaces(this, host).withMainSurfaces(windowId, graph)
+    }
   }
 
   protected abstract getAuthoritativeSessionTabsInventoryEpoch(

@@ -126,7 +126,7 @@ function adopt(
         }
       },
       getPty: () => pty,
-      paneOf: (record) => paneOfPty({}, record),
+      paneOf: (record) => paneOfPty(record, () => null),
       getLeaves: () => [],
       getLeaf: () => undefined,
       getDisplayTitle: () => null,

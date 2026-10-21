@@ -9,7 +9,7 @@ import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-reco
 import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
+import { mainTerminalRegistered } from '../surface/main-terminal-surfaces'
 
 export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
@@ -164,7 +164,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     }
     // Switch point: a pane main binds lists its terminal now, in the same push as the flip below.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      startedMainTerminalSurfaces(this)?.terminalRegistered(ptyId)
+      mainTerminalRegistered(this, ptyId)
     }
     // Why: a listed surface's pending-handle → ready flip must not wait on a later renderer graph change.
     this.touchMobileSessionSnapshotsForPty(ptyId)

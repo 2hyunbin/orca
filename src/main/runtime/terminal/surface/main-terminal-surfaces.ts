@@ -1,6 +1,5 @@
 // Layout-owner builds: the runtime graph carries main's own panes for every workspace main owns,
 // and main republishes them when the Store's layout changes, whether or not a window publishes.
-// Only switch-on code reaches this module, so a window-owned build bundles none of it.
 
 import type { PaneStartFactOf } from '../../pane-start-statuses'
 import type { MainPaneBinding } from './main-pane-verdict'
@@ -131,9 +130,17 @@ class MainSurfacePublisher {
     )
   }
 
+  /** Whether a graph was installed; before that the index only answers queries. */
+  get started(): boolean {
+    return this.lastWindowGraph !== null
+  }
+
   /** A terminal registered: main's panes reflect it now, in the same push, not at a later sync. */
   terminalRegistered(ptyId: string): void {
     this.index.invalidateRouting()
+    if (!this.started) {
+      return
+    }
     // Registering can also move a workspace to its SSH partition, which changes main's panes.
     this.republish({ force: this.findPaneForPty(ptyId) !== null })
   }
@@ -180,7 +187,13 @@ export function mainTerminalSurfaces(
 
 /** The runtime's publisher when it has installed a graph; null before that. */
 export function startedMainTerminalSurfaces(runtime: SurfacesOwner): MainSurfacePublisher | null {
-  return byRuntime.get(runtime) ?? null
+  const state = byRuntime.get(runtime)
+  return state?.started ? state : null
+}
+
+/** A terminal registered: routing may move, so the index re-reads it even before any graph. */
+export function mainTerminalRegistered(runtime: SurfacesOwner, ptyId: string): void {
+  byRuntime.get(runtime)?.terminalRegistered(ptyId)
 }
 
 /**

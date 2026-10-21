@@ -42,7 +42,6 @@ import { RuntimeTerminalStreamConsumers } from '../runtime-terminal-stream-consu
 import type { RecentPtyOutputBuffer } from '../recent-pty-output-buffer'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { mainListsEveryPane } from '../terminal/surface/main-terminal-surfaces'
-import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId {
   protected readonly stopRequestedPtyIds = new Set<string>()
@@ -114,7 +113,7 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getDb: () => this.getOrchestrationDbIfAvailable(),
     getLeaves: () => this.leaves.values(),
     getPtys: () => this.ptysById.values(),
-    paneOf: (pty) => paneOfPty(this, pty),
+    paneOf: (pty) => this.paneOfPty(pty),
     issueLeafHandle: (leaf) => this.issueHandle(leaf),
     issuePtyHandle: (pty) => this.issuePtyHandle(pty),
     makePaneKey: (leaf) => this.makeRuntimePaneKey(leaf),

@@ -1,6 +1,7 @@
 // L80 census: production code touches a PTY record's pane copies only through paneOfPty's
 // window-owned branch and the switch-guarded writers. Type-aware, so a Pick, a union or a
-// destructure of the record is caught too. Rerun: pnpm test <this file>.
+// destructure of the record is caught too; an Object.assign or spread onto a record is not (none
+// exist). Rerun: pnpm test <this file>.
 import path from 'node:path'
 import ts from 'typescript-api'
 import { describe, expect, it } from 'vitest'
@@ -26,6 +27,14 @@ function isProductionFile(fileName: string): boolean {
     !/\.(test|spec)\.tsx?$/.test(fileName) &&
     !/[-.](test-)?(fixture|harness)\b|test-support/.test(fileName) &&
     !fileName.includes(`${path.sep}orca-runtime-tests${path.sep}`)
+  )
+}
+
+/** Whether code (not a comment) in the function reads the build switch. */
+function readsSwitch(node: ts.Node): boolean {
+  return (
+    (ts.isIdentifier(node) && node.text === 'ORCA_LAYOUT_OWNER_IS_MAIN') ||
+    ts.forEachChild(node, readsSwitch) === true
   )
 }
 
@@ -104,7 +113,7 @@ function collectCopyAccesses(): Census {
         node.name &&
         ts.isIdentifier(node.name) &&
         functions.includes(node.name.text) &&
-        node.getText(source).includes('ORCA_LAYOUT_OWNER_IS_MAIN')
+        readsSwitch(node)
       ) {
         found.add(node.name.text)
       }

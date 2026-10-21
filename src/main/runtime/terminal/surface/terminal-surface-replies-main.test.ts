@@ -14,7 +14,6 @@ import {
   recordedSurfaceReplies,
   surfaceRuntime
 } from './terminal-surface-replies.test-fixture'
-import { paneOfPty } from './pty-pane-query'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
@@ -206,7 +205,7 @@ describe('terminal replies from main (switch on)', () => {
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ptysById is the runtime's PTY registry; the test reads the record it keeps.
     const { ptysById } = runtime as unknown as { ptysById: Map<string, { ptyId: string }> }
-    expect(paneOfPty(runtime, ptysById.get('pty-b')!)).toMatchObject({
+    expect(runtime['paneOfPty'](ptysById.get('pty-b')!)).toMatchObject({
       tabId: SURFACE_TAB_ID,
       paneKey: `${SURFACE_TAB_ID}:${HEADLESS_SECOND_LEAF_ID}`
     })
