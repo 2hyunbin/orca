@@ -2,8 +2,18 @@ import type { AppState } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { joinPath } from '@/lib/path'
 import { getOpenFilesForExternalFileChange, type EditorPathMutationTarget } from './editor-autosave'
-import { toEditorModelUri } from './editor-model-uri'
 import { resolveEditorModelOwner, resolvedEditorModelOwnerKey } from './editor-model-owner'
+import type { EditorModelOwner } from './editor-model-owner'
+import { editorBufferOwnerPathKey } from '@/store/slices/editor/buffers/editor-buffer-identity'
+
+// Why not the model URI: it normalizes paths by the client's rules, so on a Windows client
+// `/repo/a\b.ts` and `/repo/a/b.ts` on a POSIX host would collide.
+function physicalFileKey(owner: EditorModelOwner, filePath: string): string | null {
+  const ownerKey = resolvedEditorModelOwnerKey(owner)
+  return ownerKey === null
+    ? null
+    : JSON.stringify([ownerKey, editorBufferOwnerPathKey(filePath, owner)])
+}
 
 /**
  * The physical file (host + path) a tab writes, shared by its edit and unstaged-diff tabs in every
@@ -13,8 +23,7 @@ export function editorFileHoldKey(state: AppState, file: OpenFile): string {
   if (file.mode !== 'edit' && !(file.mode === 'diff' && file.diffSource === 'unstaged')) {
     return file.id
   }
-  const ownerKey = resolvedEditorModelOwnerKey(resolveEditorModelOwner(file, state))
-  return ownerKey === null ? file.id : toEditorModelUri(file.filePath, ownerKey)
+  return physicalFileKey(resolveEditorModelOwner(file, state), file.filePath) ?? file.id
 }
 
 /**
@@ -30,7 +39,7 @@ export function pathMutationHoldKeys(
       editorFileHoldKey(state, file)
     )
   )
-  const ownerKey = resolvedEditorModelOwnerKey(
+  const targetKey = physicalFileKey(
     resolveEditorModelOwner(
       {
         worktreeId: target.worktreeId,
@@ -39,11 +48,12 @@ export function pathMutationHoldKeys(
           : {})
       },
       state
-    )
+    ),
+    joinPath(target.worktreePath, target.relativePath)
   )
   // Why: an unresolved owner keys per tab, so no other tab can share it.
-  if (ownerKey !== null) {
-    keys.add(toEditorModelUri(joinPath(target.worktreePath, target.relativePath), ownerKey))
+  if (targetKey !== null) {
+    keys.add(targetKey)
   }
   return keys
 }
