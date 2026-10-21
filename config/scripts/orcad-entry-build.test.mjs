@@ -1,9 +1,13 @@
 import { build } from 'esbuild'
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { buildOrcadEntry, ORCAD_COMMONJS_MODULE_OPTIONS } from './orcad-entry-build.mjs'
+import {
+  buildOrcadEntry,
+  findNonAsciiSource,
+  ORCAD_COMMONJS_MODULE_OPTIONS
+} from './orcad-entry-build.mjs'
 import { runProcessSync } from '@orca/process-host'
 
 const directory = mkdtempSync(join(tmpdir(), 'orca-structured-provider-build-'))
@@ -77,3 +81,12 @@ it.each(['import.meta', 'import.meta.dirname', 'import.meta.filename', 'import.m
     ).rejects.toThrow('"import.meta" is not available')
   }
 )
+
+it('keeps the server bundle ASCII, so V8 stores its source one byte per character', () => {
+  expect(findNonAsciiSource(readFileSync(bundle, 'utf8'))).toBeNull()
+})
+
+it('names the line of a non-ASCII character a regex literal or tagged template left', () => {
+  expect(findNonAsciiSource('a=1\nb=/[\\u2726]/')).toBeNull()
+  expect(findNonAsciiSource('a=1\nb=/[\u2726]/')?.line).toBe(2)
+})

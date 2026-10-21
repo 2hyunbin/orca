@@ -62,7 +62,36 @@ const jsoncParserEsm = {
   }
 }
 
-export function buildOrcadEntry(outfile) {
+/**
+ * Where the bundle leaves the one-byte range, if anywhere. A single non-ASCII character makes V8 hold
+ * the whole ~11 MB server source as a two-byte string (~21 MB); esbuild escapes strings itself but
+ * not regex literals or tagged templates.
+ */
+export function findNonAsciiSource(source) {
+  let index = 0
+  while (index < source.length && source.charCodeAt(index) < 0x80) {
+    index++
+  }
+  if (index === source.length) {
+    return null
+  }
+  const line = source.slice(0, index).split('\n').length
+  return { line, excerpt: source.slice(Math.max(0, index - 60), index + 20) }
+}
+
+export async function buildOrcadEntry(outfile) {
+  const result = await buildOrcadEntryBundle(outfile)
+  const nonAscii = findNonAsciiSource(readFileSync(outfile, 'utf8'))
+  if (nonAscii) {
+    throw new Error(
+      `orcad server bundle has a non-ASCII character at line ${nonAscii.line} (...${nonAscii.excerpt}...). ` +
+        'Write it as a \\uXXXX escape in the source regex or String.raw template.'
+    )
+  }
+  return result
+}
+
+function buildOrcadEntryBundle(outfile) {
   return build({
     ...ORCAD_COMMONJS_MODULE_OPTIONS,
     entryPoints: [join(root, ORCAD_ENTRY_POINT)],
