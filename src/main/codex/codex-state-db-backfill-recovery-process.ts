@@ -1,11 +1,10 @@
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle, PipedChildProcess } from '@orca/process-host/process-spec'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { buildWslCodexAppServerArgs } from '../codex-accounts/wsl-codex-command'
 import { CODEX_READ_ONLY_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
 import type { CodexAppServerSpawn } from './codex-app-server-process-tree-kill'
 import { terminateCodexProbeChild } from '../rate-limits/codex-probe-termination'
-import type { PipedChildProcess } from '@orca/process-host/process-spec'
 import {
   spawnManagedProviderProcess,
   type ManagedProviderProcess

@@ -1,5 +1,4 @@
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
-import type * as FsPromisesModule from 'node:fs/promises'
 import type * as ChildProcessModule from 'node:child_process'
 import type * as ProcessHostModule from '@orca/process-host'
 import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
@@ -38,7 +37,7 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () => ({
 }))
 
 vi.mock('node:fs/promises', async (original) => ({
-  ...(await original<typeof FsPromisesModule>()),
+  ...(await original<typeof files>()),
   readFile: readFileMock
 }))
 

@@ -1,4 +1,3 @@
-import type * as FsPromisesModule from 'node:fs/promises'
 import * as files from 'node:fs/promises'
 import * as processRows from './provider-process-row-read'
 import * as ledger from './provider-process-ledger'
@@ -12,7 +11,6 @@ import {
   runProviderRecovery,
   setProviderRecoveryMutationOwner
 } from './provider-process-inventory'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -20,16 +18,13 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { spawnProcess } from '@orca/process-host'
 import { getAppEnvironment, setAppEnvironment } from '../../shared/app-environment'
-import { spawnManagedProviderProcess } from './managed-provider-process'
-import { readPosixProcessRow } from './provider-process-row-read'
-import { recoverProviderLaunches } from './provider-process-ledger'
 import {
   resolveCodexHomeProcessLockKey,
   withCodexHomeProcessLock
 } from '../codex-cli/codex-home-process-lock'
 
 vi.mock('node:fs/promises', async (original) => ({
-  ...(await original<typeof FsPromisesModule>())
+  ...(await original<typeof files>())
 }))
 
 const roots: string[] = []
@@ -41,18 +36,18 @@ afterEach(async () => {
       child.kill('SIGKILL')
     }
   }
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  await Promise.all(roots.splice(0).map((root) => files.rm(root, { recursive: true, force: true })))
 })
 
 async function folder(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'nc-perf-direct-'))
+  const root = await files.mkdtemp(join(tmpdir(), 'nc-perf-direct-'))
   roots.push(root)
   return root
 }
 
 async function readWhenWritten(path: string): Promise<string> {
   for (let i = 0; i < 100; i++) {
-    const text = await readFile(path, 'utf8').catch(() => '')
+    const text = await files.readFile(path, 'utf8').catch(() => '')
     if (text) {
       return text
     }
@@ -72,7 +67,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
       process.stdout.write(JSON.stringify({pid:process.pid,parent:process.ppid})+'\\n');
       setTimeout(()=>{process.stdout.write('final-record\\n');process.exit(7)},150);
     `
-    const managed = spawnManagedProviderProcess(
+    const managed = managedProcesses.spawnManagedProviderProcess(
       { command: process.execPath, args: ['-e', script, toolFile] },
       { site: 'direct-test' }
     )
@@ -93,7 +88,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
         parent: process.pid
       })
       expect(output).toContain('final-record\n')
-      expect(await readPosixProcessRow(toolPid)).toBeNull()
+      expect(await processRows.readPosixProcessRow(toolPid)).toBeNull()
       expect(await managed.verifyWriters()).toBe('released')
       const reap = vi.fn(async () => 'exited' as const)
       await managed.close({ capture: async () => {}, reap, treeVerdict: 'exited' })
@@ -110,7 +105,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
   })
 
   it('shares normal close, escalates a TERM-ignoring group, and preserves user Node environment', async () => {
-    const managed = spawnManagedProviderProcess(
+    const managed = managedProcesses.spawnManagedProviderProcess(
       {
         command: process.execPath,
         args: [
@@ -143,7 +138,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
   it('recovers recorded disposable members, skips live owners and refuses changed identity', async () => {
     const root = await folder()
     const directory = join(root, 'provider-processes')
-    await mkdir(directory)
+    await files.mkdir(directory)
     const saved = getAppEnvironment()
     setAppEnvironment({
       ...saved,
@@ -166,7 +161,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
     try {
       // Darwin lstart identities must predate the scan's second.
       await delay(1_100)
-      const owner = await readPosixProcessRow(process.pid)
+      const owner = await processRows.readPosixProcessRow(process.pid)
       if (!owner || owner === 'unverifiable') {
         throw new Error('test owner identity unreadable')
       }
@@ -178,12 +173,12 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
         if (!child.pid) {
           throw new Error('test child did not spawn')
         }
-        const member = await readPosixProcessRow(child.pid)
+        const member = await processRows.readPosixProcessRow(child.pid)
         if (!member || member === 'unverifiable') {
           throw new Error('test member identity unreadable')
         }
         const token = randomUUID()
-        await writeFile(
+        await files.writeFile(
           join(directory, `${token}.json`),
           JSON.stringify({
             version: 1,
@@ -200,7 +195,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
       await record(stale, false, false)
       await record(live, true, false)
       await record(changed, false, true)
-      await recoverProviderLaunches()
+      await ledger.recoverProviderLaunches()
       expect(stale.exitCode !== null || stale.signalCode !== null).toBe(true)
       expect(live.exitCode).toBeNull()
       expect(live.signalCode).toBeNull()
@@ -228,7 +223,7 @@ it.runIf(process.platform !== 'win32')(
     ].join('\n')
     const home = resolveCodexHomeProcessLockKey(join(root, 'home'))
     const recorded = vi.spyOn(ledger, 'recordProviderLaunch')
-    const managed = spawnManagedProviderProcess(
+    const managed = managedProcesses.spawnManagedProviderProcess(
       {
         command: process.execPath,
         args: [
@@ -250,7 +245,8 @@ it.runIf(process.platform !== 'win32')(
     const slots = Promise.withResolvers<void>()
     const issued: Promise<unknown>[] = []
     const mkdir = vi.spyOn(files, 'mkdir')
-    const held = Promise.withResolvers<Awaited<ReturnType<typeof readPosixProcessRow>>>()
+    const held =
+      Promise.withResolvers<Awaited<ReturnType<typeof processRows.readPosixProcessRow>>>()
     const original = processRows.readPosixProcessRow
     let unavailable = false
     let holding = false
@@ -316,7 +312,9 @@ it.runIf(process.platform !== 'win32')(
       expect(signals).not.toHaveBeenCalled()
       rows.mockRestore()
       process.kill(writerPid, 'SIGKILL')
-      await vi.waitFor(async () => expect(await readPosixProcessRow(writerPid)).toBeNull())
+      await vi.waitFor(async () =>
+        expect(await processRows.readPosixProcessRow(writerPid)).toBeNull()
+      )
       issued.push(
         ...Array.from({ length: 4 }, () =>
           runProviderRecovery(
@@ -355,14 +353,14 @@ it.runIf(process.platform !== 'win32')(
   async () => {
     const root = await folder()
     const directory = join(root, 'provider-processes')
-    await mkdir(directory)
+    await files.mkdir(directory)
     const token = randomUUID(),
       home = `restart-${token}`,
       path = join(directory, `${token}.json`)
     const owner = { pid: 9_999_998, pgid: 9_999_998, startedAt: 'owner' }
     const member = { pid: 9_999_999, pgid: 9_999_999, startedAt: '2026-10-01T00:00:00.000Z' }
     const late = { ...member, pid: member.pid - 2 }
-    await writeFile(
+    await files.writeFile(
       path,
       JSON.stringify({
         version: 1,
@@ -394,7 +392,7 @@ it.runIf(process.platform !== 'win32')(
       if (pid === owner.pid) {
         if (capturing) {
           const current = JSON.parse(await realRead(path, 'utf8'))
-          await writeFile(path, JSON.stringify({ ...current, members: [member, late] }))
+          await files.writeFile(path, JSON.stringify({ ...current, members: [member, late] }))
           capturing = false
         }
         return null
@@ -434,7 +432,7 @@ it.runIf(process.platform !== 'win32')(
         }
         return realRead(...args)
       })
-      await recoverProviderLaunches()
+      await ledger.recoverProviderLaunches()
       const published = await realRead(path, 'utf8')
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
         'could not verify'

@@ -113,7 +113,7 @@ export async function cleanUpStructuredSessionOwner(
     return
   }
   await recoverProviderLaunches(owner.pid)
-  if (await hasRecordedProviderLaunch(owner.pid, owner.processStartTimeMs)) {
+  if (await hasRecordedProviderLaunch(owner.pid, owner.processStartTimeMs ?? undefined)) {
     return
   }
   if (!isProvenAliveProbe(await deps.probeRecord(record))) {

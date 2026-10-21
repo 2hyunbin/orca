@@ -1,11 +1,16 @@
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type {
+  PipedProcessSpawner,
+  PipedChildProcess,
+  SpawnedProcess
+} from '@orca/process-host/process-spec'
 import type { ProviderProcessOutputOptions } from './provider-process-output'
 import type { ProviderResource, ProviderResourceResult } from './provider-process-inventory'
-import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
-import type { PipedChildProcess, SpawnedProcess } from '@orca/process-host/process-spec'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import { PROVIDER_STDIN_END_GRACE_MS } from './provider-process-timing'
-import { waitForProcessExitUntil } from './provider-process-exit-deadline'
+import {
+  waitForProcessExitUntil,
+  type ProviderCleanupBudget
+} from './provider-process-exit-deadline'
 import type { ProviderProcessTeardownVerdict } from './provider-process-teardown'
 
 export type ProviderProcessTree = {

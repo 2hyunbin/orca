@@ -103,7 +103,7 @@ function stubChild(options: { exitOnStdinEnd?: boolean } = {}): {
     if (exited) {
       throw Object.assign(new Error('gone'), { code: 'ESRCH' })
     }
-    if (typeof signal === 'string') {
+    if (signal === 'SIGTERM' || signal === 'SIGKILL') {
       child.kill(signal)
     }
     return true
