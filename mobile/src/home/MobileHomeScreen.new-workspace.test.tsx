@@ -21,25 +21,10 @@ vi.mock('lucide-react-native', () => ({
   QrCode: 'QrCode'
 }))
 
-const navigation = vi.hoisted(() => {
-  const listeners = new Set<() => void>()
-  const committed: { state: unknown } = {
-    state: { index: 0, routes: [{ name: 'index', key: 'home' }] }
-  }
-  return {
-    listeners,
-    committed,
-    router: { push: vi.fn(), replace: vi.fn() },
-    root: {
-      addListener: (_event: 'state', listener: () => void) => {
-        listeners.add(listener)
-        return () => listeners.delete(listener)
-      },
-      dispatch: vi.fn(),
-      getState: () => committed.state
-    }
-  }
-})
+const navigation = vi.hoisted(() => ({
+  router: { push: vi.fn(), replace: vi.fn() },
+  root: { addListener: () => () => {}, dispatch: vi.fn(), getState: () => undefined }
+}))
 vi.mock('expo-router', () => ({
   useNavigation: () => navigation.root,
   useRouter: () => navigation.router
@@ -49,9 +34,6 @@ vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionShee
 vi.mock('../components/ConfirmModal', () => ({ ConfirmModal: 'ConfirmModal' }))
 vi.mock('../components/PickerModal', () => ({ PickerModal: 'PickerModal' }))
 vi.mock('../components/TaskProviderLogo', () => ({ TaskProviderLogo: 'TaskProviderLogo' }))
-vi.mock('../components/NewWorktreeModalController', () => ({
-  NewWorktreeModalController: 'NewWorktreeModalController'
-}))
 vi.mock('./MobileHomeTopBar', () => ({ MobileHomeTopBar: 'MobileHomeTopBar' }))
 vi.mock('./MobileHomeEmptyState', () => ({ MobileHomeEmptyState: 'MobileHomeEmptyState' }))
 vi.mock('./MobileHomeResumeCard', () => ({ MobileHomeResumeCard: 'MobileHomeResumeCard' }))
@@ -67,7 +49,6 @@ vi.mock('../transport/use-open-mobile-host-edit', () => ({ useOpenMobileHostEdit
 vi.mock('../transport/host-removal-lifecycle', () => ({ removeHostAndCloseClient: vi.fn() }))
 vi.mock('../transport/host-store', () => ({ loadHostCatalog: vi.fn() }))
 vi.mock('../platform/haptics', () => ({ triggerMediumImpact: vi.fn() }))
-vi.mock('../platform/external-link', () => ({ openExternalLink: vi.fn() }))
 vi.mock('../layout/responsive-layout', () => ({
   useResponsiveLayout: () => ({ isWideLayout: false, contentMaxWidth: undefined })
 }))
@@ -79,9 +60,6 @@ vi.mock('../transport/host-client-hooks', () => ({
   useForceReconnect: () => vi.fn(),
   useForgetHostClient: () => vi.fn(),
   useHostClient: () => ({ client: null, clientId: null, state: 'connected' })
-}))
-vi.mock('../transport/host-status-gates', () => ({
-  useHostStatusGates: () => ({ hostCapabilities: [], compatVerdict: { kind: 'ok' } })
 }))
 
 function host(id: string, name: string): HostProfile {
@@ -116,7 +94,6 @@ vi.mock('./use-mobile-home-data', () => ({
   })
 }))
 
-import { setCachedWorktrees } from '../cache/worktree-cache'
 import { MobileHomeScreen } from './MobileHomeScreen'
 
 describe('Home New Workspace', () => {
@@ -127,73 +104,19 @@ describe('Home New Workspace', () => {
     renderer = null
   })
 
-  it("opens the create sheet over Home for the picked desktop, then opens the new workspace's session", async () => {
+  it('opens the New Workspace overlay over Home, offering the connected desktops in order', async () => {
     await act(async () => {
       renderer = create(createElement(MobileHomeScreen))
     })
-    const root = renderer!.root
-    const sheet = () => root.findAll((node) => String(node.type) === 'NewWorktreeModalController')
-    const picker = () =>
-      root.find(
-        (node) => String(node.type) === 'PickerModal' && node.props.title === 'Create Workspace On'
-      )
-    const newWorkspace = root
+    const newWorkspace = renderer!.root
       .findAll((node) => String(node.type) === 'Pressable')
       .find((node) => node.findAll((text) => text.props.children === 'New Workspace').length > 0)!
 
-    // Home's cold-start seed: a resume row with no path, which the name picker cannot read.
-    setCachedWorktrees('laptop', [{ worktreeId: 'wt-0', displayName: 'Marlin' }])
-
     act(() => newWorkspace.props.onPress())
-    act(() => picker().props.onSelect('laptop'))
-    act(() => picker().props.onAfterClose())
 
-    expect(sheet()).toHaveLength(1)
-    expect(sheet()[0]!.props).toMatchObject({
-      visible: true,
-      hostId: 'laptop',
-      existingWorktreePaths: []
-    })
-    expect(navigation.router.push).not.toHaveBeenCalled()
-
-    // The modal closes itself before reporting the create, as the real one does.
-    act(() => {
-      sheet()[0]!.props.onClose()
-      sheet()[0]!.props.onCreated('wt-1', 'Hammerhead', 'No startup terminal')
-    })
-    expect(sheet()).toHaveLength(0)
-    expect(navigation.router.push).toHaveBeenCalledWith('/h/laptop')
-
-    // The host stack commits; the pending open replaces its index with the session.
-    navigation.committed.state = {
-      index: 0,
-      routes: [
-        {
-          name: 'h',
-          key: 'h',
-          state: {
-            key: 'host-stack',
-            index: 0,
-            routes: [{ name: '[hostId]/index', key: 'host-index', params: { hostId: 'laptop' } }]
-          }
-        }
-      ]
-    }
-    act(() => navigation.listeners.forEach((listener) => listener()))
-    expect(navigation.root.dispatch).toHaveBeenCalledWith({
-      type: 'REPLACE',
-      target: 'host-stack',
-      source: 'host-index',
-      payload: {
-        name: '[hostId]/session/[worktreeId]',
-        params: {
-          hostId: 'laptop',
-          worktreeId: 'wt-1',
-          name: 'Hammerhead',
-          created: '1',
-          warning: 'No startup terminal'
-        }
-      }
+    expect(navigation.router.push).toHaveBeenCalledWith({
+      pathname: '/new-workspace',
+      params: { hostIds: 'desk,laptop' }
     })
   })
 })

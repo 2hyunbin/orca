@@ -1,4 +1,3 @@
-/* oxlint-disable max-lines -- prototype: the overlay presentation pushes this past 400; split before a real PR */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation, useRouter } from 'expo-router'
@@ -17,11 +16,8 @@ import type {
   MobileWebShellSessionState,
   MobileWebShellUpdateNotice
 } from './mobile-web-shell-session-contract'
-import {
-  formatMobileWebShellDevFacts,
-  isDevelopmentBuild,
-  useMobileWebShellDroppedFrames
-} from './mobile-web-shell-dev-facts'
+import { useMobileWebShellDroppedFrames } from './mobile-web-shell-dev-facts'
+import { ShellDevFacts } from './ShellDevFacts'
 import { cancelledShellNavigationTarget } from './cancelled-navigation-target'
 import { playPageHaptic } from './page-haptics'
 import { useMobileWebShellBridge } from './use-mobile-web-shell-bridge'
@@ -39,7 +35,7 @@ import { useResponsiveLayout } from '../layout/responsive-layout'
 import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-native-verbs'
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
-import { useShellOverlay } from './ShellSheetPlaceholder'
+import { useShellOverlay } from './shell-overlay-presentation'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
 import { hostProfileUnreadableLine, pageFaultLine } from './shell-lifecycle-log'
 import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
@@ -109,35 +105,10 @@ function Failed({
   )
 }
 
-function DevFacts({
-  state,
-  droppedBinaryFrames
-}: {
-  state: Extract<MobileWebShellSessionState, { kind: 'ready' }>
-  droppedBinaryFrames: number
-}) {
-  if (!isDevelopmentBuild()) {
-    return null
-  }
-  return (
-    <View style={styles.devFacts} pointerEvents="none">
-      <Text style={styles.devFactsText} testID="mobile-web-shell-dev-facts">
-        {formatMobileWebShellDevFacts({
-          buildId: state.buildId,
-          totalBytes: state.totalBytes,
-          elapsedMs: state.elapsedMs,
-          droppedBinaryFrames
-        })}
-      </Text>
-    </View>
-  )
-}
-
 export type MobileWebShellScreenProps = {
   hostId: string
-  /** `overlay` for a transparent modal over the screen that opened it: the page draws its own
-   *  sheet, loading shows a placeholder of that sheet, a screen the page hands over replaces this
-   *  one, and a host that cannot serve the page opens the host list instead. */
+  /** `overlay` for a transparent modal over the screen that opened it, whose page draws a drawer:
+   *  see `useShellOverlay`. A screen the page hands over replaces this one. */
   presentation?: 'screen' | 'overlay'
   /** The screen this shell stands in for, which the page cannot derive from a document served at `/`. */
   route: BridgeInitRoute
@@ -342,7 +313,7 @@ export function MobileWebShellScreen({
     sendBack: bridge.sendBack,
     setOptions: navigation.setOptions
   })
-  const shellOverlay = useShellOverlay(overlay, hostId, state, snapshot?.host, popShellStack)
+  const shellOverlay = useShellOverlay(overlay, hostId, state, snapshot?.host ?? null)
 
   // A profile read that rejected never becomes a host, so the session would otherwise sit in
   // `ready` behind an un-hidden view with nothing serving it and the page asking forever.
@@ -397,10 +368,11 @@ export function MobileWebShellScreen({
     <View
       style={[
         styles.shellRoot,
-        overlay && { backgroundColor: 'transparent' },
         // Edge-to-edge like a native screen: the page pads for the bars itself from the insets
         // `init` carries. The banner takes the status bar strip when it shows.
-        { paddingTop: noticeShown ? insets.top : 0 }
+        { paddingTop: noticeShown ? insets.top : 0 },
+        // An overlay's page draws over the screen beneath, which shows through.
+        overlay && { backgroundColor: 'transparent' }
       ]}
       testID="mobile-web-shell-ready"
     >
@@ -454,7 +426,7 @@ export function MobileWebShellScreen({
       {shellOverlay.cover(pageFrame === 'unpainted') ?? (
         <ShellPageCover label={SHELL_OPENING_LABEL} visible={pageFrame === 'unpainted'} />
       )}
-      <DevFacts state={state} droppedBinaryFrames={droppedBinaryFrames} />
+      <ShellDevFacts state={state} droppedBinaryFrames={droppedBinaryFrames} />
     </View>
   )
 }
@@ -499,18 +471,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7
-  },
-  devFacts: {
-    position: 'absolute',
-    left: spacing.sm,
-    bottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radii.button,
-    backgroundColor: colors.bgPanel
-  },
-  devFactsText: {
-    fontSize: typography.metaSize,
-    color: colors.textMuted
   }
 })

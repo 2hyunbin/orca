@@ -241,10 +241,10 @@ export default function RootLayout() {
             <Stack.Screen name="about" options={{ headerShown: false }} />
             <Stack.Screen name="h" options={{ headerShown: false }} />
             <Stack.Screen
-              name="new-workspace/[hostId]"
+              name="new-workspace"
               options={{
                 headerShown: false,
-                // The page draws the drawer; this screen is only the transparent layer it sits on.
+                // Draws nothing of its own: the drawer is the page's, over a dimmed Home.
                 presentation: 'transparentModal',
                 animation: 'none',
                 contentStyle: { backgroundColor: 'transparent' }

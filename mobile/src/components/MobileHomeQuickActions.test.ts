@@ -16,13 +16,6 @@ vi.mock('lucide-react-native', () => ({
   QrCode: 'QrCode'
 }))
 
-vi.mock('./PickerModal', async () => {
-  const React = await import('react')
-  return {
-    PickerModal: (props: unknown) => React.createElement('PickerModal', props)
-  }
-})
-
 function host(id: string, name: string, endpoint: string): HostProfile {
   return {
     id,
@@ -64,29 +57,14 @@ describe('MobileHomeQuickActions', () => {
     return renderer!.root.findAllByType('Pressable')[1]
   }
 
-  function picker() {
-    return renderer!.root.findByType('PickerModal')
-  }
-
   it('disables workspace creation without a connected host', async () => {
     await renderQuickActions([])
 
     expect(newWorkspaceButton().props.disabled).toBe(true)
     expect(newWorkspaceButton().props.accessibilityState).toEqual({ disabled: true })
-    expect(picker().props.visible).toBe(false)
   })
 
-  it('opens the only connected host directly', async () => {
-    const desk = host('desk', 'Desk', 'ws://192.168.1.2:6768')
-    const callbacks = await renderQuickActions([desk])
-
-    act(() => newWorkspaceButton().props.onPress())
-
-    expect(callbacks.onCreateWorkspace).toHaveBeenCalledWith('desk')
-    expect(picker().props.visible).toBe(false)
-  })
-
-  it('asks which host to use when multiple are connected', async () => {
+  it('starts workspace creation, leaving the choice of desktop to the overlay it opens', async () => {
     const callbacks = await renderQuickActions([
       host('desk', 'Desk', 'ws://192.168.1.2:6768'),
       host('laptop', 'Laptop', 'wss://relay.example.com/mobile')
@@ -94,19 +72,6 @@ describe('MobileHomeQuickActions', () => {
 
     act(() => newWorkspaceButton().props.onPress())
 
-    expect(callbacks.onCreateWorkspace).not.toHaveBeenCalled()
-    expect(picker().props.visible).toBe(true)
-    expect(picker().props.title).toBe('Create Workspace On')
-    expect(picker().props.options).toEqual([
-      { value: 'desk', label: 'Desk', subtitle: '192.168.1.2:6768' },
-      { value: 'laptop', label: 'Laptop', subtitle: 'relay.example.com' }
-    ])
-
-    act(() => picker().props.onSelect('laptop'))
-    expect(callbacks.onCreateWorkspace).not.toHaveBeenCalled()
-    expect(picker().props.visible).toBe(false)
-
-    act(() => picker().props.onAfterClose())
-    expect(callbacks.onCreateWorkspace).toHaveBeenCalledWith('laptop')
+    expect(callbacks.onCreateWorkspace).toHaveBeenCalledTimes(1)
   })
 })

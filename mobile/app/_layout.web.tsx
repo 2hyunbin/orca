@@ -6,7 +6,7 @@ import { ZERO_SAFE_AREA_INSETS } from '../src/mobile-web-shell/bridge/bridge-saf
 import { SideSafeArea } from '../src/layout/side-safe-area'
 import { usePageBridgeClient } from '../src/transport/client-context.web'
 import { colors } from '../src/theme/mobile-theme'
-import { isTransparentPageRoute } from '../src/new-workspace/transparent-page-route'
+import { isOverlayPageRoute } from '../src/new-workspace/overlay-page-route'
 
 /**
  * The page's root layout, standing where the native `_layout.tsx` does. Without one expo-router
@@ -21,7 +21,7 @@ export default function PageRootLayout() {
     () => client.getShellSession()?.safeAreaInsets ?? ZERO_SAFE_AREA_INSETS
   )
   const { width, height } = useWindowDimensions()
-  const transparent = isTransparentPageRoute(usePathname())
+  const transparent = isOverlayPageRoute(usePathname())
   const frame = useMemo(() => ({ x: 0, y: 0, width, height }), [width, height])
   return (
     <SafeAreaFrameContext.Provider value={frame}>

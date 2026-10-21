@@ -1,14 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useLocalSearchParams } from 'expo-router'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { BOTTOM_DRAWER_HIDE_DURATION_MS } from '../components/bottom-drawer-constants'
-import { InstantDrawerEnterContext } from '../components/instant-drawer-enter'
+import { DrawerBackdropAlreadyDimmedContext } from '../components/drawer-backdrop-continuity'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
 import { hostNewWorktreeSessionRoute } from '../host-new-worktree-session-route'
-import { useHostWorktreeRows } from '../home/use-host-worktree-rows'
+import { useHostWorktreeRows } from './use-host-worktree-rows'
 import { useRouteHandoff } from '../navigation/route-handoff'
-import { workspaceRouteHref } from '../navigation/workspace-execution-host'
 import { firstParam } from '../navigation/route-param-reader'
+import { workspaceRouteHref } from '../navigation/workspace-execution-host'
 import { openExternalLink } from '../platform/external-link'
 import { useHostClient } from '../transport/host-client-hooks'
 import { useHostStatusGates } from '../transport/host-status-gates'
@@ -16,8 +15,8 @@ import { useHostStatusGates } from '../transport/host-status-gates'
 const NO_HOST_LABELS: ReadonlyMap<ExecutionHostId, string> = new Map()
 
 /**
- * The host screen's Create Workspace sheet, alone on a transparent page that the native modal route
- * lays over Home. It opens already in place: the shell's placeholder sheet stood there while loading.
+ * The host screen's Create Workspace drawer, alone on a transparent page. Closing it leaves the
+ * screen that opened it; creating opens the new workspace's session in its place.
  */
 export function NewWorkspacePageScreen() {
   const params = useLocalSearchParams<{ hostId?: string | string[] }>()
@@ -27,13 +26,12 @@ export function NewWorkspacePageScreen() {
   const { hostCapabilities } = useHostStatusGates({ hostId, client, connState })
   const worktrees = useHostWorktreeRows(client, connState === 'connected', hostId)
   const worktreePaths = useMemo(() => worktrees.map((worktree) => worktree.path), [worktrees])
-  const [instantEnter] = useState(() => ({ consumed: false }))
-  const [visible, setVisible] = useState(true)
 
   return (
-    <InstantDrawerEnterContext.Provider value={instantEnter}>
+    // The overlay that opened this page has dimmed the screen with the same scrim until now.
+    <DrawerBackdropAlreadyDimmedContext.Provider value>
       <NewWorktreeModalController
-        visible={visible}
+        visible
         client={client}
         hostCapabilities={hostCapabilities}
         hostId={hostId}
@@ -49,14 +47,8 @@ export function NewWorkspacePageScreen() {
             )
           )
         }
-        onClose={() => {
-          // The sheet slides out first; the native modal under it then goes without a frame.
-          setVisible(false)
-          setTimeout(() => router.back(), CLOSE_AFTER_SLIDE_MS)
-        }}
+        onClose={() => router.back()}
       />
-    </InstantDrawerEnterContext.Provider>
+    </DrawerBackdropAlreadyDimmedContext.Provider>
   )
 }
-
-const CLOSE_AFTER_SLIDE_MS = BOTTOM_DRAWER_HIDE_DURATION_MS + 16

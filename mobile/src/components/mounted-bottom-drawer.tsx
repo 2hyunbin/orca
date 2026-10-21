@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { View, Pressable, useWindowDimensions, ScrollView, Keyboard, Modal } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
@@ -14,8 +14,8 @@ import Animated, {
 import { spacing } from '../theme/mobile-theme'
 import { resolveBottomDrawerFillHeight } from './bottom-drawer-fill-height'
 import { resolveBottomDrawerKeyboardInset } from './bottom-drawer-keyboard-inset'
-import { useTakeInstantDrawerEnter } from './instant-drawer-enter'
 import { BOTTOM_DRAWER_HIDE_DURATION_MS } from './bottom-drawer-constants'
+import { DrawerBackdropAlreadyDimmedContext } from './drawer-backdrop-continuity'
 import { bottomDrawerStyles as styles } from './bottom-drawer-styles'
 import {
   useBottomDrawerModalHost,
@@ -66,6 +66,8 @@ export function MountedBottomDrawer({
 }: MountedBottomDrawerProps) {
   const translateY = useSharedValue(0)
   const progress = useSharedValue(0)
+  // Held at full until a close starts, for a drawer opening over a scrim that already dims.
+  const backdropFloor = useSharedValue(useContext(DrawerBackdropAlreadyDimmedContext) ? 1 : 0)
   const keyboardOffset = useSharedValue(0)
   const scrollOffsetY = useSharedValue(0)
   const scrollRef = useRef<ScrollView>(null)
@@ -119,15 +121,15 @@ export function MountedBottomDrawer({
     setWindowEpoch((epoch) => epoch + 1)
   }, [interactive, visible])
 
-  const takeInstantEnter = useTakeInstantDrawerEnter()
   useEffect(() => {
     if (visible) {
       translateY.value = 0
       scrollOffsetY.value = 0
-      progress.value = takeInstantEnter() ? 1 : withTiming(1, { duration: SHOW_DURATION })
+      progress.value = withTiming(1, { duration: SHOW_DURATION })
     } else {
       Keyboard.dismiss()
       setKeyboardInset(0)
+      backdropFloor.value = 0
       progress.value = withTiming(0, { duration: BOTTOM_DRAWER_HIDE_DURATION_MS }, (finished) => {
         if (finished) {
           runOnJS(onHidden)()
@@ -198,12 +200,13 @@ export function MountedBottomDrawer({
       return
     }
     Keyboard.dismiss()
+    backdropFloor.value = 0
     progress.value = withTiming(0, { duration: BOTTOM_DRAWER_HIDE_DURATION_MS }, (finished) => {
       if (finished) {
         runOnJS(onClose)()
       }
     })
-  }, [onClose, progress, visible])
+  }, [backdropFloor, onClose, progress, visible])
 
   // One seam, both platforms: natively this is the hardware key, and inside the shell's page it is
   // a claim the shell hands one press over on. Every session sheet renders through this component,
@@ -316,8 +319,8 @@ export function MountedBottomDrawer({
 
   const backdropStyle = useAnimatedStyle(() => {
     const dragFade = interpolate(translateY.value, [0, 300], [1, 0], Extrapolation.CLAMP)
-    return { opacity: progress.value * dragFade }
-  }, [progress, translateY])
+    return { opacity: Math.max(progress.value, backdropFloor.value) * dragFade }
+  }, [backdropFloor, progress, translateY])
 
   // Why: the sheet renders through a full-screen native window (its own Modal
   // below, or the shared BottomDrawerModalHost) so it always covers the viewport

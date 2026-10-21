@@ -16,8 +16,9 @@ import { HostStack } from '../../src/navigation/host-stack'
 import { HostSidebarRevealContext } from '../../src/layout/host-sidebar-reveal'
 import { HostAreaServingContext } from '../../src/mobile-web-shell/host-area-serving'
 import { usePageOwnsHostArea } from '../../src/mobile-web-shell/page-owns-host-area'
-import { isTransparentPageRoute } from '../../src/new-workspace/transparent-page-route'
-import { OverlayGateBlocked, OverlayGatePending } from '../../src/new-workspace/overlay-gate-views'
+import { isOverlayPageRoute } from '../../src/new-workspace/overlay-page-route'
+import { OverlayScrim } from '../../src/components/overlay-scrim'
+import { OverlayGateBlocked } from '../../src/new-workspace/overlay-gate-views'
 
 // Keep at least this much room for the detail pane when resizing the sidebar.
 const MIN_DETAIL_WIDTH = 320
@@ -38,6 +39,7 @@ export default function HostGroupLayout() {
   const { isWideLayout, width: windowWidth } = useResponsiveLayout()
   const { hostId } = useGlobalSearchParams<{ hostId?: string }>()
   const pathname = usePathname()
+  const overlayRoute = isOverlayPageRoute(pathname)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(HOST_SIDEBAR_DEFAULT_WIDTH)
 
@@ -121,11 +123,13 @@ export default function HostGroupLayout() {
   return (
     <HostProtocolGate
       hostId={hostId}
-      {...(isTransparentPageRoute(pathname) && hostId
-        ? { pending: <OverlayGatePending />, blocked: <OverlayGateBlocked hostId={hostId} /> }
+      // An overlay route keeps the screen it opened over in sight: dimmed while waiting, and a
+      // blocked host goes to the host list rather than a wall drawn over that screen.
+      {...(overlayRoute && hostId
+        ? { pending: <OverlayScrim />, blocked: <OverlayGateBlocked hostId={hostId} /> }
         : {})}
     >
-      <View style={[styles.row, isTransparentPageRoute(pathname) && styles.transparent]}>
+      <View style={[styles.row, overlayRoute && styles.transparent]}>
         {showSidebar && sidebarOpen ? (
           <View style={[styles.sidebar, { width: sidebarWidth }]}>
             <HostScreen

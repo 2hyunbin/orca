@@ -30,6 +30,7 @@ import { MobileHomeHostList } from './MobileHomeHostList'
 import { MobileHomeListFooter } from './MobileHomeListFooter'
 import { MobileHomeTopBar } from './MobileHomeTopBar'
 import { useMobileHomeData } from './use-mobile-home-data'
+import { newWorkspaceOverlayHref } from '../new-workspace/new-workspace-overlay-route'
 
 export function MobileHomeScreen() {
   const data = useMobileHomeData()
@@ -121,8 +122,10 @@ export function MobileHomeScreen() {
               connectedHosts={data.connectedHosts}
               resumeCard={data.resumeCard}
               taskProvidersByHost={data.taskProvidersByHost}
-              onCreateWorkspace={(hostId) =>
-                data.router.push(`/new-workspace/${encodeURIComponent(hostId)}`)
+              onCreateWorkspace={() =>
+                data.router.push(
+                  newWorkspaceOverlayHref(data.connectedHosts.map((host) => host.id))
+                )
               }
               onOpenAccounts={openMobileAccounts}
               onOpenResume={openResume}

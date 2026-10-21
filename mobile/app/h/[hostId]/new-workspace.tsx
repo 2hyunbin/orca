@@ -1,18 +1,9 @@
-import { useLocalSearchParams } from 'expo-router'
-import { MobileWebShellScreen } from '../../../src/mobile-web-shell/MobileWebShellScreen'
-import { shellScreenRoute } from '../../../src/mobile-web-shell/shell-screen-route'
-import { PageRouteUnavailableScreen } from '../../../src/mobile-web-shell/PageRouteUnavailableScreen'
-import { firstParam } from '../../../src/navigation/route-param-reader'
+import { NewWorkspacePageScreen } from '../../../src/new-workspace/NewWorkspacePageScreen'
 
-/** The same page as a full screen, for a handoff that reaches `/h/<host>/new-workspace` directly. */
-export default function NewWorkspaceShellRoute() {
-  const params = useLocalSearchParams<{ hostId?: string | string[] }>()
-  const hostId = firstParam(params.hostId)
-  const route = hostId
-    ? shellScreenRoute({ pathname: `/h/${encodeURIComponent(hostId)}/new-workspace` })
-    : null
-  if (route === null) {
-    return <PageRouteUnavailableScreen hostId={hostId} />
-  }
-  return <MobileWebShellScreen key={hostId} hostId={hostId} route={route} />
+/**
+ * The page's Create Workspace route, which Home's `/new-workspace` overlay opens in its shell. One
+ * file for both platforms: the screen is plain React Native, so no shell-mounting native sibling.
+ */
+export default function NewWorkspaceRoute() {
+  return <NewWorkspacePageScreen />
 }

@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native'
 import { Navigator, usePathname } from 'expo-router'
 import { colors } from '../theme/mobile-theme'
 import { HOST_STACK_SCREENS, type HostStackAnimation } from './host-stack-screens'
-import { isTransparentPageRoute } from '../new-workspace/transparent-page-route'
+import { isOverlayPageRoute } from '../new-workspace/overlay-page-route'
 
 /**
  * Web sibling: the page's host stack, with the push and pop slide the native stack has.
@@ -126,7 +126,7 @@ function StackScreen({
   children: ReactNode
 }) {
   const ref = useRef<View>(null)
-  const transparent = isTransparentPageRoute(usePathname())
+  const transparent = isOverlayPageRoute(usePathname())
   // Where an interrupted slide stopped, so a pop during a push leaves from there and not from 0.
   const stoppedAt = useRef<string | null>(null)
 
