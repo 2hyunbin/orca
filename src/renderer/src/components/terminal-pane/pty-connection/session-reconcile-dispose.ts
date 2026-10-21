@@ -217,10 +217,6 @@ export function installSessionReconcileDispose(session: ConnectPanePtySession): 
         const teardown = session.waitTeardowns.pop()
         teardown?.()
       }
-      if (session.startupInjectTimer !== null) {
-        clearTimeout(session.startupInjectTimer)
-        session.startupInjectTimer = null
-      }
       session.cleanupStartupDraftPasteTimers()
       session.releaseUnattemptedStartupDraftPasteDelivery()
       session.unregisterAgentHookTerminalLifecycle()

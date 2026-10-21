@@ -21,8 +21,6 @@ import type { AgentPaneLaunchRequest } from '../../../../shared/agent-pane-launc
 
 export type PtyPaneStartup = {
   command: string
-  /** Renderer-delivered startup input for callers that need xterm paste
-   *  semantics before the submit Enter. */
   startupCommandDelivery?: StartupCommandDelivery
   env?: Record<string, string>
   envToDelete?: string[]

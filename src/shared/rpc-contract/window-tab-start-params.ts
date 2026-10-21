@@ -30,11 +30,11 @@ export const WindowTabStartInputParams = {
   startupAgent: TuiAgentParam.optional().catch(undefined),
   agentArgs: AgentArgs.optional().catch(undefined),
   launchPreferences: LaunchPreferences.optional().catch(undefined),
-  startupPrompt: z.string().max(1_000_000).optional().catch(undefined),
+  startupPrompt: z.string().optional().catch(undefined),
   startupPromptDelivery: PromptDelivery.optional().catch(undefined),
   /** A draft the agent takes only once ready; main pastes it then. */
   draftPaste: z
-    .object({ agent: TuiAgentParam, content: z.string().min(1).max(1_000_000) })
+    .object({ agent: TuiAgentParam, content: z.string().min(1) })
     .optional()
     .catch(undefined)
 }
