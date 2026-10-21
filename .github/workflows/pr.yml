@@ -800,7 +800,7 @@ jobs:
       # assertions and never actually exercised.
       # Why release-4: DECSET 2031 arming lives in the fish 4.0 Rust tty_handoff, and
       # fish-color-scheme-child-stdin.node-pty.test.ts (#9993) needs it. Noble ships
-      # 3.7, so the PPA is what makes that lane real.
+      # 3.7, so the PPA (or fish's GitHub release when the PPA is down) makes that lane real.
       - name: Install zsh and fish
         id: shells
         background: true
@@ -851,6 +851,26 @@ jobs:
           # Why both shells on one line: pr-workflow-parallelism.test.mjs parses only the
           # first install command in this step to prove the lane really installs them.
           timeout 300 sudo apt-get install -y zsh fish
+          # Why a second source: when Launchpad is down (503s for hours on 10-21) apt
+          # quietly installs noble's fish 3.7 and the gate below reds every PR. fish's own
+          # release ships a single static binary; /usr/local/bin precedes /usr/bin on PATH.
+          # Why pinned: the gate needs any 4.x, so this never has to track new releases.
+          version="$(fish --version 2>/dev/null || true)"
+          major="${version##*version }"
+          major="${major%%.*}"
+          case "$major" in '' | *[!0-9]*) major=0 ;; esac
+          if [ "$major" -lt 4 ]; then
+            echo "::warning::ppa:fish-shell/release-4 left '${version:-no fish}'; installing fish 4.9.3 from its GitHub release instead."
+            case "$(uname -m)" in
+              aarch64) arch=aarch64 sha=57349f0111728c64b703a84e611aa97ff4d1fa8466385d64e67bd5bc3ffa49fc ;;
+              *) arch=x86_64 sha=8f643d10ad1abb0ef7072764c01ceb5cf61b2d373fda400cf60f0bad69b7e095 ;;
+            esac
+            curl -fsSL --retry 2 --connect-timeout 15 --max-time 120 -o "$RUNNER_TEMP/fish.tar.xz" \
+              "https://github.com/fish-shell/fish-shell/releases/download/4.9.3/fish-4.9.3-linux-${arch}.tar.xz"
+            echo "${sha}  $RUNNER_TEMP/fish.tar.xz" | sha256sum -c -
+            tar -xJf "$RUNNER_TEMP/fish.tar.xz" -C "$RUNNER_TEMP" fish
+            sudo install -m 0755 "$RUNNER_TEMP/fish" /usr/local/bin/fish
+          fi
 
       - uses: ./.github/actions/install-node-dependencies
         with:
