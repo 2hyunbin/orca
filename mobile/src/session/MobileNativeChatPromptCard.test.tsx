@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { nativeChatAskDismissKey } from '../../../src/shared/native-chat-ask'
 import { NATIVE_CHAT_QUESTION_AUTO_ADVANCE_MS } from '../../../src/shared/native-chat-question-auto-advance'
 import { MobileNativeChatPromptCard } from './MobileNativeChatPromptCard'
 
@@ -144,6 +145,95 @@ describe('MobileNativeChatPromptCard collapse', () => {
     )
     await act(async () => deny.props.onPress())
     expect(onRespond).toHaveBeenCalledExactlyOnceWith('deny')
+    act(() => tree.unmount())
+  })
+
+  it('cancels an old Ask timer when the provider replaces the prompt in the mounted card', async () => {
+    vi.useFakeTimers()
+    const onAnswer = vi.fn(async () => true)
+    const replacement = {
+      questions: [{ question: 'New target?', options: [{ label: 'West' }], multiSelect: false }]
+    }
+    const render = (prompt: typeof ask) =>
+      createElement(MobileNativeChatPromptCard, {
+        ask: prompt,
+        askKey: nativeChatAskDismissKey(prompt),
+        onAnswerAsk: onAnswer
+      })
+    let tree!: ReactTestRenderer
+    act(() => {
+      tree = create(render(ask))
+    })
+    act(() => tree.root.find((node) => node.props.label === 'East').props.onPress())
+    act(() => tree.update(render(replacement)))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NATIVE_CHAT_QUESTION_AUTO_ADVANCE_MS)
+    })
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(tree.root.find((node) => node.props.label === 'West').props.selected).toBe(false)
+
+    act(() => tree.root.find((node) => node.props.label === 'West').props.onPress())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NATIVE_CHAT_QUESTION_AUTO_ADVANCE_MS)
+    })
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith(replacement, [{ indices: [0] }])
+    act(() => tree.unmount())
+  })
+
+  it('isolates a replacement question draft from the old revision and its late acknowledgement', async () => {
+    let acceptOld!: (accepted: boolean) => void
+    const oldAck = new Promise<boolean>((resolve) => {
+      acceptOld = resolve
+    })
+    const onAnswer = vi
+      .fn<(text: string) => Promise<boolean>>()
+      .mockReturnValueOnce(oldAck)
+      .mockResolvedValue(true)
+    const question = {
+      question: 'Select release targets',
+      prompt: { itemId: 'release-question', expectedRevision: 1 },
+      options: ['East', 'West'],
+      optionTokens: ['1', '2'],
+      multiSelect: true,
+      freeTextToken: 'other'
+    }
+    const render = (expectedRevision: number) =>
+      createElement(MobileNativeChatPromptCard, {
+        question: { ...question, prompt: { ...question.prompt, expectedRevision } },
+        onAnswerQuestion: onAnswer
+      })
+    let tree!: ReactTestRenderer
+    act(() => {
+      tree = create(render(1))
+    })
+    act(() => tree.root.findAllByProps({ accessibilityRole: 'checkbox' })[0]!.props.onPress())
+    act(() => tree.root.find((node) => isHost(node, 'TextInput')).props.onChangeText('old draft'))
+    let pending!: Promise<void>
+    act(() => {
+      pending = tree.root
+        .findByProps({ accessibilityLabel: 'Submit selected options' })
+        .props.onPress()
+    })
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith('1, other:old%20draft')
+
+    act(() => tree.update(render(2)))
+    expect(tree.root.find((node) => isHost(node, 'TextInput')).props.value).toBe('')
+    expect(
+      tree.root
+        .findAllByProps({ accessibilityRole: 'checkbox' })
+        .map((node) => node.props.accessibilityState)
+    ).toEqual([{ checked: false }, { checked: false }])
+    act(() => tree.root.findAllByProps({ accessibilityRole: 'checkbox' })[1]!.props.onPress())
+    act(() => tree.root.find((node) => isHost(node, 'TextInput')).props.onChangeText('new draft'))
+    await act(async () => {
+      acceptOld(true)
+      await pending
+    })
+    expect(tree.root.find((node) => isHost(node, 'TextInput')).props.value).toBe('new draft')
+    await act(async () =>
+      tree.root.findByProps({ accessibilityLabel: 'Submit selected options' }).props.onPress()
+    )
+    expect(onAnswer.mock.calls).toEqual([['1, other:old%20draft'], ['2, other:new%20draft']])
     act(() => tree.unmount())
   })
 
