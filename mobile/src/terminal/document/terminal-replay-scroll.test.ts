@@ -221,6 +221,42 @@ describe('mobile terminal replay reading position', () => {
     expect(buffer.getLine(0)?.translateToString(true)).toBe(content)
   })
 
+  it.each([false, true])(
+    'follows bottom when an unparsed alternate snapshot is superseded (wheel=%s)',
+    async (wheel) => {
+      const harness = createReplayHarness()
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(true, 81)
+      await harness.parse()
+      if (wheel) {
+        harness.scope.committedSurface!.dispatchEvent(
+          new WheelEvent('wheel', {
+            deltaY: -10,
+            deltaMode: 1,
+            bubbles: true,
+            cancelable: true
+          })
+        )
+        harness.flushFrames()
+      }
+
+      harness.replay(true, 60, '\x1b[?1049h\x1b[HTUI_CONTENT')
+      expect(harness.scope.pendingTerm!.buffer.active.type).toBe('normal')
+      harness.deferWrites(false)
+      harness.replay(true, 75)
+      await harness.drain()
+      harness.releaseWrites()
+
+      const buffer = harness.scope.committedTerm!.buffer.active
+      expect(buffer.type).toBe('normal')
+      expect(buffer.viewportY).toBe(buffer.baseY)
+      expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe('ROW_199')
+    }
+  )
+
   it('follows bottom after a parsed pending alternate screen is replaced by normal output', async () => {
     const harness = createReplayHarness()
     harness.replay()

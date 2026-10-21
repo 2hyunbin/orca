@@ -147,6 +147,9 @@ export function init(
   // mirrored modes aligned with exactly what this mobile xterm replays.
   updateMouseModeFromData(scope, replayData)
   scope.activeAltScreenSnapshot = isAltScreenActive(replayData)
+  if (scope.activeAltScreenSnapshot) {
+    scope.pendingReplayScrollAnchorRows = 0
+  }
   scope.initialOscLinks = Array.isArray(nextOscLinks) ? nextOscLinks : []
   scope.initialOscLinkRowOffset = 0
   scope.initialOscLinkEvictionReady = false
