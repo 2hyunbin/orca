@@ -3,7 +3,11 @@
  * from, or one already rejected this launch keeps the incumbent serving, adopted as an SSH first
  * deploy adopts it. The fenced activation applies the same plan again.
  */
-import type { WslHostDeferredUpdate } from '../../shared/wsl-host-types'
+import {
+  ORCAD_HOST_NEWER_DEFERRAL_CODE,
+  type WslHostDeferredUpdate
+} from '../../shared/wsl-host-types'
+import { refuseOrcadHostDowngrade } from '../ssh/orcad-host-version-admission'
 import type { ServeReadiness } from '../server/serve-readiness'
 import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
@@ -15,7 +19,6 @@ import {
   type OrcadUpdateIntent
 } from '../managed-server/lifecycle/orcad-managed-update-decision'
 import {
-  clearOrcadUpdateFailedThisLaunch,
   orcadUpdateFailureThisLaunch,
   recordOrcadUpdateFailedThisLaunch,
   type OrcadUpdateFailure,
@@ -49,10 +52,6 @@ export async function admitWslOrcadUpdate(args: {
   intent: OrcadUpdateIntent
 }): Promise<WslOrcadUpdateAdmission> {
   const { record, candidateVersion, appVersion } = args
-  if (args.intent !== 'connect') {
-    // An explicit Update is the retry a connect's failure memory withholds.
-    clearOrcadUpdateFailedThisLaunch(args.host)
-  }
   if (!record.active) {
     return { action: 'deploy', record }
   }
@@ -165,4 +164,19 @@ export function wslOrcadDeferralFailure(deployed: {
     deployed.code === ORCAD_ACTIVATION_POLICY_REFUSED_CODE
     ? null
     : { code: deployed.code, reason: deployed.reason }
+}
+
+/** A policy refusal over a host a newer Orca runs gets its own code: an Update cannot pass it. */
+export async function wslOrcadDeferralCode(
+  slot: OrcadSlotOptions,
+  deployed: { code: string; fullVersion: string },
+  appVersion: string
+): Promise<string> {
+  if (deployed.code !== ORCAD_ACTIVATION_POLICY_REFUSED_CODE) {
+    return deployed.code
+  }
+  const record = await readOrcadActivationRecord(slot).catch(() => null)
+  return record && refuseOrcadHostDowngrade(record, deployed.fullVersion, appVersion)
+    ? ORCAD_HOST_NEWER_DEFERRAL_CODE
+    : deployed.code
 }

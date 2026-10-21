@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Plus, TerminalSquare, Trash2 } from 'lucide-react'
-import type { WslHostConnectIntent, WslHostStatus } from '../../../../shared/wsl-host-types'
+import {
+  ORCAD_HOST_NEWER_DEFERRAL_CODE,
+  type WslHostConnectIntent,
+  type WslHostStatus
+} from '../../../../shared/wsl-host-types'
 import { toast } from 'sonner'
 import {
   isWslHostRuntimeEnvironment,
@@ -180,7 +184,8 @@ export function WslHostsSection({
                 }
                 status={getWslHostRowStatus(status, unavailableLabel !== null)}
                 primaryAction={
-                  deferred ? (
+                  // A newer Orca's host refuses Update; Force stays in the menu.
+                  deferred && deferred.code !== ORCAD_HOST_NEWER_DEFERRAL_CODE ? (
                     <Button
                       type="button"
                       size="xs"
@@ -215,7 +220,9 @@ export function WslHostsSection({
                         {translate('auto.components.settings.wslHosts.forceUpdate', 'Force update')}
                       </DropdownMenuItem>
                     ) : null}
-                    {deferred && !(ready && !unavailableLabel) ? (
+                    {deferred &&
+                    deferred.code !== ORCAD_HOST_NEWER_DEFERRAL_CODE &&
+                    !(ready && !unavailableLabel) ? (
                       <DropdownMenuItem
                         disabled={connectDisabled}
                         onSelect={() => void connect(environment.id)}

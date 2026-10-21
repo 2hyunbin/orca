@@ -46,6 +46,7 @@ import { adoptUnrecordedWslOrcad } from './wsl-orcad-instance-adoption'
 import {
   admitWslOrcadLaunch,
   recordWslOrcadUpdateFailure,
+  wslOrcadDeferralCode,
   wslOrcadDeferralFailure
 } from './wsl-orcad-update-admission'
 
@@ -219,7 +220,7 @@ async function launchOverTransport(
     }
     const deferredUpdate: WslOrcadDeferredUpdate = {
       candidateVersion: deployed.fullVersion,
-      code: deployed.code,
+      code: await wslOrcadDeferralCode(slot, deployed, appVersion),
       reason: deployed.reason,
       forceable:
         isForceableOrcadDeferral(deployed.code) ||

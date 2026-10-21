@@ -672,6 +672,39 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       expect(mocks.deploy.mock.calls[1][0].admitRecord(newer, '1.5.0+ab')).toBeNull()
     })
 
+    it('still skips a failed build on the next connect when an explicit Update only waited', async () => {
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      await launch()
+      mocks.deploy.mockResolvedValueOnce({
+        outcome: 'installed-not-activated',
+        fullVersion: '1.5.0+ab',
+        code: 'orcad_update_terminals_running',
+        reason: 'busy'
+      })
+      await launch(undefined, { intent: 'update' })
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('1.4.0+aa', INCUMBENT_READINESS))
+      await expect(launch()).resolves.toMatchObject({ outcome: 'ready', fullVersion: '1.4.0+aa' })
+      expect(mocks.deploy).toHaveBeenCalledTimes(2)
+    })
+
+    it('names a newer host refusal apart from a rolled-back one, so only Force is offered', async () => {
+      withRecord(newer)
+      mocks.adoptRunning.mockResolvedValueOnce(null)
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      await expect(launch(undefined, { intent: 'update' })).resolves.toMatchObject({
+        outcome: 'deferred',
+        code: 'orcad_host_newer',
+        forceable: true
+      })
+      withRecord({ ...activeOld, rolledBackFrom: '1.5.0+ab' })
+      mocks.adoptRunning.mockResolvedValueOnce(null)
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      await expect(launch()).resolves.toMatchObject({
+        outcome: 'deferred',
+        code: 'orcad_activation_policy_refused'
+      })
+    })
+
     it('keeps retrying an update that only waited, or that a newer host refused', async () => {
       mocks.deploy.mockResolvedValue({
         outcome: 'installed-not-activated',
