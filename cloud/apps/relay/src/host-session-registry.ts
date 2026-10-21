@@ -2394,9 +2394,13 @@ export class HostSessionRegistry {
     const key = this.key(session.identity.sub, session.relayHostId)
     if (this.sessions.get(key) === session) this.sessions.delete(key)
     const controlRelease = this.releaseControlActivity(session)
-    if (controlRelease) releases.push(controlRelease)
+    if (controlRelease) {
+      releases.push(controlRelease)
+    }
     const socket = session.socket
-    if (!socket) return
+    if (!socket) {
+      return
+    }
     const close = (): void => {
       if (sendDrainFirst && socket.readyState === socket.OPEN) {
         send(socket, 'drain', { graceMs: 0, recovery: 'resolve-director' })
@@ -2631,7 +2635,9 @@ export class HostSessionRegistry {
   }
 
   private releaseControlActivity(session: HostSession): Promise<void> | undefined {
-    if (!session.controlActivityId) return undefined
+    if (!session.controlActivityId) {
+      return undefined
+    }
     return this.releaseActivitySettled(
       { userId: session.identity.sub, relayHostId: session.relayHostId },
       session.controlActivityId
