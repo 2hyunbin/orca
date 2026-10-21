@@ -3,6 +3,7 @@
 // list it. Nothing says which efforts an unlisted model takes, so its row offers none.
 
 import type {
+  AgentSessionModelCatalogResult,
   AgentSessionModelOption,
   AgentSessionOptionsResult
 } from '../../../shared/agent-session-wire'
@@ -15,6 +16,14 @@ export type StructuredAgentSessionOptionProjection = {
 
 export type StructuredAgentSessionLiveOptions = AgentSessionOptionsResult & {
   catalogListing?: AgentModelCatalogLiveListing
+}
+
+export type StructuredAgentSessionRestingOptions = Pick<
+  AgentSessionOptionsResult,
+  'models' | 'listedModelIds' | 'fastModeSupport' | 'current'
+> & {
+  inventory: AgentSessionModelCatalogResult
+  fallback: AgentSessionOptionsResult['models']
 }
 
 /** A list plus the literal selection; an unlisted model proves no capability. */

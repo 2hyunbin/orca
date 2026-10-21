@@ -71,10 +71,16 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
       model: RETIRED,
       effort: 'high'
     })
-    // The picker shows what the child runs now, so the next send moves the chat off the model.
+    const live = await host.deps.adapter.readOptions?.({
+      sessionId: SESSION,
+      fence: host.deps.store.getRecord(SESSION)!.lease.runtimeFence
+    })
+    expect(live).toMatchObject({ current: { model: undefined } })
+    // The default is display-only until the child reports what actually ran.
     const answer = await vi.waitFor(async () => {
       const read = await host.readOptions(SESSION, { readsWithoutModel: true })
       expect(read.current.model).not.toBe(RETIRED)
+      expect(read.current).toMatchObject({ model: 'sonnet', defaulted: ['model'] })
       return read
     })
     const seed = structuredAgentSessionSeedCatalog('claude')
@@ -83,9 +89,7 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
       seed,
       answer
     )
-    expect(structuredAgentSessionSendSelection(reopened)).toMatchObject({
-      model: answer.current.model
-    })
+    expect(structuredAgentSessionSendSelection(reopened)).toEqual({ effort: 'high' })
   })
 
   it("keeps a model the reply did not come from: a subagent's own error", async () => {

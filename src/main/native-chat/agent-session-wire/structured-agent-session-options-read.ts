@@ -16,7 +16,8 @@ import { independentAgentModelCatalog } from '../agent-model-catalog/agent-model
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import {
   structuredAgentSessionCapabilityView,
-  structuredAgentSessionOptionModels
+  structuredAgentSessionOptionModels,
+  type StructuredAgentSessionRestingOptions as RestingOptions
 } from './structured-agent-session-option-models'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
@@ -26,14 +27,6 @@ export {
   recordStructuredAgentSessionOptionIntent,
   structuredAgentSessionOptionOverridesRefusal
 } from './structured-agent-session-option-intent'
-
-type RestingOptions = Pick<
-  AgentSessionOptionsResult,
-  'models' | 'listedModelIds' | 'fastModeSupport' | 'current'
-> & {
-  inventory: AgentSessionModelCatalogResult
-  fallback: AgentSessionOptionsResult['models']
-}
 
 /** What the asking client takes: whether it reads an answer that names no model. */
 export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
@@ -225,15 +218,23 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = record
     ? await structuredAgentSessionLaunchPermission(context.deps, record)
     : null
-  const selected = live ? await atRest() : options
+  const resting = live ? await atRest() : null
+  const selected = resting ?? options
+  const independent = independentAgentModelCatalog(agent)
+  const displayDefault =
+    resting && independent
+      ? (resting.inventory.origin === 'unknown' ? resting.fallback : resting.inventory.models).find(
+          (row) => row.isDefault
+        )?.id
+      : undefined
   // The saved pick shows, except a model the running child could not take (its provider says it
   // does not exist): that shows what the child runs instead.
   const refusedModel = live && !!adapter.readOptionRestoreFailures?.(sessionId).includes('model')
   const saved = record?.options ?? {}
   const { model: _refused, ...selectedWithoutModel } = selected.current
   const model = refusedModel
-    ? options.current.model
-    : (saved.model ?? (options.current.model || selected.current.model))
+    ? (options.current.model ?? displayDefault)
+    : (saved.model ?? (options.current.model || selected.current.model || displayDefault))
   const current = {
     ...(refusedModel ? selectedWithoutModel : selected.current),
     ...options.current,
@@ -251,18 +252,21 @@ export async function readStructuredAgentSessionOptions(
   }
   // Defaults describe only values the chat has not saved; the first send pins them.
   const defaultedBy = (key: 'model' | 'effort') =>
-    (key === 'model' && !options.current.model ? selected : options).current.defaulted
+    key === 'model' && !options.current.model
+      ? displayDefault !== undefined || selected.current.defaulted?.includes(key) === true
+      : options.current.defaulted?.includes(key) === true
   const defaulted = structuredAgentSessionNeverSent(record, session.journal)
     ? []
     : (['model', 'effort'] as const).filter(
-        (key) => saved[key] === undefined && defaultedBy(key)?.includes(key) === true
+        (key) =>
+          (key === 'model' && refusedModel && !options.current.model && model !== undefined) ||
+          (saved[key] === undefined && defaultedBy(key))
       )
   const confirmed = options.current.confirmed?.filter((key) =>
     key === 'model' || key === 'effort' || key === 'fastMode' || key === 'serviceTier'
       ? current[key] === options.current[key]
       : false
   )
-  const independent = independentAgentModelCatalog(agent)
   if (independent) {
     const { inventory, fallback, listedModelIds } = await atRest()
     if (saved.model === undefined && current.model && inventory.origin !== 'unknown') {

@@ -79,12 +79,15 @@ describe('Claude effort reporting', () => {
   })
 
   it('leaves the effort unreported when the session never learns one', async () => {
-    const claude = fakeClaude({ settings: { applied: {}, effective: {}, sources: {} } })
+    const model = 'claude-opus-5[1m]'
+    const claude = fakeClaude({
+      settings: { applied: { model }, effective: { model }, sources: {} }
+    })
     const adapter = await acquired(claude)
 
     const options = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
     expect(options.current.effort).toBeUndefined()
-    expect(options.current.model).toBeTruthy()
+    expect(options.current.model).toBe(model)
   })
 
   it('keeps the init fixture free of an effort the real frame never sends', async () => {

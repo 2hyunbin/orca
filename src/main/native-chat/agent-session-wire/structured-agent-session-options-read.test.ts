@@ -241,9 +241,9 @@ describe('a chat at rest, read by the host', () => {
     { id: 'gpt-account', label: 'Model', isDefault: true, efforts: [], serviceTiers: fast },
     { id: 'gpt-flex', label: 'Flex', isDefault: false, efforts: [], serviceTiers: flex }
   ]
-  const catalog = (models = listed, verified = true) => ({
+  const catalog = (models: AgentSessionModelOption[] | null = listed, verified = true) => ({
     read: async (params?: { verifiedOnly?: boolean }) =>
-      !verified && params?.verifiedOnly
+      models === null || (!verified && params?.verifiedOnly)
         ? { origin: 'unknown' as const }
         : { origin: 'probe' as const, models, fetchedAt: 1 }
   })
@@ -251,7 +251,7 @@ describe('a chat at rest, read by the host', () => {
     facts: RestingFacts,
     items: AgentJournalItemBody[] = [],
     wroteBeforeOpen = false,
-    models = listed,
+    models: AgentSessionModelOption[] | null = listed,
     verified = true,
     liveOptions?: StructuredAgentSessionLiveOptions
   ) {
@@ -332,27 +332,64 @@ describe('a chat at rest, read by the host', () => {
     expect(firstRun.record().options).toEqual({ model: 'opus', effort: 'low' })
   })
 
-  it('pins the installed default on first Send when a live Claude child names no model', async () => {
+  it.each<[string, AgentSessionModelOption[] | null, string | undefined]>([
+    [
+      'known default',
+      [{ id: 'opus[1m]', label: 'Opus', isDefault: true, efforts: [] }],
+      'opus[1m]'
+    ],
+    ['unknown list', null, 'sonnet'],
+    ['known empty', [], undefined],
+    [
+      'known without default',
+      [{ id: 'opus', label: 'Opus', isDefault: false, efforts: [] }],
+      undefined
+    ]
+  ])('composes %s for a live Claude child that names no model', async (_name, installed, model) => {
     const adapter = await acquired(fakeClaude({ settings: { effective: {}, sources: [] } }))
     const live = await adapter.readOptions({ sessionId: SESSION, fence: 7 })
     expect(live.current.model).toBeUndefined()
-    const installed = [{ id: 'opus[1m]', label: 'Installed Opus', isDefault: true, efforts: [] }]
     const answer = await readAtRest({ provider: 'claude' }, [], false, installed, true, live)
-    expect(answer.current).toMatchObject({ model: 'opus[1m]', defaulted: [] })
+    expect(answer.current.model).toBe(model)
+    expect(answer.current.defaulted).toEqual([])
+    if (installed === null) {
+      const atRest = await readAtRest({ provider: 'claude' }, [], false, installed)
+      expect(atRest.current.model).toBeUndefined()
+    }
     const seed = getAgentSessionOptionCatalog('claude')!
     const launch = { newLaunch: true, coherentCatalog: true }
     const state = applyStructuredAgentSessionOptions(
       applyStructuredAgentSessionModelCatalog(
         createStructuredAgentSessionOptionState('claude', seed),
         seed,
-        { origin: 'probe', models: installed, fetchedAt: 1 },
+        installed === null
+          ? { origin: 'unknown' }
+          : { origin: 'probe', models: installed, fetchedAt: 1 },
         launch
       ),
       seed,
       answer,
       launch
     )
-    expect(structuredAgentSessionSendSelection(state)).toEqual({ model: 'opus[1m]' })
+    expect(structuredAgentSessionSendSelection(state)).toEqual(model ? { model } : undefined)
+    const resumed = await readAtRest(
+      { provider: 'claude', providerHandleChain: [{ origin: 'adopted' }] },
+      [],
+      true,
+      installed,
+      true,
+      live
+    )
+    expect(resumed.current.defaulted).toEqual(model ? ['model'] : [])
+    expect(
+      structuredAgentSessionSendSelection(
+        applyStructuredAgentSessionOptions(
+          createStructuredAgentSessionOptionState('claude', seed),
+          seed,
+          resumed
+        )
+      )
+    ).toBeUndefined()
   })
 
   it('resolves only an unsaved reported identity against installed rows', async () => {
