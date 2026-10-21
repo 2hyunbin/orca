@@ -224,9 +224,8 @@ export function buildHostFeedSections(sources: HostFeedListSources): Section[] {
 }
 
 /**
- * Before the first feed read: the rows this page last listed (worktree.ps, or the cache the screen
- * opened with) under the view's filters, in their served order and no header, so an offline open
- * is not blank.
+ * For a host whose feed this page cannot read: the rows worktree.ps listed under the view's
+ * filters, in their served order and no header, so an older desktop still gets a list.
  */
 export function buildPreFeedSections(sources: {
   rows: Worktree[]

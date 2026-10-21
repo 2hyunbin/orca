@@ -80,7 +80,7 @@ export function useHostScreenController({
 
   useHostScreenIdentity({ client, hostId, state })
   const fetchRepoMetadataOnly = useHostRepoMetadata({ client, connState, hostId, state })
-  const sidebarFeed = useSwitchedHostSidebarFeed(client)
+  const sidebarFeed = useSwitchedHostSidebarFeed(client, hostId)
   // Read through a ref so the metadata refresh keeps its identity across installs.
   const feedRef = useRef(sidebarFeed?.feed)
   useEffect(() => {
