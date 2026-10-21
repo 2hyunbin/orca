@@ -120,14 +120,14 @@ export const mobileSessionCommandInputStyles = StyleSheet.create({
   keyboardDismissKey: {
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch',
     marginLeft: spacing.sm,
     marginVertical: spacing.xs,
     backgroundColor: colors.bgRaised,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 0,
     borderRadius: radii.button,
-    minWidth: 36,
-    height: 28
+    minWidth: 36
   },
   keyboardDismissGlyph: {
     alignItems: 'center',
