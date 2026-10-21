@@ -112,12 +112,14 @@ export function sleep(model: WorkspaceLayoutModel, command: CommandOf<'sleep'>):
 
 export function wake(model: WorkspaceLayoutModel, command: CommandOf<'wake'>): Applied {
   let workspace = model.workspaces[command.workspace]!
-  const woken = workspacePanes(workspace).filter(
-    (pane) =>
+  // A recordOnly wake drops either record (how a live one is cleared); a start wakes only slept panes.
+  const woken = workspacePanes(workspace).filter((pane) => {
+    const leaf = workspace.leaves?.[pane.leafId]
+    return (
       (!command.paneKeys || command.paneKeys.includes(pane.paneKey)) &&
-      hasResumeRecord(workspace.leaves?.[pane.leafId])
-  )
-  // Wake drops whichever record the pane holds: a recordOnly wake is how a live record is cleared.
+      (command.recordOnly ? hasResumeRecord(leaf) : leaf?.sleeping !== undefined)
+    )
+  })
   for (const { leafId } of woken) {
     workspace = setLeaf(
       workspace,

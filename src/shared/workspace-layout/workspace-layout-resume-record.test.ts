@@ -106,6 +106,28 @@ describe('the sleep, wake and start commands on a resume record', () => {
     expect(leafOf(cleared.model, leaf(1))!.resume).toBeUndefined()
   })
 
+  it('a waking start leaves a running agent alone: it keeps its resume record and is not started', () => {
+    const context = testContext()
+    const { layout } = load(localDesktopSession())
+    const live = build(
+      context,
+      [
+        {
+          type: 'sleep',
+          workspace: GIT_KEY,
+          paneKeys: [shellPane],
+          records: [record('live')],
+          recordOnly: true
+        }
+      ],
+      layout
+    ).model
+    const woken = applyLayoutCommand(live, { type: 'wake', workspace: GIT_KEY }, context)
+    expect(woken).toMatchObject({ ok: true, result: { woken: [] } })
+    expect(woken.ok && woken.effects?.startPaneKeys).toEqual([])
+    expect(woken.ok && leafOf(woken.model, leaf(1))).toMatchObject({ resume: { origin: 'live' } })
+  })
+
   it('refuses a plain start of an unbound pane holding a resume record', () => {
     const context = testContext()
     const unboundPane = `tab-unbound:${leaf(4)}`
