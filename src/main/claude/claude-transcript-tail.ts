@@ -1,4 +1,5 @@
 import { open } from 'node:fs/promises'
+import { claudeRecord } from './claude-structured-item-translation'
 
 // Claude appends to a conversation's transcript and never rewrites it, so every row written after
 // a chat last ran sits after the row of the leaf it saved at its last turn end. Reading back from
@@ -77,10 +78,7 @@ function parseRow(bytes: Buffer): Record<string, unknown> | null {
     return null
   }
   try {
-    const value: unknown = JSON.parse(bytes.toString('utf8'))
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null
+    return claudeRecord(JSON.parse(bytes.toString('utf8')))
   } catch {
     // A torn or foreign line is not part of the conversation.
     return null
@@ -101,7 +99,8 @@ function mainChain(rows: Record<string, unknown>[], leafUuid: string): ClaudeTra
   let rewound = false
   for (let row = newest; row;) {
     chain.push(row)
-    byUuid.delete(row.uuid as string)
+    // Each row is visited once, so a parent loop in a damaged file ends the walk.
+    byUuid.delete(String(row.uuid))
     // A compaction boundary starts a fresh chain and names the one it continues.
     const parent = typeof row.parentUuid === 'string' ? row.parentUuid : row.logicalParentUuid
     if (parent === leafUuid) {
