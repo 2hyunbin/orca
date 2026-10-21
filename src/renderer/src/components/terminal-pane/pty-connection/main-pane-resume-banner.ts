@@ -4,14 +4,54 @@
 import { useAppStore } from '@/store'
 import type { TerminalPaneResumeOutcome } from '@/store/terminals/terminal-state'
 import { mainStartsPane } from './main-starts-pane'
+import { resolveTerminalTabId } from './terminal-tab-id'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
-/** Starts whose banner this window showed: a remount or second attach shows none. */
-const shownStarts = new Set<string>()
+type Outcomes = Record<string, TerminalPaneResumeOutcome>
+type AppState = ReturnType<typeof useAppStore.getState>
+
+// Why session storage: a reload reattaches the same start, which showed its banner already.
+const SHOWN_STARTS_KEY = 'orca.mainPaneResumeBannersShown'
+/** This document's shown starts, for when session storage is unavailable. */
+const shownHere = new Set<string>()
 const watching = new WeakMap<ConnectPanePtySession, () => void>()
 
 const startOf = ({ ptyId, ptyGeneration }: TerminalPaneResumeOutcome): string =>
   `${ptyId}#${ptyGeneration ?? ''}`
+
+function readShownStarts(): string[] {
+  try {
+    const stored: unknown = JSON.parse(globalThis.sessionStorage.getItem(SHOWN_STARTS_KEY) ?? '[]')
+    return Array.isArray(stored) ? stored.filter((key) => typeof key === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** Notes `start` as shown, keeping only starts main still publishes; false if it was already. */
+function noteShown(start: string, outcomes: Outcomes): boolean {
+  const shown = readShownStarts()
+  if (shownHere.has(start) || shown.includes(start)) {
+    return false
+  }
+  shownHere.add(start)
+  const live = new Set(Object.values(outcomes).map(startOf))
+  try {
+    globalThis.sessionStorage.setItem(
+      SHOWN_STARTS_KEY,
+      JSON.stringify([...shown.filter((key) => live.has(key)), start])
+    )
+  } catch {
+    // Best effort: without storage a reload may show the banner once more.
+  }
+  return true
+}
+
+/** The terminal the store binds the view's pane to now. */
+function boundPtyId(session: ConnectPanePtySession, state: AppState): string | undefined {
+  const tabId = resolveTerminalTabId(state, session.deps.tabId)
+  return state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[session.pane.leafId]
+}
 
 /**
  * After the view attached `ptyId`: shows the banner of main's start of that terminal, once, now or
@@ -22,19 +62,18 @@ export function showMainPaneResumeOutcome(session: ConnectPanePtySession, ptyId:
     return
   }
   watching.get(session)?.()
-  const shown = (outcomes: Record<string, TerminalPaneResumeOutcome>): boolean => {
+  const shown = (outcomes: Outcomes): boolean => {
     const found = outcomes[session.cacheKey]
     if (found?.ptyId !== ptyId) {
       return false
     }
-    if (!shownStarts.has(startOf(found))) {
-      shownStarts.add(startOf(found))
+    if (noteShown(startOf(found), outcomes)) {
       session.showSessionRestoredBanner(found.outcome)
     }
     return true
   }
-  let seen = useAppStore.getState().terminalPaneResumeOutcomesByPaneKey
-  if (shown(seen)) {
+  let seen = useAppStore.getState()
+  if (shown(seen.terminalPaneResumeOutcomesByPaneKey)) {
     return
   }
   // Why wait: main's outcome can land in a frame after the one that bound the pane.
@@ -47,12 +86,20 @@ export function showMainPaneResumeOutcome(session: ConnectPanePtySession, ptyId:
     }
   }
   const unsubscribe = useAppStore.subscribe((state) => {
-    const outcomes = state.terminalPaneResumeOutcomesByPaneKey
-    if (outcomes === seen) {
+    if (
+      state.terminalPaneResumeOutcomesByPaneKey === seen.terminalPaneResumeOutcomesByPaneKey &&
+      state.terminalLayoutsByTabId === seen.terminalLayoutsByTabId
+    ) {
       return
     }
-    seen = outcomes
-    if (session.disposed || shown(outcomes)) {
+    seen = state
+    const bound = boundPtyId(session, state)
+    // A pane bound to another terminal since will never show this start's outcome.
+    if (
+      session.disposed ||
+      shown(state.terminalPaneResumeOutcomesByPaneKey) ||
+      (bound && bound !== ptyId)
+    ) {
       stop()
     }
   })

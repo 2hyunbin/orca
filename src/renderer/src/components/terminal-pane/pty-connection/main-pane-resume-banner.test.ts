@@ -1,26 +1,33 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalPaneResumeOutcome } from '@/store/terminals/terminal-state'
+import type { TerminalLayoutSnapshot } from '../../../../../shared/terminal-tab-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { showMainPaneResumeOutcome as ShowOutcome } from './main-pane-resume-banner'
 
 type Outcomes = Record<string, TerminalPaneResumeOutcome>
+type StoreState = {
+  terminalPaneResumeOutcomesByPaneKey: Outcomes
+  terminalLayoutsByTabId: Record<string, TerminalLayoutSnapshot>
+}
 
 const store = vi.hoisted(() => {
-  let state: { terminalPaneResumeOutcomesByPaneKey: Outcomes } = {
-    terminalPaneResumeOutcomesByPaneKey: {}
-  }
-  const listeners = new Set<(next: typeof state) => void>()
+  let state: StoreState = { terminalPaneResumeOutcomesByPaneKey: {}, terminalLayoutsByTabId: {} }
+  const listeners = new Set<(next: StoreState) => void>()
   return {
     getState: () => state,
-    subscribe: (listener: (next: typeof state) => void) => {
+    subscribe: (listener: (next: StoreState) => void) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    publish: (outcomes: Outcomes) => {
-      state = { terminalPaneResumeOutcomesByPaneKey: outcomes }
+    publish: (patch: Partial<StoreState>) => {
+      state = { ...state, ...patch }
       for (const listener of listeners) {
         listener(state)
       }
+    },
+    reset: () => {
+      state = { terminalPaneResumeOutcomesByPaneKey: {}, terminalLayoutsByTabId: {} }
+      listeners.clear()
     },
     listenerCount: () => listeners.size
   }
@@ -35,6 +42,8 @@ function attachedView() {
   const view = {
     cacheKey: PANE_KEY,
     disposed: false,
+    deps: { tabId: 'tab-1' },
+    pane: { leafId: 'leaf-1' },
     waitTeardowns: new Array<() => void>(),
     showSessionRestoredBanner: vi.fn()
   }
@@ -42,17 +51,46 @@ function attachedView() {
   return { view, session: view as unknown as ConnectPanePtySession }
 }
 
-describe("the window's banner for main's start of a pane", () => {
-  let showMainPaneResumeOutcome: typeof ShowOutcome
+function boundTo(ptyId: string): Record<string, TerminalLayoutSnapshot> {
+  return {
+    'tab-1': {
+      root: { type: 'leaf', leafId: 'leaf-1' },
+      activeLeafId: 'leaf-1',
+      expandedLeafId: null,
+      ptyIdsByLeafId: { 'leaf-1': ptyId }
+    }
+  }
+}
 
-  beforeEach(async () => {
-    vi.resetModules()
-    store.publish({})
-    ;({ showMainPaneResumeOutcome } = await import('./main-pane-resume-banner'))
+/** A fresh module, as a renderer reload loads it; session storage survives the reload. */
+async function loadBannerModule(): Promise<typeof ShowOutcome> {
+  vi.resetModules()
+  return (await import('./main-pane-resume-banner')).showMainPaneResumeOutcome
+}
+
+describe("the window's banner for main's start of a pane", () => {
+  let storage: Map<string, string>
+
+  beforeEach(() => {
+    store.reset()
+    storage = new Map()
+    vi.stubGlobal('sessionStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value)
+    })
   })
 
-  it('shows the outcome of the terminal the view attached, once per start', () => {
-    store.publish({ [PANE_KEY]: { ptyId: 'pty-1', ptyGeneration: 1, outcome: 'restored' } })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the outcome of the terminal the view attached, once per start', async () => {
+    const showMainPaneResumeOutcome = await loadBannerModule()
+    store.publish({
+      terminalPaneResumeOutcomesByPaneKey: {
+        [PANE_KEY]: { ptyId: 'pty-1', ptyGeneration: 1, outcome: 'restored' }
+      }
+    })
     const first = attachedView()
     showMainPaneResumeOutcome(first.session, 'pty-1')
     expect(first.view.showSessionRestoredBanner).toHaveBeenCalledExactlyOnceWith('restored')
@@ -63,25 +101,62 @@ describe("the window's banner for main's start of a pane", () => {
     expect(remounted.view.showSessionRestoredBanner).not.toHaveBeenCalled()
   })
 
-  it('shows nothing for an outcome naming another terminal', () => {
-    store.publish({ [PANE_KEY]: { ptyId: 'pty-old', ptyGeneration: 1, outcome: 'restored' } })
+  it('shows nothing again after a renderer reload reattaches the same start', async () => {
+    store.publish({
+      terminalPaneResumeOutcomesByPaneKey: {
+        [PANE_KEY]: { ptyId: 'pty-1', ptyGeneration: 1, outcome: 'resume-unavailable' }
+      }
+    })
+    const before = attachedView()
+    ;(await loadBannerModule())(before.session, 'pty-1')
+    expect(before.view.showSessionRestoredBanner).toHaveBeenCalledOnce()
+
+    const reloaded = attachedView()
+    ;(await loadBannerModule())(reloaded.session, 'pty-1')
+    expect(reloaded.view.showSessionRestoredBanner).not.toHaveBeenCalled()
+  })
+
+  it('shows nothing for an outcome naming another terminal', async () => {
+    const showMainPaneResumeOutcome = await loadBannerModule()
+    store.publish({
+      terminalPaneResumeOutcomesByPaneKey: {
+        [PANE_KEY]: { ptyId: 'pty-old', ptyGeneration: 1, outcome: 'restored' }
+      }
+    })
     const { view, session } = attachedView()
     showMainPaneResumeOutcome(session, 'pty-1')
     store.publish({
-      [PANE_KEY]: { ptyId: 'pty-old', ptyGeneration: 2, outcome: 'resume-unavailable' }
+      terminalPaneResumeOutcomesByPaneKey: {
+        [PANE_KEY]: { ptyId: 'pty-old', ptyGeneration: 2, outcome: 'resume-unavailable' }
+      }
     })
     expect(view.showSessionRestoredBanner).not.toHaveBeenCalled()
   })
 
-  it('shows an outcome that arrives after the attach, then stops watching', () => {
+  it('shows an outcome that arrives after the attach, then stops watching', async () => {
+    const showMainPaneResumeOutcome = await loadBannerModule()
     const { view, session } = attachedView()
     showMainPaneResumeOutcome(session, 'pty-1')
     expect(view.showSessionRestoredBanner).not.toHaveBeenCalled()
 
     store.publish({
-      [PANE_KEY]: { ptyId: 'pty-1', ptyGeneration: 1, outcome: 'resume-unavailable' }
+      terminalPaneResumeOutcomesByPaneKey: {
+        [PANE_KEY]: { ptyId: 'pty-1', ptyGeneration: 1, outcome: 'resume-unavailable' }
+      }
     })
     expect(view.showSessionRestoredBanner).toHaveBeenCalledExactlyOnceWith('resume-unavailable')
+    expect(store.listenerCount()).toBe(0)
+    expect(view.waitTeardowns).toEqual([])
+  })
+
+  it('stops watching once the pane is bound to another terminal', async () => {
+    const showMainPaneResumeOutcome = await loadBannerModule()
+    const { view, session } = attachedView()
+    showMainPaneResumeOutcome(session, 'pty-1')
+    store.publish({ terminalLayoutsByTabId: boundTo('pty-1') })
+    expect(store.listenerCount()).toBe(1)
+
+    store.publish({ terminalLayoutsByTabId: boundTo('pty-2') })
     expect(store.listenerCount()).toBe(0)
     expect(view.waitTeardowns).toEqual([])
   })
