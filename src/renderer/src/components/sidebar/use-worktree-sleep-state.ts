@@ -1,10 +1,7 @@
 import { useAppStore } from '@/store'
 import { useDesktopSidebarFeedValue } from '@/lib/desktop-sidebar-feed'
 import type { Worktree } from '../../../../shared/worktree/types'
-import {
-  getSettingsFocusedExecutionHostId,
-  getWorktreeExecutionHostId
-} from '../../../../shared/execution-host'
+import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { feedSleepOverride } from '../../../../shared/sidebar-list/workspace-sleep-verdict'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
@@ -106,12 +103,11 @@ export function selectIsSleepingWorktree(state: SleepStateInput, worktreeId: str
 const useMainSleepOverride: (worktree: SleepWorktree) => boolean | undefined =
   ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? (worktree) => {
-        // The host the feed keys this copy's hint by, resolved as the feed's rows resolve it.
+        // The host the feed keys this copy's hint by: the row's own host, else its repo's owner.
         const hostId = useAppStore((state) =>
           getWorktreeExecutionHostId(
             worktree,
-            state.repos.find((repo) => repo.id === worktree.repoId),
-            getSettingsFocusedExecutionHostId(state.settings)
+            state.repos.find((repo) => repo.id === worktree.repoId)
           )
         )
         return useDesktopSidebarFeedValue((feed) =>
