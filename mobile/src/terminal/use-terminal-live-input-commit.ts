@@ -29,6 +29,7 @@ type TerminalLiveInputChangeEvent = {
   readonly nativeEvent: {
     readonly text: string
     readonly isComposing?: boolean
+    readonly inputType?: string
   }
 }
 
@@ -202,7 +203,10 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
       // that differs from the native field text, so the controlled capture must
       // echo the field verbatim; only the PTY mirror sees normalized text.
       advanceLiveInputInteractionGeneration()
-      if (dropEndedSessionEcho(nativeEvent.text)) {
+      // DOM input identifies a fresh edit even when a mobile keyboard omits key events.
+      if (nativeEvent.inputType) {
+        endedSessionTextRef.current = null
+      } else if (dropEndedSessionEcho(nativeEvent.text)) {
         return
       }
       updateLiveInputCapture(nativeEvent.text)

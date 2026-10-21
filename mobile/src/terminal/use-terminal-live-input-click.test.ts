@@ -219,6 +219,24 @@ describe('terminal live input around a click', () => {
     }
   })
 
+  it.each(['insertText', 'insertFromPaste', 'insertCompositionText'])(
+    'preserves immediate matching DOM input %s without a key event',
+    async (inputType) => {
+      const { handlers, sent, captures, unmount } = createClickHarness()
+      try {
+        change(handlers, 'x')
+        await handlers.sendLiveInputClick('terminal-a', CLICK)
+        handlers.handleLiveInputChange({
+          nativeEvent: { text: 'x', isComposing: false, inputType }
+        })
+        await vi.waitFor(() => expect(sent.join('')).toBe('x' + CLICK + 'x'))
+        expect(captures.at(-1)).toBe('x')
+      } finally {
+        unmount()
+      }
+    }
+  )
+
   it('does not discard matching input after switching to another terminal', async () => {
     const harness = createClickHarness()
     try {
