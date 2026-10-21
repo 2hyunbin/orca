@@ -1,6 +1,6 @@
-// Ledger L104: each writer of the touched-records patch, against a full save of main's model for
-// the same change. They differ, and only on records the Loader normalizes (legacy rows older
-// writers leave); this pins where, so the patch goes only once no partition holds such rows.
+// Ledger L104: each writer of the touched-records patch against a full save of main's model. They
+// differ on 50 of the 51 legacy fixture x writer pairs, only on records the Loader rewrites; every
+// pair is pinned exactly, so the patch goes only once no partition holds such rows.
 
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -14,7 +14,8 @@ import { LEGACY_WORKSPACE_LAYOUT_PROFILES } from '../../shared/workspace-layout/
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import {
   diffStoredSession,
-  stableJson
+  stableJson,
+  type LayoutLoadChange
 } from '../../shared/workspace-layout/workspace-layout-load-report'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import {
@@ -145,8 +146,13 @@ function layoutApplyCommands(
   ]
 }
 
-const WRITERS: Record<string, Writer> = {
-  'layout.apply (terminal-pane-admission)': (profile) => {
+const APPLY = 'layout.apply (terminal-pane-admission)'
+const MOVE = 'cross-partition editor move'
+const SAVE = 'window save (window-save-view)'
+type WriterName = typeof APPLY | typeof MOVE | typeof SAVE
+
+const WRITERS: Record<WriterName, Writer> = {
+  [APPLY]: (profile) => {
     const target = firstTerminal(profile)
     if (!target) {
       return []
@@ -180,7 +186,7 @@ const WRITERS: Record<string, Writer> = {
       )
     ]
   },
-  'cross-partition editor move': (profile) => {
+  [MOVE]: (profile) => {
     const target = firstTerminal(profile)
     if (!target || profile.hostId !== LOCAL_EXECUTION_HOST_ID) {
       return []
@@ -218,7 +224,7 @@ const WRITERS: Record<string, Writer> = {
       )
     ]
   },
-  'window save (window-save-view)': (profile) => {
+  [SAVE]: (profile) => {
     const stored = profile.build()
     const firstTab = Object.values(stored.tabsByWorktree).flat()[0]
     // The window echoes the stored partition with a new selection and a title its view reported.
@@ -252,19 +258,42 @@ const LIST_FIELD_OF_TABLE: Readonly<Record<string, string>> = {
   browser: 'browserTabsByWorktree'
 }
 
-const withLists = (records: string[]) => [
-  ...records,
-  ...records.map((record) => `session/${LIST_FIELD_OF_TABLE[record.split('/')[0]!] ?? ''}`)
-]
+/**
+ * Whether a session list field's workspace keys differ only where the load rewrote a record of
+ * that list: a full save drops a workspace's emptied list that the patch keeps with its stored row.
+ */
+function listKeysFollowLoad(change: LayoutLoadChange, normalized: readonly string[]): boolean {
+  const tables = Object.keys(LIST_FIELD_OF_TABLE).filter(
+    (table) => LIST_FIELD_OF_TABLE[table] === change.field
+  )
+  const keys = (value: unknown) => (Array.isArray(value) ? value.map(String) : [])
+  const before = keys(change.before)
+  const after = keys(change.after)
+  const moved = [
+    ...before.filter((key) => !after.includes(key)),
+    ...after.filter((key) => !before.includes(key))
+  ]
+  return (
+    tables.length > 0 &&
+    moved.length > 0 &&
+    moved.every((key) =>
+      normalized.some((record) => tables.some((table) => record.startsWith(`${table}/${key}|`)))
+    )
+  )
+}
 
 /** The records a writer's patches differ from its full saves in. */
 function differingRecords(calls: readonly PatchCall[]): string[] {
   const differing = new Set<string>()
   for (const call of calls) {
-    const normalized = withLists(recordsDiffering(call.stored, call.before))
+    const normalized = recordsDiffering(call.stored, call.before)
     const differs = recordsDiffering(call.full, call.patched)
+    const listKeyChanges = diffStoredSession(call.full, call.patched).filter(
+      (change) => change.table === 'session' && listKeysFollowLoad(change, normalized)
+    )
+    const allowed = [...normalized, ...listKeyChanges.map((change) => `session/${change.field}`)]
     // Only records the load rewrites from what the stored partition says can differ.
-    expect(differs.filter((record) => !normalized.includes(record))).toEqual([])
+    expect(differs.filter((record) => !allowed.includes(record))).toEqual([])
     // Either way the partition loads to main's model.
     expect(reloaded(call.hostId, call.patched)).toBe(reloaded(call.hostId, call.full))
     differs.forEach((record) => differing.add(record))
@@ -273,39 +302,214 @@ function differingRecords(calls: readonly PatchCall[]): string[] {
 }
 
 const GIT = 'repo-1::/Users/dev/orca'
+// The two a switch-off window restores differently from their full save, dropping tab-b or adding
+// it (legacy-partition-full-save-hydration.test.ts); the others differ only in records on disk.
 const SURFACE_TOMBSTONE = 'legacy surface tombstone on a pane still showing its terminal'
 const HIDDEN_ROW = 'row without a tab-bar entry or a terminal'
-// The concrete cases: a switch-off window restores each differently from its full save
-// (legacy-partition-full-save-hydration.test.ts), which drops tab-b or adds it.
-const HIDDEN_ROW_RECORDS = [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
-const TOMBSTONED_RECORDS = [
-  `entry/${GIT}|$order`,
-  `group/${GIT}|g1`,
-  'layout/tab-b',
-  `row/${GIT}|$order`,
-  `row/${GIT}|tab-b`,
-  'session/terminalSurfaceTombstonesByPaneKey',
-  'session/terminalTopologyRevisionByRepoId',
-  `terminalEntry/${GIT}|tab-b`
-]
-// The move writes the group itself; a close of the last listed tab also empties the tab bar.
-const notGroup = (record: string) => !record.startsWith('group/')
-const PINNED: Record<string, Record<string, string[]>> = {
-  'layout.apply (terminal-pane-admission)': {
-    [SURFACE_TOMBSTONE]: [...TOMBSTONED_RECORDS, 'session/unifiedTabs'].sort(),
-    [HIDDEN_ROW]: HIDDEN_ROW_RECORDS
+
+/** Every legacy fixture's difference per writer; absent is none. */
+const PINNED: Readonly<Record<string, Partial<Record<WriterName, readonly string[]>>>> = {
+  [HIDDEN_ROW]: {
+    [APPLY]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`],
+    [MOVE]: [`entry/${GIT}|$order`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
   },
-  'cross-partition editor move': {
-    [SURFACE_TOMBSTONE]: TOMBSTONED_RECORDS.filter(notGroup),
-    [HIDDEN_ROW]: HIDDEN_ROW_RECORDS.filter(notGroup)
+  'row without a tab-bar entry or a terminal, selected': {
+    [APPLY]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`],
+    [MOVE]: [`entry/${GIT}|$order`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
   },
-  'window save (window-save-view)': {
-    [SURFACE_TOMBSTONE]: TOMBSTONED_RECORDS,
-    [HIDDEN_ROW]: HIDDEN_ROW_RECORDS
+  'row without a tab-bar entry, its terminal in a workspace slept at shutdown': {
+    [APPLY]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`],
+    [MOVE]: [`entry/${GIT}|$order`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
+  },
+  'row without a tab-bar entry, still bound to a terminal': {
+    [APPLY]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`],
+    [MOVE]: [`entry/${GIT}|$order`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
+  },
+  'row without a tab-bar entry, its terminal only on a relay': {
+    [APPLY]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`],
+    [MOVE]: [`entry/${GIT}|$order`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
+  },
+  'row without a tab-bar entry, with a sleeping agent': {
+    [APPLY]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`],
+    [MOVE]: [`entry/${GIT}|$order`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [`entry/${GIT}|$order`, `group/${GIT}|g1`, `terminalEntry/${GIT}|tab-b`]
+  },
+  'row bound only through its pane, without a tab-bar entry': {
+    [APPLY]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|g1`,
+      `row/${GIT}|tab-b`,
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [MOVE]: [`entry/${GIT}|$order`, `row/${GIT}|tab-b`, `terminalEntry/${GIT}|tab-b`],
+    [SAVE]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|g1`,
+      `row/${GIT}|tab-b`,
+      `terminalEntry/${GIT}|tab-b`
+    ]
+  },
+  'legacy row repeating a tab-bar tab’s terminal': {
+    [APPLY]: ['layout/tab-legacy', `row/${GIT}|$order`, `row/${GIT}|tab-legacy`],
+    [MOVE]: ['layout/tab-legacy', `row/${GIT}|$order`, `row/${GIT}|tab-legacy`],
+    [SAVE]: ['layout/tab-legacy', `row/${GIT}|$order`, `row/${GIT}|tab-legacy`]
+  },
+  'legacy row repeating a tab-bar tab’s terminal, selected': {
+    [APPLY]: [
+      'layout/tab-legacy',
+      `row/${GIT}|$order`,
+      `row/${GIT}|tab-legacy`,
+      'session/activeTabId',
+      'session/activeTabIdByWorktree'
+    ],
+    [MOVE]: [
+      'layout/tab-legacy',
+      `row/${GIT}|$order`,
+      `row/${GIT}|tab-legacy`,
+      'session/activeTabId',
+      'session/activeTabIdByWorktree'
+    ],
+    [SAVE]: [
+      'layout/tab-legacy',
+      `row/${GIT}|$order`,
+      `row/${GIT}|tab-legacy`,
+      'session/activeTabId',
+      'session/activeTabIdByWorktree'
+    ]
+  },
+  'legacy split row sharing one pane’s terminal with a tab-bar tab': {
+    [APPLY]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|g1`,
+      'layout/tab-legacy',
+      `row/${GIT}|tab-legacy`,
+      `terminalEntry/${GIT}|tab-legacy`
+    ],
+    [MOVE]: [
+      `entry/${GIT}|$order`,
+      'layout/tab-legacy',
+      `row/${GIT}|tab-legacy`,
+      `terminalEntry/${GIT}|tab-legacy`
+    ],
+    [SAVE]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|g1`,
+      'layout/tab-legacy',
+      `row/${GIT}|tab-legacy`,
+      `terminalEntry/${GIT}|tab-legacy`
+    ]
+  },
+  'row terminal differs from its focused pane’s': {
+    [APPLY]: [`row/${GIT}|tab-a`],
+    [MOVE]: [`row/${GIT}|tab-a`],
+    [SAVE]: [`row/${GIT}|tab-a`]
+  },
+  'row with no terminal while its pane has one': {
+    [APPLY]: [`row/${GIT}|tab-a`],
+    [MOVE]: [`row/${GIT}|tab-a`],
+    [SAVE]: [`row/${GIT}|tab-a`]
+  },
+  'tab listed by two groups, its tab-bar entry naming the second': {
+    [APPLY]: [`group/${GIT}|g1`],
+    [SAVE]: [`group/${GIT}|g1`]
+  },
+  'session from before the tab bar, with an open file': {
+    [APPLY]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|$order`,
+      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      'session/tabGroupLayouts',
+      'session/tabGroups',
+      'session/unifiedTabs',
+      `terminalEntry/${GIT}|tab-a`,
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [MOVE]: [
+      `entry/${GIT}|$order`,
+      'session/tabGroupLayouts',
+      `terminalEntry/${GIT}|tab-a`,
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [SAVE]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|$order`,
+      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      'session/tabGroupLayouts',
+      'session/tabGroups',
+      `terminalEntry/${GIT}|tab-b`
+    ]
+  },
+  'session from before the tab bar, a row with no terminal': {
+    [APPLY]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|$order`,
+      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      'session/tabGroupLayouts',
+      'session/tabGroups',
+      'session/unifiedTabs',
+      `terminalEntry/${GIT}|tab-a`,
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [MOVE]: [
+      `entry/${GIT}|$order`,
+      'session/tabGroupLayouts',
+      `terminalEntry/${GIT}|tab-a`,
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [SAVE]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|$order`,
+      `group/${GIT}|1a5387f9-46df-5b0c-807c-4cf31d90223e`,
+      'session/tabGroupLayouts',
+      'session/tabGroups',
+      `terminalEntry/${GIT}|tab-b`
+    ]
+  },
+  [SURFACE_TOMBSTONE]: {
+    [APPLY]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|g1`,
+      'layout/tab-b',
+      `row/${GIT}|$order`,
+      `row/${GIT}|tab-b`,
+      'session/terminalSurfaceTombstonesByPaneKey',
+      'session/terminalTopologyRevisionByRepoId',
+      'session/unifiedTabs',
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [MOVE]: [
+      `entry/${GIT}|$order`,
+      'layout/tab-b',
+      `row/${GIT}|$order`,
+      `row/${GIT}|tab-b`,
+      'session/terminalSurfaceTombstonesByPaneKey',
+      'session/terminalTopologyRevisionByRepoId',
+      `terminalEntry/${GIT}|tab-b`
+    ],
+    [SAVE]: [
+      `entry/${GIT}|$order`,
+      `group/${GIT}|g1`,
+      'layout/tab-b',
+      `row/${GIT}|$order`,
+      `row/${GIT}|tab-b`,
+      'session/terminalSurfaceTombstonesByPaneKey',
+      'session/terminalTopologyRevisionByRepoId',
+      `terminalEntry/${GIT}|tab-b`
+    ]
+  },
+  'tab-bar label differing from the row title': {
+    [APPLY]: [`row/${GIT}|tab-a`],
+    [MOVE]: [`row/${GIT}|tab-a`],
+    [SAVE]: [`row/${GIT}|tab-a`]
   }
 }
 
-describe.each(Object.entries(WRITERS))(
+describe.each(([APPLY, MOVE, SAVE] as const).map((name) => [name, WRITERS[name]] as const))(
   '%s: touched-records patch vs a full save',
   (writer, write) => {
     it.each(WORKSPACE_LAYOUT_PROFILES.map((profile) => [profile.name, profile] as const))(
@@ -324,10 +528,8 @@ describe.each(Object.entries(WRITERS))(
         const calls = write(profile).flat()
         expect(calls.length).toBeGreaterThan(0)
         const differing = differingRecords(calls)
-        const pinned = PINNED[writer]?.[profile.name]
-        if (pinned) {
-          expect(differing).toEqual(pinned)
-        }
+        // Exact both ways: a fixture that converges, or a new divergence, fails here.
+        expect(differing).toEqual(PINNED[profile.name]?.[writer] ?? [])
       }
     )
   }

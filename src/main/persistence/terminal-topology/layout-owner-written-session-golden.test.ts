@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   LAYOUT_OWNER_WRITTEN_SESSION_GOLDEN_PATH,
   LAYOUT_OWNER_WRITTEN_SESSION_WORKTREE_ID as WORKTREE
-} from '../../../shared/__fixtures__/layout-owner-written-session-golden'
+} from '../../../shared/__fixtures__/layout-owner-written-session-golden-paths'
 import type { LayoutCommand } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { Store } from '../loading-store/store'
@@ -129,6 +129,7 @@ function writtenSession(directory: string): string {
   return `${JSON.stringify(profile.workspaceSession, null, 2)}\n`
 }
 
+// Proves the current switch-off code reads a switch-on save, not that older released builds do.
 describe('the session a layout-owner build writes (downgrade probe, ledger L8)', () => {
   it('is the checked-in golden, byte for byte', async () => {
     expect(WORKTREE).toBe(FIXTURE_GIT_WORKTREE_ID)
@@ -167,11 +168,18 @@ describe('the session a layout-owner build writes (downgrade probe, ledger L8)',
     await store.freezeWritesAsync()
 
     const written = writtenSession(directory)
+    // Times are pinned (fake Date) and minted ids numbered; no machine path may reach the golden.
+    expect(written).not.toContain(tmpdir())
     if (process.env[UPDATE_ENV] === '1') {
       writeFileSync(LAYOUT_OWNER_WRITTEN_SESSION_GOLDEN_PATH, written)
     }
     const golden = JSON.parse(readFileSync(LAYOUT_OWNER_WRITTEN_SESSION_GOLDEN_PATH, 'utf8'))
     // Re-serialized so the formatter's line breaks do not count; key order and values do.
-    expect(written, `regenerate with ${UPDATE_ENV}=1`).toBe(`${JSON.stringify(golden, null, 2)}\n`)
+    expect(
+      written,
+      `the switch-on save format changed: regenerate with ${UPDATE_ENV}=1, then the switch-off ` +
+        'restore tests (layout-owner-written-session-switch-off-load, ' +
+        'layout-owner-written-session-hydration) must still pass: they are the downgrade proof'
+    ).toBe(`${JSON.stringify(golden, null, 2)}\n`)
   })
 })
