@@ -70,6 +70,9 @@ beforeEach(() => {
     if (!entry.live) {
       throw Object.assign(new Error('scripted process exited'), { code: 'ESRCH' })
     }
+    if (typeof signal === 'string' && signal !== 'SIGTERM' && signal !== 'SIGKILL') {
+      throw new Error('unsupported scripted process signal')
+    }
     if (signal !== 0) {
       entry.child.kill(signal)
       if (entry.live && signal === 'SIGKILL') {

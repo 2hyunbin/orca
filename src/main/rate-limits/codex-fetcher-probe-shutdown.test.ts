@@ -51,21 +51,18 @@ const fetchCodexRateLimits = (options?: Parameters<typeof fetch>[0]) =>
 import { probeCodexAuthPresence } from './codex-auth-presence'
 
 function makeRpcChild() {
-  const child = Object.assign(createFakePipedChild(9_999_999), {
-    stdin: Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn() }),
-    kill: vi.fn(() => true)
+  const state: { exitCode: number | null } = { exitCode: null }
+  const child = Object.assign(createFakePipedChild(9_999_999), state, {
+    stdin: Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn() })
   })
-  child.exitCode = null
   // EOF and a signal both report an actual scripted exit.
-  const exitNow = (): void => {
+  const exitNow = (): boolean => {
     child.exitCode = 0
     child.emit('exit', 0, null)
+    return true
   }
   child.stdin.end.mockImplementation(exitNow)
-  child.kill.mockImplementation(() => {
-    exitNow()
-    return true
-  })
+  child.kill.mockImplementation(exitNow)
   child.once('exit', (code, signal) => child.emit('close', code, signal))
   return child
 }
@@ -202,7 +199,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     const rpcChild = makeRpcChild()
     // Stubborn child: it ignores stdin EOF, survives SIGTERM, dies on SIGKILL.
     rpcChild.stdin.end = vi.fn()
-    rpcChild.kill = vi.fn((signal?: string) => {
+    rpcChild.kill.mockImplementation((signal) => {
       if (signal === 'SIGKILL') {
         rpcChild.exitCode = 0
         rpcChild.emit('exit', 0, null)
@@ -355,7 +352,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     const firstChild = makeRpcChild()
     firstChild.stdin.end = vi.fn()
-    firstChild.kill = vi.fn((signal?: string) => {
+    firstChild.kill.mockImplementation((signal) => {
       if (signal === 'SIGKILL') {
         firstChild.exitCode = 1
         firstChild.emit('exit', 1, 'SIGKILL')
@@ -419,7 +416,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       }
     })
     firstChild.stdin.end = vi.fn()
-    firstChild.kill = vi.fn((signal?: string) => {
+    firstChild.kill.mockImplementation((signal) => {
       if (signal === 'SIGKILL') {
         firstChild.exitCode = 1
         firstChild.emit('exit', 1, 'SIGKILL')
@@ -466,7 +463,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     const firstChild = makeRpcChild()
     firstChild.stdin.end = vi.fn()
-    firstChild.kill = vi.fn((signal?: string) => {
+    firstChild.kill.mockImplementation((signal) => {
       if (signal === 'SIGKILL') {
         firstChild.exitCode = 1
         firstChild.emit('exit', 1, 'SIGKILL')
