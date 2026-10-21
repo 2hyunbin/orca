@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { useWorkspaceFileBrowserActionPredicate } from '@/lib/file-preview'
 import { openWorkspaceFile } from '@/lib/workspace-file-open'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
@@ -130,7 +130,7 @@ export function useFileExplorerTreePaneState({
       : false
   })
   const ownerRuntimeEnvironmentId = useAppStore((s) =>
-    runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(s, activeWorktreeId)
+    runtimeEnvironmentIdOrLocalUnlessTwin(s, activeWorktreeId)
   )
   const toggleDir = useAppStore((s) => s.toggleDir)
   const makePreviewFilePermanent = useAppStore((s) => s.makePreviewFilePermanent)
