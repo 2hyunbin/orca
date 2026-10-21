@@ -128,17 +128,47 @@ describe('preflight RPC methods', () => {
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
     const response = await dispatcher.dispatch(
-      makeRequest('preflight.detectAgents', { repoId: 'r1' })
+      makeRequest('preflight.detectAgents', {
+        repoId: 'r1',
+        path: '/client-controlled',
+        wslDistro: 'client-controlled',
+        executionHostId: 'local'
+      })
     )
     expect(resolveAgentDetectionHost).toHaveBeenCalledWith(undefined, 'r1')
     expect(response).toMatchObject({ ok: true, result: ['codex'] })
     resolveAgentDetectionHost.mockClear()
-    const malformed = await dispatcher.dispatch(
-      makeRequest('preflight.detectAgents', { repoId: '' })
-    )
-    expect(malformed).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+    for (const repoId of ['', null, 1, { path: '/client-controlled' }]) {
+      const malformed = await dispatcher.dispatch(makeRequest('preflight.detectAgents', { repoId }))
+      expect(malformed).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+    }
     expect(resolveAgentDetectionHost).not.toHaveBeenCalled()
   })
+
+  it.each(['preflight.detectAgents', 'preflight.refreshAgents'])(
+    '%s never probes locally after repository ownership refuses',
+    async (method) => {
+      detectInstalledAgentsWithShellPathHydrationMock.mockClear()
+      refreshShellPathAndDetectAgentsMock.mockClear()
+      const resolveAgentDetectionHost = vi
+        .fn()
+        .mockRejectedValue(new Error('workspace_on_other_runtime'))
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the dispatcher reads only these runtime members.
+      const runtime = {
+        getRuntimeId: () => 'runtime',
+        resolveAgentDetectionHost
+      } as unknown as OrcaRuntimeService
+      const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
+      const response = await dispatcher.dispatch(makeRequest(method, { repoId: 'foreign-repo' }))
+      expect(resolveAgentDetectionHost).toHaveBeenCalledWith(undefined, 'foreign-repo')
+      expect(response).toMatchObject({
+        ok: false,
+        error: { message: 'workspace_on_other_runtime' }
+      })
+      expect(detectInstalledAgentsWithShellPathHydrationMock).not.toHaveBeenCalled()
+      expect(refreshShellPathAndDetectAgentsMock).not.toHaveBeenCalled()
+    }
+  )
 
   it('refuses agent detection on an SSH target this host does not serve', async () => {
     detectInstalledAgentsWithShellPathHydrationMock.mockClear()

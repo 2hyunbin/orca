@@ -1,5 +1,4 @@
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
-import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import {
@@ -31,8 +30,7 @@ export async function resolveRuntimeAgentDetectionHost(
     return resolveWorkspaceAgentDetectionHost(store, {
       kind: 'worktree',
       repoId: repo.id,
-      path: repo.path,
-      hostId: getRepoExecutionHostId(repo)
+      path: repo.path
     })
   }
   if (!worktreeId || worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
