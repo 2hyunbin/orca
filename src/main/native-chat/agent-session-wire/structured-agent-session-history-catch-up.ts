@@ -11,7 +11,8 @@ import type { AgentJournalItemBody } from '../../../shared/agent-session-journal
 import type { JournalLifecycleIdentityMutationInput } from '../agent-session-journal/journal-lifecycle-mutation'
 import type {
   StructuredAgentSessionEventSink,
-  StructuredAgentSessionHistoryJournal
+  StructuredAgentSessionHistoryJournal,
+  StructuredAgentSessionSinkBarrier
 } from './structured-agent-session-event-sink'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { StructuredAgentSessionTransitionJournal } from './structured-agent-session-transition'
@@ -199,8 +200,12 @@ export async function runHistoryCatchUp<View>(input: {
       warn(admission.reason)
       return 'skipped'
     }
-    const committed = await sink.written?.()
-    if (committed?.ok === false) {
+    // The deadline bounds the commit too: a stalled barrier must not hold the provider's open.
+    const committed = await waitForPromiseWithSignal(
+      sink.written?.() ?? Promise.resolve<StructuredAgentSessionSinkBarrier>({ ok: true }),
+      controller.signal
+    )
+    if (!committed.ok) {
       warn('write-failed', committed.error)
       return 'skipped'
     }
