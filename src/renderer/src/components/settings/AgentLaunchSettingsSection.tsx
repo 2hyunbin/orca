@@ -90,12 +90,12 @@ function LocalAgentLaunchSettings({
         toast.error(
           agent
             ? translate(
-                'settings.agents.saveFailedAgent',
+                'settings.agents.localSaveFailedAgent',
                 '{{agent}} settings could not be saved. Try again.',
                 { agent: getAgentLabel(agent) }
               )
             : translate(
-                'settings.agents.saveFailed',
+                'settings.agents.localSaveFailed',
                 'Agent settings could not be saved. Try again.'
               )
         )
@@ -105,8 +105,9 @@ function LocalAgentLaunchSettings({
     return write
   }
   const mutate = (mutation: AgentLaunchSettingsMutation): Promise<void> =>
-    apply('agent' in mutation ? mutation.agent : undefined, (current, platform) =>
-      agentLaunchSettingsMutationUpdates(current, mutation, platform)
+    apply(
+      mutation.type !== 'default' && 'agent' in mutation ? mutation.agent : undefined,
+      (current, platform) => agentLaunchSettingsMutationUpdates(current, mutation, platform)
     )
   const saveEnvironment = (agent: TuiAgent, requested: Record<string, string>): Promise<void> =>
     apply(agent, (current, platform) => {
