@@ -95,7 +95,13 @@
         "environment": "El entorno establece el límite de terminales de esta instancia de Orca. Elimina esa configuración en este equipo para editarlo aquí.",
         "failed": "No se pudo confirmar el límite de terminales. Inténtalo de nuevo.",
         "retry": "Reintentar",
-        "unit": "terminales"
+        "unit": "terminales",
+        "search": {
+          "limit": "límite",
+          "maximum": "máximo",
+          "pty": "pty",
+          "capacity": "capacidad"
+        }
       }
     },
     "appearance": {

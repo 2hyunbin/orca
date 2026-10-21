@@ -53,9 +53,46 @@ async function readSavedMaximum(path: string): Promise<number | null> {
   }
 }
 
+type PolicyOperation = {
+  isCurrent: () => boolean
+  wait: <T>(load: () => Promise<T>) => Promise<T>
+}
+
+async function withPolicyOperation<T>(
+  isHostCurrent: () => boolean,
+  deadline: number,
+  work: (operation: PolicyOperation) => Promise<T>
+): Promise<T> {
+  let active = true
+  const isCurrent = (): boolean => active && Date.now() < deadline && isHostCurrent()
+  const check = (): void => {
+    if (!isCurrent()) {
+      throw new Error('Couldn’t confirm the terminal setting. Refresh and try again.')
+    }
+  }
+  const operation: PolicyOperation = {
+    isCurrent,
+    wait: async (load) => {
+      check()
+      const result = await awaitDaemonValueWithinCallerDeadline(load(), deadline)
+      check()
+      if (!result.completed) {
+        throw new Error('Couldn’t confirm the terminal setting. Refresh and try again.')
+      }
+      return result.value
+    }
+  }
+  try {
+    const result = await work(operation)
+    check()
+    return result
+  } finally {
+    active = false
+  }
+}
+
 export class HostTerminalPolicy {
   private readonly reads = new InFlightPromiseDedupe<number | null>(0, 1)
-  private writing = false
   private readonly environment: number | null
 
   constructor(
@@ -92,11 +129,11 @@ export class HostTerminalPolicy {
     }
   }
 
-  async status(daemonNonce: string): Promise<TerminalLimitStatus> {
-    const [saved, systemPtyLimit] = await Promise.all([
-      this.environment === null ? this.saved() : Promise.resolve(null),
-      this.system.read()
-    ])
+  private observedStatus(
+    saved: number | null,
+    systemPtyLimit: number | null,
+    daemonNonce: string
+  ): TerminalLimitStatus {
     return {
       maxTerminals: this.environment ?? saved ?? DEFAULT_MAX_HOST_TERMINALS,
       source: this.environment !== null ? 'environment' : saved !== null ? 'saved' : 'default',
@@ -106,37 +143,78 @@ export class HostTerminalPolicy {
     }
   }
 
-  async save(maximum: number, isCurrent: () => boolean): Promise<void> {
-    if (!this.path || this.environment !== null || this.writing) {
-      throw new Error('Terminal setting unavailable')
-    }
-    this.writing = true
-    let temporary: string | undefined
-    try {
-      // A read that started before the write must settle before authoritative readback.
-      await this.saved()
-      const ceiling = terminalLimitInputMaximum(await this.system.read())
-      if (!isConfiguredTerminalLimit(maximum) || maximum > ceiling) {
+  status(
+    daemonNonce: string,
+    isCurrent: () => boolean = () => true,
+    deadline = Date.now() + 2_000
+  ): Promise<TerminalLimitStatus> {
+    return withPolicyOperation(isCurrent, deadline, async (operation) => {
+      const [saved, systemPtyLimit] = await operation.wait(() =>
+        Promise.all([
+          this.environment === null ? this.saved() : Promise.resolve(null),
+          this.system.read()
+        ])
+      )
+      return this.observedStatus(saved, systemPtyLimit, daemonNonce)
+    })
+  }
+
+  save(
+    maximum: number,
+    isCurrent: () => boolean,
+    daemonNonce = '',
+    deadline = Date.now() + 2_000
+  ): Promise<TerminalLimitStatus> {
+    return withPolicyOperation(isCurrent, deadline, async (operation) => {
+      const path = this.path
+      if (!path || this.environment !== null) {
+        throw new Error('Terminal setting unavailable')
+      }
+      const systemPtyLimit = await operation.wait(() => this.system.read())
+      if (
+        !isConfiguredTerminalLimit(maximum) ||
+        maximum > terminalLimitInputMaximum(systemPtyLimit)
+      ) {
         throw new Error('Terminal limit exceeds host capacity')
       }
-      const directory = dirname(this.path)
-      await mkdir(directory, { recursive: true, mode: 0o700 })
-      if (!isSafeOwnedDirectory(await lstat(directory))) {
+      const directory = dirname(path)
+      await operation.wait(() => mkdir(directory, { recursive: true, mode: 0o700 }))
+      if (!isSafeOwnedDirectory(await operation.wait(() => lstat(directory)))) {
         throw new Error('Terminal policy directory is not private')
       }
-      temporary = `${this.path}.${process.pid}.${randomUUID()}.tmp`
-      await writeFile(temporary, JSON.stringify({ schemaVersion: 1, maxTerminals: maximum }), {
-        flag: 'wx',
-        mode: 0o600
-      })
-      if (!(await renameFileWithWindowsRetryAsync(temporary, this.path, isCurrent))) {
-        throw new Error('Terminal host changed')
+      const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
+      let staging: Promise<unknown> = Promise.resolve()
+      try {
+        await operation.wait(() => {
+          staging = writeFile(
+            temporary,
+            JSON.stringify({ schemaVersion: 1, maxTerminals: maximum }),
+            {
+              flag: 'wx',
+              mode: 0o600
+            }
+          )
+          return staging
+        })
+        const replaced = await operation.wait(() => {
+          const rename = renameFileWithWindowsRetryAsync(temporary, path, operation.isCurrent)
+          staging = rename
+          return rename
+        })
+        if (!replaced) {
+          throw new Error('Terminal host changed')
+        }
+        // Drain pre-replacement observations without evicting their raw I/O.
+        await operation.wait(() => this.saved().catch(() => null))
+        const saved = await operation.wait(() => this.saved())
+        return this.observedStatus(saved, systemPtyLimit, daemonNonce)
+      } finally {
+        // A late staging write must settle before removal can consume its temporary file.
+        void staging
+          .catch(() => undefined)
+          .then(() => rm(temporary, { force: true }))
+          .catch(() => undefined)
       }
-    } finally {
-      if (temporary) {
-        await rm(temporary, { force: true }).catch(() => undefined)
-      }
-      this.writing = false
-    }
+    })
   }
 }

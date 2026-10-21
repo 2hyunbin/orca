@@ -6,27 +6,36 @@ import { TerminalLimitSetting } from './TerminalLimitSetting'
 import { readTerminalLimit, saveTerminalLimit } from './terminal-limit-transport'
 import type { SettingsHostScope } from './settings-host-scope'
 import type { TerminalLimitStatus } from '../../../../shared/terminal-limit-policy'
+import { useAppStore } from '@/store'
+import { i18n } from '@/i18n/i18n'
+import { getTerminalAdvancedSearchEntries } from './terminal-advanced-platform-search'
+import { matchesSettingsSearch } from './settings-search'
+import type { RuntimeStatus } from '../../../../shared/runtime-types'
 import { advanceRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status-connection-generation'
 
 vi.mock('./terminal-limit-transport', () => ({
   readTerminalLimit: vi.fn(),
   saveTerminalLimit: vi.fn()
 }))
-vi.mock('@/i18n/i18n', () => ({
-  translate: (_key: string, fallback: string, values?: Record<string, unknown>) =>
-    fallback.replace('{{value}}', String(values?.value))
-}))
-vi.mock('@/store', () => ({
-  useAppStore: (select: (state: unknown) => unknown) => select({ runtimeEnvironments: [] })
-}))
+const search = vi.hoisted(() => ({ query: '' }))
+vi.mock('sonner', () => ({ toast: { warning: vi.fn(), dismiss: vi.fn() } }))
+vi.mock('@/store', async () => {
+  const { useStore } = await import('zustand')
+  const { createRuntimeStatusTestStore } =
+    await import('@/store/slices/runtime-status.test-fixture')
+  const store = createRuntimeStatusTestStore()
+  return {
+    useAppStore: Object.assign(
+      (select: (state: unknown) => unknown) =>
+        useStore(store, (state) => select({ ...state, settingsSearchQuery: search.query })),
+      store
+    )
+  }
+})
 vi.mock('@/store/host-catalog-fencing', () => ({
   captureHostIdentityFence: () => ({}),
   isHostIdentityFenceCurrent: () => true
 }))
-vi.mock('./SearchableSetting', () => ({
-  SearchableSetting: ({ children }: { children: React.ReactNode }) => children
-}))
-
 const local: SettingsHostScope = { target: { kind: 'local' }, available: true }
 const base: TerminalLimitStatus = {
   maxTerminals: 256,
@@ -37,7 +46,10 @@ const base: TerminalLimitStatus = {
 }
 let container: HTMLDivElement
 let root: Root
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('en')
+  search.query = ''
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -115,6 +127,7 @@ it('discards a late answer and draft when switching execution hosts', async () =
     systemPtyLimit: 256,
     daemonNonce: 'daemon-b'
   })
+  publish('server', true, 1)
   await render({ target: { kind: 'environment', environmentId: 'server' }, available: true })
   await act(async () => complete?.(base))
   expect(input().value).toBe('128')
@@ -159,8 +172,71 @@ it('keeps confirmed environment values above the bound and leaves old daemons un
   expect(input().disabled).toBe(true)
   expect(container.textContent).toContain('environment')
   vi.mocked(readTerminalLimit).mockResolvedValue(null)
+  publish('old', true, 1)
   await render({ target: { kind: 'environment', environmentId: 'old' }, available: true })
   expect(input().value).toBe('')
   expect(input().disabled).toBe(true)
   expect(container.textContent).toContain('does not support')
+})
+
+const runtime: RuntimeStatus = {
+  runtimeId: 'same-runtime',
+  rendererGraphEpoch: 0,
+  graphStatus: 'ready',
+  authoritativeWindowId: null,
+  liveTabCount: 0,
+  liveLeafCount: 0
+}
+function publish(id: string, live: boolean, checkedAt: number): void {
+  useAppStore.getState().setRuntimeEnvironmentStatus(id, {
+    status: live ? runtime : null,
+    checkedAt,
+    snapshot: {
+      environmentId: id,
+      pairingRevision: 1,
+      sequence: checkedAt,
+      checkedAt,
+      status: runtime,
+      verification: live ? 'verified' : 'unavailable',
+      transport: live ? 'ready' : 'disconnected'
+    }
+  })
+}
+
+it('disables on contact loss and reads again on a real same-runtime recovery publication', async () => {
+  publish('server', true, 1)
+  const scope: SettingsHostScope = {
+    target: { kind: 'environment', environmentId: 'server' },
+    available: true
+  }
+  await render(scope)
+  await type('384')
+  const generation = useAppStore
+    .getState()
+    .runtimeStatusByEnvironmentId.get('server')?.connectionGeneration
+  await act(async () => publish('server', false, 2))
+  expect(input().disabled).toBe(true)
+  expect(input().value).toBe('')
+  expect(container.textContent).toContain('disconnected')
+  vi.mocked(readTerminalLimit).mockResolvedValue({ ...base, maxTerminals: 64 })
+  await act(async () => publish('server', true, 3))
+  expect(
+    useAppStore.getState().runtimeStatusByEnvironmentId.get('server')?.connectionGeneration
+  ).toBe(generation)
+  expect(input().disabled).toBe(false)
+  expect(input().value).toBe('64')
+  expect(readTerminalLimit).toHaveBeenCalledTimes(2)
+})
+
+it('finds localized capacity in both the catalog and the rendered row filter', async () => {
+  await i18n.changeLanguage('fr')
+  search.query = 'capacité'
+  expect(
+    getTerminalAdvancedSearchEntries().some((entry) => matchesSettingsSearch(search.query, entry))
+  ).toBe(true)
+  await render()
+  expect(input().value).toBe('256')
+  search.query = 'aucun-résultat'
+  await render()
+  expect(container.querySelector('input')).toBeNull()
 })

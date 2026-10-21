@@ -272,7 +272,13 @@
         "environment": "This Orca instance has a terminal limit set by its environment. Remove the override on this host to edit it here.",
         "failed": "Couldn’t confirm the terminal limit. Try again.",
         "retry": "Retry",
-        "unit": "terminals"
+        "unit": "terminals",
+        "search": {
+          "limit": "limit",
+          "maximum": "maximum",
+          "pty": "pty",
+          "capacity": "capacity"
+        }
       }
     },
     "appearance": {

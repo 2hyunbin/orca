@@ -299,7 +299,7 @@ export class DaemonServer {
           request,
           this.terminalPolicy,
           this.terminalPolicyNonce,
-          () => !this.endpoint.hasLostOwnership()
+          () => this.lifecycle.isAcceptingWork() && !this.endpoint.hasLostOwnership()
         )
         return (
           limitRequest ??

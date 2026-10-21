@@ -199,7 +199,13 @@
         "environment": "L’environnement définit la limite de terminaux de cette instance d’Orca. Supprimez cette configuration sur cet hôte pour la modifier ici.",
         "failed": "Impossible de confirmer la limite de terminaux. Réessayez.",
         "retry": "Réessayer",
-        "unit": "terminaux"
+        "unit": "terminaux",
+        "search": {
+          "limit": "limite",
+          "maximum": "maximum",
+          "pty": "pty",
+          "capacity": "capacité"
+        }
       }
     },
     "appearance": {

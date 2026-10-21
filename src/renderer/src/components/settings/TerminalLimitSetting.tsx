@@ -18,6 +18,8 @@ import {
 } from '@/store/host-catalog-fencing'
 import type { HostRoute } from '@/runtime/runtime-client-target'
 import { translate } from '@/i18n/i18n'
+import { runtimeHostContactForEntry } from '../../../../shared/runtime-host-contact'
+import { getTerminalLimitSearchKeywords } from './terminal-advanced-platform-search'
 
 export function TerminalLimitSetting({ scope }: { scope: SettingsHostScope }): React.JSX.Element {
   const environmentId = scope.target.kind === 'environment' ? scope.target.environmentId : null
@@ -25,12 +27,21 @@ export function TerminalLimitSetting({ scope }: { scope: SettingsHostScope }): R
     const host = state.runtimeEnvironments.find((item) => item.id === environmentId)
     const pairing = host?.pairingRevision ?? host?.createdAt ?? 0
     const connection = environmentId ? getRuntimeEnvironmentConnectionGeneration(environmentId) : 0
-    return `${pairing}:${connection}`
+    const contactEpoch =
+      state.runtimeStatusByEnvironmentId.get(environmentId ?? '')?.hostContactEpoch ?? 0
+    return `${pairing}:${connection}:${contactEpoch}`
   })
+  const contacted = useAppStore(
+    (state) =>
+      environmentId === null ||
+      runtimeHostContactForEntry(state.runtimeStatusByEnvironmentId.get(environmentId)).verdict ===
+        'live'
+  )
+  const available = scope.available && contacted
   return (
     <TerminalLimitField
-      key={`${environmentId ?? 'local'}:${revision}:${scope.available}`}
-      scope={scope}
+      key={`${environmentId ?? 'local'}:${revision}:${available}`}
+      scope={{ ...scope, available }}
     />
   )
 }
@@ -136,17 +147,19 @@ function TerminalLimitField({ scope }: { scope: SettingsHostScope }): React.JSX.
         'settings.terminal.limit.disconnected',
         'This host is disconnected. Reconnect to view or change its terminal limit.'
       )
-    : status === null || (status?.editable === false && status.source !== 'environment')
+    : status === null
       ? translate(
           'settings.terminal.limit.unsupported',
           'This host’s terminal service does not support changing this limit yet.'
         )
-      : status?.source === 'environment'
-        ? translate(
-            'settings.terminal.limit.environment',
-            'This Orca instance has a terminal limit set by its environment. Remove the override on this host to edit it here.'
-          )
-        : null
+      : status?.editable === false && status.source !== 'environment'
+        ? translate('settings.terminal.limit.unknown', 'Unavailable')
+        : status?.source === 'environment'
+          ? translate(
+              'settings.terminal.limit.environment',
+              'This Orca instance has a terminal limit set by its environment. Remove the override on this host to edit it here.'
+            )
+          : null
   const label = translate('settings.terminal.limit.label', 'Maximum running terminals')
   return (
     <SearchableSetting
@@ -155,7 +168,7 @@ function TerminalLimitField({ scope }: { scope: SettingsHostScope }): React.JSX.
         'settings.terminal.limit.description',
         'Limits your running terminals across projects on this host.'
       )}
-      keywords={['terminal', 'limit', 'maximum', 'pty', 'capacity']}
+      keywords={getTerminalLimitSearchKeywords()}
     >
       <SettingsRow
         alignTop

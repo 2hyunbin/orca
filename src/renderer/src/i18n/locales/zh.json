@@ -95,7 +95,13 @@
         "environment": "此 Orca 实例的终端上限由环境变量设置。要在此编辑，请先移除此主机上的相应环境设置。",
         "failed": "无法确认终端上限。请重试。",
         "retry": "重试",
-        "unit": "个终端"
+        "unit": "个终端",
+        "search": {
+          "limit": "限制",
+          "maximum": "最大值",
+          "pty": "pty",
+          "capacity": "容量"
+        }
       }
     },
     "appearance": {

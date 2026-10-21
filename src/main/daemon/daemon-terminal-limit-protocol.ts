@@ -3,7 +3,6 @@ import {
   type TerminalLimitStatus
 } from '../../shared/terminal-limit-policy'
 import type { HostTerminalPolicy } from './host-terminal-policy'
-import { awaitDaemonValueWithinCallerDeadline } from './daemon-request-deadline'
 
 /** New requests remain unknown on older daemons; no protocol-generation change or replacement. */
 export function answerTerminalLimitRequest(
@@ -15,6 +14,7 @@ export function answerTerminalLimitRequest(
   if (request.type !== 'terminalLimitStatus' && request.type !== 'setTerminalLimit') {
     return undefined
   }
+  const deadline = Date.now() + 2_000
   const work = async (): Promise<TerminalLimitStatus> => {
     if (!isCurrent()) {
       throw new Error('Terminal host changed. Refresh the setting and try again.')
@@ -31,18 +31,9 @@ export function answerTerminalLimitRequest(
       ) {
         throw new Error('Terminal setting changed. Refresh the setting and try again.')
       }
-      await policy.save(update.maxTerminals, isCurrent)
+      return policy.save(update.maxTerminals, isCurrent, nonce, deadline)
     }
-    const status = await policy.status(nonce)
-    if (!isCurrent()) {
-      throw new Error('Terminal host changed. Refresh the setting and try again.')
-    }
-    return status
+    return policy.status(nonce, isCurrent, deadline)
   }
-  return awaitDaemonValueWithinCallerDeadline(work(), Date.now() + 2_000).then((result) => {
-    if (!result.completed) {
-      throw new Error('Couldn’t confirm the terminal setting. Refresh and try again.')
-    }
-    return result.value
-  })
+  return work()
 }
