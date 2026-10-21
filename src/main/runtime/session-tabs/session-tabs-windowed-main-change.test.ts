@@ -166,7 +166,7 @@ describe('session.tabs on a windowed server follow main without a window publish
     expect(parentTabsOf(await listed(runtime))).toEqual(layoutTabIds(store))
   })
 
-  it("a later commit never re-adds a row main's layout lacks", async () => {
+  it("a later commit, or the window's older snapshot, never re-adds a row main's layout lacks", async () => {
     const { runtime } = threeTabSurfaceRuntime()
     await windowedPhone(runtime)
     await runtime.applyLayoutCommand({
@@ -192,6 +192,23 @@ describe('session.tabs on a windowed server follow main without a window publish
       tabId: SURFACE_TAB_ID,
       kind: 'custom',
       title: 'Build'
+    })
+    await vi.runAllTimersAsync()
+    // The window republishes its older snapshot, which still lists the closed tab.
+    const older = windowPublication()
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      mobileSessionTabs: [
+        {
+          ...older,
+          snapshotVersion: 2,
+          tabs: [
+            ...older.tabs,
+            ...held.tabs.filter((tab) => parentTabsOf({ tabs: [tab] }).includes(SECOND_TAB_ID))
+          ]
+        }
+      ]
     })
     await vi.runAllTimersAsync()
 

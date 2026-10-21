@@ -121,7 +121,7 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
       // Every write keeps main's order and groups; its rows and their facts stay as written.
       const merged = startedMainTerminalSurfaces(this)?.withMainOrder(snapshot) ?? snapshot
       // A write main's order wholly overrides (a rebuild from the saved session) changes nothing,
-      // unless it names a new occupant or retirement proof.
+      // unless it names a new occupant, window publication or retirement proof.
       if (
         existing &&
         mobileSnapshotIdentityUnchanged(existing, snapshot) &&

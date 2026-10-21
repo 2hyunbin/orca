@@ -60,7 +60,16 @@ export function mobileSnapshotValueEqual(a: unknown, b: unknown): boolean {
   return false
 }
 
-/** Whether a write keeps the stored occupant and retirement proofs; an absent one keeps them. */
+/** Whether rows were built by the host itself (not a window's publication, merges included). */
+export function isHeadlessBuiltPublication(publicationEpoch: string): boolean {
+  const base = publicationEpoch.split(':headless-merge:')[0] ?? publicationEpoch
+  return base.startsWith('headless:') || base.startsWith('headless-hydrated:')
+}
+
+/**
+ * Whether a write keeps the stored occupant, publication and retirement proofs; an absent occupant
+ * or proof keeps them. Two host-built stamps count as one: each rebuild mints its own.
+ */
 export function mobileSnapshotIdentityUnchanged(
   existing: RuntimeMobileSessionTabsSnapshot,
   next: RuntimeMobileSessionTabsSnapshot
@@ -68,6 +77,9 @@ export function mobileSnapshotIdentityUnchanged(
   return (
     (next.worktreeInstanceId === undefined ||
       next.worktreeInstanceId === existing.worktreeInstanceId) &&
+    (existing.publicationEpoch === next.publicationEpoch ||
+      (isHeadlessBuiltPublication(existing.publicationEpoch) &&
+        isHeadlessBuiltPublication(next.publicationEpoch))) &&
     (next.retiredTerminalSurfaces === undefined ||
       mobileSnapshotValueEqual(next.retiredTerminalSurfaces, existing.retiredTerminalSurfaces))
   )
