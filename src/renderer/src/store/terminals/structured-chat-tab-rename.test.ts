@@ -1,18 +1,38 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-helpers'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import type * as SessionClient from '@/runtime/structured-agent-session-client'
 
-// Main's answer to the window's layout commands, as a switch-on build sends them.
-vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
-  (
+const { hostRename, hostSavesNames, toastError } = vi.hoisted(() => ({
+  hostRename: vi.fn(async () => ({ name: 'Flaky retry test', applied: true })),
+  hostSavesNames: vi.fn(async () => true),
+  toastError: vi.fn()
+}))
+
+// Main's answer to the window's layout commands, as a switch-on build sends them; the chat's host
+// answers its rename.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
+  const client = (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
   ).runtimeRpcClientWithLayoutApply(await importOriginal())
-)
+  return {
+    ...client,
+    callRuntimeRpc: ((target, method, params, options) =>
+      method === 'agentSession.rename'
+        ? hostRename(params)
+        : client.callRuntimeRpc(target, method, params, options)) as typeof client.callRuntimeRpc
+  }
+})
+
+vi.mock('@/runtime/structured-agent-session-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof SessionClient>()),
+  supportsStructuredAgentSessionRename: hostSavesNames
+}))
 
 vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }
+  toast: { info: vi.fn(), success: vi.fn(), error: toastError, warning: vi.fn() }
 }))
 
 const WORKTREE = 'local-repo::/tmp/app'
@@ -125,23 +145,57 @@ describe('recoloring a structured chat tab', () => {
 })
 
 describe('renaming a structured chat tab', () => {
-  it('clears the custom label when the rename is emptied', async () => {
+  beforeEach(() => {
+    hostRename.mockClear()
+    toastError.mockClear()
+    hostSavesNames.mockResolvedValue(true)
+  })
+
+  it("saves the name on the chat's host, where Session History reads it, not on the tab", async () => {
+    const store = storeWithStructuredTab()
+    store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, '  Flaky retry test ')
+    await vi.waitFor(() =>
+      expect(hostRename).toHaveBeenCalledWith({ sessionId: 'codex-1', name: 'Flaky retry test' })
+    )
+    await layoutApplyTestTransport.settle()
+    expect(labelOf(store)).toBeNull()
+    expect(layoutApplyTestTransport.sent).not.toContainEqual(
+      expect.objectContaining({ type: 'renameTab', tabId: STRUCTURED_TAB_ID })
+    )
+  })
+
+  it("refuses an empty name and keeps the chat's name", async () => {
+    const store = storeWithStructuredTab()
+    store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, '   ')
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalled())
+    expect(hostRename).not.toHaveBeenCalled()
+    expect(labelOf(store)).toBeNull()
+  })
+
+  it('keeps the name on the tab for a host too old to save it, and clears it when emptied', async () => {
+    hostSavesNames.mockResolvedValue(false)
     const store = storeWithStructuredTab()
     store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, 'Flaky retry test')
+    await vi.waitFor(() => expect(hostSavesNames).toHaveBeenCalled())
     await layoutApplyTestTransport.settle()
     // Guard: without the intermediate assertion this case passes on a rename
     // that never wrote anything, since the label starts out null too.
-    expectChange(() => expect(labelOf(store)).toBe('Flaky retry test'), {
-      type: 'renameTab',
-      tabId: STRUCTURED_TAB_ID,
-      title: 'Flaky retry test'
-    })
+    await vi.waitFor(() =>
+      expectChange(() => expect(labelOf(store)).toBe('Flaky retry test'), {
+        type: 'renameTab',
+        tabId: STRUCTURED_TAB_ID,
+        title: 'Flaky retry test'
+      })
+    )
     store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, null)
     await layoutApplyTestTransport.settle()
-    expectChange(() => expect(labelOf(store)).toBeNull(), {
-      type: 'renameTab',
-      tabId: STRUCTURED_TAB_ID,
-      title: null
-    })
+    await vi.waitFor(() =>
+      expectChange(() => expect(labelOf(store)).toBeNull(), {
+        type: 'renameTab',
+        tabId: STRUCTURED_TAB_ID,
+        title: null
+      })
+    )
+    expect(hostRename).not.toHaveBeenCalled()
   })
 })

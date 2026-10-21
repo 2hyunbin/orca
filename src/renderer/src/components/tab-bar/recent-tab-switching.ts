@@ -1,5 +1,6 @@
 import type { CtrlTabOrderMode, Tab, TabContentType, TabGroup } from '../../../../shared/tab-types'
 import { resolveUnifiedTabLabel } from '../../../../shared/tab-title-resolution'
+import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
 import type { AppState } from '../../store/types'
 import { sanitizeRecentTabIds } from '../../store/slices/tab-group-state'
 import { getActiveTabNavOrder, type VisibleTabRef } from './group-tab-order'
@@ -90,7 +91,9 @@ function getTabLabel(
   generatedTitlesEnabled: boolean,
   fallback: string
 ): string {
-  return resolveUnifiedTabLabel(tab, generatedTitlesEnabled, fallback)
+  return tab?.contentType === 'agent-session'
+    ? readStructuredChatTabName(tab)
+    : resolveUnifiedTabLabel(tab, generatedTitlesEnabled, fallback)
 }
 
 function toSwitcherItem(

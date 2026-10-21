@@ -23,7 +23,13 @@ export function createTerminalTabAppearanceActions(
         return { tabsByWorktree: next }
       })
       const item = findRenamableUnifiedTab(get().unifiedTabsByWorktree, tabId)
-      if (item) {
+      if (item?.contentType === 'agent-session') {
+        void import('@/runtime/structured-chat-rename').then(({ renameStructuredChatTab }) =>
+          renameStructuredChatTab(get, item, title, opts, () =>
+            get().setTabCustomLabel(item.id, title, opts)
+          )
+        )
+      } else if (item) {
         get().setTabCustomLabel(item.id, title, opts)
       }
     },

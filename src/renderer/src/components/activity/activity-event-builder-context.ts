@@ -11,6 +11,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+import { readStructuredChatTabSavedName } from '@/runtime/structured-chat-tab-name'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
   effectiveWorktreeAgentRowStartedAt,
@@ -26,26 +27,28 @@ export type ActivityTabHostIndex = Map<string, Map<string, ExecutionHostId | nul
 // Why memoized on the source object: the pane build cache compares `tab` by identity, so a
 // fresh derived object per rebuild would miss the cache for every agent-session and
 // missing-tab row. Upstream keeps the source identity stable while its fields are unchanged.
-const agentSessionTerminalTabs = new WeakMap<Tab, TerminalTab>()
+const agentSessionTerminalTabs = new WeakMap<Tab, { name: string | null; tab: TerminalTab }>()
 const attributedTabContexts = new WeakMap<AgentStatusEntry, ActivityTabContext | null>()
 
 function terminalTabFromAgentSessionTab(tab: Tab): TerminalTab {
+  // The chat's name lives on its host, so a rename changes it without changing the tab.
+  const name = readStructuredChatTabSavedName(tab)
   const cached = agentSessionTerminalTabs.get(tab)
-  if (cached) {
-    return cached
+  if (cached && cached.name === name) {
+    return cached.tab
   }
   const derived: TerminalTab = {
     id: tab.id,
     ptyId: null,
     worktreeId: tab.worktreeId,
-    title: tab.customLabel ?? tab.generatedLabel ?? tab.label,
-    customTitle: tab.customLabel,
+    title: name ?? tab.generatedLabel ?? tab.label,
+    customTitle: name,
     color: tab.color,
     isPinned: tab.isPinned,
     sortOrder: tab.sortOrder,
     createdAt: tab.createdAt
   }
-  agentSessionTerminalTabs.set(tab, derived)
+  agentSessionTerminalTabs.set(tab, { name, tab: derived })
   return derived
 }
 

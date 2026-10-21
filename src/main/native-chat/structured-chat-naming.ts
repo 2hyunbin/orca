@@ -32,7 +32,7 @@ export type StructuredChatNameGeneration =
 export type StructuredChatNamingDeps = {
   getStore: () => Pick<
     AgentSessionRecordStore,
-    'getRecord' | 'compareAndSetConversationName'
+    'getRecord' | 'compareAndSetConversationName' | 'setUserConversationName'
   > | null
   getSettings: () => Pick<GlobalSettings, 'nativeChatAutoName'>
   readFirstPrompt: (sessionId: string, hostStartedAt: number) => Promise<string>
@@ -262,6 +262,21 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       attempted.add(sessionId)
       run(sessionId, record.location.workspaceId, () => rename(store, record))
       return true
+    },
+    // Not a job: a pending generation must not swallow the user's rename. The record's 'user'
+    // source is what makes that generation's later write refuse.
+    setUserName: async (sessionId, name, write) => {
+      const store = deps.getStore()
+      if (!store?.getRecord(sessionId)) {
+        return null
+      }
+      attempted.add(sessionId)
+      const { record, applied } = await store.setUserConversationName(sessionId, name, write)
+      if (applied) {
+        forget(sessionId)
+        refresh(record.location.workspaceId, sessionId)
+      }
+      return { name: record.conversationName ?? null, applied }
     }
   }
   return Object.assign(observe, naming)

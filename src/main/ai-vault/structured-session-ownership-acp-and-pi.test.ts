@@ -105,11 +105,14 @@ describe('Session History rows owned by OpenCode, Grok, OMP and Pi chats', () =>
       filePath: PI_FILE
     }
   ])(
-    'owns the $rowAgent row of a $handle.agent chat under its CLI title and refuses preparing its resume',
+    'owns the $rowAgent row of a $handle.agent chat under the chat name and refuses preparing its resume',
     ({ handle, rowAgent, sessionId, filePath }) => {
+      // An unnamed chat's row keeps the CLI's title; once named, the row shows the chat's name.
+      installOwnership({ handle })
+      expect(ownedRow(rowAgent, sessionId, filePath)).toMatchObject({ title: 'First prompt' })
       installOwnership({ handle, conversationName: 'Quokka harbor chat' })
       expect(ownedRow(rowAgent, sessionId, filePath)).toMatchObject({
-        title: 'First prompt',
+        title: 'Quokka harbor chat',
         structuredSession: {
           sessionId: 'session-alpha',
           workspaceId: 'workspace-1'

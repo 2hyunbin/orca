@@ -9,6 +9,7 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { WorkspaceAttachment, Worktree } from '../../../../shared/worktree/types'
 import type { Tab } from '../../../../shared/tab-types'
 import { getWorkspaceAttachmentOriginKey } from '../../../../shared/workspace-attachment-origins'
+import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
 
 const EMPTY_TABS: Tab[] = []
 
@@ -45,6 +46,7 @@ export function WorkspaceAttachmentOrigins({
             (origin.hostId ?? 'local') === (workspace.hostId ?? 'local')
         )
         const label =
+          (tab?.contentType === 'agent-session' ? readStructuredChatTabName(tab) : null) ||
           tab?.customLabel ||
           tab?.label ||
           origin.label ||

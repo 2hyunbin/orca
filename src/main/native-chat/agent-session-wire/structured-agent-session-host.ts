@@ -354,6 +354,8 @@ export class StructuredAgentSessionHost {
   publishConversationName = this.clientDelivery.publishConversationName
   regenerateConversationName = (sessionId: string): boolean =>
     this.deps.conversationNaming?.regenerate(sessionId) ?? false
+  setUserConversationName: HostTypes.SetUserConversationName = (...args) =>
+    this.deps.conversationNaming?.setUserName(...args) ?? Promise.resolve(null)
 
   /** Turns that settle, and prompts raised, from now on. Live-only: nothing missed is replayed. */
   subscribeTurnCompletions = this.clientDelivery.subscribeTurnCompletions

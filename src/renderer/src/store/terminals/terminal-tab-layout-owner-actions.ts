@@ -133,13 +133,25 @@ export function routeTerminalTabChangesThroughLayoutOwner(
     }
   }
   return {
-    setTabCustomTitle: (tabId, title, opts) =>
-      route(
-        tabId,
-        (id) => ({ type: 'renameTab', tabId: id, kind: 'custom', title }),
-        () => actions.setTabCustomTitle(tabId, title, opts),
-        opts?.recordInteraction === false ? undefined : recordTabsInteraction
-      ),
+    setTabCustomTitle: (tabId, title, opts) => {
+      const renameOnTab = () =>
+        route(
+          tabId,
+          (id) => ({ type: 'renameTab', tabId: id, kind: 'custom', title }),
+          () => actions.setTabCustomTitle(tabId, title, opts),
+          opts?.recordInteraction === false ? undefined : recordTabsInteraction
+        )
+      // A chat's name lives on its host, not in the layout; only a host too old to save it keeps
+      // the name on the tab.
+      const chat = findRenamableUnifiedTab(get().unifiedTabsByWorktree, tabId)
+      if (chat?.contentType !== 'agent-session') {
+        renameOnTab()
+        return
+      }
+      void import('@/runtime/structured-chat-rename').then(({ renameStructuredChatTab }) =>
+        renameStructuredChatTab(get, chat, title, opts, renameOnTab)
+      )
+    },
     setTabColor: (tabId, color, opts) =>
       route(
         tabId,

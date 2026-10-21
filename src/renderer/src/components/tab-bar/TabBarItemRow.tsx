@@ -11,6 +11,7 @@ import type { DropIndicator } from './drop-indicator'
 import type { TabDragItemData } from '../tab-group/useTabDragSplit'
 import { getTabDragLabel, resolveTerminalItemTab, type TabBarItem } from './tab-bar-item-model'
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
+import { useLegacyChatRenameUpload } from './use-legacy-chat-rename-upload'
 import {
   useStructuredChatTabConversationName,
   useStructuredChatTabNamingFailure
@@ -69,6 +70,7 @@ function TabBarItemRow({
   const namingFailure = useStructuredChatTabNamingFailure(
     item.type === 'agent-session' ? item.data : undefined
   )
+  useLegacyChatRenameUpload(item.type === 'agent-session' ? item.data : undefined)
   const dragData: TabDragItemData = {
     kind: 'tab',
     worktreeId,
