@@ -46,6 +46,7 @@ import {
   readLaunchedAgentForeground,
   type LaunchedAgentForeground
 } from '../launched-agent-foreground'
+import { worktreeRowTarget } from '../../persistence/host-qualified-worktree-meta'
 
 export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListManagedWorktrees {
   protected abstract toAgentSessionOptions(
@@ -82,10 +83,15 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     const targetsHost = navigationTargetsHost(navigation)
     const targetsClients = navigationTargetsClients(navigation)
 
-    if (!targetsHost && this.store?.getWorktreeMeta(worktree.id)?.isUnread) {
+    const target = this.store ? worktreeRowTarget(this.store, worktree) : undefined
+    if (
+      !targetsHost &&
+      target &&
+      this.store?.getWorktreeMetaForHost?.(target.id, target.hostId)?.isUnread
+    ) {
       // Why: mobile/web session activation intentionally bypasses renderer
       // selection, so the runtime must acknowledge the unread state itself.
-      this.store.setWorktreeMeta(worktree.id, { isUnread: false })
+      this.store.setWorktreeMeta(target, { isUnread: false })
       this.notifyWorktreesChanged(repo.id)
     }
 
@@ -125,7 +131,10 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
           Object.values(
             this.store?.getWorkspaceSession?.(getRepoExecutionHostId(repo))
               .sleepingAgentSessionsByPaneKey ?? {}
-          ).some((record) => record.worktreeId === worktree.id)
+          ).some(
+            // Why: a tab-open record resumes when its tab opens, headless or not.
+            (record) => record.worktreeId === worktree.id && record.restoreOnTabOpenOnly !== true
+          )
         ) {
           // Why: headless is only degraded when this worktree actually has a
           // persisted resume record. Ordinary mobile activation must not show

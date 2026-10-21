@@ -1,4 +1,4 @@
-import { link, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, rm, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,10 +15,6 @@ import { aiVaultScanWork, trackAiVaultScanProgress } from './ai-vault-scan-progr
 import { scanAiVaultSessions } from './session-scanner'
 import { resetSessionParseCacheForTests } from './session-scanner-parse-cache'
 import { AiVaultScannerServiceClient } from './session-scanner-service-client'
-import {
-  AI_VAULT_SERVICE_SCAN_TIMEOUT_MS,
-  AiVaultServiceDeadlineError
-} from './session-scanner-service-request-deadline'
 import {
   AiVaultServiceTestChild,
   aiVaultServiceRequestId,
@@ -39,11 +35,14 @@ afterEach(async () => {
 })
 
 /** Runs a real scan in this process the way the scanner child does, keeping every report. */
-async function scanInChild(): Promise<{ reports: AiVaultScanWork[]; final: AiVaultScanWork }> {
+async function scanInChild(
+  limit = 20
+): Promise<{ reports: AiVaultScanWork[]; final: AiVaultScanWork }> {
   tempRoot = await mkdtemp(join(tmpdir(), 'orca-scan-strip-'))
   const roots = isolatedScanRoots(tempRoot)
-  for (const name of ['a', 'b', 'c']) {
-    await writeJsonlFile(join(roots.claudeProjectsDir, 'project', `${name}.jsonl`), [
+  for (const [index, name] of ['a', 'b', 'c'].entries()) {
+    const path = join(roots.claudeProjectsDir, 'project', `${name}.jsonl`)
+    await writeJsonlFile(path, [
       {
         type: 'user',
         sessionId: name,
@@ -52,6 +51,7 @@ async function scanInChild(): Promise<{ reports: AiVaultScanWork[]; final: AiVau
         message: { role: 'user', content: `ask ${name}` }
       }
     ])
+    await utimes(path, 1_000 + index, 1_000 + index)
   }
   // A second path to one transcript, as Codex homes and linked profiles produce: still one file.
   await mkdir(join(roots.claudeProjectsDir, 'linked'))
@@ -64,10 +64,10 @@ async function scanInChild(): Promise<{ reports: AiVaultScanWork[]; final: AiVau
   let now = 0
   trackAiVaultScanProgress(
     signal,
-    (_units, work) => reports.push(work),
+    (work) => reports.push(work),
     () => (now += 1_000)
   )
-  await scanAiVaultSessions({ ...roots, platform: 'darwin', limit: 20, signal })
+  await scanAiVaultSessions({ ...roots, platform: 'darwin', limit, signal })
   return { reports, final: aiVaultScanWork(signal)! }
 }
 
@@ -110,7 +110,7 @@ describe('Session History scan progress, scanner child to window', () => {
     readyAiVaultServiceChild(child)
     await vi.waitFor(() => expect(localAiVaultScanProgress('')?.stage).toBe('finding'))
     const id = aiVaultServiceRequestId(child, 'scan')
-    child.emit('message', { type: 'progress', id, units: 1, work: reports[0] })
+    child.emit('message', { type: 'progress', id, work: reports[0] })
     child.emit('message', {
       type: 'result',
       id,
@@ -120,7 +120,6 @@ describe('Session History scan progress, scanner child to window', () => {
     await scan
 
     expect(published.map((progress) => progress?.stage ?? null)).toEqual([
-      null,
       'finding',
       reports[0]!.stage,
       'finished'
@@ -134,51 +133,29 @@ describe('Session History scan progress, scanner child to window', () => {
     })
   })
 
-  it('reports a scan the no-progress deadline ended as stopped on the agent still walking', async () => {
-    vi.useFakeTimers()
-    const { child, scan, published } = startScan()
-    const settled = scan.catch((error: Error) => error)
-    readyAiVaultServiceChild(child)
-    await vi.advanceTimersByTimeAsync(0)
-    const walking: AiVaultScanWork = {
-      stage: 'finding',
-      agents: [{ agent: 'codex', files: 77_483, databases: 0, walking: true }],
-      read: { done: 0, total: 0 }
-    }
-    child.emit('message', {
-      type: 'progress',
-      id: aiVaultServiceRequestId(child, 'scan'),
-      units: 1,
-      work: walking
-    })
-    await vi.advanceTimersByTimeAsync(AI_VAULT_SERVICE_SCAN_TIMEOUT_MS)
-
-    expect(await settled).toBeInstanceOf(Error)
-    expect(published.at(-1)).toMatchObject({ stage: 'stopped', agents: walking.agents })
+  it('reaches its total when the first pass stops before reading every file it planned', async () => {
+    // The newest file fills a limit of 1, so the pass never reads the older ones it announced.
+    const { final } = await scanInChild(1)
+    expect(final.read).toEqual({ done: 1, total: 1 })
   })
 
-  it('replaces an old stop during preparation and clears it for a later ordinary failure', () => {
+  it('keeps a replacement entry when the scan it replaced fails late', () => {
+    const earlier = startLocalAiVaultScanProgress('scope', 'earlier', () => 500)
+    earlier.finish(null)
     const old = startLocalAiVaultScanProgress('scope', 'old', () => 1_000)
-    old.sent(1)
-    old.fail(new AiVaultServiceDeadlineError('scan timed out', 'scan', 1))
-    expect(localAiVaultScanProgress('scope')?.stage).toBe('stopped')
-
     const replacement = startLocalAiVaultScanProgress('scope', 'replacement', () => 2_000)
-    old.fail(new Error('cancelled'))
-    expect(localAiVaultScanProgress('scope')).toBeNull()
-    replacement.sent(2)
+    old.fail()
     expect(localAiVaultScanProgress('scope')).toMatchObject({ stage: 'finding', startedAt: 2_000 })
 
-    replacement.fail(new Error('service unavailable'))
-    expect(localAiVaultScanProgress('scope')).toBeNull()
-
-    const interrupted = startLocalAiVaultScanProgress('scope', 'interrupted', () => 3_000)
-    interrupted.sent(3)
-    interrupted.fail(new AiVaultServiceDeadlineError('another scan timed out', 'scan', 2))
-    expect(localAiVaultScanProgress('scope')).toBeNull()
+    // A failed refresh puts back the last finished scan rather than leaving the key empty.
+    replacement.fail()
+    expect(localAiVaultScanProgress('scope')).toMatchObject({
+      scanId: 'earlier',
+      stage: 'finished'
+    })
   })
 
-  it('does not call a healthy scan stopped when the interactive lane expires', async () => {
+  it('settles unfinished work when an interactive timeout retires the shared scanner', async () => {
     vi.useFakeTimers()
     const { child, client, scan } = startScan()
     const rejectedScan = scan.catch((error: Error) => error)
@@ -193,14 +170,22 @@ describe('Session History scan progress, scanner child to window', () => {
     child.emit('message', {
       type: 'progress',
       id: aiVaultServiceRequestId(child, 'scan'),
-      units: 1,
       work: { stage: 'finding', agents: [], read: { done: 0, total: 0 } }
     })
     await vi.advanceTimersByTimeAsync(15_000)
 
-    expect(await rejectedInteractive).toBeInstanceOf(AiVaultServiceDeadlineError)
-    expect(await rejectedScan).toBeInstanceOf(AiVaultServiceDeadlineError)
-    expect(localAiVaultScanProgress('')).toBeNull()
+    expect(await rejectedInteractive).toBeInstanceOf(Error)
+    expect(await rejectedScan).toBeInstanceOf(Error)
+    expect(localAiVaultScanProgress('')).toMatchObject({ stage: 'finding', settledAt: 5_000 })
+    const retry = startLocalAiVaultScanProgress('', 'retry', () => 6_000)
+    retry.work({ stage: 'reading', agents: [], read: { done: 1, total: 2 } })
+    retry.fail()
+    expect(localAiVaultScanProgress('')).toMatchObject({
+      scanId: 'retry',
+      stage: 'reading',
+      settledAt: 6_000,
+      read: { done: 1, total: 2 }
+    })
     client.dispose()
   })
 

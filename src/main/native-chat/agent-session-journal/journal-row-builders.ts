@@ -1,4 +1,5 @@
 import type {
+  AgentJournalSubmission,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
   AgentJournalMessageItem,
@@ -8,7 +9,7 @@ import type {
   AgentSessionJournalIdentity,
   AgentSessionJournalProviderHandle
 } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionMessageSource } from '../../../shared/agent-session-message-source'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { agentSessionJournalProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { journalRowSchemaVersion } from '../../../shared/agent-session-journal-types'
 import { agentJournalLinkageFields } from '../../../shared/agent-session-journal-producer'
@@ -27,7 +28,7 @@ import {
   MAX_JOURNAL_LIFECYCLE_BATCH_BYTES,
   MAX_JOURNAL_LIFECYCLE_BATCH_MUTATIONS
 } from './journal-row-schema'
-import { boundInlineText, DEFAULT_JOURNAL_PAYLOAD_LIMITS } from './journal-payload-bounds'
+import { boundInlineText, JOURNAL_DISPATCH_REASON_LIMITS } from './journal-payload-bounds'
 import { assertSubmissionIdUnused } from './journal-write-guards'
 import { turnEndAfterStop } from './journal-stop-turn-end'
 import { nextJournalItemRevision } from './journal-item-revision'
@@ -55,6 +56,7 @@ export function journalItemRowBuilder(
   options: AgentJournalRowAttribution & {
     fence: number
     ownerFence?: number
+    executionOwner?: number
     observedAt?: number
     recovered?: true
   },
@@ -68,6 +70,7 @@ export function journalItemRowBuilder(
       seq,
       fence: options.fence,
       ownerFence: options.ownerFence,
+      executionOwner: options.executionOwner,
       ts: options.observedAt ?? ts,
       recovered: options.recovered,
       linkage: options,
@@ -97,7 +100,7 @@ export function journalSubmissionRowBuilder(
     handoverRecorded?: true
     queuedMessageId?: string
     origin?: 'client' | 'host'
-    options?: Readonly<Record<string, string>>
+    options?: AgentSessionExecutionOptions
   },
   /** Present when the append hands off a queued draft: the row names that draft, stamped here
    *  from the consume itself so no hand-off path can leave the link off. */
@@ -165,7 +168,7 @@ function boundedDispatchReason(input: ResolveDispatchInput): string | null {
   if (input.state === 'accepted' || input.state === 'pending' || !input.reason) {
     return null
   }
-  return boundInlineText(input.reason, DEFAULT_JOURNAL_PAYLOAD_LIMITS).text
+  return boundInlineText(input.reason, JOURNAL_DISPATCH_REASON_LIMITS).text
 }
 
 export function journalLifecycleBatchRowBuilder(
@@ -240,6 +243,7 @@ export function buildJournalItemRow(
     fence: number
     /** The writer's provenance claim (`journalItemOwnerFence`); absent for host bookkeeping. */
     ownerFence?: number
+    executionOwner?: number
     ts: number
     recovered?: true
     linkage?: AgentJournalProducerLinkage
@@ -260,6 +264,7 @@ export function buildJournalItemRow(
     body,
     ...journalRowBase(input.state.epoch, input.seq, input.fence, input.ts, [body]),
     ownerFence: journalItemOwnerFence(input.state, resolved, input),
+    ...(input.executionOwner === undefined ? {} : { executionOwner: input.executionOwner }),
     ...(input.recovered ? { recovered: input.recovered } : {}),
     turnScope: input.turnScope,
     ...agentJournalLinkageFields(input.linkage)
@@ -298,8 +303,8 @@ export function buildJournalSubmissionRow(input: {
   handoverRecorded?: true
   queuedMessageId?: string
   origin?: 'client' | 'host'
-  source?: Pick<AgentSessionMessageSource, 'kind'>
-  options?: Readonly<Record<string, string>>
+  source?: AgentJournalSubmission['source']
+  options?: AgentSessionExecutionOptions
 }): JournalSubmissionRow {
   return {
     kind: 'submission',

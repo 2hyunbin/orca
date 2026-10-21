@@ -54,7 +54,6 @@ export function useMobileNativeChatController(args: {
     activeSessionTabId,
     activeHandleRef,
     deviceTokenRef,
-    nativeChatTranscriptIsLocalReadable,
     nativeChatInputLeaseReady,
     connState,
     agentSessionHostSupport = null,
@@ -69,6 +68,7 @@ export function useMobileNativeChatController(args: {
     activeChatStructured,
     activeTabAgentWorking,
     isTabChatView,
+    setTabView,
     nativeChatStatus,
     showNativeChat,
     showNativeChatRef,
@@ -76,14 +76,7 @@ export function useMobileNativeChatController(args: {
     streamIdentity,
     streamScopeKey,
     toggleTabChatView
-  } = useMobileNativeChatActiveResolution({
-    hostId,
-    worktreeId,
-    activeSessionTab,
-    activeSessionTabId,
-    activeHandleRef,
-    nativeChatTranscriptIsLocalReadable
-  })
+  } = useMobileNativeChatActiveResolution(args)
 
   // The lane runs before the drafts hook (fixed hook order); Edit's composer
   // append reaches the drafts state through this ref, set below once they exist.
@@ -280,6 +273,7 @@ export function useMobileNativeChatController(args: {
 
   return {
     isTabChatView,
+    setTabView,
     toggleTabChatView,
     showNativeChat,
     showNativeChatRef,
@@ -295,6 +289,10 @@ export function useMobileNativeChatController(args: {
     /** Structured lane: drives the per-turn status row and live tool progress. */
     nativeChatStructured: activeChatStructured,
     nativeChatVisualSource: activeChatStructured ? structuredNativeChat.visualSource : null,
+    nativeChatItemSource:
+      activeChatStructured && agentSessionHostSupport?.itemDetail === true
+        ? structuredNativeChat.visualSource
+        : null,
     nativeChatAgentWorking,
     nativeChatTurnIndicator: activeChatStructured ? structuredNativeChat.turnIndicator : null,
     nativeChatWorkingStartedAt: activeChatStructured ? structuredNativeChat.workingStartedAt : null,

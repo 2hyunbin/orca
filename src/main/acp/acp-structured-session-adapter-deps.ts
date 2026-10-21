@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionLifecycleEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type {
@@ -10,6 +11,7 @@ import type { AcpLaunchSpec } from './acp-launch-specs'
 import type { ConnectAcpAgent } from './acp-structured-connection'
 import type { AcpStructuredLaunch } from './acp-structured-launch-resolution'
 import type { AgentChildWorkEvidence } from '../../shared/agent-status-child-work-evidence'
+import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
 
 /** How long a Stop, counted from its cancel, lets the agent end its turn before the child goes. */
 export const ACP_STOP_GRACE_MS = 4_000
@@ -22,6 +24,8 @@ export type AcpStructuredSessionAdapterDeps = {
   resolveLaunch: (input: {
     identity: AgentSessionJournalIdentity
     spawnToken: string
+    /** The mode the host decided this start runs with; absent asks. */
+    permissionMode?: AgentChatPermissionMode
   }) => Promise<AcpStructuredLaunch>
   /** The same launch for a read that starts no child (restart recovery): the agent's env, unsealed. */
   readLaunch: (identity: AgentSessionJournalIdentity) => Promise<AcpStructuredLaunch>
@@ -36,7 +40,12 @@ export type AcpStructuredSessionAdapterDeps = {
   readProcessStartTime?: (pid: number) => Promise<number | null>
   /** Every exit, expected or not: the host ends that child's record. */
   onEvent?: (event: StructuredAgentSessionLifecycleEvent) => void
-  onChildWorkEvidence?: (sessionId: string, evidence: AgentChildWorkEvidence[]) => void
+  /** `producer`: the reporting child's own sink, which writes what the report changes. */
+  onChildWorkEvidence?: (
+    sessionId: string,
+    evidence: AgentChildWorkEvidence[],
+    producer?: StructuredAgentSessionChildWorkProducer
+  ) => void
   /** A send this adapter admitted, settled once the agent answered for it. */
   onDispatchSettledLate?: (
     settlement: { sessionId: string; clientMessageId: string } & (

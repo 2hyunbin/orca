@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
+import { equalizeTerminalPanes } from './terminal-pane-layout-owner-commands'
 import {
-  equalizeTerminalPanes,
-  sendPaneCommandToLayoutOwner
-} from './terminal-pane-layout-owner-commands'
+  _resetLayoutFramePositionForTests,
+  beginLayoutFramePositions,
+  endLayoutFramePositions
+} from '@/runtime/layout-frame-position'
 
 const mocks = vi.hoisted(
   (): {
@@ -25,88 +27,16 @@ vi.mock('../../../../shared/layout-owner-switch', () => ({
 
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
-vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExplicitRuntimeEnvironmentIdForWorktree: () => mocks.ownerEnvironmentId
+vi.mock('@/lib/resolve-owner', () => ({
+  runtimeEnvironmentIdUnlessTwin: () => mocks.ownerEnvironmentId
 }))
-
-const SPLIT = {
-  type: 'splitPane',
-  tabId: 'tab-1',
-  leafId: 'leaf-1',
-  direction: 'vertical'
-} as const
-
-function handlers() {
-  return { apply: vi.fn(), asToday: vi.fn(), refused: vi.fn() }
-}
-
-describe('sendPaneCommandToLayoutOwner', () => {
-  beforeEach(() => {
-    mocks.callRuntimeRpc.mockReset()
-    mocks.ownerEnvironmentId = null
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-
-  it('asks local main first, then applies main’s result', async () => {
-    mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: { leafId: 'leaf-minted' } })
-    const on = handlers()
-
-    expect(sendPaneCommandToLayoutOwner('worktree-1', SPLIT, on)).toBe(true)
-
-    expect(mocks.callRuntimeRpc).toHaveBeenCalledWith({ kind: 'local' }, 'layout.apply', {
-      command: { ...SPLIT, workspace: 'worktree-1' }
-    })
-    expect(on.apply).not.toHaveBeenCalled()
-    await vi.waitFor(() => expect(on.apply).toHaveBeenCalledWith({ leafId: 'leaf-minted' }))
-    expect(on.asToday).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    ['a refusal', () => mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'last_pane' })],
-    ['a failed call', () => mocks.callRuntimeRpc.mockRejectedValue(new Error('rpc_failed'))]
-  ])('changes nothing after %s', async (_case, arrange) => {
-    arrange()
-    const on = handlers()
-
-    expect(sendPaneCommandToLayoutOwner('worktree-1', SPLIT, on)).toBe(true)
-
-    await vi.waitFor(() => expect(console.warn).toHaveBeenCalled())
-    expect(on.apply).not.toHaveBeenCalled()
-    expect(on.asToday).not.toHaveBeenCalled()
-  })
-
-  it('hands any other refusal to the caller', async () => {
-    mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'last_pane' })
-    const on = handlers()
-
-    sendPaneCommandToLayoutOwner('worktree-1', SPLIT, on)
-
-    await vi.waitFor(() => expect(on.refused).toHaveBeenCalledWith('last_pane'))
-  })
-
-  it('acts as today when main says a paired server holds the tab', async () => {
-    mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'host_not_owned' })
-    const on = handlers()
-
-    expect(sendPaneCommandToLayoutOwner('worktree-1', SPLIT, on)).toBe(true)
-
-    await vi.waitFor(() => expect(on.asToday).toHaveBeenCalled())
-    expect(on.apply).not.toHaveBeenCalled()
-  })
-
-  it('leaves a paired server’s workspace to today’s path', () => {
-    mocks.ownerEnvironmentId = 'env-1'
-
-    expect(sendPaneCommandToLayoutOwner('worktree-1', SPLIT, handlers())).toBe(false)
-    expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
-  })
-})
 
 describe('equalizeTerminalPanes', () => {
   beforeEach(() => {
     mocks.callRuntimeRpc.mockReset()
     mocks.ownerEnvironmentId = null
     mocks.layoutOwnerIsMain = false
+    _resetLayoutFramePositionForTests()
   })
 
   function manager() {
@@ -131,20 +61,39 @@ describe('equalizeTerminalPanes', () => {
     expect(mocks.callRuntimeRpc).not.toHaveBeenCalled()
   })
 
-  it('a layout-owner build equalizes once main has', async () => {
+  it('a layout-owner build leaves the sizes to main’s frame, then focuses', async () => {
     mocks.layoutOwnerIsMain = true
+    beginLayoutFramePositions()
     mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
     const current = manager()
+    const then = vi.fn()
 
     equalizeTerminalPanes(
       { worktreeId: 'worktree-1', tabId: 'tab-1', getManager: () => current },
-      vi.fn()
+      then
     )
 
     expect(mocks.callRuntimeRpc).toHaveBeenCalledWith({ kind: 'local' }, 'layout.apply', {
       command: { type: 'equalizePanes', tabId: 'tab-1', workspace: 'worktree-1' }
     })
+    await vi.waitFor(() => expect(then).toHaveBeenCalledWith(current))
     expect(current.equalizePaneSizes).not.toHaveBeenCalled()
-    await vi.waitFor(() => expect(current.equalizePaneSizes).toHaveBeenCalledOnce())
+  })
+
+  it('a layout-owner build equalizes itself when no frame is coming', async () => {
+    mocks.layoutOwnerIsMain = true
+    beginLayoutFramePositions()
+    endLayoutFramePositions()
+    mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
+    const current = manager()
+    const then = vi.fn()
+
+    equalizeTerminalPanes(
+      { worktreeId: 'worktree-1', tabId: 'tab-1', getManager: () => current },
+      then
+    )
+
+    await vi.waitFor(() => expect(then).toHaveBeenCalledWith(current))
+    expect(current.equalizePaneSizes).toHaveBeenCalledOnce()
   })
 })
