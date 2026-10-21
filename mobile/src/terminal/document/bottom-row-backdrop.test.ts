@@ -180,7 +180,7 @@ describe("xterm's own cells", () => {
       { name: 'truecolor', data: '\x1b[48;2;14;20;37m\x1b[K', expected: NAVY },
       { name: 'palette', data: '\x1b[42m\x1b[K', expected: null },
       // Erasing carries the background but not inverse, so the row is filled with inverse text.
-      { name: 'inverse', data: '\x1b[7m' + ' '.repeat(10), expected: null },
+      { name: 'inverse', data: `\x1b[7m${' '.repeat(10)}`, expected: null },
       { name: 'mixed', data: '\x1b[48;2;14;20;37m  \x1b[0m', expected: null }
     ]
     for (const { name, data, expected } of cases) {

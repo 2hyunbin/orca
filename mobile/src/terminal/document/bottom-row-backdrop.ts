@@ -43,9 +43,7 @@ export function lastRowBackground(scope: TerminalDocumentScope): string | null {
   if (shared === DEFAULT_BACKGROUND) {
     return (term.element && term.element.style.backgroundColor) || scope.terminalTheme.background
   }
-  return (
-    'rgb(' + ((shared >> 16) & 255) + ', ' + ((shared >> 8) & 255) + ', ' + (shared & 255) + ')'
-  )
+  return `rgb(${(shared >> 16) & 255}, ${(shared >> 8) & 255}, ${shared & 255})`
 }
 
 // Extend only the fractional row; larger gaps belong to the surrounding theme.
@@ -61,14 +59,7 @@ export function paintBottomRowBackdrop(scope: TerminalDocumentScope) {
     const strip = scope.viewportRect().height - gridBottom
     const color = strip > 0 && strip < rowHeight ? lastRowBackground(scope) : null
     if (color) {
-      fill =
-        'linear-gradient(to bottom, transparent ' +
-        gridBottom +
-        'px, ' +
-        color +
-        ' ' +
-        gridBottom +
-        'px)'
+      fill = `linear-gradient(to bottom, transparent ${gridBottom}px, ${color} ${gridBottom}px)`
     }
   }
   if (fill === scope.bottomRowBackdrop) {
