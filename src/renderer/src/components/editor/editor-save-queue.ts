@@ -39,6 +39,7 @@ import { withEditorFileWriteLock } from './editor-file-write-lock'
 import { editorSaveWriterView } from './editor-save-writer-view'
 import { createEditorSaveSlots, type EditorSaveRequest } from './editor-save-slots'
 import { EditorSaveDiscardedError, editorDiscardEpoch } from './editor-discard-epoch'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -133,7 +134,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       return 'failed'
     }
     const worktree = liveFile.worktreeId
-      ? findWorktreeById(state.worktreesByRepo ?? {}, liveFile.worktreeId)
+      ? findWorktreeById(selectWorktreesByRepo(state) ?? {}, liveFile.worktreeId)
       : null
     const fileContext = getEditorFileOperationContext(state, liveFile, worktree?.path ?? null)
     const connectionId = fileContext.connectionId
