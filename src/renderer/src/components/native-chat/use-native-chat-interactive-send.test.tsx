@@ -118,6 +118,43 @@ describe('useNativeChatInteractiveSend', () => {
     expect(mocks.inferQuestionAnswered).toHaveBeenCalledOnce()
   })
 
+  it('guards OMP groups against a changed question and fences blind retries', () => {
+    const original = {
+      ...waitingQuestion,
+      agentType: 'omp',
+      interactivePrompt: JSON.stringify(PROMPT)
+    }
+    mocks.storeState.agentStatusByPaneKey[PANE_KEY] = original
+    const { result } = renderHook(() => useNativeChatInteractiveSend(PANE_KEY, 'pty-1', 'omp'))
+    const settled = vi.fn()
+    act(() => result.current.sendAnswer(PROMPT, [{ indices: [1] }], settled))
+    const canWrite = mocks.sendNativeChatAskAnswer.mock.calls[0]?.[3]
+    expect(canWrite()).toBe(true)
+    mocks.storeState.agentStatusByPaneKey[PANE_KEY] = { ...original, state: 'working' }
+    expect(canWrite()).toBe(false)
+    act(() => result.current.sendAnswer(PROMPT, [{ indices: [1] }], settled))
+    expect(mocks.sendNativeChatAskAnswer).toHaveBeenCalledTimes(1)
+    expect(settled).toHaveBeenCalledWith(false)
+    mocks.storeState.agentStatusByPaneKey[PANE_KEY] = {
+      ...original,
+      stateStartedAt: original.stateStartedAt + 1
+    }
+    act(() => result.current.sendAnswer(PROMPT, [{ indices: [1] }], settled))
+    expect(mocks.sendNativeChatAskAnswer).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses an OMP status prompt that is already working before delivery starts', () => {
+    mocks.storeState.agentStatusByPaneKey[PANE_KEY] = {
+      ...waitingQuestion,
+      agentType: 'omp',
+      state: 'working',
+      interactivePrompt: JSON.stringify(PROMPT)
+    }
+    const { result } = renderHook(() => useNativeChatInteractiveSend(PANE_KEY, 'pty-1', 'omp'))
+    act(() => result.current.sendAnswer(PROMPT, [{ indices: [1] }]))
+    expect(mocks.sendNativeChatAskAnswer.mock.calls[0]?.[3]()).toBe(false)
+  })
+
   it('does nothing when no option is answered', () => {
     const { result } = renderHook(() => useNativeChatInteractiveSend(PANE_KEY, 'pty-1', 'claude'))
 

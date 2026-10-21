@@ -3,6 +3,7 @@ import {
   buildNativeChatAskAnswerKeys,
   formatAskAnswer,
   hasAskAnswer,
+  nativeChatAskDismissKey,
   type AskAnswerSelection,
   type AskPrompt
 } from '../../../src/shared/native-chat-ask'
@@ -17,7 +18,10 @@ import {
   acquireMobileNativeChatTerminalWrite,
   releaseMobileNativeChatTerminalWrite
 } from './mobile-native-chat-terminal-write-lock'
-import { shouldStepNativeChatAskAnswer } from '../../../src/shared/native-chat-agent-support'
+import {
+  resolveNativeChatTranscriptAgent,
+  shouldStepNativeChatAskAnswer
+} from '../../../src/shared/native-chat-agent-support'
 
 /** Sends an ask-user answer to the active chat pane. Selector agents use their
  *  own keystrokes; other agents get pasted label text.
@@ -58,6 +62,7 @@ export function useMobileNativeChatAnswerSend(args: {
   sessionId: string | null
   streamIdentity: string
   onSendError: (message: string) => void
+  currentAsk?: AskPrompt | null
 }): MobileNativeChatAnswerSend {
   const {
     client,
@@ -69,6 +74,12 @@ export function useMobileNativeChatAnswerSend(args: {
     streamIdentity,
     onSendError
   } = args
+  const currentAskRef = useRef(args.currentAsk)
+  currentAskRef.current = args.currentAsk
+  const attemptedOmpAskRef = useRef<string | null>(null)
+  useEffect(() => {
+    attemptedOmpAskRef.current = null
+  }, [nativeChatAskDismissKey(args.currentAsk ?? null), sessionId, streamIdentity])
   const generationRef = useRef(0)
   const activeRouteRef = useRef({ client, enabled, sessionId, streamIdentity })
   activeRouteRef.current = { client, enabled, sessionId, streamIdentity }
@@ -107,6 +118,14 @@ export function useMobileNativeChatAnswerSend(args: {
         return false
       }
       if (!hasAskAnswer(prompt, selections)) {
+        return false
+      }
+      const agent = agentRef.current
+      const omp = resolveNativeChatTranscriptAgent(agent) === 'omp'
+      const askKey = nativeChatAskDismissKey(prompt)
+      const ompAttemptKey = JSON.stringify([streamIdentity, sessionId, handle, askKey])
+      if (omp && attemptedOmpAskRef.current === ompAttemptKey) {
+        onSendError('Answer already attempted — check terminal before retrying')
         return false
       }
       // One composed write sequence per terminal: an answer landing mid-flight
@@ -162,7 +181,11 @@ export function useMobileNativeChatAnswerSend(args: {
             activeRoute.client !== client ||
             activeRoute.sessionId !== sessionId ||
             activeRoute.streamIdentity !== streamIdentity ||
-            handleRef.current !== handle
+            handleRef.current !== handle ||
+            agentRef.current !== agent ||
+            (omp &&
+              currentAskRef.current !== undefined &&
+              nativeChatAskDismissKey(currentAskRef.current) !== askKey)
           ) {
             return false
           }
@@ -178,9 +201,15 @@ export function useMobileNativeChatAnswerSend(args: {
               : {})
           })
           if (outcome === 'unknown') {
+            if (omp) {
+              attemptedOmpAskRef.current = ompAttemptKey
+            }
             sawUnknownOutcome = true
           }
           if (outcome === 'accepted') {
+            if (omp) {
+              attemptedOmpAskRef.current = ompAttemptKey
+            }
             sawAcceptedGroup = true
           }
           return outcome === 'accepted'

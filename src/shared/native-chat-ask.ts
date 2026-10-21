@@ -7,6 +7,7 @@ import type {
 import { isInterruptedStatusMessage, type NativeChatMessage } from './native-chat-types'
 import { resolveNativeChatTranscriptAgent } from './native-chat-agent-support'
 import { AGENT_TUI_CLEAR_INPUT_MAX } from './agent-tui-input-clear'
+import { isOmpAskSelectionValid } from './native-chat-omp-selection'
 
 export type { AskOption, AskPrompt, AskQuestion, InteractiveQuestionParser }
 
@@ -337,10 +338,9 @@ export function buildOmpAskAnswerKeys(
   prompt: AskPrompt,
   selections: AskAnswerSelection[]
 ): AskAnswerKeyGroup[] {
-  if (!hasAskAnswer(prompt, selections)) {
+  if (!hasAskAnswer(prompt, selections) || !isOmpAskSelectionValid(prompt, selections)) {
     return []
   }
-  const hasSubmitTab = prompt.questions.length > 1 || prompt.questions.some((q) => q.multiSelect)
   // Clear any draft that would otherwise consume the dialog keys.
   const groups: AskAnswerKeyGroup[] = [{ raw: AGENT_TUI_CLEAR_INPUT_MAX }]
   const moveTo = (optionCount: number, row: number): void => {
@@ -378,7 +378,7 @@ export function buildOmpAskAnswerKeys(
     }
   })
 
-  if (hasSubmitTab) {
+  if (prompt.questions.length > 1 || prompt.questions.some((q) => q.multiSelect)) {
     groups.push({ raw: ASK_ENTER })
   }
   return groups

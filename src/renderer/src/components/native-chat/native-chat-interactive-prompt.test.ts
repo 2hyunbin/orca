@@ -403,6 +403,13 @@ describe('buildOmpAskAnswerKeys', () => {
     ])
   })
 
+  it.each([[3], [-1], [0.5], [0, 0]])(
+    'rejects invalid OMP indices %j before clearing the terminal',
+    (...indices) => {
+      expect(buildOmpAskAnswerKeys(single(['A', 'B', 'C'], true), [{ indices }])).toEqual([])
+    }
+  )
+
   it('returns no keys when nothing is answered', () => {
     expect(buildOmpAskAnswerKeys(single(['A', 'B', 'C']), [{ indices: [] }])).toEqual([])
     expect(buildOmpAskAnswerKeys(single(['A', 'B', 'C']), [])).toEqual([])

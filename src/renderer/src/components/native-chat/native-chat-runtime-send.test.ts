@@ -463,7 +463,9 @@ describe('sendNativeChatAskAnswer', () => {
   })
 
   it('returns a no-op handle for an empty key group list', () => {
-    const handle = sendNativeChatAskAnswer(PTY, [])
+    const settled = vi.fn()
+    const handle = sendNativeChatAskAnswer(PTY, [], settled)
+    expect(settled).toHaveBeenCalledExactlyOnceWith(false)
     expect(handle.settleAfterMs).toBe(0)
     handle.cancel()
     expect(sendRuntimePtyInput).not.toHaveBeenCalled()
@@ -492,6 +494,18 @@ describe('sendNativeChatAskAnswer', () => {
       'driving',
       undefined
     )
+  })
+
+  it('stops a paced selector before writing when its question guard changes', async () => {
+    let current = true
+    const settled = vi.fn()
+    sendNativeChatAskAnswer(PTY, [{ raw: ' ' }, { raw: '\r' }], settled, () => current)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sendRuntimePtyInputVerified).toHaveBeenCalledTimes(1)
+    current = false
+    await vi.runAllTimersAsync()
+    expect(sendRuntimePtyInputVerified).toHaveBeenCalledTimes(1)
+    expect(settled).toHaveBeenCalledExactlyOnceWith(false)
   })
 
   it('cancels remaining key group timers', async () => {

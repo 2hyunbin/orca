@@ -48,7 +48,11 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
     vi.useRealTimers()
   })
 
-  async function mount(client: RpcClient, agent: AgentType): Promise<void> {
+  async function mount(
+    client: RpcClient,
+    agent: AgentType,
+    options: { currentAsk?: AskPrompt | null; onSendError?: (message: string) => void } = {}
+  ): Promise<() => Promise<void>> {
     function Harness(): null {
       answerSend = useMobileNativeChatAnswerSend({
         client,
@@ -58,13 +62,17 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
         agentRef: { current: agent },
         sessionId: 'session',
         streamIdentity: 'host\0worktree\0tab\0session',
-        onSendError: vi.fn()
+        onSendError: options.onSendError ?? vi.fn(),
+        currentAsk: options.currentAsk
       })
       return null
     }
     await act(async () => {
       renderer = create(createElement(Harness))
     })
+    return async () => {
+      await act(async () => renderer?.update(createElement(Harness)))
+    }
   }
 
   it('writes OMP groups from the shared key plan, paced, never as pasted labels', async () => {
@@ -104,6 +112,79 @@ describe('useMobileNativeChatAnswerSend for OMP asks', () => {
     )
     expect(sendRequest.mock.calls.map((call) => call[1])).not.toContainEqual(
       expect.objectContaining({ text: formatAskAnswer(prompt, selections), enter: true })
+    )
+  })
+
+  it.each(['accepted', 'unknown'] as const)(
+    'fences a later retry after an %s group even after the chain has unwound',
+    async (outcome) => {
+      const sendRequest = vi
+        .fn()
+        .mockResolvedValue(
+          outcome === 'accepted' ? acceptedResponse() : { ...acceptedResponse(), result: {} }
+        )
+      const prompt: AskPrompt = {
+        questions: [
+          { question: 'Pick', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] }
+        ]
+      }
+      const onSendError = vi.fn()
+      const options: { currentAsk: AskPrompt | null; onSendError: typeof onSendError } = {
+        currentAsk: prompt,
+        onSendError
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the scripted sendRequest port is exercised.
+      const rerender = await mount({ sendRequest } as unknown as RpcClient, 'omp', options)
+      let first: Promise<boolean> | undefined
+      await act(async () => {
+        first = answerSend?.answerAsk(prompt, [{ indices: [1] }])
+      })
+      act(() => answerSend?.cancelPending())
+      await expect(first).resolves.toBe(false)
+      await expect(answerSend?.answerAsk(prompt, [{ indices: [1] }])).resolves.toBe(false)
+      expect(sendRequest).toHaveBeenCalledTimes(1)
+      expect(onSendError).toHaveBeenLastCalledWith(
+        'Answer already attempted — check terminal before retrying'
+      )
+      options.currentAsk = null
+      await rerender()
+      options.currentAsk = prompt
+      await rerender()
+      sendRequest.mockResolvedValue(acceptedResponse())
+      let next: Promise<boolean> | undefined
+      await act(async () => {
+        next = answerSend?.answerAsk(prompt, [{ indices: [1] }])
+      })
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+      await expect(next).resolves.toBe(true)
+    }
+  )
+
+  it('stops before the next group when the observed card is replaced', async () => {
+    const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
+    const prompt: AskPrompt = {
+      questions: [
+        { question: 'Pick', multiSelect: false, options: [{ label: 'A' }, { label: 'B' }] }
+      ]
+    }
+    const options = { currentAsk: prompt, onSendError: vi.fn() }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the scripted sendRequest port is exercised.
+    const rerender = await mount({ sendRequest } as unknown as RpcClient, 'omp', options)
+    let result: Promise<boolean> | undefined
+    await act(async () => {
+      result = answerSend?.answerAsk(prompt, [{ indices: [1] }])
+    })
+    options.currentAsk = { questions: [{ ...prompt.questions[0]!, question: 'Replacement' }] }
+    await rerender()
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    await expect(result).resolves.toBe(false)
+    expect(sendRequest).toHaveBeenCalledTimes(1)
+    expect(options.onSendError).toHaveBeenCalledWith(
+      'Answer partly sent — check chat before retrying'
     )
   })
 })

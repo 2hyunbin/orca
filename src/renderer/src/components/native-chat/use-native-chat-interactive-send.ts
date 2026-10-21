@@ -19,6 +19,7 @@ import {
   sendNativeChatMessage,
   type NativeChatSendHandle
 } from './native-chat-runtime-send'
+import { nativeChatAskDismissKey, parseAskFromStatus } from '../../../../shared/native-chat-ask'
 import { inferQuestionAnsweredFromCurrentStatus } from '../terminal-pane/agent-question-answered-inference'
 
 // ESC is the agent-TUI interrupt/cancel key over the PTY (matches how the
@@ -63,6 +64,7 @@ export function useNativeChatInteractiveSend(
   // unmount so a detached setTimeout chain can't keep writing PTY bytes after
   // the view is gone / the user switched away.
   const inFlightRef = useRef<NativeChatSendHandle | null>(null)
+  const attemptedOmpAskRef = useRef<string | null>(null)
   const cancelInFlight = useCallback(() => {
     inFlightRef.current?.cancel()
     inFlightRef.current = null
@@ -113,6 +115,42 @@ export function useNativeChatInteractiveSend(
       const questionStatusBaseline = stepsAnswer
         ? useAppStore.getState().agentStatusByPaneKey[paneKey]
         : undefined
+      const omp = resolveNativeChatTranscriptAgent(agent) === 'omp'
+      const askKey = nativeChatAskDismissKey(prompt)
+      const baselineKey = JSON.stringify([
+        targetPtyId,
+        askKey,
+        questionStatusBaseline?.stateStartedAt,
+        questionStatusBaseline?.turnStartedAt
+      ])
+      if (omp && attemptedOmpAskRef.current === baselineKey) {
+        onDeliverySettled?.(false)
+        return { settleAfterMs: 0 }
+      }
+      const baselineAskKey = nativeChatAskDismissKey(
+        parseAskFromStatus(
+          questionStatusBaseline?.interactivePrompt,
+          questionStatusBaseline?.toolName
+        )
+      )
+      const beforeWrite = (): boolean => {
+        const current = useAppStore.getState().agentStatusByPaneKey[paneKey]
+        if (
+          (baselineAskKey !== null &&
+            (baselineAskKey !== askKey ||
+              (current?.state !== 'waiting' && current?.state !== 'blocked'))) ||
+          current?.state !== questionStatusBaseline?.state ||
+          current?.stateStartedAt !== questionStatusBaseline?.stateStartedAt ||
+          current?.turnStartedAt !== questionStatusBaseline?.turnStartedAt ||
+          nativeChatAskDismissKey(
+            parseAskFromStatus(current?.interactivePrompt, current?.toolName)
+          ) !== baselineAskKey
+        ) {
+          return false
+        }
+        attemptedOmpAskRef.current = baselineKey
+        return true
+      }
       let settledHandle: NativeChatSendHandle | null = null
       const onSettled = (delivered: boolean): void => {
         if (settledHandle && inFlightRef.current === settledHandle) {
@@ -137,7 +175,8 @@ export function useNativeChatInteractiveSend(
         ? sendNativeChatAskAnswer(
             targetPtyId,
             buildNativeChatAskAnswerKeys(agent, prompt, selections),
-            onSettled
+            onSettled,
+            ...(omp ? [beforeWrite] : [])
           )
         : sendNativeChatMessage(targetPtyId, formatAskAnswer(prompt, selections), {
             onDeliverySettled: onSettled

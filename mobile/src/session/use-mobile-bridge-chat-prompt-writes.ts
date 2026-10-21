@@ -1,4 +1,5 @@
 import type { MutableRefObject } from 'react'
+import type { AskPrompt } from '../../../src/shared/native-chat-ask'
 import type { RpcClient } from '../transport/rpc-client'
 import { useMobileNativeChatPermissionSend } from './mobile-native-chat-permission-send'
 import { useMobileNativeChatAnswerSend } from './use-mobile-native-chat-answer-send'
@@ -20,6 +21,7 @@ export function useMobileBridgeChatPromptWrites(args: {
   sessionId: string | null
   streamIdentity: string
   onSendError: (message: string) => void
+  currentAsk?: AskPrompt | null
 }): {
   answerAsk: MobileNativeChatAnswerSend['answerAsk']
   cancelAsk: () => Promise<boolean>
@@ -33,6 +35,7 @@ export function useMobileBridgeChatPromptWrites(args: {
     handleRef,
     deviceTokenRef,
     agentRef: args.agentRef,
+    currentAsk: args.currentAsk,
     sessionId: args.sessionId,
     streamIdentity,
     onSendError
