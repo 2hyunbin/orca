@@ -4,12 +4,15 @@ import {
 } from '../../../../shared/agent-session-option-catalog'
 import type { SourceControlActionLaunchPreferences } from '../../../../shared/source-control-ai-actions'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import { sourceControlActionOptions } from '../../../../shared/source-control-action-launch-preferences'
+import {
+  sourceControlActionOptions,
+  sourceControlActionPermissionModeRoute
+} from '../../../../shared/source-control-action-launch-preferences'
 import { translate } from '@/i18n/i18n'
 import { nativeChatPermissionModeLabel } from '../native-chat/native-chat-permission-mode-labels'
+import { sourceControlActionRouteHint } from './SourceControlActionOptionField'
 
-/** The model and permission mode saved in the recipe, named the way the chat pickers name them;
- *  chats and terminals both start with them. */
+/** Describes the saved choices and which launches they reach. */
 export function describeSourceControlActionModel(
   agent: TuiAgent,
   preferences: SourceControlActionLaunchPreferences
@@ -37,6 +40,14 @@ export function describeSourceControlActionModel(
   return translate(
     'settings.sourceControl.actionModel.savedLaunchOptions',
     'Saved options: {{value0}}. Older servers use their own permission settings.',
-    { value0: [...labels, nativeChatPermissionModeLabel(permissionMode)].join(' · ') }
+    {
+      value0: [
+        ...labels,
+        nativeChatPermissionModeLabel(permissionMode),
+        sourceControlActionRouteHint(sourceControlActionPermissionModeRoute(agent, permissionMode))
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    }
   )
 }

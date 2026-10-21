@@ -4,7 +4,7 @@ import { executeAgentLaunch } from './agent-launch-executor'
 
 function harness() {
   const readSettings = vi.fn(() => {
-    throw new Error('settings_not_needed_for_refusal')
+    throw new Error('settings_unavailable')
   })
   const createSupport = vi.fn(async () => {
     throw new Error('support_not_needed_for_refusal')
@@ -60,11 +60,11 @@ const creating: AgentLaunchIntent = {
 
 describe('OpenCode model preferences on unsupported launch placements', () => {
   it.each([reused, creating])(
-    'refuses before reading settings or creating or delivering',
+    'preserves definitive refusal without creating or delivering when the route settings read throws',
     async (intent) => {
       const h = harness()
       await expect(h.run(intent)).rejects.toMatchObject({ code: 'capability_unsupported' })
-      expect(h.readSettings).not.toHaveBeenCalled()
+      expect(h.readSettings).toHaveBeenCalledOnce()
       expect(h.createTerminal).not.toHaveBeenCalled()
       expect(h.createWorktree).not.toHaveBeenCalled()
       expect(h.deliverPrompt).not.toHaveBeenCalled()

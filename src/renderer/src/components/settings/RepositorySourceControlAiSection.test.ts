@@ -137,52 +137,67 @@ describe('RepositorySourceControlAiActionRows', () => {
     }
   )
 
-  it('renders save controls on dirty repository action recipes', () => {
-    const actionDirtyById = Object.fromEntries(
-      SOURCE_CONTROL_ACTION_IDS.map((actionId) => [actionId, actionId === 'fixCommitFailure'])
-    ) as Record<SourceControlActionId, boolean>
-    const source = {
-      enabled: true,
-      agentId: null,
-      selectedModelByAgent: {},
-      selectedThinkingByModel: {},
-      customAgentCommand: '',
-      instructionsByOperation: {}
-    } as SourceControlAiSettings
+  it.each([undefined, null, '', '--repo'])(
+    'renders save controls and argument ownership for %s',
+    (repoAgentArgs) => {
+      const actionDirtyById = Object.fromEntries(
+        SOURCE_CONTROL_ACTION_IDS.map((actionId) => [actionId, actionId === 'fixCommitFailure'])
+      ) as Record<SourceControlActionId, boolean>
+      const source = {
+        enabled: true,
+        agentId: null,
+        selectedModelByAgent: {},
+        selectedThinkingByModel: {},
+        customAgentCommand: '',
+        instructionsByOperation: {},
+        actions: { fixCommitFailure: { agentId: null, agentArgs: '--global' } }
+      } as SourceControlAiSettings
 
-    const markup = renderToStaticMarkup(
-      React.createElement(RepositorySourceControlAiActionRows, {
-        repoId: 'repo-1',
-        repoAi: {
-          actionOverrides: {
-            fixCommitFailure: {
-              agentId: null,
-              commandInputTemplate: '{basePrompt}\n\nrepo'
+      const markup = renderToStaticMarkup(
+        React.createElement(RepositorySourceControlAiActionRows, {
+          repoId: 'repo-1',
+          repoAi: {
+            actionOverrides: {
+              fixCommitFailure: {
+                agentId: null,
+                commandInputTemplate: '{basePrompt}\n\nrepo',
+                ...(repoAgentArgs !== undefined ? { agentArgs: repoAgentArgs } : {})
+              }
             }
-          }
-        },
-        source,
-        defaultTuiAgent: 'codex',
-        savingActionIds: {},
-        actionDirtyById,
-        onActionModeChange: () => {},
-        onActionAgentChange: () => {},
-        onActionLaunchPreferencesChange: () => {},
-        onActionTemplateChange: () => {},
-        onActionAgentArgsChange: () => {},
-        onAppendVariable: () => {},
-        onActionDiscard: () => {},
-        onActionSave: () => {}
-      })
-    )
+          },
+          source,
+          defaultTuiAgent: 'codex',
+          savingActionIds: {},
+          actionDirtyById,
+          onActionModeChange: () => {},
+          onActionAgentChange: () => {},
+          onActionLaunchPreferencesChange: () => {},
+          onActionTemplateChange: () => {},
+          onActionAgentArgsChange: () => {},
+          onAppendVariable: () => {},
+          onActionDiscard: () => {},
+          onActionSave: () => {}
+        })
+      )
 
-    expect(markup).toContain('Commit failure fixes')
-    expect(markup).toContain('Push failure fixes')
-    expect(markup).toContain('Unsaved changes')
-    expect(markup).toContain('Discard')
-    expect(markup).toContain('Save')
-    expect(markup).toContain('repo-repo-1-source-control-ai-fixCommitFailure')
-  })
+      expect(markup).toContain('Commit failure fixes')
+      expect(markup).toContain('Push failure fixes')
+      expect(markup).toContain('Unsaved changes')
+      expect(markup).toContain('Discard')
+      expect(markup).toContain('Save')
+      expect(markup).toContain('repo-repo-1-source-control-ai-fixCommitFailure')
+      const card = new DOMParser()
+        .parseFromString(markup, 'text/html')
+        .getElementById('repo-repo-1-source-control-ai-fixCommitFailure')
+      expect(card?.textContent).toContain(
+        repoAgentArgs === undefined
+          ? 'Global custom args'
+          : repoAgentArgs
+            ? 'Repository custom args'
+            : 'No args'
+      )
+    }
+  )
 })
 
 describe('dropRepoLegacyInstructionForAction', () => {

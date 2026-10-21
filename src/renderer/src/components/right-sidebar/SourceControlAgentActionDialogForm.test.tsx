@@ -142,6 +142,15 @@ describe('SourceControlAgentActionDialogForm', () => {
         agentArgsApply: false
       })
     ).toContain('Model from Settings: saved')
+    expect(
+      renderForm({
+        selectedAgent: 'antigravity',
+        recipe: {
+          agentId: 'antigravity',
+          launchPreferences: { agentId: 'antigravity', permissionMode: 'ask' }
+        }
+      })
+    ).toContain('Applies to chats only')
   })
 
   it('offers agents only, since an action cannot start without one', () => {
