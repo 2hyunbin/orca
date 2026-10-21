@@ -1,3 +1,4 @@
+import { getWorktreeIdFromHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { getLineageRenderInfo } from '../../../../shared/sidebar-list/worktree-lineage-projection'
@@ -55,7 +56,10 @@ export function getWorktreeLineageDropTargetId(args: {
     return null
   }
 
-  return rowTarget.getAttribute('data-worktree-drag-id')
+  return (
+    rowTarget.getAttribute('data-worktree-host-identity') ??
+    rowTarget.getAttribute('data-worktree-drag-id')
+  )
 }
 
 export function getReorderedWorktreeIdsToUnnest(args: {
@@ -63,7 +67,6 @@ export function getReorderedWorktreeIdsToUnnest(args: {
   sourceGroupIds: readonly string[]
   lineageById: Readonly<Record<string, WorktreeLineage>>
   worktreeMap: ReadonlyMap<string, Worktree>
-  cyclicLineageIds: ReadonlySet<string>
 }): string[] {
   const ids: string[] = []
   const seen = new Set<string>()
@@ -72,10 +75,9 @@ export function getReorderedWorktreeIdsToUnnest(args: {
     const worktree = args.worktreeMap.get(id)
     if (
       seen.has(id) ||
-      !sourceGroupIdSet.has(id) ||
+      !sourceGroupIdSet.has(getWorktreeIdFromHostIdentity(id)) ||
       !worktree ||
-      getLineageRenderInfo(worktree, args.lineageById, args.worktreeMap, args.cyclicLineageIds)
-        .state !== 'valid'
+      getLineageRenderInfo(worktree, args.lineageById, args.worktreeMap).state !== 'valid'
     ) {
       continue
     }

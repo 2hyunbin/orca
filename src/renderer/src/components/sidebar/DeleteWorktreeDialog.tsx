@@ -1,3 +1,4 @@
+import { getLineageInputs } from './visible-worktree-indexes'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
@@ -50,7 +51,6 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
   const clearWorktreeDeleteState = useAppStore((s) => s.clearWorktreeDeleteState)
   const allWorktrees = useAllWorktrees()
   const repos = useAppStore((s) => s.repos)
-  const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
   const updateSettings = useAppStore((s) => s.updateSettings)
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)
@@ -66,9 +66,7 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
     () =>
       Array.isArray(modalData.worktreeIds)
         ? modalData.worktreeIds.filter((id): id is string => typeof id === 'string')
-        : worktreeId
-          ? [worktreeId]
-          : [],
+        : [worktreeId].filter(Boolean),
     [modalData.worktreeIds, worktreeId]
   )
   const { worktreeDeleteIdentities, lineageDeleteIdentities, resolveConfirmedTargets } =
@@ -126,12 +124,13 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
     isFolderWorkspaceDelete
   })
   const deleteStateByWorktreeId = useAppStore((s) => s.deleteStateByWorktreeId)
+  const lineageInputs = useAppStore(getLineageInputs)
   const lineageDelete = useMemo(
     () =>
       !isBatchDelete && worktree
-        ? getWorkspaceDeleteLineage(worktree, allWorktrees, worktreeLineageById)
+        ? getWorkspaceDeleteLineage(worktree, lineageInputs.worktreeMap, lineageInputs.lineageById)
         : { descendants: [], deleteAllTargets: [] },
-    [allWorktrees, isBatchDelete, worktree, worktreeLineageById]
+    [isBatchDelete, worktree, lineageInputs]
   )
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   // Why: the main worktree is the repo's original clone directory — `git worktree remove`

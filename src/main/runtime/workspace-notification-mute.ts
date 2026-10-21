@@ -1,4 +1,7 @@
 import { resolveWorktreeLineageParents } from '../../shared/resolved-worktree-lineage'
+import { getWorktreeLineageCandidates, type CandidateStore } from '../worktree-lineage-candidates'
+import { getWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
 // The host's read of "Notify About Hidden Workspaces": with it off, news from a workspace the
 // desktop's sidebar Filters switches hide sends no phone push from the host. The shared unread dot
 // ignores it: clients' Filters differ.
@@ -29,7 +32,8 @@ export type WorkspaceNotificationMuteDeps = {
   store: Pick<
     RuntimeStore,
     'getUI' | 'getRepo' | 'getWorktreeMeta' | 'getAllWorktreeLineage' | 'getFolderWorkspaces'
-  > & { getSettings: () => { notifications?: NotificationSettings } }
+  > &
+    CandidateStore & { getSettings: () => { notifications?: NotificationSettings } }
   /** Last resolved Git listing, possibly stale; branch and HEAD come only from here. */
   resolvedWorktrees: readonly Worktree[] | null
 }
@@ -75,32 +79,34 @@ export function isWorkspaceHiddenBySidebarFilters(
       isWorkspaceOwnedBySomeoneElse(folder, EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT)
     )
   }
-  const lineage = deps.store.getAllWorktreeLineage?.() ?? {}
-  const children = new Map<string, string[]>()
-  const listedRows = deps.resolvedWorktrees ?? []
-  const rows = new Map(
-    listedRows.map((row) => [
-      row.id,
-      { id: row.id, instanceId: row.instanceId, hostId: row.hostId }
-    ])
+  const snapshot = getWorktreeLineageCandidates(deps.store)
+  const rows = new Map(snapshot.rows.map((row) => [getWorktreeHostIdentity(row), row]))
+  const listedByIdentity = new Map(
+    (deps.resolvedWorktrees ?? []).map((row) => {
+      const owners = snapshot.reposById.get(row.repoId) ?? []
+      const owned =
+        !row.hostId && owners.length === 1
+          ? { ...row, hostId: getRepoExecutionHostId(owners[0]) }
+          : row
+      return [getWorktreeHostIdentity(owned), owned]
+    })
   )
-  for (const edge of Object.values(lineage)) {
-    for (const id of [edge.worktreeId, edge.parentWorktreeId]) {
-      const meta = deps.store.getWorktreeMeta(id)
-      if (!rows.has(id) && meta) {
-        rows.set(id, { id, instanceId: meta.instanceId, hostId: meta.hostId })
-      }
-    }
+  for (const [key, row] of listedByIdentity) {
+    rows.set(key, { ...row, savedLineage: undefined, lineage: undefined })
   }
+  const children = new Map<string, string[]>()
   for (const [child, parent] of resolveWorktreeLineageParents(
     [...rows.values()],
-    (row) => lineage[row.id]
+    snapshot.edgeOf
   )) {
-    children.set(parent.id, [...(children.get(parent.id) ?? []), child.id])
+    const key = getWorktreeHostIdentity(parent)
+    children.set(key, [...(children.get(key) ?? []), getWorktreeHostIdentity(child)])
   }
-  const isRowHidden = (id: string): boolean => {
-    const listed = deps.resolvedWorktrees?.find((worktree) => worktree.id === id)
-    const meta = deps.store.getWorktreeMeta(id)
+  const isRowHidden = (key: string): boolean => {
+    const row = rows.get(key)
+    const id = row?.id ?? key
+    const listed = listedByIdentity.get(key)
+    const meta = row ?? deps.store.getWorktreeMeta(id)
     if (!listed && !meta) {
       return false
     }
@@ -128,12 +134,13 @@ export function isWorkspaceHiddenBySidebarFilters(
     )
   }
   const seen = new Set<string>()
-  const isShown = (id: string): boolean => {
-    if (seen.has(id)) {
+  const isShown = (key: string): boolean => {
+    if (seen.has(key)) {
       return false
     }
-    seen.add(id)
-    return !isRowHidden(id) || (children.get(id) ?? []).some(isShown)
+    seen.add(key)
+    return !isRowHidden(key) || (children.get(key) ?? []).some(isShown)
   }
-  return !isShown(workspaceId)
+  const targets = [...rows].filter(([, row]) => row.id === workspaceId)
+  return targets.length > 0 ? targets.every(([key]) => !isShown(key)) : isRowHidden(workspaceId)
 }

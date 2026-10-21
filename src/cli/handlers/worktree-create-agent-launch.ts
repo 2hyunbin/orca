@@ -108,7 +108,7 @@ export async function createWorktreeWithAgent(args: {
     ...(worktree
       ? {
           worktree,
-          lineage: worktree.lineage,
+          lineage: worktree.savedLineage !== undefined ? worktree.savedLineage : worktree.lineage,
           workspaceLineage: worktree.workspaceLineage ?? null
         }
       : { lineage: null }),

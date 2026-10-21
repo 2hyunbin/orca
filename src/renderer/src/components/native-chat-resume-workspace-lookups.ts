@@ -1,17 +1,7 @@
+import { getLineageInputs } from './sidebar/visible-worktree-indexes'
 import { useMemo } from 'react'
-import {
-  getCyclicProjectedWorktreeLineageIds,
-  getSidebarLineageAncestors
-} from '../../../shared/sidebar-list/worktree-lineage-projection'
-import {
-  getAllWorktreesFromState,
-  getWorktreeMapFromState,
-  getWorktreeOnHostFromState
-} from '@/store/selectors'
-import {
-  composeWorktreeHostIdentity,
-  getWorktreeHostIdentity
-} from '../../../shared/worktree/host-qualified-identity'
+import { getSidebarLineageAncestors } from '../../../shared/sidebar-list/worktree-lineage-projection'
+import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { useAppStore } from '../store'
 import type { ResumeWorkspaceGroup } from './native-chat-resume-on-restart-grouping'
@@ -50,35 +40,20 @@ export function useRepoIdByWorkspace(
 export function useLineageAncestors(
   workspaces: readonly ResumeWorkspaceGroup[]
 ): (group: ResumeWorkspaceGroup) => readonly string[] {
-  const worktreesByRepo = useAppStore((store) => store.worktreesByRepo)
-  const worktreeLineageById = useAppStore((store) => store.worktreeLineageById)
+  const inputs = useAppStore(getLineageInputs)
   const ancestors = useMemo(() => {
-    const state = { worktreesByRepo }
-    // Why: archived rows never render in the sidebar, so nothing nests under them.
-    const rows = new Map(
-      getAllWorktreesFromState(state)
-        .filter((worktree) => !worktree.isArchived)
-        .map((worktree) => [getWorktreeHostIdentity(worktree), worktree])
-    )
-    const cyclic = getCyclicProjectedWorktreeLineageIds(
-      worktreeLineageById,
-      getWorktreeMapFromState(state)
-    )
+    const rows = inputs.worktreeMap
     return new Map(
       workspaces.map((group) => {
         // Why: a row with no host id (older metadata) is still the chat's workspace.
         const target =
-          getWorktreeOnHostFromState(
-            state,
-            group.workspaceId,
-            group.candidates[0]?.executionHostId
+          rows.get(
+            composeWorktreeHostIdentity(group.candidates[0]?.executionHostId, group.workspaceId)
           ) ?? rows.get(composeWorktreeHostIdentity(undefined, group.workspaceId))
-        const parents = target
-          ? getSidebarLineageAncestors(target, worktreeLineageById, rows, cyclic)
-          : []
+        const parents = target ? getSidebarLineageAncestors(target, inputs.lineageById, rows) : []
         return [group, parents.map((parent) => parent.id)]
       })
     )
-  }, [workspaces, worktreesByRepo, worktreeLineageById])
+  }, [workspaces, inputs])
   return (group) => ancestors.get(group) ?? []
 }

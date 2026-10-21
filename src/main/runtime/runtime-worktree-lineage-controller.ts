@@ -6,7 +6,10 @@ import {
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../shared/workspace-scope'
-import { sharesResolvedWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
+import {
+  isSameSavedWorktreeParent,
+  sharesResolvedWorktreeLineageBoundary
+} from '../../shared/resolved-worktree-lineage'
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
 import { worktreeRowTarget } from '../persistence/host-qualified-worktree-meta'
@@ -92,9 +95,11 @@ export class RuntimeWorktreeLineageController {
   validateParent(child: ResolvedWorktree, parent: ResolvedWorktree): void {
     const existing = this.deps.getStore()?.getWorktreeLineage?.(child.id)
     if (
-      existing?.parentWorktreeId === parent.id &&
-      existing.parentWorktreeInstanceId === parent.instanceId &&
-      existing.worktreeInstanceId === child.instanceId
+      isSameSavedWorktreeParent(existing, child, {
+        worktreeId: parent.id,
+        instanceId: parent.instanceId,
+        external: !sharesResolvedWorktreeLineageBoundary(child, parent)
+      })
     ) {
       return
     }

@@ -12,8 +12,12 @@ import { WorkspaceAttachmentsSchema } from '../workspace-attachment-schema'
 import { getWorkspaceAttachments } from '../workspace-attachments'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../workspace-statuses'
 import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
-import { worktreeLineageFromWorkspaceLineage } from '../resolved-worktree-lineage'
+import {
+  projectResolvedWorktreeLineage,
+  mergeWorkspaceLineageRecords
+} from '../resolved-worktree-lineage'
 import type { WorkspaceLineage, WorktreeLineage } from '../worktree/lineage-types'
+import type { WorktreeMeta } from '../worktree/meta-types'
 import type { Worktree } from '../worktree/types'
 import { getWorkspaceRowKindFacts } from '../worktree/workspace-kinds'
 import { SMART_TIERS } from './sort-stamps'
@@ -100,8 +104,14 @@ function toWorkspaceRow(
   hostId: ExecutionHostId,
   kind: WorkspaceRow['kind'],
   repo: Repo | undefined,
-  lineage: WorktreeLineage | undefined
+  lineage: WorktreeLineage | null | undefined
 ): WorkspaceRow {
+  lineage =
+    worktree.savedLineage === null
+      ? null
+      : worktree.savedLineage !== undefined
+        ? worktree.lineage
+        : lineage
   const kindFacts = getWorkspaceRowKindFacts(worktree, repo)
   return {
     id: worktree.id,
@@ -113,7 +123,7 @@ function toWorkspaceRow(
     displayName: worktree.displayName,
     isMainWorktree: worktree.isMainWorktree,
     ...(worktree.instanceId !== undefined ? { instanceId: worktree.instanceId } : {}),
-    savedLineage: worktree.savedLineage ?? lineage ?? null,
+    savedLineage: worktree.savedLineage !== undefined ? worktree.savedLineage : (lineage ?? null),
     lineage: lineage
       ? {
           parentWorktreeId: lineage.parentWorktreeId,
@@ -198,6 +208,8 @@ export function buildWorkspaceRows(catalog: {
   repos: readonly Repo[]
   lineageById: Readonly<Record<string, WorktreeLineage>>
   workspaceLineageByChildKey?: Readonly<Record<string, WorkspaceLineage>>
+  knownPeers?: readonly Worktree[]
+  metadata?: Readonly<Record<string, WorktreeMeta>>
 }): Map<string, WorkspaceRow> {
   const rows = new Map<string, WorkspaceRow>()
   const add = (
@@ -211,13 +223,20 @@ export function buildWorkspaceRows(catalog: {
       rows.set(listed.identity, toWorkspaceRow(worktree, listed.hostId, kind, repo, lineage))
     }
   }
-  for (const { worktree, repo } of withOwnerRepos(catalog.worktrees, catalog.repos)) {
-    add(worktree, 'git', repo, catalog.lineageById[worktree.id])
-  }
-  for (const folderWorkspace of catalog.folderWorkspaces) {
-    const worktree = folderWorkspaceToWorktree(folderWorkspace)
-    const edge = catalog.workspaceLineageByChildKey?.[worktree.id]
-    add(worktree, 'folder', undefined, edge ? worktreeLineageFromWorkspaceLineage(edge) : undefined)
+  const all = [...catalog.worktrees, ...catalog.folderWorkspaces.map(folderWorkspaceToWorktree)]
+  const projected = projectResolvedWorktreeLineage(
+    all,
+    mergeWorkspaceLineageRecords(catalog.lineageById, catalog.workspaceLineageByChildKey ?? {}),
+    catalog.knownPeers,
+    catalog.metadata
+  )
+  for (const [index, { worktree, repo }] of withOwnerRepos(projected, catalog.repos).entries()) {
+    add(
+      worktree,
+      index < catalog.worktrees.length ? 'git' : 'folder',
+      repo,
+      worktree.lineage ?? undefined
+    )
   }
   return rows
 }

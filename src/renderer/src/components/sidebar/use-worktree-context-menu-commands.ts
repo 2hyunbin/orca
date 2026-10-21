@@ -40,6 +40,7 @@ export function useWorktreeContextMenuCommands(args: {
   subtreeSleepableWorktrees: readonly Worktree[]
   updateWorktreeMeta: ReturnType<typeof useAppStore.getState>['updateWorktreeMeta']
   validParentWorktreeId: string | null
+  validParentHostId?: Worktree['hostId']
   worktree: Worktree
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
 }) {
@@ -175,9 +176,12 @@ export function useWorktreeContextMenuCommands(args: {
   }, [args])
   const handleOpenParent = useCallback(() => {
     if (args.validParentWorktreeId) {
-      activateAndRevealWorktree(args.validParentWorktreeId, { navigationIntent: 'user-open' })
+      activateAndRevealWorktree(args.validParentWorktreeId, {
+        navigationIntent: 'user-open',
+        executionHostId: args.validParentHostId
+      })
     }
-  }, [args.validParentWorktreeId])
+  }, [args.validParentWorktreeId, args.validParentHostId])
   return {
     handleAssignWorkspaceStatus,
     handleCloseTerminals,

@@ -1,4 +1,4 @@
-import { folderWorkspaceToWorktree } from '../../../shared/folder-workspace-worktree'
+import { getWorktreeLineageCandidates } from '../../worktree-lineage-candidates'
 import { OrcaRuntimeWithReadKittyFile } from '../orca-runtime-read-kitty-file'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
@@ -16,10 +16,7 @@ import {
   resolveRepoWorktreeRows,
   resolveScopedWorktreeIdRow
 } from '../repo-worktree-row-resolution'
-import {
-  projectResolvedWorktreeLineage,
-  mergeWorkspaceLineageRecords
-} from '../../../shared/resolved-worktree-lineage'
+import { projectResolvedWorktreeLineage } from '../../../shared/resolved-worktree-lineage'
 import type { RepoWorktreeRowDeps } from '../repo-worktree-row-resolution'
 import { listRuntimeFolderWorkspaces } from '../runtime-worktree-filesystem'
 import type { ExecutionHostId } from '../../../shared/execution-host'
@@ -105,7 +102,8 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     if (!this.store) {
       return { worktrees: [], platformByRepoId: new Map() }
     }
-    const metaById = this.store.getAllWorktreeMeta() ?? {}
+    const snapshot = getWorktreeLineageCandidates(this.store)
+    const metaById = snapshot.rawMetadata
     const repos = this.store.getRepos()
     const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
     const platformByRepoId = new Map(
@@ -117,17 +115,22 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     const deps = this.repoWorktreeRowDeps()
     const perRepoWorktrees = await Promise.all(
       repos.map(
-        async (repo) => await resolveRepoWorktreeRows(deps, repo, metaById, projectRuntimeByRepoId)
+        async (repo) =>
+          await resolveRepoWorktreeRows(
+            deps,
+            repo,
+            metaById,
+            projectRuntimeByRepoId,
+            snapshot.reposById.get(repo.id)?.length,
+            snapshot
+          )
       )
-    )
-    const lineageById = mergeWorkspaceLineageRecords(
-      this.store.getAllWorktreeLineage?.() ?? {},
-      this.store.getAllWorkspaceLineage?.() ?? {}
     )
     const worktrees = projectResolvedWorktreeLineage(
       perRepoWorktrees.flat(),
-      lineageById,
-      this.store.getFolderWorkspaces?.().map(folderWorkspaceToWorktree) ?? []
+      snapshot.lineageById,
+      snapshot.folders,
+      snapshot.rawMetadata
     )
     return { worktrees, platformByRepoId }
   }

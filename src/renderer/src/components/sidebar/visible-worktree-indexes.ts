@@ -1,37 +1,8 @@
-import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-
-type WorktreesByRepo = Record<string, Worktree[]>
-
-/**
- * Non-archived rows by host identity — the map `computeVisibleWorktrees` hands to
- * the lineage projection.
- *
- * Why cached: `getSidebarLineageParentsByIdentity` keys its memo on this map's
- * identity, so a per-call Map is a guaranteed miss that re-walks every workspace
- * and re-runs cycle detection on each PTY, tab and agent-status write.
- *
- * Why not the store's `getIndexedWorktreeMap`: this index excludes archived rows
- * (an archived parent resolving as a valid ancestor would inject a phantom row),
- * and keeps both rows of a two-host id collision.
- */
-const lineageAncestorIndexCache = new WeakMap<WorktreesByRepo, Map<string, Worktree>>()
-
-export function getLineageAncestorIndex(worktreesByRepo: WorktreesByRepo): Map<string, Worktree> {
-  const cached = lineageAncestorIndexCache.get(worktreesByRepo)
-  if (cached) {
-    return cached
-  }
-  const index = new Map<string, Worktree>()
-  for (const worktree of getIndexedAllWorktrees(worktreesByRepo)) {
-    if (!worktree.isArchived) {
-      index.set(getWorktreeHostIdentity(worktree), worktree)
-    }
-  }
-  lineageAncestorIndexCache.set(worktreesByRepo, index)
-  return index
-}
+import type { AppState } from '@/store/types'
+import { getWorkspaceLineageRows } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { mergeWorkspaceLineageRecords } from '../../../../shared/resolved-worktree-lineage'
+export { getWorkspaceLineageRows as getLineageAncestorIndex } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 /**
  * Rank of each key in the frozen sidebar sort order. Keyed on the array the sort
@@ -47,4 +18,36 @@ export function getSortedWorktreeRankIndex(sortedIds: readonly string[]): Map<st
   const index = new Map(sortedIds.map((id, rank) => [id, rank]))
   sortedWorktreeRankIndexCache.set(sortedIds, index)
   return index
+}
+
+type LineageState = Pick<AppState, 'worktreesByRepo'> &
+  Partial<Pick<AppState, 'folderWorkspaces' | 'worktreeLineageById' | 'workspaceLineageByChildKey'>>
+const noEdges = {}
+const inputCache = new WeakMap<
+  object,
+  WeakMap<
+    object,
+    {
+      worktreeMap: Map<string, Worktree>
+      lineageById: AppState['worktreeLineageById']
+    }
+  >
+>()
+export function getLineageInputs(state: LineageState) {
+  const worktreeMap = getWorkspaceLineageRows(state.worktreesByRepo, state.folderWorkspaces)
+  const lineageById = mergeWorkspaceLineageRecords(
+    state.worktreeLineageById ?? noEdges,
+    state.workspaceLineageByChildKey ?? noEdges
+  )
+  let byRows = inputCache.get(lineageById)
+  if (!byRows) {
+    byRows = new WeakMap()
+    inputCache.set(lineageById, byRows)
+  }
+  let inputs = byRows.get(worktreeMap)
+  if (!inputs) {
+    inputs = { worktreeMap, lineageById }
+    byRows.set(worktreeMap, inputs)
+  }
+  return inputs
 }

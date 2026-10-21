@@ -21,6 +21,7 @@ import { acquireProfileStateMaintenance } from './persistence/profile-state/prof
 import type { Repo } from '../shared/repo-types'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
 import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+import { getWorktreeLineageCandidates } from './worktree-lineage-candidates'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
 
 // Stub the ~/.ssh/config parser so the SSH-import test drives the real Store with deterministic hosts, not the operator's actual ~/.ssh/config.
@@ -99,6 +100,19 @@ describe('Store', () => {
         parentStore: 'external'
       })
     )
+    const listen = vi.spyOn(store, 'onStateWritten')
+    const snapshot = getWorktreeLineageCandidates(store)
+    expect(getWorktreeLineageCandidates(store)).toBe(snapshot)
+    const raw = store.getAllWorktreeMeta()
+    store.setWorktreeMeta(hostWorktreeTarget({ id: childId, hostId: 'ssh:copy' }), {
+      instanceId: 'child-instance'
+    })
+    expect(store.getAllWorktreeMeta()).toBe(raw)
+    const changed = getWorktreeLineageCandidates(store)
+    expect(changed).not.toBe(snapshot)
+    expect(changed.rows.filter((row) => row.id === childId)).toHaveLength(2)
+    expect(getWorktreeLineageCandidates(store)).toBe(changed)
+    expect(listen).toHaveBeenCalledOnce()
     await store.flushPendingOrThrowAsync()
     await closeTestStores()
     const reloaded = createStore()

@@ -1,4 +1,4 @@
-import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
+import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
 import { preserveFolderUpgradeWorktreePath } from '../folder-upgrade-worktree-path'
 import {
   splitWorktreeId,
@@ -10,13 +10,12 @@ import {
   readAllWorktreeMetaForHost,
   readWorktreeMetaForHost
 } from '../persistence/host-qualified-worktree-meta'
-import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
-import { isFolderRepo } from '../../shared/repo-kind'
 import {
-  getConnectedWorktreeLineageIds,
-  mergeWorkspaceLineageRecords,
-  projectResolvedWorktreeLineage
-} from '../../shared/resolved-worktree-lineage'
+  composeWorktreeHostIdentity,
+  hostWorktreeTarget
+} from '../../shared/worktree/host-qualified-identity'
+import { isFolderRepo } from '../../shared/repo-kind'
+import { projectResolvedWorktreeLineage } from '../../shared/resolved-worktree-lineage'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
 import type { GitWorktreeInfo, Worktree } from '../../shared/worktree/types'
 import type { WorktreeLineage } from '../../shared/worktree/lineage-types'
@@ -38,6 +37,8 @@ type RepoWorktreeRowStore = Pick<
   | 'getRepo'
   | 'getProjects'
   | 'getSettings'
+  | 'getWorktreeLineageMetadata'
+  | 'onStateWritten'
   | 'getAllWorktreeMeta'
   | 'getAllWorktreeMetaForHost'
   | 'getWorktreeMeta'
@@ -125,7 +126,8 @@ export async function resolveRepoWorktreeRows(
   repo: Repo,
   metaById: Record<string, WorktreeMeta>,
   projectRuntimeByRepoId: ReadonlyMap<string, ProjectExecutionRuntimeResolution>,
-  repoOwnerCount = deps.store.getRepos().filter((candidate) => candidate.id === repo.id).length
+  repoOwnerCount = deps.store.getRepos().filter((candidate) => candidate.id === repo.id).length,
+  snapshot?: ReturnType<typeof getWorktreeLineageCandidates>
 ): Promise<RepoWorktreeRow[]> {
   const { store } = deps
   if (isFolderRepo(repo)) {
@@ -168,7 +170,9 @@ export async function resolveRepoWorktreeRows(
     const existingMeta = metaById[worktreeId]
     // A host-qualified row is exact; the locator-keyed one is only trustworthy when this repo owns it.
     const ownedExistingMeta =
-      readWorktreeMetaForHost(store, worktreeId, expectedHostId) ??
+      (snapshot
+        ? snapshot.metadataByIdentity.get(composeWorktreeHostIdentity(expectedHostId, worktreeId))
+        : readWorktreeMetaForHost(store, worktreeId, expectedHostId)) ??
       getRepoOwnedWorktreeMeta(repo, worktreeId, metaById, repoOwnerCount)
     const meta = ownedExistingMeta?.instanceId
       ? ownedExistingMeta
@@ -224,11 +228,14 @@ export async function resolveScopedWorktreeIdRow(
     return null
   }
   const repo = owners[0]
+  const snapshot = getWorktreeLineageCandidates(store)
   const ownerRows = await resolveRepoWorktreeRows(
     deps,
     repo,
-    store.getAllWorktreeMeta() ?? {},
-    resolveLocalProjectRuntimesForRepos(store, [repo])
+    snapshot.rawMetadata,
+    resolveLocalProjectRuntimesForRepos(store, [repo]),
+    snapshot.reposById.get(repo.id)?.length,
+    snapshot
   )
   // Why (#16243): the scan can spell this id's path differently — the divergence `path:` absorbs.
   // One equivalent row may stand in; two is an ambiguity a scoped lookup must refuse, not guess.
@@ -241,49 +248,33 @@ export async function resolveScopedWorktreeIdRow(
   if (!target) {
     return null
   }
-  const lineageById = mergeWorkspaceLineageRecords(
-    store.getAllWorktreeLineage?.() ?? {},
-    store.getAllWorkspaceLineage?.() ?? {}
-  )
-  const relatedIds = getConnectedWorktreeLineageIds([target.id], lineageById)
-  const ownIds = new Set(ownerRows.map((row) => row.id))
-  const relatedRepoIds = new Set(
-    [...relatedIds]
-      .filter((id) => !ownIds.has(id))
-      .map((id) => splitWorktreeIdForFilesystem(id)?.repoId)
-      .filter((id) => id !== undefined)
-  )
-  const savedHosts = new Map<string, Set<ExecutionHostId>>()
-  for (const id of relatedIds) {
-    const host = store.getAllWorktreeMeta()[id]?.hostId
-    const relatedRepoId = splitWorktreeIdForFilesystem(id)?.repoId
-    if (host && relatedRepoId) {
-      const hosts = savedHosts.get(relatedRepoId) ?? new Set<ExecutionHostId>()
-      hosts.add(host)
-      savedHosts.set(relatedRepoId, hosts)
-    }
-  }
-  const relatedRepos = store
-    .getRepos()
+  const { lineageById } = snapshot
+  const relatedRepos = snapshot
+    .relatedRepos([target.id])
     .filter(
       (candidate) =>
-        relatedRepoIds.has(candidate.id) &&
-        (candidate.id !== repo.id ||
-          getRepoExecutionHostId(candidate) !== getRepoExecutionHostId(repo)) &&
-        (!savedHosts.has(candidate.id) ||
-          savedHosts.get(candidate.id)?.has(getRepoExecutionHostId(candidate)))
+        candidate.id !== repo.id ||
+        getRepoExecutionHostId(candidate) !== getRepoExecutionHostId(repo)
     )
-  const metaById = store.getAllWorktreeMeta() ?? {}
+  const metaById = snapshot.rawMetadata
   const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, relatedRepos)
   const otherRows = await Promise.all(
     relatedRepos.map((relatedRepo) =>
-      resolveRepoWorktreeRows(deps, relatedRepo, metaById, projectRuntimeByRepoId)
+      resolveRepoWorktreeRows(
+        deps,
+        relatedRepo,
+        metaById,
+        projectRuntimeByRepoId,
+        snapshot.reposById.get(relatedRepo.id)?.length,
+        snapshot
+      )
     )
   )
   const projected = projectResolvedWorktreeLineage(
     [...ownerRows, ...otherRows.flat()],
     lineageById,
-    store.getFolderWorkspaces?.().map(folderWorkspaceToWorktree) ?? []
+    snapshot.folders,
+    metaById
   )
   return projected[ownerRows.indexOf(target)] ?? null
 }

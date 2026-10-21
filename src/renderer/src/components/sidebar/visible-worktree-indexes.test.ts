@@ -12,9 +12,11 @@ vi.mock('../../../../shared/resolved-worktree-lineage', async (importOriginal) =
   const actual = await importOriginal<typeof ResolvedWorktreeLineage>()
   return {
     ...actual,
-    getCyclicLineageChildKeys: (...args: Parameters<typeof actual.getCyclicLineageChildKeys>) => {
+    resolveWorktreeLineageParents: (
+      ...args: Parameters<typeof actual.resolveWorktreeLineageParents>
+    ) => {
       counters.cycleDetections += 1
-      return actual.getCyclicLineageChildKeys(...args)
+      return actual.resolveWorktreeLineageParents(...args)
     }
   }
 })
@@ -143,7 +145,7 @@ describe('visible worktree indexes', () => {
     )
   })
 
-  it('keeps archived parents out of the cached ancestor index', () => {
+  it('keeps archived candidates without injecting archived ancestors', () => {
     const parent = makeWorktree('parent')
     parent.isArchived = true
     const child = makeWorktree('child')
@@ -162,9 +164,7 @@ describe('visible worktree indexes', () => {
     // phantom ancestor row.
     expect(computeVisibleWorktreeIds(worktreesByRepo, sortedIds, opts)).toEqual([child.id])
     expect(computeVisibleWorktreeIds(worktreesByRepo, sortedIds, opts)).toEqual([child.id])
-    expect(getLineageAncestorIndex(worktreesByRepo).has(getWorktreeHostIdentity(parent))).toBe(
-      false
-    )
+    expect(getLineageAncestorIndex(worktreesByRepo).has(getWorktreeHostIdentity(parent))).toBe(true)
   })
 
   it('keeps both rows of a two-host id collision', () => {

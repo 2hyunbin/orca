@@ -9,6 +9,7 @@ import { getOptionalWorktreeSelector } from '../selectors'
 export type CreateParentSelector = {
   parentWorktree?: string
   parentWorkspace?: string
+  origin?: 'caller' | 'target'
 }
 
 const CREATE_PARENT_CONFLICT_MESSAGE = 'Choose either one parent selector or --no-parent.'
@@ -48,20 +49,27 @@ export async function resolveCreateParentSelector(
   if (parentWorkspace) {
     // Why: create exposes one public parent flag, while the runtime still needs
     // workspace keys to preserve folder/worktree lineage accurately.
-    return { parentWorkspace }
+    return { parentWorkspace, origin: 'target' }
   }
 
-  const parentWorktree = await getOptionalWorktreeSelector(flags, 'parent-worktree', cwd, client)
+  const callerRelative = rawParentWorktree === 'active' || rawParentWorktree === 'current'
+  const parentWorktree = await getOptionalWorktreeSelector(
+    flags,
+    'parent-worktree',
+    cwd,
+    callerRelative ? localParentClient(client) : client
+  )
   const resolvedParentWorkspace = parentWorktree
     ? getWorkspaceKeyParentSelector(parentWorktree)
     : undefined
   if (resolvedParentWorkspace) {
     // Why: active/current may resolve to a folder workspace pseudo-worktree id.
-    return { parentWorkspace: resolvedParentWorkspace }
+    return { parentWorkspace: resolvedParentWorkspace, origin: 'caller' }
   }
 
   return {
-    parentWorktree
+    parentWorktree,
+    origin: callerRelative ? 'caller' : 'target'
   }
 }
 
@@ -91,24 +99,15 @@ export async function resolveCallerParentRef(
   }
   const local = localParentClient(client)
   let parent: RuntimeWorktreeRecord
-  let external = client.isRemote
   try {
     parent = (
       await local.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', { worktree: selector })
     ).result.worktree
   } catch (error) {
-    if (!explicit) {
-      return undefined
-    }
-    if (!client.isRemote) {
+    if (explicit) {
       throw error
     }
-    parent = (
-      await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
-        worktree: selector
-      })
-    ).result.worktree
-    external = false
+    return undefined
   }
   const instanceId = parent.instanceId ?? (parent.id.startsWith('folder:') ? parent.id : undefined)
   if (!instanceId) {
@@ -117,7 +116,7 @@ export async function resolveCallerParentRef(
     }
     return undefined
   }
-  if (client.isRemote && (external || (parent.hostId && parent.hostId !== 'local'))) {
+  if (client.isRemote) {
     const status = (await client.call<RuntimeStatus>('status.get')).result
     try {
       assertCrossMachineLineageSupported(
@@ -134,5 +133,5 @@ export async function resolveCallerParentRef(
       return undefined
     }
   }
-  return { worktreeId: parent.id, instanceId, external }
+  return { worktreeId: parent.id, instanceId, external: true }
 }

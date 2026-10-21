@@ -4,32 +4,24 @@ import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { getLineagePlacementRows } from '../worktree-occurrence-plan'
 import { getSidebarLineageParentsByIdentity } from './worktree-lineage-projection'
 
-export function getSidebarLineageRowsByIdentity(
-  worktrees: readonly Worktree[],
-  worktreeMap: ReadonlyMap<string, Worktree>
-): Map<string, Worktree> {
-  return new Map(
-    [...worktreeMap.values(), ...worktrees].map((worktree) => [
-      getWorktreeHostIdentity(worktree),
-      worktree
-    ])
-  )
-}
-
 export function getSidebarLineageChildren(
   worktrees: readonly Worktree[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   worktreeMap: ReadonlyMap<string, Worktree>,
   filterRepoIds: readonly string[] = []
 ): Map<string, Worktree[]> {
-  const rowsByIdentity = getSidebarLineageRowsByIdentity(worktrees, worktreeMap)
+  const rowsByIdentity = worktreeMap
+  const visible = new Set(worktrees.map(getWorktreeHostIdentity))
   const allowedRepoIds = filterRepoIds.length > 0 ? new Set(filterRepoIds) : null
   const parentByIdentity = getSidebarLineageParentsByIdentity(lineageById, rowsByIdentity)
   const childrenByParentIdentity = new Map<string, Worktree[]>()
-  for (const [childIdentity, child] of rowsByIdentity) {
+  for (const child of rowsByIdentity.values()) {
+    const childIdentity = getWorktreeHostIdentity(child)
     const parent = parentByIdentity.get(childIdentity)
     if (
       !parent ||
+      !visible.has(childIdentity) ||
+      !visible.has(getWorktreeHostIdentity(parent)) ||
       (allowedRepoIds && (!allowedRepoIds.has(child.repoId) || !allowedRepoIds.has(parent.repoId)))
     ) {
       continue

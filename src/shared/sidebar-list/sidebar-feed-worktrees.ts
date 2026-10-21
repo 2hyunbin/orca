@@ -114,7 +114,7 @@ function readFeedRow(
     lastActivityAt: row.recentAt ?? 0,
     ...(row.smartTier !== undefined ? { smartTier: row.smartTier, smartAt: row.smartAt } : {}),
     ...extra,
-    savedLineage: edgeRecord(row.savedLineage ?? row.lineage),
+    savedLineage: edgeRecord(row.savedLineage !== undefined ? row.savedLineage : row.lineage),
     lineage: edgeRecord(row.lineage)
   }
   return {

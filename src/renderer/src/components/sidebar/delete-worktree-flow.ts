@@ -1,5 +1,6 @@
+import { getLineageInputs } from './visible-worktree-indexes'
 import { useAppStore } from '@/store'
-import { getAllWorktreesFromState, getWorktreeOnHostFromState } from '@/store/selectors'
+import { getWorktreeOnHostFromState } from '@/store/selectors'
 import { toWorktreeRemovalTarget } from '../../../../shared/worktree/removal'
 import { findRepoForHost } from '@/store/slices/repo-host-identity'
 import {
@@ -95,8 +96,8 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
 
   const deleteLineage = getWorkspaceDeleteLineage(
     target,
-    getAllWorktreesFromState(state),
-    state.worktreeLineageById
+    getLineageInputs(state).worktreeMap,
+    getLineageInputs(state).lineageById
   )
   const hasLineageChildren = deleteLineage.descendants.length > 0
   const skipConfirm = state.settings?.skipDeleteWorktreeConfirm ?? false
@@ -147,8 +148,8 @@ export function runWorktreeBatchDelete(
     targets.length === 1
       ? getWorkspaceDeleteLineage(
           targets[0],
-          getAllWorktreesFromState(state),
-          state.worktreeLineageById
+          getLineageInputs(state).worktreeMap,
+          getLineageInputs(state).lineageById
         )
       : null
   const singleTargetHasLineageChildren = (singleTargetLineage?.descendants.length ?? 0) > 0

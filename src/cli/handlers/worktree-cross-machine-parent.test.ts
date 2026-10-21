@@ -22,11 +22,14 @@ vi.mock('../runtime-client', async (importOriginal) => {
 import { WORKTREE_HANDLERS } from './worktree'
 
 function context(capabilities: string[], explicit: boolean) {
+  const parent = {
+    id: 'repo::/parent',
+    instanceId: 'parent-instance',
+    hostId: 'local',
+    path: '/unmanaged'
+  }
   localCall.mockImplementation(async (method) => ({
-    result:
-      method === 'worktree.list'
-        ? { worktrees: [] }
-        : { worktree: { id: 'repo::/parent', instanceId: 'parent-instance', hostId: 'local' } }
+    result: method === 'worktree.list' ? { worktrees: [parent] } : { worktree: parent }
   }))
   const call = vi.fn(async (method: string) => ({
     result:
@@ -46,7 +49,7 @@ function context(capabilities: string[], explicit: boolean) {
     ['name', 'child']
   ])
   if (explicit) {
-    flags.set('parent-worktree', 'id:repo::/parent')
+    flags.set('parent-worktree', 'active')
   }
   return { context: { flags, client, cwd: '/unmanaged', json: true }, call }
 }
@@ -58,6 +61,25 @@ afterEach(() => {
 })
 
 describe('caller-side cross-machine create', () => {
+  it('keeps explicit target selectors and legacy folder payloads on an older peer', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    for (const selector of [
+      'id:repo::/parent',
+      'branch:main',
+      'name:Parent',
+      'path:/mnt/c/server',
+      'folder:F'
+    ]) {
+      const target = context([], false)
+      target.context.flags.set('parent-worktree', selector)
+      await WORKTREE_HANDLERS['worktree create'](target.context)
+      const payload =
+        selector === 'folder:F' ? { parentWorkspace: selector } : { parentWorktree: selector }
+      expect(target.call).toHaveBeenCalledWith('worktree.create', expect.objectContaining(payload))
+      expect(target.call.mock.calls.some(([method]) => method === 'status.get')).toBe(false)
+    }
+    expect(localCall).not.toHaveBeenCalled()
+  })
   it('refuses an explicit parent on an old server before create, and lets an inferred parent create flat with a warning', async () => {
     vi.stubEnv('ORCA_WORKSPACE_ID', 'worktree:repo::/parent')
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})

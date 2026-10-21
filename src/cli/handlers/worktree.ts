@@ -21,7 +21,6 @@ import {
   getRequiredStringFlag
 } from '../flags'
 import {
-  getOptionalWorktreeSelector,
   getRequiredWorktreeSelector,
   resolveCurrentWorktreeSelection,
   resolveCurrentWorktreeSelector
@@ -100,7 +99,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       process.env.ORCA_TERMINAL_HANDLE.length > 0
         ? process.env.ORCA_TERMINAL_HANDLE
         : undefined
-    const explicitParent = await resolveCreateParentSelector(flags, cwd, localParentClient(client))
+    const explicitParent = await resolveCreateParentSelector(flags, cwd, client)
     const explicitParentWorktree = explicitParent.parentWorktree
     const explicitParentWorkspace = explicitParent.parentWorkspace
     const startupAgent = getOptionalStartupAgent(flags)
@@ -138,13 +137,14 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       await assertReferenceWritesSupported(client)
     }
     const explicitParentSelector = explicitParentWorktree ?? explicitParentWorkspace
-    const parentWorktreeRef = !noParent
-      ? await resolveCallerParentRef(
-          client,
-          explicitParentSelector ?? envParentWorkspace ?? cwdParentWorktree?.selector,
-          Boolean(explicitParentSelector)
-        )
-      : undefined
+    const parentWorktreeRef =
+      !noParent && explicitParent.origin !== 'target'
+        ? await resolveCallerParentRef(
+            client,
+            explicitParentSelector ?? envParentWorkspace ?? cwdParentWorktree?.selector,
+            Boolean(explicitParentSelector)
+          )
+        : undefined
     const create = {
       ...repoTarget,
       name,
@@ -160,15 +160,9 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       // CLI activation targets its runtime's desktop, never unrelated paired viewers.
       ...(activate ? { navigation: 'host' as const } : {}),
       ...(setupDecision ? { setupDecision } : {}),
-      parentWorktreeRef:
-        parentWorktreeRef?.external || !client.isRemote ? parentWorktreeRef : undefined,
-      parentWorktree:
-        parentWorktreeRef && !parentWorktreeRef.external && client.isRemote
-          ? `id:${parentWorktreeRef.worktreeId}`
-          : parentWorktreeRef
-            ? undefined
-            : explicitParentWorktree,
-      ...(!parentWorktreeRef && !client.isRemote && explicitParentWorkspace
+      parentWorktreeRef,
+      parentWorktree: parentWorktreeRef ? undefined : explicitParentWorktree,
+      ...(!parentWorktreeRef && explicitParentWorkspace
         ? { parentWorkspace: explicitParentWorkspace }
         : {}),
       ...(!parentWorktreeRef && !client.isRemote && envParentWorkspace
@@ -204,13 +198,12 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     })
     const worktree = await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
     await assertGitLabLinkFlagProjectsMatch(flags, client, { worktree })
-    const parentSelector = await getOptionalWorktreeSelector(
-      flags,
-      'parent-worktree',
-      cwd,
-      localParentClient(client)
-    )
-    const parentWorktreeRef = await resolveCallerParentRef(client, parentSelector, true)
+    const parentSelection = await resolveCreateParentSelector(flags, cwd, client)
+    const parentSelector = parentSelection.parentWorktree ?? parentSelection.parentWorkspace
+    const parentWorktreeRef =
+      parentSelection.origin === 'caller'
+        ? await resolveCallerParentRef(client, parentSelector, true)
+        : undefined
     const result = await client.call<RuntimeWorktreeSetResult>('worktree.set', {
       worktree,
       displayName: getOptionalStringFlag(flags, 'display-name'),
@@ -219,14 +212,8 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       comment: getOptionalStringFlag(flags, 'comment'),
       workspaceStatus: getOptionalStringFlag(flags, 'workspace-status'),
       isUnread,
-      parentWorktreeRef:
-        parentWorktreeRef?.external || !client.isRemote ? parentWorktreeRef : undefined,
-      parentWorktree:
-        parentWorktreeRef && !parentWorktreeRef.external && client.isRemote
-          ? `id:${parentWorktreeRef.worktreeId}`
-          : parentWorktreeRef
-            ? undefined
-            : parentSelector,
+      parentWorktreeRef,
+      parentWorktree: parentWorktreeRef ? undefined : parentSelector,
       noParent: flags.get('no-parent') === true
     })
     if (!json) {

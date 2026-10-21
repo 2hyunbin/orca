@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { getSavedWorktreeLineage } from '../resolved-worktree-lineage'
 import {
   getRepoExecutionHostId,
   parseExecutionHostId,
@@ -95,6 +96,12 @@ export function pairedServerRowOfWorktree(
   repo: Pick<Repo, 'kind'> | undefined,
   lineage: WorktreeLineage | null | undefined
 ): PairedServerWorkspaceRow {
+  lineage =
+    worktree.savedLineage === null
+      ? null
+      : worktree.savedLineage !== undefined
+        ? worktree.lineage
+        : lineage
   const key = getWorktreeHostIdentity(worktree)
   // The server's reply carries no automation name, so the row leaves it out too.
   const { automationName: _automationName, ...kindFacts } = getWorkspaceRowKindFacts(worktree, repo)
@@ -111,7 +118,7 @@ export function pairedServerRowOfWorktree(
     isMainWorktree: worktree.isMainWorktree,
     isUnread: worktree.isUnread,
     instanceId: worktree.instanceId,
-    savedLineage: worktree.savedLineage ?? lineage ?? null,
+    savedLineage: worktree.savedLineage !== undefined ? worktree.savedLineage : (lineage ?? null),
     lineage: lineage
       ? {
           parentWorktreeId: lineage.parentWorktreeId,
@@ -146,7 +153,12 @@ export function buildPairedServerRows(catalog: {
       const repo = catalog.repos.find(
         (entry) => entry.id === worktree.repoId && getRepoExecutionHostId(entry) === worktree.hostId
       )
-      const row = pairedServerRowOfWorktree(worktree, kind, repo, catalog.lineageById[worktree.id])
+      const row = pairedServerRowOfWorktree(
+        worktree,
+        kind,
+        repo,
+        getSavedWorktreeLineage(worktree, catalog.lineageById)
+      )
       rows.set(row.key, row)
     }
   }

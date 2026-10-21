@@ -5,8 +5,8 @@ import {
   getActiveSidebarWorkspaceId,
   parseWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
-import { resolveWorktreeLineageParents } from '../../../../../../shared/resolved-worktree-lineage'
-import { getProjectedWorktreeLineage } from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getWorktreeLineageProjection } from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getLineageInputs } from '../../../../components/sidebar/visible-worktree-indexes'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { getIndexedWorktreesById } from '../../../worktree-repo-index'
 import { worktreeOwnerHostIds } from '@/lib/worktree-runtime-owner-index'
@@ -19,11 +19,12 @@ function hasChangedLineageAncestor(
   hostId: ExecutionHostId | undefined
 ): boolean {
   const state = get()
-  const rows = Object.values(state.worktreesByRepo).flat()
-  const parents = resolveWorktreeLineageParents(rows, (row) =>
-    getProjectedWorktreeLineage(row, state.worktreeLineageById)
-  )
+  const inputs = getLineageInputs(state)
+  const { parents } = getWorktreeLineageProjection(inputs.lineageById, inputs.worktreeMap)
   let child = state.getKnownWorktreeById(worktreeId, hostId)
+  if (child) {
+    child = inputs.worktreeMap.get(getWorktreeHostIdentity(child)) ?? child
+  }
   while (child) {
     const parent = parents.get(child)
     if (!parent) {

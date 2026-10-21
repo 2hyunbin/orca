@@ -54,6 +54,30 @@ describe('applyMobileWorkspaceLineage', () => {
         ?.lineageDepth
     ).toBe(1)
     expect(applyMobileWorkspaceLineage([child])[0].lineageDepth).toBe(0)
+    const plan = buildMobileWorkspacePlan(
+      [parent, child, { ...parent, repoId: 'hidden', hostId: 'ssh:copy' }],
+      'name',
+      {
+        filterRepoIds: ['repo-1'],
+        visibleHostIds: null,
+        hideSleepingWorkspaces: false,
+        alwaysShowDefaultBranchWorkspace: true,
+        hideDefaultBranchWorkspace: false,
+        hideAutomationGeneratedWorkspaces: false,
+        hideCliCreatedWorkspaces: false,
+        hideDetachedHeadWorkspaces: false,
+        hideWorkspacesFromOtherDevices: false
+      },
+      '',
+      'repo',
+      new Set()
+    )
+    expect(
+      plan
+        .render(new Set())
+        .flatMap((section) => section.data)
+        .find((row) => row.worktreeId === 'child')?.lineageDepth
+    ).toBe(0)
   })
 
   it.each([false, true])(

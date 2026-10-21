@@ -1,5 +1,6 @@
-import { resolveWorktreeLineageParents } from '../../../../shared/resolved-worktree-lineage'
-import { getProjectedWorktreeLineage } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getWorktreeLineageProjection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { AppState } from '@/store/types'
 import {
   DASHBOARD_MAX_MAP_WORKSPACES,
@@ -118,14 +119,16 @@ export function buildDashboardSnapshot(
     startWorktreeAgentRowsCachePass(options.rowsCache)
   }
 
-  const lineageParents = resolveWorktreeLineageParents(
-    activeWorktrees.map((workspace) => workspace.worktree),
-    (row) => getProjectedWorktreeLineage(row, state.worktreeLineageById ?? {})
+  const { parents: lineageParents } = getWorktreeLineageProjection(
+    getLineageInputs(state).lineageById,
+    getLineageInputs(state).worktreeMap
   )
   for (const workspace of activeWorktrees) {
     const { repo, worktree } = workspace
     const worktreeId = worktree.id
-    const parentWorktreeId = lineageParents.get(worktree)?.id
+    const parentWorktreeId = lineageParents.get(
+      getLineageInputs(state).worktreeMap.get(getWorktreeHostIdentity(worktree)) ?? worktree
+    )?.id
     const terminalLayoutsByTabId = selectTerminalLayoutsForWorktree(state, worktreeId)
     const paneTitlesByTabId = selectRuntimePaneTitlesForWorktree(state, worktreeId)
 

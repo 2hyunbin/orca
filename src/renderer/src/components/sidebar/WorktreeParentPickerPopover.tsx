@@ -1,3 +1,6 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import type { Worktree } from '../../../../shared/worktree/types'
+import { getLineageInputs } from './visible-worktree-indexes'
 import React, {
   useCallback,
   useEffect,
@@ -12,7 +15,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { Command, CommandInput, CommandList } from '@/components/ui/command'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useAppStore } from '@/store'
-import { useAllWorktrees, useRepoMap, useWorktreeMap } from '@/store/selectors'
+import { useAllWorktrees, useRepoMap } from '@/store/selectors'
 import { cn } from '@/lib/utils'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import { useWorktreeActivityStatuses } from './use-worktree-activity-statuses'
@@ -51,7 +54,7 @@ type SelectParentArgs = {
 
 type WorktreeParentPickerKeyboardArgs = {
   event: React.KeyboardEvent<HTMLInputElement>
-  candidates: readonly { id: string }[]
+  candidates: readonly Pick<Worktree, 'id' | 'hostId'>[]
   activeIndex: number
   moveHighlight: (index: number) => void
   selectParent: (worktreeId: string) => void
@@ -125,7 +128,7 @@ export function handleWorktreeParentPickerKeyDown({
     if (candidate) {
       event.preventDefault()
       event.stopPropagation()
-      selectParent(candidate.id)
+      selectParent(getWorktreeHostIdentity(candidate))
     }
   }
 }
@@ -137,10 +140,10 @@ export function WorktreeParentPickerPopover({
   onOpenChange
 }: WorktreeParentPickerPopoverProps): React.JSX.Element | null {
   const worktrees = useAllWorktrees()
-  const worktreeMap = useWorktreeMap()
+  const { worktreeMap, lineageById: viewerLineage } = useAppStore(getLineageInputs)
   const repoMap = useRepoMap()
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
-  const lineageById = useAppStore((s) => s.worktreeLineageById)
+  const lineageById = viewerLineage
   const assignWorktreeParent = useAppStore((s) => s.assignWorktreeParent)
   const suppressInitialOutsideCloseRef = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
@@ -241,7 +244,7 @@ export function WorktreeParentPickerPopover({
     getScrollElement: () => listRef.current,
     estimateSize: () => PICKER_ROW_HEIGHT,
     overscan: PICKER_ROW_OVERSCAN,
-    getItemKey: (index) => filtered[index]?.id ?? index,
+    getItemKey: (index) => (filtered[index] ? getWorktreeHostIdentity(filtered[index]) : index),
     // Why: the list mounts inside a popover that measures on the next frame, so
     // seed the viewport with max-h-72 to avoid a blank first paint.
     initialRect: { width: 0, height: PICKER_LIST_MAX_HEIGHT }
@@ -378,7 +381,7 @@ export function WorktreeParentPickerPopover({
                   const isHighlighted = virtualRow.index === activeIndex
                   return (
                     <div
-                      key={candidate.id}
+                      key={getWorktreeHostIdentity(candidate)}
                       id={`${optionIdPrefix}-${virtualRow.index}`}
                       role="option"
                       aria-selected={isHighlighted}
@@ -392,7 +395,7 @@ export function WorktreeParentPickerPopover({
                         transform: `translateY(${virtualRow.start}px)`
                       }}
                       onPointerMove={() => setHighlightedIndex(virtualRow.index)}
-                      onClick={() => handleSelect(candidate.id)}
+                      onClick={() => handleSelect(getWorktreeHostIdentity(candidate))}
                     >
                       <WorktreeParentPickerRow
                         candidate={candidate}

@@ -1,3 +1,7 @@
+import {
+  isSameSavedWorktreeParent,
+  sharesWorktreeLineageBoundary
+} from '../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
 import type { GitPushTarget, Worktree } from '../../shared/worktree/types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -97,10 +101,7 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   } else if (lineage?.parentWorktree || lineage?.parentWorktreeRef) {
     const ref = lineage.parentWorktreeRef
     const existing = existingLineage
-    const identical =
-      existing?.worktreeInstanceId === worktree.instanceId &&
-      existing?.parentWorktreeId === ref?.worktreeId &&
-      existing?.parentWorktreeInstanceId === ref?.instanceId
+    const identical = ref && isSameSavedWorktreeParent(existing, worktree, ref)
     if (ref?.external && !identical) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_CONTEXT_CONFLICT',
@@ -117,10 +118,11 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
           'The parent workspace changed. Refresh and try again.'
         )
       }
-      const sameSavedParent =
-        existing?.worktreeInstanceId === worktree.instanceId &&
-        existing.parentWorktreeId === parent.id &&
-        existing.parentWorktreeInstanceId === parent.instanceId
+      const sameSavedParent = isSameSavedWorktreeParent(existing, worktree, {
+        worktreeId: parent.id,
+        instanceId: parent.instanceId,
+        external: !sharesWorktreeLineageBoundary(worktree, parent)
+      })
       if (!sameSavedParent) {
         args.ports.validateParent(worktree, parent)
         nextParentRepoId = parent.repoId

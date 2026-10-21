@@ -4,7 +4,6 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { canAssignWorktreeParent } from './worktree-parent-eligibility'
-import { getCyclicProjectedWorktreeLineageIds } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 type ParentCandidateArgs = {
   child: Worktree
@@ -12,7 +11,6 @@ type ParentCandidateArgs = {
   lineageById: Record<string, WorktreeLineage>
   worktreeMap: Map<string, Worktree>
   repoMap: Map<string, Pick<Repo, 'connectionId' | 'executionHostId'>>
-  cyclicLineageIds?: ReadonlySet<string>
 }
 
 function getWorktreeOwnerHostId(
@@ -28,12 +26,9 @@ export function getEligibleWorktreeParents({
   worktrees,
   lineageById,
   worktreeMap,
-  repoMap,
-  cyclicLineageIds: precomputedCyclicLineageIds
+  repoMap
 }: ParentCandidateArgs): Worktree[] {
   const childHostId = getWorktreeOwnerHostId(child, repoMap)
-  const cyclicLineageIds =
-    precomputedCyclicLineageIds ?? getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
   return worktrees.filter((candidate) =>
     isEligibleWorktreeParent({
       child,
@@ -41,7 +36,6 @@ export function getEligibleWorktreeParents({
       lineageById,
       worktreeMap,
       repoMap,
-      cyclicLineageIds,
       childHostId
     })
   )
@@ -53,7 +47,6 @@ export function isEligibleWorktreeParent({
   lineageById,
   worktreeMap,
   repoMap,
-  cyclicLineageIds,
   childHostId = getWorktreeOwnerHostId(child, repoMap)
 }: Omit<ParentCandidateArgs, 'worktrees'> & {
   candidateParent: Worktree
@@ -67,8 +60,7 @@ export function isEligibleWorktreeParent({
       child,
       candidateParent,
       lineageById,
-      worktreeMap,
-      cyclicLineageIds
+      worktreeMap
     })
   )
 }

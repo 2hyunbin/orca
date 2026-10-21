@@ -1,4 +1,3 @@
-import { resolveWorktreeLineageParents } from './resolved-worktree-lineage'
 import { buildRuntimeWorktreePsSummaries } from '../main/runtime/runtime-worktree-ps-summaries'
 import {
   normalizePairedServerRow,
@@ -12,6 +11,7 @@ import type { Worktree } from './worktree/types'
 import type { WorktreeLineageBoundary } from './resolved-worktree-lineage'
 import {
   projectResolvedWorktreeLineage,
+  resolveWorktreeLineageParents,
   sharesWorktreeLineageBoundary
 } from './resolved-worktree-lineage'
 
@@ -231,52 +231,36 @@ describe('cross-store lineage contract', () => {
     const parent = { id: 'parent', instanceId: 'p', hostId: 'ssh:a' as const }
     const copy = { id: 'copied', instanceId: 'p', hostId: 'local' as const }
     const child = { id: 'child', instanceId: 'c', hostId: 'local' as const }
-    const remote = { id: 'renamed', instanceId: 'r', hostId: 'runtime:server' as const }
+    const remote = { id: 'renamed', instanceId: 'p', hostId: 'runtime:server' as const }
     const edge = {
       parentWorktreeId: 'parent',
       parentWorktreeInstanceId: 'p',
       worktreeInstanceId: 'c'
     }
-    expect(
-      resolveWorktreeLineageParents([child, parent, copy], (row) =>
-        row === child ? edge : null
-      ).get(child)
-    ).toBe(parent)
-    expect(
-      resolveWorktreeLineageParents([child, copy], (row) => (row === child ? edge : null)).get(
-        child
+    const external = { ...edge, parentWorktreeInstanceId: 'p', parentStore: 'external' as const }
+    const cases = [
+      { rows: [child, parent, copy], edge, parent },
+      { rows: [child, copy], edge, parent: copy },
+      {
+        rows: [child, { ...parent, id: 'copy-a' }, remote, { ...parent, id: 'copy-b' }],
+        edge: { ...external, parentWorktreeId: 'missing' },
+        parent: remote
+      },
+      { rows: [child, remote], edge: external, parent: remote },
+      { rows: [child, remote], edge: { ...external, parentStore: undefined }, parent: undefined },
+      {
+        rows: [child, remote, { ...remote, hostId: 'runtime:other' as const }],
+        edge: external,
+        parent: undefined
+      },
+      { rows: [child, parent], edge: { parentWorktreeId: 'parent' }, parent: undefined }
+    ]
+    for (const item of cases) {
+      const parents = resolveWorktreeLineageParents(item.rows, (row) =>
+        row === child ? item.edge : null
       )
-    ).toBe(copy)
-    const left = { ...parent, id: 'copy-a' }
-    const right = { ...parent, id: 'copy-b' }
-    const outside = { ...parent, id: 'other', hostId: 'runtime:server' as const }
-    expect(
-      resolveWorktreeLineageParents([child, left, outside, right], (row) =>
-        row === child ? { ...edge, parentWorktreeId: 'missing', parentStore: 'external' } : null
-      ).get(child)
-    ).toBe(outside)
-    const external = { ...edge, parentWorktreeInstanceId: 'r', parentStore: 'external' as const }
-    expect(
-      resolveWorktreeLineageParents([child, remote], (row) =>
-        row === child ? external : null
-      ).get(child)
-    ).toBe(remote)
-    expect(
-      resolveWorktreeLineageParents([child, remote], (row) =>
-        row === child ? { ...external, parentStore: undefined } : null
-      ).size
-    ).toBe(0)
-    expect(
-      resolveWorktreeLineageParents(
-        [child, remote, { ...remote, hostId: 'runtime:other' as const }],
-        (row) => (row === child ? external : null)
-      ).size
-    ).toBe(0)
-    expect(
-      resolveWorktreeLineageParents([child, parent], (row) =>
-        row === child ? { parentWorktreeId: 'parent' } : null
-      ).size
-    ).toBe(0)
+      expect(parents.get(child)).toBe(item.parent)
+    }
     expect(
       resolveWorktreeLineageParents([child, parent], (row) =>
         row === child ? edge : { parentWorktreeId: 'child', parentWorktreeInstanceId: 'c' }
@@ -284,7 +268,7 @@ describe('cross-store lineage contract', () => {
     ).toBe(0)
   })
 
-  it('keeps an unresolved saved server edge through desktop adapters and the phone projection', () => {
+  it('keeps an unresolved saved server edge through the actual server publication and desktop adapters', () => {
     const edge = lineage({ parentStore: 'external' })
     const parent = worktree('parent', 'parent-instance', { hostId: 'local' })
     const child = worktree('child', 'child-instance', { hostId: 'local' })
@@ -294,6 +278,17 @@ describe('cross-store lineage contract', () => {
       resolvedWorktrees: [{ ...projected, git: child }],
       platformByRepoId: new Map()
     })
+    const twin = { ...parent, hostId: 'ssh:copy' as const, isArchived: true }
+    const complete = projectResolvedWorktreeLineage(
+      [parent, twin, { ...child, savedLineage: lineage() }],
+      {}
+    )
+    const ambiguous = buildRuntimeWorktreePsSummaries({
+      store: null,
+      resolvedWorktrees: complete.map((row) => ({ ...row, git: row })),
+      platformByRepoId: new Map()
+    })
+    expect(ambiguous.get('child')?.parentWorktreeId).toBeNull()
     const summary = summaries.get('child')!
     expect(summary.parentWorktreeId).toBeNull()
     expect(summary.savedLineage).toEqual(edge)
@@ -303,21 +298,9 @@ describe('cross-store lineage contract', () => {
       servers: [{ hostId: 'runtime:server', freshness: 'live', host: null, rows: [row] }]
     })
     const desktop = readFeedPairedServerRow(snapshot.servers[0].rows[0])!.worktree
-    expect(
-      resolveWorktreeLineageParents(
-        [parent, desktop],
-        (item) => item.savedLineage ?? item.lineage
-      ).get(desktop)
-    ).toBe(parent)
-    const phoneChild = readFeedPairedServerRow(snapshot.servers[0].rows[0])!.worktree
-    expect(
-      resolveWorktreeLineageParents(
-        [parent, phoneChild],
-        (item) => item.savedLineage ?? item.lineage
-      ).get(phoneChild)
-    ).toBe(parent)
-    expect(
-      resolveWorktreeLineageParents([phoneChild], (item) => item.savedLineage ?? item.lineage).size
-    ).toBe(0)
+    const parents = resolveWorktreeLineageParents([parent, desktop], (item) =>
+      item.savedLineage !== undefined ? item.savedLineage : item.lineage
+    )
+    expect(parents.get(desktop)).toBe(parent)
   })
 })

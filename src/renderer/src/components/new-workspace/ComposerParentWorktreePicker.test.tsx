@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 
 import type React from 'react'
-import type * as WorktreeRepoIndex from '@/store/worktree-repo-index'
+import { makeFolderWorkspace } from '../../store/slices/worktrees-slice-test-fixtures'
+import type * as WorktreeRepoIndex from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
@@ -10,6 +12,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
 
 type FakeStoreState = {
+  folderWorkspaces?: FolderWorkspace[]
   worktreesByRepo: Record<string, Worktree[]>
   repos: Repo[]
   projectHostSetups: never[]
@@ -33,11 +36,7 @@ const popoverMock = vi.hoisted(() => ({
   onOpenChange: undefined as ((open: boolean) => void) | undefined
 }))
 
-const indexSpies = vi.hoisted(() => ({
-  getIndexedAllWorktrees: vi.fn(),
-  getIndexedWorktreeMap: vi.fn(),
-  getIndexedWorktreeById: vi.fn()
-}))
+const indexSpies = vi.hoisted(() => ({ getWorktreeLineageProjection: vi.fn() }))
 
 vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
@@ -51,13 +50,9 @@ vi.mock('@/store', () => ({
   useAppStore: (selector: (state: FakeStoreState) => unknown) => selector(storeState)
 }))
 
-// Spies wrap the real projections, so exclusion rules stay under test while call
-// counts prove when enumeration happens.
-vi.mock('@/store/worktree-repo-index', async (importOriginal) => {
+vi.mock('../../../../shared/sidebar-list/worktree-lineage-projection', async (importOriginal) => {
   const actual = await importOriginal<typeof WorktreeRepoIndex>()
-  indexSpies.getIndexedAllWorktrees.mockImplementation(actual.getIndexedAllWorktrees)
-  indexSpies.getIndexedWorktreeMap.mockImplementation(actual.getIndexedWorktreeMap)
-  indexSpies.getIndexedWorktreeById.mockImplementation(actual.getIndexedWorktreeById)
+  indexSpies.getWorktreeLineageProjection.mockImplementation(actual.getWorktreeLineageProjection)
   return { ...actual, ...indexSpies }
 })
 
@@ -190,9 +185,8 @@ beforeEach(() => {
   storeState.repos = []
   storeState.worktreeLineageById = {}
   storeState.workspaceLineageByChildKey = {}
-  indexSpies.getIndexedAllWorktrees.mockClear()
-  indexSpies.getIndexedWorktreeMap.mockClear()
-  indexSpies.getIndexedWorktreeById.mockClear()
+  storeState.folderWorkspaces = []
+  indexSpies.getWorktreeLineageProjection.mockClear()
 })
 
 afterEach(cleanup)
@@ -203,15 +197,9 @@ describe('ComposerParentWorktreePicker', () => {
 
     render(<ComposerParentWorktreePicker repoId={REPO_ID} value="alpha" onChange={vi.fn()} />)
 
-    // The closed trigger resolves one name from the shared index; it never enumerates.
-    expect(indexSpies.getIndexedWorktreeById).toHaveBeenCalled()
-    expect(indexSpies.getIndexedAllWorktrees).not.toHaveBeenCalled()
-    expect(indexSpies.getIndexedWorktreeMap).not.toHaveBeenCalled()
-
+    expect(indexSpies.getWorktreeLineageProjection).not.toHaveBeenCalled()
     fireEvent.click(trigger())
-
-    expect(indexSpies.getIndexedAllWorktrees).toHaveBeenCalled()
-    expect(indexSpies.getIndexedWorktreeMap).toHaveBeenCalled()
+    expect(indexSpies.getWorktreeLineageProjection).toHaveBeenCalledOnce()
   })
 
   it('shows "No parent" on the closed trigger when nothing is picked', () => {
@@ -239,7 +227,7 @@ describe('ComposerParentWorktreePicker', () => {
     fireEvent.click(trigger())
     fireEvent.click(rowFor('Alpha'))
 
-    expect(onChange).toHaveBeenCalledWith('alpha')
+    expect(onChange).toHaveBeenCalledWith('|alpha')
     expect(rows()).toHaveLength(0)
   })
 
@@ -337,6 +325,7 @@ describe('ComposerParentWorktreePicker', () => {
     })
     const outside = makeWorktree({ id: 'outside', displayName: 'Outside' })
     seed([attached, nested, outside])
+    storeState.folderWorkspaces = [makeFolderWorkspace({ name: 'Folder', folderPath: '/folder' })]
     storeState.workspaceLineageByChildKey = {
       [worktreeWorkspaceKey(attached.id)]: {
         childWorkspaceKey: worktreeWorkspaceKey(attached.id),
@@ -402,7 +391,7 @@ describe('ComposerParentWorktreePicker', () => {
 
     // Regression: the highlight used to reset onto the pinned "No parent" row, so the
     // standard type-then-Enter flow cleared the parent instead of picking the match.
-    expect(onChange).toHaveBeenCalledWith('beta')
+    expect(onChange).toHaveBeenCalledWith('|beta')
   })
 
   it('clears the parent when Enter is pressed with no search query', () => {
@@ -447,6 +436,7 @@ describe('ComposerParentWorktreePicker', () => {
       instanceId: 'current-instance'
     })
     seed([attached])
+    storeState.folderWorkspaces = [makeFolderWorkspace({ name: 'Folder', folderPath: '/folder' })]
     storeState.workspaceLineageByChildKey = {
       [worktreeWorkspaceKey(attached.id)]: {
         childWorkspaceKey: worktreeWorkspaceKey(attached.id),

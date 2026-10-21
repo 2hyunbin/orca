@@ -1,14 +1,16 @@
 import { WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY } from '../../../../../../shared/worktree-runtime-capabilities'
-import { assertRuntimeEnvironmentCapability } from '../../../../runtime/runtime-rpc-client'
-import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type {
+  ParentWorktreeRef,
   WorkspaceLineage,
   WorktreeLineage
 } from '../../../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import { callRuntimeRpc } from '../../../../runtime/runtime-rpc-client'
+import {
+  callRuntimeRpc,
+  assertRuntimeEnvironmentCapability
+} from '../../../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { getRuntimeTargetHostId, type HostRoute } from '../../../../runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '../../../../runtime/runtime-worktree-selector'
@@ -145,10 +147,11 @@ export async function setWorktreeLineageForRuntime(
     },
     { timeoutMs: 15_000 }
   )
+  const { savedLineage, lineage } = result.worktree
   return {
     target,
     hostId: getRuntimeTargetHostId(target),
-    lineage: result.worktree.savedLineage ?? result.worktree.lineage ?? null,
+    lineage: savedLineage !== undefined ? savedLineage : (lineage ?? null),
     updatedRemoteWorktree: result.worktree
   }
 }

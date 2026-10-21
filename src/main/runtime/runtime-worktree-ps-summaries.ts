@@ -1,7 +1,5 @@
-import {
-  resolveWorktreeLineageParents,
-  worktreeLineageFromWorkspaceLineage
-} from '../../shared/resolved-worktree-lineage'
+import { projectResolvedWorktreeLineage } from '../../shared/resolved-worktree-lineage'
+import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 import type { Worktree } from '../../shared/worktree/types'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
@@ -17,10 +15,23 @@ export function buildRuntimeWorktreePsSummaries(args: {
   resolvedWorktrees: readonly ResolvedWorktree[]
   platformByRepoId: ReadonlyMap<string, NodeJS.Platform>
 }): Map<string, RuntimeWorktreePsSummary> {
+  const candidates = args.store ? getWorktreeLineageCandidates(args.store) : undefined
   const repoById = new Map((args.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
+  const projectGroupById = new Map(
+    (args.store?.getProjectGroups?.() ?? []).map((group) => [group.id, group])
+  )
+  const folders = (args.store?.getFolderWorkspaces?.() ?? []).filter(
+    (folder) => projectGroupById.get(folder.projectGroupId)?.parentPath
+  )
+  const projected = projectResolvedWorktreeLineage(
+    [...args.resolvedWorktrees, ...folders.map(folderWorkspaceToWorktree)],
+    candidates?.lineageById ?? {},
+    candidates?.rows,
+    candidates?.rawMetadata
+  )
   const summaries = new Map<string, RuntimeWorktreePsSummary>()
   const ghCache = args.store?.getGitHubCache?.()
-  for (const worktree of args.resolvedWorktrees) {
+  for (const worktree of projected.slice(0, args.resolvedWorktrees.length)) {
     const meta =
       args.store?.getWorktreeMeta?.(worktree.id) ?? args.store?.getAllWorktreeMeta()[worktree.id]
     const repo = repoById.get(worktree.repoId)
@@ -61,10 +72,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
         ? { parentWorktreeInstanceId: lineage.parentWorktreeInstanceId }
         : {}),
       savedLineage:
-        worktree.savedLineage ??
-        args.store?.getWorktreeLineage?.(worktree.id) ??
-        worktree.lineage ??
-        null,
+        worktree.savedLineage !== undefined ? worktree.savedLineage : (worktree.lineage ?? null),
       parentWorktreeId: worktree.parentWorktreeId,
       childWorktreeIds: worktree.childWorktreeIds,
       displayName: worktree.displayName,
@@ -94,15 +102,9 @@ export function buildRuntimeWorktreePsSummaries(args: {
       agents: []
     })
   }
-  const projectGroupById = new Map(
-    (args.store?.getProjectGroups?.() ?? []).map((group) => [group.id, group])
-  )
-  for (const folderWorkspace of args.store?.getFolderWorkspaces?.() ?? []) {
-    const projectGroup = projectGroupById.get(folderWorkspace.projectGroupId)
-    if (!projectGroup?.parentPath) {
-      continue
-    }
-    const worktree = folderWorkspaceToWorktree(folderWorkspace)
+  for (const [index, folderWorkspace] of folders.entries()) {
+    const projectGroup = projectGroupById.get(folderWorkspace.projectGroupId)!
+    const worktree = projected[args.resolvedWorktrees.length + index]
     summaries.set(worktree.id, {
       workspaceKind: 'folder-workspace',
       hostId: worktree.hostId,
@@ -116,11 +118,9 @@ export function buildRuntimeWorktreePsSummaries(args: {
       hasHostSidebarActivity: false,
       ...getWorkspaceRowKindFacts(worktree, undefined),
       ...(worktree.instanceId !== undefined ? { worktreeInstanceId: worktree.instanceId } : {}),
-      savedLineage: args.store?.getAllWorkspaceLineage?.()[worktree.id]
-        ? worktreeLineageFromWorkspaceLineage(args.store.getAllWorkspaceLineage()[worktree.id])
-        : null,
-      parentWorktreeId: null,
-      childWorktreeIds: [],
+      savedLineage: worktree.savedLineage,
+      parentWorktreeId: worktree.parentWorktreeId,
+      childWorktreeIds: worktree.childWorktreeIds,
       displayName: worktree.displayName,
       workspaceStatus: worktree.workspaceStatus ?? DEFAULT_WORKSPACE_STATUS_ID,
       sortOrder: worktree.sortOrder ?? 0,
@@ -147,23 +147,6 @@ export function buildRuntimeWorktreePsSummaries(args: {
       status: 'inactive',
       agents: []
     })
-  }
-  const rows = [...summaries.values()].map((row) => ({
-    id: row.worktreeId,
-    instanceId: row.worktreeInstanceId,
-    hostId: row.hostId,
-    savedLineage: row.savedLineage
-  }))
-  const parents = resolveWorktreeLineageParents(rows, (row) => row.savedLineage)
-  for (const row of rows) {
-    const summary = summaries.get(row.id)
-    if (summary) {
-      summary.parentWorktreeId = parents.get(row)?.id ?? null
-      summary.childWorktreeIds = []
-    }
-  }
-  for (const [child, parent] of parents) {
-    summaries.get(parent.id)?.childWorktreeIds.push(child.id)
   }
   return summaries
 }

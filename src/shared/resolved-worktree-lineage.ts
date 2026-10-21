@@ -1,5 +1,6 @@
 import { parseWorkspaceKey } from './workspace-scope'
 import type { WorkspaceLineage, WorktreeLineage } from './worktree/lineage-types'
+import type { WorktreeMeta } from './worktree/meta-types'
 import type { Worktree } from './worktree/types'
 
 export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
@@ -33,6 +34,39 @@ export type SavedLineageEdge = {
   worktreeInstanceId?: string | null
   parentWorktreeInstanceId?: string | null
   parentStore?: 'external'
+}
+
+/** Published edges belong to their serving store; own buckets attach only to their incarnation. */
+export function getSavedWorktreeLineage(
+  row: LineageRow & Pick<Worktree, 'savedLineage' | 'lineage'>,
+  lineageById: Readonly<Record<string, WorktreeLineage>>,
+  metadata?: Readonly<Record<string, WorktreeMeta>>
+): WorktreeLineage | null | undefined {
+  if (row.savedLineage !== undefined) {
+    return row.savedLineage
+  }
+  if (lineageStoreKeyForRow(row)) {
+    return row.lineage
+  }
+  const owner = metadata?.[row.id]?.hostId
+  if (owner && owner !== row.hostId) {
+    return null
+  }
+  const saved = lineageById[row.id]
+  return saved?.worktreeId === row.id ? saved : row.lineage
+}
+
+export function isSameSavedWorktreeParent(
+  edge: SavedLineageEdge | null | undefined,
+  child: LineageRow,
+  parent: { worktreeId: string; instanceId?: string; external?: boolean }
+): boolean {
+  return (
+    edge?.worktreeInstanceId === child.instanceId &&
+    edge?.parentWorktreeId === parent.worktreeId &&
+    edge?.parentWorktreeInstanceId === parent.instanceId &&
+    (edge?.parentStore === 'external') === (parent.external === true)
+  )
 }
 
 type Candidates<T> = { count: number; first: T; indexSum: number }
@@ -94,15 +128,15 @@ export function resolveWorktreeLineageParents<T extends LineageRow>(
     if (instance) {
       const exact = store?.exact.get(exactKey(edge.parentWorktreeId, instance))
       const local = store?.instance.get(instance)
-      if (exact?.count === 1) {
-        parent = exact.first
-      } else if (local?.count === 1) {
-        parent = local.first
-      } else if (edge.parentStore === 'external') {
+      if (edge.parentStore === 'external') {
         const all = aggregate.get(instance)
         if (all && all.count - (local?.count ?? 0) === 1) {
           parent = rows[all.indexSum - (local?.indexSum ?? 0)]
         }
+      } else if (exact?.count === 1) {
+        parent = exact.first
+      } else if (local?.count === 1) {
+        parent = local.first
       }
     } else if (!edge.parentStore) {
       const legacy = store?.locator.get(exactKey(edge.parentWorktreeId, child.hostId ?? 'local'))
@@ -119,19 +153,6 @@ export function resolveWorktreeLineageParents<T extends LineageRow>(
     parents.delete(child)
   }
   return parents
-}
-
-export function isValidResolvedWorktreeLineageEdge(
-  child: Worktree,
-  parent: Worktree,
-  lineage: WorktreeLineage
-): boolean {
-  return (
-    lineage.worktreeId === child.id &&
-    resolveWorktreeLineageParents([child, parent], (row) => (row === child ? lineage : null)).get(
-      child
-    ) === parent
-  )
 }
 
 /** The children on a cycle of a child-to-parent map, whatever the keys are. */
@@ -203,19 +224,18 @@ export function getConnectedWorktreeLineageIds(
 export function projectResolvedWorktreeLineage<T extends Worktree>(
   worktrees: readonly T[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,
-  knownPeers: readonly Worktree[] = []
+  knownPeers: readonly Worktree[] = [],
+  metadata?: Readonly<Record<string, WorktreeMeta>>
 ): WorktreeWithResolvedLineage<T>[] {
-  const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
-  const edgeOf = (row: Worktree): WorktreeLineage | null | undefined => {
-    if (row.savedLineage !== undefined && lineageStoreKeyForRow(row)) {
-      return row.savedLineage
-    }
-    const saved = lineageById[row.id]
-    return saved?.worktreeId === row.id &&
-      (!saved.worktreeInstanceId || saved.worktreeInstanceId === row.instanceId)
-      ? saved
-      : row.savedLineage
-  }
+  const allWorktrees = [
+    ...new Map(
+      [...knownPeers, ...worktrees].map((row) => [
+        JSON.stringify([row.hostId, row.runtimeOwnerEnvironmentId, row.id]),
+        row
+      ])
+    ).values()
+  ]
+  const edgeOf = (row: Worktree) => getSavedWorktreeLineage(row, lineageById, metadata)
   const parents = resolveWorktreeLineageParents(allWorktrees, edgeOf)
   const children = new Map<Worktree, string[]>()
   for (const [child, parent] of parents) {
@@ -245,11 +265,21 @@ export function worktreeLineageFromWorkspaceLineage(edge: WorkspaceLineage): Wor
   }
 }
 
+const mergedEdges = new WeakMap<object, WeakMap<object, Record<string, WorktreeLineage>>>()
 export function mergeWorkspaceLineageRecords(
   worktreeLineage: Readonly<Record<string, WorktreeLineage>>,
   workspaceLineage: Readonly<Record<string, WorkspaceLineage>>
 ): Record<string, WorktreeLineage> {
-  return {
+  let byWorkspace = mergedEdges.get(worktreeLineage)
+  if (!byWorkspace) {
+    byWorkspace = new WeakMap()
+    mergedEdges.set(worktreeLineage, byWorkspace)
+  }
+  const cached = byWorkspace.get(workspaceLineage)
+  if (cached) {
+    return cached
+  }
+  const merged = {
     ...Object.fromEntries(
       Object.values(workspaceLineage).map((edge) => {
         const lineage = worktreeLineageFromWorkspaceLineage(edge)
@@ -258,4 +288,6 @@ export function mergeWorkspaceLineageRecords(
     ),
     ...worktreeLineage
   }
+  byWorkspace.set(workspaceLineage, merged)
+  return merged
 }

@@ -1,15 +1,10 @@
-import { folderWorkspaceToWorktree } from '../shared/folder-workspace-worktree'
+import { getWorktreeLineageCandidates, type CandidateStore } from './worktree-lineage-candidates'
 import type { Worktree } from '../shared/worktree/types'
-import type { Repo } from '../shared/repo-types'
 import { getRepoExecutionHostId } from '../shared/execution-host'
 import { getRepoIdFromWorktreeId, splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
-import {
-  getConnectedWorktreeLineageIds,
-  mergeWorkspaceLineageRecords,
-  projectResolvedWorktreeLineage
-} from '../shared/resolved-worktree-lineage'
-import { readWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
+import { projectResolvedWorktreeLineage } from '../shared/resolved-worktree-lineage'
+import { composeWorktreeHostIdentity } from '../shared/worktree/host-qualified-identity'
 import { areWorktreePathsEqual } from './git/worktree-path-comparison'
 import { mergeWorktree } from './ipc/worktree-metadata-merge'
 import { resolveRepoOwnershipEvidence } from './ipc/worktrees/listing/worktree-host-ownership'
@@ -19,66 +14,38 @@ import {
   isFolderWorkspaceIdForRepo,
   mergeFolderWorkspace
 } from './ipc/worktrees/folder-workspace-model'
-import type { RuntimeStore } from './runtime/runtime-store-contract'
-
-type HostPeerStore = Pick<
-  RuntimeStore,
-  | 'getRepos'
-  | 'getAllWorktreeMeta'
-  | 'getWorktreeMetaForHost'
-  | 'getAllWorktreeLineage'
-  | 'getAllWorkspaceLineage'
-  | 'getFolderWorkspaces'
->
 
 /** Project a per-repo publication against connected peers in this store. */
 export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
-  store: HostPeerStore,
+  store: CandidateStore,
   rows: readonly T[]
 ) {
-  const lineageById = mergeWorkspaceLineageRecords(
-    store.getAllWorktreeLineage?.() ?? {},
-    store.getAllWorkspaceLineage?.() ?? {}
-  )
-  const ownIds = new Set(rows.map((row) => row.id))
-  const folders =
-    store
-      .getFolderWorkspaces?.()
-      .map(folderWorkspaceToWorktree)
-      .filter((row) => !ownIds.has(row.id)) ?? []
-  if (rows.length === 0) {
-    return projectResolvedWorktreeLineage(rows, lineageById, folders)
-  }
-  const relatedIds = getConnectedWorktreeLineageIds(
-    rows.map((row) => row.id),
-    lineageById
-  )
-  if ([...relatedIds].every((id) => ownIds.has(id))) {
-    return projectResolvedWorktreeLineage(rows, lineageById, folders)
-  }
-  const repos = store.getRepos()
-  const reposById = new Map<string, Repo[]>()
-  for (const candidate of repos) {
-    const owners = reposById.get(candidate.id) ?? []
-    owners.push(candidate)
-    reposById.set(candidate.id, owners)
-  }
-  const legacyMeta = store.getAllWorktreeMeta()
+  const snapshot = getWorktreeLineageCandidates(store)
+  const { lineageById, folders } = snapshot
+  const ownedRows = rows.map((row) => {
+    const owners = snapshot.reposById.get(row.repoId) ?? []
+    return !row.hostId && owners.length === 1
+      ? { ...row, hostId: getRepoExecutionHostId(owners[0]) }
+      : row
+  })
+  const ownRows = new Set(ownedRows.map((row) => composeWorktreeHostIdentity(row.hostId, row.id)))
+  const relatedIds = snapshot.relatedIds(rows.map((row) => row.id))
+  const legacyMeta = snapshot.rawMetadata
   const peers: Worktree[] = []
   for (const id of relatedIds) {
-    if (ownIds.has(id)) {
-      continue
-    }
-    const owners = reposById.get(getRepoIdFromWorktreeId(id)) ?? []
+    const owners = snapshot.reposById.get(getRepoIdFromWorktreeId(id)) ?? []
     const evidence = owners.map(resolveRepoOwnershipEvidence)
     if (evidence.some((owner) => owner.status !== 'owned')) {
       continue
     }
     for (const owner of owners) {
       const ownerHostId = getRepoExecutionHostId(owner)
+      if (ownRows.has(composeWorktreeHostIdentity(ownerHostId, id))) {
+        continue
+      }
       const legacy = legacyMeta[id]
       const meta =
-        readWorktreeMetaForHost(store, id, ownerHostId) ??
+        snapshot.metadataByIdentity.get(composeWorktreeHostIdentity(ownerHostId, id)) ??
         (legacy?.hostId === ownerHostId || (!legacy?.hostId && owners.length === 1)
           ? legacy
           : undefined)
@@ -115,5 +82,10 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
       )
     }
   }
-  return projectResolvedWorktreeLineage(rows, lineageById, [...folders, ...peers])
+  return projectResolvedWorktreeLineage(
+    ownedRows,
+    lineageById,
+    [...folders, ...peers],
+    legacyMeta
+  ).map((row, index) => ({ ...row, hostId: rows[index].hostId }))
 }

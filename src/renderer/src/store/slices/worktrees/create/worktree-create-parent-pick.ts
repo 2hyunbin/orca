@@ -9,7 +9,7 @@ import {
   worktreeWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
 import { folderWorkspaceToWorktree } from '../../../../../../shared/folder-workspace-worktree'
-import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
+import { getLineageInputs } from '../../../../components/sidebar/visible-worktree-indexes'
 import {
   getWorktreeExecutionHostId,
   type ExecutionHostId
@@ -35,10 +35,13 @@ export function resolveWorktreeCreateParent(
   requestedParentWorktreeId: string | undefined,
   executionHostId: ExecutionHostId
 ): WorktreeCreateParentPick {
+  const rows = getLineageInputs(state).worktreeMap
   const candidates = requestedParentWorktreeId
-    ? getIndexedWorktreesById(state.worktreesByRepo, requestedParentWorktreeId)
+    ? [...rows.values()].filter((row) => row.id === requestedParentWorktreeId)
     : []
-  const picked = candidates.find((row) => row.hostId === executionHostId) ?? candidates[0]
+  const picked =
+    rows.get(requestedParentWorktreeId ?? '') ??
+    (candidates.length === 1 ? candidates[0] : undefined)
   const pickedHost = picked
     ? getWorktreeExecutionHostId(
         picked,

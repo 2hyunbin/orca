@@ -1,3 +1,4 @@
+import { mergeWorktreeMetaForWrite } from '../persistence/loading-store/worktree-meta-write-normalization'
 import { describe, expect, it } from 'vitest'
 import type { NotificationSettings } from '../../shared/notification-settings-types'
 import type { PersistedState } from '../../shared/persisted-state-types'
@@ -58,6 +59,13 @@ function deps(options: {
       getWorktreeMeta: (id) => (options.metaById?.[id] ?? options.meta) as WorktreeMeta | undefined,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only worktreeId and parentWorktreeId.
       getAllWorktreeLineage: () => (options.lineage ?? {}) as Record<string, WorktreeLineage>,
+      getAllWorktreeMeta: () =>
+        Object.fromEntries(
+          [WORKSPACE_ID, ...Object.keys(options.lineage ?? {})].map((id) => [
+            id,
+            mergeWorktreeMetaForWrite(undefined, options.metaById?.[id] ?? options.meta ?? {})
+          ])
+        ),
       getFolderWorkspaces: () => options.folders ?? []
     },
     resolvedWorktrees: options.resolved === undefined ? [listed()] : options.resolved

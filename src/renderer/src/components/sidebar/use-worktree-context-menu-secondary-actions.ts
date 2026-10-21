@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { useAppStore } from '@/store'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { unnestWorktrees } from './worktree-unnest'
@@ -11,7 +12,7 @@ export function useWorktreeContextMenuSecondaryActions(args: {
 }) {
   const handleRemoveParentLink = useCallback(() => {
     void unnestWorktrees(
-      args.activeContextWorktrees.map((item) => item.id),
+      args.activeContextWorktrees.map(getWorktreeHostIdentity),
       args.updateWorktreeLineage
     )
   }, [args])

@@ -588,7 +588,7 @@ describe('worktree lineage state', () => {
       worktreesByRepo: { repo1: [child] }
     } as Partial<AppState>)
 
-    await store.getState().assignWorktreeParent(lineage.worktreeId, {
+    await store.getState().assignWorktreeParent(`runtime:owner-env|${lineage.worktreeId}`, {
       parentWorktreeId: lineage.parentWorktreeId
     })
 
@@ -601,6 +601,11 @@ describe('worktree lineage state', () => {
       },
       timeoutMs: 15_000
     })
+    await expect(
+      store.getState().assignWorktreeParent(`runtime:owner-env|${lineage.worktreeId}`, {
+        parentWorktreeId: `ssh:gone|${lineage.parentWorktreeId}`
+      })
+    ).rejects.toThrow('selected workspace changed')
   })
 
   it('refreshes assignment failures through the worktree owner runtime when host-stamped', async () => {

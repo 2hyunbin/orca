@@ -1,4 +1,3 @@
-import type { ParentWorktreeRef } from './lineage-types'
 import type { WorktreeCatalogVersion } from './catalog-version'
 import type { ExecutionHostId } from '../execution-host'
 import type { ArchiveHookOverride } from './archive-hook-removal-gate'
@@ -15,7 +14,12 @@ import type {
   WorkspaceStatus,
   Worktree
 } from './types'
-import type { WorkspaceLineage, WorktreeLineage, WorktreeLineageWarning } from './lineage-types'
+import type {
+  ParentWorktreeRef,
+  WorkspaceLineage,
+  WorktreeLineage,
+  WorktreeLineageWarning
+} from './lineage-types'
 import type {
   WorktreeDefaultTabsLaunch,
   WorktreeSetupLaunch,

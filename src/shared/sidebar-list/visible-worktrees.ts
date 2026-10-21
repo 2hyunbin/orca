@@ -49,7 +49,7 @@ export function selectVisibleSidebarWorktrees({
       const worktree = includedIds.has(worktreeId)
         ? undefined
         : [...ancestorByIdentity.values()].find((candidate) => candidate.id === worktreeId)
-      if (worktree) {
+      if (worktree && !worktree.isArchived) {
         includedIds.add(worktreeId)
         all.push(worktree)
       }
@@ -91,7 +91,7 @@ function addVisibleLineageAncestors(
     const parent = parentByIdentity.get(identity)
     // Why: a repository filter is an explicit boundary; other filters keep
     // valid ancestors so visible children retain their hierarchy.
-    if (parent && (!selectedRepoIds || selectedRepoIds.has(parent.repoId))) {
+    if (parent && !parent.isArchived && (!selectedRepoIds || selectedRepoIds.has(parent.repoId))) {
       addWithAncestors(parent)
     }
     if (!included.has(identity)) {

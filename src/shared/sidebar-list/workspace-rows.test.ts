@@ -108,7 +108,7 @@ describe('buildWorkspaceRows', () => {
     expect(rows.get('|repo-1::/r/a')?.hostId).toBe('local')
   })
 
-  it('carries the stored lineage edge for the builder to validate', () => {
+  it('keeps saved intent while an unresolved display edge stays null', () => {
     const rows = buildWorkspaceRows({
       worktrees: [worktree({ hostId: 'local', instanceId: 'a-1' })],
       folderWorkspaces: [],
@@ -127,7 +127,8 @@ describe('buildWorkspaceRows', () => {
     })
     expect(rows.get('local|repo-1::/r/a')).toMatchObject({
       instanceId: 'a-1',
-      lineage: {
+      lineage: null,
+      savedLineage: {
         parentWorktreeId: 'repo-1::/r',
         worktreeInstanceId: 'a-1',
         parentWorktreeInstanceId: 'p-1'

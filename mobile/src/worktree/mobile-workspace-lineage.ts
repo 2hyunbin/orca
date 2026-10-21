@@ -22,17 +22,16 @@ export function getMobileWorkspaceLineageChildren(
     id: row.worktreeId,
     instanceId: row.worktreeInstanceId
   }))
-  const parents = resolveWorktreeLineageParents(
-    rows,
-    (row) =>
-      row.savedLineage ??
-      (row.parentWorktreeId
+  const parents = resolveWorktreeLineageParents(rows, (row) =>
+    row.savedLineage !== undefined
+      ? row.savedLineage
+      : row.parentWorktreeId
         ? {
             parentWorktreeId: row.parentWorktreeId,
             worktreeInstanceId: row.lineageWorktreeInstanceId,
             parentWorktreeInstanceId: row.parentWorktreeInstanceId
           }
-        : null)
+        : null
   )
   const children = new Map<string, Worktree[]>()
   for (const [child, parent] of parents) {

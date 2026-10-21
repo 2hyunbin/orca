@@ -25,6 +25,7 @@ import {
 } from './session-host-partitions'
 import { migrateWorktreeIdentity as migrateWorktreeIdentityOperation } from '../tracking-repos/worktree-identity-migration'
 import {
+  getWorktreeLineageMetadata,
   getAllWorktreeMetaForHost as getAllWorktreeMetaForHostOperation,
   getWorktreeMetaForHost as getWorktreeMetaForHostOperation,
   migrateWorktreeMetadataLocator,
@@ -77,6 +78,10 @@ export class MetadataLineageOperations {
 
   getAllWorktreeMeta(): Record<string, WorktreeMeta> {
     return this[metadataLineageOperationsContext].runtime.state.worktreeMeta
+  }
+
+  getWorktreeLineageMetadata() {
+    return getWorktreeLineageMetadata(this[metadataLineageOperationsContext].runtime.state)
   }
 
   getAllWorktreeMetaForHost(executionHostId: ExecutionHostId): Record<string, WorktreeMeta> {

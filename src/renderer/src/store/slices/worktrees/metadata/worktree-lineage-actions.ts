@@ -1,6 +1,8 @@
 import { lineageStoreKeyForRow } from '../../../../../../shared/resolved-worktree-lineage'
-import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import { getLineageInputs } from '../../../../components/sidebar/visible-worktree-indexes'
+import { isWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
+import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseExecutionHostId } from '../../../../../../shared/execution-host'
@@ -13,6 +15,23 @@ import {
 } from './worktree-lineage-refresh'
 import { hostRouteForWorktreeOwner } from '../listing/worktree-owner-target'
 
+function selectedRow(rows: ReadonlyMap<string, Worktree>, selection: string): Worktree | undefined {
+  const exact = rows.get(selection)
+  if (exact) {
+    return exact
+  }
+  const matches = isWorktreeHostIdentity(selection)
+    ? []
+    : [...rows.values()].filter((row) => row.id === selection)
+  if (matches.length === 1) {
+    return matches[0]
+  }
+  if (isWorktreeHostIdentity(selection) || matches.length > 1) {
+    throw new Error('The selected workspace changed. Select it again.')
+  }
+  return undefined
+}
+
 function withParentReference(
   get: WorktreeSliceGet,
   worktreeId: string,
@@ -21,19 +40,23 @@ function withParentReference(
   if (!args.parentWorktreeId || args.noParent) {
     return args
   }
-  const rows = getIndexedAllWorktrees(get().worktreesByRepo)
-  const child = rows.find((row) => row.id === worktreeId)
-  const parent = rows.find((row) => row.id === args.parentWorktreeId)
+  const rows = getLineageInputs(get()).worktreeMap
+  const child = selectedRow(rows, worktreeId)
+  const parent = selectedRow(rows, args.parentWorktreeId)
   if (
     !child ||
     !parent?.instanceId ||
     (child.hostId === parent.hostId &&
       lineageStoreKeyForRow(child) === lineageStoreKeyForRow(parent))
   ) {
-    return args
+    return {
+      ...args,
+      parentWorktreeId: parent?.id ?? args.parentWorktreeId
+    }
   }
   return {
     ...args,
+    parentWorktreeId: parent.id,
     parentWorktreeRef: {
       worktreeId: parent.id,
       instanceId: parent.instanceId,
@@ -93,14 +116,16 @@ export function createUpdateWorktreeLineage(
   return async (worktreeId, args) => {
     // Why: an unresolvable owner route (ambiguous or missing) rejects rather than skipping — this is a
     // user-initiated action, and both callers toast the failure. Don't swallow it into a silent no-op.
-    const ownerRoute = hostRouteForWorktreeOwner(get(), worktreeId)
+    const child = selectedRow(getLineageInputs(get()).worktreeMap, worktreeId)
+    const id = child?.id ?? worktreeId
+    const ownerRoute = hostRouteForWorktreeOwner(get(), id, child?.hostId)
     try {
       applyWorktreeLineageUpdate(
         set,
-        worktreeId,
+        id,
         await setWorktreeLineageForRuntime(
           ownerRoute,
-          worktreeId,
+          id,
           withParentReference(get, worktreeId, args)
         )
       )
@@ -117,14 +142,16 @@ export function createAssignWorktreeParent(
   get: WorktreeSliceGet
 ): WorktreeSlice['assignWorktreeParent'] {
   return async (worktreeId, args) => {
-    const ownerRoute = hostRouteForWorktreeOwner(get(), worktreeId)
+    const child = selectedRow(getLineageInputs(get()).worktreeMap, worktreeId)
+    const id = child?.id ?? worktreeId
+    const ownerRoute = hostRouteForWorktreeOwner(get(), id, child?.hostId)
     try {
       applyWorktreeLineageUpdate(
         set,
-        worktreeId,
+        id,
         await setWorktreeLineageForRuntime(
           ownerRoute,
-          worktreeId,
+          id,
           withParentReference(get, worktreeId, args)
         )
       )

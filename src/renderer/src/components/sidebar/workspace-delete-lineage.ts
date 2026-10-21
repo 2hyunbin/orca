@@ -1,7 +1,10 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getProjectedWorktreeLineage } from '../../../../shared/sidebar-list/worktree-lineage-projection'
-import { resolveWorktreeLineageParents } from '../../../../shared/resolved-worktree-lineage'
+import {
+  getWorktreeLineageProjection,
+  getWorktreeLineageRows
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 type WorkspaceDeleteLineage = {
   descendants: Worktree[]
@@ -10,26 +13,12 @@ type WorkspaceDeleteLineage = {
 
 export function getWorkspaceDeleteLineage(
   parent: Worktree,
-  worktrees: readonly Worktree[],
+  worktrees: readonly Worktree[] | ReadonlyMap<string, Worktree>,
   lineageById: Record<string, WorktreeLineage>
 ): WorkspaceDeleteLineage {
-  // Legacy child buckets carry no host; retain their existing same-id owner preference.
-  const selected = new Map<string, Worktree>()
-  for (const row of worktrees) {
-    const prior = selected.get(row.id)
-    if (!prior || prior.hostId !== parent.hostId) {
-      selected.set(row.id, row)
-    }
-  }
-  const parents = resolveWorktreeLineageParents([...selected.values()], (row) =>
-    getProjectedWorktreeLineage(row, lineageById)
-  )
-  const childrenByParent = new Map<Worktree, Worktree[]>()
-  for (const [child, owner] of parents) {
-    const children = childrenByParent.get(owner) ?? []
-    children.push(child)
-    childrenByParent.set(owner, children)
-  }
+  const rows = 'get' in worktrees ? worktrees : getWorktreeLineageRows(worktrees)
+  parent = rows.get(getWorktreeHostIdentity(parent)) ?? parent
+  const { children: childrenByParent } = getWorktreeLineageProjection(lineageById, rows)
 
   const descendants: Worktree[] = []
   const childFirstTargets: Worktree[] = []

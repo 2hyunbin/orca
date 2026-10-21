@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getCyclicProjectedWorktreeLineageIds } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import {
   getReorderedWorktreeIdsToUnnest,
   getWorktreeLineageDropTargetId,
@@ -151,8 +150,7 @@ describe('getReorderedWorktreeIdsToUnnest', () => {
         draggedIds: ['child', 'child', 'root', 'grandchild'],
         sourceGroupIds: ['child', 'root', 'grandchild'],
         lineageById,
-        worktreeMap,
-        cyclicLineageIds: getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
+        worktreeMap
       })
     ).toEqual(['child', 'grandchild'])
   })
@@ -172,8 +170,7 @@ describe('getReorderedWorktreeIdsToUnnest', () => {
         draggedIds: ['source-child', 'other-child'],
         sourceGroupIds: ['source-child'],
         lineageById,
-        worktreeMap,
-        cyclicLineageIds: getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
+        worktreeMap
       })
     ).toEqual(['source-child'])
   })
@@ -189,8 +186,7 @@ describe('getReorderedWorktreeIdsToUnnest', () => {
         draggedIds: [child.id],
         sourceGroupIds: [child.id],
         lineageById: {},
-        worktreeMap,
-        cyclicLineageIds: getCyclicProjectedWorktreeLineageIds({}, worktreeMap)
+        worktreeMap
       })
     ).toEqual([child.id])
   })
@@ -209,8 +205,7 @@ describe('getReorderedWorktreeIdsToUnnest', () => {
         draggedIds: [child.id],
         sourceGroupIds: [child.id],
         lineageById,
-        worktreeMap,
-        cyclicLineageIds: getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
+        worktreeMap
       })
     ).toEqual([])
   })

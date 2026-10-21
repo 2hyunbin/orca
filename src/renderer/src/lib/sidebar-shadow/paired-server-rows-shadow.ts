@@ -37,7 +37,7 @@ export function readWindowPairedServerRows(
   const folders = (state.folderWorkspaces ?? []).map((folder) => {
     const row = folderWorkspaceToWorktree(folder)
     const edge = state.workspaceLineageByChildKey?.[row.id]
-    return { ...row, savedLineage: edge ? worktreeLineageFromWorkspaceLineage(edge) : undefined }
+    return { ...row, savedLineage: edge ? worktreeLineageFromWorkspaceLineage(edge) : null }
   })
   for (const worktree of projectResolvedWorktreeLineage(
     [...getAllWorktreesFromState(state), ...folders],

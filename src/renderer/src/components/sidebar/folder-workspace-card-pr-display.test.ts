@@ -1,3 +1,4 @@
+import { getWorktreeLineageRows } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { describe, expect, it } from 'vitest'
 import type { CheckStatus, PRInfo } from '../../../../shared/github/pull-request-types'
 import type { Repo } from '../../../../shared/repo-types'
@@ -46,6 +47,17 @@ function makeWorktree(overrides: Partial<Worktree> & { id: string }): Worktree {
   }
 }
 
+function lineageRows(entries: [string, Worktree][]) {
+  return getWorktreeLineageRows([
+    makeWorktree({
+      id: folderWorkspaceKey('folder-1'),
+      instanceId: folderWorkspaceKey('folder-1'),
+      hostId: 'local'
+    }),
+    ...entries.map(([, row]) => row)
+  ])
+}
+
 function makeWorkspaceLineage(worktree: Worktree): WorkspaceLineage {
   return {
     childWorkspaceKey: worktreeWorkspaceKey(worktree.id),
@@ -78,7 +90,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [worktree.id]: makeWorkspaceLineage(worktree) },
       worktreeLineageById: {},
-      worktreeMap: new Map([[worktree.id, worktree]]),
+      worktreeMap: lineageRows([[worktree.id, worktree]]),
       repoMap: new LookupOnlyRepoMap([[repo.id, repo]]),
       hostedReviewCache: null,
       prCache: {
@@ -102,7 +114,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
         [failing.id]: makeWorkspaceLineage(failing)
       },
       worktreeLineageById: {},
-      worktreeMap: new Map([
+      worktreeMap: lineageRows([
         [passing.id, passing],
         [pending.id, pending],
         [failing.id, failing]
@@ -130,7 +142,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
         [pending.id]: makeWorkspaceLineage(pending)
       },
       worktreeLineageById: {},
-      worktreeMap: new Map([
+      worktreeMap: lineageRows([
         [passing.id, passing],
         [pending.id, pending]
       ]),
@@ -156,7 +168,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [worktree.id]: makeWorkspaceLineage(worktree) },
       worktreeLineageById: {},
-      worktreeMap: new Map([[worktree.id, worktree]]),
+      worktreeMap: lineageRows([[worktree.id, worktree]]),
       repoMap: new Map([[repo.id, repo]]),
       hostedReviewCache: null,
       prCache: { 'repo-1::suppressed': makePrEntry(4, 'failure') }
@@ -173,7 +185,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [parent.id]: makeWorkspaceLineage(parent) },
       worktreeLineageById: { [nested.id]: makeWorktreeLineage(nested, parent) },
-      worktreeMap: new Map([
+      worktreeMap: lineageRows([
         [parent.id, parent],
         [nested.id, nested]
       ]),
@@ -196,7 +208,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [parent.id]: makeWorkspaceLineage(parent) },
       worktreeLineageById: {},
-      worktreeMap: new Map([
+      worktreeMap: lineageRows([
         [parent.id, parent],
         [inlineNested.id, inlineNested]
       ]),
@@ -222,7 +234,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
           parentWorktreeInstanceId: 'stale-parent'
         }
       },
-      worktreeMap: new Map([
+      worktreeMap: lineageRows([
         [parent.id, parent],
         [inlineNested.id, inlineNested]
       ]),
@@ -235,7 +247,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
   })
 
   it.each([['known host', { hostId: 'ssh:remote' as const }, { hostId: 'local' as const }]])(
-    'excludes nested PRs across a %s boundary',
+    'includes nested PRs across a %s within this store',
     (_boundary, childOverrides, parentOverrides) => {
       const parent = makeWorktree({ id: 'parent', instanceId: 'parent', ...parentOverrides })
       const nested = makeWorktree({
@@ -250,7 +262,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
         folderWorkspaceId: 'folder-1',
         workspaceLineageByChildKey: { [parent.id]: makeWorkspaceLineage(parent) },
         worktreeLineageById: { [nested.id]: makeWorktreeLineage(nested, parent) },
-        worktreeMap: new Map([
+        worktreeMap: lineageRows([
           [parent.id, parent],
           [nested.id, nested]
         ]),
@@ -262,7 +274,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
         prCache: { [`${nested.repoId}::nested`]: makePrEntry(4, 'success') }
       })
 
-      expect(display).toBeNull()
+      expect(display).toMatchObject({ number: 4, status: 'success' })
     }
   )
 
@@ -277,7 +289,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
         [parent.id]: makeWorktreeLineage(parent, nested),
         [nested.id]: makeWorktreeLineage(nested, parent)
       },
-      worktreeMap: new Map([
+      worktreeMap: lineageRows([
         [parent.id, parent],
         [nested.id, nested]
       ]),
@@ -296,7 +308,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [worktree.id]: makeWorkspaceLineage(worktree) },
       worktreeLineageById: {},
-      worktreeMap: new Map([[worktree.id, worktree]]),
+      worktreeMap: lineageRows([[worktree.id, worktree]]),
       repoMap: new Map([[repo.id, repo]]),
       hostedReviewCache: null,
       prCache: {
@@ -314,7 +326,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [worktree.id]: makeWorkspaceLineage(worktree) },
       worktreeLineageById: {},
-      worktreeMap: new Map([[worktree.id, worktree]]),
+      worktreeMap: lineageRows([[worktree.id, worktree]]),
       repoMap: new Map([[repo.id, repo]]),
       hostedReviewCache: null,
       prCache: {
@@ -335,7 +347,7 @@ describe('getFolderWorkspaceCardPrDisplay', () => {
       folderWorkspaceId: 'folder-1',
       workspaceLineageByChildKey: { [worktree.id]: makeWorkspaceLineage(worktree) },
       worktreeLineageById: {},
-      worktreeMap: new Map([[worktree.id, worktree]]),
+      worktreeMap: lineageRows([[worktree.id, worktree]]),
       repoMap: new Map([[repo.id, repo]]),
       hostedReviewCache: null,
       prCache: {

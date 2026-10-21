@@ -120,8 +120,8 @@ export function renderWorktreeItemRow(
   const worktreeIdentity = getWorktreeHostIdentity(itemRow.worktree)
   const isLineageDropTarget =
     ctx.worktreeDragState.draggingWorktreeId &&
-    (ctx.worktreeDragState.lineageDropTargetId === itemRow.worktree.id ||
-      ctx.nativeLineageDropTargetId === itemRow.worktree.id)
+    (ctx.worktreeDragState.lineageDropTargetId === worktreeIdentity ||
+      ctx.nativeLineageDropTargetId === worktreeIdentity)
   const isActiveWorktree = isActiveSidebarWorkspace(itemRow.worktree, {
     worktreeId: ctx.activeWorktreeId,
     hostId: ctx.activeWorkspaceExecutionHostId ?? null

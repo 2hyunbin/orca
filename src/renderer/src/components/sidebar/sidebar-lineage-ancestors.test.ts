@@ -5,10 +5,7 @@ import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
 import { worktree, repoMap } from './worktree-list-groups-test-fixtures'
-import {
-  getCyclicProjectedWorktreeLineageIds,
-  getSidebarLineageAncestors
-} from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getSidebarLineageAncestors } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 function pair(parentHost: ExecutionHostId | undefined, childHost: ExecutionHostId | undefined) {
   const parent: Worktree = { ...worktree, id: 'parent', instanceId: 'p', hostId: parentHost }
@@ -53,12 +50,7 @@ describe('getSidebarLineageAncestors', () => {
       true
     ).find((row) => row.type === 'item' && row.worktree.id === 'child')
     const rows = new Map([parent, child].map((entry) => [getWorktreeHostIdentity(entry), entry]))
-    const ancestors = getSidebarLineageAncestors(
-      child,
-      lineageById,
-      rows,
-      getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
-    )
+    const ancestors = getSidebarLineageAncestors(child, lineageById, rows)
 
     expect(sidebarDepth?.type === 'item' && sidebarDepth.depth).toBe(nests ? 1 : 0)
     expect(ancestors.map((entry) => entry.id)).toEqual(nests ? ['parent'] : [])

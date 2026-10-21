@@ -1,14 +1,11 @@
-import {
-  resolveWorktreeLineageParents,
-  worktreeLineageFromWorkspaceLineage
-} from '../../../../shared/resolved-worktree-lineage'
-import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
+import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { compareWorktreeDisplayName } from '@/lib/worktree-display-name-order'
-import { getProjectedWorktreeLineageChildrenByParentId } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getWorktreeLineageProjection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 export type AttachedWorktreeResolution = {
   folderWorkspace: FolderWorkspace | null
@@ -54,115 +51,33 @@ export function getAttachedWorktreesForFolderWorkspace({
     }
   }
 
-  const worktreeById = getWorktreeById(worktreesByRepo)
-  const folderRows = folderWorkspaces.map(folderWorkspaceToWorktree)
-  const parentRow = folderRows.find((row) => row.id === folderWorkspaceKey(folderWorkspace.id))
-  const edges = new Map(
-    Object.values(workspaceLineageByChildKey).map((edge) => {
-      const lineage = worktreeLineageFromWorkspaceLineage(edge)
-      return [lineage.worktreeId, lineage] as const
-    })
+  const { worktreeMap, lineageById } = getLineageInputs({
+    worktreesByRepo,
+    folderWorkspaces,
+    workspaceLineageByChildKey,
+    worktreeLineageById
+  })
+  const folder = [...worktreeMap.values()].find(
+    (row) => row.id === folderWorkspaceKey(folderWorkspace.id)
   )
-  const parents = resolveWorktreeLineageParents(
-    [...worktreeById.values(), ...folderRows],
-    (row) => row.savedLineage ?? edges.get(row.id) ?? worktreeLineageById[row.id]
+  const { children } = getWorktreeLineageProjection(lineageById, worktreeMap)
+  const childWorktrees = (folder ? (children.get(folder) ?? []) : [])
+    .filter((row) => !row.isArchived)
+    .toSorted(sortWorktreesByRecentActivity)
+  const lineageChildrenByParentId = new Map(
+    [...children]
+      .filter(([parent]) => !parent.id.startsWith('folder:'))
+      .map(([parent, rows]) => [
+        getWorktreeHostIdentity(parent),
+        rows.filter((row) => !row.isArchived).toSorted(sortWorktreesByRecentActivity)
+      ])
   )
-  const childWorktrees = [...parents]
-    .filter(([child, parent]) => parent === parentRow && !child.isArchived)
-    .map(([child]) => child)
-    .sort(sortWorktreesByRecentActivity)
-
-  const childWorktreeIds = new Set(childWorktrees.map((worktree) => worktree.id))
-  const lineageChildrenByParentId = getLineageChildrenByParentId(
-    worktreeLineageById,
-    worktreeById,
-    childWorktreeIds
-  )
-  const nestedChildIds = new Set<string>()
-  for (const children of lineageChildrenByParentId.values()) {
-    for (const child of children) {
-      nestedChildIds.add(child.id)
-    }
-  }
-  const topLevelChildWorktrees = childWorktrees.filter(
-    (worktree) => !nestedChildIds.has(worktree.id)
-  )
-  const rootChildWorktrees =
-    topLevelChildWorktrees.length > 0 ? topLevelChildWorktrees : childWorktrees
-
   return {
     folderWorkspace,
     childWorktrees,
     lineageChildrenByParentId,
-    rootChildWorktrees
+    rootChildWorktrees: childWorktrees
   }
-}
-
-export function getLineageChildrenByParentId(
-  lineageById: Record<string, WorktreeLineage>,
-  worktreeById: Map<string, Worktree>,
-  rootWorktreeIds: ReadonlySet<string>
-): Map<string, Worktree[]> {
-  const projectedChildrenByParentId = getProjectedWorktreeLineageChildrenByParentId(
-    lineageById,
-    worktreeById
-  )
-  const includedIds = new Set(rootWorktreeIds)
-  const queue = [...rootWorktreeIds]
-  for (let index = 0; index < queue.length; index += 1) {
-    for (const child of projectedChildrenByParentId.get(queue[index]) ?? []) {
-      if (child.isArchived || includedIds.has(child.id)) {
-        continue
-      }
-      includedIds.add(child.id)
-      queue.push(child.id)
-    }
-  }
-
-  const descendantsByParentId = new Map<string, Worktree[]>()
-  for (const parentId of includedIds) {
-    const children = (projectedChildrenByParentId.get(parentId) ?? []).filter(
-      (child) => includedIds.has(child.id) && !child.isArchived
-    )
-    if (children.length > 0) {
-      descendantsByParentId.set(parentId, children)
-    }
-  }
-
-  for (const children of descendantsByParentId.values()) {
-    children.sort(sortWorktreesByRecentActivity)
-  }
-
-  return descendantsByParentId
-}
-
-function getWorktreeById(
-  worktreesByRepo: Record<string, readonly Worktree[]>
-): Map<string, Worktree> {
-  return new Map(
-    Object.values(worktreesByRepo)
-      .flat()
-      .map((worktree) => [worktree.id, worktree])
-  )
-}
-
-/** Exported so the composer's parent picker offers exactly the roots this view attaches. */
-export function getLineageChildWorktree(
-  lineage: WorkspaceLineage,
-  worktreeById: Map<string, Worktree>
-): Worktree | null {
-  const childScope = parseWorkspaceKey(lineage.childWorkspaceKey)
-  if (childScope?.type !== 'worktree') {
-    return null
-  }
-  const worktree = worktreeById.get(childScope.worktreeId)
-  if (!worktree || worktree.isArchived) {
-    return null
-  }
-  if (lineage.childInstanceId && lineage.childInstanceId !== worktree.instanceId) {
-    return null
-  }
-  return worktree
 }
 
 function sortWorktreesByRecentActivity(left: Worktree, right: Worktree): number {

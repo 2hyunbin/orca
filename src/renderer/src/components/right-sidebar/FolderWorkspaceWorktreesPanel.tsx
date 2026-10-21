@@ -1,3 +1,4 @@
+import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import WorktreeCard from '@/components/sidebar/WorktreeCard'
 import { stopNestedWorktreeCardBubble } from '@/components/sidebar/worktree-list/rows/header-event-guards'
 import {
@@ -49,14 +50,16 @@ export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
     worktree: Worktree,
     ancestorIds: ReadonlySet<string> = new Set()
   ): React.JSX.Element => {
-    const lineageChildren = lineageChildrenByParentId.get(worktree.id) ?? []
-    const lineageCollapsed = collapsedLineageWorktreeIds.has(worktree.id)
-    const nextAncestorIds = new Set([...ancestorIds, worktree.id])
-    const safeLineageChildren = lineageChildren.filter((child) => !nextAncestorIds.has(child.id))
+    const lineageChildren = lineageChildrenByParentId.get(getWorktreeHostIdentity(worktree)) ?? []
+    const lineageCollapsed = collapsedLineageWorktreeIds.has(getWorktreeHostIdentity(worktree))
+    const nextAncestorIds = new Set([...ancestorIds, getWorktreeHostIdentity(worktree)])
+    const safeLineageChildren = lineageChildren.filter(
+      (child) => !nextAncestorIds.has(getWorktreeHostIdentity(child))
+    )
     const hasSafeLineageChildren = safeLineageChildren.length > 0
     return (
       <WorktreeCard
-        key={worktree.id}
+        key={getWorktreeHostIdentity(worktree)}
         worktree={worktree}
         repo={repoById.get(worktree.repoId)}
         isActive={activeWorktreeId === worktree.id}
@@ -72,7 +75,7 @@ export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
           !lineageCollapsed && hasSafeLineageChildren
             ? safeLineageChildren.map((child) => (
                 <div
-                  key={child.id}
+                  key={getWorktreeHostIdentity(child)}
                   onClick={stopNestedWorktreeCardBubble}
                   onDoubleClick={stopNestedWorktreeCardBubble}
                   onDragStart={stopNestedWorktreeCardBubble}
@@ -92,7 +95,7 @@ export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
             ? (event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                toggleLineage(worktree.id)
+                toggleLineage(getWorktreeHostIdentity(worktree))
               }
             : undefined
         }
