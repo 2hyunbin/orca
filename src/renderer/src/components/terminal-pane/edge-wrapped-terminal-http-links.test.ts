@@ -78,7 +78,7 @@ describe('edge-wrapped terminal HTTP links', () => {
   it.each([1, 2])(
     'opens both rows of a URL hard-wrapped inside %i-column TUI padding',
     (padding) => {
-      const url = 'https://github.com/makenotion/notion-next/pull/397970'
+      const url = 'https://example.com/example-project/pull/1234567890'
       const width = COLS - padding * 2
       const margin = ' '.repeat(padding)
       const rows = [

@@ -72,6 +72,59 @@ describe('wrapped terminal HTTP link provider', () => {
     }
   )
 
+  it.each(['https://example.org/ ', 'Reference: '])(
+    'reconstructs the final URL after %s on its start row',
+    async (prefix) => {
+      const url = `https://example.com/${'a'.repeat(45)}`
+      const leading = ` ${prefix}`
+      const width = 59 - leading.length
+      const { terminal, linksAt } = await terminalWithRows(
+        [`${leading}${url.slice(0, width)} `, ` ${url.slice(width)} `],
+        60
+      )
+      try {
+        for (const row of [1, 2]) {
+          expect((await linksAt(row))?.[0]?.text).toBe(url)
+        }
+      } finally {
+        terminal.dispose()
+      }
+    }
+  )
+
+  it.each(['HTTPS://', 'HTTP://'])(
+    'reconstructs an uppercase %s URL without leaving the continuation dead',
+    async (scheme) => {
+      const visible = `${scheme}EXAMPLE.COM/${'a'.repeat(45)}`
+      const { terminal, linksAt } = await terminalWithRows(
+        [` ${visible.slice(0, 38)} `, ` ${visible.slice(38)} `],
+        40
+      )
+      try {
+        for (const row of [1, 2]) {
+          expect((await linksAt(row))?.[0]?.text).toBe(new URL(visible).toString())
+        }
+      } finally {
+        terminal.dispose()
+      }
+    }
+  )
+
+  it('keeps an embedded scheme inside the reconstructed URL', async () => {
+    const url = `https://example.com/redirect/https://example.org/${'a'.repeat(45)}`
+    const { terminal, linksAt } = await terminalWithRows(
+      [` ${url.slice(0, 58)} `, ` ${url.slice(58)} `],
+      60
+    )
+    try {
+      for (const row of [1, 2]) {
+        expect((await linksAt(row))?.[0]?.text).toBe(url)
+      }
+    } finally {
+      terminal.dispose()
+    }
+  })
+
   it('keeps a sibling URL outside the continued link range', async () => {
     const first = `https://example.com/${'a'.repeat(26)}`
     const sibling = 'https://other.test/'
@@ -202,7 +255,7 @@ describe('wrapped terminal HTTP link provider', () => {
   )
 
   it('provides the complete URL and cell range on both independently written padded rows', async () => {
-    const url = 'https://github.com/makenotion/notion-next/pull/397970'
+    const url = 'https://example.com/example-project/pull/1234567890'
     const width = 38
     const { terminal, linksAt } = await terminalWithRows(
       [` ${url.slice(0, width)} `, ` ${url.slice(width)} `],

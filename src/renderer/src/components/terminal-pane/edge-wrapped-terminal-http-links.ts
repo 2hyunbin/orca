@@ -66,7 +66,10 @@ function isAsciiWordCode(code: number): boolean {
 }
 
 function findHttpSchemeIndex(text: string): number {
-  let searchStart = 0
+  let searchStart = text.search(/\S+\s*$/)
+  if (searchStart === -1) {
+    return -1
+  }
   while (searchStart < text.length) {
     const relativeIndex = text.slice(searchStart).search(HTTP_SCHEME_PATTERN)
     if (relativeIndex === -1) {
