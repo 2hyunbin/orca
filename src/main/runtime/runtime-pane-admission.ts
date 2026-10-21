@@ -8,21 +8,26 @@ import type {
 import type { LayoutRefusalCode } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
-import { paneStartFailure, type PaneStartStatuses } from './pane-start-statuses'
-import type { PaneResumeOutcomes } from './pane-resume-outcomes'
+import {
+  paneStartFailure,
+  type PaneResumeOutcomes,
+  type PaneStartStatuses
+} from './pane-start-statuses'
 
 type Spawn = NonNullable<RuntimePtyController['spawn']>
 type PaneStartStatusSink = Pick<PaneStartStatuses, 'set' | 'clear'>
 /**
  * Layout-owner build: how a start goes, for a pane main already held or one that should stay
- * when its start fails (`keepOnFailure`), so the pane shows the failure; and whether it resumed
- * the pane's agent (`resumeOutcomes`).
+ * when its start fails (`keepOnFailure`), so the pane shows the failure. Each start ends the
+ * pane's earlier resume outcome; one that wakes the pane's sleeping record (`resumesSleepingRecord`)
+ * records its own.
  */
 export type PaneStartArgs = {
   startStatus?: {
     sink: PaneStartStatusSink
     keepOnFailure: boolean
-    resumeOutcomes?: Pick<PaneResumeOutcomes, 'set'>
+    resumeOutcomes?: Pick<PaneResumeOutcomes, 'set' | 'clear'>
+    resumesSleepingRecord?: boolean
   }
 }
 type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
@@ -158,6 +163,7 @@ export async function spawnInAdmittedPane(
   const paneKey = `${args.tabId}:${args.leafId}`
   let admittedAs: TerminalPaneAdmissionOutcome | undefined
   startStatus?.sink.set(paneKey, { status: 'starting' })
+  startStatus?.resumeOutcomes?.clear(paneKey)
   let run: { outcome: TerminalPaneAdmissionOutcome | undefined; result: Awaited<ReturnType<Spawn>> }
   const start = async (
     admitted: TerminalPaneAdmissionOutcome | undefined
@@ -204,8 +210,8 @@ export async function spawnInAdmittedPane(
   if (outcome === 'admitted' && elsewhere) {
     await withdrawRuntimePane(store, args)
   }
-  if (result.resumeOutcome && !elsewhere) {
-    startStatus?.resumeOutcomes?.set(paneKey, result.id, result.resumeOutcome)
+  if (startStatus?.resumesSleepingRecord && result.resumeOutcome && !elsewhere) {
+    startStatus.resumeOutcomes?.set(paneKey, result.resumeOutcome, result.id)
   }
   return result
 }

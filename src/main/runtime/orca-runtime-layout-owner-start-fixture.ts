@@ -26,6 +26,9 @@ export class ProvisioningRuntime extends OrcaRuntimeService {
   startStatusOf(paneKey: string) {
     return this.paneStartStatuses?.peek(paneKey) ?? null
   }
+  resumeOutcomeOf(paneKey: string) {
+    return this.paneResumeOutcomes?.peek(paneKey) ?? null
+  }
 }
 
 export function setupLayoutOwnerRuntime() {

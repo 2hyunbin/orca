@@ -5,8 +5,7 @@ import { isHibernationDoneRecord } from '../../../../shared/hibernation-done-rec
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
-import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
-import { PaneResumeOutcomes } from '../../pane-resume-outcomes'
+import { PaneResumeOutcomes, PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
 import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime-layout-apply'
 import {
   runLayoutPaneStarts,
@@ -109,7 +108,8 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
           startStatus: {
             sink,
             keepOnFailure: opts.keepPaneOnStartFailure === true,
-            ...(this.paneResumeOutcomes ? { resumeOutcomes: this.paneResumeOutcomes } : {})
+            resumeOutcomes: this.paneResumeOutcomes ?? undefined,
+            resumesSleepingRecord: opts.resumesSleepingRecord === true
           }
         }
       : {}

@@ -205,7 +205,9 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
             : {}),
           launchRuntime: agentStartup.launchRuntime,
           targetGroupId,
-          ...(automatic ? { refuseSleptWorktree: true } : {})
+          ...(automatic ? { refuseSleptWorktree: true } : {}),
+          // Switch point: only a start from the pane's own record shows the window's banner.
+          ...(resumedRecord ? { resumesSleepingRecord: true as const } : {})
         }
       )
       const ptyId = created.tab.ptyId ?? null

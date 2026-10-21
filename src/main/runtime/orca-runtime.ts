@@ -251,7 +251,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     // An empty title is no title.
     liveTitle: (ptyId) => this.getTrackedDisplayTitleForPty(ptyId) || null,
     paneStartFact: (paneKey, binding) => this.paneStartStatuses?.get(paneKey, binding) ?? null,
-    paneResumeOutcome: (paneKey, pane) => this.paneResumeOutcomes?.get(paneKey, pane) ?? null
+    paneResumeOutcome: (paneKey, binding) => this.paneResumeOutcomes?.get(paneKey, binding) ?? null
   })
 
   protected markPaneLiveTitlesDirty(): void {

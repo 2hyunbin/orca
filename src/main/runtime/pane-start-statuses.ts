@@ -11,53 +11,22 @@ import type {
   PaneStartStatus,
   PublishedWorkspaceLayout
 } from '../../shared/workspace-layout/workspace-layout-published'
-import type { PaneResumeOutcomeOf } from './pane-resume-outcomes'
+import { bindingOf, PaneLiveFacts } from './pane-live-facts'
 
 export type PaneStartFact = { status: PaneStartStatus; reason?: string }
 
 /** A pane's start status (layout-owner build), given the pane's current binding (`bindingOf`). */
 export type PaneStartFactOf = (paneKey: string, binding: string) => PaneStartFact | null
 
-/** A pane's terminal binding as published: its terminal and that terminal's bind generation. */
-export function bindingOf(pane: { ptyId?: string; ptyGeneration?: number }): string {
-  return `${pane.ptyId ?? ''}#${pane.ptyGeneration ?? ''}`
-}
+export { bindingOf }
 
-export class PaneStartStatuses {
-  private readonly byPaneKey = new Map<string, { fact: PaneStartFact; binding?: string }>()
+export class PaneStartStatuses extends PaneLiveFacts<PaneStartFact> {}
 
-  constructor(private readonly changed: () => void) {}
+/** Whether main's resume of a pane's agent came back, set with the terminal that start made. */
+export class PaneResumeOutcomes extends PaneLiveFacts<PaneResumeOutcome> {}
 
-  set(paneKey: string, fact: PaneStartFact): void {
-    this.byPaneKey.set(paneKey, { fact })
-    this.changed()
-  }
-
-  clear(paneKey: string): void {
-    if (this.byPaneKey.delete(paneKey)) {
-      this.changed()
-    }
-  }
-
-  /** The status as set, without pinning it to a binding (tests and logs). */
-  peek(paneKey: string): PaneStartFact | null {
-    return this.byPaneKey.get(paneKey)?.fact ?? null
-  }
-
-  /** The status while the pane keeps the binding it was first published with; a new bind ends it. */
-  get(paneKey: string, binding: string): PaneStartFact | null {
-    const entry = this.byPaneKey.get(paneKey)
-    if (!entry) {
-      return null
-    }
-    entry.binding ??= binding
-    if (entry.binding !== binding) {
-      this.byPaneKey.delete(paneKey)
-      return null
-    }
-    return entry.fact
-  }
-}
+/** A pane's resume outcome (layout-owner build), given the pane's current binding (`bindingOf`). */
+export type PaneResumeOutcomeOf = (paneKey: string, binding: string) => PaneResumeOutcome | null
 
 /** A pane's live start facts as laid over its published copy: its start status, resume outcome or both. */
 export type PaneLaidFact = Partial<PaneStartFact> & { resumeOutcome?: PaneResumeOutcome }
@@ -79,8 +48,9 @@ export function paneStartFactsOf(
   return layout.tabs.flatMap((tab) =>
     (tab.terminal?.panes ?? []).map((pane) => {
       const paneKey = `${tab.entityId}:${pane.leafId}`
-      const start = statusOf?.(paneKey, bindingOf(pane)) ?? null
-      const resumeOutcome = outcomeOf?.(paneKey, pane) ?? null
+      const binding = bindingOf(pane)
+      const start = statusOf?.(paneKey, binding) ?? null
+      const resumeOutcome = outcomeOf?.(paneKey, binding) ?? null
       return resumeOutcome ? { ...start, resumeOutcome } : start
     })
   )
