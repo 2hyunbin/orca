@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { TextInput } from 'react-native'
 import { reportedLiveInputComposing } from '../platform/live-input-composing-range'
-import { getTerminalLiveSpecialKeyDecision } from './terminal-live-text-commit'
+import {
+  getTerminalLiveSpecialKeyDecision,
+  type TerminalLiveInputSelection
+} from './terminal-live-text-commit'
 import { sendTerminalLiveControlAfterPendingFlush } from './terminal-live-control-send-order'
 import type { TerminalLiveAccessoryInput } from './terminal-live-accessory-input'
 import type { TerminalLiveInputSender } from './terminal-live-input-sender'
@@ -32,6 +35,13 @@ type TerminalLiveInputChangeEvent = {
   }
 }
 
+type TerminalLiveInputSelectionChangeEvent = {
+  readonly nativeEvent: {
+    readonly selection: TerminalLiveInputSelection
+    readonly text?: string
+  }
+}
+
 type TerminalLiveInputCommitOptions<TTabType extends string> = {
   readonly activeHandle: string | null
   readonly activeHandleRef: RefObject<string | null>
@@ -54,10 +64,12 @@ type TerminalLiveInputCommitHandlers = {
   ) => Promise<TerminalLiveAccessoryInputCommitResult>
   readonly handleLiveInputChange: (event: TerminalLiveInputChangeEvent) => void
   readonly handleLiveInputKeyPress: (event: TerminalLiveInputKeyPressEvent) => void
+  readonly handleLiveInputSelectionChange: (event: TerminalLiveInputSelectionChangeEvent) => void
   readonly handleLiveInputSubmit: () => Promise<boolean>
   readonly sendLiveInputClick: (handle: string, bytes: string) => Promise<boolean>
 }
 
+/** Mirrors committed field text to the terminal while keeping native caret movement local. */
 export function useTerminalLiveInputCommit<TTabType extends string>({
   activeHandle,
   activeHandleRef,
@@ -71,16 +83,24 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
   setLiveInputCapture
 }: TerminalLiveInputCommitOptions<TTabType>): TerminalLiveInputCommitHandlers {
   const liveInputInteractionGenerationRef = useRef(0)
-  // Why: the click's stale-echo guard compares against the field text it cleared.
   const liveInputTextRef = useRef('')
   const endedSessionTextRef = useRef<{
     readonly handle: string
     readonly text: string
     readonly at: number
   } | null>(null)
+  const liveInputSelectionRef = useRef<TerminalLiveInputSelection | null>(null)
+  const liveInputSelectionSnapshotRef = useRef<{
+    readonly text: string
+    readonly selection: TerminalLiveInputSelection
+  } | null>(null)
   const updateLiveInputCapture = useCallback(
     (text: string) => {
       liveInputTextRef.current = text
+      if (text.length === 0) {
+        liveInputSelectionRef.current = null
+        liveInputSelectionSnapshotRef.current = null
+      }
       setLiveInputCapture(text)
     },
     [setLiveInputCapture]
@@ -205,6 +225,9 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
       if (dropEndedSessionEcho(nativeEvent.text)) {
         return
       }
+      const snapshot = liveInputSelectionSnapshotRef.current
+      liveInputSelectionRef.current =
+        snapshot?.text === nativeEvent.text ? snapshot.selection : null
       updateLiveInputCapture(nativeEvent.text)
       void applyLiveInputMirror(
         activeHandle,
@@ -225,6 +248,20 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
 
   const getLiveInputInteractionGeneration = useCallback(
     () => liveInputInteractionGenerationRef.current,
+    []
+  )
+
+  const handleLiveInputSelectionChange = useCallback(
+    ({ nativeEvent }: TerminalLiveInputSelectionChangeEvent) => {
+      // Why: only accessory deletion reads this; native caret movement never sends PTY controls.
+      const snapshot = {
+        text: nativeEvent.text ?? liveInputTextRef.current,
+        selection: nativeEvent.selection
+      }
+      liveInputSelectionSnapshotRef.current = snapshot
+      liveInputSelectionRef.current =
+        snapshot.text === liveInputTextRef.current ? snapshot.selection : null
+    },
     []
   )
 
@@ -282,6 +319,8 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
     heldLiveInputTextRef,
     liveInputComposingRef,
     liveInputRef,
+    liveInputTextRef,
+    liveInputSelectionRef,
     liveInputTerminalHandles,
     onInteraction: advanceLiveInputInteractionGeneration,
     pendingLiveInputHandleRef,
@@ -315,6 +354,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
     handleLiveInputAccessoryBytes,
     handleLiveInputChange,
     handleLiveInputKeyPress,
+    handleLiveInputSelectionChange,
     handleLiveInputSubmit,
     sendLiveInputClick
   }
