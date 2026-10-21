@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { registerLivePty } from '../bind-first-pane.test-fixture'
+import { boundSessionOf, registerLivePty } from '../bind-first-pane.test-fixture'
+import { expectDesktopDropsPane } from '../__fixtures__/main-layout-close-fixture'
 import {
   OrcaRuntimeService,
   electronMocks,
@@ -327,7 +328,11 @@ describe('OrcaRuntimeService', () => {
 
     expect(kill).toHaveBeenCalledWith('pty-right')
     // Only the leaf-addressed notice for the closed pane; never a whole-tab close.
-    expect(closeTerminalPane).toHaveBeenCalledExactlyOnceWith('tab-1', rightLeafId)
+    expectDesktopDropsPane(
+      { closeTerminalPane, getSession: () => boundSessionOf(runtime) },
+      'tab-1',
+      rightLeafId
+    )
     expect(closeTerminal).not.toHaveBeenCalled()
   })
 

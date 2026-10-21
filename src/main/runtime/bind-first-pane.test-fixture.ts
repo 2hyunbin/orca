@@ -7,6 +7,9 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { getConnectionExecutionHostId } from '../../shared/execution-host'
 import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
+import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
+import { resolveHostId } from '../persistence/loading-store/session-host-partitions'
+import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 
 export type BoundPane = {
   worktreeId: string
@@ -21,16 +24,21 @@ type SessionStore = {
   getWorkspaceSession?: (hostId?: string) => WorkspaceSessionState | null | undefined
   setWorkspaceSession?: (session: WorkspaceSessionState, hostId?: string) => void
   getWorkspaceSessionHostIds?: () => readonly string[]
+  applyLayoutCommand?: (command: LayoutCommand, hostIds?: readonly string[]) => Promise<unknown>
 }
 
 // The partitions a store without its own host list has had panes bound in.
 const boundHostIdsByStore = new WeakMap<SessionStore, Set<string>>()
 
 const installedSessionStores = new WeakSet<SessionStore>()
+const installedLayoutApplies = new WeakSet<SessionStore>()
 
 /** Drops the in-memory session bindPaneFirst gave a store shared across tests, so none leaks. */
 export function forgetInstalledPaneSession(shared: object): void {
   const store: SessionStore = shared
+  if (installedLayoutApplies.delete(store)) {
+    delete store.applyLayoutCommand
+  }
   if (!installedSessionStores.delete(store)) {
     return
   }
@@ -131,9 +139,31 @@ export function bindPaneFirst(runtime: object, pane: BoundPane, hostId = 'local'
     boundHostIdsByStore.set(store, hostIds)
     store.getWorkspaceSessionHostIds = () => [...hostIds]
   }
+  if (!store.applyLayoutCommand) {
+    // A profile Store applies main's layout commands to the routed partition.
+    installedLayoutApplies.add(store)
+    const { getWorkspaceSession, setWorkspaceSession } = store
+    store.applyLayoutCommand = async (command, hostIds = []) => {
+      const host = resolveHostId(hostIds[0])
+      const change = applyCommandToSession(
+        host,
+        getWorkspaceSession(host) ?? getDefaultWorkspaceSession(),
+        command
+      )
+      if (change.session) {
+        setWorkspaceSession(change.session, host)
+      }
+      return change.value
+    }
+  }
   boundHostIdsByStore.get(store)?.add(hostId)
   const current = store.getWorkspaceSession(hostId) ?? getDefaultWorkspaceSession()
   store.setWorkspaceSession(withBoundPane(current, pane), hostId)
+}
+
+/** The session main's layout reads from the runtime's store, as bindPaneFirst left it. */
+export function boundSessionOf(runtime: object, hostId = 'local'): WorkspaceSessionState {
+  return storeOf(runtime)?.getWorkspaceSession?.(hostId) ?? getDefaultWorkspaceSession()
 }
 
 /** As main's pane move to a new tab: the pane leaves `fromTabId` (a tab left empty goes) first. */

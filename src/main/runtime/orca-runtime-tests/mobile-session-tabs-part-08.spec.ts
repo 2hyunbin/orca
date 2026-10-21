@@ -1,5 +1,7 @@
 import { withDurableRuntimeStore } from '../runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
+import { durableSessionLayoutApply } from '../__fixtures__/main-layout-close-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { registerBoundPty } from '../bind-first-pane.test-fixture'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
 import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
@@ -422,7 +424,7 @@ describe('OrcaRuntimeService', () => {
   it('durably tears down a runtime-owned SSH headless tab when renderer cleanup fails', async () => {
     // #8958: the renderer relay can't see headless tabs, so its advisory fallback must not block authoritative teardown/flush.
     const persistedPtyId = 'ssh:ssh-1@@relay-pty'
-    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
+    const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
       makeWorkspaceSessionWithHeadlessTerminal({
         tabsByWorktree: {
           [TEST_WORKTREE_ID]: [
@@ -451,8 +453,15 @@ describe('OrcaRuntimeService', () => {
     })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const closeTerminalTab = vi.fn(async () => {})
+    const durableStore = withDurableRuntimeStore({ ...runtimeStore, flushOrThrow })
+    // As the Store runs main's `layout.apply`: one durable write.
     const runtime = new OrcaRuntimeService(
-      withDurableRuntimeStore({ ...runtimeStore, flushOrThrow })
+      Object.assign(durableStore, {
+        applyLayoutCommand: durableSessionLayoutApply(durableStore, {
+          get: getSession,
+          set: setSession
+        })
+      })
     )
     runtime.setPtyController({
       write: () => true,
@@ -467,12 +476,17 @@ describe('OrcaRuntimeService', () => {
 
     expect(closeTerminalTab).not.toHaveBeenCalled()
     expect(kill).toHaveBeenCalledWith(persistedPtyId)
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
     expect(flushOrThrow).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith(
-      '[runtime] failed to notify renderer after headless terminal close',
-      { parentTabId: 'host-tab', error: rendererError }
-    )
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main closes in its own layout, so no renderer cleanup runs to fail.
+      expect(closeTerminal).not.toHaveBeenCalled()
+    } else {
+      expect(closeTerminal).toHaveBeenCalledWith('host-tab')
+      expect(warn).toHaveBeenCalledWith(
+        '[runtime] failed to notify renderer after headless terminal close',
+        { parentTabId: 'host-tab', error: rendererError }
+      )
+    }
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toEqual([])
     expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
   })
@@ -558,10 +572,16 @@ describe('OrcaRuntimeService', () => {
       ptyKilled: true
     })
 
-    expect(closeTerminalTab).toHaveBeenCalledWith('host-tab', {
-      localPtyTeardownOwnedExternally: true
-    })
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main closes the tab in its own layout; no renderer acknowledges anything.
+      expect(closeTerminalTab).not.toHaveBeenCalled()
+      expect(closeTerminal).not.toHaveBeenCalled()
+    } else {
+      expect(closeTerminalTab).toHaveBeenCalledWith('host-tab', {
+        localPtyTeardownOwnedExternally: true
+      })
+      expect(closeTerminal).toHaveBeenCalledWith('host-tab')
+    }
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toEqual([])
     expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
     expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([])
@@ -626,6 +646,16 @@ describe('OrcaRuntimeService', () => {
       ]
     })
 
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main's layout holds the pin, unpinned here, and main closes the tab itself.
+      await expect(
+        runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
+      ).resolves.toEqual({ closed: true })
+      expect(closeTerminalTab).not.toHaveBeenCalled()
+      expect(kill).toHaveBeenCalledWith(servePtyId)
+      expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
+      return
+    }
     await expect(
       runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
     ).rejects.toThrow('terminal_tab_pinned')

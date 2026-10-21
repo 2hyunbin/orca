@@ -479,10 +479,15 @@ describe('OrcaRuntimeService', () => {
 
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
 
-    expect(kill).not.toHaveBeenCalled()
+    // #31571: main's close stops the terminal its layout binds; the window-era close kills none.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      expect(kill).toHaveBeenCalledWith('persisted-pty')
+    } else {
+      expect(kill).not.toHaveBeenCalled()
+    }
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toEqual([])
     expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
+    expectDesktopDropsTab({ closeTerminal, getSession }, 'host-tab')
   })
 
   it('closes only the addressed serve-owned split leaf so siblings survive even with a renderer attached', async () => {

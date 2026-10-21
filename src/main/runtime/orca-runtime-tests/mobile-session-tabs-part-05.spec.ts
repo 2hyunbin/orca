@@ -1,6 +1,7 @@
 import { withDurableRuntimeStore } from '../runtime-durable-store-fixture'
 import { durableSessionLayoutApply } from '../__fixtures__/main-layout-close-fixture'
 import { describe, expect, it, vi } from 'vitest'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { committingSpawn, registerLivePty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
 import type { RuntimeMobileSessionTabsResult } from '../orca-runtime-test-mocks.spec'
@@ -302,7 +303,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('waits for renderer acknowledgement before returning a whole-tab close receipt', async () => {
-    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
       makeWorkspaceSessionWithHeadlessTerminal()
     )
     const acknowledged = makeDeferred()
@@ -341,6 +342,18 @@ describe('OrcaRuntimeService', () => {
     })
     const [terminal] = (await runtime.listTerminals()).terminals
     const pending = runtime.closeTerminalTab(terminal.handle)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main closes the tab in its own layout, so there is no renderer close to await.
+      await expect(pending).resolves.toEqual({
+        handle: terminal.handle,
+        tabId: 'host-tab',
+        closeMode: 'tab',
+        ptyKilled: false
+      })
+      expect(closeTerminalTab).not.toHaveBeenCalled()
+      expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
+      return
+    }
     let settled = false
     void pending.finally(() => {
       settled = true
@@ -359,7 +372,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('leases renderer publication until a paired whole-tab close is acknowledged', async () => {
-    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
       makeWorkspaceSessionWithHeadlessTerminal()
     )
     const acknowledged = makeDeferred()
@@ -431,6 +444,14 @@ describe('OrcaRuntimeService', () => {
       reason: 'user',
       clientNavigationId: 'device-a'
     })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main commits the close itself, so no renderer close holds a publication lease.
+      await expect(pending).resolves.toEqual({ closed: true })
+      expect(closeTerminalTab).not.toHaveBeenCalled()
+      expect(setBackgroundThrottling).not.toHaveBeenCalled()
+      expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
+      return
+    }
     await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('host-tab'))
     expect(setBackgroundThrottling.mock.calls).toEqual([[false]])
 
@@ -515,6 +536,13 @@ describe('OrcaRuntimeService', () => {
       reason: 'user',
       clientNavigationId: 'device-a'
     })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main's own close commits before any renderer could persist a removal.
+      await expect(pending).resolves.toEqual({ closed: true })
+      expect(kill).toHaveBeenCalledWith('persisted-pty')
+      expect(closeTerminalTab).not.toHaveBeenCalled()
+      return
+    }
     await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('host-tab'))
     const session = getSession()
     setSession({
