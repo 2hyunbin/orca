@@ -3,10 +3,7 @@ import { readHostStructuredAgents } from '@/runtime/host-structured-agents'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import {
-  buildNativeChatProviderUpdate,
-  isNativeChatProviderDisplayedOn
-} from '../../../../shared/native-chat-providers'
+import { isNativeChatProviderDisplayedOn } from '../../../../shared/native-chat-providers'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import { translate } from '@/i18n/i18n'
@@ -15,7 +12,7 @@ import { chatProviderAgents, useHostStructuredAgentsVersion } from '@/lib/chat-p
 import { useManagedRuntimeInstall } from '@/runtime/use-managed-runtime-install'
 import { useAppStore } from '../../store'
 import { readNativeDetectedAgents } from '@/store/slices/local-detected-agent-store-state'
-import { createAgentSettingsUpdateQueue } from './agent-availability-settings'
+import { saveNativeChatProviderChoice } from './native-chat-provider-choice'
 import { Card, CardContent } from '../ui/card'
 import { ManagedRuntimeInstallRow } from '../managed-runtime/ManagedRuntimeInstallRow'
 import { SearchableSetting } from './SearchableSetting'
@@ -28,8 +25,6 @@ import {
   antigravityProviderSignInShown
 } from './AntigravityProviderSignInArea'
 import { getHostRuntimeLabel, getRuntimeSentenceLabel } from './accounts-pane-runtime'
-
-const enqueueProviderUpdate = createAgentSettingsUpdateQueue()
 
 // The agents listed here are this computer's, so their downloaded programs are too.
 const CHAT_HOST: RuntimeClientTarget = { kind: 'local' }
@@ -119,11 +114,11 @@ function ProviderDetail(props: {
         value0: props.label
       })}
       onChange={() =>
-        enqueueProviderUpdate({
-          getSettings: () => useAppStore.getState().settings,
+        saveNativeChatProviderChoice({
+          agent: props.agent,
+          on: !on,
           fallbackSettings: props.settings,
-          updateSettings: props.updateSettings,
-          buildUpdate: (latest) => buildNativeChatProviderUpdate(latest, props.agent, !on)
+          updateSettings: props.updateSettings
         })
       }
     />
