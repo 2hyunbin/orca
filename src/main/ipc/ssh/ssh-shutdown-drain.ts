@@ -75,7 +75,7 @@ function sshShutdownTasks(): SshShutdownTask[] {
     {
       // Why: nothing restores a plain SSH terminal, so none may outlive Orca.
       targetId: '*plain-ssh',
-      promise: Promise.resolve(closeAllPlainSshTerminals())
+      promise: closeAllPlainSshTerminals()
     }
   ]
 }

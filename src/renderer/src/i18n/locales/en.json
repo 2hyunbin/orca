@@ -18561,7 +18561,9 @@
         "close": "Close and end session",
         "unknownTarget": "This SSH host is no longer saved in Orca.",
         "notBlocked": "Orca can reach this host again, so use its terminals instead. Plain SSH is only for while Orca can’t set up on the host.",
-        "alreadyOpen": "A plain SSH terminal to this host is already open."
+        "alreadyOpen": "A plain SSH terminal to this host is already open.",
+        "endedBySignal": "ssh was stopped (signal {{signal}}). Close this window when you’re done reading.",
+        "cancelled": "This plain SSH terminal was closed before it started."
       }
     },
     "i18n": {

@@ -3,6 +3,7 @@ import { Minus, SquareTerminal, X } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   minimizePlainSshPanel,
   removePlainSshPanel,
@@ -27,12 +28,39 @@ function phaseText(phase: PlainSshTerminalPhase): string | null {
     case 'failed':
       return phase.message
     case 'ended':
-      return translate(
-        'auto.components.plainSshTerminal.ended',
-        'ssh exited with code {{code}}. Close this window when you’re done reading.',
-        { code: phase.exitCode }
-      )
+      return phase.signal
+        ? translate(
+            'auto.components.plainSshTerminal.endedBySignal',
+            'ssh was stopped (signal {{signal}}). Close this window when you’re done reading.',
+            { signal: phase.signal }
+          )
+        : translate(
+            'auto.components.plainSshTerminal.ended',
+            'ssh exited with code {{code}}. Close this window when you’re done reading.',
+            { code: phase.exitCode }
+          )
   }
+}
+
+function HeaderIconButton({
+  label,
+  onClick,
+  children
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button type="button" size="icon-xs" variant="ghost" aria-label={label} onClick={onClick}>
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 /** A non-modal window over Orca; minimized windows wait in a strip at the bottom right. */
@@ -58,24 +86,18 @@ function PlainSshTerminalCard({ panel }: { panel: PlainSshPanel }): React.JSX.El
             host: panel.label
           })}
         </div>
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
-          aria-label={translate('auto.components.plainSshTerminal.minimize', 'Minimize')}
+        <HeaderIconButton
+          label={translate('auto.components.plainSshTerminal.minimize', 'Minimize')}
           onClick={() => minimizePlainSshPanel(panel.targetId)}
         >
           <Minus />
-        </Button>
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
-          aria-label={translate('auto.components.plainSshTerminal.close', 'Close and end session')}
+        </HeaderIconButton>
+        <HeaderIconButton
+          label={translate('auto.components.plainSshTerminal.close', 'Close and end session')}
           onClick={() => removePlainSshPanel(panel.targetId)}
         >
           <X />
-        </Button>
+        </HeaderIconButton>
       </header>
       <p className="border-b border-border bg-muted px-3 py-1.5 text-xs text-status-warning">
         {plainSshUnmanagedNotice()}

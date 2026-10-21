@@ -2,7 +2,7 @@
  * Plain SSH terminals: an unmanaged `ssh` login to a host whose move to its Orca server is blocked,
  * so the user can keep working there meanwhile. A session is not an Orca workspace or terminal:
  * nothing persists or restores it, no agent or status runs in it, and it never marks the host
- * connected. One per host; it ends when ssh exits, its window closes, or Orca quits.
+ * connected. One per host; it ends when ssh exits, its window closes or reloads, or Orca quits.
  */
 import { randomUUID } from 'node:crypto'
 import type * as pty from 'node-pty'
@@ -32,18 +32,24 @@ export type PlainSshTerminalSink = (event: PlainSshTerminalEvent) => boolean
 
 type Session = {
   id: string
-  targetId: string
   owner: number
   proc: pty.IPty
-  exited: boolean
-  forceKill?: ReturnType<typeof setTimeout>
+  exited: Promise<void>
+  hungUp: boolean
 }
 
+/** A host's one claim, taken before the first await so concurrent opens can't both spawn. */
+type Slot = { owner: number; token: symbol; session: Session | null }
+
 const FORCE_KILL_AFTER_MS = 5_000
+const QUIT_FORCE_KILL_AFTER_MS = 1_000
 const MIN_SIZE = 2
 const MAX_SIZE = 1_000
 
+const slots = new Map<string, Slot>()
+/** Every process not yet exited, including ones already hung up. */
 const sessions = new Map<string, Session>()
+let quitting = false
 
 function sshMissingMessage(platform: NodeJS.Platform): string {
   return platform === 'win32'
@@ -55,6 +61,40 @@ function clampSize(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.floor(value)))
     : fallback
+}
+
+/** Frees a host's claim; a live session in it is hung up. */
+function releaseSlot(targetId: string, slot: Slot): void {
+  if (slots.get(targetId) === slot) {
+    slots.delete(targetId)
+  }
+  if (slot.session) {
+    hangUp(slot.session, FORCE_KILL_AFTER_MS)
+  }
+}
+
+function hangUp(session: Session, forceAfterMs: number): void {
+  if (session.hungUp) {
+    return
+  }
+  session.hungUp = true
+  try {
+    session.proc.kill()
+  } catch {
+    // Already gone; its exit cleans up.
+  }
+  const forceKill = setTimeout(() => {
+    if (sessions.has(session.id)) {
+      try {
+        // Why: Windows rejects a signal name; its kill() above already terminated the console.
+        session.proc.kill('SIGKILL')
+      } catch {
+        // Already gone.
+      }
+    }
+  }, forceAfterMs)
+  forceKill.unref?.()
+  void session.exited.then(() => clearTimeout(forceKill))
 }
 
 export async function openPlainSshTerminal(
@@ -71,12 +111,24 @@ export async function openPlainSshTerminal(
   if (!deps.isMoveBlocked(target.id)) {
     return { ok: false, reason: 'not-blocked' }
   }
-  const existing = [...sessions.values()].find((session) => session.targetId === target.id)
-  if (existing) {
-    return { ok: false, reason: 'already-open', sessionId: existing.id }
+  if (quitting) {
+    return { ok: false, reason: 'cancelled' }
   }
+  const held = slots.get(target.id)
+  if (held && held.owner !== request.owner) {
+    return { ok: false, reason: 'already-open' }
+  }
+  // Why the same window may replace its own: it shows one per host, so an older one is stale.
+  if (held) {
+    releaseSlot(target.id, held)
+  }
+  const slot: Slot = { owner: request.owner, token: Symbol(target.id), session: null }
+  slots.set(target.id, slot)
+  const stillClaimed = (): boolean => !quitting && slots.get(target.id)?.token === slot.token
+
   const sshPath = deps.findSsh()
   if (!sshPath) {
+    releaseSlot(target.id, slot)
     return { ok: false, reason: 'ssh-missing', message: sshMissingMessage(deps.platform) }
   }
   const args = buildPlainSshTerminalArgs(
@@ -87,6 +139,11 @@ export async function openPlainSshTerminal(
   )
   let proc: pty.IPty
   try {
+    const ptySpawn = await deps.loadPtySpawn()
+    // A reload, a newer open or quit during the await took the claim; spawn nothing.
+    if (!stillClaimed()) {
+      return { ok: false, reason: 'cancelled' }
+    }
     proc = spawnPtyExecutable({
       file: sshPath,
       args,
@@ -94,41 +151,53 @@ export async function openPlainSshTerminal(
       rows: clampSize(request.rows, 24),
       cwd: deps.homeDir(),
       env: buildInheritedLocalPtyEnvironment(undefined),
-      ptySpawn: await deps.loadPtySpawn()
+      ptySpawn
     })
   } catch (error) {
+    releaseSlot(target.id, slot)
     return {
       ok: false,
       reason: 'spawn-failed',
       message: error instanceof Error ? error.message : String(error)
     }
   }
+  let markExited: () => void = () => {}
   const session: Session = {
     id: randomUUID(),
-    targetId: target.id,
     owner: request.owner,
     proc,
-    exited: false
+    exited: new Promise((resolve) => {
+      markExited = resolve
+    }),
+    hungUp: false
   }
   sessions.set(session.id, session)
+  slot.session = session
   proc.onData((data) => {
     if (!sink({ kind: 'data', sessionId: session.id, data })) {
-      closePlainSshTerminal(session.id, session.owner)
+      releaseSlot(target.id, slot)
     }
   })
-  proc.onExit(({ exitCode }) => {
-    session.exited = true
-    clearTimeout(session.forceKill)
+  proc.onExit(({ exitCode, signal }) => {
     sessions.delete(session.id)
+    if (slots.get(target.id) === slot) {
+      slots.delete(target.id)
+    }
     destroyPtyProcess(proc, { alreadyKilled: true })
-    sink({ kind: 'exit', sessionId: session.id, exitCode })
+    markExited()
+    sink({
+      kind: 'exit',
+      sessionId: session.id,
+      exitCode,
+      ...(signal ? { signal } : {})
+    })
   })
   return { ok: true, sessionId: session.id, label: target.label }
 }
 
 function ownedSession(sessionId: unknown, owner: number): Session | null {
   const session = typeof sessionId === 'string' ? sessions.get(sessionId) : undefined
-  return session && session.owner === owner && !session.exited ? session : null
+  return session && session.owner === owner && !session.hungUp ? session : null
 }
 
 export function writePlainSshTerminal(sessionId: unknown, owner: number, data: unknown): void {
@@ -150,41 +219,44 @@ export function resizePlainSshTerminal(
   }
 }
 
-/** Hangs up ssh; its exit event follows, and a stuck one is killed outright. */
+/** Hangs up ssh and frees its host at once; a stuck process is killed outright later. */
 export function closePlainSshTerminal(sessionId: unknown, owner: number): void {
   const session = ownedSession(sessionId, owner)
-  if (!session || session.forceKill) {
+  if (!session) {
     return
   }
-  try {
-    session.proc.kill()
-  } catch {
-    // Already gone; onExit cleans up.
-  }
-  session.forceKill = setTimeout(() => {
-    if (!session.exited) {
-      try {
-        session.proc.kill('SIGKILL')
-      } catch {
-        // Already gone.
-      }
+  for (const [targetId, slot] of slots) {
+    if (slot.session === session) {
+      releaseSlot(targetId, slot)
+      return
     }
-  }, FORCE_KILL_AFTER_MS)
-  session.forceKill.unref?.()
+  }
+  hangUp(session, FORCE_KILL_AFTER_MS)
 }
 
-/** Every session a window owns, e.g. when it closes or reloads. */
+/** Every session a window owns, opened or still opening, e.g. when it closes or reloads. */
 export function closePlainSshTerminalsOwnedBy(owner: number): void {
-  for (const session of sessions.values()) {
-    if (session.owner === owner) {
-      closePlainSshTerminal(session.id, owner)
+  for (const [targetId, slot] of slots) {
+    if (slot.owner === owner) {
+      releaseSlot(targetId, slot)
     }
   }
 }
 
-/** On quit: nothing outlives Orca, since nothing would ever restore it. */
-export function closeAllPlainSshTerminals(): void {
-  for (const session of sessions.values()) {
-    closePlainSshTerminal(session.id, session.owner)
+/** On quit: nothing restores these, so none may outlive Orca. Resolves once all have exited. */
+export async function closeAllPlainSshTerminals(): Promise<void> {
+  quitting = true
+  slots.clear()
+  const pending = [...sessions.values()]
+  for (const session of pending) {
+    hangUp(session, QUIT_FORCE_KILL_AFTER_MS)
   }
+  await Promise.all(pending.map((session) => session.exited))
+}
+
+/** Test seam: quit is one-way in a real app. */
+export function resetPlainSshTerminalsForTests(): void {
+  quitting = false
+  slots.clear()
+  sessions.clear()
 }

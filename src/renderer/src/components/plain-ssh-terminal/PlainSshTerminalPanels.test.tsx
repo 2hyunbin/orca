@@ -13,6 +13,7 @@ import type {
 import { OpenPlainSshTerminalButton } from './OpenPlainSshTerminalButton'
 import { PlainSshTerminalPanels } from './PlainSshTerminalPanels'
 import { removePlainSshPanel } from '@/ssh/plain-ssh-terminal-panels'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const written: string[] = []
 
@@ -41,6 +42,13 @@ vi.mock('@xterm/addon-fit', () => ({
   }
 }))
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
+// Shared with the dashboard preview terminal and covered there.
+vi.mock('@/components/dashboard-popout/preview-terminal-key-handler', () => ({
+  installPreviewTerminalKeyHandler: () => () => {}
+}))
+vi.mock('@/components/dashboard-popout/preview-terminal-app-menu-clipboard', () => ({
+  installPreviewTerminalAppMenuClipboard: () => () => {}
+}))
 
 const blocked: SshManagedServerStatus = {
   kind: 'relay',
@@ -87,10 +95,10 @@ afterEach(() => {
 
 function Harness({ status }: { status: SshManagedServerStatus | undefined }): React.JSX.Element {
   return (
-    <>
+    <TooltipProvider>
       <OpenPlainSshTerminalButton targetId="lambda" targetLabel="lambda" status={status} />
       <PlainSshTerminalPanels />
-    </>
+    </TooltipProvider>
   )
 }
 
@@ -136,6 +144,17 @@ describe('plain SSH terminal', () => {
 
     act(() => emit({ kind: 'exit', sessionId: 's1', exitCode: 0 }))
     await waitFor(() => expect(screen.queryByText('Plain SSH · lambda')).toBeNull())
+  })
+
+  it('keeps output when ssh is killed by a signal, even with exit code 0', async () => {
+    open.mockResolvedValue({ ok: true, sessionId: 's4', label: 'lambda' })
+    const user = userEvent.setup()
+    render(<Harness status={blocked} />)
+    await user.click(screen.getByRole('button', { name: 'Open plain SSH terminal' }))
+    await waitFor(() => expect(open).toHaveBeenCalled())
+    await act(async () => {})
+    act(() => emit({ kind: 'exit', sessionId: 's4', exitCode: 0, signal: 9 }))
+    expect(await screen.findByText(/ssh was stopped \(signal 9\)/)).toBeInTheDocument()
   })
 
   it('keeps a failed login readable, with no shell to fall back to', async () => {

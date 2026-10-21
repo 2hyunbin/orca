@@ -27,10 +27,6 @@ export function OpenPlainSshTerminalButton({
       type="button"
       size="xs"
       variant="outline"
-      title={translate(
-        'auto.components.plainSshTerminal.buttonHint',
-        'Opens an unmanaged SSH login to this host, so you can keep working while Orca can’t set up there. It isn’t an Orca workspace and isn’t restored.'
-      )}
       onClick={() => showPlainSshPanel(targetId, targetLabel)}
     >
       {translate('auto.components.plainSshTerminal.open', 'Open plain SSH terminal')}

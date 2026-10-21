@@ -5,7 +5,9 @@ import type { PlainSshTerminalEvent } from '../../../shared/plain-ssh-terminal'
 import {
   closeAllPlainSshTerminals,
   closePlainSshTerminal,
+  closePlainSshTerminalsOwnedBy,
   openPlainSshTerminal,
+  resetPlainSshTerminalsForTests,
   resizePlainSshTerminal,
   writePlainSshTerminal,
   type PlainSshTerminalDeps
@@ -29,14 +31,14 @@ type FakePty = {
   resize: ReturnType<typeof vi.fn>
   kill: ReturnType<typeof vi.fn>
   emitData: (data: string) => void
-  emitExit: (exitCode: number) => void
+  emitExit: (exitCode: number, signal?: number) => void
 }
 
 const spawned: FakePty[] = []
 
 function fakeSpawn(file: string, args: string[] | string, options: pty.IPtyForkOptions): pty.IPty {
   let onData: ((data: string) => void) | null = null
-  let onExit: ((event: { exitCode: number }) => void) | null = null
+  let onExit: ((event: { exitCode: number; signal?: number }) => void) | null = null
   const fake: FakePty = {
     file,
     args: Array.isArray(args) ? args : [args],
@@ -45,7 +47,7 @@ function fakeSpawn(file: string, args: string[] | string, options: pty.IPtyForkO
     resize: vi.fn(),
     kill: vi.fn(() => fake.emitExit(129)),
     emitData: (data) => onData?.(data),
-    emitExit: (exitCode) => onExit?.({ exitCode })
+    emitExit: (exitCode, signal) => onExit?.({ exitCode, signal })
   }
   spawned.push(fake)
   const proc = {
@@ -59,7 +61,7 @@ function fakeSpawn(file: string, args: string[] | string, options: pty.IPtyForkO
       onData = listener
       return { dispose: () => {} }
     },
-    onExit: (listener: (event: { exitCode: number }) => void) => {
+    onExit: (listener: (event: { exitCode: number; signal?: number }) => void) => {
       onExit = listener
       return { dispose: () => {} }
     }
@@ -93,8 +95,9 @@ function open(
   })
 }
 
-afterEach(() => {
-  closeAllPlainSshTerminals()
+afterEach(async () => {
+  await closeAllPlainSshTerminals()
+  resetPlainSshTerminalsForTests()
   spawned.length = 0
 })
 
@@ -134,15 +137,71 @@ describe('plain SSH terminal sessions', () => {
     expect(result.ok ? '' : 'message' in result ? result.message : '').toContain('OpenSSH Client')
   })
 
-  it('keeps one session per host', async () => {
-    const first = await open(deps())
-    const second = await open(deps())
-    expect(second).toEqual({
-      ok: false,
-      reason: 'already-open',
-      sessionId: first.ok ? first.sessionId : ''
-    })
+  it('keeps one session per host across windows', async () => {
+    await open(deps(), 'lambda', 1)
+    expect(await open(deps(), 'lambda', 2)).toEqual({ ok: false, reason: 'already-open' })
     expect(spawned).toHaveLength(1)
+  })
+
+  it('claims the host before awaiting, so concurrent opens never spawn twice', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const slow = deps({
+      loadPtySpawn: async () => {
+        await gate
+        return fakeSpawn
+      }
+    })
+    const first = open(slow, 'lambda', 1)
+    const other = await open(slow, 'lambda', 2)
+    // The same window replacing its own pending open (e.g. a remount) wins; the older one yields.
+    const again = open(slow, 'lambda', 1)
+    release()
+    expect(other).toEqual({ ok: false, reason: 'already-open' })
+    expect(await first).toEqual({ ok: false, reason: 'cancelled' })
+    expect(await again).toMatchObject({ ok: true })
+    expect(spawned).toHaveLength(1)
+  })
+
+  it('spawns nothing for an open whose window reloaded while it was pending', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const pending = open(
+      deps({
+        loadPtySpawn: async () => {
+          await gate
+          return fakeSpawn
+        }
+      }),
+      'lambda',
+      3
+    )
+    closePlainSshTerminalsOwnedBy(3)
+    release()
+    expect(await pending).toEqual({ ok: false, reason: 'cancelled' })
+    expect(spawned).toHaveLength(0)
+    expect(await open(deps(), 'lambda', 4)).toMatchObject({ ok: true })
+  })
+
+  it('frees the host as soon as a close is asked, before ssh has exited', async () => {
+    const first = await open(deps(), 'lambda', 1)
+    spawned[0].kill.mockImplementation(() => {})
+    closePlainSshTerminal(first.ok ? first.sessionId : '', 1)
+    expect(await open(deps(), 'lambda', 2)).toMatchObject({ ok: true })
+    spawned[0].emitExit(129)
+  })
+
+  it('reports a signal kill, which is not a clean logout', async () => {
+    const events: PlainSshTerminalEvent[] = []
+    const result = await open(deps(), 'lambda', 1, events)
+    spawned[0].emitExit(0, 9)
+    expect(events).toEqual([
+      { kind: 'exit', sessionId: result.ok ? result.sessionId : '', exitCode: 0, signal: 9 }
+    ])
   })
 
   it('forwards output and exit, and only its owner can write, resize or close it', async () => {
@@ -166,12 +225,21 @@ describe('plain SSH terminal sessions', () => {
       { kind: 'exit', sessionId, exitCode: 129 }
     ])
     // Ended: a new one may open.
-    expect(await open(deps())).toMatchObject({ ok: true })
+    expect(await open(deps(), 'lambda', 7)).toMatchObject({ ok: true })
   })
 
-  it('hangs up every session on quit', async () => {
+  it('on quit, hangs up every session, waits for it to exit, and opens no more', async () => {
     await open(deps())
-    closeAllPlainSshTerminals()
+    spawned[0].kill.mockImplementation(() => {})
+    let done = false
+    const quit = closeAllPlainSshTerminals().then(() => {
+      done = true
+    })
     expect(spawned[0].kill).toHaveBeenCalledTimes(1)
+    await Promise.resolve()
+    expect(done).toBe(false)
+    spawned[0].emitExit(129)
+    await quit
+    expect(await open(deps(), 'lambda', 9)).toEqual({ ok: false, reason: 'cancelled' })
   })
 })

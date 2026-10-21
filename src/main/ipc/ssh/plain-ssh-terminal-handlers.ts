@@ -31,7 +31,7 @@ const deps: PlainSshTerminalDeps = {
 
 const watchedOwners = new Set<number>()
 
-/** A reload or a closed window can't show its sessions again, so they end with it. */
+/** A reload, a crash or a closed window can't show its sessions again, so they end with it. */
 function endSessionsWithOwner(sender: WebContents): void {
   if (watchedOwners.has(sender.id)) {
     return
@@ -44,6 +44,7 @@ function endSessionsWithOwner(sender: WebContents): void {
       end()
     }
   })
+  sender.on('render-process-gone', end)
   sender.once('destroyed', () => {
     watchedOwners.delete(owner)
     end()

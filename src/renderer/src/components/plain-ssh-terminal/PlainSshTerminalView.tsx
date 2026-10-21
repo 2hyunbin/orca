@@ -10,16 +10,24 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { buildDefaultTerminalOptions } from '@/lib/pane-manager/pane-terminal-options'
 import { buildFontFamily } from '@/lib/monospace-font-family'
+import { getShortcutPlatform } from '@/lib/shortcut-platform'
+import { useEffectiveMacOptionAsAlt } from '@/lib/keyboard-layout/use-effective-mac-option-as-alt'
 import { composeActiveTerminalTheme } from '@/components/terminal-pane/terminal-appearance'
 import { resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
 import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
+import { TERMINAL_PASTE_MAX_BYTES } from '@/components/terminal-pane/terminal-paste-limits'
+import { installPreviewTerminalKeyHandler } from '@/components/dashboard-popout/preview-terminal-key-handler'
+import { installPreviewTerminalAppMenuClipboard } from '@/components/dashboard-popout/preview-terminal-app-menu-clipboard'
 import { removePlainSshPanel } from '@/ssh/plain-ssh-terminal-panels'
 
 export type PlainSshTerminalPhase =
   | { kind: 'opening' }
   | { kind: 'open' }
   | { kind: 'failed'; message: string }
-  | { kind: 'ended'; exitCode: number }
+  | { kind: 'ended'; exitCode: number; signal?: number }
+
+/** Output ssh may print before the open reply lands; more than this is never a login banner. */
+const EARLY_EVENT_LIMIT = 256
 
 export function plainSshOpenFailureText(
   result: Extract<PlainSshTerminalOpenResult, { ok: false }>
@@ -38,7 +46,12 @@ export function plainSshOpenFailureText(
     case 'already-open':
       return translate(
         'auto.components.plainSshTerminal.alreadyOpen',
-        'A plain SSH terminal to this host is already open.'
+        'Another Orca window already has a plain SSH terminal open to this host.'
+      )
+    case 'cancelled':
+      return translate(
+        'auto.components.plainSshTerminal.cancelled',
+        'This plain SSH terminal was closed before it started.'
       )
     case 'ssh-missing':
     case 'spawn-failed':
@@ -61,7 +74,8 @@ export function PlainSshTerminalView({
   const fitRef = useRef<FitAddon | null>(null)
   const settings = useAppStore((s) => s.settings)
   const systemPrefersDark = useSystemPrefersDark()
-  const [initial] = useState(() => ({ settings, systemPrefersDark }))
+  const macOptionAsAlt = useEffectiveMacOptionAsAlt(settings?.terminalMacOptionAsAlt)
+  const [initial] = useState(() => ({ settings, systemPrefersDark, macOptionAsAlt }))
   const onPhaseRef = useRef(onPhase)
   useEffect(() => {
     onPhaseRef.current = onPhase
@@ -95,25 +109,38 @@ export function PlainSshTerminalView({
     fit.fit()
 
     let sessionId: string | null = null
+    let phase: 'opening' | 'open' | 'done' = 'opening'
     let disposed = false
-    // Why: ssh can print before the open reply lands; hold its output until the id is known.
     const early: PlainSshTerminalEvent[] = []
+    let unsubscribe: () => void = () => {}
+    const finish = (next: PlainSshTerminalPhase | null): void => {
+      phase = 'done'
+      sessionId = null
+      early.length = 0
+      unsubscribe()
+      if (next) {
+        onPhaseRef.current(next)
+      }
+    }
     const handle = (event: PlainSshTerminalEvent): void => {
       if (event.kind === 'data') {
         terminal.write(event.data)
         return
       }
-      sessionId = null
-      if (event.exitCode === 0) {
+      // A clean logout closes the window; anything else keeps its output, with no shell after it.
+      const clean = event.exitCode === 0 && !event.signal
+      finish(clean ? null : { kind: 'ended', exitCode: event.exitCode, signal: event.signal })
+      if (clean) {
         removePlainSshPanel(targetId)
-      } else {
-        onPhaseRef.current({ kind: 'ended', exitCode: event.exitCode })
       }
     }
-    const unsubscribe = api.onEvent((event) => {
-      if (sessionId === null) {
-        early.push(event)
-      } else if (event.sessionId === sessionId) {
+    unsubscribe = api.onEvent((event) => {
+      if (phase === 'opening') {
+        // Why: ssh can print before the open reply lands; hold a bounded amount until the id is known.
+        if (early.length < EARLY_EVENT_LIMIT) {
+          early.push(event)
+        }
+      } else if (phase === 'open' && event.sessionId === sessionId) {
         handle(event)
       }
     })
@@ -127,13 +154,14 @@ export function PlainSshTerminalView({
           return
         }
         if (!result.ok) {
-          onPhaseRef.current({ kind: 'failed', message: plainSshOpenFailureText(result) })
+          finish({ kind: 'failed', message: plainSshOpenFailureText(result) })
           return
         }
         sessionId = result.sessionId
+        phase = 'open'
         onPhaseRef.current({ kind: 'open' })
         for (const event of early.splice(0)) {
-          if (event.sessionId === result.sessionId) {
+          if (phase === 'open' && event.sessionId === result.sessionId) {
             handle(event)
           }
         }
@@ -141,12 +169,42 @@ export function PlainSshTerminalView({
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          onPhaseRef.current({
+          finish({
             kind: 'failed',
             message: error instanceof Error ? error.message : String(error)
           })
         }
       })
+
+    const pasteClipboardText = async (activeElement: Element | null): Promise<void> => {
+      const text = await window.api.ui
+        .readClipboardText({ maxBytes: TERMINAL_PASTE_MAX_BYTES })
+        .catch(() => '')
+      if (text && !disposed && activeElement && container.contains(activeElement)) {
+        // Why paste, not write: xterm adds bracketed-paste markers when the remote shell asked.
+        terminal.paste(text)
+      }
+    }
+    // Same copy, paste and shortcut policy as Orca's other standalone terminals.
+    const disposeKeyHandler = installPreviewTerminalKeyHandler({
+      terminal,
+      claimImeKeyEvent: () => false,
+      pasteClipboardText: (activeElement) => void pasteClipboardText(activeElement),
+      sendInput: (data) => terminal.input(data),
+      getShortcutContext: () => ({
+        clientPlatform: getShortcutPlatform(),
+        macOptionAsAlt: initial.macOptionAsAlt,
+        keybindings: useAppStore.getState().keybindings,
+        terminalInput: null,
+        getKittyKeyboardFlags: () => 0,
+        terminalShortcutPolicy: useAppStore.getState().settings?.terminalShortcutPolicy
+      })
+    })
+    const disposeAppMenuClipboard = installPreviewTerminalAppMenuClipboard({
+      container,
+      getTerminal: () => terminal,
+      pasteClipboardText: (activeElement) => void pasteClipboardText(activeElement)
+    })
     const dataListener = terminal.onData((data) => {
       if (sessionId) {
         api.write({ sessionId, data })
@@ -168,6 +226,8 @@ export function PlainSshTerminalView({
       observer.disconnect()
       dataListener.dispose()
       resizeListener.dispose()
+      disposeKeyHandler()
+      disposeAppMenuClipboard()
       unsubscribe()
       if (sessionId) {
         api.close({ sessionId })
