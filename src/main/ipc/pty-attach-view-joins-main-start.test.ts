@@ -56,41 +56,53 @@ type RuntimeSpawnController = {
   spawn(args: Record<string, unknown>): Promise<{ id: string }>
 }
 
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test doubles implement only the members these spawn paths read.
+const testDouble = <T>(value: unknown): T => value as T
+
+const PANE: PaneArgs = {
+  worktreeId: 'repo-1::/tmp/view-join',
+  connectionId: null,
+  tabId: 'tab-view-join',
+  leafId: '55555555-5555-4555-8555-555555555555'
+}
+
 describe('a window view of a pane main is starting', () => {
   const { handlers, mainWindow } = setupPtyIpcSuite()
 
-  it('attaches to the terminal main starts, with one provider request', async () => {
-    const coldRestore = { scrollback: 'restored history', cwd: '/tmp/view-join' }
+  /** Main starts the pane while the window's view of it waits; resolves the view's attach. */
+  async function viewDuringMainStart(startResult: Record<string, unknown>) {
     const providerSpawn = vi.fn(async (opts: { sessionId?: string }) => ({
       id: opts.sessionId ?? 'pty-main',
-      coldRestore
+      ...startResult
     }))
-    setLocalPtyProvider({
-      spawn: providerSpawn,
-      write: vi.fn(),
-      resize: vi.fn(),
-      kill: vi.fn(),
-      shutdown: vi.fn(),
-      sendSignal: vi.fn(),
-      getCwd: vi.fn(),
-      getInitialCwd: vi.fn(),
-      clearBuffer: vi.fn(),
-      acknowledgeDataEvent: vi.fn(),
-      hasChildProcesses: vi.fn(),
-      getForegroundProcess: vi.fn(),
-      serialize: vi.fn(),
-      revive: vi.fn(),
-      onData: vi.fn(() => () => {}),
-      onReplay: vi.fn(() => () => {}),
-      onExit: vi.fn(() => () => {}),
-      listProcesses: vi.fn(async () => []),
-      attach: vi.fn(),
-      getDefaultShell: vi.fn(),
-      getProfiles: vi.fn()
-    } as never)
+    setLocalPtyProvider(
+      testDouble({
+        spawn: providerSpawn,
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(),
+        shutdown: vi.fn(),
+        sendSignal: vi.fn(),
+        getCwd: vi.fn(),
+        getInitialCwd: vi.fn(),
+        clearBuffer: vi.fn(),
+        acknowledgeDataEvent: vi.fn(),
+        hasChildProcesses: vi.fn(),
+        getForegroundProcess: vi.fn(),
+        serialize: vi.fn(),
+        revive: vi.fn(),
+        onData: vi.fn(() => () => {}),
+        onReplay: vi.fn(() => () => {}),
+        onExit: vi.fn(() => () => {}),
+        listProcesses: vi.fn(async () => []),
+        attach: vi.fn(),
+        getDefaultShell: vi.fn(),
+        getProfiles: vi.fn()
+      })
+    )
     let controller: RuntimeSpawnController | null = null
     const runtime = {
-      setPtyController: vi.fn((value) => {
+      setPtyController: vi.fn((value: RuntimeSpawnController) => {
         controller = value
       }),
       createPreAllocatedTerminalHandle: vi.fn(() => 'term_main'),
@@ -101,92 +113,32 @@ describe('a window view of a pane main is starting', () => {
       onPtyData: vi.fn(),
       seedHeadlessTerminal: vi.fn()
     }
-    registerPtyHandlers(mainWindow as never, runtime as never)
-    const pane: PaneArgs = {
-      worktreeId: 'repo-1::/tmp/view-join',
-      connectionId: null,
-      tabId: 'tab-view-join',
-      leafId: '55555555-5555-4555-8555-555555555555'
-    }
-    const main = controller as unknown as RuntimeSpawnController
-    const releaseClaim = main.claimStablePaneCreate(pane)
-
+    registerPtyHandlers(testDouble(mainWindow), testDouble(runtime))
+    const main = testDouble<RuntimeSpawnController>(controller)
+    const releaseClaim = main.claimStablePaneCreate(PANE)
     const view = handlers.get('pty:spawn')!(null, {
       cols: 80,
       rows: 24,
-      ...pane,
+      ...PANE,
       sessionId: 'pty-main',
       attachOnlyView: true
     })
-    await main.spawn({ cols: 80, rows: 24, cwd: '/tmp/view-join', ...pane, sessionId: 'pty-main' })
+    await main.spawn({ cols: 80, rows: 24, cwd: '/tmp/view-join', ...PANE, sessionId: 'pty-main' })
     releaseClaim()
+    return { view: await view, providerSpawn }
+  }
 
-    await expect(view).resolves.toMatchObject({ id: 'pty-main', isReattach: true, coldRestore })
+  it('attaches to the terminal main starts, with one provider request', async () => {
+    const coldRestore = { scrollback: 'restored history', cwd: '/tmp/view-join' }
+    const { view, providerSpawn } = await viewDuringMainStart({ coldRestore })
+    expect(view).toMatchObject({ id: 'pty-main', isReattach: true, coldRestore })
     expect(providerSpawn).toHaveBeenCalledOnce()
   })
 
   it("attaches as today when main's start carries no payload to paint", async () => {
     // A fresh start: nothing to paint, so the view's own attach takes the provider's snapshot.
-    const providerSpawn = vi.fn(async (opts: { sessionId?: string }) => ({
-      id: opts.sessionId ?? 'pty-main'
-    }))
-    setLocalPtyProvider({
-      spawn: providerSpawn,
-      write: vi.fn(),
-      resize: vi.fn(),
-      kill: vi.fn(),
-      shutdown: vi.fn(),
-      sendSignal: vi.fn(),
-      getCwd: vi.fn(),
-      getInitialCwd: vi.fn(),
-      clearBuffer: vi.fn(),
-      acknowledgeDataEvent: vi.fn(),
-      hasChildProcesses: vi.fn(),
-      getForegroundProcess: vi.fn(),
-      serialize: vi.fn(),
-      revive: vi.fn(),
-      onData: vi.fn(() => () => {}),
-      onReplay: vi.fn(() => () => {}),
-      onExit: vi.fn(() => () => {}),
-      listProcesses: vi.fn(async () => []),
-      attach: vi.fn(),
-      getDefaultShell: vi.fn(),
-      getProfiles: vi.fn()
-    } as never)
-    let controller: RuntimeSpawnController | null = null
-    const runtime = {
-      setPtyController: vi.fn((value) => {
-        controller = value
-      }),
-      createPreAllocatedTerminalHandle: vi.fn(() => 'term_main'),
-      registerPreAllocatedHandleForPty: vi.fn(),
-      registerPty: vi.fn(),
-      onPtySpawned: vi.fn(),
-      onPtyExit: vi.fn(),
-      onPtyData: vi.fn(),
-      seedHeadlessTerminal: vi.fn()
-    }
-    registerPtyHandlers(mainWindow as never, runtime as never)
-    const pane: PaneArgs = {
-      worktreeId: 'repo-1::/tmp/view-join',
-      connectionId: null,
-      tabId: 'tab-view-join',
-      leafId: '55555555-5555-4555-8555-555555555555'
-    }
-    const main = controller as unknown as RuntimeSpawnController
-    const releaseClaim = main.claimStablePaneCreate(pane)
-
-    const view = handlers.get('pty:spawn')!(null, {
-      cols: 80,
-      rows: 24,
-      ...pane,
-      sessionId: 'pty-main',
-      attachOnlyView: true
-    })
-    await main.spawn({ cols: 80, rows: 24, cwd: '/tmp/view-join', ...pane, sessionId: 'pty-main' })
-    releaseClaim()
-
-    await expect(view).resolves.toMatchObject({ id: 'pty-main' })
+    const { view, providerSpawn } = await viewDuringMainStart({})
+    expect(view).toMatchObject({ id: 'pty-main' })
     expect(providerSpawn).toHaveBeenCalledTimes(2)
   })
 })

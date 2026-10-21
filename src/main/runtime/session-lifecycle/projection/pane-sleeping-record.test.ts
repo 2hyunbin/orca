@@ -21,10 +21,13 @@ const RECORD: SleepingAgentSessionRecord = {
   origin: 'worktree-sleep'
 }
 
-function session(root: unknown): WorkspaceSessionState {
+function session(
+  root: unknown,
+  records: Record<string, SleepingAgentSessionRecord> = { 'tab-1:2': RECORD }
+): WorkspaceSessionState {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the lookup reads only the records and the tab's layout.
   return {
-    sleepingAgentSessionsByPaneKey: { 'tab-1:2': RECORD },
+    sleepingAgentSessionsByPaneKey: records,
     terminalLayoutsByTabId: { 'tab-1': { root, activeLeafId: LEFT, expandedLeafId: null } }
   } as unknown as WorkspaceSessionState
 }
@@ -46,13 +49,10 @@ describe("main's lookup of a pane's numbered sleeping record", () => {
       first: { type: 'leaf', leafId: LEFT },
       second: { type: 'leaf', leafId: RIGHT }
     }
-    const twoAgents = {
-      ...session(split),
-      sleepingAgentSessionsByPaneKey: {
-        'tab-1:1': { ...RECORD, paneKey: 'tab-1:1' },
-        'tab-1:2': { ...RECORD, providerSession: { key: 'session_id', id: 'conv-2' } }
-      }
-    } as WorkspaceSessionState
+    const twoAgents = session(split, {
+      'tab-1:1': { ...RECORD, paneKey: 'tab-1:1' },
+      'tab-1:2': { ...RECORD, providerSession: { key: 'session_id', id: 'conv-2' } }
+    })
     const of = (leafId: string) =>
       findPaneSleepingRecord(twoAgents, WORKTREE, { parentTabId: 'tab-1', leafId })?.record
         .providerSession.id

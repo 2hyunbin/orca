@@ -20,10 +20,8 @@ import {
 const PANE_OWNER_UNVERIFIED_ERROR = 'terminal_pane_owner_unverified'
 const PANE_OWNER_CHANGED_ERROR = 'terminal_pane_owner_changed'
 
-type ReattachOptions = {
-  /** Layout-owner build: this attaches to the terminal main just started for the pane. */
-  afterMainStart?: true
-}
+/** Layout-owner build: `afterMainStart` attaches to the terminal main just started for the pane. */
+type ReattachOptions = { afterMainStart?: true }
 
 export function startDeferredSessionReattach(
   session: ConnectPanePtySession,
