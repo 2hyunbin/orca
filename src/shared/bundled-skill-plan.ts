@@ -26,6 +26,10 @@ export const BUNDLED_SKILL_LEAVE_REASONS = Object.freeze([
 ] as const)
 export type BundledSkillLeaveReason = (typeof BUNDLED_SKILL_LEAVE_REASONS)[number]
 
+export function isBundledSkillLeaveReason(value: string): value is BundledSkillLeaveReason {
+  return BUNDLED_SKILL_LEAVE_REASONS.some((reason) => reason === value)
+}
+
 export const BUNDLED_SKILL_OP_STATUSES = Object.freeze([
   'done',
   'changed',
@@ -92,6 +96,8 @@ export type BundledSkillOpOutcome = {
   path: string
   kind: BundledSkillOpKind
   status: BundledSkillOpStatus
+  /** Why a `leave` left the path alone. */
+  reason?: BundledSkillLeaveReason
   /** Error code for `failed`. */
   error?: string
   /** Where Replace or a non-released old copy was moved. */

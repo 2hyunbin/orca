@@ -22,11 +22,7 @@ import {
   replaceBundledSkillPath,
   swapBundledSkillFolder
 } from './swap'
-import {
-  bundledSkillPathKey,
-  resolveBundledSkillTargets,
-  type BundledSkillTargetRoot
-} from './targets'
+import { bundledSkillPathKey, resolveBundledSkillTargets } from './targets'
 
 export type BundledSkillExecuteInput = BundledSkillPlanInput & {
   /** Per-lock wait; the shared 5s default applies when unset. */
@@ -37,7 +33,6 @@ type SkillRun = {
   input: BundledSkillExecuteInput
   entry: BundledSkillPlanEntry
   source: BundledSkillSource
-  rootFor: (path: string) => BundledSkillTargetRoot
 }
 
 /** Literal target paths, as delete and cloud install key locks; sorted so two runs can't deadlock. */
@@ -97,19 +92,19 @@ async function requireUnchanged(run: SkillRun, path: string, expected: BundledSk
   }
 }
 
-function backupFor(run: SkillRun, path: string): string {
-  return bundledSkillBackupPath(run.rootFor(path).realPath, run.entry.name)
+function backupFor(run: SkillRun): string {
+  return bundledSkillBackupPath(run.input.destination.homeDirectory, run.entry.name)
 }
 
-async function settleCleanup(run: SkillRun, op: BundledSkillOp, cleanup: BundledSkillCleanup) {
+async function settleCleanup(run: SkillRun, cleanup: BundledSkillCleanup) {
   await requireUnchanged(run, cleanup.path, cleanup.observed)
   await (cleanup.action === 'delete'
     ? removeBundledSkillSibling(run.input.filesystem, cleanup.path)
-    : backUpBundledSkillPath(run.input.filesystem, cleanup.path, backupFor(run, op.path)))
+    : backUpBundledSkillPath(run.input.filesystem, cleanup.path, backupFor(run)))
 }
 
 /** Re-hashes the copy an update moved aside: a writer that raced the lock keeps its bytes. */
-async function settleOldCopy(run: SkillRun, op: BundledSkillOp, old: string) {
+async function settleOldCopy(run: SkillRun, old: string) {
   const { folderClass } = await classifyBundledSkillPath(
     run.input.filesystem,
     old,
@@ -120,7 +115,7 @@ async function settleOldCopy(run: SkillRun, op: BundledSkillOp, old: string) {
     await removeBundledSkillSibling(run.input.filesystem, old)
     return undefined
   }
-  return backUpBundledSkillPath(run.input.filesystem, old, backupFor(run, op.path))
+  return backUpBundledSkillPath(run.input.filesystem, old, backupFor(run))
 }
 
 function requireLinkTarget(op: BundledSkillOp): string {
@@ -136,7 +131,7 @@ async function applyOp(run: SkillRun, op: BundledSkillOp): Promise<string | unde
   const files = [{ path: 'SKILL.md', text: run.source.text }]
   const verify = verifier(run, op.path, op.observed)
   for (const cleanup of op.cleanup) {
-    await settleCleanup(run, op, cleanup)
+    await settleCleanup(run, cleanup)
   }
   switch (op.kind) {
     case 'keep':
@@ -153,10 +148,10 @@ async function applyOp(run: SkillRun, op: BundledSkillOp): Promise<string | unde
     case 'update': {
       const old = await swapBundledSkillFolder(filesystem, op.path, files, verify)
       // The new copy is in; a leftover old copy is the next plan's cleanup, not a failed update.
-      return settleOldCopy(run, op, old).catch(() => undefined)
+      return settleOldCopy(run, old).catch(() => undefined)
     }
     case 'replace': {
-      const backupPath = backupFor(run, op.path)
+      const backupPath = backupFor(run)
       await replaceBundledSkillPath(
         filesystem,
         op.path,
@@ -191,6 +186,7 @@ async function runSkill(run: SkillRun): Promise<BundledSkillOutcome> {
               path: op.path,
               kind: op.kind,
               status: 'done' as const,
+              ...(op.reason ? { reason: op.reason } : {}),
               ...(backupPath ? { backupPath } : {})
             }),
             (error: unknown) =>
@@ -230,7 +226,7 @@ export async function executeBundledSkillPlan(
     return unrun('busy')
   }
   try {
-    const { plan, roots } = await buildBundledSkillPlan(input)
+    const { plan } = await buildBundledSkillPlan(input)
     if (plan.planDigest !== planDigest) {
       return unrun('changed')
     }
@@ -240,11 +236,7 @@ export async function executeBundledSkillPlan(
       if (!source) {
         throw new Error(`bundled-skill-unknown: ${entry.name}`)
       }
-      const rootFor = (path: string) =>
-        roots.find(
-          (root) => bundledSkillPathKey(join(root.path, entry.name)) === bundledSkillPathKey(path)
-        ) ?? roots[0]
-      skills.push(await runSkill({ input, entry, source, rootFor }))
+      skills.push(await runSkill({ input, entry, source }))
     }
     return { scope: plan.scope, skills }
   } finally {

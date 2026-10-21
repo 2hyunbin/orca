@@ -29,13 +29,20 @@ async function npxShared(home: SkillHome, agents: ('claude' | 'cursor')[] = ['cl
   return serviceInput(home, { agents })
 }
 
-/** Dies like a killed process: from the `crashAt`-th rename on, every write throws, rollback included. */
+/** Dies like a killed process: from the `crashAt`-th rename or move on, every write throws, rollback included. */
 function crashingFilesystem(crashAt: number): BundledSkillFilesystem {
   let renames = 0
   let dead = false
   const die = () => {
     dead = true
     throw Object.assign(new Error('crashed'), { code: 'ECRASH' })
+  }
+  // Moves into backups count as renames: they are the same step of a swap.
+  const step = () => {
+    renames += 1
+    if (dead || renames >= crashAt) {
+      die()
+    }
   }
   const guard =
     <A extends unknown[]>(write: (...args: A) => Promise<void>) =>
@@ -52,11 +59,12 @@ function crashingFilesystem(crashAt: number): BundledSkillFilesystem {
     remove: guard(nativeBundledSkillFilesystem.remove),
     createLink: guard(nativeBundledSkillFilesystem.createLink),
     rename: async (source, target) => {
-      renames += 1
-      if (dead || renames >= crashAt) {
-        die()
-      }
+      step()
       await nativeBundledSkillFilesystem.rename(source, target)
+    },
+    moveToBackup: async (source, target) => {
+      step()
+      await nativeBundledSkillFilesystem.moveToBackup(source, target)
     }
   }
 }

@@ -23,10 +23,13 @@ function siblingPath(target: string, marker: string): string {
   return join(dirname(target), `.${basename(target)}${marker}${randomUUID()}`)
 }
 
-/** Beside the skills root (never inside it, where agents would load it) on the same filesystem. */
-export function bundledSkillBackupPath(realRootPath: string, name: string): string {
+/**
+ * One place per executing host, outside every skills root (agents would load it) and outside
+ * any project (it would show up in the repo).
+ */
+export function bundledSkillBackupPath(homeDirectory: string, name: string): string {
   const utc = new Date().toISOString().replace(/[:.]/gu, '-')
-  return join(dirname(realRootPath), '.orca-skill-backups', `${name}-${utc}-${randomUUID()}`)
+  return join(homeDirectory, '.agents', '.orca-skill-backups', `${name}-${utc}-${randomUUID()}`)
 }
 
 /** The installer's only delete: it refuses anything but its own stage and old siblings. */
@@ -112,7 +115,7 @@ export async function swapBundledSkillFolder(
 
 /**
  * `replace`: the foreign object (a link moves as itself, never what it points to) goes to
- * backups with one rename before anything takes its place, so no `.orca-old` holds user content.
+ * backups before anything takes its place, so no `.orca-old` holds user content.
  */
 export async function replaceBundledSkillPath(
   filesystem: BundledSkillFilesystem,
@@ -133,7 +136,7 @@ export async function replaceBundledSkillPath(
   try {
     await requireUnchanged(verify, target)
     await filesystem.ensureDirectory(dirname(backupPath))
-    await filesystem.rename(target, backupPath)
+    await filesystem.moveToBackup(target, backupPath)
   } catch (error) {
     await dropStaged()
     throw error
@@ -141,7 +144,7 @@ export async function replaceBundledSkillPath(
   try {
     await placeNew()
   } catch (error) {
-    await filesystem.rename(backupPath, target).catch(() => undefined)
+    await filesystem.moveToBackup(backupPath, target).catch(() => undefined)
     await dropStaged()
     throw error
   }
@@ -154,6 +157,6 @@ export async function backUpBundledSkillPath(
   backupPath: string
 ): Promise<string> {
   await filesystem.ensureDirectory(dirname(backupPath))
-  await filesystem.rename(path, backupPath)
+  await filesystem.moveToBackup(path, backupPath)
   return backupPath
 }

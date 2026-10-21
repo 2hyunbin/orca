@@ -1,5 +1,17 @@
 import { constants } from 'node:fs'
-import { access, lstat, mkdir, readFile, readlink, realpath, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import {
+  access,
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  writeFile
+} from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   nativeSkillInstallFilesystem,
@@ -30,6 +42,8 @@ export type BundledSkillFilesystem = {
   writeFolder(path: string, files: readonly { path: string; text: string }[]): Promise<void>
   ensureDirectory(path: string): Promise<void>
   rename(source: string, target: string): Promise<void>
+  /** Rename into backups, which may sit on another filesystem: copy, verify, then remove. */
+  moveToBackup(source: string, target: string): Promise<void>
   remove(path: string): Promise<void>
   createLink(target: string, linkPath: string): Promise<void>
 }
@@ -53,6 +67,53 @@ export function filesystemErrorCode(error: unknown): string {
 function isMissing(error: unknown): boolean {
   const code = filesystemErrorCode(error)
   return code === 'ENOENT' || code === 'ENOTDIR'
+}
+
+/** Every entry's relative path, kind and content (or link target), in a fixed order. */
+async function treeSignature(path: string): Promise<string> {
+  const hash = createHash('sha256')
+  const visit = async (current: string, relative: string): Promise<void> => {
+    const stats = await lstat(current)
+    hash.update(`${relative}\0${kindOf(stats)}\0`)
+    if (stats.isSymbolicLink()) {
+      hash.update(await readlink(current))
+    } else if (stats.isFile()) {
+      hash.update(await readFile(current))
+    } else if (stats.isDirectory()) {
+      for (const name of (await readdir(current)).sort()) {
+        await visit(join(current, name), `${relative}/${name}`)
+      }
+    }
+    hash.update('\0')
+  }
+  await visit(path, '.')
+  return hash.digest('hex')
+}
+
+export async function moveAcrossFilesystems(
+  source: string,
+  target: string,
+  rename: (source: string, target: string) => Promise<void> = nativeSkillInstallFilesystem.rename
+): Promise<void> {
+  try {
+    await rename(source, target)
+    return
+  } catch (error) {
+    if (filesystemErrorCode(error) !== 'EXDEV') {
+      throw error
+    }
+  }
+  await cp(source, target, {
+    recursive: true,
+    verbatimSymlinks: true,
+    errorOnExist: true,
+    force: false
+  })
+  // The source is removed only once the copy provably holds the same bytes.
+  if ((await treeSignature(source)) !== (await treeSignature(target))) {
+    throw Object.assign(new Error(`bundled-skill-backup-mismatch: ${target}`), { code: 'EBACKUP' })
+  }
+  await rm(source, { recursive: true, force: true })
 }
 
 export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
@@ -96,6 +157,7 @@ export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
     await mkdir(path, { recursive: true })
   },
   rename: nativeSkillInstallFilesystem.rename,
+  moveToBackup: (source, target) => moveAcrossFilesystems(source, target),
   remove: nativeSkillInstallFilesystem.remove,
   createLink: createNativeSkillAlias
 }

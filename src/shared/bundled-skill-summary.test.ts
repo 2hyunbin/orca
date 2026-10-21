@@ -3,6 +3,7 @@ import {
   BUNDLED_SKILL_LEAVE_REASONS,
   BUNDLED_SKILL_OP_KINDS,
   type BundledSkillOp,
+  type BundledSkillOpOutcome,
   type BundledSkillOpKind,
   type BundledSkillPlan
 } from './bundled-skill-plan'
@@ -85,14 +86,15 @@ describe('summarizeBundledSkillPlan', () => {
 describe('summarizeBundledSkillOutcomes', () => {
   const done = (kind: BundledSkillOpKind) => ({ path: `/${kind}`, kind, status: 'done' as const })
 
-  it('never calls a refusal, a change, a skip or a failure success', () => {
+  it('never calls a change, a skip or a failure success', () => {
     const text = (ops: Parameters<typeof bundledSkillOutcomeText>[0]['ops']) =>
       bundledSkillOutcomeText({ name: 's', status: 'ran', ops })
     expect(text([done('keep')])).toBe('No change')
     expect(text([done('keep'), done('link')])).toBe('Linked')
     expect(text([done('write'), done('link')])).toBe('Installed')
     expect(text([done('update'), done('link')])).toBe('Updated')
-    expect(text([done('update'), done('leave')])).toBe('Needs attention')
+    expect(text([done('update'), done('leave')])).toBe('Updated')
+    expect(text([done('leave')])).toBe('No change')
     expect(text([done('restore')])).toBe('Needs attention')
     for (const status of ['changed', 'skipped', 'failed'] as const) {
       expect(text([done('update'), { ...done('link'), status }])).toBe('Needs attention')
@@ -102,17 +104,35 @@ describe('summarizeBundledSkillOutcomes', () => {
     }
   })
 
-  it('exits 1 when any skill needs attention', () => {
-    const ran = (ops: ReturnType<typeof done>[]) => ({ name: 's', status: 'ran' as const, ops })
-    expect(
-      summarizeBundledSkillOutcomes({ scope: 'global', skills: [ran([done('update')])] })
-    ).toMatchObject({ ok: true, exitCode: 0 })
+  it('reports leaves as warnings and exits 1 only for a failed or changed op', () => {
+    const ran = (ops: BundledSkillOpOutcome[]) => ({ name: 's', status: 'ran' as const, ops })
+    const left = { ...done('leave'), reason: 'edited' as const }
+    const summary = summarizeBundledSkillOutcomes({
+      scope: 'global',
+      skills: [ran([done('update'), left]), ran([left])]
+    })
+    expect(summary).toMatchObject({ ok: true, exitCode: 0 })
+    expect(summary.skills.map((skill) => skill.line)).toEqual([
+      "Updated · 1 left alone: You've changed this copy",
+      "No change · 1 left alone: You've changed this copy"
+    ])
+    expect(summary.skills[0].leftAlone).toEqual([
+      { path: '/leave', reason: "You've changed this copy" }
+    ])
+    for (const status of ['changed', 'failed'] as const) {
+      expect(
+        summarizeBundledSkillOutcomes({
+          scope: 'global',
+          skills: [ran([{ ...done('update'), status }])]
+        })
+      ).toMatchObject({ ok: false, exitCode: 1 })
+    }
     expect(
       summarizeBundledSkillOutcomes({
         scope: 'global',
-        skills: [ran([done('update')]), ran([done('leave')])]
-      })
-    ).toMatchObject({ ok: false, exitCode: 1 })
+        skills: [{ name: 's', status: 'changed', ops: [] }]
+      }).exitCode
+    ).toBe(1)
   })
 })
 

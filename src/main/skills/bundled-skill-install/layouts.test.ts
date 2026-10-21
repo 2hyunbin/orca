@@ -16,11 +16,14 @@ import type {
 } from '../../../shared/bundled-skill-plan'
 import {
   summarizeBundledSkillOutcomes,
-  summarizeBundledSkillPlan,
-  type BundledSkillOutcomeText
+  summarizeBundledSkillPlan
 } from '../../../shared/bundled-skill-summary'
 import type { SkillInstallProviderId } from '../../../shared/skill-install-providers'
-import { nativeBundledSkillFilesystem, type BundledSkillFilesystem } from './filesystem'
+import {
+  moveAcrossFilesystems,
+  nativeBundledSkillFilesystem,
+  type BundledSkillFilesystem
+} from './filesystem'
 import { skillInstallReceiptPath } from '../skill-install-provenance'
 import { skillInstallJournalPath } from '../skill-install-recovery'
 import { installBundledSkills, previewBundledSkillInstall } from './service'
@@ -47,7 +50,8 @@ type Layout = {
   name: string
   arrange: (home: SkillHome) => Promise<void>
   ops: [Label, BundledSkillOpKind, BundledSkillLeaveReason?][]
-  text: BundledSkillOutcomeText
+  /** What the CLI prints for the skill; leaves are warnings, never failures. */
+  text: string
   badge?: 'update' | null
   agents?: SkillInstallProviderId[]
   force?: Label[]
@@ -116,7 +120,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'edited'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'Needs attention',
+    text: "No change · 2 left alone: You've changed this copy; The shared copy this folder uses is not Orca’s",
     badge: null
   },
   {
@@ -133,7 +137,7 @@ const LAYOUTS: Layout[] = [
       ['claude', 'keep'],
       ['cursor', 'leave', 'other']
     ],
-    text: 'Needs attention',
+    text: 'Updated · 1 left alone: A different skill already uses this name',
     untouched: (home) => [join(home.root, 'elsewhere', NAME)]
   },
   {
@@ -148,7 +152,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'update'],
       ['claude', 'leave', 'other']
     ],
-    text: 'Needs attention'
+    text: 'Updated · 1 left alone: A different skill already uses this name'
   },
   {
     name: 'plugin-managed copy only',
@@ -173,7 +177,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'unwritable'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'Needs attention'
+    text: "No change · 2 left alone: Orca can't write to this folder; The shared copy this folder uses is not Orca’s"
   },
   {
     name: 'npx shared copy with Claude and Cursor detected',
@@ -208,7 +212,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'other'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'Needs attention'
+    text: 'No change · 2 left alone: A different skill already uses this name; The shared copy this folder uses is not Orca’s'
   },
   {
     name: 'host that cannot link gets a copy',
@@ -245,7 +249,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'edited'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'Needs attention'
+    text: "No change · 2 left alone: You've changed this copy; The shared copy this folder uses is not Orca’s"
   },
   {
     name: '~/.claude/skills is a link to ~/.agents/skills (one target)',
@@ -321,9 +325,10 @@ describe('bundled skill install across real layouts', () => {
 
     const { plan, result } = await previewAndInstall(input)
     expect(plan.planDigest).toBe(preview.planDigest)
-    expect(summarizeBundledSkillOutcomes(result).skills).toEqual([
-      { name: NAME, text: layout.text }
-    ])
+    const summary = summarizeBundledSkillOutcomes(result)
+    expect(summary.skills.map((skill) => skill.line)).toEqual([layout.text])
+    // Leaving a folder alone is a warning; only a failed or changed op fails the CLI.
+    expect(summary.exitCode).toBe(0)
 
     // Files after: what each op promised, and nothing else moved.
     for (const op of plan.skills[0].ops) {
@@ -362,6 +367,37 @@ describe('bundled skill install edges', () => {
       true
     )
     expect(await readFile(join(backup, 'SKILL.md'), 'utf8')).toBe(EDITED_TEXT)
+  })
+
+  it('keeps a project Replace backup in the home, not the repo', async () => {
+    const home = await makeSkillHome()
+    const project = join(home.root, 'project')
+    const projectShared = join(project, '.agents', 'skills', NAME)
+    await writeCopy(projectShared, EDITED_TEXT)
+    const input = serviceInput(home, { workspaceDirectory: project, force: [projectShared] })
+    const { result } = await previewAndInstall(input)
+    const backup = result.skills[0].ops[0].backupPath ?? ''
+    expect(backup.startsWith(join(home.home, '.agents', '.orca-skill-backups', `${NAME}-`))).toBe(
+      true
+    )
+    expect(await readFile(join(backup, 'SKILL.md'), 'utf8')).toBe(EDITED_TEXT)
+    expect(await snapshot(join(project, '.agents', '.orca-skill-backups'))).toBe('missing')
+  })
+
+  it('moves a backup across filesystems by copying, verifying, then removing', async () => {
+    const home = await makeSkillHome()
+    const source = join(home.root, 'source', NAME)
+    await writeCopy(source, EDITED_TEXT, { 'notes.md': 'mine\n' })
+    await symlink('notes.md', join(source, 'link.md'))
+    const target = join(home.root, 'backups', NAME)
+    await mkdir(dirname(target), { recursive: true })
+    const crossDevice = async () => {
+      throw Object.assign(new Error('cross-device'), { code: 'EXDEV' })
+    }
+    await moveAcrossFilesystems(source, target, crossDevice)
+    expect(await snapshot(source)).toBe('missing')
+    expect(await snapshot(target)).toBe(`dir[SKILL.md,link.md,notes.md]:${EDITED_TEXT}`)
+    expect(await readlink(join(target, 'link.md'))).toBe('notes.md')
   })
 
   it('links into a project only where its agent folder already exists', async () => {

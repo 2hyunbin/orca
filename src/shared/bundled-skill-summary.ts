@@ -1,4 +1,5 @@
 import {
+  isBundledSkillLeaveReason,
   isBundledSkillOpKind,
   type BundledSkillInstallResult,
   type BundledSkillLeaveReason,
@@ -96,9 +97,10 @@ export type BundledSkillOutcomeText =
   | 'No change'
   | 'Needs attention'
 
+// Why `leave` is null: leaving someone else's folder alone is reported, not a failure.
 const DONE_TEXT: Readonly<Record<BundledSkillOpKind, BundledSkillOutcomeText | null>> = {
   keep: null,
-  leave: 'Needs attention',
+  leave: null,
   write: 'Installed',
   copy: 'Installed',
   link: 'Linked',
@@ -115,34 +117,66 @@ const OUTCOME_TEXT_ORDER: readonly BundledSkillOutcomeText[] = [
   'Needs attention'
 ]
 
+/** A `changed`, `skipped` or `failed` op, or a skill that never ran. */
+function hasProblem(outcome: BundledSkillOutcome): boolean {
+  return outcome.status !== 'ran' || outcome.ops.some((op) => op.status !== 'done')
+}
+
 export function bundledSkillOutcomeText(outcome: BundledSkillOutcome): BundledSkillOutcomeText {
-  if (outcome.status !== 'ran') {
+  if (hasProblem(outcome)) {
     return 'Needs attention'
   }
   return outcome.ops.reduce<BundledSkillOutcomeText>((highest, op) => {
-    // Refusals, `changed`, skips and failures are never success.
-    const text =
-      op.status === 'done' && isBundledSkillOpKind(op.kind)
-        ? (DONE_TEXT[op.kind] ?? 'No change')
-        : 'Needs attention'
+    const text = isBundledSkillOpKind(op.kind)
+      ? (DONE_TEXT[op.kind] ?? 'No change')
+      : 'Needs attention'
     return OUTCOME_TEXT_ORDER.indexOf(text) > OUTCOME_TEXT_ORDER.indexOf(highest) ? text : highest
   }, 'No change')
 }
 
+export type BundledSkillLeftAlone = { path: string; reason: string }
+
+export type BundledSkillOutcomeSummary = {
+  name: string
+  text: BundledSkillOutcomeText
+  /** Printed as warnings; never part of the exit code. */
+  leftAlone: BundledSkillLeftAlone[]
+  /** e.g. "Updated · 1 left alone: You've changed this copy". */
+  line: string
+}
+
+function leaveReasonText(reason: string | undefined): string {
+  return reason && isBundledSkillLeaveReason(reason)
+    ? BUNDLED_SKILL_LEAVE_REASON_TEXT[reason]
+    : 'Left as it is'
+}
+
+export function summarizeBundledSkillOutcome(
+  outcome: BundledSkillOutcome
+): BundledSkillOutcomeSummary {
+  const text = bundledSkillOutcomeText(outcome)
+  const leftAlone = outcome.ops
+    .filter((op) => op.kind === 'leave')
+    .map((op) => ({ path: op.path, reason: leaveReasonText(op.reason) }))
+  const reasons = [...new Set(leftAlone.map((left) => left.reason))].join('; ')
+  return {
+    name: outcome.name,
+    text,
+    leftAlone,
+    line: leftAlone.length > 0 ? `${text} · ${leftAlone.length} left alone: ${reasons}` : text
+  }
+}
+
 export type BundledSkillResultSummary = {
   ok: boolean
-  /** The CLI's exit code. */
+  /** The CLI's exit code: 1 only when an op failed or found the disk changed. */
   exitCode: 0 | 1
-  skills: { name: string; text: BundledSkillOutcomeText }[]
+  skills: BundledSkillOutcomeSummary[]
 }
 
 export function summarizeBundledSkillOutcomes(
   result: BundledSkillInstallResult
 ): BundledSkillResultSummary {
-  const skills = result.skills.map((outcome) => ({
-    name: outcome.name,
-    text: bundledSkillOutcomeText(outcome)
-  }))
-  const ok = skills.every((skill) => skill.text !== 'Needs attention')
-  return { ok, exitCode: ok ? 0 : 1, skills }
+  const ok = !result.skills.some(hasProblem)
+  return { ok, exitCode: ok ? 0 : 1, skills: result.skills.map(summarizeBundledSkillOutcome) }
 }
