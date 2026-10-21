@@ -271,7 +271,7 @@ describe('useStructuredAgentSessionOptions', () => {
   })
 
   it('refreshes inventory after a live answer while keeping the chat choice', async () => {
-    let settleCatalog!: (value: unknown) => void
+    let settleCatalog: ((value: unknown) => void) | undefined
     answer({
       options: () =>
         Promise.resolve(
@@ -286,6 +286,9 @@ describe('useStructuredAgentSessionOptions', () => {
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.5')
     )
     await act(async () => {
+      if (!settleCatalog) {
+        throw new Error('Host catalog request has not started')
+      }
       settleCatalog(HOST_CATALOG)
       await tick()
     })

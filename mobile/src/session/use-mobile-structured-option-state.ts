@@ -1,9 +1,11 @@
 import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
-import type { AgentSessionOptionsResult } from '../../../src/shared/agent-session-wire'
+import type {
+  AgentSessionOptionsResult,
+  AgentSessionModelCatalogResult
+} from '../../../src/shared/agent-session-wire'
 import { callAgentSession } from './mobile-structured-agent-session-rpc'
 import { forgetMobileCreatedStructuredSession } from './mobile-created-structured-sessions'
 import { createCoalescingKeyedRunner } from '../../../src/shared/coalescing-keyed-runner'
-import type { AgentSessionModelCatalogResult } from '../../../src/shared/agent-session-wire'
 import type { RpcClient } from '../transport/rpc-client'
 import { independentAgentModelCatalog } from '../../../src/shared/agent-model-catalog-ownership'
 import {
