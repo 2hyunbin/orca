@@ -6,6 +6,7 @@ import type { TerminalPaneResumeOutcome } from '@/store/terminals/terminal-state
 import { mainStartsPane } from './main-starts-pane'
 import { resolveTerminalTabId } from './terminal-tab-id'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 
 type Outcomes = Record<string, TerminalPaneResumeOutcome>
 type AppState = ReturnType<typeof useAppStore.getState>
@@ -60,7 +61,7 @@ function boundPtyId(session: ConnectPanePtySession, state: AppState): string | u
 export function attachResumedAgent(
   session: ConnectPanePtySession,
   ptyId: string,
-  windowResume: object | null
+  windowResume: ColdRestoreAgentResumeStartup | null
 ): boolean {
   if (!mainStartsPane(session) || windowResume) {
     return Boolean(windowResume)
