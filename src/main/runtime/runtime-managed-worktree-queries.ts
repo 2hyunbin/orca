@@ -153,7 +153,7 @@ export class RuntimeManagedWorktreeQueries {
         authoritative: true,
         source: 'git',
         catalogVersion: getLocalWorktreeCatalogVersion(repo.id),
-        worktrees: projectWorktreeLineageWithHostPeers(store, repo, detected)
+        worktrees: projectWorktreeLineageWithHostPeers(store, detected)
       }
     }
     const scan = await scanRuntimeWorktreesUntilNotOvertaken(store, repo, (target) =>
@@ -211,7 +211,7 @@ export class RuntimeManagedWorktreeQueries {
       source: scan.ok ? 'git' : 'metadata-fallback',
       // Why the scan's generation: the rows describe the catalog as of when the scan began.
       catalogVersion: localWorktreeCatalogVersionAt(scan.scanGeneration),
-      worktrees: projectWorktreeLineageWithHostPeers(store, repo, detected)
+      worktrees: projectWorktreeLineageWithHostPeers(store, detected)
     }
   }
 

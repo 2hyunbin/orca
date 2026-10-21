@@ -201,7 +201,7 @@ export function buildDetectedGitWorktrees(
       worktreeVisibilitySourceMatcher
     })
   })
-  return projectWorktreeLineageWithHostPeers(store, repo, detected)
+  return projectWorktreeLineageWithHostPeers(store, detected)
 }
 
 export function stampAndMergeVisibleDetectedWorktree(

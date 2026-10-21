@@ -28,12 +28,11 @@ function pair(parentHost: ExecutionHostId | undefined, childHost: ExecutionHostI
 }
 
 describe('getSidebarLineageAncestors', () => {
-  // Why: only a parent on the child's own host nests it; a missing host id matches only another.
   it.each([
     ['both without a host id', undefined, undefined, true],
     ['both local', 'local', 'local', true],
-    ['parent without a host id, child local', undefined, 'local', false],
-    ['parent local, child without a host id', 'local', undefined, false]
+    ['parent without a host id, child local', undefined, 'local', true],
+    ['parent local, child without a host id', 'local', undefined, true]
   ] as const)('%s: nests exactly when the sidebar rows do', (_, parentHost, childHost, nests) => {
     const { parent, child, lineageById } = pair(parentHost, childHost)
     const worktreeMap = new Map([

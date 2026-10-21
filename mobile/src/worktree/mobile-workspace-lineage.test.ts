@@ -31,6 +31,31 @@ function worktree(overrides: Partial<Worktree> = {}): Worktree {
 }
 
 describe('applyMobileWorkspaceLineage', () => {
+  it('recovers a relayed server child from its saved external edge while a phone paired only to that server stays flat', () => {
+    const parent = worktree({ worktreeId: 'parent', worktreeInstanceId: 'p', hostId: 'local' })
+    const child = worktree({
+      worktreeId: 'child',
+      worktreeInstanceId: 'c',
+      hostId: 'runtime:server',
+      parentWorktreeId: null,
+      savedLineage: {
+        worktreeId: 'child',
+        worktreeInstanceId: 'c',
+        parentWorktreeId: 'parent',
+        parentWorktreeInstanceId: 'p',
+        parentStore: 'external',
+        origin: 'cli',
+        capture: { source: 'explicit-cli-flag', confidence: 'explicit' },
+        createdAt: 1
+      }
+    })
+    expect(
+      applyMobileWorkspaceLineage([parent, child]).find((row) => row.worktreeId === 'child')
+        ?.lineageDepth
+    ).toBe(1)
+    expect(applyMobileWorkspaceLineage([child])[0].lineageDepth).toBe(0)
+  })
+
   it.each([false, true])(
     'keeps deep project identity in each occurrence (duplicate pins: %s)',
     (duplicate) => {

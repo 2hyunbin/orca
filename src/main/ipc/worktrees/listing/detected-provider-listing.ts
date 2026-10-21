@@ -83,7 +83,6 @@ export async function listDetectedWorktreesForCapturedRepo(
         catalogVersion: getLocalWorktreeCatalogVersion(repo.id),
         worktrees: projectWorktreeLineageWithHostPeers(
           store,
-          repo,
           buildFolderDetectedWorktrees(store, repo)
         )
       }

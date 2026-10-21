@@ -117,6 +117,24 @@ describe('cross-machine lineage writes', () => {
       setup({ Q: edge('Q', 'P') }).controller.validateParent(row('P'), row('Q'))
     ).toThrow('cycle')
   })
+  it('follows a legacy folder link in the saved chain before refusing external ancestry', () => {
+    const { store, controller } = setup({ Q: edge('Q', 'R', true) })
+    Object.assign(store, {
+      getFolderWorkspaces: () => [{ id: 'F' }],
+      getAllWorkspaceLineage: () => ({
+        'folder:F': {
+          childWorkspaceKey: 'folder:F',
+          parentWorkspaceKey: 'worktree:Q',
+          childInstanceId: null,
+          parentInstanceId: 'Q'
+        }
+      })
+    })
+    expect(() => controller.validateParent(row('P'), row('folder:F'))).toThrow(
+      'chain reaches another Orca install'
+    )
+  })
+
   it('reasserts an external parent without looking it up, refuses a different one, and always clears it', async () => {
     const { store } = setup({ C: edge('C', 'P', true) })
     const child = row('C')

@@ -150,5 +150,5 @@ export function buildDisconnectedDetectedWorktrees(
     })
     return applyMetadataFallbackVisibility(detected)
   })
-  return projectWorktreeLineageWithHostPeers(store, repo, detected)
+  return projectWorktreeLineageWithHostPeers(store, detected)
 }

@@ -45,12 +45,7 @@ export async function createWorktreeWithAgent(args: {
 }): Promise<void> {
   const { client, flags, create, launch, json, rawArgs } = args
   const capabilities = await getAgentLaunchCapabilities(client)
-  if (
-    create.parentWorktreeRef &&
-    typeof create.parentWorktreeRef === 'object' &&
-    'external' in create.parentWorktreeRef &&
-    create.parentWorktreeRef.external === true
-  ) {
+  if (create.parentWorktreeRef) {
     assertCrossMachineLineageSupported(
       capabilities,
       client.environmentSelector ?? 'the connected server'

@@ -63,8 +63,10 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
     listAll: () => listAllRuntimeWorktrees(),
     create: async (args) => {
       if (args.parentWorktreeRef) {
+        const environment = requireActiveEnvironment()
         const status = await getRemoteRuntimeStatus()
-        assertCrossMachineLineageSupported(status.capabilities, 'the connected server')
+        assertActiveEnvironment(environment.id)
+        assertCrossMachineLineageSupported(status.capabilities, environment.name)
       }
       if (args.linkedItems !== undefined) {
         await assertAttachmentWriteSupported(args)
@@ -211,8 +213,10 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
       }>('worktree.lineageList'),
     updateLineage: async ({ worktreeId, parentWorktreeId, parentWorktreeRef, noParent }) => {
       if (parentWorktreeRef) {
+        const environment = requireActiveEnvironment()
         const status = await getRemoteRuntimeStatus()
-        assertCrossMachineLineageSupported(status.capabilities, 'the connected server')
+        assertActiveEnvironment(environment.id)
+        assertCrossMachineLineageSupported(status.capabilities, environment.name)
       }
       invalidateRuntimeWorktreeCaches()
       const result = await callRuntimeResult<{

@@ -64,6 +64,31 @@ function createStore(
 }
 
 describe('pruneLineageForMissingRepoWorktrees', () => {
+  it('never rotates an external parent or one on a host the scan did not cover', () => {
+    const child = 'repo-1::/repo/child'
+    const parent = 'repo-1::/repo/missing-parent'
+    for (const external of [false, true]) {
+      const edge = {
+        ...lineage(child, parent),
+        ...(external ? { parentStore: 'external' as const } : {})
+      }
+      // SAFETY: pruning reads only the host and instance of these persisted metadata rows.
+      const metadata = {
+        [child]: { hostId: 'local' },
+        [parent]: {
+          hostId: external ? 'local' : 'ssh:other',
+          instanceId: edge.parentWorktreeInstanceId
+        }
+      } as Record<string, WorktreeMeta>
+      const store = createStore({ [child]: edge }, {}, metadata)
+      pruneLineageForMissingRepoWorktrees(store, repo, [
+        { path: '/repo/child', head: 'a', branch: 'child', isBare: false, isMainWorktree: false }
+      ])
+      expect(store.setWorktreeMeta).not.toHaveBeenCalled()
+      expect(store.removeWorktreeLineage).not.toHaveBeenCalled()
+    }
+  })
+
   it('keeps lineage stored under another spelling of a live worktree path', () => {
     const parentId = 'repo-1::/repo'
     const childId = 'repo-1::/repo/./child'

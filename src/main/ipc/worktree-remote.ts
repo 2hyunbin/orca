@@ -1788,7 +1788,12 @@ async function performLocalWorktreeCreate(
       ...worktree,
       workspaceLineage,
       ...(worktreeLineage
-        ? { lineage: worktreeLineage, parentWorktreeId: worktreeLineage.parentWorktreeId }
+        ? {
+            savedLineage: worktreeLineage,
+            lineage: worktreeLineage.parentStore === 'external' ? null : worktreeLineage,
+            parentWorktreeId:
+              worktreeLineage.parentStore === 'external' ? null : worktreeLineage.parentWorktreeId
+          }
         : {})
     },
     ...(worktreeLineage ? { lineage: worktreeLineage } : {}),

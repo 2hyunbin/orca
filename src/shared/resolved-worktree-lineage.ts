@@ -211,7 +211,8 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
       return row.savedLineage
     }
     const saved = lineageById[row.id]
-    return saved?.worktreeId === row.id && saved.worktreeInstanceId === row.instanceId
+    return saved?.worktreeId === row.id &&
+      (!saved.worktreeInstanceId || saved.worktreeInstanceId === row.instanceId)
       ? saved
       : row.savedLineage
   }

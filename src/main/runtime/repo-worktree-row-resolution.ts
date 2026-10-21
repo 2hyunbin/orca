@@ -246,12 +246,13 @@ export async function resolveScopedWorktreeIdRow(
     store.getAllWorkspaceLineage?.() ?? {}
   )
   const relatedIds = getConnectedWorktreeLineageIds([target.id], lineageById)
+  const ownIds = new Set(ownerRows.map((row) => row.id))
   const relatedRepoIds = new Set(
     [...relatedIds]
+      .filter((id) => !ownIds.has(id))
       .map((id) => splitWorktreeIdForFilesystem(id)?.repoId)
       .filter((id) => id !== undefined)
   )
-  relatedRepoIds.delete(repo.id)
   const savedHosts = new Map<string, Set<ExecutionHostId>>()
   for (const id of relatedIds) {
     const host = store.getAllWorktreeMeta()[id]?.hostId
@@ -267,12 +268,11 @@ export async function resolveScopedWorktreeIdRow(
     .filter(
       (candidate) =>
         relatedRepoIds.has(candidate.id) &&
+        (candidate.id !== repo.id ||
+          getRepoExecutionHostId(candidate) !== getRepoExecutionHostId(repo)) &&
         (!savedHosts.has(candidate.id) ||
           savedHosts.get(candidate.id)?.has(getRepoExecutionHostId(candidate)))
     )
-  if (new Set(relatedRepos.map((candidate) => candidate.id)).size !== relatedRepos.length) {
-    return null
-  }
   const metaById = store.getAllWorktreeMeta() ?? {}
   const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, relatedRepos)
   const otherRows = await Promise.all(

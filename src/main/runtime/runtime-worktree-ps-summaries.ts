@@ -149,9 +149,10 @@ export function buildRuntimeWorktreePsSummaries(args: {
     })
   }
   const rows = [...summaries.values()].map((row) => ({
-    ...row,
     id: row.worktreeId,
-    instanceId: row.worktreeInstanceId
+    instanceId: row.worktreeInstanceId,
+    hostId: row.hostId,
+    savedLineage: row.savedLineage
   }))
   const parents = resolveWorktreeLineageParents(rows, (row) => row.savedLineage)
   for (const row of rows) {

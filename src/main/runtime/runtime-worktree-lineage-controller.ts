@@ -159,7 +159,7 @@ export class RuntimeWorktreeLineageController {
       }
       if (
         lineage.parentStore === 'external' &&
-        instanceIdOf(cursor) === lineage.worktreeInstanceId
+        (!lineage.worktreeInstanceId || instanceIdOf(cursor) === lineage.worktreeInstanceId)
       ) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_CONTEXT_CONFLICT',
@@ -167,8 +167,9 @@ export class RuntimeWorktreeLineageController {
         )
       }
       if (
-        instanceIdOf(cursor) !== lineage.worktreeInstanceId ||
-        instanceIdOf(lineage.parentWorktreeId) !== lineage.parentWorktreeInstanceId
+        (lineage.worktreeInstanceId && instanceIdOf(cursor) !== lineage.worktreeInstanceId) ||
+        (lineage.parentWorktreeInstanceId &&
+          instanceIdOf(lineage.parentWorktreeId) !== lineage.parentWorktreeInstanceId)
       ) {
         break
       }
