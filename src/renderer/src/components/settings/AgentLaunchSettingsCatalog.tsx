@@ -171,7 +171,7 @@ export function AgentLaunchSettingsCatalog({
     argsOverride: typed
       ? (typed.userArgs[agent.id] ?? '')
       : resolveTuiAgentLaunchArgs(agent.id, settings),
-    launchArgs: settings.agentDefaultArgs[agent.id] ?? '',
+    launchArgs: typed ? (settings.agentDefaultArgs[agent.id] ?? '') : undefined,
     envOverride: !local
       ? {}
       : typed

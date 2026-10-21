@@ -68,6 +68,17 @@ beforeEach(() => {
 })
 
 describe('host launch settings form', () => {
+  it('shows resolved launch defaults in a collapsed legacy host row', async () => {
+    transport.read.mockResolvedValue(projectAgentLaunchSettings({ agentDefaultArgs: {} }))
+    render(pane(17))
+    const installed = (await screen.findByText('Installed')).closest('section')
+    if (!installed) {
+      throw new Error('missing installed agents section')
+    }
+    expect(within(installed).getByText('--dangerously-skip-permissions')).toBeTruthy()
+    expect(transport.mutate).not.toHaveBeenCalled()
+  })
+
   it.each([true, false])(
     'offers automatic permissions only when supported: %s',
     async (supported) => {
