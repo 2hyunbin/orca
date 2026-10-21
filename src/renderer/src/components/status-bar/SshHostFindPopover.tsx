@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import { useRef, useState, type RefObject } from 'react'
 import {
   Command,
   CommandEmpty,
@@ -31,6 +31,7 @@ export function SshHostFindPopover({
   anchorRef: RefObject<HTMLButtonElement | null>
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
+  const dismissedByPointerRef = useRef(false)
   // Why own filtering: cmdk would mount and score an item per host, the DOM cost this avoids.
   const { matches, moreCount } = open
     ? findSshHostMatches(targets, query)
@@ -47,7 +48,25 @@ export function SshHostFindPopover({
       }}
     >
       <PopoverAnchor virtualRef={anchorRef} />
-      <PopoverContent side="top" align="start" className="w-[min(20rem,calc(100vw-1rem))] p-0">
+      <PopoverContent
+        side="top"
+        align="start"
+        className="w-[min(20rem,calc(100vw-1rem))]"
+        onOpenAutoFocus={() => {
+          dismissedByPointerRef.current = false
+        }}
+        onPointerDownOutside={() => {
+          dismissedByPointerRef.current = true
+        }}
+        onCloseAutoFocus={(event) => {
+          // Why: an anchor is not a trigger, so Radix has nowhere to return focus; a keyboard
+          // close goes back to the status button, a click elsewhere keeps what was clicked.
+          event.preventDefault()
+          if (!dismissedByPointerRef.current) {
+            anchorRef.current?.focus()
+          }
+        }}
+      >
         <Command shouldFilter={false}>
           <CommandInput
             value={query}

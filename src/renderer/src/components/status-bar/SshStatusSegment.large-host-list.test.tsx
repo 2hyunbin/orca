@@ -129,6 +129,17 @@ describe('the status menu with a very large imported SSH host list', () => {
     expect(screen.getByText('No SSH hosts match.')).toBeTruthy()
   })
 
+  it('returns focus to the status button when the search is closed from the keyboard', async () => {
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Find among/ }))
+    const search = await screen.findByRole('combobox')
+    search.focus()
+    fireEvent.keyDown(search, { key: 'Escape' })
+    await vi.waitFor(() => expect(screen.queryByRole('combobox')).toBeNull())
+    const trigger = screen.getByRole('button', { name: 'Remote host connection status' })
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
+
   it('offers no search when every idle host fits', () => {
     state.sshTargetLabels = new Map([['ssh-1', 'solo']])
     state.sshConnectionStates = new Map()
