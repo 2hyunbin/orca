@@ -1,5 +1,4 @@
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import { useAppStore } from '@/store'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
@@ -103,8 +102,6 @@ export async function runSourceControlAgentActionStart({
       notifyLaunchAccepted()
     }
   } else if (worktreeId) {
-    // An agent the user launches is this window's choice of tab (desktop-tab-choice).
-    useAppStore.getState().recordDesktopTabChoice?.(worktreeId)
     const result = launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),
       agent: selectedAgent,

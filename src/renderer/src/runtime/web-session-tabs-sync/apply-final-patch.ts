@@ -1,3 +1,4 @@
+import { withDesktopTabChoice } from '../../store/slices/tabs/desktop-tab-choice'
 import { collectCollidingRetractionPaneKeys } from './retraction-pane-ownership'
 import type { WebSessionTabsSyncState } from './state'
 import type { applyActiveStateUpdates } from './apply-active-state'
@@ -91,7 +92,13 @@ export function buildWebSessionTabsFinalPatch(
     mirroredTerminalIds
   )
 
+  const chosen =
+    context.callerFocusIntentTab &&
+    context.nextUnifiedTabs?.find((tab) => tab.id === context.nextActiveUnifiedTabId)
   const patch: Partial<WebSessionTabsSyncState> = {
+    ...(chosen
+      ? { desktopLayoutView: withDesktopTabChoice(state.desktopLayoutView, worktreeId, chosen) }
+      : {}),
     ...agentStatusPatch,
     ...retractedTabSweepPatch,
     ...remirroredClosedTabLiftPatch,

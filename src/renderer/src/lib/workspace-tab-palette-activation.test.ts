@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => {
     activeGroupIdByWorktree: Record<string, string>
     getKnownWorktreeById: ReturnType<typeof vi.fn>
     focusGroup: ReturnType<typeof vi.fn>
-    recordDesktopTabChoice: ReturnType<typeof vi.fn>
     activateTab: ReturnType<typeof vi.fn>
     setActiveTab: ReturnType<typeof vi.fn>
     setActiveTabType: ReturnType<typeof vi.fn>
@@ -54,7 +53,6 @@ const mocks = vi.hoisted(() => {
     activeGroupIdByWorktree: { 'wt-1': 'group-1' },
     getKnownWorktreeById: vi.fn(),
     focusGroup: vi.fn(),
-    recordDesktopTabChoice: vi.fn(),
     activateTab: vi.fn(),
     setActiveTab: vi.fn(),
     setActiveTabType: vi.fn(),
@@ -72,6 +70,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/store', () => ({
   useAppStore: {
+    setState: vi.fn(),
     getState: () => mocks.store
   }
 }))

@@ -2,8 +2,6 @@ import { structuredLaunchSlotIds } from './structured-agent-session-launch-persi
 import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { WorkspaceSessionSnapshot } from './workspace-session'
-import type { AppState } from '../store'
-import { unchosenCreationAgent } from '../store/slices/tabs/desktop-tab-choice'
 
 type PersistedUnifiedTabSessionData = Pick<
   WorkspaceSessionState,
@@ -35,7 +33,7 @@ function buildPersistedGroupsForWorktree(
   tabs: Tab[],
   groups: TabGroup[],
   worktreeId: string,
-  savesShownTab: boolean
+  choices: Record<string, { activeTabId: string | null }> | undefined
 ): TabGroup[] {
   const validTabIds = new Set(tabs.map((tab) => tab.id))
   const tabIdsByGroup = new Map<string, string[]>()
@@ -53,8 +51,9 @@ function buildPersistedGroupsForWorktree(
         ...(tabIdsByGroup.get(group.id) ?? [])
       ])
       const tabOrder = Array.from(orderedTabIds)
-      const activeTabId =
-        savesShownTab && group.activeTabId && validTabIds.has(group.activeTabId)
+      const activeTabId = choices
+        ? (choices[group.id]?.activeTabId ?? null)
+        : group.activeTabId && validTabIds.has(group.activeTabId)
           ? group.activeTabId
           : null
       return {
@@ -64,17 +63,18 @@ function buildPersistedGroupsForWorktree(
         recentTabIds: group.recentTabIds?.filter((tabId) => validTabIds.has(tabId))
       }
     })
-    .filter((group) => group.tabOrder.length > 0)
+    .filter((group) => group.tabOrder.length > 0 || group.activeTabId !== null)
 }
 
 export function buildPersistedUnifiedTabSessionData(
   snapshot: Pick<
     WorkspaceSessionSnapshot,
-    'activeGroupIdByWorktree' | 'groupsByWorktree' | 'layoutByWorktree' | 'unifiedTabsByWorktree'
-  > &
-    // Read from the live store the payload is built from; every pick also activates its tab,
-    // which is what schedules the write.
-    Partial<Pick<AppState, 'desktopTabChoices' | 'folderWorkspaces' | 'worktreesByRepo'>>
+    | 'activeGroupIdByWorktree'
+    | 'groupsByWorktree'
+    | 'layoutByWorktree'
+    | 'unifiedTabsByWorktree'
+    | 'desktopLayoutView'
+  >
 ): PersistedUnifiedTabSessionData {
   const unifiedTabs: WorkspaceSessionState['unifiedTabs'] = {}
   const tabGroups: WorkspaceSessionState['tabGroups'] = {}
@@ -87,22 +87,34 @@ export function buildPersistedUnifiedTabSessionData(
   const worktreeIds = new Set([
     ...Object.keys(sourceTabs),
     ...Object.keys(sourceGroups),
-    ...Object.keys(sourceLayouts)
+    ...Object.keys(sourceLayouts),
+    ...Object.keys(snapshot.desktopLayoutView?.groups ?? {})
   ])
 
   for (const worktreeId of worktreeIds) {
     const tabs = sourceTabs[worktreeId] ?? []
-    if (tabs.length === 0 && structuredLaunchSlotIds(worktreeId).size === 0) {
+    const rawGroups = snapshot.desktopLayoutView?.groups[worktreeId]
+    if (
+      tabs.length === 0 &&
+      !Object.values(rawGroups ?? {}).some((group) => group.activeTabId) &&
+      structuredLaunchSlotIds(worktreeId).size === 0
+    ) {
       continue
     }
 
-    // Why: a derived default is not this window's choice; saved, it would restore as one and
-    // pin an interim Setup over the agent that arrives after a reload.
     const groups = buildPersistedGroupsForWorktree(
       tabs,
-      sourceGroups[worktreeId] ?? [],
+      [
+        ...(sourceGroups[worktreeId] ?? []),
+        ...Object.entries(rawGroups ?? {}).flatMap(([id, choice]) =>
+          sourceGroups[worktreeId]?.some((group) => group.id === id)
+            ? []
+            : [{ id, worktreeId, tabOrder: [], ...choice }]
+        )
+      ],
       worktreeId,
-      !unchosenCreationAgent(snapshot, worktreeId)
+      snapshot.desktopLayoutView?.groups[worktreeId] ??
+        (snapshot.desktopLayoutView ? {} : undefined)
     )
     if (groups.length === 0) {
       continue
@@ -110,13 +122,19 @@ export function buildPersistedUnifiedTabSessionData(
 
     const groupIds = new Set(groups.map((group) => group.id))
     const persistedTabs = tabs.filter((tab) => groupIds.has(tab.groupId))
-    if (persistedTabs.length === 0 && structuredLaunchSlotIds(worktreeId).size === 0) {
+    if (
+      persistedTabs.length === 0 &&
+      !groups.some((group) => group.activeTabId) &&
+      structuredLaunchSlotIds(worktreeId).size === 0
+    ) {
       continue
     }
 
     unifiedTabs[worktreeId] = persistedTabs
     tabGroups[worktreeId] = groups
-    const activeGroupId = sourceActiveGroups[worktreeId]
+    const activeGroupId =
+      snapshot.desktopLayoutView?.activeGroupIdByWorktree?.[worktreeId] ??
+      sourceActiveGroups[worktreeId]
     activeGroupIdByWorktree[worktreeId] =
       activeGroupId && groupIds.has(activeGroupId) ? activeGroupId : groups[0].id
     const prunedLayout = sourceLayouts[worktreeId]

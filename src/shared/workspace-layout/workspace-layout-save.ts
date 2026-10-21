@@ -79,7 +79,7 @@ function saveWorkspace(
       return {
         id: group.id,
         worktreeId,
-        activeTabId: activeTabId && group.tabOrder.includes(activeTabId) ? activeTabId : null,
+        activeTabId: activeTabId ?? null,
         tabOrder: group.tabOrder,
         ...(selection?.recentTabIds
           ? {

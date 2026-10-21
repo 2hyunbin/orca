@@ -5,7 +5,12 @@ import {
   withoutPendingHandle,
   withoutPendingTabId
 } from './pending-session-selection'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
+import { sessionWorktreeRecordRead } from './mobile-session-read-operations'
+import {
+  findWorkspaceCreationTab,
+  SESSION_TAB_IDENTITY
+} from '../../../src/shared/workspace-creation-tab'
 import {
   getTerminalRecordsFromSessionTabs,
   mergeTerminalRecordsByCurrentOrder,
@@ -56,6 +61,12 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
     creatingTerminalRef,
     setCreating
   } = scope
+  const visit = useMemo<{
+    agent?: string
+    first: MobileSessionTab[] | null
+    latest: SessionTabsResult | null
+    seenMatch: boolean
+  }>(() => ({ first: null, latest: null, seenMatch: false }), [scope.hostId, scope.worktreeId])
   const applySessionTabs = useCallback(
     (result: SessionTabsResult): SessionTabsApplyOutcome<MobileSessionTab> => {
       const diagnostics = terminalDiagnosticsRef.current
@@ -63,6 +74,18 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
       if (!acceptSessionSnapshot(result, appliedSnapshotMarkerRef.current)) {
         return { accepted: false }
       }
+      visit.first ??= result.tabs
+      visit.latest = result
+      const creationMatch = findWorkspaceCreationTab(
+        result.tabs,
+        visit.agent,
+        SESSION_TAB_IDENTITY.agentOf
+      )
+      const acceptCreationArrival =
+        isViewerProjectedSnapshot(result.publicationEpoch) &&
+        !visit.seenMatch &&
+        Boolean(creationMatch?.isActive)
+      visit.seenMatch ||= creationMatch !== undefined
       const applicationRevision = ++appliedSessionTabsRevisionRef.current
       let nextTabs = applyClosedTabTombstones(
         result.tabs,
@@ -149,7 +172,7 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
         pendingActiveSessionTabId,
         selectedSessionTabId: selectedSessionTabIdRef.current,
         navigationIntent: result.navigationIntent,
-        viewerProjection: isViewerProjectedSnapshot(result.publicationEpoch)
+        acceptCreationArrival
       })
       let active = resolved.activeTab
       let selectionSource: string = resolved.selectionSource
@@ -237,8 +260,37 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
       }
       return outcome
     },
-    [defaultTerminalHandlesToLiveInput, subscribeToTerminal, unsubscribeTerminal]
+    [defaultTerminalHandlesToLiveInput, subscribeToTerminal, unsubscribeTerminal, visit]
   )
+  useEffect(() => {
+    const client = scope.client
+    if (!client) {
+      return
+    }
+    let stale = false
+    void sessionWorktreeRecordRead
+      .request(client, { worktree: `id:${scope.worktreeId}` })
+      .then((reply) => {
+        if (stale) {
+          return
+        }
+        const read = sessionWorktreeRecordRead.interpret(reply)
+        if (!read.accepted) {
+          return
+        }
+        visit.agent = read.value?.createdWithAgent
+        visit.seenMatch ||=
+          findWorkspaceCreationTab(visit.first ?? [], visit.agent, SESSION_TAB_IDENTITY.agentOf) !==
+          undefined
+        if (visit.latest) {
+          applySessionTabs(visit.latest)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      stale = true
+    }
+  }, [applySessionTabs, scope.client, scope.worktreeId, scope.hostId, visit])
   return {
     applySessionTabs
   }

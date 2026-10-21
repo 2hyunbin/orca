@@ -1,3 +1,4 @@
+import { chooseWorkspaceTabInStore } from '@/store/slices/tabs/desktop-tab-choice'
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import type { OpenFile } from '../types/open-file'
@@ -76,6 +77,9 @@ export function createOpenFileAction(
     const view = (get().unifiedTabsByWorktree?.[editorItemWorktreeId] ?? []).find(
       (tab) => tab.id === editorItemViewStateId && tab.entityId === scratch.editorItemFileId
     )
+    if (view && options?.selection !== 'none' && options?.selection !== 'background') {
+      chooseWorkspaceTabInStore(editorItemWorktreeId, view.id, { getState: get, setState: set })
+    }
     return {
       fileId: scratch.editorItemFileId,
       result: view
@@ -88,11 +92,9 @@ export function createOpenFileAction(
   // choice of tab in that workspace (desktop-tab-choice).
   return {
     openFile: (file, options) => {
-      get().recordDesktopTabChoice?.(file.worktreeId)
       return open(file, options, null).fileId
     },
     openFileForLink: (file, options, intent) => {
-      get().recordDesktopTabChoice?.(file.worktreeId)
       const { result } = open(file, { ...options, focusEditor: true }, intent)
       // Why: created and reused views must land identically; creating in another group leaves focus behind.
       if (result) {

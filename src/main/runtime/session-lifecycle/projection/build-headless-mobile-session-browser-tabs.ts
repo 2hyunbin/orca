@@ -1,14 +1,11 @@
-import { OrcaRuntimeWithPersistTerminalSurfaceRetirements } from '../../session-tabs/terminal-surface-retirements'
+import { OrcaRuntimeWithClientSessionTabProjection } from './client-session-tab-projection'
 import type {
   RuntimeMobileSessionBrowserTab,
-  RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../../../shared/runtime-types'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-registry'
-import { holdAgentSessionInventory } from '../../structured-agent-session-inventory-hold'
 import type { Tab } from '../../../../shared/tab-types'
 import {
   captureTerminalCloseRequest,
@@ -28,7 +25,7 @@ import { captureAcknowledgedTerminalTabRetirement } from '../../workspace-sessio
 import { closeLeafOrTab } from '../../../persistence/terminal-topology/terminal-topology-commit'
 import { markAgentLaunchesClosedByUser } from '../../../agent-launch/agent-launch-pane-attachment'
 
-export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithPersistTerminalSurfaceRetirements {
+export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithClientSessionTabProjection {
   // Why: headless serve backs browser panes with offscreen WebContents that live
   // only in the BrowserManager, never in a renderer graph. Without surfacing them
   // as session tabs, a session.tabs snapshot (e.g. on terminal open) prunes the
@@ -286,32 +283,6 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
         changeSequence
       )
     }
-  }
-
-  /**
-   * Answers one client's session-tabs question: whether this runtime has taken back *that* client's
-   * client-hosted pages yet and can say which chats exist, then that client's own tab selection.
-   *
-   * The holds are decided here and nowhere else, and each is set or cleared rather than only set,
-   * so a frame built for one client can never carry another client's, or an earlier, answer.
-   */
-  protected projectMobileSessionTabsForClient(
-    result: RuntimeMobileSessionTabsResult,
-    clientNavigationId?: string
-  ): RuntimeMobileSessionTabsResult {
-    const scope = parseWorkspaceKey(result.worktree)
-    return this.clientSessionTabSelections.project(
-      this.withSessionTabsHolds(result, clientNavigationId),
-      clientNavigationId,
-      scope?.type === 'folder'
-        ? this.store?.getFolderWorkspace?.(scope.folderWorkspaceId)?.createdWithAgent
-        : this.store?.getWorktreeMeta?.(result.worktree)?.createdWithAgent
-    )
-  }
-
-  protected withSessionTabsHolds(result: RuntimeMobileSessionTabsResult, navigationId?: string) {
-    const held = this.clientHostedPageReconciliation.holdFor(result, navigationId, Date.now())
-    return holdAgentSessionInventory(held, this.structuredAgentSessionInventoryUnverifiable)
   }
 
   protected async refreshMobileSessionPtyRecords(

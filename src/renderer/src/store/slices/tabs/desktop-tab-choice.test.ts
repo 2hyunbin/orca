@@ -1,3 +1,6 @@
+import { desktopChosenTabId } from './desktop-tab-choice'
+import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
+import type { AppState } from '@/store/types'
 import { describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import type { RuntimeMobileSessionTabsResult } from '../../../../../shared/runtime-types'
@@ -13,8 +16,6 @@ import { buildLayoutFrameSlices } from '../../workspace-layout-frame-slices'
 import { createStoreSessionMockApi } from '../store-session-test-harness'
 import { createTestStore } from '../store-test-helpers'
 import { deriveActiveSurfaceForWorktree } from './tabs-surface'
-import { useAppStore } from '@/store'
-import { createNewTerminalTab } from '@/components/terminal/terminal-tab-create'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
@@ -35,7 +36,7 @@ const worktreesByRepo = {
     },
     makeWorktree(OTHER, '/workspace/where-the-desktop-is')
   ]
-}
+} satisfies AppState['worktreesByRepo']
 const chat = { type: 'agent-session', id: 'chat-1', sessionId: 's-1', agent: 'claude' } as const
 const chatArrives = {
   worktree: WT,
@@ -43,6 +44,7 @@ const chatArrives = {
   snapshotVersion: 1,
   activeTabId: chat.id,
   activeTabType: 'agent-session',
+  activeGroupId: null,
   tabs: [{ ...chat, title: 'Claude', isActive: false }]
 } satisfies RuntimeMobileSessionTabsResult
 type Saved = ReturnType<typeof buildWorkspaceSessionPayload>
@@ -77,9 +79,14 @@ function shownByFrames(saved: Saved, choices: ReturnType<typeof reloaded>) {
 
 describe('a workspace this window has not chosen a tab in', () => {
   // The bug: a phone-created workspace opened on Setup on the desktop, never on its agent chat.
-  it.each([false, true])(
-    'opens on its late agent chat across a reload, unless Setup was clicked: %s',
-    (clickedSetup) => {
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true]
+  ])(
+    'opens on its late agent across a reload (picked=%s, terminal=%s)',
+    (clickedSetup, terminal) => {
       const store = createTestStore()
       store.setState({ worktreesByRepo, activeWorktreeId: OTHER, activeTabId: 'other-terminal' })
       const setup = store.getState().createTab(WT, undefined, undefined, {
@@ -88,15 +95,45 @@ describe('a workspace this window has not chosen a tab in', () => {
       })
       if (clickedSetup) {
         // A click on the Setup already shown is still this window's choice.
-        store.getState().recordDesktopTabChoice(WT)
-        store.getState().activateTab(setup.id, { worktreeId: WT })
+        chooseWorkspaceTab(WT, setup.id, store)
       }
 
+      if (!clickedSetup) {
+        store.getState().openFile(
+          {
+            filePath: '/workspace/background.md',
+            relativePath: 'background.md',
+            worktreeId: WT,
+            language: 'markdown',
+            mode: 'edit'
+          },
+          { selection: 'background' }
+        )
+        expect(desktopChosenTabId(store.getState(), WT)).toBeNull()
+      }
       // Saved and reloaded while only Setup exists; then the chat arrives.
       const before = reloaded(buildWorkspaceSessionPayload(store.getState()))
-      const projected = projectLocalStructuredSessionTabs(chatArrives)
+      const projected = terminal
+        ? {
+            ...chatArrives,
+            activeTabType: 'terminal' as const,
+            tabs: [
+              {
+                type: 'terminal' as const,
+                id: 'agent::leaf',
+                parentTabId: 'agent',
+                leafId: 'leaf',
+                title: 'Claude',
+                launchAgent: 'claude',
+                terminal: 'pty-agent',
+                status: 'ready' as const,
+                isActive: false
+              }
+            ]
+          }
+        : projectLocalStructuredSessionTabs(chatArrives)
       const options = {
-        contentScope: 'agent-session',
+        contentScope: terminal ? 'all' : 'agent-session',
         preserveLocalLayout: true,
         terminalPtyMode: 'local'
       } as const
@@ -104,12 +141,14 @@ describe('a workspace this window has not chosen a tab in', () => {
         ...before,
         ...applyWebSessionTabsSnapshot(before, projected, 'local', 1, options)
       }
-      const chatTab = after.unifiedTabsByWorktree[WT]!.find(
-        (tab) => tab.entityId === chat.sessionId
+      const chatTab = after.unifiedTabsByWorktree[WT]!.find((tab) =>
+        terminal
+          ? tab.contentType === 'terminal' && tab.entityId !== setup.id
+          : tab.entityId === chat.sessionId
       )
       const expected = clickedSetup
         ? { tabId: setup.id, type: 'terminal' }
-        : { tabId: chatTab?.id, type: 'agent-session' }
+        : { tabId: chatTab?.id, type: terminal ? 'terminal' : 'agent-session' }
       expect(shown(after)).toEqual(expected)
       expect([after.activeWorktreeId, after.activeTabId]).toEqual([OTHER, 'other-terminal'])
 
@@ -117,24 +156,33 @@ describe('a workspace this window has not chosen a tab in', () => {
       const resaved = buildWorkspaceSessionPayload(after)
       expect(shown(reloaded(resaved))).toEqual(expected)
       expect(shownByFrames(resaved, after)).toBe(expected.tabId)
-
-      // A terminal the user opens is a choice too: a restart reopens on it, as on main.
-      const repo = {
-        id: REPO_ID,
-        path: '/workspace',
-        displayName: 'repo',
-        badgeColor: '',
-        addedAt: 0
-      }
-      // Data only: the reloaded state's actions write to its own test store.
-      const data = Object.entries(after).filter(([, value]) => typeof value !== 'function')
-      useAppStore.setState({ ...Object.fromEntries(data), repos: [repo] })
-      createNewTerminalTab(WT)
-      const opened = useAppStore.getState().tabsByWorktree[WT]!.at(-1)!.id
-      expect(shown(reloaded(buildWorkspaceSessionPayload(useAppStore.getState())))).toEqual({
-        tabId: opened,
-        type: 'terminal'
-      })
     }
   )
+})
+
+// A transient publisher omission changes display, never the saved choice.
+it('returns to a temporarily absent explicit tab after saving and reloading its fallback', () => {
+  const store = createTestStore()
+  store.setState({ worktreesByRepo, activeWorktreeId: OTHER, activeTabId: 'other-terminal' })
+  store.getState().createTab(WT, undefined, undefined, { activate: false })
+  const picked = store.getState().createTab(WT, undefined, undefined, { activate: false })
+  chooseWorkspaceTab(WT, picked.id, store)
+  const present = store.getState().unifiedTabsByWorktree[WT]!
+  const terminals = store.getState().tabsByWorktree[WT]!
+  store.setState({
+    unifiedTabsByWorktree: { [WT]: present.filter((tab) => tab.entityId !== picked.id) }
+  })
+  store.getState().reconcileWorktreeTabModel(WT)
+  const saved = buildWorkspaceSessionPayload(store.getState())
+  expect(saved.tabGroups?.[WT]?.some((group) => group.activeTabId === picked.id)).toBe(true)
+  const restored = createTestStore()
+  restored.setState({ worktreesByRepo, tabsByWorktree: saved.tabsByWorktree })
+  restored.getState().hydrateTabsSession(saved)
+  expect(desktopChosenTabId(restored.getState(), WT)).toBe(picked.id)
+  restored.setState({
+    unifiedTabsByWorktree: { [WT]: present },
+    tabsByWorktree: { [WT]: terminals }
+  })
+  restored.getState().reconcileWorktreeTabModel(WT)
+  expect(shown(restored.getState()).tabId).toBe(picked.id)
 })

@@ -23,7 +23,7 @@ import { ownsGlobalSelection } from '../global-selection-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { desktopCreationDefaultTab, unchosenCreationAgent } from '../slices/tabs/desktop-tab-choice'
+import { desktopCreationDefaultTab } from '../slices/tabs/desktop-tab-choice'
 import {
   recordCreatedTerminalTabInLayoutOwner,
   terminalTabCreateCommand,
@@ -221,10 +221,11 @@ export function createTerminalTabCreationActions(
         // only: no focus, history or choice is recorded.
         const shown =
           shouldActivate ||
-          (!existingTerminalTab &&
-            options?.launchAgent !== undefined &&
-            unchosenCreationAgent(s, worktreeId) === options.launchAgent &&
-            !desktopCreationDefaultTab(s, worktreeId, existingUnifiedTabs))
+          desktopCreationDefaultTab(
+            { ...s, tabsByWorktree: { ...s.tabsByWorktree, [worktreeId]: [...existing, tab] } },
+            worktreeId,
+            [...existingUnifiedTabs, unifiedTab]
+          )?.id === unifiedTab.id
         const nextGroupOrder = dedupeTabOrder([...cleanedGroupOrder, unifiedTab.id])
         const nextRecent = shouldActivate
           ? pushRecentTabId(sanitizeRecentTabIds(group.recentTabIds, nextGroupOrder), unifiedTab.id)

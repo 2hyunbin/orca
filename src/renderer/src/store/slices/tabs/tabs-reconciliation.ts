@@ -4,6 +4,7 @@ import type { Tab } from '../../../../../shared/tab-types'
 import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order'
 import { ensureGroup, sanitizeRecentTabIds, updateGroup } from '../tab-group-state'
 import { pruneTabGroupLayoutForGroups } from '../tabs-hydration'
+import { activeSurfacePatchMatchesState, buildActiveSurfacePatch } from './tabs-surface'
 import { desktopCreationDefaultTab } from './desktop-tab-choice'
 import {
   buildOrphanTerminalCleanupPatch,
@@ -150,17 +151,17 @@ export function projectWorktreeTabModelReconciliation(
     const slots = structuredLaunchSlotIds(worktreeId, group.id)
     const tabOrder = group.tabOrder.filter((tabId) => validTabIds.has(tabId) || slots.has(tabId))
     const realOrder = tabOrder.filter((id) => validTabIds.has(id))
-    const fillsCreationTab =
-      !(group.activeTabId && validTabIds.has(group.activeTabId)) &&
-      creationTab !== undefined &&
-      realOrder.includes(creationTab.id)
+    const fillsCreationTab = creationTab !== undefined && realOrder.includes(creationTab.id)
     creationGroupId = fillsCreationTab ? group.id : creationGroupId
+    const rawTabId = state.desktopLayoutView?.groups[worktreeId]?.[group.id]?.activeTabId
     const activeTabId =
-      group.activeTabId && validTabIds.has(group.activeTabId)
-        ? group.activeTabId
+      rawTabId && validTabIds.has(rawTabId)
+        ? rawTabId
         : fillsCreationTab
           ? creationTab.id
-          : (realOrder[0] ?? null)
+          : group.activeTabId && validTabIds.has(group.activeTabId)
+            ? group.activeTabId
+            : (realOrder[0] ?? null)
     const tabOrderUnchanged =
       tabOrder.length === group.tabOrder.length &&
       tabOrder.every((tabId, index) => tabId === group.tabOrder[index])
@@ -282,6 +283,17 @@ export function projectWorktreeTabModelReconciliation(
         ? buildOrphanTerminalCleanupPatch(state, worktreeId, orphanTerminalIds)
         : {})
     }
+  }
+
+  const display = buildActiveSurfacePatch({ ...state, ...patch }, worktreeId, nextActiveGroupId)
+  if (state.activeWorktreeId !== worktreeId) {
+    display.activeTabId = state.activeTabId
+    display.activeTabType = state.activeTabType
+    display.activeFileId = state.activeFileId
+    display.activeBrowserTabId = state.activeBrowserTabId
+  }
+  if (!activeSurfacePatchMatchesState(state, worktreeId, display)) {
+    patch = { ...patch, ...display }
   }
 
   return {

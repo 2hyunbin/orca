@@ -1,3 +1,4 @@
+import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { useAppStore } from '../store'
 import { getActiveTabNavOrder } from '@/components/tab-bar/group-tab-order'
 import {
@@ -60,8 +61,8 @@ function resolveCycleContext(): CycleContext | null {
  */
 export function activateCyclableTab(store: AppStoreState, next: TypeCyclableTab): void {
   const worktreeId = store.activeWorktreeId
-  if (worktreeId) {
-    store.recordDesktopTabChoice?.(worktreeId)
+  if (worktreeId && next.tabId) {
+    chooseWorkspaceTab(worktreeId, next.tabId)
   }
   if (next.type === 'terminal') {
     store.setActiveTab(next.id)
@@ -376,6 +377,9 @@ export function handleSwitchTerminalTab(direction: number): boolean {
   // work in components that react to active-tab changes.
   if (next.id === store.activeTabId && store.activeTabType === 'terminal') {
     return false
+  }
+  if (next.tabId) {
+    chooseWorkspaceTab(worktreeId, next.tabId)
   }
   store.setActiveTab(next.id)
   store.setActiveTabType('terminal', worktreeId)

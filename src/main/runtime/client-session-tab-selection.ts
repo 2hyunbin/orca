@@ -10,11 +10,6 @@ import {
 } from './client-session-tab-closed-selection'
 import type { StoredClientSessionTabSelection } from './client-session-tab-closed-selection'
 import { normalizePersistedMobileClientTabSelections } from './client-session-tab-selection-persistence'
-import {
-  resolveWorkspaceViewerTab,
-  SESSION_TAB_IDENTITY
-} from '../../shared/workspace-creation-tab'
-
 export type ClientSessionTabSelection = {
   activeTabId: string | null
   activeGroupId: string | null
@@ -102,7 +97,10 @@ export function projectClientSessionTabSelection(
   const activeTopLevelTabId = activeTab ? topLevelTabId(activeTab) : null
   const activeTabIdByGroupId: Record<string, string> = {}
   const tabGroups = snapshot.tabGroups?.map((group) => {
-    const selected = selection.activeTabIdByGroupId[group.id]
+    const selected =
+      activeTopLevelTabId && group.tabOrder.includes(activeTopLevelTabId)
+        ? activeTopLevelTabId
+        : selection.activeTabIdByGroupId[group.id]
     const activeTabId =
       (selected && group.tabOrder.includes(selected) ? selected : null) ?? group.tabOrder[0] ?? null
     if (activeTabId) {
@@ -195,8 +193,7 @@ export class ClientSessionTabSelectionStore {
 
   project(
     snapshot: RuntimeMobileSessionTabsResult,
-    clientNavigationId?: string,
-    createdWithAgent?: string
+    clientNavigationId?: string
   ): RuntimeMobileSessionTabsResult {
     if (!clientNavigationId) {
       return snapshot
@@ -219,15 +216,9 @@ export class ClientSessionTabSelectionStore {
         snapshotVersion: snapshot.snapshotVersion + state.revision
       }
     }
-    // Why: only `shouldPersist` marks a pick; a cached fallback is never one, nor promoted to one.
-    const viewerTab = resolveWorkspaceViewerTab(
-      closed.snapshot.tabs,
-      { chosenTabId: state.shouldPersist ? state.selection.activeTabId : null, createdWithAgent },
-      SESSION_TAB_IDENTITY
-    )
     const projected = projectClientSessionTabSelection(
       closed.snapshot,
-      viewerTab ? { ...state.selection, activeTabId: viewerTab.id } : state.selection
+      state.shouldPersist ? state.selection : deriveClientSessionTabSelection(closed.snapshot)
     )
     // Why: a browser guest process swap drops its tab for one snapshot; the topology fallback
     // must not overwrite (and persist) the device's explicit pick, or focus never returns.

@@ -65,8 +65,6 @@ export function runQuickCommandInNewTab({
     if (!command.prompt.trim() || !supportsTerminalAgentQuickCommand(command.agent)) {
       return null
     }
-    // An agent the user launches is this window's choice of tab (desktop-tab-choice).
-    useAppStore.getState().recordDesktopTabChoice?.(worktreeId)
     const result = launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),
       agent: command.agent,

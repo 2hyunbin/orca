@@ -1,3 +1,4 @@
+import { toVisibleTabType } from '../../../shared/tab-types'
 // Today's store slices for the workspaces main's layout frames hold, built from the frames, the
 // content facts beside them and this window's view (design phase E2a). Not called yet: the switch
 // sets these slices from frames instead of restoring them from disk. Records come from the shared
@@ -40,7 +41,7 @@ export type LayoutFrameSliceInput = {
   /** Whether this window holds an editor file's record: frames carry only edit-mode files'. */
   holdsEditorFile?: (worktreeId: string, fileId: string) => boolean
   /** This window's tab choices: a workspace saved without one opens on its creation tab. */
-  choices?: Pick<AppState, 'desktopTabChoices' | 'worktreesByRepo' | 'folderWorkspaces'>
+  choices?: Pick<AppState, 'desktopLayoutView' | 'worktreesByRepo' | 'folderWorkspaces'>
 }
 
 export type LayoutFrameSlices = Pick<
@@ -142,7 +143,8 @@ function withShownTabs(
       return [
         key,
         groups.map((group) =>
-          group.activeTabId === null && group.tabOrder.length > 0
+          group.tabOrder.length > 0 &&
+          (group.activeTabId === null || (creationTab && group.tabOrder.includes(creationTab.id)))
             ? {
                 ...group,
                 activeTabId:
@@ -217,7 +219,7 @@ export function buildLayoutFrameSlices({
     ...tabs,
     ...migrateHydratedEditorTabsAndGroups(tabs, editor.editorFileIdMigrationsByWorktree)
   }
-  return {
+  const slices: LayoutFrameSlices = {
     tabsByWorktree: rows.tabsByWorktree,
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
@@ -225,6 +227,8 @@ export function buildLayoutFrameSlices({
     groupsByWorktree: withShownTabs(
       { ...editorTabs, tabsByWorktree: rows.tabsByWorktree },
       choices
+        ? { ...choices, desktopLayoutView: view }
+        : { desktopLayoutView: view, worktreesByRepo: {}, folderWorkspaces: [] }
     ),
     openFiles: editor.state.openFiles,
     editorDrafts: editor.state.editorDrafts,
@@ -236,4 +240,20 @@ export function buildLayoutFrameSlices({
     activeBrowserTabIdByWorktree: browser.activeBrowserTabIdByWorktree,
     activeTabTypeByWorktree: browser.activeTabTypeByWorktree
   }
+  for (const key of workspaceKeys) {
+    const selected = desktopCreationDefaultTab(
+      { ...choices, desktopLayoutView: view, tabsByWorktree: rows.tabsByWorktree },
+      key,
+      slices.unifiedTabsByWorktree[key] ?? []
+    )
+    if (selected) {
+      slices.activeGroupIdByWorktree[key] = selected.groupId
+      slices.activeTabTypeByWorktree[key] = toVisibleTabType(selected.contentType)
+      if (selected.contentType === 'terminal' || selected.contentType === 'agent-session') {
+        slices.activeTabIdByWorktree[key] =
+          selected.contentType === 'terminal' ? selected.entityId : selected.id
+      }
+    }
+  }
+  return slices
 }

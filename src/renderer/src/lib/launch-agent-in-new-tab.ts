@@ -1,3 +1,10 @@
+import type { AgentLaunchSurface } from './launch-agent-tab-choice'
+export type { AgentLaunchSurface } from './launch-agent-tab-choice'
+import { launchAgentInNewTab } from './launch-agent-tab-choice'
+export {
+  launchAgentInNewTab,
+  shouldQueueTerminalFocusAfterMenuClose
+} from './launch-agent-tab-choice'
 import type {
   AgentSessionLaunchPlan,
   AgentSessionLaunchRequest
@@ -89,12 +96,6 @@ export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
   onStructuredHostDeclined?: () => StructuredLaunchTerminal
 }
 
-/** `host-published`: the surface opens once its host answers; `local-chat` opened before it did. */
-export type AgentLaunchSurface =
-  | { kind: 'local-terminal'; tabId: string }
-  | { kind: 'local-chat'; tabId: string }
-  | { kind: 'host-published' }
-
 export type LaunchAgentInNewTabResult = {
   surface: AgentLaunchSurface
   startupPlan: AgentStartupPlan
@@ -104,12 +105,6 @@ export type LaunchAgentInNewTabResult = {
   terminalCompletion?: StructuredLaunchTerminal['completion']
   structuredSettlement?: Promise<StructuredAgentLaunchSettlement>
 } | null
-
-export function shouldQueueTerminalFocusAfterMenuClose(
-  result: NonNullable<LaunchAgentInNewTabResult>
-): boolean {
-  return result.surface.kind === 'host-published'
-}
 
 /**
  * Create a new terminal tab and queue the agent's launch command, optionally
@@ -121,7 +116,9 @@ export function shouldQueueTerminalFocusAfterMenuClose(
  *
  * Returns `null` when no startup plan can be built (e.g. a whitespace-only prompt).
  */
-function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgentInNewTabResult {
+export function launchAgentInNewTabInternal(
+  args: LaunchAgentInNewTabArgs
+): LaunchAgentInNewTabResult {
   const {
     agent,
     worktreeId,
@@ -193,7 +190,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     ...(args.promptKeptByCaller ? { promptKeptByCaller: true as const } : {})
   })
   if ('awaited' in route) {
-    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTabInternal)
+    return launchOnceHostAnswered(route, args, startupPlan, launchAgentInNewTab)
   }
   const { plan } = route
   if (plan?.route === 'structured-native-chat') {
@@ -359,5 +356,3 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
     ...(promptDeliveryResult ? { promptDeliveryResult } : {})
   }
 }
-
-export { launchAgentInNewTabInternal as launchAgentInNewTab }

@@ -1,3 +1,4 @@
+import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { useAppStore } from '@/store'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { activateAndRevealWorkspace } from './worktree-activation'
@@ -59,7 +60,7 @@ export function activateSimulatorTabPaletteResult({
 
   const state = useAppStore.getState()
   state.focusGroup(worktreeId, tab.groupId)
-  state.activateTab(tab.id, { worktreeId })
+  chooseWorkspaceTab(worktreeId, tab.id)
   state.setActiveTab(tab.id)
   state.setActiveTabType('simulator', worktreeId)
   return { status: 'activated', tabId: tab.id }

@@ -1,3 +1,4 @@
+import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
@@ -17,7 +18,6 @@ export function createActiveWorkspaceTerminalActions(
       if (!worktreeId) {
         return
       }
-      state.recordDesktopTabChoice?.(worktreeId)
       const workspaceScope = parseWorkspaceKey(worktreeId)
       const worktreeRoute =
         worktreeId === FLOATING_TERMINAL_WORKTREE_ID || workspaceScope?.type === 'folder'
@@ -44,6 +44,7 @@ export function createActiveWorkspaceTerminalActions(
         return
       }
       const terminal = get().createTab(worktreeId, groupId)
+      chooseWorkspaceTab(worktreeId, terminal.id, { getState: get, setState: _set })
       get().setActiveTab(terminal.id)
       get().setActiveTabType('terminal', worktreeId)
       const latest = get()

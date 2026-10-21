@@ -1,3 +1,4 @@
+import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { toast } from 'sonner'
 import { useAppStore } from '../../store'
 import { focusTerminalTabSurface } from '../../lib/focus-terminal-tab-surface'
@@ -37,22 +38,20 @@ export function useTabGroupCreationCommands({
     (state) => state.openNewTerminalTabInActiveWorkspace
   )
 
-  // A tab the user creates from this group is this window's choice of tab (desktop-tab-choice).
-  const pick = (): void => useAppStore.getState().recordDesktopTabChoice?.(worktreeId)
-
   // Why: these stay unmemoized plain lambdas — the original built them inline in the returned commands object.
   return {
     newBrowserTab: () => {
-      pick()
       void openNewBrowserTabInActiveWorkspace(groupId).catch((error) => {
         toast.error(error instanceof Error ? error.message : String(error))
       })
     },
     newSimulatorTab: worktreeState.mobileEmulatorEnabled
       ? () => {
-          pick()
           if (getSimulatorTabForWorktree(worktreeId)) {
-            void ensureSimulatorTab(worktreeId, { surfacePane: true })
+            const opened = ensureSimulatorTab(worktreeId, { surfacePane: true })
+            if (opened) {
+              chooseWorkspaceTab(worktreeId, opened)
+            }
             return
           }
           // Why: mobile simulators are most useful beside the current tab group.
@@ -65,11 +64,9 @@ export function useTabGroupCreationCommands({
         }
       : undefined,
     openEntry: async (args: TabCreateEntryArgs) => {
-      pick()
       await openTabBarEntry(args)
     },
     duplicateBrowserTab: (browserTabId: string, sourceUnifiedTabId: string) => {
-      pick()
       void (async () => {
         const state = useAppStore.getState()
         const tabs = state.browserTabsByWorktree[worktreeId] ?? []
@@ -105,26 +102,24 @@ export function useTabGroupCreationCommands({
           throw new Error('The paired runtime could not duplicate the managed browser tab.')
         }
         // Why no targetGroupId: a source-following duplicate joins the source's live group.
-        createBrowserTab(worktreeId, source.url, {
+        const opened = createBrowserTab(worktreeId, source.url, {
           ...buildDuplicatedBrowserTabOptions(source),
           ...(runtimeEnvironmentId ? { browserRuntimeEnvironmentId: null } : {}),
           afterTabId: sourceUnifiedTabId
         })
+        chooseWorkspaceTab(worktreeId, opened.id)
       })().catch((error) => {
         toast.error(error instanceof Error ? error.message : String(error))
       })
     },
     // Why: target the owning group explicitly; the "+" menu can fire from an unfocused panel without updating global group focus.
     newFileTab: async () => {
-      pick()
       await openNewMarkdownInActiveWorkspace(groupId)
     },
     newTerminalTab: () => {
-      pick()
       void openNewTerminalTabInActiveWorkspace(groupId)
     },
     newTerminalWithShell: (shellOverride: string) => {
-      pick()
       void (async () => {
         const environmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
           useAppStore.getState(),
@@ -142,6 +137,7 @@ export function useTabGroupCreationCommands({
         }
         const tabId = createBrowserUuid()
         createTab(worktreeId, groupId, shellOverride, { id: tabId })
+        chooseWorkspaceTab(worktreeId, tabId)
         setActiveTab(tabId)
         setActiveTabType('terminal', worktreeId)
         focusTerminalTabSurface(tabId)

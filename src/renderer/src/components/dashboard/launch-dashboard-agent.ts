@@ -14,8 +14,6 @@ export function launchDashboardAgent({ worktreeId, agent }: DashboardSpawnAgentA
     return false
   }
   state.setActiveWorktree(worktreeId, executionHostId)
-  // An agent the user launches is this window's choice of tab (desktop-tab-choice).
-  state.recordDesktopTabChoice?.(worktreeId)
   return (
     launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),

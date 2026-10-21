@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { PersistedMobileClientTabSelections } from '../../shared/persisted-state-types'
 import {
@@ -130,15 +130,15 @@ describe('client session-tab selection', () => {
     expect(store.project(initial, 'device-a').activeTabId).toBe('terminal-a::leaf-a')
   })
 
-  it('does not expose host focus when initializing a new paired device', () => {
+  it('cold opens a new paired device on the host shown tab', () => {
     const store = new ClientSessionTabSelectionStore()
     const hostFocusedBrowser = snapshot('browser-unified')
 
     const projected = store.project(hostFocusedBrowser, 'new-device')
 
-    expect(projected.activeTabId).toBe('terminal-a::leaf-a')
-    expect(projected.activeGroupId).toBe('group-left')
-    expect(projected.tabs.find((tab) => tab.isActive)?.id).toBe('terminal-a::leaf-a')
+    expect(projected.activeTabId).toBe('browser-unified')
+    expect(projected.activeGroupId).toBe('group-right')
+    expect(projected.tabs.find((tab) => tab.isActive)?.id).toBe('browser-unified')
   })
 
   it('persists activations and restores them across a store rebuild (host restart)', () => {
@@ -341,47 +341,61 @@ describe('client session-tab selection', () => {
   })
 })
 
-describe('a workspace created with an agent', () => {
-  const terminal = snapshot().tabs.find((tab) => tab.type === 'terminal')
-  const setup = { ...terminal!, id: 'setup::leaf-a', parentTabId: 'setup', isActive: false }
-  const agents = {
-    chat: { type: 'agent-session', id: 'chat', sessionId: 's', agent: 'claude', title: 'Claude' },
-    'agent terminal': { ...setup, id: 'agent::leaf-a', parentTabId: 'agent', launchAgent: 'claude' }
-  } as const
-  // The host-wide snapshot keeps Setup active: a phone create activates nothing on the host.
-  const workspace = (snapshotVersion: number, agent?: (typeof agents)[keyof typeof agents]) => ({
-    ...snapshot(),
-    snapshotVersion,
-    tabGroups: [
-      {
-        id: 'group-left',
-        activeTabId: 'setup',
-        tabOrder: ['setup', ...(agent ? [agent.id.split('::')[0]!] : [])]
-      }
-    ],
-    tabs: agent ? [setup, { ...agent, isActive: false }] : [setup]
-  })
+const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
+await import('./orca-runtime-test-lifecycle.spec')
+const { makeRuntimeStoreWithWorkspaceSession, makeWorktreeMeta, makeFolderWorkspace, store } =
+  await import('./orca-runtime-test-fixtures.spec')
+const { getDefaultWorkspaceSession } = await import('../../shared/constants')
 
-  // The bug: a phone-created workspace opened on Setup, and stayed there when its chat arrived.
-  it.each(Object.entries(agents))('opens on its %s until a viewer picks a tab', (_kind, agent) => {
-    const store = new ClientSessionTabSelectionStore()
-    const shown = (s: ClientSessionTabSelectionStore, version: number, device: string) =>
-      s.project(workspace(version, agent), device, 'claude').activeTabId
+class ViewerProjectionRuntime extends OrcaRuntimeService {
+  project(result: RuntimeMobileSessionTabsResult) {
+    return this.projectMobileSessionTabsForClient(result, 'new-phone')
+  }
+}
 
-    expect(store.project(workspace(1), 'phone', 'claude').activeTabId).toBe(setup.id)
-    store.activate(workspace(1), 'picked-early', setup.id)
-    expect(shown(store, 2, 'phone')).toBe(agent.id)
-    expect(shown(store, 2, 'second-phone')).toBe(agent.id)
-    store.activate(workspace(2, agent), 'phone', setup.id)
-    const restarted = new ClientSessionTabSelectionStore()
-    restarted.hydrate(store.serialize())
-    for (const viewer of [store, restarted]) {
-      expect(shown(viewer, 3, 'phone')).toBe(setup.id)
-      expect(shown(viewer, 3, 'picked-early')).toBe(setup.id)
-      expect(shown(viewer, 3, 'second-phone')).toBe(agent.id)
+it.each(['local', 'ssh:box', 'folder'] as const)(
+  'projects the creation tab using the %s execution owner',
+  (owner) => {
+    const worktree = owner === 'folder' ? 'folder:workspace' : 'repo-1::/same/path'
+    const creator = owner === 'ssh:box' ? 'codex' : 'claude'
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
+    const repo = store.getRepos()[0]!
+    const owned = { ...repo, executionHostId: owner === 'ssh:box' ? owner : ('local' as const) }
+    const metadata = vi.fn((_id: string, host: string) =>
+      makeWorktreeMeta({ createdWithAgent: host === 'ssh:box' ? 'codex' : 'claude' })
+    )
+    const folder = makeFolderWorkspace({ id: 'workspace', createdWithAgent: creator })
+    const runtime = new ViewerProjectionRuntime({
+      ...runtimeStore,
+      getRepo: () => owned,
+      getRepos: () => [owned, { ...repo, executionHostId: 'ssh:other' }],
+      getWorktreeMeta: () => makeWorktreeMeta({ createdWithAgent: 'gemini' }),
+      getWorktreeMetaForHost: metadata,
+      getFolderWorkspace: () => folder,
+      getFolderWorkspaces: () => [folder]
+    })
+    const projected = runtime.project({
+      worktree,
+      publicationEpoch: 'host:1',
+      snapshotVersion: 1,
+      activeTabId: null,
+      activeTabType: 'terminal',
+      activeGroupId: null,
+      tabs: (['claude', 'codex'] as const).map((agent) => ({
+        type: 'agent-session',
+        id: agent,
+        sessionId: agent,
+        agent,
+        title: agent,
+        isActive: false
+      }))
+    })
+    expect(projected.activeTabId).toBe(creator)
+    expect(projected.tabs.find((tab) => tab.isActive)?.id).toBe(creator)
+    if (owner === 'folder') {
+      expect(metadata).not.toHaveBeenCalled()
+    } else {
+      expect(metadata).toHaveBeenCalledWith(worktree, owner)
     }
-    // No creation agent keeps today's topology; closing the agent's tab falls back the same way.
-    expect(store.project(workspace(4, agent), 'other', undefined).activeTabId).toBe(setup.id)
-    expect(store.project(workspace(5), 'second-phone', 'claude').activeTabId).toBe(setup.id)
-  })
-})
+  }
+)

@@ -1,3 +1,4 @@
+import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { useCallback } from 'react'
 import type { Tab } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
@@ -21,17 +22,11 @@ export function useTabGroupActivationCommands({
   groupTabs: Tab[]
   worktreeState: TabGroupWorktreeSnapshot
 }) {
-  const focusGroupForWorktree = useAppStore((state) => state.focusGroup)
-  const recordDesktopTabChoice = useAppStore((state) => state.recordDesktopTabChoice)
-  // Every tab-strip click is this window's choice, including one on the tab already shown.
-  const focusGroup = useCallback(
-    (targetWorktreeId: string, targetGroupId: string) => {
-      recordDesktopTabChoice(targetWorktreeId)
-      focusGroupForWorktree(targetWorktreeId, targetGroupId)
-    },
-    [focusGroupForWorktree, recordDesktopTabChoice]
+  const focusGroup = useAppStore((state) => state.focusGroup)
+  const activateTab = useCallback(
+    (tabId: string) => chooseWorkspaceTab(worktreeId, tabId),
+    [worktreeId]
   )
-  const activateTab = useAppStore((state) => state.activateTab)
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const setActiveTabType = useAppStore((state) => state.setActiveTabType)
   const setActiveFile = useAppStore((state) => state.setActiveFile)
@@ -148,10 +143,10 @@ export function useTabGroupActivationCommands({
 
   const activateAgentSession = useCallback(
     (tabId: string) => {
-      recordDesktopTabChoice(worktreeId)
+      chooseWorkspaceTab(worktreeId, tabId)
       activateStructuredAgentSessionTab({ worktreeId, tabId })
     },
-    [recordDesktopTabChoice, worktreeId]
+    [worktreeId]
   )
 
   return {

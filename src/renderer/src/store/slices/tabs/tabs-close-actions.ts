@@ -1,3 +1,4 @@
+import { withDesktopTabChoice } from './desktop-tab-choice'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import {
@@ -152,7 +153,31 @@ export function createTabsCloseActions(
             (current.tabsByWorktree[worktreeId] ?? []).length === 0 &&
             (current.browserTabsByWorktree[worktreeId] ?? []).length === 0 &&
             !current.openFiles.some((file) => file.worktreeId === worktreeId)
+          const raw = current.desktopLayoutView
+          const closesChoice = raw.groups[worktreeId]?.[tab.groupId]?.activeTabId === tabId
+          const nextChoice = nextTabs.find((candidate) => candidate.id === nextActiveTabId)
+          const desktopLayoutView = !closesChoice
+            ? raw
+            : nextChoice
+              ? withDesktopTabChoice(raw, worktreeId, nextChoice)
+              : {
+                  ...raw,
+                  groups: {
+                    ...raw.groups,
+                    [worktreeId]: {
+                      ...raw.groups[worktreeId],
+                      [tab.groupId]: { activeTabId: null }
+                    }
+                  },
+                  activeTabIdByWorktree: { ...raw.activeTabIdByWorktree, [worktreeId]: null },
+                  activeFileIdByWorktree: { ...raw.activeFileIdByWorktree, [worktreeId]: null },
+                  activeBrowserTabIdByWorktree: {
+                    ...raw.activeBrowserTabIdByWorktree,
+                    [worktreeId]: null
+                  }
+                }
           return {
+            desktopLayoutView,
             unifiedTabsByWorktree: { ...current.unifiedTabsByWorktree, [worktreeId]: nextTabs },
             groupsByWorktree: {
               ...current.groupsByWorktree,

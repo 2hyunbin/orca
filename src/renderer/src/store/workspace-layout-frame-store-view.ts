@@ -27,6 +27,7 @@ import type { AppState } from './types'
 
 export type LayoutFrameStoreViewState = Pick<
   AppState,
+  | 'desktopLayoutView'
   | 'activeRepoId'
   | 'activeWorktreeId'
   | 'activeTabId'
@@ -95,7 +96,8 @@ export function layoutViewAndFactsOfStore(
     unifiedTabsByWorktree,
     groupsByWorktree,
     layoutByWorktree,
-    activeGroupIdByWorktree
+    activeGroupIdByWorktree,
+    desktopLayoutView: state.desktopLayoutView
   })
   // The builders read only these workspaces' entries of the selection maps.
   const view: DesktopLayoutView = {
@@ -178,5 +180,17 @@ export function layoutViewAndFactsOfStore(
       ])
     }
   }
-  return { view, facts }
+  return {
+    view: {
+      ...view,
+      ...state.desktopLayoutView,
+      activeRepoId: view.activeRepoId,
+      activeWorktreeId: view.activeWorktreeId,
+      activeTabId: view.activeTabId,
+      panes: view.panes,
+      lastFocusedAt: view.lastFocusedAt,
+      editorDrafts: view.editorDrafts
+    },
+    facts
+  }
 }

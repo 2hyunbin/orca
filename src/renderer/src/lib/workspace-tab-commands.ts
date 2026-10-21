@@ -1,3 +1,4 @@
+import { chooseWorkspaceTabInStore } from '@/store/slices/tabs/desktop-tab-choice'
 import type { KeybindingContext } from '../../../shared/keybindings'
 import { toVisibleTabType, type Tab } from '../../../shared/tab-types'
 import { useAppStore } from '@/store'
@@ -100,6 +101,15 @@ function resolveCloseTarget(
     return resolveCloseTarget(state, { kind: 'browser-source', sourceId: state.activeBrowserTabId })
   }
   return null
+}
+
+/** An explicit choice, including a redundant click; automatic activation stays display-only. */
+export function chooseWorkspaceTab(
+  worktreeId: string,
+  tabId: string,
+  store: Pick<typeof useAppStore, 'getState' | 'setState'> = useAppStore
+): boolean {
+  return chooseWorkspaceTabInStore(worktreeId, tabId, store)
 }
 
 /** Input adapters describe intent; targeting and tab operations live here. */

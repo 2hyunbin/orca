@@ -1,3 +1,4 @@
+import { emptyLayoutViewRecord } from '../../../../../shared/workspace-layout/workspace-layout-views'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../types'
 import type { TabsSlice } from './tabs-slice-contract'
@@ -18,13 +19,7 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
   groupsByWorktree: {},
   activeGroupIdByWorktree: {},
   layoutByWorktree: {},
-  desktopTabChoices: {},
-  recordDesktopTabChoice: (worktreeId) =>
-    set((state) =>
-      state.desktopTabChoices[worktreeId]
-        ? {}
-        : { desktopTabChoices: { ...state.desktopTabChoices, [worktreeId]: true } }
-    ),
+  desktopLayoutView: emptyLayoutViewRecord(),
   ...createTabsCreateActions(set, get),
   ...createTabsFocusActions(set, get),
   ...createTabsCloseActions(set, get),

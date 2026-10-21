@@ -9,7 +9,9 @@ import {
 import { buildHydratedTabState } from '../tabs-hydration'
 import { projectWorktreeTabModelReconciliation } from './tabs-reconciliation'
 import { createWorktreeTabModelReconciliationBatch } from './tabs-reconciliation-batch'
-import { hydratedDesktopTabChoices } from './desktop-tab-choice'
+import { loadWorkspaceLayoutWithoutReport } from '../../../../../shared/workspace-layout/workspace-layout-load'
+import { nameBasedLoadContext } from '../../../../../shared/workspace-layout/workspace-layout-minted-ids'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host'
 import type { AppState } from '../../types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
@@ -93,18 +95,50 @@ export function createTabsSessionActions(
       }
       addAdditionalValidWorkspaceKeys(validWorktreeIds, options)
       const hydrated = buildHydratedTabState(session, validWorktreeIds)
-      const desktopTabChoices = hydratedDesktopTabChoices(session.tabGroups)
+      const desktopLayoutView = loadWorkspaceLayoutWithoutReport(
+        LOCAL_EXECUTION_HOST_ID,
+        session,
+        nameBasedLoadContext()
+      ).desktopView
       if (!options?.replaceWorkspaceKeys) {
-        set({ ...hydrated, desktopTabChoices })
+        set({ ...hydrated, desktopLayoutView })
         return
       }
       const replaceWorkspaceKeys = new Set(options.replaceWorkspaceKeys)
       set((current) => ({
-        desktopTabChoices: replaceWorkspaceRecordKeys(
-          current.desktopTabChoices,
-          desktopTabChoices,
-          replaceWorkspaceKeys
-        ),
+        desktopLayoutView: {
+          ...current.desktopLayoutView,
+          groups: replaceWorkspaceRecordKeys(
+            current.desktopLayoutView.groups ?? {},
+            desktopLayoutView.groups ?? {},
+            replaceWorkspaceKeys
+          ),
+          activeGroupIdByWorktree: replaceWorkspaceRecordKeys(
+            current.desktopLayoutView.activeGroupIdByWorktree ?? {},
+            desktopLayoutView.activeGroupIdByWorktree ?? {},
+            replaceWorkspaceKeys
+          ),
+          activeTabTypeByWorktree: replaceWorkspaceRecordKeys(
+            current.desktopLayoutView.activeTabTypeByWorktree ?? {},
+            desktopLayoutView.activeTabTypeByWorktree ?? {},
+            replaceWorkspaceKeys
+          ),
+          activeTabIdByWorktree: replaceWorkspaceRecordKeys(
+            current.desktopLayoutView.activeTabIdByWorktree ?? {},
+            desktopLayoutView.activeTabIdByWorktree ?? {},
+            replaceWorkspaceKeys
+          ),
+          activeFileIdByWorktree: replaceWorkspaceRecordKeys(
+            current.desktopLayoutView.activeFileIdByWorktree ?? {},
+            desktopLayoutView.activeFileIdByWorktree ?? {},
+            replaceWorkspaceKeys
+          ),
+          activeBrowserTabIdByWorktree: replaceWorkspaceRecordKeys(
+            current.desktopLayoutView.activeBrowserTabIdByWorktree ?? {},
+            desktopLayoutView.activeBrowserTabIdByWorktree ?? {},
+            replaceWorkspaceKeys
+          )
+        },
         unifiedTabsByWorktree: replaceWorkspaceRecordKeys(
           current.unifiedTabsByWorktree,
           hydrated.unifiedTabsByWorktree,
