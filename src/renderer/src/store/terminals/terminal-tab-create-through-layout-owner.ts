@@ -115,17 +115,17 @@ export function recordCreatedTerminalTabInLayoutOwner(
     start !== undefined &&
     runtimeEnvironmentIdUnlessTwin(state, workspace) === null &&
     windowTabStartsInMain(state, start.tab)
-  const paneKey = makePaneKey(command.tabId, command.leafId)
   const mark = startsInMain
     ? markWindowTabStarting(start.store, command.tabId, command.leafId)
     : null
   // Before the pane mounts: one that captures the startup now must not spawn or paste it itself.
   const startup = start && mark ? state.pendingStartupByTabId[command.tabId] : undefined
-  if (start && mark) {
-    handStartupToMain(workspace, command.tabId, paneKey, startup)
+  if (mark) {
+    handStartupToMain(workspace, command.tabId, makePaneKey(command.tabId, command.leafId), startup)
   }
   const unmark = (): void => {
     if (start && mark) {
+      const paneKey = makePaneKey(command.tabId, command.leafId)
       takeStartupBackFromMain(workspace, command.tabId, paneKey, startup)
       clearWindowTabMark(start.store, paneKey, mark)
     }
