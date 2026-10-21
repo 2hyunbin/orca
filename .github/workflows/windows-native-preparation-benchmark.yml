@@ -7,7 +7,7 @@ on:
         description: Bounded comparison to run on the existing Windows slots.
         type: choice
         default: native-preparation
-        options: [native-preparation, windows-security]
+        options: [native-preparation, windows-security, node-server-workers]
       source_sha:
         description: Exact commit containing this benchmark and the Windows compiler candidate.
         required: true
@@ -26,13 +26,13 @@ env:
 jobs:
   compare:
     name: Native preparation comparison (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ inputs.comparison == 'node-server-workers' && 'orca-windows-11-arm64-8core' || matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        os: [windows-2022, windows-11-arm]
+        os: ${{ fromJSON(inputs.comparison == 'node-server-workers' && '["windows-11-arm"]' || '["windows-2022","windows-11-arm"]') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -50,11 +50,11 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
         with:
           node-version: '24.21.0'
-          native-runtime: none
+          native-runtime: ${{ inputs.comparison == 'node-server-workers' && 'node' || 'none' }}
           cache-pnpm-store: 'false'
           cache-pnpm-verification: 'false'
       - name: Compare isolated cold and same-build warm preparation
-        if: inputs.comparison != 'windows-security'
+        if: inputs.comparison == 'native-preparation'
         shell: bash
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
@@ -67,6 +67,26 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           BENCHMARK_RUNNER: ${{ matrix.os }}
         run: node config/scripts/benchmark-windows-security-reuse.mjs
+      - uses: ./.github/actions/prepare-orcad-prebuilds
+        if: inputs.comparison == 'node-server-workers'
+        with:
+          resolve-windows-cache: 'true'
+          restore-windows-cache: 'true'
+      - uses: ./.github/actions/prepare-windows-cli-launcher
+        if: inputs.comparison == 'node-server-workers'
+        with:
+          arches: arm64
+      - uses: ./.github/actions/build-mobile-web-bundle
+        if: inputs.comparison == 'node-server-workers'
+      - name: Build the qualified server candidate
+        if: inputs.comparison == 'node-server-workers'
+        run: pnpm build:orcad
+        env:
+          ORCA_REUSE_PREPARED_WINDOWS_SECURITY: 'true'
+      - name: Compare qualification test workers
+        if: inputs.comparison == 'node-server-workers'
+        shell: bash
+        run: node config/scripts/benchmark-node-server-workers.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
