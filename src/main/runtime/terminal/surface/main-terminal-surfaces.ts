@@ -32,6 +32,8 @@ export type MainTerminalSurfacesHost = {
   readyGraphPublisher: () => number | null
   /** Installs a graph under the publisher's authority, as the window's own publication does. */
   publish: (windowId: number, graph: RuntimeSyncWindowGraph) => void
+  /** Main's layout may have changed: a windowless host merges it into the rows it holds. */
+  layoutChanged: () => void
 }
 
 class MainSurfacePublisher {
@@ -68,10 +70,8 @@ class MainSurfacePublisher {
   }
 
   /** A workspace main owns publishes main's terminal and editor rows; any other, the window's. */
-  private withMainRows(
-    published: RuntimeMobileSessionTabsSnapshot
-  ): RuntimeMobileSessionTabsSnapshot {
-    const projected = this.installed?.worktreeIds.has(published.worktree)
+  withMainRows(published: RuntimeMobileSessionTabsSnapshot): RuntimeMobileSessionTabsSnapshot {
+    const projected = this.index.surfaces().worktreeIds.has(published.worktree)
       ? this.index.sessionTabsOf(published.worktree)
       : null
     return projected ? withMainSessionTabRows(published, projected, this.host.exited) : published
@@ -177,6 +177,7 @@ class MainSurfacePublisher {
       this.scheduled = false
       this.forceNext = false
       this.republish({ force })
+      this.host.layoutChanged()
     })
   }
 }

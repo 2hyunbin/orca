@@ -8,13 +8,17 @@ import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSess
 import { OrcaRuntimeWithSyncWindowGraph } from '../session-graph/session-window-graph'
 import {
   mainTerminalSurfaces,
+  startedMainTerminalSurfaces,
   type MainTerminalSurfacesHost
 } from '../terminal/surface/main-terminal-surfaces'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { headlessMobileSnapshotContentUnchanged } from '../mobile-session-snapshot-equality'
 import type { WorkspaceLayoutReads } from '../workspace-layout-stream'
-import type {
-  RuntimeMobileSessionTabsResult,
-  RuntimeSyncedTab,
-  RuntimeSyncWindowGraph
+import {
+  HEADLESS_RUNTIME_WINDOW_ID,
+  type RuntimeMobileSessionTabsResult,
+  type RuntimeSyncedTab,
+  type RuntimeSyncWindowGraph
 } from '../../../shared/runtime-types'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
@@ -41,9 +45,28 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       readyGraphPublisher: () => (this.graphStatus === 'ready' ? this.authoritativeWindowId : null),
       publish: (publisher, next) => {
         this.syncWindowGraph(publisher, next)
-      }
+      },
+      layoutChanged: () => this.mergeMainLayoutIntoHeldRows()
     })
     return mainTerminalSurfaces(this, host).withMainSurfaces(windowId, graph)
+  }
+
+  /**
+   * Layout-owner builds with no window: no publication carries main's layout into the rows held
+   * for a workspace main owns, so main merges it in itself, as a publication's rows are merged.
+   */
+  protected mergeMainLayoutIntoHeldRows(): void {
+    const surfaces = startedMainTerminalSurfaces(this)
+    if (!surfaces || this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID) {
+      return
+    }
+    for (const [worktreeId, held] of this.mobileSessionTabsByWorktree) {
+      const next = surfaces.withMainRows(held)
+      if (!headlessMobileSnapshotContentUnchanged(held, next)) {
+        this.storeMobileSessionSnapshot(worktreeId, next)
+        this.scheduleMobileSessionTabsChanged(worktreeId)
+      }
+    }
   }
 
   protected abstract getAuthoritativeSessionTabsInventoryEpoch(
@@ -173,6 +196,9 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       const resolvedId =
         this.getExplicitSessionWorktreeIdSelector(worktreeSelector) ?? explicitWorktreeId
       this.restoreLivePairedRendererSessionOwnedMobileTerminals(resolvedId)
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        this.mergeMainLayoutIntoHeldRows()
+      }
       return this.getMobileSessionTabsForWorktree(resolvedId, clientNavigationId, options)
     }
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
@@ -183,6 +209,9 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id)
     await this.refreshMobileSessionPtyRecords()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktree.id)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      this.mergeMainLayoutIntoHeldRows()
+    }
     return this.getMobileSessionTabsForWorktree(worktree.id, clientNavigationId, options)
   }
 
@@ -214,6 +243,9 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()
     const ptyInventory = await this.refreshMobileSessionPtyInventory()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(null)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      this.mergeMainLayoutIntoHeldRows()
+    }
     const snapshots = [...this.mobileSessionTabsByWorktree.values()].map((snapshot) =>
       this.projectMobileSessionTabsForClient(
         this.toMobileSessionTabsResult(snapshot),
