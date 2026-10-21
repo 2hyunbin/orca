@@ -1,14 +1,18 @@
-import { createHash } from 'node:crypto'
 import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalItemBody,
   type AgentJournalItemIdentity
 } from '../../shared/agent-session-journal-types'
+import { journalLifecycleItemMutation } from '../native-chat/agent-session-journal/journal-row-builders'
+import type { JournalLifecycleIdentityMutationInput } from '../native-chat/agent-session-journal/journal-lifecycle-mutation'
 import {
-  journalLifecycleItemMutation,
-  type JournalLifecycleMutationInput
-} from '../native-chat/agent-session-journal/journal-row-builders'
+  continuedOutsideNotice,
+  continuedOutsideRecordId,
+  createHistoryCatchUpBatch,
+  HISTORY_CATCH_UP_MAX_OPERATIONS,
+  type HistoryCatchUpPlan
+} from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
 import {
   legacyItemBody,
   LEGACY_IMPORT_BLOCK_LIMITS
@@ -31,10 +35,6 @@ import {
   type ClaudeMessageEnvelope
 } from './claude-structured-item-translation'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
-
-/** One batch's bounds, the same as an outside Codex batch's. */
-const CLAUDE_IMPORT_MAX_OPERATIONS = 1_024
-const CLAUDE_IMPORT_MAX_BYTES = 16 * 1024 * 1024
 
 /** Every key a live chat could have written this transcript row under. */
 function liveKeys(envelope: ClaudeMessageEnvelope, row: Record<string, unknown>): string[] {
@@ -74,11 +74,11 @@ export function createClaudeTranscriptImportPlan(input: {
   sessionId: string
   providerSessionId: string
   journal: StructuredAgentSessionTransitionJournal
-  outsideNotice?: AgentJournalItemBody
+  /** Whether the divider reads as rewound; null when the chat holds nothing for one to follow. */
+  rewound: boolean | null
   check: () => void
 }) {
-  const mutations = new Map<string, JournalLifecycleMutationInput>()
-  let bytes = 0
+  const mutations = new Map<string, JournalLifecycleIdentityMutationInput>()
   const append = (
     identity: AgentJournalItemIdentity,
     body: AgentJournalItemBody,
@@ -91,10 +91,10 @@ export function createClaudeTranscriptImportPlan(input: {
       // Display only: an outside prompt names no send of this chat's.
       ...(body.kind === 'message' && body.role === 'user' ? { echoOf: null } : {})
     }
-    // A later write of a row replaces its body where the first one put it, as the journal does.
-    bytes += Buffer.byteLength(JSON.stringify(mutation), 'utf8') + 1
+    // A later write of a row replaces its body where the first one put it, as the journal does;
+    // the batch then sees each row once. Bytes are counted there.
     mutations.set(key, mutation)
-    if (mutations.size > CLAUDE_IMPORT_MAX_OPERATIONS || bytes > CLAUDE_IMPORT_MAX_BYTES) {
+    if (mutations.size > HISTORY_CATCH_UP_MAX_OPERATIONS) {
       throw new Error('too-large')
     }
     return { accepted: true } as const
@@ -191,45 +191,41 @@ export function createClaudeTranscriptImportPlan(input: {
         })
       }
     },
-    finish: () => {
+    finish: (): HistoryCatchUpPlan | null => {
       input.check()
       if (uuids.length > 0) {
         idle(lastAt)
       }
       translator.flush()
       // A row that renders nothing (a thinking block saved without its text) adds no divider either.
-      if (![...mutations.values()].some((m) => m.kind === 'item' && m.body.kind !== 'turn')) {
-        mutations.clear()
+      const rows = [...mutations.values()]
+      if (!rows.some((row) => row.kind === 'item' && row.body.kind !== 'turn')) {
+        return null
       }
-      const planned = [...mutations.values()]
-      if (planned.length > 0 && input.outsideNotice) {
-        const divider: AgentJournalItemIdentity = {
-          provider: 'legacy',
-          agent: 'claude',
-          sessionId: input.sessionId,
-          recordId: `continued-outside:${uuids[0]}`
-        }
-        planned.unshift(
+      const batch = createHistoryCatchUpBatch()
+      if (input.rewound !== null) {
+        batch.push(
           journalLifecycleItemMutation(
             { turnScope: AGENT_JOURNAL_THREAD_SCOPE },
-            divider,
-            input.outsideNotice
+            {
+              provider: 'legacy',
+              agent: 'claude',
+              sessionId: input.sessionId,
+              recordId: continuedOutsideRecordId(uuids[0] ?? '')
+            },
+            continuedOutsideNotice(input.rewound)
           )
         )
-        mutations.set(agentJournalItemKey(divider), planned[0])
       }
-      const keys = [...mutations.keys()]
-      const digest = createHash('sha256')
-        .update(JSON.stringify([input.journal.epoch, input.providerSessionId, uuids, keys]))
-        .digest('hex')
-      const settlementId = `claude-history-import:${digest}`
-      // Match the existing batch envelope charge, plus the transition's one publication byte.
-      const reservedBytes =
-        Buffer.byteLength(JSON.stringify({ settlementId, mutations: planned }), 'utf8') + 512
-      if (reservedBytes + 1 > CLAUDE_IMPORT_MAX_BYTES) {
-        throw new Error('too-large')
+      for (const row of rows) {
+        batch.push(row)
       }
-      return { settlementId, mutations: planned, keys, reservedBytes }
+      return batch.finish('claude-history-import', [
+        input.journal.epoch,
+        input.providerSessionId,
+        uuids,
+        [...mutations.keys()]
+      ])
     },
     dispose: () => translator.dispose()
   }
