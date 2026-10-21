@@ -72,6 +72,7 @@ export type CreateOrAttachRequest = {
   id: string
   type: 'createOrAttach'
   payload: HistorySeedProtocol.CreateOrAttachHistorySeedPayload & {
+    transients?: { streamId: string; subscriptionId: string }
     sessionId: string
     cols: number
     rows: number

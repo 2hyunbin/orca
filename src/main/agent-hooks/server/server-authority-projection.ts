@@ -1,7 +1,7 @@
 import { serializeAgentStatusSubject } from '../../../shared/agent-status-subject'
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import { isTmuxInnerSubject } from '../../../shared/tmux-agent-hook-owner'
-import type { AgentHookLaunchObservation } from './server-authority-state'
+import type { AgentHookLaunchObservation, AgentHookLaunchSubject } from './server-authority-state'
 import { AgentHookServerState } from './server-state'
 
 /** Credential views never replace the semantic object that owns pending provider work. */
@@ -29,7 +29,7 @@ export abstract class AgentHookServerAuthorityProjection extends AgentHookServer
     }
   }
 
-  protected authoritySubject(paneKey: string): object | undefined {
+  protected authoritySubject(paneKey: string): AgentHookLaunchSubject | undefined {
     return (
       this.state.lastStatusByPaneKey.get(paneKey) ??
       this.canonicalStatusStore
@@ -53,11 +53,11 @@ export abstract class AgentHookServerAuthorityProjection extends AgentHookServer
 
   protected projectLaunchAuthority<T extends { paneKey: string; launchToken?: string }>(
     row: T,
-    subject: object = row
+    subject?: AgentHookLaunchSubject
   ): T {
     const observation = this.currentAuthorityObservations.get(row.paneKey)
     const launchToken =
-      observation?.subject === subject &&
+      observation?.subject === (subject ?? row) &&
       this.applicableAuthority(observation) &&
       (observation.executionIsCurrent?.() ?? true)
         ? observation.launchToken

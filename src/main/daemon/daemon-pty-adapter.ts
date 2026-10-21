@@ -99,6 +99,15 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
             ...(event.payload.seq === undefined ? {} : { seq: event.payload.seq })
           })
         )
+      } else if (event.event === 'terminalObservation') {
+        if (event.sessionId) {
+          this.emitBackgroundStreamEvent({
+            id: event.sessionId,
+            kind: 'terminalObservation',
+            incarnationId: event.incarnationId,
+            observation: event.payload
+          })
+        }
       } else if (event.event === 'sessionBackgroundMarker') {
         this.emitBackgroundStreamEvent({
           id: event.sessionId,

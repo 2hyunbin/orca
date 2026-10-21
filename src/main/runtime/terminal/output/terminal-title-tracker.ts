@@ -173,6 +173,7 @@ export abstract class OrcaRuntimeWithGetUnpersistedTrackedTitleForPty extends Or
         },
         onCommandStarted: () => {
           this.openCodeRunLifetime.onCommandStarted(ptyId)
+          this.recordTerminalSideEffectFact(ptyId, { kind: 'command-started' })
         },
         onCommandFinished: (exitCode: number | null) => {
           this.retirePtyAgentLaunchAuthorityOnConfirmedExit(ptyId)

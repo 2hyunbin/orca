@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { isSameAgentProcess } from '../../../shared/agent-process-presence'
-import type { AgentHookLaunchObservation } from './server-authority-state'
+import type { AgentHookLaunchObservation, AgentHookLaunchSubject } from './server-authority-state'
 
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import type {
@@ -127,7 +127,7 @@ export abstract class AgentHookServerAuthorityEvidence extends AgentHookServerSt
     row = payload,
     isCurrent?: () => boolean,
     derivedFrom?: AgentHookEventPayload,
-    subject: object = row
+    subject: AgentHookLaunchSubject = row
   ): boolean {
     const evidence = this.toAuthorityEvidence(payload)
     if (evidence) {

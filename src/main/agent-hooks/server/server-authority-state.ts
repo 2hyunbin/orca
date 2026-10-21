@@ -1,11 +1,14 @@
+import type { AgentStatusParentRecord } from '../../../shared/agent-status-store-parent'
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import type { AgentHookAuthorityEvidence } from './server-types'
 import { RevisionedMap } from './revisioned-map'
 
+export type AgentHookLaunchSubject = AgentHookEventPayload | AgentStatusParentRecord
+
 export type AgentHookLaunchObservation = {
   evidence: AgentHookAuthorityEvidence
   row: AgentHookEventPayload
-  subject: object
+  subject: AgentHookLaunchSubject
   launchToken?: string
   isCurrent?: () => boolean
   executionIsCurrent?: () => boolean
@@ -13,6 +16,13 @@ export type AgentHookLaunchObservation = {
 
 /** Launch credentials are admitted independently of the latest status row. */
 export abstract class AgentHookServerAuthorityState {
+  protected abstract recordCurrentAuthorityObservation(
+    payload: AgentHookEventPayload,
+    row?: AgentHookEventPayload,
+    isCurrent?: () => boolean,
+    derivedFrom?: AgentHookEventPayload,
+    subject?: AgentHookLaunchSubject
+  ): boolean
   protected abstract captureTmuxRoot(paneKey: string): (() => boolean) | undefined
   protected abstract captureHydratedAuthorityCommitments(): void
   protected abstract scheduleStatusPersist(): void

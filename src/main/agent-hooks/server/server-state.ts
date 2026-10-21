@@ -313,13 +313,6 @@ export abstract class AgentHookServerState extends AgentHookServerAuthorityState
   ): EnrichedAgentHookEventPayload | null
   protected abstract maybeWriteEndpointFile(): void
   protected abstract hydrateLastStatusFromDisk(): void
-  protected abstract recordCurrentAuthorityObservation(
-    payload: AgentHookEventPayload,
-    row?: AgentHookEventPayload,
-    isCurrent?: () => boolean,
-    derivedFrom?: AgentHookEventPayload,
-    subject?: object
-  ): boolean
   protected abstract toAuthorityEvidence(
     payload: AgentHookEventPayload | EnrichedAgentHookEventPayload,
     launchTokenHashOverride?: string
