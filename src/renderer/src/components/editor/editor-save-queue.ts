@@ -66,10 +66,8 @@ export const EDITOR_SAVE_KEYS: EditorSaveKeys = {
 }
 
 // Why: keeping the save queue, quiesce coordination, and the debounce timers that feed it together avoids split-brain saves.
-export function createEditorSaveQueue(
-  store: AppStoreApi,
-  keys: EditorSaveKeys = EDITOR_SAVE_KEYS
-): EditorSaveQueue {
+export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
+  const keys = EDITOR_SAVE_KEYS
   // Keyed by `keys.schedule`.
   const autoSaveTimers = new Map<string, number>()
   const autoSaveScheduledContent = new Map<string, string>()

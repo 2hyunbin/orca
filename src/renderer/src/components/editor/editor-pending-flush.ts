@@ -1,6 +1,6 @@
 import {
   editorBufferSiblingViewIds,
-  type EditorBufferViewLookup
+  type EditorBufferViewIndex
 } from '@/store/slices/editor/buffers/editor-buffer-views'
 
 type PendingEditor = { flush: () => void; hasChange?: () => boolean }
@@ -37,17 +37,9 @@ function flushPendingEntries(entries: PendingEditor[], autosave: boolean): void 
   }
 }
 
-export function flushPendingEditorChange(fileId: string, autosave = false): void {
-  flushPendingEntries(pendingEntriesOf([fileId]), autosave)
-}
-
-export function hasPendingEditorChange(fileId: string): boolean {
-  return pendingEntriesOf([fileId]).some((entry) => entry.hasChange?.())
-}
-
 /** Flushes pending text from every view of `fileId`'s record. */
 export function flushPendingEditorBuffer(
-  state: EditorBufferViewLookup,
+  state: EditorBufferViewIndex,
   fileId: string,
   autosave = false
 ): void {
@@ -55,7 +47,7 @@ export function flushPendingEditorBuffer(
 }
 
 export function hasPendingEditorBufferChange(
-  state: EditorBufferViewLookup,
+  state: EditorBufferViewIndex,
   fileId: string
 ): boolean {
   return pendingEntriesOf(editorBufferSiblingViewIds(state, fileId)).some((entry) =>

@@ -2,7 +2,7 @@ import type { AppState } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import {
   editorBufferIdOfView,
-  type EditorBufferViewLookup
+  type EditorBufferViewIndex
 } from '@/store/slices/editor/buffers/editor-buffer-views'
 
 export type AutosaveSubscriberInputs = {
@@ -35,7 +35,7 @@ export function autosaveSubscriberInputsEqual(
 
 /** The views a restart save writes: the first dirty view of each record. */
 export function restartSaveTargets(
-  state: Pick<AppState, 'openFiles'> & EditorBufferViewLookup
+  state: Pick<AppState, 'openFiles'> & EditorBufferViewIndex
 ): OpenFile[] {
   const recordIds = new Set<string>()
   return state.openFiles.filter((file) => {

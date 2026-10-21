@@ -1,22 +1,14 @@
 import type { OpenFile } from '../types/open-file'
-import { editorBufferSiblingViewIds, type EditorBufferViewLookup } from './editor-buffer-views'
-
-type CloseRuleState = { openFiles: readonly OpenFile[] } & EditorBufferViewLookup
+import { isLastEditorBufferView, type EditorBufferViewIndex } from './editor-buffer-views'
 
 /**
- * Whether closing `viewId` must ask to save: its record is dirty and no view outside the close
- * survives it. A batch (`closing`) prompts once per record, on the record's last view.
+ * Whether closing `viewId` now must ask to save: its record is dirty and it is the record's last
+ * open view. Batches ask per view as they process it, so the record's last view prompts once.
  */
 export function needsSavePromptOnClose(
-  state: CloseRuleState,
-  viewId: string,
-  closing?: ReadonlySet<string>
+  state: { openFiles: readonly OpenFile[] } & EditorBufferViewIndex,
+  viewId: string
 ): boolean {
   const file = state.openFiles.find((candidate) => candidate.id === viewId)
-  if (file?.isDirty !== true) {
-    return false
-  }
-  const viewIds = editorBufferSiblingViewIds(state, viewId)
-  const survivors = viewIds.filter((id) => id !== viewId && !closing?.has(id))
-  return survivors.length === 0 && (closing === undefined || viewIds.at(-1) === viewId)
+  return file?.isDirty === true && isLastEditorBufferView(state, viewId)
 }

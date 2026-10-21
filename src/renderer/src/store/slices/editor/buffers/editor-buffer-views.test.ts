@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createStore } from 'zustand'
 import { useAppStore } from '@/store'
-import { assertEditorBufferInvariant } from '../../../editor-buffer-record-lifecycle'
+import {
+  assertEditorBufferInvariant,
+  assertEditorBufferRecordsMatchViews,
+  withEditorBufferRecords
+} from '../../../editor-buffer-record-lifecycle'
 import { createEditorDraftState } from '../actions/editor-draft-state'
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { OpenFile } from '../types/open-file'
@@ -130,9 +134,7 @@ describe('editor buffer view index', () => {
     expect(next.editorBuffers.rec?.isDirty).toBe(true)
     expect(next.openFiles.map((file) => file.isDirty)).toEqual([true, true, false])
     expect(next.openFiles.map((file) => file.isPreview)).toEqual([undefined, false, undefined])
-    expect(() =>
-      assertEditorBufferInvariant({ ...next, ...SHARED, editorBufferViews: undefined })
-    ).not.toThrow()
+    expect(() => assertEditorBufferRecordsMatchViews({ ...next, ...SHARED })).not.toThrow()
   })
 
   it('writes and clears drafts through every view of the record', () => {
@@ -184,37 +186,36 @@ describe('editor buffer invariant', () => {
     editorDrafts: { a: 'x', b: 'x' },
     ...SHARED
   }
-  // Only the record checks apply: the live key function still gives each tab its own record.
-  const shared = { ...valid, editorBufferViews: undefined }
+  // The live key function still gives each tab its own record, so check against the index only.
+  const check = assertEditorBufferRecordsMatchViews
 
   it('accepts views that agree with their shared record', () => {
-    expect(() => assertEditorBufferInvariant(shared)).not.toThrow()
+    expect(() => check(valid)).not.toThrow()
   })
 
   it('rejects views of one record holding different drafts', () => {
-    expect(() =>
-      assertEditorBufferInvariant({
-        ...shared,
-        editorDrafts: { a: 'x', b: 'y' }
-      })
-    ).toThrow(/draft of b/)
+    expect(() => check({ ...valid, editorDrafts: { a: 'x', b: 'y' } })).toThrow(/draft of b/)
+  })
+
+  it('rejects a drafts-only store write that splits a shared record', () => {
+    const store = createStore<EditorBufferState>()(
+      withEditorBufferRecords<EditorBufferState>(() => ({ ...valid, editorDrafts: {} }), true)
+    )
+
+    store.setState({ editorDrafts: { a: 'y', b: 'y' } })
+    expect(() => store.setState({ editorDrafts: { a: 'y', b: 'z' } })).toThrow(/draft of b/)
+    expect(store.getState().editorDrafts).toEqual({ a: 'y', b: 'y' })
   })
 
   it('rejects a view whose mirror differs from its shared record', () => {
     expect(() =>
-      assertEditorBufferInvariant({
-        ...shared,
-        openFiles: [files[0], { ...files[1], isDirty: true }, files[2]]
-      })
+      check({ ...valid, openFiles: [files[0], { ...files[1], isDirty: true }, files[2]] })
     ).toThrow(/"isDirty" of b/)
   })
 
   it('rejects a record with no view and an index that misses a tab', () => {
     expect(() =>
-      assertEditorBufferInvariant({
-        ...shared,
-        editorBuffers: { ...valid.editorBuffers, orphan: valid.editorBuffers.c }
-      })
+      check({ ...valid, editorBuffers: { ...valid.editorBuffers, orphan: valid.editorBuffers.c } })
     ).toThrow(/not keyed/)
     expect(() =>
       assertEditorBufferInvariant({

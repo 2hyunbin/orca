@@ -28,7 +28,6 @@ export function useTerminalBulkCloseActions(
       }
       const state = useAppStore.getState()
       const dirtyFileIds: string[] = []
-      const closingIds = new Set(tabIds)
       for (const id of tabIds) {
         const unifiedTab = (state.unifiedTabsByWorktree[activeWorktreeId] ?? []).find(
           (candidate) => candidate.id === id || candidate.entityId === id
@@ -71,7 +70,8 @@ export function useTerminalBulkCloseActions(
         } else if (
           state.openFiles.some((file) => file.worktreeId === activeWorktreeId && file.id === id)
         ) {
-          if (needsSavePromptOnClose(state, id, closingIds)) {
+          // Why fresh state: an earlier view of the same record may have just closed.
+          if (needsSavePromptOnClose(useAppStore.getState(), id)) {
             dirtyFileIds.push(id)
             continue
           }
@@ -152,11 +152,10 @@ export function useTerminalBulkCloseActions(
       },
       (fileIds) => {
         const selectedIds = new Set(fileIds)
-        const state = useAppStore.getState()
-        const files = state.openFiles.filter((file) => selectedIds.has(file.id))
+        const files = useAppStore.getState().openFiles.filter((file) => selectedIds.has(file.id))
         const dirtyFileIds: string[] = []
         for (const file of files) {
-          if (needsSavePromptOnClose(state, file.id, selectedIds)) {
+          if (needsSavePromptOnClose(useAppStore.getState(), file.id)) {
             dirtyFileIds.push(file.id)
           } else {
             closeFile(file.id)

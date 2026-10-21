@@ -160,12 +160,13 @@ export function buildHydratedEditorSessionState(
     editorFileIdMigrationsByWorktree
   )
 
+  const viewIndex = reconcileEditorBufferViewIndex(EMPTY_EDITOR_BUFFER_VIEW_INDEX, openFiles)
   return {
     state: {
       openFiles,
       // Why fresh: a restored tab's buffer state comes from the session, not a same-id tab it replaces.
-      editorBuffers: reconcileEditorBufferMembership({}, openFiles),
-      ...reconcileEditorBufferViewIndex(EMPTY_EDITOR_BUFFER_VIEW_INDEX, openFiles),
+      editorBuffers: reconcileEditorBufferMembership({}, openFiles, viewIndex),
+      ...viewIndex,
       editorDrafts,
       markdownFrontmatterVisible,
       activeFileId: nextActiveFileId,

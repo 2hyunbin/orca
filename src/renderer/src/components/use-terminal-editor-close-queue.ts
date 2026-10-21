@@ -65,7 +65,7 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
         settleQueuedClose(fileId)
         continue
       }
-      if (!needsSavePromptOnClose(state, fileId, new Set(pendingEditorCloseQueueRef.current))) {
+      if (!needsSavePromptOnClose(state, fileId)) {
         closeFile(fileId)
         settleQueuedClose(fileId)
         continue

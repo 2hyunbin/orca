@@ -2,7 +2,7 @@ import type { AppState } from '../../../types'
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import {
   editorBufferSiblingViewIds,
-  type EditorBufferViewLookup
+  type EditorBufferViewIndex
 } from '../buffers/editor-buffer-views'
 import type { EditorViewMode, MarkdownViewMode } from '../types/open-file'
 import { clampMarkdownTocPanelWidth } from '../../../../../../shared/markdown-toc-panel-width'
@@ -36,9 +36,10 @@ export type EditorDraftState = {
 }
 
 /** Drops the drafts of every view sharing a record with `fileIds`. */
-function clearEditorDraftsOf<
-  TState extends Pick<AppState, 'editorDrafts'> & EditorBufferViewLookup
->(s: TState, fileIds: readonly string[]): TState | Pick<AppState, 'editorDrafts'> {
+function clearEditorDraftsOf<TState extends Pick<AppState, 'editorDrafts'> & EditorBufferViewIndex>(
+  s: TState,
+  fileIds: readonly string[]
+): TState | Pick<AppState, 'editorDrafts'> {
   let next = s.editorDrafts
   for (const fileId of fileIds) {
     for (const id of [fileId, ...editorBufferSiblingViewIds(s, fileId)]) {

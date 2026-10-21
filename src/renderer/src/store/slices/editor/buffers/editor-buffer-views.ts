@@ -7,12 +7,9 @@ import type { OpenFile } from '../types/open-file'
 export type EditorBufferViewIndex = {
   /** View (tab) id → record id. */
   editorBufferIdOf: Record<string, string>
-  /** Record id → its view ids, in `openFiles` order. */
+  /** Record id → its view ids, in the order they joined. */
   editorBufferViews: Record<string, readonly string[]>
 }
-
-/** States built outside the store (tests, projections) may lack the index; lookups then fall back to one record per tab. */
-export type EditorBufferViewLookup = Partial<EditorBufferViewIndex>
 
 export const EMPTY_EDITOR_BUFFER_VIEW_INDEX: EditorBufferViewIndex = {
   editorBufferIdOf: {},
@@ -24,62 +21,59 @@ export function editorBufferIdForFile(file: OpenFile): string {
   return file.id
 }
 
-export function editorBufferIdOfView(state: EditorBufferViewLookup, viewId: string): string {
-  return state.editorBufferIdOf?.[viewId] ?? viewId
+/** A tab that isn't open has no record yet, so it answers for itself. */
+export function editorBufferIdOfView(index: EditorBufferViewIndex, viewId: string): string {
+  return index.editorBufferIdOf[viewId] ?? viewId
 }
 
 export function editorBufferViewIds(
-  state: EditorBufferViewLookup,
+  index: EditorBufferViewIndex,
   recordId: string
 ): readonly string[] {
-  return state.editorBufferViews?.[recordId] ?? [recordId]
+  return index.editorBufferViews[recordId] ?? [recordId]
 }
 
 /** Every view sharing `viewId`'s record, including `viewId` itself. */
 export function editorBufferSiblingViewIds(
-  state: EditorBufferViewLookup,
+  index: EditorBufferViewIndex,
   viewId: string
 ): readonly string[] {
-  return editorBufferViewIds(state, editorBufferIdOfView(state, viewId))
+  return editorBufferViewIds(index, editorBufferIdOfView(index, viewId))
 }
 
-export function isLastEditorBufferView(state: EditorBufferViewLookup, viewId: string): boolean {
-  return editorBufferSiblingViewIds(state, viewId).every((id) => id === viewId)
+export function isLastEditorBufferView(index: EditorBufferViewIndex, viewId: string): boolean {
+  return editorBufferSiblingViewIds(index, viewId).every((id) => id === viewId)
 }
 
-function sameViewIds(a: readonly string[] | undefined, b: readonly string[]): boolean {
-  return a !== undefined && a.length === b.length && a.every((id, index) => id === b[index])
+function buildEditorBufferViewIndex(openFiles: readonly OpenFile[]): EditorBufferViewIndex {
+  const editorBufferIdOf: Record<string, string> = {}
+  const editorBufferViews: Record<string, string[]> = {}
+  for (const file of openFiles) {
+    const recordId = editorBufferIdForFile(file)
+    editorBufferIdOf[file.id] = recordId
+    ;(editorBufferViews[recordId] ??= []).push(file.id)
+  }
+  return { editorBufferIdOf, editorBufferViews }
 }
 
-/** Rebuilds the index from `openFiles`; returns `previous` itself when nothing moved. */
+/** Whether every open tab already maps to the record `index` gives it; no allocation. */
+function indexCoversTabs(index: EditorBufferViewIndex, openFiles: readonly OpenFile[]): boolean {
+  return (
+    openFiles.length === Object.keys(index.editorBufferIdOf).length &&
+    openFiles.every((file) => index.editorBufferIdOf[file.id] === editorBufferIdForFile(file))
+  )
+}
+
+/** The index for `openFiles`; returns `previous` itself when no tab joined, left or moved record. */
 export function reconcileEditorBufferViewIndex(
   previous: EditorBufferViewIndex,
   openFiles: readonly OpenFile[]
 ): EditorBufferViewIndex {
-  const idOf: Record<string, string> = {}
-  const views: Record<string, string[]> = {}
-  for (const file of openFiles) {
-    const recordId = editorBufferIdForFile(file)
-    idOf[file.id] = recordId
-    ;(views[recordId] ??= []).push(file.id)
-  }
-  const idOfKeys = Object.keys(idOf)
-  const idOfUnchanged =
-    idOfKeys.length === Object.keys(previous.editorBufferIdOf).length &&
-    idOfKeys.every((viewId) => previous.editorBufferIdOf[viewId] === idOf[viewId])
-  const recordIds = Object.keys(views)
-  const viewsUnchanged =
-    recordIds.length === Object.keys(previous.editorBufferViews).length &&
-    recordIds.every((recordId) =>
-      sameViewIds(previous.editorBufferViews[recordId], views[recordId])
-    )
-  if (idOfUnchanged && viewsUnchanged) {
-    return previous
-  }
-  return {
-    editorBufferIdOf: idOfUnchanged ? previous.editorBufferIdOf : idOf,
-    editorBufferViews: viewsUnchanged ? previous.editorBufferViews : views
-  }
+  return indexCoversTabs(previous, openFiles) ? previous : buildEditorBufferViewIndex(openFiles)
+}
+
+function sameMembers(a: readonly string[] | undefined, b: readonly string[]): boolean {
+  return a !== undefined && a.length === b.length && b.every((id) => a.includes(id))
 }
 
 /** Why the index is wrong for `openFiles`, or null when it is consistent. */
@@ -87,6 +81,13 @@ export function editorBufferViewIndexMismatch(
   index: EditorBufferViewIndex,
   openFiles: readonly OpenFile[]
 ): string | null {
-  const expected = reconcileEditorBufferViewIndex(index, openFiles)
-  return expected === index ? null : 'Editor buffer view index does not match the open editor tabs'
+  const expected = buildEditorBufferViewIndex(openFiles)
+  const recordIds = Object.keys(expected.editorBufferViews)
+  const consistent =
+    indexCoversTabs(index, openFiles) &&
+    recordIds.length === Object.keys(index.editorBufferViews).length &&
+    recordIds.every((id) =>
+      sameMembers(index.editorBufferViews[id], expected.editorBufferViews[id])
+    )
+  return consistent ? null : 'Editor buffer view index does not match the open editor tabs'
 }

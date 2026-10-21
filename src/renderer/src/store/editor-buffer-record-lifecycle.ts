@@ -7,7 +7,8 @@ import {
 import {
   editorBufferIdOfView,
   editorBufferViewIndexMismatch,
-  reconcileEditorBufferViewIndex
+  reconcileEditorBufferViewIndex,
+  type EditorBufferViewIndex
 } from './slices/editor/buffers/editor-buffer-views'
 
 /**
@@ -25,19 +26,20 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
   const records = write.editorBuffers ?? state.editorBuffers
   const drafts = write.editorDrafts ?? state.editorDrafts
   if (openFiles === state.openFiles && records === state.editorBuffers) {
+    // Why only drafts: this runs per keystroke, and nothing else about the views changed.
     if (checkInvariant && drafts !== state.editorDrafts) {
-      assertEditorBufferInvariant({ ...state, ...write, openFiles, editorBuffers: records })
+      assertEditorBufferDraftsAgree({ ...state, ...write }, drafts)
     }
     return write
   }
   const index = reconcileEditorBufferViewIndex(
     {
-      editorBufferIdOf: write.editorBufferIdOf ?? state.editorBufferIdOf ?? {},
-      editorBufferViews: write.editorBufferViews ?? state.editorBufferViews ?? {}
+      editorBufferIdOf: write.editorBufferIdOf ?? state.editorBufferIdOf,
+      editorBufferViews: write.editorBufferViews ?? state.editorBufferViews
     },
     openFiles
   )
-  const next = reconcileEditorBufferMembership(records, openFiles)
+  const next = reconcileEditorBufferMembership(records, openFiles, index)
   if (checkInvariant) {
     assertEditorBufferInvariant({ openFiles, editorBuffers: next, editorDrafts: drafts, ...index })
   }
@@ -54,41 +56,47 @@ function reconcileEditorBuffers<TState extends EditorBufferState>(
   }
 }
 
+/** Every view of a shared record holds the same `editorDrafts` entry. */
+export function assertEditorBufferDraftsAgree(
+  index: EditorBufferViewIndex,
+  drafts: Readonly<Record<string, string>> | undefined
+): void {
+  for (const viewIds of Object.values(index.editorBufferViews)) {
+    const [first, ...rest] = viewIds
+    const differing = rest.find((id) => !Object.is(drafts?.[first], drafts?.[id]))
+    if (differing !== undefined) {
+      throw new Error(`Editor draft of ${differing} differs from another view of its record`)
+    }
+  }
+}
+
 /**
- * Every view maps to exactly one record, every record has a view, and every view of a record
- * holds the same mirror fields and the same `editorDrafts` entry.
+ * Against the index: every view's record exists, every record has a view, and every view of a
+ * record holds the same mirror fields and the same `editorDrafts` entry.
  */
-export function assertEditorBufferInvariant(state: EditorBufferState): void {
-  const index = {
-    editorBufferIdOf: state.editorBufferIdOf ?? {},
-    editorBufferViews: state.editorBufferViews ?? {}
-  }
-  const indexMismatch =
-    state.editorBufferIdOf && state.editorBufferViews
-      ? editorBufferViewIndexMismatch(index, state.openFiles)
-      : null
-  if (indexMismatch !== null) {
-    throw new Error(indexMismatch)
-  }
+export function assertEditorBufferRecordsMatchViews(state: EditorBufferState): void {
   const recordIds = new Set(state.openFiles.map((file) => editorBufferIdOfView(state, file.id)))
   const keys = Object.keys(state.editorBuffers)
   if (keys.length !== recordIds.size || keys.some((id) => !recordIds.has(id))) {
     throw new Error('Editor buffer records are not keyed by the open editor tabs')
   }
-  const firstViewOf = new Map<string, string>()
   for (const file of state.openFiles) {
-    const recordId = editorBufferIdOfView(state, file.id)
-    const field = editorBufferMirrorMismatch(file, state.editorBuffers[recordId])
+    const record = state.editorBuffers[editorBufferIdOfView(state, file.id)]
+    const field = editorBufferMirrorMismatch(file, record)
     if (field !== null) {
       throw new Error(`Editor buffer mirror "${field}" of ${file.id} differs from its record`)
     }
-    const firstView = firstViewOf.get(recordId)
-    if (firstView === undefined) {
-      firstViewOf.set(recordId, file.id)
-    } else if (!Object.is(state.editorDrafts?.[firstView], state.editorDrafts?.[file.id])) {
-      throw new Error(`Editor draft of ${file.id} differs from another view of its record`)
-    }
   }
+  assertEditorBufferDraftsAgree(state, state.editorDrafts)
+}
+
+/** The index matches the open tabs, and the records match the index. */
+export function assertEditorBufferInvariant(state: EditorBufferState): void {
+  const indexMismatch = editorBufferViewIndexMismatch(state, state.openFiles)
+  if (indexMismatch !== null) {
+    throw new Error(indexMismatch)
+  }
+  assertEditorBufferRecordsMatchViews(state)
 }
 
 export function withEditorBufferRecords<TState extends EditorBufferState>(

@@ -8,9 +8,7 @@ import { EDITOR_SAVE_KEYS } from './editor-save-queue'
 import { editorTabModelUri } from './editor-save-disk-precondition'
 import {
   flushPendingEditorBuffer,
-  flushPendingEditorChange,
   hasPendingEditorBufferChange,
-  hasPendingEditorChange,
   registerPendingEditorFlush
 } from './editor-pending-flush'
 import { discardEditorFileChangesAndClose } from './discard-editor-file-changes'
@@ -35,22 +33,17 @@ function tab(id: string, patch: Partial<OpenFile> = {}): OpenFile {
   }
 }
 
-// Every sharing class from the plan's §1.1 table, clean and dirty.
+// The cases whose old answers differ: one model shared across workspaces, a clean tab, a non-edit tab.
 const FIXTURE: OpenFile[] = [
   tab('/repo/a.ts', { isDirty: true }),
   tab('editor:wt-2:local:/repo/a.ts', { worktreeId: 'wt-2', isDirty: true }),
-  tab('/vault/log.jsonl', { filePath: '/vault/log.jsonl', readOnly: true }),
-  tab('wt-1::diff::unstaged::a.ts', { mode: 'diff', diffSource: 'unstaged', isDirty: true }),
-  tab('markdown-preview::/repo/b.md', { mode: 'markdown-preview', filePath: '/repo/b.md' }),
   tab('/repo/b.md', { filePath: '/repo/b.md', language: 'markdown' }),
-  tab('/repo/c.csv', { filePath: '/repo/c.csv', language: 'csv', isDirty: true }),
-  tab('wt-1::conflict-review', { mode: 'conflict-review', filePath: '/repo' }),
-  tab('/repo/untitled-1.ts', { filePath: '/repo/untitled-1.ts', isDirty: true })
+  tab('wt-1::diff::unstaged::a.ts', { mode: 'diff', diffSource: 'unstaged', isDirty: true })
 ]
 const IDS = [...FIXTURE.map((file) => file.id), 'not-open']
 
-function seed(files: OpenFile[] = FIXTURE): AppState {
-  useAppStore.setState({ openFiles: files })
+function seed(): AppState {
+  useAppStore.setState({ openFiles: FIXTURE })
   return useAppStore.getState()
 }
 
@@ -67,20 +60,10 @@ describe('editor buffer entry points return the per-tab answer', () => {
     quiesce.mockClear()
   })
 
-  it('maps every tab to a record of its own', () => {
-    const state = seed()
-    for (const file of FIXTURE) {
-      expect(state.editorBufferIdOf[file.id]).toBe(file.id)
-      expect(state.editorBufferViews[file.id]).toEqual([file.id])
-    }
-  })
-
   it.each(IDS)('needsSavePromptOnClose(%s) equals the tab dirty flag', (id) => {
     const state = seed()
     const old = state.openFiles.find((file) => file.id === id)?.isDirty === true
     expect(needsSavePromptOnClose(state, id)).toBe(old)
-    expect(needsSavePromptOnClose(state, id, new Set(IDS))).toBe(old)
-    expect(needsSavePromptOnClose({ openFiles: state.openFiles }, id)).toBe(old)
   })
 
   it('restartSaveTargets equals the dirty tabs', () => {
@@ -96,7 +79,10 @@ describe('editor buffer entry points return the per-tab answer', () => {
     expect(EDITOR_SAVE_KEYS.schedule(state, id)).toBe(id)
   })
 
-  it.each([false, true])('record flush matches the per-tab flush (autosave=%s)', (autosave) => {
+  it.each([
+    [false, ['rich-new', 'csv']],
+    [true, ['rich-new']]
+  ])('record flush keeps the per-tab semantics (autosave=%s)', (autosave, expected) => {
     const state = seed()
     const calls: string[] = []
     const remove = [
@@ -110,14 +96,10 @@ describe('editor buffer entry points return the per-tab answer', () => {
       registerPendingEditorFlush('editor:wt-2:local:/repo/a.ts', () => calls.push('other-tab'))
     ]
     try {
-      flushPendingEditorChange('/repo/a.ts', autosave)
-      const old = calls.splice(0)
       flushPendingEditorBuffer(state, '/repo/a.ts', autosave)
-      expect(calls).toEqual(old)
-      expect(hasPendingEditorBufferChange(state, '/repo/a.ts')).toBe(
-        hasPendingEditorChange('/repo/a.ts')
-      )
-      expect(hasPendingEditorBufferChange(state, '/repo/b.md')).toBe(false)
+      expect(calls).toEqual(expected)
+      expect(hasPendingEditorBufferChange(state, '/repo/a.ts')).toBe(true)
+      expect(hasPendingEditorBufferChange(state, 'editor:wt-2:local:/repo/a.ts')).toBe(false)
     } finally {
       remove.forEach((unregister) => unregister())
     }
@@ -141,17 +123,19 @@ describe('editor buffer entry points return the per-tab answer', () => {
 describe('entry point bodies once views share a record', () => {
   const state = { openFiles: SHARED_FILES, ...SHARED }
 
-  it('prompts only on the last view, and once for a batch covering every view', () => {
-    expect(needsSavePromptOnClose(state, 'a')).toBe(false)
-    const afterAClosed = {
-      openFiles: [SHARED_FILES[1]],
-      editorBufferIdOf: { b: 'rec' },
-      editorBufferViews: { rec: ['b'] }
+  it('prompts only on the last open view, whatever order a batch closes them in', () => {
+    for (const [first, last] of [
+      ['a', 'b'],
+      ['b', 'a']
+    ]) {
+      expect(needsSavePromptOnClose(state, first)).toBe(false)
+      const afterFirstClosed = {
+        openFiles: SHARED_FILES.filter((file) => file.id !== first),
+        editorBufferIdOf: { [last]: 'rec', c: 'c' },
+        editorBufferViews: { rec: [last], c: ['c'] }
+      }
+      expect(needsSavePromptOnClose(afterFirstClosed, last)).toBe(true)
     }
-    expect(needsSavePromptOnClose(afterAClosed, 'b')).toBe(true)
-    const all = new Set(['a', 'b'])
-    expect(['a', 'b'].filter((id) => needsSavePromptOnClose(state, id, all))).toEqual(['b'])
-    expect(needsSavePromptOnClose(state, 'b', new Set(['b']))).toBe(false)
   })
 
   it('restart save writes one view per record', () => {
