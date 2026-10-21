@@ -310,10 +310,3 @@ function spawnElectronServe(
 function getExecutableSpawnOptions(executable: string): Pick<SpawnOptions, 'shell'> {
   return process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(executable) ? { shell: true } : {}
 }
-
-export {
-  getExecutableAppArgs,
-  resolveAppRoot,
-  resolveForegroundOrcaExecutable,
-  stripElectronRunAsNode
-}
