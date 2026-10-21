@@ -71,21 +71,3 @@ export function terminalLayoutsWithFrameBindings(
   }
   return next
 }
-
-/** Every rebound workspace's bindings shown, and the workspaces only a build shows so. */
-export function terminalLayoutsWithReboundFrames(
-  layouts: TerminalLayouts,
-  cache: WorkspaceLayoutCache,
-  rebound: ReadonlyMap<string, ReadonlySet<string>>
-): { layouts: TerminalLayouts; unshown: string[] } {
-  const unshown: string[] = []
-  for (const [key, tabIds] of rebound) {
-    const next = terminalLayoutsWithFrameBindings(layouts, key, cache[key]!, tabIds)
-    if (next) {
-      layouts = next
-    } else {
-      unshown.push(key)
-    }
-  }
-  return { layouts, unshown }
-}
