@@ -2,8 +2,6 @@ import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-i
 import { isHibernationDoneRecord } from '../../../../../shared/hibernation-done-record'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 
-export { isHibernationDoneRecord }
-
 // Why: never remote, where disconnect() only closes this viewer's stream, so the retry re-lands on the same live PTY and loops.
 export function hasEmptyReattachRetireEvidence(
   ptyId: string,

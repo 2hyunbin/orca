@@ -1,7 +1,12 @@
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { SessionNotFoundError } from '../../../daemon/daemon-errors'
 import { PANE_NOT_LIVE_ERROR } from '../../../../shared/pane-attach-only-view'
-import { retireHiddenRendererPtyDropMemory } from '../../pty-hidden-delivery-gate'
+import {
+  consumeHiddenRendererPtyDropMemory,
+  hiddenRendererPtyDropEpisode,
+  isRuntimeOwnedHiddenRendererPty,
+  markRuntimeOwnedHiddenRendererPty
+} from '../../pty-hidden-delivery-gate'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -37,16 +42,30 @@ export function attachOnlyViewOf(args: { attachOnlyView?: unknown }): true | und
 }
 
 /**
- * Layout-owner build: main started the pane hidden, dropping its output; the view's attach
- * snapshot, taken after this unmark, holds those bytes, so the view paints once, not twice.
+ * Layout-owner build: main started the pane hidden, dropping its output. A visible view unmarks it
+ * before attaching, so its attach snapshot holds every dropped byte and the view paints once.
  */
 export async function attachViewAfterHiddenStart<T extends object>(
   ptyId: string,
-  unmarkHidden: (id: string) => void,
+  setHidden: (id: string, hidden: boolean) => void,
   attach: () => Promise<T>
 ): Promise<T> {
-  unmarkHidden(ptyId)
-  const attached = await attach()
+  if (!isRuntimeOwnedHiddenRendererPty(ptyId)) {
+    return attach()
+  }
+  const episode = hiddenRendererPtyDropEpisode(ptyId)
+  setHidden(ptyId, false)
+  let attached: T
+  try {
+    attached = await attach()
+  } catch (error) {
+    // Why: until a view attaches, main must keep answering the pane's startup queries.
+    if (!(error instanceof Error && error.message === PANE_NOT_LIVE_ERROR)) {
+      setHidden(ptyId, true)
+      markRuntimeOwnedHiddenRendererPty(ptyId)
+    }
+    throw error
+  }
   // Why a snapshot of the same id: a local attach carries none, and another id's drops may postdate it.
   if (
     'id' in attached &&
@@ -54,7 +73,8 @@ export async function attachViewAfterHiddenStart<T extends object>(
     'snapshot' in attached &&
     typeof attached.snapshot === 'string'
   ) {
-    retireHiddenRendererPtyDropMemory(ptyId)
+    // Retires only the episode the snapshot covers; a drop after a re-mark opened a new one.
+    consumeHiddenRendererPtyDropMemory(ptyId, episode)
   }
   return attached
 }

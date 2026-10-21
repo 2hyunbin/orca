@@ -260,7 +260,7 @@ describe('a client’s startPane in the layout-owner build', () => {
       expect(runtime.startStatusOf(PANE_KEY)).toMatchObject({ status: 'failed' })
     )
   })
-  // Owner-visible row 27: the window shows this reason through its wait for main's start.
+  // The window shows this reason through its wait for main's start.
   it('shows terminal_not_started when the terminal ends before main can bind it', async () => {
     const { runtime } = await desktopRuntime()
     runtime.setStartStatus(PANE_KEY, 'sleeping')

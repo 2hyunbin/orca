@@ -145,9 +145,9 @@ export function recordHiddenRendererPtyDataDrop(
   return { shouldEmitRestoreMarker: true, hiddenDropEpisode: episode }
 }
 
-/** Retires drop memory a view's attach snapshot covers: taken after the unmark, it holds every dropped byte. */
-export function retireHiddenRendererPtyDropMemory(id: string): void {
-  droppedSinceHiddenPtys.delete(id)
+/** The open drop episode, if bytes were dropped since the last restore painted. */
+export function hiddenRendererPtyDropEpisode(id: string): number | undefined {
+  return droppedSinceHiddenPtys.get(id)?.episode
 }
 
 /** Renderer process replaced (reload / crash): its ref-counted interest

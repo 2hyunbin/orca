@@ -268,8 +268,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
   }
 
   private findPaneSleepingAgentRecord(worktreeId: string, tab: RuntimeMobileSessionTerminalTab) {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    return findPaneSleepingRecord(session?.sleepingAgentSessionsByPaneKey, worktreeId, tab)
+    return findPaneSleepingRecord(this.getWorkspaceSessionForWorktree(worktreeId), worktreeId, tab)
   }
 
   protected shouldMaterializeHeadlessMobileSessionTab(

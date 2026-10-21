@@ -14,8 +14,8 @@ export function getProviderSessionClaimKey(record: SleepingAgentSessionRecord): 
 
 /**
  * The tab's numbered record for the pane: the one with its number, else the oldest capture when
- * every numbered record in the tab names one conversation. `aliases` are that tab's numbered keys.
- * A pane whose number is unknown (main) matches only by the one-conversation rule.
+ * every numbered record in the tab names one conversation. `aliases`: every numbered key of the tab
+ * in this workspace. A pane whose number is unknown (main) matches only by the one-conversation rule.
  */
 export function findLegacyNumericSleepingRecord(
   records: Readonly<Record<string, SleepingAgentSessionRecord>>,

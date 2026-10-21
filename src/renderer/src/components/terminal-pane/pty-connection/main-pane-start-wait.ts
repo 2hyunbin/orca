@@ -102,7 +102,7 @@ export function adoptMainBinding(
   }
 }
 
-/** The one place a pane shows why main's start of it failed (owner-visible row 27). */
+/** The one place a pane shows why main's start of it failed (copy the owner approved). */
 export function showPaneStartFailure(
   session: ConnectPanePtySession,
   reason: string | undefined

@@ -52,7 +52,8 @@ export function commitLayoutCommand(
     return { value: { ok: false, code: 'workspace_not_found' }, persist: false }
   }
   const effects = routed.ok ? changes[0]!.change.effects : undefined
-  // Why before the write: a terminal that would not stop keeps its pane, as a failed stop leaves it.
+  // Why before the write: a terminal that would not stop keeps its pane. A write that then fails
+  // restores the binding to the stopped terminal, which the pane's next start replaces.
   if (effects?.stopPtyIds.length && run.stopBeforeWrite?.(effects.stopPtyIds) === false) {
     return { value: { ok: false, code: 'pane_already_bound' }, persist: false }
   }

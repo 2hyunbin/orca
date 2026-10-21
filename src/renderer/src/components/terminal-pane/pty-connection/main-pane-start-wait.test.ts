@@ -78,7 +78,7 @@ describe('waitsForMainPaneStart', () => {
       'The terminal could not start: spawn exploded'
     )
   })
-  // Owner-visible row 27: a start main could not bind shows its reason through this wait.
+  // A start main could not bind shows its reason through this wait.
   it('shows terminal_not_started from main through the wait', async () => {
     const { waitsForMainPaneStart } = await import('./main-pane-start-wait')
     const pane = session()

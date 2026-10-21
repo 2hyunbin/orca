@@ -377,6 +377,25 @@ describe('handleReattachResult empty reattach under a hibernation note', () => {
     expect(bag.session.setPanePtyFitBinding).toHaveBeenCalledWith(REMOTE_PTY_ID)
   })
 
+  it.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+    'keeps the shell main kept after its start, without asking main again',
+    async () => {
+      const bag = buildParkRevealSession({
+        mountFollowsTerminalPark: false,
+        buildColdRestoreAgentResumeStartup: vi.fn(() => startup),
+        mainStartAttach: {}
+      })
+
+      await expect(
+        bag.session.handleReattachResult({ id: 'local-pty-1', isReattach: true }, null, null)
+      ).resolves.toBe(true)
+
+      expect(bag.transport.disconnect).not.toHaveBeenCalled()
+      expect(bag.session.startFreshColdRestoreAgentResume).not.toHaveBeenCalled()
+      expect(bag.session.setPanePtyFitBinding).toHaveBeenCalledWith('local-pty-1')
+    }
+  )
+
   it('retires an empty local fresh-spawn adoption and resumes the provider session', async () => {
     const bag = buildParkRevealSession({
       mountFollowsTerminalPark: false,

@@ -33,6 +33,7 @@ type ReattachResultSession = ReattachPayloadSession &
     ConnectPanePtySession,
     | 'agentCompletionCoordinator'
     | 'buildColdRestoreAgentResumeStartup'
+    | 'mainStartAttach'
     | 'runtimeEnvironmentId'
     | 'activePanePtyBinding'
     | 'activePanePtyBindingBoundAt'
@@ -174,6 +175,8 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     if (
       !hasStructuralReplay &&
       connectResult?.isReattach &&
+      // Why: main already judged this terminal after its start; asking again would loop.
+      !(mainStarts && session.mainStartAttach) &&
       hasEmptyReattachRetireEvidence(
         ptyId,
         // Main's attach carries no resume; the evidence reads the pane's record all the same.
