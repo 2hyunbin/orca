@@ -112,7 +112,7 @@ describe('the status menu with a very large imported SSH host list', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     const hidden = IMPORTED_HOST_COUNT - 2 - SSH_STATUS_MENU_IDLE_ROW_LIMIT
     expect(screen.getByText(`${hidden} more SSH hosts. Search by name to find one.`)).toBeTruthy()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search SSH hosts…' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search SSH hosts…' }), {
       target: { value: 'NODE-13691' }
     })
     expect(screen.getByText('node-13691')).toBeTruthy()
@@ -125,14 +125,29 @@ describe('the status menu with a very large imported SSH host list', () => {
   it('sends letters typed in the menu to the host search', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     fireEvent.keyDown(screen.getByTestId('menu-content'), { key: 'n' })
-    const search = screen.getByRole<HTMLInputElement>('textbox', { name: 'Search SSH hosts…' })
+    const search = screen.getByRole<HTMLInputElement>('combobox', { name: 'Search SSH hosts…' })
     expect(search.value).toBe('n')
     expect(document.activeElement).toBe(search)
   })
 
+  it('moves the active result with arrows and connects it with Enter', async () => {
+    const connect = vi.fn(async () => undefined)
+    vi.stubGlobal('api', { ssh: { connect } })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    const search = screen.getByRole('combobox', { name: 'Search SSH hosts…' })
+    fireEvent.change(search, { target: { value: 'node-1369' } })
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    const active = screen.getByRole('option', { selected: true })
+    expect(active.textContent).toContain('node-13691')
+    expect(search.getAttribute('aria-activedescendant')).toBe(active.id)
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-13691' }))
+    vi.unstubAllGlobals()
+  })
+
   it('says when no idle host matches the search', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search SSH hosts…' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search SSH hosts…' }), {
       target: { value: 'no-such-host' }
     })
     expect(screen.getByText('No SSH hosts match.')).toBeTruthy()
@@ -144,6 +159,6 @@ describe('the status menu with a very large imported SSH host list', () => {
     state.sshConnectionStates = new Map()
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('solo')).toBeTruthy()
-    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
   })
 })

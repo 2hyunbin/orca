@@ -8,7 +8,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
 import { useAppStore } from '../../store'
 import type { SshConnectionStatus } from '../../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
@@ -25,13 +24,8 @@ import {
   runtimePairingRepairRoute
 } from '../../../../shared/runtime-environments'
 import { RuntimeHostStatusRow } from './RuntimeHostStatusRow'
-import {
-  connectedHostCountLabel,
-  connectingHostsLabel,
-  moreSshHostsLabel,
-  noMatchingSshHostsLabel,
-  searchSshHostsLabel
-} from './ssh-status-segment-copy'
+import { connectedHostCountLabel, connectingHostsLabel } from './ssh-status-segment-copy'
+import { SshStatusMenuHostSearch } from './SshStatusMenuHostSearch'
 import { splitSshStatusMenuRows } from './ssh-status-menu-rows'
 import { SshTargetStatusRow } from './SshTargetStatusRow'
 import { syncSshConfigTargetsPassively } from '../../lib/ssh-config-passive-sync'
@@ -320,37 +314,15 @@ export function SshStatusSegment({
             onRepair={() => openRepair(host)}
           />
         ))}
-        {showHostSearch ? (
-          <div className="p-1">
-            <Input
-              ref={hostSearchInputRef}
-              value={hostQuery}
-              onChange={(event) => setHostQuery(event.target.value)}
-              onKeyDown={(event) => {
-                // Why: keep typed letters out of the menu's typeahead; Escape and Tab still close it.
-                if (event.key !== 'Escape' && event.key !== 'Tab') {
-                  event.stopPropagation()
-                }
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              placeholder={searchSshHostsLabel()}
-              aria-label={searchSshHostsLabel()}
-              className="h-7 px-2 text-xs"
-            />
-          </div>
-        ) : null}
-        {disconnectedTargets.map((t) => (
-          <SshTargetStatusRow key={t.id} targetId={t.id} label={t.label} status={t.status} />
-        ))}
-        {hiddenIdleCount > 0 ? (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            {moreSshHostsLabel(hiddenIdleCount)}
-          </div>
-        ) : hostQuery !== '' && !idleMatched ? (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            {noMatchingSshHostsLabel()}
-          </div>
-        ) : null}
+        <SshStatusMenuHostSearch
+          rows={disconnectedTargets}
+          searchable={showHostSearch}
+          query={hostQuery}
+          onQueryChange={setHostQuery}
+          hiddenIdleCount={hiddenIdleCount}
+          idleMatched={idleMatched}
+          inputRef={hostSearchInputRef}
+        />
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {

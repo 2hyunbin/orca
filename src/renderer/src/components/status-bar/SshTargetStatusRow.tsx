@@ -16,14 +16,39 @@ import {
 } from '@/ssh/ssh-connect-in-flight'
 import type { SshConnectionStatus } from '../../../../shared/ssh-types'
 
+/** One connect attempt from the hosts menu, from its Connect button or Enter in its search. */
+export async function connectSshTargetFromStatusMenu(targetId: string): Promise<void> {
+  if (isSshConnectInFlight(targetId)) {
+    return
+  }
+  beginSshConnect(targetId)
+  try {
+    await window.api.ssh.connect({ targetId })
+    useAppStore.getState().recordFeatureInteraction('ssh')
+  } catch (err) {
+    toastSshConnectFailure(
+      targetId,
+      err,
+      translate('auto.components.status.bar.SshStatusSegment.2c29e2de68', 'Connection failed')
+    )
+  } finally {
+    endSshConnect(targetId)
+  }
+}
+
 export function SshTargetStatusRow({
   targetId,
   label,
-  status
+  status,
+  optionId,
+  active
 }: {
   targetId: string
   label: string
   status: SshConnectionStatus
+  /** Set when the row is a result of the menu's host search (a listbox option). */
+  optionId?: string
+  active?: boolean
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const mountedRef = useMountedRef()
@@ -33,27 +58,15 @@ export function SshTargetStatusRow({
   const connectInFlight = useSshConnectInFlight(targetId)
 
   const handleConnect = useCallback(async () => {
-    if (isSshConnectInFlight(targetId)) {
-      return
-    }
-    beginSshConnect(targetId)
     setBusy(true)
     try {
-      await window.api.ssh.connect({ targetId })
-      recordFeatureInteraction('ssh')
-    } catch (err) {
-      toastSshConnectFailure(
-        targetId,
-        err,
-        translate('auto.components.status.bar.SshStatusSegment.2c29e2de68', 'Connection failed')
-      )
+      await connectSshTargetFromStatusMenu(targetId)
     } finally {
-      endSshConnect(targetId)
       if (mountedRef.current) {
         setBusy(false)
       }
     }
-  }, [mountedRef, recordFeatureInteraction, targetId])
+  }, [mountedRef, targetId])
 
   const handleDisconnect = useCallback(async () => {
     setBusy(true)
@@ -74,7 +87,13 @@ export function SshTargetStatusRow({
   }, [mountedRef, recordFeatureInteraction, targetId])
 
   return (
-    <div className="flex items-center gap-2.5 px-2 py-1.5">
+    <div
+      id={optionId}
+      role={optionId ? 'option' : undefined}
+      aria-selected={optionId ? active === true : undefined}
+      data-active={active ? 'true' : undefined}
+      className="flex items-center gap-2.5 rounded-sm px-2 py-1.5 data-[active=true]:bg-accent"
+    >
       <span className={`size-1.5 shrink-0 rounded-full ${statusColor(status)}`} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[12px] font-medium">{label}</div>
