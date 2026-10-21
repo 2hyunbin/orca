@@ -1,3 +1,4 @@
+import { projectSessionTabAgentStatus } from './rpc/methods/session-tab-agent-status-projection'
 import { expect, it, vi } from 'vitest'
 import { projectRuntimeMobileSessionTabs } from './runtime-mobile-session-projection'
 import type { RuntimeMobileSessionProjectionHost } from './runtime-mobile-session-projection-contract'
@@ -31,7 +32,21 @@ it.each(['pty', 'leaf', 'unknown', 'disconnected'] as const)(
       buildPtyStatus: () => ({}),
       sanitizeGroups: () => [],
       pruneGroupLayout: () => null,
-      collectTabIds: () => new Set()
+      collectTabIds: () => new Set(),
+      readTerminalInterface: () => ({
+        ptyId: pty.ptyId,
+        incarnationId: 'live-incarnation',
+        terminalHandle: 'handle',
+        paneKey: 'tab:11111111-1111-4111-8111-111111111111',
+        worktreeId: 'workspace',
+        epoch: 'host',
+        revision: 1,
+        inputRevision: 0,
+        owner: null,
+        executionLaunchToken: null,
+        state: 'shell',
+        basis: 'hook'
+      })
     } as unknown as RuntimeMobileSessionProjectionHost
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: one terminal tab is the only snapshot field this projection path reads.
     const snapshot = {
@@ -51,7 +66,17 @@ it.each(['pty', 'leaf', 'unknown', 'disconnected'] as const)(
       ]
     } as RuntimeMobileSessionTabsSnapshot
 
-    const tab = projectRuntimeMobileSessionTabs(snapshot, host).tabs[0]
+    const projected = projectRuntimeMobileSessionTabs(snapshot, host)
+    const tab = projected.tabs[0]
+    if (kind === 'pty' || kind === 'leaf') {
+      expect(tab).toHaveProperty('terminalInterface.state', 'shell')
+      expect(tab).not.toHaveProperty('agentStatus')
+      const old = projectSessionTabAgentStatus(projected, 'mobile', []).tabs[0]
+      expect(old).not.toHaveProperty('terminalInterface')
+      const modern = projectSessionTabAgentStatus(projected, 'mobile', ['terminal.interface.v1'])
+        .tabs[0]
+      expect(modern).toHaveProperty('terminalInterface.state', 'shell')
+    }
 
     if (kind === 'unknown' || kind === 'disconnected') {
       expect(tab).not.toHaveProperty('incarnationId')

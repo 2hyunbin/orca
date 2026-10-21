@@ -1,3 +1,4 @@
+import type { TerminalInterfaceOwner } from './terminal-interface-authority'
 import { deriveCliWriterTopology } from './cli-writer-observation'
 import { transitionHookPresence } from '../../../shared/agent-hook-presence-transition'
 import {
@@ -11,7 +12,6 @@ import {
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import type { AgentHookEventPayload } from '../../../shared/agent-hook-listener/listener-event'
 import type { AgentStatusObservationOrigin } from '../../../shared/agent-status-observation'
-import { ClaudeOwedNotificationExpiryTimers } from '../../../shared/claude-owed-notification-expiry-timers'
 import { setClaudeMainAgentTurnState } from '../../../shared/agent-hook-listener/providers/claude-roster-state'
 import {
   attachClaudePermissionToolUseId,
@@ -21,14 +21,10 @@ import {
 } from './server-claude-status-rules'
 import { isStaleGrokTurnEnd } from './server-grok-status-rules'
 import { resolveCancelVerdictLatch } from './server-cancel-verdict-latch'
-import { AgentHookServerStatusApplication } from './server-status-application'
+import { AgentHookServerTerminalInterfaceStatus } from './server-terminal-interface-status'
 import { claimsPaneAfterExit } from './agent-exit-evidence'
 
-export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusApplication {
-  protected readonly claudeOwedNotificationExpiry = new ClaudeOwedNotificationExpiryTimers(
-    this.state
-  )
-
+export abstract class AgentHookServerStatusUpdate extends AgentHookServerTerminalInterfaceStatus {
   // Why here: every stored row passes through, including a cancel inference and a pane move.
   protected override commitStatusRowMutation(
     before: EnrichedAgentHookEventPayload | null | undefined,
@@ -51,7 +47,8 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     origin: AgentStatusObservationOrigin = 'hook',
     observedAt?: number,
     mutationBefore?: EnrichedAgentHookEventPayload,
-    newRun = false
+    newRun = false,
+    acceptInterfaceHook?: (owner: TerminalInterfaceOwner) => void
   ): EnrichedAgentHookEventPayload | undefined {
     const transitioned = transitionHookPresence(
       incoming,
@@ -141,10 +138,16 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
     if (terminalOwnedPayload.providerSessionOnly) {
       // Why: identity-only rows survive replay but must not emit prompt telemetry or a fabricated status.
       onAccepted?.()
-      const enriched = deriveCliWriterTopology({
-        ...this.attachStatusTiming(terminalOwnedPayload, now),
-        observation: this.stampObservation(terminalOwnedPayload, origin, now)
-      }, rowBefore, this.cliWriterExecutionMatches, newRun, incoming.agentPresence?.process)
+      const enriched = deriveCliWriterTopology(
+        {
+          ...this.attachStatusTiming(terminalOwnedPayload, now),
+          observation: this.stampObservation(terminalOwnedPayload, origin, now)
+        },
+        rowBefore,
+        this.cliWriterExecutionMatches,
+        newRun,
+        incoming.agentPresence?.process
+      )
       this.clearAssistantMessageRetry(enriched.paneKey)
       this.runtimeObservedStatusPaneKeys.delete(enriched.paneKey)
       if (!this.writeLegacyStatusRow(enriched)) {
@@ -270,10 +273,16 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
       runningNonAgentTask === undefined
         ? unpairedPayload
         : { ...unpairedPayload, claudeRunningNonAgentTask: runningNonAgentTask }
-    const enriched = deriveCliWriterTopology({
-      ...this.attachStatusTiming(pairedPayload, now, observedAt),
-      observation: this.stampObservation(pairedPayload, origin, observedAt ?? now)
-    }, rowBefore, this.cliWriterExecutionMatches, newRun, incoming.agentPresence?.process)
+    const enriched = deriveCliWriterTopology(
+      {
+        ...this.attachStatusTiming(pairedPayload, now, observedAt),
+        observation: this.stampObservation(pairedPayload, origin, observedAt ?? now)
+      },
+      rowBefore,
+      this.cliWriterExecutionMatches,
+      newRun,
+      incoming.agentPresence?.process
+    )
     if (
       typeof enriched.payload.turnCompletedAt === 'number' &&
       Number.isFinite(enriched.payload.turnCompletedAt)
@@ -293,6 +302,7 @@ export abstract class AgentHookServerStatusUpdate extends AgentHookServerStatusA
       return undefined
     }
     this.commitStatusRowMutation(rowBefore, enriched)
+    this.acceptTerminalInterfaceReceipt(acceptInterfaceHook, origin, payload, incoming, enriched)
     // Why skipped for structured rows: the serializer drops them, so the whole walk and stringify
     // can only ever reproduce the last file — once per debounce window for a streaming chat.
     if (!enriched.structuredHost) {

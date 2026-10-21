@@ -1,3 +1,6 @@
+import { canWriteHookServerLegacyStatusRow } from './server-status-admission'
+import type { TerminalInterfaceOwner } from './terminal-interface-authority'
+import { TerminalInterfaceAuthority } from './terminal-interface-authority'
 import type {
   AgentProcessPresence,
   AgentProcessVerdict
@@ -7,7 +10,6 @@ import { randomBytes, randomUUID } from 'node:crypto'
 
 import {
   createHookListenerState,
-  canAdmitLegacyAgentStatusEntry,
   type HookListenerState
 } from '../../../shared/agent-hook-listener/listener-state'
 import {
@@ -27,7 +29,6 @@ import type { AgentStatusClearIpcPayload } from '../../../shared/agent-status-ty
 import type { LegacyPaneKeyAliasEntry } from '../../../shared/persisted-state-types'
 import type { SpoolRecord } from '../../../shared/agent-hook-spool'
 import { createAgentStatusStore, type AgentStatusStore } from '../../../shared/agent-status-store'
-import { AGENT_STATUS_2A_CURRENT_PRODUCER_MODE } from '../../../shared/agent-status-legacy-adapter'
 import type { AgentStatusSubject } from '../../../shared/agent-status-subject'
 import type {
   AgentHookAuthorityEvidence,
@@ -51,17 +52,13 @@ import type {
   StatusRowMutationListener
 } from './server-types'
 import { RevisionedMap } from './revisioned-map'
-import { forgetAgentExit, type AgentExitEvidence } from './agent-exit-evidence'
+import { forgetPaneAgentExit, type AgentExitEvidence } from './agent-exit-evidence'
 
 /** Shared mutable state for the layered hook-server implementation. */
 export abstract class AgentHookServerState {
+  readonly terminalInterfaces = new TerminalInterfaceAuthority()
   protected canWriteLegacyStatusRow(entry: AgentHookEventPayload): boolean {
-    return canAdmitLegacyAgentStatusEntry(
-      this.state,
-      'main-status-update',
-      entry,
-      AGENT_STATUS_2A_CURRENT_PRODUCER_MODE
-    )
+    return canWriteHookServerLegacyStatusRow(this.state, entry)
   }
 
   // Why: the epoch is minted on first canonical use, so constructing the server — which happens at
@@ -80,10 +77,8 @@ export abstract class AgentHookServerState {
 
   /** A new agent (or a new worker attach) claimed the pane; the previous exit no longer describes it. */
   forgetAgentExit(paneKey: string): void {
-    const forgotten = forgetAgentExit(this.agentExitedAtByPaneKey, paneKey)
     if (
-      forgetAgentExit(this.agentExitedAtByPaneKey, this.resolvePaneKeyAlias(paneKey)) ||
-      forgotten
+      forgetPaneAgentExit(this.agentExitedAtByPaneKey, paneKey, this.resolvePaneKeyAlias(paneKey))
     ) {
       this.scheduleStatusPersist()
     }
@@ -247,7 +242,9 @@ export abstract class AgentHookServerState {
     onAccepted?: () => void,
     origin?: AgentStatusObservationOrigin,
     observedAt?: number,
-    mutationBefore?: EnrichedAgentHookEventPayload
+    mutationBefore?: EnrichedAgentHookEventPayload,
+    newRun?: boolean,
+    acceptInterfaceHook?: (owner: TerminalInterfaceOwner) => void
   ): EnrichedAgentHookEventPayload | undefined
   protected abstract emitEnrichedStatus(enriched: EnrichedAgentHookEventPayload): void
   protected abstract clearAssistantMessageRetry(paneKey: string): void

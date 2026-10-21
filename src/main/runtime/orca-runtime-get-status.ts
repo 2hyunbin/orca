@@ -239,6 +239,11 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
     return this.clientEvents.countTerminalSideEffectConsumers()
   }
 
+  getTerminalInterfaceClientEventSnapshot(): RuntimeClientEvent[] {
+    const authority = this.terminalInterfaces
+    return authority ? [authority.snapshotEvent()] : []
+  }
+
   getTerminalSleepClientEventSnapshot(): RuntimeClientEvent[] {
     const statusHost = this.asRuntimeStatusHost()
     const events: RuntimeClientEvent[] = []

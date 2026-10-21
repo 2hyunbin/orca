@@ -1,3 +1,4 @@
+import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { takeSleepingAgentWakeRequest } from '@/lib/sleeping-agent-wake-requests'
 import { holdPaneResumeUntilShown, releasePaneResumeHold } from '@/lib/pane-spawn-deferral-registry'
@@ -50,6 +51,7 @@ export function deferHiddenAgentResume(
     }
   }
   session.hibernatedWakeTarget = target
+  notifyPaneStartupStateChanged()
   session.hiddenAgentResumeHeldTarget = target
   // Why: the cleared layout binding no longer proves ownership, so an activation sweep would relaunch the record.
   // Why each clause: armed, woken, or its reattach or fallback still connecting — until a PTY binds.

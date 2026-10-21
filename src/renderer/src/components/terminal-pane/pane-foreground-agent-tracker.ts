@@ -1,10 +1,11 @@
+import { createPaneForegroundObservationTransitions } from './pane-foreground-observation-transitions'
+import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import {
   isAgentForegroundWrapperProcess,
   recognizeAgentProcess
 } from '../../../../shared/agent-process-recognition'
 import { isShellProcess } from '../../../../shared/shell-process-detection'
 import { createPaneForegroundProcessReader } from './pane-foreground-process-reader'
-import { createMonitorObservationHandlers } from './pane-foreground-monitor-observations'
 import { FOREGROUND_COMMAND_READS } from '../../../../shared/foreground-command-settle'
 import {
   isObservationOwnerSuperseded,
@@ -63,6 +64,7 @@ export function createPaneForegroundAgentTracker(
     }
     scheduledReadReason = null
     activeReadReason = null
+    notifyPaneStartupStateChanged()
   }
 
   const scheduleRead = (
@@ -72,6 +74,7 @@ export function createPaneForegroundAgentTracker(
   ): void => {
     const generation = readGeneration
     scheduledReadReason = reason
+    notifyPaneStartupStateChanged()
     readTimer = setTimeout(() => {
       readTimer = null
       scheduledReadReason = null
@@ -79,6 +82,7 @@ export function createPaneForegroundAgentTracker(
       void readForeground(generation, retryIndex, reason).finally(() => {
         if (generation === readGeneration && activeReadReason === reason) {
           activeReadReason = null
+          notifyPaneStartupStateChanged()
         }
       })
     }, delayMs)
@@ -339,14 +343,14 @@ export function createPaneForegroundAgentTracker(
       scheduleRead(FOREGROUND_COMMAND_READS.settleMs, 0, 'command-finished')
       return true
     },
-    ...createMonitorObservationHandlers({
+    ...createPaneForegroundObservationTransitions({
       deps,
-      isDisposed: () => disposed,
-      cancelPendingRead,
+      disposed: () => disposed,
       hasCommandReadInFlight,
+      cancelPendingRead,
       markForegroundAgentEvidence,
-      clearAgentEvidence: () => {
-        clearAgentEvidence()
+      clearAgentEvidence,
+      resetStartup: () => {
         startupSampled = false
       }
     }),

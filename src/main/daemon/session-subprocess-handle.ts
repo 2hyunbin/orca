@@ -20,6 +20,7 @@ export type SubprocessHandle = {
   startupCommandDeliveredInShellArgs?: boolean
   /** Shell the subprocess actually spawned, after fallbacks. The host reconciles the caller's shell-ready
    *  assumption against it so a fallback shell without a ready marker never gates startup commands. */
+  loginWrapped?: boolean
   shellPath?: string
   shellCwd?: string
   shellPathEnv?: string

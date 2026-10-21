@@ -1,3 +1,4 @@
+import { TERMINAL_INTERFACE_CAPABILITY } from '../../../../shared/terminal-interface-observation'
 import {
   AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
   AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY,
@@ -53,6 +54,20 @@ export function projectSessionTabAgentStatus<TPayload extends SessionTabsPayload
   clientCapabilities: readonly RuntimeCapability[] | undefined
 ): TPayload {
   const structuredVisible = supportsStructuredAgentSessions({ clientKind, clientCapabilities })
+  if (!clientCapabilities?.includes(TERMINAL_INTERFACE_CAPABILITY)) {
+    let changed = false
+    const tabs = payload.tabs.map((tab) => {
+      if (tab.type !== 'terminal' || !('terminalInterface' in tab)) {
+        return tab
+      }
+      changed = true
+      const { terminalInterface: _interface, ...legacy } = tab
+      return legacy
+    })
+    if (changed) {
+      payload = { ...payload, tabs }
+    }
+  }
   let projected: TPayload
   if (clientKind === 'mobile') {
     // Why: deleting the row left the user hunting for a chat the desktop says exists; the row

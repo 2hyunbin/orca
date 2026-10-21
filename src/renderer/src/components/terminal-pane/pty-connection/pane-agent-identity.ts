@@ -1,3 +1,5 @@
+import { installPaneTerminalInterfacePresentation } from './pane-terminal-interface-presentation'
+import { readTerminalInterface } from '../../native-chat/terminal-interface-presentation'
 import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { dismissRetainedProgramResult } from '@/lib/program-status/result-retention'
 import { isRetainedProgramResult } from '@/lib/program-status/row'
@@ -27,6 +29,7 @@ import { installAgentDeparture, readPaneObservationOwner } from './agent-departu
 
 /** Pane agent identity, foreground-agent sampling, and command lifecycle handling. */
 export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
+  installPaneTerminalInterfacePresentation(session)
   // Why: the 133;D confirmation guard and the visible-pane resampler both key off
   // "does this pane expect an agent"; derive each signal once so the two callers
   // can't drift and silently reintroduce the icon bug this fix closes.
@@ -166,7 +169,11 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       )
     },
     getObservationOwner: () => readPaneObservationOwner(session),
-    onConfirmedShellForeground: () => session.acceptAgentDeparture('foreground-release'),
+    onConfirmedShellForeground: () => {
+      if (!readTerminalInterface(useAppStore.getState(), session.cacheKey)) {
+        return session.acceptAgentDeparture('foreground-release')
+      }
+    },
     // Why wrapped: passed bare, a caller-supplied argument would be read as `options` and could
     // reconcile on the unavailable path, which has no proof the agent exited.
     onCommandFinishedUnavailable: () => session.settleDeferredCommandFinishedStatusDrop(),

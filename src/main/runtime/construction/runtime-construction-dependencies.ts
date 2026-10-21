@@ -1,3 +1,4 @@
+import type { TerminalInterfaceAuthority } from '../../agent-hooks/server/terminal-interface-authority'
 import type { CliWriterObservation } from '../../agent-hooks/server/cli-writer-observation'
 import type { ExecutionHostScope } from '../../../shared/execution-host'
 import type { IPtyProvider } from '../../providers/pty-provider-contract'
@@ -22,6 +23,7 @@ import type { OrchestrationEnvironmentTransport } from '../orchestration/environ
 import type { SessionSearchSettingsApply } from '../runtime-session-search-settings'
 
 export type RuntimeConstructionDependencies = {
+  terminalInterfaces?: TerminalInterfaceAuthority
   getLocalProvider?: () => IPtyProvider
   prepareClaudeAuth?: PrepareClaudeAuth
   onPtyStopped?: (ptyId: string) => void

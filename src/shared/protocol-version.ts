@@ -1,3 +1,4 @@
+import { TERMINAL_INTERFACE_CAPABILITY } from './terminal-interface-observation'
 import { AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY } from './agent-session-current-requests-capability'
 import { AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY } from './ai-vault-resume-preparation'
 import { PROGRAM_STATUS_RUNTIME_CAPABILITY } from './program-status/protocol'
@@ -181,6 +182,7 @@ export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
 ] as const
 
 export const RUNTIME_CAPABILITIES = [
+  TERMINAL_INTERFACE_CAPABILITY,
   AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY,
   jiraDetailCapabilities.JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
   JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY,

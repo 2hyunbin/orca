@@ -1,6 +1,10 @@
 import { useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import { encodeNativeChatTranscriptIdentity } from '../../../src/shared/native-chat-transcript-retention'
-import { resolveMobileNativeChat, type MobileNativeChatTab } from './mobile-native-chat-eligibility'
+import {
+  mobileTerminalInterfaceReleasesChat,
+  resolveMobileNativeChat,
+  type MobileNativeChatTab
+} from './mobile-native-chat-eligibility'
 import {
   useMobileSessionViewMode,
   type MobileSessionViewModeController
@@ -49,6 +53,16 @@ export function useMobileNativeChatActiveResolution(args: {
     activeSessionTab && activeSessionTabId && tabWantsChat
       ? resolveMobileNativeChat(activeSessionTab, nativeChatTranscriptIsLocalReadable)
       : null
+  useLayoutEffect(() => {
+    if (
+      activeSessionTabId &&
+      activeSessionTab?.type === 'terminal' &&
+      mobileTerminalInterfaceReleasesChat(activeSessionTab) &&
+      isTabChatView(activeSessionTabId)
+    ) {
+      setTabView(activeSessionTabId, 'terminal')
+    }
+  }, [activeSessionTab, activeSessionTabId, isTabChatView, setTabView])
   const showNativeChat = activeChatResolution != null
   const showNativeChatRef = useRef(showNativeChat)
   const activeChatAgent = activeChatResolution?.agent ?? null

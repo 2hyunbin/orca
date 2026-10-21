@@ -1,3 +1,4 @@
+import type { TerminalInterfaceAuthority } from '../../agent-hooks/server/terminal-interface-authority'
 import type * as Calls from './runtime-host-service-calls'
 import type { IPtyProvider } from '../../providers/pty-provider-contract'
 import type {
@@ -43,6 +44,7 @@ import type * as PtyControllerContract from '../runtime-pty-controller-contract'
 import type { RuntimeClientEventBus } from '../runtime-client-event-bus'
 
 export abstract class RuntimeConstructionServices {
+  readonly terminalInterfaces!: TerminalInterfaceAuthority | null
   abstract getOrchestrationDb(): OrchestrationDb
   abstract listRepos(): Repo[]
   abstract invalidateResolvedWorktreeCache(): void

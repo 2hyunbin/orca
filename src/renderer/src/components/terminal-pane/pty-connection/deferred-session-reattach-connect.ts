@@ -1,3 +1,4 @@
+import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
 import { isSshSessionGoneError, recordPtyConnectDiagnostic } from './pty-connect-limits'
@@ -95,6 +96,7 @@ function connectDeferredSessionReattach(
   )
   session.beginReattachLiveDataDeferral(outputCallbacks.generation)
   session.transportConnectInFlightSince = Date.now()
+  notifyPaneStartupStateChanged()
   const reattachPromise = session.transport.connect({
     url: '',
     cols: session.cols,
@@ -132,6 +134,7 @@ function connectDeferredSessionReattach(
     .catch(() => null)
     .finally(() => {
       session.transportConnectInFlightSince = null
+      notifyPaneStartupStateChanged()
     })
   const outcome = Promise.resolve(reattachPromise)
     .then(async (result): Promise<HeldPaneReopenOutcome> => {

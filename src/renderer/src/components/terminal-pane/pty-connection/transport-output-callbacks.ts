@@ -1,3 +1,4 @@
+import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
 import { createTerminalStartupTiming } from '../terminal-startup-timing'
 import type { PtyReplayDataMeta, PtyTransportRecoveryState } from '../pty-transport-types'
@@ -112,6 +113,7 @@ export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySessi
         onSpawnDeferred: (reason: SpawnDeferralReason): void => {
           if (isCurrent()) {
             session.pendingSpawnDeferral = reason
+            notifyPaneStartupStateChanged()
           }
         }
       }

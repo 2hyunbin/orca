@@ -1,4 +1,13 @@
 // @vitest-environment happy-dom
+import { useNativeChatToggleShortcut } from '../native-chat/use-native-chat-toggle-shortcut'
+import type { TerminalInterfaceObservation } from '../../../../shared/terminal-interface-observation'
+import {
+  applyTerminalInterfaceSnapshot,
+  registerTerminalInterfacePresentation,
+  terminalInterfaceReleasesChat
+} from '../native-chat/terminal-interface-presentation'
+import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
+import { selectTabBarAgentProjections } from '../tab-bar/tab-agent-types-by-tab-id'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -126,6 +135,9 @@ function useFixture(fixture: ReturnType<typeof makeFixture>, initialOwner: strin
         chatLeafId,
         activeLeafId,
         chatLeafStillMounted: mounted,
+        chatLeafHasConfirmedAgentExit:
+          chatLeafId !== null &&
+          terminalInterfaceReleasesChat(useAppStore.getState(), `tab:${chatLeafId}`),
         activeLeafIsEligible: isChatEligibleForLeaf(activeLeafId)
       })
     )
@@ -141,7 +153,11 @@ function useFixture(fixture: ReturnType<typeof makeFixture>, initialOwner: strin
 }
 
 beforeEach(() => {
-  useAppStore.setState({ paneForegroundAgentByPaneKey: {} })
+  useAppStore.setState({
+    paneForegroundAgentByPaneKey: {},
+    terminalInterfaceByPtyId: {},
+    agentLaunchConfigByPaneKey: {}
+  })
   mocks.state.settings.experimentalNativeChat = true
   mocks.state.runtimePaneTitlesByTabId.tab = { 1: 'codex', 2: 'codex' }
   mocks.state.setTabViewMode('tab', 'chat')
@@ -310,4 +326,104 @@ describe('terminal chat ownership lifecycle', () => {
     expect(hook.result.current.chatLeafId).toBeNull()
     expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('terminal')
   })
+})
+
+it('converges a split Chat from rowless snapshots after slow launch settlement, then remounts with the same tab and pane eligibility', async () => {
+  const fixture = makeFixture()
+  mocks.state.setTabLayout('tab', {
+    ...mocks.state.terminalLayoutsByTabId.tab,
+    ptyIdsByLeafId: { [LEFT]: 'shell-left', [RIGHT]: 'pty' }
+  })
+  let pending = true
+  const release = registerTerminalInterfacePresentation(`tab:${RIGHT}`, {
+    ptyId: () => 'pty',
+    incarnation: () => 'birth',
+    pending: () => pending,
+    cold: () => true
+  })
+  const observation: TerminalInterfaceObservation = {
+    ptyId: 'pty',
+    incarnationId: 'birth',
+    terminalHandle: 'handle',
+    paneKey: `tab:${RIGHT}`,
+    worktreeId: 'wt',
+    epoch: 'desktop-flow',
+    revision: 1,
+    inputRevision: 0,
+    owner: 'original-hook',
+    executionLaunchToken: 'launch-A',
+    state: 'shell',
+    basis: 'hook'
+  }
+  const publish = (right: TerminalInterfaceObservation): void =>
+    applyTerminalInterfaceSnapshot(
+      {
+        type: 'terminalInterfaces',
+        epoch: right.epoch,
+        revision: right.revision,
+        observations: [{ ...right, ptyId: 'shell-left', paneKey: `tab:${LEFT}` }, right]
+      },
+      null
+    )
+  useAppStore.setState({
+    agentLaunchConfigByPaneKey: {
+      [`tab:${RIGHT}`]: {
+        launchConfig: { agentArgs: '', agentEnv: {} },
+        registeredAt: 0,
+        identity: { launchToken: 'launch-B' }
+      }
+    }
+  })
+  const hook = renderHook(() => useFixture(fixture, RIGHT))
+  act(() => publish(observation))
+  expect(hook.result.current.chatLeafId).toBe(RIGHT)
+  await act(async () => {
+    pending = false
+    notifyPaneStartupStateChanged()
+    await Promise.resolve()
+  })
+  // A delayed old snapshot has no authority over launch B, even if received after it.
+  act(() => publish({ ...observation, revision: 2 }))
+  expect(hook.result.current.chatLeafId).toBe(RIGHT)
+  act(() => publish({ ...observation, revision: 3, executionLaunchToken: 'launch-B' }))
+  expect(hook.result.current.chatLeafId).toBeNull()
+  expect(hook.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+  expect(fixture.managerRef.current.getActivePane()?.leafId).toBe(LEFT)
+  mocks.state.setTabLayout('tab', {
+    ...mocks.state.terminalLayoutsByTabId.tab,
+    activeLeafId: RIGHT
+  })
+  expect(
+    selectTabBarAgentProjections(useAppStore.getState()).nativeChatShellForegroundTabsById.tab
+  ).toBe(true)
+  useAppStore.setState({
+    activeWorktreeId: 'wt',
+    activeGroupIdByWorktree: { wt: 'group' },
+    groupsByWorktree: {
+      wt: [{ id: 'group', worktreeId: 'wt', activeTabId: 'tab', tabOrder: ['tab'] }]
+    }
+  })
+  const shortcut = renderHook(() => useNativeChatToggleShortcut('wt', true))
+  const toggle = vi.spyOn(useAppStore.getState(), 'toggleTabViewMode')
+  const isMac = navigator.userAgent.includes('Mac')
+  act(() =>
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'j',
+        shiftKey: true,
+        metaKey: isMac,
+        ctrlKey: !isMac,
+        bubbles: true
+      })
+    )
+  )
+  expect(toggle).not.toHaveBeenCalled()
+  toggle.mockRestore()
+  shortcut.unmount()
+  hook.unmount()
+  const remount = renderHook(() => useFixture(makeFixture([20, 10]), RIGHT))
+  act(() => publish({ ...observation, revision: 3, executionLaunchToken: 'launch-B' }))
+  expect(remount.result.current.chatLeafId).toBeNull()
+  expect(remount.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
+  release()
 })

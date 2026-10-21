@@ -1,3 +1,4 @@
+import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
 import type { MobileFileMedia } from '../files/mobile-file-media'
 import type { StructuredAgentId } from '../../../src/shared/agent-session-provider-handle'
 import type { DiffComment } from '../../../src/shared/diff-comment-types'
@@ -16,6 +17,7 @@ export type MobileSessionTabType = 'terminal' | 'markdown' | 'file' | 'browser' 
 export type MobileSessionTab =
   | {
       type: 'terminal'
+      terminalInterface?: TerminalInterfaceObservation
       id: string
       title: string
       parentTabId?: string

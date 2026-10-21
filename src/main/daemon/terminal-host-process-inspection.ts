@@ -1,3 +1,4 @@
+import type { TerminalInterfaceEvidence } from '../../shared/terminal-interface-observation'
 import { isShellProcess } from '../../shared/agent-detection'
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
 import type { PtyChildProcessVerdict } from '../../shared/terminal-process-inspection'
@@ -17,6 +18,7 @@ import {
 import { SessionNotFoundError } from './types'
 
 export type TerminalHostProcessInspection = {
+  terminalInterface?: TerminalInterfaceEvidence
   foregroundProcess: string | null
   hasChildProcesses: boolean
   childProcessEvidence?: PtyChildProcessVerdict
@@ -39,6 +41,7 @@ export async function inspectTerminalHostProcess(args: {
   expectedIncarnationId?: string
   /** The caller is a self-correcting poll that only reads the process name, never evidence. */
   steadyState?: boolean
+  terminalInterface?: boolean
   /** See `PtyProcessInspectionOptions`. */
   ignoreDetached?: boolean
   retiredIncarnation?: RetiredIncarnation
@@ -134,6 +137,14 @@ export async function inspectTerminalHostProcess(args: {
       clearSteadyStateAnchor(session)
     }
   }
+  const terminalInterface =
+    args.terminalInterface === true
+      ? await session.inspectTerminalInterface().catch(() => ({
+          shellForeground: false,
+          children: 'unverifiable' as const,
+          capturedAgeMs: 0
+        }))
+      : undefined
   if (!session.isAlive || (args.currentSession && args.currentSession() !== session)) {
     childProcessEvidence = 'unverifiable'
     evidence = unverifiableEvidence(args, session, 'session_changed')
@@ -152,7 +163,13 @@ export async function inspectTerminalHostProcess(args: {
         ? nonShellForeground
         : childProcessEvidence !== 'no-children',
     ...(childProcessEvidence === undefined ? {} : { childProcessEvidence }),
-    foregroundProcessEvidence: evidence
+    foregroundProcessEvidence: evidence,
+    ...(terminalInterface &&
+    session.isAlive &&
+    incarnationMatches &&
+    (!args.currentSession || args.currentSession() === session)
+      ? { terminalInterface }
+      : {})
   }
 }
 

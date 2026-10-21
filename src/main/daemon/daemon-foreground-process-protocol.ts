@@ -18,6 +18,7 @@ export type InspectProcessRequest = Omit<GetForegroundProcessRequest, 'type'> & 
   type: 'inspectProcess'
   payload: GetForegroundProcessRequest['payload'] & {
     expectedIncarnationId?: string
+    terminalInterface?: boolean
     /** Optional; a daemon that predates it answers with the full capture as it always did. */
     steadyState?: boolean
     /** Optional; a daemon that predates it keeps counting detached daemons as children. */

@@ -29,6 +29,7 @@ function makeRuntime(): {
   )
   const runtime = {
     onClientEvent,
+    getTerminalInterfaceClientEventSnapshot: () => [],
     registerSubscriptionCleanup: (_id: string, cleanup: () => void) => {
       cleanups.push(cleanup)
     }
@@ -68,4 +69,45 @@ describe('runtime.clientEvents.subscribe', () => {
     cleanups.forEach((cleanup) => cleanup())
     await done
   })
+})
+
+// The same stream serves desktop IPC and paired sockets; only negotiated readers see this facet.
+it('replays rowless state listener-first, filters old peers, and sends the empty replacement', async () => {
+  const event: RuntimeClientEvent = {
+    type: 'terminalInterfaces',
+    epoch: 'host',
+    revision: 2,
+    observations: []
+  }
+  for (const capable of [false, true]) {
+    const { runtime, onClientEvent, cleanups } = makeRuntime()
+    runtime.getTerminalInterfaceClientEventSnapshot = () => [event]
+    const frames: unknown[] = []
+    const done = subscribeMethod.handler(
+      undefined,
+      {
+        runtime,
+        clientKind: 'runtime',
+        caller: { kind: 'desktop' },
+        clientCapabilities: capable ? ['terminal.interface.v1'] : []
+      } as RpcContext,
+      (frame) => frames.push(frame)
+    )
+    expect(onClientEvent).toHaveBeenCalledWith(expect.any(Function), {
+      consumesTerminalSideEffects: false
+    })
+    expect(frames.some((frame) => frame === event)).toBe(capable)
+    onClientEvent.mock.calls[0]?.[0]({ ...event, revision: 3 })
+    expect(
+      frames.filter(
+        (frame) =>
+          typeof frame === 'object' &&
+          frame !== null &&
+          'type' in frame &&
+          frame.type === 'terminalInterfaces'
+      )
+    ).toHaveLength(capable ? 2 : 0)
+    cleanups.forEach((cleanup) => cleanup())
+    await done
+  }
 })

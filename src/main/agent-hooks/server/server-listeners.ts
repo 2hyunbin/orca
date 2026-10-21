@@ -1,3 +1,4 @@
+import { resolveAgentStatusBinding } from '../../ipc/agent-status-ipc-boundary'
 import { cliWriterExecutionMatcher, type CliWriterExecutionMatches } from './cli-writer-observation'
 import { isTmuxInnerSubject } from '../../../shared/tmux-agent-hook-owner'
 import type {
@@ -33,6 +34,15 @@ export abstract class AgentHookServerListeners extends AgentHookServerState {
 
   setCliWriterExecutionMatcher(...args: Parameters<typeof cliWriterExecutionMatcher>): void {
     this.cliWriterExecutionMatches = cliWriterExecutionMatcher(...args)
+    this.terminalInterfaces.attachHookBindings((paneKey) => {
+      const binding = resolveAgentStatusBinding(paneKey, args[1])
+      return binding.kind === 'unresolved'
+        ? null
+        : {
+            terminalHandle: binding.terminalHandle,
+            incarnationId: binding.processIncarnation
+          }
+    })
   }
   // Why here: every publish below stitches from it, and all later layers manage its lifecycle.
   protected readonly programStatusFacets = new ProgramStatusFacetStore()

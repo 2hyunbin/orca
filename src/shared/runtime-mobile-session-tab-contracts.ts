@@ -1,3 +1,4 @@
+import type { TerminalInterfaceObservation } from './terminal-interface-observation'
 import type { AgentStatusEntry } from './agent-status-types'
 import type { BrowserCertificateFailure, BrowserLoadError } from './browser-workspace-types'
 import type { RuntimeBrowserPlacement } from './runtime-browser-placement'
@@ -117,8 +118,16 @@ export type RuntimeMobileSessionSnapshotTab =
   | RuntimeMobileSessionAgentTab
 
 export type RuntimeMobileSessionTerminalClientTab =
-  | (RuntimeMobileSessionTerminalTab & { status: 'pending-handle'; terminal: null })
-  | (RuntimeMobileSessionTerminalTab & { status: 'ready'; terminal: string })
+  | (RuntimeMobileSessionTerminalTab & {
+      status: 'pending-handle'
+      terminal: null
+      terminalInterface?: TerminalInterfaceObservation
+    })
+  | (RuntimeMobileSessionTerminalTab & {
+      status: 'ready'
+      terminal: string
+      terminalInterface?: TerminalInterfaceObservation
+    })
 
 export type RuntimeMobileSessionClientTab =
   | RuntimeMobileSessionTerminalClientTab

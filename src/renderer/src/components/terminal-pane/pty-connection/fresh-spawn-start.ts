@@ -1,3 +1,4 @@
+import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { useAppStore } from '@/store'
@@ -54,6 +55,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
     // Every fresh connect creates or rebinds a PTY. Do not let a legacy
     // response that omits `incarnationId` inherit the predecessor's fence.
     session.remotePtyIncarnationId = null
+    notifyPaneStartupStateChanged()
     session.clearPaneMode2031State()
     session.clearHiddenOutputRestoreState()
     // Why: a canceled old replay clear can preserve xterm's native
@@ -88,7 +90,9 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
     }
 
     session.transportConnectInFlightSince = Date.now()
+    notifyPaneStartupStateChanged()
     session.pendingSpawnDeferral = null
+    notifyPaneStartupStateChanged()
     const visibleAtSpawn = session.deps.isVisibleRef.current === true
     const effectiveStartup = startupOverride === undefined ? session.paneStartup : startupOverride
     const outputCallbacks = session.captureTransportOutputCallbacks(
@@ -125,6 +129,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
       .catch(() => null)
       .finally(() => {
         session.transportConnectInFlightSince = null
+        notifyPaneStartupStateChanged()
       })
     const trackedPromise: Promise<string | null> = Promise.resolve(spawnedRaw)
       .then(async (spawnedPtyId) => {
@@ -143,6 +148,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           ? null
           : session.pendingSpawnDeferral
         session.pendingSpawnDeferral = null
+        notifyPaneStartupStateChanged()
         if (deferral) {
           // Why before the launch-config cleanup below: a deferred launch is postponed, not dead.
           releaseDeferredCwdFence()
@@ -159,8 +165,10 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
         // field; either way remote evidence must remain client-only
         // unverifiable until a stamped attach result arrives.
         session.remotePtyIncarnationId = connectResult?.incarnationId ?? null
+        notifyPaneStartupStateChanged()
         if (connectResult?.isReattach) {
           session.pendingStartupCommand = null
+          notifyPaneStartupStateChanged()
           const accepted = await session.handleReattachResult(
             connectResult,
             null,
@@ -270,6 +278,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
       .finally(() => {
         if (pendingSpawnByPaneKey.get(session.pendingSpawnKey) === trackedPromise) {
           pendingSpawnByPaneKey.delete(session.pendingSpawnKey)
+          notifyPaneStartupStateChanged()
           pendingSpawnGenerationByPaneKey.delete(session.pendingSpawnKey)
         }
       })
@@ -304,6 +313,7 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
     // Why: split panes in the same tab can spawn concurrently. Key by pane
     // as well as tab so a remount cannot attach to a sibling setup pane's PTY.
     pendingSpawnByPaneKey.set(session.pendingSpawnKey, trackedPromise)
+    notifyPaneStartupStateChanged()
     pendingSpawnGenerationByPaneKey.set(session.pendingSpawnKey, session.tabGeneration)
     return trackedPromise
   }

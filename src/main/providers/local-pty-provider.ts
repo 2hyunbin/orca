@@ -1,3 +1,5 @@
+import { inspectPosixTerminalInterface } from './terminal-interface-process-evidence'
+import { inspectSpawnFileWindowsChildProcesses } from '../daemon/pty-subprocess/spawn-file-child-processes'
 import type * as pty from 'node-pty'
 import type {
   IPtyProvider,
@@ -30,6 +32,8 @@ import {
   pendingLocalPtySpawns,
   ptyProcesses,
   ptyIncarnations,
+  ptyShellPath,
+  ptyReportsChildExitStatus,
   resetLoadGeneration,
   type DataCallback,
   type ExitCallback
@@ -169,6 +173,28 @@ export class LocalPtyProvider implements IPtyProvider {
       options?.steadyState !== true,
       options?.ignoreDetached === true
     )
+    const terminalInterface =
+      options?.terminalInterface === true
+        ? process.platform === 'win32'
+          ? await inspectSpawnFileWindowsChildProcesses(
+              proc,
+              ptyShellPath.get(id) ?? '',
+              true
+            ).then((children) => ({
+              shellForeground: children === 'no-children',
+              children,
+              capturedAgeMs: 0
+            }))
+          : await inspectPosixTerminalInterface(
+              proc.pid,
+              ptyShellPath.get(id) ?? '',
+              ptyReportsChildExitStatus.get(id) === false
+            ).catch(() => ({
+              shellForeground: false,
+              children: 'unverifiable' as const,
+              capturedAgeMs: 0
+            }))
+        : undefined
     // Neither asynchronous inspection may publish a replacement pane's identity.
     if (ptyProcesses.get(id) !== proc || ptyIncarnations.get(id) !== incarnation) {
       return {
@@ -180,7 +206,8 @@ export class LocalPtyProvider implements IPtyProvider {
     return {
       foregroundProcess,
       hasChildProcesses: childProcessEvidence !== 'no-children',
-      childProcessEvidence
+      childProcessEvidence,
+      ...(terminalInterface ? { terminalInterface } : {})
     }
   }
 

@@ -1,3 +1,4 @@
+import { nativeChatShellForeground } from './terminal-interface-presentation'
 import { useEffect } from 'react'
 import { useAppStore } from '../../store'
 import type { AgentType } from '../../../../shared/agent-status-types'
@@ -9,7 +10,6 @@ import { isMacPlatform, matchesNativeChatToggleShortcut } from './native-chat-sh
 import { getConnectionIdFromState } from '@/lib/connection-context'
 import { resolveKeyboardWorkspaceId } from '@/lib/floating-workspace-terminal-actions'
 import {
-  isNativeChatActiveLeafShellForeground,
   isNativeChatTabWideFallbackSafe,
   resolveNativeChatActiveLayoutLeafId
 } from './native-chat-leaf-routing'
@@ -97,10 +97,9 @@ export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive
             getConnectionIdFromState(state, worktreeId)
           ),
           isChatViewMode: tab.viewMode === 'chat',
-          shellForeground: isNativeChatActiveLeafShellForeground(
-            tab.entityId,
-            terminalLayout,
-            state.paneForegroundAgentByPaneKey
+          shellForeground: nativeChatShellForeground(
+            state,
+            `${tab.entityId}:${resolveNativeChatActiveLayoutLeafId(terminalLayout) ?? ''}`
           )
         })
       ) {

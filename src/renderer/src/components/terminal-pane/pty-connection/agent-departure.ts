@@ -1,3 +1,4 @@
+import { readTerminalInterface } from '../../native-chat/terminal-interface-presentation'
 import type { RecognizedAgentProcess } from '../../../../../shared/agent-process-recognition'
 import { resolveCompatibleAgentTypeForOwner } from '../../../../../shared/agent-title-owner'
 import { CONFIRMED_SHELL_MODE_RESET } from '../../../../../shared/terminal-mode-reset-profiles'
@@ -20,6 +21,7 @@ export function installAgentDeparture(session: ConnectPanePtySession): void {
   ): boolean => {
     const state = useAppStore.getState()
     const ptyId = session.transport.getPtyId()
+    const hostPresentation = Boolean(readTerminalInterface(state, session.cacheKey))
     const sleeping = session.getSleepingRecordForPane(state)
     const wake = session.hibernatedWakeTarget
     const current = state.agentStatusByPaneKey[session.cacheKey]
@@ -55,6 +57,10 @@ export function installAgentDeparture(session: ConnectPanePtySession): void {
       }
       state.clearAgentLaunchConfig(session.cacheKey)
       retireLiveAgentRowOnConfirmedProcessExit(session, process)
+    }
+    // Ordinary recognized-process cleanup still runs for capable hosts and old readers.
+    if (hostPresentation) {
+      return true
     }
     session.deps.onAgentExitedRef.current(session.pane.leafId)
     if (kind !== 'title') {

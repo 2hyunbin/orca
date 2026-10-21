@@ -1,3 +1,4 @@
+import { nativeChatShellForeground } from '../native-chat/terminal-interface-presentation'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '../../store'
@@ -73,14 +74,14 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     return [...new Set([...expectedLayoutLeafIds, ...mountedLeafIds])]
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
   }, [expectedLayoutLeafIds])
-  const [runtimePaneTitlesByPaneId, ...shellForegroundByLeaf] = useAppStore(
+  const [runtimePaneTitlesByPaneId, interfaceObservations, ...shellForegroundByLeaf] = useAppStore(
     useShallow(
       (store) =>
         [
           store.runtimePaneTitlesByTabId[tabId] ?? EMPTY_PANE_TITLES,
-          ...getNativeChatLeafIds().map(
-            (leafId) =>
-              store.paneForegroundAgentByPaneKey[`${tabId}:${leafId}`]?.shellForeground === true
+          store.terminalInterfaceByPtyId,
+          ...getNativeChatLeafIds().map((leafId) =>
+            nativeChatShellForeground(store, `${tabId}:${leafId}`)
           )
         ] as const
     )
@@ -142,8 +143,7 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
         // Departure callbacks can run before React commits the foreground subscription update.
         shellForeground:
           leafId !== null &&
-          useAppStore.getState().paneForegroundAgentByPaneKey[`${tabId}:${leafId}`]
-            ?.shellForeground === true,
+          nativeChatShellForeground(useAppStore.getState(), `${tabId}:${leafId}`),
         launchAgent: detectedAgent ? null : launchAgent,
         detectedAgent,
         resolvedAgent: detectedAgent ? null : resolveTitleAgentForLeaf(leafId),
@@ -154,6 +154,7 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     [
       tabAgentTypeByLeaf,
       shellForegroundByLeaf,
+      interfaceObservations,
       tabId,
       nativeChatTranscriptIsLocalReadable,
       terminalTab?.launchAgent,

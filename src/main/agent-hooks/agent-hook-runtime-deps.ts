@@ -12,6 +12,7 @@ export function agentHookRuntimeDeps(
   getSettings: () => Parameters<typeof isAgentStatusHooksEnabled>[0]
 ) {
   return {
+    terminalInterfaces: server.terminalInterfaces,
     // Why: main's OSC parse is the only producer for a PTY agent, and this store is the only
     // place `worktree.ps` and the mobile projection read from.
     onTerminalAgentStatus: (event) => server.ingestTerminalStatus(event),

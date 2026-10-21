@@ -1,3 +1,4 @@
+import { TERMINAL_INTERFACE_CAPABILITY } from '../../shared/terminal-interface-observation'
 import { AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY } from '../../shared/agent-session-current-requests-capability'
 import {
   AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY,
@@ -39,6 +40,7 @@ import { TERMINAL_QUICK_COMMAND_LONG_PROMPTS_RUNTIME_CAPABILITY } from '../../sh
  * copies, and a capability added to one and missed on the other is invisible until a user hits it.
  */
 export const DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES: readonly RuntimeCapability[] = [
+  TERMINAL_INTERFACE_CAPABILITY,
   AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY,
   AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY,
   AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY,
