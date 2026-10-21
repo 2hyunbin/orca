@@ -236,12 +236,16 @@ describe('capability probe recovery', () => {
     const host = connection()
     host.sendRequest.mockRejectedValue(new Error('offline'))
     await render(host.client)
-    await act(async () => vi.advanceTimersByTimeAsync(600_000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000)
+    })
     expect(host.sendRequest).toHaveBeenCalledTimes(24)
     expect(vi.getTimerCount()).toBe(1)
     await render(host.client, false)
     expect(vi.getTimerCount()).toBe(0)
-    await act(async () => vi.advanceTimersByTimeAsync(600_000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000)
+    })
     expect(host.sendRequest).toHaveBeenCalledTimes(24)
   })
 
@@ -259,7 +263,9 @@ describe('capability probe recovery', () => {
       await render(host.client, false)
       await render(host.client)
     }
-    await act(async () => vi.advanceTimersByTimeAsync(600_000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000)
+    })
     expect(host.sendRequest).toHaveBeenCalledTimes(1)
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -298,7 +304,9 @@ describe('capability probe recovery', () => {
       act(() => renderer?.unmount())
       renderer = undefined
       expect(vi.getTimerCount()).toBe(0)
-      await act(async () => vi.advanceTimersByTimeAsync(60_000))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
       expect(host.sendRequest).toHaveBeenCalledTimes(2)
       host.reconnect()
       expect(host.sendRequest).toHaveBeenCalledTimes(2)
