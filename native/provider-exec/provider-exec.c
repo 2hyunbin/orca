@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #define _DEFAULT_SOURCE
 #define _DARWIN_C_SOURCE
 #define _POSIX_C_SOURCE 200809L

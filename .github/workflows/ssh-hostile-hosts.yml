@@ -59,7 +59,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft != true }}
     runs-on: ubuntu-22.04
     # Same glibc 2.28 builder as the headless-server floor lane, so the slot loads on Debian 10.
-    container: quay.io/pypa/manylinux_2_28_x86_64@sha256:407f771c51a2c3e83ebe5a7970b4289ead3a6db21d9b9c089168775cad11d328
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64@sha256:407f771c51a2c3e83ebe5a7970b4289ead3a6db21d9b9c089168775cad11d328
+      # Reap the deliberately orphaned tools in the native lifetime contract.
+      options: --init
     timeout-minutes: 25
     env:
       ORCA_BACKGROUND_LAUNCH: '1'

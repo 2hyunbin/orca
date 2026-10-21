@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
-import { openSync, closeSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs'
+import {
+  openSync,
+  closeSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  chmodSync,
+  readFileSync
+} from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 const binary = process.argv[2]
 assert(binary?.startsWith('/'))
 const dir = mkdtempSync(join(process.cwd(), 'gate-contract-'))
-const held = openSync(join(dir, 'hold'), 'wx+', 0o600)
+let held = openSync(join(dir, 'hold'), 'wx+', 0o600)
 const owned = []
 const watchers = []
 const result = { platform: process.platform, node: process.version, cases: [], roots: [], watchers }
@@ -85,11 +93,19 @@ const start = async (args, env = process.env) => {
   assert.equal(match[1], nonce)
   const watcher = Number(match[2])
   watchers.push(watcher)
-  const row = spawnSync('ps', ['-p', String(watcher), '-o', 'pid=,ppid=,pgid=,sess='], {
-    encoding: 'utf8'
-  })
-  assert.equal(row.status, 0)
-  const fields = row.stdout.trim().split(/\s+/)
+  let fields
+  if (process.platform === 'linux') {
+    const stat = readFileSync(`/proc/${watcher}/stat`, 'utf8')
+    const values = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')
+    fields = [String(watcher), ...values.slice(1, 4)]
+    assert.equal(Number(fields[3]), child.pid)
+  } else {
+    const row = spawnSync('ps', ['-p', String(watcher), '-o', 'pid=,ppid=,pgid='], {
+      encoding: 'utf8'
+    })
+    assert.equal(row.status, 0)
+    fields = row.stdout.trim().split(/\s+/)
+  }
   assert.equal(Number(fields[2]), watcher)
   assert.notEqual(Number(fields[1]), child.pid, 'watcher must not be provider waitable child')
   return {
@@ -132,7 +148,31 @@ try {
   assert.equal(io.stdout(), 'request\nfinal')
   assert.equal(io.status(), '')
   assert.match(await io.command('PROBE'), /^RESULT \w+ 0 /)
+  closeSync(held)
+  held = openSync(join(dir, 'hold'), 'r+')
+  const lockProbe = () =>
+    spawnSync(binary, ['probe-lock', join(dir, 'hold')], {
+      stdio: ['ignore', 'pipe', 'pipe', 'ignore', 'ignore', 'ignore', held]
+    }).status
+  assert.equal(lockProbe(), 2, 'watcher retains code after the owner and provider close their FDs')
   await io.retire()
+  const lastClose = Date.now() + 1500
+  let lockResult
+  do {
+    lockResult = lockProbe()
+    if (lockResult !== 2) {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  } while (Date.now() < lastClose)
+  assert.equal(lockResult, 0, 'last watcher close permits exclusive code retirement')
+  assert.equal(
+    spawnSync(binary, ['pin', join(dir, 'hold')], {
+      stdio: ['ignore', 'pipe', 'pipe', 'ignore', 'ignore', 'ignore', held]
+    }).status,
+    0
+  )
+  result.cases.push('owner-to-gate-to-watcher code lock survives owner close and ends with watcher')
   result.cases.push('direct stdin EOF and final output; singleton watcher; no pre-exec output')
   const denied = await start(['/bin/sh', '-c', 'echo forbidden'])
   denied.child.stdio[3].end()
