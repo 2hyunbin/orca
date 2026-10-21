@@ -88,7 +88,7 @@ describe("main's start of a pane publishes its resume outcome", () => {
   it.each(['restored', 'resume-unavailable'] as const)(
     'publishes %s on the pane bound to the terminal it started, switch-on only',
     async (outcome) => {
-      const { runtime, spawn } = resumablePaneRuntime(outcome)
+      const { runtime, spawn, getSession } = resumablePaneRuntime(outcome)
 
       await expect(runtime.ensureRestoredPaneStarted(PANE)).resolves.toBe('persisted-pty')
 
@@ -98,6 +98,8 @@ describe("main's start of a pane publishes its resume outcome", () => {
       const pane = publishedPane(runtime)
       expect(pane?.ptyId).toBe('persisted-pty')
       expect(pane?.resumeOutcome).toBe(ORCA_LAYOUT_OWNER_IS_MAIN ? outcome : undefined)
+      // Live state only: the session main saves never holds it.
+      expect(JSON.stringify(getSession())).not.toContain('resumeOutcome')
     }
   )
 

@@ -101,6 +101,29 @@ describe("the window's banner for main's start of a pane", () => {
     expect(remounted.view.showSessionRestoredBanner).not.toHaveBeenCalled()
   })
 
+  it('shows once per start: a later start under the same terminal id shows again', async () => {
+    const showMainPaneResumeOutcome = await loadBannerModule()
+    const publish = (ptyGeneration: number, outcome: TerminalPaneResumeOutcome['outcome']) =>
+      store.publish({
+        terminalPaneResumeOutcomesByPaneKey: {
+          [PANE_KEY]: { ptyId: 'pty-1', ptyGeneration, outcome }
+        }
+      })
+    publish(1, 'restored')
+    const first = attachedView()
+    showMainPaneResumeOutcome(first.session, 'pty-1')
+    // A respawn kept the daemon id; its bind raised the generation, so this is a new start.
+    publish(2, 'resume-unavailable')
+    const respawned = attachedView()
+    showMainPaneResumeOutcome(respawned.session, 'pty-1')
+    expect(respawned.view.showSessionRestoredBanner).toHaveBeenCalledExactlyOnceWith(
+      'resume-unavailable'
+    )
+    const again = attachedView()
+    showMainPaneResumeOutcome(again.session, 'pty-1')
+    expect(again.view.showSessionRestoredBanner).not.toHaveBeenCalled()
+  })
+
   it('shows nothing again after a renderer reload reattaches the same start', async () => {
     store.publish({
       terminalPaneResumeOutcomesByPaneKey: {
