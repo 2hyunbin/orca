@@ -18,6 +18,7 @@ export type TerminalLiveInputChangeEvent = {
   readonly nativeEvent: {
     readonly text: string
     readonly isComposing?: boolean
+    readonly inputType?: string
   }
 }
 
