@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { committingSpawn, registerLivePty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import type { WorkspaceSessionState } from '../orca-runtime-test-mocks.spec'
@@ -200,12 +201,19 @@ describe('OrcaRuntimeService', () => {
     })
 
     it('keeps an explicit user close destructive while the PTY is live', async () => {
-      const { runtime, closeTerminalTab } = makeAdoptedLiveTabRuntime()
+      const { runtime, closeTerminalTab, kill, getSession } = makeAdoptedLiveTabRuntime()
 
       await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', {
         reason: 'user'
       })
 
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        // #31571: main closes the tab in its own layout and stops its live terminal itself.
+        expect(closeTerminalTab).not.toHaveBeenCalled()
+        expect(kill).toHaveBeenCalledWith('serve-live-1')
+        expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
+        return
+      }
       // Legacy whole-parent relay: the renderer close transaction still runs.
       expect(closeTerminalTab).toHaveBeenCalledWith('host-tab')
     })

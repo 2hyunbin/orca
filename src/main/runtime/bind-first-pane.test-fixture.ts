@@ -8,7 +8,14 @@ import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { getConnectionExecutionHostId } from '../../shared/execution-host'
 import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
 
-export type BoundPane = { worktreeId: string; tabId: string; leafId: string; ptyId: string }
+export type BoundPane = {
+  worktreeId: string
+  tabId: string
+  leafId: string
+  ptyId: string
+  /** The new tab's view mode, as the creating client saved it. */
+  viewMode?: 'chat' | 'terminal'
+}
 
 type SessionStore = {
   getWorkspaceSession?: (hostId?: string) => WorkspaceSessionState | null | undefined
@@ -79,7 +86,8 @@ export function withBoundPane(
               customTitle: null,
               color: null,
               sortOrder: tabs.length,
-              createdAt: 1
+              createdAt: 1,
+              ...(pane.viewMode ? { viewMode: pane.viewMode } : {})
             }
           ]
     },

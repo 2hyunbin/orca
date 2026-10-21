@@ -174,6 +174,8 @@ describe('OrcaRuntimeService', () => {
 
       runtime.onPtyExit('pty-1', 0)
       runtime.onPtySpawned('pty-1', undefined, { awaitsRegistration: false })
+      // Main's exit cleanup dropped the pane; the respawn's commit binds it again.
+      registerLivePty(runtime, 'pty-1', TEST_WORKTREE_ID, null, { tabId: 'tab-1', leafId })
       // Drop the leaf, then republish it: the rebuilt record's tailSource is the
       // PTY record rather than the previous leaf, which is what pins the clear
       // onPtyExit applies at the pty level.

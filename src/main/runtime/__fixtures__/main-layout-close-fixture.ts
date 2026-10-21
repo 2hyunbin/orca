@@ -93,3 +93,27 @@ export function expectDesktopDropsPane(
     expect(call).toEqual([tabId, leafId])
   }
 }
+
+/**
+ * The desktop drops a tab a phone or CLI closed. Switch-off the window is told to close it;
+ * switch-on main closes it in its own layout (#31571) and the window draws that, unasked.
+ */
+export function expectDesktopDropsTab(
+  harness: {
+    closeTerminal: Mock<(...args: unknown[]) => unknown>
+    getSession: () => WorkspaceSessionState
+  },
+  tabId: string
+): void {
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    expect(harness.closeTerminal).toHaveBeenCalledWith(tabId)
+    return
+  }
+  expect(harness.getSession().terminalLayoutsByTabId[tabId]).toBeUndefined()
+  expect(
+    Object.values(harness.getSession().tabsByWorktree)
+      .flat()
+      .map((tab) => tab.id)
+  ).not.toContain(tabId)
+  expect(harness.closeTerminal).not.toHaveBeenCalled()
+}
