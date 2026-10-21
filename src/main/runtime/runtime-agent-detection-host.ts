@@ -1,4 +1,5 @@
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
+import { getRepoRoutingConnectionId } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import {
@@ -35,7 +36,7 @@ export async function resolveRuntimeAgentDetectionHost(
       current.length !== 1 ||
       current[0].path !== repo.path ||
       current[0].executionHostId !== repo.executionHostId ||
-      current[0].connectionId !== repo.connectionId
+      getRepoRoutingConnectionId(current[0]) !== getRepoRoutingConnectionId(repo)
     ) {
       throw new Error('repo_target_changed')
     }
