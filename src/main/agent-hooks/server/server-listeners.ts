@@ -83,8 +83,8 @@ export abstract class AgentHookServerListeners extends AgentHookServerAuthorityP
     const rows: { entry: EnrichedAgentHookEventPayload; order: number }[] = []
     for (const [paneKey, entry] of this.state.lastStatusByPaneKey) {
       rows.push({
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Main admits enriched legacy rows; shared listeners expose only the base event type.
         entry: this.programStatusFacets.stitch(
+          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Main admits enriched legacy rows; shared listeners expose only the base event type.
           this.projectLaunchAuthority(entry as EnrichedAgentHookEventPayload)
         ),
         order: getLegacyStatusListingOrder(this.state, paneKey) ?? UNORDERED_STATUS_ROW

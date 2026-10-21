@@ -93,13 +93,13 @@ export function streamEventJsonBytes(value: unknown): number {
     return 0
   }
   let total = 2
-  for (const key in value) {
-    if (!Object.hasOwn(value, key)) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: own JSON fields are inspected only for a conservative sizing bound.
+  const fields = value as Record<string, unknown>
+  for (const key in fields) {
+    if (!Object.hasOwn(fields, key)) {
       continue
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: own JSON fields are inspected only for a conservative sizing bound.
-    total +=
-      2 + streamEventJsonBytes(key) + streamEventJsonBytes((value as Record<string, unknown>)[key])
+    total += 2 + streamEventJsonBytes(key) + streamEventJsonBytes(fields[key])
     if (total > RECORD_BYTES) {
       break
     }
