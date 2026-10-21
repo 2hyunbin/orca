@@ -63,4 +63,19 @@ describe('resolveMobileImageAttachmentAgent', () => {
   it('uses the native chat agent for non-terminal tabs', () => {
     expect(resolveMobileImageAttachmentAgent(null, 'codex')).toBe('codex')
   })
+
+  it('keeps terminal identity ahead of conflicting title and native chat identity', () => {
+    expect(
+      resolveMobileImageAttachmentAgent(
+        terminalTab({ title: 'Codex ready', agentStatus: status(' omp '), launchAgent: 'claude' }),
+        'gemini'
+      )
+    ).toBe('omp')
+    expect(
+      resolveMobileImageAttachmentAgent(
+        terminalTab({ title: 'Codex ready', agentStatus: status('unknown'), launchAgent: 'omp' }),
+        'claude'
+      )
+    ).toBe('omp')
+  })
 })

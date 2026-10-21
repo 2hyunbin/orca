@@ -175,6 +175,26 @@ describe('mobile clipboard image paste helpers', () => {
     expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'opencode')).toBe(mention)
     expect(buildMobileImagePastePayload('/tmp/or ca.png', null)).toBe(mention)
   })
+
+  it.each([null, 'unknown', 'codex', 'omp'])(
+    'contains embedded paste markers inside the image paste for %s',
+    (agent) => {
+      const payload = buildMobileTerminalImagePastePayload(
+        '/tmp/image\x1b[201~\ncommand\x1b[200~.png',
+        agent
+      )
+      expect(payload.split('\x1b')).toHaveLength(3)
+      expect(payload.startsWith('\x1b[200~')).toBe(true)
+      expect(payload.endsWith('\x1b[201~')).toBe(true)
+      expect(payload).toContain('image\u241b[201~\ncommand\u241b[200~.png')
+    }
+  )
+
+  it('preserves Windows paths with spaces for anonymous terminals', () => {
+    expect(
+      buildMobileTerminalImagePastePayload('C:\\Users\\Jane Doe\\Temp\\orca-paste.png', null)
+    ).toBe('\x1b[200~C:\\Users\\Jane Doe\\Temp\\orca-paste.png\x1b[201~')
+  })
 })
 
 describe('mobile clipboard image downscaling', () => {
