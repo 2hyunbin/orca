@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import { existsSync } from 'node:fs'
@@ -6,6 +6,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { runProcess, spawnProcess } from '@orca/process-host'
+import * as processHost from '@orca/process-host'
 import { collectProviderExecCode, prepareProviderExecCode } from './provider-exec-code'
 import { readPosixProcessRow } from './provider-process-row-read'
 
@@ -43,8 +44,21 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
     const sha256 = createHash('sha256')
       .update(await readFile(binary))
       .digest('hex')
-    const first = await prepareProviderExecCode({ executable: sourcePath, sha256 }, cache)
-    const second = await prepareProviderExecCode({ executable: binary, sha256 }, cache)
+    const denied = join(root, 'noexec-cache')
+    await mkdir(denied)
+    const originalRun = runProcess
+    const noexec = vi.spyOn(processHost, 'runProcess').mockImplementation((spec, capture) => {
+      if (spec.program.startsWith(denied)) {
+        return Promise.reject(Object.assign(new Error('Execution denied'), { code: 'EACCES' }))
+      }
+      return originalRun(spec, capture)
+    })
+    const first = await prepareProviderExecCode({ executable: sourcePath, sha256 }, [
+      denied,
+      cache
+    ]).finally(() => noexec.mockRestore())
+    expect(first.executable.startsWith(cache)).toBe(true)
+    const second = await prepareProviderExecCode({ executable: binary, sha256 }, [cache])
     const holder = spawnProcess({
       program: '/bin/sh',
       args: ['-c', 'printf READY; IFS= read -r finish'],

@@ -12,7 +12,7 @@ function compileProviderExec(output, arch = process.arch) {
   mkdirSync(dirname(output), { recursive: true })
   const mac = process.platform === 'darwin'
   execFileSync(
-    mac ? '/usr/bin/xcrun' : 'cc',
+    mac ? '/usr/bin/xcrun' : process.env.CC || 'cc',
     [
       ...(mac
         ? ['clang', '-arch', arch === 'x64' ? 'x86_64' : 'arm64', '-mmacosx-version-min=12.0']

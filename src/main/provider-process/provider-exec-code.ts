@@ -12,7 +12,7 @@ import {
   rename,
   rm
 } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { orcadDataRootIsOnLocalDisk } from '../orcad/orcad-data-root-locality'
@@ -32,29 +32,26 @@ export type ProviderExecCode = {
   close(): Promise<void>
 }
 
-async function privateCodeRoot(basePath?: string): Promise<string> {
+async function privateCodeRoot(base: string): Promise<string | undefined> {
   const uid = process.getuid?.()
   if (uid === undefined) {
     throw new Error('Provider code requires a POSIX execution host')
   }
-  for (const base of new Set(basePath ? [basePath] : [tmpdir(), '/var/tmp', '/tmp'])) {
-    if (!orcadDataRootIsOnLocalDisk(base)) {
-      continue
-    }
-    const root = join(base, `orca-provider-exec-${uid}.noindex`)
-    try {
-      await mkdir(root, { mode: 0o700 })
-    } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) {
-        continue
-      }
-    }
-    const stat = await lstat(root)
-    if (stat.isDirectory() && stat.uid === uid && (stat.mode & 0o077) === 0) {
-      return root
+  if (!orcadDataRootIsOnLocalDisk(base)) {
+    return
+  }
+  const root = join(base, `orca-provider-exec-${uid}.noindex`)
+  try {
+    await mkdir(root, { mode: 0o700 })
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) {
+      throw error
     }
   }
-  throw new Error('Could not prepare private local provider code storage')
+  const stat = await lstat(root)
+  if (stat.isDirectory() && stat.uid === uid && (stat.mode & 0o077) === 0) {
+    return root
+  }
 }
 
 async function codeCommand(executable: string, args: string[], fd?: number) {
@@ -136,9 +133,34 @@ export async function collectProviderExecCode(
 /** The owner retains the pin child's shared open description, then hands it directly to each gate. */
 export async function prepareProviderExecCode(
   source: ProviderExecSource,
-  cacheBase?: string
+  cacheBases: readonly string[] = [tmpdir(), '/var/tmp', '/tmp', homedir()]
 ): Promise<ProviderExecCode> {
-  const root = await privateCodeRoot(cacheBase)
+  let failure: unknown = new Error('Could not prepare private local provider code storage')
+  for (const base of new Set(cacheBases)) {
+    try {
+      const root = await privateCodeRoot(base)
+      if (root) {
+        return await prepareCodeInRoot(source, root)
+      }
+    } catch (error) {
+      // A local, writable filesystem can still forbid executing the copied helper.
+      if (
+        !(error instanceof Error) ||
+        !('code' in error) ||
+        !['EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'ENOENT'].includes(String(error.code))
+      ) {
+        throw error
+      }
+      failure = error
+    }
+  }
+  throw failure
+}
+
+async function prepareCodeInRoot(
+  source: ProviderExecSource,
+  root: string
+): Promise<ProviderExecCode> {
   const creator = await readPosixProcessRow(process.pid)
   if (!creator || creator === 'unverifiable') {
     throw new Error('Could not identify the provider code owner')
