@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type * as Wsl from '../wsl'
-import type * as LocalFolderStatDeadline from '../local-folder-stat-deadline'
+import type * as WorkingDirectoryValidation from '../providers/working-directory-validation'
 
 // Why: every split pty IPC suite must mock the same module graph; the vi.mock calls stay
 // per-file (hoisting is per-file) but delegate their factories here so the vi.fn instances
@@ -152,7 +152,7 @@ export const pwshModuleMock = () => ({
 })
 
 // Why: the startup folder probe reads the same fake filesystem the suites stage through statSync.
-export const folderStatModuleMock = (original: typeof LocalFolderStatDeadline) => ({
+export const folderStatModuleMock = (original: typeof WorkingDirectoryValidation) => ({
   ...original,
   statLocalFolderWithDeadline: async (path: string) => statSyncMock(path)
 })

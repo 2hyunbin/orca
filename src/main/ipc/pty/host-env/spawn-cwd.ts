@@ -10,9 +10,9 @@ import {
   getFolderWorkspacePathStatus
 } from '../../../project-groups/folder-workspace-path-status'
 import {
-  LocalFolderStatTimeoutError,
+  WorkingDirectoryValidationAbortedError,
   statLocalFolderWithDeadline
-} from '../../../local-folder-stat-deadline'
+} from '../../../providers/working-directory-validation'
 import {
   isWslMoveWorkspaceBlocked,
   WslMoveProjectFencedError
@@ -82,7 +82,7 @@ export async function localStartupCwdDirectoryExists(path: string): Promise<bool
     return (await statLocalFolderWithDeadline(path)).isDirectory()
   } catch (error) {
     // Why: an unanswered folder is not a missing one, so it refuses the start instead of falling back.
-    if (error instanceof LocalFolderStatTimeoutError) {
+    if (error instanceof WorkingDirectoryValidationAbortedError) {
       assertFolderWorkspacePathUsable({ path, exists: false, reason: 'unavailable' })
     }
     return false

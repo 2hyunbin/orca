@@ -18,9 +18,9 @@ import {
 } from './folder-workspace-path-status'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import {
-  _resetLocalFolderStatStateForTest,
-  LOCAL_FOLDER_STAT_TIMEOUT_MS
-} from '../local-folder-stat-deadline'
+  _resetWorkingDirectoryValidationStateForTest,
+  LOCAL_FOLDER_CHECK_TIMEOUT_MS
+} from '../providers/working-directory-validation'
 
 const FOLDER = '/Volumes/nas/platform'
 
@@ -36,7 +36,7 @@ function folderStatus() {
 beforeEach(() => {
   vi.useFakeTimers()
   statMock.mockReset()
-  _resetLocalFolderStatStateForTest()
+  _resetWorkingDirectoryValidationStateForTest()
 })
 
 afterEach(() => {
@@ -48,7 +48,7 @@ describe('folder workspace path status on a mount that stopped answering', () =>
     statMock.mockReturnValue(new Promise<DirectoryStats>(() => {}))
     const status = folderStatus()
 
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
     const settled = await Promise.race([status, Promise.resolve('pending' as const)])
     expect(settled).toEqual({ path: FOLDER, exists: false, reason: 'unavailable' })
     expect(folderWorkspacePathRefusal(await status)).toBe(
@@ -59,11 +59,11 @@ describe('folder workspace path status on a mount that stopped answering', () =>
   it('still reports a slow folder that answers inside the limit as present', async () => {
     statMock.mockReturnValue(
       new Promise((resolve) =>
-        setTimeout(() => resolve({ isDirectory: () => true }), LOCAL_FOLDER_STAT_TIMEOUT_MS - 100)
+        setTimeout(() => resolve({ isDirectory: () => true }), LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
       )
     )
     const status = folderStatus()
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS - 100)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
     await expect(status).resolves.toEqual({ path: FOLDER, exists: true })
   })
   it('lets a new terminal in that folder workspace fail instead of waiting forever', async () => {
@@ -90,7 +90,7 @@ describe('folder workspace path status on a mount that stopped answering', () =>
     ).then(assertFolderWorkspacePathUsable)
     admission.catch(() => {})
 
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
     await expect(admission).rejects.toThrow(`folder_workspace_path_unavailable:${FOLDER}`)
   })
 })

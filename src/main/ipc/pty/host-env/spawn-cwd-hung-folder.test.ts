@@ -21,9 +21,9 @@ vi.mock('node:fs', async (importOriginal) => ({
 
 import { localStartupCwdDirectoryExists } from './spawn-cwd'
 import {
-  _resetLocalFolderStatStateForTest,
-  LOCAL_FOLDER_STAT_TIMEOUT_MS
-} from '../../../local-folder-stat-deadline'
+  _resetWorkingDirectoryValidationStateForTest,
+  LOCAL_FOLDER_CHECK_TIMEOUT_MS
+} from '../../../providers/working-directory-validation'
 
 const HUNG_DIR = '/Volumes/nas/repo/src'
 const directoryStats = { isDirectory: () => true }
@@ -38,7 +38,7 @@ function blockFor(ms: number): void {
 beforeEach(() => {
   statMock.mockReset()
   statSyncMock.mockReset()
-  _resetLocalFolderStatStateForTest()
+  _resetWorkingDirectoryValidationStateForTest()
 })
 
 afterEach(() => {
@@ -66,7 +66,7 @@ describe('the worktree-fallback folder check on a mount that stopped answering',
     const exists = Promise.resolve(localStartupCwdDirectoryExists(HUNG_DIR))
     exists.catch(() => {})
 
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
     await expect(exists).rejects.toThrow(`folder_workspace_path_unavailable:${HUNG_DIR}`)
   })
 
@@ -74,11 +74,11 @@ describe('the worktree-fallback folder check on a mount that stopped answering',
     vi.useFakeTimers()
     statMock.mockReturnValue(
       new Promise((resolve) =>
-        setTimeout(() => resolve(directoryStats), LOCAL_FOLDER_STAT_TIMEOUT_MS - 100)
+        setTimeout(() => resolve(directoryStats), LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
       )
     )
     const exists = Promise.resolve(localStartupCwdDirectoryExists(HUNG_DIR))
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS - 100)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
     await expect(exists).resolves.toBe(true)
   })
 

@@ -2,7 +2,7 @@
 // an opaque ENOENT. Split from local-pty-utils to keep that file under its line
 // cap; the async path carries the cancellation contract described below.
 
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, statSync, type Stats } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { release } from 'node:os'
 import { isWslUncPath, uncRouteKey } from '../../shared/wsl-paths'
@@ -10,6 +10,10 @@ import { wslUncDirectoryExistsAsync } from '../wsl'
 import { PrioritySemaphore } from '../../shared/priority-semaphore'
 
 const pendingWorkingDirectoryValidations = new Map<string, Promise<void>>()
+const pendingLocalFolderStats = new Map<string, Promise<Stats>>()
+// Why 5s: the daemon already calls an fs stat unanswered this long stalled and refuses terminal
+// starts on it (DAEMON_ASYNC_IO_TIMEOUT_MS); a folder that answers sooner behaves as before.
+export const LOCAL_FOLDER_CHECK_TIMEOUT_MS = 5_000
 // Why: a dead UNC share answers `stat` in ~21s on Windows and holds one of
 // libuv's 4 default fs threads the whole time, so a handful of distinct paths on
 // one unreachable server would starve every other async fs read in the daemon —
@@ -61,6 +65,7 @@ export class WorkingDirectoryValidationAbortedError extends Error {
 /** Test seam: both maps are module-level, so an unsettled probe would leak across tests. */
 export function _resetWorkingDirectoryValidationStateForTest(): void {
   pendingWorkingDirectoryValidations.clear()
+  pendingLocalFolderStats.clear()
   uncRouteLanes.clear()
 }
 
@@ -143,6 +148,32 @@ export function validateWorkingDirectoryAsync(
   return waitForWorkingDirectoryValidation(validation, cwd, signal)
 }
 
+/**
+ * `fs.stat` for a local folder check that gives up after LOCAL_FOLDER_CHECK_TIMEOUT_MS, rejecting
+ * with WorkingDirectoryValidationAbortedError. Shares one in-flight stat per path and the UNC route
+ * lane, the same way validation does, so a retry on a dead mount pins no extra fs thread.
+ */
+export function statLocalFolderWithDeadline(path: string): Promise<Stats> {
+  let pending = pendingLocalFolderStats.get(path)
+  if (!pending) {
+    const started = withUncRouteLane(path, () => stat(path))
+    pending = started
+    pendingLocalFolderStats.set(path, started)
+    const forget = (): void => {
+      if (pendingLocalFolderStats.get(path) === started) {
+        pendingLocalFolderStats.delete(path)
+      }
+    }
+    void started.then(forget, forget)
+  }
+  // Why a plain timer: unlike AbortSignal.timeout, it is cleared as soon as the stat settles.
+  const deadline = new AbortController()
+  const timer = setTimeout(() => deadline.abort(), LOCAL_FOLDER_CHECK_TIMEOUT_MS)
+  return waitForWorkingDirectoryValidation(pending, path, deadline.signal).finally(() =>
+    clearTimeout(timer)
+  )
+}
+
 function validateWorkingDirectoryUncached(cwd: string): Promise<void> {
   return withUncRouteLane(cwd, () => probeWorkingDirectory(cwd))
 }
@@ -173,18 +204,18 @@ async function probeWorkingDirectory(cwd: string): Promise<void> {
   }
 }
 
-type WorkingDirectoryWaiterHolder = {
+type WorkingDirectoryWaiterHolder<T> = {
   waiter: {
     signal: AbortSignal
     onAbort: () => void
-    resolve: () => void
+    resolve: (value: T) => void
     reject: (error: unknown) => void
   } | null
 }
 
-function takeWorkingDirectoryWaiter(
-  holder: WorkingDirectoryWaiterHolder
-): WorkingDirectoryWaiterHolder['waiter'] {
+function takeWorkingDirectoryWaiter<T>(
+  holder: WorkingDirectoryWaiterHolder<T>
+): WorkingDirectoryWaiterHolder<T>['waiter'] {
   const waiter = holder.waiter
   holder.waiter = null
   waiter?.signal.removeEventListener('abort', waiter.onAbort)
@@ -192,23 +223,23 @@ function takeWorkingDirectoryWaiter(
 }
 
 // Keep reaction order while an abandoned caller's signal and resolver become collectible.
-function observeWorkingDirectoryValidation(
-  promise: Promise<void>,
-  holder: WorkingDirectoryWaiterHolder
+function observeWorkingDirectoryValidation<T>(
+  promise: Promise<T>,
+  holder: WorkingDirectoryWaiterHolder<T>
 ): void {
   void promise.then(
-    () => takeWorkingDirectoryWaiter(holder)?.resolve(),
+    (value) => takeWorkingDirectoryWaiter(holder)?.resolve(value),
     (error: unknown) => takeWorkingDirectoryWaiter(holder)?.reject(error)
   )
 }
 
-function waitForWorkingDirectoryValidation(
-  shared: Promise<void>,
+function waitForWorkingDirectoryValidation<T>(
+  shared: Promise<T>,
   cwd: string,
   signal: AbortSignal
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const holder: WorkingDirectoryWaiterHolder = { waiter: null }
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const holder: WorkingDirectoryWaiterHolder<T> = { waiter: null }
     const onAbort = (): void => {
       takeWorkingDirectoryWaiter(holder)?.reject(new WorkingDirectoryValidationAbortedError(cwd))
     }

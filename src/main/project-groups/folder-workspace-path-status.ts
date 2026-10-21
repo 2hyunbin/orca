@@ -7,7 +7,7 @@ import { getProjectGroupSubtreeIds } from '../../shared/project-groups'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
-import { statLocalFolderWithDeadline } from '../local-folder-stat-deadline'
+import { statLocalFolderWithDeadline } from '../providers/working-directory-validation'
 
 type FolderWorkspacePathStatusStore = {
   getRepos: () => Repo[]

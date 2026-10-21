@@ -11,11 +11,11 @@ vi.mock('node:fs/promises', async (importOriginal) => ({
 }))
 
 import {
-  _resetLocalFolderStatStateForTest,
-  LOCAL_FOLDER_STAT_TIMEOUT_MS,
-  LocalFolderStatTimeoutError,
+  _resetWorkingDirectoryValidationStateForTest,
+  LOCAL_FOLDER_CHECK_TIMEOUT_MS,
+  WorkingDirectoryValidationAbortedError,
   statLocalFolderWithDeadline
-} from './local-folder-stat-deadline'
+} from './working-directory-validation'
 
 const directoryStats = { isDirectory: () => true }
 
@@ -26,7 +26,7 @@ function statAnsweringAfter(ms: number): Promise<DirectoryStats> {
 beforeEach(() => {
   vi.useFakeTimers()
   statMock.mockReset()
-  _resetLocalFolderStatStateForTest()
+  _resetWorkingDirectoryValidationStateForTest()
 })
 
 afterEach(() => {
@@ -40,16 +40,16 @@ describe('statLocalFolderWithDeadline', () => {
     const settled = vi.fn()
     result.then(settled, settled)
 
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS - 1)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 1)
     expect(settled).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
-    await expect(result).rejects.toBeInstanceOf(LocalFolderStatTimeoutError)
+    await expect(result).rejects.toBeInstanceOf(WorkingDirectoryValidationAbortedError)
   })
 
   it('resolves a slow folder that answers inside the limit', async () => {
-    statMock.mockReturnValue(statAnsweringAfter(LOCAL_FOLDER_STAT_TIMEOUT_MS - 100))
+    statMock.mockReturnValue(statAnsweringAfter(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100))
     const result = statLocalFolderWithDeadline('/Volumes/nas/repo')
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS - 100)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
     await expect(result).resolves.toBe(directoryStats)
   })
 
@@ -63,14 +63,14 @@ describe('statLocalFolderWithDeadline', () => {
     statMock.mockReturnValue(new Promise<DirectoryStats>(() => {}))
     const first = statLocalFolderWithDeadline('/Volumes/nas/repo')
     first.catch(() => {})
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS)
-    await expect(first).rejects.toBeInstanceOf(LocalFolderStatTimeoutError)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
+    await expect(first).rejects.toBeInstanceOf(WorkingDirectoryValidationAbortedError)
 
     const retry = statLocalFolderWithDeadline('/Volumes/nas/repo')
     retry.catch(() => {})
     expect(statMock).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS)
-    await expect(retry).rejects.toBeInstanceOf(LocalFolderStatTimeoutError)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
+    await expect(retry).rejects.toBeInstanceOf(WorkingDirectoryValidationAbortedError)
   })
 
   it('starts a fresh stat once the previous one settled', async () => {

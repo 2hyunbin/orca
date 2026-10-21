@@ -4,9 +4,9 @@ import { statSyncMock, spawnMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { registerPtyHandlers } from './pty/register-handlers'
 import {
-  _resetLocalFolderStatStateForTest,
-  LOCAL_FOLDER_STAT_TIMEOUT_MS
-} from '../local-folder-stat-deadline'
+  _resetWorkingDirectoryValidationStateForTest,
+  LOCAL_FOLDER_CHECK_TIMEOUT_MS
+} from '../providers/working-directory-validation'
 
 type DirectoryStats = { isDirectory(): boolean }
 
@@ -83,7 +83,7 @@ function spawnWithWorktreeFallback(cwd: string): Promise<unknown> {
 const { handlers, mainWindow } = setupPtyIpcSuite()
 
 beforeEach(() => {
-  _resetLocalFolderStatStateForTest()
+  _resetWorkingDirectoryValidationStateForTest()
   statMock.mockReset()
   // The provider still validates through the suite's statSync fake; the folder check reads stat.
   statMock.mockImplementation(async () => directoryStats)
@@ -97,7 +97,7 @@ describe('pty:spawn with the worktree-folder fallback on a mount that stopped an
 
     const start = spawnWithWorktreeFallback(SAVED_CWD)
     start.catch(() => {})
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS)
 
     await expect(start).rejects.toThrow(`folder_workspace_path_unavailable:${SAVED_CWD}`)
     expect(spawnMock).not.toHaveBeenCalled()
@@ -106,11 +106,11 @@ describe('pty:spawn with the worktree-folder fallback on a mount that stopped an
 
   it('starts in a slow saved folder that answers inside the limit', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    statMock.mockImplementation(() => statAnsweringAfter(LOCAL_FOLDER_STAT_TIMEOUT_MS - 100))
+    statMock.mockImplementation(() => statAnsweringAfter(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100))
     registerPtyHandlers(mainWindow as never)
 
     const start = spawnWithWorktreeFallback(SAVED_CWD)
-    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_STAT_TIMEOUT_MS - 100)
+    await vi.advanceTimersByTimeAsync(LOCAL_FOLDER_CHECK_TIMEOUT_MS - 100)
     const result = await start
 
     const [, , options] = spawnMock.mock.calls.at(-1) as [string, string[], { cwd: string }]
