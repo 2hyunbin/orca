@@ -221,6 +221,7 @@ jobs:
     if: needs.orcad-template-support.outputs.ships == 'true'
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/adhoc-orcad-template.yml
     with:
       ref: ${{ needs.resolve-ref.outputs.sha }}

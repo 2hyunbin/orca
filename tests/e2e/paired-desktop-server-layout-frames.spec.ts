@@ -11,18 +11,13 @@
 import { existsSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { toRemoteRuntimePtyId } from '../../src/shared/remote-runtime-pty-id'
-import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
 import {
   HOST_TERMINAL_SURFACE_SEPARATOR,
   toWebTerminalSurfaceTabId
 } from '../../src/shared/terminal-surface-id'
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../src/shared/workspace-layout/layout-intents-capability'
 import { expect, test } from './helpers/orca-app'
-import {
-  launchHeadlessPairedRuntimeHost,
-  type HeadlessPairedRuntimeHost
-} from './helpers/headless-paired-runtime-host'
+import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import {
   createHostCliTerminal,
   createRetentionFixtureDirectory,
@@ -34,9 +29,11 @@ import {
 } from './helpers/paired-electron-client'
 import { readPairedPaneContent } from './helpers/paired-host-terminal'
 import {
-  expectFrameDrawnTreeMatchesServer,
+  expectPanesBoundToHandles,
+  openTab,
   waitForWorktree
-} from './helpers/paired-desktop-server-layout'
+} from './helpers/paired-desktop-server-terminal-tab'
+import { expectFrameDrawnTreeMatchesServer } from './helpers/paired-desktop-server-layout'
 
 const LAYOUT_OWNER_BUILD = existsSync(
   path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
@@ -49,98 +46,6 @@ const sinkPath = path.join(scratch, 'server-layout-frames.log')
 test.afterAll(() => {
   rmSync(scratch, { recursive: true, force: true })
 })
-
-async function readHostHandles(
-  host: HeadlessPairedRuntimeHost,
-  worktreeId: string,
-  hostTabId: string
-): Promise<Record<string, string | null>> {
-  const listed = await host.client.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
-    worktree: `id:${worktreeId}`
-  })
-  return Object.fromEntries(
-    listed.result.tabs.flatMap((tab) =>
-      tab.type === 'terminal' && tab.parentTabId === hostTabId
-        ? [[tab.leafId, tab.status === 'ready' ? tab.terminal : null]]
-        : []
-    )
-  )
-}
-
-/** Each pane of the tab binds `remote:` + the handle session.tabs gives its surface now. */
-async function expectPanesBoundToHandles(
-  host: HeadlessPairedRuntimeHost,
-  client: PairedElectronClient,
-  worktreeId: string,
-  hostTabId: string,
-  leafIds: string[]
-): Promise<Record<string, string>> {
-  const webTabId = toWebTerminalSurfaceTabId(hostTabId)
-  let expected: Record<string, string> = {}
-  await expect
-    .poll(
-      async () => {
-        const handles = await readHostHandles(host, worktreeId, hostTabId)
-        expected = Object.fromEntries(
-          leafIds.map((leafId) => {
-            const handle = handles[leafId]
-            return [leafId, handle ? toRemoteRuntimePtyId(handle, client.environmentId) : 'none']
-          })
-        )
-        const bound = await client.page.evaluate(
-          ({ webTabId, leafIds }) => {
-            const state = window.__store!.getState()
-            const bindings = state.terminalLayoutsByTabId[webTabId]?.ptyIdsByLeafId ?? {}
-            const manager = window.__paneManagers?.get(webTabId)
-            const mounted = Object.fromEntries(
-              (manager?.getPanes?.() ?? []).map((pane) => [
-                pane.container.dataset.leafId ?? '',
-                pane.container.dataset.ptyId ?? null
-              ])
-            )
-            return Object.fromEntries(
-              leafIds.map((leafId) => [
-                leafId,
-                { binding: bindings[leafId] ?? null, pane: mounted[leafId] ?? null }
-              ])
-            )
-          },
-          { webTabId, leafIds }
-        )
-        return Object.fromEntries(
-          Object.entries(expected).map(([leafId, ptyId]) => [
-            leafId,
-            bound[leafId]?.binding === ptyId &&
-            bound[leafId]?.pane === ptyId &&
-            ptyId.startsWith('remote:')
-              ? 'bound'
-              : { want: ptyId, ...bound[leafId] }
-          ])
-        )
-      },
-      { timeout: 90_000, message: 'Desktop panes never bound the session.tabs handles' }
-    )
-    .toEqual(Object.fromEntries(leafIds.map((leafId) => [leafId, 'bound'])))
-  return expected
-}
-
-async function openTab(client: PairedElectronClient, worktreeId: string, webTabId: string) {
-  await client.page.evaluate(
-    ({ environmentId, worktreeId, webTabId }) => {
-      const state = window.__store!.getState()
-      state.setActiveView('terminal')
-      state.setActiveWorktree(worktreeId, `runtime:${environmentId}`)
-      state.setActiveTab(webTabId)
-    },
-    { environmentId: client.environmentId, worktreeId, webTabId }
-  )
-  await expect
-    .poll(() => client.page.evaluate((id) => window.__paneManagers?.has(id) ?? false, webTabId), {
-      timeout: 60_000,
-      message: 'The frame-drawn terminal tab never mounted'
-    })
-    .toBe(true)
-}
 
 /** Types into the pane showing `leafId`, through its xterm input as a user does. */
 async function typeIntoPane(

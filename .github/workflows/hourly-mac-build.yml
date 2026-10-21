@@ -122,6 +122,7 @@ jobs:
     if: needs.preflight.outputs.should_build == 'true'
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/node-server-tests.yml
     with:
       ref: ${{ needs.preflight.outputs.head_sha }}

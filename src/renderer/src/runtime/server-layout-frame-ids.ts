@@ -222,6 +222,8 @@ export type ServerLayoutFrameTranslator = {
   serverTabId: (key: string, desktopTabId: string) => string | null
   /** A server tab id under desktop ids; unchanged when the frames hold no such tab. */
   desktopTabId: (key: string, serverTabId: string) => string
+  /** A workspace as the server publishes it, under the server's ids. */
+  serverLayout: (key: string) => PublishedWorkspaceLayout | undefined
 }
 
 /**
@@ -305,6 +307,7 @@ export function createServerLayoutFrameTranslator(
       const index = server.get(key)?.tabs.findIndex((tab) => tab.id === serverTabId) ?? -1
       return index < 0 ? serverTabId : (desktop.get(key)?.layout.tabs[index]?.id ?? serverTabId)
     },
+    serverLayout: (key) => server.get(key),
     rebind: (key) => {
       const layout = server.get(key)
       const workspaces = layout ? changeTo(key, layout) : []

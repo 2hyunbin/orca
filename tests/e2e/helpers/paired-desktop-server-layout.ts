@@ -154,23 +154,3 @@ export async function expectFrameDrawnTreeMatchesServer(
     .toBe('settled')
   return settled!
 }
-
-export async function waitForWorktree(
-  host: HeadlessPairedRuntimeHost,
-  repoId: string
-): Promise<string> {
-  let worktreeId = ''
-  await expect
-    .poll(
-      async () => {
-        const listed = await host.client.call<{ worktrees: { id: string }[] }>('worktree.list', {
-          repo: `id:${repoId}`
-        })
-        worktreeId = listed.result.worktrees[0]?.id ?? ''
-        return worktreeId
-      },
-      { timeout: 30_000, message: 'Serve host never listed its folder workspace' }
-    )
-    .not.toBe('')
-  return worktreeId
-}

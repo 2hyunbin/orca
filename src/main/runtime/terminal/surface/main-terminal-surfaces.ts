@@ -165,7 +165,7 @@ class MainSurfacePublisher {
     this.schedule({ force: true })
   }
 
-  /** A layout operation may have moved a pane; main's panes are installed once per task. */
+  /** Deferred so a connected flip, noted inside syncWindowGraph's record update, cannot recurse into it. */
   private schedule(opts: { force?: boolean } = {}): void {
     this.forceNext ||= opts.force === true
     if (this.scheduled) {

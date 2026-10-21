@@ -23,9 +23,9 @@ import {
 } from './helpers/paired-electron-client'
 import {
   expectFrameDrawnTreeMatchesServer,
-  waitForWorktree,
   type Tree
 } from './helpers/paired-desktop-server-layout'
+import { waitForWorktree } from './helpers/paired-desktop-server-terminal-tab'
 
 const LAYOUT_OWNER_BUILD = existsSync(
   path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
