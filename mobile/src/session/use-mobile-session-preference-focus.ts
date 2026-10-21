@@ -1,3 +1,4 @@
+import { settleSessionPreferenceRead } from './session-preference-read'
 import { useCallback, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import {
@@ -10,24 +11,40 @@ import type { MobileSessionKeyboardStateModel } from './use-mobile-session-keybo
 export function useMobileSessionPreferenceFocus(
   scope: Pick<
     MobileSessionKeyboardStateModel,
-    'setTerminalTextScale' | 'setAutocompleteEnabled' | 'setTerminalLinkOpenMode'
+    | 'setTerminalTextScale'
+    | 'terminalTextScaleRevisionRef'
+    | 'setAutocompleteEnabled'
+    | 'setTerminalLinkOpenMode'
   >
 ) {
-  const { setTerminalTextScale, setAutocompleteEnabled, setTerminalLinkOpenMode } = scope
+  const {
+    setTerminalTextScale,
+    terminalTextScaleRevisionRef,
+    setAutocompleteEnabled,
+    setTerminalLinkOpenMode
+  } = scope
   const [terminalPreferencesReady, setTerminalPreferencesReady] = useState(false)
   // Reload on Settings return without dropping readiness or remounting terminal panes.
   useFocusEffect(
     useCallback(() => {
       let active = true
-      void Promise.all([
-        loadTerminalTextScale(),
-        loadTerminalAutocompleteEnabled(),
-        loadTerminalLinkOpenMode()
-      ]).then(([scale, autocomplete, linkMode]) => {
+      const scaleRevision = terminalTextScaleRevisionRef.current
+      void settleSessionPreferenceRead(
+        Promise.all([
+          loadTerminalTextScale(),
+          loadTerminalAutocompleteEnabled(),
+          loadTerminalLinkOpenMode()
+        ])
+      ).then((preferences) => {
         if (active) {
-          setTerminalTextScale(scale)
-          setAutocompleteEnabled(autocomplete)
-          setTerminalLinkOpenMode(linkMode)
+          if (preferences) {
+            const [scale, autocomplete, linkMode] = preferences
+            if (terminalTextScaleRevisionRef.current === scaleRevision) {
+              setTerminalTextScale(scale)
+            }
+            setAutocompleteEnabled(autocomplete)
+            setTerminalLinkOpenMode(linkMode)
+          }
           setTerminalPreferencesReady(true)
         }
       })

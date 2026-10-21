@@ -210,6 +210,33 @@ describe('useMobileSessionViewMode', () => {
     expect(controller?.ready).toBe(true)
   })
 
+  it('waits for a fresh read when returning A to B to A before B settles', async () => {
+    const pendingB = deferred<{ overrides: Map<string, MobileSessionView>; loaded: boolean }>()
+    const returningA = deferred<{ overrides: Map<string, MobileSessionView>; loaded: boolean }>()
+    vi.mocked(readSessionViewOverridesPreference)
+      .mockResolvedValueOnce({ overrides: new Map([['t1', 'chat']]), loaded: true })
+      .mockReturnValueOnce(pendingB.promise)
+      .mockReturnValueOnce(returningA.promise)
+    function Harness(props: { hostId: string }) {
+      controller = useMobileSessionViewMode({ ...props, worktreeId: 'folder:/project' })
+      return null
+    }
+    await act(async () => {
+      renderer = create(createElement(Harness, { hostId: 'A' }))
+    })
+    expect(controller?.ready).toBe(true)
+    act(() => renderer?.update(createElement(Harness, { hostId: 'B' })))
+    act(() => renderer?.update(createElement(Harness, { hostId: 'A' })))
+    expect(controller?.ready).toBe(false)
+    await act(async () => pendingB.resolve({ overrides: new Map([['t1', 'chat']]), loaded: true }))
+    expect(controller?.ready).toBe(false)
+    await act(async () =>
+      returningA.resolve({ overrides: new Map([['t1', 'terminal']]), loaded: true })
+    )
+    expect(controller?.ready).toBe(true)
+    expect(controller?.isTabChatView('t1')).toBe(false)
+  })
+
   it('merges an explicit terminal choice made during load with the other persisted overrides', async () => {
     vi.mocked(loadDefaultSessionView).mockResolvedValue('chat')
     const overridesLoad = deferred<Map<string, MobileSessionView>>()

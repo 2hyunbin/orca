@@ -8,11 +8,18 @@ import { useMobileSessionPreferenceFocus } from './use-mobile-session-preference
 import { useMobileSessionViewMode } from './use-mobile-session-view-mode'
 
 const focusEffects = vi.hoisted(() => ({
-  callbacks: new Set<() => void | (() => void)>()
+  callbacks: new Map<() => void | (() => void), void | (() => void)>(),
+  appStateListeners: new Set<(state: string) => void>()
 }))
 
 vi.mock('react-native', () => ({
-  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
+  AppState: {
+    currentState: 'active',
+    addEventListener: (_event: string, listener: (state: string) => void) => {
+      focusEffects.appStateListeners.add(listener)
+      return { remove: () => focusEffects.appStateListeners.delete(listener) }
+    }
+  },
   Platform: { OS: 'ios' }
 }))
 vi.mock('expo-router', async () => {
@@ -20,11 +27,10 @@ vi.mock('expo-router', async () => {
   return {
     useFocusEffect: (effect: () => void | (() => void)) => {
       react.useEffect(() => {
-        focusEffects.callbacks.add(effect)
-        const cleanup = effect()
+        focusEffects.callbacks.set(effect, effect())
         return () => {
+          focusEffects.callbacks.get(effect)?.()
           focusEffects.callbacks.delete(effect)
-          cleanup?.()
         }
       }, [effect])
     }
@@ -52,6 +58,7 @@ function sessionScope() {
     hostId: 'host',
     connState: 'connecting',
     setTerminalTextScale: vi.fn(),
+    terminalTextScaleRevisionRef: { current: 0 },
     setAutocompleteEnabled: vi.fn(),
     setTerminalLinkOpenMode: vi.fn(),
     setCustomKeys: vi.fn(),
@@ -70,11 +77,13 @@ function sessionScope() {
 let renderer: ReactTestRenderer | null = null
 beforeEach(() => {
   focusEffects.callbacks.clear()
+  focusEffects.appStateListeners.clear()
   vi.mocked(AsyncStorage.getItem).mockReset().mockResolvedValue(null)
 })
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = null
+  vi.useRealTimers()
 })
 
 describe('saved session settings before the first render', () => {
@@ -114,8 +123,9 @@ describe('saved session settings before the first render', () => {
       key === 'orca:terminalTextScale' ? nextScale.promise : Promise.resolve(null)
     )
     act(() => {
-      for (const effect of focusEffects.callbacks) {
-        effect()
+      for (const [effect, cleanup] of focusEffects.callbacks) {
+        cleanup?.()
+        focusEffects.callbacks.set(effect, effect())
       }
     })
     expect(ready).toBe(true)
@@ -156,6 +166,141 @@ describe('saved session settings before the first render', () => {
     await act(async () => keys.resolve(JSON.stringify(saved)))
     expect(scope.setCustomKeys).toHaveBeenCalledWith(saved)
     expect(ready).toBe(true)
+  })
+
+  it('keeps a live zoom edit when an older Settings-return read completes', async () => {
+    const scope = sessionScope()
+    function Harness() {
+      useMobileSessionPreferenceFocus(scope)
+      return null
+    }
+    await act(async () => {
+      renderer = create(createElement(Harness))
+    })
+    scope.setTerminalTextScale.mockClear()
+    const scale = deferred<string | null>()
+    vi.mocked(AsyncStorage.getItem).mockImplementation((key) =>
+      key === 'orca:terminalTextScale' ? scale.promise : Promise.resolve(null)
+    )
+    act(() => {
+      for (const [effect, cleanup] of focusEffects.callbacks) {
+        cleanup?.()
+        focusEffects.callbacks.set(effect, effect())
+      }
+    })
+    scope.terminalTextScaleRevisionRef.current += 1
+    scope.setTerminalTextScale(1.75)
+    await act(async () => scale.resolve('1.25'))
+    expect(scope.setTerminalTextScale).toHaveBeenCalledTimes(1)
+    expect(scope.setTerminalTextScale).toHaveBeenLastCalledWith(1.75)
+    expect(scope.setAutocompleteEnabled).toHaveBeenCalledWith(false)
+  })
+
+  it('lets the latest foreground layout read settle startup and ignores an older focus read', async () => {
+    const older = deferred<string | null>()
+    const newer = deferred<string | null>()
+    let reads = 0
+    vi.mocked(AsyncStorage.getItem).mockImplementation((key) => {
+      if (key === 'orca:terminal-accessory-layout') {
+        return ++reads === 1 ? older.promise : newer.promise
+      }
+      return Promise.resolve(null)
+    })
+    const scope = sessionScope()
+    let ready = false
+    function Harness() {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the lifecycle reads only the supplied session members.
+      ready = useMobileSessionLifecycle(scope as never).accessoryPreferencesReady
+      return null
+    }
+    await act(async () => {
+      renderer = create(createElement(Harness))
+    })
+    act(() => {
+      for (const listener of focusEffects.appStateListeners) {
+        listener('active')
+      }
+    })
+    const layout = (visibleBuiltInIds: string[]) =>
+      JSON.stringify({
+        version: 2,
+        orderedBuiltInIds: TERMINAL_ACCESSORY_KEYS.map((key) => key.id),
+        visibleBuiltInIds
+      })
+    await act(async () => newer.resolve(layout(['tab'])))
+    expect(ready).toBe(true)
+    expect(scope.setVisibleBuiltInIds).toHaveBeenLastCalledWith(['tab'])
+    await act(async () => older.resolve(layout(['escape'])))
+    expect(scope.setVisibleBuiltInIds).toHaveBeenCalledTimes(1)
+    expect(scope.setVisibleBuiltInIds).toHaveBeenLastCalledWith(['tab'])
+  })
+
+  it('opens safely after stalled storage and ignores its late results', async () => {
+    vi.useFakeTimers()
+    const stalled = deferred<string | null>()
+    vi.mocked(AsyncStorage.getItem).mockReturnValue(stalled.promise)
+    const scope = sessionScope()
+    let ready = false
+    let chat = true
+    function Harness() {
+      const terminal = useMobileSessionPreferenceFocus(scope)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the lifecycle reads only the supplied session members.
+      const accessory = useMobileSessionLifecycle(scope as never)
+      const view = useMobileSessionViewMode({ hostId: 'host', worktreeId: 'folder:/tmp/project' })
+      ready = terminal.terminalPreferencesReady && accessory.accessoryPreferencesReady && view.ready
+      chat = view.isTabChatView('tab')
+      return null
+    }
+    await act(async () => {
+      renderer = create(createElement(Harness))
+    })
+    expect(ready).toBe(false)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4999)
+    })
+    expect(ready).toBe(false)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    expect(ready).toBe(true)
+    expect(chat).toBe(false)
+    await act(async () => stalled.resolve('1.5'))
+    expect(scope.setTerminalTextScale).not.toHaveBeenCalled()
+    expect(scope.setCustomKeys).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('ignores reads from a blurred focus and all reads after unmount', async () => {
+    const older = deferred<string | null>()
+    const current = deferred<string | null>()
+    vi.mocked(AsyncStorage.getItem).mockReturnValue(older.promise)
+    const scope = sessionScope()
+    function Harness() {
+      useMobileSessionPreferenceFocus(scope)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the lifecycle reads only the supplied session members.
+      useMobileSessionLifecycle(scope as never)
+      return null
+    }
+    act(() => {
+      renderer = create(createElement(Harness))
+    })
+    vi.mocked(AsyncStorage.getItem).mockReturnValue(current.promise)
+    act(() => {
+      for (const [effect, cleanup] of focusEffects.callbacks) {
+        cleanup?.()
+        focusEffects.callbacks.set(effect, effect())
+      }
+    })
+    await act(async () => older.resolve('1.25'))
+    expect(scope.setTerminalTextScale).not.toHaveBeenCalled()
+    expect(scope.setVisibleBuiltInIds).not.toHaveBeenCalled()
+    act(() => {
+      renderer?.unmount()
+      renderer = null
+    })
+    await act(async () => current.resolve('1.5'))
+    expect(scope.setTerminalTextScale).not.toHaveBeenCalled()
+    expect(scope.setVisibleBuiltInIds).not.toHaveBeenCalled()
   })
 
   it('finishes startup with safe defaults when real preference loaders encounter failed storage', async () => {

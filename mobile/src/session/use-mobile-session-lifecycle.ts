@@ -1,3 +1,4 @@
+import { settleSessionPreferenceRead } from './session-preference-read'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { AppState, type AppStateStatus, Platform } from 'react-native'
 import { useFocusEffect } from 'expo-router'
@@ -49,9 +50,11 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
 
   useEffect(() => {
     let active = true
-    void loadCustomKeys().then((keys) => {
+    void settleSessionPreferenceRead(loadCustomKeys()).then((keys) => {
       if (active) {
-        setCustomKeys(keys)
+        if (keys) {
+          setCustomKeys(keys)
+        }
         setCustomKeysLoaded(true)
       }
     })
@@ -60,40 +63,37 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
     }
   }, [])
 
-  useFocusEffect(
-    useCallback(() => {
-      let stale = false
-      void loadTerminalAccessoryLayout().then((layout) => {
-        if (!stale) {
-          setVisibleBuiltInIds(layout.visibleBuiltInIds)
-          setAccessoryLayoutLoaded(true)
-        }
-      })
-      return () => {
-        stale = true
-      }
-    }, [])
-  )
-
-  useEffect(() => {
-    let mounted = true
-    const refresh = () => {
-      void loadTerminalAccessoryLayout().then((layout) => {
-        if (mounted) {
+  const layoutReadRevisionRef = useRef(0)
+  const refreshAccessoryLayout = useCallback(() => {
+    const revision = ++layoutReadRevisionRef.current
+    void settleSessionPreferenceRead(loadTerminalAccessoryLayout()).then((layout) => {
+      if (layoutReadRevisionRef.current === revision) {
+        if (layout) {
           setVisibleBuiltInIds(layout.visibleBuiltInIds)
         }
-      })
-    }
-    const sub = AppState.addEventListener('change', (s: AppStateStatus) => {
-      if (s === 'active') {
-        refresh()
+        setAccessoryLayoutLoaded(true)
       }
     })
     return () => {
-      mounted = false
-      sub.remove()
+      if (layoutReadRevisionRef.current === revision) {
+        layoutReadRevisionRef.current += 1
+      }
     }
   }, [])
+
+  useFocusEffect(refreshAccessoryLayout)
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s: AppStateStatus) => {
+      if (s === 'active') {
+        refreshAccessoryLayout()
+      }
+    })
+    return () => {
+      layoutReadRevisionRef.current += 1
+      sub.remove()
+    }
+  }, [refreshAccessoryLayout])
 
   const pendingForegroundRecoveryRef = useRef(false)
   useEffect(() => {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { settleSessionPreferenceRead } from './session-preference-read'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import {
   loadDefaultSessionView,
@@ -55,7 +56,8 @@ export function useMobileSessionViewMode(args: {
   worktreeId: string
 }): MobileSessionViewModeController {
   const { hostId, worktreeId } = args
-  const [settledScope, setSettledScope] = useState<string | null>(null)
+  const scope = useMemo(() => ({ hostId, worktreeId }), [hostId, worktreeId])
+  const [settledScope, setSettledScope] = useState<typeof scope | null>(null)
   const [defaultViewReady, setDefaultViewReady] = useState(false)
   const [viewOverridesState, setViewOverridesState] = useState<ViewOverridesState>(() => ({
     hostId,
@@ -81,7 +83,9 @@ export function useMobileSessionViewMode(args: {
     const next: ViewOverridesRuntime = {
       hostId: scopeHostId,
       worktreeId: scopeWorktreeId,
-      loadPromise: readSessionViewOverridesPreference(scopeHostId, scopeWorktreeId),
+      loadPromise: settleSessionPreferenceRead(
+        readSessionViewOverridesPreference(scopeHostId, scopeWorktreeId)
+      ).then((preference) => preference ?? { overrides: new Map(), loaded: false }),
       currentOverrides: new Map(),
       mutationRevisions: new Map()
     }
@@ -110,20 +114,22 @@ export function useMobileSessionViewMode(args: {
       const next = { hostId, worktreeId, overrides: merged, loaded: preference.loaded }
       viewOverridesStateRef.current = next
       setViewOverridesState(next)
-      setSettledScope(JSON.stringify([hostId, worktreeId]))
+      setSettledScope(scope)
     })
     return () => {
       active = false
     }
-  }, [ensureViewOverridesRuntime, hostId, worktreeId])
+  }, [ensureViewOverridesRuntime, hostId, worktreeId, scope])
 
   // Why: reload on focus so returning from Settings picks up a changed default.
   useFocusEffect(
     useCallback(() => {
       let active = true
-      void loadDefaultSessionView().then((view) => {
+      void settleSessionPreferenceRead(loadDefaultSessionView()).then((view) => {
         if (active) {
-          setDefaultView(view)
+          if (view) {
+            setDefaultView(view)
+          }
           setDefaultViewReady(true)
         }
       })
@@ -220,7 +226,7 @@ export function useMobileSessionViewMode(args: {
 
   return {
     // Why: until both reads land a chat tab resolves to terminal, then swaps to chat after mount.
-    ready: defaultViewReady && settledScope === JSON.stringify([hostId, worktreeId]),
+    ready: defaultViewReady && settledScope === scope,
     isTabChatView,
     setTabView,
     toggleTabChatView
