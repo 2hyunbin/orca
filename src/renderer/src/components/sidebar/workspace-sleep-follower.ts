@@ -12,6 +12,7 @@ import {
 import type { HostTerminalStop } from '@/store/terminals/terminal-actions'
 import type { WorkspaceSleepNotice } from '../../../../shared/workspace-sleep'
 import { preserveSidebarWorktreePosition } from './sleep-worktree-sidebar-position'
+import { toastWorkspaceSleepOutcome } from './sleep-worktree-flow'
 
 type FollowedSleep = {
   settle: (stop: HostTerminalStop) => void
@@ -44,6 +45,10 @@ function watchReopenDuringSleep(worktreeId: string): () => void {
  */
 export function followWorkspaceSleep(notice: WorkspaceSleepNotice): void {
   const { worktreeId } = notice
+  if (notice.phase === 'failed') {
+    toastWorkspaceSleepOutcome(notice.outcome)
+    return
+  }
   if (notice.phase === 'started') {
     // A newer sleep of the same workspace replaces an unfinished one.
     const previous = followed.get(worktreeId)
