@@ -22,7 +22,9 @@ let current: ReturnType<typeof useBufferedTerminalDrafts> | null = null
 let tree: ReactTestRenderer | null = null
 function Probe({ scope = 'paired', handle = 'terminal-a' }: { scope?: string; handle?: string }) {
   const activeHandleRef = useRef<string | null>(handle)
-  activeHandleRef.current = handle
+  useEffect(() => {
+    activeHandleRef.current = handle
+  }, [handle])
   current = useBufferedTerminalDrafts({
     activeHandle: handle,
     activeHandleRef,

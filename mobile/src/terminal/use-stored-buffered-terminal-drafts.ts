@@ -64,10 +64,15 @@ export function useStoredBufferedTerminalDrafts(
       errorRef.current?.()
     }
   }, [])
-  errorRef.current = onStorageError
-  if (state.key !== identity) {
+  useEffect(() => {
+    errorRef.current = onStorageError
+  }, [onStorageError])
+  useEffect(() => {
     surfaces.current.clear()
     reconciled.current = false
+    warned.current = false
+  }, [identity, surfaces, reconciled])
+  if (state.key !== identity) {
     setState({ key: identity, drafts: {}, loaded: !storageKey, edited: [] })
   }
   const setDrafts = useCallback((update: SetStateAction<Drafts>) => {
@@ -119,20 +124,21 @@ export function useStoredBufferedTerminalDrafts(
             restored[nextHandle] = scopeDrafts[handle]
           }
         }
-        setState((current) =>
-          current.key !== identity
+        setState((current) => {
+          const edited = new Set(current.edited)
+          return current.key !== identity
             ? current
             : {
                 ...current,
                 loaded: true,
                 drafts: {
                   ...Object.fromEntries(
-                    Object.entries(restored).filter(([handle]) => !current.edited.includes(handle))
+                    Object.entries(restored).filter(([handle]) => !edited.has(handle))
                   ),
                   ...current.drafts
                 }
               }
-        )
+        })
       })
       .catch(() => {
         if (!cancelled) {
