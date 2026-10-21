@@ -54,12 +54,16 @@ export function TaskPageGitHubFilters({
     githubTasksBusy
   } = model
   // Why: filter metadata for the primary slug is read from the host that owns the repo it came from.
-  const primaryGithubFilterRepoId =
-    perRepoSourceState.find((state) =>
-      activeGithubTaskKind === 'prs' ? state.sources?.prs : state.sources?.issues
-    )?.repoId ?? null
+  const primaryGithubFilterSource = perRepoSourceState.find((state) =>
+    activeGithubTaskKind === 'prs' ? state.sources?.prs : state.sources?.issues
+  )
+  const primaryGithubFilterRepoId = primaryGithubFilterSource?.repoId ?? null
+  // Why the host: a twin's two rows share the id, so only the source's row host names one.
+  const primaryGithubFilterHostId = primaryGithubFilterSource?.hostId ?? null
   const primaryGithubFilterTarget = useAppStore(
-    useShallow((s) => getGitHubRepoRoutingTarget(s, primaryGithubFilterRepoId, null))
+    useShallow((s) =>
+      getGitHubRepoRoutingTarget(s, primaryGithubFilterRepoId, null, primaryGithubFilterHostId)
+    )
   )
   return (
     // Why: top of the joined GitHub list card — pairs with the
