@@ -47,6 +47,7 @@ describe('mobile new-tab agent loading', () => {
     groupExecutionHostId?: string
     executionHostId?: string
     repos?: unknown[]
+    groups?: unknown[]
     missing?: boolean
     duplicate?: boolean
     refused?: boolean
@@ -87,7 +88,7 @@ describe('mobile new-tab agent loading', () => {
         return {
           ok: true,
           result: {
-            groups: [
+            groups: args.groups ?? [
               {
                 id: 'pg-1',
                 connectionId: args.groupConnectionId,
@@ -120,6 +121,15 @@ describe('mobile new-tab agent loading', () => {
 
   it.each([
     ['local', {}, 'preflight.detectAgents'],
+    [
+      'explicit local pin overrides group SSH and runtime candidates',
+      {
+        executionHostId: 'local',
+        groupConnectionId: 'group-ssh',
+        repos: [{ path: '/project/repo', projectGroupId: 'pg-1', executionHostId: 'runtime:other' }]
+      },
+      'preflight.detectAgents'
+    ],
     ['group SSH', { groupConnectionId: 'group-ssh' }, 'preflight.detectRemoteAgents'],
     [
       'workspace connection overrides group runtime',
@@ -154,6 +164,15 @@ describe('mobile new-tab agent loading', () => {
   it.each([
     ['missing', { missing: true }],
     ['duplicate identity', { duplicate: true }],
+    [
+      'duplicate group identity',
+      {
+        groups: [
+          { id: 'pg-1', connectionId: 'first-ssh' },
+          { id: 'pg-1', connectionId: 'second-ssh' }
+        ]
+      }
+    ],
     ['group runtime', { groupExecutionHostId: 'runtime:other', groupConnectionId: 'private-ssh' }],
     [
       'inferred runtime',
@@ -201,6 +220,69 @@ describe('mobile new-tab agent loading', () => {
     expect(client.sendRequest.mock.calls.some(([method]) => method.startsWith('preflight.'))).toBe(
       false
     )
+  })
+
+  it.each(['folderWorkspace.list', 'projectGroup.list', 'repo.list'])(
+    'never probes after an incompatible legacy %s reply',
+    async (failedMethod) => {
+      const base = folderClient({})
+      const client = createClient(async (method, params) => {
+        if (method === failedMethod) {
+          return { ok: true, result: null }
+        }
+        return base.sendRequest(method, params)
+      })
+      await expect(
+        loadMobileNewTabAgentOptions({ client, worktreeId: 'folder:fw-1' })
+      ).rejects.toThrow()
+      expect(
+        client.sendRequest.mock.calls.some(([method]) => method.startsWith('preflight.'))
+      ).toBe(false)
+    }
+  )
+
+  it.each([false, true])(
+    'preserves transport failure without a wrong-host retry (modern=%s)',
+    async (modern) => {
+      const disconnected = new Error('logical client cutover')
+      const client = createClient(async (method) => {
+        if (method === 'settings.get') {
+          return { ok: true, result: { settings: {} } }
+        }
+        throw disconnected
+      })
+      await expect(
+        loadMobileNewTabAgentOptions({
+          client,
+          worktreeId: 'folder:fw-1',
+          hostRefusesOtherRuntime: modern
+        })
+      ).rejects.toBe(disconnected)
+      const methods = client.sendRequest.mock.calls.map(([method]) => method)
+      expect(methods).not.toContain('preflight.detectRemoteAgents')
+      expect(methods.filter((method) => method === 'preflight.detectAgents')).toHaveLength(
+        modern ? 1 : 0
+      )
+    }
+  )
+
+  it('keeps a modern unserved SSH refusal without retrying on the paired host', async () => {
+    const client = createClient(async (method) =>
+      method === 'settings.get'
+        ? { ok: true, result: { settings: {} } }
+        : { ok: false, error: { code: 'runtime_error', message: 'SSH host not served' } }
+    )
+    await expect(
+      loadMobileNewTabAgentOptions({
+        client,
+        worktreeId: 'folder:fw-1',
+        hostRefusesOtherRuntime: true
+      })
+    ).rejects.toThrow('SSH host not served')
+    expect(client.sendRequest.mock.calls.map(([method]) => method)).toEqual([
+      'preflight.detectAgents',
+      'settings.get'
+    ])
   })
 
   it('preserves a modern host folder ownership refusal', async () => {

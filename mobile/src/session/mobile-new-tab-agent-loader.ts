@@ -194,7 +194,13 @@ async function loadFolderDetectedAgents(
   }
   const workspace = workspaces[0]
   const explicitHost = parseExecutionHostId(workspace?.executionHostId)
-  const group = catalog.projectGroups.find((entry) => entry.id === workspace?.projectGroupId)
+  const groupsForWorkspace = catalog.projectGroups.filter(
+    (entry) => entry.id === workspace?.projectGroupId
+  )
+  if (!explicitHost && groupsForWorkspace.length > 1) {
+    throw new Error('worktree_execution_host_unresolved')
+  }
+  const group = groupsForWorkspace[0]
   // A legacy host cannot disambiguate another runtime's rows or address its private SSH targets.
   if (
     workspaces.some((entry) => entry.executionHostId?.startsWith('runtime:')) ||
