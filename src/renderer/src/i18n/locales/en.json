@@ -16596,6 +16596,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "Your last edit in this view couldn't be applied because the file changed elsewhere."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "Paste is too large.",
           "stopped": "Large paste stopped before it finished.",

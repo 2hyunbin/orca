@@ -16294,6 +16294,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "文件已在其他位置更改，因此无法应用你在此视图中的最后一次编辑。"
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "粘贴内容过大。",
           "stopped": "大浆糊还没完成就停了。",

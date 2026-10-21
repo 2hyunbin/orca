@@ -16289,6 +16289,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "No se pudo aplicar tu última edición en esta vista porque el archivo cambió en otro lugar."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "El contenido pegado es demasiado grande.",
           "stopped": "El pegado grande se detuvo antes de terminar.",

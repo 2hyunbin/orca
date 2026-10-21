@@ -12520,6 +12520,9 @@
         "useRichMarkdownReviewData": {
           "f9d2acd6b0": "Todas as notas não enviadas"
         },
+        "staleViewEdit": {
+          "rejected": "Não foi possível aplicar sua última edição nesta visualização porque o arquivo foi alterado em outro lugar."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "A colagem é muito grande.",
           "stopped": "A colagem de conteúdo extenso parou antes de terminar.",

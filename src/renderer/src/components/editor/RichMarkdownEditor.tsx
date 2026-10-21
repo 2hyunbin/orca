@@ -300,6 +300,7 @@ export default function RichMarkdownEditor({
     markdownDocuments,
     rootRef,
     runtimeTarget,
+    serializeTimerRef,
     slashMenuSetter: menu.setSlashMenu,
     worktreeId,
     worktreeRoot

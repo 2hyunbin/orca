@@ -7,6 +7,7 @@ import {
   type MutableRefObject
 } from 'react'
 import { registerPendingEditorFlush } from './editor-pending-flush'
+import { notifyStaleViewEditRejected } from './editor-stale-view-edit'
 import {
   deleteIpynbCell,
   insertIpynbCell,
@@ -76,6 +77,8 @@ export function useIpynbDocumentEditing({
   const onContentChangeRef = useRef(onContentChange)
   const onDirtyStateHintRef = useRef(onDirtyStateHint)
   const sourceCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Why: the notebook text the pending drafts were typed against; a commit onto newer text is refused.
+  const draftBaseRef = useRef<string | null>(null)
   const structuralFrameIdsRef = useRef<number[]>([])
   useLayoutEffect(() => {
     contentRef.current = content
@@ -103,6 +106,14 @@ export function useIpynbDocumentEditing({
     if (sourceCommitTimerRef.current !== null) {
       clearTimeout(sourceCommitTimerRef.current)
       sourceCommitTimerRef.current = null
+    }
+    const base = draftBaseRef.current
+    draftBaseRef.current = null
+    if (base !== null && base !== contentRef.current) {
+      sourceDraftsRef.current = {}
+      setSourceDrafts({})
+      notifyStaleViewEditRejected()
+      return contentRef.current
     }
     const nextContent = materializeSourceDrafts()
     if (nextContent !== contentRef.current) {
@@ -157,7 +168,25 @@ export function useIpynbDocumentEditing({
     [flushSourceDrafts]
   )
 
+  const flushOnFocusLeave = useCallback(
+    (event: { currentTarget: Element; relatedTarget: EventTarget | null }): void => {
+      const next = event.relatedTarget
+      if (
+        sourceCommitTimerRef.current === null ||
+        (next instanceof Node && event.currentTarget.contains(next))
+      ) {
+        return
+      }
+      // Why: commit before focus reaches another view of this file, so alternating views never goes stale.
+      void flushSourceDrafts()
+    },
+    [flushSourceDrafts]
+  )
+
   const applyContent = useCallback((nextContent: string): void => {
+    if (draftBaseRef.current === contentRef.current) {
+      draftBaseRef.current = nextContent
+    }
     contentRef.current = nextContent
     onContentChangeRef.current(nextContent)
   }, [])
@@ -169,6 +198,7 @@ export function useIpynbDocumentEditing({
         return
       }
       const key = getIpynbCellKey(cell, index)
+      draftBaseRef.current ??= contentRef.current
       const nextDrafts = { ...sourceDraftsRef.current, [key]: source }
       sourceDraftsRef.current = nextDrafts
       setSourceDrafts(nextDrafts)
@@ -209,6 +239,7 @@ export function useIpynbDocumentEditing({
   return {
     rootRef,
     setRootRef,
+    flushOnFocusLeave,
     sourceDrafts,
     flushSourceDrafts,
     applyContent,

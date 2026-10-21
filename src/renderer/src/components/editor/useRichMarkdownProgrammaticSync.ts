@@ -12,6 +12,7 @@ import {
 } from './rich-markdown-image-context'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { RichMarkdownEditorCodec } from './rich-markdown-source-transport'
+import { notifyStaleViewEditRejected } from './editor-stale-view-edit'
 
 type RichMarkdownProgrammaticSyncOptions = {
   codec: RichMarkdownEditorCodec
@@ -28,6 +29,8 @@ type RichMarkdownProgrammaticSyncOptions = {
   markdownDocuments?: MarkdownDocument[]
   rootRef: MutableRefObject<HTMLDivElement | null>
   runtimeTarget: RuntimeClientTarget | null
+  /** Pending debounced commit, based on the text this view last synced. */
+  serializeTimerRef: MutableRefObject<number | null>
   slashMenuSetter: Dispatch<SetStateAction<SlashMenuState | null>>
   worktreeId: string
   worktreeRoot: string | null
@@ -54,6 +57,7 @@ export function useRichMarkdownProgrammaticSync({
   markdownDocuments,
   rootRef,
   runtimeTarget,
+  serializeTimerRef,
   slashMenuSetter,
   worktreeId,
   worktreeRoot
@@ -118,6 +122,12 @@ export function useRichMarkdownProgrammaticSync({
       baseCanonicalRef.current = content
       return
     }
+    if (serializeTimerRef.current !== null) {
+      // Why: the pending edit is based on text another view or disk has since replaced; committing it would overwrite that.
+      window.clearTimeout(serializeTimerRef.current)
+      serializeTimerRef.current = null
+      notifyStaleViewEditRejected()
+    }
     isApplyingProgrammaticUpdateRef.current = true
     try {
       applyExternalRichMarkdownContent(
@@ -144,6 +154,7 @@ export function useRichMarkdownProgrammaticSync({
     originalSourceRef,
     baseCanonicalRef,
     rootRef,
+    serializeTimerRef,
     slashMenuSetter
   ])
 }

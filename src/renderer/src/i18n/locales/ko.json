@@ -16294,6 +16294,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "파일이 다른 곳에서 변경되어 이 보기에서 마지막으로 한 편집을 적용할 수 없습니다."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "붙여넣기 내용이 너무 큽니다.",
           "stopped": "큰 페이스트는 완성되기 전에 멈췄습니다.",

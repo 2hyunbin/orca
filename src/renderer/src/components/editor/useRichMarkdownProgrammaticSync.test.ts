@@ -13,6 +13,9 @@ import {
   type RichMarkdownHtmlSuperscriptLinkContext
 } from './rich-markdown-html-superscript-link-context'
 import { encodeRawMarkdownHtmlForRichEditor } from './raw-markdown-html'
+import { notifyStaleViewEditRejected } from './editor-stale-view-edit'
+
+vi.mock('./editor-stale-view-edit', () => ({ notifyStaleViewEditRejected: vi.fn() }))
 
 function buildEditor(
   codec: RichMarkdownEditorCodec,
@@ -71,6 +74,7 @@ describe('useRichMarkdownProgrammaticSync external-reload baseline adoption (#60
           markdownDocuments: undefined,
           rootRef: { current: null },
           runtimeTarget: { kind: 'local' },
+          serializeTimerRef: { current: null },
           slashMenuSetter: vi.fn(),
           worktreeId: 'w1',
           worktreeRoot: null
@@ -82,6 +86,81 @@ describe('useRichMarkdownProgrammaticSync external-reload baseline adoption (#60
       expect(lastCommittedMarkdownRef.current).toBe(canonical)
       expect(originalSourceRef.current).toBe(canonical)
       expect(baseCanonicalRef.current).toBe(canonical)
+    } finally {
+      editor.destroy()
+    }
+  })
+})
+
+describe('useRichMarkdownProgrammaticSync stale pending edit', () => {
+  function renderPane(paneText: string, pendingCommit: (() => void) | null) {
+    const codec = createRichMarkdownEditorCodec()
+    const editor = buildEditor(
+      codec,
+      createRichMarkdownHtmlSuperscriptLinkContext({
+        sourceFilePath: '',
+        worktreeId: '',
+        worktreeRoot: null,
+        sourceOwner: { kind: 'unknown' as const }
+      }),
+      paneText
+    )
+    const serializeTimerRef = {
+      current: pendingCommit ? window.setTimeout(pendingCommit, 300) : null
+    }
+    const hook = renderHook(
+      ({ content }: { content: string }) =>
+        useRichMarkdownProgrammaticSync({
+          codec,
+          content,
+          docLinkMenuSetter: vi.fn(),
+          editor,
+          fileId: 'f1',
+          filePath: '/repo/README.md',
+          isApplyingProgrammaticUpdateRef: { current: false },
+          lastCommittedMarkdownRef: { current: 'base' },
+          originalSourceRef: { current: 'base' },
+          baseCanonicalRef: { current: 'base' },
+          markdownDocuments: undefined,
+          rootRef: { current: null },
+          runtimeTarget: { kind: 'local' },
+          serializeTimerRef,
+          slashMenuSetter: vi.fn(),
+          worktreeId: 'w1',
+          worktreeRoot: null
+        }),
+      { initialProps: { content: 'base' } }
+    )
+    return { editor, hook, serializeTimerRef }
+  }
+
+  it('rejects a split pane pending edit once the other pane replaced the shared text', () => {
+    vi.useFakeTimers()
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const commitPaneB = vi.fn()
+    // Pane B typed "pane b" over "base" and is waiting out its serialize delay.
+    const { editor, hook, serializeTimerRef } = renderPane('pane b', commitPaneB)
+    try {
+      hook.rerender({ content: 'pane a' })
+      vi.advanceTimersByTime(300)
+
+      expect(commitPaneB).not.toHaveBeenCalled()
+      expect(serializeTimerRef.current).toBeNull()
+      expect(notifyStaleViewEditRejected).toHaveBeenCalledOnce()
+      expect(editor.getMarkdown()).toBe('pane a')
+    } finally {
+      editor.destroy()
+      vi.useRealTimers()
+    }
+  })
+
+  it('re-syncs silently when the pane had no pending edit', () => {
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const { editor, hook } = renderPane('base', null)
+    try {
+      hook.rerender({ content: 'pane a' })
+      expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+      expect(editor.getMarkdown()).toBe('pane a')
     } finally {
       editor.destroy()
     }
