@@ -50,38 +50,50 @@ export function sessionRowFilter(
   }
   if (filters.scopePaths && filters.scopePaths.length > 0) {
     // Several scopes mean any of them; every other narrowing is ANDed on.
-    const present = filters.scopePaths
-      .map((scope) => scopeCondition(filter, scope))
-      .filter((condition) => condition !== null)
+    // A scope the caller could not key is a scope nothing is inside of.
+    const keys = new Set(filters.scopePaths.map(cwdKey).filter((key) => key !== null))
     // Every scope unkeyable still means a scope, so it narrows to nothing;
     // pushing no condition would widen the search to every session instead.
-    filter.conditions.push(present.length > 0 ? `(${present.join(' OR ')})` : '0 = 1')
+    if (keys.size === 0) {
+      filter.conditions.push('0 = 1')
+    } else {
+      const ranges = JSON.stringify([...keys].map(scopeRange))
+      filter.conditions.push(SCOPE_CONDITION)
+      filter.values.push(ranges, ranges)
+    }
   }
   return filter
 }
 
-/** A scope the caller could not key is a scope nothing is inside of. */
-function scopeCondition(filter: SessionRowFilter, scope: string): string | null {
-  const key = cwdKey(scope)
-  return key === null ? null : insideCondition(filter, key)
-}
-
 /**
- * `key` itself, or anything below it. Why a half-open range and not
- * `substr(key, 1, length(?)) = ?`: only `>=`/`<` can seek `sessions_cwd_key`;
- * the substr form scans it. The bound is the child prefix with its last byte
- * incremented, so it stops at the end of that prefix and nowhere else. The two
- * arms cannot merge: one range over the bare key would also swallow a sibling
- * like `/work/app-other`. No wildcards, so `%`/`_` in a folder name are literal.
+ * `key` itself, or anything below it. Why one JSON parameter and not an OR per
+ * scope: a project keeps every worktree it ever had, and past ~500 scopes the
+ * OR chain exceeds SQLite's expression depth of 1000 and the search throws.
+ * Each arm is driven by `json_each` so every scope is still an index seek.
+ *
+ * Why a half-open range and not `substr(key, 1, length(?)) = ?`: only `>=`/`<`
+ * can seek `sessions_cwd_key`; the substr form scans it. The bound is the child
+ * prefix with its last byte incremented, so it stops at the end of that prefix
+ * and nowhere else. The two arms cannot merge: one range over the bare key would
+ * also swallow a sibling like `/work/app-other`. No wildcards, so `%`/`_` in a
+ * folder name are literal.
  *
  * The filesystem root is the one key that already ends in a separator, and
  * appending a second one would bound the range at `//`, which sorts below every
  * real child; `cwdKey` keeps it as `/` for exactly this reason.
  */
-function insideCondition(filter: SessionRowFilter, key: string): string {
+const SCOPE_CONDITION = `id IN (
+  SELECT scoped.id FROM json_each(?) AS scope
+    JOIN sessions AS scoped ON scoped.${CWD} = json_extract(scope.value, '$[0]')
+  UNION ALL
+  SELECT scoped.id FROM json_each(?) AS scope
+    JOIN sessions AS scoped ON scoped.${CWD} >= json_extract(scope.value, '$[1]')
+      AND scoped.${CWD} < json_extract(scope.value, '$[2]')
+)`
+
+function scopeRange(key: string): [string, string, string] {
   const children = key.endsWith('/') ? key : `${key}/`
-  filter.values.push(key, children, nextAfterPrefix(children))
-  return `(${CWD} = ? OR (${CWD} >= ? AND ${CWD} < ?))`
+  return [key, children, nextAfterPrefix(children)]
 }
 
 /** The first string that sorts after every string starting with `prefix`. */

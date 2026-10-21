@@ -145,3 +145,11 @@ it('plans a cwd scope as a seek on sessions_cwd_key, never a scan', async () => 
   expect(plan.some((detail) => detail.startsWith('SEARCH'))).toBe(true)
   expect(plan.some((detail) => detail.startsWith('SCAN sessions'))).toBe(false)
 })
+
+it('matches under a thousand-plus scopes, past where an OR chain exceeds SQLite expression depth', async () => {
+  const db = await openIndex()
+  addSession(db, 1, '/lanes/lane-1199/src')
+  addSession(db, 2, '/elsewhere')
+  const scopePaths = Array.from({ length: 1_200 }, (_, index) => `/lanes/lane-${index}`)
+  expect(selected(db, { scopePaths })).toEqual([1])
+})
