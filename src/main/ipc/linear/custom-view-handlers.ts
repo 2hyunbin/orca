@@ -4,15 +4,15 @@ import {
   listCustomViewIssues,
   listCustomViewProjects,
   listCustomViews
-} from '../linear/projects'
+} from '../../linear/linear-custom-view-queries'
 import {
   normalizeConcreteWorkspaceId,
   normalizeCustomViewModel,
   normalizeWorkspaceSelection
-} from './linear-ipc-args'
-import { clampLinearIssueListLimit } from '../../shared/linear/issue-read-limits'
-import type { LinearCustomViewModel } from '../../shared/linear/project-types'
-import type { LinearWorkspaceSelection } from '../../shared/linear/workspace-types'
+} from './ipc-args'
+import { clampLinearIssueListLimit } from '../../../shared/linear/issue-read-limits'
+import type { LinearCustomViewModel } from '../../../shared/linear/project-types'
+import type { LinearWorkspaceSelection } from '../../../shared/linear/workspace-types'
 
 export function registerLinearCustomViewHandlers(): void {
   ipcMain.handle(

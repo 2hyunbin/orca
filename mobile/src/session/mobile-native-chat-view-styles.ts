@@ -13,6 +13,13 @@ export const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0
   },
+  inputLockStatus: {
+    color: colors.textSecondary,
+    fontSize: typography.metaSize,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xs
+  },
+
   sendError: {
     alignItems: 'center',
     paddingHorizontal: spacing.md,

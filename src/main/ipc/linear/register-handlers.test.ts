@@ -28,7 +28,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../linear/client', () => ({
+vi.mock('../../linear/client', () => ({
   connect: connectMock,
   disconnect: disconnectMock,
   getStatus: getStatusMock,
@@ -36,44 +36,50 @@ vi.mock('../linear/client', () => ({
   testConnection: testConnectionMock
 }))
 
-vi.mock('../linear/linear-issue-lookups', () => ({
+vi.mock('../../linear/linear-issue-lookups', () => ({
   getIssue: vi.fn(),
   searchIssues: vi.fn()
 }))
-vi.mock('../linear/linear-issue-listing', () => ({
+vi.mock('../../linear/linear-issue-listing', () => ({
   listIssues: listIssuesMock
 }))
-vi.mock('../linear/linear-issue-mutations', () => ({
+vi.mock('../../linear/linear-issue-mutations', () => ({
   createIssue: vi.fn(),
   updateIssue: vi.fn()
 }))
-vi.mock('../linear/linear-issue-comments', () => ({
+vi.mock('../../linear/linear-issue-comments', () => ({
   addIssueComment: vi.fn(),
   getIssueComments: vi.fn()
 }))
 
-vi.mock('../linear/projects', () => ({
+vi.mock('../../linear/linear-custom-view-queries', () => ({
   getCustomView: vi.fn(),
-  getProject: vi.fn(),
   listCustomViewIssues: listCustomViewIssuesMock,
   listCustomViewProjects: vi.fn(),
-  listCustomViews: vi.fn(),
-  listProjectIssues: listProjectIssuesMock,
+  listCustomViews: vi.fn()
+}))
+
+vi.mock('../../linear/linear-project-queries', () => ({
+  getProject: vi.fn(),
   listProjects: vi.fn()
 }))
 
-vi.mock('../linear/teams', () => ({
+vi.mock('../../linear/linear-project-issue-queries', () => ({
+  listProjectIssues: listProjectIssuesMock
+}))
+
+vi.mock('../../linear/teams', () => ({
   listTeams: vi.fn(),
   getTeamStates: vi.fn(),
   getTeamLabels: vi.fn(),
   getTeamMembers: vi.fn()
 }))
 
-vi.mock('../preflight/agent-detection', () => ({
+vi.mock('../../preflight/agent-detection', () => ({
   _resetPreflightCache: vi.fn()
 }))
 
-import { registerLinearHandlers } from './linear'
+import { registerLinearHandlers } from './register-handlers'
 
 type HandlerMap = Record<string, (_event: unknown, args: unknown) => unknown>
 

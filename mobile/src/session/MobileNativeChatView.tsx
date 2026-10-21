@@ -350,6 +350,7 @@ export function MobileNativeChatView({
   const emptyState = mobileNativeChatEmptyState(status, agent ?? null, error)
 
   const lockReason = useSettledMobileNativeChatInputLock(inputLockReason)
+  const placeholder = mobileNativeChatComposerPlaceholder(lockReason, turnIndicator?.afterStop)
   // Why only Send, terminal-backed only: that send types into the agent's prompt and can answer it,
   // while drafting never does; the host queues a structured send behind it.
   const expandedPromptOwnsSend =
@@ -425,6 +426,12 @@ export function MobileNativeChatView({
           }
         />
       </View>
+      <Text
+        style={lockReason === 'waiting' ? styles.inputLockStatus : undefined}
+        accessibilityLiveRegion="polite"
+      >
+        {lockReason === 'waiting' ? placeholder : null}
+      </Text>
       {sendErrorMessage ? (
         // This banner is the only channel for a send failure — announce it.
         <View
@@ -447,22 +454,13 @@ export function MobileNativeChatView({
         onSend={handleSend}
         sendSurfaceId={sendSurfaceId}
         {...{ getSendCompletionGeneration, getComposerEditGeneration, inputRef }}
-        agent={agent}
-        sessionOptions={sessionOptions}
-        onAttachImage={onAttachImage}
-        attachments={attachments}
-        onRemoveAttachment={onRemoveAttachment}
-        isAttaching={isAttaching}
-        onMicPress={onMicPress}
-        micActive={micActive}
-        dictationMode={dictationMode}
-        onMicPressIn={onMicPressIn}
-        onMicPressOut={onMicPressOut}
+        {...{ agent, sessionOptions }}
+        {...{ onAttachImage, attachments, onRemoveAttachment, isAttaching }}
+        {...{ onMicPress, micActive, dictationMode, onMicPressIn, onMicPressOut }}
         disabled={lockReason !== null}
         sendDisabled={expandedPromptOwnsSend}
-        placeholder={mobileNativeChatComposerPlaceholder(lockReason, turnIndicator?.afterStop)}
-        filePaths={filePaths}
-        onNeedFiles={onNeedFiles}
+        placeholder={placeholder}
+        {...{ filePaths, onNeedFiles }}
         stop={
           canStop
             ? {

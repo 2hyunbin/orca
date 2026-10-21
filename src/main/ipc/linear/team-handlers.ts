@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
-import { listTeams, getTeamStates, getTeamLabels, getTeamMembers } from '../linear/teams'
-import { normalizeWorkspaceId, normalizeWorkspaceSelection } from './linear-ipc-args'
-import type { LinearWorkspaceSelection } from '../../shared/linear/workspace-types'
+import { listTeams, getTeamStates, getTeamLabels, getTeamMembers } from '../../linear/teams'
+import { normalizeWorkspaceId, normalizeWorkspaceSelection } from './ipc-args'
+import type { LinearWorkspaceSelection } from '../../../shared/linear/workspace-types'
 
 export function registerLinearTeamHandlers(): void {
   ipcMain.handle(
