@@ -1,73 +1,24 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import type { TextInput } from 'react-native'
+import { useCallback, useEffect, useRef } from 'react'
 import { reportedLiveInputComposing } from '../platform/live-input-composing-range'
 import {
   getTerminalLiveSpecialKeyDecision,
   type TerminalLiveInputSelection
 } from './terminal-live-text-commit'
 import { sendTerminalLiveControlAfterPendingFlush } from './terminal-live-control-send-order'
-import type { TerminalLiveAccessoryInput } from './terminal-live-accessory-input'
-import type { TerminalLiveInputSender } from './terminal-live-input-sender'
 import { writeTerminalLiveInputText } from './terminal-live-input-text-write'
 import { normalizeTerminalTextInput } from './terminal-text-input-normalization'
 import { useTerminalLivePendingInputFlush } from './use-terminal-live-pending-input-flush'
-import {
-  useTerminalLiveAccessoryInputCommit,
-  type TerminalLiveAccessoryInputCommitResult
-} from './use-terminal-live-accessory-input-commit'
+import { useTerminalLiveAccessoryInputCommit } from './use-terminal-live-accessory-input-commit'
+import type {
+  TerminalLiveInputChangeEvent,
+  TerminalLiveInputCommitHandlers,
+  TerminalLiveInputCommitOptions,
+  TerminalLiveInputKeyPressEvent,
+  TerminalLiveInputSelectionChangeEvent
+} from './terminal-live-input-commit-contract'
 
 // Native text changes queued before a reset can arrive after it.
 const ENDED_SESSION_ECHO_MS = 500
-
-type TerminalLiveInputKeyPressEvent = {
-  readonly nativeEvent: {
-    readonly key: string
-  }
-}
-
-/** `isComposing` is the text system's marked-text range, forwarded by the pinned
- *  react-native patch on iOS; `onChangeText` would drop the payload entirely.
- *  Absent means the platform reports no range — not "not composing". */
-type TerminalLiveInputChangeEvent = {
-  readonly nativeEvent: {
-    readonly text: string
-    readonly isComposing?: boolean
-  }
-}
-
-type TerminalLiveInputSelectionChangeEvent = {
-  readonly nativeEvent: {
-    readonly selection: TerminalLiveInputSelection
-    readonly text?: string
-  }
-}
-
-type TerminalLiveInputCommitOptions<TTabType extends string> = {
-  readonly activeHandle: string | null
-  readonly activeHandleRef: RefObject<string | null>
-  readonly activeSessionTabType: TTabType | null | undefined
-  readonly activeSessionTabTypeRef: RefObject<TTabType | null>
-  readonly connected: boolean
-  readonly liveInputRef: RefObject<TextInput | null>
-  readonly liveInputTerminalHandles: ReadonlySet<string>
-  readonly liveInputTerminalHandlesRef: RefObject<Set<string>>
-  readonly sendLiveTerminalInputRef: RefObject<TerminalLiveInputSender>
-  readonly setLiveInputCapture: (text: string) => void
-}
-
-type TerminalLiveInputCommitHandlers = {
-  readonly clearPendingLiveInputCommit: () => void
-  readonly flushPendingLiveInputBeforeExternalSend: (handle: string) => Promise<boolean>
-  readonly getLiveInputInteractionGeneration: () => number
-  readonly handleLiveInputAccessoryBytes: (
-    input: TerminalLiveAccessoryInput
-  ) => Promise<TerminalLiveAccessoryInputCommitResult>
-  readonly handleLiveInputChange: (event: TerminalLiveInputChangeEvent) => void
-  readonly handleLiveInputKeyPress: (event: TerminalLiveInputKeyPressEvent) => void
-  readonly handleLiveInputSelectionChange: (event: TerminalLiveInputSelectionChangeEvent) => void
-  readonly handleLiveInputSubmit: () => Promise<boolean>
-  readonly sendLiveInputClick: (handle: string, bytes: string) => Promise<boolean>
-}
 
 /** Mirrors committed field text to the terminal while keeping native caret movement local. */
 export function useTerminalLiveInputCommit<TTabType extends string>({
@@ -187,19 +138,29 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
     [advanceLiveInputInteractionGeneration, endLiveInputSessionThenSend]
   )
 
+  const getEndedSession = useCallback(() => {
+    const endedSession = endedSessionTextRef.current
+    if (
+      !endedSession ||
+      endedSession.handle !== activeHandleRef.current ||
+      Date.now() - endedSession.at > ENDED_SESSION_ECHO_MS
+    ) {
+      endedSessionTextRef.current = null
+      return null
+    }
+    return endedSession
+  }, [activeHandleRef])
+
   // Replaying the cleared field's native echo would retype it at the clicked cursor.
   const dropEndedSessionEcho = useCallback(
     (text: string): boolean => {
-      const endedSession = endedSessionTextRef.current
-      if (
-        !endedSession ||
-        endedSession.handle !== activeHandleRef.current ||
-        Date.now() - endedSession.at > ENDED_SESSION_ECHO_MS
-      ) {
-        endedSessionTextRef.current = null
+      const endedSession = getEndedSession()
+      if (!endedSession) {
         return false
       }
       if (text === endedSession.text) {
+        liveInputSelectionRef.current = null
+        liveInputSelectionSnapshotRef.current = null
         writeTerminalLiveInputText(liveInputRef, '')
         return true
       }
@@ -209,7 +170,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
       }
       return false
     },
-    [activeHandleRef, liveInputRef]
+    [getEndedSession, liveInputRef]
   )
 
   const handleLiveInputChange = useCallback(
@@ -253,6 +214,10 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
 
   const handleLiveInputSelectionChange = useCallback(
     ({ nativeEvent }: TerminalLiveInputSelectionChangeEvent) => {
+      const endedSession = getEndedSession()
+      if (endedSession && nativeEvent.text === endedSession.text) {
+        return
+      }
       // Why: only accessory deletion reads this; native caret movement never sends PTY controls.
       const snapshot = {
         text: nativeEvent.text ?? liveInputTextRef.current,
@@ -262,7 +227,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
       liveInputSelectionRef.current =
         snapshot.text === liveInputTextRef.current ? snapshot.selection : null
     },
-    []
+    [getEndedSession]
   )
 
   const handleLiveInputKeyPress = useCallback(
@@ -271,7 +236,11 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
         return
       }
       advanceLiveInputInteractionGeneration()
-      endedSessionTextRef.current = null
+      if (endedSessionTextRef.current) {
+        liveInputSelectionRef.current = null
+        liveInputSelectionSnapshotRef.current = null
+        endedSessionTextRef.current = null
+      }
       const ownsPendingState = pendingLiveInputHandleRef.current === activeHandle
       if (pendingLiveInputHandleRef.current && !ownsPendingState) {
         clearPendingLiveInputCommit()
