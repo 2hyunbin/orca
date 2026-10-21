@@ -19,6 +19,7 @@ import { preflightOrcadNativeRuntime } from './orcad-runtime-native-preflight'
 import { orcadCompileCacheEnv } from './orcad-compile-cache'
 import {
   claimStartupPreflightSkip,
+  clearAbandonedStartupPreflightClaim,
   computeStartupPreflightFingerprint,
   forgetStartupPreflightVerdict,
   readStartupPreflightVerdict,
@@ -32,7 +33,9 @@ import {
 } from './orcad-bundled-runtime'
 
 /** Check every packaged start before a profile index, data-root lock or import is touched. */
-export async function preflightBundledOrcadStartup(): Promise<void> {
+export async function preflightBundledOrcadStartup(
+  options: { allowVerdict?: boolean } = {}
+): Promise<void> {
   const directory = resolveBundledOrcadSlot()
   if (!isRunningAsBundledOrcadRuntime(directory)) {
     return
@@ -40,7 +43,7 @@ export async function preflightBundledOrcadStartup(): Promise<void> {
   const identity = await readInstalledVersion(directory)
   const verdictPath = startupPreflightVerdictPath(directory)
   const fingerprint = verdictPath ? await computeStartupPreflightFingerprint(directory) : null
-  if (verdictPath && fingerprint) {
+  if (options.allowVerdict !== false && verdictPath && fingerprint) {
     const verdict = await readStartupPreflightVerdict(verdictPath)
     if (
       verdict?.fingerprint === fingerprint &&
@@ -86,7 +89,13 @@ export async function preflightBundledOrcadStartup(): Promise<void> {
       artifactVersion: identity,
       runtimeVersion: process.versions.node
     })
+    await clearAbandonedStartupPreflightClaim(verdictPath)
   }
+}
+
+/** Runs the real probe now, for a start whose skipped probe is in doubt; throws as a start would. */
+export function reprobeBundledOrcadStartup(): Promise<void> {
+  return preflightBundledOrcadStartup({ allowVerdict: false })
 }
 
 /** Only disposable state is opened; no server, profile index or host adapters are installed. */

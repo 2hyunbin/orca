@@ -4,7 +4,7 @@ import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec
 import { NODE_RUNTIME_PIN } from '../../shared/node-runtime-pin'
 import type * as BundledRuntime from './orcad-bundled-runtime'
 import type * as Verdict from './orcad-startup-preflight-verdict'
-import { preflightBundledOrcadStartup } from './orcad-profile-preflight'
+import { preflightBundledOrcadStartup, reprobeBundledOrcadStartup } from './orcad-profile-preflight'
 
 const fixture = vi.hoisted(() => ({
   readVersion: vi.fn(),
@@ -14,7 +14,8 @@ const fixture = vi.hoisted(() => ({
   read: vi.fn(),
   write: vi.fn(),
   forget: vi.fn(),
-  claim: vi.fn<() => Promise<boolean>>()
+  claim: vi.fn<() => Promise<boolean>>(),
+  clearAbandoned: vi.fn()
 }))
 vi.mock('./orcad-bundled-runtime', async (importOriginal) => ({
   ...(await importOriginal<typeof BundledRuntime>()),
@@ -30,7 +31,8 @@ vi.mock('./orcad-startup-preflight-verdict', async (importOriginal) => ({
   readStartupPreflightVerdict: fixture.read,
   writeStartupPreflightVerdict: fixture.write,
   forgetStartupPreflightVerdict: fixture.forget,
-  claimStartupPreflightSkip: fixture.claim
+  claimStartupPreflightSkip: fixture.claim,
+  clearAbandonedStartupPreflightClaim: fixture.clearAbandoned
 }))
 
 const identity = '0.1.0+aaaaaaaaaaaa'
@@ -57,7 +59,7 @@ function readyResult(nonce: string | undefined): ProcessResult {
 
 function matchingVerdict() {
   return {
-    format: 1,
+    format: 2,
     fingerprint,
     artifactVersion: identity,
     runtimeVersion: NODE_RUNTIME_PIN.version
@@ -77,6 +79,7 @@ beforeEach(() => {
   fixture.write.mockResolvedValue(undefined)
   fixture.forget.mockResolvedValue(undefined)
   fixture.claim.mockResolvedValue(true)
+  fixture.clearAbandoned.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -157,5 +160,17 @@ describe('managed slot startup preflight verdict', () => {
     expect(fixture.fingerprint).not.toHaveBeenCalled()
     expect(fixture.read).not.toHaveBeenCalled()
     expect(fixture.write).not.toHaveBeenCalled()
+  })
+  it('clears a dead start’s abandoned claim once a probe passes', async () => {
+    await preflightBundledOrcadStartup()
+    expect(fixture.clearAbandoned).toHaveBeenCalledWith(verdictPath)
+  })
+
+  it('re-probes on demand even with a matching verdict, and never claims a skip', async () => {
+    fixture.read.mockResolvedValue(matchingVerdict())
+    await reprobeBundledOrcadStartup()
+    expect(fixture.claim).not.toHaveBeenCalled()
+    expect(fixture.forget).toHaveBeenCalledWith(verdictPath)
+    expect(fixture.run).toHaveBeenCalledOnce()
   })
 })

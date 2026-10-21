@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,13 +18,16 @@ import {
 } from '../../shared/orcad-artifacts'
 import {
   claimStartupPreflightSkip,
+  clearAbandonedStartupPreflightClaim,
   computeStartupPreflightFingerprint,
   forgetSlotStartupPreflightVerdict,
   forgetStartupPreflightVerdict,
   readStartupPreflightVerdict,
   settleSlotStartupPreflightSkip,
   startupPreflightVerdictPath,
-  writeStartupPreflightVerdict
+  wasStartupPreflightSkipped,
+  writeStartupPreflightVerdict,
+  type StartupPreflightRuntime
 } from './orcad-startup-preflight-verdict'
 
 vi.mock('./orcad-artifact-identity', () => ({
@@ -25,12 +36,33 @@ vi.mock('./orcad-artifact-identity', () => ({
 
 let slot: string
 let node: string
-const runtime = () => ({
+let temp: string
+let verdictPath: string
+const runtime = (overrides: Partial<StartupPreflightRuntime> = {}): StartupPreflightRuntime => ({
   execPath: node,
   nodeVersion: '24.21.0',
-  platform: 'darwin' as const,
-  arch: 'x64'
+  platform: 'darwin',
+  arch: 'x64',
+  osRelease: '25.3.0',
+  tempDirectory: temp,
+  ...overrides
 })
+
+function withManagedEnv(run: () => void): void {
+  const previous = process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
+  try {
+    process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV] = '/root'
+    run()
+  } finally {
+    if (previous === undefined) {
+      delete process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
+    } else {
+      process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV] = previous
+    }
+  }
+}
+
+const markerFiles = () => readdirSync(slot).filter((name) => name.startsWith('.orcad-startup'))
 
 beforeEach(() => {
   slot = mkdtempSync(join(tmpdir(), 'orcad-preflight-verdict-'))
@@ -46,18 +78,22 @@ beforeEach(() => {
   }
   node = join(slot, 'node')
   writeFileSync(node, 'node')
+  temp = join(slot, 'tmp')
+  mkdirSync(temp)
+  verdictPath = join(slot, '.orcad-startup-preflight.json')
 })
 
 afterEach(() => {
+  chmodSync(temp, 0o700)
   rmSync(slot, { recursive: true, force: true })
 })
 
-describe('startup preflight verdict', () => {
+describe('startup preflight fingerprint', () => {
   it('only lives in a client-managed slot', () => {
     expect(startupPreflightVerdictPath(slot, {})).toBeNull()
     expect(
       startupPreflightVerdictPath(slot, { [ORCAD_MANAGED_ACTIVATION_ROOT_ENV]: '/root' })
-    ).toBe(join(slot, '.orcad-startup-preflight.json'))
+    ).toBe(verdictPath)
   })
 
   it('is stable for an unchanged install and runtime', async () => {
@@ -80,93 +116,117 @@ describe('startup preflight verdict', () => {
     expect(await computeStartupPreflightFingerprint(slot, runtime())).not.toBe(before)
   })
 
-  it('changes with the Node version or architecture', async () => {
-    const before = await computeStartupPreflightFingerprint(slot, runtime())
-    expect(
-      await computeStartupPreflightFingerprint(slot, { ...runtime(), nodeVersion: '24.22.0' })
-    ).not.toBe(before)
-    expect(
-      await computeStartupPreflightFingerprint(slot, { ...runtime(), arch: 'arm64' })
-    ).not.toBe(before)
-  })
+  it.each([
+    ['Node version', 'darwin', { nodeVersion: '24.22.0' }],
+    ['architecture', 'darwin', { arch: 'arm64' }],
+    // An OS update can change native libraries on every platform, not only Linux.
+    ['OS release on macOS', 'darwin', { osRelease: '25.4.0' }],
+    ['OS release on Windows', 'win32', { osRelease: '10.0.26100' }]
+  ] satisfies [string, NodeJS.Platform, Partial<StartupPreflightRuntime>][])(
+    'changes with the %s',
+    async (_label, platform, change) => {
+      const base = runtime({ platform })
+      const before = await computeStartupPreflightFingerprint(slot, base)
+      expect(await computeStartupPreflightFingerprint(slot, { ...base, ...change })).not.toBe(
+        before
+      )
+    }
+  )
 
   it('is null, so the probe runs, when an artifact is missing', async () => {
     rmSync(join(slot, 'daemon-entry.js'))
     expect(await computeStartupPreflightFingerprint(slot, runtime())).toBeNull()
   })
 
-  it('round-trips atomically and rejects anything malformed', async () => {
-    const path = join(slot, '.orcad-startup-preflight.json')
+  it('is null when the probe’s temp directory is not writable', async () => {
+    chmodSync(temp, 0o500)
+    expect(await computeStartupPreflightFingerprint(slot, runtime())).toBeNull()
+  })
+
+  it('is null when the temp directory is missing', async () => {
+    expect(
+      await computeStartupPreflightFingerprint(slot, runtime({ tempDirectory: join(slot, 'gone') }))
+    ).toBeNull()
+  })
+
+  it.runIf(process.platform !== 'linux')(
+    'is null on Linux without a shared-library cache: unknown means probe',
+    async () => {
+      // This host has no /etc/ld.so.cache, as on musl; a Linux runtime must not treat it as unchanged.
+      expect(
+        await computeStartupPreflightFingerprint(slot, runtime({ platform: 'linux' }))
+      ).toBeNull()
+    }
+  )
+})
+
+describe('startup preflight verdict file', () => {
+  it('round-trips atomically and rejects anything malformed or from an older format', async () => {
     const verdict = {
       fingerprint: 'a'.repeat(64),
       artifactVersion: '0.1.0+aaaaaaaaaaaa',
       runtimeVersion: '24.21.0'
     }
-    await writeStartupPreflightVerdict(path, verdict)
-    expect(await readStartupPreflightVerdict(path)).toEqual({ format: 1, ...verdict })
+    await writeStartupPreflightVerdict(verdictPath, verdict)
+    expect(await readStartupPreflightVerdict(verdictPath)).toEqual({ format: 2, ...verdict })
     expect(readdirSync(slot).filter((name) => name.endsWith('.tmp'))).toEqual([])
-    writeFileSync(path, '{"format":1,"fingerprint":"x"}')
-    expect(await readStartupPreflightVerdict(path)).toBeNull()
-    writeFileSync(path, 'not json')
-    expect(await readStartupPreflightVerdict(path)).toBeNull()
+    writeFileSync(verdictPath, JSON.stringify({ ...verdict, format: 1 }))
+    expect(await readStartupPreflightVerdict(verdictPath)).toBeNull()
+    writeFileSync(verdictPath, 'not json')
+    expect(await readStartupPreflightVerdict(verdictPath)).toBeNull()
+  })
+})
+
+describe('skip claims', () => {
+  it('claims atomically: a second claim on the same slot fails while the first is open', async () => {
+    expect(await claimStartupPreflightSkip(verdictPath)).toBe(true)
+    expect(wasStartupPreflightSkipped()).toBe(true)
+    expect(await claimStartupPreflightSkip(verdictPath)).toBe(false)
   })
 
-  it('forgets the verdict, and tolerates it already being gone', async () => {
-    const path = join(slot, '.orcad-startup-preflight.json')
-    writeFileSync(path, '{}')
-    await forgetStartupPreflightVerdict(path)
-    expect(await readStartupPreflightVerdict(path)).toBeNull()
-    await expect(forgetStartupPreflightVerdict(path)).resolves.toBeUndefined()
+  it('settles only its own claim', async () => {
+    writeFileSync(`${verdictPath}.pending`, `${process.pid} someone-else\n`)
+    withManagedEnv(() => settleSlotStartupPreflightSkip(() => slot))
+    expect(markerFiles()).toContain('.orcad-startup-preflight.json.pending')
+    rmSync(`${verdictPath}.pending`)
+    expect(await claimStartupPreflightSkip(verdictPath)).toBe(true)
+    withManagedEnv(() => settleSlotStartupPreflightSkip(() => slot))
+    expect(markerFiles()).toEqual([])
+  })
+
+  it('forgets the verdict but never another start’s claim', async () => {
+    writeFileSync(verdictPath, '{}')
+    writeFileSync(`${verdictPath}.pending`, `${process.pid} someone-else\n`)
+    await forgetStartupPreflightVerdict(verdictPath)
+    expect(markerFiles()).toEqual(['.orcad-startup-preflight.json.pending'])
+  })
+
+  it('forgets its own claim with the verdict', async () => {
+    writeFileSync(verdictPath, '{}')
+    expect(await claimStartupPreflightSkip(verdictPath)).toBe(true)
+    await forgetStartupPreflightVerdict(verdictPath)
+    expect(markerFiles()).toEqual([])
+  })
+
+  it('clears a dead start’s abandoned claim after a passed probe, but keeps a live one', async () => {
+    writeFileSync(`${verdictPath}.pending`, `${process.pid} live-start\n`)
+    await clearAbandonedStartupPreflightClaim(verdictPath)
+    expect(markerFiles()).toContain('.orcad-startup-preflight.json.pending')
+    writeFileSync(`${verdictPath}.pending`, `2147483646 dead-start\n`)
+    await clearAbandonedStartupPreflightClaim(verdictPath)
+    expect(markerFiles()).toEqual([])
   })
 
   it('forgets the running slot verdict on a failed start, only when managed', () => {
-    const path = join(slot, '.orcad-startup-preflight.json')
-    writeFileSync(path, '{}')
-    const previous = process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
-    try {
-      delete process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
-      forgetSlotStartupPreflightVerdict(() => slot)
-      expect(readdirSync(slot)).toContain('.orcad-startup-preflight.json')
-      process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV] = '/root'
-      forgetSlotStartupPreflightVerdict(() => slot)
-      expect(readdirSync(slot)).not.toContain('.orcad-startup-preflight.json')
-      expect(() =>
-        forgetSlotStartupPreflightVerdict(() => {
-          throw new Error('no slot')
-        })
-      ).not.toThrow()
-    } finally {
-      if (previous === undefined) {
-        delete process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
-      } else {
-        process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV] = previous
-      }
-    }
-  })
-  it('lets one skipped start through until it reaches readiness', async () => {
-    const path = join(slot, '.orcad-startup-preflight.json')
-    expect(await claimStartupPreflightSkip(path)).toBe(true)
-    // A crash before readiness leaves the claim: the next start must probe.
-    expect(await claimStartupPreflightSkip(path)).toBe(false)
-    const previous = process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
-    try {
-      process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV] = '/root'
-      settleSlotStartupPreflightSkip(() => slot)
-    } finally {
-      if (previous === undefined) {
-        delete process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]
-      } else {
-        process.env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV] = previous
-      }
-    }
-    expect(await claimStartupPreflightSkip(path)).toBe(true)
-  })
-
-  it('clears an unfinished claim with the verdict', async () => {
-    const path = join(slot, '.orcad-startup-preflight.json')
-    writeFileSync(path, '{}')
-    await claimStartupPreflightSkip(path)
-    await forgetStartupPreflightVerdict(path)
-    expect(readdirSync(slot).filter((name) => name.startsWith('.orcad-startup'))).toEqual([])
+    writeFileSync(verdictPath, '{}')
+    forgetSlotStartupPreflightVerdict(() => slot)
+    expect(markerFiles()).toContain('.orcad-startup-preflight.json')
+    withManagedEnv(() => forgetSlotStartupPreflightVerdict(() => slot))
+    expect(markerFiles()).not.toContain('.orcad-startup-preflight.json')
+    expect(() =>
+      forgetSlotStartupPreflightVerdict(() => {
+        throw new Error('no slot')
+      })
+    ).not.toThrow()
   })
 })

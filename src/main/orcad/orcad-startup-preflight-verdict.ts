@@ -1,13 +1,14 @@
 /**
  * A managed slot's passed startup preflight, so its disposable second Node process runs once per
- * install instead of on every start (MEASURED 0.4–1.0 s per orcad start on WSL hosts). The verdict
+ * install instead of on every start (MEASURED 0.25–1.0 s per orcad start on WSL hosts). The verdict
  * is bound to a stat fingerprint of everything the preflight qualified: the installed artifacts, the
- * Node runtime, and on Linux the shared-library cache the native modules load through.
+ * Node runtime, the OS release, the temp directory it writes to and, on Linux, the shared-library
+ * cache the native modules load through. Any input it cannot read means "unknown": probe.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { unlinkSync } from 'node:fs'
-import { readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
-import { release } from 'node:os'
+import { constants, readFileSync, unlinkSync } from 'node:fs'
+import { access, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { release, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/orcad-managed-launch-env'
@@ -21,8 +22,12 @@ import { resolveBundledOrcadSlot } from './orcad-bundled-runtime'
 
 export const ORCAD_STARTUP_PREFLIGHT_VERDICT_FILENAME = '.orcad-startup-preflight.json'
 // Bump whenever the preflight or the fingerprint gains a check, so old verdicts stop matching.
-const VERDICT_FORMAT = 1
+const VERDICT_FORMAT = 2
 const LINUX_LIBRARY_CACHE = '/etc/ld.so.cache'
+const PENDING_SUFFIX = '.pending'
+// Identifies this process's skip claim, so it never settles or clears another start's.
+const START_TOKEN = randomUUID()
+let skippedThisStart = false
 
 const verdictSchema = z.object({
   format: z.literal(VERDICT_FORMAT),
@@ -31,6 +36,26 @@ const verdictSchema = z.object({
   runtimeVersion: z.string().min(1)
 })
 export type OrcadStartupPreflightVerdict = z.infer<typeof verdictSchema>
+
+export type StartupPreflightRuntime = {
+  execPath: string
+  nodeVersion: string
+  platform: NodeJS.Platform
+  arch: string
+  osRelease: string
+  tempDirectory: string
+}
+
+function currentRuntime(): StartupPreflightRuntime {
+  return {
+    execPath: process.execPath,
+    nodeVersion: process.versions.node,
+    platform: process.platform,
+    arch: process.arch,
+    osRelease: release(),
+    tempDirectory: tmpdir()
+  }
+}
 
 /** Only a client-managed slot (SSH or WSL); a packaged app directory keeps preflighting every start. */
 export function startupPreflightVerdictPath(
@@ -43,26 +68,14 @@ export function startupPreflightVerdictPath(
 }
 
 async function statPart(label: string, path: string): Promise<string> {
-  try {
-    const s = await stat(path)
-    return `${label}:${s.size}:${s.mtimeMs}:${s.ino}:${s.dev}`
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return `${label}:absent`
-    }
-    throw error
-  }
+  const s = await stat(path)
+  return `${label}:${s.size}:${s.mtimeMs}:${s.ino}:${s.dev}`
 }
 
-/** Null when any input is unreadable: never skip a preflight on a partial fingerprint. */
+/** Null when any input is unreadable or unknown: never skip a preflight on a partial fingerprint. */
 export async function computeStartupPreflightFingerprint(
   slotDirectory: string,
-  runtime: { execPath: string; nodeVersion: string; platform: NodeJS.Platform; arch: string } = {
-    execPath: process.execPath,
-    nodeVersion: process.versions.node,
-    platform: process.platform,
-    arch: process.arch
-  }
+  runtime: StartupPreflightRuntime = currentRuntime()
 ): Promise<string | null> {
   try {
     const files = new Set([
@@ -73,18 +86,18 @@ export async function computeStartupPreflightFingerprint(
     ])
     const parts = [`format:${VERDICT_FORMAT}`]
     for (const file of [...files].sort()) {
-      const part = await statPart(file, join(slotDirectory, file))
-      if (part.endsWith(':absent')) {
-        return null
-      }
-      parts.push(part)
+      parts.push(await statPart(file, join(slotDirectory, file)))
     }
     parts.push(await statPart(`node:${runtime.execPath}`, runtime.execPath))
     parts.push(`runtime:${runtime.nodeVersion}:${runtime.platform}:${runtime.arch}`)
+    // An OS update can change the libraries native modules load on any platform.
+    parts.push(`os:${runtime.osRelease}`)
+    // The probe writes its disposable database here; an unwritable temp directory must re-probe.
+    await access(runtime.tempDirectory, constants.W_OK)
+    parts.push(await statPart(`tmp:${runtime.tempDirectory}`, runtime.tempDirectory))
     if (runtime.platform === 'linux') {
-      // Any library install or upgrade rewrites this cache; the native modules dlopen through it.
+      // Absent (musl, unusual layouts) is unknown, not "unchanged": those hosts probe every start.
       parts.push(await statPart('ld.so.cache', LINUX_LIBRARY_CACHE))
-      parts.push(`kernel:${release()}`)
     }
     return createHash('sha256').update(parts.join('\n')).digest('hex')
   } catch {
@@ -118,9 +131,39 @@ export async function writeStartupPreflightVerdict(
   }
 }
 
+function readClaim(path: string): { pid: number; token: string } | null {
+  try {
+    const [pid, token] = readFileSync(path + PENDING_SUFFIX, 'utf8')
+      .trim()
+      .split(' ')
+    const parsed = Number(pid)
+    return Number.isSafeInteger(parsed) && token ? { pid: parsed, token } : null
+  } catch {
+    return null
+  }
+}
+
+function isOwnClaim(path: string): boolean {
+  return readClaim(path)?.token === START_TOKEN
+}
+
+function isLiveProcess(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM: alive under another account.
+    return error instanceof Error && 'code' in error && error.code === 'EPERM'
+  }
+}
+
+/** Drops the verdict and this start's own claim; another start's claim is never touched. */
 export async function forgetStartupPreflightVerdict(path: string | null): Promise<void> {
-  if (path) {
-    await unlink(path).catch(() => {})
+  if (!path) {
+    return
+  }
+  await unlink(path).catch(() => {})
+  if (isOwnClaim(path)) {
     await unlink(path + PENDING_SUFFIX).catch(() => {})
   }
 }
@@ -130,12 +173,28 @@ export function forgetStartupPreflightVerdictSync(path: string | null): void {
   if (!path) {
     return
   }
-  for (const file of [path, path + PENDING_SUFFIX]) {
+  try {
+    unlinkSync(path)
+  } catch {
+    // Absent or unwritable: the next start compares the fingerprint anyway.
+  }
+  if (isOwnClaim(path)) {
     try {
-      unlinkSync(file)
+      unlinkSync(path + PENDING_SUFFIX)
     } catch {
-      // Absent or unwritable: the next start compares the fingerprint anyway.
+      // Already gone.
     }
+  }
+}
+
+/**
+ * After a passed probe: a claim whose start died never settles, and would make every later start
+ * probe. A live start's claim stays, so its own crash still forces the next probe.
+ */
+export async function clearAbandonedStartupPreflightClaim(path: string): Promise<void> {
+  const claim = readClaim(path)
+  if (claim && claim.token !== START_TOKEN && !isLiveProcess(claim.pid)) {
+    await unlink(path + PENDING_SUFFIX).catch(() => {})
   }
 }
 
@@ -150,25 +209,26 @@ export function forgetSlotStartupPreflightVerdict(
   }
 }
 
-const PENDING_SUFFIX = '.pending'
-
 /**
- * Claims a skip for this start. A start that dies before readiness (a crash, a signal) never runs
- * the failure path, so its marker survives and the next start probes instead of skipping again.
+ * Claims a skip for this start, atomically. A start that dies before readiness (a crash, a signal)
+ * never runs the failure path, so its claim survives and the next start probes instead.
  */
 export async function claimStartupPreflightSkip(path: string): Promise<boolean> {
   try {
-    await stat(path + PENDING_SUFFIX)
-    return false
-  } catch {
-    // No unfinished skipped start: claim this one.
-  }
-  try {
-    await writeFile(path + PENDING_SUFFIX, `${process.pid}\n`, { mode: 0o600 })
+    await writeFile(path + PENDING_SUFFIX, `${process.pid} ${START_TOKEN}\n`, {
+      mode: 0o600,
+      flag: 'wx'
+    })
+    skippedThisStart = true
     return true
   } catch {
     return false
   }
+}
+
+/** True once this process skipped its probe on a verdict; the import guard then re-qualifies it. */
+export function wasStartupPreflightSkipped(): boolean {
+  return skippedThisStart
 }
 
 /** Readiness published: the skipped preflight's verdict held for this start. */
@@ -177,7 +237,7 @@ export function settleSlotStartupPreflightSkip(
 ): void {
   try {
     const path = startupPreflightVerdictPath(resolveSlot())
-    if (path) {
+    if (path && isOwnClaim(path)) {
       unlinkSync(path + PENDING_SUFFIX)
     }
   } catch {
