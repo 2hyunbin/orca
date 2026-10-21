@@ -26,7 +26,7 @@ it.each([
   ['ubuntu-22.04', 'blacksmith-8vcpu-ubuntu-2204'],
   ['ubuntu-24.04-arm', 'blacksmith-8vcpu-ubuntu-2404-arm'],
   ['macos-15', 'blacksmith-6vcpu-macos-15'],
-  ['macos-15-intel', 'orca-macos-15-intel-12core'],
+  ['macos-15-intel', 'macos-15-large'],
   ['windows-2022', 'blacksmith-8vcpu-windows-2025'],
   ['windows-11-arm', 'orca-windows-11-arm64-8core']
 ])('preserves the qualification architecture for %s', (os, fastRunner) => {
