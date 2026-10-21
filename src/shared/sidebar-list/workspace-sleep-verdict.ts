@@ -1,8 +1,5 @@
 import type { ExecutionHostId } from '../execution-host'
-import {
-  composeWorktreeHostIdentity,
-  getWorktreeIdFromHostIdentity
-} from '../worktree/host-qualified-identity'
+import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { worktreeIdentityKey } from '../worktree/id'
 import type { SidebarFeedDomains } from './sidebar-feed-domains'
 import { isIdleWorkspaceActivity, type WorkspaceActivityFacts } from './workspace-activity-facts'
@@ -40,25 +37,18 @@ export function isWorkspaceAsleep(facts: {
 }
 
 /**
- * How main's sleep of any host's copy of this workspace overrides what its activity says: true
- * while one runs, false while one went unconfirmed, undefined when none is in flight.
+ * How main's sleep of this host's copy of a workspace overrides what its activity says: true while
+ * one runs, false while one went unconfirmed, undefined when none is in flight. A twin on another
+ * host has its own key, so sleeping one copy never hides the other.
  */
 export function feedSleepOverride(
   inProgress: SidebarFeedDomains['inProgress'],
-  worktreeId: string
+  worktreeId: string,
+  executionHostId: ExecutionHostId | null
 ): boolean | undefined {
-  const wanted = worktreeIdentityKey(worktreeId)
-  let override: boolean | undefined
-  for (const [key, hint] of inProgress) {
-    if (getWorktreeIdFromHostIdentity(key) !== wanted) {
-      continue
-    }
-    if (hint.paused) {
-      return false
-    }
-    if (hint.kind === 'sleep') {
-      override = true
-    }
+  const hint = feedLifecycleHint(inProgress, worktreeId, executionHostId)
+  if (hint?.paused) {
+    return false
   }
-  return override
+  return hint?.kind === 'sleep' ? true : undefined
 }

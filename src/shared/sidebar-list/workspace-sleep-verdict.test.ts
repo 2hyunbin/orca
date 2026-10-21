@@ -30,22 +30,22 @@ describe('isWorkspaceAsleep', () => {
 })
 
 describe('feedSleepOverride', () => {
-  it("finds any host's sleep of the workspace; an unconfirmed one wins", () => {
-    expect(feedSleepOverride(new Map(), 'r::/w/a')).toBeUndefined()
-    expect(feedSleepOverride(new Map([['ssh:box|r::/w/a', sleeping]]), 'r::/w/a')).toBe(true)
-    expect(
-      feedSleepOverride(
-        new Map<string, WorkspaceLifecycleHint>([
-          ['ssh:box|r::/w/a', sleeping],
-          ['local|r::/w/a', { kind: 'wake' as const, queuedBehind: 0, paused: true as const }]
-        ]),
-        'r::/w/a'
-      )
-    ).toBe(false)
+  it("reads only this host's copy: sleeping one host's twin never hides the other", () => {
+    const twins = new Map([['ssh:box|r::/w/a', sleeping]])
+    expect(feedSleepOverride(new Map(), 'r::/w/a', 'local')).toBeUndefined()
+    expect(feedSleepOverride(twins, 'r::/w/a', 'ssh:box')).toBe(true)
+    expect(feedSleepOverride(twins, 'r::/w/a', 'local')).toBeUndefined()
+    expect(feedSleepOverride(twins, 'r::/w/a', null)).toBeUndefined()
+  })
+
+  it('reads an unconfirmed command as awake, and other commands as no override', () => {
+    const paused = { kind: 'wake' as const, queuedBehind: 0, paused: true as const }
+    expect(feedSleepOverride(new Map([['local|r::/w/a', paused]]), 'r::/w/a', 'local')).toBe(false)
     expect(
       feedSleepOverride(
         new Map([['local|r::/w/a', { kind: 'close' as const, queuedBehind: 0 }]]),
-        'r::/w/a'
+        'r::/w/a',
+        'local'
       )
     ).toBeUndefined()
   })

@@ -18,9 +18,6 @@ import type { LaunchHostRepo } from '../worktree-launch-host-repo'
 import type { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
 import { WORKSPACE_DELETED_ERROR } from './workspace-lifecycle-command'
 import type { PairedServerRowsProducer } from '../sidebar-inputs/paired-server-rows-producer'
-
-// Bounds the wait for a paired server's rows to show a sleep; a slow server must not hold the queue.
-const SERVER_REREAD_WAIT_MS = 15_000
 import type { RestoredPane, StartedPty } from '../terminal/recovery/restored-pane-start'
 import {
   explicitKey,
@@ -29,6 +26,9 @@ import {
   runWorkspaceLifecycleCommand,
   workspaceLifecycleKey
 } from './workspace-lifecycle-commands'
+
+// Bounds the wait for a paired server's rows to show a sleep; a slow server must not hold the queue.
+const SERVER_REREAD_WAIT_MS = 15_000
 
 export type WorkspaceSleepRuntime = {
   readonly workspaceLifecycle: WorkspaceLifecycleQueue | null

@@ -1,5 +1,10 @@
 import { useAppStore } from '@/store'
 import { useDesktopSidebarFeedValue } from '@/lib/desktop-sidebar-feed'
+import type { Worktree } from '../../../../shared/worktree/types'
+import {
+  getSettingsFocusedExecutionHostId,
+  getWorktreeExecutionHostId
+} from '../../../../shared/execution-host'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { feedSleepOverride } from '../../../../shared/sidebar-list/workspace-sleep-verdict'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
@@ -98,17 +103,28 @@ export function selectIsSleepingWorktree(state: SleepStateInput, worktreeId: str
 }
 
 // Switch point: main's feed says when a sleep is running (asleep at once) or went unconfirmed.
-const useMainSleepOverride: (worktreeId: string) => boolean | undefined =
+const useMainSleepOverride: (worktree: SleepWorktree) => boolean | undefined =
   ORCA_SIDEBAR_INPUTS_IS_MAIN
-    ? (worktreeId) =>
-        useDesktopSidebarFeedValue((feed) =>
-          feed ? feedSleepOverride(feed.domains.inProgress, worktreeId) : undefined
+    ? (worktree) => {
+        // The host the feed keys this copy's hint by, resolved as the feed's rows resolve it.
+        const hostId = useAppStore((state) =>
+          getWorktreeExecutionHostId(
+            worktree,
+            state.repos.find((repo) => repo.id === worktree.repoId),
+            getSettingsFocusedExecutionHostId(state.settings)
+          )
         )
+        return useDesktopSidebarFeedValue((feed) =>
+          feed ? feedSleepOverride(feed.domains.inProgress, worktree.id, hostId) : undefined
+        )
+      }
     : () => undefined
 
-export function useIsSleepingWorktree(worktreeId: string): boolean {
-  const idle = useAppStore((state) => selectIsSleepingWorktree(state, worktreeId))
-  return useMainSleepOverride(worktreeId) ?? idle
+type SleepWorktree = Pick<Worktree, 'id' | 'hostId' | 'repoId'>
+
+export function useIsSleepingWorktree(worktree: SleepWorktree): boolean {
+  const idle = useAppStore((state) => selectIsSleepingWorktree(state, worktree.id))
+  return useMainSleepOverride(worktree) ?? idle
 }
 
 export function resetWorktreeSleepStateCacheForTests(): void {
