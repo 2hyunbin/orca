@@ -238,7 +238,10 @@ describe("a layout-owner server's held pane on a paired desktop", () => {
     await act(async () => reopenHeldTerminals(PANE_KEY))
 
     expect(pty.reopenNewerDaemonTerminals).not.toHaveBeenCalled()
-    expect(hoisted.callRuntimeRpc).not.toHaveBeenCalled()
+    // The view report shares the RPC client; only a Reopen would name this method.
+    expect(hoisted.callRuntimeRpc.mock.calls.map(([, method]) => method)).not.toContain(
+      'layout.reopenHeldPanes'
+    )
   })
 
   it('shows no banner for an older server that publishes no status', async () => {
