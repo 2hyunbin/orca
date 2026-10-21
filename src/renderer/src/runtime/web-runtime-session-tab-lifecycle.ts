@@ -5,7 +5,8 @@ import type {
 } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
 import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
-import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from './runtime-rpc-result'
+import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
+import { isUndeliveredCloseFailure } from './web-runtime-session-undelivered-close'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   clearWebSessionCloseIntent,
@@ -88,21 +89,6 @@ export async function closeWebRuntimeSessionTab(args: {
   expectedPairingRevision?: number
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
   return callWebRuntimeSessionTabMethod('session.tabs.close', args)
-}
-
-// Why these and a bare rejection only: they mean the close never reached the host, so sending it
-// again is the user's own close. A structured refusal (e.g. a re-paired host) is an answer.
-// A Disconnect is answered by this client, not the host, so a tab closed meanwhile stays closed.
-const UNDELIVERED_CLOSE_CODES = new Set([
-  'runtime_manually_disconnected',
-  'runtime_unavailable',
-  'remote_runtime_unavailable',
-  'runtime_timeout',
-  'remote_runtime_timeout'
-])
-
-function isUndeliveredCloseFailure(error: unknown): boolean {
-  return !(error instanceof RuntimeRpcCallError) || UNDELIVERED_CLOSE_CODES.has(error.code)
 }
 
 /** Keeps a user close the host never received, hiding the tab until a replay reaches the host. */
