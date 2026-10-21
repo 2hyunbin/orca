@@ -7,6 +7,7 @@ import { callRuntimeRpc } from './runtime-rpc-client'
 import { supportsStructuredAgentSessionRename } from './structured-agent-session-client'
 import {
   structuredAgentSessionTargetForTab,
+  structuredAgentSessionTargetForHost,
   structuredAgentSessionOwnerForTab,
   executionHostIdForStructuredTarget
 } from './structured-agent-session-owner'
@@ -69,7 +70,7 @@ export async function uploadLegacyStructuredChatRename(
   tab: Tab,
   alias: string
 ): Promise<boolean> {
-  const target = structuredAgentSessionTargetForTab(get(), tab)
+  const target = structuredAgentSessionTargetForHost(tab.executionHostId)
   if (!target || !(await supportsStructuredAgentSessionRename(target))) {
     return false
   }

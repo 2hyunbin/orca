@@ -1,14 +1,9 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store'
-import { shallow } from 'zustand/shallow'
 import { getStructuredAgentSessionTabs } from '@/components/native-chat/structured-agent-session-tabs'
 import { subscribeLocalRuntimeCapabilitiesKnown } from './local-runtime-capabilities'
 import { subscribeRuntimeHostContactRegained } from './runtime-host-contact-regained'
-import {
-  structuredAgentSessionOwnerForTab,
-  structuredAgentSessionOwnerInputs,
-  structuredAgentSessionTargetForHost
-} from './structured-agent-session-owner'
+import { structuredAgentSessionTargetForHost } from './structured-agent-session-owner'
 import { uploadLegacyStructuredChatRename } from './structured-chat-rename'
 
 /** Remaining saved aliases are the migration debt; only active requests need bookkeeping. */
@@ -28,7 +23,7 @@ export function installLegacyChatRenameMigration(): () => void {
     const pending = state.workspaceSessionReady
       ? getStructuredAgentSessionTabs(state.unifiedTabsByWorktree).flatMap((tab) => {
           const alias = tab.customLabel
-          const owner = structuredAgentSessionOwnerForTab(state, tab)
+          const owner = tab.executionHostId
           const target = structuredAgentSessionTargetForHost(owner)
           return alias && target
             ? [
@@ -74,11 +69,7 @@ export function installLegacyChatRenameMigration(): () => void {
   const stopStore = useAppStore.subscribe((state, previous) => {
     if (
       state.workspaceSessionReady !== previous.workspaceSessionReady ||
-      state.unifiedTabsByWorktree !== previous.unifiedTabsByWorktree ||
-      !shallow(
-        structuredAgentSessionOwnerInputs(state),
-        structuredAgentSessionOwnerInputs(previous)
-      )
+      state.unifiedTabsByWorktree !== previous.unifiedTabsByWorktree
     ) {
       reconcile()
     }
