@@ -2,7 +2,6 @@ import type {
   BundledSkillInstallResult,
   BundledSkillPlan
 } from '../../../shared/bundled-skill-plan'
-import { clearSkillDiscoveryCaches } from '../skill-discovery-target'
 import { BUNDLED_SKILL_SOURCES } from './bundled-skill-sources'
 import { executeBundledSkillPlan, type BundledSkillExecuteInput } from './execute'
 import { nativeBundledSkillFilesystem } from './filesystem'
@@ -30,8 +29,5 @@ export async function installBundledSkills(
   input: BundledSkillServiceInput,
   planDigest: string
 ): Promise<BundledSkillInstallResult> {
-  const result = await executeBundledSkillPlan(withDefaults(input), planDigest)
-  // Discovery would otherwise serve its pre-install answer from cache.
-  clearSkillDiscoveryCaches()
-  return result
+  return executeBundledSkillPlan(withDefaults(input), planDigest)
 }

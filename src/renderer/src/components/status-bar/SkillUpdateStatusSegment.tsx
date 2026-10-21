@@ -18,25 +18,6 @@ export function SkillUpdateStatusSegment({
   }
 
   const segment = (() => {
-    if (run.state === 'running' && run.stopping) {
-      // The dialog can be closed while a Stop is still killing the tree; this is
-      // then the only surface reporting it, and "Updating skills" would be wrong.
-      return {
-        icon: <Loader2 className="size-3 animate-spin text-muted-foreground" />,
-        label: translate(
-          'auto.components.status.bar.SkillUpdateStatusSegment.stoppingLabel',
-          'Stopping update'
-        ),
-        tooltip: translate(
-          'auto.components.status.bar.SkillUpdateStatusSegment.stoppingTooltip',
-          'Stopping the skill update…'
-        ),
-        ariaLabel: translate(
-          'auto.components.status.bar.SkillUpdateStatusSegment.stoppingAria',
-          'Stopping the skill update. Click to open details.'
-        )
-      }
-    }
     if (run.state === 'running') {
       return {
         icon: <Loader2 className="size-3 animate-spin text-muted-foreground" />,
@@ -62,7 +43,7 @@ export function SkillUpdateStatusSegment({
         )
       }
     }
-    if (run.state === 'success') {
+    if (run.state === 'done' && run.summary.ok) {
       return {
         icon: <CheckCircle2 className="size-3 text-emerald-500" />,
         label: translate(
@@ -90,16 +71,16 @@ export function SkillUpdateStatusSegment({
     return {
       icon: <AlertCircle className="size-3 text-yellow-500" />,
       label: translate(
-        'auto.components.status.bar.SkillUpdateStatusSegment.errorLabel',
-        'Update failed'
+        'auto.components.status.bar.SkillUpdateStatusSegment.attentionLabel',
+        'Skills need attention'
       ),
       tooltip: translate(
-        'auto.components.status.bar.SkillUpdateStatusSegment.errorTooltip',
-        'Skill update failed — click to see details'
+        'auto.components.status.bar.SkillUpdateStatusSegment.attentionTooltip',
+        'Some skills were not updated — click to see details'
       ),
       ariaLabel: translate(
-        'auto.components.status.bar.SkillUpdateStatusSegment.errorAria',
-        'Skill update failed. Click to open details.'
+        'auto.components.status.bar.SkillUpdateStatusSegment.attentionAria',
+        'Some skills were not updated. Click to open details.'
       )
     }
   })()

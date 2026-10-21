@@ -9,7 +9,9 @@ import {
 } from './bundled-skill-plan'
 import {
   BUNDLED_SKILL_LEAVE_REASON_TEXT,
+  bundledSkillInstallAgents,
   bundledSkillNudgeKey,
+  bundledSkillPlanState,
   bundledSkillOutcomeText,
   summarizeBundledSkillOutcomes,
   summarizeBundledSkillPlan
@@ -76,6 +78,14 @@ describe('summarizeBundledSkillPlan', () => {
     expect(summarizeBundledSkillPlan(plan([[op('keep')]])).hasWork).toBe(false)
   })
 
+  it("treats someone else's same-named skill as theirs, not as attention", () => {
+    const other: BundledSkillOp = { ...op('leave'), reason: 'other', replaceable: true }
+    const edited: BundledSkillOp = { ...op('leave'), reason: 'edited', replaceable: true }
+    expect(bundledSkillPlanState(plan([[op('keep'), other]]).skills[0])).toBe('current')
+    expect(bundledSkillPlanState(plan([[op('keep'), edited]]).skills[0])).toBe('attention')
+    expect(bundledSkillPlanState(plan([[op('update'), other]]).skills[0])).toBe('update')
+  })
+
   it('has wording for every leave reason', () => {
     for (const reason of BUNDLED_SKILL_LEAVE_REASONS) {
       expect(BUNDLED_SKILL_LEAVE_REASON_TEXT[reason]).toMatch(/\S/u)
@@ -117,7 +127,7 @@ describe('summarizeBundledSkillOutcomes', () => {
       "No change · 1 left alone: You've changed this copy"
     ])
     expect(summary.skills[0].leftAlone).toEqual([
-      { path: '/leave', reason: "You've changed this copy" }
+      { path: '/leave', reason: "You've changed this copy", code: 'edited' }
     ])
     for (const status of ['changed', 'failed'] as const) {
       expect(
@@ -133,6 +143,22 @@ describe('summarizeBundledSkillOutcomes', () => {
         skills: [{ name: 's', status: 'changed', ops: [] }]
       }).exitCode
     ).toBe(1)
+  })
+})
+
+describe('bundledSkillInstallAgents', () => {
+  it('lists the agents newly given the skill, once each and sorted', () => {
+    const forAgents = (
+      kind: BundledSkillOpKind,
+      agents: BundledSkillOp['agents']
+    ): BundledSkillOp => ({ ...op(kind, `/${kind}/${agents.join(',')}`), agents })
+    const entries = plan([
+      [forAgents('write', ['codex']), forAgents('link', ['claude'])],
+      [forAgents('copy', ['cursor', 'claude']), forAgents('update', ['gemini'])],
+      [forAgents('keep', ['droid']), forAgents('leave', ['grok'])]
+    ]).skills
+    expect(bundledSkillInstallAgents(entries)).toEqual(['claude', 'codex', 'cursor'])
+    expect(bundledSkillInstallAgents([])).toEqual([])
   })
 })
 

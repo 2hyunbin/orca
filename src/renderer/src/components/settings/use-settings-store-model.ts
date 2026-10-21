@@ -116,7 +116,7 @@ export function useSettingsStoreModel() {
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
   const skillFreshnessApplies = activeSkillRuntime.canUseLocalSkillFreshness
-  const { inventory: skillFreshnessInventory } = useSkillFreshness(skillFreshnessApplies)
+  const { plan: skillPlan } = useSkillFreshness(skillFreshnessApplies)
   const [voiceModelStatesLoading, setVoiceModelStatesLoading] = useState(showDesktopOnlySettings)
   // Why: trim platform-only Terminal entries from the shared search index so search never reveals hidden controls.
   const [scrollbackMode, setScrollbackMode] = useState<'preset' | 'custom'>('preset')
@@ -212,7 +212,7 @@ export function useSettingsStoreModel() {
     linearSkill,
     computerUseSkill,
     skillFreshnessApplies,
-    skillFreshnessInventory,
+    skillPlan,
     voiceModelStatesLoading,
     setVoiceModelStatesLoading,
     scrollbackMode,

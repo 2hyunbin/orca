@@ -52,9 +52,7 @@ export function useSettingsNavigationModel(
   const { installed: computerUseSkillInstalled, loading: computerUseSkillLoading } =
     model.computerUseSkill
   const capabilityInstallStatusBySectionId = useMemo(() => {
-    const applicableFreshnessInventory = model.skillFreshnessApplies
-      ? model.skillFreshnessInventory
-      : null
+    const applicableSkillPlan = model.skillFreshnessApplies ? model.skillPlan : null
     const next = new Map<string, SettingsNavInstallStatus>([
       [
         'orchestration',
@@ -62,7 +60,7 @@ export function useSettingsNavigationModel(
           name: ORCHESTRATION_SKILL_NAME,
           installed: orchestrationSkillInstalled,
           loading: orchestrationSkillLoading,
-          inventory: applicableFreshnessInventory
+          plan: applicableSkillPlan
         })
       ]
     ])
@@ -73,7 +71,7 @@ export function useSettingsNavigationModel(
           skills: linearSkills,
           installed: linearSkillInstalled,
           loading: linearSkillLoading,
-          inventory: applicableFreshnessInventory
+          plan: applicableSkillPlan
         })
       )
     }
@@ -84,7 +82,7 @@ export function useSettingsNavigationModel(
           name: COMPUTER_USE_SKILL_NAME,
           installed: computerUseSkillInstalled,
           loading: computerUseSkillLoading,
-          inventory: applicableFreshnessInventory
+          plan: applicableSkillPlan
         })
       )
       if (model.settings) {
@@ -110,7 +108,7 @@ export function useSettingsNavigationModel(
     model.settings,
     model.showDesktopOnlySettings,
     model.skillFreshnessApplies,
-    model.skillFreshnessInventory,
+    model.skillPlan,
     model.voiceModelStatesLoading,
     orchestrationSkillInstalled,
     orchestrationSkillLoading

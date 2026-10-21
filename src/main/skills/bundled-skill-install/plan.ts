@@ -32,8 +32,10 @@ import {
 export type BundledSkillPlanInput = BundledSkillTargetRequest & {
   /** Bundled skill names; every bundled skill when omitted. */
   names?: readonly string[]
-  /** Target paths the user chose to Replace (`--force`). */
-  force?: readonly string[]
+  /** Target paths the user chose to Replace; `all` is `--force`, every replaceable one. */
+  force?: readonly string[] | 'all'
+  /** Update: skip a skill with no copy of Orca's anywhere, so it is never newly installed. */
+  installedOnly?: boolean
   /** `<userData>/skill-installs`, where cloud installs keep receipts and journals. */
   stateDirectory: string
   filesystem: BundledSkillFilesystem
@@ -49,7 +51,7 @@ type SkillContext = {
   input: BundledSkillPlanInput
   source: BundledSkillSource
   digest: string
-  force: Set<string>
+  force: Set<string> | 'all'
 }
 
 type SharedTarget = { path: string; realPath: string; current: boolean }
@@ -155,11 +157,15 @@ async function recoverySiblings(
   }
 }
 
+type PlannedTarget = { op: BundledSkillOp; holdsOrcaCopy: boolean }
+
+const ORCA_COPY_CLASSES = new Set<BundledSkillFolderClass>(['current', 'released', 'edited'])
+
 async function planTarget(
   context: SkillContext,
   root: BundledSkillTargetRoot,
   shared: SharedTarget | null
-): Promise<BundledSkillOp> {
+): Promise<PlannedTarget> {
   const { filesystem, stateDirectory } = context.input
   const path = join(root.path, context.source.name)
   const realPath = join(root.realPath, context.source.name)
@@ -230,7 +236,7 @@ async function planTarget(
         ? { ...base, kind: 'keep', cleanup }
         : leave('shared-not-current', false)
     }
-    if (!context.force.has(bundledSkillPathKey(path))) {
+    if (context.force !== 'all' && !context.force.has(bundledSkillPathKey(path))) {
       return leave(folderClass === 'edited' ? 'edited' : 'other', true)
     }
     return shared?.current && filesystem.supportsLinks
@@ -238,10 +244,11 @@ async function planTarget(
       : files('replace')
   }
 
+  const holdsOrcaCopy = Boolean(restoreFrom) || ORCA_COPY_CLASSES.has(folderClass)
   const op = await decide()
   const writes = op.kind !== 'keep' && op.kind !== 'leave'
   if (!writes && op.cleanup.length === 0) {
-    return op
+    return { op, holdsOrcaCopy }
   }
   const blocked = (await hasPendingCloudTransaction(stateDirectory, stateKeys))
     ? 'busy'
@@ -249,34 +256,37 @@ async function planTarget(
       ? null
       : 'unwritable'
   if (!blocked) {
-    return op
+    return { op, holdsOrcaCopy }
   }
-  return { ...(writes ? leave(blocked, false) : op), cleanup: [] }
+  return { op: { ...(writes ? leave(blocked, false) : op), cleanup: [] }, holdsOrcaCopy }
 }
 
 async function planSkill(
   input: BundledSkillPlanInput,
   roots: readonly BundledSkillTargetRoot[],
   source: BundledSkillSource
-): Promise<BundledSkillPlanEntry> {
+): Promise<BundledSkillPlanEntry | null> {
   const context: SkillContext = {
     input,
     source,
     digest: bundledSkillTextDigest(Buffer.from(source.text, 'utf8')),
-    force: new Set((input.force ?? []).map(bundledSkillPathKey))
+    force: input.force === 'all' ? 'all' : new Set((input.force ?? []).map(bundledSkillPathKey))
   }
   const [sharedRoot, ...agentRoots] = roots
-  const sharedOp = await planTarget(context, sharedRoot, null)
+  const sharedTarget = await planTarget(context, sharedRoot, null)
   const shared: SharedTarget = {
-    path: sharedOp.path,
+    path: sharedTarget.op.path,
     realPath: join(sharedRoot.realPath, source.name),
-    current: WRITES_SHARED_CURRENT.has(sharedOp.kind)
+    current: WRITES_SHARED_CURRENT.has(sharedTarget.op.kind)
   }
-  const ops = [sharedOp]
+  const planned = [sharedTarget]
   for (const root of agentRoots) {
-    ops.push(await planTarget(context, root, shared))
+    planned.push(await planTarget(context, root, shared))
   }
-  return { name: source.name, digest: context.digest, ops }
+  if (input.installedOnly && !planned.some((target) => target.holdsOrcaCopy)) {
+    return null
+  }
+  return { name: source.name, digest: context.digest, ops: planned.map((target) => target.op) }
 }
 
 /**
@@ -298,7 +308,10 @@ export async function buildBundledSkillPlan(
     : input.sources
   const skills: BundledSkillPlanEntry[] = []
   for (const source of selected) {
-    skills.push(await planSkill(input, roots, source))
+    const entry = await planSkill(input, roots, source)
+    if (entry) {
+      skills.push(entry)
+    }
   }
   return {
     plan: { scope: input.destination.scope, skills, planDigest: bundledSkillDigestOf(skills) },

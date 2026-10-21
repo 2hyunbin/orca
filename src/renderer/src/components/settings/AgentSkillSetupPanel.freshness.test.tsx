@@ -3,7 +3,8 @@
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SkillFreshnessInventory } from '../../../../shared/skill-freshness'
+import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
+import { planOf, sharedEntry } from '../skills/bundled-skill-plan-fixtures.test-support'
 import { _skillFreshnessCacheForTests } from '@/hooks/useSkillFreshness'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 
@@ -21,30 +22,8 @@ vi.mock('../onboarding/OnboardingInlineCommandTerminal', () => ({
   OnboardingInlineCommandTerminal: () => null
 }))
 
-function inventory(eligibleUpdateNames: string[]): SkillFreshnessInventory {
-  return {
-    schemaVersion: 1,
-    // Why: an update is only advertised for a copy the skills.sh lock attributes to Orca.
-    installations: eligibleUpdateNames.map((name) => ({
-      id: name,
-      name,
-      rootId: 'home-agents',
-      providers: ['agent-skills'],
-      sourceKind: 'home',
-      sourceLabel: 'Agent skills home',
-      unresolvedPath: `/home/.agents/skills/${name}`,
-      resolvedPath: `/home/.agents/skills/${name}`,
-      physicalIdentity: `physical-${name}`,
-      topology: 'canonical-copy',
-      status: 'outdated',
-      currentPackageDigest: 'current',
-      lockSource: 'stablyai/orca',
-      errorCategory: null
-    })),
-    eligibleUpdateNames,
-    scanIssues: [],
-    scannedAt: 1
-  }
+function plan(updateNames: string[]): BundledSkillPlan {
+  return planOf(updateNames.map((name) => sharedEntry(name, 'update')))
 }
 
 function panelProps(
@@ -90,7 +69,7 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
     Reflect.deleteProperty(window, 'api')
   })
 
-  it('rescans skill freshness and updates the rendered verdict on re-check', async () => {
+  it('re-plans skill freshness and updates the rendered verdict on re-check', async () => {
     let completeRecheck: (() => void) | null = null
     // Why: a rescan started before the install scan finishes would re-read the same
     // pre-update disk state, so the boundary is what the assertions below pin.
@@ -100,22 +79,23 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
           completeRecheck = resolve
         })
     )
-    let completeRescan: ((value: SkillFreshnessInventory) => void) | null = null
-    const freshnessInventory = vi
+    let completeRescan: ((value: BundledSkillPlan) => void) | null = null
+    const bundledPlan = vi
       .fn()
-      .mockResolvedValueOnce(inventory(['orca-linear']))
+      .mockResolvedValueOnce(plan(['orca-linear']))
       .mockImplementationOnce(
         () =>
-          new Promise<SkillFreshnessInventory>((resolve) => {
+          new Promise<BundledSkillPlan>((resolve) => {
             completeRescan = resolve
           })
       )
-    window.api = { skills: { freshnessInventory } } as never
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test double implements only the preload methods this code path calls.
+    window.api = { skills: { bundledPlan } } as never
 
     await act(async () => root?.render(<AgentSkillSetupPanel {...panelProps(onRecheck)} />))
     await act(async () => {})
 
-    expect(freshnessInventory).toHaveBeenCalledTimes(1)
+    expect(bundledPlan).toHaveBeenCalledTimes(1)
     expect(container?.textContent).toContain('Update available')
 
     const recheck = Array.from(container?.querySelectorAll('button') ?? []).find(
@@ -130,7 +110,7 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
 
     expect(onRecheck).toHaveBeenCalledOnce()
     expect(mocks.skillsRefreshed).not.toHaveBeenCalled()
-    expect(freshnessInventory).toHaveBeenCalledTimes(1)
+    expect(bundledPlan).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       completeRecheck?.()
@@ -138,12 +118,12 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
     await act(async () => {})
 
     expect(mocks.skillsRefreshed).toHaveBeenCalledOnce()
-    expect(freshnessInventory).toHaveBeenCalledTimes(2)
+    expect(bundledPlan).toHaveBeenCalledTimes(2)
     expect(container?.textContent).toContain('Checking...')
     expect(container?.textContent).not.toContain('Update available')
 
     await act(async () => {
-      completeRescan?.(inventory([]))
+      completeRescan?.(plan([]))
     })
     await act(async () => {})
 
@@ -151,12 +131,13 @@ describe('AgentSkillSetupPanel freshness re-check', () => {
     expect(container?.textContent).not.toContain('Update available')
   })
 
-  it('shows a failed verdict when the post-recheck inventory scan fails', async () => {
-    const freshnessInventory = vi
+  it('shows a failed verdict when the post-recheck plan fails', async () => {
+    const bundledPlan = vi
       .fn()
-      .mockResolvedValueOnce(inventory(['orca-linear']))
-      .mockRejectedValueOnce(new Error('inventory unavailable'))
-    window.api = { skills: { freshnessInventory } } as never
+      .mockResolvedValueOnce(plan(['orca-linear']))
+      .mockRejectedValueOnce(new Error('plan unavailable'))
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test double implements only the preload methods this code path calls.
+    window.api = { skills: { bundledPlan } } as never
 
     await act(async () => root?.render(<AgentSkillSetupPanel {...panelProps()} />))
     await act(async () => {})
