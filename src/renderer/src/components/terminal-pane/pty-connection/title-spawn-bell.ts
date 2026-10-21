@@ -75,7 +75,11 @@ export function installTitleSpawnBell(session: ConnectPanePtySession): void {
   }
 
   session.applyInitialAgentStatus = (terminalTitle?: string): void => {
-    const initialStatus = session.paneStartup?.initialAgentStatus
+    // A pane main started has no startup of its own, only the view facts main's start left.
+    const startup = session.paneStartup?.initialAgentStatus
+      ? session.paneStartup
+      : session.mainStartedPaneView
+    const initialStatus = startup?.initialAgentStatus
     const routing = session.resolveCurrentAgentStatusRouting()
     if (!initialStatus || !routing) {
       return
@@ -93,12 +97,13 @@ export function installTitleSpawnBell(session: ConnectPanePtySession): void {
         kind: 'transition'
       })
     }
-    if (session.paneStartup.launchConfig) {
+    if (startup.launchConfig) {
+      const launchToken = session.launchToken ?? startup.launchToken
       useAppStore
         .getState()
         .setAgentStatus(session.cacheKey, statusPayload, terminalTitle, undefined, routing, {
-          launchConfig: session.paneStartup.launchConfig,
-          ...(session.launchToken ? { launchToken: session.launchToken } : {})
+          launchConfig: startup.launchConfig,
+          ...(launchToken ? { launchToken } : {})
         })
       return
     }

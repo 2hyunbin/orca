@@ -3,6 +3,7 @@ import { TERMINAL_KITTY_FILE_MAX_BYTES } from '../terminal-kitty-file'
 import { OptionalFiniteNumber, OptionalString, requiredString } from './rpc-param-primitives'
 import { isTuiAgent } from '../tui-agent-config'
 import { SpawnIntentParam } from './agent-session-params'
+import { WindowTabStartInputParams } from './window-tab-start-params'
 import {
   canonicalizeWindowsShellOverride,
   isSupportedWindowsShellOverride,
@@ -237,6 +238,7 @@ export const TerminalCreateParams = z.object({
   // Layout-owner build: the window's own new tab, already written to main under `tabId`/`leafId`;
   // main starts its first pane. Only a window sends it, and only to its own main process.
   windowTab: z.literal(true).optional(),
+  ...WindowTabStartInputParams,
   cwd: OptionalString
 })
 

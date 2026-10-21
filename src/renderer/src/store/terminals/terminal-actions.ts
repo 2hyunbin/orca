@@ -194,7 +194,6 @@ export type TerminalActions = {
     tabId: string,
     startup: {
       command: string
-      delivery?: 'terminal-paste'
       startupCommandDelivery?: StartupCommandDelivery
       env?: Record<string, string>
       envToDelete?: string[]
@@ -220,7 +219,6 @@ export type TerminalActions = {
     expected?: TerminalState['pendingStartupByTabId'][string]
   ) => {
     command: string
-    delivery?: 'terminal-paste'
     startupCommandDelivery?: StartupCommandDelivery
     env?: Record<string, string>
     envToDelete?: string[]

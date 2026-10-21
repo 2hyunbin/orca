@@ -1,10 +1,6 @@
 import { useAppStore } from '@/store'
 import type { PtyReplayDataMeta } from '../pty-transport-types'
 import { INITIAL_MODE_2031_REPLY_SCAN_STATE } from '../../../../../shared/terminal-color-scheme-protocol'
-import { waitForTerminalOutputParsed } from '@/lib/pane-manager/pane-terminal-output-scheduler'
-import { executeTerminalStartupCommandPaste } from '../terminal-startup-command-paste'
-import { resolveTerminalPasteRuntime } from '../terminal-paste-runtime'
-import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { recordPaneWakeThroughLayoutOwner } from '@/store/terminals/terminal-sleep-layout-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
@@ -92,64 +88,6 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
   // Why: the hibernation wake fires from noteVisibilityResume in the outer
   // connection scope, long after this deferred-connect closure has run.
   session.wakeHibernatedAgentPane = () => session.spawnColdRestoreAgentResume()
-  const isStartupPasteTargetCurrent = (ptyId: string | null): boolean =>
-    !session.disposed &&
-    session.deps.paneTransportsRef.current.get(session.pane.id) === session.transport &&
-    session.transport.getPtyId() === ptyId
-  const runTerminalPasteStartupCommand = async (command: string): Promise<boolean> => {
-    const ptyId = session.transport.getPtyId()
-    const result = await executeTerminalStartupCommandPaste({
-      command,
-      pane: session.pane,
-      ptyId,
-      runtime: resolveTerminalPasteRuntime({
-        platform: CLIENT_PLATFORM,
-        ptyId,
-        transport: session.transport,
-        isWindowsConpty: session.isNativeWindowsConpty
-      }),
-      transport: session.transport,
-      isTargetCurrent: isStartupPasteTargetCurrent
-    })
-    if (result.status !== 'pasted' || !isStartupPasteTargetCurrent(ptyId)) {
-      return false
-    }
-    return session.transport.sendInput('\r', 'launch')
-  }
-  session.schedulePendingStartupCommandDelivery = (): void => {
-    const startup = session.pendingStartupCommand
-    if (!startup) {
-      return
-    }
-    if (session.startupInjectTimer !== null) {
-      clearTimeout(session.startupInjectTimer)
-    }
-    session.startupInjectTimer = setTimeout(() => {
-      session.startupInjectTimer = null
-      void (async () => {
-        if (session.pendingStartupCommand !== startup || session.disposed) {
-          return
-        }
-        if (session.shouldDeliverStartupViaTerminalPaste) {
-          await waitForTerminalOutputParsed(session.pane.terminal)
-        }
-        if (session.pendingStartupCommand !== startup || session.disposed) {
-          return
-        }
-        const command = startup.command
-        const submitted = session.shouldDeliverStartupViaTerminalPaste
-          ? await runTerminalPasteStartupCommand(command)
-          : session.transport.sendInput(`${command}\r`, 'launch')
-        if (submitted) {
-          session.armStartupDraftReadinessObservation()
-        } else {
-          session.releaseUnattemptedStartupDraftPasteDelivery()
-        }
-        session.pendingStartupCommand = null
-      })()
-    }, 50)
-  }
-
   session.freshSpawnFollowResetDisposables = []
   session.cancelFreshSpawnFollowReset = (): void => {
     for (const disposable of session.freshSpawnFollowResetDisposables) {

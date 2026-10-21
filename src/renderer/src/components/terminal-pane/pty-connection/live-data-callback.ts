@@ -126,12 +126,10 @@ export function bindLiveDataCallback(session: ConnectPanePtySession): void {
     if (orderedRendererData === null) {
       // Why: renderer filtering can't map cleaned text back to raw seq offsets; rebuild from main instead of risking stale bytes.
       session.markHiddenOutputRestoreNeeded()
-      session.schedulePendingStartupCommandDelivery()
       return
     }
     if (!foreground && orderedRendererData.length === 0) {
       session.recordRendererOrderedSeq(rendererMeta)
-      session.schedulePendingStartupCommandDelivery()
       return
     }
     // Keep source order aligned with sibling producers; xterm's async write buffer made the old inversion latent.
@@ -180,8 +178,6 @@ export function bindLiveDataCallback(session: ConnectPanePtySession): void {
         session.recordRendererOrderedSeq(rendererMeta)
       }
     }
-
-    session.schedulePendingStartupCommandDelivery()
   }
   session.unregisterE2ePtyDataInjection = registerE2eTerminalPtyDataInjection(
     session.cacheKey,

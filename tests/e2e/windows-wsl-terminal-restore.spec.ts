@@ -50,8 +50,7 @@ async function createWslStartupTab(
       }
       const tab = store.getState().createTab(worktreeId, undefined, undefined, {
         pendingStartup: {
-          command: `printf '${marker}:%s\\n' "$PWD"`,
-          delivery: 'terminal-paste'
+          command: `printf '${marker}:%s\\n' "$PWD"`
         }
       })
       store.getState().setActiveTab(tab.id)

@@ -220,7 +220,6 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
         onWorking: session.seedCommandCodeOutputWorkingStatus,
         onDone: session.scheduleCommandCodeOutputDoneStatus
       })
-  session.shouldDeliverStartupViaTerminalPaste = session.paneStartup?.delivery === 'terminal-paste'
   session.hadExistingPaneTransportAtConnect = session.deps.paneTransportsRef.current.size > 0
   session.lastTerminalInputAt = Number.NEGATIVE_INFINITY
   session.lastInteractiveRedrawInputAt = Number.NEGATIVE_INFINITY

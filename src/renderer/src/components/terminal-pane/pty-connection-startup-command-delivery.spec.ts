@@ -1,9 +1,8 @@
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TERMINAL_PASTE_DIRECT_MAX_BYTES } from './terminal-paste-limits'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
-import { flushAsyncTicks, drainPendingTimeouts } from './pty-connection-test-async'
+import { flushAsyncTicks } from './pty-connection-test-async'
 import {
   LEAF_1,
   createMockTransport,
@@ -131,6 +130,93 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
         undefined,
         { connectionId: null }
       )
+    })
+
+    it('seeds the start’s status prompt when the pane attaches to the terminal main started', async () => {
+      vi.doMock('../../../../shared/layout-owner-switch', () => ({
+        ORCA_LAYOUT_OWNER_IS_MAIN: true
+      }))
+      onTestFinished(() => {
+        vi.doUnmock('../../../../shared/layout-owner-switch')
+      })
+      const { connectPanePty } = await import('./pty-connection')
+      const { noteMainStartsPane } = await import('@/store/terminals/main-started-pane-view')
+      const ptyId = 'pty-main-started'
+      const transport = createMockTransport(ptyId)
+      // Main started it: the pane's connect attaches and never reports a spawn of its own.
+      transport.connect.mockResolvedValue({ id: ptyId })
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] }
+      }
+      // Main took the startup before this pane mounted, so the pane has none of its own.
+      noteMainStartsPane(makePaneKey('tab-1', LEAF_1), {
+        initialAgentStatus: { agent: 'command-code', prompt: 'Fix the status' }
+      })
+
+      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      await flushAsyncTicks()
+
+      expect(mockStoreState.setAgentStatus).toHaveBeenCalledTimes(1)
+      expect(mockStoreState.setAgentStatus).toHaveBeenCalledWith(
+        makePaneKey('tab-1', LEAF_1),
+        expect.objectContaining({
+          state: 'working',
+          prompt: 'Fix the status',
+          agentType: 'command-code',
+          observation: expect.objectContaining({ origin: 'launch', kind: 'transition' })
+        }),
+        undefined,
+        undefined,
+        { connectionId: null }
+      )
+    })
+
+    it('arms no draft paste of its own for a pane main starts, even one that captured the startup', async () => {
+      vi.doMock('../../../../shared/layout-owner-switch', () => ({
+        ORCA_LAYOUT_OWNER_IS_MAIN: true
+      }))
+      onTestFinished(() => {
+        vi.doUnmock('../../../../shared/layout-owner-switch')
+      })
+      const { connectPanePty } = await import('./pty-connection')
+      const { noteMainStartsPane } = await import('@/store/terminals/main-started-pane-view')
+      const ptyId = 'pty-main-started'
+      const transport = createMockTransport(ptyId)
+      const onData: { current: ((data: string) => void) | null } = { current: null }
+      transport.connect.mockImplementation(
+        async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
+          onData.current = callbacks.onData ?? null
+          return { id: ptyId }
+        }
+      )
+      transportFactoryQueue.push(transport)
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] }
+      }
+      noteMainStartsPane(makePaneKey('tab-1', LEAF_1), {})
+
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({
+          startup: {
+            command: 'codex',
+            launchAgent: 'codex',
+            launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
+            launchToken: 'token-1',
+            draftPrompt: 'look at this'
+          }
+        }) as never
+      )
+      await flushAsyncTicks()
+      // Codex's composer is ready: only main may paste the draft into it.
+      onData.current?.('\x1b[?2004h\x1b[2K\u203a ')
+      await flushAsyncTicks()
+
+      expect(transport.sendInputAccepted).not.toHaveBeenCalled()
     })
 
     it('seeds a working status from Command Code thinking output without a startup prompt', async () => {
@@ -392,118 +478,6 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
         undefined,
         { connectionId: null }
       )
-    })
-
-    it('chunks large terminal-paste startup commands through the PTY before submitting', async () => {
-      const pendingTimeouts: (() => void)[] = []
-      const originalSetTimeout = globalThis.setTimeout
-      globalThis.setTimeout = vi.fn((fn: () => void) => {
-        pendingTimeouts.push(fn)
-        return 999 as unknown as ReturnType<typeof setTimeout>
-      }) as unknown as typeof setTimeout
-
-      try {
-        const { connectPanePty } = await import('./pty-connection')
-
-        const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
-        const transport = createMockTransport('pty-id')
-        transport.connect.mockImplementation(
-          async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
-            capturedDataCallback.current = callbacks.onData ?? null
-            return 'pty-local-paste'
-          }
-        )
-        transportFactoryQueue.push(transport)
-
-        mockStoreState = {
-          ...mockStoreState,
-          tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-          repos: [{ id: 'repo1', connectionId: null }]
-        }
-
-        const pane = createPane(1)
-        pane.terminal.write.mockImplementation((_data: string, callback?: () => void) => {
-          callback?.()
-        })
-        const manager = createManager(1)
-        const command = `${'x'.repeat(TERMINAL_PASTE_DIRECT_MAX_BYTES)}tail`
-        const deps = createDeps({ startup: { command, delivery: 'terminal-paste' } })
-
-        connectPanePty(pane as never, manager as never, deps as never)
-        expect(createdTransportOptions[0]?.command).toBeUndefined()
-        expect(capturedDataCallback.current).not.toBeNull()
-
-        capturedDataCallback.current?.('user@host $ ')
-        await drainPendingTimeouts(pendingTimeouts)
-        await flushAsyncTicks()
-
-        const writtenInput = transport.sendInput.mock.calls.map((call) => call[0])
-        expect(pane.terminal.paste).not.toHaveBeenCalled()
-        expect(writtenInput.at(-1)).toBe('\r')
-        expect(writtenInput.slice(0, -1).join('')).toBe(command)
-        expect(writtenInput.slice(0, -1).length).toBeGreaterThan(1)
-        expect(transport.sendInput).not.toHaveBeenCalledWith(`${command}\r`)
-      } finally {
-        globalThis.setTimeout = originalSetTimeout
-      }
-    })
-
-    it('does not submit a terminal-paste startup command after the PTY changes mid-paste', async () => {
-      const pendingTimeouts: (() => void)[] = []
-      const originalSetTimeout = globalThis.setTimeout
-      globalThis.setTimeout = vi.fn((fn: () => void) => {
-        pendingTimeouts.push(fn)
-        return 999 as unknown as ReturnType<typeof setTimeout>
-      }) as unknown as typeof setTimeout
-
-      try {
-        const { connectPanePty } = await import('./pty-connection')
-
-        const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
-        const transport = createMockTransport('pty-id')
-        let livePtyId = 'pty-local-paste'
-        transport.getPtyId.mockImplementation(() => livePtyId)
-        transport.sendInput.mockImplementation((data: string) => {
-          if (data !== '\r') {
-            livePtyId = 'pty-replaced'
-          }
-          return true
-        })
-        transport.connect.mockImplementation(
-          async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
-            capturedDataCallback.current = callbacks.onData ?? null
-            return 'pty-local-paste'
-          }
-        )
-        transportFactoryQueue.push(transport)
-
-        mockStoreState = {
-          ...mockStoreState,
-          tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-          repos: [{ id: 'repo1', connectionId: null }]
-        }
-
-        const pane = createPane(1)
-        pane.terminal.write.mockImplementation((_data: string, callback?: () => void) => {
-          callback?.()
-        })
-        const manager = createManager(1)
-        const command = `${'x'.repeat(TERMINAL_PASTE_DIRECT_MAX_BYTES)}tail`
-        const deps = createDeps({ startup: { command, delivery: 'terminal-paste' } })
-
-        connectPanePty(pane as never, manager as never, deps as never)
-        expect(capturedDataCallback.current).not.toBeNull()
-
-        capturedDataCallback.current?.('user@host $ ')
-        await drainPendingTimeouts(pendingTimeouts)
-        await flushAsyncTicks()
-
-        expect(pane.terminal.paste).not.toHaveBeenCalled()
-        expect(transport.sendInput).not.toHaveBeenCalledWith('\r')
-        expect(transport.sendInput.mock.calls.map((call) => call[0]).join('')).not.toBe(command)
-      } finally {
-        globalThis.setTimeout = originalSetTimeout
-      }
     })
   })
 }

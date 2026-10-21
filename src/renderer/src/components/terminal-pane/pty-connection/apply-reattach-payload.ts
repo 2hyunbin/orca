@@ -283,9 +283,6 @@ export function createReattachPayloadHandlers(
       if (!isRemoteRuntimePtyId(ctx.ptyId)) {
         window.api.pty.ackColdRestore(ctx.ptyId)
       }
-      if (didPrepareResume && !ctx.coldRestoreStartup) {
-        session.schedulePendingStartupCommandDelivery()
-      }
     }
     if (ctx.shouldApplyStructuralPayload) {
       await waitForTerminalReplayWritesParsed(session.pane.terminal)

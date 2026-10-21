@@ -2,6 +2,8 @@ import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-i
 import { captureNotificationTransportOwner } from '@/attention/notification-subject-owner'
 import { scheduleRuntimeGraphSync } from '@/runtime/sync-runtime-graph'
 import { useAppStore } from '@/store'
+import { takeMainStartedPaneView } from '@/store/terminals/main-started-pane-view'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 // Why: a restored pane's stale-account prompt can only be raised once a PTY is
 // actually attached — nothing is inspectable while the session hydrates.
 import { notifyCodexPaneBoundForStaleSweep } from '@/lib/codex-stale-pane-sweep'
@@ -124,6 +126,13 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
     }
     if (options.seedInitialAgentStatus) {
       session.applyInitialAgentStatus()
+    } else if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Switch point: attaching to the terminal main started seeds what its spawn would have.
+      const view = takeMainStartedPaneView(session.cacheKey)
+      if (view) {
+        session.mainStartedPaneView = view
+        session.applyInitialAgentStatus()
+      }
     }
     // Spawn/attach completion is when a pane gains a concrete PTY ID. The initial
     // frame-level sync often runs before that async result arrives.

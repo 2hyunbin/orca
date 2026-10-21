@@ -41,7 +41,7 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
     worktreeId: session.deps.worktreeId,
     tabId: session.deps.tabId,
     paneKey: session.cacheKey,
-    startup: session.paneStartup
+    startup: session.paneStartup ?? session.mainStartedPaneView
   })
   const resolveLaunchAgentCandidate = (
     state: ReturnType<typeof useAppStore.getState>

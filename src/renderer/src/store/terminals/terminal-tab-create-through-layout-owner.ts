@@ -27,6 +27,7 @@ import {
   startWindowTabInMain,
   windowTabStartsInMain
 } from './window-tab-start-in-main'
+import { handStartupToMain, takeStartupBackFromMain } from './window-tab-start-params'
 
 /**
  * The row a tab main made itself is drawn with: main's time, title and the creation fields main
@@ -114,12 +115,19 @@ export function recordCreatedTerminalTabInLayoutOwner(
     start !== undefined &&
     runtimeEnvironmentIdUnlessTwin(state, workspace) === null &&
     windowTabStartsInMain(state, start.tab)
+  const paneKey = makePaneKey(command.tabId, command.leafId)
   const mark = startsInMain
     ? markWindowTabStarting(start.store, command.tabId, command.leafId)
     : null
+  // Before the pane mounts: one that captures the startup now must not spawn or paste it itself.
+  const startup = start && mark ? state.pendingStartupByTabId[command.tabId] : undefined
+  if (start && mark) {
+    handStartupToMain(workspace, command.tabId, paneKey, startup)
+  }
   const unmark = (): void => {
     if (start && mark) {
-      clearWindowTabMark(start.store, makePaneKey(command.tabId, command.leafId), mark)
+      takeStartupBackFromMain(workspace, command.tabId, paneKey, startup)
+      clearWindowTabMark(start.store, paneKey, mark)
     }
   }
   const sent = sendLayoutApply(state, workspace, rest, {

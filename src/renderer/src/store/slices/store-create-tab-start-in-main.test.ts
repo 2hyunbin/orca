@@ -3,7 +3,15 @@ import type * as AgentStatusModule from '@/lib/agent-status'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
 import { provideLayoutFrameTerminalPanes } from '@/runtime/layout-frame-terminal-panes'
-import { startupNeedsWindowSpawn } from '../terminals/window-tab-start-in-main'
+import {
+  peekMainStartedPaneView,
+  resetMainStartedPaneViewsForTests
+} from '../terminals/main-started-pane-view'
+import {
+  agentStartupDeliveryKey,
+  clearConsumedAgentStartupDeliveriesForTests,
+  isAgentStartupDeliveryConsumed
+} from '@/lib/agent-startup-delivery-guards'
 
 type HeldCreate = { resolve: (value: unknown) => void; reject: (error: Error) => void }
 
@@ -216,13 +224,8 @@ describe("a new tab's first terminal, started by main in a layout-owner build", 
     expect(store.getState().pendingStartupByTabId[TAB]).toBeUndefined()
   })
 
-  it('keeps the window spawn for a startup only it carries, and for a tab with a terminal', async () => {
+  it('keeps the window spawn for a tab that already has a terminal', async () => {
     const store = storeWithWorktree()
-    store.getState().createTab(WORKTREE, undefined, undefined, {
-      id: TAB,
-      initialLeafId: LEAF,
-      pendingStartup: { command: 'claude', delivery: 'terminal-paste' }
-    })
     store.getState().createTab(WORKTREE, undefined, undefined, { initialPtyId: 'pty-live' })
     await settle()
 
@@ -241,24 +244,189 @@ describe("a new tab's first terminal, started by main in a layout-owner build", 
   })
 })
 
-describe('startupNeedsWindowSpawn', () => {
-  it('sends main a plain startup, and keeps the window spawn for one only it carries', () => {
-    expect(startupNeedsWindowSpawn(undefined)).toBe(false)
-    expect(startupNeedsWindowSpawn({ command: 'ls', env: { A: '1' }, launchAgent: 'claude' })).toBe(
-      false
-    )
-    for (const field of [
-      { delivery: 'terminal-paste' as const },
-      { agentLaunch: { agent: 'claude' } },
-      { agentArgsOverride: null },
-      { draftPrompt: 'hi' },
-      { sessionOptions: {} },
-      { initialAgentStatus: { agent: 'claude' as const, prompt: 'hi' } },
-      { showSessionRestoredBanner: true },
-      { telemetry: {} }
-    ]) {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each field is checked only for presence, never read.
-      expect(startupNeedsWindowSpawn({ command: 'x', ...field } as never)).toBe(true)
+const CODEX_DRAFT_DELIVERY = agentStartupDeliveryKey({
+  worktreeId: WORKTREE,
+  tabId: TAB,
+  launchToken: 'token-1'
+})
+const LAUNCH_CONFIG = { agentCommand: 'codex', agentArgs: '', agentEnv: {} }
+const TELEMETRY = {
+  agent_kind: 'codex',
+  launch_source: 'new_workspace_composer',
+  request_kind: 'new'
+} as const
+
+/** The params main's create gets for a startup, after the ids every start sends. */
+async function startParamsFor(startup: Record<string, unknown>) {
+  const store = storeWithWorktree()
+  store.getState().createTab(WORKTREE, undefined, undefined, {
+    id: TAB,
+    initialLeafId: LEAF,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each row is a startup a producer queues; the table keeps them untyped to list them side by side.
+    pendingStartup: startup as never
+  })
+  await settle()
+  const [{ worktree: _w, windowTab: _t, tabId: _tab, leafId: _leaf, ...params }] =
+    terminalCreateCalls().map((call) => call[2] as Record<string, unknown>)
+  return { store, params }
+}
+
+describe('every start input of a new tab reaches main’s create (L252)', () => {
+  beforeEach(() => {
+    resetMainStartedPaneViewsForTests()
+    clearConsumedAgentStartupDeliveriesForTests()
+  })
+
+  it.each([
+    {
+      name: 'telemetry, which main records once its spawn commits',
+      startup: { command: 'codex', launchAgent: 'codex', telemetry: TELEMETRY },
+      params: { command: 'codex', launchAgent: 'codex', telemetry: TELEMETRY }
+    },
+    {
+      name: 'an agent launch, which main plans as the pane’s own spawn did',
+      startup: {
+        command: '',
+        launchAgent: 'claude',
+        agentLaunch: {
+          launch: { agent: 'claude', target: { kind: 'existing', worktree: `id:${WORKTREE}` } }
+        }
+      },
+      params: {
+        launchAgent: 'claude',
+        agentLaunch: {
+          launch: { agent: 'claude', target: { kind: 'existing', worktree: `id:${WORKTREE}` } }
+        }
+      }
+    },
+    {
+      name: 'agent args and session options, already in the built command',
+      startup: {
+        command: "claude --model 'opus'",
+        launchAgent: 'claude',
+        agentArgsOverride: null,
+        sessionOptions: { model: 'opus' }
+      },
+      params: { command: "claude --model 'opus'", launchAgent: 'claude' }
+    },
+    {
+      name: 'an OpenCode model start, planned by main as createAgentSession planned it',
+      startup: {
+        command: 'opencode',
+        launchAgent: 'opencode',
+        launchConfig: LAUNCH_CONFIG,
+        agentArgsOverride: '--print-logs',
+        sessionOptions: { model: 'opencode/m', effort: 'high' },
+        draftPrompt: 'look at this'
+      },
+      params: {
+        startupAgent: 'opencode',
+        agentArgs: '--print-logs',
+        launchPreferences: { model: 'opencode/m', effort: 'high' },
+        startupPrompt: 'look at this',
+        startupPromptDelivery: 'draft'
+      }
+    },
+    {
+      name: 'a draft a flag carries, already in the command, with no paste',
+      startup: {
+        command: "claude --prefill 'look'",
+        launchAgent: 'claude',
+        launchConfig: LAUNCH_CONFIG,
+        draftPrompt: 'look'
+      },
+      params: {
+        command: "claude --prefill 'look'",
+        launchAgent: 'claude',
+        launchConfig: LAUNCH_CONFIG,
+        // createTab gives every launch-bound startup a token.
+        launchToken: expect.any(String)
+      }
+    },
+    {
+      name: 'a Codex draft, which main pastes once Codex is ready',
+      startup: {
+        command: 'codex',
+        launchAgent: 'codex',
+        launchConfig: LAUNCH_CONFIG,
+        launchToken: 'token-1',
+        draftPrompt: 'look'
+      },
+      params: {
+        command: 'codex',
+        launchAgent: 'codex',
+        launchConfig: LAUNCH_CONFIG,
+        launchToken: 'token-1',
+        draftPaste: { agent: 'codex', content: 'look' }
+      }
+    },
+    {
+      name: 'the view facts, which stay the window’s',
+      startup: {
+        command: 'cmd',
+        launchAgent: 'command-code',
+        initialAgentStatus: { agent: 'command-code', prompt: 'go' },
+        showSessionRestoredBanner: true
+      },
+      params: { command: 'cmd', launchAgent: 'command-code' }
     }
+  ])('$name', async ({ startup, params }) => {
+    const { store, params: sent } = await startParamsFor(startup)
+    expect(sent).toEqual(params)
+    // Main runs it: the pane waits instead of spawning its own.
+    expect(store.getState().terminalPaneStartsByPaneKey[PANE_KEY]).toEqual({ status: 'starting' })
+    expect(store.getState().pendingStartupByTabId[TAB]).toBeUndefined()
+  })
+
+  it('keeps the start’s status prompt for the pane, which seeds it when it attaches', async () => {
+    const startup = {
+      command: 'cmd',
+      launchAgent: 'command-code',
+      launchConfig: LAUNCH_CONFIG,
+      initialAgentStatus: { agent: 'command-code', prompt: 'go' }
+    }
+    await startParamsFor(startup)
+
+    expect(peekMainStartedPaneView(PANE_KEY)).toEqual({
+      initialAgentStatus: { agent: 'command-code', prompt: 'go' },
+      launchConfig: LAUNCH_CONFIG,
+      launchToken: expect.any(String)
+    })
+  })
+
+  it('fences the delayed delivery of a Codex draft, so main’s paste is the only one', async () => {
+    await startParamsFor({
+      command: 'codex',
+      launchAgent: 'codex',
+      launchConfig: LAUNCH_CONFIG,
+      launchToken: 'token-1',
+      draftPrompt: 'look'
+    })
+
+    expect(isAgentStartupDeliveryConsumed(CODEX_DRAFT_DELIVERY)).toBe(true)
+  })
+
+  it('gives the whole startup back when main does not hold the tab', async () => {
+    const startup = {
+      command: 'codex',
+      launchAgent: 'codex',
+      launchConfig: LAUNCH_CONFIG,
+      launchToken: 'token-1',
+      draftPrompt: 'look',
+      telemetry: TELEMETRY,
+      agentArgsOverride: null,
+      sessionOptions: { model: 'gpt' },
+      initialAgentStatus: { agent: 'codex', prompt: 'look' },
+      showSessionRestoredBanner: true
+    }
+    const { store } = await startParamsFor(startup)
+
+    mocks.create!.reject(new Error('host_not_owned'))
+    await settle()
+
+    expect(store.getState().pendingStartupByTabId[TAB]).toEqual(startup)
+    // The pane's own spawn seeds and pastes, as before.
+    expect(peekMainStartedPaneView(PANE_KEY)).toBeUndefined()
+    expect(isAgentStartupDeliveryConsumed(CODEX_DRAFT_DELIVERY)).toBe(false)
   })
 })

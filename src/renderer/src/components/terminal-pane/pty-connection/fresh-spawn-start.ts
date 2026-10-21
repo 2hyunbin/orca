@@ -165,7 +165,6 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
         // unverifiable until a stamped attach result arrives.
         session.remotePtyIncarnationId = connectResult?.incarnationId ?? null
         if (connectResult?.isReattach) {
-          session.pendingStartupCommand = null
           const accepted = await session.handleReattachResult(
             connectResult,
             null,

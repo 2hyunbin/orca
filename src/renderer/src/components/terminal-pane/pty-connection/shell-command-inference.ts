@@ -111,7 +111,9 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
       resolvePaneAgentOwner({
         launchAgent: tab?.launchAgent,
         startupLaunchAgent: session.paneStartup?.launchAgent,
-        initialStatusAgent: session.paneStartup?.initialAgentStatus?.agent,
+        initialStatusAgent:
+          session.paneStartup?.initialAgentStatus?.agent ??
+          session.mainStartedPaneView?.initialAgentStatus?.agent,
         commandInferredAgent: session.commandInferredPaneAgent,
         hookAgent: state.agentStatusByPaneKey[session.cacheKey]?.agentType
       }) ?? undefined

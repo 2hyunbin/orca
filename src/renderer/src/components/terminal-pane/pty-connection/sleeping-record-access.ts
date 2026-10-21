@@ -1,6 +1,8 @@
 import { useAppStore } from '@/store'
 import type { PtyConnectResult } from '../pty-transport-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { peekMainStartedPaneView } from '@/store/terminals/main-started-pane-view'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { parseLegacyNumericPaneKey } from '../../../../../shared/stable-pane-id'
 import { neutralTerminalTitle } from '../../../../../shared/terminal-pane-title-reset'
 import { getProviderSessionClaimKey } from '@/lib/sleeping-agent-pane-ownership'
@@ -88,8 +90,14 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
   session.launchToken = session.paneStartup?.launchConfig
     ? (session.paneStartup.launchToken ?? createBrowserUuid())
     : undefined
+  // Switch point: a pane main starts keeps its startup's view facts by pane key.
+  session.mainStartedPaneView = ORCA_LAYOUT_OWNER_IS_MAIN
+    ? peekMainStartedPaneView(session.cacheKey)
+    : undefined
   session.startupDraftAgent =
-    session.paneStartup?.launchAgent ?? session.paneStartup?.initialAgentStatus?.agent
+    session.paneStartup?.launchAgent ??
+    session.paneStartup?.initialAgentStatus?.agent ??
+    session.mainStartedPaneView?.initialAgentStatus?.agent
   session.startupDraftAgentConfig = session.startupDraftAgent
     ? TUI_AGENT_CONFIG[session.startupDraftAgent]
     : null
@@ -104,7 +112,12 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
   session.startupDraftDeliveryClaimed = false
   session.startupDraftPasteAttempted = false
   session.claimStartupDraftPasteDelivery = (): boolean => {
-    if (!session.startupDraftPromptNeedsPaste || session.launchToken === undefined) {
+    // Main pastes the draft of a pane it starts, even one that captured the startup first.
+    if (
+      !session.startupDraftPromptNeedsPaste ||
+      session.launchToken === undefined ||
+      session.mainStartedPaneView
+    ) {
       return false
     }
     if (session.startupDraftDeliveryClaimed) {

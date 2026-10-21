@@ -57,13 +57,6 @@ export function bindSettlePaneSerializer(session: ConnectPanePtySession): void {
       .catch(() => {})
   }
 
-  // Why: startup commands are provider-owned so delivery survives renderer
-  // replacement. Only explicit terminal-paste stays renderer-owned.
-  session.pendingStartupCommand = session.shouldDeliverStartupViaTerminalPaste
-    ? session.paneStartup?.command
-      ? { command: session.paneStartup.command }
-      : null
-    : null
   const startupDraftReadyScanner = session.ownsStartupDraftPaste
     ? createDraftPasteReadyScanner(
         session.startupDraftAgentConfig?.draftPasteReadySignal ??
@@ -207,11 +200,7 @@ export function bindSettlePaneSerializer(session: ConnectPanePtySession): void {
       armStartupDraftQuietTimer()
     }
   }
-  if (
-    session.ownsStartupDraftPaste &&
-    !session.unservedSshTargetId &&
-    !session.shouldDeliverStartupViaTerminalPaste
-  ) {
+  if (session.ownsStartupDraftPaste && !session.unservedSshTargetId) {
     session.armStartupDraftReadinessObservation()
   }
   let sessionRestoredBannerShown: SessionRestoredBannerReason | null = null

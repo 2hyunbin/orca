@@ -1,0 +1,47 @@
+// Layout-owner build: the view facts of a window tab's first start main runs. The pane attaches to
+// main's terminal instead of spawning, so nothing it spawns seeds these; they are kept by pane key.
+// Session-only and bounded: a pane that never attaches leaves at most a few entries behind.
+
+import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+
+export type MainStartedPaneView = {
+  initialAgentStatus?: { agent: TuiAgent; prompt: string }
+  launchConfig?: SleepingAgentLaunchConfig
+  launchToken?: string
+}
+
+const MAX_PANES = 64
+const viewsByPaneKey = new Map<string, MainStartedPaneView>()
+
+/** Main starts this pane: its own spawn and startup paste must not run. */
+export function noteMainStartsPane(paneKey: string, view: MainStartedPaneView): void {
+  viewsByPaneKey.delete(paneKey)
+  viewsByPaneKey.set(paneKey, view)
+  for (const oldest of viewsByPaneKey.keys()) {
+    if (viewsByPaneKey.size <= MAX_PANES) {
+      break
+    }
+    viewsByPaneKey.delete(oldest)
+  }
+}
+
+/** Main declined: the pane starts its own terminal, with its startup, as before. */
+export function forgetMainStartedPane(paneKey: string): void {
+  viewsByPaneKey.delete(paneKey)
+}
+
+export function peekMainStartedPaneView(paneKey: string): MainStartedPaneView | undefined {
+  return viewsByPaneKey.get(paneKey)
+}
+
+/** Once, when the pane attaches to main's terminal. */
+export function takeMainStartedPaneView(paneKey: string): MainStartedPaneView | undefined {
+  const view = viewsByPaneKey.get(paneKey)
+  viewsByPaneKey.delete(paneKey)
+  return view
+}
+
+export function resetMainStartedPaneViewsForTests(): void {
+  viewsByPaneKey.clear()
+}

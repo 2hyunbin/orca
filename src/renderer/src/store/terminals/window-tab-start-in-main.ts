@@ -7,11 +7,15 @@ import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { isSupportedWindowsShellOverride } from '../../../../shared/windows-terminal-shell'
+import { isWslShellName } from '../../../../shared/local-windows-terminal-runtime'
 import type { AppState } from '../types'
 import type { TerminalPaneStart } from './terminal-state'
 import { getRemoteConnectionIdForWorktree, worktreeUsesWslPath } from './terminal-workspace-routing'
-
-type TabStartup = AppState['pendingStartupByTabId'][string]
+import {
+  handStartupToMain,
+  takeStartupBackFromMain,
+  windowTabStartupParams
+} from './window-tab-start-params'
 
 type StartStore = {
   getState: () => AppState
@@ -19,38 +23,17 @@ type StartStore = {
   subscribe: (listener: (state: AppState) => void) => () => void
 }
 
-/**
- * Whether a startup needs the window's own spawn: a field main's create does not carry yet. One
- * predicate, so moving these into main (L252) deletes it.
- */
-export function startupNeedsWindowSpawn(startup: TabStartup | undefined): boolean {
-  if (!startup) {
-    return false
-  }
-  return (
-    // Start inputs that move into main's create.
-    startup.delivery === 'terminal-paste' ||
-    startup.agentLaunch !== undefined ||
-    startup.agentArgsOverride !== undefined ||
-    startup.draftPrompt !== undefined ||
-    startup.sessionOptions !== undefined ||
-    // View effects of the start the window shows once it attaches.
-    startup.initialAgentStatus !== undefined ||
-    startup.showSessionRestoredBanner !== undefined ||
-    startup.telemetry !== undefined
-  )
-}
-
 /** Whether main starts this tab's first terminal: a local, plain tab with no terminal yet. */
 export function windowTabStartsInMain(state: AppState, tab: TerminalTab): boolean {
   return (
     !tab.ptyId &&
     !tab.forceHostRuntime &&
-    // SSH and WSL starts keep the window's spawn and its prompts until L252.
+    // An SSH row's pane never spawns: its reconnect overlay owns it, and the prompts stay here.
     !getRemoteConnectionIdForWorktree(state, tab.worktreeId) &&
+    // A tab the window put in WSL keeps its spawn: main's runtime read disagrees on two shapes.
     !worktreeUsesWslPath(state, tab.worktreeId) &&
-    (tab.shellOverride === undefined || isSupportedWindowsShellOverride(tab.shellOverride)) &&
-    !startupNeedsWindowSpawn(state.pendingStartupByTabId[tab.id])
+    !isWslShellName(tab.shellOverride) &&
+    (tab.shellOverride === undefined || isSupportedWindowsShellOverride(tab.shellOverride))
   )
 }
 
@@ -96,17 +79,13 @@ export function startWindowTabInMain(
   const state = store.getState()
   const paneKey = makePaneKey(tab.id, leafId)
   const startup = state.pendingStartupByTabId[tab.id]
-  if (startupNeedsWindowSpawn(startup)) {
-    // A caller gave the tab a startup only the window's spawn carries since it was drawn.
-    clearWindowTabMark(store, paneKey, mark)
-    return
-  }
   const cwd = state.pendingInitialCwdByTabId[tab.id] ?? tab.startupCwd
   if (startup) {
     // Main runs it; a later mount of the pane must not run it again.
     const { [tab.id]: _started, ...pendingStartupByTabId } = state.pendingStartupByTabId
     store.setState({ pendingStartupByTabId })
   }
+  handStartupToMain(tab.worktreeId, tab.id, paneKey, startup)
   void callRuntimeRpc<{ terminal: { ptyId: string } }>({ kind: 'local' }, 'terminal.create', {
     worktree: `id:${tab.worktreeId}`,
     windowTab: true,
@@ -114,23 +93,13 @@ export function startWindowTabInMain(
     leafId,
     ...(cwd ? { cwd } : {}),
     ...(tab.shellOverride ? { shell: tab.shellOverride } : {}),
-    ...(startup?.command ? { command: startup.command } : {}),
-    ...(startup?.startupCommandDelivery
-      ? { startupCommandDelivery: startup.startupCommandDelivery }
-      : {}),
-    ...(startup?.env ? { env: startup.env } : {}),
-    ...(startup?.envToDelete ? { envToDelete: startup.envToDelete } : {}),
-    ...(startup?.launchConfig ? { launchConfig: startup.launchConfig } : {}),
-    ...(startup?.resumeProviderSession
-      ? { resumeProviderSession: startup.resumeProviderSession }
-      : {}),
-    ...(startup?.launchToken ? { launchToken: startup.launchToken } : {}),
-    ...(startup?.launchAgent ? { launchAgent: startup.launchAgent } : {})
+    ...windowTabStartupParams(startup)
   }).then(
     (reply) => releaseOnceDrawn(store, tab.id, leafId, reply?.terminal?.ptyId ?? null, mark),
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
       if (message === 'host_not_owned') {
+        takeStartupBackFromMain(tab.worktreeId, tab.id, paneKey, startup)
         // Main started nothing and does not hold the tab: the pane starts its own, as before.
         // Not for a tab the user closed meanwhile: nothing would ever take the startup back.
         if (startup && store.getState().terminalLayoutsByTabId[tab.id]) {

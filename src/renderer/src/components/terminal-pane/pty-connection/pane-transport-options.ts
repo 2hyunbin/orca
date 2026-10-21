@@ -24,12 +24,8 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
     ...(session.runtimeEnvironmentId === null ? { cwdFallback: 'worktree' as const } : {}),
     env: session.paneEnv,
     ...(session.paneStartup?.envToDelete ? { envToDelete: session.paneStartup.envToDelete } : {}),
-    command: session.shouldDeliverStartupViaTerminalPaste
-      ? undefined
-      : session.paneStartup?.command,
-    startupCommandDelivery: session.shouldDeliverStartupViaTerminalPaste
-      ? undefined
-      : session.paneStartup?.startupCommandDelivery,
+    command: session.paneStartup?.command,
+    startupCommandDelivery: session.paneStartup?.startupCommandDelivery,
     executionHostId: session.executionHostId,
     worktreeId: session.deps.worktreeId,
     // Why: closes the SIGKILL race documented in INVESTIGATION.md by letting

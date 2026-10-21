@@ -54,7 +54,6 @@ export type TerminalState = {
     string,
     {
       command: string
-      delivery?: 'terminal-paste'
       startupCommandDelivery?: StartupCommandDelivery
       env?: Record<string, string>
       envToDelete?: string[]

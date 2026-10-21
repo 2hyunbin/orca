@@ -82,11 +82,9 @@ describe('reattach payload context', () => {
     } as ColdRestoreAgentResumeStartup
     const buildColdRestoreAgentResumeStartup = vi.fn()
     const applyColdRestoreAgentResumeStartup = vi.fn(() => true)
-    const schedulePendingStartupCommandDelivery = vi.fn()
     const session = createSession({
       buildColdRestoreAgentResumeStartup,
       applyColdRestoreAgentResumeStartup,
-      schedulePendingStartupCommandDelivery,
       showSessionRestoredBanner: vi.fn(),
       clearSleepingRecordAfterColdRestoreSpawn: vi.fn(),
       consumeRestoredViewportBlankingMarker: vi.fn(),
@@ -105,7 +103,6 @@ describe('reattach payload context', () => {
 
     expect(applyColdRestoreAgentResumeStartup).toHaveBeenCalledWith(startup)
     expect(buildColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
-    expect(schedulePendingStartupCommandDelivery).not.toHaveBeenCalled()
     expect(context.reattachPayloadApplied).toBe(true)
   })
 })

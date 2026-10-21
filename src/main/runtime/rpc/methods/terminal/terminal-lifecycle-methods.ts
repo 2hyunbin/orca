@@ -6,6 +6,7 @@ import {
   resolveRuntimeNavigationTarget
 } from '../../../../../shared/runtime-navigation'
 import { withTerminalCloseAttribution } from '../../terminal-close-attribution'
+import { windowTabStartOptions } from '../../../terminal/launch/window-tab-start-inputs'
 import {
   AgentTeamsPrepareLaunch,
   AgentTeamsTmuxCompat,
@@ -79,6 +80,7 @@ export const TERMINAL_LIFECYCLE_METHODS = [
                 : {}),
               ...(params.launchToken ? { launchToken: params.launchToken } : {}),
               ...(params.launchAgent ? { launchAgent: params.launchAgent } : {}),
+              ...windowTabStartOptions(params),
               terminalImageViewerSupported: terminalImageViewerSupported(context)
             }
           )

@@ -23,7 +23,6 @@ export type PtyPaneStartup = {
   command: string
   /** Renderer-delivered startup input for callers that need xterm paste
    *  semantics before the submit Enter. */
-  delivery?: 'terminal-paste'
   startupCommandDelivery?: StartupCommandDelivery
   env?: Record<string, string>
   envToDelete?: string[]

@@ -9,6 +9,8 @@ import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identi
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
 import { mainOwnsTabLayout } from './main-owned-tab-layout'
 import { PaneOwnerContentionError } from '../../../ipc/pty/pane/pane-spawn-operation'
+import { startWindowTabWithInputs, type WindowTabStartInputs } from './window-tab-start-inputs'
+import type { OrcaRuntimeService } from '../../orca-runtime'
 
 export type FailedStartPane = { tabId: string; leafId: string }
 
@@ -75,9 +77,12 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
    * off, or a tab main's layout does not hold, keeps the window's own start.
    */
   startWindowTabTerminal(
+    // The launch lifecycle runs as main's agent launches do, against the whole service.
+    this: OrcaRuntimeService,
     worktreeId: string,
     pane: { tabId: string; leafId: string },
-    opts: Omit<dependencies.TerminalCreateOptions, 'tabId' | 'leafId' | 'presentation'>
+    opts: Omit<dependencies.TerminalCreateOptions, 'tabId' | 'leafId' | 'presentation'> &
+      WindowTabStartInputs
   ): Promise<dependencies.RuntimeTerminalCreate> {
     if (
       !ORCA_LAYOUT_OWNER_IS_MAIN ||
@@ -86,12 +91,22 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       return Promise.reject(new Error('host_not_owned'))
     }
     // Background: the window already shows the tab, so main reveals nothing.
-    return this.createTerminal(`id:${worktreeId}`, {
-      ...opts,
-      ...pane,
-      presentation: 'background',
-      keepPaneOnStartFailure: true
-    })
+    return startWindowTabWithInputs(
+      {
+        runtime: this,
+        store: this.store,
+        pasteDraft: (handle, draft) => this.pasteStartupDraftWhenReady(handle, draft)
+      },
+      { worktreeId, ...pane },
+      opts,
+      (createOpts) =>
+        this.createTerminal(`id:${worktreeId}`, {
+          ...createOpts,
+          ...pane,
+          presentation: 'background',
+          keepPaneOnStartFailure: true
+        })
+    )
   }
 
   protected notePaneSleeping(paneKey: string): void {
