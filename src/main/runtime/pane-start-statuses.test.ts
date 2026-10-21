@@ -99,6 +99,24 @@ describe('a start into a pane main holds', () => {
     expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
   })
 
+  it('clears the status of a pane it wrote when the user closed it before its start failed', async () => {
+    const { register } = statuses()
+    const { store, runtimeStore } = storeAnswering('admitted', false)
+    await expect(
+      spawnInAdmittedPane(
+        runtimeStore,
+        {
+          spawn: vi.fn(async () => {
+            throw new Error('no pty')
+          })
+        },
+        { ...ARGS, startStatus: { sink: register, keepOnFailure: true } }
+      )
+    ).rejects.toThrow('no pty')
+    expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
+    expect(store.withdrawTerminalPane).not.toHaveBeenCalled()
+  })
+
   it('keeps a pane the create wrote only when asked to; otherwise takes it back as today', async () => {
     const failing = {
       spawn: vi.fn(async () => {
