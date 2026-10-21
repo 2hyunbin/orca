@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { KeyedBottomDrawer } from './keyed-bottom-drawer'
+import { InlineDrawerBody, useInlineDrawerPresentation } from './inline-drawer-presentation'
 
 type Props = {
   visible: boolean
@@ -23,6 +24,13 @@ const SHOWN = 'shown'
 const sheetKey = () => SHOWN
 
 export function BottomDrawer({ visible, onClose, onAfterClose, children, ...drawerProps }: Props) {
+  const inline = useInlineDrawerPresentation()
+  if (inline) {
+    // A drawer pinned under another (not interactive) is covered there, so it is not drawn.
+    return visible && drawerProps.interactive !== false ? (
+      <InlineDrawerBody fillAvailable={drawerProps.fillAvailable}>{children}</InlineDrawerBody>
+    ) : null
+  }
   // Why: hidden drawers are rendered by parent screens even while closed; the keyed drawer
   // renders nothing until shown, which keeps Reanimated/Gesture setup out of hot paths.
   return (

@@ -28,7 +28,6 @@ import { isResumeTargetConfirmedMissing, type HomeResumeCard } from '../worktree
 import { MobileHomeEmptyState } from './MobileHomeEmptyState'
 import { MobileHomeHostList } from './MobileHomeHostList'
 import { MobileHomeListFooter } from './MobileHomeListFooter'
-import { MobileHomeNewWorkspaceSheet } from './MobileHomeNewWorkspaceSheet'
 import { MobileHomeTopBar } from './MobileHomeTopBar'
 import { useMobileHomeData } from './use-mobile-home-data'
 
@@ -45,7 +44,6 @@ export function MobileHomeScreen() {
   const forceReconnectHost = useForceReconnect()
   const [actionTarget, setActionTarget] = useState<HostProfile | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string } | null>(null)
-  const [newWorkspaceHostId, setNewWorkspaceHostId] = useState<string | null>(null)
 
   const openResume = useCallback(
     (card: HomeResumeCard) => {
@@ -123,7 +121,9 @@ export function MobileHomeScreen() {
               connectedHosts={data.connectedHosts}
               resumeCard={data.resumeCard}
               taskProvidersByHost={data.taskProvidersByHost}
-              onCreateWorkspace={setNewWorkspaceHostId}
+              onCreateWorkspace={(hostId) =>
+                data.router.push(`/new-workspace/${encodeURIComponent(hostId)}`)
+              }
               onOpenAccounts={openMobileAccounts}
               onOpenResume={openResume}
               onOpenTasks={openMobileTasks}
@@ -181,14 +181,6 @@ export function MobileHomeScreen() {
         onConfirm={() => void handleRemove()}
         onCancel={() => setConfirmRemove(null)}
       />
-      {newWorkspaceHostId ? (
-        <MobileHomeNewWorkspaceSheet
-          key={newWorkspaceHostId}
-          hostId={newWorkspaceHostId}
-          onCreated={openMobileSession}
-          onClose={() => setNewWorkspaceHostId(null)}
-        />
-      ) : null}
     </SafeAreaView>
   )
 }

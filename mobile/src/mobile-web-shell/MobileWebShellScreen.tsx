@@ -133,6 +133,9 @@ function DevFacts({
 
 export type MobileWebShellScreenProps = {
   hostId: string
+  /** `sheet` for a route presented as a native drawer: no status bar sits above the view, and a
+   *  screen the page hands over replaces the drawer instead of stacking on it. */
+  presentation?: 'screen' | 'sheet'
   /** The screen this shell stands in for, which the page cannot derive from a document served at `/`. */
   route: BridgeInitRoute
   /** False for the catch-all, whose pathnames have no screen in this app. */
@@ -158,6 +161,7 @@ export function MobileWebShellScreen({
   route,
   appNamesRoute,
   onRouteParamClear,
+  presentation = 'screen',
   runtime
 }: MobileWebShellScreenProps) {
   const insets = useSafeAreaInsets()
@@ -201,7 +205,10 @@ export function MobileWebShellScreen({
   // IME insets are zeroed, so `visualViewport` never shrinks. The keyboard covers the view like a
   // native screen, and the page lifts by the height native screens read.
   const keyboardInset = Math.max(0, useKeyboardOcclusion())
-  const pageInsets = pageSafeAreaInsets({ insets, topCovered: noticeShown })
+  const pageInsets = pageSafeAreaInsets({
+    insets,
+    topCovered: noticeShown || presentation === 'sheet'
+  })
   const { snapshot, unreadable, readStorage, refreshStorage, writeStorage, readWorkspaceKey } =
     usePageHostSnapshot(hostId, route.pathname, ownsHostArea)
   // Declared before the bridge so the handler it is handed already belongs to this session: the
@@ -277,6 +284,10 @@ export function MobileWebShellScreen({
     onNavigate: (href: string) => {
       // Wide, this host's route is the area-owning session below: back to it, or in place of this
       // one from a cold deep link, never a second on top. `dismissTo` takes the href's params.
+      if (presentation === 'sheet') {
+        router.replace(href)
+        return
+      }
       if (isWideLayout && isHostRouteOf(href, hostId)) {
         router.dismissTo(href)
         return

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Modal } from 'react-native'
 import { BottomDrawerModalHostContext } from './bottom-drawer-modal-host-scope'
+import { useInlineDrawerPresentation } from './inline-drawer-presentation'
 
 type Props = {
   /** Omit to show the host while any drawer inside is requested, shown or closing. */
@@ -36,6 +37,7 @@ export function BottomDrawerModalHost({ visible, onRequestClose, children }: Pro
       backClaims.current = backClaims.current.filter((entry) => entry !== claim)
     }
   }, [])
+  const inline = useInlineDrawerPresentation()
   const selfShowing = visible === undefined
   const shown = selfShowing ? holds > 0 : visible
   const scope = useMemo(
@@ -48,6 +50,9 @@ export function BottomDrawerModalHost({ visible, onRequestClose, children }: Pro
     </BottomDrawerModalHostContext.Provider>
   )
 
+  if (inline) {
+    return shown ? content : null
+  }
   if (!shown) {
     // Why: a self-showing host keeps its drawers mounted while down so a request can raise it.
     // They remount inside the Modal, which is safe because none of them is showing anything yet.

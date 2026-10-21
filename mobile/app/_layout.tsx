@@ -240,6 +240,17 @@ export default function RootLayout() {
             <Stack.Screen name="connection-log" options={{ headerShown: false }} />
             <Stack.Screen name="about" options={{ headerShown: false }} />
             <Stack.Screen name="h" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="new-workspace/[hostId]"
+              options={{
+                headerShown: false,
+                presentation: 'formSheet',
+                sheetAllowedDetents: [0.85],
+                sheetGrabberVisible: true,
+                sheetCornerRadius: 16,
+                contentStyle: { backgroundColor: colors.bgBase }
+              }}
+            />
           </Stack>
         </SideSafeArea>
       </View>
