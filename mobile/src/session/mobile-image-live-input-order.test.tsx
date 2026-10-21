@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { TuiAgent } from '../../../src/shared/tui-agent'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcResponse } from '../transport/types'
 import type { TerminalLiveInputSender } from '../terminal/terminal-live-input-sender'
@@ -23,9 +24,9 @@ const ref = <T,>(current: T) => ({ current })
 const renderers: ReactTestRenderer[] = []
 const imagePayload = '\x1b[200~/tmp/orca-image.png\x1b[201~ '
 
-function fixture(title = 'Terminal') {
+function fixture(title = 'Terminal', imagePath = '/tmp/orca-image.png', launchAgent?: TuiAgent) {
   const agent = resolveMobileImageAttachmentAgent(
-    { type: 'terminal', id: 'tab-1', title, terminal: 'term-1', isActive: true },
+    { type: 'terminal', id: 'tab-1', title, terminal: 'term-1', isActive: true, launchAgent },
     null
   )
   const sends: Array<{ terminal: unknown; text: unknown; enter: unknown }> = []
@@ -44,7 +45,7 @@ function fixture(title = 'Terminal') {
         return ok({ receivedBase64Length: 4 })
       }
       if (method === 'clipboard.commitImageUpload') {
-        return ok('/tmp/orca-image.png')
+        return ok(imagePath)
       }
       if (method === 'terminal.send') {
         if (!params || typeof params !== 'object' || !('text' in params)) {
@@ -228,3 +229,16 @@ it.each(['picker', 'clipboard'] as const)(
     expect(test.sends).toEqual([{ terminal: 'term-1', text: imagePayload, enter: false }])
   }
 )
+
+it.each([
+  ['picker', undefined],
+  ['clipboard', undefined],
+  ['picker', 'codex'],
+  ['clipboard', 'codex']
+] as const)('%s escapes a spaced host temp path with agent %s', async (entry, launchAgent) => {
+  const test = fixture('Terminal', '/tmp/orca images/orca.png', launchAgent)
+  await test.attach(entry)
+  expect(test.sends).toEqual([
+    { terminal: 'term-1', text: '\x1b[200~/tmp/orca\\ images/orca.png\x1b[201~ ', enter: false }
+  ])
+})

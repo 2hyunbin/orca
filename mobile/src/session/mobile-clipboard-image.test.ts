@@ -159,12 +159,12 @@ describe('mobile clipboard image paste helpers', () => {
     )
   })
 
-  it('pastes the bare path into a terminal for Codex and for no identified agent', () => {
-    const bare = '\x1b[200~/tmp/or ca.png\x1b[201~'
-    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'codex')).toBe(bare)
-    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', null)).toBe(bare)
-    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', undefined)).toBe(bare)
-    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'unknown')).toBe(bare)
+  it('escapes spaced paths for Codex and unidentified terminals', () => {
+    const escaped = '\x1b[200~/tmp/or\\ ca.png\x1b[201~'
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'codex')).toBe(escaped)
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', null)).toBe(escaped)
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', undefined)).toBe(escaped)
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'unknown')).toBe(escaped)
     expect(buildMobileTerminalImagePastePayload('/tmp/\x1b.png', null)).toBe(
       '\x1b[200~/tmp/\u241b.png\x1b[201~'
     )
@@ -190,10 +190,10 @@ describe('mobile clipboard image paste helpers', () => {
     }
   )
 
-  it('preserves Windows paths with spaces for anonymous terminals', () => {
+  it('quotes Windows paths with spaces using the host path dialect', () => {
     expect(
       buildMobileTerminalImagePastePayload('C:\\Users\\Jane Doe\\Temp\\orca-paste.png', null)
-    ).toBe('\x1b[200~C:\\Users\\Jane Doe\\Temp\\orca-paste.png\x1b[201~')
+    ).toBe('\x1b[200~"C:\\Users\\Jane Doe\\Temp\\orca-paste.png"\x1b[201~')
   })
 })
 

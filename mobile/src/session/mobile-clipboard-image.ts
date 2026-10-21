@@ -1,3 +1,5 @@
+import { isWindowsAbsolutePathLike } from '../../../src/shared/cross-platform-path'
+import { formatImageDropPasteText } from '../../../src/shared/image-path-paste'
 import { formatAgentImagePath } from '../../../src/shared/agent-image-paste'
 import {
   computeMobileClipboardImageDownscale,
@@ -165,9 +167,14 @@ export function buildMobileTerminalImagePastePayload(
   agent?: string | null
 ): string {
   const id = agent?.trim()
-  return !id || id === 'unknown'
-    ? bracketMobileImagePaste(filePath)
-    : buildMobileImagePastePayload(filePath, id)
+  if (!id || id === 'unknown' || id === 'codex') {
+    const pasted = formatImageDropPasteText(
+      filePath,
+      isWindowsAbsolutePathLike(filePath) ? 'windows' : 'posix'
+    )
+    return bracketMobileImagePaste(pasted ?? filePath)
+  }
+  return buildMobileImagePastePayload(filePath, id)
 }
 
 function bracketMobileImagePaste(pasted: string): string {
