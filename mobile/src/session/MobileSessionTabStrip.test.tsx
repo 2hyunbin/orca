@@ -48,7 +48,9 @@ const visibleTabs = TAB_IDS.map((id) => ({
 }))
 
 // The real activation reveal runs, so switching tabs scrolls the strip as it does in the app.
-function mountStrip(terminals: Controller['terminals'] = []) {
+function mountStrip(
+  terminals: Pick<Controller['terminals'][number], 'handle' | 'agentIdentity'>[] = []
+) {
   const scrollTo = vi.fn()
   const setRenameTarget = vi.fn()
   const offsetRef = { current: 0 }
