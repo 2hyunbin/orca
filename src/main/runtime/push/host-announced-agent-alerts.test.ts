@@ -10,7 +10,10 @@ import type { ParsedAgentStatusPayload } from '../../../shared/agent-status-type
 import { encodePairingOffer } from '../../../shared/pairing'
 import { addEnvironmentFromPairingCode } from '../../../shared/runtime-environment-store'
 import { deriveRelayHostId } from '../mobile-cloud-relay/relay-http-client'
-import type { MobileNotificationDispatchEvent } from '../runtime-mobile-notification-controller'
+import {
+  RuntimeMobileNotificationController,
+  type MobileNotificationDispatchEvent
+} from '../runtime-mobile-notification-controller'
 import { createTerminalAgentMobileAttention } from '../terminal-agent-mobile-attention'
 import { resolveExecutionHostPushFingerprints } from './execution-host-push-fingerprints'
 import { createHarness, flush, registration } from './push-dispatcher.test-fixture'
@@ -34,7 +37,7 @@ const SETTINGS = {
 } as const
 
 /** Machine B: the hook server, the transition detector and the phone announcer, as the runtime wires them. */
-function createExecutionHost() {
+function createExecutionHost(controller?: RuntimeMobileNotificationController) {
   const server = new AgentHookServer()
   const detector = new AgentTransitionDetector({
     resolveTabWorktreeId: () => undefined,
@@ -48,7 +51,12 @@ function createExecutionHost() {
       readNotificationSettings: () => ({ ...SETTINGS, mutedNotificationSourceIds: [] }),
       readWorkspaceLabels: () => ({ repoLabel: 'repo', worktreeLabel: 'feat/x' }),
       isWorkspaceMuted: () => false,
-      dispatch: (event) => announced.push(event),
+      dispatch: (event) => {
+        announced.push(event)
+        controller?.dispatch(event)
+      },
+      retire: (worktreeId, paneKey, before) =>
+        controller?.retireTerminalAttention(worktreeId, paneKey, before),
       now: Date.now,
       schedule: (run) => {
         holds.add(run)
@@ -60,15 +68,23 @@ function createExecutionHost() {
   let clock = 10_000
   return {
     announced,
-    hook(row: Partial<ParsedAgentStatusPayload> & Pick<ParsedAgentStatusPayload, 'state'>) {
+    hook(
+      row: Partial<ParsedAgentStatusPayload> & Pick<ParsedAgentStatusPayload, 'state'>,
+      newTurn = false
+    ) {
       clock += 1_000
       vi.setSystemTime(clock)
-      server.ingestTerminalStatus({
+      const event = {
         paneKey: PANE,
         tabId: 'tab-a',
         worktreeId: WT,
-        payload: { prompt: 'ship it', agentType: 'claude', ...row }
-      })
+        payload: { prompt: 'ship it', agentType: 'claude' as const, ...row }
+      }
+      if (newTurn) {
+        server.ingestRemote({ ...event, source: 'claude', hookEventName: 'UserPromptSubmit' }, null)
+      } else {
+        server.ingestTerminalStatus(event)
+      }
       return detector.latestRow(PANE)!.stateStartedAt
     },
     /** The quiet window elapses. */
@@ -172,6 +188,53 @@ describe('host-announced agent alerts', () => {
     })
     await flush()
     expect(push.sends.map((send) => send.registrationIds)).toEqual([['reg-updated'], ['reg-older']])
+  })
+
+  it('retires the host delivery when its pane resumes, preserving a current background completion', async () => {
+    const controller = new RuntimeMobileNotificationController()
+    controller.configureDismissalStore(userDataPath)
+    const push = createHarness({
+      devices: [
+        { deviceId: 'phone', pushRegistration: registration({ filter: { hostAgentAlerts: true } }) }
+      ]
+    })
+    controller.onDispatched((event) => push.dispatcher.enqueue(event))
+    const host = createExecutionHost(controller)
+    try {
+      host.hook({ state: 'working' })
+      const askedAt = host.hook({ state: 'waiting' })
+      await flush()
+      const delivered = {
+        notificationId: idAt(askedAt)!,
+        notificationEpoch: controller.getEpoch(),
+        notificationSeq: 1
+      }
+      host.hook({ state: 'working' })
+      host.hook({ state: 'working', lastAssistantMessage: 'Still working' })
+      await flush()
+      expect(push.sends.map((send) => send.notification.kind)).toEqual([undefined, 'dismiss'])
+      expect(push.sends[1]?.notification).toMatchObject(delivered)
+      expect(controller.reconcileDismissedPushes([delivered])).toEqual([delivered])
+
+      const completedAt = Date.now() + 500
+      host.hook({ state: 'working', turnCompletedAt: completedAt })
+      host.hook({
+        state: 'working',
+        turnCompletedAt: completedAt,
+        lastAssistantMessage: 'Background work'
+      })
+      await flush()
+      expect(controller.getMissedSince(0).filter((event) => event.type === 'dismiss')).toHaveLength(
+        1
+      )
+      host.hook({ state: 'working' }, true)
+      expect(controller.getMissedSince(0).at(-1)).toMatchObject({
+        type: 'dismiss',
+        notificationId: idAt(completedAt)
+      })
+    } finally {
+      await controller.closeDismissals()
+    }
   })
 
   it('a desktop forwarding that news skips only phones that hear the host directly', async () => {

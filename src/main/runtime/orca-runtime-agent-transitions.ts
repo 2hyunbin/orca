@@ -21,6 +21,8 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
           this.store ? readStructuredAttentionWorkspaceLabels(this.store, { workspaceId }) : {},
         isWorkspaceMuted: (workspaceId) => this.isWorkspaceNotificationMuted(workspaceId),
         dispatch: (event) => this.mobileNotifications.dispatch(event),
+        retire: (worktreeId, paneKey, before) =>
+          this.mobileNotifications.retireTerminalAttention(worktreeId, paneKey, before),
         now: Date.now
       })
     )

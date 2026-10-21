@@ -1,4 +1,5 @@
 import { reserveNotificationCooldown } from '../../shared/notification-burst-cooldown'
+import { buildAgentNotificationId } from '../../shared/agent-notification-id'
 import type { AgentStatusState } from '../../shared/agent-status-types'
 import {
   agentSessionAttentionSubjectPrefix,
@@ -186,6 +187,22 @@ export class RuntimeMobileNotificationController {
   retireStructuredAttention(read: StructuredAttentionRead): void {
     for (const delivery of this.dismissalStore?.liveDeliveries() ?? []) {
       if (attentionOriginWasRead(delivery.structuredOrigin, read)) {
+        this.retireDelivery(delivery)
+      }
+    }
+  }
+
+  retireTerminalAttention(worktreeId: string, paneKey: string, before: number): void {
+    const prefix = buildAgentNotificationId({ worktreeId, paneKey, stateStartedAt: 0 })?.slice(
+      0,
+      -1
+    )
+    if (!prefix) {
+      return
+    }
+    for (const delivery of this.dismissalStore?.liveDeliveries(prefix) ?? []) {
+      // A background completion belongs to the current working run until a newer boundary arrives.
+      if (Number(delivery.notificationId.slice(prefix.length)) < before) {
         this.retireDelivery(delivery)
       }
     }

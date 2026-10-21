@@ -1,15 +1,5 @@
-// The execution host's own delivery of terminal agents' hook news ("finished", "needs input") to the
-// phones paired with it.
-//
-// WHY THE HOST: the agent's hooks report here, so a phone paired to this host (a headless server, or
-// a desktop whose window never shows the tab because a paired desktop started it in the background)
-// must not depend on some window holding the tab. A local window marks its own hook-lane request so
-// main does not push it twice; a paired desktop skips phones that say they hear from this host.
-//
-// THE WINDOW'S HOOK-LANE RULES, PORTED: a forwarding desktop drops its copy for phones this host
-// reaches, so this must announce at least what a window's hook lane announces. That is more than the
-// transition detector's news: a turn that finished while Claude keeps background work (`working` with
-// a new `turnCompletedAt`), a `done` with no `working` seen, and a turn the user stopped.
+// The execution host announces hook news even when no window holds the agent's tab.
+// Keep the window's completion rules until the host supplies one turn-end signal.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import { agentMainAgentVerdict } from '../../shared/agent-main-agent-verdict'
 import { buildAgentNotificationId } from '../../shared/agent-notification-id'
@@ -33,6 +23,7 @@ export type TerminalAgentMobileAttentionDeps = {
   readWorkspaceLabels: (workspaceId: string) => StructuredAttentionWorkspaceLabels
   isWorkspaceMuted: (workspaceId: string) => boolean
   dispatch: (event: MobileNotificationDispatchEvent) => void
+  retire: (worktreeId: string, paneKey: string, before: number) => void
   now: () => number
   schedule?: (run: () => void, delayMs: number) => () => void
 }
@@ -176,6 +167,9 @@ export function createTerminalAgentMobileAttention(
 
     if (row.state === 'working') {
       cancelHold(pane)
+      if (change.kind === 'observed') {
+        deps.retire(worktreeId, paneKey, Math.max(row.turnStartedAt ?? 0, row.stateStartedAt))
+      }
       const sawWorking = pane.sawWorking
       pane.sawWorking = true
       if (turnCompletedAt === null || turnCompletedAt === pane.lastTurnCompletedAt) {
