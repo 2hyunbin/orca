@@ -162,7 +162,7 @@ export function scheduleEditorChangedOnDiskMark(
     })
 }
 
-// Per-file generation so a newer echo-verify read supersedes an older one — overlapping reads can't clear each other's autosave gate or apply a stale verdict.
+// Per-file generation so a newer echo-verify read supersedes an older one — an overlapping read can't apply a stale verdict.
 const liveMoveVerifyGeneration = new Map<string, number>()
 let liveMoveVerifyCounter = 0
 
@@ -187,7 +187,6 @@ function resolveLiveMoveVerification(
   }
   liveMoveVerifyGeneration.delete(fileId)
   const state = useAppStore.getState()
-  state.setPendingLiveDiskVerification(fileId, false)
   const file = state.openFiles.find((candidateFile) => candidateFile.id === fileId)
   if (
     !file ||
@@ -228,7 +227,6 @@ export function verifyLatchedEditorMoveDestinations(
   )
 }
 
-// Autosave is suspended synchronously first so a write landing mid-read can't be overwritten before verification settles.
 export function scheduleEditorSelfMoveEchoVerification(
   target: EditorExternalWatchTarget,
   fileIds: string[],
@@ -245,7 +243,6 @@ export function scheduleEditorSelfMoveEchoVerification(
     }
     const generation = ++liveMoveVerifyCounter
     liveMoveVerifyGeneration.set(fileId, generation)
-    state.setPendingLiveDiskVerification(fileId, true)
     const candidate: LiveMoveVerifyCandidate = {
       fileId,
       baseline: file.lastKnownDiskSignature,

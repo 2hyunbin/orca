@@ -194,8 +194,6 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     if (!stillDirty) {
       nextState.clearEditorDraft(fileId)
     }
-    // Why: disk now holds contentToSave, so a pending restore verification is moot.
-    nextState.clearPendingDiskBaselineVerification(fileId)
     // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
     const savedFile = nextState.openFiles.find((openFile) => openFile.id === fileId)
     if (savedFile?.externalMutation === 'changed') {

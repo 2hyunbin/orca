@@ -28,7 +28,8 @@ export function stubGuardedDisk(
     if (diskPrecondition) {
       const diskConflict = compareDiskWritePrecondition(
         diskPrecondition,
-        files.get(filePath) ?? null
+        files.get(filePath) ?? null,
+        content
       )
       if (diskConflict) {
         return { ok: false, diskConflict }

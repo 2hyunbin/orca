@@ -13,11 +13,22 @@ import {
 describe('disk write precondition', () => {
   it('compares decoded disk text against the baseline signature', () => {
     const precondition = { expectedSignature: getDiskBaselineSignature('base') }
-    expect(compareDiskWritePrecondition(precondition, 'base')).toBeNull()
-    expect(compareDiskWritePrecondition(precondition, 'newer')).toBe('changed')
-    expect(compareDiskWritePrecondition(precondition, undefined)).toBe('changed')
-    expect(compareDiskWritePrecondition(precondition, null)).toBe('missing')
-    expect(compareDiskWritePrecondition({ ...precondition, allowMissing: true }, null)).toBeNull()
+    expect(compareDiskWritePrecondition(precondition, 'base', 'mine')).toBeNull()
+    expect(compareDiskWritePrecondition(precondition, 'newer', 'mine')).toBe('changed')
+    expect(compareDiskWritePrecondition(precondition, undefined, 'mine')).toBe('changed')
+    expect(compareDiskWritePrecondition(precondition, null, 'mine')).toBe('missing')
+    expect(
+      compareDiskWritePrecondition({ ...precondition, allowMissing: true }, null, 'mine')
+    ).toBeNull()
+  })
+
+  it('accepts a changed disk that already holds exactly the text being saved', () => {
+    const precondition = { expectedSignature: getDiskBaselineSignature('base') }
+    expect(compareDiskWritePrecondition(precondition, 'mine', 'mine')).toBeNull()
+    expect(compareDiskWritePrecondition(precondition, 'mine\r\n', 'mine\n')).toBe('changed')
+    expect(compareDiskWritePrecondition(precondition, undefined, 'mine')).toBe('changed')
+    // A replacement character may stand for bytes the decode dropped, so it proves nothing.
+    expect(compareDiskWritePrecondition(precondition, 'a�', 'a�')).toBe('changed')
   })
 
   it('treats anything but an explicit refusal from a host as a completed write', () => {

@@ -104,9 +104,13 @@ describe('checkLocalDiskWritePrecondition', () => {
     await writeFile(filePath, content)
 
     await expect(
-      checkLocalDiskWritePrecondition(filePath, {
-        expectedSignature: getDiskBaselineSignature(content)
-      })
+      checkLocalDiskWritePrecondition(
+        filePath,
+        {
+          expectedSignature: getDiskBaselineSignature(content)
+        },
+        'my save'
+      )
     ).resolves.toBeNull()
   })
 
@@ -115,9 +119,13 @@ describe('checkLocalDiskWritePrecondition', () => {
     await writeFile(filePath, 'agent')
 
     await expect(
-      checkLocalDiskWritePrecondition(filePath, {
-        expectedSignature: getDiskBaselineSignature('human')
-      })
+      checkLocalDiskWritePrecondition(
+        filePath,
+        {
+          expectedSignature: getDiskBaselineSignature('human')
+        },
+        'my save'
+      )
     ).resolves.toBe('changed')
   })
 
@@ -126,9 +134,13 @@ describe('checkLocalDiskWritePrecondition', () => {
     await writeFile(filePath, 'x'.repeat(100))
 
     await expect(
-      checkLocalDiskWritePrecondition(filePath, {
-        expectedSignature: getDiskBaselineSignature('short')
-      })
+      checkLocalDiskWritePrecondition(
+        filePath,
+        {
+          expectedSignature: getDiskBaselineSignature('short')
+        },
+        'my save'
+      )
     ).resolves.toBe('changed')
   })
 
@@ -138,9 +150,13 @@ describe('checkLocalDiskWritePrecondition', () => {
     fileRead.understateSizeBy = 10
 
     await expect(
-      checkLocalDiskWritePrecondition(filePath, {
-        expectedSignature: getDiskBaselineSignature('ab')
-      })
+      checkLocalDiskWritePrecondition(
+        filePath,
+        {
+          expectedSignature: getDiskBaselineSignature('ab')
+        },
+        'my save'
+      )
     ).resolves.toBe('changed')
   })
 
@@ -148,12 +164,52 @@ describe('checkLocalDiskWritePrecondition', () => {
     const filePath = join(base, 'gone.ts')
     const expectedSignature = getDiskBaselineSignature('was here')
 
-    await expect(checkLocalDiskWritePrecondition(filePath, { expectedSignature })).resolves.toBe(
-      'missing'
-    )
     await expect(
-      checkLocalDiskWritePrecondition(filePath, { expectedSignature, allowMissing: true })
+      checkLocalDiskWritePrecondition(filePath, { expectedSignature }, 'my save')
+    ).resolves.toBe('missing')
+    await expect(
+      checkLocalDiskWritePrecondition(
+        filePath,
+        { expectedSignature, allowMissing: true },
+        'my save'
+      )
     ).resolves.toBeNull()
+  })
+})
+
+describe('a changed disk that already holds the save', () => {
+  const baseline = { expectedSignature: getDiskBaselineSignature('original') }
+
+  it.each([
+    ['the same length as the baseline', 'origin2'],
+    ['a length the baseline cannot decode to', 'x'.repeat(100)],
+    ['multi-byte text', 'café ☕ 𝄞\r\n']
+  ])('passes when disk holds exactly the bytes being saved (%s)', async (_label, content) => {
+    const filePath = join(base, 'a.ts')
+    await writeFile(filePath, content)
+
+    await expect(checkLocalDiskWritePrecondition(filePath, baseline, content)).resolves.toBeNull()
+  })
+
+  it('compares bytes, so a BOM or a line-ending difference still refuses', async () => {
+    const filePath = join(base, 'a.ts')
+    await writeFile(filePath, '\uFEFFmine\n')
+    await expect(checkLocalDiskWritePrecondition(filePath, baseline, 'mine\n')).resolves.toBe(
+      'changed'
+    )
+    await writeFile(filePath, 'mine\r\n')
+    await expect(checkLocalDiskWritePrecondition(filePath, baseline, 'mine\n')).resolves.toBe(
+      'changed'
+    )
+  })
+
+  it('treats invalid UTF-8 on disk as different from its decoded text', async () => {
+    const filePath = join(base, 'a.ts')
+    await writeFile(filePath, Buffer.from([0x61, 0xff]))
+
+    await expect(checkLocalDiskWritePrecondition(filePath, baseline, 'a\uFFFD')).resolves.toBe(
+      'changed'
+    )
   })
 })
 
@@ -196,6 +252,12 @@ describe('local provider guarded write', () => {
       })
     ).resolves.toEqual({ ok: false, diskConflict: 'changed' })
     expect(await readFile(filePath, 'utf8')).toBe('edited')
+
+    await expect(
+      provider().writeFileWithDiskPrecondition(filePath, 'edited', {
+        expectedSignature: getDiskBaselineSignature('original')
+      })
+    ).resolves.toEqual({ ok: true })
   })
 
   it('lets only one of two concurrent saves from the same baseline write', async () => {
@@ -441,10 +503,14 @@ describe('local provider guarded write', () => {
     )
 
     await expect(
-      checkLocalDiskWritePrecondition(filePath, {
-        expectedSignature: getDiskBaselineSignature('original'),
-        allowMissing: true
-      })
+      checkLocalDiskWritePrecondition(
+        filePath,
+        {
+          expectedSignature: getDiskBaselineSignature('original'),
+          allowMissing: true
+        },
+        'my save'
+      )
     ).rejects.toThrow('EACCES')
   })
 

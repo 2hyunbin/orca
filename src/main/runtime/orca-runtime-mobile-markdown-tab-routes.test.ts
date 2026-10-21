@@ -271,6 +271,26 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
     expect(await readFile(readme, 'utf8')).toBe('# Changed on the server\n')
   })
 
+  it('saves on a server too old to check the disk when its changed disk already holds the text', async () => {
+    const { desktop, call } = await desktopOnServer('local', PRE_DISK_CHECK_SERVER)
+    const forward = call.getMockImplementation()!
+    call.mockImplementation(async (environmentId, method, params, ...rest) => {
+      if (method === 'status.get') {
+        await writeFile(readme, '# Phone\n')
+      }
+      return forward(environmentId, method, params, ...rest)
+    })
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+  })
+
   it('refuses a save whose server was re-paired after its first read, writing nothing', async () => {
     const { desktop, call, serverCalls, pairing } = await desktopOnServer()
     const forward = call.getMockImplementation()!

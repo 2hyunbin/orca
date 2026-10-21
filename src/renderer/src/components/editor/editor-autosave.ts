@@ -106,25 +106,13 @@ export function canAutoSaveOpenFile(file: OpenFile): boolean {
   return file.mode === 'edit' || (file.mode === 'diff' && file.diffSource === 'unstaged')
 }
 
-// Why: autosave must not resolve a changed-on-disk conflict by overwriting
-// the newer external content, nor write over a restored tab whose disk
-// baseline is still unverified (the conflict may simply not be marked YET).
+// Why: autosave must not resolve a changed-on-disk conflict by overwriting the newer external
+// content. An unmarked conflict needs no pause: every save is guarded, and a refusal sets the mark.
 // One predicate so the save-queue gate and the timer scheduler cannot drift.
 export function isAutosaveSuspendedForFile(
-  file: Pick<
-    OpenFile,
-    | 'externalMutation'
-    | 'pendingDiskBaselineVerification'
-    | 'pendingLiveDiskVerification'
-    | 'pendingOwnerMigration'
-  >
+  file: Pick<OpenFile, 'externalMutation' | 'pendingOwnerMigration'>
 ): boolean {
-  return (
-    file.externalMutation === 'changed' ||
-    file.pendingDiskBaselineVerification === true ||
-    file.pendingLiveDiskVerification === true ||
-    file.pendingOwnerMigration === true
-  )
+  return file.externalMutation === 'changed' || file.pendingOwnerMigration === true
 }
 
 export function normalizeAutoSaveDelayMs(value: unknown): number {

@@ -41,7 +41,8 @@ export async function diskSignatureOfUtf8(buffer: Buffer): Promise<string> {
 /** Reads the file the writer is about to replace and reports why it no longer matches the baseline. */
 export async function checkLocalDiskWritePrecondition(
   filePath: string,
-  precondition: FileWriteDiskPrecondition
+  precondition: FileWriteDiskPrecondition,
+  content: string
 ): Promise<FileWriteDiskConflict | null> {
   let opened: Awaited<ReturnType<typeof openLocalRegularFile>>
   try {
@@ -49,28 +50,41 @@ export async function checkLocalDiskWritePrecondition(
   } catch (error) {
     // Why the code alone: the message quotes the path, which can spell any error.
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return compareDiskWritePrecondition(precondition, null)
+      return compareDiskWritePrecondition(precondition, null, content)
     }
     throw error
   }
   const { handle, stats } = opened
   try {
+    const written = Buffer.from(content, 'utf8')
     const expectedLength = diskBaselineSignatureLength(precondition.expectedSignature)
-    // Why: the signature pins the decoded length, so a size it can't decode to skips reading a huge file.
-    if (expectedLength === null || !utf8ByteSizeCanDecodeToLength(stats.size, expectedLength)) {
+    // Why: the signature pins the decoded length, so a size neither it nor the save can match skips reading a huge file.
+    const baselineFits =
+      expectedLength !== null && utf8ByteSizeCanDecodeToLength(stats.size, expectedLength)
+    if (!baselineFits && stats.size !== written.length) {
       return 'changed'
     }
     let buffer: Buffer
     try {
-      buffer = await readLocalFileBounded(handle, expectedLength * 3, stats.size)
+      buffer = await readLocalFileBounded(
+        handle,
+        Math.max(baselineFits ? expectedLength * 3 : 0, written.length),
+        stats.size
+      )
     } catch (error) {
-      // Why: grown past what the baseline could decode from since the size check, so it changed.
+      // Why: grown past what the baseline or the save could match since the size check, so it changed.
       if (error instanceof FileTooLargeError) {
         return 'changed'
       }
       throw error
     }
-    return (await diskSignatureOfUtf8(buffer)) === precondition.expectedSignature ? null : 'changed'
+    // Why: disk already holds the exact bytes this save writes.
+    if (buffer.equals(written)) {
+      return null
+    }
+    return baselineFits && (await diskSignatureOfUtf8(buffer)) === precondition.expectedSignature
+      ? null
+      : 'changed'
   } finally {
     await handle.close()
   }
@@ -151,7 +165,7 @@ export async function writeLocalTextFileWithDiskPrecondition(
     return FILE_WRITE_OK
   }
   const compareAndWrite = async (): Promise<FileWriteResult> => {
-    const diskConflict = await checkLocalDiskWritePrecondition(filePath, precondition)
+    const diskConflict = await checkLocalDiskWritePrecondition(filePath, precondition, content)
     if (diskConflict) {
       return { ok: false, diskConflict }
     }

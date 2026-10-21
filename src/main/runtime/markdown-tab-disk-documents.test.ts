@@ -58,7 +58,7 @@ function makeHost(disk: string, draft?: string, saved: Partial<PersistedOpenFile
         content: string,
         precondition: { expectedSignature: string }
       ) => {
-        if (compareDiskWritePrecondition(precondition, state.disk)) {
+        if (compareDiskWritePrecondition(precondition, state.disk, content)) {
           return { ok: false as const, diskConflict: 'changed' as const }
         }
         state.disk = content

@@ -32,7 +32,6 @@ import {
 } from './editor-external-watch-overflow'
 
 const setExternalMutation = vi.fn()
-const setPendingDiskBaselineVerification = vi.fn()
 
 function tab(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -47,7 +46,7 @@ function tab(id: string, extra: Record<string, unknown> = {}): Record<string, un
 }
 
 function setTabs(...openFiles: Record<string, unknown>[]): void {
-  harness.state = { openFiles, setExternalMutation, setPendingDiskBaselineVerification }
+  harness.state = { openFiles, setExternalMutation }
 }
 
 const target = { worktreeId: 'wt-1', worktreePath: '/repo' }
@@ -110,16 +109,16 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     expect(setExternalMutation).not.toHaveBeenCalledWith('a.ts', 'deleted')
   })
 
-  it('hands dirty tabs to the disk check instead of reloading them', () => {
+  it('leaves dirty tabs to their guarded save, neither pausing nor reloading them', () => {
     setTabs(tab('dirty.ts', { isDirty: true, lastKnownDiskSignature: 'sig' }))
     reconcileEditorTabsAfterOverflow(target, true)
 
-    expect(setPendingDiskBaselineVerification).toHaveBeenCalledWith('dirty.ts', true)
+    expect(setExternalMutation).not.toHaveBeenCalled()
     expect(harness.runtimePathsExist).not.toHaveBeenCalled()
     expect(harness.scheduleReload).not.toHaveBeenCalled()
   })
 
-  it('a storm overflow reloads clean tabs without probing, pausing autosave or dropping combined bodies', () => {
+  it('a storm overflow reloads clean tabs without probing or dropping combined bodies', () => {
     setTabs(
       tab('a.md', { externalMutation: 'deleted' }),
       tab('dirty.ts', { isDirty: true, lastKnownDiskSignature: 'sig' })
@@ -129,7 +128,6 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     expect(harness.scheduleReload.mock.calls).toEqual([[notification('a.md')]])
     expect(setExternalMutation).toHaveBeenCalledWith('a.md', null)
     expect(harness.runtimePathsExist).not.toHaveBeenCalled()
-    expect(setPendingDiskBaselineVerification).not.toHaveBeenCalled()
     expect(harness.forgetCombinedBodies).not.toHaveBeenCalled()
   })
 

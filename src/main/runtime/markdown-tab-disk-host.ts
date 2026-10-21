@@ -238,20 +238,20 @@ async function writeFileOnEnvironment(
 /** For a server that would write unguarded: a read that cannot prove the disk fails the save. */
 async function diskConflictOnServer(
   pinned: (method: string, params: unknown) => Promise<unknown>,
-  address: { worktree: string; relativePath: string },
+  write: { worktree: string; relativePath: string; content: string },
   precondition: FileWriteDiskPrecondition
 ): Promise<FileWriteDiskConflict | null> {
   let read: unknown
   try {
     read = await pinned('files.read', {
-      worktree: address.worktree,
-      relativePath: address.relativePath
+      worktree: write.worktree,
+      relativePath: write.relativePath
     })
   } catch (error) {
     return diskConflictFromReadFailure(precondition, error)
   }
   if (!isRecord(read) || typeof read.content !== 'string' || read.truncated === true) {
-    return compareDiskWritePrecondition(precondition, undefined)
+    return compareDiskWritePrecondition(precondition, undefined, write.content)
   }
-  return compareDiskWritePrecondition(precondition, read.content)
+  return compareDiskWritePrecondition(precondition, read.content, write.content)
 }

@@ -58,7 +58,11 @@ function pasteIntoGuardedTab(pasted: string) {
   const files = new Map([[PATH, 'base']])
   const writeFile = vi.fn(async (args: GuardedWriteArgs) => {
     const conflict = args.diskPrecondition
-      ? compareDiskWritePrecondition(args.diskPrecondition, files.get(args.filePath) ?? null)
+      ? compareDiskWritePrecondition(
+          args.diskPrecondition,
+          files.get(args.filePath) ?? null,
+          args.content
+        )
       : null
     if (conflict) {
       return { ok: false, diskConflict: conflict }

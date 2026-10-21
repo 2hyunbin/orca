@@ -196,6 +196,22 @@ describe('writeRuntimeFile disk precondition', () => {
     expect(writeCalls()).toHaveLength(0)
   })
 
+  it('saves through an older host whose changed disk already holds the text', async () => {
+    serveHost({ enforcesPrecondition: false, diskContent: 'edited' })
+    runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: true }))
+
+    const result = await writeRuntimeFile(
+      remoteContext,
+      '/remote/repo/file.ts',
+      'edited',
+      undefined,
+      precondition
+    )
+
+    expect(result).toEqual({ ok: true })
+    expect(writeCalls()).toHaveLength(1)
+  })
+
   it('reports a confirmed-missing file to an autosave through an older host', async () => {
     serveHost({ enforcesPrecondition: false })
 

@@ -135,7 +135,8 @@ async function readWholeTextFile(
 async function checkWebDiskPreconditionFromClient(
   session: WebFileMutationSession,
   file: ResolvedWebRuntimeFile,
-  precondition: FileWriteDiskPrecondition
+  precondition: FileWriteDiskPrecondition,
+  content: string
 ): Promise<FileWriteDiskConflict | null> {
   let preview: unknown
   try {
@@ -148,7 +149,7 @@ async function checkWebDiskPreconditionFromClient(
     if (error instanceof Error && error.message === 'file_too_large') {
       // Why undefined on failure: a host that can't page it keeps the earlier answer, 'changed'.
       const text = await readWholeTextFile(session, file).catch(() => undefined)
-      return compareDiskWritePrecondition(precondition, text)
+      return compareDiskWritePrecondition(precondition, text, content)
     }
     return diskConflictFromReadFailure(precondition, error)
   }
@@ -160,7 +161,7 @@ async function checkWebDiskPreconditionFromClient(
     typeof preview.content === 'string'
       ? preview.content
       : undefined
-  return compareDiskWritePrecondition(precondition, text)
+  return compareDiskWritePrecondition(precondition, text, content)
 }
 
 export function createWebFileMutationMethods(
@@ -214,7 +215,8 @@ export function createWebFileMutationMethods(
             const diskConflict = await checkWebDiskPreconditionFromClient(
               session,
               file,
-              diskPrecondition
+              diskPrecondition,
+              content
             )
             return diskConflict ? { ok: false, diskConflict } : { method: 'files.write', params }
           },

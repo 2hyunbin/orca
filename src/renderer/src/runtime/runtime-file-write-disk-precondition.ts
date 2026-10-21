@@ -111,7 +111,8 @@ export async function writeRemoteFileIfUnchanged(
           const diskConflict = await checkDiskPreconditionFromClient(
             context,
             filePath,
-            precondition
+            precondition,
+            content
           )
           return diskConflict ? { result: { ok: false, diskConflict } } : { params }
         },
@@ -148,7 +149,8 @@ export async function writeRemoteFileIfUnchanged(
 async function checkDiskPreconditionFromClient(
   context: RemoteFileContext,
   filePath: string,
-  precondition: FileWriteDiskPrecondition
+  precondition: FileWriteDiskPrecondition,
+  content: string
 ): Promise<FileWriteDiskConflict | null> {
   let current: { content: string; isBinary: boolean }
   try {
@@ -156,5 +158,9 @@ async function checkDiskPreconditionFromClient(
   } catch (error) {
     return diskConflictFromReadFailure(precondition, error)
   }
-  return compareDiskWritePrecondition(precondition, current.isBinary ? undefined : current.content)
+  return compareDiskWritePrecondition(
+    precondition,
+    current.isBinary ? undefined : current.content,
+    content
+  )
 }

@@ -19,10 +19,11 @@ export type FileWriteResult = { ok: true } | { ok: false; diskConflict: FileWrit
 
 export const FILE_WRITE_OK: FileWriteResult = { ok: true }
 
-/** `current` is the decoded disk text, `null` when missing, `undefined` when not comparable text. */
+/** `current` is the decoded disk text, `null` when missing, `undefined` when not comparable text; `content` is the text being saved. */
 export function compareDiskWritePrecondition(
   precondition: FileWriteDiskPrecondition,
-  current: string | null | undefined
+  current: string | null | undefined,
+  content: string
 ): FileWriteDiskConflict | null {
   if (current === null) {
     return precondition.allowMissing === true ? null : 'missing'
@@ -30,7 +31,11 @@ export function compareDiskWritePrecondition(
   if (current === undefined) {
     return 'changed'
   }
-  return getDiskBaselineSignature(current) === precondition.expectedSignature ? null : 'changed'
+  if (getDiskBaselineSignature(current) === precondition.expectedSignature) {
+    return null
+  }
+  // Why: disk already holds what this save writes; U+FFFD may stand for bytes a decode dropped, so it proves nothing.
+  return current === content && !current.includes('\uFFFD') ? null : 'changed'
 }
 
 /** Why: old hosts answer `{ ok: true }` or nothing; only an explicit `ok: false` is a refusal. */
@@ -79,7 +84,7 @@ export function diskConflictFromReadFailure(
   error: unknown
 ): FileWriteDiskConflict | null {
   if (isConfirmedFileNotFoundError(error)) {
-    return compareDiskWritePrecondition(precondition, null)
+    return precondition.allowMissing === true ? null : 'missing'
   }
   // Why: the baseline was read whole, so content too big to read now cannot match it.
   if (isFileTooLargeToReadError(error)) {
