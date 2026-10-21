@@ -11,7 +11,7 @@ import { runtimeVisibleFolderWorkspaces } from '../runtime-visible-catalog'
 import type {
   ResolvedWorktreeRepoScans,
   ResolvedWorktreeScanJoin
-} from '../workspaces/workspace-catalog'
+} from '../workspaces/resolved-worktree-scan-join'
 import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
 import { ProducerRevision } from './producer-revision'
 import { WorkspaceGitIdentity } from './workspace-git-identity'
@@ -48,7 +48,8 @@ type Joined = {
   revision: number
   all: ResolvedWorktree[]
   rows: WorkspaceRowsSnapshot['rows']
-  authoritativeIds: ResolvedWorktreeScanJoin['authoritativeIds']
+  gitRunById: ResolvedWorktreeScanJoin['gitRunById']
+  scannedRepoKeys: ResolvedWorktreeScanJoin['scannedRepoKeys']
 }
 
 /**
@@ -63,6 +64,7 @@ export class WorkspaceRowsProducer {
   // What the last join's visibility filter read; null until a join or settings save.
   private visibilityKey: string | null = null
   private joined: Joined | null = null
+  private readonly askedRepoKeys = new Set<string>()
   private readonly scans: CachedScan<ResolvedWorktreeRepoScans>
 
   constructor(private readonly sources: WorkspaceRowsSources) {
@@ -87,9 +89,8 @@ export class WorkspaceRowsProducer {
         domains === undefined ||
         WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))
       if (metadata || (domains.includes('settings') && this.visibilitySettingsChanged())) {
-        // Urgent: the join is synchronous, so the write publishes now; git follows in a later one.
+        // Urgent, and no rescan: metadata joins at read, so the write publishes now from the cache.
         this.revision.bump({ urgent: true })
-        this.scans.request()
       }
     })
   }
@@ -133,11 +134,14 @@ export class WorkspaceRowsProducer {
       return this.joined
     }
     if (!store) {
-      return { revision, all: [], rows: {}, authoritativeIds: new Set() }
+      return { revision, all: [], rows: {}, gitRunById: new Map(), scannedRepoKeys: new Set() }
     }
     this.visibilityKey = visibilitySettingsKey(store)
     const listing = this.sources.join(scans)
-    if (listing.unscannedRepoCount > 0) {
+    // Once per new repo: a repo no scan lists (it failed, or vanished mid-scan) must not loop.
+    const unasked = [...listing.unscannedRepoKeys].filter((key) => !this.askedRepoKeys.has(key))
+    if (unasked.length > 0) {
+      unasked.forEach((key) => this.askedRepoKeys.add(key))
       this.scans.request()
     }
     const all = listing.worktrees.map((worktree) => {
@@ -161,7 +165,8 @@ export class WorkspaceRowsProducer {
       revision,
       all,
       rows: Object.fromEntries(rows),
-      authoritativeIds: listing.authoritativeIds
+      gitRunById: listing.gitRunById,
+      scannedRepoKeys: listing.scannedRepoKeys
     }
     return this.joined
   }
@@ -171,11 +176,13 @@ export class WorkspaceRowsProducer {
     const listing = this.join()
     const { store } = this.sources
     if (listing && store) {
-      const clears = this.gitIdentity.observeScan(
-        listing.all.filter((worktree) =>
-          listing.authoritativeIds.has(composeWorktreeHostIdentity(worktree.hostId, worktree.id))
+      const scanned = listing.all.flatMap((worktree) => {
+        const gitRun = listing.gitRunById.get(
+          composeWorktreeHostIdentity(worktree.hostId, worktree.id)
         )
-      )
+        return gitRun === undefined ? [] : [{ ...worktree, gitRun }]
+      })
+      const clears = this.gitIdentity.observeScan(scanned, listing.scannedRepoKeys)
       for (const { target, updates } of clears) {
         store.setWorktreeMeta(target, updates)
       }

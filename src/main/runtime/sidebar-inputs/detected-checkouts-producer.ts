@@ -45,8 +45,13 @@ export class DetectedCheckoutsProducer {
     )
   }
 
-  ready(): Promise<void> {
-    return this.listings.ready()
+  /** Listens and starts the first listing; a reader shows nothing for this domain until it lands. */
+  watch(listener: () => void): () => void {
+    const detach = this.revision.onChange(listener)
+    if (!this.listings.current) {
+      this.listings.request()
+    }
+    return detach
   }
 
   /** Null before the first listing applies. */

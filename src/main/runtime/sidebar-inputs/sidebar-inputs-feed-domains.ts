@@ -62,7 +62,7 @@ const SIDEBAR_VIEW_UI_FIELDS = [
   'agentActivityDisplayMode'
 ] as const satisfies readonly (keyof PersistedUIState)[]
 
-const DESKTOP_WRITE_DOMAINS = [...WORKTREE_METADATA_DOMAINS, 'settings']
+const DESKTOP_WRITE_DOMAINS = [...WORKTREE_METADATA_DOMAINS, 'settings', 'ui']
 
 export type SidebarInputsFeedSources = {
   facts: OrcaRuntimeWithSidebarTemporal
@@ -148,8 +148,8 @@ export function sidebarInputsFeedDomains(
       // The imported card and new-external inbox inputs; no reader yet.
       name: 'detected',
       read: () => facts.detectedCheckouts.snapshot(),
-      watch: (changed) => facts.detectedCheckouts.revision.onChange(changed),
-      ready: () => facts.detectedCheckouts.ready()
+      // No ready: a phone's first read never waits on every repo's listing.
+      watch: (changed) => facts.detectedCheckouts.watch(() => changed())
     },
     {
       // Live terminal content per workspace; no reader yet.
@@ -197,10 +197,8 @@ export function sidebarInputsFeedDomains(
         const store = sources.store()
         const detaches = [
           watchCatalog(changed),
-          store?.onUIChanged?.(() => changed()),
           store?.onWorkspaceSessionWritten?.(() => changed()),
-          store?.onSettingsChanged?.(() => changed()),
-          // Pins, settings (saved with or without notifying), and full saves: repos, folders, SSH targets.
+          // Pins, settings (saved with or without notifying), UI, and full saves (repos, folders, SSH).
           store?.onStateWritten?.((domains) => {
             if (
               domains === undefined ||

@@ -71,7 +71,7 @@ async function host() {
       detectedCheckouts: {
         revision: revisions.detected,
         snapshot: () => ({}),
-        ready: async () => {}
+        watch: (listener: () => void) => revisions.detected.onChange(listener)
       },
       workspaceLiveContent: { revision: revisions.liveContent, snapshot: () => ({}) }
     } as unknown as SidebarInputsFeedSources['facts'],

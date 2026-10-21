@@ -10,20 +10,18 @@ import {
   resolveLocalProjectRuntimeForRepo,
   resolveLocalProjectRuntimesForRepos
 } from '../../project-runtime-git-options'
-import { getAgentLaunchPlatformForRepo } from '../runtime-agent-launch-resolution'
 import {
-  joinRepoWorktreeRows,
   resolveRepoWorktreeRows,
   resolveScopedWorktreeIdRow,
-  scanRepoWorktreeRows,
-  type RepoWorktreeRowDeps,
-  type RepoWorktreeRowsScan
+  type RepoWorktreeRowDeps
 } from '../repo-worktree-row-resolution'
-import { isFolderRepo } from '../../../shared/repo-kind'
 import {
-  composeWorktreeHostIdentity,
-  type HostScopedWorktreeKey
-} from '../../../shared/worktree/host-qualified-identity'
+  joinResolvedWorktreeScans,
+  platformsByRepoId,
+  scanResolvedWorktreeRepos,
+  type ResolvedWorktreeRepoScans,
+  type ResolvedWorktreeScanJoin
+} from './resolved-worktree-scan-join'
 import { projectResolvedWorktreeLineage } from '../../../shared/resolved-worktree-lineage'
 import { listRuntimeFolderWorkspaces } from '../runtime-worktree-filesystem'
 import type { ExecutionHostId } from '../../../shared/execution-host'
@@ -40,20 +38,6 @@ import { withoutInFlightWorktreeCreates } from '../../worktree-create-in-flight'
 import { preserveFolderUpgradeWorktreePath } from '../../folder-upgrade-worktree-path'
 import type { RuntimeWorktreeScanCache } from '../orca-runtime-core'
 import { resolveWorktreeScanCacheTtlMs } from '../runtime-worktree-scan-cache'
-
-/** Per-repo scans by repo and execution host, since one repo id can live on two hosts. */
-export type ResolvedWorktreeRepoScans = Map<string, RepoWorktreeRowsScan>
-
-export type ResolvedWorktreeScanJoin = ResolvedWorktreeSnapshot & {
-  /** Git repos the scans predate, which list no rows until scanned. */
-  unscannedRepoCount: number
-  /** Rows a scan that reached a verdict listed; a stalled scan's stored rows carry no branch. */
-  authoritativeIds: ReadonlySet<HostScopedWorktreeKey>
-}
-
-function resolvedWorktreeRepoScanKey(repo: Repo): string {
-  return `${getRepoExecutionHostId(repo)}\0${repo.id}`
-}
 
 export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFile {
   protected abstract refreshRepoWorktreeScan(
@@ -126,7 +110,7 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     const metaById = this.store.getAllWorktreeMeta() ?? {}
     const repos = this.store.getRepos()
     const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
-    const platformByRepoId = this.platformsByRepoId(repos, projectRuntimeByRepoId)
+    const platformByRepoId = platformsByRepoId(repos, projectRuntimeByRepoId)
     const deps = this.repoWorktreeRowDeps()
     const perRepoWorktrees = await Promise.all(
       repos.map(
@@ -138,74 +122,16 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     return { worktrees, platformByRepoId }
   }
 
-  private platformsByRepoId(
-    repos: readonly Repo[],
-    projectRuntimeByRepoId: ReadonlyMap<string, ProjectExecutionRuntimeResolution>
-  ): Map<string, NodeJS.Platform> {
-    return new Map(
-      repos.map((repo) => [
-        repo.id,
-        getAgentLaunchPlatformForRepo(repo, projectRuntimeByRepoId.get(repo.id))
-      ])
-    )
-  }
-
   /** Every git repo's scan, with no metadata: `joinResolvedWorktreeScans` adds that at read. */
-  protected async scanResolvedWorktreeRepos(): Promise<ResolvedWorktreeRepoScans> {
-    const scans: ResolvedWorktreeRepoScans = new Map()
-    if (!this.store) {
-      return scans
-    }
-    const repos = this.store.getRepos().filter((repo) => !isFolderRepo(repo))
-    const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
-    const deps = this.repoWorktreeRowDeps()
-    await Promise.all(
-      repos.map(async (repo) => {
-        scans.set(
-          resolvedWorktreeRepoScanKey(repo),
-          await scanRepoWorktreeRows(deps, repo, projectRuntimeByRepoId)
-        )
-      })
+  protected scanResolvedWorktreeRepos(): Promise<ResolvedWorktreeRepoScans> {
+    return scanResolvedWorktreeRepos(this.store, this.repoWorktreeRowDeps.bind(this), (key) =>
+      this.worktreeScanCache.get(key)
     )
-    return scans
   }
 
-  /**
-   * The fleet listing from cached scans and the store as it is now, synchronously. A git repo the
-   * scans predate lists no rows yet and is counted, so its owner can scan again.
-   */
+  /** The fleet listing from cached scans and the store as it is now, synchronously. */
   protected joinResolvedWorktreeScans(scans: ResolvedWorktreeRepoScans): ResolvedWorktreeScanJoin {
-    if (!this.store) {
-      return {
-        worktrees: [],
-        platformByRepoId: new Map(),
-        unscannedRepoCount: 0,
-        authoritativeIds: new Set()
-      }
-    }
-    const metaById = this.store.getAllWorktreeMeta() ?? {}
-    const repos = this.store.getRepos()
-    const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
-    const platformByRepoId = this.platformsByRepoId(repos, projectRuntimeByRepoId)
-    const deps = this.repoWorktreeRowDeps()
-    let unscannedRepoCount = 0
-    const authoritativeIds = new Set<HostScopedWorktreeKey>()
-    const perRepoWorktrees = repos.map((repo) => {
-      const scan = scans.get(resolvedWorktreeRepoScanKey(repo)) ?? null
-      if (!scan && !isFolderRepo(repo)) {
-        unscannedRepoCount += 1
-      }
-      const rows = joinRepoWorktreeRows(deps, repo, scan, metaById)
-      if (scan?.ok) {
-        for (const row of rows) {
-          authoritativeIds.add(composeWorktreeHostIdentity(row.hostId, row.id))
-        }
-      }
-      return rows
-    })
-    const lineageById = this.store.getAllWorktreeLineage?.() ?? {}
-    const worktrees = projectResolvedWorktreeLineage(perRepoWorktrees.flat(), lineageById)
-    return { worktrees, platformByRepoId, unscannedRepoCount, authoritativeIds }
+    return joinResolvedWorktreeScans(this.store, this.repoWorktreeRowDeps.bind(this), scans)
   }
 
   /** Bind the runtime-owned scan cache and folder-workspace stamping into the row resolver. */

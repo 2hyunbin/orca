@@ -11,8 +11,9 @@ import { TestPhone } from './sidebar-inputs-feed.test-fixture'
 import type {
   ResolvedWorktreeRepoScans,
   ResolvedWorktreeScanJoin
-} from '../workspaces/workspace-catalog'
+} from '../workspaces/resolved-worktree-scan-join'
 import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
+import { getRepoHostIdentityForParts } from '../../../shared/repo-host-identity'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
@@ -104,6 +105,9 @@ function setup(repos: Repo[] = [localRepo, sshRepo]) {
     platformByRepoId: new Map([['repo-1', 'linux']])
   }
   let scans = 0
+  // A new object per scan that really ran git; a cached scan repeats the last one.
+  let gitRun: object = {}
+  let freshGitRuns = true
   let scanGate: Promise<void> | null = null
   // The real listing cache and visibility filter run; only the scan and merge are stubbed.
   class Probe extends OrcaRuntimeService {
@@ -114,6 +118,7 @@ function setup(repos: Repo[] = [localRepo, sshRepo]) {
     protected override async scanResolvedWorktreeRepos(): Promise<ResolvedWorktreeRepoScans> {
       scans += 1
       await scanGate
+      gitRun = freshGitRuns ? {} : gitRun
       return new Map()
     }
 
@@ -122,9 +127,12 @@ function setup(repos: Repo[] = [localRepo, sshRepo]) {
       return {
         ...listing,
         worktrees: [...listing.worktrees],
-        unscannedRepoCount: 0,
-        authoritativeIds: new Set(
-          listing.worktrees.map((row) => composeWorktreeHostIdentity(row.hostId, row.id))
+        unscannedRepoKeys: new Set(),
+        gitRunById: new Map(
+          listing.worktrees.map((row) => [composeWorktreeHostIdentity(row.hostId, row.id), gitRun])
+        ),
+        scannedRepoKeys: new Set(
+          listing.worktrees.map((row) => getRepoHostIdentityForParts(row.repoId, row.hostId ?? ''))
         )
       }
     }
@@ -143,6 +151,10 @@ function setup(repos: Repo[] = [localRepo, sshRepo]) {
     runtime,
     setWorktreeMeta,
     scans: () => scans,
+    /** Whether the next scans run git again or answer from the scan cache. */
+    setFreshGitRuns: (fresh: boolean) => {
+      freshGitRuns = fresh
+    },
     /** Holds every scan until the returned release runs. */
     holdScans(): () => void {
       let release = (): void => {}
@@ -321,6 +333,7 @@ describe('WorkspaceRowsProducer', () => {
     const detach = rows.revision.onChange(() => {})
     listing.worktrees[0] = {
       ...listing.worktrees[0],
+      instanceId: 'i-1',
       displayNameMode: 'automatic',
       linkedPR: 7
     }
@@ -375,5 +388,37 @@ describe('WorkspaceRowsProducer', () => {
     )
     expect(elapsedMs).toBeLessThan(20)
     phone.disconnect()
+  })
+
+  it('keeps a PR linked after a branch switch that a cached rescan did not see yet', async () => {
+    const { runtime, rows, listing, write, setWorktreeMeta, setFreshGitRuns } = setup()
+    const detach = rows.revision.onChange(() => {})
+    listing.worktrees[0] = { ...listing.worktrees[0], instanceId: 'i-1' }
+    await rows.settled()
+    // `git checkout -b b`; the scan cache still answers with branch a.
+    setFreshGitRuns(false)
+    listing.worktrees[0] = { ...listing.worktrees[0], linkedPR: 9 }
+    write(['worktreeMeta'])
+    runtime.emit({ type: 'worktreesChanged', repoId: 'repo-1' })
+    await rows.settled()
+    // Git runs again and reports the new branch: the new branch's PR stays.
+    setFreshGitRuns(true)
+    listing.worktrees[0] = { ...listing.worktrees[0], branch: 'refs/heads/b' }
+    runtime.emit({ type: 'worktreesChanged', repoId: 'repo-1' })
+    await rows.settled()
+    expect(setWorktreeMeta).not.toHaveBeenCalled()
+    detach()
+  })
+
+  it('scans nothing for a metadata write', async () => {
+    const { rows, write, scans } = setup()
+    const detach = rows.revision.onChange(() => {})
+    await rows.settled()
+    const before = scans()
+    write(['worktreeMeta'])
+    write(undefined)
+    await rows.settled()
+    expect(scans()).toBe(before)
+    detach()
   })
 })
