@@ -5,10 +5,13 @@ import { existsSync } from 'node:fs'
 import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { runProcess, spawnProcess } from '@orca/process-host'
+import { Duplex } from 'node:stream'
+import { runProcess } from '@orca/process-host'
 import * as processHost from '@orca/process-host'
 import { collectProviderExecCode, prepareProviderExecCode } from './provider-exec-code'
 import { readPosixProcessRow } from './provider-process-row-read'
+import { spawnProviderExecControl } from './provider-exec-control'
+import { providerExecChannel } from './provider-exec-channel'
 
 // These tests execute only our internal C fixture; they never start an agent or Electron.
 describe.skipIf(process.platform === 'win32')('provider executable retention', () => {
@@ -36,6 +39,24 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
     await rm(root, { recursive: true, force: true })
   })
 
+  it('accepts terminal acknowledgement followed by EOF in the same callback', async () => {
+    const endpoint = new Duplex({
+      read() {},
+      write(_chunk, _encoding, callback) {
+        callback()
+      }
+    })
+    const lost = vi.fn()
+    const channel = providerExecChannel(endpoint, lost)
+    const reply = channel.next()
+    channel.send('RETIRE fixture', 'RETIRED fixture')
+    endpoint.emit('data', Buffer.from('RETIRED fixture\n'))
+    endpoint.emit('end')
+    expect(await reply).toBe('RETIRED fixture')
+    expect(lost).not.toHaveBeenCalled()
+    channel.stop()
+  })
+
   it('retains old code through source removal, owner close and inherited shell use, then collects it', async () => {
     const cache = join(root, 'cache')
     await mkdir(cache)
@@ -59,15 +80,25 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
     ]).finally(() => noexec.mockRestore())
     expect(first.executable.startsWith(cache)).toBe(true)
     const second = await prepareProviderExecCode({ executable: binary, sha256 }, [cache])
-    const holder = spawnProcess({
-      program: '/bin/sh',
-      args: ['-c', 'printf READY; IFS= read -r finish'],
-      stdio: ['pipe', 'pipe', 'pipe', 'ignore', 'ignore', 'ignore', first.holdFd()]
+    const lost = vi.fn()
+    const control = spawnProviderExecControl(
+      { command: '/bin/sh', args: ['-c', 'printf READY; IFS= read -r finish; printf FINAL'] },
+      first,
+      { closeRequest: 'stdin-end-and-sigterm', onProtectionLost: lost }
+    )
+    const holder = control.child
+    const readyOutput = once(holder.stdout, 'data')
+    const outputEnded = once(holder.stdout, 'end')
+    let output = ''
+    holder.stdout.on('data', (chunk) => {
+      output += chunk
     })
-    const exited = once(holder, 'exit')
     try {
       expect(holder.pid).toBeGreaterThan(1)
-      expect(String((await once(holder.stdout, 'data'))[0])).toBe('READY')
+      expect((await control.startup).kind).toBe('released')
+      expect(String((await readyOutput)[0])).toBe('READY')
+      expect(control.rootVerdict).toBe('live')
+      expect(await control.execStatus).toEqual({ kind: 'closed' })
       await rm(sourcePath)
       await first.close()
       expect(() => first.holdFd()).toThrow('stopped')
@@ -91,15 +122,45 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
       })
       expect(usable.code).toBe(3) // A descriptor naming a different copy is refused.
       holder.stdin.end('done\n')
-      await exited
+      expect(await control.rootExit).toEqual({ code: 0, signal: null, processless: false })
+      expect(control.rootVerdict).toBe('exited')
+      await outputEnded
+      expect(output).toBe('READYFINAL')
+      // Physical exit did not retire the independently held watcher/code.
+      await collectProviderExecCode(codeRoot, second.executable, second.holdFd())
+      expect(existsSync(first.executable)).toBe(true)
+      expect((await control.operation('PROBE')).group).toBe('exited')
+      await control.finish('RETIRE')
       await collectProviderExecCode(codeRoot, second.executable, second.holdFd())
       expect(existsSync(first.executable)).toBe(false)
       expect(existsSync(stage)).toBe(false)
       expect(existsSync(second.executable)).toBe(true)
+      expect(lost).not.toHaveBeenCalled()
+      for (const missing of [false, true]) {
+        const probe = spawnProviderExecControl(
+          {
+            command: missing ? join(root, 'missing-provider') : '/bin/sh',
+            args: missing ? [] : ['-c', 'exit 127']
+          },
+          second,
+          { closeRequest: 'stdin-end', onProtectionLost: lost }
+        )
+        expect((await probe.startup).kind).toBe('released')
+        expect((await probe.rootExit).code).toBe(127)
+        const status = await probe.execStatus
+        const failure = status.kind === 'failed' ? status : null
+        expect(status.kind).toBe(missing ? 'failed' : 'closed')
+        expect(failure?.stage ?? null).toBe(missing ? 'exec' : null)
+        expect(failure && 'code' in failure.error ? failure.error.code : null).toBe(
+          missing ? 'ENOENT' : null
+        )
+        await probe.finish('RETIRE')
+      }
     } finally {
+      control.disconnect()
       if (holder.exitCode === null && holder.signalCode === null) {
         holder.kill('SIGKILL')
-        await exited
+        await control.rootExit
       }
       await first.close()
       await second.close()
