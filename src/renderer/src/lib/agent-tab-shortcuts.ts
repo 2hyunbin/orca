@@ -13,7 +13,7 @@ import {
   type WorktreeAgentInventoryState
 } from '@/lib/agent-detection-target-inventory'
 import { type AgentLaunchRouteStore, worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
-import { readAgentLaunchChoice } from '@/lib/host-chat-program'
+import { agentChoiceMayOpenAsChat } from '@/lib/host-chat-program'
 
 export type BoundAgentTabAction = {
   agent: TuiAgent
@@ -61,15 +61,12 @@ export function resolveDefaultAgentForNewTab(args: {
   chatIn?: { store: AgentLaunchRouteStore; worktreeId: string }
 }): TuiAgent | null {
   const preferred = args.defaultTuiAgent === 'blank' ? null : args.defaultTuiAgent
-  const { chatIn, detectedAgentIds } = args
+  const { chatIn } = args
+  const workspace = chatIn && worktreeLaunchWorkspace(chatIn.worktreeId)
   const chosenUsable = (agent: TuiAgent): boolean =>
     !!chatIn &&
-    readAgentLaunchChoice(
-      chatIn.store,
-      agent,
-      worktreeLaunchWorkspace(chatIn.worktreeId),
-      detectedAgentIds ?? null
-    ).chatEligibility !== 'no'
+    !!workspace &&
+    agentChoiceMayOpenAsChat(chatIn.store, agent, workspace, args.detectedAgentIds ?? null)
   return pickTuiAgent(preferred, args.detectedAgentIds ?? [], args.disabledTuiAgents, chosenUsable)
 }
 

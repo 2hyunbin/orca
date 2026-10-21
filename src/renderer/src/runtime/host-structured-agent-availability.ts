@@ -52,10 +52,8 @@ function availabilityKey(
 }
 
 function open(key: string, resource: Resource, target: RuntimeClientTarget): void {
-  let settled = (): void => {}
-  resource.first = new Promise<void>((resolve) => {
-    settled = resolve
-  })
+  const { promise, resolve: settled } = Promise.withResolvers<void>()
+  resource.first = promise
   let unsubscribe: (() => void) | null = null
   const close = (): void => {
     resource.close = null

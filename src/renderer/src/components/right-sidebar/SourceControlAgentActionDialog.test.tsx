@@ -63,6 +63,7 @@ import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-cap
 import { SourceControlAgentActionDialog } from './SourceControlAgentActionDialog'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
+import { runtimeStatusEntry } from '@/runtime/server-layout-frames.test-fixture'
 let container: HTMLDivElement
 let root: Root
 let initialState: AppState
@@ -290,16 +291,8 @@ describe('SourceControlAgentActionDialog', () => {
     for (const runtimeId of ['r1', 'r2']) {
       await flushEffects()
       expect(container.textContent).not.toContain('Launch agent')
-      const status = {
-        runtimeId,
-        rendererGraphEpoch: 0,
-        graphStatus: 'ready' as const,
-        authoritativeWindowId: null,
-        liveTabCount: 0,
-        liveLeafCount: 0
-      }
-      const runtimeStatusByEnvironmentId = new Map([['env-1', { status, checkedAt: 1 }]])
-      act(() => useAppStore.setState({ runtimeStatusByEnvironmentId }))
+      const statuses = new Map([['env-1', runtimeStatusEntry(runtimeId, false)]])
+      act(() => useAppStore.setState({ runtimeStatusByEnvironmentId: statuses }))
     }
     await vi.waitFor(() => expect(container.textContent).toContain('Launch agent'))
     await flushEffects()

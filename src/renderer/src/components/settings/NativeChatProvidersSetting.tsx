@@ -118,15 +118,14 @@ function ProviderDetail(props: {
       ariaLabel={translate('settings.chat.providers.toggleLabel', 'Open {{value0}} as a chat', {
         value0: props.label
       })}
-      onChange={() => {
-        const next = !on
-        return enqueueProviderUpdate({
+      onChange={() =>
+        enqueueProviderUpdate({
           getSettings: () => useAppStore.getState().settings,
           fallbackSettings: props.settings,
           updateSettings: props.updateSettings,
-          buildUpdate: (latest) => buildNativeChatProviderUpdate(latest, props.agent, next)
+          buildUpdate: (latest) => buildNativeChatProviderUpdate(latest, props.agent, !on)
         })
-      }}
+      }
     />
   )
   const summary = (line: React.ReactNode): React.JSX.Element => (

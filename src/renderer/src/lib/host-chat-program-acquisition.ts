@@ -22,13 +22,12 @@ import {
   readAgentInventoryForWorktree
 } from './agent-detection-target-inventory'
 
-export function useChatProgramFactsVersion(): number {
-  return useSyncExternalStore(
+export const useChatProgramFactsVersion = (): number =>
+  useSyncExternalStore(
     subscribeChatProgramFacts,
     readChatProgramFactsVersion,
     readChatProgramFactsVersion
   )
-}
 
 /** A hold owns one resolved resource; its consumer owns reconciliation. */
 export function holdChatProgramFacts(context: ReturnType<typeof resolveChatProgramContext>) {
@@ -49,11 +48,8 @@ export function holdChatProgramFacts(context: ReturnType<typeof resolveChatProgr
   )
   const health = context.hostCapabilities.includes(AVAILABILITY)
   const release = health ? acquireHostStructuredAgentAvailability(owner) : (): void => {}
-  return {
-    catalog,
-    first: () => (health ? firstHostStructuredAgentAvailability(owner) : catalog),
-    release
-  }
+  const first = () => (health ? firstHostStructuredAgentAvailability(owner) : catalog)
+  return { catalog, first, release }
 }
 
 export function useChatProgramFacts(workspace: ProspectiveWorkspace, active = true): void {
@@ -96,13 +92,11 @@ export async function acquireAgentLaunchChoices(
   let lease = holdChatProgramFacts(bound)
   let changed = Promise.withResolvers<void>()
   let failure: AgentLaunchChoiceCancelled | undefined
-  let cancel = (): void => {}
-  const cancelled = new Promise<never>((_, reject) => {
-    cancel = () => {
-      failure = new AgentLaunchChoiceCancelled('Agent launch owner changed or action cancelled')
-      reject(failure)
-    }
-  })
+  const { promise: cancelled, reject: rejectCancelled } = Promise.withResolvers<never>()
+  const cancel = (): void => {
+    failure = new AgentLaunchChoiceCancelled('Agent launch owner changed or action cancelled')
+    rejectCancelled(failure)
+  }
   const check = (): void => {
     const next = resolveChatProgramContext(useAppStore.getState(), workspace)
     const nextTarget = workspace.worktreeId
@@ -133,15 +127,13 @@ export async function acquireAgentLaunchChoices(
   const stopRetirement = onRuntimeEnvironmentsRetired(
     (ids) => bound.environmentId && ids.includes(bound.environmentId) && cancel()
   )
-  let expire = (): void => {}
-  const expired = new Promise<null>((resolve) => {
-    expire = () => {
-      ended = true
-      lease.release()
-      changed.resolve()
-      resolve(null)
-    }
-  })
+  const { promise: expired, resolve: resolveExpired } = Promise.withResolvers<null>()
+  const expire = (): void => {
+    ended = true
+    lease.release()
+    changed.resolve()
+    resolveExpired(null)
+  }
   const timer = setTimeout(expire, 5_000)
   signal?.addEventListener('abort', cancel, { once: true })
   try {

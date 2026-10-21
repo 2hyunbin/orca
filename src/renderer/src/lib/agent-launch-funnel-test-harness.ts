@@ -76,7 +76,6 @@ export function createLaunchFunnelStore(): {
     markNativeChatLaunchPromptFailed: vi.fn(),
     setTabAgentLaunchPane: vi.fn(),
     closeTab: vi.fn(),
-    // A declined chat reads its host's agent inventory before choosing a terminal.
     readLocalAgentInventory: () => ({ ids: null, state: 'pending' as const }),
     runtimeDetectedAgentIds: {},
     runtimeAgentInventoryOutcome: () => 'pending' as const,

@@ -5,7 +5,7 @@ import type { AppState } from '@/store/types'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { isTuiAgentEnabled, pickTuiAgent } from '../../../shared/tui-agent-selection'
 import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
-import { readAgentLaunchChoice } from '@/lib/host-chat-program'
+import { agentChoiceMayOpenAsChat } from '@/lib/host-chat-program'
 import { buildDirectWorkItemAgentStartupPlan } from '@/lib/launch-work-item-direct-agent'
 import type { AgentSessionLaunchPlan } from '@/lib/agent-session-launch-plan'
 import {
@@ -81,8 +81,7 @@ export async function resolveDirectWorkItemAgent(args: {
       unavailable:
         !isTuiAgentEnabled(args.agentOverride, store.settings?.disabledTuiAgents) ||
         (!detected.includes(args.agentOverride) &&
-          readAgentLaunchChoice(store, args.agentOverride, workspace, detected).chatEligibility ===
-            'no')
+          !agentChoiceMayOpenAsChat(store, args.agentOverride, workspace, detected))
     }
   }
   return {
@@ -90,7 +89,7 @@ export async function resolveDirectWorkItemAgent(args: {
       store.settings?.defaultTuiAgent,
       detected,
       store.settings?.disabledTuiAgents,
-      (chosen) => readAgentLaunchChoice(store, chosen, workspace, detected).chatEligibility !== 'no'
+      (chosen) => agentChoiceMayOpenAsChat(store, chosen, workspace, detected)
     ),
     unavailable: false
   }

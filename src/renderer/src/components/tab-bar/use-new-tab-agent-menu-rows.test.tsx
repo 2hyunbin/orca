@@ -205,14 +205,9 @@ it('picks a host-run chat without its CLI, but never its terminal', () => {
     })
   )
   const { model, selectionFor } = hook.result.current
-  expect(model.state === 'settled' && model.rows).toContainEqual({
-    kind: 'chat',
-    agent: 'codex',
-    executionHostId: 'local'
-  })
-  expect(selectionFor('codex', 'chat')).toMatchObject({
-    ready: true,
-    choice: { route: 'structured-native-chat' }
-  })
+  const rows = model.state === 'settled' ? model.rows : []
+  expect(rows).toContainEqual({ kind: 'chat', agent: 'codex', executionHostId: 'local' })
+  const chat = selectionFor('codex', 'chat')
+  expect(chat.ready && chat.choice?.route).toBe('structured-native-chat')
   expect(selectionFor('codex', 'terminal').ready).toBe(false)
 })

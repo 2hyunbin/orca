@@ -52,7 +52,6 @@ function hostContext(
     environmentId,
     runtimeId,
     pairingRevision,
-    identity,
     target: structuredAgentSessionTargetForHost(host.executionHostId),
     revision: JSON.stringify([
       identity,
@@ -86,13 +85,9 @@ export function readChatProgram(
   detected: readonly TuiAgent[] | null
 ): ChatProgramObservation {
   const context = hostContext(store, host)
-  const snapshot = readHostStructuredAgentAvailability(
-    context.executionHostId,
-    context.runtimeId,
-    context.pairingRevision
-  )
+  const { executionHostId, runtimeId, pairingRevision, hostCapabilities: capabilities } = context
+  const snapshot = readHostStructuredAgentAvailability(executionHostId, runtimeId, pairingRevision)
   const published = snapshot.state === 'received' ? snapshot.byAgent.get(agent) : undefined
-  const capabilities = context.hostCapabilities
   // A publishing host's roster answers; an older host's absent field falls to inference below.
   if (published?.chatProgram || (capabilities?.includes(AVAILABILITY) && !published)) {
     return (
@@ -104,8 +99,8 @@ export function readChatProgram(
           : 'unknown')
     )
   }
-  const catalog = readHostStructuredAgentsForRuntime(context.executionHostId, context.runtimeId)
-  return capabilities === null || context.runtimeId === undefined
+  const catalog = readHostStructuredAgentsForRuntime(executionHostId, runtimeId)
+  return capabilities === null || runtimeId === undefined
     ? 'unlearned'
     : detected?.includes(agent)
       ? 'available'
@@ -113,7 +108,7 @@ export function readChatProgram(
           capabilities.includes(INSTALL)
         ? 'installable'
         : !catalog && capabilities.includes(CATALOG)
-          ? hostStructuredAgentsReadFailed(context.executionHostId, context.runtimeId)
+          ? hostStructuredAgentsReadFailed(executionHostId, runtimeId)
             ? 'unknown'
             : 'unlearned'
           : detected === null
@@ -165,6 +160,8 @@ export const agentChoiceOpensAsChat = (...args: ChoiceArgs): boolean =>
   readAgentLaunchChoice(...args).chatEligibility === 'opens'
 export const agentChoicePending = (...args: ChoiceArgs): boolean =>
   readAgentLaunchChoice(...args).chatEligibility === 'unresolved'
+export const agentChoiceMayOpenAsChat = (...args: ChoiceArgs): boolean =>
+  readAgentLaunchChoice(...args).chatEligibility !== 'no'
 export function chosenAgentChatUnlearned(
   store: AgentLaunchRouteStore,
   chosen: TuiAgent | 'blank' | null | undefined,
@@ -180,15 +177,10 @@ export function agentsOfferedForLaunch(
   workspace: ProspectiveWorkspace,
   detected: readonly TuiAgent[] | null
 ): TuiAgent[] {
-  const context = resolveChatProgramContext(store, workspace)
-  return [
-    ...new Set([
-      ...(detected ?? []),
-      ...chatProviderAgents(context.executionHostId, store.runtimeStatusByEnvironmentId).filter(
-        (agent) => agentChoiceOpensAsChat(store, agent, workspace, detected)
-      )
-    ])
-  ]
+  const { executionHostId } = resolveChatProgramContext(store, workspace)
+  const chats = chatProviderAgents(executionHostId, store.runtimeStatusByEnvironmentId)
+  const opens = chats.filter((agent) => agentChoiceOpensAsChat(store, agent, workspace, detected))
+  return [...new Set([...(detected ?? []), ...opens])]
 }
 
 let factsVersion = 0

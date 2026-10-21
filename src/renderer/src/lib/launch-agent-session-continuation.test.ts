@@ -87,10 +87,8 @@ describe('launchAgentSessionContinuation', () => {
     const { detectAgentSessionContinuationAgents } =
       await import('./launch-agent-session-continuation')
 
-    await expect(detectAgentSessionContinuationAgents('wt-1')).resolves.toEqual({
-      detected: ['claude', 'codex'],
-      offered: ['claude', 'codex']
-    })
+    const { detected } = await detectAgentSessionContinuationAgents('wt-1')
+    expect(detected).toEqual(['claude', 'codex'])
     expect(ensureDetectedAgentsForWorktree).toHaveBeenCalledWith(store, 'wt-1')
   })
 

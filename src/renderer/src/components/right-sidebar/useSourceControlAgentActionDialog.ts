@@ -76,13 +76,10 @@ export function useSourceControlAgentActionDialog({
   const disabledAgents = settings?.disabledTuiAgents
   const connectionUnavailable = Boolean(worktreeId && connectionId === undefined)
 
+  const executionHostId = repo ? getRepoExecutionHostId(repo) : undefined
   const { detecting, refreshAgents, refreshLaunchableAgents, launchableAgents } =
     useSourceControlLaunchableAgents({
-      target: {
-        worktreeId,
-        repoId,
-        executionHostId: repo ? getRepoExecutionHostId(repo) : undefined
-      },
+      target: { worktreeId, repoId, executionHostId },
       connectionId,
       connectionUnavailable,
       active: open

@@ -4,11 +4,7 @@ import {
   resolveSourceControlActionRecipe
 } from './source-control-ai'
 import type { SourceControlActionId, SourceControlActionRecipe } from './source-control-ai-actions'
-import {
-  filterEnabledTuiAgents,
-  isTuiAgentEnabled,
-  TUI_AGENT_AUTO_PICK_ORDER
-} from './tui-agent-selection'
+import { filterEnabledTuiAgents, TUI_AGENT_AUTO_PICK_ORDER } from './tui-agent-selection'
 import type { GlobalSettings } from './global-settings-types'
 import type { Repo } from './repo-types'
 import type { TuiAgent } from './tui-agent'
@@ -30,7 +26,8 @@ export function pickSourceControlLaunchAgent(args: {
   const enabledAgents = filterEnabledTuiAgents(args.detectedAgents, args.disabledAgents)
   const usable = (agent: TuiAgent): boolean =>
     enabledAgents.includes(agent) ||
-    (isTuiAgentEnabled(agent, args.disabledAgents) && args.chosenOpensAsChat?.(agent) === true)
+    (filterEnabledTuiAgents([agent], args.disabledAgents).length > 0 &&
+      args.chosenOpensAsChat?.(agent) === true)
   if (args.savedAgent && usable(args.savedAgent)) {
     return args.savedAgent
   }

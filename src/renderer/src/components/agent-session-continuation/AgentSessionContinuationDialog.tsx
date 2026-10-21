@@ -100,15 +100,9 @@ export function AgentSessionContinuationDialog({
   const hasFullContext = request ? hasFullAgentSessionContext(request.source) : false
 
   useEffect(() => {
-    if (!open || !request) {
-      return
-    }
-    const abort = new AbortController()
+    const abort = open && request ? new AbortController() : null
     abortRef.current = abort
-    return () => {
-      abort.abort()
-      abortRef.current = null
-    }
+    return () => abort?.abort()
   }, [open, request])
 
   const currentPick = pick?.request === request && pickable.includes(pick.agent) ? pick : null

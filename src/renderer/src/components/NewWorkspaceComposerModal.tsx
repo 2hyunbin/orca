@@ -179,10 +179,9 @@ function QuickTabBody({
   const launchWorkspace =
     cardProps.agentRows?.target.workspace ?? composerLaunchWorkspace(cardProps)
   const offeredAgentIds = useAgentsOfferedForLaunch(launchWorkspace, cardProps.detectedAgentIds)
-  const launchState = useAppStore.getState()
   const detected = cardProps.detectedAgentIds ? [...cardProps.detectedAgentIds] : null
   const choicePending = (agent: TuiAgent): boolean =>
-    agentChoicePending(launchState, agent, launchWorkspace, detected)
+    agentChoicePending(useAppStore.getState(), agent, launchWorkspace, detected)
   // Pending discovery preserves the existing catalog fallback; current facts settle the default.
   const preferredQuickAgent = pickQuickWorkspaceAgent(
     settings?.defaultTuiAgent,

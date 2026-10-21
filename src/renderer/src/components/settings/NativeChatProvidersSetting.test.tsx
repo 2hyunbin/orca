@@ -37,22 +37,19 @@ it('reserves the switch footprint through unknown and failed reads, then shows m
   observation.current = { ...active, snapshot: { kind: 'readFailed' } }
   view.rerender(surface())
   expect(view.queryByRole('switch')).toBeNull()
+  const installed = {
+    agent: 'grok',
+    revision: 1,
+    available: true,
+    version: '1',
+    installedVersion: '1',
+    installedCurrent: true,
+    operation: null
+  } as const
   for (const source of ['managed', 'external'] as const) {
     observation.current = {
       ...active,
-      snapshot: {
-        kind: 'known',
-        state: {
-          agent: 'grok',
-          revision: 1,
-          available: true,
-          version: '1',
-          installedVersion: '1',
-          installedCurrent: true,
-          source,
-          operation: null
-        }
-      }
+      snapshot: { kind: 'known', state: { ...installed, source } }
     }
     view.rerender(surface())
     expect(view.getByRole('switch').getAttribute('aria-checked')).toBe('true')

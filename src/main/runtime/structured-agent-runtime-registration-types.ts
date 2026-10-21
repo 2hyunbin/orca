@@ -78,8 +78,7 @@ export type StructuredAgentLaunchCheck = {
 }
 
 export type StructuredAgentChatProgram = {
-  /** The binary a chat start from `env` runs, resolved as the launch resolves it, spawning nothing;
-   *  throws the launch's own pre-spawn refusal. */
+  /** Resolves the binary a chat start from `env` runs, spawning nothing; throws launch refusals. */
   resolve: StructuredAgentLaunchCheck['resolveLaunch']
   /** Whether Orca can download this program on this host when none is found. */
   installable?: () => boolean

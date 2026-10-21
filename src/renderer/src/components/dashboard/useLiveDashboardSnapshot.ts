@@ -73,7 +73,6 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
   // Why: launch options read only this view, so any route input change rebuilds them.
   const launchRouteStore = useAppStore(selectAgentLaunchRouteView)
-  // Launch options read host chat facts held outside the store.
   useEffect(() => {
     const holds = createDashboardChatProgramHolds()
     const reconcile = (): void => holds.reconcile(useAppStore.getState())

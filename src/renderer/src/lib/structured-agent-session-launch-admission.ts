@@ -156,8 +156,7 @@ export async function openDeclinedStructuredLaunchTerminal(args: {
   }
 }
 
-/** A declined chat falls back to its agent's terminal only where that CLI may be installed: a chat
- *  can be offered without it, and its terminal would only fail to start. */
+/** A declined chat falls back to its agent's terminal only where that CLI may be installed. */
 export function declinedTerminalCanOpen(
   agent: TuiAgent,
   worktreeId: string,

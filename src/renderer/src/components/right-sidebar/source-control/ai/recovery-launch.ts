@@ -23,7 +23,7 @@ import type {
 } from '../../../../../../shared/source-control-ai-actions'
 import { buildSourceControlRecoveryAgentCommandInput } from '../../../../../../shared/source-control-recovery-agent-command'
 import { translate } from '@/i18n/i18n'
-import { readAgentLaunchChoice } from '@/lib/host-chat-program'
+import { agentChoiceMayOpenAsChat } from '@/lib/host-chat-program'
 import { worktreeLaunchWorkspace } from '@/lib/agent-launch-route-input'
 
 type SourceControlAiLaunchStoreSnapshot = Pick<AppState, 'settings'> & WorktreeAgentInventoryState
@@ -144,8 +144,7 @@ export async function launchSourceControlRecoveryAgentWithDefault({
 
   // A saved or default agent may open as a chat without its CLI.
   const opensAsChat = (agent: TuiAgent): boolean =>
-    readAgentLaunchChoice(useAppStore.getState(), agent, workspace, choices.detected)
-      .chatEligibility !== 'no'
+    agentChoiceMayOpenAsChat(useAppStore.getState(), agent, workspace, choices.detected)
   const savedAgent = readSourceControlLaunchRecipeAgentId(savedRecipe)
   if (
     savedAgent &&

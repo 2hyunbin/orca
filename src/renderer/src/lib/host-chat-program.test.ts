@@ -30,7 +30,8 @@ const CAPS = [CHAT, CATALOG, INSTALL, HEALTH, MODE]
 const workspace = { kind: 'git-worktree', runtimeEnvironmentId: 'B' } as const
 const host = { executionHostId: 'runtime:B', hostCapabilities: CAPS }
 const initial = useAppStore.getState()
-const status = (runtimeId = 'r1') => ({
+const status = (runtimeId = 'r1', generation?: number) => ({
+  ...(generation === undefined ? {} : { connectionGeneration: generation }),
   status: {
     runtimeId,
     capabilities: CAPS,
@@ -42,12 +43,8 @@ const status = (runtimeId = 'r1') => ({
   },
   checkedAt: 1
 })
-const catalog = {
-  agents: [
-    { agent: 'antigravity', capabilities: {}, managedRuntime: true },
-    { agent: 'grok', capabilities: {} }
-  ]
-}
+const managed = { agent: 'antigravity', capabilities: {}, managedRuntime: true }
+const catalog = { agents: [managed, { agent: 'grok', capabilities: {} }] }
 const frame = (agent: string, chatProgram: string) => ({
   type: 'availability',
   agents: [{ agent, state: 'available', chatProgram }]
@@ -77,14 +74,13 @@ it('acquires inactive B independently of detection, preserves unknown truth and 
   await flush()
   expect(rpc.subscribe.mock.calls[0][0]).toEqual({ kind: 'environment', environmentId: 'B' })
   expect(agentChoicePending(useAppStore.getState(), 'antigravity', workspace, [])).toBe(true)
-  expect(
-    resolveQuickWorkspaceAgentSelection({
-      quickAgentOverride: 'antigravity',
-      preferredQuickAgent: null,
-      detectedAgentIds: [],
-      selectedChoiceUnresolved: true
-    }).quickAgentOverride
-  ).toBe('antigravity')
+  const quick = resolveQuickWorkspaceAgentSelection({
+    quickAgentOverride: 'antigravity',
+    preferredQuickAgent: null,
+    detectedAgentIds: [],
+    selectedChoiceUnresolved: true
+  })
+  expect(quick.quickAgentOverride).toBe('antigravity')
   rpc.subscribe.mock.calls[0][3].onEvent(frame('grok', 'available'))
   catalogReply.resolve(catalog)
   expect((await action).offered).toEqual(['grok'])
@@ -107,9 +103,7 @@ it('releases a pending stream at the chat deadline while slow ordinary detection
   await flush()
   await vi.advanceTimersByTimeAsync(5000)
   expect(settled).not.toHaveBeenCalled()
-  useAppStore.setState({
-    runtimeStatusByEnvironmentId: new Map([['B', { ...status(), connectionGeneration: 1 }]])
-  })
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status('r1', 1)]]) })
   expect(rpc.subscribe).toHaveBeenCalledOnce()
   const unsubscribe = vi.fn()
   handle.resolve({ unsubscribe })
@@ -130,9 +124,7 @@ it('keeps one still-detecting action on the current open through learning/reconn
   const handlers = rpc.subscribe.mock.calls.at(-1)![3]
   handlers.onEvent(frame('grok', 'available'))
   handlers.onClose()
-  useAppStore.setState({
-    runtimeStatusByEnvironmentId: new Map([['B', { ...status(), connectionGeneration: 1 }]])
-  })
+  useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status('r1', 1)]]) })
   detect.resolve([])
   await flush()
   expect(rpc.subscribe).toHaveBeenCalledTimes(2)

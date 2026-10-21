@@ -33,10 +33,7 @@ type LaunchAgentSessionContinuationArgs = {
 }
 
 /** Detected agents, then those that open as a chat on the workspace's host without their CLI. */
-export async function detectAgentSessionContinuationAgents(
-  worktreeId: string,
-  signal?: AbortSignal
-) {
+export function detectAgentSessionContinuationAgents(worktreeId: string, signal?: AbortSignal) {
   return acquireAgentLaunchChoices(
     worktreeLaunchWorkspace(worktreeId),
     () => ensureDetectedAgentsForWorktree(useAppStore.getState(), worktreeId),

@@ -3,8 +3,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import { getLocalAgentPreflightContext } from '@/lib/local-preflight-context'
 import { localAgentInventoryContextKey } from '@/lib/local-preflight-context-key'
 
-/** A context's list and how its latest attempt ended: one in flight is pending, and a list kept
- *  through a failed refresh is not a success. */
+/** A context's list and latest attempt outcome; a list kept through a failed refresh is failed. */
 export function readLocalAgentInventoryOutcome(
   state: AppState,
   worktreeId: string | null | undefined,

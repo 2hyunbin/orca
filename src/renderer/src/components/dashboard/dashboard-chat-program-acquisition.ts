@@ -12,10 +12,8 @@ export function createDashboardChatProgramHolds() {
     reconcile(state: AppState): void {
       const next = new Set<string>()
       const routeStore = selectAgentLaunchRouteView(state)
-      for (const { worktree } of collectActiveDashboardWorkspaces(state, false).slice(
-        0,
-        DASHBOARD_MAX_LAUNCH_WORKTREES
-      )) {
+      const shown = collectActiveDashboardWorkspaces(state, false)
+      for (const { worktree } of shown.slice(0, DASHBOARD_MAX_LAUNCH_WORKTREES)) {
         const context = resolveChatProgramContext(routeStore, worktreeLaunchWorkspace(worktree.id))
         const key = context.revision
         next.add(key)

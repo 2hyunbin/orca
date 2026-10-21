@@ -4,10 +4,7 @@
 
 import { homedir } from 'node:os'
 import { delimiter, isAbsolute } from 'node:path'
-import type {
-  AgentSessionAgentAvailability,
-  AgentSessionChatProgram
-} from '../../shared/agent-session-agent-availability'
+import type { AgentSessionAgentAvailability } from '../../shared/agent-session-agent-availability'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import type { GlobalSettings } from '../../shared/global-settings-types'
@@ -74,7 +71,7 @@ async function observeHostAgent(
 async function observeChatProgram(
   { definition: { agent }, chatProgram }: StructuredAgentRuntimeMetadata,
   runtime: HealthRuntime
-): Promise<AgentSessionChatProgram> {
+): Promise<NonNullable<AgentSessionAgentAvailability['chatProgram']>> {
   if (!chatProgram) {
     return 'unknown'
   }
@@ -95,8 +92,8 @@ async function observeChatProgram(
   return chatProgram.installable?.() ? 'installable' : 'missing'
 }
 
-/** The runtime's snapshot: taken after a fresh shell capture, initially and on launch settings,
- *  agent Refresh or a managed runtime install. No reader gates it, so a later one reads it at once. */
+/** The runtime's snapshot: taken after a fresh shell capture, initially and on launch settings or
+ *  agent Refresh or runtime install. No reader gates it, so a later one reads it at once. */
 export function installStructuredAgentAvailability(
   store: Pick<RuntimeStore, 'onSettingsChanged'> | null,
   runtime: HealthRuntime

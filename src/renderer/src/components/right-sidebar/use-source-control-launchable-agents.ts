@@ -12,17 +12,13 @@ import { agentsOfferedForLaunch } from '@/lib/host-chat-program'
 
 type LaunchTarget = Parameters<typeof sourceControlLaunchWorkspace>[0]
 
-export function useSourceControlLaunchableAgents({
-  target,
-  connectionId,
-  connectionUnavailable,
-  active
-}: {
+export function useSourceControlLaunchableAgents(args: {
   target: LaunchTarget
   connectionId: string | null | undefined
   connectionUnavailable: boolean
   active: boolean
 }) {
+  const { target, connectionId, connectionUnavailable, active } = args
   const { worktreeId, repoId, executionHostId } = target
   const [detecting, setDetecting] = useState(false)
   const workspace = sourceControlLaunchWorkspace(target)
