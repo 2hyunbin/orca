@@ -1,4 +1,5 @@
-// The rules a layout commit's merge adds to A2's: keep rows main lacks, and a running terminal.
+// The rules a layout commit's merge adds to A2's (keep rows main lacks, and a running terminal),
+// and the exit rule it shares with the window's publication path.
 import { describe, expect, it } from 'vitest'
 import type { RuntimeMobileSessionTerminalTab } from '../../../shared/runtime-mobile-session-tab-contracts'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
@@ -71,7 +72,7 @@ describe('a layout commit merged into held rows (layout-owner build)', () => {
     ).toMatchObject({ ptyId: 'pty-old' })
   })
 
-  it('keeps the held terminal when main binds one the host saw exit', () => {
+  it("window publication: the window's live terminal stands when main binds one the host saw exit", () => {
     const published = held([terminal('t::1', 'pty-live')])
     const projected = rows([terminal('t::1', 'pty-retired')])
 
