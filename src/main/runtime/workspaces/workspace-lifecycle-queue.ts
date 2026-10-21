@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { ProducerRevision } from '../sidebar-inputs/producer-revision'
 import { worktreeIdentityKey } from '../../../shared/worktree/id'
 import { getWorktreeIdFromHostIdentity } from '../../../shared/worktree/host-qualified-identity'
@@ -6,86 +5,80 @@ import type {
   WorkspaceLifecycleHint,
   WorkspaceLifecycleKind
 } from '../../../shared/sidebar-list/workspace-lifecycle-hints'
-import type {
-  WorkspaceCreation,
-  WorkspaceCreationsSnapshot
-} from '../../../shared/sidebar-list/workspace-creations'
-
-export const WORKSPACE_DELETED_ERROR = 'workspace_deleted'
-// Why `terminal_`: the window's sleep toast reads it as the host-could-not-confirm copy.
-export const WORKSPACE_LIFECYCLE_UNCONFIRMED_ERROR = 'terminal_workspace_lifecycle_unconfirmed'
-
-/** `unverifiable`: the execution host never confirmed the outcome, so the queue pauses. */
-export type LifecycleOutcome = 'settled' | 'unverifiable'
-
-export type LifecycleCommand<T> = {
-  kind: Exclude<WorkspaceLifecycleKind, 'create'>
-  /** A command accepted under the same opId answers with that command's reply. */
-  opId?: string
-  run: () => Promise<T>
-  /** Reads a reply; defaults to settled. */
-  outcome?: (result: T) => LifecycleOutcome
-  /** Whether a thrown error means contact was lost mid-run rather than a definite failure. */
-  lostContact?: (error: unknown) => boolean
-}
-
-/** Calls `done` once a listing that started after this call has applied. */
-export type LifecycleMembership = (done: () => void) => void
-
-export type WorkspaceCreationHandle = {
-  /** The workspace is persisted; called before the host announces it. */
-  named: (worktreeId: string) => void
-  close: () => void
-}
-
-type Attempt = { outcome: LifecycleOutcome; value?: unknown; error?: unknown; threw: boolean }
+import type { WorkspaceCreationsSnapshot } from '../../../shared/sidebar-list/workspace-creations'
+import {
+  WORKSPACE_DELETED_ERROR,
+  attemptLifecycleCommand,
+  type LifecycleAttempt,
+  type LifecycleCommand,
+  type LifecycleMembership
+} from './workspace-lifecycle-command'
+import {
+  WorkspaceLifecycleCreations,
+  type WorkspaceCreationHandle
+} from './workspace-lifecycle-creations'
 
 type Entry = {
   kind: WorkspaceLifecycleKind
-  opId?: string
+  /** Arrival order across every workspace, so a command waiting on its lookup keeps its place. */
+  seq: number
   state: 'queued' | 'running'
   /** Null for a create, which runs outside the queue between open and close. */
   command: LifecycleCommand<unknown> | null
   reply: Promise<unknown> | null
-  settle: (attempt: Attempt) => void
+  settle: (attempt: LifecycleAttempt) => void
 }
+
+type Pause = { kind: WorkspaceLifecycleKind; observe: (() => Promise<void>) | null }
 
 type WorkspaceQueue = {
   entries: Entry[]
-  /** The command whose outcome went unconfirmed; it re-runs as the proof. */
-  paused: LifecycleCommand<unknown> | null
+  paused: Pause | null
   /** A finished create or delete, held until a fresh listing shows its membership. */
   settling: number
   draining: boolean
+  /** Ends a wait on the pause early: a forced delete arrived. */
+  wake: (() => void) | null
 }
 
-type Creation = WorkspaceCreation & { key?: string; entry?: Entry; settling?: boolean }
+type Signal = { promise: Promise<void>; notify: () => void }
 
-async function attempt(command: LifecycleCommand<unknown>): Promise<Attempt> {
-  try {
-    const value = await command.run()
-    return { outcome: command.outcome?.(value) ?? 'settled', value, threw: false }
-  } catch (error) {
-    return {
-      outcome: command.lostContact?.(error) ? 'unverifiable' : 'settled',
-      error,
-      threw: true
-    }
-  }
+const OBSERVE_RETRY_MS = 5_000
+
+function signal(): Signal {
+  let notify!: () => void
+  const promise = new Promise<void>((resolve) => (notify = resolve))
+  return { promise, notify }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms).unref?.())
 }
 
 /**
  * One FIFO queue per host-qualified workspace for create, sleep, wake, close and delete. Commands
- * run one at a time in the order accepted and are never merged. Delete cancels what has not started
- * and waits for what has. An unconfirmed outcome pauses the queue; the next command first re-runs
- * the paused one, and only that host's own answer resumes it. Lives in memory: after a restart
- * nothing is pending and readers show observed state.
+ * run one at a time in the order they arrived and are never merged. Delete cancels what has not
+ * started and waits for what has. An unconfirmed outcome pauses the queue until the owner answers
+ * again; main then re-observes and carries on, never replaying the paused command. Lives in
+ * memory: after a restart nothing is pending and readers show observed state.
  */
 export class WorkspaceLifecycleQueue {
   readonly revision = new ProducerRevision()
   private readonly queues = new Map<string, WorkspaceQueue>()
-  private readonly creations = new Map<string, Creation>()
   private membership: LifecycleMembership = (done) => done()
+  private nextSeq = 0
+  /** Arrivals still looking up their workspace; nothing that arrived after them starts first. */
+  private readonly resolving = new Set<number>()
+  private resolved: Signal = signal()
+  private readonly creations = new WorkspaceLifecycleCreations<Entry>({
+    revision: this.revision,
+    membership: () => this.membership,
+    deletePending: (key) => this.deletePending(key),
+    bind: (key) => this.bindCreate(key),
+    finish: (key, entry) => this.finishEntry(key, entry)
+  })
+
+  constructor(private readonly retryDelay: (ms: number) => Promise<void> = sleep) {}
 
   /** Where finished creates and deletes wait to be listed; until set they settle at once. */
   setMembership(membership: LifecycleMembership): void {
@@ -93,94 +86,35 @@ export class WorkspaceLifecycleQueue {
   }
 
   submit<T>(key: string, command: LifecycleCommand<T>): Promise<T> {
-    const queue = this.queueFor(key)
-    const joined = queue.entries.find(
-      (entry) =>
-        entry.reply &&
-        ((command.opId !== undefined && entry.opId === command.opId) ||
-          // A second delete joins the first, as a removal in flight always has.
-          (command.kind === 'delete' && entry.kind === 'delete'))
-    )
-    if (joined?.reply) {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an opId names one command, so the joined reply is this command's type; a joined delete shares the delete's reply.
-      return joined.reply as Promise<T>
-    }
-    if (queue.entries.some((entry) => entry.kind === 'delete')) {
-      return Promise.reject(new Error(WORKSPACE_DELETED_ERROR))
-    }
-    if (command.kind === 'delete') {
-      this.cancelQueued(queue)
-    }
-    let settle!: (attempt: Attempt) => void
-    const reply = new Promise<unknown>((resolve, reject) => {
-      settle = (result) => (result.threw ? reject(result.error) : resolve(result.value))
-    })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widened only to be stored; run's result is handed back to this command's own caller.
-    const stored = command as LifecycleCommand<unknown>
-    queue.entries.push({
-      kind: command.kind,
-      opId: command.opId,
-      state: 'queued',
-      command: stored,
-      reply,
-      settle
-    })
-    this.revision.bump()
-    void this.drain(key)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: settled only with this command's run result.
-    return reply as Promise<T>
+    return this.enqueue(key, command, this.nextSeq++)
   }
 
-  /** Opened once the project is known; a caller without an id gets one, so a CLI create is listed. */
-  openCreate(start: {
-    creationId?: string
-    repoId: string
-    /** The named workspace's queue key; commands sent to it then wait behind the create. */
-    keyOf?: (worktreeId: string) => string
-  }): WorkspaceCreationHandle {
-    const creationId = start.creationId ?? randomUUID()
-    const creation: Creation = { repoId: start.repoId }
-    this.creations.set(creationId, creation)
-    this.revision.bump()
-    // Identity, not id: a concurrent retry under the same id owns the entry from then on.
-    const owns = (): boolean => this.creations.get(creationId) === creation
-    return {
-      named: (worktreeId) => {
-        if (!owns() || creation.worktreeId === worktreeId) {
-          return
-        }
-        creation.worktreeId = worktreeId
-        const key = start.keyOf?.(worktreeId)
-        // Why not behind a delete: that delete is the previous occupant's, never this new one's.
-        if (key && !creation.key && !creation.settling && !this.deletePending(key)) {
-          creation.key = key
-          creation.entry = this.bindCreate(key)
-        }
-        this.revision.bump()
-      },
-      close: () => {
-        if (!owns() || creation.settling) {
-          return
-        }
-        // The next command may start now; only the creation's hint waits for the listing.
-        if (creation.key && creation.entry) {
-          this.finishEntry(creation.key, creation.entry)
-        }
-        const finish = (): void => {
-          if (owns()) {
-            this.creations.delete(creationId)
-          }
-          this.revision.bump()
-        }
-        if (creation.worktreeId === undefined) {
-          finish()
-          return
-        }
-        // Why held: the creation shows until a listing shows the workspace, in the same revision.
-        creation.settling = true
-        this.membership(finish)
-      }
+  /**
+   * For a command whose workspace is known only after a lookup: it takes its place on arrival.
+   * A lookup answering null finds no workspace to order against, so the command runs directly.
+   */
+  async submitResolving<T>(
+    resolveKey: () => Promise<string | null>,
+    command: LifecycleCommand<T>
+  ): Promise<T> {
+    const seq = this.nextSeq++
+    this.resolving.add(seq)
+    let key: string | null
+    try {
+      key = await resolveKey()
+    } finally {
+      this.resolving.delete(seq)
+      const resolved = this.resolved
+      this.resolved = signal()
+      resolved.notify()
     }
+    return key === null ? command.run() : this.enqueue(key, command, seq)
+  }
+
+  openCreate(
+    start: Parameters<WorkspaceLifecycleCreations<Entry>['open']>[0]
+  ): WorkspaceCreationHandle {
+    return this.creations.open(start)
   }
 
   /** The per-workspace hints the feed publishes. */
@@ -203,21 +137,15 @@ export class WorkspaceLifecycleQueue {
         ...(queue.paused ? { paused: true as const } : {})
       }
     }
-    for (const { key, settling } of this.creations.values()) {
-      if (key && settling && !hints[key]) {
-        hints[key] = { kind: 'create', queuedBehind: 0 }
-      }
+    for (const key of this.creations.settlingKeys()) {
+      hints[key] ??= { kind: 'create', queuedBehind: 0 }
     }
     return hints
   }
 
   /** The creations projection the `creations` readers already read. */
   creationsSnapshot(): WorkspaceCreationsSnapshot {
-    const creations: WorkspaceCreationsSnapshot['creations'] = {}
-    for (const [creationId, { repoId, worktreeId }] of this.creations) {
-      creations[creationId] = worktreeId === undefined ? { repoId } : { repoId, worktreeId }
-    }
-    return { revision: this.revision.value, creations }
+    return this.creations.snapshot()
   }
 
   isPaused(key: string): boolean {
@@ -235,6 +163,53 @@ export class WorkspaceLifecycleQueue {
     return false
   }
 
+  private enqueue<T>(key: string, command: LifecycleCommand<T>, seq: number): Promise<T> {
+    const queue = this.queueFor(key)
+    const pendingDelete = queue.entries.find((entry) => entry.kind === 'delete')
+    if (pendingDelete) {
+      const pending = pendingDelete.command?.delete
+      if (command.kind !== 'delete') {
+        return Promise.reject(new Error(WORKSPACE_DELETED_ERROR))
+      }
+      if (pendingDelete.reply && pending?.key === command.delete?.key) {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an equal delete shares the pending delete's reply, as a removal in flight always has.
+        return pendingDelete.reply as Promise<T>
+      }
+      // A forced delete replaces an unforced one still waiting (behind a pause); never a running one.
+      if (!command.delete?.force || pendingDelete.state === 'running') {
+        const label = command.delete?.label ?? key
+        return Promise.reject(new Error(`Worktree deletion already in progress: ${label}`))
+      }
+    }
+    if (command.kind === 'delete') {
+      this.cancelQueued(queue)
+    }
+    let settle!: (attempt: LifecycleAttempt) => void
+    const reply = new Promise<unknown>((resolve, reject) => {
+      settle = (result) => (result.threw ? reject(result.error) : resolve(result.value))
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widened only to be stored; run's result is handed back to this command's own caller.
+    const stored = command as LifecycleCommand<unknown>
+    const entry: Entry = {
+      kind: command.kind,
+      seq,
+      state: 'queued',
+      command: stored,
+      reply,
+      settle
+    }
+    // In arrival order among what has not started; a late lookup goes ahead of later arrivals.
+    const after = queue.entries.findIndex((queued) => queued.state === 'queued' && queued.seq > seq)
+    queue.entries.splice(after === -1 ? queue.entries.length : after, 0, entry)
+    this.revision.bump()
+    if (command.delete?.force) {
+      queue.wake?.()
+    }
+    void this.drain(key)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: settled only with this command's run result.
+    return reply as Promise<T>
+  }
+
   private deletePending(key: string): boolean {
     return this.queues.get(key)?.entries.some((entry) => entry.kind === 'delete') === true
   }
@@ -242,7 +217,7 @@ export class WorkspaceLifecycleQueue {
   private queueFor(key: string): WorkspaceQueue {
     let queue = this.queues.get(key)
     if (!queue) {
-      queue = { entries: [], paused: null, settling: 0, draining: false }
+      queue = { entries: [], paused: null, settling: 0, draining: false, wake: null }
       this.queues.set(key, queue)
     }
     return queue
@@ -252,6 +227,7 @@ export class WorkspaceLifecycleQueue {
     const queue = this.queueFor(key)
     const entry: Entry = {
       kind: 'create',
+      seq: this.nextSeq++,
       state: 'running',
       command: null,
       reply: null,
@@ -268,6 +244,7 @@ export class WorkspaceLifecycleQueue {
     const index = queue?.entries.indexOf(entry) ?? -1
     if (queue && index !== -1) {
       queue.entries.splice(index, 1)
+      this.revision.bump()
       void this.drain(key)
     }
   }
@@ -292,25 +269,15 @@ export class WorkspaceLifecycleQueue {
           // A create running outside the queue; its close drains again.
           return
         }
-        head.state = 'running'
-        this.revision.bump()
-        const result = await this.runHead(queue, head.command)
-        queue.entries.splice(queue.entries.indexOf(head), 1)
-        if (
-          !result.threw &&
-          result.outcome === 'settled' &&
-          head.kind === 'delete' &&
-          !queue.paused
-        ) {
-          queue.settling += 1
-          this.membership(() => {
-            queue.settling -= 1
-            this.revision.bump()
-            this.forgetIfIdle(key, queue)
-          })
+        if ([...this.resolving].some((seq) => seq < head!.seq)) {
+          await this.resolved.promise
+          continue
         }
-        head.settle(result)
-        this.revision.bump()
+        if (queue.paused && !head.command.delete?.force) {
+          await this.awaitOwner(queue, queue.paused)
+          continue
+        }
+        await this.runHead(key, queue, head, head.command)
       }
     } finally {
       queue.draining = false
@@ -318,31 +285,63 @@ export class WorkspaceLifecycleQueue {
     }
   }
 
-  /** Runs the head command, first re-running a paused one as the proof the queue needs. */
-  private async runHead(queue: WorkspaceQueue, command: LifecycleCommand<unknown>) {
-    const paused = queue.paused
-    if (paused) {
-      const proof = await attempt(paused)
-      if (proof.outcome === 'settled') {
-        queue.paused = null
-      }
-      // The same command again is the retry: the proof is its answer.
-      if (paused.kind === command.kind) {
-        return proof
-      }
-      if (proof.outcome !== 'settled') {
-        return {
-          outcome: 'unverifiable' as const,
-          error: new Error(WORKSPACE_LIFECYCLE_UNCONFIRMED_ERROR),
-          threw: true
-        }
-      }
-    }
-    const result = await attempt(command)
+  private async runHead(
+    key: string,
+    queue: WorkspaceQueue,
+    head: Entry,
+    command: LifecycleCommand<unknown>
+  ): Promise<void> {
+    head.state = 'running'
+    this.revision.bump()
+    const result = await attemptLifecycleCommand(command)
+    queue.entries.splice(queue.entries.indexOf(head), 1)
     if (result.outcome === 'unverifiable') {
-      queue.paused = command
+      queue.paused = { kind: head.kind, observe: command.observe ?? null }
+    } else if (head.kind === 'delete' && !result.threw) {
+      // Deleted: nothing is left to observe.
+      queue.paused = null
+      queue.settling += 1
+      this.membership(() => {
+        queue.settling -= 1
+        this.revision.bump()
+        this.forgetIfIdle(key, queue)
+      })
     }
-    return result
+    head.settle(result)
+    this.revision.bump()
+  }
+
+  /**
+   * Waits for the paused command's owner to answer again, then re-observes the listing and lifts
+   * the pause. Returns early when a forced delete arrives; a silent owner is asked again later.
+   */
+  private async awaitOwner(queue: WorkspaceQueue, paused: Pause): Promise<void> {
+    if (!paused.observe) {
+      queue.paused = null
+      this.revision.bump()
+      return
+    }
+    const woken = new Promise<'woken'>((resolve) => (queue.wake = () => resolve('woken')))
+    try {
+      const answered = await Promise.race([
+        paused.observe().then(
+          () => true,
+          () => false
+        ),
+        woken
+      ])
+      if (answered === true) {
+        await new Promise<void>((done) => this.membership(done))
+        if (queue.paused === paused) {
+          queue.paused = null
+          this.revision.bump()
+        }
+      } else if (answered === false) {
+        await Promise.race([this.retryDelay(OBSERVE_RETRY_MS), woken])
+      }
+    } finally {
+      queue.wake = null
+    }
   }
 
   private forgetIfIdle(key: string, queue: WorkspaceQueue): void {

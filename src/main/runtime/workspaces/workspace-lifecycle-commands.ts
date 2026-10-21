@@ -7,14 +7,26 @@ import {
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../../shared/execution-host'
-import { getExplicitWorktreeIdSelector } from '../runtime-worktree-selection'
+import { splitWorktreeId } from '../../../shared/worktree/id'
+import {
+  isProvenLivePtyRemovalError,
+  isUnstoppedPtyRemovalError
+} from '../../../shared/worktree/removal'
+import {
+  getExplicitWorktreeIdSelector,
+  getRuntimeWorktreeRemovalOptionsKey
+} from '../runtime-worktree-selection'
+
 import { hostSleepKey } from '../terminal/stop/worktree-terminal-sleep-key'
 import { resolveWorktreeHostRouting, type LaunchHostRepo } from '../worktree-launch-host-repo'
 import type {
   LifecycleCommand,
-  LifecycleOutcome,
-  WorkspaceLifecycleQueue
-} from './workspace-lifecycle-queue'
+  LifecycleDeleteOptions,
+  LifecycleOutcome
+} from './workspace-lifecycle-command'
+import type { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
+
+type RemovalFlag = 'force' | 'runHooks' | 'allowUnverifiedPtyStop' | 'allowFailedArchiveHook'
 
 /** One key per host's copy of a workspace, the same one its terminals sleep under. */
 export function workspaceLifecycleKey(hostId: ExecutionHostId, worktreeId: string): string {
@@ -29,6 +41,14 @@ type LifecycleRuntime = {
   ) => Promise<{ id: string; repoId: string; hostId?: string | null }>
 }
 
+type ObservingRuntime = {
+  listTerminals: (
+    selector: string,
+    limit: number,
+    opts: { requireFreshPtyLiveness?: boolean }
+  ) => Promise<unknown>
+}
+
 /** Runs `command` in its workspace's queue, or directly in a build with none. */
 export function runWorkspaceLifecycleCommand<T>(
   queue: WorkspaceLifecycleQueue | null,
@@ -38,9 +58,85 @@ export function runWorkspaceLifecycleCommand<T>(
   return queue ? queue.submit(key, command) : command.run()
 }
 
-/** The queue key of a workspace selector: its host as the repo rows route it, as a delete keys. */
-async function terminalWorkspaceKey(runtime: LifecycleRuntime, selector: string): Promise<string> {
+const LIVENESS_UNAVAILABLE = 'terminal_liveness_unavailable'
+
+/** A thrown terminal command that lost the host's liveness answer; any other error is definite. */
+export function terminalLostContact(error: unknown): boolean {
+  return error instanceof Error && error.message === LIVENESS_UNAVAILABLE
+}
+
+// The host could not say whether the stops took; a terminal observed still live is definite.
+export function sleepOutcome(result: RuntimeWorktreeTerminalSleepResult): LifecycleOutcome {
+  return result.postStopVerified === false && result.postStopFailure === LIVENESS_UNAVAILABLE
+    ? 'unverifiable'
+    : 'settled'
+}
+
+export function closeOutcome(result: RuntimeWorktreeTerminalCloseResult): LifecycleOutcome {
+  return result.ptyStopVerdict === 'unverifiable' ? 'unverifiable' : 'settled'
+}
+
+/** A delete whose PTY stop went unproven (not seen live) lost contact; any other error is definite. */
+export function deleteLostContact(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  return (
+    error.message === LIVENESS_UNAVAILABLE ||
+    (isUnstoppedPtyRemovalError(error.message) && !isProvenLivePtyRemovalError(error.message))
+  )
+}
+
+/** Re-reads the workspace's terminal liveness; throws only while the host still cannot answer. */
+export function observeTerminals(runtime: ObservingRuntime, selector: string) {
+  return async (): Promise<void> => {
+    try {
+      await runtime.listTerminals(selector, 1, { requireFreshPtyLiveness: true })
+    } catch (error) {
+      // Any other answer (the workspace is gone, say) is the host answering.
+      if (terminalLostContact(error)) {
+        throw error
+      }
+    }
+  }
+}
+
+/** The sync key of an `id:` selector routed by the repo rows; null when only a lookup can say. */
+function explicitKey(
+  repos: readonly LaunchHostRepo[],
+  selector: string,
+  hostId?: string | null
+): string | null {
+  const worktreeId = getExplicitWorktreeIdSelector(selector)
+  const repoId = worktreeId ? splitWorktreeId(worktreeId)?.repoId : undefined
+  if (!worktreeId || !repoId) {
+    return null
+  }
+  const named = parseExecutionHostId(hostId ?? undefined)?.id
+  if (named) {
+    return workspaceLifecycleKey(named, worktreeId)
+  }
+  const routing = resolveWorktreeHostRouting(repos, { repoId })
+  if (routing.kind === 'ambiguous') {
+    return null
+  }
+  return workspaceLifecycleKey(
+    routing.kind === 'resolved' ? routing.hostId : LOCAL_EXECUTION_HOST_ID,
+    worktreeId
+  )
+}
+
+/** The key a lookup finds: the workspace's own host, else as the repo rows route it. */
+async function lookedUpKey(
+  runtime: LifecycleRuntime,
+  selector: string,
+  hostId?: string
+): Promise<string> {
   const worktree = await runtime.showManagedWorktree(selector)
+  const named = parseExecutionHostId(hostId ?? worktree.hostId ?? undefined)?.id
+  if (named) {
+    return workspaceLifecycleKey(named, worktree.id)
+  }
   const routing = resolveWorktreeHostRouting(runtime.listRepos(), worktree)
   if (routing.kind === 'ambiguous') {
     throw new Error('worktree_execution_host_unresolved')
@@ -51,57 +147,68 @@ async function terminalWorkspaceKey(runtime: LifecycleRuntime, selector: string)
   )
 }
 
-// The host could not say whether the stops took; a terminal observed still live is definite.
-export function sleepOutcome(result: RuntimeWorktreeTerminalSleepResult): LifecycleOutcome {
-  return result.postStopVerified === false &&
-    result.postStopFailure === 'terminal_liveness_unavailable'
-    ? 'unverifiable'
-    : 'settled'
-}
-
-/** A thrown sleep that lost the host's liveness answer; any other error is definite. */
-export function sleepLostContact(error: unknown): boolean {
-  return error instanceof Error && error.message === 'terminal_liveness_unavailable'
-}
-
-export function closeOutcome(result: RuntimeWorktreeTerminalCloseResult): LifecycleOutcome {
-  return result.ptyStopVerdict === 'unverifiable' ? 'unverifiable' : 'settled'
-}
-
-/** `terminal.sleep`, `terminal.closeAll` and `worktree.sleep` as queued commands. */
-export async function queueTerminalWorkspaceCommand<T>(
+/** `terminal.sleep`, `terminal.closeAll` and `worktree.sleep` as queued commands, in arrival order. */
+export function queueTerminalWorkspaceCommand<T>(
   runtime: LifecycleRuntime,
   selector: string,
   command: LifecycleCommand<T>
 ): Promise<T> {
-  if (!runtime.workspaceLifecycle) {
+  const queue = runtime.workspaceLifecycle
+  if (!queue) {
     return command.run()
   }
-  return runtime.workspaceLifecycle.submit(await terminalWorkspaceKey(runtime, selector), command)
+  const key = explicitKey(runtime.listRepos(), selector)
+  return key
+    ? queue.submit(key, command)
+    : queue.submitResolving(() => lookedUpKey(runtime, selector), command)
 }
 
-/** A delete's key: its host, else the local host; with no id, the selector itself. */
-export function deleteLifecycleKey(
-  hostId: ExecutionHostId | undefined,
-  worktreeId: string | undefined,
-  selector: string
-): string {
-  return worktreeId
-    ? workspaceLifecycleKey(hostId ?? LOCAL_EXECUTION_HOST_ID, worktreeId)
-    : `selector:${selector}`
-}
-
-/** `worktree.rm`: keyed by the caller's host and the selector's id, never resolved again. */
+/**
+ * `worktree.rm`: keyed by the workspace's resolved id, whatever selector named it, so a delete by
+ * name waits for that workspace's running sleep. A workspace no lookup finds runs unqueued.
+ */
 export function queueWorkspaceDelete<T>(
-  runtime: Pick<LifecycleRuntime, 'workspaceLifecycle'>,
+  runtime: LifecycleRuntime & ObservingRuntime,
   selector: string,
   hostId: string | undefined,
-  run: () => Promise<T>
+  requested: Partial<Record<RemovalFlag, boolean>>,
+  /** Called with the normalized flags, plus the caller's host when it named one. */
+  run: (removal: Record<RemovalFlag, boolean> & { hostId?: string }) => Promise<T>
 ): Promise<T> {
-  const key = deleteLifecycleKey(
-    parseExecutionHostId(hostId)?.id,
-    getExplicitWorktreeIdSelector(selector) ?? undefined,
-    selector
-  )
-  return runWorkspaceLifecycleCommand(runtime.workspaceLifecycle, key, { kind: 'delete', run })
+  const removal: Record<RemovalFlag, boolean> = {
+    force: requested.force === true,
+    runHooks: requested.runHooks === true,
+    allowUnverifiedPtyStop: requested.allowUnverifiedPtyStop === true,
+    allowFailedArchiveHook: requested.allowFailedArchiveHook === true
+  }
+  const options: LifecycleDeleteOptions = {
+    key: getRuntimeWorktreeRemovalOptionsKey(removal),
+    force: removal.allowUnverifiedPtyStop,
+    label: getExplicitWorktreeIdSelector(selector) ?? selector
+  }
+  const command: LifecycleCommand<T> = {
+    kind: 'delete',
+    run: () => run({ ...removal, ...(hostId ? { hostId } : {}) }),
+    lostContact: deleteLostContact,
+    observe: observeTerminals(runtime, selector),
+    delete: options
+  }
+  const queue = runtime.workspaceLifecycle
+  if (!queue) {
+    return command.run()
+  }
+  const key = explicitKey(runtime.listRepos(), selector, hostId)
+  return key
+    ? queue.submit(key, command)
+    : queue.submitResolving(
+        () =>
+          lookedUpKey(runtime, selector, hostId).catch((error: unknown) => {
+            // A delete legitimately reaches a workspace Git no longer lists; nothing orders it.
+            if (error instanceof Error && error.message === 'selector_not_found') {
+              return null
+            }
+            throw error
+          }),
+        command
+      )
 }

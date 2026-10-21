@@ -1,9 +1,10 @@
 import { terminalImageViewerSupported } from '../../../terminal-image-viewer-env'
 import {
   closeOutcome,
+  observeTerminals,
   queueTerminalWorkspaceCommand,
-  sleepLostContact,
-  sleepOutcome
+  sleepOutcome,
+  terminalLostContact
 } from '../../../workspaces/workspace-lifecycle-commands'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
 import { defineMethod } from '../../core'
@@ -145,7 +146,9 @@ export const TERMINAL_LIFECYCLE_METHODS = [
       queueTerminalWorkspaceCommand(runtime, params.worktree, {
         kind: 'close',
         run: () => runtime.closeTerminalsForWorktree(params.worktree),
-        outcome: closeOutcome
+        outcome: closeOutcome,
+        lostContact: terminalLostContact,
+        observe: observeTerminals(runtime, params.worktree)
       })
   }),
   defineMethod({
@@ -157,7 +160,8 @@ export const TERMINAL_LIFECYCLE_METHODS = [
         kind: 'sleep',
         run: () => runtime.sleepTerminalsForWorktree(params.worktree),
         outcome: sleepOutcome,
-        lostContact: sleepLostContact
+        lostContact: terminalLostContact,
+        observe: observeTerminals(runtime, params.worktree)
       })
   }),
   defineMethod({

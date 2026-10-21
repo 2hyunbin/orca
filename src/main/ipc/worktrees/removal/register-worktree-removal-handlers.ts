@@ -24,6 +24,8 @@ import {
 import { runSerializedWorktreeRemovalAcceptance } from '../../../worktree-removal-acceptance-queue'
 import { assertWslMoveRepoWritable } from '../../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import {
+  deleteLostContact,
+  observeTerminals,
   runWorkspaceLifecycleCommand,
   workspaceLifecycleKey
 } from '../../../runtime/workspaces/workspace-lifecycle-commands'
@@ -144,7 +146,17 @@ export function registerWorktreeRemovalHandlers(context: WorktreeIpcContext): vo
       ? runWorkspaceLifecycleCommand(
           context.runtime.workspaceLifecycle,
           workspaceLifecycleKey(getRepoExecutionHostId(repo), args.worktreeId),
-          { kind: 'delete', run: () => remove(args) }
+          {
+            kind: 'delete',
+            run: () => remove(args),
+            lostContact: deleteLostContact,
+            observe: observeTerminals(context.runtime, `id:${args.worktreeId}`),
+            delete: {
+              key: getWorktreeRemovalOptionsKey(args),
+              force: args.allowUnverifiedPtyStop === true,
+              label: args.worktreeId
+            }
+          }
         )
       : remove(args)
   })

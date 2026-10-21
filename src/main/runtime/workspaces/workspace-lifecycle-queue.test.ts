@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  WORKSPACE_DELETED_ERROR,
-  WORKSPACE_LIFECYCLE_UNCONFIRMED_ERROR,
-  WorkspaceLifecycleQueue,
-  type LifecycleCommand
-} from './workspace-lifecycle-queue'
+import { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
+import { WORKSPACE_DELETED_ERROR, type LifecycleCommand } from './workspace-lifecycle-command'
 
 const KEY = 'local|repo-1::/wt'
 
@@ -42,6 +38,19 @@ function gated<T>(
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const deleteOptions = (key: string, force = false) => ({
+  delete: { key, force, label: 'repo-1::/wt' }
+})
+
+/** A queue whose retries after a silent owner wait for the test to release them. */
+function manualRetryQueue() {
+  const retries: (() => void)[] = []
+  const queue = new WorkspaceLifecycleQueue(
+    () => new Promise<void>((resolve) => retries.push(resolve))
+  )
+  return { queue, retry: () => retries.splice(0).forEach((resolve) => resolve()) }
+}
+
 describe('WorkspaceLifecycleQueue', () => {
   it('runs one command at a time, in the order accepted, without merging kinds', async () => {
     const queue = new WorkspaceLifecycleQueue()
@@ -77,16 +86,11 @@ describe('WorkspaceLifecycleQueue', () => {
     expect(queue.hints()).toEqual({})
   })
 
-  it('answers a repeated opId with the accepted command, and runs it once', async () => {
+  it('runs a repeated command again rather than merging it into the first', async () => {
     const queue = new WorkspaceLifecycleQueue()
-    const log: string[] = []
-    const sleep = gated(log, 'sleep', 'sleep', 'slept', { opId: 'op-1' })
-    const first = queue.submit(KEY, sleep.command)
-    const again = queue.submit(KEY, { ...sleep.command })
-    sleep.release()
-    expect(await first).toBe('slept')
-    expect(await again).toBe('slept')
-    expect(log.filter((line) => line.startsWith('start'))).toHaveLength(1)
+    let runs = 0
+    const sleep: LifecycleCommand<number> = { kind: 'sleep', run: async () => ++runs }
+    expect(await Promise.all([queue.submit(KEY, sleep), queue.submit(KEY, sleep)])).toEqual([1, 2])
   })
 
   it('keeps separate workspaces apart, including one id on two hosts', async () => {
@@ -107,7 +111,7 @@ describe('WorkspaceLifecycleQueue', () => {
     const log: string[] = []
     const sleep = gated(log, 'sleep', 'sleep', 'slept')
     const wake = gated(log, 'wake', 'wake', 'woken')
-    const remove = gated(log, 'delete', 'delete', 'deleted')
+    const remove = gated(log, 'delete', 'delete', 'deleted', deleteOptions('normal'))
     const sleeping = queue.submit(KEY, sleep.command)
     const waking = queue.submit(KEY, wake.command)
     await flush()
@@ -128,55 +132,94 @@ describe('WorkspaceLifecycleQueue', () => {
     expect(log).not.toContain('start wake')
   })
 
-  it('joins a second delete to the first', async () => {
+  it('joins a second delete with the same options, and refuses one with different options', async () => {
     const queue = new WorkspaceLifecycleQueue()
     const log: string[] = []
-    const remove = gated(log, 'delete', 'delete', 'deleted')
+    const remove = gated(log, 'delete', 'delete', 'deleted', deleteOptions('normal'))
     const first = queue.submit(KEY, remove.command)
-    const second = queue.submit(KEY, gated(log, 'delete-2', 'delete', 'other').command)
+    const second = queue.submit(
+      KEY,
+      gated(log, 'delete-2', 'delete', 'other', deleteOptions('normal')).command
+    )
+    await expect(
+      queue.submit(KEY, gated(log, 'delete-3', 'delete', 'x', deleteOptions('hooks')).command)
+    ).rejects.toThrow('Worktree deletion already in progress: repo-1::/wt')
     remove.release()
     expect(await Promise.all([first, second])).toEqual(['deleted', 'deleted'])
-    expect(log).not.toContain('start delete-2')
+    expect(log).toEqual(['start delete', 'end delete'])
   })
 
-  it('pauses on an unconfirmed outcome and resumes only on the host’s own answer', async () => {
-    const queue = new WorkspaceLifecycleQueue()
-    let verified = false
-    let sleeps = 0
+  it('pauses on an unconfirmed outcome; re-observes when the owner answers, never replaying it', async () => {
+    const { queue, retry } = manualRetryQueue()
+    const log: string[] = []
+    let reachable = false
     const sleep: LifecycleCommand<{ postStopVerified: boolean }> = {
       kind: 'sleep',
       run: async () => {
-        sleeps += 1
-        return { postStopVerified: verified }
+        log.push('sleep')
+        return { postStopVerified: reachable }
       },
-      outcome: (result) => (result.postStopVerified ? 'settled' : 'unverifiable')
+      outcome: (result) => (result.postStopVerified ? 'settled' : 'unverifiable'),
+      observe: async () => {
+        log.push('observe')
+        if (!reachable) {
+          throw new Error('terminal_liveness_unavailable')
+        }
+      }
     }
     // The requester gets the unconfirmed reply (today's toast); the workspace stays as observed.
     expect(await queue.submit(KEY, sleep)).toEqual({ postStopVerified: false })
     expect(queue.isPaused(KEY)).toBe(true)
     expect(queue.hints()).toEqual({ [KEY]: { kind: 'sleep', queuedBehind: 0, paused: true } })
 
-    // Another command is no proof: it re-asks the host, which still cannot confirm.
-    let woke = false
-    const wake: LifecycleCommand<string> = {
+    // A command issued while paused waits behind the pause; it is neither refused nor run.
+    const woke: string[] = []
+    const waking = queue.submit(KEY, {
       kind: 'wake',
       run: async () => {
-        woke = true
+        woke.push('wake')
         return 'woken'
       }
-    }
-    await expect(queue.submit(KEY, wake)).rejects.toThrow(WORKSPACE_LIFECYCLE_UNCONFIRMED_ERROR)
-    expect(woke).toBe(false)
-    expect(sleeps).toBe(2)
-    expect(queue.isPaused(KEY)).toBe(true)
+    })
+    await flush()
+    expect(log).toEqual(['sleep', 'observe'])
+    expect(woke).toEqual([])
+    expect(queue.hints()).toEqual({ [KEY]: { kind: 'wake', queuedBehind: 0, paused: true } })
 
-    // Sleeping again is the retry: the host's confirmed answer is the proof, and its reply.
-    verified = true
-    expect(await queue.submit(KEY, sleep)).toEqual({ postStopVerified: true })
-    expect(sleeps).toBe(3)
+    // Still silent on the next ask; then the owner answers and the queue carries on.
+    retry()
+    await flush()
+    expect(log).toEqual(['sleep', 'observe', 'observe'])
+    reachable = true
+    retry()
+    expect(await waking).toBe('woken')
+    expect(log).toEqual(['sleep', 'observe', 'observe', 'observe'])
     expect(queue.isPaused(KEY)).toBe(false)
-    expect(await queue.submit(KEY, wake)).toBe('woken')
     expect(queue.hints()).toEqual({})
+  })
+
+  it('re-runs a repeated command once contact is back', async () => {
+    const { queue } = manualRetryQueue()
+    let reachable = false
+    let sleeps = 0
+    const sleep: LifecycleCommand<boolean> = {
+      kind: 'sleep',
+      run: async () => {
+        sleeps += 1
+        return reachable
+      },
+      outcome: (ok) => (ok ? 'settled' : 'unverifiable'),
+      observe: async () => {
+        if (!reachable) {
+          throw new Error('lost')
+        }
+      }
+    }
+    expect(await queue.submit(KEY, sleep)).toBe(false)
+    reachable = true
+    expect(await queue.submit(KEY, sleep)).toBe(true)
+    expect(sleeps).toBe(2)
+    expect(queue.isPaused(KEY)).toBe(false)
   })
 
   it('pauses on lost contact mid-run, but not on a definite failure', async () => {
@@ -194,31 +237,89 @@ describe('WorkspaceLifecycleQueue', () => {
     expect(queue.isPaused(KEY)).toBe(true)
   })
 
-  it('runs a delete issued while paused only after the proof', async () => {
-    const queue = new WorkspaceLifecycleQueue()
+  it('acknowledges a delete issued while paused and runs it once the owner answers', async () => {
+    const { queue, retry } = manualRetryQueue()
     const log: string[] = []
-    let verified = false
-    const sleep: LifecycleCommand<boolean> = {
+    let reachable = false
+    await queue.submit(KEY, {
       kind: 'sleep',
-      run: async () => {
-        log.push('sleep')
-        return verified
-      },
-      outcome: (ok) => (ok ? 'settled' : 'unverifiable')
-    }
-    await queue.submit(KEY, sleep)
-    const remove: LifecycleCommand<string> = {
+      run: async () => false,
+      outcome: () => 'unverifiable',
+      observe: async () => {
+        if (!reachable) {
+          throw new Error('lost')
+        }
+      }
+    })
+    const deleting = queue.submit(KEY, {
       kind: 'delete',
       run: async () => {
         log.push('delete')
         return 'deleted'
+      },
+      ...deleteOptions('normal')
+    })
+    await flush()
+    expect(queue.hints()).toEqual({ [KEY]: { kind: 'delete', queuedBehind: 0, paused: true } })
+    expect(log).toEqual([])
+    reachable = true
+    retry()
+    expect(await deleting).toBe('deleted')
+    expect(queue.isPaused(KEY)).toBe(false)
+  })
+
+  it('runs a forced delete past the pause at once, in place of an unforced one waiting', async () => {
+    const { queue } = manualRetryQueue()
+    const log: string[] = []
+    await queue.submit(KEY, {
+      kind: 'sleep',
+      run: async () => false,
+      outcome: () => 'unverifiable',
+      observe: () => new Promise<void>(() => {})
+    })
+    const waiting = queue.submit(KEY, {
+      kind: 'delete',
+      run: async () => 'unforced',
+      ...deleteOptions('normal')
+    })
+    await flush()
+    const forced = queue.submit(KEY, {
+      kind: 'delete',
+      run: async () => {
+        log.push('forced')
+        return 'deleted'
+      },
+      ...deleteOptions('force', true)
+    })
+    await expect(waiting).rejects.toThrow(WORKSPACE_DELETED_ERROR)
+    expect(await forced).toBe('deleted')
+    expect(log).toEqual(['forced'])
+    expect(queue.isPaused(KEY)).toBe(false)
+  })
+
+  it('starts commands in arrival order even when an earlier one is still looking up its workspace', async () => {
+    const queue = new WorkspaceLifecycleQueue()
+    const log: string[] = []
+    const lookup = deferred<string | null>()
+    const first = queue.submitResolving(() => lookup.promise, {
+      kind: 'sleep',
+      run: async () => {
+        log.push('sleep (by name)')
+        return 'slept'
       }
-    }
-    await expect(queue.submit(KEY, remove)).rejects.toThrow(WORKSPACE_LIFECYCLE_UNCONFIRMED_ERROR)
-    expect(log).toEqual(['sleep', 'sleep'])
-    verified = true
-    expect(await queue.submit(KEY, remove)).toBe('deleted')
-    expect(log).toEqual(['sleep', 'sleep', 'sleep', 'delete'])
+    })
+    const second = queue.submit(KEY, {
+      kind: 'wake',
+      run: async () => {
+        log.push('wake (by id)')
+        return 'woken'
+      }
+    })
+    await flush()
+    expect(log).toEqual([])
+    lookup.resolve(KEY)
+    expect(await Promise.all([first, second])).toEqual(['slept', 'woken'])
+    expect(log).toEqual(['sleep (by name)', 'wake (by id)'])
   })
 
   it('never cancels a command because its requester went away', async () => {
@@ -274,6 +375,17 @@ describe('WorkspaceLifecycleQueue creates', () => {
     expect(queue.creationsSnapshot().creations).toEqual({ c1: { repoId: 'repo-1' } })
     second.close()
     expect(queue.creationsSnapshot().creations).toEqual({})
+  })
+
+  it('frees the workspace queue when a create closes after a retry took over its id', async () => {
+    const queue = new WorkspaceLifecycleQueue()
+    const first = queue.openCreate({ creationId: 'c1', repoId: 'repo-1', keyOf: () => KEY })
+    first.named('repo-1::/wt')
+    const retry = queue.openCreate({ creationId: 'c1', repoId: 'repo-1', keyOf: () => KEY })
+    const sleeping = queue.submit(KEY, { kind: 'sleep', run: async () => 'slept' })
+    first.close()
+    expect(await sleeping).toBe('slept')
+    retry.close()
   })
 
   it('closes once', () => {

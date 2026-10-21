@@ -23,7 +23,7 @@ import type { RuntimeWorkspaceCreateEvents } from '../../workspace-create-teleme
 import { createdWorkspaceActivationCallbacks } from './workspace-create-activation'
 import { assertWslMoveRepoWritable } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { resolveManagedWorktreeCreateStartup } from './managed-worktree-create-startup'
-import type { WorkspaceCreationHandle } from './workspace-lifecycle-queue'
+import type { WorkspaceCreationHandle } from './workspace-lifecycle-creations'
 import { workspaceLifecycleKey } from './workspace-lifecycle-commands'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
 
