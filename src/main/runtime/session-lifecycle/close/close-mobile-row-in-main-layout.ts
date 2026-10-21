@@ -67,6 +67,7 @@ export abstract class OrcaRuntimeWithCloseMobileRowInMainLayout extends OrcaRunt
    * Drops the closed rows from the phones' snapshot now. A window's rows carry main's panes only
    * when it next publishes, so until then a closed tab would still list (and its exiting SSH
    * terminal's registration show it again). `leafId` null: every row of the tab.
+   * Interim (ledger L260): goes once main merges its layout into the rows after each commit.
    */
   private retireMainClosedRows(worktreeId: string, tabId: string, leafId: string | null): void {
     let snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
