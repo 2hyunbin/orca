@@ -190,8 +190,53 @@ export async function readDirector503Minutes(reader, { projectId, directorServic
     perMinute: Object.fromEntries(keys.map((minute, index) => [minute, nonDrain.series[index]])),
     minutes: keys,
     publishedThrough: published.at(-1) ?? null,
-    unmetered: keys.filter((minute) => !metered.has(minute))
+    unmetered: keys.filter((minute) => !metered.has(minute)),
+    instances: await readDirector503ByInstance(reader, { projectId, directorService, span, metrics, keys })
   }
+}
+
+// One read's worth of 503 request-log lines; a sick-instance burst is ~400 in 10 minutes.
+export const DIRECTOR_503_LOG_LIMIT = 5_000
+
+// The same non-drain measure per director instance: the metric names no instance, so the 503s
+// come from Cloud Run's request log, less each instance's own scheduled 503s. A 503 no instance
+// answered stays in the fleet count only.
+async function readDirector503ByInstance(reader, { projectId, directorService, span, metrics, keys }) {
+  const read = await readLogEntries(reader, {
+    filter: [
+      'resource.type="cloud_run_revision"',
+      `resource.labels.service_name="${directorService}"`,
+      `logName="projects/${projectId}/logs/run.googleapis.com%2Frequests"`,
+      'httpRequest.status=503',
+      `timestamp>="${span.startedAt.toISOString()}"`,
+      `timestamp<"${span.endedAt.toISOString()}"`
+    ].join(' AND '),
+    projection: 'json(timestamp,labels.instanceId)',
+    limit: DIRECTOR_503_LOG_LIMIT
+  })
+  if (read.failed) return failedRead(`director 503 request log read failed: ${read.error}`)
+  if (read.entries.length >= DIRECTOR_503_LOG_LIMIT) return failedRead('director 503 request log read truncated')
+  const raw = new Map()
+  for (const entry of read.entries) {
+    const at = Date.parse(entry.timestamp)
+    if (!Number.isFinite(at)) return failedRead('director 503 request log line with an unparseable timestamp')
+    const instance = entry.labels?.instanceId
+    if (!instance) continue
+    const perMinute = raw.get(instance) ?? {}
+    perMinute[minuteKey(at)] = (perMinute[minuteKey(at)] ?? 0) + 1
+    raw.set(instance, perMinute)
+  }
+  const perInstance = {}
+  for (const [instance, perMinute] of raw) {
+    // Coverage is checked fleet-wide above; an instance with no lines under-subtracts, toward a trip.
+    const own = drainReturnByMinute(
+      metrics.map((part) => ({ samples: part.samples.filter((sample) => sample.instanceId === instance) })),
+      DIRECTOR_METRICS_LIMIT
+    )
+    const { series } = withoutDrainDeferrals({ perMinute }, own, keys)
+    perInstance[instance] = Object.fromEntries(keys.map((minute, index) => [minute, series[index]]))
+  }
+  return { ok: true, perMinute: perInstance }
 }
 
 const CELL_METRICS_EVENT = 'orca_relay_runtime_metrics'
