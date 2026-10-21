@@ -23,12 +23,8 @@ function qualification(template = 'success', ships = 'true') {
 }
 
 describe('adhoc Windows compilation overlaps Mac without publishing early', () => {
-  it('starts both platforms from the same qualified inputs without a Mac dependency', () => {
-    expect(windows.needs).toEqual([
-      ...mac.needs.slice(0, 2),
-      'orcad-template',
-      'release-javascript'
-    ])
+  it('starts both platforms during qualification without a Mac dependency', () => {
+    expect(windows.needs).toEqual(mac.needs)
     expect(mac.needs).not.toContain('orcad-template')
     expect(windows.needs).not.toContain('build-adhoc-mac')
     expect(windows.with.stage_only).toBe(true)
@@ -104,11 +100,11 @@ describe('adhoc Windows compilation overlaps Mac without publishing early', () =
 
   it.each([
     ['success', 'true', true],
-    ['failure', 'true', false],
-    ['cancelled', 'true', false],
-    ['skipped', 'true', false],
+    ['failure', 'true', true],
+    ['cancelled', 'true', true],
+    ['skipped', 'true', true],
     ['skipped', 'false', true]
-  ])('preserves qualification for %s / template=%s', (result, ships, allowed) => {
+  ])('allows preparation before qualification ends: %s / template=%s', (result, ships, allowed) => {
     const run = compileAggregateExpression(windows.if, ['needs', 'github'])
     const context = qualification(result, ships)
     expect(run(context).coerceString()).toBe(String(allowed))

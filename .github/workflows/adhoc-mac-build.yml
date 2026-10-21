@@ -665,14 +665,14 @@ jobs:
 
   # Build unsigned Windows artifacts alongside Mac; publication waits below.
   build-adhoc-win:
-    needs: [resolve-ref, orcad-template-support, orcad-template, release-javascript]
+    needs: [resolve-ref, orcad-template-support, release-javascript]
     if: >-
       !cancelled() && github.repository == 'stablyai/orca' &&
       needs.orcad-template-support.result == 'success' &&
-      needs.release-javascript.result == 'success' &&
-      (needs.orcad-template.result == 'success' ||
-        (needs.orcad-template.result == 'skipped' &&
-          needs.orcad-template-support.outputs.ships == 'false'))
+      needs.release-javascript.result == 'success'
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/dev-channel-win-build.yml
     secrets: inherit
     with:

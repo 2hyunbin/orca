@@ -4,9 +4,9 @@ import { parse } from 'yaml'
 
 const adhoc = parse(readFileSync('.github/workflows/adhoc-mac-build.yml', 'utf8'))
 const publisher = parse(readFileSync('.github/workflows/dev-channel-win-publish.yml', 'utf8'))
+const windows = parse(readFileSync('.github/workflows/dev-channel-win-build.yml', 'utf8'))
 const macSteps = adhoc.jobs['build-adhoc-mac'].steps
 const publishSteps = publisher.jobs['publish-win'].steps
-const templateWait = macSteps.find((step) => step.name === 'Wait for the qualified orcad template')
 const macWait = publishSteps.find((step) => step.name === 'Wait for successful macOS publication')
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
 
@@ -52,7 +52,13 @@ const job = (name, conclusion) => ({
   conclusion
 })
 
-describe('release waits retain qualification and publication gates', () => {
+describe.each([
+  ['Mac', macSteps],
+  ['Windows', windows.jobs['build-win'].steps]
+])('%s release waits retain qualification and publication gates', (_platform, buildSteps) => {
+  const templateWait = buildSteps.find(
+    (step) => step.name === 'Wait for the qualified orcad template'
+  )
   it('allows desktop setup first, but waits for a qualified artifact from this run', async () => {
     const { result, calls } = execute(templateWait, [
       { jobs: [job('orcad-template / cache', 'success')] },
@@ -63,11 +69,11 @@ describe('release waits retain qualification and publication gates', () => {
     await result
     expect(calls.filter((call) => call.endpoint === 'artifacts')).toHaveLength(4)
     expect(calls.every((call) => call.input.run_id === 42)).toBe(true)
-    expect(macSteps.indexOf(templateWait)).toBeGreaterThan(
-      macSteps.findIndex((step) => step.name === 'Build app')
+    expect(buildSteps.indexOf(templateWait)).toBeGreaterThan(
+      buildSteps.findIndex((step) => step.name === 'Build app')
     )
-    expect(macSteps.indexOf(templateWait)).toBeLessThan(
-      macSteps.findIndex((step) => step.name === 'Publish adhoc macOS artifacts')
+    expect(buildSteps.indexOf(templateWait)).toBeLessThan(
+      buildSteps.findIndex((step) => step.name === 'Download the orcad deployment template')
     )
   })
 
@@ -127,4 +133,10 @@ it('keeps the release a draft until qualification and its cleanup finish', async
   expect(macSteps.indexOf(final)).toBeLessThan(
     macSteps.findIndex((step) => step.id === 'publish_live')
   )
+})
+
+it('uses the same qualification wait on both platforms', () => {
+  const script = (steps) =>
+    steps.find((step) => step.name === 'Wait for the qualified orcad template').with.script
+  expect(script(windows.jobs['build-win'].steps)).toBe(script(macSteps))
 })

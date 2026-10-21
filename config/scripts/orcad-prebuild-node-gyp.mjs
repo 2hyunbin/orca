@@ -23,6 +23,15 @@ export async function nodeGypRebuild({ stagedDir, workDir, nodeDir, staticCxxRun
   const compileGypi = join(workDir, 'prebuild-compile.gypi')
   writeFileSync(compileGypi, prebuildCompileGypi({ staticCxxRuntime }))
   const { runProcessSync } = await import('@orca/process-host')
+  let environment = process.env
+  if (process.platform === 'win32') {
+    const { initializeWindowsNativeToolchain, mergeWindowsCompilerEnvironment } =
+      await import('./initialize-windows-native-toolchain.mjs')
+    const compilerEnvironment = initializeWindowsNativeToolchain()
+    if (compilerEnvironment) {
+      environment = mergeWindowsCompilerEnvironment(environment, compilerEnvironment)
+    }
+  }
   const result = runProcessSync({
     program: process.execPath,
     args: [
@@ -34,6 +43,7 @@ export async function nodeGypRebuild({ stagedDir, workDir, nodeDir, staticCxxRun
       compileGypi
     ],
     cwd: stagedDir,
+    env: environment,
     stdio: 'inherit',
     timeoutMs: null
   })
