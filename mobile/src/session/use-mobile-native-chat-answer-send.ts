@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react'
 import {
   buildNativeChatAskAnswerKeys,
   formatAskAnswer,
@@ -72,14 +72,18 @@ export function useMobileNativeChatAnswerSend(args: {
     agentRef,
     sessionId,
     streamIdentity,
-    onSendError
+    onSendError,
+    currentAsk
   } = args
-  const currentAskRef = useRef(args.currentAsk)
-  currentAskRef.current = args.currentAsk
+  const currentAskRef = useRef(currentAsk)
+  useLayoutEffect(() => {
+    currentAskRef.current = currentAsk
+  }, [currentAsk])
+  const currentAskKey = nativeChatAskDismissKey(currentAsk ?? null)
   const attemptedOmpAskRef = useRef<string | null>(null)
   useEffect(() => {
     attemptedOmpAskRef.current = null
-  }, [nativeChatAskDismissKey(args.currentAsk ?? null), sessionId, streamIdentity])
+  }, [currentAskKey, sessionId, streamIdentity])
   const generationRef = useRef(0)
   const activeRouteRef = useRef({ client, enabled, sessionId, streamIdentity })
   activeRouteRef.current = { client, enabled, sessionId, streamIdentity }
