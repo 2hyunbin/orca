@@ -603,6 +603,7 @@ function makeRuntimeStoreWithWorkspaceSession(
             resolveHostId(hostIds?.[0] ?? ownerHostId),
             session,
             command,
+            undefined,
             run.live
           )
           if (

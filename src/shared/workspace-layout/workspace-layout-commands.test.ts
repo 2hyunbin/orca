@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { EditorTabView } from '../editor-tab-view-types'
+import type { LayoutEditorView } from './layout-editor-view'
 import { applyLayoutCommand } from './workspace-layout-commands'
 import type { CommandOf, LayoutCommand } from './workspace-layout-command-types'
 import {
@@ -666,11 +666,14 @@ describe('layout command effects', () => {
     expect(entities).not.toContain('/w/b.ts')
   })
 
-  const viewedOpens: [string, CommandOf<'openEditorTab'>, EditorTabView, string[]][] = [
+  const viewedOpens: [string, CommandOf<'openEditorTab'>, LayoutEditorView, string[]][] = [
     [
       'a diff tab',
       { type: 'openEditorTab', workspace: WS, fileId: '/w', contentType: 'diff' },
-      { mode: 'diff', diffSource: 'combined-all', combinedAreaFilter: 'staged' },
+      {
+        view: { mode: 'diff', diffSource: 'combined-all', combinedAreaFilter: 'staged' },
+        file: { filePath: '/w', relativePath: 'All Changes', language: 'plaintext' }
+      },
       ['/w/a.ts']
     ],
     [
@@ -683,13 +686,16 @@ describe('layout command effects', () => {
         file: { filePath: '/w/b.ts', relativePath: 'b.ts', language: 'typescript' }
       },
       {
-        mode: 'edit',
-        conflict: {
-          kind: 'conflict-editable',
-          conflictKind: 'both_modified',
-          conflictStatus: 'unresolved',
-          conflictStatusSource: 'git'
-        }
+        view: {
+          mode: 'edit',
+          conflict: {
+            kind: 'conflict-editable',
+            conflictKind: 'both_modified',
+            conflictStatus: 'unresolved',
+            conflictStatusSource: 'git'
+          }
+        },
+        file: { filePath: '/w/b.ts', relativePath: 'b.ts', language: 'typescript' }
       },
       ['/w/a.ts', '/w/b.ts']
     ]

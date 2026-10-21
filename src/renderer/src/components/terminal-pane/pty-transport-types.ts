@@ -288,7 +288,6 @@ export type IpcPtyTransportOptions = {
   preconnectInput?: readonly PtyPreconnectInputEntry[]
   /** Records newly retained input against a remount-safe deferred split handoff. */
   onPreconnectInput?: (input: PtyPreconnectInputEntry) => void
-  cwdFallback?: 'worktree'
   env?: Record<string, string>
   envToDelete?: string[]
   command?: string

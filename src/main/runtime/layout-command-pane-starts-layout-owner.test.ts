@@ -7,6 +7,7 @@ import {
   type SleepingAgentSessionRecord as SleepingRecord
 } from '../../shared/agent-session-resume'
 import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
+import type { RuntimeMobileSessionCreateTerminalResult } from '../../shared/runtime-session-contracts'
 import type { RestoredPaneTrigger } from './terminal/recovery/restored-pane-start'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -27,16 +28,21 @@ const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 const PANE = { worktreeId: TEST_WORKTREE_ID, tabId: 'host-tab', leafId: HEADLESS_LEAF_ID }
 
 class StatusRuntime extends OrcaRuntimeService {
-  /** The start's create ends with no terminal, as one that exits before main can bind it. */
+  /** The start's terminal is gone once its create returns, as one that exits before main can bind it. */
   startsNoTerminal = false
   protected override materializePendingMobileSessionTerminal(
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab,
     trigger: RestoredPaneTrigger & { sessionId?: string }
-  ): Promise<string | null> {
-    return this.startsNoTerminal
-      ? Promise.resolve(null)
-      : super.materializePendingMobileSessionTerminal(worktreeId, tab, trigger)
+  ): Promise<RuntimeMobileSessionCreateTerminalResult> {
+    return super
+      .materializePendingMobileSessionTerminal(worktreeId, tab, trigger)
+      .then((created) => {
+        if (this.startsNoTerminal && created.tab.ptyId) {
+          this.ptysById.delete(created.tab.ptyId)
+        }
+        return created
+      })
   }
   setStartStatus(paneKey: string, status: 'sleeping'): void {
     this.paneStartStatuses?.set(paneKey, { status })
@@ -133,7 +139,7 @@ describe('a client’s startPane in the layout-owner build', () => {
     const cliSend = runtime.ensureRestoredPaneStarted(PANE)
     started.resolve({ id: 'persisted-pty' })
 
-    await expect(cliSend).resolves.toBe('persisted-pty')
+    await expect(cliSend).resolves.toMatchObject({ id: 'persisted-pty' })
     expect(spawn).toHaveBeenCalledOnce()
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'persisted-pty' }))
     // The wire reply is the command's outcome and stream position, byte for byte.
@@ -265,11 +271,12 @@ describe('a client’s startPane in the layout-owner build', () => {
   })
   // The window shows this reason through its wait for main's start.
   it('shows terminal_not_started when the terminal ends before main can bind it', async () => {
-    const { runtime } = await desktopRuntime()
+    const { runtime, started } = await desktopRuntime()
     runtime.setStartStatus(PANE_KEY, 'sleeping')
     runtime.startsNoTerminal = true
 
     await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    started.resolve({ id: 'persisted-pty' })
 
     await vi.waitFor(() =>
       expect(runtime.startStatusOf(PANE_KEY)).toEqual({

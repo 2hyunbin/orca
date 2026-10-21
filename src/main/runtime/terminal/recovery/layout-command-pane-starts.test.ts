@@ -6,7 +6,7 @@ const PANE_KEY = `tab-1:${LEAF}`
 
 describe('runLayoutPaneStarts', () => {
   it('starts each named pane through the starter', async () => {
-    const start = vi.fn(async () => 'pty-1')
+    const start = vi.fn(async () => ({ id: 'pty-1' }))
     runLayoutPaneStarts(
       { type: 'restartPane', workspace: 'wt' },
       { stopPtyIds: ['pty-old'], startPaneKeys: [PANE_KEY] },
@@ -22,7 +22,7 @@ describe('runLayoutPaneStarts', () => {
   })
 
   it('runs no start for a create, which starts through its own path', () => {
-    const start = vi.fn(async () => 'pty-1')
+    const start = vi.fn(async () => ({ id: 'pty-1' }))
     runLayoutPaneStarts(
       { type: 'createTerminalTab', workspace: 'wt' },
       { stopPtyIds: [], startPaneKeys: [PANE_KEY] },

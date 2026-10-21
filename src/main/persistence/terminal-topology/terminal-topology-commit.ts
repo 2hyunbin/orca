@@ -14,6 +14,7 @@ import type {
 import {
   admitPaneToSession,
   withdrawPaneFromSession,
+  type PaneLayoutChange,
   type TerminalPaneAdmission,
   type TerminalPaneAdmissionOutcome
 } from './terminal-pane-admission'
@@ -32,11 +33,11 @@ import { writeRestorable } from './restorable-write'
 import { assignWorkspaceSessionPartition } from './terminal-topology-membership'
 import {
   commitLayoutCommand,
-  commitPaneChange,
+  commitLayoutCommandsAcrossPartitions,
+  commitWindowPaneDetach,
   keepFrozen,
   type LayoutCommandRun
-} from './topology-partition-write'
-import { resolveWindowPaneDetach, type WindowPaneDetachCommand } from './window-pane-detach'
+} from './layout-command-commit'
 import {
   fencedIfLayoutOwner,
   layoutCommandFence,
@@ -157,6 +158,18 @@ export function applyLayout(
   )
 }
 
+/** One disk move's editor renames, a command per partition, in one durable write of all. */
+export function applyEditorFileRenamesInPartitions(
+  batches: readonly { hostId: ExecutionHostId; command: CommandOf<'renameEditorFiles'> }[],
+  context: TerminalTopologyCommitContext
+): () => DurableProfileStateMutation<LayoutApplyOutcome> {
+  return traced(
+    'apply_layout',
+    () => commitLayoutCommandsAcrossPartitions(batches, context),
+    (outcome) => (outcome.ok ? undefined : outcome.code)
+  )
+}
+
 /**
  * One `persistence.terminal-topology` span per commit, from admission to the in-memory write.
  * Attributes stay low-cardinality: no pane key, PTY id or path; `refusalOf` returns a fixed code.
@@ -203,6 +216,8 @@ export type TerminalTopologyCommitContext = {
   markDirty: (
     domain: 'workspaceSession' | 'workspaceSessionsByHostId' | 'ui' | 'sshRemotePtyLeases'
   ) => void
+  /** Main's in-memory editor views; absent where a commit never changes them. */
+  editorViews?: Pick<StoreRuntimeState, 'layoutEditorViews'>
 }
 
 /** The commit context over a Store's state and its session partitions. */
@@ -210,7 +225,8 @@ export function topologyCommitContext({
   runtime,
   sessions
 }: {
-  runtime: Pick<StoreRuntimeState, 'state' | 'dirtyProfileStateDomains'>
+  runtime: Pick<StoreRuntimeState, 'state' | 'dirtyProfileStateDomains'> &
+    Partial<Pick<StoreRuntimeState, 'layoutEditorViews'>>
   sessions: Pick<
     SessionHostPartitionOperations,
     'getWorkspaceSessionHostIds' | 'getWorkspaceSession'
@@ -220,7 +236,10 @@ export function topologyCommitContext({
     state: runtime.state,
     hostIds: () => sessions.getWorkspaceSessionHostIds(),
     getSession: (hostId) => sessions.getWorkspaceSession(hostId),
-    markDirty: (domain) => runtime.dirtyProfileStateDomains?.add(domain)
+    markDirty: (domain) => runtime.dirtyProfileStateDomains?.add(domain),
+    ...(runtime.layoutEditorViews
+      ? { editorViews: { layoutEditorViews: runtime.layoutEditorViews } }
+      : {})
   }
 }
 
@@ -250,41 +269,18 @@ function commitLeafMove(
   }
 }
 
-/** A window's drag-out: checked across every partition, then moved in each holder as one write. */
-function commitWindowPaneDetach(
-  hostIds: readonly ExecutionHostId[],
-  command: WindowPaneDetachCommand,
+function commitPaneChange<T>(
+  hostId: ExecutionHostId,
+  change: PaneLayoutChange<T>,
   context: TerminalTopologyCommitContext
-): DurableProfileStateMutation<LayoutApplyOutcome> {
-  const resolved = resolveWindowPaneDetach(
-    context.hostIds().map((hostId) => ({ hostId, session: context.getSession(hostId) })),
-    hostIds,
-    command
+): DurableProfileStateMutation<T> {
+  if (!change.session) {
+    return { value: change.value, persist: false }
+  }
+  const restore = writeRestorable(
+    () => context.getSession(hostId),
+    (value) => context.markDirty(assignWorkspaceSessionPartition(context.state, hostId, value)),
+    keepFrozen(hostId, change.session, context)
   )
-  if (resolved && 'code' in resolved) {
-    return { value: { ok: false, code: resolved.code }, persist: false }
-  }
-  const committed = commitLayoutCommand(hostIds, resolved?.command ?? command, context, {})
-  if (!resolved || !committed.value.ok || committed.persist === false) {
-    return committed
-  }
-  const restores = writeMovedLeafProfileRecords(
-    {
-      worktreeId: command.workspace,
-      sourceTabId: resolved.sourceEntityId,
-      targetTabId: resolved.command.windowDetach.tabId,
-      leafId: command.leafId,
-      ptyId: resolved.command.windowDetach.ptyId
-    },
-    context
-  )
-  return {
-    value: committed.value,
-    rollback: () => {
-      restores.forEach((restore) => restore())
-      committed.rollback?.()
-    }
-  }
+  return { value: change.value, rollback: restore }
 }
-
-export { keepFrozen, type LayoutCommandRun }

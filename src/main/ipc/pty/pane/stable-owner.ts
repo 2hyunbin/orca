@@ -199,6 +199,7 @@ export async function persistAdmittedStablePaneBinding(args: {
   result: PtySpawnResult
   worktreeId: string | undefined
   startupCwd: string | undefined
+  correctStartupCwd?: string
   connectionId?: string | null
 }): Promise<boolean> {
   const expectedBinding = stablePanePersistenceFence(args.owner)
@@ -212,6 +213,7 @@ export async function persistAdmittedStablePaneBinding(args: {
     ptyId: args.result.id,
     ...(args.result.incarnationId ? { incarnationId: args.result.incarnationId } : {}),
     ...(args.startupCwd ? { startupCwd: args.startupCwd } : {}),
+    ...(args.correctStartupCwd ? { correctStartupCwd: args.correctStartupCwd } : {}),
     expectedBinding,
     mayCreate: false,
     mayReviveRetiredSurface: false,
