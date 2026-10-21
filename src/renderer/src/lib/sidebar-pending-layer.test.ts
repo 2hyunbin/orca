@@ -8,6 +8,7 @@ import {
   makeWorktree
 } from '@/components/worktree-jump-palette-test-fixtures'
 import type { DesktopSidebarFeed } from './desktop-sidebar-feed'
+import { overlaySidebarPendingLayer } from './sidebar-pending-overlay'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 const feed = vi.hoisted(() => ({
@@ -100,7 +101,7 @@ describe('sidebar pending layer', () => {
       () => write.promise
     )
     const overlaid = () =>
-      layer.overlaySidebarPendingLayer(main, layer.readSidebarPendingLayer(), CATALOG)
+      overlaySidebarPendingLayer(main, layer.readSidebarPendingLayer(), CATALOG)
     expect([...overlaid().workspaces.values()][0]?.manualOrder).toBe(9)
     // A read from before the answer reflects main without the write.
     install(main, 0)
@@ -128,13 +129,11 @@ describe('sidebar pending layer', () => {
     install(domains([], [serverRow(1)]))
     const shown = () =>
       [
-        ...layer
-          .overlaySidebarPendingLayer(
-            domains([], [serverRow(1)]),
-            layer.readSidebarPendingLayer(),
-            CATALOG
-          )
-          .pairedServerRows.values()
+        ...overlaySidebarPendingLayer(
+          domains([], [serverRow(1)]),
+          layer.readSidebarPendingLayer(),
+          CATALOG
+        ).pairedServerRows.values()
       ][0]?.manualOrder
     expect(shown()).toBe(5)
     install(domains([], [serverRow(5)]))
@@ -161,9 +160,11 @@ describe('sidebar pending layer', () => {
     layer.holdCreatedSidebarWorkspace({ worktree: created })
     const ids = (main: SidebarFeedDomains) =>
       [
-        ...layer
-          .overlaySidebarPendingLayer(main, layer.readSidebarPendingLayer(), CATALOG)
-          .workspaces.values()
+        ...overlaySidebarPendingLayer(
+          main,
+          layer.readSidebarPendingLayer(),
+          CATALOG
+        ).workspaces.values()
       ].map((row) => row.id)
     expect(ids(domains([rowOf()]))).toEqual([local.id, created.id])
     install(domains([rowOf()]))
@@ -179,9 +180,11 @@ describe('sidebar pending layer', () => {
     layer.holdCreatedSidebarWorkspace({ worktree })
     layer.holdCreatedSidebarWorkspace({ folderWorkspace: folder })
     const keys = (main: SidebarFeedDomains) => [
-      ...layer
-        .overlaySidebarPendingLayer(main, layer.readSidebarPendingLayer(), CATALOG)
-        .pairedServerRows.keys()
+      ...overlaySidebarPendingLayer(
+        main,
+        layer.readSidebarPendingLayer(),
+        CATALOG
+      ).pairedServerRows.keys()
     ]
     // Main answered the create, but the server's list has not reached it yet.
     install(domains([]))
@@ -190,11 +193,13 @@ describe('sidebar pending layer', () => {
       'runtime:env-1|folder:folder-1'
     ])
     expect(
-      layer
-        .overlaySidebarPendingLayer(domains([]), layer.readSidebarPendingLayer(), CATALOG)
-        .pairedServerRows.get('runtime:env-1|folder:folder-1')
+      overlaySidebarPendingLayer(
+        domains([]),
+        layer.readSidebarPendingLayer(),
+        CATALOG
+      ).pairedServerRows.get('runtime:env-1|folder:folder-1')
     ).toMatchObject({ kind: 'folder', displayName: 'Notes' })
-    const listed = layer.overlaySidebarPendingLayer(
+    const listed = overlaySidebarPendingLayer(
       domains([]),
       layer.readSidebarPendingLayer(),
       CATALOG
@@ -226,7 +231,61 @@ describe('sidebar pending layer', () => {
       () => [{ worktreeId: local.id, updates: { comment: 'note' } }],
       async () => {}
     )
-    expect(layer.readSidebarPendingLayer()).toEqual({ writes: [], created: [] })
+    expect(layer.readSidebarPendingLayer()).toEqual({ writes: [], created: [], removed: [] })
     expect(feed.lastReadId).toBe(0)
+  })
+
+  it('keeps a removed row out of the list until main stops listing it', async () => {
+    const layer = await load()
+    const main = domains([rowOf()])
+    const ids = (installed: SidebarFeedDomains) =>
+      [
+        ...overlaySidebarPendingLayer(
+          installed,
+          layer.readSidebarPendingLayer(),
+          CATALOG
+        ).workspaces.values()
+      ].map((row) => row.id)
+    layer.holdRemovedSidebarWorkspace({ worktreeId: local.id, hostId: 'local' })
+    // Main answered the removal, but its worktree re-scan has not landed: the row is still listed.
+    expect(ids(main)).toEqual([])
+    install(main)
+    expect(ids(main)).toEqual([])
+    install(domains([]))
+    expect(layer.readSidebarPendingLayer().removed).toEqual([])
+  })
+
+  it('hides only the removed host’s copy of a same-id row, and never a hostless removal', async () => {
+    const layer = await load()
+    const ssh = makeWorktree(local.id, 'a', { hostId: 'ssh:box', manualOrder: 1 })
+    const main = domains([rowOf(), rowOf(ssh)])
+    layer.holdRemovedSidebarWorkspace({ worktreeId: local.id, hostId: undefined })
+    expect(layer.readSidebarPendingLayer().removed).toEqual([])
+    layer.holdRemovedSidebarWorkspace({ worktreeId: local.id, hostId: 'ssh:box' })
+    expect(
+      [
+        ...overlaySidebarPendingLayer(
+          main,
+          layer.readSidebarPendingLayer(),
+          CATALOG
+        ).workspaces.values()
+      ].map((row) => row.hostId)
+    ).toEqual(['local'])
+  })
+
+  it('lists a workspace re-created under a just-removed id and host', async () => {
+    const layer = await load()
+    layer.holdRemovedSidebarWorkspace({ worktreeId: local.id, hostId: 'local' })
+    layer.holdCreatedSidebarWorkspace({ worktree: local })
+    expect(layer.readSidebarPendingLayer().removed).toEqual([])
+    expect(
+      [
+        ...overlaySidebarPendingLayer(
+          domains([]),
+          layer.readSidebarPendingLayer(),
+          CATALOG
+        ).workspaces.values()
+      ].map((row) => row.id)
+    ).toEqual([local.id])
   })
 })

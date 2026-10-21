@@ -1,62 +1,30 @@
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import {
+  ROW_WRITE_FIELDS,
+  rowHostId,
+  serverRowHostId,
+  targets,
+  type CreatedWorkspace,
+  type PendingRow,
+  type PendingRowWrite,
+  type RowWriteField,
+  type RowWriteValues,
+  type SidebarPendingLayer
+} from './sidebar-pending-overlay'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
-import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { getFolderWorkspaceWorktreeHostId } from '../../../shared/folder-workspace-worktree'
-import type { Repo } from '../../../shared/repo-types'
-import type { SidebarFeedDomains } from '../../../shared/sidebar-list/sidebar-feed-domains'
-import {
-  buildPairedServerRows,
-  type PairedServerWorkspaceRow
-} from '../../../shared/sidebar-list/paired-server-rows'
-import { buildWorkspaceRows, type WorkspaceRow } from '../../../shared/sidebar-list/workspace-rows'
-import type { WorktreeLineage } from '../../../shared/worktree/lineage-types'
-import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
-import type { Worktree } from '../../../shared/worktree/types'
-import { getExecutionHostIdFromWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import {
   onDesktopSidebarFeedInstalled,
   refreshDesktopSidebarFeed,
   type DesktopSidebarFeed
 } from './desktop-sidebar-feed'
 
-// The row fields a sidebar drag, pin or rename writes, named alike in metadata and main's rows.
-const ROW_WRITE_FIELDS = [
-  'manualOrder',
-  'workspaceStatus',
-  'isPinned',
-  'isArchived',
-  'isUnread',
-  'displayName'
-] as const satisfies readonly (keyof WorktreeMeta &
-  keyof WorkspaceRow &
-  keyof PairedServerWorkspaceRow)[]
-
-type RowWriteField = (typeof ROW_WRITE_FIELDS)[number]
-type RowWriteValues = Partial<Pick<WorktreeMeta, RowWriteField>>
+export type { SidebarPendingLayer }
 
 // Bounds what main never shows (a paired server that dropped a write); main's value wins after.
 const PENDING_LIMIT_MS = 10_000
-
-type PendingRow = {
-  /** The operation it came from; answering and expiry find it by this, whatever it was trimmed to. */
-  opId: number
-  worktreeId: string
-  /** Null: a local row whose metadata names no host, matched on every host. */
-  hostId: ExecutionHostId | null
-  /** The feed read sent once main answered; null while the operation runs. */
-  answeredBy: number | null
-}
-
-type PendingRowWrite = PendingRow & { values: RowWriteValues }
-
-type CreatedWorkspace = { worktree: Worktree } | { folderWorkspace: FolderWorkspace }
-
-/** The window's own sidebar operations main's feed does not show yet. */
-export type SidebarPendingLayer = {
-  writes: readonly PendingRowWrite[]
-  created: readonly (PendingRow & { workspace: CreatedWorkspace })[]
-}
 
 export type SidebarRowWrite = {
   worktreeId: string
@@ -64,7 +32,7 @@ export type SidebarRowWrite = {
   executionHostId?: ExecutionHostId
 }
 
-let layer: SidebarPendingLayer = { writes: [], created: [] }
+let layer: SidebarPendingLayer = { writes: [], created: [], removed: [] }
 let lastOpId = 0
 const listeners = new Set<() => void>()
 let detachSettlement: (() => void) | null = null
@@ -72,18 +40,6 @@ let detachSettlement: (() => void) | null = null
 function publish(next: SidebarPendingLayer): void {
   layer = next
   listeners.forEach((listener) => listener())
-}
-
-function targets(entry: PendingRow, id: string, hostId: ExecutionHostId | null): boolean {
-  return entry.worktreeId === id && (entry.hostId === null || entry.hostId === hostId)
-}
-
-function rowHostId(row: WorkspaceRow): ExecutionHostId | null {
-  return parseExecutionHostId(row.hostId)?.id ?? null
-}
-
-function serverRowHostId(row: PairedServerWorkspaceRow): ExecutionHostId | null {
-  return parseExecutionHostId(getExecutionHostIdFromWorktreeHostIdentity(row.key))?.id ?? null
 }
 
 function answered(entry: PendingRow, installed: DesktopSidebarFeed): boolean {
@@ -108,23 +64,36 @@ function writeShown(write: PendingRowWrite, installed: DesktopSidebarFeed): bool
   )
 }
 
-/** Main announces a new workspace after it answers the create, so it holds until main lists it. */
-function createdShown(created: PendingRow, installed: DesktopSidebarFeed): boolean {
+function listed(entry: PendingRow, installed: DesktopSidebarFeed): boolean {
   const { workspaces, pairedServerRows } = installed.domains
   return (
-    answered(created, installed) &&
-    ([...workspaces.values()].some((row) => targets(created, row.id, rowHostId(row))) ||
-      [...pairedServerRows.values()].some((row) =>
-        targets(created, row.worktreeId, serverRowHostId(row))
-      ))
+    [...workspaces.values()].some((row) => targets(entry, row.id, rowHostId(row))) ||
+    [...pairedServerRows.values()].some((row) =>
+      targets(entry, row.worktreeId, serverRowHostId(row))
+    )
   )
+}
+
+/** Main announces a new workspace after it answers the create, so it holds until main lists it. */
+function createdShown(created: PendingRow, installed: DesktopSidebarFeed): boolean {
+  return answered(created, installed) && listed(created, installed)
+}
+
+/** Main can list a removed row until its worktree re-scan lands, so it holds until main drops it. */
+function removalShown(removed: PendingRow, installed: DesktopSidebarFeed): boolean {
+  return answered(removed, installed) && !listed(removed, installed)
 }
 
 function settle(installed: DesktopSidebarFeed): void {
   const writes = layer.writes.filter((write) => !writeShown(write, installed))
   const created = layer.created.filter((entry) => !createdShown(entry, installed))
-  if (writes.length !== layer.writes.length || created.length !== layer.created.length) {
-    publish({ writes, created })
+  const removed = layer.removed.filter((entry) => !removalShown(entry, installed))
+  if (
+    writes.length !== layer.writes.length ||
+    created.length !== layer.created.length ||
+    removed.length !== layer.removed.length
+  ) {
+    publish({ writes, created, removed })
   }
 }
 
@@ -254,7 +223,12 @@ export function holdCreatedSidebarWorkspace(workspace: CreatedWorkspace): void {
     answeredBy: null
   }
   startSettling()
-  publish({ ...layer, created: [...layer.created, entry] })
+  // A re-create of a just-removed id must not stay hidden by that removal's hold.
+  const removed = layer.removed.filter(
+    (hold) =>
+      hold.worktreeId !== worktreeId || (entry.hostId !== null && hold.hostId !== entry.hostId)
+  )
+  publish({ ...layer, created: [...layer.created, entry], removed })
   answer(
     new Set([entry.opId]),
     (pending) => pending.created,
@@ -262,71 +236,24 @@ export function holdCreatedSidebarWorkspace(workspace: CreatedWorkspace): void {
   )
 }
 
-function patch<Row extends Partial<Pick<WorkspaceRow, RowWriteField>>>(
-  row: Row,
-  id: string,
-  hostId: ExecutionHostId | null,
-  writes: readonly PendingRowWrite[]
-): Row {
-  let patched = row
-  for (const write of writes) {
-    if (targets(write, id, hostId)) {
-      patched = { ...patched, ...write.values }
-    }
+/** Switch point. Keeps a workspace the window just removed out of the list until main drops it too. */
+export function holdRemovedSidebarWorkspace(workspace: {
+  worktreeId: string
+  hostId: string | null | undefined
+}): void {
+  const hostId = parseExecutionHostId(workspace.hostId)?.id
+  // Hostless, it would also hide a same-id copy main keeps listing on another host.
+  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN || !hostId) {
+    return
   }
-  return patched
-}
-
-function withMissing<Row>(
-  rows: ReadonlyMap<string, Row>,
-  added: ReadonlyMap<string, Row>
-): Map<string, Row> {
-  const merged = new Map(rows)
-  for (const [key, row] of added) {
-    if (!merged.has(key)) {
-      merged.set(key, row)
-    }
-  }
-  return merged
-}
-
-/** Main's inputs with the window's pending operations over them; the same object when none. */
-export function overlaySidebarPendingLayer(
-  domains: SidebarFeedDomains,
-  pending: SidebarPendingLayer,
-  catalog: { repos: readonly Repo[]; lineageById: Readonly<Record<string, WorktreeLineage>> }
-): SidebarFeedDomains {
-  const { writes, created } = pending
-  if (writes.length === 0 && created.length === 0) {
-    return domains
-  }
-  const createdCatalog = {
-    ...catalog,
-    worktrees: created.flatMap(({ workspace }) =>
-      'worktree' in workspace ? [workspace.worktree] : []
-    ),
-    folderWorkspaces: created.flatMap(({ workspace }) =>
-      'folderWorkspace' in workspace ? [workspace.folderWorkspace] : []
-    )
-  }
-  const workspaces = withMissing(domains.workspaces, buildWorkspaceRows(createdCatalog))
-  // Main lists a paired server's new row only once the server's own list reaches it.
-  const pairedServerRows = withMissing(
-    domains.pairedServerRows,
-    buildPairedServerRows(createdCatalog)
+  const entry = { opId: ++lastOpId, worktreeId: workspace.worktreeId, hostId, answeredBy: null }
+  startSettling()
+  publish({ ...layer, removed: [...layer.removed, entry] })
+  answer(
+    new Set([entry.opId]),
+    (pending) => pending.removed,
+    (pending, next) => ({ ...pending, removed: next })
   )
-  const touched = new Set(writes.map((write) => write.worktreeId))
-  for (const [identity, row] of workspaces) {
-    if (touched.has(row.id)) {
-      workspaces.set(identity, patch(row, row.id, rowHostId(row), writes))
-    }
-  }
-  for (const [key, row] of pairedServerRows) {
-    if (touched.has(row.worktreeId)) {
-      pairedServerRows.set(key, patch(row, row.worktreeId, serverRowHostId(row), writes))
-    }
-  }
-  return { ...domains, workspaces, pairedServerRows }
 }
 
 export function subscribeSidebarPendingLayer(listener: () => void): () => void {

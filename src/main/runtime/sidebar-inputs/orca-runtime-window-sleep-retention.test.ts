@@ -148,3 +148,82 @@ describe('main sleeping retention and a window sleep', () => {
     expect(retained(runtime)).toEqual([ROW_KEY])
   })
 })
+
+/** The window's graph once its terminal tab in WT is closed. */
+function publishNoTabs(runtime: Host): void {
+  runtime.syncWindowGraph(1, {
+    tabs: [],
+    leaves: [],
+    mobileSessionTabs: [
+      {
+        worktree: WT,
+        publicationEpoch: 'renderer:test',
+        snapshotVersion: 2,
+        activeGroupId: null,
+        activeTabId: null,
+        activeTabType: null,
+        tabs: []
+      }
+    ]
+  })
+}
+
+// pty-1 is recorded as the spawn records it, so it reads live until its exit arrives.
+async function createHostWithSpawnedPty(): Promise<Host> {
+  const runtime = await createHost()
+  runtime.registerPty('pty-1', WT)
+  return runtime
+}
+
+describe('main sleeping retention and a closed last tab', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('drops the row as the window closes the tab, before the terminal exits', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    // As closeTab does: pty:kill first, then the graph without the tab.
+    runtime.markPtyStopRequested('pty-1')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+    publishNoTabs(runtime)
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]).toBeUndefined()
+    expect(retained(runtime)).toEqual([])
+  })
+
+  it('drops the row when the stop request lands after the graph', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    publishNoTabs(runtime)
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+    runtime.markPtyStopRequested('pty-1')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]).toBeUndefined()
+    expect(retained(runtime)).toEqual([])
+  })
+
+  it('keeps a terminal live while a pane still shows it, though asked to stop', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    runtime.markPtyStopRequested('pty-1')
+    await vi.advanceTimersByTimeAsync(300)
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+  })
+
+  it('keeps a closed tab’s terminal unverifiable when its host stops answering', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    runtime.markPtyStopRequested('pty-1')
+    publishNoTabs(runtime)
+    runtime.markPtyLivenessUnverifiable('pty-1', 'ssh contact lost')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('unverifiable')
+  })
+
+  it('counts the terminal live again when its stop fails', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    runtime.markPtyStopRequested('pty-1')
+    publishNoTabs(runtime)
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]).toBeUndefined()
+    runtime.clearPtyStopRequest('pty-1')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+  })
+})

@@ -42,6 +42,7 @@ import { tearDownRemovedWorktreeRendererState } from './removed-worktree-rendere
 import { captureWorktreeStateBeforeRemoval } from './worktree-state-before-removal'
 import { resolveWorktreeRemovalPreference } from './worktree-removal-preference'
 import { completePreservedBranchCleanup } from './complete-preserved-branch-cleanup'
+import { holdRemovedSidebarWorkspace } from '@/lib/sidebar-pending-layer'
 
 export function createRemoveWorktree(
   set: WorktreeSliceSet,
@@ -169,6 +170,8 @@ export function createRemoveWorktree(
         }
       }
 
+      // Before the teardown drops the window's record: main may still list the row a moment longer.
+      holdRemovedSidebarWorkspace({ worktreeId, hostId })
       if (!snapshotPruneHandledByLocalMain) {
         await recordRemovedWorktreeSnapshotPrune({
           worktreeId,
