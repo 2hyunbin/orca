@@ -156,6 +156,12 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     // Why: an agent already ran here and the host recorded its session; resume it rather than
     // start a bare shell or a fresh agent (#27147, #27777).
     const resumeStartup = await this.resolvePaneOwnedResumeStartup(worktreeId, tab)
+    // The pane's record its resume starts from, as stored after any claim.
+    const paneKey = `${tab.parentTabId}:${tab.leafId}`
+    const resumedRecord =
+      resumeStartup && 'resumeProviderSession' in resumeStartup
+        ? this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey?.[paneKey]
+        : undefined
     let agentStartup: MobileTerminalCommand | MobileTerminalResumeCommand = resumeStartup ?? {}
     if (resumeStartup === undefined && tab.launchAgent) {
       let workspace
@@ -204,12 +210,12 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       )
       const ptyId = created.tab.ptyId ?? null
       // Switch point: under main the resumed agent runs, so its record must not read as a sleep.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && ptyId && 'resumeProviderSession' in agentStartup) {
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && ptyId && resumedRecord) {
         const hostId = this.getWorkspaceSessionHostIdForWorktree(worktreeId)
         void markResumedRecordLive(
           (edit) => this.commitWorkspaceSessionEdit(hostId, edit),
-          `${tab.parentTabId}:${tab.leafId}`,
-          agentStartup.resumeProviderSession
+          paneKey,
+          resumedRecord
         ).catch((err: unknown) => console.warn('[layout] could not mark a resumed pane live', err))
       }
       return ptyId
