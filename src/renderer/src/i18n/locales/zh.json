@@ -3468,8 +3468,8 @@
             "workspaceGone": "其工作区已不可用。"
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "由于运行此会话的计算机意外停止，自动恢复已暂停。",
-            "liveCapDetail": "运行此会话的计算机已达到 Orca 自动恢复 {{limit}} 个智能体的上限。",
+            "pausedDetail": "运行此会话的计算机上的自动恢复已暂停。",
+            "liveCapDetail": "Orca 已达到在运行此会话的计算机上重新打开会话的上限。",
             "pressureDetail": "运行此会话的计算机负载过高。",
             "deadlineDetail": "运行此会话的计算机当时正忙于重新打开其他终端。",
             "title": "恢复会话",

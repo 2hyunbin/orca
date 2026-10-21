@@ -1,23 +1,19 @@
 import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
-import {
-  DEFAULT_SPAWN_ADMISSION_LIMITS,
-  type SpawnDeferralReason
-} from '../../../../shared/host-spawn-admission'
+import type { SpawnDeferralReason } from '../../../../shared/host-spawn-admission'
 
 function sleepingReasonDetail(reason: SpawnDeferralReason): string {
   switch (reason) {
     case 'paused':
       return translate(
         'auto.components.terminal.pane.TerminalSleepingPaneOverlay.pausedDetail',
-        'Automatic restores are paused because the computer running this session stopped unexpectedly.'
+        'Automatic restores are paused on the computer running this session.'
       )
     case 'live_cap':
       return translate(
         'auto.components.terminal.pane.TerminalSleepingPaneOverlay.liveCapDetail',
-        'Orca has reached its automatic restore limit of {{limit}} agents on the computer running this session.',
-        { limit: DEFAULT_SPAWN_ADMISSION_LIMITS.maxLiveAutomatic }
+        'Orca has reached its limit for reopening sessions on the computer running this session.'
       )
     case 'pressure':
       return translate(

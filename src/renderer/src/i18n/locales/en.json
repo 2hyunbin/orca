@@ -3731,8 +3731,8 @@
             "workspaceGone": "Its workspace is no longer available."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Automatic restores are paused because the computer running this session stopped unexpectedly.",
-            "liveCapDetail": "Orca has reached its automatic restore limit of {{limit}} agents on the computer running this session.",
+            "pausedDetail": "Automatic restores are paused on the computer running this session.",
+            "liveCapDetail": "Orca has reached its limit for reopening sessions on the computer running this session.",
             "pressureDetail": "The computer running this session is under heavy load.",
             "deadlineDetail": "The computer running this session was busy reopening other terminals.",
             "title": "Resume your session",

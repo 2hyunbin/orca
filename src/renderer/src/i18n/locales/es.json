@@ -3463,8 +3463,8 @@
             "workspaceGone": "Su espacio de trabajo ya no está disponible."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Las restauraciones automáticas están en pausa porque el equipo que ejecuta esta sesión se detuvo de forma inesperada.",
-            "liveCapDetail": "Orca ha alcanzado el límite de restauración automática de {{limit}} agentes en el equipo que ejecuta esta sesión.",
+            "pausedDetail": "Las restauraciones automáticas están en pausa en el equipo que ejecuta esta sesión.",
+            "liveCapDetail": "Orca ha alcanzado su límite para reabrir sesiones en el equipo que ejecuta esta sesión.",
             "pressureDetail": "El equipo que ejecuta esta sesión está bajo mucha carga.",
             "deadlineDetail": "El equipo que ejecuta esta sesión estaba ocupado reabriendo otras terminales.",
             "title": "Reanuda tu sesión",

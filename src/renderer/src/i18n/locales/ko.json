@@ -3468,8 +3468,8 @@
             "workspaceGone": "작업 공간을 더 이상 사용할 수 없습니다."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "이 세션을 실행하는 컴퓨터가 예기치 않게 중지되어 자동 복원이 일시 중지되었습니다.",
-            "liveCapDetail": "이 세션을 실행하는 컴퓨터에서 Orca의 자동 복원 한도인 에이전트 {{limit}}개에 도달했습니다.",
+            "pausedDetail": "이 세션을 실행하는 컴퓨터에서 자동 복원이 일시 중지되었습니다.",
+            "liveCapDetail": "이 세션을 실행하는 컴퓨터에서 Orca의 세션 다시 열기 한도에 도달했습니다.",
             "pressureDetail": "이 세션을 실행하는 컴퓨터에 부하가 심합니다.",
             "deadlineDetail": "이 세션을 실행하는 컴퓨터가 다른 터미널을 다시 여느라 바빴습니다.",
             "title": "세션 재개",

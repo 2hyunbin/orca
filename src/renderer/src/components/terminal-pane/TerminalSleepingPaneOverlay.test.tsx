@@ -7,8 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalSleepingPaneOverlay } from './TerminalSleepingPaneOverlay'
 
 vi.mock('@/i18n/i18n', () => ({
-  translate: (_key: string, fallback: string, options?: { limit: number }) =>
-    fallback.replace('{{limit}}', String(options?.limit))
+  translate: (_key: string, fallback: string) => fallback
 }))
 
 afterEach(cleanup)
@@ -19,7 +18,7 @@ describe('TerminalSleepingPaneOverlay', () => {
 
     expect(screen.getByText('Resume your session')).toBeInTheDocument()
     expect(
-      screen.getByText(/paused because the computer running this session stopped unexpectedly/)
+      screen.getByText('Automatic restores are paused on the computer running this session.')
     ).toBeInTheDocument()
     expect(
       screen.getByText(/Your conversation is saved. Resume whenever you’re ready./)
@@ -33,7 +32,7 @@ describe('TerminalSleepingPaneOverlay', () => {
 
     expect(
       screen.getByText(
-        'Orca has reached its automatic restore limit of 8 agents on the computer running this session.'
+        'Orca has reached its limit for reopening sessions on the computer running this session.'
       )
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Resume' }))
