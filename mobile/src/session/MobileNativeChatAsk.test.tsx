@@ -82,6 +82,39 @@ describe('MobileNativeChatAsk single-select auto-advance', () => {
     expect(hints()).toHaveLength(0)
   })
 
+  it('preserves the last choice and Other through keyboard relayouts without sending', async () => {
+    const onAnswer = render({
+      questions: [
+        {
+          question: 'Which release targets?',
+          multiSelect: true,
+          options: Array.from({ length: 20 }, (_, index) => ({ label: `Target ${index + 1}` }))
+        }
+      ]
+    })
+    press('Target 20')
+    press('Other…')
+    act(() => tree.root.findByType('TextInput').props.onChangeText('another target'))
+    const scroll = () => tree.root.find((node) => isHost(node, 'ScrollView') && node.props.onLayout)
+    act(() => {
+      scroll().props.onContentSizeChange(320, 1_600)
+      for (const height of [240, 80, 0, 80, 240]) {
+        scroll().props.onLayout({ nativeEvent: { layout: { height } } })
+      }
+    })
+    await passAutoAdvanceBeat()
+
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(tree.root.find((node) => node.props.label === 'Target 20').props.selected).toBe(true)
+    expect(tree.root.findByType('TextInput').props.value).toBe('another target')
+    const submit = tree.root.find(
+      (node) => isHost(node, 'Pressable') && node.findAllByProps({ children: 'Submit' }).length > 0
+    )
+    expect(submit.props.disabled).toBe(false)
+    await act(async () => submit.props.onPress())
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith([{ indices: [19], other: 'another target' }])
+  })
+
   it('moves to the next question after a pick and sends after the last one', async () => {
     const onAnswer = render({ questions: [indent, fruit] })
 
