@@ -19747,7 +19747,7 @@
           "closedToast_one": "Closed {{count}} file with unsaved edits from {{workspace}}",
           "closedToast_other": "Closed {{count}} files with unsaved edits from {{workspace}}",
           "reopen": "Reopen",
-          "reopenFailed": "Some files couldn't be reopened because no workspace on their host is open."
+          "reopenFailed": "Some files couldn't be reopened. Open a workspace and try Reopen again."
         }
       }
     },

@@ -38,9 +38,13 @@ import {
 import { recordRemovedWorktreeSnapshotPrune } from './removed-worktree-snapshot-prune'
 import { clearSessionCommitDraftForWorktree } from '@/lib/source-control-commit-draft-session'
 import { dispatchWorktreeRemoval } from './dispatch-worktree-removal'
-import { tearDownRemovedWorktreeRendererState } from './removed-worktree-renderer-teardown'
+import {
+  tearDownRemovedWorktreeRendererState,
+  snapshotRemovedWorktreeName
+} from './removed-worktree-renderer-teardown'
 import { captureWorktreeStateBeforeRemoval } from './worktree-state-before-removal'
 import { resolveWorktreeRemovalPreference } from './worktree-removal-preference'
+import { beginConfirmedUnsavedRemoval } from './confirmed-unsaved-removal-scope'
 import { completePreservedBranchCleanup } from './complete-preserved-branch-cleanup'
 
 export function createRemoveWorktree(
@@ -74,6 +78,9 @@ export function createRemoveWorktree(
     } = start
     const sameIdSurvivingHostId =
       catalogSameIdSurvivingHostId ?? options?.sameIdSurvivingHostId ?? null
+    const releaseConfirmedScope = options?.unsavedEditsConfirmed
+      ? beginConfirmedUnsavedRemoval(hostId, worktreeId)
+      : () => {}
     const deleteStateKey = getWorktreeDeleteStateKey(get(), worktreeId, requiredExecutionHostId)
     set((s) => ({
       deleteStateByWorktreeId: {
@@ -224,19 +231,7 @@ export function createRemoveWorktree(
         rememberAuthoritativelyRemovedWorktrees(hostId, [worktreeId])
       }
 
-      const worktreeDisplayName = worktreeBeforeRemoval?.displayName?.trim()
-      if (worktreeDisplayName && hostId) {
-        try {
-          await window.api.automations?.snapshotWorkspaceName?.({
-            workspaceId: worktreeId,
-            hostId,
-            displayName: worktreeDisplayName
-          })
-        } catch (error) {
-          // Why: snapshotting automation labels is best-effort; a stale preload/test harness must not block removal.
-          console.warn('Failed to snapshot automation workspace name:', error)
-        }
-      }
+      await snapshotRemovedWorktreeName(worktreeId, hostId, worktreeBeforeRemoval?.displayName)
 
       await tearDownRemovedWorktreeRendererState({
         set,
@@ -325,6 +320,8 @@ export function createRemoveWorktree(
         }
       }))
       return { ok: false as const, error }
+    } finally {
+      releaseConfirmedScope()
     }
   }
 }

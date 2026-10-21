@@ -25,7 +25,7 @@ import {
   worktreeListingRefusal,
   type WorktreeListingMergeOutcome
 } from './detected-worktree-refresh-admission'
-import { buildWorktreePurgeState } from '../teardown/worktree-purge-state'
+import { buildAnnouncedRemovalPurgeState } from '../teardown/announced-removal-purge-state'
 import { flushWorkspacePendingEdits } from '../teardown/removed-workspace-unsaved-files'
 import { hostWorktreeTarget } from '../../../../../../shared/worktree/host-qualified-identity'
 import { isDisplayNamePersistencePending } from '../metadata/worktree-meta-persist'
@@ -284,7 +284,7 @@ export function mergeFetchedWorktrees(
           }
         : {}),
       ...(removedIds.length > 0
-        ? buildWorktreePurgeState(
+        ? buildAnnouncedRemovalPurgeState(
             s,
             removedIds.map((id) => hostWorktreeTarget({ id, hostId: args.hostId }))
           )

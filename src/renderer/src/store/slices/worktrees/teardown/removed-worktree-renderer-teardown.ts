@@ -113,3 +113,23 @@ export async function tearDownRemovedWorktreeRendererState(args: {
   get().prunePullRequestGenerationRecords?.(liveWorktreeKeys)
   get().pruneCommitMessageGenerationRecords?.(liveWorktreeKeys)
 }
+
+export async function snapshotRemovedWorktreeName(
+  worktreeId: string,
+  hostId: ExecutionHostId | undefined,
+  displayName: string | undefined
+): Promise<void> {
+  const worktreeDisplayName = displayName?.trim()
+  if (worktreeDisplayName && hostId) {
+    try {
+      await window.api.automations?.snapshotWorkspaceName?.({
+        workspaceId: worktreeId,
+        hostId,
+        displayName: worktreeDisplayName
+      })
+    } catch (error) {
+      // Best-effort labels must not block workspace removal.
+      console.warn('Failed to snapshot automation workspace name:', error)
+    }
+  }
+}

@@ -12,6 +12,7 @@ import { getFolderWorkspaceHostId } from '../../../../../../shared/folder-worksp
 import { getProjectGroupHostId } from '../../project-group-owner-routing'
 import {
   collectRemovedHostTwinState,
+  type RemovedHostTwinState,
   removedHostCanonicalizer,
   twinSelectionPatch
 } from '../../../repos/repo-removal-host-twin-attribution'
@@ -177,23 +178,10 @@ export function buildHostTwinPurgeState(
       terminalTabs.push({ id: tabId, ptyId: null })
     }
   }
-  // Why: a preview keys its source's editor state, unless a surviving file still uses that source.
-  const survivingFiles = s.openFiles.filter((file) => !removed.fileIds.has(file.id))
-  const previewSourceIds = s.openFiles.flatMap((file) =>
-    removed.fileIds.has(file.id) &&
-    file.markdownPreviewSourceFileId &&
-    !survivingFiles.some(
-      (other) =>
-        other.id === file.markdownPreviewSourceFileId ||
-        other.markdownPreviewSourceFileId === file.markdownPreviewSourceFileId
-    )
-      ? [file.markdownPreviewSourceFileId]
-      : []
-  )
   const doomed = collectSurfacePurgeDoomedIds(s, {
     tabs: terminalTabs,
     browserWorkspaceIds: removed.browserTabIds,
-    fileIds: [...removed.fileIds, ...previewSourceIds]
+    fileIds: twinPurgeFileIds(s, removed)
   })
   // Why: a PTY a kept tab still binds stays live, so its PTY-keyed state must stay with it.
   for (const worktreeId of twinIds) {
@@ -254,4 +242,21 @@ export function buildHostTwinPurgeState(
     }),
     ...twinSelectionPatch(s, twinHostIds, hostId)
   }
+}
+
+export function twinPurgeFileIds(s: AppState, removed: RemovedHostTwinState): Set<string> {
+  // Why: a preview keys its source's editor state, unless a surviving file still uses that source.
+  const survivingFiles = s.openFiles.filter((file) => !removed.fileIds.has(file.id))
+  const previewSourceIds = s.openFiles.flatMap((file) =>
+    removed.fileIds.has(file.id) &&
+    file.markdownPreviewSourceFileId &&
+    !survivingFiles.some(
+      (other) =>
+        other.id === file.markdownPreviewSourceFileId ||
+        other.markdownPreviewSourceFileId === file.markdownPreviewSourceFileId
+    )
+      ? [file.markdownPreviewSourceFileId]
+      : []
+  )
+  return new Set([...removed.fileIds, ...previewSourceIds])
 }

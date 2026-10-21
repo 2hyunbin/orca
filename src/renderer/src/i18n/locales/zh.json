@@ -19377,7 +19377,7 @@
           "closedToast_one": "已关闭 {{workspace}} 中 {{count}} 个有未保存编辑的文件",
           "closedToast_other": "已关闭 {{workspace}} 中 {{count}} 个有未保存编辑的文件",
           "reopen": "重新打开",
-          "reopenFailed": "由于其主机上没有打开的工作区，部分文件无法重新打开。"
+          "reopenFailed": "部分文件无法重新打开。请打开工作区，然后再次尝试“重新打开”。"
         }
       }
     },

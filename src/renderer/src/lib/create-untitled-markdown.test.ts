@@ -72,6 +72,40 @@ describe('createUntitledMarkdownFile', () => {
     expect(pathExists).toHaveBeenCalledTimes(3)
   })
 
+  it.each(['original text {{title}}', ''])(
+    'recovers exact text into a collision-safe new path (%j)',
+    async (content) => {
+      const pathExists = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false)
+      const createFile = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('EEXIST'))
+        .mockResolvedValue(undefined)
+      const writeFile = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal('window', { api: { fs: { pathExists, createFile, writeFile } } })
+      await expect(
+        createUntitledMarkdownFile('/active', 'wt', undefined, LOCAL, {
+          recoveredDocument: { originalName: 'C:\\removed\\note.ts', content }
+        })
+      ).resolves.toMatchObject({
+        filePath: '/active/note (recovered 3).ts',
+        relativePath: 'note (recovered 3).ts',
+        language: 'typescript',
+        isUntitled: true,
+        deleteUntouchedOnClose: false
+      })
+      expect(writeFile).toHaveBeenCalledTimes(1)
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filePath: '/active/note (recovered 3).ts',
+          content
+        })
+      )
+      expect(createFile).not.toHaveBeenCalledWith(
+        expect.objectContaining({ filePath: 'C:\\removed\\note.ts' })
+      )
+    }
+  )
+
   it('throws a descriptive error when untitled names are exhausted', async () => {
     const pathExists = vi.fn(async () => true)
     const stat = vi.fn().mockResolvedValue({ size: 0, isDirectory: false, mtime: 1 })

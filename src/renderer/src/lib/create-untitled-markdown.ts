@@ -14,7 +14,7 @@ import {
   type MarkdownDocumentTemplate
 } from './markdown-document-templates'
 import { requestMarkdownTemplateSelection } from './markdown-template-picker-request'
-import { joinPath } from './path'
+import { basename, joinPath } from './path'
 import type { EditorFileOperationProvenance } from './editor-file-operation-owner'
 
 export type UntitledMarkdownFileInfo = {
@@ -30,6 +30,7 @@ export type UntitledMarkdownFileInfo = {
 
 type CreateUntitledMarkdownOptions = {
   template?: MarkdownDocumentTemplate
+  recoveredDocument?: { originalName: string; content: string }
   now?: Date
   operationProvenance?: EditorFileOperationProvenance
   expectedSshTargetId?: string
@@ -52,8 +53,12 @@ export async function createUntitledMarkdownFile(
   target: RuntimeClientTarget,
   options: CreateUntitledMarkdownOptions = {}
 ): Promise<UntitledMarkdownFileInfo> {
-  const baseName = 'untitled'
-  const ext = '.md'
+  const originalName = basename(options.recoveredDocument?.originalName ?? '')
+  const dot = originalName.lastIndexOf('.')
+  const ext = options.recoveredDocument ? (dot > 0 ? originalName.slice(dot) : '') : '.md'
+  const baseName = options.recoveredDocument
+    ? (dot > 0 ? originalName.slice(0, dot) : originalName) || 'untitled'
+    : 'untitled'
   const MAX_ATTEMPTS = 100
   const context = {
     target,
@@ -69,9 +74,11 @@ export async function createUntitledMarkdownFile(
       requireOperationAssertion(options.assertOperationCurrent)()
     }
   }
-  const templateContent = options.template
-    ? await readMarkdownDocumentTemplateContent(context, options.template)
-    : null
+  const templateContent = options.recoveredDocument
+    ? options.recoveredDocument.content
+    : options.template
+      ? await readMarkdownDocumentTemplateContent(context, options.template)
+      : null
 
   // Why: createFile uses the 'wx' flag, so pathExists is only a hint. Another
   // create can still win the race after our last probe, especially when the
@@ -82,7 +89,11 @@ export async function createUntitledMarkdownFile(
   // Why: existence probing must go through the same runtime/SSH-aware file
   // surface as creation; the shell probe only sees the client filesystem.
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const fileName = attempt === 1 ? `${baseName}${ext}` : `${baseName}-${attempt}${ext}`
+    const fileName = options.recoveredDocument
+      ? `${baseName} (recovered${attempt === 1 ? '' : ` ${attempt}`})${ext}`
+      : attempt === 1
+        ? `${baseName}${ext}`
+        : `${baseName}-${attempt}${ext}`
     const filePath = joinPath(worktreePath, fileName)
 
     assertCurrent()
@@ -99,11 +110,13 @@ export async function createUntitledMarkdownFile(
           await writeRuntimeFile(
             context,
             filePath,
-            applyMarkdownTemplatePlaceholders(templateContent, {
-              title: getMarkdownTemplateTitleForFileName(fileName),
-              filename: fileName,
-              now: options.now
-            })
+            options.recoveredDocument
+              ? templateContent
+              : applyMarkdownTemplatePlaceholders(templateContent, {
+                  title: getMarkdownTemplateTitleForFileName(fileName),
+                  filename: fileName,
+                  now: options.now
+                })
           )
         } catch (error) {
           assertCurrent()

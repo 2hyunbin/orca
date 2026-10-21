@@ -19365,7 +19365,7 @@
           "closedToast_one": "Se cerró {{count}} archivo con ediciones sin guardar de {{workspace}}",
           "closedToast_other": "Se cerraron {{count}} archivos con ediciones sin guardar de {{workspace}}",
           "reopen": "Reabrir",
-          "reopenFailed": "Algunos archivos no se pudieron reabrir porque no hay ningún espacio de trabajo abierto en su host."
+          "reopenFailed": "No se pudieron reabrir algunos archivos. Abre un espacio de trabajo e intenta Reabrir de nuevo."
         }
       }
     },

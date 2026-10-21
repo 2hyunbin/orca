@@ -1,3 +1,4 @@
+import { worktreePurgeClosedFileIds } from './worktree-purge-closed-files'
 import type { AppState } from '../../../types'
 import { forgetCombinedDiffViewsForWorktrees } from '@/components/editor/combined-diff/remember-view/combined-diff-view-cache'
 import type { WorktreePurgeTarget, WorktreePurgeTargets } from '../../worktree-helpers'
@@ -38,17 +39,20 @@ export function buildWorktreePurgeState(
   const targets: WorktreePurgeTarget[] = worktreeTargets.map((target) =>
     typeof target === 'string' ? { id: target } : target
   )
+  noticeRemovedUnsavedFiles(s, worktreePurgeClosedFileIds(s, targets), options)
+  const childOptions = { ...options, unsavedNoticeHandled: true }
   const twinScopes = collectHostTwinPurgeScopes(s, targets)
   if (twinScopes.size === 0) {
-    return buildFullWorktreePurgeState(s, targets, options)
+    return buildFullWorktreePurgeState(s, targets, childOptions)
   }
   const twinIds = new Set([...twinScopes.values()].flatMap((twins) => [...twins.keys()]))
   const fullTargets = targets.filter((target) => !target.hostId || !twinIds.has(target.id))
-  let patch = fullTargets.length > 0 ? buildFullWorktreePurgeState(s, fullTargets, options) : {}
+  let patch =
+    fullTargets.length > 0 ? buildFullWorktreePurgeState(s, fullTargets, childOptions) : {}
   for (const [hostId, twinHostIds] of twinScopes) {
     patch = {
       ...patch,
-      ...buildHostTwinPurgeState({ ...s, ...patch }, hostId, twinHostIds, options)
+      ...buildHostTwinPurgeState({ ...s, ...patch }, hostId, twinHostIds, childOptions)
     }
   }
   // Why both hosts: a paired runtime's copy writes recency and delete state under either identity.

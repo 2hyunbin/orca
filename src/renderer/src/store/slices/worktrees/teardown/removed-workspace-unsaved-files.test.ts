@@ -9,10 +9,6 @@ const mocks = vi.hoisted(() => ({ show: vi.fn() }))
 vi.mock('@/components/editor/closed-unsaved-files-toast', () => ({
   showClosedUnsavedFilesToast: mocks.show
 }))
-vi.mock('@/components/editor/editor-model-owner', () => ({
-  resolveEditorModelOwner: () => ({ environmentId: null, hostId: 'ssh:box' }),
-  getEditorModelOwnerKey: () => '[null,"ssh:box"]'
-}))
 
 function tab(id: string, worktreeId: string, isDirty = true): OpenFile {
   return {
@@ -54,7 +50,7 @@ describe('unsaved files closed by a removal with no prompt', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  it('offers the text back in one toast, keyed to its host', async () => {
+  it('offers only the recovered text and filename in one toast', async () => {
     noticeRemovedUnsavedFiles(
       state([tab('a.md', 'wt'), tab('b.md', 'wt'), tab('c.md', 'wt', false)], {
         'a.md': 'draft a',
@@ -66,12 +62,12 @@ describe('unsaved files closed by a removal with no prompt', () => {
     const [closed, label] = mocks.show.mock.calls[0]
     expect(label).toBe('Feature work')
     expect(closed).toEqual([
-      expect.objectContaining({
+      {
         filePath: '/w/wt/a.md',
         content: 'draft a',
-        lastKnownDiskSignature: 'sig-a.md',
-        ownerKey: '[null,"ssh:box"]'
-      }),
+        worktreeId: 'wt',
+        language: 'markdown'
+      },
       expect.objectContaining({ filePath: '/w/wt/b.md', content: 'draft b' })
     ])
   })

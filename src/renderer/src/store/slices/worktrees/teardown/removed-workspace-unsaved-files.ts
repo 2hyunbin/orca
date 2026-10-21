@@ -3,32 +3,21 @@ import {
   flushRemovalPendingEdits,
   lastViewUnsavedFiles
 } from '@/components/editor/removal-unsaved-editor-files'
-import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
-import { isRemovedRuntimeHostId } from '../../stale-runtime-host-rows'
-import {
-  getEditorModelOwnerKey,
-  resolveEditorModelOwner,
-  type EditorModelOwner
-} from '@/components/editor/editor-model-owner'
 import { folderWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '../../../workspace-record-selectors'
 
 /** Set by a removal the user confirmed in a dialog that listed its unsaved files. */
-export type RemovalUnsavedEditsOptions = { unsavedEditsConfirmed?: boolean }
+export type RemovalUnsavedEditsOptions = {
+  unsavedEditsConfirmed?: boolean
+  unsavedNoticeHandled?: boolean
+}
 
-/** Unsaved text a removal with no prompt closed, owned by that removal's notice alone. */
+/** Text retained only until the removal notice is dismissed or recovered. */
 export type ClosedUnsavedFile = {
   filePath: string
-  relativePath: string
   worktreeId: string
   language: string
   content: string
-  lastKnownDiskSignature?: string
-  runtimeEnvironmentId?: string | null
-  externalSshTargetId?: string
-  owner: EditorModelOwner
-  /** Host-qualified model owner; a reopen must land on the same host. */
-  ownerKey: string
 }
 
 function workspaceLabel(s: AppState, worktreeId: string): string {
@@ -50,18 +39,29 @@ export function noticeRemovedUnsavedFiles(
   removedFileIds: ReadonlySet<string>,
   options?: RemovalUnsavedEditsOptions
 ): void {
-  if (options?.unsavedEditsConfirmed || removedFileIds.size === 0) {
+  if (
+    options?.unsavedEditsConfirmed ||
+    options?.unsavedNoticeHandled ||
+    removedFileIds.size === 0
+  ) {
     return
   }
+  announceClosedUnsavedFiles(s, captureRemovedUnsavedFiles(s, removedFileIds))
+}
+
+export function captureRemovedUnsavedFiles(
+  s: AppState,
+  removedFileIds: ReadonlySet<string>
+): ClosedUnsavedFile[] {
   try {
-    captureAndNotice(s, removedFileIds)
+    return captureRemovedText(s, removedFileIds)
   } catch (error) {
-    // Why: the notice is best-effort; it must never block the purge it runs inside.
     console.error('[editor] capturing unsaved edits from a removed workspace failed', error)
+    return []
   }
 }
 
-function captureAndNotice(s: AppState, removedFileIds: ReadonlySet<string>): void {
+function captureRemovedText(s: AppState, removedFileIds: ReadonlySet<string>): ClosedUnsavedFile[] {
   const closed: ClosedUnsavedFile[] = []
   for (const file of lastViewUnsavedFiles(s, removedFileIds)) {
     const content = s.editorDrafts[file.id]
@@ -74,17 +74,15 @@ function captureAndNotice(s: AppState, removedFileIds: ReadonlySet<string>): voi
     }
     closed.push({
       filePath: file.filePath,
-      relativePath: file.relativePath,
       worktreeId: file.worktreeId,
       language: file.language,
-      content,
-      lastKnownDiskSignature: file.lastKnownDiskSignature,
-      runtimeEnvironmentId: file.runtimeEnvironmentId,
-      externalSshTargetId: file.externalSshTargetId,
-      owner: resolveEditorModelOwner(file, s),
-      ownerKey: getEditorModelOwnerKey(file, s)
+      content
     })
   }
+  return closed
+}
+
+export function announceClosedUnsavedFiles(s: AppState, closed: ClosedUnsavedFile[]): void {
   if (closed.length === 0) {
     return
   }
@@ -99,29 +97,6 @@ function captureAndNotice(s: AppState, removedFileIds: ReadonlySet<string>): voi
       module.showClosedUnsavedFilesToast(closed, label)
     )
   })
-}
-
-/** Flushes delayed views of workspaces a runtime-host removal will purge; over-flushing is harmless. */
-export function flushRemovedRuntimeHostPendingEdits(
-  state: AppState,
-  removedEnvironmentIds: ReadonlySet<string>
-): void {
-  const removedOwnerRepoIds = new Set(
-    (state.repos ?? [])
-      .filter((repo) => isRemovedRuntimeHostId(getRepoExecutionHostId(repo), removedEnvironmentIds))
-      .map((repo) => repo.id)
-  )
-  flushWorkspacePendingEdits(
-    state,
-    Object.values(selectWorktreesByRepo(state) ?? {})
-      .flat()
-      .filter(
-        (row) =>
-          isRemovedRuntimeHostId(row.hostId, removedEnvironmentIds) ||
-          (!row.hostId && removedOwnerRepoIds.has(row.repoId))
-      )
-      .map((row) => row.id)
-  )
 }
 
 /** Flushes delayed views of every tab in these workspaces before a purge drops them. */

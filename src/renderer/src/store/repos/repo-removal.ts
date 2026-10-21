@@ -28,57 +28,21 @@ import {
   deleteWorkspaceChatDrafts
 } from '../slices/worktrees/teardown/removed-worktree-chat-drafts'
 
-export function worktreeBelongsToHost(worktree: { hostId?: string }, hostId: string): boolean {
-  return (worktree.hostId ?? LOCAL_EXECUTION_HOST_ID) === hostId
-}
+import { flushRemovalPendingEdits } from '@/components/editor/removal-unsaved-editor-files'
+import { worktreePurgeClosedFileIds } from '../slices/worktrees/teardown/worktree-purge-closed-files'
+import {
+  captureRemovedUnsavedFiles,
+  announceClosedUnsavedFiles
+} from '../slices/worktrees/teardown/removed-workspace-unsaved-files'
 
-type HostScopedWorktreeRef = { id: string; hostId?: string }
+import { beginConfirmedUnsavedRemoval } from '../slices/worktrees/teardown/confirmed-unsaved-removal-scope'
 
-type RepoWorktreeCatalog = {
-  worktreesByRepo: Readonly<Record<string, readonly HostScopedWorktreeRef[] | undefined>>
-  detectedWorktreesByRepo: Readonly<
-    Record<string, { worktrees: readonly HostScopedWorktreeRef[] } | undefined>
-  >
-}
-
-export function getKnownRepoWorktreeIds(
-  state: RepoWorktreeCatalog,
-  projectId: string,
-  hostId?: string
-): string[] {
-  const ids = new Set<string>()
-  for (const worktree of state.worktreesByRepo[projectId] ?? []) {
-    if (!hostId || worktreeBelongsToHost(worktree, hostId)) {
-      ids.add(worktree.id)
-    }
-  }
-  for (const worktree of state.detectedWorktreesByRepo[projectId]?.worktrees ?? []) {
-    if (!hostId || worktreeBelongsToHost(worktree, hostId)) {
-      ids.add(worktree.id)
-    }
-  }
-  return [...ids]
-}
-
-/** Terminal tabs that removing this project's host row will close. */
-export function countOpenRepoTerminalTabs(
-  state: RepoWorktreeCatalog & {
-    tabsByWorktree: Readonly<Record<string, readonly { id: string }[] | undefined>>
-    ptyIdsByTabId: Readonly<Record<string, readonly string[] | undefined>>
-  },
-  projectId: string,
-  hostId: string
-): number {
-  let count = 0
-  for (const worktreeId of getKnownRepoWorktreeIds(state, projectId, hostId)) {
-    for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
-      if ((state.ptyIdsByTabId[tab.id]?.length ?? 0) > 0) {
-        count += 1
-      }
-    }
-  }
-  return count
-}
+import { getKnownRepoWorktreeIds, worktreeBelongsToHost } from './repo-removal-worktree-catalog'
+export {
+  countOpenRepoTerminalTabs,
+  getKnownRepoWorktreeIds,
+  worktreeBelongsToHost
+} from './repo-removal-worktree-catalog'
 
 /** A listing that fails reads as registered, so the host is still asked as before. */
 async function isRuntimeEnvironmentRegistered(environmentId: string): Promise<boolean> {
@@ -96,6 +60,7 @@ export function createRepoRemovalActions(
 ): Pick<RepoSlice, 'removeProject'> {
   const actions: Pick<RepoSlice, 'removeProject'> = {
     removeProject: async (projectId, options) => {
+      const releaseConfirmedScopes: (() => void)[] = []
       try {
         // Why: exact host match only; the unique-candidate/focused fallbacks could pick another host's row (#13071).
         const ownerRepo = get().repos.find((repo) =>
@@ -105,6 +70,13 @@ export function createRepoRemovalActions(
           return
         }
         const ownerHostId = getRepoExecutionHostId(ownerRepo)
+        if (options.unsavedEditsConfirmed) {
+          releaseConfirmedScopes.push(
+            ...getKnownRepoWorktreeIds(get(), projectId, ownerHostId).map((id) =>
+              beginConfirmedUnsavedRemoval(ownerHostId, id)
+            )
+          )
+        }
         // Why only awaited for a VM: concurrent removals of one row must reach the host together.
         const vmDestroy = destroyRecipeVmBeforeProjectRemoval(
           get(),
@@ -214,10 +186,21 @@ export function createRepoRemovalActions(
         }
 
         // Why: use the canonical per-worktree purge to evict all worktree-scoped maps (hand-deletion leaked most); runs before the set() below so it still sees tabsByWorktree.
+        const closedFileIds = worktreePurgeClosedFileIds(
+          get(),
+          worktreeIds.map((id) => ({ id, hostId: ownerHostId }))
+        )
+        flushRemovalPendingEdits(get(), closedFileIds)
+        const closed = options.unsavedEditsConfirmed
+          ? []
+          : captureRemovedUnsavedFiles(get(), closedFileIds)
+        const noticeState = get()
         closeRemovedHostTwinState(get, set, twins, preCallTwins)
         get().purgeWorktreeTerminalState(exclusiveWorktreeIds, {
-          unsavedEditsConfirmed: options.unsavedEditsConfirmed === true
+          unsavedEditsConfirmed: options.unsavedEditsConfirmed === true,
+          unsavedNoticeHandled: true
         })
+        announceClosedUnsavedFiles(noticeState, closed)
         deleteWorkspaceChatDrafts(chatDraftKeys)
         get().clearLocalDetectedAgentContextsForProjects(localAgentContextProjectIds)
 
@@ -310,6 +293,8 @@ export function createRepoRemovalActions(
             }
           )
         }
+      } finally {
+        releaseConfirmedScopes.forEach((release) => release())
       }
     }
   }

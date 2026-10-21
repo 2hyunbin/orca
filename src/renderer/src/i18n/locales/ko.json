@@ -19412,7 +19412,7 @@
           "closedToast_one": "{{workspace}}에서 저장되지 않은 편집 내용이 있는 파일 {{count}}개를 닫았습니다",
           "closedToast_other": "{{workspace}}에서 저장되지 않은 편집 내용이 있는 파일 {{count}}개를 닫았습니다",
           "reopen": "다시 열기",
-          "reopenFailed": "호스트에 열린 워크스페이스가 없어 일부 파일을 다시 열지 못했습니다."
+          "reopenFailed": "일부 파일을 다시 열지 못했습니다. 워크스페이스를 열고 다시 열기를 다시 시도하세요."
         }
       }
     },

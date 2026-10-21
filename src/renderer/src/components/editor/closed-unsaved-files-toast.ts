@@ -1,13 +1,13 @@
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
-import type { AppState } from '@/store'
-import type { OpenFile } from '@/store/slices/editor'
 import type { ClosedUnsavedFile } from '@/store/slices/worktrees/teardown/removed-workspace-unsaved-files'
-import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { parseWorkspaceKey, folderWorkspaceKey } from '../../../../shared/workspace-scope'
-import { getEditorModelOwnerKey } from './editor-model-owner'
+import {
+  assertEditorFileOperationCurrent,
+  captureEditorFileOperationProvenance,
+  getEditorFileOperationContext
+} from '@/lib/editor-file-operation-owner'
+import { createUntitledMarkdownFile } from '@/lib/create-untitled-markdown'
 import { translate } from '@/i18n/i18n'
-import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 function closedUnsavedFilesToastTitle(count: number, workspace: string): string {
   return count === 1
@@ -23,100 +23,105 @@ function closedUnsavedFilesToastTitle(count: number, workspace: string): string 
       )
 }
 
-function workspaceStillOpen(state: AppState, worktreeId: string): boolean {
-  if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
-    return selectFolderWorkspaces(state).some(
-      (workspace) => folderWorkspaceKey(workspace.id) === worktreeId
-    )
-  }
-  return state.allWorktrees().some((worktree) => worktree.id === worktreeId)
-}
-
-/** The tab to reopen in `worktreeId`, pinned to the closed file's host when it moved workspace. */
-function reopenTab(
-  closed: ClosedUnsavedFile,
-  worktreeId: string
-): Omit<OpenFile, 'id' | 'isDirty'> {
-  const moved = worktreeId !== closed.worktreeId
-  const sshTargetId =
-    closed.externalSshTargetId ?? (moved ? parseSshTargetId(closed.owner.hostId) : undefined)
-  return {
-    filePath: closed.filePath,
-    relativePath: closed.relativePath,
-    worktreeId,
-    language: closed.language,
-    mode: 'edit',
-    // Why: the next save is guarded against the version these edits came from.
-    lastKnownDiskSignature: closed.lastKnownDiskSignature,
-    ...(closed.runtimeEnvironmentId !== undefined || (moved && closed.owner.environmentId)
-      ? { runtimeEnvironmentId: closed.runtimeEnvironmentId ?? closed.owner.environmentId }
-      : {}),
-    ...(sshTargetId ? { externalSshTargetId: sshTargetId } : {})
-  }
-}
-
-function parseSshTargetId(hostId: string | null): string | undefined {
-  const parsed = parseExecutionHostId(hostId)
-  return parsed?.kind === 'ssh' ? parsed.targetId : undefined
-}
-
-/** Reopens each file as an unsaved tab: its own workspace if still open, else the active one. */
-export function reopenClosedUnsavedFiles(closed: readonly ClosedUnsavedFile[]): void {
-  let failed = 0
+/** Recovery creates new files only in the active workspace, never at the removed paths. */
+export async function reopenClosedUnsavedFiles(
+  closed: readonly ClosedUnsavedFile[]
+): Promise<ClosedUnsavedFile[]> {
+  const failed: ClosedUnsavedFile[] = []
   for (const file of closed) {
-    const state = useAppStore.getState()
-    const worktreeId = workspaceStillOpen(state, file.worktreeId)
-      ? file.worktreeId
-      : state.activeWorktreeId
-    const tab = worktreeId ? reopenTab(file, worktreeId) : null
-    // Why: a tab resolving to another host would save these edits to the wrong machine.
-    if (
-      !tab ||
-      getEditorModelOwnerKey({ ...tab, id: '', isDirty: false }, state) !== file.ownerKey
-    ) {
-      failed += 1
-      continue
+    try {
+      const state = useAppStore.getState()
+      const worktreeId = state.activeWorktreeId
+      const worktree = worktreeId ? state.getKnownWorktreeById(worktreeId) : null
+      if (!worktreeId || !worktree) {
+        throw new Error('No active workspace')
+      }
+      const operationProvenance = captureEditorFileOperationProvenance(
+        state,
+        worktreeId,
+        undefined,
+        false
+      )
+      const context = getEditorFileOperationContext(
+        state,
+        { worktreeId, operationProvenance },
+        worktree.path
+      )
+      const fileInfo = await createUntitledMarkdownFile(
+        worktree.path,
+        worktreeId,
+        context.connectionId,
+        context.target,
+        {
+          recoveredDocument: { originalName: file.filePath, content: file.content },
+          operationProvenance,
+          expectedSshConnectionGeneration: context.expectedSshConnectionGeneration,
+          expectedSshTargetId: context.expectedSshTargetId,
+          expectedExecutionHostId: context.expectedExecutionHostId,
+          assertOperationCurrent: () =>
+            assertEditorFileOperationCurrent(
+              useAppStore.getState(),
+              worktreeId,
+              operationProvenance
+            )
+        }
+      )
+      useAppStore.getState().openFile(fileInfo, { preview: false, focusEditor: true })
+    } catch (error) {
+      failed.push(file)
+      console.warn('[editor] could not reopen closed unsaved file', {
+        filePath: file.filePath,
+        error
+      })
     }
-    const existing = new Set(state.openFiles.filter((open) => open.isDirty).map((open) => open.id))
-    const fileId = state.openFile(tab)
-    // Why: never overwrite edits a tab already open on that path holds.
-    if (existing.has(fileId)) {
-      failed += 1
-      continue
-    }
-    state.setEditorDraft(fileId, file.content)
-    state.markFileDirty(fileId, true)
   }
-  if (failed > 0) {
+  if (failed.length > 0) {
     toast.error(
       translate(
         'components.workspace.delete.unsavedEdits.reopenFailed',
-        "Some files couldn't be reopened because no workspace on their host is open."
+        "Some files couldn't be reopened. Open a workspace and try Reopen again."
       )
     )
-    console.warn('[editor] could not reopen closed unsaved files', { failed })
   }
+  return failed
 }
 
-/** One toast per removal; dismissing it drops the text, so the drop is logged. */
+/** Callbacks retained by the toast keep only a clearable holder, not the recovered text. */
 export function showClosedUnsavedFilesToast(
   closed: readonly ClosedUnsavedFile[],
   workspaceLabel: string
 ): void {
-  let reopened = false
-  toast.warning(closedUnsavedFilesToastTitle(closed.length, workspaceLabel), {
+  const holder: { files: readonly ClosedUnsavedFile[] | null } = { files: closed }
+  let reopening = false
+  const toastId = toast.warning(closedUnsavedFilesToastTitle(closed.length, workspaceLabel), {
     duration: Number.POSITIVE_INFINITY,
     action: {
       label: translate('components.workspace.delete.unsavedEdits.reopen', 'Reopen'),
-      onClick: () => {
-        reopened = true
-        reopenClosedUnsavedFiles(closed)
+      onClick: (event) => {
+        event.preventDefault()
+        if (reopening || !holder.files) {
+          return
+        }
+        reopening = true
+        void reopenClosedUnsavedFiles(holder.files).then((failed) => {
+          reopening = false
+          // Dismiss can release the holder while creation is still in flight.
+          if (!holder.files) {
+            return
+          }
+          holder.files = failed.length > 0 ? failed : null
+          if (!holder.files) {
+            toast.dismiss(toastId)
+          }
+        })
       }
     },
     onDismiss: () => {
-      if (!reopened) {
+      const files = holder.files
+      holder.files = null
+      if (files) {
         console.warn('[editor] dropped unsaved edits from a removed workspace', {
-          filePaths: closed.map((file) => file.filePath)
+          filePaths: files.map((file) => file.filePath)
         })
       }
     }

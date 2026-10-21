@@ -19,7 +19,7 @@ export function collectWorktreePurgeDoomedIds(
 ): WorktreePurgeDoomedIds {
   const tabs: { id: string; ptyId: string | null }[] = []
   const browserWorkspaceIds: string[] = []
-  const fileIds: string[] = []
+  const fileIds = fullPurgeFileIds(s, worktreeIdSet)
   for (const id of worktreeIdSet) {
     tabs.push(...(s.tabsByWorktree[id] ?? []))
     for (const workspace of s.browserTabsByWorktree[id] ?? []) {
@@ -28,15 +28,20 @@ export function collectWorktreePurgeDoomedIds(
     // Why: drop the auto-derived detached-HEAD display name so the module-level map doesn't retain removed worktrees for the session.
     forgetDetachedHeadAutoDerivedDisplayName(id)
   }
-  for (const file of s.openFiles) {
+  return collectSurfacePurgeDoomedIds(s, { tabs, browserWorkspaceIds, fileIds })
+}
+
+export function fullPurgeFileIds(s: AppState, worktreeIdSet: ReadonlySet<string>): Set<string> {
+  const fileIds = new Set<string>()
+  for (const file of s.openFiles ?? []) {
     if (worktreeIdSet.has(file.worktreeId)) {
-      fileIds.push(file.id)
+      fileIds.add(file.id)
       if (file.markdownPreviewSourceFileId) {
-        fileIds.push(file.markdownPreviewSourceFileId)
+        fileIds.add(file.markdownPreviewSourceFileId)
       }
     }
   }
-  return collectSurfacePurgeDoomedIds(s, { tabs, browserWorkspaceIds, fileIds })
+  return fileIds
 }
 
 /** Doomed ids for named surfaces, which may sit in a workspace that stays (a surviving twin's). */

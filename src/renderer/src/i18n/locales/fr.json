@@ -19481,7 +19481,7 @@
           "closedToast_one": "{{count}} fichier avec des modifications non enregistrées de {{workspace}} a été fermé",
           "closedToast_other": "{{count}} fichiers avec des modifications non enregistrées de {{workspace}} ont été fermés",
           "reopen": "Rouvrir",
-          "reopenFailed": "Certains fichiers n'ont pas pu être rouverts, car aucun espace de travail n'est ouvert sur leur hôte."
+          "reopenFailed": "Certains fichiers n’ont pas pu être rouverts. Ouvrez un espace de travail et réessayez avec Rouvrir."
         }
       }
     },
