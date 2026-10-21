@@ -133,7 +133,7 @@ describe('older clients against a host with the stored choice', () => {
       },
       'linux'
     )
-    expect({ ...host, ...swapped }.agentDefaultArgs.codex).toBe('--search')
+    expect({ ...host, ...swapped }.agentDefaultArgs?.codex).toBe('--search')
     expect(resolveAgentPermission('codex', { ...host, ...swapped }).choice).toBe('full-access')
     const manual = agentLaunchSettingsMutationUpdates(
       host,

@@ -185,9 +185,11 @@ export function liftAgentPermissionEnv(
   return { choice: 'full-access', env: rest }
 }
 
-type AgentPermissionProfile = Pick<
-  GlobalSettings,
-  'agentDefaultArgs' | 'agentDefaultEnv' | 'agentPermissionDefault' | 'agentPermissionOverrides'
+type AgentPermissionProfile = Required<
+  Pick<
+    GlobalSettings,
+    'agentDefaultArgs' | 'agentDefaultEnv' | 'agentPermissionDefault' | 'agentPermissionOverrides'
+  >
 >
 
 /**
@@ -204,7 +206,7 @@ export function migrateAgentPermissionChoice(
     return {
       agentDefaultArgs: args,
       agentDefaultEnv: env,
-      agentPermissionDefault: settings.agentPermissionDefault,
+      agentPermissionDefault: settings.agentPermissionDefault ?? 'own',
       agentPermissionOverrides: normalizeAgentPermissionOverrides(settings.agentPermissionOverrides)
     }
   }
