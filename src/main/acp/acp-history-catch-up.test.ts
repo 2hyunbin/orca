@@ -2,7 +2,8 @@
 // OpenCode 2.0.14 and Grok 1.0.62 recordings: once, in order, under one divider, and never a turn
 // the chat already holds.
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { setTimeout as delay } from 'node:timers/promises'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   agentJournalSubmissionKey,
   parseAgentJournalItemKey
@@ -92,6 +93,32 @@ async function chatSend(
 }
 
 describe('ACP history catch-up', () => {
+  it('returns by its deadline when the final journal write never settles', async () => {
+    const { fixture } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
+    const frames = await recording('opencode-v2-reopen-outside')
+    const written = vi
+      .fn<NonNullable<typeof fixture.rig.eventSink.written>>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockImplementation(() => new Promise(() => {}))
+    const catchUp = catchUpAcpHistory({
+      frames: loadReplay(frames, 'C'),
+      identity: 'user-message-id',
+      sink: { ...fixture.rig.eventSink, written },
+      sessionId: SESSION,
+      agent: AGENT,
+      providerSessionId: NAMESPACE,
+      dialect: OPENCODE_ACP_DIALECT,
+      assertCurrent: () => {},
+      now: () => 5_000,
+      timeoutMs: 100
+    })
+
+    await expect(
+      Promise.race([catchUp.then(() => 'returned'), delay(500, 'still waiting')])
+    ).resolves.toBe('returned')
+    expect(written).toHaveBeenCalledTimes(2)
+  })
+
   it('adds an OpenCode turn made outside the chat once, completing it on a later open', async () => {
     const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
     const frames = await recording('opencode-v2-reopen')

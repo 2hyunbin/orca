@@ -114,7 +114,10 @@ export async function catchUpAcpHistory(input: AcpHistoryCatchUpInput): Promise<
       warn(admission.reason)
       return
     }
-    const committed = await input.sink.written?.()
+    const committed = await waitForPromiseWithSignal(
+      input.sink.written?.() ?? Promise.resolve({ ok: true }),
+      controller.signal
+    )
     if (committed?.ok === false) {
       warn('write-failed', committed.error)
     } else if (!resolved) {
