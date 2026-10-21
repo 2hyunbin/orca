@@ -56,6 +56,7 @@ export function bindHiddenOutputRestoreSnapshot(session: ConnectPanePtySession):
       // Repeat markers for the drop episode this banner disclosed are ignored.
       session.hiddenOutputRestoreDisclosedGap = { ptyId, episode }
     }
+    session.requestRemoteProgramRedraw('restore-unavailable')
   }
 
   // Why an ack instead of retiring on the serve: the pane can dispose across the serialize +
