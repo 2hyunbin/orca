@@ -6,17 +6,14 @@ import type { ProviderProcessLaunch } from './provider-process-launch'
 import { createProviderSpawnSpec } from './provider-process-launch'
 import { PROVIDER_GROUP_REAP_TIMEOUT_MS } from './provider-process-timing'
 import { recordProviderLaunch } from './provider-process-ledger'
-import { verifyProviderWriters } from './provider-process-inventory'
+import { writerVerdict } from './provider-process-inventory'
 import {
   observeProviderGroup,
   signalProviderGroup,
   stopRecordedProviderGroup
 } from './provider-process-group'
 import { retainCodexHomeWriter } from '../codex-cli/codex-home-process-lock'
-import {
-  type ProviderCleanupBudget,
-  waitForProcessExitUntil
-} from './provider-process-exit-deadline'
+import { ProviderCleanupBudget, waitForProcessExitUntil } from './provider-process-exit-deadline'
 import {
   terminateProviderProcessTree,
   type ProviderProcessTeardownVerdict
@@ -249,7 +246,7 @@ export function spawnManagedProviderProcess(
       if (!child.pid) {
         return observed?.processless ?? false
       }
-      if (budget) {
+      if (budget && (!observed || !groupRetired || external.owed)) {
         const cleanup = async (): Promise<void> => {
           await close(undefined, budget)
         }
@@ -258,8 +255,7 @@ export function spawnManagedProviderProcess(
       if (!observed) {
         return false
       }
-      const verified = await verifyProviderWriters(group, child.pid, groupRetired, budget)
-      return verified
+      return verifyProviderWriters(group, budget)
     },
     get processless() {
       return observed?.processless ?? false
@@ -297,4 +293,16 @@ export function spawnManagedProviderProcess(
     retainCodexHomeWriter(options.resource.key, managed.verifyWriters)
   }
   return managed
+}
+
+/** Resource proof follows captured incarnations, including those that changed groups. */
+async function verifyProviderWriters(
+  record: ReturnType<typeof recordProviderLaunch> | undefined,
+  budget = new ProviderCleanupBudget(Date.now() + 2_000)
+): Promise<boolean> {
+  if (record?.verifyResource) {
+    return budget.wait(record.verifyResource(budget), false)
+  }
+  const verdict = await budget.wait(writerVerdict(record?.members() ?? [], budget), 'unknown')
+  return verdict === 'exited' && budget.active
 }

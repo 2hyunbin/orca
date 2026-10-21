@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/pro
 import { join } from 'node:path'
 import { z } from 'zod'
 import { getAppEnvironment } from '../../shared/app-environment'
-import { ProviderCleanupBudget } from './provider-process-exit-deadline'
+import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import type { ProviderGroupMember } from './provider-process-group'
 import { readPosixProcessRow } from './provider-process-row-read'
 
@@ -50,6 +50,12 @@ let mutationOwner = false
 let active = 0
 const available = new Set<() => void>()
 
+export class ProviderVerificationUnavailableError extends Error {
+  constructor() {
+    super('Orca could not verify previous Codex processes. Try again.')
+  }
+}
+
 export function setProviderRecoveryMutationOwner(acquired: boolean): void {
   mutationOwner = acquired
 }
@@ -96,7 +102,10 @@ export async function readProviderLedgerEntry(
   }
 }
 
-export function discoverProviderLaunches(budget: ProviderCleanupBudget): Promise<boolean> {
+export function discoverProviderLaunches(
+  budget: ProviderCleanupBudget,
+  issued?: (work: Promise<unknown>) => void
+): Promise<boolean> {
   if (process.platform === 'win32') {
     return Promise.resolve(true)
   }
@@ -125,12 +134,22 @@ export function discoverProviderLaunches(budget: ProviderCleanupBudget): Promise
           ) {
             installProviderLedgerEntry(entry)
           }
-        } catch {
-          complete = false
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+            console.warn(
+              '[provider-process] inventory read unavailable',
+              join(directory, name),
+              error
+            )
+            complete = false
+          }
         }
       }
     } catch (error) {
       complete = error instanceof Error && 'code' in error && error.code === 'ENOENT'
+      if (!complete) {
+        console.warn('[provider-process] inventory listing unavailable', directory, error)
+      }
     }
     if (budget.active && namespace === directory && complete) {
       discovered = true
@@ -141,6 +160,7 @@ export function discoverProviderLaunches(budget: ProviderCleanupBudget): Promise
       discovery = undefined
     }
   })
+  issued?.(discovery)
   return budget.wait(discovery, false)
 }
 
@@ -174,13 +194,12 @@ export async function publishProviderEntry(
       return
     }
     const current = await readProviderLedgerEntry(path, budget)
-    const owner = await readPosixProcessRow(entry.owner.pid, process.platform, budget)
+    const owner = await writerVerdict([entry.owner], budget)
     if (
       !current ||
       current.token !== entry.token ||
       current.createdAt !== entry.createdAt ||
-      owner === 'unverifiable' ||
-      (owner && !owner.zombie && owner.startedAt === entry.owner.startedAt)
+      owner !== 'exited'
     ) {
       return
     }
@@ -210,7 +229,8 @@ export async function publishProviderEntry(
 export function runProviderRecovery(
   state: Pick<ProviderLedgerState, 'tail' | 'flight'>,
   budget: ProviderCleanupBudget,
-  action: () => Promise<void>
+  action: () => Promise<void>,
+  issued?: (work: Promise<unknown>) => void
 ): Promise<void> {
   state.flight ??= (async () => {
     while (active >= 4 && budget.active) {
@@ -240,6 +260,7 @@ export function runProviderRecovery(
   })().finally(() => {
     state.flight = undefined
   })
+  issued?.(state.flight)
   return budget.wait(state.flight, undefined)
 }
 
@@ -254,7 +275,10 @@ export async function writerVerdict(
       return 'unknown'
     }
     const row = await readPosixProcessRow(member.pid, process.platform, budget)
-    if (row === 'unverifiable') {
+    if (
+      row === 'unverifiable' ||
+      (row && !row.zombie && process.platform === 'darwin' && !member.startedAt.endsWith('Z'))
+    ) {
       unknown = true
     } else if (row && !row.zombie && row.startedAt === member.startedAt) {
       return 'live'
@@ -286,21 +310,4 @@ export function deriveObligation(
   } else {
     delete entry.resource
   }
-}
-
-/** Resource proof follows captured incarnations, including those that changed groups. */
-export async function verifyProviderWriters(
-  record: ProviderLaunchRecord | undefined,
-  _pgid: number,
-  _groupRetired: boolean,
-  budget = new ProviderCleanupBudget(Date.now() + 2_000)
-): Promise<boolean> {
-  if (record?.verifyResource) {
-    return budget.wait(record.verifyResource(budget), false)
-  }
-  const verdict = await budget.wait(writerVerdict(record?.members() ?? [], budget), 'unknown')
-  if (verdict !== 'exited' || !budget.active) {
-    return false
-  }
-  return true
 }

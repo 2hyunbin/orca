@@ -1,5 +1,5 @@
 import { prepareOrcadSecretStoreAndMigrate } from './orcad-secret-store-startup'
-import { recoverProviderLaunches } from '../provider-process/provider-process-ledger'
+import { startProviderRecoveryTask } from '../provider-process/provider-process-ledger'
 import { stopStructuredAgentSessionRuntime } from '../runtime/structured-agent-session-runtime'
 /**
  * `orcad` — the Orca runtime served without Electron.
@@ -145,7 +145,9 @@ async function startOrcadRuntime(
   const { resolvePushGatewayOrigin } = await import('../runtime/push/push-gateway-origin')
 
   const runtimeUserDataPath = getAppEnvironment().getPath('userData')
-  await recoverProviderLaunches()
+  const recovery = startProviderRecoveryTask()
+  registerCleanup(() => recovery.cancelAndJoin())
+  await recovery.ready
   const { startEventLoopDelayProbe } = await import('../diagnostics/event-loop-delay-probe')
   startEventLoopDelayProbe('orcad', runtimeUserDataPath)
   // A missing `orca` command must never keep the server from starting.

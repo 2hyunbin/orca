@@ -6,6 +6,10 @@ import type * as ProviderLedgerModule from '../provider-process/provider-process
 import type { ProcessSpec } from '@orca/process-host/process-spec'
 import { readPosixProcessRow } from '../provider-process/provider-process-row-read'
 import { recordProviderLaunch } from '../provider-process/provider-process-ledger'
+import * as files from 'node:fs/promises'
+import * as backend from './codex-backend-usage-client'
+import { getAppEnvironment, setAppEnvironment } from '../../shared/app-environment'
+import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
@@ -147,6 +151,49 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
+
+  it.each([false, true])(
+    'reports unavailable verification with backend fallback=%s',
+    async (succeeds) => {
+      const saved = getAppEnvironment()
+      setAppEnvironment({
+        ...saved,
+        getPath: (key) =>
+          key === 'userData'
+            ? join(saved.getPath(key), `unavailable-${succeeds}`)
+            : saved.getPath(key)
+      })
+      const inventory = vi
+        .spyOn(files, 'readdir')
+        .mockRejectedValue(Object.assign(new Error('inventory denied'), { code: 'EACCES' }))
+      const fallback = {
+        provider: 'codex',
+        status: 'ok',
+        session: null,
+        weekly: null,
+        error: null,
+        updatedAt: Date.now()
+      } as const
+      vi.spyOn(backend, 'fetchCodexRateLimitsViaBackend').mockResolvedValue(
+        succeeds ? fallback : null
+      )
+      try {
+        const result = await fetchCodexRateLimits()
+        expect(result).toMatchObject(
+          succeeds
+            ? fallback
+            : {
+                status: 'error',
+                error: 'Orca could not verify previous Codex processes. Try again.'
+              }
+        )
+        expect(childSpawnMock).not.toHaveBeenCalled()
+      } finally {
+        inventory.mockRestore()
+        setAppEnvironment(saved)
+      }
+    }
+  )
 
   it('gives a cold app-server the full boot budget before any deadline fires', async () => {
     const rpcChild = makeRpcChild()

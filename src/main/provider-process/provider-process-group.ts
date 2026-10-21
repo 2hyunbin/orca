@@ -1,4 +1,5 @@
-import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
+import { discoverProviderLaunches, providerLedgerStates } from './provider-process-inventory'
+import { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import { readProcessStartTimeMs } from '../runtime/agent-session-process-identity-probe'
 import { setTimeout as delay } from 'node:timers/promises'
 import { captureDescendantSnapshot, hasUnambiguousStartTime } from '../pty-descendant-termination'
@@ -182,4 +183,33 @@ export async function stopRecordedProviderGroup(
   }
   signalProviderGroup(pgid, 'SIGKILL')
   return observeProviderGroup(pgid, PROVIDER_GROUP_REAP_TIMEOUT_MS, budget)
+}
+
+/** A retained old root number is not proof that a new lease came from direct launch. */
+export async function hasRecordedProviderLaunch(
+  pgid: number,
+  processStartTimeMs?: number
+): Promise<boolean> {
+  const budget = new ProviderCleanupBudget(Date.now() + 2_000)
+  if (!(await discoverProviderLaunches(budget))) {
+    return false
+  }
+  const row = await readPosixProcessRow(pgid, process.platform, budget)
+  if (
+    !row ||
+    row === 'unverifiable' ||
+    row.zombie ||
+    processStartTimeMs === undefined ||
+    (await readProcessStartTimeMs(pgid)) !== processStartTimeMs
+  ) {
+    return false
+  }
+  return (
+    budget.active &&
+    providerLedgerStates().some(
+      ({ entry }) =>
+        entry.pgid === pgid &&
+        entry.members.some((member) => member.pid === pgid && member.startedAt === row.startedAt)
+    )
+  )
 }

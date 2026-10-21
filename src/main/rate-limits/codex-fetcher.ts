@@ -1,4 +1,5 @@
 import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
+import { ProviderVerificationUnavailableError } from '../provider-process/provider-process-inventory'
 import type { CodexRateLimitResetOutcome, ProviderRateLimits } from '../../shared/rate-limit-types'
 import { isCodexAuthError } from '../../shared/codex-auth-errors'
 import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
@@ -235,11 +236,14 @@ export async function fetchCodexRateLimits(
       return rpcResult
     }
     rpcFailure = rpcResult
-  } catch {
+  } catch (error) {
     if (options?.signal?.aborted) {
       return abortedCodexRateLimitResult()
     }
-    rpcFailure = codexUnavailable('RPC failed', 'error')
+    rpcFailure = codexUnavailable(
+      error instanceof ProviderVerificationUnavailableError ? error.message : 'RPC failed',
+      'error'
+    )
   }
 
   if (isWslHome) {

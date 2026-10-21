@@ -1,8 +1,8 @@
 export type { ProviderLaunchRecord } from './provider-process-inventory'
+export { hasRecordedProviderLaunch } from './provider-process-group'
 import { randomUUID } from 'node:crypto'
 import { hasUnambiguousStartTime } from '../pty-descendant-termination'
 import { join } from 'node:path'
-import { readProcessStartTimeMs } from '../runtime/agent-session-process-identity-probe'
 import { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import { readPosixProcessRow } from './provider-process-row-read'
 import {
@@ -21,37 +21,45 @@ import {
   serializeProviderEntry,
   writerVerdict,
   deriveObligation,
+  ProviderVerificationUnavailableError,
   UNKNOWN_RETENTION_MS,
   type ProviderResource,
   type ProviderLaunchRecord,
   type ProviderLedgerState
 } from './provider-process-inventory'
 
-function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudget): Promise<void> {
+async function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudget): Promise<void> {
   return serializeProviderEntry(state, async () => {
     let entry = state.entry
-    let mutable = true
-    if (!state.local) {
+    const owner = await writerVerdict([entry.owner], budget)
+    let complete = false
+    if (owner === 'exited') {
       const current = await readProviderLedgerEntry(
         join(entry.directory, `${entry.token}.json`),
         budget
-      ).catch(() => null)
+      ).catch((error: unknown) => {
+        console.warn(
+          '[provider-process] final inventory read unavailable',
+          entry.directory,
+          entry.token,
+          error
+        )
+        return null
+      })
       if (!budget.active) {
         return
       }
-      mutable = current?.token === entry.token && current.createdAt === entry.createdAt
-      if (current && mutable) {
+      complete =
+        current?.directory === entry.directory &&
+        current.token === entry.token &&
+        current.createdAt === entry.createdAt
+      if (current && complete) {
         current.groupRetired ||= entry.groupRetired
         current.unknownSince = entry.unknownSince
         state.entry = entry = current
       }
     }
-    const owner = await readPosixProcessRow(entry.owner.pid, process.platform, budget)
-    const liveOwner =
-      owner &&
-      owner !== 'unverifiable' &&
-      !owner.zombie &&
-      owner.startedAt === entry.owner.startedAt
+    const liveOwner = owner === 'live'
     if (liveOwner) {
       delete entry.unknownSince?.group
     }
@@ -64,20 +72,17 @@ function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudget): P
           join(entry.directory, `${entry.token}.json`),
           budget
         ).catch(() => null)
-        const fresh = await readPosixProcessRow(entry.owner.pid, process.platform, budget)
         return (
           budget.active &&
           current?.token === entry.token &&
           current.createdAt === entry.createdAt &&
           !current.groupRetired &&
-          fresh !== 'unverifiable' &&
-          (!fresh || fresh.zombie === true || fresh.startedAt !== entry.owner.startedAt)
+          (await writerVerdict([entry.owner], budget)) === 'exited'
         )
       }
-      const verdict =
-        owner === 'unverifiable'
-          ? 'unverifiable'
-          : await stopRecordedProviderGroup(entry.pgid, entry.members, owns, false, budget)
+      const verdict = !complete
+        ? 'unverifiable'
+        : await stopRecordedProviderGroup(entry.pgid, entry.members, owns, false, budget)
       if (!budget.active) {
         return
       }
@@ -92,9 +97,9 @@ function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudget): P
       if (!budget.active) {
         return
       }
-      deriveObligation(state, 'resource', verdict)
+      deriveObligation(state, 'resource', complete || verdict === 'live' ? verdict : 'unknown')
     }
-    if (!liveOwner && mutable && budget.active) {
+    if (!liveOwner && complete && budget.active) {
       await publishProviderEntry(state, budget)
     }
   })
@@ -102,28 +107,48 @@ function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudget): P
 
 /** Discovery hands over residual evidence; completion of a sweep never certifies a home empty. */
 export async function recoverProviderLaunches(rootPid?: number): Promise<void> {
-  if (process.platform === 'win32') {
-    return
-  }
-  if (!(await discoverProviderLaunches(new ProviderCleanupBudget(Date.now() + 2_000)))) {
-    return
-  }
-  const pending = providerLedgerStates().filter(
-    (state) => rootPid === undefined || state.entry.pgid === rootPid
+  await startProviderRecoveryTask(rootPid).completion
+}
+
+/** The first caller owns cancellation; a scope still joins every actual shared flight. */
+export function startProviderRecoveryTask(rootPid?: number) {
+  const controller = new AbortController()
+  const work = new Set<Promise<unknown>>()
+  const issued = work.add.bind(work)
+  const ready = discoverProviderLaunches(
+    new ProviderCleanupBudget(Date.now() + 2_000, controller.signal),
+    issued
   )
-  let next = 0
-  await Promise.all(
-    Array.from({ length: Math.min(4, pending.length) }, async () => {
-      while (next < pending.length) {
-        const state = pending[next++]
-        if (!state) {
-          break
+  const completion = ready.then(async (found) => {
+    if (!found || controller.signal.aborted || process.platform === 'win32') {
+      return
+    }
+    const pending = providerLedgerStates().filter(
+      (state) => !state.local && (rootPid === undefined || state.entry.pgid === rootPid)
+    )
+    let next = 0
+    await Promise.all(
+      Array.from({ length: Math.min(4, pending.length) }, async () => {
+        while (!controller.signal.aborted && next < pending.length) {
+          const state = pending[next++]
+          if (!state) {
+            break
+          }
+          const budget = new ProviderCleanupBudget(undefined, controller.signal)
+          await runProviderRecovery(state, budget, () => reapEntry(state, budget), issued)
         }
-        const budget = new ProviderCleanupBudget()
-        await runProviderRecovery(state, budget, () => reapEntry(state, budget))
-      }
-    })
-  )
+      })
+    )
+  })
+  return {
+    ready,
+    completion,
+    async cancelAndJoin() {
+      controller.abort()
+      await completion
+      await Promise.all(work)
+    }
+  }
 }
 
 export async function verifyRecoveredProviderResources(
@@ -136,44 +161,18 @@ export async function verifyRecoveredProviderResources(
   let verified = true
   await Promise.all(
     providerLedgerStates()
-      .filter((state) => state.entry.resource?.key === key)
+      .filter((state) => !state.local && state.entry.resource?.key === key)
       .map(async (state) => {
         await runProviderRecovery(state, budget, () => reapEntry(state, budget))
-        if (state.entry.resource) {
+        if (state.entry.resource?.key === key) {
+          if (state.entry.unknownSince?.resource !== undefined || !budget.active) {
+            throw new ProviderVerificationUnavailableError()
+          }
           verified = false
         }
       })
   )
   return budget.active && verified
-}
-
-/** A retained old root number is not proof that a new lease came from direct launch. */
-export async function hasRecordedProviderLaunch(
-  pgid: number,
-  processStartTimeMs?: number
-): Promise<boolean> {
-  const budget = new ProviderCleanupBudget(Date.now() + 2_000)
-  if (!(await discoverProviderLaunches(budget))) {
-    return false
-  }
-  const row = await readPosixProcessRow(pgid, process.platform, budget)
-  if (
-    !row ||
-    row === 'unverifiable' ||
-    row.zombie ||
-    processStartTimeMs === undefined ||
-    (await readProcessStartTimeMs(pgid)) !== processStartTimeMs
-  ) {
-    return false
-  }
-  return (
-    budget.active &&
-    providerLedgerStates().some(
-      ({ entry }) =>
-        entry.pgid === pgid &&
-        entry.members.some((member) => member.pid === pgid && member.startedAt === row.startedAt)
-    )
-  )
 }
 
 /** Recording is advisory: a filesystem failure cannot refuse an agent launch. */
@@ -261,14 +260,9 @@ export function recordProviderLaunch(
       }
       if (state && resource) {
         const current = state
-        await serializeProviderEntry(current, async () => {
-          if (!budget.active) {
-            return
-          }
-          deriveObligation(current, 'resource', verdict)
-          await publishProviderEntry(current, budget)
-        })
+        deriveObligation(current, 'resource', verdict)
         released = !current.entry.resource
+        void serializeProviderEntry(current, () => publishProviderEntry(current, budget))
         return released
       }
       if (verdict === 'live') {
@@ -288,15 +282,16 @@ export function recordProviderLaunch(
     members: () => members,
     retire: () => {
       retired = true
-      return enqueue(async () => {
-        if (state) {
-          const current = state
-          await serializeProviderEntry(current, async () => {
-            current.entry.groupRetired = true
-            await publishProviderEntry(current, new ProviderCleanupBudget())
-          })
-        }
-      })
+      const current = state
+      if (!current) {
+        return Promise.resolve()
+      }
+      current.entry.groupRetired = true
+      return enqueue(() =>
+        serializeProviderEntry(current, () =>
+          publishProviderEntry(current, new ProviderCleanupBudget())
+        )
+      )
     }
   }
 }

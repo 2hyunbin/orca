@@ -79,8 +79,8 @@ async function readPsProcessRow(
     const result = await runProcess({
       program: 'ps',
       args: ['-o', 'pid=,ppid=,pgid=,lstart=,stat=', '-p', String(pid)],
-      // The same locale on every read, so two reads of one process compare equal.
-      env: { ...process.env, LANG: 'C', LC_ALL: 'C' },
+      // Identity must survive a timezone change between capture and recovery.
+      env: { ...process.env, LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
       timeoutMs: Math.min(PROCESS_ROW_TIMEOUT_MS, budget?.remaining() ?? PROCESS_ROW_TIMEOUT_MS),
       signal: budget?.signal,
       maxOutputBytes: 4096
@@ -89,7 +89,15 @@ async function readPsProcessRow(
       (entry) => entry.pid === pid
     )
     if (row) {
-      return { ...row, startResolution: 'second', zombie: /\sZ\S*\s*$/.test(result.stdout) }
+      const started = Date.parse(`${row.startedAt} UTC`)
+      return Number.isFinite(started)
+        ? {
+            ...row,
+            startedAt: new Date(started).toISOString(),
+            startResolution: 'second',
+            zombie: /\sZ\S*\s*$/.test(result.stdout)
+          }
+        : 'unverifiable'
     }
     // ps exits 1 with no rows for a pid that does not exist; anything else is a failed read.
     return !result.timedOut && result.code === 1 ? null : 'unverifiable'

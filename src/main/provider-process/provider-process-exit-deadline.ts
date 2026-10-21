@@ -20,8 +20,12 @@ export async function waitForProcessExitUntil(
 /** One deadline follows a recovery action through queueing, reads and signals. */
 export class ProviderCleanupBudget {
   readonly signal: AbortSignal
-  constructor(readonly deadline = Date.now() + 6_500) {
-    this.signal = AbortSignal.timeout(Math.max(1, this.remaining()))
+  constructor(
+    readonly deadline = Date.now() + 6_500,
+    lifetime?: AbortSignal
+  ) {
+    const timeout = AbortSignal.timeout(Math.max(1, this.remaining()))
+    this.signal = lifetime ? AbortSignal.any([timeout, lifetime]) : timeout
   }
   remaining(): number {
     return Math.max(0, this.deadline - Date.now())

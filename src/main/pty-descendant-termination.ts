@@ -61,14 +61,14 @@ function readFreshProcessTable(
         killSignal: 'SIGKILL',
         // Why: ps localizes lstart, but delayed identity checks must parse it
         // identically for every user locale.
-        env: { ...process.env, LANG: 'C', LC_ALL: 'C' }
+        env: { ...process.env, LANG: 'C', LC_ALL: 'C', TZ: 'UTC' }
       },
       (error, stdout) => {
         if (error) {
           reject(error)
           return
         }
-        resolve({ rows: parseProcessTable(stdout), capturedAtMs })
+        resolve({ rows: parseProcessTable(stdout, 'UTC'), capturedAtMs })
       }
     )
   })

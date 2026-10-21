@@ -1,8 +1,13 @@
 import type * as FsPromisesModule from 'node:fs/promises'
 import * as files from 'node:fs/promises'
 import * as processRows from './provider-process-row-read'
+import * as ledger from './provider-process-ledger'
 import { ProviderCleanupBudget } from './provider-process-exit-deadline'
-import { runProviderRecovery, setProviderRecoveryMutationOwner } from './provider-process-inventory'
+import {
+  providerLedgerStates,
+  runProviderRecovery,
+  setProviderRecoveryMutationOwner
+} from './provider-process-inventory'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,10 +19,7 @@ import { getAppEnvironment, setAppEnvironment } from '../../shared/app-environme
 import { spawnManagedProviderProcess } from './managed-provider-process'
 import { readPosixProcessRow } from './provider-process-row-read'
 import { recoverProviderLaunches } from './provider-process-ledger'
-import {
-  retainCodexHomeWriter,
-  withCodexHomeProcessLock
-} from '../codex-cli/codex-home-process-lock'
+import { withCodexHomeProcessLock } from '../codex-cli/codex-home-process-lock'
 
 vi.mock('node:fs/promises', async (original) => ({
   ...(await original<typeof FsPromisesModule>())
@@ -217,6 +219,8 @@ it.runIf(process.platform !== 'win32')(
       `open(${JSON.stringify(escapedFile)}, 'w').write('ready')`,
       'time.sleep(60)'
     ].join('\n')
+    const home = `direct-test-${randomUUID()}`
+    const recorded = vi.spyOn(ledger, 'recordProviderLaunch')
     const managed = spawnManagedProviderProcess(
       {
         command: process.execPath,
@@ -229,19 +233,25 @@ it.runIf(process.platform !== 'win32')(
   `
         ]
       },
-      { site: 'escaped-writer-test' }
+      { site: 'escaped-writer-test', resource: { kind: 'codex-home', key: home } }
     )
     children.push(managed.child)
     managed.child.stdout.resume()
     const writerPid = Number(await readWhenWritten(writerFile))
-    const home = `direct-test-${randomUUID()}`
+    await delay(1_100)
+    const publication = Promise.withResolvers<void>()
+    const slots = Promise.withResolvers<void>()
+    const issued: Promise<void>[] = []
+    const mkdir = vi.spyOn(files, 'mkdir')
     try {
-      await delay(1_100)
-      await expect(managed.verifyWriters()).resolves.toBe(false)
+      await recorded.mock.results[0]!.value.capture()
+      expect(
+        recorded.mock.results[0]!.value.members().some((member) => member.pid === writerPid)
+      ).toBe(true)
       managed.child.stdin.write('escape\n')
       await readWhenWritten(escapedFile)
+      mkdir.mockImplementationOnce(() => publication.promise.then(() => undefined))
       await managed.close()
-      retainCodexHomeWriter(home, managed.verifyWriters)
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
         'still using this account home'
       )
@@ -250,8 +260,26 @@ it.runIf(process.platform !== 'win32')(
       )
       process.kill(writerPid, 'SIGKILL')
       await vi.waitFor(async () => expect(await readPosixProcessRow(writerPid)).toBeNull())
+      issued.push(
+        ...Array.from({ length: 4 }, () =>
+          runProviderRecovery(
+            { tail: Promise.resolve() },
+            new ProviderCleanupBudget(),
+            () => slots.promise
+          )
+        )
+      )
       await expect(withCodexHomeProcessLock(home, async () => 'safe')).resolves.toBe('safe')
+      slots.resolve()
+      await Promise.all(issued)
+      publication.resolve()
     } finally {
+      publication.resolve()
+      slots.resolve()
+      await Promise.all(issued)
+      await recorded.mock.results[0]!.value.capture()
+      recorded.mockRestore()
+      mkdir.mockRestore()
       try {
         process.kill(writerPid, 'SIGKILL')
       } catch {
@@ -272,7 +300,8 @@ it.runIf(process.platform !== 'win32')(
       home = `restart-${token}`,
       path = join(directory, `${token}.json`)
     const owner = { pid: 9_999_998, pgid: 9_999_998, startedAt: 'owner' }
-    const member = { pid: 9_999_999, pgid: 9_999_999, startedAt: 'writer' }
+    const member = { pid: 9_999_999, pgid: 9_999_999, startedAt: '2026-10-01T00:00:00.000Z' }
+    const late = { ...member, pid: member.pid - 2 }
     await writeFile(
       path,
       JSON.stringify({
@@ -285,43 +314,73 @@ it.runIf(process.platform !== 'win32')(
         pgid: member.pgid,
         members: [member],
         groupRetired: true,
-        resource: { kind: 'codex-home', key: home },
-        unknownSince: { resource: Date.now() - 8 * 86400000 }
+        resource: { kind: 'codex-home', key: home }
       })
     )
     const saved = getAppEnvironment()
-    setAppEnvironment({
+    const environment: typeof saved = {
       ...saved,
       getPath: (key) => (key === 'userData' ? root : saved.getPath(key))
-    })
+    }
+    setAppEnvironment(environment)
     setProviderRecoveryMutationOwner(true)
     const signal = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw new Error('no signals permitted')
     })
     let state: 'live' | 'unknown' | 'zombie' = 'live'
-    const rows = vi.spyOn(processRows, 'readPosixProcessRow').mockImplementation(async (pid) =>
-      pid === owner.pid
+    let capturing = true,
+      failFinal = true
+    const rows = vi.spyOn(processRows, 'readPosixProcessRow').mockImplementation(async (pid) => {
+      if (pid === owner.pid) {
+        if (capturing) {
+          const current = JSON.parse(await realRead(path, 'utf8'))
+          await writeFile(path, JSON.stringify({ ...current, members: [member, late] }))
+          capturing = false
+        }
+        return null
+      }
+      return pid !== late.pid
         ? null
         : state === 'unknown'
           ? 'unverifiable'
           : {
-              ...member,
+              ...late,
               ppid: 1,
               pgid: member.pgid + 1,
               startResolution: 'clock-tick',
               zombie: state === 'zombie'
             }
-    )
+    })
     const realRead = files.readFile
     const read = vi
       .spyOn(files, 'readFile')
       .mockRejectedValueOnce(Object.assign(new Error('unreadable'), { code: 'EACCES' }))
     try {
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'still using'
+        'could not verify'
       )
-      read.mockRestore()
+      read.mockRejectedValueOnce(
+        Object.assign(new Error('removed after listing'), { code: 'ENOENT' })
+      )
+      await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
+        'other'
+      )
+      setAppEnvironment(saved)
+      providerLedgerStates()
+      setAppEnvironment(environment)
+      read.mockImplementation(async (...args) => {
+        if (!capturing && failFinal && args[0] === path) {
+          throw Object.assign(new Error('final snapshot unavailable'), { code: 'EACCES' })
+        }
+        return realRead(...args)
+      })
       await recoverProviderLaunches()
+      const published = await realRead(path, 'utf8')
+      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
+        'could not verify'
+      )
+      expect(await realRead(path, 'utf8')).toBe(published)
+      failFinal = false
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
         'still using'
       )
@@ -331,11 +390,11 @@ it.runIf(process.platform !== 'win32')(
       expect(JSON.parse(await realRead(path, 'utf8')).unknownSince.resource).toBeUndefined()
       state = 'unknown'
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'still using'
+        'could not verify'
       )
       const anchor = JSON.parse(await realRead(path, 'utf8')).unknownSince.resource
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'still using'
+        'could not verify'
       )
       expect(JSON.parse(await realRead(path, 'utf8')).unknownSince.resource).toBe(anchor)
       state = 'zombie'
