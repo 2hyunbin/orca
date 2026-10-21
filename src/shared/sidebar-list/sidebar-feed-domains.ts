@@ -42,29 +42,54 @@ export type SidebarFeedDomains = {
   retention: SidebarRetention | null
 }
 
-const entitySchemas = {
-  workspaces: WorkspaceRowsSnapshotSchema.shape.rows.valueType,
-  activity: WorkspaceActivityFactsSnapshotSchema.shape.facts.valueType,
-  review: WorkspaceReviewFactsSnapshotSchema.shape.facts.valueType,
-  creations: WorkspaceCreationsSnapshotSchema.shape.creations.valueType,
-  pairedServerHosts: PairedServerRowsSnapshotSchema.shape.servers.element.pick({
-    freshness: true,
-    host: true
-  }),
-  pairedServerRows: PairedServerRowsSnapshotSchema.shape.servers.element.shape.rows.element,
-  repoIcons: z.string()
+type EntityParser<Entity> = (value: unknown) => { entity: Entity } | null
+
+/** Remembers each raw entity's parse by object identity. The installer keeps an unchanged entity's
+ *  object, so only a changed entity is parsed again, and only its parsed object changes. */
+function entityParser<Schema extends z.ZodType>(schema: Schema): EntityParser<z.infer<Schema>> {
+  const parsedByRaw = new WeakMap<object, { entity: z.infer<Schema> } | null>()
+  return (value) => {
+    const remembered =
+      typeof value === 'object' && value !== null ? parsedByRaw.get(value) : undefined
+    if (remembered !== undefined) {
+      return remembered
+    }
+    const parsed = schema.safeParse(value)
+    const read = parsed.success ? { entity: parsed.data } : null
+    if (typeof value === 'object' && value !== null) {
+      parsedByRaw.set(value, read)
+    }
+    return read
+  }
 }
 
-function readDomain<Schema extends z.ZodType>(
+const entityParsers = {
+  workspaces: entityParser(WorkspaceRowsSnapshotSchema.shape.rows.valueType),
+  activity: entityParser(WorkspaceActivityFactsSnapshotSchema.shape.facts.valueType),
+  review: entityParser(WorkspaceReviewFactsSnapshotSchema.shape.facts.valueType),
+  creations: entityParser(WorkspaceCreationsSnapshotSchema.shape.creations.valueType),
+  pairedServerHosts: entityParser(
+    PairedServerRowsSnapshotSchema.shape.servers.element.pick({
+      freshness: true,
+      host: true
+    })
+  ),
+  pairedServerRows: entityParser(
+    PairedServerRowsSnapshotSchema.shape.servers.element.shape.rows.element
+  ),
+  repoIcons: entityParser(z.string())
+}
+
+function readDomain<Entity>(
   installed: InstalledSidebarInputs,
   name: string,
-  schema: Schema
-): Map<string, z.infer<Schema>> {
-  const entities = new Map<string, z.infer<Schema>>()
+  parse: EntityParser<Entity>
+): Map<string, Entity> {
+  const entities = new Map<string, Entity>()
   for (const [key, value] of installed.domains.get(name) ?? []) {
-    const parsed = schema.safeParse(value)
-    if (parsed.success) {
-      entities.set(key, parsed.data)
+    const read = parse(value)
+    if (read) {
+      entities.set(key, read.entity)
     }
   }
   return entities
@@ -99,22 +124,22 @@ export function readSidebarFeedDomains(
   return {
     workspaces:
       unchanged('workspaces')?.workspaces ??
-      readDomain(installed, 'workspaces', entitySchemas.workspaces),
+      readDomain(installed, 'workspaces', entityParsers.workspaces),
     activity:
-      unchanged('activity')?.activity ?? readDomain(installed, 'activity', entitySchemas.activity),
-    review: unchanged('review')?.review ?? readDomain(installed, 'review', entitySchemas.review),
+      unchanged('activity')?.activity ?? readDomain(installed, 'activity', entityParsers.activity),
+    review: unchanged('review')?.review ?? readDomain(installed, 'review', entityParsers.review),
     creations:
       unchanged('creations')?.creations ??
-      readDomain(installed, 'creations', entitySchemas.creations),
+      readDomain(installed, 'creations', entityParsers.creations),
     pairedServerHosts:
       unchanged('pairedServerHosts')?.pairedServerHosts ??
-      readDomain(installed, 'pairedServerHosts', entitySchemas.pairedServerHosts),
+      readDomain(installed, 'pairedServerHosts', entityParsers.pairedServerHosts),
     pairedServerRows:
       unchanged('pairedServerRows')?.pairedServerRows ??
-      readDomain(installed, 'pairedServerRows', entitySchemas.pairedServerRows),
+      readDomain(installed, 'pairedServerRows', entityParsers.pairedServerRows),
     repoIcons:
       unchanged('repoIcons')?.repoIcons ??
-      readDomain(installed, 'repoIcons', entitySchemas.repoIcons),
+      readDomain(installed, 'repoIcons', entityParsers.repoIcons),
     desktop: desktop.success ? desktop.data : null,
     projectCatalog,
     retention: temporal.success ? temporal.data.retention : null
