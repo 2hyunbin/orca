@@ -16,6 +16,7 @@ import {
   closePairedHostLeafFirst,
   isTerminalTabPinnedInSession
 } from './paired-host-terminal-close'
+import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithExplicitCloseTabPtyStops {
   protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
@@ -113,8 +114,9 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
         worktreeId: pty.pty.worktreeId
       }
       const ptyCloseAuthority = this.resolvePtyTabCloseSurfaceAuthority(closeAuthority)
-      const spawnSurface = pty.pty.tabId
-        ? this.findMobileTerminalSurface(pty.pty.worktreeId, pty.pty.tabId)
+      const recorded = paneOfPty(this, pty.pty)
+      const spawnSurface = recorded.tabId
+        ? this.findMobileTerminalSurface(pty.pty.worktreeId, recorded.tabId)
         : null
       // Why: PTY exit can immediately replace a ready SSH publication with a pending one, so capture its durable HUB surface before killing it.
       const surface =
@@ -122,8 +124,8 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
         (spawnSurface && this.getMobileTerminalLeafPtyIds(spawnSurface.tab).length === 0
           ? spawnSurface
           : null)
-      const tabId = surface?.tab.parentTabId ?? pty.pty.tabId ?? pty.record.tabId
-      const leafId = surface?.tab.leafId ?? parsePaneKey(pty.pty.paneKey ?? '')?.leafId
+      const tabId = surface?.tab.parentTabId ?? recorded.tabId ?? pty.record.tabId
+      const leafId = surface?.tab.leafId ?? parsePaneKey(recorded.paneKey ?? '')?.leafId
       const paneTarget = leafId ? { kind: 'pane' as const, tabId, leafId } : null
       // Why: a PTY with no pane identity cannot be placed in any tab's layout, so it closes nothing.
       const closesTab =
@@ -166,7 +168,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
       if (
         closesTab &&
         !surface &&
-        pty.pty.tabId &&
+        recorded.tabId &&
         this.tabs.has(tabId) &&
         this.notifier?.closeTerminalTab
       ) {
@@ -280,7 +282,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
       }
       const tabId =
         this.resolvePtyTabCloseSurfaceAuthority(closeAuthority)?.surface.tab.parentTabId ??
-        pty.pty.tabId
+        paneOfPty(this, pty.pty).tabId
       if (!tabId) {
         return this.closeTerminal(handle)
       }

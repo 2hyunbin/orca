@@ -22,6 +22,7 @@ import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRuntimeWithStopTerminalsForWorktree {
   protected readonly sleepResumeRecords: WorktreeSleepResumeRecorder = {
@@ -63,7 +64,11 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
 
   private readonly paneLaunchConfigOf: PaneLaunchConfigOf = (paneKey, agent) => {
     for (const pty of this.ptysById.values()) {
-      if (pty.paneKey === paneKey && pty.launchConfig && pty.launchAgent === agent) {
+      if (
+        pty.launchConfig &&
+        pty.launchAgent === agent &&
+        paneOfPty(this, pty).paneKey === paneKey
+      ) {
         return pty.launchConfig
       }
     }

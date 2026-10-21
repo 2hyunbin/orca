@@ -15,6 +15,7 @@ import {
   navigationTargetsHost,
   type RuntimeNavigationTarget
 } from '../../../../shared/runtime-navigation'
+import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRuntimeWithActivateManagedWorktree {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
@@ -140,8 +141,9 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
 
   protected getProvisionedTerminalTab(handle: string): { worktreeId: string; tabId: string } {
     const pty = this.getLivePtyForHandle(handle)?.pty
-    if (pty?.tabId) {
-      return { worktreeId: pty.worktreeId, tabId: pty.tabId }
+    const recordedTabId = pty ? paneOfPty(this, pty).tabId : null
+    if (pty && recordedTabId) {
+      return { worktreeId: pty.worktreeId, tabId: recordedTabId }
     }
     // Why: once the window's graph sync adopts the handle it names the window's leaf, not the
     // runtime's pty, as renameTerminal also resolves it.

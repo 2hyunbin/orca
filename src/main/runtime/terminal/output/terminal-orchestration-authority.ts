@@ -33,6 +33,7 @@ import { resolveStructuredWorkerAuthority } from '../../structured-worker-author
 import { isStructuredWorkerHandle } from '../../../../shared/structured-worker-handle'
 import { parseOrcaSessionAddress } from '../../../../shared/orca-session-address'
 import { matchesProcessIncarnation } from '../../orchestration/worker-terminal-process-liveness'
+import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller {
   protected abstract getExistingTerminalHandlesForPtyId(ptyId: string): string[]
@@ -47,8 +48,9 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
   protected collectPaneKeysForPty(ptyId: string): Set<string> {
     const paneKeys = new Set<string>()
     const pty = this.ptysById.get(ptyId)
-    if (pty?.paneKey && parsePaneKey(pty.paneKey)) {
-      paneKeys.add(pty.paneKey)
+    const ptyPaneKey = pty ? paneOfPty(this, pty).paneKey : null
+    if (ptyPaneKey && parsePaneKey(ptyPaneKey)) {
+      paneKeys.add(ptyPaneKey)
     }
     const receipt = this.restoredOrchestrationAuthorityByPtyId.get(ptyId)
     if (receipt?.paneKey && parsePaneKey(receipt.paneKey)) {
@@ -73,7 +75,8 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
         paneKeys.add(row.paneKey)
       }
     }
-    const ptyPaneKey = this.ptysById.get(ptyId)?.paneKey
+    const pty = this.ptysById.get(ptyId)
+    const ptyPaneKey = pty ? paneOfPty(this, pty).paneKey : null
     if (ptyPaneKey && parseLegacyNumericPaneKey(ptyPaneKey)) {
       paneKeys.add(ptyPaneKey)
     }
@@ -135,7 +138,7 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
       ptyId,
       worktreeId: pty.worktreeId,
       processIncarnation: this.getTerminalProcessIncarnation(terminalHandle),
-      paneKey: pty.paneKey,
+      paneKey: paneOfPty(this, pty).paneKey,
       launchTokenHash: pty.launchToken
         ? createHash('sha256').update(pty.launchToken).digest('hex')
         : null,

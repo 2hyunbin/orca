@@ -11,6 +11,7 @@ import type {
 import { createHash } from 'node:crypto'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
+import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller extends OrcaRuntimeWithSerializeHeadlessTerminalBuffer {
   abstract getOrchestrationDispatchAuthority(
@@ -190,7 +191,7 @@ export abstract class OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller exte
     terminalHandle: string,
     incarnationId: string
   ): void {
-    const paneKey = pty.paneKey
+    const { paneKey } = paneOfPty(this, pty)
     const hostScope = this.getOrchestrationCompatibilityHostScope(pty)
     if (!paneKey || !parsePaneKey(paneKey) || !hostScope) {
       this.restoredOrchestrationAuthorityByPtyId.delete(pty.ptyId)

@@ -32,6 +32,8 @@ import type {
   ArtifactWriteRequest
 } from '../../../../shared/artifacts'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
+import { forgetPtySurface } from '../../pty-recorded-surface-topology'
+import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends OrcaRuntimeWithRestoredTerminalPlacement {
   protected abstract getOwnWorkspaceSessionForWorktree(
@@ -137,9 +139,8 @@ export abstract class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity ex
         this.tabs.delete(candidate.tabId)
       }
     }
-    if (pty?.tabId === candidate.tabId) {
-      pty.tabId = null
-      pty.paneKey = null
+    if (pty && paneOfPty(this, pty).tabId === candidate.tabId) {
+      forgetPtySurface(pty)
     }
     this.notifier?.resolveLegacyWorkerTerminalRecovery?.(
       candidate.paneKey,

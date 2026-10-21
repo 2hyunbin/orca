@@ -17,6 +17,7 @@ import { ActiveGroupViewFacts } from '../view-facts/active-group-view-facts'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
+import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifySshStateChanged {
   /** The group each workspace shows, as the attached window last reported it (syncWindowGraph). */
@@ -158,28 +159,32 @@ export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifyS
     }
     const partitions = new Map<
       ExecutionHostId,
-      { session: WorkspaceSessionState; ptys: RuntimePtyWorktreeRecord[] }
+      {
+        session: WorkspaceSessionState
+        ptys: { pty: RuntimePtyWorktreeRecord; tabId: string }[]
+      }
     >()
     for (const pty of this.ptysById.values()) {
-      if (!pty.connected || !pty.tabId) {
+      const tabId = pty.connected ? paneOfPty(this, pty).tabId : null
+      if (!pty.connected || !tabId) {
         continue
       }
       const hostId = this.getWorkspaceSessionHostIdForWorktree(pty.worktreeId)
       const session = this.store.getWorkspaceSession(hostId)
       const tab = session.tabsByWorktree[pty.worktreeId]?.find(
-        (candidate) => candidate.id === pty.tabId
+        (candidate) => candidate.id === tabId
       )
       if (!tab) {
         continue
       }
       const layoutPtyIds = Object.values(
-        session.terminalLayoutsByTabId[pty.tabId]?.ptyIdsByLeafId ?? {}
+        session.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId ?? {}
       )
       if (tab.ptyId !== pty.ptyId && !layoutPtyIds.includes(pty.ptyId)) {
         continue
       }
       const partition = partitions.get(hostId) ?? { session, ptys: [] }
-      partition.ptys.push(pty)
+      partition.ptys.push({ pty, tabId })
       partitions.set(hostId, partition)
     }
 
@@ -188,21 +193,21 @@ export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifyS
       const activeWorktreeIdsOnShutdown = [
         ...new Set([
           ...(session.activeWorktreeIdsOnShutdown ?? []),
-          ...ptys.map((pty) => pty.worktreeId)
+          ...ptys.map(({ pty }) => pty.worktreeId)
         ])
       ]
       const activeConnectionIdsAtShutdown = [
         ...new Set([
           ...(session.activeConnectionIdsAtShutdown ?? []),
           ...ptys
-            .map((pty) => pty.connectionId)
+            .map(({ pty }) => pty.connectionId)
             .filter((connectionId): connectionId is string => connectionId !== null)
         ])
       ]
       const remoteSessionIdsByTabId = { ...session.remoteSessionIdsByTabId }
-      for (const pty of ptys) {
-        if (pty.connectionId && pty.tabId) {
-          remoteSessionIdsByTabId[pty.tabId] = pty.ptyId
+      for (const { pty, tabId } of ptys) {
+        if (pty.connectionId && tabId) {
+          remoteSessionIdsByTabId[tabId] = pty.ptyId
         }
       }
 

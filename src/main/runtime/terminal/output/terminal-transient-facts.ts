@@ -19,6 +19,7 @@ import type {
   RuntimePtyWorktreeRecord
 } from '../../runtime-terminal-state-records'
 import type { TerminalTitleFactMeta } from '../../../../shared/terminal-output-side-effects'
+import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithEmitDaemonPtyTransientFact extends OrcaRuntimeWithScheduleWaitBlockedCheck {
   protected abstract retirePtyAgentLaunchAuthority(ptyId: string): void
@@ -136,11 +137,12 @@ export abstract class OrcaRuntimeWithEmitDaemonPtyTransientFact extends OrcaRunt
         connectionId
       }
     }
-    if (pty?.paneKey) {
+    const recorded = pty ? paneOfPty(this, pty) : null
+    if (pty && recorded?.paneKey) {
       return {
         worktreeId: pty.worktreeId,
-        ...(pty.tabId ? { tabId: pty.tabId } : {}),
-        paneKey: pty.paneKey,
+        ...(recorded.tabId ? { tabId: recorded.tabId } : {}),
+        paneKey: recorded.paneKey,
         connectionId
       }
     }

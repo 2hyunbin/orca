@@ -10,6 +10,7 @@ import type {
 import { retireTerminalSurfacesFromSnapshot } from '../mobile-session-terminal-retirement'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
+import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal {
   abstract getTerminalWorktreeIdForPaneKey(
@@ -98,11 +99,12 @@ export abstract class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends O
       return false
     }
     const pty = this.ptysById.get(candidatePtyId)
-    const pane = parsePaneKey(pty?.paneKey ?? '')
+    const recorded = pty ? paneOfPty(this, pty) : null
+    const pane = parsePaneKey(recorded?.paneKey ?? '')
     return Boolean(
       pty?.connected &&
       pty.worktreeId === worktreeId &&
-      pty.tabId === parentTabId &&
+      recorded?.tabId === parentTabId &&
       pane?.leafId === leafId
     )
   }

@@ -16,6 +16,7 @@ import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
 } from '../../runtime-terminal-state-records'
+import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnected {
   protected abstract pruneDisconnectedPtyRecords(): void
@@ -130,11 +131,12 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
           leafId: leaf.leafId
         })
       }
-      const parsedPaneKey = parsePaneKey(pty?.paneKey ?? '')
-      if (pty?.tabId && parsedPaneKey) {
-        exactSurfaceByKey.set(`${pty.worktreeId}\0${pty.tabId}\0${parsedPaneKey.leafId}`, {
+      const recorded = pty ? paneOfPty(this, pty) : null
+      const parsedPaneKey = parsePaneKey(recorded?.paneKey ?? '')
+      if (pty && recorded?.tabId && parsedPaneKey) {
+        exactSurfaceByKey.set(`${pty.worktreeId}\0${recorded.tabId}\0${parsedPaneKey.leafId}`, {
           worktreeId: pty.worktreeId,
-          parentTabId: pty.tabId,
+          parentTabId: recorded.tabId,
           leafId: parsedPaneKey.leafId
         })
       }
@@ -303,7 +305,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     // that teardown, so settle from them too (STA-4603).
     const ptyHandle = this.handleByPtyId.get(ptyId)
     if (ptyHandle && !exitedSurfaces.some((surface) => surface.handle === ptyHandle)) {
-      exitedSurfaces.push({ handle: ptyHandle, paneKey: pty?.paneKey ?? null })
+      exitedSurfaces.push({ handle: ptyHandle, paneKey: pty ? paneOfPty(this, pty).paneKey : null })
     }
     if (!preservesAbnormalSshSurface) {
       for (const surface of exitedSurfaces) {

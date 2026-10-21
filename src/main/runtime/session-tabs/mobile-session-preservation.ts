@@ -12,6 +12,7 @@ import {
 } from '../mobile-session-tab-merge'
 import { terminalLayoutContainsLeaf } from '../../../shared/workspace-session-pane-ownership'
 import { getHeadlessMobileSessionGroupId } from '../mobile-session-layout-projection'
+import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends OrcaRuntimeWithSyncMobileSessionTabs {
   protected abstract collectPreservedHeadlessMobileSessionTabs(
@@ -148,7 +149,10 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
       }
       for (const ptyId of getMobileTerminalLeafPtyIds(tab)) {
         const pty = this.ptysById.get(ptyId)
-        if (pty?.worktreeId === existing.worktree && pty.tabId === tab.parentTabId) {
+        if (
+          pty?.worktreeId === existing.worktree &&
+          paneOfPty(this, pty).tabId === tab.parentTabId
+        ) {
           pty.runtimeSessionOwned = false
           this.setPairedRendererSessionOwnership(ptyId, false)
         }

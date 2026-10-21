@@ -3,7 +3,6 @@
 // Only switch-on code reaches this module, so a window-owned build bundles none of it.
 
 import type { PaneStartFactOf } from '../../pane-start-statuses'
-import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
@@ -197,48 +196,41 @@ export function windowListsTab(
 }
 
 type PaneClaim = {
-  connected?: boolean
   tabId?: string | null
   paneKey?: string | null
   surfaceRecordedAtGraphSequence?: number
 }
 
+/** A terminal record's update with no pane claim: main's layout answers for the pane (L80). */
+export function withoutPaneClaim<State extends PaneClaim>(
+  state: State
+): Omit<State, keyof PaneClaim> {
+  const {
+    tabId: _tabId,
+    paneKey: _paneKey,
+    surfaceRecordedAtGraphSequence: _stamp,
+    ...rest
+  } = state
+  return rest
+}
+
 /**
- * A terminal record's update with main's pane in place of the caller's claim. Looked up only when
- * the claim or the connection changes, since output records every chunk with neither changed.
+ * A bound pane's terminal connecting or ending changes its leaf, though no layout changed. Looked
+ * up only when the connection changes, since output records every chunk with it unchanged.
  */
-export function withMainPaneClaim<State extends PaneClaim>(
+export function noteMainPaneConnection(
   runtime: SurfacesOwner,
-  prior: { connected: boolean; tabId: string | null; paneKey: string | null } | undefined,
+  prior: { connected: boolean } | undefined,
   ptyId: string,
-  state: State,
-  graphSequence: number
-): State {
-  const connectedChanges = state.connected !== undefined && prior?.connected !== state.connected
-  const claimChanges =
-    (state.tabId !== undefined && state.tabId !== prior?.tabId) ||
-    (state.paneKey !== undefined && state.paneKey !== prior?.paneKey)
-  if (!connectedChanges && !claimChanges) {
-    return state
+  state: { connected?: boolean }
+): void {
+  if (state.connected === undefined || prior?.connected === state.connected) {
+    return
   }
   const surfaces = startedMainTerminalSurfaces(runtime)
-  const pane = surfaces?.findPaneForPty(ptyId)
-  if (!pane) {
-    return state
+  if (surfaces?.findPaneForPty(ptyId)) {
+    surfaces.terminalChanged()
   }
-  // A bound pane's terminal connecting or ending changes its leaf, though no layout changed.
-  if (connectedChanges) {
-    surfaces?.terminalChanged()
-  }
-  // A legacy pane id names no pane key; the caller's claim stands for it.
-  return claimChanges && isTerminalLeafId(pane.leafId)
-    ? {
-        ...state,
-        tabId: pane.tabId,
-        paneKey: makePaneKey(pane.tabId, pane.leafId),
-        surfaceRecordedAtGraphSequence: graphSequence
-      }
-    : state
 }
 
 /** Whether main lists the workspace's panes, so terminal.list shows every saved one. */

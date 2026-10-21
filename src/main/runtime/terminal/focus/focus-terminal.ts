@@ -7,6 +7,7 @@ import type {
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { getLatestPtyTitle } from '../../runtime-worktree-status-projection'
 import { copySleepingAgentLaunchConfig } from '../../runtime-agent-launch-resolution'
+import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyId {
   async focusTerminal(
@@ -21,7 +22,7 @@ export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitFo
       }
       return {
         handle,
-        tabId: live.pty.tabId ?? live.record.tabId,
+        tabId: paneOfPty(this, live.pty).tabId ?? live.record.tabId,
         worktreeId: live.pty.worktreeId,
         navigated: false
       }
@@ -45,7 +46,7 @@ export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitFo
       if (!navigateHost || !this.notifier?.revealTerminalSession) {
         return {
           handle,
-          tabId: pty.pty.tabId ?? pty.record.tabId,
+          tabId: paneOfPty(this, pty.pty).tabId ?? pty.record.tabId,
           worktreeId: pty.pty.worktreeId,
           navigated: false
         }
@@ -63,7 +64,7 @@ export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitFo
           if (!ctx.isCurrent()) {
             return {
               handle,
-              tabId: live.pty.tabId ?? live.record.tabId,
+              tabId: paneOfPty(this, live.pty).tabId ?? live.record.tabId,
               worktreeId: live.pty.worktreeId,
               navigated: false
             }
@@ -72,12 +73,13 @@ export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitFo
           if (!notifier?.revealTerminalSession) {
             return {
               handle,
-              tabId: live.pty.tabId ?? live.record.tabId,
+              tabId: paneOfPty(this, live.pty).tabId ?? live.record.tabId,
               worktreeId: live.pty.worktreeId,
               navigated: false
             }
           }
-          const parsedPaneKey = parsePaneKey(live.pty.paneKey ?? '')
+          const recorded = paneOfPty(this, live.pty)
+          const parsedPaneKey = parsePaneKey(recorded.paneKey ?? '')
           const revealed = await notifier.revealTerminalSession(live.pty.worktreeId, {
             ptyId: live.pty.ptyId,
             title: getLatestPtyTitle(this.getPtyDisplayRecord(live.pty)),
@@ -86,20 +88,20 @@ export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitFo
               : {}),
             ...(live.pty.launchToken ? { launchToken: live.pty.launchToken } : {}),
             ...(live.pty.launchAgent ? { launchAgent: live.pty.launchAgent } : {}),
-            ...(live.pty.tabId !== null ? { tabId: live.pty.tabId } : {}),
+            ...(recorded.tabId !== null ? { tabId: recorded.tabId } : {}),
             ...(parsedPaneKey ? { leafId: parsedPaneKey.leafId } : {})
           })
           if (!ctx.isCurrent() || this.notifier !== notifier) {
             return {
               handle,
-              tabId: revealed?.tabId ?? live.pty.tabId ?? live.record.tabId,
+              tabId: revealed?.tabId ?? paneOfPty(this, live.pty).tabId ?? live.record.tabId,
               worktreeId: live.pty.worktreeId,
               navigated: false
             }
           }
           return {
             handle,
-            tabId: revealed?.tabId ?? live.pty.tabId ?? live.record.tabId,
+            tabId: revealed?.tabId ?? paneOfPty(this, live.pty).tabId ?? live.record.tabId,
             worktreeId: live.pty.worktreeId,
             navigated: true
           }
@@ -178,7 +180,7 @@ export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitFo
   protected getPtyIdsForExplicitTabClose(worktreeId: string, tabId: string): string[] {
     const ptyIds = new Set<string>()
     for (const pty of this.ptysById.values()) {
-      if (pty.connected && pty.worktreeId === worktreeId && pty.tabId === tabId) {
+      if (pty.connected && pty.worktreeId === worktreeId && paneOfPty(this, pty).tabId === tabId) {
         ptyIds.add(pty.ptyId)
       }
     }

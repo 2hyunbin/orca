@@ -29,6 +29,7 @@ import {
   cloneTerminalLayoutSnapshot
 } from '../../mobile-session-layout-projection'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
+import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh {
   protected abstract emitMobileSessionTabsSnapshotToClient(
@@ -228,7 +229,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     // yet hydrated after a restart may still be writing the transcript.
     const ptys = [...this.ptysById.values()]
     const holderPaneKeys = [...otherPaneKeys].filter((paneKey) => {
-      const panePtys = ptys.filter((pty) => pty.paneKey === paneKey)
+      const panePtys = ptys.filter((pty) => paneOfPty(this, pty).paneKey === paneKey)
       return panePtys.length === 0 || panePtys.some((pty) => !this.isPtyKnownExited(pty.ptyId))
     })
     if (holderPaneKeys.length === 0) {

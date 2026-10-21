@@ -29,6 +29,7 @@ import {
   panesBoundToGoneLocalTerminals
 } from '../../terminal/recovery/foreign-pane-bindings'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 /** The longest a workspace's first surface waits for main's placement pass. */
 export const FIRST_SURFACE_PLACEMENT_WAIT_MS = 500
@@ -120,6 +121,7 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
         return inventory && { ...inventory, workspaceIds }
       },
       ptys: () => this.ptysById.values(),
+      paneOf: (pty) => paneOfPty(this, pty),
       // A window spawn holds its workspace's lock until its pane is recorded (spawn-run.ts).
       isStillBinding: (pty) =>
         this.terminalMutationLock.hasActiveSpawns(worktreeIdentityKey(pty.worktreeId)),

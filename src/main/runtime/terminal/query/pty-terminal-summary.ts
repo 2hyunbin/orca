@@ -17,6 +17,7 @@ import type { TerminalHandleRecord } from '../../runtime-terminal-contracts'
 import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
+import { paneOfPty } from '../surface/pty-pane-query'
 
 export type LiveTerminalPty = ReturnType<
   OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
@@ -41,16 +42,17 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   ): RuntimeTerminalSummary {
     const worktree = worktreesById.get(pty.worktreeId)
 
-    const pane = parsePaneKey(pty.paneKey ?? '')
-    const orphaned = !ptyHoldsRecordedSurface(pty, this.ptySurfaceTopology())
+    const recorded = paneOfPty(this, pty)
+    const pane = parsePaneKey(recorded.paneKey ?? '')
+    const orphaned = !ptyHoldsRecordedSurface(pty.ptyId, recorded, this.ptySurfaceTopology())
     // A restarted host's terminal has no title yet; until it has one, its tab's saved name stands in.
     const title =
       getLatestPtyTitle(this.getPtyDisplayRecord(pty)) ??
-      (orphaned ? null : this.getSavedTerminalTabCustomTitle(pty.worktreeId, pty.tabId))
+      (orphaned ? null : this.getSavedTerminalTabCustomTitle(pty.worktreeId, recorded.tabId))
     const paneTitle =
-      orphaned || !pty.tabId || !pane
+      orphaned || !recorded.tabId || !pane
         ? null
-        : this.getSavedPaneTitle(pty.worktreeId, pty.tabId, pane.leafId)
+        : this.getSavedPaneTitle(pty.worktreeId, recorded.tabId, pane.leafId)
     // A live process awaiting its pane binding is not evidence of an orphan.
     if (
       orphaned &&
@@ -64,13 +66,13 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
       ptyId: pty.ptyId,
       incarnationId: pty.incarnationId,
       orphaned,
-      ...(orphaned && pane && pane.tabId === pty.tabId && pty.paneKey
-        ? { recordedPaneKey: pty.paneKey }
+      ...(orphaned && pane && pane.tabId === recorded.tabId && recorded.paneKey
+        ? { recordedPaneKey: recorded.paneKey }
         : {}),
       worktreeId: pty.worktreeId,
       worktreePath: worktree?.path ?? '',
       branch: worktree?.branch ?? '',
-      tabId: orphaned ? `pty:${pty.ptyId}` : pty.tabId!,
+      tabId: orphaned ? `pty:${pty.ptyId}` : recorded.tabId!,
       // SAFETY: A later binding read does not prove the cached pane was present.
       leafId: orphaned ? `pty:${pty.ptyId}` : pane!.leafId,
       title,
@@ -85,7 +87,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
         pty.launchAgent,
         pty.foregroundAgent,
         title,
-        pty.paneKey ?? null
+        recorded.paneKey
       )
     }
   }

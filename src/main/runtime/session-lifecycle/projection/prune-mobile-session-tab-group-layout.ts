@@ -28,6 +28,7 @@ import {
   retitleStructuredConversationTab,
   titleStructuredConversationTabs
 } from '../../structured-conversation-tab-title'
+import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntimeWithScheduleMobileSessionTabsChanged {
   protected pruneMobileSessionTabGroupLayout(
@@ -200,13 +201,11 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
       if (this.mobileTerminalTabMatchesPty(worktreeId, tab, pty, paneKey)) {
         return pty
       }
-      if (
-        options.allowWorktreeOnlyMatch === true &&
-        pty.worktreeId === worktreeId &&
-        pty.tabId === null &&
-        pty.paneKey === null
-      ) {
-        return pty
+      if (options.allowWorktreeOnlyMatch === true && pty.worktreeId === worktreeId) {
+        const recorded = paneOfPty(this, pty)
+        if (recorded.tabId === null && recorded.paneKey === null) {
+          return pty
+        }
       }
       return null
     }
@@ -215,7 +214,12 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
       paneKeys.add(`${tab.parentTabId}:${FIRST_PANE_ID}`)
     }
     for (const pty of this.ptysById.values()) {
-      if (pty.tabId === tab.parentTabId && pty.paneKey && paneKeys.has(pty.paneKey)) {
+      const recorded = paneOfPty(this, pty)
+      if (
+        recorded.tabId === tab.parentTabId &&
+        recorded.paneKey &&
+        paneKeys.has(recorded.paneKey)
+      ) {
         return pty
       }
     }
@@ -242,7 +246,11 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
     pty: RuntimePtyWorktreeRecord,
     paneKey = this.getMobileTerminalPaneKey(tab)
   ): boolean {
-    return pty.worktreeId === worktreeId && pty.tabId === tab.parentTabId && pty.paneKey === paneKey
+    if (pty.worktreeId !== worktreeId) {
+      return false
+    }
+    const recorded = paneOfPty(this, pty)
+    return recorded.tabId === tab.parentTabId && recorded.paneKey === paneKey
   }
 
   // Why: group address resolution (Section 4.5) queries per-handle status and must not throw on stale handles; return null on any error.

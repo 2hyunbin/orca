@@ -10,7 +10,7 @@ import type { RuntimeSyncedLeaf } from '../../../../shared/runtime-types'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { inferWorktreeIdFromPtyId } from '../../runtime-worktree-path-identity'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { withMainPaneClaim } from '../surface/main-terminal-surfaces'
+import { noteMainPaneConnection, withoutPaneClaim } from '../surface/main-terminal-surfaces'
 import {
   recordPtySurfaceClaim,
   SURFACE_CLAIM_WITHOUT_STANDING
@@ -49,9 +49,10 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
       >
     > = {}
   ): RuntimePtyWorktreeRecord {
-    // Switch point: the pane main's layout binds the terminal to outranks any caller's claim.
+    // Switch point: main's layout is the one answer to a terminal's pane, so no claim is copied.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      state = withMainPaneClaim(this, this.ptysById.get(ptyId), ptyId, state, this.graphSequence)
+      noteMainPaneConnection(this, this.ptysById.get(ptyId), ptyId, state)
+      state = withoutPaneClaim(state)
     }
     let pty = this.ptysById.get(ptyId)
     if (!pty) {
@@ -74,15 +75,20 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
         runtimeSessionOwned: state.runtimeSessionOwned ?? false,
         isWsl: state.isWsl ?? null,
         wslDistro,
-        tabId: state.tabId ?? null,
-        paneKey: state.paneKey ?? null,
-        // A PTY the runtime is meeting for the first time has no prior observation for a graph
-        // statement to contradict, and the leaf map cannot answer for a pane no statement has ever
-        // named — a headless workspace has no renderer graph at all. The next statement decides it.
-        surfaceRecordedAtGraphSequence: Math.max(
-          this.graphSequence,
-          state.surfaceRecordedAtGraphSequence ?? this.graphSequence
-        ),
+        ...(ORCA_LAYOUT_OWNER_IS_MAIN
+          ? {}
+          : {
+              tabId: state.tabId ?? null,
+              paneKey: state.paneKey ?? null,
+              // A PTY the runtime is meeting for the first time has no prior observation for a
+              // graph statement to contradict, and the leaf map cannot answer for a pane no
+              // statement has ever named — a headless workspace has no renderer graph at all.
+              // The next statement decides it.
+              surfaceRecordedAtGraphSequence: Math.max(
+                this.graphSequence,
+                state.surfaceRecordedAtGraphSequence ?? this.graphSequence
+              )
+            }),
         launchConfig: null,
         launchToken: null,
         launchIncarnationId: null,
