@@ -2,6 +2,7 @@
 // and main republishes them when the Store's layout changes, whether or not a window publishes.
 
 import type { PaneStartFactOf } from '../../pane-start-statuses'
+import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
@@ -318,6 +319,13 @@ export function noteMainPaneConnection(
   if (surfaces?.findPaneForPty(ptyId)) {
     surfaces.terminalChanged()
   }
+}
+
+/** Whether main's layout still holds the pane; null before main has published its panes. */
+export function mainLayoutHoldsPane(runtime: SurfacesOwner, paneKey: string): boolean | null {
+  const surfaces = startedMainTerminalSurfaces(runtime)
+  const pane = parsePaneKey(paneKey)
+  return surfaces && pane ? surfaces.paneOf(pane.tabId, pane.leafId) !== null : null
 }
 
 /** Whether main lists the workspace's panes, so terminal.list shows every saved one. */

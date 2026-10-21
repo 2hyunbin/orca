@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { committingSpawn, registerBoundPty } from '../bind-first-pane.test-fixture'
+import { bindPaneFirst, committingSpawn, registerBoundPty } from '../bind-first-pane.test-fixture'
 import {
   OrcaRuntimeService,
   electronMocks,
@@ -363,6 +363,13 @@ describe('OrcaRuntimeService', () => {
             } as never
           ]
         }
+      })
+      // A restart: the other pane is saved in main's layout, its terminal not yet re-registered.
+      bindPaneFirst(runtime, {
+        worktreeId: TEST_WORKTREE_ID,
+        tabId: 'other-tab',
+        leafId: HEADLESS_SECOND_LEAF_ID,
+        ptyId: 'other-pty'
       })
 
       await userActivate(runtime)

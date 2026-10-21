@@ -29,6 +29,8 @@ import {
   cloneTerminalLayoutSnapshot
 } from '../../mobile-session-layout-projection'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { mainLayoutHoldsPane } from '../../terminal/surface/main-terminal-surfaces'
 
 export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh {
   protected abstract emitMobileSessionTabsSnapshotToClient(
@@ -229,7 +231,10 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     const ptys = [...this.ptysById.values()]
     const holderPaneKeys = [...otherPaneKeys].filter((paneKey) => {
       const panePtys = ptys.filter((pty) => this.paneOfPty(pty).paneKey === paneKey)
-      return panePtys.length === 0 || panePtys.some((pty) => !this.isPtyKnownExited(pty.ptyId))
+      // Switch point: an empty pane holds the session only while main's layout still holds it.
+      return panePtys.length === 0
+        ? !ORCA_LAYOUT_OWNER_IS_MAIN || mainLayoutHoldsPane(this, paneKey) !== false
+        : panePtys.some((pty) => !this.isPtyKnownExited(pty.ptyId))
     })
     if (holderPaneKeys.length === 0) {
       return false
