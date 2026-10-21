@@ -14,7 +14,6 @@ import {
   deriveClientSessionTabSelection,
   projectClientSessionTabSelection
 } from '../../client-session-tab-selection'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
   agentProviderSessionsEqual,
   type SleepingAgentSessionRecord
@@ -29,7 +28,7 @@ import {
   buildHeadlessMobileSessionTabGroups,
   cloneTerminalLayoutSnapshot
 } from '../../mobile-session-layout-projection'
-import { worktreeIdsEqual } from '../../../../shared/worktree/id'
+import { findPaneSleepingRecord } from './pane-sleeping-record'
 
 export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh {
   protected abstract emitMobileSessionTabsSnapshotToClient(
@@ -182,9 +181,11 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     // Why: nothing here spends the record, so a session another pane also records could be
     // resumed twice (two writers on one transcript), as could one already live in another pane.
     const records = this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey
-    const sharedWithAnotherPane = Object.values(records ?? {}).some(
-      (other) =>
+    const aliases = this.findPaneSleepingAgentRecord(worktreeId, tab)?.aliases ?? []
+    const sharedWithAnotherPane = Object.entries(records ?? {}).some(
+      ([paneKey, other]) =>
         other !== record &&
+        !aliases.includes(paneKey) &&
         other.agent === record.agent &&
         agentProviderSessionsEqual(record.agent, other.providerSession, record.providerSession)
     )
@@ -263,11 +264,12 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab
   ): SleepingAgentSessionRecord | null {
-    const record =
-      this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey?.[
-        makePaneKey(tab.parentTabId, tab.leafId)
-      ]
-    return record && worktreeIdsEqual(record.worktreeId, worktreeId) ? record : null
+    return this.findPaneSleepingAgentRecord(worktreeId, tab)?.record ?? null
+  }
+
+  private findPaneSleepingAgentRecord(worktreeId: string, tab: RuntimeMobileSessionTerminalTab) {
+    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    return findPaneSleepingRecord(session?.sleepingAgentSessionsByPaneKey, worktreeId, tab)
   }
 
   protected shouldMaterializeHeadlessMobileSessionTab(

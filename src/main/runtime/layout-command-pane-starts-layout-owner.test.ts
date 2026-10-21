@@ -222,6 +222,26 @@ describe('a client’s startPane in the layout-owner build', () => {
     warn.mockRestore()
   })
 
+  it('resumes the agent a pre-stable-id build recorded under the pane’s number', async () => {
+    const legacyKey = 'host-tab:2'
+    const { runtime, spawn, started } = await desktopRuntime({
+      session: makeWorkspaceSessionWithHeadlessTerminal({
+        sleepingAgentSessionsByPaneKey: {
+          [legacyKey]: { ...RECORD, paneKey: legacyKey },
+          // A second alias of the same conversation is the same record, not another pane's.
+          'host-tab:3': { ...RECORD, paneKey: 'host-tab:3', capturedAt: 2 }
+        }
+      })
+    })
+    runtime.setStartStatus(PANE_KEY, 'sleeping')
+
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+    started.resolve({ id: 'persisted-pty' })
+
+    expect(spawn.mock.calls[0]?.[0].command).toContain('provider-session-1')
+  })
+
   it('shows the pane starting in the frame its reply names', async () => {
     const { runtime } = await desktopRuntime()
 
