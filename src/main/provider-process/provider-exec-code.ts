@@ -52,6 +52,7 @@ async function privateCodeRoot(base: string): Promise<string | undefined> {
   if (stat.isDirectory() && stat.uid === uid && (stat.mode & 0o077) === 0) {
     return root
   }
+  return undefined
 }
 
 async function codeCommand(executable: string, args: string[], fd?: number) {

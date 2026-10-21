@@ -12,6 +12,7 @@ import { collectProviderExecCode, prepareProviderExecCode } from './provider-exe
 import { readPosixProcessRow } from './provider-process-row-read'
 import { spawnProviderExecControl } from './provider-exec-control'
 import { providerExecChannel } from './provider-exec-channel'
+import { settleProviderExec } from './provider-exec-settlement'
 
 // These tests execute only our internal C fixture; they never start an agent or Electron.
 describe.skipIf(process.platform === 'win32')('provider executable retention', () => {
@@ -87,6 +88,7 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
       { closeRequest: 'stdin-end-and-sigterm', onProtectionLost: lost }
     )
     const holder = control.child
+    holder.stderr.resume()
     const readyOutput = once(holder.stdout, 'data')
     const outputEnded = once(holder.stdout, 'end')
     let output = ''
@@ -130,7 +132,19 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
       await collectProviderExecCode(codeRoot, second.executable, second.holdFd())
       expect(existsSync(first.executable)).toBe(true)
       expect((await control.operation('PROBE')).group).toBe('exited')
-      await control.finish('RETIRE')
+      expect(
+        await settleProviderExec(control, {
+          reason: 'natural',
+          closeRequest: 'stdin-end',
+          lifetime: 'one-shot'
+        })
+      ).toEqual({
+        root: 'exited',
+        group: 'exited',
+        tree: null,
+        output: 'complete',
+        terminal: 'retired'
+      })
       await collectProviderExecCode(codeRoot, second.executable, second.holdFd())
       expect(existsSync(first.executable)).toBe(false)
       expect(existsSync(stage)).toBe(false)
@@ -145,6 +159,8 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
           second,
           { closeRequest: 'stdin-end', onProtectionLost: lost }
         )
+        probe.child.stdout.resume()
+        probe.child.stderr.resume()
         expect((await probe.startup).kind).toBe('released')
         expect((await probe.rootExit).code).toBe(127)
         const status = await probe.execStatus
@@ -154,8 +170,44 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
         expect(failure && 'code' in failure.error ? failure.error.code : null).toBe(
           missing ? 'ENOENT' : null
         )
-        await probe.finish('RETIRE')
+        await settleProviderExec(probe, {
+          reason: 'natural',
+          closeRequest: 'stdin-end',
+          lifetime: 'one-shot'
+        })
       }
+      const stubborn = spawnProviderExecControl(
+        { command: '/bin/sh', args: ['-c', 'trap "" TERM; printf READY; exec /bin/sleep 30'] },
+        second,
+        { closeRequest: 'stdin-end-and-sigterm', onProtectionLost: lost }
+      )
+      stubborn.child.stderr.resume()
+      try {
+        await once(stubborn.child.stdout, 'data')
+        const closing = settleProviderExec(stubborn, {
+          reason: 'close',
+          closeRequest: 'stdin-end-and-sigterm',
+          lifetime: 'session'
+        })
+        expect(
+          settleProviderExec(stubborn, {
+            reason: 'natural',
+            closeRequest: 'stdin-end',
+            lifetime: 'one-shot'
+          })
+        ).toBe(closing)
+        expect(await closing).toEqual({
+          root: 'exited',
+          group: 'exited',
+          tree: null,
+          output: 'complete',
+          terminal: 'retired'
+        })
+        expect((await stubborn.rootExit).signal).toBe('SIGKILL')
+      } finally {
+        stubborn.disconnect()
+      }
+      expect(lost).not.toHaveBeenCalled()
     } finally {
       control.disconnect()
       if (holder.exitCode === null && holder.signalCode === null) {

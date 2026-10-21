@@ -44,7 +44,7 @@ export function spawnProviderExecControl(
   let finishing = false
   const gate = child.stdio[3]
   const watcher = child.stdio[4]
-  const status = child.stdio[5]
+  const status = child.stdio.at(5)
   const loseProtection = (error: Error): void => {
     if (failure || terminal) {
       return
@@ -111,7 +111,7 @@ export function spawnProviderExecControl(
     }
   })
   status?.on('error', loseProtection)
-  const startup: Promise<ExecStartup> = (async () => {
+  const startup = (async (): Promise<ExecStartup> => {
     const [setup, armed] = await Promise.all([gateChannel.next(), watchChannel.next()])
     const match = new RegExp(`^ARMED ${nonce} ([1-9]\\d*)$`).exec(armed)
     const watcherPid = Number(match?.[1])
@@ -215,6 +215,10 @@ export function spawnProviderExecControl(
         throw error
       }
       terminal = true
+      execStatus.resolve({
+        kind: 'unverifiable',
+        error: new Error('Provider launch observation ended at retirement')
+      })
       gateChannel.stop()
       watchChannel.stop()
       status?.destroy()
