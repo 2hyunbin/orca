@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import type * as ManagedRuntimeContext from '../managed-server/lifecycle/orcad-managed-runtime-context'
 import type * as RemoteVersionedInstall from '../managed-server/install/remote-versioned-install'
-import { emptyOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
+import {
+  emptyOrcadActivationRecord,
+  type OrcadActivationRecord
+} from '../managed-server/activation/orcad-activation-record'
 import { getRemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import type { WslDistroHolder } from './wsl-distro-holder'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
@@ -60,6 +63,9 @@ vi.mock('../managed-server/lifecycle/orcad-managed-runtime-context', async (impo
 }))
 
 import { deployAndLaunchWslOrcad, isWsl1KernelRelease } from './wsl-orcad-deploy'
+import { resetOrcadUpdateFailuresForTests } from '../managed-server/lifecycle/orcad-managed-update-failure-memory'
+
+beforeEach(() => resetOrcadUpdateFailuresForTests())
 
 const host = getRemoteHostPlatform('linux-x64')
 const READINESS = {
@@ -450,7 +456,7 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       reason: 'newer Orca ran this host'
     }
 
-    function withRecord(record: typeof activeOld): void {
+    function withRecord(record: OrcadActivationRecord): void {
       mocks.resolveContext.mockImplementation(async (target: WslOrcadHostTarget, connection) => ({
         activationRecord: record,
         serverTarget: 'linux-x64-glibc',
@@ -559,6 +565,85 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       expect(admitRecord(rolledBack, '1.5.0+ab')).toMatch(/rolled back from 1\.5\.0\+ab/)
       expect(admitRecord(activeOld, '1.5.0+ab')).toBeNull()
       expect(admitRecord(newer, '1.5.0+ab')).toMatch(/Orca 2\.0\.0 last ran/)
+    })
+
+    const rejected = {
+      outcome: 'installed-not-activated',
+      fullVersion: '1.5.0+ab',
+      code: 'orcad_candidate_readiness_rejected',
+      reason: 'the candidate never became ready; the incumbent was restored'
+    }
+
+    it('does not retry a candidate rejected earlier this launch, and serves the incumbent', async () => {
+      mocks.deploy.mockResolvedValue(rejected)
+      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred' })
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('1.4.0+aa', INCUMBENT_READINESS))
+      await expect(launch()).resolves.toMatchObject({ outcome: 'ready', fullVersion: '1.4.0+aa' })
+      expect(mocks.deploy).toHaveBeenCalledTimes(1)
+      // Force is the explicit retry.
+      await launch(undefined, { force: true })
+      expect(mocks.deploy).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps retrying an update that only waited, or that a newer host refused', async () => {
+      mocks.deploy.mockResolvedValue({
+        outcome: 'installed-not-activated',
+        fullVersion: '1.5.0+ab',
+        code: 'orcad_update_terminals_running',
+        reason: 'busy'
+      })
+      await launch()
+      await launch()
+      mocks.deploy.mockResolvedValue(policyRefused)
+      await launch()
+      await launch()
+      expect(mocks.deploy).toHaveBeenCalledTimes(4)
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
+    })
+
+    it('forgets a failure once a deploy goes through', async () => {
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      await launch()
+      mocks.deploy.mockResolvedValueOnce({
+        outcome: 'installed-and-activated',
+        fullVersion: '1.5.0+ab',
+        verdict: {}
+      })
+      await launch(undefined, { force: true })
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      await launch()
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
+      expect(mocks.deploy).toHaveBeenCalledTimes(3)
+    })
+
+    it('deploys on the record the wake read when the skipped build stopped meanwhile', async () => {
+      withRecord(newer)
+      const stopped = { ...newer, active: null, activatedAt: null }
+      mocks.adoptRunning.mockResolvedValueOnce(null)
+      mocks.readRecord.mockResolvedValueOnce(stopped)
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      await launch()
+      expect(mocks.incumbent).not.toHaveBeenCalled()
+      expect(mocks.deploy.mock.calls[0][0]).toMatchObject({
+        censusRecord: stopped,
+        census: { liveSessions: 0 }
+      })
+    })
+
+    it('leaves a host stopped after a rollback for Force, not the build it rolled back from', async () => {
+      // No bundle of `previous` is on this desktop, so nothing here could restart it.
+      const stopped = {
+        ...emptyOrcadActivationRecord(),
+        previous: '1.4.0+aa',
+        rolledBackFrom: '1.5.0+ab'
+      }
+      withRecord(stopped)
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred', forceable: true })
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
+      expect(mocks.deploy.mock.calls[0][0].admitRecord(stopped, '1.5.0+ab')).toMatch(
+        /rolled back from 1\.5\.0\+ab/
+      )
     })
 
     it('updates an older host as before, without asking to adopt it', async () => {
