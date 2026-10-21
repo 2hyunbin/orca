@@ -61,8 +61,9 @@ function desktopOnlyEditorOpens(
 
 /**
  * Hands a workspace's desktop-only editor tabs to the server's main, then reports when all have
- * answered. An open answered `tab_exists` is the server's already (a retry after a reconnect); any
- * other refusal, or a failed call, keeps the workspace mirror-drawn for the rest of this stream.
+ * answered. A resent open the server already applied answers ok (drawnTabOpen); any refusal, even
+ * `tab_exists` (the id is another tab's there), or a failed call, keeps the workspace mirror-drawn
+ * for the rest of this stream.
  */
 export function createServerEditorHandover(options: {
   environmentId: string
@@ -82,7 +83,7 @@ export function createServerEditorHandover(options: {
       if (closed) {
         return
       }
-      if (reply?.ok || reply?.code === 'tab_exists') {
+      if (reply?.ok) {
         const tabs = handedOver.get(key) ?? new Set()
         handedOver.set(key, tabs.add(tabId))
       } else {

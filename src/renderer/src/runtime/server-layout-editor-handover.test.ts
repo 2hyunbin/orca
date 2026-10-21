@@ -303,16 +303,20 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
     expect(editorTabIds(store)).toEqual([tabId])
   })
 
-  it('takes `tab_exists` as handed over already, and gates the workspace', async () => {
+  it('keeps the tab and its draft on the mirror when the server answers `tab_exists`: its id is another tab’s there', async () => {
     const store = mirroredStore()
-    openDesktopFile(store, FILE_PATH)
+    const { fileId, tabId } = openDesktopFile(store, FILE_PATH)
+    editDraft(store, fileId, 'unsaved')
     const server = serverWith()
     server.answer = { refuse: 'tab_exists' }
 
     await connect(store, server)
 
     expect(serverOpens()).toHaveLength(1)
-    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+    expect(editorTabIds(store)).toEqual([tabId])
+    expect(openFileIds(store)).toEqual([fileId])
+    expect(store.getState().editorDrafts[fileId]).toBe('unsaved')
   })
 
   it('keeps the tab and its draft on the mirror for the stream after any other refusal', async () => {
@@ -367,9 +371,10 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
     expect(store.getState().editorDrafts[fileId]).toBe('unsaved')
   })
 
-  it('retries on the next stream after a call that never reached the server, which answers `tab_exists`', async () => {
+  it('retries on the next stream after a call that never reached the server, and gates once it applies', async () => {
     const store = mirroredStore()
-    const { tabId } = openDesktopFile(store, FILE_PATH)
+    const { fileId, tabId } = openDesktopFile(store, FILE_PATH)
+    editDraft(store, fileId, 'unsaved')
     const server = serverWith()
     server.answer = 'throw'
     const stream = await connect(store, server)
@@ -377,13 +382,16 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
 
     stream.onStatus({ state: 'lost' })
     stream.onStatus({ state: 'connecting' })
-    server.answer = { refuse: 'tab_exists' }
+    server.answer = 'apply'
     server.connect(stream)
     await settle()
     await settle()
 
     expect(serverOpens().map((command) => command.tabId)).toEqual([tabId, tabId])
     expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+    expect(editorTabIds(store)).toEqual([tabId])
+    expect(openFileIds(store)).toEqual([fileId])
+    expect(store.getState().editorDrafts[fileId]).toBe('unsaved')
   })
 
   it('hands over a tab opened during the hand-over before gating, and skips one closed meanwhile', async () => {
