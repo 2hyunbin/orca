@@ -586,76 +586,110 @@ describe('mobile automation navigation and setup', () => {
         .some((node) => text(node).includes('may have applied'))
     ).toBe(true)
   })
-  it('reconciles a lost create reply before explicitly saving only the revised input', async () => {
-    const targets = automationTargets()
-    const sshSetup = { ...targets.setups[0]!, hostId: 'ssh:builder' as const, path: '/remote/repo' }
-    inventory.targets.mockResolvedValue({
-      ...targets,
-      setups: [...targets.setups, sshSetup],
-      sshTargets: [{ id: 'builder', label: 'Builder', generation: 7 }]
-    })
-    const port = await mount(true)
-    await press('New automation')
-    const field = (label: string) =>
-      root()
-        .findAllByType(AutomationField)
-        .find((node) => node.props.label === label)!
-    await act(async () => {
-      field('Name').props.onChange('Daily review')
-      field('Instructions').props.onChange('Submitted A')
-    })
-    await press('Continue')
-    await press('Continue')
-    await press('Create automation')
-    await press('Back')
-    await press('Back')
-    await act(async () => {
-      field('Instructions').props.onChange('Revised B')
-      root()
-        .findAllByType(AutomationChoice)
-        .find((node) => node.props.label === 'Project and host setup')!
-        .props.onSelect(automationSetupKey(sshSetup))
-    })
-    await press('Continue')
-    await press('Continue')
-    await press('Create automation')
-    const attempts = port.send.mock.calls.filter(([method]) => method === 'automation.create')
-    expect(attempts).toHaveLength(2)
-    expect(attempts[1]?.[1]).toEqual(attempts[0]?.[1])
-    await act(async () => {
-      port.reconcile()
-    })
-    expect(root().findByType(AutomationEditor).props.current.id).toBe('created')
-    expect(root().findByType(AutomationEditor).props.initialDraft.prompt).toBe('Revised B')
-    expect(port.send.mock.calls.filter(([method]) => method === 'automation.create')).toHaveLength(
-      2
-    )
-    expect(port.send.mock.calls.filter(([method]) => method === 'automation.update')).toHaveLength(
-      0
-    )
-    await press('Save changes')
-    expect(port.send).toHaveBeenCalledWith(
-      'automation.update',
-      {
-        id: 'created',
-        updates: {
-          prompt: 'Revised B',
-          repo: 'id:repo-1',
-          workspace: undefined,
-          workspaceMode: 'new_per_run',
-          runContext: {
-            kind: 'workspace-run',
-            projectId: sshSetup.projectId,
-            projectHostSetupId: sshSetup.id,
-            repoId: sshSetup.repoId,
-            path: sshSetup.path,
-            hostId: sshSetup.hostId
-          }
+  it.each([false, true])(
+    'reconciles a lost create reply before explicitly saving only the revised input (reverted=%s)',
+    async (reverted) => {
+      const targets = automationTargets()
+      const sshSetup = {
+        ...targets.setups[0]!,
+        hostId: 'ssh:builder' as const,
+        path: '/remote/repo'
+      }
+      inventory.targets.mockResolvedValue({
+        ...targets,
+        setups: [...targets.setups, sshSetup],
+        sshTargets: [{ id: 'builder', label: 'Builder', generation: 7 }]
+      })
+      const port = await mount(true)
+      await press('New automation')
+      const field = (label: string) =>
+        root()
+          .findAllByType(AutomationField)
+          .find((node) => node.props.label === label)!
+      await act(async () => {
+        field('Name').props.onChange('Daily review')
+        field('Instructions').props.onChange('Submitted A')
+      })
+      await press('Continue')
+      await press('Continue')
+      await press('Create automation')
+      await press('Back')
+      await press('Back')
+      await act(async () => {
+        field('Instructions').props.onChange('Revised B')
+        root()
+          .findAllByType(AutomationChoice)
+          .find((node) => node.props.label === 'Project and host setup')!
+          .props.onSelect(automationSetupKey(sshSetup))
+      })
+      await press('Continue')
+      await press('Continue')
+      await press('Create automation')
+      const attempts = port.send.mock.calls.filter(([method]) => method === 'automation.create')
+      expect(attempts).toHaveLength(2)
+      expect(attempts[1]?.[1]).toEqual(attempts[0]?.[1])
+      if (reverted) {
+        await press('Back')
+        await press('Back')
+        await act(async () => {
+          field('Instructions').props.onChange('Submitted A')
+          root()
+            .findAllByType(AutomationChoice)
+            .find((node) => node.props.label === 'Project and host setup')!
+            .props.onSelect(automationSetupKey(targets.setups[0]!))
+        })
+      }
+      await act(async () => {
+        port.reconcile()
+      })
+      if (reverted) {
+        expect(root().findAllByType(AutomationEditor)).toHaveLength(0)
+        expect(
+          root()
+            .findAll((node) => String(node.type) === 'Text')
+            .map(text)
+            .join(' ')
+        ).toContain('Submitted A')
+        expect(
+          port.send.mock.calls.filter(([method]) => method === 'automation.create')
+        ).toHaveLength(2)
+        expect(
+          port.send.mock.calls.filter(([method]) => method === 'automation.update')
+        ).toHaveLength(0)
+        return
+      }
+      expect(root().findByType(AutomationEditor).props.current.id).toBe('created')
+      expect(root().findByType(AutomationEditor).props.initialDraft.prompt).toBe('Revised B')
+      expect(
+        port.send.mock.calls.filter(([method]) => method === 'automation.create')
+      ).toHaveLength(2)
+      expect(
+        port.send.mock.calls.filter(([method]) => method === 'automation.update')
+      ).toHaveLength(0)
+      await press('Save changes')
+      expect(port.send).toHaveBeenCalledWith(
+        'automation.update',
+        {
+          id: 'created',
+          updates: {
+            prompt: 'Revised B',
+            repo: 'id:repo-1',
+            workspace: undefined,
+            workspaceMode: 'new_per_run',
+            runContext: {
+              kind: 'workspace-run',
+              projectId: sshSetup.projectId,
+              projectHostSetupId: sshSetup.id,
+              repoId: sshSetup.repoId,
+              path: sshSetup.path,
+              hostId: sshSetup.hostId
+            }
+          },
+          destination: { selector: { kind: 'ssh', targetId: 'builder', targetGeneration: 7 } },
+          expectedOwner: { selector: { kind: 'self' } }
         },
-        destination: { selector: { kind: 'ssh', targetId: 'builder', targetGeneration: 7 } },
-        expectedOwner: { selector: { kind: 'self' } }
-      },
-      { failWhenDisconnected: true }
-    )
-  })
+        { failWhenDisconnected: true }
+      )
+    }
+  )
 })
