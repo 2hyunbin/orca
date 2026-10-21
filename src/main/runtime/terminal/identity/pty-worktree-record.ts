@@ -10,7 +10,11 @@ import type { RuntimeSyncedLeaf } from '../../../../shared/runtime-types'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { inferWorktreeIdFromPtyId } from '../../runtime-worktree-path-identity'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { noteMainPaneConnection, withoutPaneClaim } from '../surface/main-terminal-surfaces'
+import {
+  mainPaneRecordFacts,
+  noteMainPaneRecordChange,
+  withoutPaneClaim
+} from '../surface/main-terminal-surfaces'
 import {
   recordPtySurfaceClaim,
   SURFACE_CLAIM_WITHOUT_STANDING
@@ -50,8 +54,8 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
     > = {}
   ): RuntimePtyWorktreeRecord {
     // Switch point: main's layout is the one answer to a terminal's pane, so no claim is copied.
+    const prior = ORCA_LAYOUT_OWNER_IS_MAIN ? mainPaneRecordFacts(this.ptysById.get(ptyId)) : null
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      noteMainPaneConnection(this, this.ptysById.get(ptyId), ptyId, state)
       state = withoutPaneClaim(state)
     }
     let pty = this.ptysById.get(ptyId)
@@ -135,6 +139,9 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
       }
       // Why: restored/controller-discovered PTYs learn their worktree here without registerPty(), so URL enrichment must bind at this source.
       advertisedUrlWatcher.bindPty(ptyId, worktreeId)
+      if (prior !== null) {
+        noteMainPaneRecordChange(this, prior, pty)
+      }
       return pty
     }
 
@@ -206,6 +213,9 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
     }
     // Why: recordPtyWorktree is the common lifecycle point for every path that resolves a PTY's worktree (renderer restore, controller list).
     advertisedUrlWatcher.bindPty(ptyId, worktreeId)
+    if (prior !== null) {
+      noteMainPaneRecordChange(this, prior, pty)
+    }
     return pty
   }
 

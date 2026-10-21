@@ -214,6 +214,11 @@ class MainSurfacePublisher {
     this.republish({ force: this.findPaneForPty(ptyId) !== null })
   }
 
+  /** Whether any pane main's layout holds binds the id, whichever terminal holds it now. */
+  bindsTerminal(ptyId: string): boolean {
+    return this.index.surfaces().leaves.some((leaf) => leaf.ptyId === ptyId)
+  }
+
   /** A pane's terminal came or went: its record changes with no layout change, so reinstall. */
   terminalChanged(): void {
     this.index.invalidateRouting()
@@ -302,21 +307,46 @@ export function withoutPaneClaim<State extends PaneClaim>(
   return rest
 }
 
+/** What main's composed panes read from a terminal record (terminalHoldsPane and liveness). */
+export type MainPaneRecordFacts = {
+  connected: boolean
+  incarnationId: string | null
+  worktreeId: string
+}
+
+/** The facts of a record before an update; undefined for a record not yet made. */
+export function mainPaneRecordFacts(
+  record: MainPaneRecordFacts | undefined
+): MainPaneRecordFacts | undefined {
+  return (
+    record && {
+      connected: record.connected,
+      incarnationId: record.incarnationId,
+      worktreeId: record.worktreeId
+    }
+  )
+}
+
 /**
- * A bound pane's terminal connecting or ending changes its leaf, though no layout changed. Looked
- * up only when the connection changes, since output records every chunk with it unchanged.
+ * A terminal record arrived, or its connection, incarnation or workspace changed: main's panes
+ * that bind its id re-compose, though no layout changed. Read after the update, so the record
+ * the panes compare against is the one now registered; an unchanged refresh notes nothing.
  */
-export function noteMainPaneConnection(
+export function noteMainPaneRecordChange(
   runtime: SurfacesOwner,
-  prior: { connected: boolean } | undefined,
-  ptyId: string,
-  state: { connected?: boolean }
+  prior: MainPaneRecordFacts | undefined,
+  next: MainPaneRecordFacts & { ptyId: string }
 ): void {
-  if (state.connected === undefined || prior?.connected === state.connected) {
+  if (
+    prior &&
+    prior.connected === next.connected &&
+    prior.incarnationId === next.incarnationId &&
+    prior.worktreeId === next.worktreeId
+  ) {
     return
   }
   const surfaces = startedMainTerminalSurfaces(runtime)
-  if (surfaces?.findPaneForPty(ptyId)) {
+  if (surfaces?.bindsTerminal(next.ptyId)) {
     surfaces.terminalChanged()
   }
 }
