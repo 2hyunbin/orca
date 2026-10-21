@@ -1,6 +1,7 @@
 // How Orca starts each ACP agent, as data: adding an agent is one more row (plus a dialect when it
 // speaks protocol extensions). Nothing outside `acp-dialects/` branches on an agent's name.
 
+import type { AcpHistoryTurnIdentity } from './acp-history-replay'
 import { join } from 'node:path'
 import type { AcpDialect } from './acp-dialects/acp-dialect'
 import { GROK_ACP_DIALECT } from './acp-dialects/grok-dialect'
@@ -157,6 +158,9 @@ export type AcpLaunchSpec = {
   assertCopyLaunchArgs?: (args: readonly string[]) => void
   /** The agent's own store of a session's user messages, read for restart recovery only. */
   readStoredUserMessages?: AcpStoredUserMessagesReader
+  /** How the agent names each turn its reopen replays, when a reopened chat catches up on the
+   *  turns made outside it; absent, the replay is only dropped. */
+  historyCatchUp?: AcpHistoryTurnIdentity
   modelDiscovery: AcpModelDiscovery
   /** How a launch loads the inline-visuals skill; absent, the agent's chats have no visuals. */
   visualsSkill?: AcpVisualsSkillLoader
@@ -184,6 +188,7 @@ const GROK_LAUNCH_SPEC: AcpLaunchSpec = {
   ],
   env: {},
   dialect: GROK_ACP_DIALECT,
+  historyCatchUp: 'prompt-id',
   loginCommand: agentSessionSignInFor('grok')?.loginCommand ?? [],
   // An API key in Grok's own environment, else the sign-in Grok already cached; never interactive.
   authMethod: ({ advertised, env }) =>
@@ -226,6 +231,7 @@ function openCodeLaunchSpec(
     env: { OPENCODE_CLIENT: 'acp', OPENCODE_ENABLE_QUESTION_TOOL: 'false' },
     scrubEnvironment: scrubOpenCodeAcpEnvironment,
     dialect: OPENCODE_ACP_DIALECT,
+    historyCatchUp: 'user-message-id',
     loginCommand: agentSessionSignInFor(row.agent)?.loginCommand ?? [],
     account: openCodeAcpAccountBinding(),
     installDirectories: ({ homePath }) => [join(homePath, '.opencode', 'bin')],

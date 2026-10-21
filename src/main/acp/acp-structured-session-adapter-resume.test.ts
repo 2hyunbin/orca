@@ -66,6 +66,16 @@ function sendsWhileAttaching(agent: AcpScriptedAgent, reply: string): void {
   })
 }
 
+/** Grok saved the exchange only once the chat sent it: the first open has nothing to replay. */
+function onReopen(): (replay: () => void) => void {
+  let loads = 0
+  return (replay) => {
+    if (loads++ > 0) {
+      replay()
+    }
+  }
+}
+
 /** Orca's send of `hello` as `m1` and Grok's reply, ended or cut off. */
 async function exchange(rig: AcpAdapterRig, reply: string, end: boolean): Promise<void> {
   await rig.rig.eventSink.appendItem({ provider: 'orca', clientMessageId: 'm1' }, hello, {
@@ -217,12 +227,13 @@ it("starts in the chat's own permission mode, asks when none is named, and fails
 
 describe('reattaching a Grok chat the journal holds', () => {
   it('loads with session/load though Grok also resumes, and writes nothing it replays', async () => {
+    const reopen = onReopen()
     const rig = await openAcpAdapterRig({
       ...resume,
       initialize: RESUMES,
       script: (agent) =>
         agent.on('session/load', (frame) => {
-          sendsWhileAttaching(agent, 'hi')
+          reopen(() => sendsWhileAttaching(agent, 'hi'))
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
@@ -244,11 +255,12 @@ describe('reattaching a Grok chat the journal holds', () => {
   })
 
   it('loads an agent that only loads, writing none of what it replays', async () => {
+    const reopen = onReopen()
     const rig = await openAcpAdapterRig({
       ...resume,
       script: (agent) =>
         agent.on('session/load', (frame) => {
-          sendsWhileAttaching(agent, 'hi')
+          reopen(() => sendsWhileAttaching(agent, 'hi'))
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
@@ -264,11 +276,12 @@ describe('reattaching a Grok chat the journal holds', () => {
   })
 
   it('leaves a reply cut off mid-turn as it was cut, never completed from what Grok saved', async () => {
+    const reopen = onReopen()
     const rig = await openAcpAdapterRig({
       ...resume,
       script: (agent) =>
         agent.on('session/load', (frame) => {
-          sendsWhileAttaching(agent, 'complete saved reply')
+          reopen(() => sendsWhileAttaching(agent, 'complete saved reply'))
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
@@ -285,12 +298,13 @@ describe('reattaching a Grok chat the journal holds', () => {
   })
 
   it('writes nothing of the reattach into a sink the host binds only after the start', async () => {
+    const reopen = onReopen()
     const rig = await openAcpAdapterRig({
       ...resume,
       initialize: RESUMES,
       script: (agent) =>
         agent.on('session/load', (frame) => {
-          sendsWhileAttaching(agent, 'hi')
+          reopen(() => sendsWhileAttaching(agent, 'hi'))
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })

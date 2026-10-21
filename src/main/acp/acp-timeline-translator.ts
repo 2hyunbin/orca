@@ -46,7 +46,7 @@ export class AcpTimelineTranslator {
   private readonly failures: AcpTurnFailures
   private loading = false
   private readonly context = new AcpContextTimeline()
-  private activeTurn?: string
+  protected activeTurn?: string
 
   constructor(private readonly options: AcpTimelineTranslatorOptions) {
     this.dialect = options.dialect ?? GENERIC_ACP_DIALECT
@@ -298,7 +298,7 @@ export class AcpTimelineTranslator {
   }
 
   /** A failed end writes the reason row before the end, so it joins the turn while open. */
-  private endTurn(
+  protected endTurn(
     turn: string,
     stopReason: string,
     at: number,
@@ -318,7 +318,7 @@ export class AcpTimelineTranslator {
     return events
   }
 
-  private start(turn: string, at: number): ProviderTimelineEvent[] {
+  protected start(turn: string, at: number): ProviderTimelineEvent[] {
     if (turn === this.prompts.current?.turn) {
       const events = this.prompts.start(turn, at)
       // Marked so a late frame for this prompt after its end neither reopens nor retargets it.
