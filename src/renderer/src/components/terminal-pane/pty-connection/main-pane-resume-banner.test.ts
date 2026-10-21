@@ -6,7 +6,9 @@ import type { showMainPaneResumeOutcome as ShowOutcome } from './main-pane-resum
 type Outcomes = Record<string, TerminalPaneResumeOutcome>
 
 const store = vi.hoisted(() => {
-  let state = { terminalPaneResumeOutcomesByPaneKey: {} as Outcomes }
+  let state: { terminalPaneResumeOutcomesByPaneKey: Outcomes } = {
+    terminalPaneResumeOutcomesByPaneKey: {}
+  }
   const listeners = new Set<(next: typeof state) => void>()
   return {
     getState: () => state,
