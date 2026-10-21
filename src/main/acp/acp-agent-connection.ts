@@ -141,7 +141,7 @@ export class AcpAgentConnection extends AcpSessionRuntime {
     unreadable = () =>
       super.close(new AcpConnectionClosedError('The agent printed a sign-in link Orca cannot read'))
     child.stderr.on('error', (error) => super.close(error))
-    managed.onExit((exit) => {
+    managed.onSettled((exit) => {
       const error =
         lifecycle.error ??
         new AcpConnectionClosedError(managed.stderrTail().trim() || `${launch.command} exited`)
@@ -182,7 +182,7 @@ export class AcpAgentConnection extends AcpSessionRuntime {
   }
 
   onExit(listener: (exit: ProviderProcessExit) => void): void {
-    this.managed.onExit((exit) => {
+    this.managed.onSettled((exit) => {
       try {
         listener(exit)
       } catch (failure) {

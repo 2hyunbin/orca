@@ -1,3 +1,15 @@
+import {
+  captureDescendantSnapshot,
+  hasUnambiguousStartTime,
+  hasUnambiguousStartIdentity
+} from '../../pty-descendant-termination'
+import { terminateDescendantSnapshotWithVerdict } from '../../pty-descendant-exit-verification'
+import { readProcessStartTimeMs } from '../../runtime/agent-session-process-identity-probe'
+import { readPosixProcessRow } from '../../provider-process/provider-process-row-read'
+import {
+  hasRecordedProviderLaunch,
+  recoverProviderLaunches
+} from '../../provider-process/provider-process-ledger'
 /**
  * Exits from the `recovering` stage. A session lands there when evidence about its owner was
  * unavailable; this re-asks with present-time evidence and always concludes. A dead owner is
@@ -16,7 +28,7 @@ import {
   type AgentSessionOwnerProbe
 } from '../../../shared/agent-session-lease-adjudication'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-supervisor'
+import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-timing'
 import { releaseUnprovenAgentSessionOwner } from '../../runtime/agent-session-lease-transitions'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 
@@ -55,19 +67,12 @@ export async function resolveStructuredSessionRecovery(
   if (record?.lease.handoffStage !== 'recovering') {
     return 'not-applicable'
   }
-  let probe = await deps.probeRecord(record)
+  await cleanUpStructuredSessionOwner(deps, record)
+  const probe = await deps.probeRecord(record)
   const owner = record.lease.ownerProcess
   if (owner && record.lease.claimStatus === 'conflicted' && !isProvenDeadProbe(probe)) {
     // A terminal agent keeps its transport across a restart, so only proof of its exit is a way in.
     return 'unresolved'
-  }
-  if (owner && isProvenAliveProbe(probe)) {
-    if (owner.hostId !== deps.store.hostId) {
-      return 'unresolved'
-    }
-    if ((deps.platform ?? process.platform) !== 'win32') {
-      probe = await stopOwnerAndReprobe(deps, record, owner.pid)
-    }
   }
   try {
     await (owner && !isProvenDeadProbe(probe)
@@ -95,29 +100,85 @@ export async function resolveStructuredSessionRecovery(
   }
 }
 
-async function stopOwnerAndReprobe(
+/** Runs before adjudication can discard the only old-supervisor identity. */
+export async function cleanUpStructuredSessionOwner(
   deps: StructuredSessionRecoveryResolutionDeps,
-  record: AgentSessionRecord,
-  pid: number
-): Promise<AgentSessionOwnerProbe> {
-  const stop = deps.stopOwnerProcess ?? defaultStopOwnerProcess
-  const delay = deps.delay ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
-  let probe: AgentSessionOwnerProbe = { outcome: 'indeterminate', reason: 'owner stop requested' }
-  for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
-    // Resolution runs outside the session's serialize: a lease that moved names a pid not ours.
+  record: AgentSessionRecord
+): Promise<void> {
+  if ((deps.platform ?? process.platform) === 'win32') {
+    return
+  }
+  await recoverProviderLaunches()
+  const owner = record.lease.ownerProcess
+  if (!owner || owner.hostId !== deps.store.hostId || record.lease.claimStatus === 'conflicted') {
+    return
+  }
+  if (await hasRecordedProviderLaunch(owner.pid)) {
+    return
+  }
+  if (!isProvenAliveProbe(await deps.probeRecord(record))) {
+    return
+  }
+  const matches = async (): Promise<boolean> => {
     if (!leaseStillNamesOwner(deps.store.getRecord(record.sessionId), record)) {
-      return probe
+      return false
     }
-    stop(pid, signal)
+    const boundary = Date.now()
+    const row = await readPosixProcessRow(owner.pid)
+    if (
+      !row ||
+      row === 'unverifiable' ||
+      (row.startResolution === 'second' && !hasUnambiguousStartTime(row.startedAt, boundary))
+    ) {
+      return false
+    }
+    return (await readProcessStartTimeMs(owner.pid)) === owner.processStartTimeMs
+  }
+  if (!(await matches())) {
+    return
+  }
+  const captured = await captureDescendantSnapshot(owner.pid)
+  if (!(await matches())) {
+    return
+  }
+  const snapshot = captured && {
+    ...captured,
+    descendants: captured.descendants.filter((row) =>
+      hasUnambiguousStartIdentity(
+        row,
+        captured.capturedAtMsByPid?.[String(row.pid)] ?? captured.capturedAtMs
+      )
+    )
+  }
+  const stop = deps.stopOwnerProcess ?? defaultStopOwnerProcess
+  const delay =
+    deps.delay ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  stopLadder: for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+    if (!(await matches())) {
+      break
+    }
+    stop(owner.pid, signal)
     for (let attempt = 0; attempt < STOP_PROBES[signal]; attempt += 1) {
-      probe = await deps.probeRecord(record)
+      const probe = await deps.probeRecord(record)
       if (isProvenDeadProbe(probe)) {
-        return probe
+        break stopLadder
       }
       await delay(STOP_PROBE_INTERVAL_MS)
     }
   }
-  return probe
+  if (snapshot && leaseStillNamesOwner(deps.store.getRecord(record.sessionId), record)) {
+    await terminateDescendantSnapshotWithVerdict(snapshot, {
+      requireIdentityBeforeSignal: true,
+      sendSignal: (pid, signal) => {
+        if (
+          (signal === 'SIGTERM' || signal === 'SIGKILL') &&
+          leaseStillNamesOwner(deps.store.getRecord(record.sessionId), record)
+        ) {
+          stop(pid, signal)
+        }
+      }
+    })
+  }
 }
 
 function leaseStillNamesOwner(
@@ -128,6 +189,11 @@ function leaseStillNamesOwner(
   const expected = probed.lease.ownerProcess
   return (
     current?.lease.runtimeFence === probed.lease.runtimeFence &&
+    current?.lease.claimKeyId === probed.lease.claimKeyId &&
+    current?.lease.claimStatus === probed.lease.claimStatus &&
+    current?.lease.reservedSpawnToken === probed.lease.reservedSpawnToken &&
+    owner?.hostId === expected?.hostId &&
+    owner?.spawnToken === expected?.spawnToken &&
     owner?.pid === expected?.pid &&
     owner?.processStartTimeMs === expected?.processStartTimeMs
   )

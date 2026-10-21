@@ -1,9 +1,11 @@
+import * as ledger from './provider-process-ledger'
+import * as processRows from './provider-process-row-read'
+import * as groups from './provider-process-group'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from './provider-process-supervisor'
-import { PROVIDER_SPAWN_FAILURE_MARKER } from './provider-spawn-failure-report'
+import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from './provider-process-timing'
 import { spawnManagedProviderProcess } from './managed-provider-process'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import type { ProviderProcessTree } from './provider-process-close'
@@ -18,6 +20,7 @@ vi.mock('../windows-process-tree-kill', () => ({ terminateWindowsProcessTree: mo
 afterEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
 })
 
 function fakeChild(pid: number | null = 9_999_999) {
@@ -28,6 +31,7 @@ function fakeChild(pid: number | null = 9_999_999) {
     stderr: new PassThrough(),
     kill: vi.fn(() => true)
   })
+  child.once('exit', (code, signal) => queueMicrotask(() => child.emit('close', code, signal)))
   const spawn = vi.fn<PipedProcessSpawner>(() => {
     return child
   })
@@ -84,7 +88,7 @@ describe('managed provider process', () => {
         policy: () => ({ gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS, forcedExitMs: 50 })
       }
     )
-    expect(managed.supervised).toBe(true)
+    expect(managed.dedicatedGroup).toBe(true)
     expect(fixture.spawn).toHaveBeenCalledWith(
       expect.objectContaining({
         detached: true,
@@ -190,33 +194,6 @@ describe('managed provider process', () => {
       })
     )
     expect(directManaged.executableMissing).toBe(true)
-
-    const supervisedLaunch = (fixture: ReturnType<typeof fakeChild>) =>
-      spawnManagedProviderProcess(
-        { command: 'fixture-provider', args: ['serve'], cwd: '/workspace' },
-        {
-          spawnImpl: fixture.spawn,
-          platform: 'linux',
-          site: 'fixture-provider-teardown',
-          policy: () => ({ gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS, forcedExitMs: 50 })
-        }
-      )
-    const supervised = fakeChild()
-    const supervisedManaged = supervisedLaunch(supervised)
-    const report = (code: string): string =>
-      `${PROVIDER_SPAWN_FAILURE_MARKER}${JSON.stringify({ thrown: false, code, message: `spawn fixture-provider ${code}` })}\n`
-    supervised.child.stderr.write(report('ENOENT'))
-    await new Promise((resolve) => setImmediate(resolve))
-    expect(supervisedManaged.executableMissing).toBe(false)
-    supervised.child.emit('exit', 127, null)
-    expect(supervisedManaged.executableMissing).toBe(true)
-
-    const denied = fakeChild()
-    const deniedManaged = supervisedLaunch(denied)
-    denied.child.stderr.write(report('EACCES'))
-    await new Promise((resolve) => setImmediate(resolve))
-    denied.child.emit('exit', 127, null)
-    expect(deniedManaged.executableMissing).toBe(false)
   })
 
   it('does not turn a transport close with an existing pid into Claude exit proof', () => {
@@ -232,7 +209,7 @@ describe('managed provider process', () => {
     vi.useFakeTimers()
     const fixture = fakeChild()
     const managed = launch(fixture, 'win32')
-    expect(managed.supervised).toBe(false)
+    expect(managed.dedicatedGroup).toBe(false)
     const first = managed.close()
     await vi.advanceTimersByTimeAsync(150)
     await expect(first).resolves.toMatchObject({ root: 'live' })
@@ -267,7 +244,7 @@ describe('managed provider process', () => {
     proof.setVerdict('exited')
     await expect(managed.close(proof.tree)).resolves.toEqual({ root: 'exited', tree: 'exited' })
     await expect(managed.close(proof.tree)).resolves.toEqual({ root: 'exited', tree: 'exited' })
-    expect(proof.tree.capture).toHaveBeenCalledTimes(3)
+    expect(proof.tree.capture).not.toHaveBeenCalled()
   })
 
   it('reports failed tree cleanup separately after observed root exit', async () => {
@@ -296,35 +273,80 @@ describe('managed provider process', () => {
     await expect(managed.close()).resolves.toMatchObject({ root: 'exited' })
     expect(managed.lastCloseResult).toEqual({ root: 'live', tree: 'unverifiable' })
   })
+})
 
-  it('lets a supervised caller signal immediately and waits its configured grace before forcing', async () => {
-    vi.useFakeTimers()
-    const fixture = fakeChild()
-    const managed = spawnManagedProviderProcess(
-      { command: 'fixture-provider', args: [] },
-      {
-        spawnImpl: fixture.spawn,
-        platform: 'darwin',
-        site: 'fixture',
-        acceptClose: (result) => result.root === 'exited' && result.tree === 'exited',
-        policy: () => ({
-          gracefulExitMs: PROVIDER_SUPERVISOR_MAX_STOP_MS + 500,
-          forcedExitMs: 50,
-          signalSupervisorOnClose: true
-        })
-      }
-    )
-    fixture.child.kill.mockImplementation(() => {
-      setTimeout(() => fixture.child.emit('exit', 0, 'SIGTERM'), 550)
-      return true
-    })
-    const close = managed.close()
-    await vi.advanceTimersByTimeAsync(549)
-    expect(fixture.child.kill).toHaveBeenCalledExactlyOnceWith('SIGTERM')
-    expect(managed.rootVerdict).toBe('live')
-    await vi.advanceTimersByTimeAsync(1)
-    await expect(close).resolves.toMatchObject({ root: 'exited' })
-    expect(fixture.child.kill).not.toHaveBeenCalledWith('SIGKILL')
-    expect(vi.getTimerCount()).toBe(0)
+it('keeps a known writer excluded after it moves out of its recorded group', async () => {
+  const fixture = fakeChild()
+  const pid = fixture.child.pid!
+  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => [{ pid: pid + 1, pgid: pid, startedAt: 'writer-start' }]
   })
+  const read = vi.spyOn(processRows, 'readPosixProcessRow').mockResolvedValue({
+    pid: pid + 1,
+    ppid: 1,
+    pgid: pid + 1,
+    startedAt: 'writer-start',
+    startResolution: 'clock-tick'
+  })
+  const managed = launch(fixture, 'darwin')
+  fixture.child.emit('exit', 0, null)
+  await managed.completion
+  await expect(managed.verifyWriters()).resolves.toBe(false)
+  read.mockResolvedValue(null)
+  await expect(managed.verifyWriters()).resolves.toBe(true)
+})
+
+it('joins natural cleanup after an earlier unproven close before publishing completion', async () => {
+  vi.useFakeTimers()
+  const fixture = fakeChild()
+  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => []
+  })
+  vi.spyOn(groups, 'signalProviderGroup').mockImplementation(() => {})
+  vi.spyOn(groups, 'stopRecordedProviderGroup').mockResolvedValue('unverifiable')
+  const natural = Promise.withResolvers<DescendantTreeVerdict>()
+  vi.spyOn(groups, 'observeProviderGroup').mockReturnValue(natural.promise)
+  const managed = launch(fixture, 'darwin')
+  const close = managed.close()
+  await vi.advanceTimersByTimeAsync(2_000)
+  await expect(close).resolves.toMatchObject({ root: 'live', tree: 'unverifiable' })
+  const publish = vi.fn()
+  managed.onSettled(publish)
+  fixture.child.emit('exit', 0, null)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(publish).not.toHaveBeenCalled()
+  natural.resolve('exited')
+  await managed.completion
+  expect(publish).toHaveBeenCalledOnce()
+  expect(managed.lastCloseResult).toEqual({ root: 'exited', tree: 'exited' })
+})
+
+it('joins a tree attached while final output drains before publishing completion', async () => {
+  vi.useFakeTimers()
+  const fixture = fakeChild()
+  fixture.child.removeAllListeners('exit')
+  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => []
+  })
+  vi.spyOn(groups, 'signalProviderGroup').mockImplementation(() => {})
+  vi.spyOn(groups, 'observeProviderGroup').mockResolvedValue('exited')
+  const managed = launch(fixture, 'darwin')
+  fixture.child.emit('exit', 0, null)
+  await vi.advanceTimersByTimeAsync(0)
+  const cleanup = Promise.withResolvers<DescendantTreeVerdict>()
+  const { tree } = fakeTree()
+  vi.mocked(tree.reap).mockReturnValue(cleanup.promise)
+  managed.attachTree(tree)
+  await vi.advanceTimersByTimeAsync(1_000)
+  expect(tree.reap).toHaveBeenCalledOnce()
+  expect(managed.settled).toBe(false)
+  cleanup.resolve('exited')
+  await managed.completion
+  expect(managed.settled).toBe(true)
 })

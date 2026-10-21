@@ -1,3 +1,4 @@
+import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
 import type { CodexRateLimitResetOutcome, ProviderRateLimits } from '../../shared/rate-limit-types'
 import { isCodexAuthError } from '../../shared/codex-auth-errors'
 import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
@@ -9,6 +10,7 @@ import { resolveCodexCommand } from '../codex-cli/command'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
   resolveCodexHomeProcessLockKey,
+  retainCodexHomeWriter,
   withCodexHomeProcessLock
 } from '../codex-cli/codex-home-process-lock'
 import { isCodexStateDbBackfillPending } from '../codex/codex-state-db'
@@ -94,7 +96,7 @@ async function fetchViaRpc(options?: CodexRateLimitFetchOptions): Promise<Provid
   const codexCommand = wslCodex ? 'codex' : resolveCodexCommand()
   // Why the bare CLI: spawnProcess resolves an npm `codex.cmd` shim past cmd.exe itself.
   // Why a worker thread (#27362): a cold codex.exe can block process creation for seconds.
-  const child = spawnProcessOnWorkerThread({
+  const spec = {
     program: wslCodex ? wslCodex.command : codexCommand,
     args: wslCodex ? wslCodex.args : codexArgs,
     // Why: WSL holds wsl.exe's cwd busy ~60s, so never hand it a folder inside the profile (#29845).
@@ -105,14 +107,34 @@ async function fetchViaRpc(options?: CodexRateLimitFetchOptions): Promise<Provid
       ...(wslCodex ? {} : buildConfiguredProxyEnv(options?.networkProxySettings)),
       ...(options?.codexHomePath && !wslCodex ? { CODEX_HOME: options.codexHomePath } : {})
     })
-  })
+  }
+  const managed =
+    process.platform !== 'win32'
+      ? spawnManagedProviderProcess(
+          { command: spec.program, args: spec.args, cwd: spec.cwd },
+          { inheritedEnv: spec.env, site: 'codex-quota-probe' }
+        )
+      : null
+  const child = managed?.child ?? spawnProcessOnWorkerThread(spec)
+  if (managed) {
+    retainCodexHomeWriter(
+      resolveCodexHomeProcessLockKey(options?.codexHomePath),
+      managed.verifyWriters
+    )
+  }
   return readCodexRateLimitsViaRpc({
     child,
     codexCommand,
     initTimeoutMs: wslCodex ? WSL_RPC_INIT_TIMEOUT_MS : RPC_INIT_TIMEOUT_MS,
     rpcTimeoutMs: wslCodex ? WSL_RPC_TIMEOUT_MS : RPC_TIMEOUT_MS,
     fetchOptions: options,
-    terminate: () => terminateCodexProbeChild(child)
+    terminate: async () => {
+      if (managed) {
+        await managed.close()
+        return
+      }
+      await terminateCodexProbeChild(child)
+    }
   })
 }
 

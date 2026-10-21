@@ -19,7 +19,9 @@ vi.mock('../provider-process/provider-process-teardown', () => ({
   })
 }))
 
+const hostPlatform = process.platform
 afterEach(() => {
+  Object.defineProperty(process, 'platform', { configurable: true, value: hostPlatform })
   vi.useRealTimers()
 })
 
@@ -47,6 +49,7 @@ describe('Codex process-tree diagnostic after a forced close', () => {
     ['exited', false],
     [null, false]
   ] as const)('teardown observing %s reads unproven=%s', async (verdict, unproven) => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     vi.useFakeTimers()
     teardown.verdict = verdict
     const { child, spawnImpl } = stubChild()

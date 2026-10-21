@@ -87,7 +87,7 @@ async function connectCodexAppServer(
     // Transport/protocol failures make the connection unusable immediately so
     // callers do not hang, but recovery must not treat that as a child exit
     // until the execution host has observed `exit`/`close`.
-    if (managed.rootVerdict === 'exited' && !exitReported) {
+    if (managed.settled && !exitReported) {
       exitReported = true
       handlers.onExit?.(terminalError, { expected: closing })
     }
@@ -96,7 +96,7 @@ async function connectCodexAppServer(
   child.on('error', (error) => {
     handleUnexpectedEnd(error)
   })
-  managed.onExit(() => handleUnexpectedEnd())
+  managed.onSettled(() => handleUnexpectedEnd())
   child.stdin.on('error', (error) => {
     // A broken pipe is terminal, not one failed write: every later request can
     // only error or time out, so the session must learn its lease is worthless

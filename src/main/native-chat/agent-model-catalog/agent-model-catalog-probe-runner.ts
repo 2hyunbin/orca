@@ -8,17 +8,12 @@ import { createOutputSink } from '@orca/process-host/bounded-output-sink'
 import { spawnManagedProviderProcess } from '../../provider-process/managed-provider-process'
 import type { ProviderProcessClosePolicy } from '../../provider-process/provider-process-close'
 import type { ProviderProcessLaunch } from '../../provider-process/provider-process-launch'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-supervisor'
-import {
-  providerStderrForDisplay,
-  supervisedProviderSpawnFailure
-} from '../../provider-process/provider-spawn-failure-report'
 
 // Why 15s: a cold listing may pay one network fetch; past that, the picker keeps what it has.
 export const AGENT_MODEL_CATALOG_PROBE_TIMEOUT_MS = 15_000
 export const AGENT_MODEL_CATALOG_PROBE_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 const STDERR_DETAIL_MAX_CHARS = 400
-const UNSUPERVISED_GRACEFUL_EXIT_MS = 1_500
+const GRACEFUL_EXIT_MS = 1_500
 const FORCED_EXIT_MS = 1_000
 
 export type AgentModelCatalogProbeFailure =
@@ -42,11 +37,11 @@ export class AgentModelCatalogProbeError extends Error {
 }
 
 /** Nothing waits on a probe past its answer, so a close stops it at once rather than draining. */
-function probeClosePolicy(supervised: boolean): ProviderProcessClosePolicy {
+function probeClosePolicy(_dedicatedGroup: boolean): ProviderProcessClosePolicy {
   return {
-    gracefulExitMs: supervised ? PROVIDER_SUPERVISOR_MAX_STOP_MS : UNSUPERVISED_GRACEFUL_EXIT_MS,
+    gracefulExitMs: GRACEFUL_EXIT_MS,
     forcedExitMs: FORCED_EXIT_MS,
-    signalSupervisorOnClose: true
+    immediateTerm: true
   }
 }
 
@@ -78,7 +73,6 @@ export async function runAgentModelCatalogListing(
   const managed = spawnManagedProviderProcess(launch, {
     site: options.site,
     // A listing's stdin end is the end of its request, not a stop.
-    lifetime: 'one-shot',
     policy: probeClosePolicy,
     ...(options.spawnImpl ? { spawnImpl: options.spawnImpl } : {}),
     ...(options.platform ? { platform: options.platform } : {}),
@@ -88,8 +82,7 @@ export async function runAgentModelCatalogListing(
   const output = createOutputSink(
     options.maxOutputBytes ?? AGENT_MODEL_CATALOG_PROBE_MAX_OUTPUT_BYTES
   )
-  const stderrDetail = (): string =>
-    providerStderrForDisplay(managed.stderrTail()).trim().slice(0, STDERR_DETAIL_MAX_CHARS)
+  const stderrDetail = (): string => managed.stderrTail().trim().slice(0, STDERR_DETAIL_MAX_CHARS)
   let timer: ReturnType<typeof setTimeout> | undefined
   let onAbort = (): void => {}
   try {
@@ -127,13 +120,8 @@ export async function runAgentModelCatalogListing(
         }
       })
       // `close`, not `exit`: only then has every byte of stdout arrived.
-      child.on('close', (code: number | null) => {
-        const spawnFailure = managed.supervised
-          ? supervisedProviderSpawnFailure(code, managed.stderrTail())
-          : null
-        if (spawnFailure) {
-          fail(`${launch.command} could not start: ${spawnFailure.error.message}`, 'spawn')
-        } else if (code === 0) {
+      managed.onSettled(({ code }) => {
+        if (code === 0) {
           resolve(output.text())
         } else {
           const detail = stderrDetail()

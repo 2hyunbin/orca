@@ -1,3 +1,8 @@
+import type * as ChildProcessModule from 'node:child_process'
+import type * as ProcessHostModule from '@orca/process-host'
+import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
+import type { ProcessSpec } from '@orca/process-host/process-spec'
+import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -13,7 +18,8 @@ vi.mock(
   () =>
     import('../worker-thread-child-process/worker-thread-child-process-in-process.test-fixtures')
 )
-vi.mock('node:child_process', () => ({
+vi.mock('node:child_process', async (original) => ({
+  ...(await original<typeof ChildProcessModule>()),
   spawn: childSpawnMock
 }))
 
@@ -39,19 +45,22 @@ import { fetchCodexRateLimits } from './codex-fetcher'
 
 function makeRpcChild() {
   const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter
-    stderr: EventEmitter
+    pid: number
+    stdout: PassThrough
+    stderr: PassThrough
     stdin: EventEmitter & { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }
     kill: ReturnType<typeof vi.fn>
     exitCode: number | null
   }
-  child.stdout = new EventEmitter()
-  child.stderr = new EventEmitter()
+  child.pid = 9_999_999
+  child.stdout = new PassThrough()
+  child.stderr = new PassThrough()
   // Why: like the real app-server, the fake dies on stdin EOF or a signal —
   // the graceful shutdown path resolves only once the child reports exit.
   const exitNow = (): void => {
     child.exitCode = 0
     child.emit('exit', 0, null)
+    child.emit('close', 0, null)
   }
   child.stdin = Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn(exitNow) })
   child.exitCode = null
@@ -167,3 +176,17 @@ describe('fetchCodexRateLimits auth errors', () => {
     expect(ptySpawnMock).not.toHaveBeenCalled()
   })
 })
+
+vi.mock('@orca/process-host', async (original) => ({
+  ...(await original<typeof ProcessHostModule>()),
+  spawnProcess: (spec: ProcessSpec) => childSpawnMock(spec.program, spec.args ?? [], spec)
+}))
+
+vi.mock('../provider-process/provider-process-ledger', async (original) => ({
+  ...(await original<typeof ProviderLedgerModule>()),
+  recordProviderLaunch: () => ({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => []
+  })
+}))

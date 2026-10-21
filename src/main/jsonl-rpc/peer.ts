@@ -98,10 +98,14 @@ export class JsonlRpcPeer {
     input.on('end', this.onEnd)
     input.on('close', this.onEnd)
     input.on('error', this.onError)
-    output.on('finish', this.onEnd)
-    output.on('close', this.onEnd)
+    output.on('finish', this.onOutputEnd)
+    output.on('close', this.onOutputEnd)
     output.on('error', this.onError)
-    if (input.destroyed || input.readableEnded || output.destroyed || !output.writable) {
+    if (
+      input.destroyed ||
+      input.readableEnded ||
+      (this.limits.closeOnOutputEnd && (output.destroyed || !output.writable))
+    ) {
       this.onEnd()
     }
   }
@@ -198,8 +202,8 @@ export class JsonlRpcPeer {
     this.input.removeListener('end', this.onEnd)
     this.input.removeListener('close', this.onEnd)
     detachProviderStreamErrorHandler(this.input, this.onError)
-    this.output.removeListener('finish', this.onEnd)
-    this.output.removeListener('close', this.onEnd)
+    this.output.removeListener('finish', this.onOutputEnd)
+    this.output.removeListener('close', this.onOutputEnd)
     detachProviderStreamErrorHandler(this.output, this.onError)
     this.framer.reset()
     this.writer.close(error)
@@ -222,6 +226,11 @@ export class JsonlRpcPeer {
   }
   private readonly onEnd = (): void =>
     this.close(this.inputEndError ?? new JsonlRpcStreamClosedError())
+  private readonly onOutputEnd = (): void => {
+    if (this.limits.closeOnOutputEnd) {
+      this.onEnd()
+    }
+  }
   private readonly onError = (error: Error): void => this.close(error)
 
   private diagnose(message: string): void {

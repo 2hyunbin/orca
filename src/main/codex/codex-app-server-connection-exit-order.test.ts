@@ -40,7 +40,7 @@ describe('Codex app-server exit order', () => {
     child.emit('exit', 1, null)
     child.emit('close', 1, null)
 
-    expect(exits).toHaveLength(1)
+    await vi.waitFor(() => expect(exits).toHaveLength(1))
     expect(exits[0]).toContain('codex crashed')
     await connection.close()
   })

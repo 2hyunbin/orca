@@ -8,6 +8,36 @@ import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-p
 // so Orca's own spawns (quota probes, commit-message runs) serialize per home.
 // User terminal panes are intentionally not serialized here.
 
+const retainedWriters = new Map<string, Set<() => Promise<boolean>>>()
+
+export function retainCodexHomeWriter(key: string, verify: () => Promise<boolean>): void {
+  let writers = retainedWriters.get(key)
+  if (!writers) {
+    writers = new Set()
+    retainedWriters.set(key, writers)
+  }
+  writers.add(verify)
+}
+
+async function verifyCodexHomeWriters(key: string): Promise<void> {
+  const writers = retainedWriters.get(key)
+  if (!writers) {
+    return
+  }
+  for (const verify of writers) {
+    if (await verify()) {
+      writers.delete(verify)
+    }
+  }
+  if (writers.size === 0) {
+    retainedWriters.delete(key)
+  } else {
+    throw new Error(
+      'Codex is still using this account home. Try again after its previous command stops.'
+    )
+  }
+}
+
 const lockTails = new Map<string, Promise<unknown>>()
 
 export function resolveCodexHomeProcessLockKey(codexHomePath?: string | null): string {
@@ -42,7 +72,10 @@ export function resolveCodexHomeProcessLockKeyForSpawnEnv(
 
 export function withCodexHomeProcessLock<T>(lockKey: string, fn: () => Promise<T>): Promise<T> {
   const prior = lockTails.get(lockKey) ?? Promise.resolve()
-  const run = prior.then(fn)
+  const run = prior.then(async () => {
+    await verifyCodexHomeWriters(lockKey)
+    return fn()
+  })
   // Why: keep the queue alive past a failed run so later entrants still start.
   const tail = run.then(
     () => undefined,

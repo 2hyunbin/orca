@@ -19,7 +19,6 @@ import {
   createClaudeUserMessageQueue
 } from './claude-agent-sdk-user-message-queue'
 import type { ClaudeStructuredSdkOptions } from './claude-structured-launch-resolution'
-import { providerStderrForDisplay } from '../provider-process/provider-spawn-failure-report'
 import { withMissingProviderExecutable } from '../provider-process/provider-executable-missing'
 
 export { ClaudeControlRequestError }
@@ -112,7 +111,7 @@ export type ClaudeStreamJsonConnection = ClaudeControlSurface & {
 type ExitStatus = { code: number | null; signal: NodeJS.Signals | null }
 
 function exitError(stderrTail: string, status: ExitStatus | null, cause?: Error): Error {
-  const detail = providerStderrForDisplay(stderrTail).trim()
+  const detail = stderrTail.trim()
   // The status is the diagnostic a signed-out or refused start leaves behind;
   // it has to survive every wrapper between here and the user.
   const how =
@@ -192,6 +191,7 @@ export async function openClaudeStreamJsonConnection(
   // One reaper per child: every close attempt and error-path reap shares its proof.
   const rootSettled = (): boolean => managed.rootVerdict === 'exited'
   const tree = createClaudeChildTreeReaper(child, { exited: rootSettled })
+  managed.attachTree(tree)
 
   // Arm lazily on actual child output instead of issuing a process-table scan for
   // every session at startup. A natural SDK exit can race a later close, while
@@ -223,7 +223,7 @@ export async function openClaudeStreamJsonConnection(
       faultReported = true
       handlers.onFault?.(terminalError)
     }
-    if (managed.rootExitObserved && !exitReported) {
+    if (managed.settled && managed.rootExitObserved && !exitReported) {
       exitReported = true
       handlers.onExit?.(terminalError, { expected: closing })
     }
@@ -256,7 +256,7 @@ export async function openClaudeStreamJsonConnection(
       // The SDK ends its generator in error when the child dies or the transport
       // fails; a transport failure with a live child still has to reap the tree.
       if (!closing && managed.rootVerdict !== 'exited') {
-        void tree.reap()
+        void managed.close(tree)
       }
       handleUnexpectedEnd(error instanceof Error ? error : new Error(String(error)))
     }
@@ -264,11 +264,11 @@ export async function openClaudeStreamJsonConnection(
 
   managed.onExit((exit) => {
     exitStatus = exit
-    handleUnexpectedEnd()
   })
+  managed.onSettled(() => handleUnexpectedEnd())
   child.on('error', (error) => {
     if (!closing && managed.rootVerdict !== 'exited') {
-      void tree.reap()
+      void managed.close(tree)
     }
     handleUnexpectedEnd(error)
   })
@@ -277,7 +277,7 @@ export async function openClaudeStreamJsonConnection(
   })
   child.stdin.on('error', (error) => {
     if (!closing) {
-      void tree.reap()
+      void managed.close(tree)
       handleUnexpectedEnd(error)
     }
   })

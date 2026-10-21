@@ -36,9 +36,20 @@ export function parseLinuxProcStat(pid: number, stat: string): ProviderProcessRo
 
 async function readLinuxProcStatRow(pid: number): Promise<ProcessRowRead> {
   try {
-    return parseLinuxProcStat(pid, await readFile(`/proc/${pid}/stat`, 'utf8')) ?? 'unverifiable'
+    const [stat, boot] = await Promise.all([
+      readFile(`/proc/${pid}/stat`, 'utf8'),
+      readFile('/proc/sys/kernel/random/boot_id', 'utf8')
+    ])
+    const row = parseLinuxProcStat(pid, stat)
+    return row && boot.trim()
+      ? { ...row, startedAt: `${boot.trim()}:${row.startedAt}` }
+      : 'unverifiable'
   } catch (error) {
-    return error instanceof Error && 'code' in error && error.code === 'ENOENT'
+    return error instanceof Error &&
+      'code' in error &&
+      error.code === 'ENOENT' &&
+      'path' in error &&
+      error.path === `/proc/${pid}/stat`
       ? null
       : 'unverifiable'
   }

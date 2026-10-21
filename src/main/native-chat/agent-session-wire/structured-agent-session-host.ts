@@ -105,6 +105,7 @@ export class StructuredAgentSessionHost {
     )
     this.reconcileLeases = createRestartReconciler({
       store: deps.store,
+      beforeProbe: (record) => this.runtimeState.cleanUpRecordedOwner(record),
       probe: (record) => this.runtimeState.probeRecord(record),
       ...(deps.probeOwners ? { probeMany: deps.probeOwners } : {}),
       now: () => this.now()

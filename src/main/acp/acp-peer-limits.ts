@@ -6,7 +6,7 @@ export type AcpPeerOptions = {
   maxPendingRequests?: number
   maxIncomingRequests?: number
   requestTimeoutMs?: number | null
-  /** A managed connection waits for process exit rather than treating stdout EOF as exit. */
+  /** A managed connection waits for process exit rather than treating either pipe closing as exit. */
   closeOnInputEnd?: boolean
 }
 

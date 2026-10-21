@@ -6,8 +6,13 @@
 // runtime closes the one journal connection, last.
 
 import type { AgentSessionResumeTrigger } from '../../../shared/agent-session-resume-marker'
-import { SUPERVISED_GRACEFUL_EXIT_MS } from '../../claude/claude-child-exit-proof-ladder'
-import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../../provider-process/provider-process-supervisor'
+import { DESCENDANT_SNAPSHOT_TIMEOUT_MS } from '../../pty-descendant-termination'
+import { DESCENDANT_KILL_VERIFY_MS } from '../../pty-descendant-exit-verification'
+import {
+  PROVIDER_SUPERVISOR_MAX_STOP_MS,
+  PROVIDER_GROUP_REAP_TIMEOUT_MS,
+  PROVIDER_OUTPUT_DRAIN_TIMEOUT_MS
+} from '../../provider-process/provider-process-timing'
 import { SNAPSHOT_DRAIN_TIMEOUT_MS } from './structured-agent-session-eviction'
 import type { StructuredAgentSessionRestartResume } from './structured-agent-session-restart-resume-host'
 import {
@@ -29,14 +34,14 @@ export const RESUME_MARKER_RECORD_TIMEOUT_MS = 2_000
 /** Covers a provider's stop observed late on a loaded host. */
 export const EVICTION_MARGIN_MS = 1_000
 
-/** A quit that dies mid-eviction leaves the lease unreleased — the exact state restart has to
- *  clean up — so this covers the sink drain plus the longest supervised provider close, well below
- *  the global quit deadline so later phases still run. A close's tree-kill fallback is outside it:
- *  once main exits the supervisor stops its group itself, and next launch's recovery settles the
- *  lease. Windows closes have no supervisor and wait less. */
+/** Includes the owner ladder, external descendant verification and final output before quit. */
 export const CHILD_EVICTION_TIMEOUT_MS =
   SNAPSHOT_DRAIN_TIMEOUT_MS +
-  Math.max(SUPERVISED_GRACEFUL_EXIT_MS, PROVIDER_SUPERVISOR_MAX_STOP_MS) +
+  PROVIDER_SUPERVISOR_MAX_STOP_MS +
+  PROVIDER_GROUP_REAP_TIMEOUT_MS +
+  DESCENDANT_SNAPSHOT_TIMEOUT_MS +
+  DESCENDANT_KILL_VERIFY_MS +
+  PROVIDER_OUTPUT_DRAIN_TIMEOUT_MS +
   EVICTION_MARGIN_MS
 
 /** Bounds a phase without swallowing its failure, which `withTimeout` alone would. */

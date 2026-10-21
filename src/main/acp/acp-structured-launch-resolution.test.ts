@@ -17,7 +17,7 @@ import {
   createLegacyProviderTimelineIdentityScheme,
   spellProviderTimelineKey
 } from '../native-chat/agent-session-timeline/provider-timeline-identity'
-import { createProviderSpawnSpec } from '../provider-process/provider-process-supervisor'
+import { createProviderSpawnSpec } from '../provider-process/provider-process-launch'
 import { ACP_LAUNCH_SPECS, acpLaunchSpecFor } from './acp-launch-specs'
 import { agentChatPermissionModes } from '../../shared/agent-chat-permission-mode'
 import { STRUCTURED_CHILD_ENV_TO_DELETE } from '../runtime/structured-session-child-env'

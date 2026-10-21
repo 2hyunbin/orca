@@ -15,11 +15,11 @@ export type ClaudeCodeProcessSpawn = {
   readonly managed: ManagedProviderProcess | null
   /**
    * Ownership proof: the durable lease adjudicates on this pid plus start time plus the spawn
-   * token. On POSIX it is the provider supervisor's, which outlives Claude by construction.
+   * token. It always names the actual agent child.
    */
   readonly pid: number | undefined
   /** The spawn spec's verdict, so the close ladder never re-decides it. False until the SDK spawns. */
-  readonly supervised: boolean
+  readonly dedicatedGroup: boolean
 }
 
 function definedEnv(env: Record<string, string | undefined>): Record<string, string> {
@@ -38,9 +38,6 @@ function definedEnv(env: Record<string, string | undefined>): Record<string, str
  * Two independent reasons: the SDK's `SpawnedProcess` has no pid, and Orca's
  * spawner is the only path that encodes `.cmd` arguments safely on Windows.
  *
- * On POSIX Claude runs under the provider supervisor, so an Orca that dies stops
- * it instead of leaving it to finish its turn, tools and edits included, with
- * nobody watching. Windows has no supervisor and spawns Claude directly.
  */
 export function createClaudeCodeProcessSpawn(
   spawnImpl: PipedProcessSpawner = spawnProcess,
@@ -61,7 +58,7 @@ export function createClaudeCodeProcessSpawn(
           platform,
           inheritedEnv: definedEnv(options.env),
           site: 'claude-stream-json-teardown',
-          policy: (supervised) => claudeChildClosePolicy(supervised, platform),
+          policy: (dedicatedGroup) => claudeChildClosePolicy(dedicatedGroup, platform),
           acceptClose: claudeChildCloseProven
         }
       )
@@ -77,8 +74,8 @@ export function createClaudeCodeProcessSpawn(
     get pid() {
       return managed?.child.pid
     },
-    get supervised() {
-      return managed?.supervised ?? false
+    get dedicatedGroup() {
+      return managed?.dedicatedGroup ?? false
     }
   }
 }

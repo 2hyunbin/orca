@@ -1,3 +1,6 @@
+import type * as ChildProcessModule from 'node:child_process'
+import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
+import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,7 +28,8 @@ vi.mock(
   () =>
     import('../worker-thread-child-process/worker-thread-child-process-in-process.test-fixtures')
 )
-vi.mock('node:child_process', () => ({
+vi.mock('node:child_process', async (original) => ({
+  ...(await original<typeof ChildProcessModule>()),
   spawn: childSpawnMock
 }))
 
@@ -71,14 +75,16 @@ import { CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS } from '../codex-cli/codex-read
 
 function makeRpcChild() {
   const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter
-    stderr: EventEmitter
+    pid: number
+    stdout: PassThrough
+    stderr: PassThrough
     stdin: EventEmitter & { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }
     kill: ReturnType<typeof vi.fn>
     exitCode: number | null
   }
-  child.stdout = new EventEmitter()
-  child.stderr = new EventEmitter()
+  child.pid = 9_999_999
+  child.stdout = new PassThrough()
+  child.stderr = new PassThrough()
   // Why: like the real app-server, the fake dies on stdin EOF or a signal —
   // the graceful shutdown path resolves only once the child reports exit.
   const exitNow = (): void => {
@@ -253,7 +259,7 @@ describe('fetchCodexRateLimits', () => {
       status: 'error',
       error: 'Rate-limit fetch aborted'
     })
-    expect(rpcChild.kill).toHaveBeenCalledTimes(1)
+    expect(rpcChild.kill).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
     expect(ptySpawnMock).not.toHaveBeenCalled()
   })
@@ -339,11 +345,10 @@ describe('fetchCodexRateLimits', () => {
       status: 'error',
       error: 'RPC timeout'
     })
-    expect(rpcChild.kill).toHaveBeenCalledTimes(1)
-    expect(rpcChild.stdout.listenerCount('data')).toBe(0)
-    expect(rpcChild.stderr.listenerCount('data')).toBe(0)
-    expect(rpcChild.listenerCount('error')).toBe(0)
-    expect(rpcChild.listenerCount('close')).toBe(0)
+    expect(rpcChild.kill).not.toHaveBeenCalled()
+    expect(rpcChild.stdin.listenerCount('error')).toBe(0)
+    // The managed child still owns diagnostic draining and physical exit observation.
+    expect(rpcChild.stdout.listenerCount('data')).toBeLessThanOrEqual(1)
     expect(ptySpawnMock).not.toHaveBeenCalled()
   })
 
@@ -784,3 +789,12 @@ describe('fetchCodexRateLimits', () => {
     }
   })
 })
+
+vi.mock('../provider-process/provider-process-ledger', async (original) => ({
+  ...(await original<typeof ProviderLedgerModule>()),
+  recordProviderLaunch: () => ({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => []
+  })
+}))

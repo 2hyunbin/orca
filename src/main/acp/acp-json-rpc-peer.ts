@@ -217,15 +217,17 @@ export class AcpJsonRpcPeer {
       this.close(error instanceof Error ? error : new Error(String(error)))
     }
   }
-  private readonly onEnd = (): void => this.close()
+  private readonly onEnd = (): void => {
+    if (this.limits.closeOnInputEnd) {
+      this.close()
+    }
+  }
   private readonly onInputEnd = (): void => {
     const tail = this.framer.takeTail()
     if (tail.trim()) {
       this.otherLine(tail)
     }
-    if (this.limits.closeOnInputEnd) {
-      this.close()
-    }
+    this.onEnd()
   }
   private readonly onError = (error: Error): void => this.close(error)
   private otherLine(line: string): void {

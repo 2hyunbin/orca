@@ -1,3 +1,8 @@
+import type * as ChildProcessModule from 'node:child_process'
+import type * as ProcessHostModule from '@orca/process-host'
+import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
+import type { ProcessSpec } from '@orca/process-host/process-spec'
+import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -12,7 +17,10 @@ vi.mock(
   () =>
     import('../worker-thread-child-process/worker-thread-child-process-in-process.test-fixtures')
 )
-vi.mock('node:child_process', () => ({ spawn: childSpawnMock }))
+vi.mock('node:child_process', async (original) => ({
+  ...(await original<typeof ChildProcessModule>()),
+  spawn: childSpawnMock
+}))
 vi.mock('node:fs/promises', () => ({ readFile: readFileMock }))
 vi.mock('../codex-cli/command', () => ({ resolveCodexCommand: () => 'codex' }))
 vi.mock('node-pty', () => ({ spawn: vi.fn() }))
@@ -40,8 +48,9 @@ function parseRpcRequest(line: string): { id?: number; method?: string } {
 
 // Like the real app-server, the fake dies on stdin EOF or a signal.
 class FakeRpcChild extends EventEmitter {
-  readonly stdout = new EventEmitter()
-  readonly stderr = new EventEmitter()
+  readonly pid = 9_999_999
+  readonly stdout = new PassThrough()
+  readonly stderr = new PassThrough()
   exitCode: number | null = null
   rateLimits: unknown = null
   readonly kill = vi.fn(() => {
@@ -70,6 +79,7 @@ class FakeRpcChild extends EventEmitter {
   private exitNow(): void {
     this.exitCode = 0
     this.emit('exit', 0, null)
+    this.emit('close', 0, null)
   }
 }
 
@@ -146,3 +156,17 @@ describe('fetchCodexRateLimits credit balance', () => {
     expect(result.extraUsage).toMatchObject({ unit: 'credits', unlimited: true, enabled: true })
   })
 })
+
+vi.mock('@orca/process-host', async (original) => ({
+  ...(await original<typeof ProcessHostModule>()),
+  spawnProcess: (spec: ProcessSpec) => childSpawnMock(spec.program, spec.args ?? [], spec)
+}))
+
+vi.mock('../provider-process/provider-process-ledger', async (original) => ({
+  ...(await original<typeof ProviderLedgerModule>()),
+  recordProviderLaunch: () => ({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => []
+  })
+}))

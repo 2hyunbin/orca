@@ -254,7 +254,8 @@ export function createClaudeChildTreeReaper(
   /** The only source of a tree verdict: `exited` is observed on POSIX and is taskkill's report
    *  on Windows. */
   async function judgeTree(): Promise<DescendantTreeVerdict> {
-    const killRoot = (): boolean => terminateClaudeRoot({ child, exited })
+    const killRoot = (): boolean =>
+      platform === 'win32' ? terminateClaudeRoot({ child, exited }) : false
     const rootPid = child.pid
     if (!rootPid) {
       // Never spawned, so the OS never created a tree to orphan.

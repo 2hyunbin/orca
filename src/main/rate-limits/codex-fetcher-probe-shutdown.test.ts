@@ -1,3 +1,9 @@
+import type * as ChildProcessModule from 'node:child_process'
+import type * as ProcessHostModule from '@orca/process-host'
+import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
+import type { ProcessSpec } from '@orca/process-host/process-spec'
+import { readPosixProcessRow } from '../provider-process/provider-process-row-read'
+import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,7 +20,8 @@ vi.mock(
   () =>
     import('../worker-thread-child-process/worker-thread-child-process-in-process.test-fixtures')
 )
-vi.mock('node:child_process', () => ({
+vi.mock('node:child_process', async (original) => ({
+  ...(await original<typeof ChildProcessModule>()),
   spawn: childSpawnMock
 }))
 
@@ -45,14 +52,17 @@ import { probeCodexAuthPresence } from './codex-auth-presence'
 
 function makeRpcChild() {
   const child = new EventEmitter() as EventEmitter & {
-    stdout: EventEmitter
-    stderr: EventEmitter
+    pid: number
+    stdout: PassThrough
+    stderr: PassThrough
     stdin: EventEmitter & { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }
     kill: ReturnType<typeof vi.fn>
     exitCode: number | null
   }
-  child.stdout = new EventEmitter()
-  child.stderr = new EventEmitter()
+  child.once('exit', (code, signal) => child.emit('close', code, signal))
+  child.pid = 9_999_999
+  child.stdout = new PassThrough()
+  child.stderr = new PassThrough()
   // Why: like the real app-server, the fake dies on stdin EOF or a signal —
   // the graceful shutdown path resolves only once the child reports exit.
   const exitNow = (): void => {
@@ -101,9 +111,36 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     vi.mocked(probeCodexAuthPresence).mockResolvedValue('present')
     readFileMock.mockRejectedValue(new Error('no auth fixture'))
     vi.stubGlobal('fetch', vi.fn())
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid !== -9_999_999) {
+        throw new Error(`Unexpected fixture signal: ${pid}`)
+      }
+      const child = childSpawnMock.mock.results.at(-1)?.value
+      if (!child || child.exitCode !== null) {
+        throw Object.assign(new Error('gone'), { code: 'ESRCH' })
+      }
+      if (signal !== 0) {
+        child.kill(signal)
+      }
+      return true
+    })
+    vi.mocked(readPosixProcessRow).mockImplementation(async () => {
+      const child = childSpawnMock.mock.results.at(-1)?.value
+      return child?.exitCode === null
+        ? {
+            pid: 9_999_999,
+            pgid: 9_999_999,
+            ppid: process.pid,
+            startedAt: 'fixture-start',
+            startResolution: 'clock-tick'
+          }
+        : null
+    })
   })
 
   afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -187,10 +224,12 @@ describe('fetchCodexRateLimits probe shutdown', () => {
 
       await vi.advanceTimersByTimeAsync(1)
       expect(rpcChild.stdin.end).toHaveBeenCalledTimes(1)
+      expect(rpcChild.kill).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1_000)
       expect(rpcChild.kill).toHaveBeenCalledWith('SIGTERM')
       expect(rpcChild.kill).not.toHaveBeenCalledWith('SIGKILL')
 
-      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(3_000)
       expect(rpcChild.kill).toHaveBeenCalledWith('SIGKILL')
       await expect(resultPromise).resolves.toMatchObject({
         status: 'error',
@@ -220,7 +259,9 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(childSpawnMock).toHaveBeenCalledTimes(1)
 
-    firstChild.emit('close')
+    firstChild.exitCode = 0
+    firstChild.emit('exit', 0, null)
+    firstChild.emit('close', 0, null)
     await vi.advanceTimersByTimeAsync(1)
     await vi.advanceTimersByTimeAsync(1)
     await vi.advanceTimersByTimeAsync(1)
@@ -259,9 +300,9 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       })
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(firstChild.stdin.end).toHaveBeenCalledOnce()
       expect(childSpawnMock).toHaveBeenCalledTimes(1)
-      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(4_000)
       expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL')
       expect(childSpawnMock).toHaveBeenCalledTimes(2)
       await vi.advanceTimersByTimeAsync(1)
@@ -318,12 +359,12 @@ describe('fetchCodexRateLimits probe shutdown', () => {
         codexHomePath: home
       })
       await vi.advanceTimersByTimeAsync(0)
-      expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(firstChild.stdin.end).toHaveBeenCalledOnce()
 
       const second = fetchCodexRateLimits({
         codexHomePath: home
       })
-      await vi.advanceTimersByTimeAsync(4_999)
+      await vi.advanceTimersByTimeAsync(3_999)
       expect(childSpawnMock).toHaveBeenCalledTimes(1)
 
       await vi.advanceTimersByTimeAsync(1)
@@ -370,7 +411,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
         codexHomePath: '/managed/home-async-stdin-error'
       })
 
-      await vi.advanceTimersByTimeAsync(4_999)
+      await vi.advanceTimersByTimeAsync(3_999)
       expect(childSpawnMock).toHaveBeenCalledTimes(1)
       await vi.advanceTimersByTimeAsync(1)
       expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL')
@@ -384,3 +425,23 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     }
   })
 })
+
+vi.mock('@orca/process-host', async (original) => ({
+  ...(await original<typeof ProcessHostModule>()),
+  spawnProcess: (spec: ProcessSpec) => childSpawnMock(spec.program, spec.args ?? [], spec)
+}))
+
+vi.mock('../provider-process/provider-process-ledger', async (original) => ({
+  ...(await original<typeof ProviderLedgerModule>()),
+  recordProviderLaunch: () => ({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => [{ pid: 9_999_999, pgid: 9_999_999, startedAt: 'fixture-start' }]
+  })
+}))
+
+vi.mock('../provider-process/provider-process-row-read', () => ({ readPosixProcessRow: vi.fn() }))
+
+vi.mock('node:timers/promises', () => ({
+  setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+}))

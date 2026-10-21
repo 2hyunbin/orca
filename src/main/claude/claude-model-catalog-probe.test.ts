@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { PROVIDER_STDIN_END_GRACE_MS } from '../provider-process/provider-process-supervisor'
+import { PROVIDER_STDIN_END_GRACE_MS } from '../provider-process/provider-process-timing'
 import { createClaudeModelCatalogProbe } from './claude-model-catalog-probe'
 import { resolveClaudeStructuredInvocation } from './claude-structured-launch-resolution'
 import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
@@ -165,7 +165,7 @@ describe('claude model catalog probe', () => {
   )
 
   it.runIf(process.platform !== 'win32')(
-    'lists through a supervised one-shot that answers after its input ends',
+    'lists through a direct one-shot that answers after its input ends',
     async () => {
       const folder = mkdtempSync(join(tmpdir(), 'orca-claude-probe-'))
       try {
@@ -197,8 +197,7 @@ process.stdin.on('end', () => setTimeout(() => {
           origin: 'probe',
           models: [{ id: 'sonnet', label: 'Sonnet' }]
         })
-        // The stand-in's parent is the supervisor, never Orca itself.
-        expect(Number(readFileSync(parentFile, 'utf8'))).not.toBe(process.pid)
+        expect(Number(readFileSync(parentFile, 'utf8'))).toBe(process.pid)
       } finally {
         rmSync(folder, { recursive: true, force: true })
       }

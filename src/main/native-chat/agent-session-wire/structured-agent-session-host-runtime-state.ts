@@ -14,7 +14,10 @@ import {
   heldProviderChildReader,
   type ProviderChildSessions
 } from './structured-agent-session-provider-child'
-import { resolveStructuredSessionRecovery } from './structured-agent-session-recovery-resolution'
+import {
+  cleanUpStructuredSessionOwner,
+  resolveStructuredSessionRecovery
+} from './structured-agent-session-recovery-resolution'
 import { recordAgentSessionStartup } from '../../observability/agent-session-instrumentation'
 import {
   StructuredAgentSessionStartupAttempts,
@@ -162,6 +165,18 @@ export class StructuredAgentSessionHostRuntimeState {
         ...(this.deps.stopOwnerProcess ? { stopOwnerProcess: this.deps.stopOwnerProcess } : {})
       },
       sessionId
+    )
+  }
+
+  cleanUpRecordedOwner(record: AgentSessionRecord): Promise<void> {
+    return cleanUpStructuredSessionOwner(
+      {
+        store: this.deps.store,
+        probeRecord: (entry) => this.probeRecord(entry),
+        now: () => this.deps.now?.() ?? Date.now(),
+        ...(this.deps.stopOwnerProcess ? { stopOwnerProcess: this.deps.stopOwnerProcess } : {})
+      },
+      record
     )
   }
 
