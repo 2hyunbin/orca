@@ -37,23 +37,36 @@ export function markWorkspaceUnreadFlag(
   const folderHostId = folderRow
     ? getFolderWorkspaceHostId(folderRow, state.projectGroups)
     : undefined
-  const readsBefore = readsByWorkspace.get(worktreeId) ?? 0
-  void ownerHostOwnsSidebarInputs(state, worktreeId, folderHostId).then((ownerRaises) => {
-    // A read while the owner was being asked already covers this news.
-    if (!ownerRaises && (readsByWorkspace.get(worktreeId) ?? 0) === readsBefore) {
-      raiseWorkspaceUnreadFlag(set, get, worktreeId, folderHostId)
-    }
-  })
+  const pending = pendingRaises.get(worktreeId) ?? { raises: 0, reads: 0 }
+  pendingRaises.set(worktreeId, pending)
+  pending.raises += 1
+  const readsBefore = pending.reads
+  void ownerHostOwnsSidebarInputs(state, worktreeId, folderHostId)
+    .then((ownerRaises) => {
+      // A read while the owner was being asked already covers this news.
+      if (!ownerRaises && pending.reads === readsBefore) {
+        raiseWorkspaceUnreadFlag(set, get, worktreeId, folderHostId)
+      }
+    })
+    .finally(() => {
+      pending.raises -= 1
+      if (pending.raises === 0) {
+        pendingRaises.delete(worktreeId)
+      }
+    })
 }
 
-/** Reads seen per workspace, so a raise still waiting on its owner check yields to a read. Why
+/** Raises still waiting on their owner check, per workspace, with the reads seen meanwhile. Why
  *  not per host: a read names its row's host differently from the row's own host lookup (a
  *  group-hosted folder reads as 'local'), so a per-host count could miss the read it must see. */
-const readsByWorkspace = new Map<string, number>()
+const pendingRaises = new Map<string, { raises: number; reads: number }>()
 
 /** A read of the workspace by any path; a raise still waiting on its owner check drops. */
 export function noteWorkspaceRead(worktreeId: string): void {
-  readsByWorkspace.set(worktreeId, (readsByWorkspace.get(worktreeId) ?? 0) + 1)
+  const pending = pendingRaises.get(worktreeId)
+  if (pending) {
+    pending.reads += 1
+  }
 }
 
 /** Same-id folder rows: the on-screen host's, else the first. */

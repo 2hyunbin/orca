@@ -295,8 +295,11 @@ describe('PairedServerRowsProducer', () => {
 
     await vi.advanceTimersByTimeAsync(1_000)
     expect(call).toHaveBeenCalledTimes(2)
+    // The fallback poll answers too, so the rows stay live.
+    call.mockResolvedValueOnce(psReply([row('new')]))
     await vi.advanceTimersByTimeAsync(30_000)
     expect(call).toHaveBeenCalledTimes(3)
+    expect(rowsOf(producer, 'runtime:box')).toMatchObject({ freshness: 'live' })
     expect(rowsOf(producer, 'runtime:box')?.rows.map((entry) => entry.worktreeId)).toEqual(['new'])
   })
 

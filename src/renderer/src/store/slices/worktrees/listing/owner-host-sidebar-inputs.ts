@@ -8,10 +8,10 @@ import type { AppState } from '../../../types'
 import { tryRuntimeTargetForWorktreeOwner } from './worktree-owner-target'
 
 /**
- * Whether the workspace's owning host runs main's sidebar inputs, so it raises the unread flag and
- * writes the sort stamps itself. A local owner runs this build (main, its SSH hosts, or the host
- * that served the browser client). A paired server answers by capability (one capability marks
- * both); an unresolved owner or an unreadable status counts as older, so this window keeps writing.
+ * Whether the workspace's owning host runs main's sidebar inputs, so it raises the unread flag
+ * itself. A local owner runs this build (main, its SSH hosts, or the host that served the browser
+ * client). A paired server answers by capability; an unresolved owner or an unreadable status
+ * counts as older, so this window raises the flag.
  */
 export async function ownerHostOwnsSidebarInputs(
   state: AppState,

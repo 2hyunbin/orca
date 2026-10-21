@@ -186,6 +186,19 @@ describe('a stop-and-wait of a terminal an older relay still runs', () => {
     installLegacyRelayBridge(null)
   })
 
+  it('keeps the stop request of a final stop the bridge still owes, so the pane reads closing', async () => {
+    const runtime = { markPtyStopRequested: vi.fn(), clearPtyStopRequest: vi.fn() }
+    const recordStop = vi.fn()
+    const deps = install(recordStop, runtime)
+    const ptyId = toAppSshPtyId(TARGET, lease.ptyId)
+    await expect(
+      stopAndWaitPtyFromRuntimeController(deps, ptyId, { deadlineMs: Date.now() + 1_000 })
+    ).resolves.toBe(false)
+    expect(recordStop).toHaveBeenCalled()
+    expect(runtime.clearPtyStopRequest).not.toHaveBeenCalled()
+    installLegacyRelayBridge(null)
+  })
+
   it('takes back the stop request of a refused reversible stop, so the pane reads running', async () => {
     const runtime = { markPtyStopRequested: vi.fn(), clearPtyStopRequest: vi.fn() }
     const deps = install(vi.fn(), runtime)
@@ -196,6 +209,28 @@ describe('a stop-and-wait of a terminal an older relay still runs', () => {
     expect(runtime.markPtyStopRequested).toHaveBeenCalledWith(ptyId)
     expect(runtime.clearPtyStopRequest).toHaveBeenCalledWith(ptyId)
     installLegacyRelayBridge(null)
+  })
+})
+
+describe('a stop-and-wait whose provider startup fails', () => {
+  it('takes back its stop request, so the terminal still reads running', async () => {
+    const runtime = { markPtyStopRequested: vi.fn(), clearPtyStopRequest: vi.fn() }
+    const deps = {
+      runtime,
+      store: null,
+      getLocalPtyProviderStartupPromise: () => Promise.reject(new Error('daemon failed')),
+      shutdownProviderAndDetectExit: vi.fn(),
+      finishPtyShutdown: vi.fn()
+    }
+    await expect(
+      stopAndWaitPtyFromRuntimeController(
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the startup await throws before any other dep is read.
+        deps as unknown as PtyRuntimeControllerDeps,
+        'local-pty-1'
+      )
+    ).rejects.toThrow('daemon failed')
+    expect(runtime.markPtyStopRequested).toHaveBeenCalledWith('local-pty-1')
+    expect(runtime.clearPtyStopRequest).toHaveBeenCalledWith('local-pty-1')
   })
 })
 
