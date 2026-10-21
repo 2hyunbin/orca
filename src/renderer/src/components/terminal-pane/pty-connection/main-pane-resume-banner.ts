@@ -54,6 +54,22 @@ function boundPtyId(session: ConnectPanePtySession, state: AppState): string | u
 }
 
 /**
+ * Whether the pane's attach to `ptyId` resumed its agent: the window's own resume, or, when main
+ * started the pane (`windowResume` null), main's outcome, which rides the frame binding `ptyId`.
+ */
+export function attachResumedAgent(
+  session: ConnectPanePtySession,
+  ptyId: string,
+  windowResume: object | null
+): boolean {
+  if (!mainStartsPane(session) || windowResume) {
+    return Boolean(windowResume)
+  }
+  const found = useAppStore.getState().terminalPaneResumeOutcomesByPaneKey[session.cacheKey]
+  return found?.ptyId === ptyId && found.outcome === 'restored'
+}
+
+/**
  * After the view attached `ptyId`: shows the banner of main's start of that terminal, once, now or
  * when its outcome arrives. An outcome for another terminal shows nothing.
  */

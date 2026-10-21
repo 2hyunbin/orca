@@ -11,6 +11,7 @@ import { PANE_NOT_LIVE_ERROR } from '../../../../../shared/pane-attach-only-view
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
 import { mainStartsPane } from './main-starts-pane'
+import { attachResumedAgent } from './main-pane-resume-banner'
 
 import {
   awaitAgentStatusStartupSnapshot,
@@ -150,7 +151,7 @@ function connectDeferredSessionReattach(
       .then(
         (ptyId: string | null) => ({
           reopened: ptyId !== null,
-          agentResumed: ptyId !== null && Boolean(coldRestoreStartup)
+          agentResumed: ptyId !== null && attachResumedAgent(session, ptyId, coldRestoreStartup)
         }),
         () => NOT_REOPENED
       )
@@ -269,7 +270,7 @@ function connectDeferredSessionReattach(
         reopened: accepted,
         agentResumed:
           accepted &&
-          Boolean(coldRestoreStartup) &&
+          attachResumedAgent(session, deferredReattachSessionId, coldRestoreStartup) &&
           !(result && typeof result === 'object' && result.agentResumeUnavailable)
       }
     })
