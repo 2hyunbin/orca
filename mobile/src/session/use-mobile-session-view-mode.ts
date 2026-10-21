@@ -39,6 +39,8 @@ function mergeOverrides(
 }
 
 export type MobileSessionViewModeController = {
+  /** Whether the default and this workspace's overrides have both been read once. */
+  ready: boolean
   /** Whether a tab's effective view is chat (per-tab override, else the default). */
   isTabChatView: (tabId: string) => boolean
   setTabView: (tabId: string, view: MobileSessionView) => void
@@ -53,6 +55,8 @@ export function useMobileSessionViewMode(args: {
   worktreeId: string
 }): MobileSessionViewModeController {
   const { hostId, worktreeId } = args
+  const [settledScope, setSettledScope] = useState<string | null>(null)
+  const [defaultViewReady, setDefaultViewReady] = useState(false)
   const [viewOverridesState, setViewOverridesState] = useState<ViewOverridesState>(() => ({
     hostId,
     worktreeId,
@@ -106,6 +110,7 @@ export function useMobileSessionViewMode(args: {
       const next = { hostId, worktreeId, overrides: merged, loaded: preference.loaded }
       viewOverridesStateRef.current = next
       setViewOverridesState(next)
+      setSettledScope(JSON.stringify([hostId, worktreeId]))
     })
     return () => {
       active = false
@@ -119,6 +124,7 @@ export function useMobileSessionViewMode(args: {
       void loadDefaultSessionView().then((view) => {
         if (active) {
           setDefaultView(view)
+          setDefaultViewReady(true)
         }
       })
       return () => {
@@ -212,5 +218,11 @@ export function useMobileSessionViewMode(args: {
     [hostId, setTabView, worktreeId]
   )
 
-  return { isTabChatView, setTabView, toggleTabChatView }
+  return {
+    // Why: until both reads land a chat tab resolves to terminal, then swaps to chat after mount.
+    ready: defaultViewReady && settledScope === JSON.stringify([hostId, worktreeId]),
+    isTabChatView,
+    setTabView,
+    toggleTabChatView
+  }
 }

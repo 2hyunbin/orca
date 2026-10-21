@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { AppState, type AppStateStatus, Platform } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { loadHosts } from '../transport/host-store'
@@ -11,6 +11,8 @@ import { loadCustomKeys } from '../terminal/terminal-custom-keys'
 import type { MobileSessionTabReconciliationModel } from './use-mobile-session-tab-reconciliation'
 
 export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationModel) {
+  const [customKeysLoaded, setCustomKeysLoaded] = useState(false)
+  const [accessoryLayoutLoaded, setAccessoryLayoutLoaded] = useState(false)
   const {
     hostId,
     connState,
@@ -46,7 +48,16 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
   }, [hostId])
 
   useEffect(() => {
-    void loadCustomKeys().then(setCustomKeys)
+    let active = true
+    void loadCustomKeys().then((keys) => {
+      if (active) {
+        setCustomKeys(keys)
+        setCustomKeysLoaded(true)
+      }
+    })
+    return () => {
+      active = false
+    }
   }, [])
 
   useFocusEffect(
@@ -55,6 +66,7 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
       void loadTerminalAccessoryLayout().then((layout) => {
         if (!stale) {
           setVisibleBuiltInIds(layout.visibleBuiltInIds)
+          setAccessoryLayoutLoaded(true)
         }
       })
       return () => {
@@ -136,6 +148,7 @@ export function useMobileSessionLifecycle(scope: MobileSessionTabReconciliationM
     })
   }, [connState, scheduleDelayedAction, subscribeToTerminal, unsubscribeTerminal])
   return {
+    accessoryPreferencesReady: customKeysLoaded && accessoryLayoutLoaded,
     pendingForegroundRecoveryRef
   }
 }

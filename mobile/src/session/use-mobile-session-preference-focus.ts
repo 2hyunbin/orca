@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import {
   loadTerminalAutocompleteEnabled,
@@ -7,15 +7,28 @@ import {
 } from '../storage/preferences'
 import type { MobileSessionKeyboardStateModel } from './use-mobile-session-keyboard-state'
 
-export function useMobileSessionPreferenceFocus(scope: MobileSessionKeyboardStateModel) {
+export function useMobileSessionPreferenceFocus(
+  scope: Pick<
+    MobileSessionKeyboardStateModel,
+    'setTerminalTextScale' | 'setAutocompleteEnabled' | 'setTerminalLinkOpenMode'
+  >
+) {
   const { setTerminalTextScale, setAutocompleteEnabled, setTerminalLinkOpenMode } = scope
-  // Why: pick up Settings → Terminal text size on return; panes stay mounted and update in place.
+  const [terminalPreferencesReady, setTerminalPreferencesReady] = useState(false)
+  // Reload on Settings return without dropping readiness or remounting terminal panes.
   useFocusEffect(
     useCallback(() => {
       let active = true
-      void loadTerminalTextScale().then((scale) => {
+      void Promise.all([
+        loadTerminalTextScale(),
+        loadTerminalAutocompleteEnabled(),
+        loadTerminalLinkOpenMode()
+      ]).then(([scale, autocomplete, linkMode]) => {
         if (active) {
           setTerminalTextScale(scale)
+          setAutocompleteEnabled(autocomplete)
+          setTerminalLinkOpenMode(linkMode)
+          setTerminalPreferencesReady(true)
         }
       })
       return () => {
@@ -23,34 +36,5 @@ export function useMobileSessionPreferenceFocus(scope: MobileSessionKeyboardStat
       }
     }, [])
   )
-
-  // Why: pick up the Settings → Terminal autocomplete toggle when returning here.
-  useFocusEffect(
-    useCallback(() => {
-      let active = true
-      void loadTerminalAutocompleteEnabled().then((enabled) => {
-        if (active) {
-          setAutocompleteEnabled(enabled)
-        }
-      })
-      return () => {
-        active = false
-      }
-    }, [])
-  )
-
-  // Why: link routing is a phone-local choice; reload after Settings → Browser.
-  useFocusEffect(
-    useCallback(() => {
-      let active = true
-      void loadTerminalLinkOpenMode().then((mode) => {
-        if (active) {
-          setTerminalLinkOpenMode(mode)
-        }
-      })
-      return () => {
-        active = false
-      }
-    }, [])
-  )
+  return { terminalPreferencesReady }
 }
