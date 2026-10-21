@@ -50,7 +50,7 @@ describe('adhoc Windows compilation overlaps Mac without publishing early', () =
     expect(bundle.with.ref).toBe('${{ needs.resolve-ref.outputs.sha }}')
     expect(bundle.with.dev_build).toBe(true)
     expect(bundle.secrets).toBeUndefined()
-    expect(jobs['orcad-template'].uses).toBe('./.github/workflows/adhoc-orcad-template.yml')
+    expect(jobs['orcad-template'].uses).toBe('./.github/workflows/qualified-orcad-template.yml')
     for (const job of [mac, windows]) {
       expect(job.needs).toContain('release-javascript')
       const evaluate = compileAggregateExpression(job.if, ['needs', 'github'])

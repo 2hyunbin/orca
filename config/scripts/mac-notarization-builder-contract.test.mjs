@@ -104,9 +104,11 @@ describe('macOS build workflow policy', () => {
     })
     expect(source.jobs['qualification-template'].if).toBe('inputs.qualification_only')
     expect(source.jobs['qualification-template'].with).toEqual({
-      ref: '${{ github.sha }}',
-      build_template: true
+      ref: '${{ github.sha }}'
     })
+    expect(source.jobs['qualification-template'].uses).toBe(
+      './.github/workflows/qualified-orcad-template.yml'
+    )
     const job = source.jobs['build-mac']
     expect(job.needs).toBe('qualification-template')
     expect(job.if).toContain('!cancelled()')

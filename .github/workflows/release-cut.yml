@@ -1184,10 +1184,9 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: ./.github/workflows/node-server-tests.yml
+    uses: ./.github/workflows/qualified-orcad-template.yml
     with:
       ref: refs/tags/${{ needs.cut.outputs.tag }}
-      build_template: true
 
   # Why: artifact jobs submit Windows binaries to SignPath. Keep every
   # quota-consuming build behind all blocking release gates so a late test

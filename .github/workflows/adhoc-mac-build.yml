@@ -222,9 +222,10 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: ./.github/workflows/adhoc-orcad-template.yml
+    uses: ./.github/workflows/qualified-orcad-template.yml
     with:
       ref: ${{ needs.resolve-ref.outputs.sha }}
+      fast_runners: true
 
   release-javascript:
     needs: [resolve-ref, orcad-template-support]
