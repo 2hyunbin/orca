@@ -35,6 +35,7 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       reads: () => this.workspaceLayoutReads,
       homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
       registered: (ptyId) => this.ptysById.has(ptyId),
+      exited: (ptyId) => this.ptysById.get(ptyId)?.connected === false,
       paneStartFact: (paneKey, binding) => this.paneStartStatuses?.get(paneKey, binding) ?? null,
       readyGraphPublisher: () => (this.graphStatus === 'ready' ? this.authoritativeWindowId : null),
       publish: (publisher, next) => {

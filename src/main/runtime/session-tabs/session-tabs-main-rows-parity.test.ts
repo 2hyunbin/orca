@@ -4,6 +4,7 @@
 // with that publication (the window republishes after each layout frame), not before it.
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import {
   HEADLESS_LEAF_ID,
   HEADLESS_SECOND_LEAF_ID,
@@ -20,24 +21,31 @@ vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAI
 const row = (leafId: string) => `${SURFACE_TAB_ID}::${leafId}`
 
 /** The window's publication as it was before main's change: both panes, the old title. */
-function stalePublication(version: number): RuntimeMobileSessionTabsSnapshot {
+function stalePublication(
+  version: number,
+  activeLeafId: string = HEADLESS_LEAF_ID
+): RuntimeMobileSessionTabsSnapshot {
   const tabs = [HEADLESS_LEAF_ID, HEADLESS_SECOND_LEAF_ID].map((leafId) => ({
     type: 'terminal' as const,
     id: row(leafId),
     title: 'Persisted Terminal',
     parentTabId: SURFACE_TAB_ID,
     leafId,
-    isActive: leafId === HEADLESS_LEAF_ID
+    isActive: leafId === activeLeafId
   }))
   return {
     worktree: TEST_WORKTREE_ID,
     publicationEpoch: 'renderer',
     snapshotVersion: version,
     activeGroupId: null,
-    activeTabId: row(HEADLESS_LEAF_ID),
+    activeTabId: row(activeLeafId),
     activeTabType: 'terminal',
     tabs
   }
+}
+
+async function phoneActiveRow(runtime: ReturnType<typeof surfaceRuntime>['runtime']) {
+  return (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).activeTabId
 }
 
 async function phoneRows(runtime: ReturnType<typeof surfaceRuntime>['runtime']) {
@@ -96,5 +104,50 @@ describe('session.tabs rows follow main’s layout (switch on)', () => {
       ['Build', 'Build'],
       ['Build', 'Build']
     ])
+  })
+
+  it("save or view lands after publication: the phone's row updates", async () => {
+    const { runtime, store, setSession } = surfaceRuntime()
+    runtime.attachWindow(1)
+    // The user focuses the second pane: the window publishes at once, its save lands later.
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      mobileSessionTabs: [stalePublication(1, HEADLESS_SECOND_LEAF_ID)]
+    })
+    expect(await phoneActiveRow(runtime)).toBe(row(HEADLESS_SECOND_LEAF_ID))
+
+    const session = store.getSession()
+    const layout = session.terminalLayoutsByTabId[SURFACE_TAB_ID]!
+    setSession({
+      ...session,
+      terminalLayoutsByTabId: {
+        [SURFACE_TAB_ID]: { ...layout, activeLeafId: HEADLESS_SECOND_LEAF_ID }
+      }
+    })
+    expect(await phoneActiveRow(runtime)).toBe(row(HEADLESS_SECOND_LEAF_ID))
+
+    // Back to the first pane, published before its save: the phone follows the view.
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      mobileSessionTabs: [stalePublication(2, HEADLESS_LEAF_ID)]
+    })
+    expect(await phoneActiveRow(runtime)).toBe(row(HEADLESS_LEAF_ID))
+  })
+
+  it("with no window, rows follow main's saved view", async () => {
+    const { runtime, store, setSession } = surfaceRuntime()
+    runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
+    const session = store.getSession()
+    const layout = session.terminalLayoutsByTabId[SURFACE_TAB_ID]!
+    setSession({
+      ...session,
+      terminalLayoutsByTabId: {
+        [SURFACE_TAB_ID]: { ...layout, activeLeafId: HEADLESS_SECOND_LEAF_ID }
+      }
+    })
+
+    expect(await phoneActiveRow(runtime)).toBe(row(HEADLESS_SECOND_LEAF_ID))
   })
 })

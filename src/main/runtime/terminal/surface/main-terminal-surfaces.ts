@@ -24,6 +24,8 @@ export type MainTerminalSurfacesHost = {
   homeHostId: (key: string) => ExecutionHostId | null
   /** Whether the PTY registry holds the terminal. */
   registered: (ptyId: string) => boolean
+  /** Whether main has seen the terminal exit (its record kept, disconnected). */
+  exited: (ptyId: string) => boolean
   /** Main's start status of a pane, as the layout stream publishes it. */
   paneStartFact: PaneStartFactOf
   /** The graph authority now, when its graph is ready; null otherwise. */
@@ -72,7 +74,7 @@ class MainSurfacePublisher {
     const projected = this.installed?.worktreeIds.has(published.worktree)
       ? this.index.sessionTabsOf(published.worktree)
       : null
-    return projected ? withMainSessionTabRows(published, projected) : published
+    return projected ? withMainSessionTabRows(published, projected, this.host.exited) : published
   }
 
   /** The pane main's layout binds a terminal to, read fresh; null when no pane main owns holds it. */
