@@ -3846,6 +3846,12 @@
             "connectedHostCount_one": "{{count}} 台のホスト",
             "connectedHostCount_other": "{{count}} 台のホスト",
             "connecting": "接続中…",
+            "searchSshHosts": "SSH ホストを検索…",
+            "noMatchingSshHosts": "一致する SSH ホストはありません。",
+            "moreSshHostMatches_one": "ほかに {{count}} 件一致しています。入力を続けて絞り込んでください。",
+            "moreSshHostMatches_other": "ほかに {{count}} 件一致しています。入力を続けて絞り込んでください。",
+            "moreSshHosts_one": "他 {{count}} 台の SSH ホストから検索…",
+            "moreSshHosts_other": "他 {{count}} 台の SSH ホストから検索…",
             "runtime_unavailable_transport_up": "Orca は利用できません",
             "runtime_workspace_window_closed": "ワークスペースウィンドウを閉じた"
           },
@@ -14320,8 +14326,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} のセッションは Orca では削除できません。",
             "resumeInNewNativeChat": "新しいチャットで再開",
             "resumeInNewCli": "新しいターミナルで再開",
-            "resumeInNewCliTooltipFork": "この会話を新しい CLI セッションにフォークします。",
-            "resumeInNewCliTooltipChat": "ネイティブチャットはそのまま残ります。"
+            "resumeInNewCliTooltipFork": "この会話のコピーを使って、新しいターミナル Agent のセッションを開始します。",
+            "resumeInNewCliTooltipChat": "このチャットは変更されません。"
           },
           "AiVaultSessionDeleteDialog": {
             "title": "このセッションを削除しますか?",
@@ -19124,8 +19130,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "ターミナル Agent に切り替える",
-          "switchToChatView": "チャット UI に切り替える",
+          "switchToTerminalView": "ターミナル Agent で続ける",
+          "switchToChatView": "チャット UI で続ける",
           "closeTabsToLeft": "左側のすべてのタブを閉じる"
         },
         "BrowserTab": {

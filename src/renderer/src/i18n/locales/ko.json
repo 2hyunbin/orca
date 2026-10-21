@@ -3846,6 +3846,12 @@
             "connectedHostCount_one": "호스트 {{count}}개",
             "connectedHostCount_other": "호스트 {{count}}개",
             "connecting": "연결 중…",
+            "searchSshHosts": "SSH 호스트 검색…",
+            "noMatchingSshHosts": "일치하는 SSH 호스트가 없습니다.",
+            "moreSshHostMatches_one": "{{count}}개 더 일치합니다. 계속 입력해 범위를 좁히세요.",
+            "moreSshHostMatches_other": "{{count}}개 더 일치합니다. 계속 입력해 범위를 좁히세요.",
+            "moreSshHosts_one": "SSH 호스트 {{count}}개 더 찾기…",
+            "moreSshHosts_other": "SSH 호스트 {{count}}개 중에서 찾기…",
             "runtime_unavailable_transport_up": "Orca를 사용할 수 없습니다.",
             "runtime_workspace_window_closed": "워크스페이스 창이 닫혔습니다."
           },
@@ -14320,8 +14326,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} 세션은 Orca에서 삭제할 수 없습니다.",
             "resumeInNewNativeChat": "새 채팅에서 재개",
             "resumeInNewCli": "새 터미널에서 재개",
-            "resumeInNewCliTooltipFork": "이 대화를 새 CLI 세션으로 포크합니다.",
-            "resumeInNewCliTooltipChat": "기본 채팅은 그대로 유지됩니다."
+            "resumeInNewCliTooltipFork": "이 대화의 복사본으로 새 터미널 에이전트 세션을 시작합니다.",
+            "resumeInNewCliTooltipChat": "이 채팅은 그대로 유지됩니다."
           },
           "AiVaultSessionDeleteDialog": {
             "title": "이 세션을 삭제할까요?",
@@ -19124,8 +19130,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "터미널 에이전트로 전환",
-          "switchToChatView": "채팅 UI로 전환",
+          "switchToTerminalView": "터미널 에이전트로 계속하기",
+          "switchToChatView": "채팅 UI에서 계속하기",
           "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
         },
         "BrowserTab": {

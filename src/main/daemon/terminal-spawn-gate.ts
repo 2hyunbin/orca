@@ -114,8 +114,7 @@ export class TerminalSpawnGate {
     )
   }
 
-  /** Returns synchronously unless the request has to wait, so an unpaced fork keeps
-   *  today's timing against the host's shutdown fence. */
+  /** A maximum resolver or paced wait adds an async boundary; callers recheck shutdown after await. */
   admit(
     facts: SpawnRequestFacts,
     cancel?: { signal: AbortSignal; error: () => Error },

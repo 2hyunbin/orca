@@ -3841,6 +3841,12 @@
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
             "connecting": "Conectando…",
+            "searchSshHosts": "Buscar hosts SSH…",
+            "noMatchingSshHosts": "Ningún host SSH coincide.",
+            "moreSshHostMatches_one": "{{count}} coincidencia más. Sigue escribiendo para acotar.",
+            "moreSshHostMatches_other": "{{count}} coincidencias más. Sigue escribiendo para acotar.",
+            "moreSshHosts_one": "Buscar {{count}} host SSH más…",
+            "moreSshHosts_other": "Buscar entre {{count}} hosts SSH más…",
             "runtime_unavailable_transport_up": "Orca no disponible",
             "runtime_workspace_window_closed": "Ventana del espacio de trabajo cerrada"
           },
@@ -14315,8 +14321,8 @@
             "deleteReasonUnsupportedAgent": "Las sesiones de {{value0}} no se pueden eliminar desde Orca.",
             "resumeInNewNativeChat": "Reanudar en un nuevo chat",
             "resumeInNewCli": "Reanudar en un nuevo terminal",
-            "resumeInNewCliTooltipFork": "Hace un fork de esta conversación en una nueva sesión de CLI.",
-            "resumeInNewCliTooltipChat": "El chat nativo queda como está."
+            "resumeInNewCliTooltipFork": "Inicia una nueva sesión del agente de terminal con una copia de esta conversación.",
+            "resumeInNewCliTooltipChat": "Este chat permanece sin cambios."
           },
           "AiVaultSessionDeleteDialog": {
             "title": "¿Eliminar esta sesión?",
@@ -19084,8 +19090,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Cambiar al agente de terminal",
-          "switchToChatView": "Cambiar a la interfaz de chat",
+          "switchToTerminalView": "Continuar con el agente de terminal",
+          "switchToChatView": "Continuar en la interfaz de chat",
           "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
         },
         "BrowserTab": {
