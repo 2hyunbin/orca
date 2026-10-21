@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { requestEditorFileSave } from './editor-autosave'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
-import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
+import { __clearSelfWriteRegistryForTests, hasRecentSelfWrite } from './editor-self-write-registry'
 import { createEditorStore } from './editor-autosave-controller-test-fixture'
 import {
   keepTabEditsOverExternalChange,
@@ -66,6 +66,29 @@ describe('editor saves guarded by the disk precondition', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
     __clearSelfWriteRegistryForTests()
+  })
+
+  it('cleans a tab whose disk already holds the edit, without retaining a self-write stamp', async () => {
+    const disk = stubGuardedDisk({ [PATH]: 'user edit' })
+    const store = createEditorStore()
+    openFile(store, { baseline: 'original', draft: 'user edit' })
+    const cleanup = attachEditorAutosaveController(store)
+    try {
+      await requestEditorFileSave({ fileId: PATH })
+
+      await expect(disk.writeFile.mock.results[0]?.value).resolves.toEqual({
+        ok: true,
+        unchanged: true
+      })
+      expect(store.getState().openFiles[0]).toMatchObject({
+        isDirty: false,
+        lastKnownDiskSignature: getWrittenContentDiskSignature('user edit')
+      })
+      expect(store.getState().editorDrafts[PATH]).toBeUndefined()
+      expect(hasRecentSelfWrite(PATH)).toBe(false)
+    } finally {
+      cleanup()
+    }
   })
 
   it('blocks an autosave over an unnoticed agent write and raises the banner', async () => {

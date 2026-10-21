@@ -11,8 +11,9 @@ import {
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
+  FILE_WRITE_UNCHANGED,
   parseFileWriteResult,
-  type FileWriteDiskConflict,
+  type FileWriteDiskComparison,
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../../shared/file-write-disk-precondition'
@@ -137,7 +138,7 @@ async function checkWebDiskPreconditionFromClient(
   file: ResolvedWebRuntimeFile,
   precondition: FileWriteDiskPrecondition,
   content: string
-): Promise<FileWriteDiskConflict | null> {
+): Promise<FileWriteDiskComparison> {
   let preview: unknown
   try {
     preview = await session.callRuntimeResult('files.readPreview', {
@@ -218,6 +219,9 @@ export function createWebFileMutationMethods(
               diskPrecondition,
               content
             )
+            if (diskConflict === 'identical') {
+              return FILE_WRITE_UNCHANGED
+            }
             return diskConflict ? { ok: false, diskConflict } : { method: 'files.write', params }
           },
           diskPrecondition !== undefined

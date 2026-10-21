@@ -64,7 +64,7 @@ describe('paired web client save precondition', () => {
     expect(calledMethods()).toEqual(['files.readPreview'])
   })
 
-  it('writes through an older server whose changed disk already holds the text', async () => {
+  it('skips writing through an older server whose changed disk already holds the text', async () => {
     const { methods, calledMethods } = methodsFor([], 'edited')
 
     const result = await methods.writeFile({
@@ -73,8 +73,8 @@ describe('paired web client save precondition', () => {
       diskPrecondition: precondition
     })
 
-    expect(result).toEqual({ ok: true })
-    expect(calledMethods()).toEqual(['files.readPreview', 'files.write'])
+    expect(result).toEqual({ ok: true, unchanged: true })
+    expect(calledMethods()).toEqual(['files.readPreview'])
   })
 
   it('writes through an older server without the field once the disk matches', async () => {

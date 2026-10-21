@@ -31,6 +31,9 @@ export function stubGuardedDisk(
         files.get(filePath) ?? null,
         content
       )
+      if (diskConflict === 'identical') {
+        return { ok: true, unchanged: true }
+      }
       if (diskConflict) {
         return { ok: false, diskConflict }
       }

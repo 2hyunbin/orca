@@ -64,6 +64,9 @@ function pasteIntoGuardedTab(pasted: string) {
           args.content
         )
       : null
+    if (conflict === 'identical') {
+      return { ok: true, unchanged: true }
+    }
     if (conflict) {
       return { ok: false, diskConflict: conflict }
     }

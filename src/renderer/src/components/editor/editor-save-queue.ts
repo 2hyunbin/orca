@@ -184,6 +184,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       return 'blocked-stale'
     }
 
+    if (writeResult.unchanged) {
+      clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
+    }
     rebaselineAfterEditorWrite(store.getState(), fileId, contentToSave)
     const nextState = store.getState()
     const currentDraft = nextState.editorDrafts[fileId]

@@ -4,8 +4,9 @@ import {
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
   FILE_WRITE_OK,
+  FILE_WRITE_UNCHANGED,
   parseFileWriteResult,
-  type FileWriteDiskConflict,
+  type FileWriteDiskComparison,
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../../shared/file-write-disk-precondition'
@@ -114,6 +115,9 @@ export async function writeRemoteFileIfUnchanged(
             precondition,
             content
           )
+          if (diskConflict === 'identical') {
+            return { result: FILE_WRITE_UNCHANGED }
+          }
           return diskConflict ? { result: { ok: false, diskConflict } } : { params }
         },
         15_000,
@@ -151,7 +155,7 @@ async function checkDiskPreconditionFromClient(
   filePath: string,
   precondition: FileWriteDiskPrecondition,
   content: string
-): Promise<FileWriteDiskConflict | null> {
+): Promise<FileWriteDiskComparison> {
   let current: { content: string; isBinary: boolean }
   try {
     current = await readRemoteFile(context, filePath)

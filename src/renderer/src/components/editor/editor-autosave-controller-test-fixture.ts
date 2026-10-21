@@ -41,6 +41,9 @@ export function createFakeEditorDisk(initialFiles: Record<string, string> = {}):
           const diskConflict = diskPrecondition
             ? compareDiskWritePrecondition(diskPrecondition, files.get(filePath) ?? null, content)
             : null
+          if (diskConflict === 'identical') {
+            return { ok: true, unchanged: true }
+          }
           if (diskConflict) {
             return { ok: false, diskConflict }
           }

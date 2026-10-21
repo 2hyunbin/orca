@@ -15,33 +15,43 @@ export type FileWriteDiskPrecondition = {
 
 export type FileWriteDiskConflict = 'changed' | 'missing'
 
-export type FileWriteResult = { ok: true } | { ok: false; diskConflict: FileWriteDiskConflict }
+export type FileWriteDiskComparison = FileWriteDiskConflict | 'identical' | null
+
+export type FileWriteResult =
+  | { ok: true; unchanged?: boolean }
+  | { ok: false; diskConflict: FileWriteDiskConflict }
 
 export const FILE_WRITE_OK: FileWriteResult = { ok: true }
+export const FILE_WRITE_UNCHANGED: FileWriteResult = { ok: true, unchanged: true }
 
 /** `current` is the decoded disk text, `null` when missing, `undefined` when not comparable text; `content` is the text being saved. */
 export function compareDiskWritePrecondition(
   precondition: FileWriteDiskPrecondition,
   current: string | null | undefined,
   content: string
-): FileWriteDiskConflict | null {
+): FileWriteDiskComparison {
   if (current === null) {
     return precondition.allowMissing === true ? null : 'missing'
   }
   if (current === undefined) {
     return 'changed'
   }
-  if (getDiskBaselineSignature(current) === precondition.expectedSignature) {
-    return null
+  // Why: U+FFFD may stand for bytes a decode dropped, so decoded equality proves nothing.
+  if (current === content && !current.includes('\uFFFD')) {
+    return 'identical'
   }
-  // Why: disk already holds what this save writes; U+FFFD may stand for bytes a decode dropped, so it proves nothing.
-  return current === content && !current.includes('\uFFFD') ? null : 'changed'
+  return getDiskBaselineSignature(current) === precondition.expectedSignature ? null : 'changed'
 }
 
 /** Why: old hosts answer `{ ok: true }` or nothing; only an explicit `ok: false` is a refusal. */
 export function parseFileWriteResult(value: unknown): FileWriteResult {
-  if (typeof value !== 'object' || value === null || !('ok' in value) || value.ok !== false) {
+  if (typeof value !== 'object' || value === null || !('ok' in value)) {
     return FILE_WRITE_OK
+  }
+  if (value.ok !== false) {
+    return value.ok === true && 'unchanged' in value && value.unchanged === true
+      ? FILE_WRITE_UNCHANGED
+      : FILE_WRITE_OK
   }
   const diskConflict = 'diskConflict' in value ? value.diskConflict : undefined
   return { ok: false, diskConflict: diskConflict === 'missing' ? 'missing' : 'changed' }

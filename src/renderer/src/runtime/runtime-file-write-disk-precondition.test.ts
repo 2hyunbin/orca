@@ -196,7 +196,7 @@ describe('writeRuntimeFile disk precondition', () => {
     expect(writeCalls()).toHaveLength(0)
   })
 
-  it('saves through an older host whose changed disk already holds the text', async () => {
+  it('skips writing through an older host whose changed disk already holds the text', async () => {
     serveHost({ enforcesPrecondition: false, diskContent: 'edited' })
     runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: true }))
 
@@ -208,8 +208,8 @@ describe('writeRuntimeFile disk precondition', () => {
       precondition
     )
 
-    expect(result).toEqual({ ok: true })
-    expect(writeCalls()).toHaveLength(1)
+    expect(result).toEqual({ ok: true, unchanged: true })
+    expect(writeCalls()).toHaveLength(0)
   })
 
   it('reports a confirmed-missing file to an autosave through an older host', async () => {

@@ -11,8 +11,9 @@ import {
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
+  FILE_WRITE_UNCHANGED,
   parseFileWriteResult,
-  type FileWriteDiskConflict,
+  type FileWriteDiskComparison,
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../shared/file-write-disk-precondition'
@@ -229,6 +230,9 @@ async function writeFileOnEnvironment(
     )
   }
   const diskConflict = await diskConflictOnServer(pinned, params, diskPrecondition)
+  if (diskConflict === 'identical') {
+    return FILE_WRITE_UNCHANGED
+  }
   if (diskConflict) {
     return { ok: false, diskConflict }
   }
@@ -240,7 +244,7 @@ async function diskConflictOnServer(
   pinned: (method: string, params: unknown) => Promise<unknown>,
   write: { worktree: string; relativePath: string; content: string },
   precondition: FileWriteDiskPrecondition
-): Promise<FileWriteDiskConflict | null> {
+): Promise<FileWriteDiskComparison> {
   let read: unknown
   try {
     read = await pinned('files.read', {

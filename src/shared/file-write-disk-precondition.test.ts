@@ -24,7 +24,8 @@ describe('disk write precondition', () => {
 
   it('accepts a changed disk that already holds exactly the text being saved', () => {
     const precondition = { expectedSignature: getDiskBaselineSignature('base') }
-    expect(compareDiskWritePrecondition(precondition, 'mine', 'mine')).toBeNull()
+    expect(compareDiskWritePrecondition(precondition, 'mine', 'mine')).toBe('identical')
+    expect(compareDiskWritePrecondition(precondition, 'base', 'base')).toBe('identical')
     expect(compareDiskWritePrecondition(precondition, 'mine\r\n', 'mine\n')).toBe('changed')
     expect(compareDiskWritePrecondition(precondition, undefined, 'mine')).toBe('changed')
     // A replacement character may stand for bytes the decode dropped, so it proves nothing.
@@ -34,6 +35,10 @@ describe('disk write precondition', () => {
   it('treats anything but an explicit refusal from a host as a completed write', () => {
     expect(parseFileWriteResult(undefined)).toEqual({ ok: true })
     expect(parseFileWriteResult({ ok: true })).toEqual({ ok: true })
+    expect(parseFileWriteResult({ ok: true, unchanged: true })).toEqual({
+      ok: true,
+      unchanged: true
+    })
     expect(parseFileWriteResult({ ok: false, diskConflict: 'missing' })).toEqual({
       ok: false,
       diskConflict: 'missing'

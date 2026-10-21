@@ -272,7 +272,7 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
   })
 
   it('saves on a server too old to check the disk when its changed disk already holds the text', async () => {
-    const { desktop, call } = await desktopOnServer('local', PRE_DISK_CHECK_SERVER)
+    const { desktop, call, serverCalls } = await desktopOnServer('local', PRE_DISK_CHECK_SERVER)
     const forward = call.getMockImplementation()!
     call.mockImplementation(async (environmentId, method, params, ...rest) => {
       if (method === 'status.get') {
@@ -289,6 +289,7 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
         '# Phone\n'
       )
     ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+    expect(serverCalls).toEqual(['files.read', 'status.get', 'files.read'])
   })
 
   it('refuses a save whose server was re-paired after its first read, writing nothing', async () => {

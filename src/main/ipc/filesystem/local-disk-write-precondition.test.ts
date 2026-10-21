@@ -1,4 +1,14 @@
-import { link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,14 +61,14 @@ vi.mock('node:fs/promises', async (importOriginal) => {
       return zeroInodes.enabled ? Object.assign(stats, { ino: 0n }) : stats
     },
     // Why: holds one save between its passed check and its write, where a competing save must wait.
-    writeFile: async (...args: Parameters<typeof actual.writeFile>) => {
+    writeFile: vi.fn(async (...args: Parameters<typeof actual.writeFile>) => {
       const gate = typeof args[1] === 'string' ? writeGates.get(args[1]) : undefined
       if (gate) {
         gate.entered()
         await gate.release
       }
       return actual.writeFile(...args)
-    }
+    })
   }
 })
 vi.mock('./local-regular-file-read', async (importOriginal) => {
@@ -188,7 +198,9 @@ describe('a changed disk that already holds the save', () => {
     const filePath = join(base, 'a.ts')
     await writeFile(filePath, content)
 
-    await expect(checkLocalDiskWritePrecondition(filePath, baseline, content)).resolves.toBeNull()
+    await expect(checkLocalDiskWritePrecondition(filePath, baseline, content)).resolves.toBe(
+      'identical'
+    )
   })
 
   it('compares bytes, so a BOM or a line-ending difference still refuses', async () => {
@@ -257,7 +269,40 @@ describe('local provider guarded write', () => {
       provider().writeFileWithDiskPrecondition(filePath, 'edited', {
         expectedSignature: getDiskBaselineSignature('original')
       })
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ ok: true, unchanged: true })
+  })
+
+  it.each(['original', 'edited'])(
+    'does not write identical bytes against baseline %s',
+    async (baseline) => {
+      const filePath = join(base, 'identical.ts')
+      await writeFile(filePath, 'edited')
+      vi.mocked(writeFile).mockClear()
+
+      await expect(
+        provider().writeFileWithDiskPrecondition(filePath, 'edited', {
+          expectedSignature: getDiskBaselineSignature(baseline)
+        })
+      ).resolves.toEqual({ ok: true, unchanged: true })
+      expect(writeFile).not.toHaveBeenCalled()
+    }
+  )
+
+  it('accepts identical content on a read-only file without opening it for write', async () => {
+    const filePath = join(base, 'read-only.ts')
+    await writeFile(filePath, 'edited')
+    await chmod(filePath, 0o444)
+    vi.mocked(writeFile).mockClear()
+    try {
+      await expect(
+        provider().writeFileWithDiskPrecondition(filePath, 'edited', {
+          expectedSignature: getDiskBaselineSignature('original')
+        })
+      ).resolves.toEqual({ ok: true, unchanged: true })
+      expect(writeFile).not.toHaveBeenCalled()
+    } finally {
+      await chmod(filePath, 0o644)
+    }
   })
 
   it('lets only one of two concurrent saves from the same baseline write', async () => {

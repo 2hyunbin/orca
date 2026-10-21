@@ -8,7 +8,8 @@ import {
 import {
   compareDiskWritePrecondition,
   FILE_WRITE_OK,
-  type FileWriteDiskConflict,
+  FILE_WRITE_UNCHANGED,
+  type FileWriteDiskComparison,
   type FileWriteDiskPrecondition,
   type FileWriteResult
 } from '../../../shared/file-write-disk-precondition'
@@ -43,7 +44,7 @@ export async function checkLocalDiskWritePrecondition(
   filePath: string,
   precondition: FileWriteDiskPrecondition,
   content: string
-): Promise<FileWriteDiskConflict | null> {
+): Promise<FileWriteDiskComparison> {
   let opened: Awaited<ReturnType<typeof openLocalRegularFile>>
   try {
     opened = await openLocalRegularFile(filePath)
@@ -78,9 +79,8 @@ export async function checkLocalDiskWritePrecondition(
       }
       throw error
     }
-    // Why: disk already holds the exact bytes this save writes.
     if (buffer.equals(written)) {
-      return null
+      return 'identical'
     }
     return baselineFits && (await diskSignatureOfUtf8(buffer)) === precondition.expectedSignature
       ? null
@@ -166,6 +166,9 @@ export async function writeLocalTextFileWithDiskPrecondition(
   }
   const compareAndWrite = async (): Promise<FileWriteResult> => {
     const diskConflict = await checkLocalDiskWritePrecondition(filePath, precondition, content)
+    if (diskConflict === 'identical') {
+      return FILE_WRITE_UNCHANGED
+    }
     if (diskConflict) {
       return { ok: false, diskConflict }
     }
