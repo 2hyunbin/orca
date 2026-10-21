@@ -120,7 +120,7 @@ export function acpHistoryTurns(
   frames: readonly AcpLoadHistoryFrame[],
   identity: AcpHistoryTurnIdentity
 ): AcpHistoryTurn[] {
-  const turns: AcpHistoryTurn[] = []
+  const turns: (AcpHistoryTurn & { userKey: string | number | undefined })[] = []
   let current: (AcpHistoryTurn & { userKey: string | number | undefined }) | null = null
   const nameTurn = (turn: AcpHistoryTurn, id: string | undefined) => {
     if (id === undefined || id === turn.turn) {

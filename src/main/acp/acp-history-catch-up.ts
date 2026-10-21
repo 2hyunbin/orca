@@ -150,6 +150,7 @@ async function planAcpHistoryImport(
   const usable = usableJournalHistoryOrigin(origin)
   const handle = usable?.providerHandle
   const importedAt =
+    usable &&
     handle?.kind === 'opaque' &&
     handle.agent === input.agent &&
     handle.value === input.providerSessionId

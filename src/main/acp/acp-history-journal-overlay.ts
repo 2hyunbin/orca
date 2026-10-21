@@ -15,7 +15,8 @@ import {
 import type { ProviderTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
 
-type StagedItem = { item: AgentJournalRenderItem; mutation: JournalLifecycleMutationInput }
+type ItemMutation = Extract<JournalLifecycleMutationInput, { kind: 'item' }>
+type StagedItem = { item: AgentJournalRenderItem; mutation: ItemMutation }
 
 export class AcpHistoryJournalOverlay {
   private readonly staged = new Map<string, StagedItem>()
