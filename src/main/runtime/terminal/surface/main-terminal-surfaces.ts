@@ -11,7 +11,9 @@ import type { RuntimeStore } from '../../runtime-store-contract'
 import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 import {
   composeMainTerminalSurfaces,
+  terminalHoldsPane,
   TerminalSurfaceIndex,
+  type BoundTerminal,
   type MainTerminalSurfaces
 } from './terminal-surface-index'
 
@@ -20,8 +22,8 @@ export type MainTerminalSurfacesHost = {
   /** Main's one layout projection. */
   reads: () => WorkspaceLayoutReads
   homeHostId: (key: string) => ExecutionHostId | null
-  /** Whether the PTY registry holds the terminal. */
-  registered: (ptyId: string) => boolean
+  /** The PTY registry's terminal of that id, or null. */
+  registered: (ptyId: string) => BoundTerminal | null
   /** Whether the host certified the terminal exited (not merely disconnected or unverifiable). */
   exited: (ptyId: string) => boolean
   /** Main's start status of a pane, as the layout stream publishes it. */
@@ -77,7 +79,13 @@ class MainSurfacePublisher {
 
   /** The pane main's layout binds a terminal to, read fresh; null when no pane main owns holds it. */
   findPaneForPty(ptyId: string): { worktreeId: string; tabId: string; leafId: string } | null {
-    const pane = this.index.surfaces().leaves.find((leaf) => leaf.ptyId === ptyId)
+    const surfaces = this.index.surfaces()
+    const terminal = this.host.registered(ptyId)
+    const pane = surfaces.leaves.find(
+      (leaf) =>
+        leaf.ptyId === ptyId &&
+        terminalHoldsPane(terminal, leaf, surfaces.paneFacts.get(`${leaf.tabId}::${leaf.leafId}`))
+    )
     return pane ? { worktreeId: pane.worktreeId, tabId: pane.tabId, leafId: pane.leafId } : null
   }
 

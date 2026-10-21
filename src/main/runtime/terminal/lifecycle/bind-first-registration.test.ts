@@ -18,14 +18,15 @@ const { bindingOf, PaneStartStatuses } = await import('../../pane-start-statuses
 type SpawnArgs = { worktreeId?: string; tabId?: string; leafId?: string }
 
 function createOn(bindsFirst: boolean) {
-  const { runtime, bindPane } = surfaceRuntime()
+  const { runtime, bindPane, store } = surfaceRuntime()
   runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
+  // The terminal main's layout binds the registering pane to, read as registration starts.
   const answeredAtRegistration: (string | null)[] = []
   const register = runtime.registerPty.bind(runtime)
   runtime.registerPty = (ptyId, worktreeId, connectionId, binding) => {
     if (binding) {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ptysById is the runtime's PTY registry; the pane is asked before the record exists, as main's layout answers by id.
-      answeredAtRegistration.push(runtime['paneOfPty']({ ptyId } as never).paneKey)
+      const layout = store.getSession().terminalLayoutsByTabId[binding.tabId]
+      answeredAtRegistration.push(layout?.ptyIdsByLeafId?.[binding.leafId] ?? null)
     }
     return register(ptyId, worktreeId, connectionId, binding)
   }
@@ -68,7 +69,7 @@ describe('bind-first registration (switch on)', () => {
     const created = await createFromPhone(runtime)
 
     expect(answeredAtRegistration.length).toBeGreaterThan(0)
-    expect(answeredAtRegistration.every((paneKey) => paneKey !== null)).toBe(true)
+    expect(answeredAtRegistration).toEqual(answeredAtRegistration.map(() => 'pty-new'))
     expect(created.tab).toMatchObject({ status: 'ready' })
   })
 

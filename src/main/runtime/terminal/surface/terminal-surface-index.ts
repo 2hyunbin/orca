@@ -20,6 +20,7 @@ import type {
 } from '../../../../shared/workspace-layout/workspace-layout-model'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
 import { bindingOf } from '../../pane-start-statuses'
+import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 import {
   projectSessionTabs,
   type ProjectedSessionTabs
@@ -29,6 +30,11 @@ import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 
 type LoadedPartition = Pick<LoadedWorkspaceLayout, 'layout' | 'desktopView' | 'facts'>
 
+export type MainPaneFacts = { binding: string; sleeping: boolean; incarnationId?: string }
+
+/** The terminal a pane's binding names: same workspace, and the stamped incarnation if any. */
+export type BoundTerminal = { worktreeId: string; incarnationId: string | null }
+
 /** Main's terminal surfaces, in the window graph's shape so the graph's readers take them as is. */
 export type MainTerminalSurfaces = {
   tabs: RuntimeSyncedTab[]
@@ -36,8 +42,9 @@ export type MainTerminalSurfaces = {
   leaves: RuntimeSyncedLeaf[]
   /** Every workspace main answers for, a workspace with no terminal tab included. */
   worktreeIds: ReadonlySet<string>
-  /** By `tabId::leafId`: the pane's binding as published (bindingOf) and its sleeping record. */
-  paneFacts: ReadonlyMap<string, { binding: string; sleeping: boolean }>
+  /** By `tabId::leafId`: the pane's binding as published (bindingOf), its sleeping record, and
+   *  the incarnation its binding was stamped with, when it was. */
+  paneFacts: ReadonlyMap<string, MainPaneFacts>
 }
 
 export class TerminalSurfaceIndex {
@@ -142,7 +149,7 @@ export class TerminalSurfaceIndex {
   ): MainTerminalSurfaces {
     const partitions: LoadedPartition[] = []
     const worktreeIds = new Set<string>()
-    const paneFacts = new Map<string, { binding: string; sleeping: boolean }>()
+    const paneFacts = new Map<string, MainPaneFacts>()
     const held = { tabIds: new Set<string>(), ptyIds: new Set<string>() }
     const index = (partition: LoadedPartition, workspaces: Record<string, WorkspaceLayout>) => {
       for (const workspace of Object.values(workspaces)) {
@@ -159,7 +166,8 @@ export class TerminalSurfaceIndex {
             }
             paneFacts.set(`${tab.entityId}::${leafId}`, {
               binding: bindingOf(leaf),
-              sleeping: leaf.sleeping !== undefined
+              sleeping: leaf.sleeping !== undefined,
+              ...(leaf.incarnationId ? { incarnationId: leaf.incarnationId } : {})
             })
           }
         }
@@ -254,8 +262,8 @@ export class TerminalSurfaceIndex {
 export function composeMainTerminalSurfaces(
   graph: RuntimeSyncWindowGraph,
   main: MainTerminalSurfaces,
-  /** Whether the PTY registry holds the terminal: a saved binding alone is not a live one. */
-  registered: (ptyId: string) => boolean
+  /** The registered terminal of that id: a saved binding alone is not a live one. */
+  registered: (ptyId: string) => BoundTerminal | null
 ): RuntimeSyncWindowGraph {
   const mounted = new Map(
     (graph.mountedLeaves ?? []).map((leaf) => [`${leaf.tabId}::${leaf.leafId}`, leaf])
@@ -268,7 +276,14 @@ export function composeMainTerminalSurfaces(
     leaves: [
       ...graph.leaves.filter(notMain),
       ...main.leaves.map((bound) => {
-        const leaf = bound.ptyId && !registered(bound.ptyId) ? { ...bound, ptyId: null } : bound
+        const holds =
+          bound.ptyId !== null &&
+          terminalHoldsPane(
+            registered(bound.ptyId),
+            bound,
+            main.paneFacts.get(`${bound.tabId}::${bound.leafId}`)
+          )
+        const leaf = bound.ptyId && !holds ? { ...bound, ptyId: null } : bound
         const shown = mounted.get(`${leaf.tabId}::${leaf.leafId}`)
         if (!shown) {
           return { ...leaf, parked: true }
@@ -297,5 +312,22 @@ function spilledTerminalTab(
       const ptyId = workspace.leaves?.[leafId]?.ptyId
       return ptyId !== undefined && held.ptyIds.has(ptyId)
     })
+  )
+}
+
+/**
+ * Whether a registered terminal is the one a pane's binding names. Ids alone can collide (a local
+ * id reused after a restart, or a record made before its adoption registers), so the workspace
+ * must match, and the incarnation too when the binding was stamped with one.
+ */
+export function terminalHoldsPane(
+  terminal: BoundTerminal | null,
+  pane: { worktreeId: string },
+  facts: Pick<MainPaneFacts, 'incarnationId'> | undefined
+): boolean {
+  return (
+    terminal !== null &&
+    worktreeIdsEqual(terminal.worktreeId, pane.worktreeId) &&
+    (facts?.incarnationId === undefined || terminal.incarnationId === facts.incarnationId)
   )
 }
