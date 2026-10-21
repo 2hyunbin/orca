@@ -20,7 +20,6 @@ import type { OrchestrationMailboxPointerSubmitTarget } from '../mailbox-pointer
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../../terminal/surface/main-terminal-surfaces'
 import { mainPaneVerdict } from '../../terminal/surface/main-pane-verdict'
-import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithWriteOrchestrationPointerPty extends OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness {
   protected abstract issueHandle(leaf: RuntimeLeafRecord): string
@@ -52,7 +51,7 @@ export abstract class OrcaRuntimeWithWriteOrchestrationPointerPty extends OrcaRu
       return null
     }
     const pty = this.ptysById.get(ptyId)
-    const pane = pty?.connected ? paneOfPty(this, pty) : null
+    const pane = pty?.connected ? this.paneOfPty(pty) : null
     const leaf = parked
       ? pty?.connected &&
         pane?.tabId === stagedLeaf.tabId &&

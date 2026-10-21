@@ -13,7 +13,6 @@ import type {
   RuntimePtyTabCloseAuthority,
   RuntimePtyWorktreeRecord
 } from '../../runtime-terminal-state-records'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal {
   protected abstract resolveTerminalSplitSourceAuthority(
@@ -206,7 +205,7 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
       // Why: the renderer's ready publication already landed with the intended mode; only a pending shell needs the main-side rescue.
       return existing
     }
-    const leafId = pty ? parsePaneKey(paneOfPty(this, pty).paneKey ?? '')?.leafId : undefined
+    const leafId = pty ? parsePaneKey(this.paneOfPty(pty).paneKey ?? '')?.leafId : undefined
     if (!pty || !leafId) {
       return existing
     }

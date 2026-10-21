@@ -9,7 +9,6 @@ import {
   normalizeTerminalTitle
 } from '../../../../shared/agent-detection'
 import { shouldModelAnswerHiddenPtyQueries } from '../../terminal-model-query-authority'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
   protected abstract getOrCreateHeadlessTerminal(ptyId: string): RuntimeHeadlessTerminal
@@ -203,7 +202,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
               () => {
                 const paneKey =
                   this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
-                  paneOfPty(this, pty).paneKey
+                  this.paneOfPty(pty).paneKey
                 return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
               },
               outputObservedAt

@@ -14,6 +14,7 @@ import type { PtyProviderBufferSnapshot } from '../../../providers/pty-provider-
 import type { createAgentStatusOscProcessor } from '../../../../shared/agent-status-osc'
 import { RuntimeTerminalViewSubscribers } from '../../runtime-terminal-view-subscribers'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { paneOfPty, type PtyPane, type PtyPaneSource } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWithStopRequestedPtyIds {
   protected abstract notifyRemoteTerminalViewPresenceChanged(ptyId: string): void
@@ -37,6 +38,11 @@ export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWit
   protected readonly mobileNotifications = new RuntimeMobileNotificationController()
 
   protected ptysById = new Map<string, RuntimePtyWorktreeRecord>()
+
+  /** The tab and pane that hold a terminal: the one reader of a record's pane copies (L80). */
+  protected paneOfPty(pty: PtyPaneSource | null | undefined): PtyPane {
+    return paneOfPty(this, pty)
+  }
 
   protected readonly pairedRendererSessionOwnedPtyIds = new Set<string>()
 

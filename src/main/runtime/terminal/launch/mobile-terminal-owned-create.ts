@@ -24,7 +24,6 @@ import {
   buildMaterializedHeadlessParentLayout,
   getHeadlessMobileSessionGroupId
 } from '../../mobile-session-layout-projection'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 const OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS = 15 * 60_000
 
@@ -203,7 +202,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         terminalHandle: terminal.handle
       })
     }
-    const recorded = paneOfPty(this, livePty.pty)
+    const recorded = this.paneOfPty(livePty.pty)
     const parentTabId = recorded.tabId ?? `pty:${livePty.pty.ptyId}`
     const leafId = parsePaneKey(recorded.paneKey ?? '')?.leafId ?? randomUUID()
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)

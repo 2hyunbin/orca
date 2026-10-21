@@ -19,7 +19,6 @@ import { adoptRuntimeTerminalOrphansFromInventory } from '../../runtime-terminal
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { getLatestPtyTitle } from '../../runtime-worktree-status-projection'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends OrcaRuntimeWithSubscribeToTerminalResize {
   protected abstract issueHandle(leaf: RuntimeLeafRecord): string
@@ -75,7 +74,7 @@ export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends O
       ports: {
         readSession,
         getPty: (handle) => this.getLivePtyForHandle(handle)?.pty ?? null,
-        paneOf: (pty) => paneOfPty(this, pty),
+        paneOf: (pty) => this.paneOfPty(pty),
         getLeaves: (ptyId) => this.getLeavesForPty(ptyId),
         getLeaf: (tabId, leafId) => this.leaves.get(this.getLeafKey(tabId, leafId)),
         getDisplayTitle: (pty) => getLatestPtyTitle(this.getPtyDisplayRecord(pty)),
@@ -235,7 +234,7 @@ export abstract class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends O
     }
     const runtimePty = this.getLivePtyForHandle(handle)
     if (runtimePty) {
-      return runtimePty.pty.connected ? paneOfPty(this, runtimePty.pty).paneKey : null
+      return runtimePty.pty.connected ? this.paneOfPty(runtimePty.pty).paneKey : null
     }
     try {
       const leaf = this.resolveLiveLeafForHandle(handle)

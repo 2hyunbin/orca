@@ -17,7 +17,6 @@ import { ActiveGroupViewFacts } from '../view-facts/active-group-view-facts'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
-import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifySshStateChanged {
   /** The group each workspace shows, as the attached window last reported it (syncWindowGraph). */
@@ -165,7 +164,7 @@ export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifyS
       }
     >()
     for (const pty of this.ptysById.values()) {
-      const tabId = pty.connected ? paneOfPty(this, pty).tabId : null
+      const tabId = pty.connected ? this.paneOfPty(pty).tabId : null
       if (!pty.connected || !tabId) {
         continue
       }

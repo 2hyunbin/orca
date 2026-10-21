@@ -33,7 +33,6 @@ import { resolveStructuredWorkerAuthority } from '../../structured-worker-author
 import { isStructuredWorkerHandle } from '../../../../shared/structured-worker-handle'
 import { parseOrcaSessionAddress } from '../../../../shared/orca-session-address'
 import { matchesProcessIncarnation } from '../../orchestration/worker-terminal-process-liveness'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller {
   protected abstract getExistingTerminalHandlesForPtyId(ptyId: string): string[]
@@ -47,8 +46,7 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
   /** Every pane key this PTY could be addressed by, including restored receipts. */
   protected collectPaneKeysForPty(ptyId: string): Set<string> {
     const paneKeys = new Set<string>()
-    const pty = this.ptysById.get(ptyId)
-    const ptyPaneKey = pty ? paneOfPty(this, pty).paneKey : null
+    const ptyPaneKey = this.paneOfPty(this.ptysById.get(ptyId)).paneKey
     if (ptyPaneKey && parsePaneKey(ptyPaneKey)) {
       paneKeys.add(ptyPaneKey)
     }
@@ -75,8 +73,7 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
         paneKeys.add(row.paneKey)
       }
     }
-    const pty = this.ptysById.get(ptyId)
-    const ptyPaneKey = pty ? paneOfPty(this, pty).paneKey : null
+    const ptyPaneKey = this.paneOfPty(this.ptysById.get(ptyId)).paneKey
     if (ptyPaneKey && parseLegacyNumericPaneKey(ptyPaneKey)) {
       paneKeys.add(ptyPaneKey)
     }
@@ -138,7 +135,7 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
       ptyId,
       worktreeId: pty.worktreeId,
       processIncarnation: this.getTerminalProcessIncarnation(terminalHandle),
-      paneKey: paneOfPty(this, pty).paneKey,
+      paneKey: this.paneOfPty(pty).paneKey,
       launchTokenHash: pty.launchToken
         ? createHash('sha256').update(pty.launchToken).digest('hex')
         : null,

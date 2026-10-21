@@ -10,7 +10,6 @@ import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
@@ -126,7 +125,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       paneKey &&
       binding.incarnationId &&
       pty.incarnationId === binding.incarnationId &&
-      paneOfPty(this, pty).paneKey === paneKey &&
+      this.paneOfPty(pty).paneKey === paneKey &&
       pty.launchToken === null &&
       agentLaunchAuthority.launchToken.length > 0 &&
       agentLaunchAuthority.launchToken.length <= 128 &&
@@ -142,7 +141,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       paneKey &&
       binding.incarnationId === providerReattachLaunchIdentity.incarnationId &&
       pty.incarnationId === providerReattachLaunchIdentity.incarnationId &&
-      paneOfPty(this, pty).paneKey === paneKey &&
+      this.paneOfPty(pty).paneKey === paneKey &&
       isTuiAgent(providerReattachLaunchIdentity.launchAgent)
     ) {
       // Why: daemon metadata owns the surviving process; its incarnation fence restores identity without minting renderer launch authority.

@@ -9,7 +9,6 @@ import type {
   RuntimeMobileSessionTerminalTab
 } from '../../../../shared/runtime-types'
 import { SSH_PANE_RECOVERY_GRACE_MS } from '../../orca-runtime-core'
-import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding extends OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs {
   protected abstract setPairedRendererSessionOwnership(
@@ -142,7 +141,7 @@ export abstract class OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding
       )
       for (const ptyId of ptyIds) {
         const pty = this.ptysById.get(ptyId)
-        if (pty?.worktreeId === worktreeId && paneOfPty(this, pty).tabId === parentTabId) {
+        if (pty?.worktreeId === worktreeId && this.paneOfPty(pty).tabId === parentTabId) {
           pty.runtimeSessionOwned = false
           this.setPairedRendererSessionOwnership(pty.ptyId, false)
         }

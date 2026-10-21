@@ -13,7 +13,6 @@ import { mapExplicitAgentStateToRuntimeTerminalStatus } from '../../runtime-work
 import type { RuntimeTerminalAgentStatusEvent } from '../../runtime-terminal-contracts'
 import { programStatusStateOutlivesProgram } from '../../../../shared/program-status/protocol'
 import type { ParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 // Why: programs report only changes, so a long `working` renews its row inside AGENT_STATUS_STALE_AFTER_MS.
 const PROGRAM_STATUS_LEASE_RENEWAL_MS = 10 * 60 * 1000
@@ -240,7 +239,7 @@ export abstract class OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector
         connectionId
       })
     }
-    const recorded = targets.size === 0 && pty ? paneOfPty(this, pty) : null
+    const recorded = targets.size === 0 && pty ? this.paneOfPty(pty) : null
     if (pty && recorded?.paneKey) {
       targets.set(recorded.paneKey, {
         source: 'pty-record',

@@ -28,7 +28,6 @@ import {
   retitleStructuredConversationTab,
   titleStructuredConversationTabs
 } from '../../structured-conversation-tab-title'
-import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntimeWithScheduleMobileSessionTabsChanged {
   protected pruneMobileSessionTabGroupLayout(
@@ -202,7 +201,7 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
         return pty
       }
       if (options.allowWorktreeOnlyMatch === true && pty.worktreeId === worktreeId) {
-        const recorded = paneOfPty(this, pty)
+        const recorded = this.paneOfPty(pty)
         if (recorded.tabId === null && recorded.paneKey === null) {
           return pty
         }
@@ -214,7 +213,7 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
       paneKeys.add(`${tab.parentTabId}:${FIRST_PANE_ID}`)
     }
     for (const pty of this.ptysById.values()) {
-      const recorded = paneOfPty(this, pty)
+      const recorded = this.paneOfPty(pty)
       if (
         recorded.tabId === tab.parentTabId &&
         recorded.paneKey &&
@@ -249,7 +248,7 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
     if (pty.worktreeId !== worktreeId) {
       return false
     }
-    const recorded = paneOfPty(this, pty)
+    const recorded = this.paneOfPty(pty)
     return recorded.tabId === tab.parentTabId && recorded.paneKey === paneKey
   }
 

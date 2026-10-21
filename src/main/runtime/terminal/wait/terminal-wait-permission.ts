@@ -26,7 +26,6 @@ import { hasExplicitIdleTitle } from '../../tui-idle-evidence'
 import { readTuiIdleHookTurn, type TuiIdleHookTurn } from '../../tui-idle-hook-lane'
 
 import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from '../stop/worktree-terminal-stop-targets'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export type TerminalWaitPermissionInputs = ReturnType<
   OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['getTerminalWaitPermissionInputs']
@@ -190,7 +189,7 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
     }
     const handles = this.getExistingTerminalHandlesForPtyId(ptyId)
     const paneKeys = this.collectPaneKeysForPty(ptyId)
-    const ptyPaneKey = paneOfPty(this, pty).paneKey
+    const ptyPaneKey = this.paneOfPty(pty).paneKey
     if (ptyPaneKey) {
       paneKeys.add(ptyPaneKey)
     }

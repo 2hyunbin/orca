@@ -16,7 +16,6 @@ import {
   closePairedHostLeafFirst,
   isTerminalTabPinnedInSession
 } from './paired-host-terminal-close'
-import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithExplicitCloseTabPtyStops {
   protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
@@ -114,7 +113,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
         worktreeId: pty.pty.worktreeId
       }
       const ptyCloseAuthority = this.resolvePtyTabCloseSurfaceAuthority(closeAuthority)
-      const recorded = paneOfPty(this, pty.pty)
+      const recorded = this.paneOfPty(pty.pty)
       const spawnSurface = recorded.tabId
         ? this.findMobileTerminalSurface(pty.pty.worktreeId, recorded.tabId)
         : null
@@ -282,7 +281,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
       }
       const tabId =
         this.resolvePtyTabCloseSurfaceAuthority(closeAuthority)?.surface.tab.parentTabId ??
-        paneOfPty(this, pty.pty).tabId
+        this.paneOfPty(pty.pty).tabId
       if (!tabId) {
         return this.closeTerminal(handle)
       }

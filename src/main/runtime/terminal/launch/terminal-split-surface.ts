@@ -10,7 +10,6 @@ import { REJECTED_SPLIT_PTY_STOP_TIMEOUT_MS, ownerSurfacing } from '../../orca-r
 import type { Worktree } from '../../../../shared/worktree/types'
 import { spawnInAdmittedPane, withdrawRuntimePane } from '../../runtime-pane-admission'
 import { UNMEASURED_PTY_SIZE } from '../../../ipc/pty/pty-first-size'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export type TerminalSplitOptions = {
   direction?: 'horizontal' | 'vertical'
@@ -36,7 +35,7 @@ export abstract class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeW
     if (!pty.connected) {
       throw new Error('terminal_exited')
     }
-    const recorded = paneOfPty(this, pty)
+    const recorded = this.paneOfPty(pty)
     const parsedPaneKey = parsePaneKey(recorded.paneKey ?? '')
     const parentTabId = recorded.tabId?.trim()
     if (!parentTabId || !parsedPaneKey) {

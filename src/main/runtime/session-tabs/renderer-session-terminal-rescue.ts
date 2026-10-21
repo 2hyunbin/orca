@@ -4,7 +4,6 @@ import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../shared/runtime-types'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
-import { paneOfPty } from '../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals extends OrcaRuntimeWithWaitForMobileTerminalSurface {
   protected abstract resolveHandleForTab(
@@ -17,7 +16,7 @@ export abstract class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobile
   ): void {
     for (const ptyId of this.pairedRendererSessionOwnedPtyIds) {
       const pty = this.ptysById.get(ptyId)
-      const recorded = pty?.connected ? paneOfPty(this, pty) : null
+      const recorded = pty?.connected ? this.paneOfPty(pty) : null
       const tabId = recorded?.tabId
       if (
         !pty?.connected ||
@@ -84,7 +83,7 @@ export abstract class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobile
       if (pty.worktreeId !== worktreeId) {
         continue
       }
-      const recorded = paneOfPty(this, pty)
+      const recorded = this.paneOfPty(pty)
       if (
         recorded.tabId === tabId &&
         pty.connected &&
@@ -99,7 +98,7 @@ export abstract class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobile
   // Why: looser rollback guard than findLiveRegisteredPtyForRendererTab — a shell without a registered pane key is still a real terminal the timeout must not kill (#7718).
   protected hasLiveShellForRendererTab(worktreeId: string, tabId: string): boolean {
     for (const pty of this.ptysById.values()) {
-      if (pty.worktreeId === worktreeId && paneOfPty(this, pty).tabId === tabId && pty.connected) {
+      if (pty.worktreeId === worktreeId && this.paneOfPty(pty).tabId === tabId && pty.connected) {
         return true
       }
     }

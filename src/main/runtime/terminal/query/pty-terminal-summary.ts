@@ -17,7 +17,6 @@ import type { TerminalHandleRecord } from '../../runtime-terminal-contracts'
 import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export type LiveTerminalPty = ReturnType<
   OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
@@ -42,7 +41,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   ): RuntimeTerminalSummary {
     const worktree = worktreesById.get(pty.worktreeId)
 
-    const recorded = paneOfPty(this, pty)
+    const recorded = this.paneOfPty(pty)
     const pane = parsePaneKey(recorded.paneKey ?? '')
     const orphaned = !ptyHoldsRecordedSurface(pty.ptyId, recorded, this.ptySurfaceTopology())
     // A restarted host's terminal has no title yet; until it has one, its tab's saved name stands in.

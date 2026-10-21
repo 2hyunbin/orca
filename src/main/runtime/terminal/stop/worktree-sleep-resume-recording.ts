@@ -22,7 +22,6 @@ import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
-import { paneOfPty } from '../surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRuntimeWithStopTerminalsForWorktree {
   protected readonly sleepResumeRecords: WorktreeSleepResumeRecorder = {
@@ -67,7 +66,7 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
       if (
         pty.launchConfig &&
         pty.launchAgent === agent &&
-        paneOfPty(this, pty).paneKey === paneKey
+        this.paneOfPty(pty).paneKey === paneKey
       ) {
         return pty.launchConfig
       }

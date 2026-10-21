@@ -21,7 +21,6 @@ import type { WorkspaceSessionState } from '../../../../shared/workspace-session
 import type { RuntimeStore } from '../../runtime-store-contract'
 import { SSH_PANE_RECOVERY_GRACE_MS } from '../../orca-runtime-core'
 import { findTerminalTabIdForLeaf } from '../../../persistence/terminal-topology/terminal-topology-membership'
-import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession {
   protected abstract findPtyForMobileTerminalTab(
@@ -165,7 +164,7 @@ export abstract class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs e
       }
     }
     for (const pty of this.ptysById.values()) {
-      const parsed = parsePaneKey(paneOfPty(this, pty).paneKey ?? '')
+      const parsed = parsePaneKey(this.paneOfPty(pty).paneKey ?? '')
       if (parsed?.leafId === leafId) {
         return parsed.tabId
       }

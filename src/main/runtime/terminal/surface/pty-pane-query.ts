@@ -24,8 +24,11 @@ export type PtyPaneOf = (pty: PtyPaneSource) => PtyPane
 
 const NO_PANE: PtyPane = { tabId: null, paneKey: null, recordedAtGraphSequence: 0 }
 
-/** The tab and pane that hold a terminal; null fields when none does. */
-export function paneOfPty(runtime: WeakKey, pty: PtyPaneSource): PtyPane {
+/** The tab and pane that hold a terminal; null fields when none does or there is no record. */
+export function paneOfPty(runtime: WeakKey, pty: PtyPaneSource | null | undefined): PtyPane {
+  if (!pty) {
+    return NO_PANE
+  }
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
     const pane = startedMainTerminalSurfaces(runtime)?.findPaneForPty(pty.ptyId)
     if (!pane) {

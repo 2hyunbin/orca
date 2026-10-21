@@ -15,7 +15,6 @@ import {
   navigationTargetsHost,
   type RuntimeNavigationTarget
 } from '../../../../shared/runtime-navigation'
-import { paneOfPty } from '../../terminal/surface/pty-pane-query'
 
 export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRuntimeWithActivateManagedWorktree {
   abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
@@ -141,7 +140,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
 
   protected getProvisionedTerminalTab(handle: string): { worktreeId: string; tabId: string } {
     const pty = this.getLivePtyForHandle(handle)?.pty
-    const recordedTabId = pty ? paneOfPty(this, pty).tabId : null
+    const recordedTabId = this.paneOfPty(pty).tabId
     if (pty && recordedTabId) {
       return { worktreeId: pty.worktreeId, tabId: recordedTabId }
     }
