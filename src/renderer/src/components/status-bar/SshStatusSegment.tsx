@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { Loader2, MonitorSmartphone, Server, ServerOff } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -70,6 +70,7 @@ export function SshStatusSegment({
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hostQuery, setHostQuery] = useState('')
+  const hostSearchInputRef = useRef<HTMLInputElement>(null)
   const [repairTarget, setRepairTarget] = useState<{ id: string; label: string } | null>(null)
 
   const projectHostIds = useMemo(
@@ -267,6 +268,25 @@ export function SshStatusSegment({
         align="start"
         sideOffset={8}
         className="w-[min(20rem,calc(100vw-1rem))]"
+        onKeyDown={(event) => {
+          // Why: the search box is not a menu item, so arrows can't reach it; typing from the
+          // menu goes there instead of Radix typeahead.
+          const input = hostSearchInputRef.current
+          if (
+            !input ||
+            event.target === input ||
+            event.key.length !== 1 ||
+            event.key === ' ' ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.altKey
+          ) {
+            return
+          }
+          event.preventDefault()
+          setHostQuery((query) => query + event.key)
+          input.focus()
+        }}
       >
         <div className="px-2 pt-1.5 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
           {translate('auto.components.status.bar.SshStatusSegment.6e8a9a4242', 'Remote Hosts')}
@@ -303,6 +323,7 @@ export function SshStatusSegment({
         {showHostSearch ? (
           <div className="p-1">
             <Input
+              ref={hostSearchInputRef}
               value={hostQuery}
               onChange={(event) => setHostQuery(event.target.value)}
               onKeyDown={(event) => {

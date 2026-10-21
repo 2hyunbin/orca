@@ -40,7 +40,14 @@ vi.mock('@/components/ui/dropdown-menu', () => {
   const content = ({ children }: PropsWithChildren) => <div>{children}</div>
   return {
     DropdownMenu: content,
-    DropdownMenuContent: content,
+    DropdownMenuContent: ({
+      children,
+      onKeyDown
+    }: PropsWithChildren<{ onKeyDown?: React.KeyboardEventHandler<HTMLDivElement> }>) => (
+      <div data-testid="menu-content" tabIndex={-1} onKeyDown={onKeyDown}>
+        {children}
+      </div>
+    ),
     DropdownMenuItem: ({ children, onSelect }: PropsWithChildren<{ onSelect?: () => void }>) => (
       <div role="menuitem" onClick={onSelect}>
         {children}
@@ -113,6 +120,14 @@ describe('the status menu with a very large imported SSH host list', () => {
     // Live and busy hosts stay listed while searching.
     expect(screen.getByText('node-09000')).toBeTruthy()
     expect(screen.queryByText(/more SSH hosts/)).toBeNull()
+  })
+
+  it('sends letters typed in the menu to the host search', () => {
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    fireEvent.keyDown(screen.getByTestId('menu-content'), { key: 'n' })
+    const search = screen.getByRole<HTMLInputElement>('textbox', { name: 'Search SSH hosts…' })
+    expect(search.value).toBe('n')
+    expect(document.activeElement).toBe(search)
   })
 
   it('says when no idle host matches the search', () => {
