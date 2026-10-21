@@ -160,7 +160,9 @@ export function buildDetectedGitWorktrees(
   const snapshot = getWorktreeLineageCandidates(store)
   const allMeta =
     allMetaOverride ??
-    (store.getAllWorktreeMeta ? snapshot.metadataForHost(getRepoExecutionHostId(repo)) : undefined)
+    (typeof store.getAllWorktreeMeta === 'function'
+      ? snapshot.metadataForHost(getRepoExecutionHostId(repo))
+      : undefined)
   const repoOwnerCount = snapshot.reposById.get(repo.id)?.length ?? 0
   const detected = liveWorktrees.map((gitWorktree) => {
     const worktreeId = `${repo.id}::${gitWorktree.path}`
