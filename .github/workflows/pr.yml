@@ -821,7 +821,13 @@ jobs:
               echo "$package: absent"
             fi
           done
+          # Exclude runner preload while keeping the tests' own XDG vendor snippets reachable.
+          quarantine="$(mktemp -d "$RUNNER_TEMP/fish-runner-resources.XXXXXX")"
           for path in /usr/share/fish /etc/fish; do
+            if [ -e "$path" ] || [ -L "$path" ]; then
+              sudo mv -- "$path" "$quarantine/${path//\//_}"
+              echo "$path: quarantined in $quarantine"
+            fi
             if [ -e "$path" ]; then echo "$path: present"; else echo "$path: absent"; fi
           done
           printf 'fish selected: %s\n' "$(command -v fish)"
