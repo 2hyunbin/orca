@@ -20,7 +20,7 @@ import {
 import type { MobileViewState } from '../worktree/workspace-view-settings'
 import type { ProjectGroup } from '../../../src/shared/project-group-types'
 import { readServedProjectSections } from '../worktree/project-sections-operations'
-import type { HostVisit } from '../worktree/host-list-highlight'
+import type { LastVisitedWorktreeOnHost } from '../worktree/host-list-highlight'
 
 const catalog = buildSidebarFeedCatalog(SERVED_SECTIONS, [], [])
 
@@ -43,7 +43,7 @@ function sectionsFor(
     showPinnedInGroups?: boolean
     live?: ReturnType<typeof liveRow>[]
     search?: string
-    lastVisited?: HostVisit
+    lastVisited?: LastVisitedWorktreeOnHost | null
   } = {}
 ) {
   const built = buildSidebarFeedRows(
@@ -53,8 +53,7 @@ function sectionsFor(
   )
   return buildHostFeedSections({
     rows: built.sectionRows,
-    activeRowKeys: built.activeRowKeys,
-    lastVisited: 'lastVisited' in options ? options.lastVisited : null,
+    lastVisited: options.lastVisited ?? null,
     liveRows: options.live ?? [],
     repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
     search: options.search ?? ''
@@ -65,12 +64,11 @@ function sectionsFromDomains(
   domains: SidebarFeedDomains,
   view: MobileViewState,
   search = '',
-  lastVisited: HostVisit = null
+  lastVisited: LastVisitedWorktreeOnHost | null = null
 ) {
   const built = buildSidebarFeedRows(domains, catalog, phoneFeedView(view))
   return buildHostFeedSections({
     rows: built.sectionRows,
-    activeRowKeys: built.activeRowKeys,
     lastVisited,
     liveRows: [],
     repoHostIdByRepoId: new Map(),
@@ -145,7 +143,6 @@ describe('the phone list from the sidebar feed', () => {
     const built = buildSidebarFeedRows(domains, grouped, phoneFeedView(phoneView()))
     const sections = buildHostFeedSections({
       rows: built.sectionRows,
-      activeRowKeys: built.activeRowKeys,
       lastVisited: null,
       liveRows: [],
       repoHostIdByRepoId: new Map([['lab', 'ssh:gpu']]),
@@ -173,26 +170,13 @@ describe('the phone list from the sidebar feed', () => {
     expect(sections.at(-2)?.data.map((row) => row.worktreeId)).toEqual(['lab::/w/gpu'])
   })
 
-  describe('the highlight: this phone’s last-opened workspace where shown, else the desktop’s', () => {
+  describe('the highlight: only the workspace this phone last opened, where shown', () => {
     const active = (sections: ReturnType<typeof sectionsFor>) =>
       outline(sections).filter((line) => line.endsWith(' ACTIVE'))
 
-    it('shows the desktop’s selection while this phone has opened nothing on the host', () => {
-      // The fixture's desktop has the pinned parent selected.
-      const lines = active(sectionsFor(phoneView(), { lastVisited: null }))
-      expect(lines).toHaveLength(1)
-      expect(lines[0]).toContain('orca::/w/parent')
-    })
-
-    it('shows nothing while the phone’s stored visit is still being read', () => {
-      expect(active(sectionsFor(phoneView(), { lastVisited: undefined }))).toEqual([])
-    })
-
-    it('drops the desktop’s selection while this phone’s own row is shown', () => {
-      const lines = active(
-        sectionsFor(phoneView(), { lastVisited: { worktreeId: 'orca::/w/child' } })
-      )
-      expect(lines.some((line) => line.includes('orca::/w/parent'))).toBe(false)
+    it('highlights nothing while this phone has opened nothing on the host', () => {
+      // The fixture's desktop has the pinned parent selected; the phone never shows it.
+      expect(active(sectionsFor(phoneView(), { lastVisited: null }))).toEqual([])
     })
 
     it('highlights the listed row this phone opened, and only it', () => {
@@ -211,29 +195,26 @@ describe('the phone list from the sidebar feed', () => {
 
     it('never matches a desktop row for a visit on a server of the same id', () => {
       const lastVisited = { worktreeId: 'orca::/w/child', executionHost: 'runtime:env-1' as const }
-      const lines = active(sectionsFor(phoneView(), { lastVisited }))
-      expect(lines.some((line) => line.includes('orca::/w/child'))).toBe(false)
+      expect(active(sectionsFor(phoneView(), { lastVisited }))).toEqual([])
     })
 
-    it('falls back to the desktop’s selection while the row is not shown, and back once it is', () => {
-      const lastVisited = { worktreeId: 'orca::/w/child' }
-      const hidden = active(sectionsFor(phoneView(), { lastVisited, search: 'parent' }))
-      expect(hidden).toHaveLength(1)
-      expect(hidden[0]).toContain('orca::/w/parent')
-      const shown = active(sectionsFor(phoneView(), { lastVisited }))
-      expect(shown).toHaveLength(1)
-      expect(shown[0]).toContain('orca::/w/child')
+    it('highlights nothing while the row is searched away or folded, and the row once it is back', () => {
+      const lastVisited = { worktreeId: 'lab::/w/gpu' }
+      expect(active(sectionsFor(phoneView(), { lastVisited, search: 'parent' }))).toEqual([])
+      const lab = sectionsFor(phoneView()).find((section) => section.title === 'lab')!
+      const folded = sectionsFor(phoneView({ collapsedGroups: [lab.key] }), { lastVisited })
+      expect(active(folded)).toEqual([])
+      expect(active(sectionsFor(phoneView(), { lastVisited }))).toHaveLength(1)
     })
 
-    it('falls back to the desktop’s selection once the row is deleted', () => {
+    it('highlights nothing once the row is deleted', () => {
       const workspaces = new Map(feedDomains().workspaces)
       workspaces.delete('|orca::/w/child')
       const domains = feedDomains({ workspaces })
-      const lines = active(
-        sectionsFromDomains(domains, phoneView(), '', { worktreeId: 'orca::/w/child' })
-      )
-      expect(lines).toHaveLength(1)
-      expect(lines[0]).toContain('orca::/w/parent')
+      const sections = sectionsFromDomains(domains, phoneView(), '', {
+        worktreeId: 'orca::/w/child'
+      })
+      expect(active(sections)).toEqual([])
     })
 
     it('highlights every occurrence when pinned rows also show in their groups', () => {
@@ -291,7 +272,6 @@ describe('the phone list from the sidebar feed', () => {
       )
       const sections = buildHostFeedSections({
         rows: built.sectionRows,
-        activeRowKeys: built.activeRowKeys,
         lastVisited: null,
         liveRows: [],
         repoHostIdByRepoId: new Map(),
@@ -363,7 +343,6 @@ describe('the phone list from the sidebar feed', () => {
     })
     const sections = buildHostFeedSections({
       rows: built.sectionRows,
-      activeRowKeys: built.activeRowKeys,
       lastVisited: null,
       liveRows: [stale],
       repoHostIdByRepoId: new Map(),
@@ -457,7 +436,11 @@ describe('the phone list before the first feed read', () => {
     liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' }),
     liveRow({ worktreeId: 'orca::/w/old', displayName: 'old', isArchived: true })
   ]
-  const preFeedVisiting = (search: string, rows: typeof cached, lastVisited: HostVisit) =>
+  const preFeedVisiting = (
+    search: string,
+    rows: typeof cached,
+    lastVisited: LastVisitedWorktreeOnHost | null
+  ) =>
     buildPreFeedSections({
       rows,
       view: phoneView(),
@@ -468,19 +451,24 @@ describe('the phone list before the first feed read', () => {
   const preFeed = (search: string, rows = cached) => preFeedVisiting(search, rows, null)
 
   it('shows the rows the page last listed, in their order under no header, filtered as the view is', () => {
-    expect(preFeed('')).toEqual([{ key: 'all', title: '', data: cached.slice(0, 2) }])
+    expect(preFeed('')).toEqual([
+      {
+        key: 'all',
+        title: '',
+        data: cached.slice(0, 2).map((row) => ({ ...row, isActive: false }))
+      }
+    ])
   })
 
-  it('highlights the row this phone opened, else the one the desktop marked active', () => {
+  it('highlights the row this phone opened, never the one the desktop marked active', () => {
     const rows = [{ ...cached[0]!, isActive: true }, cached[1]!]
-    const highlighted = (lastVisited: HostVisit) =>
+    const highlighted = (lastVisited: LastVisitedWorktreeOnHost | null) =>
       preFeedVisiting('', rows, lastVisited)[0]
         ?.data.filter((row) => row.isActive)
         .map((row) => row.worktreeId)
-    expect(highlighted(undefined)).toEqual([])
-    expect(highlighted(null)).toEqual(['orca::/w/b'])
+    expect(highlighted(null)).toEqual([])
     expect(highlighted({ worktreeId: 'orca::/w/a' })).toEqual(['orca::/w/a'])
-    expect(highlighted({ worktreeId: 'orca::/w/gone' })).toEqual(['orca::/w/b'])
+    expect(highlighted({ worktreeId: 'orca::/w/gone' })).toEqual([])
   })
 
   it('narrows them by search, and draws nothing with none', () => {

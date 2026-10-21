@@ -4,20 +4,24 @@ import type { SectionList, SectionListData } from 'react-native'
 type WithId = { worktreeId: string; isActive?: boolean }
 
 // Scrolls the highlighted (isActive) worktree into view when the highlight
-// changes. Fires only on a *change* of active id (not every re-render) so it
-// never yanks the list while the user scrolls or searches. Returns the ref to
-// attach to the SectionList and the onScrollToIndexFailed handler it needs for
-// rows that aren't measured yet (variable heights from the inline agent list).
+// moves to a different workspace. A highlight a search or fold hides and then
+// shows again is the same workspace, so it never yanks the list. Returns the
+// ref to attach to the SectionList and the onScrollToIndexFailed handler it
+// needs for rows that aren't measured yet (variable heights from the inline
+// agent list).
 export function useActiveWorktreeScroll<T extends WithId, S>(
   sections: readonly (SectionListData<T, S> & { data: readonly T[] })[],
-  /** A search in progress: a highlight it moves (the desktop's row standing in) is not followed. */
-  searching = false
+  /** The folded sections: a highlight an unfold first reveals is not scrolled to either. */
+  collapsedGroups?: ReadonlySet<string>
 ): {
   sectionListRef: React.RefObject<SectionList<T, S> | null>
   onScrollToIndexFailed: (info: { averageItemLength: number }) => void
 } {
   const sectionListRef = useRef<SectionList<T, S>>(null)
   const lastScrolledActiveIdRef = useRef<string | null>(null)
+  // The last workspace highlighted, scrolled to or not: a hidden row coming back is no change.
+  const seenActiveIdRef = useRef<string | null>(null)
+  const collapsedGroupsRef = useRef(collapsedGroups)
 
   const activeWorktreeId = useMemo(() => {
     for (const section of sections) {
@@ -54,13 +58,16 @@ export function useActiveWorktreeScroll<T extends WithId, S>(
   )
 
   useEffect(() => {
-    if (searching || !activeWorktreeId || activeWorktreeId === lastScrolledActiveIdRef.current) {
+    const folded = collapsedGroupsRef.current !== collapsedGroups
+    collapsedGroupsRef.current = collapsedGroups
+    if (!activeWorktreeId || activeWorktreeId === seenActiveIdRef.current) {
       return
     }
-    if (scrollToWorktree(activeWorktreeId)) {
+    seenActiveIdRef.current = activeWorktreeId
+    if (!folded && scrollToWorktree(activeWorktreeId)) {
       lastScrolledActiveIdRef.current = activeWorktreeId
     }
-  }, [searching, activeWorktreeId, scrollToWorktree])
+  }, [collapsedGroups, activeWorktreeId, scrollToWorktree])
 
   const onScrollToIndexFailed = useCallback(
     (info: { averageItemLength: number }) => {
