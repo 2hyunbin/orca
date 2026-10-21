@@ -7,7 +7,7 @@ import {
   type EditorSaveFileDetail,
   type EditorSaveQuiesceDetail
 } from './editor-autosave'
-import { editorSaveKeyOfFile, pathMutationSaveKeys } from './editor-autosave-holds'
+import { editorFileHoldKey, pathMutationHoldKeys } from './editor-autosave-holds'
 import type { OpenFile } from '@/store/slices/editor'
 import { flushPendingEditorBuffer } from './editor-pending-flush'
 import {
@@ -124,19 +124,29 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
     }
     detail.claim()
 
-    const state = store.getState()
-    let matchingFiles: OpenFile[]
-    if ('fileId' in detail) {
-      matchingFiles = state.openFiles.filter((file) => file.id === detail.fileId)
-    } else {
-      // Why: a git discard rewrites the file under every workspace showing it, and the guarded
-      // write's compare fallback (older hosts) can't refuse a save that read disk just before git.
-      const keys = pathMutationSaveKeys(state, detail)
-      detail.onHold?.(holdAutoSave(keys))
-      matchingFiles = state.openFiles.filter((file) => keys.has(editorSaveKeyOfFile(state, file)))
+    let release: (() => void) | undefined
+    try {
+      const state = store.getState()
+      let matchingFiles: OpenFile[]
+      if ('fileId' in detail) {
+        matchingFiles = state.openFiles.filter((file) => file.id === detail.fileId)
+      } else {
+        // Why: a git discard rewrites the file under every workspace showing it, and the guarded
+        // write's compare fallback (older hosts) can't refuse a save that read disk just before git.
+        const keys = pathMutationHoldKeys(state, detail)
+        release = holdAutoSave(keys)
+        matchingFiles = state.openFiles.filter((file) => keys.has(editorFileHoldKey(state, file)))
+      }
+      await Promise.all(matchingFiles.map((file) => quiesceFileSave(file.id)))
+    } catch (error) {
+      // Why: a failed quiesce (e.g. an unresolved CSV cell) must stop the discard, not strand its hold.
+      release?.()
+      detail.reject?.(error instanceof Error ? error.message : String(error))
+      return
     }
-
-    await Promise.all(matchingFiles.map((file) => quiesceFileSave(file.id)))
+    if (release) {
+      detail.onHold?.(release)
+    }
     detail.resolve()
   }
 

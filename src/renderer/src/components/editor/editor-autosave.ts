@@ -41,6 +41,7 @@ export type EditorSaveQuiesceTarget = { fileId: string } | EditorPathMutationTar
 export type EditorSaveQuiesceDetail = EditorSaveQuiesceTarget & {
   claim: () => void
   resolve: () => void
+  reject?: (message: string) => void
   /** A path quiesce holds autosave of that file in every workspace until this release runs. */
   onHold?: (release: () => void) => void
 }
@@ -179,7 +180,7 @@ export async function requestEditorSaveQuiesce(
   target: EditorSaveQuiesceTarget
 ): Promise<() => void> {
   let release = (): void => {}
-  await new Promise<void>((resolve) => {
+  await new Promise<void>((resolve, reject) => {
     let claimed = false
     window.dispatchEvent(
       new CustomEvent<EditorSaveQuiesceDetail>(ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT, {
@@ -189,6 +190,7 @@ export async function requestEditorSaveQuiesce(
             claimed = true
           },
           resolve,
+          reject: (message) => reject(new Error(message)),
           onHold: (hold) => {
             release = hold
           }

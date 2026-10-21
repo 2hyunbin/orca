@@ -9,6 +9,7 @@ import {
   stubEditorWindowWithDisk,
   withLoadedBaselines
 } from './editor-autosave-controller-test-fixture'
+import { registerPendingEditorFlush } from './editor-pending-flush'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 
 const DISCARD_TARGET = { worktreeId: 'wt-1', worktreePath: '/repo', relativePath: 'a.ts' }
@@ -156,9 +157,10 @@ it('a discard slower than the backstop: banner, and no autosave from any tab unt
       'changed',
       'changed'
     ])
-    // Even a tab whose banner was dismissed stays held while git's outcome is unknown.
+    // Even a tab whose banner was dismissed stays held, and its banner comes back to say why.
     store.getState().setExternalMutation(ids[1], null)
     edit(ids[1], 'typed while git is still running')
+    expect(store.getState().openFiles[1].externalMutation).toBe('changed')
     await vi.advanceTimersByTimeAsync(60_000)
     expect(writes()).toBe(0)
     disk.files.set('/repo/a.ts', 'HEAD')
@@ -166,6 +168,48 @@ it('a discard slower than the backstop: banner, and no autosave from any tab unt
     release()
     await vi.advanceTimersByTimeAsync(5_000)
     expect(disk.files.get('/repo/a.ts')).toBe('HEAD')
+  } finally {
+    cleanup()
+  }
+})
+
+it('a quiesce that fails (unresolved CSV cell) fails the discard and releases its hold', async () => {
+  const { disk, ids, edit, cleanup, writes } = setup(['wt-1'])
+  const unregister = registerPendingEditorFlush(
+    ids[0],
+    () => {
+      throw new Error('Resolve the pending CSV cell edit before saving.')
+    },
+    () => true
+  )
+  try {
+    await expect(requestEditorSaveQuiesce(DISCARD_TARGET)).rejects.toThrow('pending CSV cell')
+    unregister()
+    edit(ids[0], 'cell resolved')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(writes()).toBe(1)
+    expect(disk.files.get('/repo/a.ts')).toBe('cell resolved')
+  } finally {
+    unregister()
+    cleanup()
+  }
+})
+
+it("holds another workspace's unstaged diff tab of the file until release", async () => {
+  const { disk, store, cleanup, writes } = setup([])
+  store.getState().openDiff('wt-2', '/repo/a.ts', 'a.ts', 'typescript', false)
+  const diff = store.getState().openFiles[0]
+  expect(diff.diffSource).toBe('unstaged')
+  withLoadedBaselines(store, disk)
+  store.getState().setEditorDraft(diff.id, 'diff edit')
+  store.getState().markFileDirty(diff.id, true)
+  try {
+    const release = await requestEditorSaveQuiesce(DISCARD_TARGET)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(writes()).toBe(0)
+    release()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(disk.files.get('/repo/a.ts')).toBe('diff edit')
   } finally {
     cleanup()
   }

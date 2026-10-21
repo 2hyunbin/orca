@@ -11,7 +11,7 @@ import {
   type EditorFileSavedDetail
 } from './editor-autosave'
 import { flushPendingEditorBuffer, hasPendingEditorBufferChange } from './editor-pending-flush'
-import { createAutoSaveHolds, editorSaveKeyOfFile } from './editor-autosave-holds'
+import { createAutoSaveHolds } from './editor-autosave-holds'
 import { editorBufferIdOfView } from '@/store/slices/editor/buffers/editor-buffer-views'
 import {
   clearSelfWrite,
@@ -47,7 +47,7 @@ export type EditorSaveQueue = {
   quiesceFileSave: (fileId: string) => Promise<void>
   clearAutoSaveTimer: (fileId: string) => void
   bumpSaveGeneration: (fileId: string) => void
-  /** Pauses autosave of these model save keys, in every workspace, until the release runs. */
+  /** Pauses autosave of these files (hold keys), in every workspace, until the release runs. */
   holdAutoSave: (keys: ReadonlySet<string>) => () => void
   syncAutoSave: () => void
   dispose: () => void
@@ -63,7 +63,7 @@ export const EDITOR_SAVE_KEYS: EditorSaveKeys = {
   // Why keyed by model: sibling tabs share one text and baseline, so their saves must run in turn.
   queue: (state, fileId) => {
     const file = state.openFiles.find((openFile) => openFile.id === fileId)
-    return file ? editorSaveKeyOfFile(state, file) : fileId
+    return file?.mode === 'edit' ? editorTabModelUri(state, file) : fileId
   },
   schedule: (state, fileId) => editorBufferIdOfView(state, fileId)
 }
@@ -260,6 +260,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
   const syncAutoSave = (): void => {
     const state = store.getState()
+    holds.flagOverdue(state)
     const openFilesByKey = new Map(
       state.openFiles.map((file) => [keys.schedule(state, file.id), file])
     )
