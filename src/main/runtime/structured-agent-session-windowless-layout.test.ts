@@ -267,4 +267,56 @@ describe('a chat tab on a host with no window', () => {
 
     expect(savedChatIds(state)).toEqual(ORCA_LAYOUT_OWNER_IS_MAIN ? ['chat-1'] : [])
   })
+
+  // Switch-on, a window's own launch reserves the chat's place and opens it there once the create
+  // answers; main's publish leaves the placing to that open, in either order.
+  it.each(['publish first', 'window open first'])(
+    "puts a window's chat where the window opens it: %s",
+    async (order) => {
+      const { runtime, state } = createRuntime()
+      for (const sessionId of ['chat-a', 'chat-b']) {
+        await runtime.publishStructuredAgentSessionTab({
+          workspaceId: WT,
+          sessionId,
+          agent: 'codex',
+          activate: false
+        })
+      }
+      await settled()
+      const publish = () =>
+        runtime.publishStructuredAgentSessionTab({
+          workspaceId: WT,
+          sessionId: 'chat-w',
+          agent: 'codex',
+          activate: true,
+          placedByWindow: true
+        })
+      const windowOpen = () =>
+        runtime.applyLayoutCommand({
+          type: 'openAgentSessionTab',
+          workspace: WT,
+          tabId: structuredAgentSessionTabId('chat-w'),
+          sessionId: 'chat-w',
+          agent: 'codex',
+          afterTabId: structuredAgentSessionTabId('chat-a')
+        })
+
+      if (order === 'publish first') {
+        await publish()
+        await settled()
+        await windowOpen()
+      } else {
+        await windowOpen()
+        await publish()
+      }
+      await settled()
+
+      if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+        return
+      }
+      expect(state.session.tabGroups?.[WT]?.map((group) => group.tabOrder)).toEqual([
+        ['chat-a', 'chat-w', 'chat-b'].map(structuredAgentSessionTabId)
+      ])
+    }
+  )
 })
