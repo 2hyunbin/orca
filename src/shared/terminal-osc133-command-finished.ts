@@ -9,7 +9,7 @@
  */
 
 import { ownRetainedString } from './own-retained-string'
-import { couldBecomeAgentStatusFrame, leadingAgentStatusFramesLength } from './agent-status-osc'
+import { TerminalStatusFrameCursor } from './terminal-status-frame-cursor'
 
 type OscTerminator = {
   index: number
@@ -92,6 +92,7 @@ export function createOsc133CommandFinishedScanner(
    */
   onCommandStarted?: (endInChunk: number) => void
 ): Osc133CommandFinishedScanner {
+  const framing = new TerminalStatusFrameCursor()
   let carry = ''
   // OSC 133 markers seen back to back since the last other output, e.g. 'BC'.
   let adjacentMarkers = UNSEEN_OSC133_MARKERS
@@ -126,27 +127,22 @@ export function createOsc133CommandFinishedScanner(
     }
   }
 
-  const scan = (data: string): void => {
+  const scanSpan = (data: string, sourceStart: number): void => {
     let combined = carry + data
     // `combined` starts at this index in `data`; negative while it still holds the carry.
-    let combinedStartInChunk = -carry.length
+    let combinedStartInChunk = sourceStart - carry.length
     carry = ''
 
     while (combined.length > 0) {
       const start = combined.indexOf(OSC_133_PREFIX)
       if (start === -1) {
-        const rest = combined.slice(leadingAgentStatusFramesLength(combined))
-        if (couldBecomeAgentStatusFrame(rest) && rest.length <= MAX_OSC_CARRY_LENGTH) {
-          carry = ownRetainedString(rest)
-          break
-        }
-        carry = findPrefixCarry(rest)
-        if (carry.length < rest.length) {
+        carry = findPrefixCarry(combined)
+        if (carry.length < combined.length) {
           noteOutput()
         }
         break
       }
-      if (start > leadingAgentStatusFramesLength(combined.slice(0, start))) {
+      if (start > 0) {
         noteOutput()
       }
 
@@ -172,8 +168,15 @@ export function createOsc133CommandFinishedScanner(
   }
 
   return {
-    scan,
+    scan(data) {
+      framing.scan(data, scanSpan, () => {
+        carry = ''
+        adjacentMarkers = UNSEEN_OSC133_MARKERS
+        unseenZoneFinishPending = false
+      })
+    },
     reset() {
+      framing.reset()
       carry = ''
       adjacentMarkers = UNSEEN_OSC133_MARKERS
       unseenZoneFinishPending = false

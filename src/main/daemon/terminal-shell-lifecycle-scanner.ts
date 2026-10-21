@@ -4,10 +4,7 @@ import {
   mayCloseUnseenAppZone,
   UNSEEN_OSC133_MARKERS
 } from '../../shared/terminal-osc133-command-finished'
-import {
-  couldBecomeAgentStatusFrame,
-  leadingAgentStatusFramesLength
-} from '../../shared/agent-status-osc'
+import { TerminalStatusFrameCursor } from '../../shared/terminal-status-frame-cursor'
 import type { TerminalOwner } from '../../shared/terminal-owner'
 import { TerminalArmedInputModes } from './terminal-armed-input-modes'
 
@@ -64,6 +61,7 @@ export type ShellLifecycleScanEvents = {
  * sequence slipped in between, which `trySetOwner()` checks.
  */
 export class TerminalShellLifecycleScanner {
+  private readonly framing = new TerminalStatusFrameCursor()
   private scanTail = ''
   private ownerState: TerminalOwner | undefined
   private generationState = 0
@@ -123,6 +121,34 @@ export class TerminalShellLifecycleScanner {
 
   scan(chunk: string): ShellLifecycleScanEvents {
     const events: ShellLifecycleScanEvents = {}
+    this.framing.scan(
+      chunk,
+      (span, start) => {
+        const result = this.scanSpan(span)
+        if (result.cleanExitCandidate) {
+          events.cleanExitCandidate = result.cleanExitCandidate
+        }
+        if (result.uncleanDeathTriggerEnd !== undefined) {
+          events.uncleanDeathTriggerEnd = Math.max(0, start + result.uncleanDeathTriggerEnd)
+          events.uncleanDeathTriggerStart = Math.max(
+            0,
+            start + (result.uncleanDeathTriggerStart ?? 0)
+          )
+          return false
+        }
+      },
+      () => {
+        this.revoke()
+        this.scanTail = ''
+        this.adjacentMarkers = UNSEEN_OSC133_MARKERS
+        this.heldUnseenCommandEnd = false
+      }
+    )
+    return events
+  }
+
+  private scanSpan(chunk: string): ShellLifecycleScanEvents {
+    const events: ShellLifecycleScanEvents = {}
     // Why the pre-filter: this runs per chunk for every session; a flood chunk
     // with no escape introducer must not pay the regex pass. Split sequences
     // stay correct because a partial one always left a non-empty scanTail.
@@ -142,9 +168,7 @@ export class TerminalShellLifecycleScanner {
     let outputEnd = 0
     while ((match = SEQUENCE_RE.exec(input)) !== null) {
       const oscPayload = match[1]
-      const markersBefore = this.isOutputBetween(input, outputEnd, match.index)
-        ? ''
-        : this.adjacentMarkers
+      const markersBefore = match.index > outputEnd ? '' : this.adjacentMarkers
       outputEnd = match.index + match[0].length
       if (this.heldUnseenCommandEnd) {
         this.heldUnseenCommandEnd = false
@@ -244,16 +268,11 @@ export class TerminalShellLifecycleScanner {
         }
       }
     }
-    if (this.isOutputBetween(input, outputEnd, input.length - this.scanTail.length)) {
+    if (input.length - this.scanTail.length > outputEnd) {
       this.adjacentMarkers = ''
       this.heldUnseenCommandEnd = false
     }
     return events
-  }
-
-  /** Bytes other than OSC 9999 status frames, which main strips before its own scanners. */
-  private isOutputBetween(input: string, start: number, end: number): boolean {
-    return end > start && leadingAgentStatusFramesLength(input.slice(start, end)) < end - start
   }
 
   /** Command finished; true when the app died with its modes up and the caller must repair first. */
@@ -288,11 +307,7 @@ export class TerminalShellLifecycleScanner {
 
   private extractScanTail(input: string): string {
     const oscStart = input.lastIndexOf('\x1b]')
-    if (
-      oscStart !== -1 &&
-      (isIncompleteLifecycleOsc(input.slice(oscStart)) ||
-        couldBecomeAgentStatusFrame(input.slice(oscStart)))
-    ) {
+    if (oscStart !== -1 && isIncompleteLifecycleOsc(input.slice(oscStart))) {
       return boundTail(input.slice(oscStart))
     }
     const start = Math.max(input.lastIndexOf('\x1b'), input.lastIndexOf('\x9b'))

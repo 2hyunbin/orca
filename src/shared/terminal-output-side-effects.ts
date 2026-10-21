@@ -41,6 +41,7 @@ export type TerminalTitleFactMeta = {
 export type AgentIdleEdgeMeta = TerminalTitleFactMeta & { status?: AgentIdleStatus }
 
 type TerminalTitleTrackerChunkOptions = {
+  commandScanData?: string
   titleScanData?: string
   mode2031PendingSubscribe?: boolean
   /** The chunk's OSC 7501 activity changes, offsets in `data`; applied in byte order with its titles. */
@@ -257,7 +258,7 @@ export function createTerminalTitleTracker(
     }
     // Fact order (matches renderer drain): titles → command-finished → pr-link → 2031-subscribe → bell; bell last.
     if (!transientFactScanningSuppressed) {
-      commandFinishedScanner?.scan(data)
+      commandFinishedScanner?.scan(options.commandScanData ?? data)
       if (prLinkDetector) {
         for (const link of prLinkDetector(data)) {
           onPrLink?.(link)

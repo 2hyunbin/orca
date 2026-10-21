@@ -5,7 +5,6 @@
  * exited never sets it. Every failure to observe reads as unproven.
  */
 import { confirmShellForegroundProcess } from '../providers/agent-foreground-process'
-import { inspectSpawnFileChildProcessesFromRows } from '../daemon/pty-subprocess/spawn-file-child-processes'
 import {
   getCommandTokenPathBasename,
   getFirstCommandToken
@@ -51,15 +50,40 @@ export async function confirmRootShellHasNoChildrenFromProcessTable(
     const rows = await getFreshProcessTableSnapshot(true)
     const index = getProcessTableIndex(rows)
     const root = index.byPid.get(rootPid)
-    const shell = (root ? [root, ...collectDescendantsFromIndex(index, rootPid)] : [])
-      .map((row) =>
-        getCommandTokenPathBasename(getFirstCommandToken(row.command)).replace(/^-/, '')
+    if (!root || !root.tty || root.tty === '?' || root.stat.includes('Z')) {
+      return false
+    }
+    const executable = (command: string): string =>
+      getCommandTokenPathBasename(getFirstCommandToken(command)).replace(/^-/, '')
+    const tree = collectDescendantsFromIndex(index, rootPid)
+    const allowed = new Set([rootPid])
+    if (!isShellProcess(executable(root.command))) {
+      if (
+        process.platform !== 'darwin' ||
+        getFirstCommandToken(root.command) !== '/usr/bin/login'
+      ) {
+        return false
+      }
+      const shell = tree.find(
+        (row) =>
+          row.ppid === rootPid && !row.stat.includes('Z') && isShellProcess(executable(row.command))
       )
-      .find(isShellProcess)
-    return (
-      shell !== undefined &&
-      inspectSpawnFileChildProcessesFromRows(rows, rootPid, shell) === 'no-children'
-    )
+      const loginCommand = /^\/usr\/bin\/login -flpq \S+ (.*)$/.exec(root.command)?.[1]
+      // The bash trampoline is not the configured shell: only its fixed positional target counts.
+      const trampoline =
+        /^\/bin\/bash --noprofile --norc -p -c export SHELL="\$1"; shift; exec (?:-l )?-- "\$@" orca-tcc-login \S+ (\S+)(?: |$)/.exec(
+          loginCommand ?? ''
+        )
+      const configuredShell =
+        trampoline?.[1] ??
+        (loginCommand && !loginCommand.includes(' -c ') ? getFirstCommandToken(loginCommand) : '')
+      // Only login's direct configured shell is plumbing; an agent's descendant shell never is.
+      if (!shell || executable(configuredShell) !== executable(shell.command)) {
+        return false
+      }
+      allowed.add(shell.pid)
+    }
+    return !tree.some((row) => !allowed.has(row.pid) && !row.stat.includes('Z'))
   } catch {
     return false
   }
