@@ -1,7 +1,6 @@
 import type { CtrlTabOrderMode, Tab, TabContentType, TabGroup } from '../../../../shared/tab-types'
 import { resolveUnifiedTabLabel } from '../../../../shared/tab-title-resolution'
 import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
-import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import type { AppState } from '../../store/types'
 import { sanitizeRecentTabIds } from '../../store/slices/tab-group-state'
 import { getActiveTabNavOrder, type VisibleTabRef } from './group-tab-order'
@@ -18,22 +17,6 @@ export type RecentTabSwitcherModel = {
   items: RecentTabSwitcherItem[]
   activeIndex: number
 }
-
-type RecentTabSwitchingState = Pick<
-  AppState,
-  | 'activeBrowserTabId'
-  | 'activeFileId'
-  | 'activeGroupIdByWorktree'
-  | 'activeTabId'
-  | 'activeTabType'
-  | 'browserTabsByWorktree'
-  | 'groupsByWorktree'
-  | 'openFiles'
-  | 'tabBarOrderByWorktree'
-  | 'tabsByWorktree'
-  | 'unifiedTabsByWorktree'
-> &
-  WorktreeRuntimeOwnerState & { settings?: AppState['settings'] }
 
 export function normalizeCtrlTabOrderMode(
   value: CtrlTabOrderMode | null | undefined
@@ -92,7 +75,7 @@ function getTabLabel(
   tab: Tab | undefined,
   generatedTitlesEnabled: boolean,
   fallback: string,
-  state: WorktreeRuntimeOwnerState
+  state: AppState
 ): string {
   return tab?.contentType === 'agent-session'
     ? readStructuredChatTabName(tab, state)
@@ -104,7 +87,7 @@ function toSwitcherItem(
   tabById: ReadonlyMap<string, Tab>,
   dirtyFileIds: ReadonlySet<string>,
   generatedTitlesEnabled: boolean,
-  state: WorktreeRuntimeOwnerState
+  state: AppState
 ): RecentTabSwitcherItem {
   const backingTab = entry.tabId ? tabById.get(entry.tabId) : undefined
   return {
@@ -157,7 +140,7 @@ function orderByMru(
 }
 
 export function buildRecentTabSwitcherModel(
-  state: RecentTabSwitchingState,
+  state: AppState,
   worktreeId: string,
   mode: CtrlTabOrderMode
 ): RecentTabSwitcherModel | null {

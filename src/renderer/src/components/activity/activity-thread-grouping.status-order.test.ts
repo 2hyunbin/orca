@@ -62,6 +62,7 @@ import { formatShortTimeAgo } from '@/lib/short-time-ago'
     )
     return makeThreads(
       buildActivityEvents({
+        chatNames: new Map(),
         agentStatusByPaneKey,
         retainedAgentsByPaneKey: {},
         tabsByWorktree: { [worktree.id]: tabs },
@@ -258,6 +259,7 @@ import { formatShortTimeAgo } from '@/lib/short-time-ago'
     const repo = makeRepo()
     const worktree = makeWorktree()
     const { events, liveAgentByPaneKey } = buildActivityEvents({
+      chatNames: new Map(),
       agentStatusByPaneKey: {
         [PANE_KEY]: doneEntry(PANE_KEY, newer, 3_000),
         [PANE_KEY_2]: doneEntry(PANE_KEY_2, older, 2_000)

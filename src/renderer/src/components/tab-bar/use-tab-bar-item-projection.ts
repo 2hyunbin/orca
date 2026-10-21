@@ -1,6 +1,5 @@
 import { useStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
 import { useMemo, useState } from 'react'
-import { useAppStore } from '@/store'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TabBarProps } from './tab-bar-props'
@@ -148,9 +147,8 @@ export function useTabBarItemProjection({
         generatedTabTitlesEnabled,
         expandedPaneByTabId,
         statusByRelativePath,
-        useAppStore.getState()
+        chatNames
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Names are read from the host mirror by the builder.
     [expandedPaneByTabId, generatedTabTitlesEnabled, orderedItems, statusByRelativePath, chatNames]
   )
 

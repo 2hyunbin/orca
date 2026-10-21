@@ -76,6 +76,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
     () =>
       buildDashboardSnapshot(
         {
+          chatNames,
           repos,
           worktreesByRepo,
           tabsByWorktree,

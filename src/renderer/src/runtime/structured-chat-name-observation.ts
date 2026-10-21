@@ -3,42 +3,80 @@ import { shallow } from 'zustand/shallow'
 import { useAppStore } from '@/store'
 import { getStructuredAgentSessionTabs } from '@/components/native-chat/structured-agent-session-tabs'
 import {
-  structuredAgentSessionOwnerForTab,
   structuredAgentSessionOwnerInputs,
   structuredAgentSessionTargetForHost
 } from './structured-agent-session-owner'
 import { getStructuredAgentSessionStatusFeed } from './structured-agent-session-status-feed'
-import { readStructuredChatTabSavedName } from './structured-chat-tab-name'
+import {
+  resolveStructuredChatTabName,
+  type StructuredChatTabNames
+} from './structured-chat-tab-name'
 
 const listeners = new Set<() => void>()
-let snapshot = ''
+let snapshot: StructuredChatTabNames = new Map()
+let inputs: unknown[] = []
+let nameMaps = new Map<string, unknown>()
 let stopObserving: (() => void) | undefined
-const getSnapshot = () => snapshot
+export function getStructuredChatTabNames(): StructuredChatTabNames {
+  const state = useAppStore.getState()
+  const nextInputs = [state.unifiedTabsByWorktree, ...structuredAgentSessionOwnerInputs(state)]
+  const nextMaps = new Map<string, unknown>()
+  for (const owner of nameMaps.keys()) {
+    const target = structuredAgentSessionTargetForHost(owner)
+    if (target) {
+      nextMaps.set(owner, getStructuredAgentSessionStatusFeed(target).getNamingSnapshot())
+    }
+  }
+  if (shallow(inputs, nextInputs) && shallow(nameMaps, nextMaps)) {
+    return snapshot
+  }
+  const next = new Map(
+    getStructuredAgentSessionTabs(state.unifiedTabsByWorktree).map((tab) => {
+      const value = resolveStructuredChatTabName(tab, state)
+      const target = structuredAgentSessionTargetForHost(value.owner)
+      if (value.owner && target) {
+        nextMaps.set(value.owner, getStructuredAgentSessionStatusFeed(target).getNamingSnapshot())
+      }
+      return [tab, value] as const
+    })
+  )
+  const owners = new Set([...next.values()].map((value) => value.owner))
+  for (const owner of nextMaps.keys()) {
+    if (!owners.has(owner)) {
+      nextMaps.delete(owner)
+    }
+  }
+  inputs = nextInputs
+  nameMaps = nextMaps
+  if (
+    next.size !== snapshot.size ||
+    [...next].some(([tab, value]) => {
+      const previous = snapshot.get(tab)
+      return (
+        !previous ||
+        previous.owner !== value.owner ||
+        previous.sessionId !== value.sessionId ||
+        previous.savedName !== value.savedName
+      )
+    })
+  ) {
+    snapshot = next
+  }
+  return snapshot
+}
 
 function observe(): () => void {
   const feeds = new Map<string, () => void>()
+  let published = getStructuredChatTabNames()
   const notice = () => {
-    const state = useAppStore.getState()
-    const next = JSON.stringify(
-      getStructuredAgentSessionTabs(state.unifiedTabsByWorktree).map((tab) => [
-        tab.worktreeId,
-        tab.id,
-        tab.entityId,
-        readStructuredChatTabSavedName(tab, state)
-      ])
-    )
-    if (next !== snapshot) {
-      snapshot = next
+    const next = getStructuredChatTabNames()
+    if (published !== next) {
+      published = next
       listeners.forEach((listener) => listener())
     }
   }
   const reconcile = () => {
-    const state = useAppStore.getState()
-    const owners = new Set<string | null>(
-      getStructuredAgentSessionTabs(state.unifiedTabsByWorktree).map((tab) =>
-        structuredAgentSessionOwnerForTab(state, tab)
-      )
-    )
+    const owners = new Set([...getStructuredChatTabNames().values()].map((value) => value.owner))
     for (const [owner, stop] of feeds) {
       if (!owners.has(owner)) {
         stop()
@@ -99,6 +137,10 @@ export function subscribeStructuredChatTabNames(listener: () => void): () => voi
   }
 }
 
-export function useStructuredChatTabNames(): string {
-  return useSyncExternalStore(subscribeStructuredChatTabNames, getSnapshot, () => '')
+export function useStructuredChatTabNames(): StructuredChatTabNames {
+  return useSyncExternalStore(
+    subscribeStructuredChatTabNames,
+    getStructuredChatTabNames,
+    getStructuredChatTabNames
+  )
 }

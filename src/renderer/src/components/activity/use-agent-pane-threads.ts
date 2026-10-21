@@ -166,6 +166,7 @@ export function useAgentPaneThreads(args: {
     () =>
       buildActivityEvents(
         {
+          chatNames,
           agentStatusByPaneKey: storeData.agentStatusByPaneKey,
           runtimeAgentOrchestrationByPaneKey: storeData.runtimeAgentOrchestrationByPaneKey,
           migrationUnsupportedByPtyId: storeData.migrationUnsupportedByPtyId,
@@ -175,7 +176,6 @@ export function useAgentPaneThreads(args: {
           worktreeMap: storeData.worktreeMap,
           repoMap: storeData.repoMap,
           repos: storeData.repos,
-          ownerState: useAppStore.getState(),
           resolveWorktree: storeData.getKnownWorktreeById,
           acknowledgedAgentsByPaneKey: storeData.acknowledgedAgentsByPaneKey,
           activityClearedAtByPaneKey: storeData.activityClearedAtByPaneKey,

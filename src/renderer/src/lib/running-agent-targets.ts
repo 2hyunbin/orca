@@ -1,10 +1,8 @@
-import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import type { AppState } from '@/store/types'
 import type { AgentStatusEntry, AgentType } from '../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { structuredAgentSessionPaneKey } from '../../../shared/structured-agent-session-projection'
-import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
 import { isStructuredTab } from '../../../shared/structured-agent-session-tab'
 import { resolvePaneAgentActivity } from '@/lib/pane-agent-evidence'
 import type { AgentMessageTarget } from './agent-message-target'
@@ -19,8 +17,7 @@ export type RunningAgentTargetState = Pick<
   | 'terminalLayoutsByTabId'
   | 'ptyIdsByTabId'
 > &
-  Partial<Pick<AppState, 'runtimePaneTitlesByTabId'>> &
-  WorktreeRuntimeOwnerState
+  Partial<Pick<AppState, 'runtimePaneTitlesByTabId'>>
 
 type RunningAgentSendTargetEligibility = {
   status: 'eligible' | 'disabled'
@@ -191,7 +188,7 @@ function deriveStructuredAgentSendTargets(
       tabId: tab.id,
       sessionId: tab.entityId,
       agentType: tab.agentSessionAgent,
-      title: readStructuredChatTabName(tab, state),
+      title: tab.customLabel?.trim() || tab.label,
       entry,
       status: disabledReason ? 'disabled' : 'eligible',
       ...(disabledReason ? { disabledReason } : {})

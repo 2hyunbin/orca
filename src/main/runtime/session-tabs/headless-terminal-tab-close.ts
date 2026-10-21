@@ -1,3 +1,4 @@
+import { renameStructuredSessionTab } from './structured-session-tab-rename'
 import type { RuntimeHeadlessTabProperties as HeadlessTabPropertiesMethods } from './headless-tab-properties'
 import type { RuntimeHeadlessTabGroups as HeadlessTabGroupsMethods } from './headless-tab-group-moves'
 import type { OrcaRuntimeWithPersistHeadlessTerminalTitle as PersistHeadlessTerminalTitleMethods } from '../workspaces/workspace-file-session-targets'
@@ -297,13 +298,16 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
     const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
+    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     // Why: a renderer-authoritative host owns + republishes tab props, so a
     // headless write would be overwritten. Persist only when headless.
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
     const hostTabId = snapshot
       ? (this.resolveMobileSessionHostTabId(snapshot, args.tabId) ?? args.tabId)
       : args.tabId
-    // Why by tab: a sleeping or starting pane has no handle for terminal.rename to name (#29975).
+    args = await renameStructuredSessionTab(snapshot, hostTabId, args, () =>
+      this.ensureStructuredAgentSessionHost()
+    )
     const customTitle =
       args.customTitle === undefined ? undefined : args.customTitle?.trim() || null
     // Switch point: a terminal tab main owns takes its props in main's layout, window or not.

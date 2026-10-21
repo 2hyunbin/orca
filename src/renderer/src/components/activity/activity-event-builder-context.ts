@@ -9,10 +9,12 @@ import {
 } from '../../../../shared/execution-host'
 import type { Repo } from '../../../../shared/repo-types'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
-import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import { readStructuredChatTabSavedName } from '@/runtime/structured-chat-tab-name'
+import {
+  projectedStructuredChatTabSavedName,
+  type StructuredChatTabNames
+} from '@/runtime/structured-chat-tab-name'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
   effectiveWorktreeAgentRowStartedAt,
@@ -31,12 +33,9 @@ export type ActivityTabHostIndex = Map<string, Map<string, ExecutionHostId | nul
 const agentSessionTerminalTabs = new WeakMap<Tab, { name: string | null; tab: TerminalTab }>()
 const attributedTabContexts = new WeakMap<AgentStatusEntry, ActivityTabContext | null>()
 
-function terminalTabFromAgentSessionTab(
-  tab: Tab,
-  ownerState: WorktreeRuntimeOwnerState
-): TerminalTab {
+function terminalTabFromAgentSessionTab(tab: Tab, names: StructuredChatTabNames): TerminalTab {
   // The chat's name lives on its host, so a rename changes it without changing the tab.
-  const name = readStructuredChatTabSavedName(tab, ownerState)
+  const name = projectedStructuredChatTabSavedName(tab, names)
   const cached = agentSessionTerminalTabs.get(tab)
   if (cached && cached.name === name) {
     return cached.tab
@@ -58,8 +57,8 @@ function terminalTabFromAgentSessionTab(
 
 export function buildActivityTabContext(
   tabsByWorktree: Record<string, TerminalTab[]>,
-  unifiedTabsByWorktree?: Record<string, Tab[]>,
-  ownerState: WorktreeRuntimeOwnerState = {}
+  unifiedTabsByWorktree: Record<string, Tab[]> | undefined,
+  names: StructuredChatTabNames
 ): Map<string, ActivityTabContext> {
   const contexts = new Map<string, ActivityTabContext>()
   for (const [worktreeId, tabs] of Object.entries(tabsByWorktree)) {
@@ -72,7 +71,7 @@ export function buildActivityTabContext(
       if (tab.contentType !== 'agent-session' || contexts.has(tab.id)) {
         continue
       }
-      contexts.set(tab.id, { worktreeId, tab: terminalTabFromAgentSessionTab(tab, ownerState) })
+      contexts.set(tab.id, { worktreeId, tab: terminalTabFromAgentSessionTab(tab, names) })
     }
   }
   return contexts

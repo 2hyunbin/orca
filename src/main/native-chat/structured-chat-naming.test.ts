@@ -337,23 +337,6 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     expect(state.deps.generate).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps a successful user name free of a late generation failure for the same text', async () => {
-    const state = rig(provider)
-    const generation = deferred<StructuredChatNameGeneration>()
-    state.deps.generate = vi.fn(() => generation.promise)
-    state.handle(state.summary, { replay: false })
-    await settle()
-    await state.handle.setUserName(
-      state.summary.sessionId,
-      'Please repair the login flow',
-      'rename'
-    )
-    generation.resolve({ error: 'Generation failed' })
-    await settle()
-    expect(state.handle.failure(state.summary.sessionId)).toBeUndefined()
-    expect(state.read()?.conversationNameSource).toBe('user')
-  })
-
   it('protects a name changed while generation runs', async () => {
     const state = rig(provider)
     const generation = deferred<StructuredChatNameGeneration>()
@@ -387,22 +370,24 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     expect(state.deps.generate).not.toHaveBeenCalled()
   })
 
-  it('keeps a rename made while generation runs, even one back to the same text', async () => {
-    const state = rig(provider)
-    const generation = deferred<StructuredChatNameGeneration>()
-    state.deps.generate = vi.fn(() => generation.promise)
-    state.handle(state.summary, { replay: false })
-    await settle()
-    const seed = state.read()?.conversationName
-    if (!seed) {
-      throw new Error('Missing seed')
+  it.each([{ name: 'Late agent name' }, { error: 'Generation failed' }])(
+    'keeps a same-text user rename after generation settles with %j',
+    async (outcome) => {
+      const state = rig(provider)
+      const generation = deferred<StructuredChatNameGeneration>()
+      state.deps.generate = vi.fn(() => generation.promise)
+      state.handle(state.summary, { replay: false })
+      await settle()
+      const id = state.summary.sessionId
+      const seed = 'Please repair the login flow'
+      await state.handle.setUserName(id, 'Login work', 'rename')
+      await state.handle.setUserName(id, seed, 'rename')
+      generation.resolve(outcome)
+      await settle()
+      expect(state.read()).toMatchObject({ conversationName: seed, conversationNameSource: 'user' })
+      expect(state.handle.failure(id)).toBeUndefined()
     }
-    await state.handle.setUserName(state.summary.sessionId, 'Login work', 'rename')
-    await state.handle.setUserName(state.summary.sessionId, seed, 'rename')
-    generation.resolve({ name: 'Late agent name' })
-    await settle()
-    expect(state.read()).toMatchObject({ conversationName: seed, conversationNameSource: 'user' })
-  })
+  )
 
   it("takes a window's pre-upgrade tab name only over a name Orca chose", async () => {
     const state = rig(provider)

@@ -15,7 +15,10 @@ vi.mock('../sidebar/worktree-agent-orchestration-batch', () => ({
   selectRuntimeAgentOrchestrationBatch: batchMocks.select
 }))
 
-import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
+import {
+  buildDashboardSnapshot,
+  type DashboardSnapshotInput as DashboardSnapshotState
+} from './build-dashboard-snapshot'
 
 function worktree(index: number): Worktree {
   return {
@@ -58,6 +61,7 @@ function state(
 ): DashboardSnapshotState {
   const worktrees = Array.from({ length: worktreeCount }, (_, index) => worktree(index))
   return {
+    chatNames: new Map(),
     repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000' }],
     worktreesByRepo: { r1: worktrees },
     tabsByWorktree: Object.fromEntries(

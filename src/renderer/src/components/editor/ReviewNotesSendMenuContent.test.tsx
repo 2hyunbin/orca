@@ -81,7 +81,8 @@ vi.mock('zustand/react/shallow', () => ({
 }))
 
 vi.mock('@/runtime/structured-chat-name-observation', () => ({
-  useStructuredChatTabNames: () => ''
+  useStructuredChatTabNames: () => new Map(),
+  getStructuredChatTabNames: () => new Map()
 }))
 
 vi.mock('@/lib/active-agent-note-send', () => ({

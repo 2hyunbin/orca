@@ -37,9 +37,11 @@ export type AgentHistoryScreenState =
       kind: 'ready'
       sessions: AiVaultSession[]
       issues: AiVaultScanIssue[]
-      hostId: string
-      client: RpcClient
     }
+
+type FetchedHistoryState =
+  | Exclude<AgentHistoryScreenState, { kind: 'ready' }>
+  | (Extract<AgentHistoryScreenState, { kind: 'ready' }> & { hostId: string; client: RpcClient })
 
 export type MobileAgentHistoryStateParams = {
   hostId: string
@@ -55,7 +57,7 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
   const { client, state: connState } = useWorkspaceClient(hostId)
   const forceReconnect = useForceReconnect()
   const [scope, setScope] = useState<AiVaultScope>('workspace')
-  const [screenState, setScreenState] = useState<AgentHistoryScreenState>({ kind: 'loading' })
+  const [screenState, setScreenState] = useState<FetchedHistoryState>({ kind: 'loading' })
   const clientGeneration = client?.getGeneration?.() ?? 0
   const [hostStatusProbe, setHostStatusProbe] = useState<{
     hostId: string
@@ -224,20 +226,23 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
     feed?.getNamingSnapshot ?? noNames,
     noNames
   )
-  const namedScreenState = useMemo(
-    () =>
-      screenState.kind === 'ready' && screenState.hostId === hostId && screenState.client === client
-        ? {
-            ...screenState,
-            sessions: screenState.sessions.map((session) => {
-              const id = session.structuredSession?.sessionId
-              const title = id ? names.get(id)?.conversationName : null
-              return title ? { ...session, title } : session
-            })
-          }
-        : screenState,
-    [screenState, names, hostId, client]
-  )
+  const namedScreenState = useMemo<AgentHistoryScreenState>(() => {
+    if (screenState.kind !== 'ready') {
+      return screenState
+    }
+    const current = screenState.hostId === hostId && screenState.client === client
+    return {
+      kind: 'ready',
+      issues: screenState.issues,
+      sessions: current
+        ? screenState.sessions.map((session) => {
+            const id = session.structuredSession?.sessionId
+            const title = id ? names.get(id)?.conversationName : null
+            return title ? { ...session, title } : session
+          })
+        : screenState.sessions
+    }
+  }, [screenState, names, hostId, client])
 
   return {
     connState,

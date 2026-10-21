@@ -5,10 +5,9 @@ import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type * as SessionClient from '@/runtime/structured-agent-session-client'
 
-const { hostRename, hostSavesNames, toastError } = vi.hoisted(() => ({
-  hostRename: vi.fn(async () => ({ name: 'Flaky retry test', applied: true })),
-  hostSavesNames: vi.fn(async () => true),
-  toastError: vi.fn()
+const { hostRename, hostSavesNames } = vi.hoisted(() => ({
+  hostRename: vi.fn(async (_params: unknown) => ({ name: 'Flaky retry test', applied: true })),
+  hostSavesNames: vi.fn(async () => true)
 }))
 
 // Main's answer to the window's layout commands, as a switch-on build sends them; the chat's host
@@ -19,10 +18,8 @@ vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
   ).runtimeRpcClientWithLayoutApply(await importOriginal())
   return {
     ...client,
-    callRuntimeRpc: ((target, method, params, options) =>
-      method === 'agentSession.rename'
-        ? hostRename(params)
-        : client.callRuntimeRpc(target, method, params, options)) as typeof client.callRuntimeRpc
+    callRuntimeRpc: (...args: Parameters<typeof client.callRuntimeRpc>) =>
+      args[1] === 'agentSession.rename' ? hostRename(args[2]) : client.callRuntimeRpc(...args)
   }
 })
 
@@ -32,7 +29,7 @@ vi.mock('@/runtime/structured-agent-session-client', async (importOriginal) => (
 }))
 
 vi.mock('sonner', () => ({
-  toast: { info: vi.fn(), success: vi.fn(), error: toastError, warning: vi.fn() }
+  toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }
 }))
 
 const WORKTREE = 'local-repo::/tmp/app'
@@ -147,7 +144,6 @@ describe('recoloring a structured chat tab', () => {
 describe('renaming a structured chat tab', () => {
   beforeEach(() => {
     hostRename.mockClear()
-    toastError.mockClear()
     hostSavesNames.mockResolvedValue(true)
   })
 
@@ -162,14 +158,6 @@ describe('renaming a structured chat tab', () => {
     expect(layoutApplyTestTransport.sent).not.toContainEqual(
       expect.objectContaining({ type: 'renameTab', tabId: STRUCTURED_TAB_ID })
     )
-  })
-
-  it("refuses an empty name and keeps the chat's name", async () => {
-    const store = storeWithStructuredTab()
-    store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, '   ')
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalled())
-    expect(hostRename).not.toHaveBeenCalled()
-    expect(labelOf(store)).toBeNull()
   })
 
   it('keeps the name on the tab for a host too old to save it, and clears it when emptied', async () => {

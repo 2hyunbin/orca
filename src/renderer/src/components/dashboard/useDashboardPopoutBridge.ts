@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 import { useAppStore, type AppState } from '@/store'
-import { subscribeStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
+import {
+  subscribeStructuredChatTabNames,
+  getStructuredChatTabNames
+} from '@/runtime/structured-chat-name-observation'
 import { revealDashboardAgent } from './reveal-dashboard-agent'
 import { runSleepWorktree } from '../sidebar/sleep-worktree-flow'
 import type { RepoIcon } from '../../../../shared/repo-icon'
@@ -177,10 +180,14 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
     const publishNow = (withIcons: boolean): void => {
       lastPublishAt = Date.now()
       const state = useAppStore.getState()
-      const snapshot = buildDashboardSnapshot(state, lastPublishAt, {
-        rowsCache,
-        rowsGeneration: state.agentStatusEpoch
-      })
+      const snapshot = buildDashboardSnapshot(
+        { ...state, chatNames: getStructuredChatTabNames() },
+        lastPublishAt,
+        {
+          rowsCache,
+          rowsGeneration: state.agentStatusEpoch
+        }
+      )
       const icons = snapshot.repoIconsByRepoId ?? {}
       if (!withIcons && repoIconsUnchanged(icons, lastPublishedRepoIcons)) {
         const { repoIconsByRepoId: _omitted, ...withoutIcons } = snapshot

@@ -10,12 +10,11 @@ import type { WorkspaceAttachment, Worktree } from '../../../../shared/worktree/
 import type { Tab } from '../../../../shared/tab-types'
 import { getWorkspaceAttachmentOriginKey } from '../../../../shared/workspace-attachment-origins'
 import { useStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
-import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
+import { projectedStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
 
 const EMPTY_TABS: Tab[] = []
 
 function useReferenceTabs(workspace: Worktree): Tab[] {
-  useStructuredChatTabNames()
   const tabs = useAppStore((s) => s.unifiedTabsByWorktree?.[workspace.id] ?? EMPTY_TABS)
   const state = useAppStore.getState()
   return tabs.filter((tab) => {
@@ -34,6 +33,7 @@ export function WorkspaceAttachmentOrigins({
   item: WorkspaceAttachment
   workspace: Worktree
 }): React.JSX.Element | null {
+  const names = useStructuredChatTabNames()
   const tabs = useReferenceTabs(workspace)
   const origins = item.origins?.filter((origin) => origin.kind === 'observed') ?? []
   if (!origins.length) {
@@ -49,7 +49,7 @@ export function WorkspaceAttachmentOrigins({
         )
         const label =
           (tab?.contentType === 'agent-session'
-            ? readStructuredChatTabName(tab, useAppStore.getState())
+            ? projectedStructuredChatTabName(tab, names)
             : null) ||
           tab?.customLabel ||
           tab?.label ||

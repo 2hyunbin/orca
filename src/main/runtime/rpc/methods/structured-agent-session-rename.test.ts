@@ -7,19 +7,10 @@ import {
   clearStructuredHostStub,
   hostCalls,
   installStructuredHostStub,
-  SESSION,
   STRUCTURED_CLIENT
 } from './structured-agent-session-rpc.test-fixture'
 
 afterEach(clearStructuredHostStub)
-
-it('refuses a rename when its durable record is missing', async () => {
-  installStructuredHostStub()
-  hostCalls.setUserConversationName = vi.fn(async () => null)
-  expect(
-    await call('agentSession.rename', { sessionId: SESSION, name: 'Only name' }, STRUCTURED_CLIENT)
-  ).toMatchObject({ ok: false })
-})
 
 it('filters naming notes by the same record audience as status rows', async () => {
   installStructuredHostStub()

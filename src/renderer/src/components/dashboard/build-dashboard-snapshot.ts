@@ -1,3 +1,4 @@
+import type { StructuredChatTabNames } from '@/runtime/structured-chat-tab-name'
 import type { AppState } from '@/store/types'
 import {
   DASHBOARD_MAX_MAP_WORKSPACES,
@@ -78,8 +79,10 @@ export type DashboardSnapshotState = Pick<
  * worktree's rows into presentational cards. Provider subagents without their
  * own terminal stay folded into their spawning card.
  */
+export type DashboardSnapshotInput = DashboardSnapshotState & { chatNames: StructuredChatTabNames }
+
 export function buildDashboardSnapshot(
-  state: DashboardSnapshotState,
+  state: DashboardSnapshotInput,
   now: number,
   options: {
     includeCardDetails?: boolean
@@ -254,7 +257,8 @@ export function buildDashboardSnapshot(
             generatedTitlesEnabled,
             terminalLayoutsByTabId[row.tab.id],
             paneTitlesByTabId[row.tab.id],
-            state
+            state.chatNames,
+            state.unifiedTabsByWorktree
           )
         ),
         ...(terminalInput ? { terminalInput } : {})
