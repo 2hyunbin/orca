@@ -36,11 +36,11 @@ jobs:
           path: .build/workflow-policy
           sparse-checkout: .github
           persist-credentials: false
-      # Whole-tree identity includes tests, native sources, mobile assets and build policy.
+      # The CLI embeds its source commit; tree equality alone cannot identify its bytes.
       - name: Identify today's exact source tree
         id: identity
         shell: bash
-        run: echo "key=orcad-qualified-template-v1-$(git -C .build/workflow-policy rev-parse HEAD:.github)-$(git rev-parse 'HEAD^{tree}')-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+        run: echo "key=orcad-qualified-template-v1-$(git -C .build/workflow-policy rev-parse HEAD:.github)-$(git rev-parse HEAD)-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v5
         id: restore
         continue-on-error: true
