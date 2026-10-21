@@ -332,7 +332,7 @@ describe('MobileNativeChatSessionOptionPickers', () => {
   })
 
   it.each(['ios', 'android'] as const)(
-    'announces the working notice only when it appears on %s',
+    'announces the working notice without queuing only when it appears on %s',
     async (platform) => {
       Platform.OS = platform
       const updateWorking = mount([MODEL_DESCRIPTOR, PERMISSION_DESCRIPTOR])
@@ -346,7 +346,7 @@ describe('MobileNativeChatSessionOptionPickers', () => {
       if (platform === 'ios') {
         expect(announce).toHaveBeenCalledExactlyOnceWith(
           'Agent is working. Model settings unlock when this turn finishes.',
-          { queue: true }
+          { queue: false }
         )
       } else {
         expect(announce).not.toHaveBeenCalled()

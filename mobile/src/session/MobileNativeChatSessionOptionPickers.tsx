@@ -135,9 +135,10 @@ export function MobileNativeChatSessionOptionPickers({
 
   useEffect(() => {
     if (Platform.OS === 'ios' && showWorkingNotice) {
+      // Queued announcements cannot be canceled when the picker closes or changes pages.
       AccessibilityInfo.announceForAccessibilityWithOptions(
         'Agent is working. Model settings unlock when this turn finishes.',
-        { queue: true }
+        { queue: false }
       )
     }
   }, [showWorkingNotice])
