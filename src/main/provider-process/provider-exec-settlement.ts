@@ -7,9 +7,7 @@ import {
   PROVIDER_GROUP_REAP_TIMEOUT_MS,
   PROVIDER_OUTPUT_DRAIN_TIMEOUT_MS,
   PROVIDER_SIGTERM_GRACE_MS,
-  PROVIDER_STDIN_END_GRACE_MS,
-  type ProviderCloseRequest,
-  type ProviderSupervisorLifetime
+  PROVIDER_STDIN_END_GRACE_MS
 } from './provider-process-supervisor'
 
 export type ProviderExecSettlement = {
@@ -21,8 +19,6 @@ export type ProviderExecSettlement = {
 }
 type SettlementOptions = {
   reason: 'close' | 'natural'
-  closeRequest: ProviderCloseRequest
-  lifetime: ProviderSupervisorLifetime
   tree?: ProviderProcessTree
 }
 const settlements = new WeakMap<ProviderExecControl, Promise<ProviderExecSettlement>>()
@@ -57,7 +53,7 @@ async function settle(
       while (observation.group === 'live' && observation.monotonicMs < deadline) {
         if (
           control.rootVerdict === 'exited' &&
-          (step === 0 || (step === 1 && options.lifetime === 'one-shot'))
+          (step === 0 || (step === 1 && control.lifetime === 'one-shot'))
         ) {
           break
         }
@@ -83,7 +79,7 @@ async function settle(
       group === 'live' &&
       options.reason === 'close' &&
       control.rootVerdict !== 'exited' &&
-      options.closeRequest === 'stdin-end'
+      control.closeRequest === 'stdin-end'
     ) {
       await phase(0, PROVIDER_STDIN_END_GRACE_MS)
     }

@@ -276,14 +276,29 @@ try {
   const probed = await crash.command('PROBE')
   const stamp = Number(probed.split(' ').at(-1))
   assert.equal(
-    await crash.command(`PHASE 1 ${stamp + 150}`),
-    `PHASE ${crash.nonce} 1 ${stamp + 150}`
+    await crash.command(`PHASE 1 ${stamp + 150} 0`),
+    `PHASE ${crash.nonce} 1 ${stamp + 150} 0`
   )
   const startMs = Date.now()
   crash.child.stdio[4].end()
   await bound(crash.exit, 'EOF phase continuation', 2500)
   assert(Date.now() - startMs < 2000)
   result.cases.push('lifetime EOF continues accepted partial TERM deadline')
+  const oneShot = await start([
+    '/bin/sh',
+    '-c',
+    'trap "" TERM; sleep 30 & echo spawned:$!; read line'
+  ])
+  oneShot.exec()
+  const outputEnd = once(oneShot.child.stdout, 'end')
+  const oneShotProbe = await oneShot.command('PROBE')
+  const oneShotDeadline = Number(oneShotProbe.split(' ').at(-1)) + 3000
+  await oneShot.command(`PHASE 1 ${oneShotDeadline} 1`)
+  oneShot.child.stdin.end()
+  await bound(oneShot.exit, 'one-shot root exit')
+  oneShot.child.stdio[4].end()
+  await bound(outputEnd, 'one-shot root exit shortens remaining TERM grace', 2000)
+  result.cases.push('one-shot crash cleanup stops remaining tools promptly after root exit')
   console.log(JSON.stringify({ ...result, result: 'PASS' }))
 } finally {
   closeSync(held)

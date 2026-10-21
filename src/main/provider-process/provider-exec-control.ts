@@ -7,7 +7,10 @@ import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import type { ProviderExecCode } from './provider-exec-code'
 import { providerExecChannel } from './provider-exec-channel'
 import { resolveProviderChildEnv, type ProviderProcessLaunch } from './provider-process-launch'
-import type { ProviderCloseRequest } from './provider-process-supervisor'
+import type {
+  ProviderCloseRequest,
+  ProviderSupervisorLifetime
+} from './provider-process-supervisor'
 import type { ProviderProcessExit } from './managed-provider-process'
 
 type ExecStatus =
@@ -23,10 +26,14 @@ export function spawnProviderExecControl(
   code: ProviderExecCode,
   options: {
     closeRequest: ProviderCloseRequest
+    lifetime?: ProviderSupervisorLifetime
     inheritedEnv?: NodeJS.ProcessEnv
     onProtectionLost: (error: Error) => void
   }
 ) {
+  const lifetime = options.lifetime ?? 'session'
+  const closeRequest = lifetime === 'one-shot' ? 'stdin-end-and-sigterm' : options.closeRequest
+  const oneShot = lifetime === 'one-shot' ? 1 : 0
   const nonce = randomBytes(16).toString('hex')
   const child = spawnProcess({
     program: code.executable,
@@ -123,9 +130,10 @@ export function spawnProviderExecControl(
     ) {
       throw new Error('Provider watcher did not establish protection')
     }
-    const phase = options.closeRequest === 'stdin-end' ? 0 : 1
-    watchChannel.send(`PHASE ${nonce} ${phase} 0`)
-    if ((await watchChannel.next()) !== `PHASE ${nonce} ${phase} 0`) {
+    const phase = closeRequest === 'stdin-end' ? 0 : 1
+    const command = `PHASE ${nonce} ${phase} 0 ${oneShot}`
+    watchChannel.send(command)
+    if ((await watchChannel.next()) !== command) {
       throw new Error('Provider watcher did not accept its close policy')
     }
     if (failure) {
@@ -167,6 +175,8 @@ export function spawnProviderExecControl(
   }
   return {
     child,
+    lifetime,
+    closeRequest,
     startup,
     rootExit: physical.promise,
     /** A closed errno channel does not prove exec succeeded. */
@@ -195,7 +205,7 @@ export function spawnProviderExecControl(
       if (!Number.isSafeInteger(deadline) || deadline < 0) {
         throw new RangeError('Invalid provider cleanup deadline')
       }
-      const command = `PHASE ${nonce} ${phase} ${deadline}`
+      const command = `PHASE ${nonce} ${phase} ${deadline} ${oneShot}`
       return request(command).then((reply) => {
         if (reply !== command) {
           const error = new Error('Provider cleanup phase was not acknowledged')

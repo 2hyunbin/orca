@@ -61,33 +61,34 @@ static int group_signal(pid_t group, int sig) {
   if (!kill(-group, sig)) return 1;
   return errno == ESRCH ? 0 : -1;
 }
-static int wait_group(pid_t group, long long deadline) {
+static int wait_group(pid_t group, long long deadline, int until_root_exits) {
   for (;;) {
     int state = group_state(group);
     if (state <= 0 || now_ms() >= deadline) return state;
+    if (until_root_exits && kill(group, 0) && errno == ESRCH) return state;
     struct timespec pause = {0, 25000000};
     while (nanosleep(&pause, &pause) && errno == EINTR) {}
   }
 }
-static int crash(pid_t group, int phase, long long deadline) {
+static int crash(pid_t group, int phase, long long deadline, int one_shot) {
   int state;
   if (!deadline) deadline = now_ms() + (phase == 0 ? 1000 : phase == 1 ? 3000 : 1500);
   if (phase == 0) {
-    state = wait_group(group, deadline);
+    state = wait_group(group, deadline, 0);
     if (state <= 0) return state;
     phase = 1; deadline = now_ms() + 3000;
   }
   if (phase == 1) {
     state = group_signal(group, SIGTERM);
     if (state <= 0) return state;
-    state = wait_group(group, deadline);
+    state = wait_group(group, deadline, one_shot);
     if (state <= 0) return state;
     phase = 2; deadline = now_ms() + 1500;
   }
   if (phase == 2) {
     state = group_signal(group, SIGKILL);
     if (state <= 0) return state;
-    return wait_group(group, deadline);
+    return wait_group(group, deadline, 0);
   }
   return -1;
 }
@@ -127,19 +128,19 @@ static void provider_exec(char **args) {
 }
 static const char watcher[] =
   "trap '' HUP PIPE\n"
-  "h=$1; nonce=$2; group=$3; phase=0; deadline=$4\n"
+  "h=$1; nonce=$2; group=$3; phase=0; deadline=$4; one_shot=0\n"
   "printf 'ARMED %s %s\\n' \"$nonce\" \"$$\" >&4\n"
-  "while IFS=' ' read -r tag a b c <&4; do\n"
+  "while IFS=' ' read -r tag a b c d <&4; do\n"
   "  test \"$a\" = \"$nonce\" || break\n"
   "  case $tag in\n"
   "    RETIRE|ABANDON) printf 'RETIRED %s\\n' \"$nonce\" >&4; exit 0;;\n"
-  "    PHASE) phase=$b; deadline=$c; printf 'PHASE %s %s %s\\n' \"$nonce\" \"$phase\" \"$deadline\" >&4;;\n"
+  "    PHASE) phase=$b; deadline=$c; one_shot=$d; printf 'PHASE %s %s %s %s\\n' \"$nonce\" \"$phase\" \"$deadline\" \"$one_shot\" >&4;;\n"
   "    PROBE|TERM|KILL) result=$(exec 4>&-; exec \"$h\" op \"$group\" \"$tag\"); printf 'RESULT %s %s\\n' \"$nonce\" \"$result\" >&4;;\n"
   "    *) break;;\n"
   "  esac\n"
   "done\n"
   "exec 4>&-\n"
-  "exec \"$h\" crash \"$group\" \"$phase\" \"$deadline\"\n";
+  "exec \"$h\" crash \"$group\" \"$phase\" \"$deadline\" \"$one_shot\"\n";
 static int same_file(const struct stat *a, const struct stat *b) {
   return a->st_dev == b->st_dev && a->st_ino == b->st_ino;
 }
@@ -185,8 +186,8 @@ int main(int argc, char **argv) {
       : group_signal(group, !strcmp(argv[3], "TERM") ? SIGTERM : SIGKILL);
     printf("%d %lld\n", result, now_ms()); return result < 0 ? 1 : 0;
   }
-  if (!strcmp(argv[1], "crash") && argc == 5) {
-    int result = crash((pid_t)strtol(argv[2], NULL, 10), atoi(argv[3]), strtoll(argv[4], NULL, 10));
+  if (!strcmp(argv[1], "crash") && argc == 6) {
+    int result = crash((pid_t)strtol(argv[2], NULL, 10), atoi(argv[3]), strtoll(argv[4], NULL, 10), atoi(argv[5]));
     return result == 0 ? 0 : 1;
   }
   if (strcmp(argv[1], "gate") || argc < 4 || strlen(argv[2]) > 64) return 64;

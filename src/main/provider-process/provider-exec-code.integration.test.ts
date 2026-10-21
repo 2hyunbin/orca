@@ -134,9 +134,7 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
       expect((await control.operation('PROBE')).group).toBe('exited')
       expect(
         await settleProviderExec(control, {
-          reason: 'natural',
-          closeRequest: 'stdin-end',
-          lifetime: 'one-shot'
+          reason: 'natural'
         })
       ).toEqual({
         root: 'exited',
@@ -157,7 +155,7 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
             args: missing ? [] : ['-c', 'exit 127']
           },
           second,
-          { closeRequest: 'stdin-end', onProtectionLost: lost }
+          { closeRequest: 'stdin-end', lifetime: 'one-shot', onProtectionLost: lost }
         )
         probe.child.stdout.resume()
         probe.child.stderr.resume()
@@ -171,9 +169,7 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
           missing ? 'ENOENT' : null
         )
         await settleProviderExec(probe, {
-          reason: 'natural',
-          closeRequest: 'stdin-end',
-          lifetime: 'one-shot'
+          reason: 'natural'
         })
       }
       const stubborn = spawnProviderExecControl(
@@ -185,15 +181,11 @@ describe.skipIf(process.platform === 'win32')('provider executable retention', (
       try {
         await once(stubborn.child.stdout, 'data')
         const closing = settleProviderExec(stubborn, {
-          reason: 'close',
-          closeRequest: 'stdin-end-and-sigterm',
-          lifetime: 'session'
+          reason: 'close'
         })
         expect(
           settleProviderExec(stubborn, {
-            reason: 'natural',
-            closeRequest: 'stdin-end',
-            lifetime: 'one-shot'
+            reason: 'natural'
           })
         ).toBe(closing)
         expect(await closing).toEqual({
