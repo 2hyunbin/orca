@@ -12,8 +12,19 @@ import {
   type HostAccountSignInProvider
 } from '../../../../shared/host-account-sign-in-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import { toast } from 'sonner'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+
+/** A Cancel the server could not be told about yet; the sign-in keeps asking it to stop. */
+export function showHostCancelFailure(error: unknown): void {
+  toast.error(
+    translate('accounts.hostSignIn.cancelFailed', 'Could not reach the server to cancel yet.'),
+    {
+      description: error instanceof Error ? error.message : String(error)
+    }
+  )
+}
 
 function CopyButton(props: { text: string; label: string }): React.JSX.Element {
   const { copyText, status } = useClipboardTextCopyFeedback(props.text)

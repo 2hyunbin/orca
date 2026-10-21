@@ -15,7 +15,7 @@ import {
   addCodexAccountOnHost,
   cancelHostAccountSignIn
 } from '@/runtime/runtime-host-account-sign-in-client'
-import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
+import { HostAccountSignInPrompt, showHostCancelFailure } from './HostAccountSignInPrompt'
 
 export function renderCodexAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -191,7 +191,7 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
                 size="xs"
                 onClick={() =>
                   void (isRemoteAccountScope
-                    ? cancelHostAccountSignIn(accountOwner, 'codex')
+                    ? cancelHostAccountSignIn(accountOwner, 'codex').catch(showHostCancelFailure)
                     : window.api.codexAccounts.cancelPendingLogin())
                 }
                 className="gap-1.5"

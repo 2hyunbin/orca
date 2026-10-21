@@ -23,7 +23,7 @@ import {
   addClaudeAccountOnHost,
   cancelHostAccountSignIn
 } from '@/runtime/runtime-host-account-sign-in-client'
-import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
+import { HostAccountSignInPrompt, showHostCancelFailure } from './HostAccountSignInPrompt'
 
 export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
   const {
@@ -143,7 +143,7 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
                 size="xs"
                 onClick={() =>
                   void (isRemoteAccountScope
-                    ? cancelHostAccountSignIn(accountOwner, 'claude')
+                    ? cancelHostAccountSignIn(accountOwner, 'claude').catch(showHostCancelFailure)
                     : window.api.claudeAccounts.cancelPendingLogin())
                 }
                 className="gap-1.5 text-muted-foreground hover:text-foreground"
