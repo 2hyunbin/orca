@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connect } from './rpc-client'
 import { diagnoseConnection } from '../diagnostics/connection-diagnostics-analysis'
 import type { ConnectionLogEntry } from './types'
+import { recordSocketDeadlineAppState } from './socket-deadline-clock'
 
 vi.mock('./direct-e2ee-framing-policy', () => import('./legacy-direct-framing-test-policy'))
 
@@ -89,6 +90,7 @@ describe('synthesized close diagnostics', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    recordSocketDeadlineAppState('active')
     sockets.length = 0
     globalThis.WebSocket = WedgedWebSocket as unknown as typeof WebSocket
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -135,6 +137,28 @@ describe('synthesized close diagnostics', () => {
       }
     }
   )
+
+  it('does not blame the endpoint when device sleep pauses the monotonic clock', async () => {
+    let elapsed = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+    const entries: ConnectionLogEntry[] = []
+    const client = connect('ws://desktop.invalid', 'token', 'server-key', {
+      onLog: (entry) => entries.push(entry)
+    })
+    try {
+      recordSocketDeadlineAppState('background')
+      elapsed = 12_000
+      vi.setSystemTime(Date.now() + 3 * 60 * 60_000)
+      recordSocketDeadlineAppState('active')
+      await vi.advanceTimersByTimeAsync(12_000)
+      expect(client.getState()).toBe('reconnecting')
+      expect(entries.some((entry) => entry.code === 'suspended-dial')).toBe(true)
+      expect(entries.some((entry) => entry.code === 'connect-timeout')).toBe(false)
+    } finally {
+      client.close()
+      clock.mockRestore()
+    }
+  })
 
   it.each([3 * 60 * 60_000, -3 * 60 * 60_000])(
     'keeps an on-time connect timeout when the wall clock shifts by %i ms',

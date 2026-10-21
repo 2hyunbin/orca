@@ -5,6 +5,7 @@ import { isRpcResponse } from './rpc-response-shape'
 import { isStaleRpcSocketEvent, logRpcSocketClose } from './rpc-socket-close-evidence'
 import { describeSocketEvent, redactSocketEndpoint } from './socket-event-debug'
 import { reportSocketDeadline, type SocketDeadlineKind } from './socket-deadline-suspension'
+import { startSocketDeadlineClock } from './socket-deadline-clock'
 import type { ConnectionLogEmitter, ConnectionState, RpcRequest, RpcResponse } from './types'
 
 const CONNECT_TIMEOUT_MS = 12_000
@@ -242,7 +243,7 @@ export class RpcClientSocketSession {
   }
 
   private armSocketDeadline(kind: SocketDeadlineKind, timeoutMs: number): void {
-    const armedMonotonicMs = performance.now()
+    const elapsedMs = startSocketDeadlineClock()
     const timer = setTimeout(() => {
       if (kind === 'connect') {
         this.connectTimer = null
@@ -260,7 +261,7 @@ export class RpcClientSocketSession {
       reportSocketDeadline(
         {
           kind,
-          elapsedMs: performance.now() - armedMonotonicMs,
+          elapsedMs: elapsedMs(),
           timeoutMs,
           ...(kind === 'connect' ? { attempt: this.options.getReconnectAttempt() } : {})
         },
