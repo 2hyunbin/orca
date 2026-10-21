@@ -94,7 +94,7 @@ export const createWorkItemMutationActions = (
       // Why: the optimistic patch may now disagree with disk; resync rather than leave a lie on screen.
       void get().fetchReposForAllHosts()
     }
-    const eviction = repoCacheEvictionForRow(get(), repoId, repoPath)
+    const eviction = repoCacheEvictionForRow(get(), repoId, repoPath, hostId)
     // Why: clear inflight dedupe BEFORE bumping the nonce so the re-triggered fetch can't collapse onto a pre-flip in-flight entry.
     clearInflightWorkItemsForRepo(eviction)
     // Why: evict AFTER the await so an overlapping fetch can't repopulate with pre-flip data; also drops legacy path-scoped keys.
