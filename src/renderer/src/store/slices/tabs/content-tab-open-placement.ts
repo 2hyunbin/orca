@@ -9,6 +9,7 @@ import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspac
 import type { NewGroupSplit } from '../../../../../shared/workspace-layout/workspace-layout-command-types'
 import type { AppState } from '../../types'
 import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
+import { selectFolderWorkspaces } from '../../workspace-record-selectors'
 import { resolveUnifiedTabCreatePlacement } from './tabs-create-placement'
 import type { TabSplitTarget } from './tabs-slice-contract'
 
@@ -46,7 +47,7 @@ export function contentTabOpenPlacement(
     lookupWorktrees: () =>
       [
         ...(state.allWorktrees?.() ?? []),
-        ...(state.folderWorkspaces ?? []).map(folderWorkspaceToWorktree)
+        ...(selectFolderWorkspaces(state) ?? []).map(folderWorkspaceToWorktree)
       ].filter((worktree) => worktree.id === worktreeId)
   })
   const groupId = placement.groupId ?? groups[0]?.id ?? state.ensureWorktreeRootGroup?.(worktreeId)
