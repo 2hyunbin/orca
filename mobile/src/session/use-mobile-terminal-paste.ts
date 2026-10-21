@@ -8,7 +8,7 @@ import { buildMobileTerminalPasteText } from '../terminal/mobile-terminal-paste-
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import {
-  buildMobileImagePastePayload,
+  buildMobileTerminalImagePastePayload,
   prepareMobileClipboardImageBase64,
   saveMobileClipboardImageAsTempFile
 } from './mobile-clipboard-image'
@@ -79,7 +79,7 @@ export function useMobileTerminalPaste({
           connectionId
         })
         payload = separateImagePasteFromFollowingText(
-          buildMobileImagePastePayload(imagePath, agent),
+          buildMobileTerminalImagePastePayload(imagePath, agent),
           true
         )
       }

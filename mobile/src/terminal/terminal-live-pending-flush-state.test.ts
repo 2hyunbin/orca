@@ -90,8 +90,8 @@ describe('terminal live mirror send queue', () => {
         }
         const accepted = isTerminalLiveInputWithinByteLimit(payload)
         if (accepted) {
-        received.push(payload)
-      }
+          received.push(payload)
+        }
         return accepted
       }
       const part = glyph.repeat(

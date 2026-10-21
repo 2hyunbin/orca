@@ -95,7 +95,8 @@
         "korean": "한국어",
         "japanese": "日本語",
         "spanish": "Español",
-        "french": "Français"
+        "french": "Français",
+        "portuguese": "Português (Brasil)"
       },
       "statusBar": {
         "claudeToggleDescription": "アクティブなワークスペースの Claude トークンとコストの使用状況を表示します。",
@@ -210,6 +211,10 @@
       "readFailed": "Agent設定を読み込めませんでした。ホストへの接続を確認して再試行してください。",
       "saveFailed": "Agent設定を保存できませんでした。ホストへの接続を確認して再試行してください。",
       "hostDefaults": "選択したホストで起動する新しいAgentの既定値。",
+      "defaultOpensAs": "{{value0}}の開き方",
+      "defaultOpensAsChat": "チャット",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "このコンピューターから起動する新しい{{value0}}セッション（ペアリングしたホスト上も含む）に適用されます。プロバイダーのスイッチと連動します。",
       "save": "保存",
       "clearDefault": "デフォルトの Agent をクリア"
     },
@@ -3217,12 +3222,12 @@
             "c44659e09f": "スマホ操作中",
             "3eed73394f": "キーボードが一時停止しています",
             "c7e4a2b8f1": "スマホが操作中です",
-            "4b7e1c9a20": "スマートフォンにぴったりのサイズ",
-            "9d2f6a3e58": "電話セッションが終了しました。このウィンドウに合わせて復元します。",
+            "4b7e1c9a20": "スマホのサイズのままです",
+            "9d2f6a3e58": "スマホでの操作が終了しました。復元すると、このウィンドウのサイズに戻ります。",
             "1e5c8b7d43": "復元する",
             "6a3d9f2c71": "すべて復元する",
-            "8c1a5e9f36": "デスクトップの入力が一時停止されます。出力はストリーミングを続けます。",
-            "2f7b4d1e95": "全部取り戻せ",
+            "8c1a5e9f36": "デスクトップからの入力は止まっています。出力の表示は続きます。",
+            "2f7b4d1e95": "すべての操作を取り戻す",
             "3a9c5f7e12": "最小化する"
           },
           "TerminalAgentSessionForkDialog": {
@@ -3515,7 +3520,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "ブラウザで開く",
-            "9dd880bd56": "右側のすべてのタブを閉じる",
             "1611a1324b": "閉じる",
             "5d6e89891f": "タブの複製",
             "966feb9ad5": "右に分割",
@@ -3532,7 +3536,6 @@
             "52ce4f4605": "相対パスをコピー",
             "5b85754786": "パスのコピー",
             "bfd5797ef4": "Markdown プレビューを開く",
-            "e5ff31ccaf": "右側のすべてのタブを閉じる",
             "ba1369dd24": "すべてのエディターのタブを閉じる",
             "1ba8492c5b": "閉じる",
             "68cc610e7f": "名前を変更する",
@@ -3565,7 +3568,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "タブの色",
             "2f697b3c31": "タイトルの変更",
-            "c1ee099c7e": "右側のすべてのタブを閉じる",
             "8d16f9cd30": "その他を閉じる",
             "89359a36f7": "閉じる",
             "21132389e9": "右に分割",
@@ -6839,7 +6841,6 @@
           "4e32e030b2": "ローカルに保存されます。Orca は使用量の更新のために platform.minimax.io のみに送信します。",
           "remoteServerFallback": "リモートサーバー",
           "loadAccountsFailed": "プロバイダーアカウントを読み込めませんでした。",
-          "remoteScopeAccounts": "{{value0}} が管理するアカウントを表示しています。アカウントの追加や再認証はそのサーバー上で行ってください。",
           "accountScopePrefix": "アカウントスコープ",
           "accountScopeRemoteServerUnnamed": "リモートサーバー",
           "remoteScopeLocalAccountsKept": "このデスクトップで管理されているアカウントはそのまま残っています。デフォルトランタイムをローカルデスクトップに戻すと表示されます。",
@@ -12323,7 +12324,7 @@
           "artifactsTitle": "成果物の共有",
           "artifactsDescription": "HTML ファイルと Markdown ファイルを公開し、Orca からのすべての共有リンクを管理します。",
           "relayTitle": "Orca リレー",
-          "relayDescription": "Orca Mobile を携帯電話または Wi-Fi 経由でこのデスクトップに接続します。",
+          "relayDescription": "Orca Mobile をモバイル回線でも、どの Wi-Fi からでも、このデスクトップに接続します。",
           "skillsTitle": "スキルの共有",
           "skillsDescription": "1 つのスキルまたはスキルセット全体を非公開リンクで共有し、使用するマシンにインストールします。",
           "keywordAccount": "アカウント",
@@ -12712,7 +12713,8 @@
           "behindRolledBack": "このアプリより古い Orca サーバーを実行しています。前回の更新はロールバックされました。[サーバーを更新] で再試行してください。",
           "behindNoTemplate": "このアプリでは更新できない Orca サーバーを実行しています。このビルドにはこのホスト用のサーバーが含まれていません。",
           "behindMigrating": "Orca サーバーを実行しています。プロジェクトの移動が完了した後に更新されます。",
-          "behindCheckFailed": "Orca サーバーを実行しています。Orca はこのアプリより古いかどうかを確認できませんでした。"
+          "behindCheckFailed": "Orca サーバーを実行しています。Orca はこのアプリより古いかどうかを確認できませんでした。",
+          "refusedBlockedReason": "このホストにはまだ Orca がセットアップされていません。{{reason}}"
         },
         "deltaMove": {
           "action": "新規プロジェクトを移動…",
@@ -15010,7 +15012,7 @@
           "missing-description": "Windowsがペアリングサーバーをブロックする可能性があります。プライベートネットワーク上のこの Orca アプリとTCPポート{{port}}のルールを追加してください。",
           "open-settings": "ネットワーク設定を開く",
           "waiting": "Windowsを待機中…",
-          "allow": "電話接続を許可",
+          "allow": "スマホからの接続を許可",
           "repair-unverified": "Windows ファイアウォールのアクセスを確認できませんでした",
           "blocked-title": "Windowsが Orca モバイルをブロックしている可能性があります",
           "blocked-description": "既存のインバウンドブロックルールがペアリング例外を上書きする可能性があります。修復はこの Orca アプリの競合するTCPルールを削除し、プライベートネットワーク上のポート{{port}}を許可します。",
@@ -16645,10 +16647,10 @@
           },
           "BrowserMobileDriverOverlay": {
             "a6914ee43f": "操作を取り戻す",
-            "f4ecd61552": "このタブはスマートフォンから制御されています。持ち帰ってデスクトップで使用します。",
+            "f4ecd61552": "このタブはスマホから操作されています。操作を取り戻すと、デスクトップで使えます。",
             "d9768ec642": "ブラウザ入力が一時停止されています",
             "20539eca03": "モバイルがこのブラウザを操作しています",
-            "7c31b0da94": "このタブを元に戻すことができませんでした。電話セッションを確認して、もう一度試してください。"
+            "7c31b0da94": "このタブの操作を取り戻せませんでした。スマホでの接続状況を確認して、もう一度試してください。"
           },
           "BrowserPane": {
             "1ded0d3168": "スクリーンショットをコピー",
@@ -18140,7 +18142,7 @@
         "8d2e4f7a1b": "成果物の共有",
         "2c9a5b6e8d": "HTML ファイルと Markdown ファイルを公開し、Orca からのすべての共有リンクを管理します。",
         "6e3f1a9c5b": "Orca リレー",
-        "4b7d2e8f1a": "Orca Mobile を携帯電話または Wi-Fi 経由でこのデスクトップに接続します。",
+        "4b7d2e8f1a": "Orca Mobile をモバイル回線でも、どの Wi-Fi からでも、このデスクトップに接続します。",
         "9a4c6b2d7e": "スキルの共有",
         "3d8e5f1b9c": "非公開リンクでスキルを共有し、使用するマシンにインストールします。",
         "c5b3e8a17d": "Orca にサインインする"
@@ -18872,6 +18874,8 @@
         "plan": "プラン",
         "historyRepaired": "このチャットの履歴の一部を読み込めませんでした。",
         "historyItemTooLarge": "チャットのこの部分は大きすぎるため表示できません。",
+        "continuedOutside": "このチャットの外で続けられました。",
+        "continuedOutsideRewound": "このチャットの外で続けられました。上の以前の返信は、この会話の履歴にはもうありません。",
         "stoppedBeforeStart": "手動で停止しました",
         "dismiss": "閉じる",
         "copyError": "エラーをコピー",
@@ -19118,16 +19122,13 @@
       "bar": {
         "SortableTabContextMenu": {
           "switchToTerminalView": "ターミナル Agent で続ける",
-          "switchToChatView": "チャット UI で続ける",
-          "closeTabsToLeft": "左側のすべてのタブを閉じる"
+          "switchToChatView": "チャット UI で続ける"
         },
         "BrowserTab": {
-          "closeOthers": "その他を閉じる",
-          "closeTabsToLeft": "左側のすべてのタブを閉じる"
+          "closeOthers": "その他を閉じる"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "その他を閉じる",
-          "closeTabsToLeft": "左側のすべてのタブを閉じる"
+          "closeOthers": "その他を閉じる"
         },
         "CopyTabIdMenuItem": {
           "copied": "タブ ID をコピーしました",
@@ -19401,6 +19402,13 @@
           "checking": "変更を確認中…",
           "checkingDetails": "確認中…",
           "unavailableDetails": "詳細を利用できません"
+        },
+        "unsavedEdits": {
+          "discarded_one": "{{count}} 個のファイルの未保存の編集は破棄されます：",
+          "discarded_other": "{{count}} 個のファイルの未保存の編集は破棄されます：",
+          "moreFiles": "ほか {{value}} 件",
+          "blocked_one": "先に {{name}} の未保存のファイル {{count}} 個を保存するか閉じてください",
+          "blocked_other": "先に {{name}} の未保存のファイル {{count}} 個を保存するか閉じてください"
         }
       }
     },
