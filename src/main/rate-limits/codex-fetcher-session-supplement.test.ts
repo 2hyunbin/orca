@@ -138,8 +138,10 @@ function dedicatedCreditsResponse(): Response {
 }
 
 async function fetchWeeklyOnly(rateLimitResetCredits?: unknown) {
-  childSpawnMock.mockReturnValue(makeRpcChild(rateLimitResetCredits))
+  const child = makeRpcChild(rateLimitResetCredits)
+  childSpawnMock.mockReturnValue(child)
   const resultPromise = fetchCodexRateLimits()
+  await vi.waitFor(() => expect(child.stdin.write).toHaveBeenCalled(), { interval: 0 })
   await vi.advanceTimersByTimeAsync(1)
   await vi.advanceTimersByTimeAsync(1)
   return resultPromise

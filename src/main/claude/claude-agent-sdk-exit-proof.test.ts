@@ -90,12 +90,18 @@ async function proveExitWithRetries(
   input: Parameters<typeof proveClaudeChildExit>[0],
   attempts = 3
 ): Promise<boolean> {
+  const tree =
+    input.tree ??
+    createClaudeChildTreeReaper(input.managed.child, {
+      exited: () => input.managed.rootVerdict === 'exited'
+    })
+  const retained = { ...input, tree }
   for (let attempt = 1; attempt < attempts; attempt += 1) {
-    if (await proveClaudeChildExit(input)) {
+    if (await proveClaudeChildExit(retained)) {
       return true
     }
   }
-  return proveClaudeChildExit(input)
+  return proveClaudeChildExit(retained)
 }
 
 function spawnScript(script: string): PipedChildProcess {

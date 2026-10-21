@@ -84,6 +84,7 @@ describe('fetchCodexRateLimits auth errors', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -120,6 +121,7 @@ describe('fetchCodexRateLimits auth errors', () => {
     })
 
     const resultPromise = fetchCodexRateLimits()
+    await vi.waitFor(() => expect(rpcChild.stdin.write).toHaveBeenCalled(), { interval: 0 })
     await vi.advanceTimersByTimeAsync(1)
     await vi.advanceTimersByTimeAsync(1)
 
@@ -166,6 +168,7 @@ describe('fetchCodexRateLimits auth errors', () => {
     })
 
     const resultPromise = fetchCodexRateLimits()
+    await vi.waitFor(() => expect(rpcChild.stdin.write).toHaveBeenCalled(), { interval: 0 })
     await vi.advanceTimersByTimeAsync(1)
     await vi.advanceTimersByTimeAsync(1)
 
