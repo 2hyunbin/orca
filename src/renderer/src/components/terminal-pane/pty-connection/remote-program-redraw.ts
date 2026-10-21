@@ -24,8 +24,14 @@ export const REMOTE_PROGRAM_REDRAW_ACK_TIMEOUT_MS = 2_000
 export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
   session.remoteProgramRedrawRestore = null
 
+  session.remoteProgramRedrawPtyId = null
+
   session.requestRemoteProgramRedraw = function (reason: string): void {
     const ptyId = session.transport.getPtyId()
+    if (session.remoteProgramRedrawRestore !== null && session.remoteProgramRedrawPtyId !== ptyId) {
+      // Why: a nudge for a swapped-out PTY must not hold off the new one's redraw.
+      session.remoteProgramRedrawRestore()
+    }
     if (
       session.disposed ||
       !ptyId ||
@@ -88,6 +94,7 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
     })
     const ackTimer = setTimeout(scheduleRestore, REMOTE_PROGRAM_REDRAW_ACK_TIMEOUT_MS)
     session.remoteProgramRedrawRestore = restore
+    session.remoteProgramRedrawPtyId = ptyId
     if (!session.transport.resize(cols, nudgeRows, { claim: true })) {
       finish()
       return

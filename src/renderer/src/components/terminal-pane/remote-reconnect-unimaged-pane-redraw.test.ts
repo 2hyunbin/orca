@@ -316,6 +316,40 @@ describe('a reconnected remote pane the host could not image', () => {
     expect(drive.resizes()).toEqual([NUDGE[0]])
   })
 
+  it('does not nudge while the stream is still reconnecting', async () => {
+    const drive = await connectVisibleRemotePane({
+      availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },
+      snapshot: null
+    })
+    drive.transport.isConnected?.mockReturnValue(false)
+    vi.useFakeTimers()
+    drive.reconnectWithoutImage()
+    await settle(5_000)
+
+    expect(drive.banners()).toBe(1)
+    expect(drive.resizes()).toEqual([])
+    drive.dispose()
+  })
+
+  it('leaves a swapped-out PTY alone when its nudge is still pending', async () => {
+    const drive = await connectVisibleRemotePane({
+      availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },
+      snapshot: null
+    })
+    vi.useFakeTimers()
+    drive.reconnectWithoutImage()
+    for (let tick = 0; tick < 5 && drive.resizes().length === 0; tick += 1) {
+      await vi.advanceTimersByTimeAsync(10)
+      await flushAsyncTicks(20)
+    }
+    expect(drive.resizes()).toEqual([NUDGE[0]])
+
+    drive.transport.getPtyId.mockReturnValue('remote:env-1@@terminal-agent-2')
+    await settle(5_000)
+    expect(drive.resizes()).toEqual([NUDGE[0]])
+    drive.dispose()
+  })
+
   it('puts the row back when the pane unmounts mid-repaint', async () => {
     const drive = await connectVisibleRemotePane({
       availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },
