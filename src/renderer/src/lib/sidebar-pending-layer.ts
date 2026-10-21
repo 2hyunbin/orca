@@ -223,7 +223,12 @@ export function holdCreatedSidebarWorkspace(workspace: CreatedWorkspace): void {
     answeredBy: null
   }
   startSettling()
-  publish({ ...layer, created: [...layer.created, entry] })
+  // A re-create of a just-removed id must not stay hidden by that removal's hold.
+  const removed = layer.removed.filter(
+    (hold) =>
+      hold.worktreeId !== worktreeId || (entry.hostId !== null && hold.hostId !== entry.hostId)
+  )
+  publish({ ...layer, created: [...layer.created, entry], removed })
   answer(
     new Set([entry.opId]),
     (pending) => pending.created,

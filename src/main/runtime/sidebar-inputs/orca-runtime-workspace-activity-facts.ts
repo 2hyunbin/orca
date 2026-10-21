@@ -43,12 +43,18 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
       this.workspaceActivityFacts.resyncAgentPanes()
     }
     // Now, not on the session publication: a closed pane's stopping PTY stops counting here.
+    // syncWindowGraph replaces this.leaves (session-window-graph.ts), so previousLeaves stays intact.
     this.refreshWorkspaces(leafPtyChangedWorktrees(previousLeaves, this.leaves))
     return result
   }
 
   override markPtyStopRequested(ptyId: string): void {
     super.markPtyStopRequested(ptyId)
+    this.refreshWorkspaces(this.ptyWorktreeIds(ptyId))
+  }
+
+  override clearPtyStopRequest(ptyId: string): void {
+    super.clearPtyStopRequest(ptyId)
     this.refreshWorkspaces(this.ptyWorktreeIds(ptyId))
   }
 
@@ -136,20 +142,20 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
     }
   }
 
-  // getLivePtyIdsForWorktree's identity rule in one pass. A host that only lost contact keeps its
-  // terminals unverifiable, never gone, even while the record still reads connected.
+  // Matches every host form of the worktree's id. A host that only lost contact keeps its terminals
+  // unverifiable, never gone, even while the record still reads connected or is being closed.
   private readWorkspaceTerminalLiveness(worktreeId: string): WorkspaceTerminalLiveness | null {
     const key = worktreeIdentityKey(worktreeId)
     const owns = (id: string): boolean => id === worktreeId || worktreeIdentityKey(id) === key
     let unverifiable = false
     for (const surfaces of [this.leaves.values(), this.ptysById.values()]) {
       for (const surface of surfaces) {
-        if (surface.ptyId === null || !owns(surface.worktreeId) || this.isClosing(surface.ptyId)) {
+        if (surface.ptyId === null || !owns(surface.worktreeId)) {
           continue
         }
         if (this.getPtyLivenessVerdict(surface.ptyId)?.status === 'unverifiable') {
           unverifiable = true
-        } else if (surface.connected) {
+        } else if (surface.connected && !this.isClosing(surface.ptyId)) {
           return 'live'
         }
       }

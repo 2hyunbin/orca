@@ -272,4 +272,20 @@ describe('sidebar pending layer', () => {
       ].map((row) => row.hostId)
     ).toEqual(['local'])
   })
+
+  it('lists a workspace re-created under a just-removed id and host', async () => {
+    const layer = await load()
+    layer.holdRemovedSidebarWorkspace({ worktreeId: local.id, hostId: 'local' })
+    layer.holdCreatedSidebarWorkspace({ worktree: local })
+    expect(layer.readSidebarPendingLayer().removed).toEqual([])
+    expect(
+      [
+        ...overlaySidebarPendingLayer(
+          domains([]),
+          layer.readSidebarPendingLayer(),
+          CATALOG
+        ).workspaces.values()
+      ].map((row) => row.id)
+    ).toEqual([local.id])
+  })
 })

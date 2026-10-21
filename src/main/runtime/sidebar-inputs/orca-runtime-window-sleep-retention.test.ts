@@ -209,4 +209,21 @@ describe('main sleeping retention and a closed last tab', () => {
     await vi.advanceTimersByTimeAsync(300)
     expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
   })
+
+  it('keeps a closed tab’s terminal unverifiable when its host stops answering', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    runtime.markPtyStopRequested('pty-1')
+    publishNoTabs(runtime)
+    runtime.markPtyLivenessUnverifiable('pty-1', 'ssh contact lost')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('unverifiable')
+  })
+
+  it('counts the terminal live again when its stop fails', async () => {
+    const runtime = await createHostWithSpawnedPty()
+    runtime.markPtyStopRequested('pty-1')
+    publishNoTabs(runtime)
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]).toBeUndefined()
+    runtime.clearPtyStopRequest('pty-1')
+    expect(runtime.getWorkspaceActivityFacts().facts[WT]?.terminal).toBe('live')
+  })
 })

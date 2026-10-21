@@ -197,6 +197,19 @@ export async function stopAndWaitPtyFromRuntimeController(
   ptyId: string,
   opts?: { keepHistory?: boolean; deadlineMs?: number }
 ): Promise<boolean> {
+  const stopped = await stopAndWaitPty(deps, ptyId, opts)
+  if (!stopped) {
+    // Refused or failed: the process may run on, so it must not read as closing.
+    deps.runtime?.clearPtyStopRequest?.(ptyId)
+  }
+  return stopped
+}
+
+async function stopAndWaitPty(
+  deps: PtyRuntimeControllerDeps,
+  ptyId: string,
+  opts?: { keepHistory?: boolean; deadlineMs?: number }
+): Promise<boolean> {
   const {
     runtime,
     store,
