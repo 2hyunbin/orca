@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ConnectionPresentationModel } from './use-mobile-tasks-connection-presentation'
 import { BottomDrawer, PickerModal, Pressable } from './mobile-tasks-dependencies'
 import { renderMobileTasksItemActions } from './mobile-tasks-item-actions'
 import { renderMobileTasksWorkspaceCreateTargetPicker } from './mobile-tasks-create-drawers'
@@ -81,7 +82,9 @@ function model(provider: string) {
       content: { title: 'Issue', url: 'https://example.com/1', labels: [] }
     }
   }
-  return { state, handoff, close }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this isolated fixture supplies the rendered fields; unrelated model branches are mocked above.
+  const presentation = state as unknown as ConnectionPresentationModel
+  return { state, presentation, handoff, close }
 }
 
 describe('Tasks create source handoffs', () => {
@@ -99,8 +102,8 @@ describe('Tasks create source handoffs', () => {
   it.each(['github', 'linear', 'jira'])(
     'closes %s task before create or repository selection',
     (provider) => {
-      const { state, handoff, close } = model(provider)
-      const rendered = mount(Reflect.apply(renderMobileTasksItemActions, undefined, [state]))
+      const { state, presentation, handoff, close } = model(provider)
+      const rendered = mount(renderMobileTasksItemActions(presentation))
       act(() => rendered.root.findAllByType(Pressable)[0].props.onPress())
       expect(close).toHaveBeenCalledOnce()
       expect(state.openWorkspaceCreate).not.toHaveBeenCalled()
@@ -114,10 +117,8 @@ describe('Tasks create source handoffs', () => {
     }
   )
   it('holds the selected repository until its picker closes', () => {
-    const { state, handoff, close } = model('jira')
-    const rendered = mount(
-      Reflect.apply(renderMobileTasksWorkspaceCreateTargetPicker, undefined, [state])
-    )
+    const { state, presentation, handoff, close } = model('jira')
+    const rendered = mount(renderMobileTasksWorkspaceCreateTargetPicker(presentation))
     act(() => rendered.root.findByType(PickerModal).props.onSelect('repo-b'))
     expect(close).toHaveBeenCalledOnce()
     expect(state.openWorkspaceCreate).not.toHaveBeenCalled()
@@ -125,8 +126,8 @@ describe('Tasks create source handoffs', () => {
     expect(state.openWorkspaceCreate).toHaveBeenCalledWith(state.workspaceRepoPickerItem, 'repo-b')
   })
   it('closes a project row before resolving create or missing-repository feedback', () => {
-    const { state, handoff, close } = model('github')
-    const rendered = mount(Reflect.apply(renderMobileTasksProjectDetailDrawer, undefined, [state]))
+    const { state, presentation, handoff, close } = model('github')
+    const rendered = mount(renderMobileTasksProjectDetailDrawer(presentation))
     act(() => rendered.root.findAllByType(Pressable)[0].props.onPress())
     expect(close).toHaveBeenCalledOnce()
     expect(state.createWorkspaceFromProjectRow).not.toHaveBeenCalled()
