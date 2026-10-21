@@ -189,8 +189,8 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
     })
     await record('phone closes the pinned tab', closedPinned)
 
-    // A headless server refuses with runtime_error "renderer_unavailable" (no window to open in),
-    // except in a layout-owner build, whose main opens it and lists its tab at once.
+    // A windowless server's main opens the file itself and lists a markdown row; the rebuilt rows
+    // then name tab2 from the saved session ("Terminal 2"). A layout-owner build lists it at once.
     const opened = await reply(phone, 'files.open', { worktree, relativePath: 'README.md' })
     if (LAYOUT_OWNER_BUILD) {
       const listed = await phone.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
