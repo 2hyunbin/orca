@@ -24,9 +24,9 @@ export type ChatTabLayoutCommand =
   | (CommandOf<'closeTabs'> & { tabIds: [string] })
 
 /**
- * One change against the workspace's layout as loaded now: a chat opens in the active group (while the
- * workspace still holds it) unless a tab shows it, and a close drops the chat's tab. Null when
- * nothing changes.
+ * One change against the workspace's layout as loaded now: a chat opens in the active group (while
+ * the workspace still holds it) unless a tab shows it, and a close drops the chat's tab. Null when
+ * nothing changes. Main's queue and the windowless save both decide through it.
  */
 export function chatTabLayoutCommand(
   workspace: WorkspaceLayout | undefined,
