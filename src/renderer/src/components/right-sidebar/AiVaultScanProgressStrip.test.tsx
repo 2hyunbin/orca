@@ -233,10 +233,15 @@ it('does not borrow reading facts from retained rows, absent fields, zero work o
   expect(screen.queryByRole('progressbar')).toBeNull()
   expect(panel.container.querySelector('.lucide-check')).toBeNull()
   expect(screen.getByText('24,968 files')).toBeTruthy()
-  for (const agent of [FINISHED.agents[0]!, { ...completed, read: { done: 0, total: 0 } }]) {
-    panel.rerender(<AiVaultScanProgressStrip progress={{ ...reading, agents: [agent] }} />)
+  const zero = { ...completed, read: { done: 0, total: 0 } }
+  for (const progress of [
+    { ...reading, agents: [FINISHED.agents[0]!] },
+    { ...reading, agents: [zero] },
+    { ...success, agents: [zero] }
+  ]) {
+    panel.rerender(<AiVaultScanProgressStrip progress={progress} />)
     expect(screen.queryByRole('progressbar')).toBeNull()
-    expect(panel.container.querySelector('.lucide-check')).toBeNull()
+    expect(screen.getByRole('list').querySelector('.lucide-check')).toBeNull()
   }
   panel.rerender(
     <AiVaultScanProgressStrip progress={{ ...reading, agents: [completed], settledAt: 95_000 }} />
