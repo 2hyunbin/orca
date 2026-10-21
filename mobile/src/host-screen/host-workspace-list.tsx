@@ -143,7 +143,9 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           connState={connState}
           // A feed-built list is loaded once the feed installs; rows draw before worktree.ps answers.
           worktreesLoaded={
-            controller.feed ? controller.feed.kind === 'ready' : state.worktreesLoaded
+            controller.feed && controller.feed.kind !== 'failed'
+              ? controller.feed.kind === 'ready'
+              : state.worktreesLoaded
           }
           // A feed-built list counts its sections, so collapsed ones and a failing worktree.ps never blank it.
           displayCount={controller.feed ? sections.length : displayWorktrees.length}

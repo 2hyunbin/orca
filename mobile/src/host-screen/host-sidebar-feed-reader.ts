@@ -24,6 +24,8 @@ export type HostSidebarFeedRead = {
   installed: InstalledSidebarInputs | null
   /** The host has no feed (method_not_found, or forbidden by an older mobile allowlist). */
   unavailable: boolean
+  /** Every retry failed before anything installed; the next refresh reads again. */
+  gaveUp?: true
 }
 
 // A read that fails with the connection up gets no ready to repeat it; back off so a failing host is not hammered.
@@ -76,7 +78,13 @@ export class HostSidebarFeedReader {
   /** Reads again from what is installed, which the host answers past every notice so far. */
   private retry(): void {
     const delay = RETRY_DELAYS_MS[this.retries]
-    if (this.disposed || this.retryTimer || delay === undefined) {
+    if (this.disposed || this.retryTimer) {
+      return
+    }
+    if (delay === undefined) {
+      if (!this.state.installed) {
+        this.onRead({ installed: null, unavailable: this.unavailable, gaveUp: true })
+      }
       return
     }
     this.retries += 1

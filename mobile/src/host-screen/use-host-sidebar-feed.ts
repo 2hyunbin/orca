@@ -24,6 +24,8 @@ export type HostSidebarFeed =
   | { kind: 'ready'; domains: SidebarFeedDomains }
   /** The host lacks the feed or means other things by it: only reopening the page can match it. */
   | { kind: 'reopen' }
+  /** Every read failed before one installed; the next refresh reads again. */
+  | { kind: 'failed' }
 
 export type HostSidebarFeedControls = {
   feed: HostSidebarFeed
@@ -67,13 +69,14 @@ export function forgetRememberedSidebarFeeds(): void {
 
 export function readHostSidebarFeed({
   installed,
-  unavailable
+  unavailable,
+  gaveUp
 }: HostSidebarFeedRead): HostSidebarFeed {
   if (unavailable) {
     return { kind: 'reopen' }
   }
   if (!installed) {
-    return { kind: 'loading' }
+    return gaveUp ? { kind: 'failed' } : { kind: 'loading' }
   }
   if (!SUPPORTED_SIDEBAR_SEMANTICS_VERSIONS.includes(installed.semanticsVersion)) {
     return { kind: 'reopen' }
@@ -100,6 +103,11 @@ export function useHostSidebarFeed(
     }
     let lastInstalled: HostSidebarFeedRead['installed'] = null
     const reader = new HostSidebarFeedReader(client, (next) => {
+      if (next.gaveUp) {
+        // The host's last installed feed still beats the plain list.
+        setRead((current) => (current.installed ? current : next))
+        return
+      }
       setRead(next)
       if (hostId) {
         rememberFeed(hostId, next.unavailable ? null : next.installed)
