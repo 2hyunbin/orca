@@ -32,6 +32,25 @@ export function applyEditorFileLoadFailure(args: {
   setFileContents: Dispatch<SetStateAction<Record<string, FileContent>>>
 }): void {
   const tab = args.tabs.find((file) => file.id === args.fileId)
+  // Reopened drafts stay editable when their original file is gone; explicit save recreates it.
+  if (
+    tab?.mode === 'edit' &&
+    tab.isDirty &&
+    isPathSpecificMissingFileError(args.error, args.filePath) &&
+    useAppStore.getState().editorDrafts[tab.id] !== undefined
+  ) {
+    if (tab.externalMutation !== 'deleted' && tab.externalMutation !== 'renamed') {
+      useAppStore.getState().setExternalMutation(tab.id, 'deleted')
+    }
+    args.setFileContents((prev) => {
+      const existing = prev[args.fileId]
+      if (!existing || existing.loadError !== undefined) {
+        return { ...prev, [args.fileId]: { content: '', isBinary: false } }
+      }
+      return existing.isStale ? { ...prev, [args.fileId]: { ...existing, isStale: false } } : prev
+    })
+    return
+  }
   if (
     !tab ||
     tab.mode !== 'edit' ||
