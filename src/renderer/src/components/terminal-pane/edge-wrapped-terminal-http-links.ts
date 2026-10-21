@@ -159,6 +159,7 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
     }
 
     let text = ''
+    let exceedsLengthLimit = false
     const rows: WrappedLogicalLine['rows'] = []
     for (let rowY = startY; rowY < startY + maxRows; rowY++) {
       const line = buffer.getLine(rowY)
@@ -182,6 +183,7 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
       const whitespaceIndex = fragment.search(/\s/)
       const possibleUrlFragmentLength = whitespaceIndex === -1 ? fragment.length : whitespaceIndex
       if (text.length + possibleUrlFragmentLength > TERMINAL_HTTP_URL_MAX_LENGTH) {
+        exceedsLengthLimit = true
         break
       }
 
@@ -195,13 +197,16 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
         lineLength: line.length
       })
       text += fragment
-      if (rows.length > 1 && rowY >= currentY) {
-        candidates.push({
-          text,
-          rows: [...rows],
-          fingerprint: `edge-http:${rows.map((row) => `${row.y}:${row.sourceText}`).join('\0')}`
-        })
+      if (whitespaceIndex !== -1) {
+        break
       }
+    }
+    if (!exceedsLengthLimit && rows.length > 1 && rows.at(-1)!.y >= currentY) {
+      candidates.push({
+        text,
+        rows,
+        fingerprint: `edge-http:${rows.map((row) => `${row.y}:${row.sourceText}`).join('\0')}`
+      })
     }
   }
 

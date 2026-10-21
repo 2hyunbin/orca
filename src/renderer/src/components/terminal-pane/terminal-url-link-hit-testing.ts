@@ -1,9 +1,6 @@
 import { rangeForParsedLinkOnRow } from './terminal-link-row-range'
 import type { IBufferLine, IBufferRange, IDisposable, Terminal } from '@xterm/xterm'
 import type { HttpLinkSourceOwner } from '@/lib/http-link-routing'
-import { buildEdgeWrappedHttpLogicalLineCandidates } from './edge-wrapped-terminal-http-links'
-import { buildHardWrappedHttpLogicalLineCandidates } from './hard-wrapped-terminal-http-links'
-import { dedupeLogicalLines } from './terminal-file-link-hit-testing'
 import { isTerminalHttpLinkActivation } from './terminal-http-link-activation'
 import {
   installTerminalLinkPtyMouseSuppression,
@@ -11,7 +8,8 @@ import {
 } from './terminal-link-pty-mouse-suppression'
 import { getTerminalBufferPositionForMouseEvent } from './terminal-mouse-buffer-position'
 import { extractTerminalHttpLinks } from './terminal-http-url-extraction'
-import { buildWrappedLogicalLine, rangeForParsedFileLink } from './wrapped-terminal-link-ranges'
+import { rangeForParsedFileLink } from './wrapped-terminal-link-ranges'
+import { buildTerminalHttpLogicalLines } from './terminal-http-logical-lines'
 import { terminalLogicalLinkHasOscLink } from './terminal-osc-link-cells'
 import { isTerminalLinkifierHoverActive } from '@/lib/pane-manager/terminal-linkifier-hover-reset'
 import {
@@ -190,23 +188,6 @@ export function openHttpLinkAtBufferPosition(
   }
   openRoutedHttpLink(url, deps)
   return true
-}
-
-export function buildTerminalHttpLogicalLines(
-  buffer: { getLine(y: number): IBufferLine | undefined },
-  bufferLineNumber: number
-) {
-  const nativeWrappedLogicalLine = buildWrappedLogicalLine(buffer, bufferLineNumber)
-  return dedupeLogicalLines([
-    ...(nativeWrappedLogicalLine && nativeWrappedLogicalLine.rows.length > 1
-      ? [nativeWrappedLogicalLine]
-      : []),
-    ...buildHardWrappedHttpLogicalLineCandidates(buffer, bufferLineNumber),
-    ...buildEdgeWrappedHttpLogicalLineCandidates(buffer, bufferLineNumber),
-    ...(nativeWrappedLogicalLine && nativeWrappedLogicalLine.rows.length === 1
-      ? [nativeWrappedLogicalLine]
-      : [])
-  ])
 }
 
 function findHttpLinkAtBufferPosition(
