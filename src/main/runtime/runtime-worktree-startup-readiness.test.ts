@@ -457,19 +457,37 @@ describe('startup draft delivery', () => {
     expect(kinds.every((kind) => kind === 'launch')).toBe(true)
   })
 
-  it('stops after a rejected chunk instead of appending a truncated suffix', async () => {
+  it.each(
+    ['refused', 'unknown', 'throw'].flatMap((fault) =>
+      [0, 1, 3].map((failedChunk) => ({ fault, failedChunk }))
+    )
+  )('stops without replay after $fault at chunk $failedChunk', async ({ fault, failedChunk }) => {
     vi.useFakeTimers()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const write = vi.fn().mockReturnValueOnce(true).mockReturnValue(false)
+    const draft = 'x'.repeat(50_000)
+    const received: string[] = []
+    let attempted = 0
+    const write = vi.fn((_ptyId: string, data: string) => {
+      if (attempted++ === failedChunk) {
+        if (fault === 'throw') {
+          throw new Error('transport unavailable')
+        }
+        return fault === 'refused' ? false : undefined
+      }
+      received.push(data)
+      return true
+    })
     pasteWorktreeStartupDraftWhenReady(fixture(write), 'term-draft', {
       agent: 'aider',
-      content: 'x'.repeat(50_000)
+      content: draft
     })
-    await vi.advanceTimersByTimeAsync(1500)
-    expect(write).toHaveBeenCalledTimes(2)
-    expect(warn).toHaveBeenCalledWith(
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(write).toHaveBeenCalledTimes(failedChunk + 1)
+    expect(received.join('')).toBe(`\x1b[200~${draft}\x1b[201~`.slice(0, failedChunk * 16 * 1024))
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
       '[worktree-create] failed to paste startup draft:',
       expect.any(Error)
     )
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
