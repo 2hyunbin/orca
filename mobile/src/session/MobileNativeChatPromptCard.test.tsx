@@ -25,6 +25,8 @@ vi.mock('lucide-react-native', () => ({
 }))
 vi.mock('../components/MobileMarkdown', () => ({ MobileMarkdown: 'Markdown' }))
 
+const isHost = (node: { type: unknown }, name: string): boolean => node.type === name
+
 const textInput = (root: ReactTestInstance) =>
   root.find((node) => node.props.placeholder === 'Type your answer')
 const ask = { questions: [{ question: 'Pick?', options: [{ label: 'East' }], multiSelect: false }] }
@@ -34,7 +36,7 @@ describe('MobileNativeChatPromptCard collapse', () => {
 
   it('cancels a pending single-select answer when collapsed and keeps the choice for review', async () => {
     vi.useFakeTimers()
-    let tree: ReactTestRenderer
+    let tree!: ReactTestRenderer
     const onAnswer = vi.fn(async () => true)
     const render = (collapsed: boolean) =>
       createElement(MobileNativeChatPromptCard, {
@@ -58,7 +60,7 @@ describe('MobileNativeChatPromptCard collapse', () => {
     act(() => tree.root.findByProps({ accessibilityLabel: 'Expand' }).props.onPress())
     expect(tree.root.find((node) => node.props.label === 'East').props.selected).toBe(true)
     const submit = tree.root.find(
-      (node) => node.type === 'Pressable' && node.findAllByProps({ children: 'Submit' }).length > 0
+      (node) => isHost(node, 'Pressable') && node.findAllByProps({ children: 'Submit' }).length > 0
     )
     await act(async () => submit.props.onPress())
     expect(onAnswer).toHaveBeenCalledExactlyOnceWith(ask, [{ indices: [0] }])
@@ -66,7 +68,7 @@ describe('MobileNativeChatPromptCard collapse', () => {
   })
 
   it('preserves long-question selections and a reply draft across collapse without sending', async () => {
-    let tree: ReactTestRenderer
+    let tree!: ReactTestRenderer
     const onAnswer = vi.fn(async () => true)
     const question = {
       question: 'Select release targets',
@@ -88,7 +90,9 @@ describe('MobileNativeChatPromptCard collapse', () => {
       tree = create(render(false))
     })
     act(() => tree.root.findAllByProps({ accessibilityRole: 'checkbox' })[19]!.props.onPress())
-    act(() => tree.root.findByType('TextInput').props.onChangeText('mobile parity'))
+    act(() =>
+      tree.root.find((node) => isHost(node, 'TextInput')).props.onChangeText('mobile parity')
+    )
     act(() => tree.root.findByProps({ accessibilityLabel: 'Collapse' }).props.onPress())
     expect(onAnswer).not.toHaveBeenCalled()
 
@@ -96,7 +100,7 @@ describe('MobileNativeChatPromptCard collapse', () => {
     expect(
       tree.root.findAllByProps({ accessibilityRole: 'checkbox' })[19]!.props.accessibilityState
     ).toEqual({ checked: true })
-    expect(tree.root.findByType('TextInput').props.value).toBe('mobile parity')
+    expect(tree.root.find((node) => isHost(node, 'TextInput')).props.value).toBe('mobile parity')
     await act(async () =>
       tree.root.findByProps({ accessibilityLabel: 'Submit selected options' }).props.onPress()
     )
@@ -105,7 +109,7 @@ describe('MobileNativeChatPromptCard collapse', () => {
   })
 
   it('sends no approval response while collapsing and expanding long permission context', async () => {
-    let tree: ReactTestRenderer
+    let tree!: ReactTestRenderer
     const onRespond = vi.fn(async () => true)
     const permission = {
       title: 'Approve release?',
@@ -136,7 +140,7 @@ describe('MobileNativeChatPromptCard collapse', () => {
         .findByProps({ children: permission.description })
     ).toBeTruthy()
     const deny = tree.root.find(
-      (node) => node.type === 'Pressable' && node.findAllByProps({ children: 'Deny' }).length > 0
+      (node) => isHost(node, 'Pressable') && node.findAllByProps({ children: 'Deny' }).length > 0
     )
     await act(async () => deny.props.onPress())
     expect(onRespond).toHaveBeenCalledExactlyOnceWith('deny')

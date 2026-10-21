@@ -94,7 +94,9 @@ describe('MobileNativeChatAsk single-select auto-advance', () => {
     })
     press('Target 20')
     press('Other…')
-    act(() => tree.root.findByType('TextInput').props.onChangeText('another target'))
+    act(() =>
+      tree.root.find((node) => isHost(node, 'TextInput')).props.onChangeText('another target')
+    )
     const scroll = () => tree.root.find((node) => isHost(node, 'ScrollView') && node.props.onLayout)
     act(() => {
       scroll().props.onContentSizeChange(320, 1_600)
@@ -106,7 +108,7 @@ describe('MobileNativeChatAsk single-select auto-advance', () => {
 
     expect(onAnswer).not.toHaveBeenCalled()
     expect(tree.root.find((node) => node.props.label === 'Target 20').props.selected).toBe(true)
-    expect(tree.root.findByType('TextInput').props.value).toBe('another target')
+    expect(tree.root.find((node) => isHost(node, 'TextInput')).props.value).toBe('another target')
     const submit = tree.root.find(
       (node) => isHost(node, 'Pressable') && node.findAllByProps({ children: 'Submit' }).length > 0
     )
