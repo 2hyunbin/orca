@@ -213,7 +213,7 @@ export function NativeChatUsageLimitActionsProvider({
   const stopView = useMemo(
     () => ({
       ...view,
-      continueUsageLimit: (hadFocus: boolean) => {
+      continueUsageLimit: (hadFocus?: boolean) => {
         intent.current = { key: intentKey, pending: false }
         setPreparing(null)
         setPrepared(null)
