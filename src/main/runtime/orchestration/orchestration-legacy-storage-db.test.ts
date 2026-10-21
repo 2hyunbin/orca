@@ -466,7 +466,7 @@ describe('OrchestrationDb legacy contract storage', () => {
     ).toThrow(/different input/)
   })
 
-  it('keeps heartbeats consumed before the coordinator registers out of its recovery replay', () => {
+  it('keeps consumed heartbeats out of legacy recovery replay and takeover', () => {
     const fixture = createCutoverFixture()
     db = new OrchestrationDb(fixture.dbPath)
     const runId = db.getLegacyAdoption()!.adopted_run_id
@@ -500,6 +500,17 @@ describe('OrchestrationDb legacy contract storage', () => {
 
     const page = db.getLegacyMailPage({ principalId: coordinator.principal.id })
     expect(page.messages.map((message) => message.id)).not.toContain(heartbeat.message.id)
+
+    db.bindRun({
+      runId,
+      coordinatorHandle: 'term_current_coord',
+      coordinatorPaneKey: 'tab_current:11111111-1111-4111-8111-111111111111',
+      takeoverLegacy: true
+    })
+    expect(db.getMessageById(heartbeat.message.id)).toMatchObject({
+      read: 1,
+      delivery_contract: 'legacy_direct'
+    })
   })
 
   it('reconstructs a matching pre-receipt settlement without changing its persisted outcome', () => {

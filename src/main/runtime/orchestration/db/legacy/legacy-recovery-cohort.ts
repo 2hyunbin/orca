@@ -40,8 +40,6 @@ export function initializeLegacyRecoveryCohort(
        FROM messages m
        WHERE m.run_id = ? AND m.delivery_contract = 'legacy_direct' AND m.read = 1
          AND m.to_handle = ?
-         -- Why: heartbeats are consumed on arrival, so read never means a coordinator saw one.
-         AND m.type != 'heartbeat'
          AND EXISTS(
            SELECT 1 FROM dispatch_contexts d
            WHERE d.run_id = m.run_id
@@ -77,6 +75,7 @@ export function getLegacyMailPage(
       ? `AND m.type IN (${params.types.map(() => '?').join(',')})`
       : ''
   const typeParams = params.types ?? []
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: SELECT m.* from messages returns complete MessageRow rows; the adapter exposes unknown.
   const recovery = this.db
     .prepare(
       `SELECT m.*
@@ -84,6 +83,8 @@ export function getLegacyMailPage(
        INNER JOIN messages m ON m.id = r.message_id
        WHERE r.principal_id = ? AND r.acknowledged_at IS NULL
          AND m.run_id = ? AND m.delivery_contract = 'legacy_direct'
+         -- Why: heartbeats are consumed on arrival, so a receipt never means a coordinator owes one.
+         AND m.type != 'heartbeat'
          AND ${addressSql}
          ${typeSql}
        ORDER BY m.sequence ASC LIMIT ?`
