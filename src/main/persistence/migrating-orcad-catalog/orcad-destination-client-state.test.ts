@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
+import { getDefaultUIState } from '../../../shared/constants'
 import type { OrcadMigrationClientStatePayload } from '../../../shared/orcad-migration/orcad-migration-client-state'
 import {
   applyPreparedOrcadMigrationClientState,
@@ -101,11 +102,62 @@ describe('destination client-state migration', () => {
     )
   })
 
-  it('rejects non-default UI routing conflicts', () => {
+  it("moves onto a fresh server whose sidebar shows all hosts, keeping the server's filters", () => {
     const destination = state()
-    destination.ui.lastActiveRepoId = 'other-repo'
-    expect(() => prepareOrcadMigrationClientState(incoming, destination)).toThrow(
-      'orcad_migration_client_state_conflict:ui:lastActiveRepoId'
+    // The server's defaults: 'all' and an all-hosts automation filter, not unset.
+    destination.ui = getDefaultUIState()
+    const prepared = prepareOrcadMigrationClientState(
+      {
+        uiRouting: {
+          workspaceHostScope: 'local',
+          visibleWorkspaceHostIds: ['local'],
+          workspaceHostOrder: ['local'],
+          automationHostFilter: { kind: 'host', hostKey: 'host:runtime:environment-1:self' }
+        }
+      },
+      destination
     )
+    applyPreparedOrcadMigrationClientState(prepared, destination)
+    expect(destination.ui).toMatchObject({
+      workspaceHostScope: 'all',
+      visibleWorkspaceHostIds: null,
+      workspaceHostOrder: [],
+      automationHostFilter: { kind: 'all' }
+    })
+  })
+
+  it("keeps the server's own view preferences instead of refusing the move", () => {
+    const destination = state()
+    destination.ui = {
+      ...destination.ui,
+      lastActiveRepoId: 'server-repo',
+      lastActiveWorktreeId: 'server-repo::/w',
+      filterRepoIds: ['server-repo'],
+      showDotfilesByWorktree: { 'server-repo::/w': true, 'repo-1::/worktree': true },
+      setupScriptPromptDismissedRepoIds: ['server-repo'],
+      manualRepoOrder: [{ hostId: 'local', repoId: 'server-repo' }],
+      workspaceHostScope: 'all',
+      acknowledgedAgentsByPaneKey: { 'server-tab:leaf': 5, 'tab-1:leaf': 9 }
+    }
+    const prepared = prepareOrcadMigrationClientState(
+      {
+        uiRouting: {
+          ...incoming.uiRouting,
+          setupScriptPromptDismissedRepoIds: ['repo-1'],
+          acknowledgedAgentsByPaneKey: { 'tab-1:leaf': 1, 'tab-2:leaf': 2 }
+        }
+      },
+      destination
+    )
+    applyPreparedOrcadMigrationClientState(prepared, destination)
+    expect(destination.ui).toMatchObject({
+      lastActiveRepoId: 'server-repo',
+      lastActiveWorktreeId: 'server-repo::/w',
+      filterRepoIds: ['server-repo'],
+      showDotfilesByWorktree: { 'server-repo::/w': true, 'repo-1::/worktree': true },
+      setupScriptPromptDismissedRepoIds: ['server-repo', 'repo-1'],
+      manualRepoOrder: [{ hostId: 'local', repoId: 'server-repo' }],
+      acknowledgedAgentsByPaneKey: { 'server-tab:leaf': 5, 'tab-1:leaf': 9, 'tab-2:leaf': 2 }
+    })
   })
 })
