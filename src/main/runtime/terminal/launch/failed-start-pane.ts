@@ -95,7 +95,14 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       {
         runtime: this,
         store: this.store,
-        pasteDraft: (handle, draft) => this.pasteStartupDraftWhenReady(handle, draft)
+        pasteDraft: (handle, draft) =>
+          this.pasteStartupDraftWhenReady(handle, draft, () =>
+            this.notifier?.startupDraftNotPasted?.({
+              worktreeId,
+              tabId: pane.tabId,
+              agent: draft.agent
+            })
+          )
       },
       { worktreeId, ...pane },
       opts,

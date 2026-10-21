@@ -107,6 +107,20 @@ describe("the start inputs of the window's new tab, run by main (L252)", () => {
     expect(fixture.verdicts).toEqual([{ kind: 'not-started', code: expect.any(String) }])
   })
 
+  it('tells the window a launch request it could not read never started, keeping the pane', async () => {
+    await expect(
+      fixture.runtime.startWindowTabTerminal(WORKTREE_ID, PANE, { agentLaunch: { launch: 7 } })
+    ).rejects.toThrow('agent_launch_request_invalid')
+
+    expect(fixture.spawn).not.toHaveBeenCalled()
+    expect(fixture.runtime.startStatusOf(`${TAB_ID}:${LEAF_ID}`)).toMatchObject({
+      status: 'failed'
+    })
+    expect(fixture.verdicts).toEqual([
+      { kind: 'not-started', code: 'agent_launch_request_invalid' }
+    ])
+  })
+
   it('starts nothing in a pane the user closed while it was planned', async () => {
     fixture.plan.mockImplementationOnce(async (_workspace, opts) => {
       markAgentLaunchesClosedByUser(WORKTREE_ID, { kind: 'tab', tabId: TAB_ID })
@@ -141,7 +155,26 @@ describe("the start inputs of the window's new tab, run by main (L252)", () => {
     })
 
     expect(fixture.pasteDraft.mock.calls).toEqual([
-      [created.handle, { agent: 'codex', content: 'look at this' }]
+      [created.handle, { agent: 'codex', content: 'look at this' }, expect.any(Function)]
+    ])
+  })
+
+  it("tells the window when the draft it pastes never lands, as the window's own paste does", async () => {
+    const startupDraftNotPasted = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: main's start reads only this notifier member here.
+    fixture.runtime.setNotifier({ startupDraftNotPasted } as never)
+    fixture.pasteDraft.mockImplementationOnce(
+      (_handle: string, _draft: unknown, onNotPasted?: () => void) => onNotPasted?.()
+    )
+
+    await fixture.runtime.startWindowTabTerminal(WORKTREE_ID, PANE, {
+      command: 'codex',
+      launchAgent: 'codex',
+      draftPaste: { agent: 'codex', content: 'look at this' }
+    })
+
+    expect(startupDraftNotPasted.mock.calls).toEqual([
+      [{ worktreeId: WORKTREE_ID, tabId: TAB_ID, agent: 'codex' }]
     ])
   })
 

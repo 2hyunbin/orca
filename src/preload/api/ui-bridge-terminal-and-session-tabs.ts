@@ -11,6 +11,7 @@ import type {
   AgentLaunchTabPublishRequest
 } from '../../shared/agent-launch-tab-publication'
 import type { AgentLaunchPaneVerdictEvent } from '../../shared/agent-launch-pane-verdict'
+import type { StartupDraftNotPastedEvent } from '../../shared/startup-draft-not-pasted'
 import type {
   TerminalPaneRevealReply,
   TerminalPaneRevealRequest
@@ -141,6 +142,12 @@ export const uiTerminalAndSessionTabsApi = {
       callback(data)
     ipcRenderer.on('ui:agentLaunchPaneVerdict', listener)
     return () => ipcRenderer.removeListener('ui:agentLaunchPaneVerdict', listener)
+  },
+  onStartupDraftNotPasted: (callback: (data: StartupDraftNotPastedEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: StartupDraftNotPastedEvent) =>
+      callback(data)
+    ipcRenderer.on('ui:startupDraftNotPasted', listener)
+    return () => ipcRenderer.removeListener('ui:startupDraftNotPasted', listener)
   },
   onSplitTerminal: (
     callback: (data: {

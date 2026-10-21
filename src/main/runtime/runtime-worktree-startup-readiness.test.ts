@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OPENCODE_AGENT_ROW_GRACE_MS } from '../../shared/opencode-agent-row-scanner'
 import {
   deliverWorktreeStartupFollowup,
+  pasteWorktreeStartupDraftWhenReady,
   waitForWorktreeStartupDraft,
   type WorktreeStartupReadinessHost
 } from './runtime-worktree-startup-readiness'
@@ -49,6 +50,29 @@ describe('startup follow-up delivery', () => {
     await vi.advanceTimersByTimeAsync(30 * 150)
 
     await expect(delivered).resolves.toBe(false)
+    expect(write).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
+
+describe('startup draft paste', () => {
+  it('says the draft was not pasted when its terminal is gone before the agent is ready', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const write = vi.fn()
+    const onNotPasted = vi.fn()
+    pasteWorktreeStartupDraftWhenReady(
+      {
+        getPtyId: () => null,
+        getForegroundProcess: async () => null,
+        subscribeToData: () => () => {},
+        readRecentOutput: () => undefined,
+        write
+      },
+      'term-1',
+      { agent: 'codex', content: 'look at this' },
+      onNotPasted
+    )
+    await vi.waitFor(() => expect(onNotPasted).toHaveBeenCalledOnce())
     expect(write).not.toHaveBeenCalled()
     warn.mockRestore()
   })

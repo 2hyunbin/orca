@@ -3,6 +3,7 @@ import type {
   RuntimeFileOpenPosition
 } from '../../shared/runtime-file-contracts'
 import type { AgentLaunchPaneVerdictEvent } from '../../shared/agent-launch-pane-verdict'
+import type { StartupDraftNotPastedEvent } from '../../shared/startup-draft-not-pasted'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
 import type {
   AgentLaunchTabPublished,
@@ -100,6 +101,8 @@ export type RuntimeNotifier = {
   ): Promise<AgentLaunchTabPublished>
   /** A launch pane's fate, for the window to keep on its tab or act on. */
   agentLaunchPaneVerdict?(event: AgentLaunchPaneVerdictEvent): void
+  /** A draft main was to paste into a window tab's agent never landed: the window says so. */
+  startupDraftNotPasted?(event: StartupDraftNotPastedEvent): void
   resolveLegacyWorkerTerminalRecovery?(
     paneKey: string,
     resolution: 'adopted' | 'exited' | 'rolled_back',

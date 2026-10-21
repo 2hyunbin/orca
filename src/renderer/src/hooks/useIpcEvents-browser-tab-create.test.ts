@@ -167,6 +167,7 @@ describe('useIpcEvents browser tab create routing', () => {
           onPublishAgentLaunchTab: () => () => {},
           onRevealTerminalPane: () => () => {},
           onAgentLaunchPaneVerdict: () => () => {},
+          onStartupDraftNotPasted: () => () => {},
           onRequestTerminalTabMount: () => () => {},
           replyTerminalCreate: () => {},
           onSplitTerminal: () => () => {},

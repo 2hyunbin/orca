@@ -7,6 +7,7 @@ import {
   type PaneAgentLaunch
 } from '../../../agent-launch/pane-agent-launch-lifecycle'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { agentLaunchFailureCode } from '../../rpc/methods/agent-launch-failure-code'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import type { RuntimeStore } from '../../runtime-store-contract'
@@ -101,7 +102,15 @@ async function startPaneAgentLaunch(
       throw new Error('agent_launch_request_invalid')
     }
   } catch (error) {
-    endPaneAgentLaunch(began.launch, { error })
+    if (began.launch) {
+      endPaneAgentLaunch(began.launch, { error })
+    } else {
+      // Refused before it was tracked: the window still hears, as the pane's own spawn tells it.
+      host.runtime.reportAgentLaunchPaneVerdict(
+        { worktreeId: pane.worktreeId, tabId: pane.tabId, leafId: pane.leafId },
+        { kind: 'not-started', code: agentLaunchFailureCode(error) }
+      )
+    }
     // The pane stays, showing why.
     return create({ ...paneOpts, startFailure: toError(error) })
   }

@@ -120,9 +120,7 @@ export async function useIpcEventsForCloseRouting({
   vi.doMock('../store', () => appStoreModule)
   vi.doMock('@/store', () => appStoreModule)
 
-  vi.doMock('@/lib/ui-zoom', () => ({
-    applyUIZoom: vi.fn()
-  }))
+  vi.doMock('@/lib/ui-zoom', () => ({ applyUIZoom: vi.fn() }))
   vi.doMock('@/lib/worktree-activation', () => ({
     activateAndRevealWorktree: vi.fn(),
     ensureWorktreeHasInitialTerminal: vi.fn()
@@ -181,6 +179,7 @@ export async function useIpcEventsForCloseRouting({
         onPublishAgentLaunchTab: () => () => {},
         onRevealTerminalPane: () => () => {},
         onAgentLaunchPaneVerdict: () => () => {},
+        onStartupDraftNotPasted: () => () => {},
         onRequestTerminalTabMount: () => () => {},
         replyTerminalCreate: () => {},
         onSplitTerminal: () => () => {},

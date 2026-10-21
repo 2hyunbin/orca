@@ -32,20 +32,32 @@ export type WorktreeStartupReadinessHost = {
   write: (ptyId: string, data: string, inputKind: TerminalInputKind) => void
 }
 
+/** A startup draft paste; `onNotPasted` hears when the draft never landed. */
+export type WorktreeStartupDraftPasteArgs = [
+  handle: string,
+  draft: WorktreeStartupDraftPaste,
+  onNotPasted?: () => void
+]
+
 export function pasteWorktreeStartupDraftWhenReady(
   host: WorktreeStartupReadinessHost,
   handle: string,
-  draft: WorktreeStartupDraftPaste
+  draft: WorktreeStartupDraftPaste,
+  onNotPasted?: () => void
 ): void {
   void waitForWorktreeStartupDraft(host, handle, draft.agent)
     .then((ptyId) => {
       if (!ptyId) {
         console.warn('[worktree-create] agent did not become ready for draft paste')
+        onNotPasted?.()
         return
       }
       host.write(ptyId, `${BRACKETED_PASTE_BEGIN}${draft.content}${BRACKETED_PASTE_END}`, 'launch')
     })
-    .catch((error) => console.warn('[worktree-create] failed to paste startup draft:', error))
+    .catch((error) => {
+      console.warn('[worktree-create] failed to paste startup draft:', error)
+      onNotPasted?.()
+    })
 }
 
 export function sendWorktreeStartupFollowupWhenReady(

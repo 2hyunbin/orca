@@ -3,6 +3,7 @@ import { publishAgentLaunchTab } from '@/lib/agent-launch-tab-publication'
 import { applyAgentLaunchPaneVerdict } from '@/lib/agent-launch-pane-verdict-application'
 import { keepAgentLaunchTabMainWrote } from '@/lib/agent-launch-tab-main-written'
 import { afterLayoutFrame } from '@/runtime/layout-frame-position'
+import { createPasteReadinessTimeoutNotice } from '@/lib/launch-agent-paste-timeout-notice'
 
 function replyToPublish(request: AgentLaunchTabPublishRequest): void {
   try {
@@ -28,6 +29,10 @@ export function registerAgentLaunchTabIpcBridge(unsubs: (() => void)[]): void {
         ? afterLayoutFrame(request.shownByMain.frameSeq, () => replyToPublish(request))
         : replyToPublish(request)
     ),
-    window.api.ui.onAgentLaunchPaneVerdict(applyAgentLaunchPaneVerdict)
+    window.api.ui.onAgentLaunchPaneVerdict(applyAgentLaunchPaneVerdict),
+    // A draft main pasted for this window's tab never landed: the notice its own pane would show.
+    window.api.ui.onStartupDraftNotPasted((event) =>
+      createPasteReadinessTimeoutNotice({ ...event, submitted: false }).onTimeout()
+    )
   )
 }

@@ -13,6 +13,7 @@ import type {
   AgentLaunchTabPublishRequest
 } from '../../shared/agent-launch-tab-publication'
 import type { AgentLaunchPaneVerdictEvent } from '../../shared/agent-launch-pane-verdict'
+import type { StartupDraftNotPastedEvent } from '../../shared/startup-draft-not-pasted'
 import type {
   TerminalPaneRevealReply,
   TerminalPaneRevealRequest
@@ -217,6 +218,7 @@ export type UiCommandEventApi = {
   onPublishAgentLaunchTab: (callback: (data: AgentLaunchTabPublishRequest) => void) => () => void
   replyAgentLaunchTabPublish: (reply: AgentLaunchTabPublishReply) => void
   onAgentLaunchPaneVerdict: (callback: (data: AgentLaunchPaneVerdictEvent) => void) => () => void
+  onStartupDraftNotPasted: (callback: (data: StartupDraftNotPastedEvent) => void) => () => void
   onRevealTerminalPane: (callback: (data: TerminalPaneRevealRequest) => void) => () => void
   replyTerminalPaneReveal: (reply: TerminalPaneRevealReply) => void
   onSplitTerminal: (

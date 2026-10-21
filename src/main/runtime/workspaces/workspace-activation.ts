@@ -11,10 +11,7 @@ import type { Repo } from '../../../shared/repo-types'
 import type { TerminalWorkspaceLaunchScope } from '../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-terminal-contracts'
-import type {
-  WorktreeStartupDraftPaste,
-  WorktreeStartupFollowup
-} from '../runtime-worktree-agent-startup'
+import type { WorktreeStartupFollowup } from '../runtime-worktree-agent-startup'
 import {
   buildWorktreeStartupForAgent,
   buildWorktreeStartupForDraft,
@@ -34,6 +31,7 @@ import {
   pasteWorktreeStartupDraftWhenReady,
   sendWorktreeStartupFollowupWhenReady,
   waitForWorktreeStartupDraft,
+  type WorktreeStartupDraftPasteArgs,
   type WorktreeStartupReadinessHost
 } from '../runtime-worktree-startup-readiness'
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
@@ -221,8 +219,8 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     return recordCreatedWorktreeLineageState(this.store, worktree, lineageResolution)
   }
 
-  protected pasteStartupDraftWhenReady(handle: string, draft: WorktreeStartupDraftPaste): void {
-    pasteWorktreeStartupDraftWhenReady(this.getWorktreeStartupReadinessHost(), handle, draft)
+  protected pasteStartupDraftWhenReady(...args: WorktreeStartupDraftPasteArgs): void {
+    pasteWorktreeStartupDraftWhenReady(this.getWorktreeStartupReadinessHost(), ...args)
   }
 
   /**

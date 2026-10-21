@@ -101,6 +101,7 @@ export function buildTerminalCreateWindow(args: {
         onPublishAgentLaunchTab: () => () => {},
         onRevealTerminalPane: () => () => {},
         onAgentLaunchPaneVerdict: () => () => {},
+        onStartupDraftNotPasted: () => () => {},
         onSplitTerminal: () => () => {},
         onRenameTerminal: () => () => {},
         onFocusTerminal: (
