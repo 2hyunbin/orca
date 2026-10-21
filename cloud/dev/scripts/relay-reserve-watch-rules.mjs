@@ -234,7 +234,10 @@ function judgeDirector503(read, state, at) {
   }
   if (!counts.every((count) => count > above)) return pass(detail)
   if (!read.instances?.ok) return unverifiable(read.instances?.error ?? 'no per-instance director 503s')
-  const instanceAbove = above / Math.max(read.instances.directors, instances.minOver)
+  // The fewest directors logging in a judged minute, so a rollout's overlap cannot shrink the share.
+  const directors = Math.min(...recent.map((minute) => read.instances.directors?.[minute]))
+  if (!Number.isInteger(directors)) return unverifiable(`no director instance count for ${recent.join(', ')}`)
+  const instanceAbove = above / Math.max(directors, instances.minOver)
   const over = Object.entries(read.instances.perMinute)
     .filter(([, byMinute]) => recent.every((minute) => (byMinute[minute] ?? 0) > instanceAbove))
     .map(([instance]) => instance)

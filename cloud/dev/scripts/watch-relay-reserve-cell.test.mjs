@@ -58,7 +58,7 @@ const spread = (perMinute) => ({
   perMinute: Object.fromEntries(
     DIRECTORS.map((instance) => [instance, Object.fromEntries(Object.entries(perMinute).map(([minute, count]) => [minute, count / DIRECTORS.length]))])
   ),
-  directors: DIRECTORS.length
+  directors: Object.fromEntries(Object.keys(perMinute).map((minute) => [minute, DIRECTORS.length]))
 })
 const quiet503 = (at, perMinute = 10) => {
   const minutes = minutesBefore(at, 3)
@@ -173,7 +173,7 @@ test('one stalled director instance does not trip the 503 rule; two instances or
     unmetered: [],
     instances: instances.ok === false
       ? instances
-      : { ok: true, perMinute: Object.fromEntries(Object.entries(instances).map(([id, counts]) => [id, byMinute(counts)])), directors: 5 }
+      : { ok: true, perMinute: Object.fromEntries(Object.entries(instances).map(([id, counts]) => [id, byMinute(counts)])), directors: byMinute([5, 5, 5]) }
   })
   const judge = (director503) => evaluateWatchSample(state, sampleAt(START, { director503 }), LIMIT)
   // The stall as logged, with the next minute's re-dials spread over the other four.
@@ -203,8 +203,23 @@ test('one stalled director instance does not trip the 503 rule; two instances or
   assert.equal(platform.state.state, 'tripped')
   // The share follows the directors that logged: eight make it 30/8, so an even 45 trips.
   const eight = read([45, 45, 45], Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`d${index}`, [5.6, 5.6, 5.6]])))
-  eight.instances.directors = 8
+  eight.instances.directors = byMinute([8, 8, 8])
   assert.equal(judge(eight).state.state, 'tripped')
+  // A rollout's overlap in one judged minute does not shrink the share: the fewest logging count.
+  const overlap = read([37, 37, 37], { d1: [5, 5, 5], d2: [5, 5, 5] })
+  overlap.instances.directors = byMinute([10, 5, 10])
+  assert.equal(judge(overlap).state.state, 'watching')
+  assert.equal(judge(overlap).rules.director503.instanceAbove, 6)
+  // No director count for a judged minute is no share, not a pass.
+  const uncounted = read([37, 37, 37], { d1: [16, 16, 16], d2: [16, 16, 16] })
+  delete uncounted.instances.directors[minutes[1]]
+  assert.equal(judge(uncounted).rules.director503.status, 'unverifiable')
+  assert.match(judge(uncounted).rules.director503.reason, /no director instance count/)
+  // One director: the share floors at half the line, so it alone never trips between the lines.
+  const single = read([60, 60, 60], { d1: [60, 60, 60] })
+  single.instances.directors = byMinute([1, 1, 1])
+  assert.equal(judge(single).state.state, 'watching')
+  assert.equal(judge(single).rules.director503.instanceAbove, 15)
   // Under the fleet line the split is never read.
   const calm = judge(read([20, 20, 20], { ok: false, error: 'director 503 request log read failed' }))
   assert.equal(calm.rules.director503.status, 'pass')
@@ -222,7 +237,7 @@ test('per-instance 503s come from the request log, less each instance\'s own re-
   assert.deepEqual(Object.keys(read.instances.perMinute).sort(), ['a', 'b'])
   assert.deepEqual(Object.values(read.instances.perMinute.a), [0, 0, 0])
   assert.deepEqual(Object.values(read.instances.perMinute.b), [10, 10, 10])
-  assert.equal(read.instances.directors, 2)
+  assert.deepEqual(Object.values(read.instances.directors), [2, 2, 2])
   // A full read is truncated, not every 503.
   const flood = fakeSources({ per503: () => 2_000 })
   const truncated = await readDirector503Minutes(

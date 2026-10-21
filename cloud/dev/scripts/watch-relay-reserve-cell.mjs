@@ -202,8 +202,8 @@ export const DIRECTOR_503_LOG_LIMIT = 5_000
 const NO_INSTANCE = 'no-instance'
 
 // The same non-drain measure per director instance: the metric names no instance, so the 503s
-// come from Cloud Run's request log, less each instance's own scheduled 503s. `directors` is how
-// many instances logged runtime metrics in the read.
+// come from Cloud Run's request log, less each instance's own scheduled 503s. `directors` is, per
+// minute, how many instances logged a runtime-metrics line ending in it.
 async function readDirector503ByInstance(reader, { projectId, directorService, span, metrics, keys }) {
   const read = await readLogEntries(reader, {
     filter: [
@@ -238,7 +238,11 @@ async function readDirector503ByInstance(reader, { projectId, directorService, s
     const { series } = withoutDrainDeferrals({ perMinute }, own, keys)
     perInstance[instance] = Object.fromEntries(keys.map((minute, index) => [minute, series[index]]))
   }
-  const directors = new Set(metrics.flatMap((part) => part.samples.map((sample) => sample.instanceId)).filter(Boolean)).size
+  const logged = new Map(keys.map((minute) => [minute, new Set()]))
+  for (const sample of metrics.flatMap((part) => part.samples)) {
+    if (sample.instanceId) logged.get(minuteKey(Date.parse(sample.timestamp) - 1))?.add(sample.instanceId)
+  }
+  const directors = Object.fromEntries([...logged].map(([minute, instances]) => [minute, instances.size]))
   return { ok: true, perMinute: perInstance, directors }
 }
 
