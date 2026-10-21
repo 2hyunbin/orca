@@ -5,6 +5,8 @@ import { expect, it, vi } from 'vitest'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { OPENCODE_TRANSCRIPT_IMPORT } from '../opencode/opencode-transcript-import'
 import { CLAUDE_CLI_CONVERSATIONS } from '../claude/claude-cli-conversations'
+import { PI_TRANSCRIPT_IMPORT } from '../pi/pi-transcript-import'
+import { PI_SESSION_HISTORY } from '../pi/pi-session-history'
 import {
   structuredSessionRecoveryOptions,
   type RecoveryContextCache
@@ -18,6 +20,9 @@ vi.mock('./structured-agent-runtime-metadata', () => ({
   structuredAgentRuntimeMetadata: (provider: string) => ({
     ...CLAUDE_CLI_CONVERSATIONS,
     ...(provider === 'opencode' ? { transcriptImport: OPENCODE_TRANSCRIPT_IMPORT } : {}),
+    ...(provider === 'pi'
+      ? { transcriptImport: PI_TRANSCRIPT_IMPORT, sessionHistory: PI_SESSION_HISTORY }
+      : {}),
     launchFollowsSelection: () => true
   })
 }))
@@ -83,6 +88,36 @@ it('offers switching only when the real transcript store is shared with every de
     homes.paths = [system, join(root, 'unverified')]
     expect((await read()).canSwitchAccount).toBe(false)
   } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('offers direct Pi history only while its admitted native file exists, retrying missing files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'usage-limit-actions-pi-'))
+  const store = vi.spyOn(PI_TRANSCRIPT_IMPORT, 'conversationStore').mockReturnValue(root)
+  try {
+    const transcript = join(root, 'missing.jsonl')
+    const record = agentSessionRecordFixture()
+    record.provider = 'pi'
+    record.accountHome = { variable: 'PI_CODING_AGENT_DIR', path: root }
+    record.providerHandleChain[0].handle = {
+      transport: 'pi-rpc',
+      agent: 'pi',
+      nativeId: transcript,
+      resumeCursor: null
+    }
+    const cache: RecoveryContextCache = {}
+    const read = () => structuredSessionRecoveryOptions(record, {}, { cache })
+    expect(await read()).toEqual({ canSwitchAccount: false })
+    await writeFile(transcript, '{}\n')
+    const available = { canSwitchAccount: false, transcriptPath: await realpath(transcript) }
+    expect(await read()).toEqual(available)
+    await rm(transcript)
+    expect(await read()).toEqual({ canSwitchAccount: false })
+    await writeFile(transcript, '{}\n')
+    expect(await read()).toEqual(available)
+  } finally {
+    store.mockRestore()
     await rm(root, { recursive: true, force: true })
   }
 })

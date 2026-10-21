@@ -370,7 +370,7 @@ it.each(['add', 'manage'] as const)(
       if (!section) {
         throw new Error('Missing Claude section')
       }
-      const button = within(section).getByRole('button', { name: 'Add Account', exact: true })
+      const button = within(section).getByRole('button', { name: 'Add Account' })
       await waitFor(() => expect(button).toBeEnabled())
       fireEvent.click(button)
       await act(async () => {})
@@ -394,14 +394,11 @@ it.each(['add', 'manage'] as const)(
     view.rerender(<Flow />)
     const write = Promise.withResolvers<void>()
     writeSettings.mockReturnValueOnce(write.promise)
-    fireEvent.click(screen.getByRole('radio', { name: 'Windows', exact: true }))
-    expect(screen.getByRole('radio', { name: 'Windows', exact: true })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    )
+    fireEvent.click(screen.getByRole('radio', { name: 'Windows' }))
+    expect(screen.getByRole('radio', { name: 'Windows' })).toHaveAttribute('aria-checked', 'true')
     expect(writeSettings).toHaveBeenCalledExactlyOnceWith({ localAccountRuntime: 'host' })
     await act(async () => write.resolve())
-    await act(async () => fireEvent.click(screen.getByRole('radio', { name: 'WSL', exact: true })))
+    await act(async () => fireEvent.click(screen.getByRole('radio', { name: 'WSL' })))
     expect(writeSettings.mock.lastCall).toEqual([{ localAccountRuntime: 'wsl' }])
     fake.query = 'claude'
     view.rerender(<Flow />)

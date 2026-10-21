@@ -24,13 +24,13 @@ async function readableContext(
     return cache.pending
   }
   const previous = cache.key === key ? cache.path : undefined
+  const admittedFile = async (candidate: string | null | undefined) => {
+    const path =
+      candidate && (await importer.admitTranscriptPath({ store, transcriptPath: candidate }))
+    return path && isAbsolute(path) && (await stat(path).catch(() => null))?.isFile() ? path : null
+  }
   const run = async () => {
-    let path = previous && (await importer.admitTranscriptPath({ store, transcriptPath: previous }))
-    if (!path || !(await stat(path).catch(() => null))?.isFile()) {
-      const located = await locate()
-      path = located && (await importer.admitTranscriptPath({ store, transcriptPath: located }))
-    }
-    return path && isAbsolute(path) ? path : null
+    return (await admittedFile(previous)) ?? admittedFile(await locate())
   }
   const pending = run().catch((error: unknown) => {
     console.warn('Could not locate saved chat context', error)
