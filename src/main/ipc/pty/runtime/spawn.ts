@@ -1,4 +1,5 @@
 import type { AgentSessionClaimedSpawnResult } from '../../../../shared/agent-session-host-authority'
+import type { PaneResumeOutcome } from '../../../../shared/workspace-layout/workspace-layout-published'
 import { isTerminalLeafId, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { rejectPaneSpawnReservation } from '../pane/spawn-reservation'
@@ -21,13 +22,15 @@ function toRuntimeSpawnReply(result: {
   wslDistro?: string | null
   stablePaneOwner?: { handle: string; tabId: string; leafId: string }
   agentSessionEnsure?: AgentSessionClaimedSpawnResult
+  resumeOutcome?: PaneResumeOutcome
 }) {
   return {
     id: result.id,
     ...(result.incarnationId ? { incarnationId: result.incarnationId } : {}),
     ...(typeof result.wslDistro === 'string' ? { wslDistro: result.wslDistro } : {}),
     ...(result.stablePaneOwner ? { stablePaneOwner: result.stablePaneOwner } : {}),
-    ...(result.agentSessionEnsure ? { agentSessionEnsure: result.agentSessionEnsure } : {})
+    ...(result.agentSessionEnsure ? { agentSessionEnsure: result.agentSessionEnsure } : {}),
+    ...(result.resumeOutcome ? { resumeOutcome: result.resumeOutcome } : {})
   }
 }
 

@@ -25,6 +25,7 @@ import type {
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
 import type { TerminalInputKind } from '../../shared/terminal-input-kind'
+import type { PaneResumeOutcome } from '../../shared/workspace-layout/workspace-layout-published'
 
 export type PtyInventoryRefreshOptions = {
   includeForegroundProcessEvidence?: boolean
@@ -118,6 +119,8 @@ export type RuntimePtyController = {
     wslDistro?: string
     stablePaneOwner?: { handle: string; tabId: string; leafId: string }
     agentSessionEnsure?: AgentSessionClaimedSpawnResult
+    /** Layout-owner build: whether a fresh start resumed the agent it was asked to. */
+    resumeOutcome?: PaneResumeOutcome
   }>
   /** The local terminal owner's automatic-restore state; null when it has no fork gate. */
   getAutomaticWorkStatus?(): Promise<AutomaticWorkStatus | null>

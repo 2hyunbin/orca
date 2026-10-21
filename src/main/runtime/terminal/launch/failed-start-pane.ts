@@ -6,6 +6,7 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
+import { PaneResumeOutcomes } from '../../pane-resume-outcomes'
 import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime-layout-apply'
 import {
   runLayoutPaneStarts,
@@ -42,6 +43,11 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
   /** Switch point: main's starts into panes it already holds, published until each binds. */
   protected readonly paneStartStatuses = ORCA_LAYOUT_OWNER_IS_MAIN
     ? new PaneStartStatuses(() => this.markPaneLiveTitlesDirty())
+    : null
+
+  /** Switch point: whether main's start of a pane resumed its agent, published while it stays bound. */
+  protected readonly paneResumeOutcomes = ORCA_LAYOUT_OWNER_IS_MAIN
+    ? new PaneResumeOutcomes(() => this.markPaneLiveTitlesDirty())
     : null
 
   /**
@@ -99,7 +105,13 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
   protected paneStartStatusArgs: dependencies.PaneStartArgsOf = (opts) => {
     const sink = this.paneStartStatuses
     return sink
-      ? { startStatus: { sink, keepOnFailure: opts.keepPaneOnStartFailure === true } }
+      ? {
+          startStatus: {
+            sink,
+            keepOnFailure: opts.keepPaneOnStartFailure === true,
+            ...(this.paneResumeOutcomes ? { resumeOutcomes: this.paneResumeOutcomes } : {})
+          }
+        }
       : {}
   }
 

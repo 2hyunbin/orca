@@ -9,14 +9,22 @@ import type { LayoutRefusalCode } from '../../shared/workspace-layout/workspace-
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 import { paneStartFailure, type PaneStartStatuses } from './pane-start-statuses'
+import type { PaneResumeOutcomes } from './pane-resume-outcomes'
 
 type Spawn = NonNullable<RuntimePtyController['spawn']>
 type PaneStartStatusSink = Pick<PaneStartStatuses, 'set' | 'clear'>
 /**
  * Layout-owner build: how a start goes, for a pane main already held or one that should stay
- * when its start fails (`keepOnFailure`), so the pane shows the failure.
+ * when its start fails (`keepOnFailure`), so the pane shows the failure; and whether it resumed
+ * the pane's agent (`resumeOutcomes`).
  */
-export type PaneStartArgs = { startStatus?: { sink: PaneStartStatusSink; keepOnFailure: boolean } }
+export type PaneStartArgs = {
+  startStatus?: {
+    sink: PaneStartStatusSink
+    keepOnFailure: boolean
+    resumeOutcomes?: Pick<PaneResumeOutcomes, 'set'>
+  }
+}
 type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
   worktreeId: string
   tabId: string
@@ -195,6 +203,9 @@ export async function spawnInAdmittedPane(
   const elsewhere = started && (started.tabId !== args.tabId || started.leafId !== args.leafId)
   if (outcome === 'admitted' && elsewhere) {
     await withdrawRuntimePane(store, args)
+  }
+  if (result.resumeOutcome && !elsewhere) {
+    startStatus?.resumeOutcomes?.set(paneKey, result.id, result.resumeOutcome)
   }
   return result
 }

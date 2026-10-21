@@ -63,6 +63,8 @@ export type RuntimePtySpawnState = {
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
   codexResumeArgvDropped: boolean
+  /** The dropped resume owes the user a notice: the pane runs a fresh session. */
+  codexResumeUnavailable: boolean
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
   spawnOptions: PtySpawnOptions
@@ -181,6 +183,7 @@ export function createRuntimePtySpawnState(
     selectedCodexHomePath: null,
     codexResumeHomeSelected: false,
     codexResumeArgvDropped: false,
+    codexResumeUnavailable: false,
     skipCodexHomeEnv: false,
     stripInheritedOrcaCodexHome: false,
     spawnOptions: { cols: args.cols, rows: args.rows },

@@ -7,9 +7,11 @@
 
 import { NEWER_DAEMON_HOLD_ERROR } from '../../shared/newer-daemon-hold'
 import type {
+  PaneResumeOutcome,
   PaneStartStatus,
   PublishedWorkspaceLayout
 } from '../../shared/workspace-layout/workspace-layout-published'
+import type { PaneResumeOutcomeOf } from './pane-resume-outcomes'
 
 export type PaneStartFact = { status: PaneStartStatus; reason?: string }
 
@@ -57,25 +59,37 @@ export class PaneStartStatuses {
   }
 }
 
-/** Each pane's start status, in tab and pane order; null for a pane with none. */
+/** A pane's live start facts as laid over its published copy: its start status, resume outcome or both. */
+export type PaneLaidFact = Partial<PaneStartFact> & { resumeOutcome?: PaneResumeOutcome }
+
+/** Where a pane's live start facts come from (layout-owner build). */
+export type PaneFactSources = {
+  paneStartFact?: PaneStartFactOf
+  paneResumeOutcome?: PaneResumeOutcomeOf
+}
+
+/** Each pane's start status and resume outcome, in tab and pane order; null for a pane with neither. */
 export function paneStartFactsOf(
   layout: PublishedWorkspaceLayout,
-  { paneStartFact: statusOf }: { paneStartFact?: PaneStartFactOf }
-): (PaneStartFact | null)[] {
-  if (!statusOf) {
+  { paneStartFact: statusOf, paneResumeOutcome: outcomeOf }: PaneFactSources
+): (PaneLaidFact | null)[] {
+  if (!statusOf && !outcomeOf) {
     return []
   }
   return layout.tabs.flatMap((tab) =>
-    (tab.terminal?.panes ?? []).map((pane) =>
-      statusOf(`${tab.entityId}:${pane.leafId}`, bindingOf(pane))
-    )
+    (tab.terminal?.panes ?? []).map((pane) => {
+      const paneKey = `${tab.entityId}:${pane.leafId}`
+      const start = statusOf?.(paneKey, bindingOf(pane)) ?? null
+      const resumeOutcome = outcomeOf?.(paneKey, pane) ?? null
+      return resumeOutcome ? { ...start, resumeOutcome } : start
+    })
   )
 }
 
 /** `facts` from paneStartFactsOf laid over the layout; the same layout when all are null. */
 export function withPaneStartFacts(
   layout: PublishedWorkspaceLayout,
-  facts: (PaneStartFact | null)[]
+  facts: (PaneLaidFact | null)[]
 ): PublishedWorkspaceLayout {
   if (facts.every((fact) => fact === null)) {
     return layout
@@ -94,8 +108,9 @@ export function withPaneStartFacts(
                 return fact
                   ? {
                       ...pane,
-                      status: fact.status,
-                      ...(fact.reason ? { statusReason: fact.reason } : {})
+                      ...(fact.status ? { status: fact.status } : {}),
+                      ...(fact.reason ? { statusReason: fact.reason } : {}),
+                      ...(fact.resumeOutcome ? { resumeOutcome: fact.resumeOutcome } : {})
                     }
                   : pane
               })
