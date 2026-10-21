@@ -42,7 +42,7 @@ import { ORCAD_ACTIVATION_POLICY_REFUSED_CODE } from './orcad-installed-activati
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
 import { rollbackOrcad } from '../managed-server/install/orcad-remote-rollback'
 import { collectManagedTerminalCensus } from './orcad-terminal-census-client'
-import { updateTerminalCounts } from './orcad-update-terminal-counts'
+import { updateTerminalCounts } from './orcad-fenced-stop'
 import { findIncompleteManagedOrcadMigration } from '../managed-server/lifecycle/orcad-managed-migration-status'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
 import { tunneledOrcadPairingCode } from './orcad-tunneled-pairing'

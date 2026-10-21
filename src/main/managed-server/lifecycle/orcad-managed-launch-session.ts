@@ -32,11 +32,7 @@ import { orcadSlotDir, type OrcadSlotOptions } from '../../ssh/orcad-recovery-sl
 import { stopIncumbentBehindTerminalBarrier } from './orcad-rollback-terminal-barrier'
 import { execOrcadRemote } from '../install/orcad-remote-runtime-control'
 import { collectManagedTerminalCensus } from '../../ssh/orcad-terminal-census-client'
-import {
-  reopeningAdmissionUnless,
-  updateTerminalCounts
-} from '../../ssh/orcad-update-terminal-counts'
-import { ORCAD_UPDATE_ADMISSION_STOP_BY_MS } from '../../../shared/orcad-terminal-census'
+import { runFencedStop, updateTerminalCounts } from '../../ssh/orcad-fenced-stop'
 
 export async function readManagedOrcadLaunchSshSession(
   userDataPath: string,
@@ -172,27 +168,34 @@ async function recountThenStop(
   lock: OrcadActivationLockControl,
   counts: ReturnType<typeof updateTerminalCounts>
 ): Promise<StopOutcome> {
-  const stopBy = Date.now() + ORCAD_UPDATE_ADMISSION_STOP_BY_MS
-  const census = await counts.recountCensus()
-  // Reopened only where nothing was stopped; a woken server starts with admission open.
-  return reopeningAdmissionUnless(
-    (outcome) =>
+  const fenced = await runFencedStop({
+    ...counts,
+    now: Date.now,
+    refuse: (census): StopOutcome | null =>
+      census.liveSessions === 0
+        ? null
+        : { state: 'terminals-running', liveSessions: census.liveSessions },
+    stale: (): StopOutcome => STALE_COUNT,
+    stop: (stillFenced) => stopRetiringIdleDaemon(slot, lock, stillFenced),
+    // A woken server starts with admission open, so only an unsent stop needs a reopen.
+    stopMayHaveBeenSent: (outcome) =>
       outcome.state === 'retired' ||
       outcome.state === 'daemon-kept' ||
-      (outcome.state === 'kept' && outcome.mayBeStopping === true),
-    counts.releaseIncumbentAdmission,
-    async (): Promise<StopOutcome> =>
-      census.liveSessions === 0
-        ? stopRetiringIdleDaemon(slot, lock, stopBy)
-        : { state: 'terminals-running', liveSessions: census.liveSessions }
-  )
+      (outcome.state === 'kept' && outcome.mayBeStopping === true)
+  })
+  return 'refused' in fenced ? fenced.refused : fenced.stopped
+}
+
+const STALE_COUNT: StopOutcome = {
+  state: 'kept',
+  reason: 'The terminal count went stale before the stop. Restart again.'
 }
 
 /** The rollback's managed stop: orcad retires its daemon only when no session exists then. */
 async function stopRetiringIdleDaemon(
   slot: OrcadSlotOptions,
   lock: OrcadActivationLockControl,
-  stopBy: number
+  stillFenced: () => boolean
 ): Promise<StopOutcome> {
   // Re-read under the fence: another client may have changed the active slot.
   const active = (await readOrcadActivationRecord(slot)).active
@@ -204,11 +207,8 @@ async function stopRetiringIdleDaemon(
     return { state: 'kept', reason: target.reason }
   }
   // The census's fence lapses on its own; a stop after that could kill a terminal admitted since.
-  if (Date.now() > stopBy) {
-    return {
-      state: 'kept',
-      reason: 'The terminal count went stale before the stop. Restart again.'
-    }
+  if (!stillFenced()) {
+    return STALE_COUNT
   }
   const barrier = await stopIncumbentBehindTerminalBarrier(slot, randomUUID(), target.context)
   switch (barrier.state) {

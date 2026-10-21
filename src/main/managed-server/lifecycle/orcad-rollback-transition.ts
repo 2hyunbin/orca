@@ -33,7 +33,8 @@ import {
   withOrcadRollbackRescue
 } from '../activation/orcad-activation-transaction-transitions'
 import { writeOrcadActivationTransaction } from '../activation/orcad-activation-transaction-store'
-import { recountUnderLock, reopenAdmission } from './orcad-rollback-admission'
+import { ROLLBACK_STALE_COUNT, rollbackRecountRefusal } from './orcad-rollback-admission'
+import { runFencedStop } from '../../ssh/orcad-fenced-stop'
 import { execOrcadRemoteOr, withoutAbortSignal } from '../install/orcad-remote-runtime-control'
 import { execOrcadStateMutationOr } from '../host-state/orcad-state-mutation-exec'
 import {
@@ -125,11 +126,6 @@ export async function rollbackOrcadLocked(
   if (barrierTarget.state === 'refused') {
     return { outcome: 'refused', code: barrierTarget.code, reason: barrierTarget.reason }
   }
-  const recounted = await recountUnderLock(options, now)
-  if (recounted.refusal) {
-    return recounted.refusal
-  }
-
   const startedAt = now()
   let transaction: OrcadRollbackTransaction = createOrcadRollbackTransaction({
     transactionId: randomUUID(),
@@ -140,41 +136,34 @@ export async function rollbackOrcadLocked(
     rescueDirName: orcadRollbackRescueDirName(incumbent.version, startedAt.getTime()),
     now: startedAt
   })
-  try {
-    await writeOrcadActivationTransaction(options, transaction)
-  } catch (error) {
-    await reopenAdmission(options)
-    throw error
+  const fenced = await runFencedStop({
+    recountCensus: options.recountCensus,
+    releaseIncumbentAdmission: options.releaseIncumbentAdmission,
+    now: () => now().getTime(),
+    refuse: rollbackRecountRefusal,
+    prepare: () => writeOrcadActivationTransaction(options, transaction),
+    stale: () => ROLLBACK_STALE_COUNT,
+    stop: async () => {
+      lock.retainOnError()
+      // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.
+      options = withoutAbortSignal(options)
+      // The census above was taken while orcad admitted work; this stop is the proof that counts.
+      return stopIncumbentBehindTerminalBarrier(
+        options,
+        transaction.transactionId,
+        barrierTarget.context
+      )
+    },
+    // A withdrawn stop was never sent, so the server keeps serving and takes terminals again.
+    stopMayHaveBeenSent: (barrier) => barrier.state !== 'withdrawn'
+  })
+  if ('refused' in fenced) {
+    return fenced.refused
   }
-  // The recount's fence lapses on its own; a stop after that could kill a terminal admitted since.
-  if (now().getTime() > recounted.stopBy) {
-    await reopenAdmission(options)
-    return {
-      outcome: 'refused',
-      code: 'orcad_rollback_census_unavailable',
-      reason:
-        'The terminal count went stale before the server could be stopped. Retry the rollback.'
-    }
-  }
-  lock.retainOnError()
-  // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.
-  options = withoutAbortSignal(options)
-
-  // The census above was taken while orcad admitted work; this stop is the proof that counts.
-  const blocked = rollbackBarrierRefusal(
-    await stopIncumbentBehindTerminalBarrier(
-      options,
-      transaction.transactionId,
-      barrierTarget.context
-    )
-  )
+  const blocked = rollbackBarrierRefusal(fenced.stopped)
   if (blocked) {
     if (blocked.retainFence) {
       lock.retain()
-    }
-    // A withdrawn stop was never sent, so the server keeps serving and must take terminals again.
-    if (blocked.code === 'orcad_rollback_stop_withdrawn') {
-      await reopenAdmission(options)
     }
     const recovered = blocked.restartIncumbent
       ? ` ${await putIncumbentBack(options, lock, transaction, incumbent)}`
