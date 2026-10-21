@@ -21,6 +21,8 @@ import type {
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
 import { bindingOf } from '../../pane-start-statuses'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
+import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
 import {
   projectSessionTabs,
   type ProjectedSessionTabs
@@ -286,11 +288,12 @@ export function composeMainTerminalSurfaces(
       ...main.leaves.map((bound) => {
         const holds =
           bound.ptyId !== null &&
-          terminalHoldsPane(
-            registered(bound.ptyId),
-            bound,
-            main.paneFacts.get(`${bound.tabId}::${bound.leafId}`)
-          )
+          (pairedRuntimeHostOfBinding(bound.ptyId) !== null ||
+            terminalHoldsPane(
+              registered(bound.ptyId),
+              bound,
+              main.paneFacts.get(`${bound.tabId}::${bound.leafId}`)
+            ))
         const leaf = bound.ptyId && !holds ? { ...bound, ptyId: null } : bound
         const shown = mounted.get(`${leaf.tabId}::${leaf.leafId}`)
         if (!shown) {
@@ -318,9 +321,21 @@ function spilledTerminalTab(
     !held.tabIds.has(tab.entityId) &&
     !collectLayoutLeafIdsInOrder(tab.panes.root).some((leafId) => {
       const ptyId = workspace.leaves?.[leafId]?.ptyId
-      return ptyId !== undefined && held.ptyIds.has(ptyId)
+      // A terminal a paired server runs is that server's, not a local tab an older build spilled.
+      return (
+        ptyId !== undefined &&
+        (held.ptyIds.has(ptyId) || pairedRuntimeHostOfBinding(ptyId) !== null)
+      )
     })
   )
+}
+
+/**
+ * The paired server a pane's binding runs on, named by its terminal id alone; null for a terminal
+ * of this host. Such a terminal never registers here, so its binding stands without a record.
+ */
+export function pairedRuntimeHostOfBinding(ptyId: string): ExecutionHostId | 'foreign' | null {
+  return isRemoteRuntimePtyId(ptyId) ? getPtyExecutionHost(ptyId) : null
 }
 
 /**

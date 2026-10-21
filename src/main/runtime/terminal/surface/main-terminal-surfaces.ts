@@ -14,6 +14,7 @@ import type { RuntimeStore } from '../../runtime-store-contract'
 import type { WorkspaceLayoutReads } from '../../workspace-layout-stream'
 import {
   composeMainTerminalSurfaces,
+  pairedRuntimeHostOfBinding,
   terminalHoldsPane,
   TerminalSurfaceIndex,
   type BoundTerminal,
@@ -125,7 +126,12 @@ class MainSurfacePublisher {
     const pane = surfaces.leaves.find(
       (leaf) =>
         leaf.ptyId === ptyId &&
-        terminalHoldsPane(terminal, leaf, surfaces.paneFacts.get(`${leaf.tabId}::${leaf.leafId}`))
+        (pairedRuntimeHostOfBinding(ptyId) !== null ||
+          terminalHoldsPane(
+            terminal,
+            leaf,
+            surfaces.paneFacts.get(`${leaf.tabId}::${leaf.leafId}`)
+          ))
     )
     return pane ? { worktreeId: pane.worktreeId, tabId: pane.tabId, leafId: pane.leafId } : null
   }

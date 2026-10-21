@@ -6,7 +6,8 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { loadWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
-import { TerminalSurfaceIndex } from './terminal-surface-index'
+import { composeMainTerminalSurfaces, TerminalSurfaceIndex } from './terminal-surface-index'
+import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
@@ -141,5 +142,35 @@ describe('a local workspace’s tabs in a paired server’s partition (switch on
 
     expect(panes(index)).toEqual([])
     expect(index.surfaces().worktreeIds.has(SERVER_WORKTREE)).toBe(false)
+  })
+
+  // A terminal a paired server runs, saved in its partition under a local workspace, is the
+  // server's (an orchestration worker): the window keeps mirroring it, never as a local pane.
+  it('leave a tab bound to a terminal a paired server runs to the window', () => {
+    const remote = toRemoteRuntimePtyId('term_on_host', 'env-1')
+    const index = indexOf(
+      {
+        local: session([[GIT, 'tab-local', 'pty-local']]),
+        [SPILL]: session([[GIT, 'tab-worker', remote]])
+      },
+      { [GIT]: 'local' }
+    )
+
+    expect(panes(index)).toEqual([`${GIT} tab-local pty-local`])
+  })
+})
+
+describe('a pane main holds whose terminal a paired server runs (switch on)', () => {
+  it('keeps its binding though the terminal never registers on this host', () => {
+    const remote = toRemoteRuntimePtyId('term_on_host', 'env-1')
+    const index = indexOf({ local: session([[GIT, 'tab-worker', remote]]) }, { [GIT]: 'local' })
+
+    const composed = composeMainTerminalSurfaces(
+      { tabs: [], leaves: [] },
+      index.surfaces(),
+      () => null
+    )
+
+    expect(composed.leaves.map((leaf) => leaf.ptyId)).toEqual([remote])
   })
 })
