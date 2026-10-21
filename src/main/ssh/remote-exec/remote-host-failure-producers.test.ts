@@ -1,6 +1,6 @@
 /**
- * The real producers behind the relay ladder's "did the host answer?" question: system-ssh
- * directory upload, system sftp, and the warm runtime check. Each runs real processes where it can.
+ * How real host-side failures surface: system-ssh directory upload, system sftp, and the warm
+ * runtime check. Each runs real processes where it can.
  */
 import { randomBytes } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -17,11 +17,11 @@ import {
   assertRemoteNodeRuntimePromoted
 } from '../orcad-remote-node-runtime-report'
 import { remoteNodeRuntimePresentCommand } from '../../managed-server/install/orcad-remote-node-runtime'
-import { isAnsweredHostFailure } from './remote-host-answered-failure'
 import { getRemoteHostPlatform } from '../ssh-remote-platform'
 import { findSystemSsh } from '../system-transport/system-ssh-binary'
 import { uploadDirectoryViaSystemSsh } from '../system-transport/system-ssh-file-transfer'
 import { runSftpBatch } from '../system-transport/system-ssh-sftp-transfer'
+import { isHostAnsweredSystemSshExit } from '../system-transport/system-ssh-operation-lifecycle'
 
 vi.mock('@orca/process-host', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -71,7 +71,7 @@ describe.runIf(posix)('system-ssh directory upload', () => {
       (e: unknown) => e
     )
     expect(String(error)).toContain('No space left on device')
-    expect(isAnsweredHostFailure(error)).toBe(true)
+    expect(isHostAnsweredSystemSshExit(error)).toBe(true)
   })
 
   it('keeps the remote ENOSPC when the far end closes mid-stream and local tar then fails to write', async () => {
@@ -91,7 +91,7 @@ describe.runIf(posix)('system-ssh directory upload', () => {
         (e: unknown) => e
       )
       expect(String(error)).toContain('No space left on device')
-      expect(isAnsweredHostFailure(error)).toBe(true)
+      expect(isHostAnsweredSystemSshExit(error)).toBe(true)
     }
   })
 
@@ -102,7 +102,7 @@ describe.runIf(posix)('system-ssh directory upload', () => {
     const error = await uploadDirectoryViaSystemSsh(target, await payload(), '/remote').catch(
       (e: unknown) => e
     )
-    expect(isAnsweredHostFailure(error)).toBe(false)
+    expect(isHostAnsweredSystemSshExit(error)).toBe(false)
   })
 
   it('blames a local tar failure, not the remote tar that saw a truncated stream', async () => {
@@ -115,7 +115,7 @@ describe.runIf(posix)('system-ssh directory upload', () => {
       '/remote'
     ).catch((e: unknown) => e)
     expect(String(error)).toContain('local tar relay upload')
-    expect(isAnsweredHostFailure(error)).toBe(false)
+    expect(isHostAnsweredSystemSshExit(error)).toBe(false)
   })
 })
 
@@ -134,13 +134,13 @@ describe('system sftp batch', () => {
     })
     const error = await runSftpBatch(target, ['put node.zip']).catch((e: unknown) => e)
     expect(String(error)).toContain('sftp batch failed (exit 1)')
-    expect(isAnsweredHostFailure(error)).toBe(true)
+    expect(isHostAnsweredSystemSshExit(error)).toBe(true)
   })
 
   it.each([
     [255, 'Connection closed'],
     [1, 'Connection reset by peer']
-  ])('keeps a lost connection (exit %i: %s) retryable', async (code, stderr) => {
+  ])('keeps a lost connection (exit %i: %s) unanswered', async (code, stderr) => {
     vi.mocked(runProcess).mockResolvedValueOnce({
       code,
       signal: null,
@@ -149,7 +149,8 @@ describe('system sftp batch', () => {
       timedOut: false
     })
     const error = await runSftpBatch(target, ['put node.zip']).catch((e: unknown) => e)
-    expect(isAnsweredHostFailure(error)).toBe(false)
+    expect(String(error)).toContain(stderr)
+    expect(isHostAnsweredSystemSshExit(error)).toBe(false)
   })
 })
 
@@ -204,6 +205,5 @@ describe.runIf(posix)('warm runtime check on a cached install', () => {
       throw new Error(`expected a self-test refusal, got ${String(thrown)}`)
     }
     expect(thrown.exitStatus).toBe(exitStatus)
-    expect(isAnsweredHostFailure(thrown)).toBe(true)
   })
 })
