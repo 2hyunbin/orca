@@ -150,11 +150,14 @@ export class DaemonTerminalAdmission {
 
     routedSessionId = result.agentSessionEnsure?.owner.ptyId ?? payload.sessionId
     if (
+      result.attachToken === null ||
       this.options.connections.get(clientId) !== client ||
       !client.authenticatedPairEstablished ||
       client.streamSocket === null
     ) {
-      this.options.host.detach(routedSessionId, result.attachToken)
+      if (result.attachToken !== null) {
+        this.options.host.detach(routedSessionId, result.attachToken)
+      }
       throw new TerminalAttachCanceledError(routedSessionId)
     }
     this.options.attachments.attach(routedSessionId, clientId, result.attachToken)
