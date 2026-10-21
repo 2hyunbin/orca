@@ -11,10 +11,6 @@ import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { useAppStore } from '@/store'
 import {
-  structuredAgentLaunchSupport,
-  type AgentLaunchRoutingInput
-} from '@/lib/agent-launch-routing'
-import {
   buildAgentLaunchRouteInput,
   workspaceKindForWorktreeId,
   type ProspectiveWorkspace
@@ -31,6 +27,7 @@ import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-rev
 import { useHostStructuredAgentAvailability } from '@/runtime/use-host-structured-agent-availability'
 import {
   buildNewTabAgentMenuRows,
+  hostChatAnswer,
   type HostChatAnswer,
   type NewTabAgentMenuRow
 } from '@/lib/new-tab-agent-menu-rows'
@@ -48,32 +45,6 @@ import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-invent
 import { resolveAgentMenuSelection } from '@/lib/agent-menu-selection'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
-
-function hostChatAnswer(input: AgentLaunchRoutingInput): HostChatAnswer {
-  const support = structuredAgentLaunchSupport(input)
-  if (support.supported) {
-    return 'yes'
-  }
-  switch (support.blocker) {
-    case 'runtime-capability-unknown':
-      return 'not-yet-known'
-    case 'agent-without-structured-session':
-      return !input.hostStructuredAgents && input.hostCapabilities?.includes(CATALOG) !== false
-        ? 'not-yet-known'
-        : 'not-on-host'
-    case 'remote-execution-host':
-      return 'ssh'
-    case 'project-runtime':
-      return 'wsl'
-    case 'runtime-capability':
-    case 'client-capability':
-      return 'no-chats'
-    case 'custom-start-directory':
-      return 'subfolder'
-    case 'reused-terminal':
-      return 'yes'
-  }
-}
 
 export type NewTabAgentMenuModel =
   | { state: 'loading'; placeholderCount: number }
@@ -115,6 +86,7 @@ export function useAgentMenuObservation(
 ) {
   const worktreeId = typeof target === 'string' ? target : target?.workspace.worktreeId
   const launchCwd = typeof target === 'string' ? undefined : target?.launchCwd
+  const unresolvedTarget = Boolean(worktreeId) && detectionTarget === undefined
   // Why: hidden worktrees stay mounted, so only the shown one holds its host's streams.
   const worktreeShown = useAppStore(
     (state) => typeof target === 'string' && state.activeWorktreeId === worktreeId
@@ -125,7 +97,12 @@ export function useAgentMenuObservation(
   const storedIds = useAppStore((state) =>
     detectionTarget ? readDetectedAgentsForTarget(state, detectionTarget) : null
   )
-  const detection = { ...acquired, detectedIds: acquired.detectedIds ?? storedIds }
+  // No owner means no agents to offer; a later owner publication resumes normal detection.
+  const detection = {
+    ...acquired,
+    detectedIds: unresolvedTarget ? [] : (acquired.detectedIds ?? storedIds),
+    isLoading: !unresolvedTarget && acquired.isLoading
+  }
   useHostStructuredAgentsVersion()
   const localCapabilities = useSyncExternalStore(
     subscribeLocalRuntimeCapabilityObservation,
@@ -170,7 +147,7 @@ export function useAgentMenuObservation(
     input.hostCapabilities?.includes(AVAILABILITY) === true &&
     Boolean(structuredAgentSessionTargetForHost(facts.executionHostId))
   const availability = useHostStructuredAgentAvailability(
-    published && !plain
+    published && !plain && !unresolvedTarget
       ? {
           executionHostId: facts.executionHostId,
           runtimeId: facts.runtimeId,
@@ -221,7 +198,7 @@ export function useAgentMenuObservation(
       localCapabilities.state === 'known' ? localCapabilities.capabilities : null
     )
   useEffect(() => {
-    if ((!open && !worktreeShown) || plain || inventoryFailed) {
+    if ((!open && !worktreeShown) || plain || inventoryFailed || unresolvedTarget) {
       return
     }
     if (localCapabilities.state === 'unlearned') {
@@ -238,6 +215,7 @@ export function useAgentMenuObservation(
     worktreeShown,
     plain,
     inventoryFailed,
+    unresolvedTarget,
     localCapabilities,
     hostCatalogPending,
     localCatalogPending,
@@ -246,6 +224,7 @@ export function useAgentMenuObservation(
   ])
   // Only dependencies that can enable an action hold the cold fill; a failed inventory is terminal.
   const loading =
+    !unresolvedTarget &&
     !inventoryFailed &&
     ((detection.detectedIds === null && detectionTarget !== undefined) ||
       (!plain &&
@@ -255,6 +234,9 @@ export function useAgentMenuObservation(
           hostCatalogPending ||
           localCatalogPending)))
   const answerFor = (agent: TuiAgent): HostChatAnswer => {
+    if (unresolvedTarget) {
+      return 'not-yet-known'
+    }
     const route = buildAgentLaunchRouteInput(state, {
       agent,
       workspace,
@@ -269,12 +251,15 @@ export function useAgentMenuObservation(
     // An agent the host could not check keeps this client's facts; the click's admission decides.
     return !verdict || verdict === 'refused' ? 'not-on-host' : preliminary
   }
+  const executionHostId = unresolvedTarget
+    ? undefined
+    : parseExecutionHostId(facts.executionHostId)?.id
   const rows = buildNewTabAgentMenuRows({
     settings,
     detectedOnHost: detection.detectedIds,
     chatAgents,
     hostChatAnswer: answerFor
-  }).map((row) => ({ ...row, executionHostId: parseExecutionHostId(facts.executionHostId)?.id }))
+  }).map((row) => ({ ...row, executionHostId }))
   const model: NewTabAgentMenuModel = loading
     ? {
         state: 'loading',
@@ -290,7 +275,7 @@ export function useAgentMenuObservation(
         agent,
         surface,
         settings,
-        executionHostId: parseExecutionHostId(facts.executionHostId)?.id,
+        executionHostId,
         inventoryReady:
           target === null ||
           (detectionTarget !== undefined &&
@@ -306,6 +291,7 @@ export function useAgentMenuObservation(
                 ? 'yes'
                 : answerFor(agent),
         chatPending:
+          !unresolvedTarget &&
           !inventoryFailed &&
           (capabilityPending || availability?.state === 'pending' || hostCatalogPending),
         plain
