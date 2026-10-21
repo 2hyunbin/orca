@@ -1,6 +1,6 @@
 import { getCellHeight, getTotalScale } from './cell-metrics'
 import type { TerminalDocumentScope } from './document-scope'
-import { scheduleDocumentFrame } from './document-frame-registry'
+import { cancelDocumentFrame, scheduleDocumentFrame } from './document-frame-registry'
 import { touchesInRoot } from './document-host-seams'
 import { clampPan } from './fit-scale'
 import { notify } from './host-notify'
@@ -108,7 +108,7 @@ export function attachSurfaceEventHandlers(
         return
       }
       if (scope.touchGesture.momentumId) {
-        cancelAnimationFrame(scope.touchGesture.momentumId)
+        cancelDocumentFrame(scope, scope.touchGesture.momentumId)
         scope.touchGesture.momentumId = null
         // Why: this touch stopped a coast; lifting it must not also tap.
         scope.tapCandidate = null
@@ -319,7 +319,7 @@ export function startSurfaceTouchGestures(scope: TerminalDocumentScope) {
 export function stopSurfaceTouchGestures(scope: TerminalDocumentScope) {
   scope.touchGesture.active = false
   if (scope.touchGesture.momentumId !== null) {
-    cancelAnimationFrame(scope.touchGesture.momentumId)
+    cancelDocumentFrame(scope, scope.touchGesture.momentumId)
     scope.touchGesture.momentumId = null
   }
   scope.touchGesture.velY = 0

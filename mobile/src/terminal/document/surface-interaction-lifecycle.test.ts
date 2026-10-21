@@ -4,10 +4,30 @@ import { createTerminalDocumentScope } from './document-scope'
 import { handleMsg } from './host-message-router'
 import { notify } from './host-notify'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
+import { scheduleDocumentFrame } from './document-frame-registry'
 
 afterEach(() => vi.restoreAllMocks())
 
 describe('inactive terminal interaction ownership', () => {
+  it('releases cancelled gesture frames across repeated hide/show cycles', () => {
+    const scope = createTerminalDocumentScope()
+    let nextFrame = 0
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => ++nextFrame)
+    const cancel = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {})
+    const paint = vi.fn()
+    const paintFrame = scheduleDocumentFrame(scope, paint)
+    for (let cycle = 0; cycle < 1000; cycle++) {
+      scope.touchGesture.momentumId = scheduleDocumentFrame(scope, () => {})
+      scope.normalScrollFrameId = scheduleDocumentFrame(scope, () => {})
+      handleMsg(scope, { type: 'set-interaction-active', active: false })
+      handleMsg(scope, { type: 'set-interaction-active', active: true })
+    }
+    expect(scope.scheduledFrames).toEqual([paintFrame])
+    expect(cancel).toHaveBeenCalledTimes(2000)
+    expect(paint).not.toHaveBeenCalled()
+    expect(scope.framesStopped).toBe(false)
+  })
+
   it('cancels pending motion when hidden and admits a new gesture when shown again', () => {
     const scope = createTerminalDocumentScope()
     const cancel = vi.spyOn(globalThis, 'cancelAnimationFrame')
