@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildAgentStartupPlan } from './tui-agent-startup'
+import { buildAgentResumeStartupPlan, buildAgentStartupPlan } from './tui-agent-startup'
 import {
   unwrapPosixShellScript,
   unwrapPowerShellScript
@@ -224,5 +224,16 @@ describe('hermes startup plans', () => {
 
     expect(plan?.launchCommand).toBe('hermes --tui')
     expect(plan?.followupPrompt).toBeNull()
+  })
+
+  it('cold-restores a Hermes pane into its exact session', () => {
+    const plan = buildAgentResumeStartupPlan({
+      agent: 'hermes',
+      providerSession: { key: 'session_id', id: '20261020_221305_5e3a1c' },
+      cmdOverrides: {},
+      platform: 'darwin'
+    })
+
+    expect(plan?.launchCommand).toBe("hermes --tui '--resume' '20261020_221305_5e3a1c'")
   })
 })
