@@ -16,6 +16,7 @@ import {
   recordHiddenRendererPtyDataDrop,
   unmarkHiddenRendererPty
 } from '../../pty-hidden-delivery-gate'
+import { attachingRendererViewPtys } from '../delivery/visibility-state'
 import { attemptStablePaneAttach } from './stable-pane-attach'
 import type { StablePaneOwner } from './stable-owner'
 
@@ -139,6 +140,36 @@ describe("a view's attach to a pane main started hidden", () => {
     expect(isRuntimeOwnedHiddenRendererPty('pty-1')).toBe(true)
     expect(isHiddenRendererPty('pty-1')).toBe(true)
     expect(revealAsksRestore()).toBe(true)
+  })
+
+  it('does not hide a terminal it never kept visible when its attach fails', async () => {
+    _resetHiddenRendererPtyDeliveryGateForTest()
+    await expect(
+      attachViewAfterHiddenStart('pty-1', setHidden, () => Promise.reject(new Error('lost')))
+    ).rejects.toThrow('lost')
+    expect(isHiddenRendererPty('pty-1')).toBe(false)
+  })
+
+  it('keeps main from hiding the terminal until the last attaching view finishes', async () => {
+    _resetHiddenRendererPtyDeliveryGateForTest()
+    let finishFirst!: () => void
+    const first = attachViewAfterHiddenStart(
+      'pty-1',
+      setHidden,
+      () => new Promise<{ id: string }>((done) => (finishFirst = () => done({ id: 'pty-1' })))
+    )
+    let finishSecond!: () => void
+    const second = attachViewAfterHiddenStart(
+      'pty-1',
+      setHidden,
+      () => new Promise<{ id: string }>((done) => (finishSecond = () => done({ id: 'pty-1' })))
+    )
+    finishFirst()
+    await first
+    expect(attachingRendererViewPtys.has('pty-1')).toBe(true)
+    finishSecond()
+    await second
+    expect(attachingRendererViewPtys.has('pty-1')).toBe(false)
   })
 
   it('leaves a terminal main did not start hidden as today', async () => {

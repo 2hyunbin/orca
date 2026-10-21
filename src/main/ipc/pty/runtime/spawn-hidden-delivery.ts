@@ -17,6 +17,11 @@ export function markRuntimeSpawnHiddenBeforeSpawn(ctx: RuntimePtySpawnState): vo
   ) {
     return
   }
+  const attaching = attachingRendererViewPtys.get(ctx.effectiveSessionAppId)
+  if (attaching) {
+    attaching.skippedHide = true
+    return
+  }
   ctx.preSpawnHiddenMarkId = ctx.effectiveSessionAppId
   markRuntimeSpawnHidden(ctx, ctx.preSpawnHiddenMarkId)
 }
@@ -37,7 +42,11 @@ export function commitRuntimeSpawnHiddenDelivery(ctx: RuntimePtySpawnState): voi
   }
   // Why: a view that mounted visible during spawn already unmarked, or is attaching to it now;
   // marking would drop its output and ask it for a second restore.
-  if (visibleRendererPtys.has(id) || attachingRendererViewPtys.has(id)) {
+  const attaching = attachingRendererViewPtys.get(id)
+  if (attaching) {
+    attaching.skippedHide = true
+  }
+  if (visibleRendererPtys.has(id) || attaching) {
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     ctx.deps.syncPtyBackgroundedDelivery?.(id, 'spawn')
     return

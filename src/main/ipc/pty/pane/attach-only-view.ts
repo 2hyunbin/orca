@@ -57,19 +57,28 @@ export async function attachViewAfterHiddenStart<T extends object>(
   if (hiddenByMain) {
     setHidden(ptyId, false)
   }
-  attachingRendererViewPtys.add(ptyId)
+  const attaching = attachingRendererViewPtys.get(ptyId) ?? { views: 0, skippedHide: false }
+  attaching.views += 1
+  attachingRendererViewPtys.set(ptyId, attaching)
   let attached: T
   try {
     attached = await attach()
   } catch (error) {
     // Why: until a view attaches, main must keep answering the pane's startup queries.
-    if (!(error instanceof Error && error.message === PANE_NOT_LIVE_ERROR)) {
+    const keptVisibleByThisAttach = hiddenByMain || attaching.skippedHide
+    if (
+      keptVisibleByThisAttach &&
+      !(error instanceof Error && error.message === PANE_NOT_LIVE_ERROR)
+    ) {
       setHidden(ptyId, true)
       markRuntimeOwnedHiddenRendererPty(ptyId)
     }
     throw error
   } finally {
-    attachingRendererViewPtys.delete(ptyId)
+    attaching.views -= 1
+    if (attaching.views === 0 && attachingRendererViewPtys.get(ptyId) === attaching) {
+      attachingRendererViewPtys.delete(ptyId)
+    }
   }
   // Why a snapshot of the same id: a local attach carries none, and another id's drops may postdate it.
   if (

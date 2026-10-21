@@ -1,3 +1,4 @@
+import { ptyIncarnationById, ptyOwnership } from '../provider/ownership-state'
 import { attachOnlyViewOf } from '../pane/attach-only-view'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { resolveAgentLaunchPaneVerdict } from '../../../agent-launch/agent-launch-pane-attachment'
@@ -109,8 +110,18 @@ export async function beginPtyIpcSpawn(
       : undefined
     if (pendingRuntimeCreate) {
       const created = await pendingRuntimeCreate.promise
-      // Why: main's start just attached this terminal; a second provider attach adds a round trip.
-      if (attachOnlyViewOf(args) && created && created.id === args.sessionId) {
+      // Why: main's start of this pane carries the payload a view paints from; attaching to the
+      // provider again adds a round trip. A start that carries none, or no longer owns its
+      // terminal, leaves the view to attach as today.
+      if (
+        attachOnlyViewOf(args) &&
+        created &&
+        created.id === args.sessionId &&
+        (created.coldRestore || typeof created.snapshot === 'string') &&
+        ptyOwnership.has(created.id) &&
+        (created.incarnationId === undefined ||
+          ptyIncarnationById.get(created.id) === created.incarnationId)
+      ) {
         return created
       }
     }
