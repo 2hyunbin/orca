@@ -64,7 +64,9 @@ describe('capability probe recovery', () => {
     const host = connection()
     host.sendRequest.mockRejectedValueOnce(new Error('timeout'))
     await render(host.client)
-    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
     expect(current?.tasksSupported).toBe(true)
   })
 
