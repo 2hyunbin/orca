@@ -1,5 +1,6 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
+import { Pressable, TextInput } from 'react-native'
 import { describe, expect, it, vi } from 'vitest'
 import { MobileNativeChatPromptCard } from './MobileNativeChatPromptCard'
 
@@ -47,11 +48,11 @@ describe('MobileNativeChatPromptCard collapse', () => {
           })
         )
       })
-      const buttons = tree!.root.findAllByType('Pressable')
+      const buttons = tree!.root.findAllByType(Pressable)
       expect(buttons).toHaveLength(1)
       expect(buttons[0]!.props.accessibilityLabel).toBe('Answer in terminal')
       expect(buttons[0]!.props.disabled).toBe(!available)
-      expect(tree!.root.findAllByType('TextInput')).toHaveLength(0)
+      expect(tree!.root.findAllByType(TextInput)).toHaveLength(0)
       if (available) {
         act(() => buttons[0]!.props.onPress())
       }

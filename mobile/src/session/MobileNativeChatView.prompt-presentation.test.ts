@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { Pressable } from 'react-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MobileNativeChatView } from './MobileNativeChatView'
+import { MobileNativeChatAsk } from './MobileNativeChatAsk'
 import { useMobileNativeChatPromptPresentation } from './use-mobile-native-chat-prompt-presentation'
 import type { MobileChatPermission } from './mobile-native-chat-permission'
 vi.mock('react-native', async () => {
@@ -150,7 +151,7 @@ describe('terminal prompt presentation with the production view, card and compos
     expect(onAnswerInTerminal).toHaveBeenCalledOnce()
     expect(onAnswerAsk).not.toHaveBeenCalled()
     expect(onCancelAsk).not.toHaveBeenCalled()
-    expect(tree!.root.findAll((node) => node.type === 'ChatAsk')).toHaveLength(0)
+    expect(tree!.root.findAllByType(MobileNativeChatAsk)).toHaveLength(0)
   })
 
   it('accepted Deny hides exactly that occurrence and restores Send across reconnect', async () => {
