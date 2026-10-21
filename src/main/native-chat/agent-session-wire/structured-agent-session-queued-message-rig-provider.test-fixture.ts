@@ -26,6 +26,9 @@ export type QueuedRigProviderOptions = {
   /** A Stop's end of the child waits, as every shipping adapter's does, for the work it stopped
    *  to end (no running turn, no unanswered send), or for the grace to run out. */
   windsDown?: true
+  /** The model its child reports running; otherwise the agent's own `default`. */
+  reportsModel?: string
+  reportsEffort?: string
 }
 
 /** How long a winding-down child is given after the interrupt before the Stop ends it. */
@@ -60,18 +63,17 @@ export function createQueuedRigProvider(
   let events: StructuredAgentSessionEventSink | undefined
   let proveOpen: (() => void) | null = null
 
+  const reported = () => ({
+    model: options.reportsModel ?? 'default',
+    ...(options.reportsEffort ? { effort: options.reportsEffort } : {})
+  })
   const scripted: StructuredAgentSessionAdapter = {
     open: () =>
       options.starting
         ? new Promise((resolve) => {
-            proveOpen = () =>
-              resolve({
-                reportedOptions: { model: 'default' }
-              })
+            proveOpen = () => resolve({ reportedOptions: reported() })
           })
-        : Promise.resolve({
-            reportedOptions: { model: 'default' }
-          }),
+        : Promise.resolve({ reportedOptions: reported() }),
     acquire: async ({ identity, fence, spawnToken, events: sink }) => {
       starts()
       const hold = startHold

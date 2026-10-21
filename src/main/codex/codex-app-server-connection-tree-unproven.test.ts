@@ -3,6 +3,7 @@ import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { spawnProcess } from '@orca/process-host'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
+import { providerRequestTimeoutOf } from '../provider-process/provider-request-timeout'
 import { openCodexAppServerConnection } from './codex-app-server-connection'
 import { codexTurnLifecycleRig } from './codex-structured-dispatch-test-support'
 
@@ -72,6 +73,10 @@ describe('Codex process-tree diagnostic after a forced close', () => {
       const timedOut = expect(stopping).rejects.toThrow('exceeded 100ms')
       await vi.advanceTimersByTimeAsync(100)
       await timedOut
+      await expect(stopping.then(() => null, providerRequestTimeoutOf)).resolves.toEqual({
+        method: 'turn/interrupt',
+        timeoutMs: 100
+      })
       const replacement = {
         ...session,
         connection: original,
