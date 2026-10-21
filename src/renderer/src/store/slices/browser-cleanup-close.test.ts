@@ -240,9 +240,11 @@ describe('closeBrowserTab with reason cleanup', () => {
       [workspaceId]: true
     })
     expect(store.getState().pendingAddressBarFocusByTabId).toEqual(unrelated)
-    // Linear, not a rescan per focus entry (1000 x 1000). A layout-owner build's frame that drops
-    // the tab reads each page a few more times before the window's close runs.
-    expect(idReads).toBeLessThan(ORCA_LAYOUT_OWNER_IS_MAIN ? 20_000 : 10_000)
+    // Linear, not a rescan per focus entry (1000 x 1000). Passes over the pages: the window's close
+    // 5; switch-on also the close command 1, the frame build 3 (persisted pages 2, store patch 1)
+    // and the test's frame-apply check 4 (staged tabs 1, persisted pages 2, store patch 1).
+    const passes = ORCA_LAYOUT_OWNER_IS_MAIN ? 5 + 1 + 3 + 4 : 5
+    expect(idReads).toBeLessThanOrEqual((passes + 1) * pages.length)
   })
 
   // Why: the omit path must not hand every pending-focus selector a fresh record on each close.
