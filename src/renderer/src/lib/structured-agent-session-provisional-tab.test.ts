@@ -21,6 +21,7 @@ import {
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import {
   drawTabsFromMain,
   type TabsDrawnFromMain
@@ -346,5 +347,51 @@ describe('a provisional structured chat tab', () => {
       expect(state.getActiveTab('wt-2')).toEqual(selected)
     }
     view.unmount()
+  })
+
+  // A hidden launch slot is in the window's group order but not in main's: the terminal's place
+  // is counted among the tabs both draw.
+  it("places a declined chat's terminal right after the chat past a hidden launch slot", async () => {
+    const { launch, chat, fallback, complete } = openChat()
+    await main.settle()
+    refuse()
+    await vi.waitFor(() => expect(fallback).toHaveBeenCalled())
+    const state = useAppStore.getState()
+    const sibling = state.createUnifiedTab('wt-1', 'terminal', {
+      entityId: 'sibling',
+      targetGroupId: chat.groupId,
+      activate: false
+    })
+    const terminal = state.createUnifiedTab('wt-1', 'terminal', {
+      id: 'replacement',
+      targetGroupId: chat.groupId,
+      activate: false
+    })
+    useAppStore.setState({
+      tabsByWorktree: {
+        'wt-1': ORCA_LAYOUT_OWNER_IS_MAIN
+          ? [terminalRecord(sibling.entityId), terminalRecord(terminal.entityId)]
+          : []
+      }
+    })
+    await mainLoadsStoreLayout()
+    const slot = structuredAgentSessionTabId('hidden-launch')
+    useAppStore.getState().ensureWorktreeRootGroup('wt-1', {
+      tabId: slot,
+      targetGroupId: chat.groupId,
+      precedingTabIds: []
+    })
+    const order = () =>
+      useAppStore.getState().groupsByWorktree['wt-1']?.find((g) => g.id === chat.groupId)?.tabOrder
+    expect(order()).toEqual([slot, chat.id, sibling.id, terminal.id])
+
+    await act(async () => {
+      complete({ outcome: { status: 'created' }, tabId: terminal.id })
+      await launch?.settlement
+      await main.settle()
+    })
+
+    expect(useAppStore.getState().getTab(chat.id)).toBeNull()
+    expect(order()?.filter((id) => id !== slot)).toEqual([terminal.id, sibling.id])
   })
 })

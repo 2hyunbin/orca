@@ -195,9 +195,12 @@ function placeReplacementThroughMain(
   replacement: Tab,
   source: Tab
 ): Promise<void> {
-  const order = (useAppStore.getState().groupsByWorktree[worktreeId] ?? [])
+  const state = useAppStore.getState()
+  const rows = new Set((state.unifiedTabsByWorktree[worktreeId] ?? []).map((tab) => tab.id))
+  // Main's index counts only tabs it draws: a hidden launch slot has no row and is not in main.
+  const order = (state.groupsByWorktree[worktreeId] ?? [])
     .find((group) => group.id === source.groupId)
-    ?.tabOrder.filter((id) => id !== replacement.id)
+    ?.tabOrder.filter((id) => id !== replacement.id && rows.has(id))
   return new Promise((resolve) => {
     const placeHere = (): void => {
       placeReplacementAfterSource(worktreeId, replacement, source)
