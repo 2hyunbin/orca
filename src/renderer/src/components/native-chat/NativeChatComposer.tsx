@@ -1,4 +1,3 @@
-import { useNativeChatPastedTextAdmission } from './native-chat-pasted-text-state'
 import { useNativeChatComposerNotice } from './use-native-chat-composer-notice'
 import { useNativeChatMobileHoldNotice } from './use-native-chat-mobile-hold-notice'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
@@ -128,6 +127,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       caret,
       recalledFromHistory: recall.active,
       disabled,
+      isComposing: imeEnterGesture.isComposing,
       structuredTransport,
       editor: { textareaRef, setDraft, setCaret, setActiveSuggestion },
       setNotice
@@ -171,13 +171,13 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     })
     const { imageAttachments, attachResolvedPaths, clearImageAttachments, removeImageAttachment } =
       attachments
-    const sendBlock = nativeChatImageSendBlock(imageAttachments)
-    const sendBlockedReason = sendBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
+    const imageBlock = nativeChatImageSendBlock(imageAttachments)
+    const sendBlockedReason = imageBlock.reason ?? structuredTransport?.sendBlockedReason ?? null
     const sendHeld =
-      useNativeChatPastedTextAdmission(draftScopeKey) === 'saving' ||
+      attachments.pastedTextSaving ||
       disabled ||
       structuredTransport?.sendOut === true ||
-      sendBlock.holdsSend ||
+      imageBlock.holdsSend ||
       structuredTransport?.sendBlockedReason !== undefined
     const sendButtonDisabled = isWorking
       ? !hasPty || !onStop
@@ -201,8 +201,8 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
     const handlePasteEvent = useNativeChatComposerHandle(ref, {
       attachmentScopeKey: draftScopeKey,
       textareaRef,
+      isComposing: imeEnterGesture.isComposing,
       caret,
-      draft,
       setDraft,
       setCaret,
       setActiveSuggestion,

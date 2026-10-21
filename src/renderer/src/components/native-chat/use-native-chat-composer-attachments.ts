@@ -31,6 +31,7 @@ import {
   takePendingImageWithReferences
 } from './native-chat-composer-image-references'
 import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
+import { useNativeChatPastedTextAdmission } from './native-chat-pasted-text-state'
 
 export type UseNativeChatComposerAttachmentsArgs = {
   attachmentScopeKey: string
@@ -64,6 +65,8 @@ export function useNativeChatComposerAttachments({
   setNotice
 }: UseNativeChatComposerAttachmentsArgs): {
   imageAttachments: NativeChatComposerImageAttachment[]
+  /** A long paste in this scope is still being saved as a file; Send waits for it. */
+  pastedTextSaving: boolean
   attachResolvedPaths: (
     paths: string[],
     connectionId?: string | null,
@@ -300,10 +303,13 @@ export function useNativeChatComposerAttachments({
     ]
   )
 
+  const pastedTextSaving = useNativeChatPastedTextAdmission(attachmentScopeKey) === 'saving'
+
   return {
     pendingChips,
     scopeEditor,
     imageAttachments,
+    pastedTextSaving,
     attachResolvedPaths,
     clearImageAttachments: () => {
       releaseAllPreviews()

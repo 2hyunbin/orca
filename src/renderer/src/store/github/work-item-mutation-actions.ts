@@ -2,16 +2,28 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { GitHubSlice } from './slice-types'
 import { toast } from 'sonner'
-import type { GitHubWorkItem } from '../../../../shared/github/work-item-types'
 import { parseGitHubIssueOrPRLink } from '../../../../shared/github/links'
 import { githubRepoIdentityKey } from '../../../../shared/github/repository-identity-key'
 import { getTaskSourceCacheScope } from '../../../../shared/task-source-context'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { repoMatchesHostIdentity } from '../slices/repo-host-identity'
-import type { CacheEntry } from './cache-model'
-import { evictRepoCacheEntries, repoCacheKeyPrefixes } from './cache-identity'
+import { evictRepoCacheEntries, repoCacheEviction, type RepoCacheEviction } from './cache-identity'
 import { ERROR_TOAST_DURATION } from './cache-policy'
 import { clearInflightWorkItemsForRepo } from './request-coordination'
+import { findRepoForGitHubOwner } from './repository-routing'
+
+// Why: the row's own host is the bucket to drop; a same-id twin on another host keeps its own.
+function repoCacheEvictionForRow(
+  state: AppState,
+  repoId: string,
+  repoPath: string | undefined,
+  hostId?: ExecutionHostId
+): RepoCacheEviction {
+  const row = hostId ? undefined : findRepoForGitHubOwner(state, repoId, repoPath ?? '')
+  const evictedHostId = hostId ?? (row ? getRepoExecutionHostId(row) : null)
+  return repoCacheEviction(state.repos, repoId, repoPath, evictedHostId)
+}
 
 export const createWorkItemMutationActions = (
   set: Parameters<StateCreator<AppState>>[0],
@@ -82,32 +94,26 @@ export const createWorkItemMutationActions = (
       // Why: the optimistic patch may now disagree with disk; resync rather than leave a lie on screen.
       void get().fetchReposForAllHosts()
     }
+    const eviction = repoCacheEvictionForRow(get(), repoId, repoPath, hostId)
     // Why: clear inflight dedupe BEFORE bumping the nonce so the re-triggered fetch can't collapse onto a pre-flip in-flight entry.
-    clearInflightWorkItemsForRepo(repoId, repoPath)
+    clearInflightWorkItemsForRepo(eviction)
     // Why: evict AFTER the await so an overlapping fetch can't repopulate with pre-flip data; also drops legacy path-scoped keys.
-    set((s) => {
-      const prefix = `${repoId}::`
-      const legacyPrefix = `${repoPath}::`
-      const next: Record<string, CacheEntry<readonly GitHubWorkItem[]>> = {}
-      for (const [key, entry] of Object.entries(s.workItemsCache)) {
-        if (!key.startsWith(prefix) && !key.startsWith(legacyPrefix)) {
-          next[key] = entry
-        }
-      }
+    set((s) => ({
+      workItemsCache: evictRepoCacheEntries(s.workItemsCache, eviction).cache,
       // Why: the Tasks fetch effect keys on the nonce, not the cache, so bump it to re-run and re-populate the evicted entries.
-      return { workItemsCache: next, workItemsInvalidationNonce: s.workItemsInvalidationNonce + 1 }
-    })
+      workItemsInvalidationNonce: s.workItemsInvalidationNonce + 1
+    }))
   },
 
-  evictGitHubRepoCaches: (repoId, repoPath) => {
-    clearInflightWorkItemsForRepo(repoId, repoPath)
+  evictGitHubRepoCaches: (repoId, repoPath, hostId) => {
+    const eviction = repoCacheEvictionForRow(get(), repoId, repoPath, hostId)
+    clearInflightWorkItemsForRepo(eviction)
     set((s) => {
-      const prefixes = repoCacheKeyPrefixes(repoId, repoPath)
-      const workItems = evictRepoCacheEntries(s.workItemsCache, prefixes)
-      const prs = evictRepoCacheEntries(s.prCache, prefixes)
-      const issues = evictRepoCacheEntries(s.issueCache, prefixes)
-      const checks = evictRepoCacheEntries(s.checksCache, prefixes)
-      const comments = evictRepoCacheEntries(s.commentsCache, prefixes)
+      const workItems = evictRepoCacheEntries(s.workItemsCache, eviction)
+      const prs = evictRepoCacheEntries(s.prCache, eviction)
+      const issues = evictRepoCacheEntries(s.issueCache, eviction)
+      const checks = evictRepoCacheEntries(s.checksCache, eviction)
+      const comments = evictRepoCacheEntries(s.commentsCache, eviction)
       const updates: Partial<AppState> = {}
 
       if (workItems.evicted) {
