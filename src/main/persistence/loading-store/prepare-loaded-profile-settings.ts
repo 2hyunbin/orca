@@ -15,6 +15,7 @@ import { normalizeDisabledTuiAgents } from '../../../shared/tui-agent-selection'
 import { hasUnsupportedTuiAgentArgs } from '../../../shared/tui-agent-launch-defaults'
 import { normalizeTerminalCursorStyleDefault } from '../../../shared/terminal-cursor-style-settings'
 import { normalizeTerminalLineHeight } from '../../../shared/terminal-line-height-settings'
+import { migratePortugueseUiLanguageOnLoad } from '../../../shared/portuguese-ui-language-migration'
 import { migrateAgentYoloDefaults } from '../applying-settings/terminal-settings-migrations'
 import { hasTypedAgentPermission } from '../../../shared/tui-agent-permission-choice'
 import { migrateAgentPermissionChoice } from '../../../shared/tui-agent-permission-lift'
@@ -25,6 +26,10 @@ import {
 } from '../applying-settings/onboarding-normalization'
 
 export type PreparedLoadedProfileSettings = {
+  migratedPortugueseUiLanguage: Pick<
+    GlobalSettings,
+    'uiLanguage' | 'uiLanguagePortugueseMigrationApplied'
+  >
   migratedExperimentalActivity: GlobalSettings['experimentalActivity']
   migratedAutoRenameBranchFromWork: Pick<
     GlobalSettings,
@@ -64,6 +69,13 @@ export function prepareLoadedProfileSettings(
   defaults: PersistedState,
   markNeedsSave: () => void
 ): PreparedLoadedProfileSettings {
+  const migratedPortugueseUiLanguage = migratePortugueseUiLanguageOnLoad(parsed.settings)
+  if (
+    parsed.settings?.uiLanguage !== migratedPortugueseUiLanguage.uiLanguage ||
+    parsed.settings?.uiLanguagePortugueseMigrationApplied !== true
+  ) {
+    markNeedsSave()
+  }
   const experimentalActivityDefaultedOffForAllUsers =
     parsed.settings?.experimentalActivityDefaultedOffForAllUsers === true
   // Why: preserve the legacy rollout boundary while loading profiles created before the Agents tab graduated.
@@ -245,6 +257,7 @@ export function prepareLoadedProfileSettings(
     markNeedsSave()
   }
   return {
+    migratedPortugueseUiLanguage,
     migratedExperimentalActivity,
     migratedAutoRenameBranchFromWork,
     migratedTerminalCursorStyle,

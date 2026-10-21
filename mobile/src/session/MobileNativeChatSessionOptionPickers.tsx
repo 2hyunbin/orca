@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   FilePenLine,
   Hand,
+  LockKeyhole,
   ShieldAlert,
   ShieldCheck,
   X,
@@ -203,6 +204,17 @@ export function MobileNativeChatSessionOptionPickers({
                 ) : null}
               </View>
             </View>
+            {isWorking && !permissionView ? (
+              <View style={styles.lockNotice} accessibilityLiveRegion="polite">
+                <LockKeyhole size={16} color={colors.textSecondary} />
+                <View style={styles.lockNoticeBody}>
+                  <Text style={styles.lockNoticeTitle}>Agent is working</Text>
+                  <Text style={styles.lockNoticeDescription}>
+                    Model settings unlock when this turn finishes.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             {sessionOptionDispatchUnconfirmed(activeDescriptor) ? (
               <SessionOptionCaption>Sent to the agent — not confirmed</SessionOptionCaption>
             ) : null}
@@ -339,6 +351,26 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  lockNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg
+  },
+  lockNoticeBody: {
+    flex: 1,
+    gap: spacing.xs
+  },
+  lockNoticeTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.bodySize,
+    fontWeight: '600'
+  },
+  lockNoticeDescription: {
+    color: colors.textSecondary,
+    fontSize: typography.metaSize
   },
   group: {
     overflow: 'hidden',
