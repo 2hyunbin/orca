@@ -11,9 +11,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const state = {
-    folderWorkspaces: [] as FolderWorkspace[],
+    folderWorkspaces: new Array<FolderWorkspace>(),
     deleteFolderWorkspace: vi.fn().mockResolvedValue(true),
-    activeWorktreeId: null as string | null,
+    activeWorktreeId: null,
     setActiveWorktree: vi.fn(),
     worktreesByRepo: {},
     worktreeMap: new Map<string, unknown>(),
