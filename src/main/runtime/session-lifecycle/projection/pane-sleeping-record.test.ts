@@ -75,4 +75,35 @@ describe("main's lookup of a pane's numbered sleeping record", () => {
       findPaneSleepingRecord(session(split), WORKTREE, { parentTabId: 'tab-1', leafId: RIGHT })
     ).toMatchObject({ record: RECORD })
   })
+
+  it('in a split where no pane owns a numbered record, gives the one conversation to pane 1 only', () => {
+    const split = {
+      type: 'split',
+      direction: 'vertical',
+      first: { type: 'leaf', leafId: LEFT },
+      second: { type: 'leaf', leafId: RIGHT }
+    }
+    // Numbered 3 in a two-pane tab: no pane's own number, so the tab's first pane resumes it.
+    const unowned = session(split, { 'tab-1:3': { ...RECORD, paneKey: 'tab-1:3' } })
+    const of = (leafId: string) =>
+      findPaneSleepingRecord(unowned, WORKTREE, { parentTabId: 'tab-1', leafId })
+    expect(of(LEFT)).toMatchObject({ record: { paneKey: 'tab-1:3' } })
+    expect(of(RIGHT)).toBeNull()
+  })
+
+  it('never gives one numbered record to two panes of a split', () => {
+    const split = {
+      type: 'split',
+      direction: 'vertical',
+      first: { type: 'leaf', leafId: LEFT },
+      second: { type: 'leaf', leafId: RIGHT }
+    }
+    for (const paneKey of ['tab-1:2', 'tab-1:3']) {
+      const records = session(split, { [paneKey]: { ...RECORD, paneKey } })
+      const takers = [LEFT, RIGHT].filter((leafId) =>
+        findPaneSleepingRecord(records, WORKTREE, { parentTabId: 'tab-1', leafId })
+      )
+      expect(takers).toHaveLength(1)
+    }
+  })
 })

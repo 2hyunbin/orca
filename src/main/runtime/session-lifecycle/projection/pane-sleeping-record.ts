@@ -22,25 +22,31 @@ export function findPaneSleepingRecord(
   if (!ORCA_LAYOUT_OWNER_IS_MAIN || !records) {
     return null
   }
-  // The pane's number as the window numbers a restored tab's panes, from main's layout.
+  // The pane numbers the tab's records name, mapped to panes as the window numbers a restored tab.
   const root = layoutOf(session, pane)?.root
-  const numericPaneId = Object.keys(records)
-    .map((paneKey) => parseLegacyNumericPaneKey(paneKey))
-    .find(
-      (legacy) =>
-        legacy?.tabId === pane.parentTabId &&
-        resolveRuntimePaneTitleLeafIdFromRoot(root, legacy.numericPaneId) === pane.leafId
-    )?.numericPaneId
+  const inWorkspace = (candidate: SleepingAgentSessionRecord) =>
+    worktreeIdsEqual(candidate.worktreeId, worktreeId)
+  const owned = Object.entries(records).flatMap(([paneKey, candidate]) => {
+    const legacy = parseLegacyNumericPaneKey(paneKey)
+    if (legacy?.tabId !== pane.parentTabId || !inWorkspace(candidate)) {
+      return []
+    }
+    const leafId = resolveRuntimePaneTitleLeafIdFromRoot(root, legacy.numericPaneId)
+    return leafId ? [{ leafId, numericPaneId: legacy.numericPaneId }] : []
+  })
+  const numericPaneId = owned.find((entry) => entry.leafId === pane.leafId)?.numericPaneId
   const found = findLegacyNumericSleepingRecord(
     records,
     { tabId: pane.parentTabId, numericPaneId },
-    (candidate) => worktreeIdsEqual(candidate.worktreeId, worktreeId)
+    inWorkspace
   )
-  // Why: in a split only the pane's own number counts, or every pane would take one record.
   const exact = parseLegacyNumericPaneKey(found?.paneKey)?.numericPaneId === numericPaneId
-  return found && (exact || collectPersistedTerminalLeafIds(layoutOf(session, pane)).length <= 1)
-    ? found
-    : null
+  // Why: in a split the one-conversation fallback goes to pane 1 alone, and only when no pane
+  // owns a numbered record, so no two panes resume one conversation.
+  const fallback =
+    collectPersistedTerminalLeafIds(layoutOf(session, pane)).length <= 1 ||
+    (owned.length === 0 && resolveRuntimePaneTitleLeafIdFromRoot(root, '1') === pane.leafId)
+  return found && (exact || fallback) ? found : null
 }
 
 function layoutOf(
