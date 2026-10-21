@@ -9,6 +9,7 @@ import {
   TEST_REPO_ID,
   TEST_WINDOW_ID,
   TEST_WORKTREE_ID,
+  makeRuntimeStoreWithWorkspaceSession,
   store
 } from '../orca-runtime-test-fixtures.spec'
 
@@ -29,29 +30,36 @@ function makeRecord(origin: SleepingAgentSessionRecord['origin']): SleepingAgent
 
 async function activateOnHeadlessServe(
   record: SleepingAgentSessionRecord,
-  ownerHostId = 'local'
-): Promise<{ wake: string | undefined; getWorkspaceSession: ReturnType<typeof vi.fn> }> {
+  ownerHostId: 'local' | 'ssh:ssh-1' = 'local'
+): Promise<{ wake: string | undefined; readHostIds: (string | undefined)[] }> {
   const repo = { ...store.getRepos()[0]!, executionHostId: ownerHostId }
-  const getWorkspaceSession = vi.fn((hostId?: string) => ({
-    ...getDefaultWorkspaceSession(),
-    // Only the owning host's partition holds the record, so a wrong partition read misses it.
-    sleepingAgentSessionsByPaneKey: hostId === ownerHostId ? { [record.paneKey]: record } : {}
-  }))
+  // Only the owning host's partition holds the record, so a wrong partition read misses it.
+  const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+    {
+      ...getDefaultWorkspaceSession(),
+      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
+    },
+    ownerHostId
+  )
+  const getWorkspaceSession = vi.fn(runtimeStore.getWorkspaceSession)
   const runtime = new OrcaRuntimeService({
-    ...store,
+    ...runtimeStore,
     getRepos: () => [repo],
     getRepo: (id: string) => (id === TEST_REPO_ID ? repo : undefined),
     getWorkspaceSession
-  } as never)
+  })
   // Headless: no BrowserWindow backs the authoritative id.
-  electronMocks.BrowserWindow.fromId.mockReturnValue(null as never)
+  electronMocks.BrowserWindow.fromId.mockReturnValue(null)
   runtime.attachWindow(TEST_WINDOW_ID)
   runtime.markGraphReady(TEST_WINDOW_ID)
   const result = await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
     notifyClients: false,
     clientKind: 'mobile'
   })
-  return { wake: result.sleepingAgentWake, getWorkspaceSession }
+  return {
+    wake: result.sleepingAgentWake,
+    readHostIds: getWorkspaceSession.mock.calls.map(([hostId]) => hostId)
+  }
 }
 
 describe('OrcaRuntimeService headless wake report', () => {
@@ -74,11 +82,11 @@ describe('OrcaRuntimeService headless wake report', () => {
   )
 
   it('reads the sleep record from an SSH-host worktree partition', async () => {
-    const { wake, getWorkspaceSession } = await activateOnHeadlessServe(
+    const { wake, readHostIds } = await activateOnHeadlessServe(
       makeRecord('worktree-sleep'),
       'ssh:ssh-1'
     )
-    expect(getWorkspaceSession).toHaveBeenCalledWith('ssh:ssh-1')
+    expect(readHostIds).toContain('ssh:ssh-1')
     expect(wake).toBe('unsupported-headless')
   })
 
