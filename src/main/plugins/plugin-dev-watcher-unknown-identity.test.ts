@@ -204,9 +204,10 @@ it('recovers a silent replacement when previously unknown identity first becomes
   await rename(fixture.realRoot, join(fixture.base, 'old'))
   await mkdir(fixture.realRoot)
   await vi.advanceTimersByTimeAsync(60_000)
-  // Why two: the rebind refresh, then the rebound subscription's one catch-up inside the tick.
-  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
-  expect(subscribeMock).toHaveBeenCalledTimes(2)
+  await vi.waitFor(() => expect(subscribeMock).toHaveBeenCalledTimes(2))
+  await vi.advanceTimersByTimeAsync(300)
+  // The rebind refresh, then the rebound subscription's one catch-up.
+  expect(refresh).toHaveBeenCalledTimes(2)
   expect(subscriptions[0]?.unsubscribe).toHaveBeenCalledOnce()
   for (let tick = 1; tick < 4; tick += 1) {
     await vi.advanceTimersByTimeAsync(60_000)
@@ -229,10 +230,9 @@ it('retries a failed native setup for an unknown present root on the existing ma
   housekeeping.sync(options)
   await Promise.resolve()
   await vi.advanceTimersByTimeAsync(60_000)
-  await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce())
-  expect(subscribeMock).toHaveBeenCalledTimes(2)
-  // Why a second: the retried subscription goes live and catches up once, then stays quiet.
+  await vi.waitFor(() => expect(subscribeMock).toHaveBeenCalledTimes(2))
   await vi.advanceTimersByTimeAsync(300)
+  // The retry refresh, then the retried subscription's one catch-up.
   expect(refresh).toHaveBeenCalledTimes(2)
   await vi.advanceTimersByTimeAsync(180_000)
   expect(refresh).toHaveBeenCalledTimes(2)

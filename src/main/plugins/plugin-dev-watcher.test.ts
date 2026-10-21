@@ -638,7 +638,10 @@ describe('PluginDevWatcher', () => {
     await mkdir(path)
 
     await vi.advanceTimersByTimeAsync(60_000)
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(subscribeMock).toHaveBeenCalledTimes(2))
+    await vi.advanceTimersByTimeAsync(300)
+    // The rebind refresh, then the replacement root's one catch-up.
+    expect(refresh).toHaveBeenCalledTimes(2)
     expect(root.unsubscribe).toHaveBeenCalledOnce()
     expect(subscriptions.map((item) => ({ path: item.path, options: item.options }))).toEqual([
       { path, options: { backend: 'windows' } },
@@ -646,9 +649,9 @@ describe('PluginDevWatcher', () => {
     ])
     subscriptions.at(-1)?.callback(null, [{ type: 'create', path: join(path, 'manifest.json') }])
     await vi.advanceTimersByTimeAsync(300)
-    expect(refresh).toHaveBeenCalledTimes(2)
+    expect(refresh).toHaveBeenCalledTimes(3)
     await vi.advanceTimersByTimeAsync(60_000)
-    expect(refresh).toHaveBeenCalledTimes(2)
+    expect(refresh).toHaveBeenCalledTimes(3)
     expect(subscribeMock).toHaveBeenCalledTimes(2)
     lifecycle.dispose()
     expect(vi.getTimerCount()).toBe(0)
