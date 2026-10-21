@@ -155,6 +155,39 @@ describe('useMobileOverlayTicks desktop-fit restore', () => {
     expect(pane.terminal.refresh).not.toHaveBeenCalled()
   })
 
+  it('fits the latest phone dimensions when an older mobile frame survives an ownership cycle', () => {
+    const pane = createPane()
+    pane.terminal.cols = 120
+    pane.terminal.rows = 40
+    mountForPane(pane)
+    act(() => {
+      setFitOverride('pty-1', 'mobile-fit', 49, 20)
+      setFitOverride('pty-1', 'desktop-fit', 120, 40)
+      setFitOverride('pty-1', 'mobile-fit', 60, 24)
+    })
+    flushAnimationFrames()
+    act(() => vi.advanceTimersByTime(100))
+    expect(pane.terminal.cols).toBe(60)
+    expect(pane.terminal.rows).toBe(24)
+    expect(pane.terminal.resize).not.toHaveBeenCalledWith(49, 20)
+    expect(pane.terminal.refresh).not.toHaveBeenCalled()
+  })
+
+  it('does not fit a retired manager after its transport and pane teardown', () => {
+    const pane = createPane()
+    pane.terminal.cols = 120
+    pane.terminal.rows = 40
+    const binding = mountForPane(pane)
+    act(() => setFitOverride('pty-1', 'mobile-fit', 49, 20))
+    binding.paneTransportsRef.current = new Map()
+    binding.setPanes([])
+    binding.managerRef.current = null
+    flushAnimationFrames()
+    expect(pane.terminal.cols).toBe(120)
+    expect(pane.terminal.rows).toBe(40)
+    expect(pane.terminal.resize).not.toHaveBeenCalled()
+  })
+
   it('abandons the desktop restore when a new phone hold arrives before the frame', () => {
     const pane = createPane()
     mountForPane(pane)
