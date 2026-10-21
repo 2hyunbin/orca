@@ -18,6 +18,14 @@ import { runProcess } from '@orca/process-host'
 import { preflightOrcadNativeRuntime } from './orcad-runtime-native-preflight'
 import { orcadCompileCacheEnv } from './orcad-compile-cache'
 import {
+  claimStartupPreflightSkip,
+  computeStartupPreflightFingerprint,
+  forgetStartupPreflightVerdict,
+  readStartupPreflightVerdict,
+  startupPreflightVerdictPath,
+  writeStartupPreflightVerdict
+} from './orcad-startup-preflight-verdict'
+import {
   isRunningAsBundledOrcadRuntime,
   OrcadBundledRuntimeError,
   resolveBundledOrcadSlot
@@ -30,6 +38,21 @@ export async function preflightBundledOrcadStartup(): Promise<void> {
     return
   }
   const identity = await readInstalledVersion(directory)
+  const verdictPath = startupPreflightVerdictPath(directory)
+  const fingerprint = verdictPath ? await computeStartupPreflightFingerprint(directory) : null
+  if (verdictPath && fingerprint) {
+    const verdict = await readStartupPreflightVerdict(verdictPath)
+    if (
+      verdict?.fingerprint === fingerprint &&
+      verdict.artifactVersion === identity &&
+      verdict.runtimeVersion === process.versions.node &&
+      (await claimStartupPreflightSkip(verdictPath))
+    ) {
+      return
+    }
+  }
+  // Before the probe: a stale verdict must not survive a probe that fails.
+  await forgetStartupPreflightVerdict(verdictPath)
   const nonce = randomUUID()
   // Keep disposable SQLite ownership and native state out of the serving process.
   const result = await runProcess({
@@ -50,6 +73,18 @@ export async function preflightBundledOrcadStartup(): Promise<void> {
   } catch (cause) {
     throw new OrcadBundledRuntimeError('The bundled runtime returned invalid readiness identity', {
       cause
+    })
+  }
+  // Only what the probe saw: anything replaced while it ran fails the comparison and re-probes.
+  if (
+    verdictPath &&
+    fingerprint &&
+    fingerprint === (await computeStartupPreflightFingerprint(directory))
+  ) {
+    await writeStartupPreflightVerdict(verdictPath, {
+      fingerprint,
+      artifactVersion: identity,
+      runtimeVersion: process.versions.node
     })
   }
 }

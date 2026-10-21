@@ -40,6 +40,7 @@ import {
 } from '../../shared/ai-vault-search-settings'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
+import { settleSlotStartupPreflightSkip } from './orcad-startup-preflight-verdict'
 import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
 import { orcadWsPortOptions } from './orcad-ws-port-policy'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
@@ -377,6 +378,8 @@ async function startOrcadRuntime(
   })
 
   await new ServeReadinessPublisher().publish(readiness, servePublishMode(options))
+  // A start that reached readiness proves a skipped preflight's verdict for the next one.
+  settleSlotStartupPreflightSkip()
 
   await idleExitStartup.start({
     rpc,
