@@ -74,13 +74,20 @@ describe('macOS build workflow policy', () => {
         step.with?.command?.includes('electron-builder --config')
       )
       const command = step.with.command
-      expect(command).toContain('if [ -f config/scripts/build-mac-notarization-overlap.mjs ]')
-      expect(command).toContain(
-        `ORCA_MAC_${channel.toUpperCase()}=1 node config/scripts/build-mac-notarization-overlap.mjs`
-      )
-      expect(command).toContain(
-        `else ORCA_MAC_${channel.toUpperCase()}=1 pnpm exec electron-builder`
-      )
+      if (channel === 'adhoc') {
+        expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { arch: ['x64', 'arm64'] } })
+        expect(command).toContain('--mac --${{ matrix.arch }} --publish never')
+        expect(command).toContain('ORCA_MAC_ADHOC=1 pnpm exec electron-builder')
+        expect(command).not.toContain('build-mac-notarization-overlap.mjs')
+      } else {
+        expect(command).toContain('if [ -f config/scripts/build-mac-notarization-overlap.mjs ]')
+        expect(command).toContain(
+          `ORCA_MAC_${channel.toUpperCase()}=1 node config/scripts/build-mac-notarization-overlap.mjs`
+        )
+        expect(command).toContain(
+          `else ORCA_MAC_${channel.toUpperCase()}=1 pnpm exec electron-builder`
+        )
+      }
       expect(step.with.max_attempts).toBeGreaterThan(1)
       for (const key of [
         'CSC_LINK',
