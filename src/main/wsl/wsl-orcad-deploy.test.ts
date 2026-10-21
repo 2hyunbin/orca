@@ -519,6 +519,17 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       expect(mocks.deploy).toHaveBeenCalledTimes(1)
     })
 
+    it('refuses the rolled-back build under the fence when the incumbent was not proven', async () => {
+      const rolledBack = { ...activeOld, rolledBackFrom: '1.5.0+ab' }
+      withRecord(rolledBack)
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      mocks.incumbentReadiness.mockResolvedValueOnce(null)
+      await launch()
+      const { admitRecord } = mocks.deploy.mock.calls[0][0]
+      expect(admitRecord(rolledBack, '1.5.0+ab')).toMatch(/rolled back from 1\.5\.0\+ab/)
+      expect(admitRecord(activeOld, '1.5.0+ab')).toBeNull()
+    })
+
     it('falls back to the deploy gate when the newer build cannot be proven serving', async () => {
       withRecord(newer)
       mocks.deploy.mockResolvedValueOnce(policyRefused)

@@ -21,10 +21,8 @@ import {
   managedOrcadSlot,
   probeManagedOrcadReadiness
 } from '../managed-server/lifecycle/orcad-managed-runtime-context'
-import {
-  isWaitingOrcadUpdateDeferral,
-  planManagedOrcadAutoUpdate
-} from '../managed-server/lifecycle/orcad-managed-auto-update'
+import { isWaitingOrcadUpdateDeferral } from '../managed-server/lifecycle/orcad-managed-auto-update'
+import { planManagedOrcadAutoUpdate } from '../managed-server/lifecycle/orcad-managed-update-decision'
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
 import { wakeAlreadyActiveOrcad } from '../ssh/orcad-already-active-wake'
 import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
@@ -171,8 +169,8 @@ async function launchOverTransport(
         context,
         slot
       })
-      // Unproven, or another client activated a build meanwhile: the deploy below re-plans under
-      // the fence, still gated on the census and the downgrade refusal.
+      // Unproven, or another client activated a build meanwhile: the deploy's fenced admission
+      // applies this plan again, so it still cannot activate a skipped build.
       if (readiness && (await readOrcadActivationRecord(slot)).active === incumbentVersion) {
         return readyLaunch({ fullVersion: incumbentVersion, readiness })
       }
