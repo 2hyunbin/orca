@@ -36,7 +36,6 @@ export function MobileQueuedMessageScrollList({
   const activeRow = editedRow?.messageId === editingMessageId ? editedRow?.layout : undefined
   if (editedRow && !activeRow) {
     setEditedRow(null)
-    revealPending.current = false
   }
   useLayoutEffect(() => {
     const newest = messageIds.at(-1)
