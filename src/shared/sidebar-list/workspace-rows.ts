@@ -12,7 +12,8 @@ import { WorkspaceAttachmentsSchema } from '../workspace-attachment-schema'
 import { getWorkspaceAttachments } from '../workspace-attachments'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../workspace-statuses'
 import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
-import type { WorktreeLineage } from '../worktree/lineage-types'
+import { worktreeLineageFromWorkspaceLineage } from '../resolved-worktree-lineage'
+import type { WorkspaceLineage, WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
 import { getWorkspaceRowKindFacts } from '../worktree/workspace-kinds'
 import { SMART_TIERS } from './sort-stamps'
@@ -36,9 +37,19 @@ export const WorkspaceRowSchema = z.object({
     .object({
       parentWorktreeId: z.string(),
       worktreeInstanceId: z.string(),
-      parentWorktreeInstanceId: z.string()
+      parentWorktreeInstanceId: z.string(),
+      parentStore: z.literal('external').optional()
     })
     .nullable(),
+  savedLineage: z
+    .object({
+      parentWorktreeId: z.string(),
+      worktreeInstanceId: z.string(),
+      parentWorktreeInstanceId: z.string(),
+      parentStore: z.literal('external').optional()
+    })
+    .nullable()
+    .optional(),
   isPinned: z.boolean(),
   isArchived: z.boolean(),
   isUnread: z.boolean(),
@@ -102,11 +113,13 @@ function toWorkspaceRow(
     displayName: worktree.displayName,
     isMainWorktree: worktree.isMainWorktree,
     ...(worktree.instanceId !== undefined ? { instanceId: worktree.instanceId } : {}),
+    savedLineage: worktree.savedLineage ?? lineage ?? null,
     lineage: lineage
       ? {
           parentWorktreeId: lineage.parentWorktreeId,
           worktreeInstanceId: lineage.worktreeInstanceId,
-          parentWorktreeInstanceId: lineage.parentWorktreeInstanceId
+          parentWorktreeInstanceId: lineage.parentWorktreeInstanceId,
+          parentStore: lineage.parentStore
         }
       : null,
     isPinned: worktree.isPinned,
@@ -184,6 +197,7 @@ export function buildWorkspaceRows(catalog: {
   folderWorkspaces: readonly FolderWorkspace[]
   repos: readonly Repo[]
   lineageById: Readonly<Record<string, WorktreeLineage>>
+  workspaceLineageByChildKey?: Readonly<Record<string, WorkspaceLineage>>
 }): Map<string, WorkspaceRow> {
   const rows = new Map<string, WorkspaceRow>()
   const add = (
@@ -201,7 +215,9 @@ export function buildWorkspaceRows(catalog: {
     add(worktree, 'git', repo, catalog.lineageById[worktree.id])
   }
   for (const folderWorkspace of catalog.folderWorkspaces) {
-    add(folderWorkspaceToWorktree(folderWorkspace), 'folder')
+    const worktree = folderWorkspaceToWorktree(folderWorkspace)
+    const edge = catalog.workspaceLineageByChildKey?.[worktree.id]
+    add(worktree, 'folder', undefined, edge ? worktreeLineageFromWorkspaceLineage(edge) : undefined)
   }
   return rows
 }

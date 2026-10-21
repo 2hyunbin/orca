@@ -1,6 +1,5 @@
 import type { WorktreeLineage, WorkspaceLineage } from '../../shared/worktree/lineage-types'
-import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
-import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { WorkspaceKey } from '../../shared/folder-workspace-types'
 import {
   folderWorkspaceKey,
@@ -10,16 +9,11 @@ import {
 import { sharesResolvedWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
-import {
-  readAllWorktreeMetaForHost,
-  worktreeRowTarget
-} from '../persistence/host-qualified-worktree-meta'
+import { worktreeRowTarget } from '../persistence/host-qualified-worktree-meta'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { getRepoOwnedWorktreeMeta } from '../worktree-metadata-ownership'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
   RuntimeLineageError,
-  enforceCreateLineageHostBoundary,
   resolveRuntimeWorktreeCreateLineage,
   type ResolvedWorkspaceParent,
   type WorktreeLineageCandidate,
@@ -35,40 +29,12 @@ type RuntimeWorktreeLineageDependencies = {
   showTerminal(handle: string): Promise<{ worktreeId: string }>
 }
 
-/**
- * Read-only and ownership-scoped like the resolved list: the migrating per-host accessor would adopt
- * another host's legacy row into this host just to answer a validation.
- */
-function savedInstanceIdReader(
-  store: RuntimeStore,
-  hostId: ExecutionHostId | undefined
-): (id: string) => string | undefined {
-  if (!hostId) {
-    return (id) => store.getWorktreeMeta(id)?.instanceId
-  }
-  const repos = store.getRepos()
-  const ownerCounts = new Map<string, number>()
-  for (const repo of repos) {
-    ownerCounts.set(repo.id, (ownerCounts.get(repo.id) ?? 0) + 1)
-  }
-  const reposOnHost = new Map(
-    repos.filter((repo) => getRepoExecutionHostId(repo) === hostId).map((repo) => [repo.id, repo])
-  )
-  const metaById = readAllWorktreeMetaForHost(store, hostId)
-  return (id) => {
-    const repo = reposOnHost.get(getRepoIdFromWorktreeId(id))
-    return repo
-      ? getRepoOwnedWorktreeMeta(repo, id, metaById, ownerCounts.get(repo.id) ?? 0)?.instanceId
-      : undefined
-  }
-}
-
 export class RuntimeWorktreeLineageController {
   constructor(private readonly deps: RuntimeWorktreeLineageDependencies) {}
 
   async resolveCreate(
     input?: WorktreeLineageInput,
-    childHostId?: ExecutionHostId
+    _childHostId?: ExecutionHostId
   ): Promise<WorktreeLineageResolution> {
     const resolution = await resolveRuntimeWorktreeCreateLineage(input, {
       resolveParent: (selector) => this.resolveParent(selector),
@@ -87,7 +53,7 @@ export class RuntimeWorktreeLineageController {
         }
       }
     })
-    return enforceCreateLineageHostBoundary(resolution, childHostId)
+    return resolution
   }
 
   async resolveParent(selector: string): Promise<ResolvedWorkspaceParent> {
@@ -105,7 +71,7 @@ export class RuntimeWorktreeLineageController {
         type: 'folder',
         workspaceKey: folderWorkspaceKey(folderWorkspace.id),
         folderWorkspace,
-        instanceId: null
+        instanceId: folderWorkspaceKey(folderWorkspace.id)
       }
     }
     return this.resolveWorktreeParent(
@@ -124,27 +90,37 @@ export class RuntimeWorktreeLineageController {
   }
 
   validateParent(child: ResolvedWorktree, parent: ResolvedWorktree): void {
+    const existing = this.deps.getStore()?.getWorktreeLineage?.(child.id)
+    if (
+      existing?.parentWorktreeId === parent.id &&
+      existing.parentWorktreeInstanceId === parent.instanceId &&
+      existing.worktreeInstanceId === child.instanceId
+    ) {
+      return
+    }
     if (child.id === parent.id) {
       throw new RuntimeLineageError('LINEAGE_PARENT_CYCLE', 'A worktree cannot parent itself.')
     }
     if (!sharesResolvedWorktreeLineageBoundary(child, parent)) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_CONTEXT_CONFLICT',
-        'Parent worktree must be on the same execution host.'
+        "Can't move an existing workspace under a parent whose chain reaches another Orca install. Create the new workspace from that parent instead, or clear its parent first."
       )
     }
     const store = this.deps.getStore()
-    let readSavedInstanceId: ((id: string) => string | undefined) | undefined
     // Why: saved metadata, not the resolved-worktree cache, which the reparent itself invalidates;
     // an unknown node would end the walk and let a longer loop through.
     const instanceIdOf = (id: string): string | undefined => {
+      const folder = parseWorkspaceKey(id)
+      if (folder?.type === 'folder') {
+        return store?.getFolderWorkspaces?.().some((row) => row.id === folder.folderWorkspaceId)
+          ? folderWorkspaceKey(folder.folderWorkspaceId)
+          : undefined
+      }
       if (id === child.id || id === parent.id) {
         return id === child.id ? child.instanceId : parent.instanceId
       }
-      readSavedInstanceId ??= store
-        ? savedInstanceIdReader(store, child.hostId ?? parent.hostId)
-        : () => undefined
-      return readSavedInstanceId(id)
+      return store?.getWorktreeMeta(id)?.instanceId
     }
     let cursor: string | undefined = parent.id
     const visited = new Set<string>()
@@ -160,9 +136,35 @@ export class RuntimeWorktreeLineageController {
         break
       }
       visited.add(cursor)
-      const lineage = store?.getWorktreeLineage?.(cursor)
+      const workspace =
+        store?.getAllWorkspaceLineage?.()[
+          cursor.startsWith('folder:') ? `folder:${cursor.slice(7)}` : worktreeWorkspaceKey(cursor)
+        ]
+      const workspaceParent = workspace ? parseWorkspaceKey(workspace.parentWorkspaceKey) : null
+      const lineage =
+        store?.getWorktreeLineage?.(cursor) ??
+        (workspace && workspaceParent
+          ? {
+              worktreeInstanceId: workspace.childInstanceId,
+              parentWorktreeId:
+                workspaceParent.type === 'worktree'
+                  ? workspaceParent.worktreeId
+                  : workspace.parentWorkspaceKey,
+              parentWorktreeInstanceId: workspace.parentInstanceId,
+              parentStore: workspace.parentStore
+            }
+          : undefined)
       if (!lineage) {
         break
+      }
+      if (
+        lineage.parentStore === 'external' &&
+        instanceIdOf(cursor) === lineage.worktreeInstanceId
+      ) {
+        throw new RuntimeLineageError(
+          'LINEAGE_PARENT_CONTEXT_CONFLICT',
+          "Can't move an existing workspace under a parent whose chain reaches another Orca install. Create the new workspace from that parent instead, or clear its parent first."
+        )
       }
       if (
         instanceIdOf(cursor) !== lineage.worktreeInstanceId ||

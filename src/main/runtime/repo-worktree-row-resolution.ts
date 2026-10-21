@@ -246,13 +246,7 @@ export async function resolveScopedWorktreeIdRow(
       .filter((id) => id !== undefined)
   )
   relatedRepoIds.delete(repo.id)
-  const hostId = getRepoExecutionHostId(repo)
-  const relatedRepos = store
-    .getRepos()
-    .filter(
-      (candidate) =>
-        relatedRepoIds.has(candidate.id) && getRepoExecutionHostId(candidate) === hostId
-    )
+  const relatedRepos = store.getRepos().filter((candidate) => relatedRepoIds.has(candidate.id))
   if (new Set(relatedRepos.map((candidate) => candidate.id)).size !== relatedRepos.length) {
     return null
   }

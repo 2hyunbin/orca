@@ -1,6 +1,7 @@
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getProjectedWorktreeLineageChildrenByParentId } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getProjectedWorktreeLineage } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { resolveWorktreeLineageParents } from '../../../../shared/resolved-worktree-lineage'
 
 type WorkspaceDeleteLineage = {
   descendants: Worktree[]
@@ -12,58 +13,50 @@ export function getWorkspaceDeleteLineage(
   worktrees: readonly Worktree[],
   lineageById: Record<string, WorktreeLineage>
 ): WorkspaceDeleteLineage {
-  // Why (STA-4343): lineage is recorded against the bare `repoId::path` id, so a
-  // colliding id resolves to one of two hosts here. A lineage child of a workspace
-  // on host X is on host X, so prefer the parent's host — otherwise "delete all"
-  // could route a descendant's removal at the other machine's checkout.
-  const worktreeById = new Map<string, Worktree>()
-  for (const worktree of worktrees) {
-    const claimed = worktreeById.get(worktree.id)
-    if (claimed && claimed.hostId === parent.hostId && worktree.hostId !== parent.hostId) {
-      continue
-    }
-    worktreeById.set(worktree.id, worktree)
-  }
-  const lineageForSelectedRows: Record<string, WorktreeLineage> = {}
-  for (const worktree of worktreeById.values()) {
-    const projected = lineageById[worktree.id]
-    const inline = (worktree as Worktree & { lineage?: WorktreeLineage | null }).lineage
-    const lineage = projected?.worktreeInstanceId === worktree.instanceId ? projected : inline
-    if (lineage) {
-      lineageForSelectedRows[worktree.id] = lineage
+  // Legacy child buckets carry no host; retain their existing same-id owner preference.
+  const selected = new Map<string, Worktree>()
+  for (const row of worktrees) {
+    const prior = selected.get(row.id)
+    if (!prior || prior.hostId !== parent.hostId) {
+      selected.set(row.id, row)
     }
   }
-  const childrenByParentId = getProjectedWorktreeLineageChildrenByParentId(
-    lineageForSelectedRows,
-    worktreeById
+  const parents = resolveWorktreeLineageParents([...selected.values()], (row) =>
+    getProjectedWorktreeLineage(row, lineageById)
   )
+  const childrenByParent = new Map<Worktree, Worktree[]>()
+  for (const [child, owner] of parents) {
+    const children = childrenByParent.get(owner) ?? []
+    children.push(child)
+    childrenByParent.set(owner, children)
+  }
 
   const descendants: Worktree[] = []
   const childFirstTargets: Worktree[] = []
-  const visiting = new Set<string>()
-  const emitted = new Set<string>([parent.id])
+  const visiting = new Set<Worktree>()
+  const emitted = new Set<Worktree>([parent])
 
-  const visit = (worktreeId: string): void => {
-    if (visiting.has(worktreeId)) {
+  const visit = (row: Worktree): void => {
+    if (visiting.has(row)) {
       return
     }
-    visiting.add(worktreeId)
-    const children = childrenByParentId.get(worktreeId) ?? []
+    visiting.add(row)
+    const children = childrenByParent.get(row) ?? []
     for (const child of children) {
-      if (emitted.has(child.id)) {
+      if (emitted.has(child)) {
         continue
       }
-      emitted.add(child.id)
+      emitted.add(child)
       descendants.push(child)
-      visit(child.id)
+      visit(child)
       if (!child.isMainWorktree) {
         childFirstTargets.push(child)
       }
     }
-    visiting.delete(worktreeId)
+    visiting.delete(row)
   }
 
-  visit(parent.id)
+  visit(parent)
 
   return {
     descendants,

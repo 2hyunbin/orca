@@ -41,6 +41,9 @@ export function canAssignWorktreeParent({
     if (current.id === child.id) {
       return false
     }
+    if ((current.savedLineage ?? lineageById[current.id])?.parentStore === 'external') {
+      return false
+    }
     const lineageInfo = getLineageRenderInfo(current, lineageById, worktreeMap, cyclicLineageIds)
     // Why: stale instance links are broken edges for renderer filtering; the
     // backend remains the authoritative final cycle guard.

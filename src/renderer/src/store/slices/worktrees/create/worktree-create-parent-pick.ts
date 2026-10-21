@@ -8,16 +8,16 @@ import {
   parseWorkspaceKey,
   worktreeWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
+import { folderWorkspaceToWorktree } from '../../../../../../shared/folder-workspace-worktree'
 import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
-import { repoMatchesHostIdentity } from '../../repo-host-identity'
-import {
-  getWorktreeExecutionHostId,
-  type ExecutionHostId
-} from '../../../../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { lineageStoreKeyForRow } from '../../../../../../shared/resolved-worktree-lineage'
+import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 
 export type WorktreeCreateParentPick = {
   /** Workspace the create attaches to. Undefined once a stale pick is dropped. */
   parentWorkspace?: WorkspaceKey
+  parentWorktreeRef?: ParentWorktreeRef
   /** Set only for an accepted user pick, whose lineage row must come back from the host. */
   pickedParentWorktreeId?: string
   /** Label for the drop warning; null when the parent record is already gone, '' when it has no name. */
@@ -34,12 +34,7 @@ export function resolveWorktreeCreateParent(
 ): WorktreeCreateParentPick {
   const picked = requestedParentWorktreeId
     ? getIndexedWorktreesById(state.worktreesByRepo, requestedParentWorktreeId).find(
-        (candidate) => {
-          const repo = state.repos.find((owner) =>
-            repoMatchesHostIdentity(owner, candidate.repoId, candidate.hostId ?? executionHostId)
-          )
-          return Boolean(repo && getWorktreeExecutionHostId(candidate, repo) === executionHostId)
-        }
+        (candidate) => !candidate.isArchived
       )
     : undefined
   const usable = picked && !picked.isArchived ? picked.id : undefined
@@ -47,17 +42,43 @@ export function resolveWorktreeCreateParent(
   if (usable) {
     return {
       parentWorkspace: worktreeWorkspaceKey(usable),
+      ...(picked.instanceId && picked.hostId !== executionHostId
+        ? {
+            parentWorktreeRef: {
+              worktreeId: picked.id,
+              instanceId: picked.instanceId,
+              external:
+                lineageStoreKeyForRow(picked) !== lineageStoreKeyForRow({ hostId: executionHostId })
+            }
+          }
+        : {}),
       pickedParentWorktreeId: usable,
       pickedDisplayName,
       staleBeforeCreate: false
     }
   }
   const activeScope = parseWorkspaceKey(state.activeWorkspaceKey ?? '')
+  const folder =
+    activeScope?.type === 'folder'
+      ? state.folderWorkspaces?.find((row) => row.id === activeScope.folderWorkspaceId)
+      : undefined
+  const folderRow = folder ? folderWorkspaceToWorktree(folder) : undefined
   return {
     parentWorkspace:
       activeScope?.type === 'folder'
         ? folderWorkspaceKey(activeScope.folderWorkspaceId)
         : undefined,
+    ...(folderRow?.instanceId && folderRow.hostId !== executionHostId
+      ? {
+          parentWorktreeRef: {
+            worktreeId: folderRow.id,
+            instanceId: folderRow.instanceId,
+            external:
+              lineageStoreKeyForRow(folderRow) !==
+              lineageStoreKeyForRow({ hostId: executionHostId })
+          }
+        }
+      : {}),
     pickedDisplayName,
     staleBeforeCreate: Boolean(requestedParentWorktreeId)
   }

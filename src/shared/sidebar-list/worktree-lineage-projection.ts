@@ -1,13 +1,6 @@
-import {
-  getCyclicLineageChildKeys,
-  getCyclicWorktreeLineageChildIds,
-  isValidResolvedWorktreeLineageEdge
-} from '../resolved-worktree-lineage'
+import { resolveWorktreeLineageParents } from '../resolved-worktree-lineage'
 import type { ExecutionHostId } from '../execution-host'
-import {
-  composeWorktreeHostIdentity,
-  getWorktreeHostIdentity
-} from '../worktree/host-qualified-identity'
+import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
 
@@ -16,22 +9,22 @@ export type LineageRenderInfo =
   | { state: 'valid'; lineage: WorktreeLineage; parent: Worktree }
   | { state: 'missing'; lineage: WorktreeLineage }
 
-type WorktreeWithResolvedLineage = Worktree & { lineage?: WorktreeLineage | null }
-
 export function getProjectedWorktreeLineage(
   worktree: Worktree,
   lineageById: Readonly<Record<string, WorktreeLineage>>
 ): WorktreeLineage | null | undefined {
-  if (Object.hasOwn(lineageById, worktree.id)) {
-    return lineageById[worktree.id]
+  const saved = lineageById[worktree.id]
+  if (saved?.worktreeId === worktree.id && saved.worktreeInstanceId === worktree.instanceId) {
+    return saved
   }
-  return (worktree as WorktreeWithResolvedLineage).lineage
+  return worktree.savedLineage ?? worktree.lineage
 }
 
 type LineageProjection = {
   cyclicLineageIds?: Set<string>
   childrenByParentId?: Map<string, Worktree[]>
   sidebarParentByIdentity?: Map<string, Worktree>
+  parents?: Map<Worktree, Worktree>
 }
 
 /**
@@ -72,19 +65,9 @@ export function getCyclicProjectedWorktreeLineageIds(
   if (projection.cyclicLineageIds) {
     return projection.cyclicLineageIds
   }
-  const validLineageByChildId = new Map<string, WorktreeLineage>()
-  for (const worktree of worktreeMap.values()) {
-    const lineage = getProjectedWorktreeLineage(worktree, lineageById)
-    if (!lineage) {
-      continue
-    }
-    const parent = worktreeMap.get(lineage.parentWorktreeId)
-    if (parent && isValidResolvedWorktreeLineageEdge(worktree, parent, lineage)) {
-      validLineageByChildId.set(worktree.id, lineage)
-    }
-  }
-  const cyclicLineageIds = getCyclicWorktreeLineageChildIds(validLineageByChildId)
-  projection.cyclicLineageIds = cyclicLineageIds
+  // The shared resolver removes cycle edges before any consumer walks the projection.
+  resolvedParents(lineageById, worktreeMap)
+  const cyclicLineageIds = projection.cyclicLineageIds ?? new Set<string>()
   return cyclicLineageIds
 }
 
@@ -98,12 +81,8 @@ export function getLineageRenderInfo(
   if (!lineage) {
     return { state: 'none' }
   }
-  const parent = worktreeMap.get(lineage.parentWorktreeId)
-  if (
-    cyclicLineageIds.has(worktree.id) ||
-    !parent ||
-    !isValidResolvedWorktreeLineageEdge(worktree, parent, lineage)
-  ) {
+  const parent = resolvedParents(lineageById, worktreeMap).get(worktree)
+  if (cyclicLineageIds.has(worktree.id) || !parent) {
     return { state: 'missing', lineage }
   }
   return { state: 'valid', lineage, parent }
@@ -144,13 +123,13 @@ export function getHostScopedWorktreeLineageInputs(
   const worktreeMap = new Map<string, Worktree>()
   const hostLineageById: Record<string, WorktreeLineage> = {}
   for (const worktree of worktrees) {
-    if (executionHostId && worktree.hostId && worktree.hostId !== executionHostId) {
+    const existing = worktreeMap.get(worktree.id)
+    if (existing && existing.hostId === executionHostId) {
       continue
     }
     worktreeMap.set(worktree.id, worktree)
     const projected = lineageById[worktree.id]
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolved rows may carry an inline lineage the Worktree type omits; it is only read, never trusted over a matching projection.
-    const inline = (worktree as WorktreeWithResolvedLineage).lineage
+    const inline = worktree.savedLineage ?? worktree.lineage
     const lineage = projected?.worktreeInstanceId === worktree.instanceId ? projected : inline
     if (lineage) {
       hostLineageById[worktree.id] = lineage
@@ -180,28 +159,29 @@ export function getWorktreeLineageAncestors(
   return ancestors
 }
 
-/**
- * The row a worktree nests under in the sidebar: its lineage parent on the worktree's own host,
- * where a row with no host id (older metadata) nests only under a parent with none either.
- */
+function resolvedParents(
+  lineageById: Readonly<Record<string, WorktreeLineage>>,
+  rows: ReadonlyMap<string, Worktree>
+): Map<Worktree, Worktree> {
+  const projection = getLineageProjection(lineageById, rows)
+  if (!projection.parents) {
+    const cyclic = new Set<Worktree>()
+    projection.parents = resolveWorktreeLineageParents(
+      [...rows.values()],
+      (row) => getProjectedWorktreeLineage(row, lineageById),
+      cyclic
+    )
+    projection.cyclicLineageIds = new Set([...cyclic].map((row) => row.id))
+  }
+  return projection.parents
+}
+
 export function getSidebarLineageParent(
   worktree: Worktree,
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   rowsByHostIdentity: ReadonlyMap<string, Worktree>
 ): Worktree | undefined {
-  const projected = getProjectedWorktreeLineage(worktree, lineageById)
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolved rows may carry an inline lineage the Worktree type omits; it is only read, never trusted over a matching projection.
-  const inline = (worktree as WorktreeWithResolvedLineage).lineage
-  const lineage = projected?.worktreeInstanceId === worktree.instanceId ? projected : inline
-  if (!lineage) {
-    return undefined
-  }
-  const parent = rowsByHostIdentity.get(
-    composeWorktreeHostIdentity(worktree.hostId, lineage.parentWorktreeId)
-  )
-  return parent && isValidResolvedWorktreeLineageEdge(worktree, parent, lineage)
-    ? parent
-    : undefined
+  return resolvedParents(lineageById, rowsByHostIdentity).get(worktree)
 }
 
 /**
@@ -222,14 +202,6 @@ export function getSidebarLineageParentsByIdentity(
     if (parent) {
       parentByIdentity.set(identity, parent)
     }
-  }
-  const cyclic = getCyclicLineageChildKeys(
-    new Map(
-      [...parentByIdentity].map(([identity, parent]) => [identity, getWorktreeHostIdentity(parent)])
-    )
-  )
-  for (const identity of cyclic) {
-    parentByIdentity.delete(identity)
   }
   projection.sidebarParentByIdentity = parentByIdentity
   return parentByIdentity

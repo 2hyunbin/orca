@@ -1,6 +1,9 @@
+import type { RuntimeStatus, RuntimeWorktreeRecord } from '../../shared/runtime-types'
+import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
+import { assertCrossMachineLineageSupported } from '../../shared/worktree-runtime-capabilities'
 import { isWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { getOptionalStringFlag } from '../flags'
-import { RuntimeClientError, type RuntimeClient } from '../runtime-client'
+import { RuntimeClientError, RuntimeClient } from '../runtime-client'
 import { getOptionalWorktreeSelector } from '../selectors'
 
 export type CreateParentSelector = {
@@ -72,4 +75,64 @@ export function getEnvParentWorkspace(): string | undefined {
     return isWorkspaceKey(worktreeId) ? worktreeId : worktreeWorkspaceKey(worktreeId)
   }
   return undefined
+}
+
+export function localParentClient(client: RuntimeClient): RuntimeClient {
+  return client.isRemote ? new RuntimeClient(client.userDataPath, 60_000, null, null) : client
+}
+
+export async function resolveCallerParentRef(
+  client: RuntimeClient,
+  selector: string | undefined,
+  explicit: boolean
+): Promise<ParentWorktreeRef | undefined> {
+  if (!selector || !client.isRemote) {
+    return undefined
+  }
+  const local = localParentClient(client)
+  let parent: RuntimeWorktreeRecord
+  let external = client.isRemote
+  try {
+    parent = (
+      await local.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', { worktree: selector })
+    ).result.worktree
+  } catch (error) {
+    if (!explicit) {
+      return undefined
+    }
+    if (!client.isRemote) {
+      throw error
+    }
+    parent = (
+      await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
+        worktree: selector
+      })
+    ).result.worktree
+    external = false
+  }
+  const instanceId = parent.instanceId ?? (parent.id.startsWith('folder:') ? parent.id : undefined)
+  if (!instanceId) {
+    if (explicit) {
+      throw new Error('The parent workspace has no identity. Refresh it and try again.')
+    }
+    return undefined
+  }
+  if (client.isRemote && (external || (parent.hostId && parent.hostId !== 'local'))) {
+    const status = (await client.call<RuntimeStatus>('status.get')).result
+    try {
+      assertCrossMachineLineageSupported(
+        status.capabilities,
+        client.environmentSelector ?? 'the connected server'
+      )
+    } catch (error) {
+      if (explicit) {
+        throw error
+      }
+      console.error(
+        `warning: ${error instanceof Error ? error.message : 'Update the connected server to nest across machines.'} Creating without a parent.`
+      )
+      return undefined
+    }
+  }
+  return { worktreeId: parent.id, instanceId, external }
 }

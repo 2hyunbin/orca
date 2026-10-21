@@ -1,3 +1,4 @@
+import { recordCreatedWorktreeLineage } from '../runtime/runtime-worktree-lineage-recording'
 /* eslint-disable max-lines */
 // Why: worktree create helpers (local + remote) split out of worktrees.ts; the cohesive create flow runs this file just over the per-file line limit.
 
@@ -85,7 +86,6 @@ import {
 } from '../../shared/execution-host'
 import type { BranchPrefixSettings } from '../../shared/branch-prefix'
 import { parseWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
-import { sharesWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
 import {
   cleanupUnusedWorktreePushTargetRemoteWithExec,
   sameGitHubRemoteUrl,
@@ -236,6 +236,23 @@ export function recordWorkspaceLineageForCreatedWorktree(
   worktree: Worktree,
   createdAt: number
 ): CreatedWorktreeLineageRecords {
+  if (args.parentWorktreeRef) {
+    const ref = args.parentWorktreeRef
+    return recordCreatedWorktreeLineage(store, worktree, {
+      kind: 'lineage',
+      parent: {
+        type: 'reference',
+        workspaceKey: ref.worktreeId.startsWith('folder:')
+          ? `folder:${ref.worktreeId.slice(7)}`
+          : worktreeWorkspaceKey(ref.worktreeId),
+        worktreeId: ref.worktreeId,
+        instanceId: ref.instanceId
+      },
+      ...(ref.external ? { parentStore: 'external' as const } : {}),
+      origin: 'manual',
+      capture: { source: 'manual-action', confidence: 'explicit' }
+    })
+  }
   if (!args.parentWorkspace || !worktree.instanceId) {
     return NO_CREATED_WORKTREE_LINEAGE
   }
@@ -266,17 +283,11 @@ export function recordWorkspaceLineageForCreatedWorktree(
 
   // Why: only a worktree parent produces sidebar nesting; a folder parent has no WorktreeLineage row.
   let lineage: CreateWorktreeResult['lineage'] = null
-  let parentOutsideLineageBoundary = false
   let lineageOwnedByTwin = false
   if (parentScope.type === 'worktree' && parentWorktreeMeta) {
     if (!parentWorktreeMeta.instanceId) {
       console.warn(
         `[worktree-create] parent ${parentScope.worktreeId} has no instance identity; skipping lineage`
-      )
-    } else if (!sharesWorktreeLineageBoundary(worktree, parentWorktreeMeta)) {
-      parentOutsideLineageBoundary = true
-      console.warn(
-        `[worktree-create] parent ${parentScope.worktreeId} is outside ${worktree.id}'s execution host; skipping lineage`
       )
     } else {
       const target = worktreeRowTarget(store, worktree)
@@ -298,7 +309,7 @@ export function recordWorkspaceLineageForCreatedWorktree(
 
   // Why: a workspace row for an out-of-boundary worktree parent is a cross-host link that survives restarts.
   // A twin-owned bucket keeps the twin's workspace row too.
-  if (parentOutsideLineageBoundary || lineageOwnedByTwin) {
+  if (lineageOwnedByTwin) {
     return NO_CREATED_WORKTREE_LINEAGE
   }
 

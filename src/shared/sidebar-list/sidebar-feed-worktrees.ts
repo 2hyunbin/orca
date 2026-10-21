@@ -42,6 +42,7 @@ type FeedRowFields = Pick<
       | 'isUnread'
       | 'instanceId'
       | 'lineage'
+      | 'savedLineage'
       | 'workspaceStatus'
       | 'sortOrder'
       | 'manualOrder'
@@ -104,15 +105,16 @@ function readFeedRow(
     ...(row.smartTier !== undefined ? { smartTier: row.smartTier, smartAt: row.smartAt } : {}),
     ...extra,
     // The builder validates only the edge; provenance stays the host's.
-    lineage: row.lineage
-      ? {
-          worktreeId: id,
-          ...row.lineage,
-          origin: 'manual',
-          capture: { source: 'manual-action', confidence: 'explicit' },
-          createdAt: 0
-        }
-      : null
+    lineage:
+      (row.savedLineage ?? row.lineage)
+        ? {
+            worktreeId: id,
+            ...(row.savedLineage ?? row.lineage),
+            origin: 'manual',
+            capture: { source: 'manual-action', confidence: 'explicit' },
+            createdAt: 0
+          }
+        : null
   }
   return {
     identity,

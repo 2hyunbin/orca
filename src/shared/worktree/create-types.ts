@@ -1,3 +1,4 @@
+import type { ParentWorktreeRef } from './lineage-types'
 import type { WorktreeCatalogVersion } from './catalog-version'
 import type { ExecutionHostId } from '../execution-host'
 import type { ArchiveHookOverride } from './archive-hook-removal-gate'
@@ -90,6 +91,7 @@ export type SparsePreset = {
 }
 
 export type CreateWorktreeArgs = {
+  parentWorktreeRef?: ParentWorktreeRef
   repoId: string
   name: string
   /** True only when `name` came from Orca's creature-name generator rather than the user. Gates

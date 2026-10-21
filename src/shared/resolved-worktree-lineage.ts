@@ -1,4 +1,5 @@
-import type { WorktreeLineage } from './worktree/lineage-types'
+import { parseWorkspaceKey } from './workspace-scope'
+import type { WorkspaceLineage, WorktreeLineage } from './worktree/lineage-types'
 import type { Worktree } from './worktree/types'
 
 export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
@@ -7,18 +8,117 @@ export type WorktreeWithResolvedLineage<T extends Worktree = Worktree> = T & {
   lineage: WorktreeLineage | null
 }
 
-/** The execution host is the only lineage boundary. */
-export type WorktreeLineageBoundary = Pick<Worktree, 'hostId'>
+export type WorktreeLineageBoundary = Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>
+
+/** Paired rows name their store through the transport; local, SSH and direct WSL share ours. */
+export function lineageStoreKeyForRow(row: WorktreeLineageBoundary): string {
+  return (
+    row.runtimeOwnerEnvironmentId ??
+    (row.hostId?.startsWith('runtime:') ? row.hostId.slice('runtime:'.length) : '')
+  )
+}
 
 export function sharesWorktreeLineageBoundary(
   child: WorktreeLineageBoundary,
   parent: WorktreeLineageBoundary
 ): boolean {
-  return child.hostId === undefined || parent.hostId === undefined || child.hostId === parent.hostId
+  return lineageStoreKeyForRow(child) === lineageStoreKeyForRow(parent)
 }
 
-export function sharesResolvedWorktreeLineageBoundary(child: Worktree, parent: Worktree): boolean {
-  return sharesWorktreeLineageBoundary(child, parent)
+export const sharesResolvedWorktreeLineageBoundary = sharesWorktreeLineageBoundary
+
+export type LineageRow = WorktreeLineageBoundary & { id: string; instanceId?: string }
+export type SavedLineageEdge = {
+  parentWorktreeId: string
+  worktreeInstanceId?: string | null
+  parentWorktreeInstanceId?: string | null
+  parentStore?: 'external'
+}
+
+type Candidates<T> = { count: number; first: T; indexSum: number }
+function addCandidate<T>(
+  map: Map<string, Candidates<T>>,
+  key: string,
+  row: T,
+  index: number
+): void {
+  const prior = map.get(key)
+  if (prior) {
+    prior.count += 1
+    prior.indexSum += index
+  } else {
+    map.set(key, { count: 1, first: row, indexSum: index })
+  }
+}
+
+/** Each projection indexes once; even copied identities across many stores resolve in O(rows). */
+export function resolveWorktreeLineageParents<T extends LineageRow>(
+  rows: readonly T[],
+  lineageOf: (row: T) => SavedLineageEdge | null | undefined,
+  cyclicChildren?: Set<T>
+): Map<T, T> {
+  const byStore = new Map<
+    string,
+    {
+      locator: Map<string, Candidates<T>>
+      instance: Map<string, Candidates<T>>
+      exact: Map<string, Candidates<T>>
+    }
+  >()
+  const aggregate = new Map<string, Candidates<T>>()
+  const exactKey = (id: string, instance: string): string => JSON.stringify([id, instance])
+  for (const [index, row] of rows.entries()) {
+    const key = lineageStoreKeyForRow(row)
+    let store = byStore.get(key)
+    if (!store) {
+      store = { locator: new Map(), instance: new Map(), exact: new Map() }
+      byStore.set(key, store)
+    }
+    addCandidate(store.locator, exactKey(row.id, row.hostId ?? 'local'), row, index)
+    if (row.instanceId) {
+      addCandidate(store.instance, row.instanceId, row, index)
+      addCandidate(store.exact, exactKey(row.id, row.instanceId), row, index)
+      addCandidate(aggregate, row.instanceId, row, index)
+    }
+  }
+  const parents = new Map<T, T>()
+  for (const child of rows) {
+    const edge = lineageOf(child)
+    if (!edge || (edge.worktreeInstanceId && edge.worktreeInstanceId !== child.instanceId)) {
+      continue
+    }
+    const key = lineageStoreKeyForRow(child)
+    const store = byStore.get(key)
+    const instance = edge.parentWorktreeInstanceId
+    let parent: T | undefined
+    if (instance) {
+      const exact = store?.exact.get(exactKey(edge.parentWorktreeId, instance))
+      const local = store?.instance.get(instance)
+      if (exact?.count === 1) {
+        parent = exact.first
+      } else if (local?.count === 1) {
+        parent = local.first
+      } else if (edge.parentStore === 'external') {
+        const all = aggregate.get(instance)
+        if (all && all.count - (local?.count ?? 0) === 1) {
+          parent = rows[all.indexSum - (local?.indexSum ?? 0)]
+        }
+      }
+    } else if (!edge.parentStore) {
+      const legacy = store?.locator.get(exactKey(edge.parentWorktreeId, child.hostId ?? 'local'))
+      if (legacy?.count === 1) {
+        parent = legacy.first
+      }
+    }
+    if (parent && parent !== child) {
+      parents.set(child, parent)
+    }
+  }
+  for (const child of getCyclicLineageChildKeys(parents)) {
+    cyclicChildren?.add(child)
+    parents.delete(child)
+  }
+  return parents
 }
 
 export function isValidResolvedWorktreeLineageEdge(
@@ -27,12 +127,10 @@ export function isValidResolvedWorktreeLineageEdge(
   lineage: WorktreeLineage
 ): boolean {
   return (
-    child.id !== parent.id &&
     lineage.worktreeId === child.id &&
-    lineage.parentWorktreeId === parent.id &&
-    sharesResolvedWorktreeLineageBoundary(child, parent) &&
-    child.instanceId === lineage.worktreeInstanceId &&
-    parent.instanceId === lineage.parentWorktreeInstanceId
+    resolveWorktreeLineageParents([child, parent], (row) => (row === child ? lineage : null)).get(
+      child
+    ) === parent
   )
 }
 
@@ -108,50 +206,37 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
   knownPeers: readonly Worktree[] = []
 ): WorktreeWithResolvedLineage<T>[] {
   const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
-  const indicesById = new Map<string, number[]>()
-  allWorktrees.forEach((worktree, index) => {
-    const indices = indicesById.get(worktree.id) ?? []
-    indices.push(index)
-    indicesById.set(worktree.id, indices)
-  })
-  const validLineageByChildIndex = new Map<number, WorktreeLineage>()
-  const parentIndexByChildIndex = new Map<number, number>()
-  const childIdsByParentIndex = new Map<number, string[]>()
-
-  allWorktrees.forEach((child, childIndex) => {
-    const lineage = lineageById[child.id]
-    if (!lineage) {
-      return
-    }
-    const parentIndices = (indicesById.get(lineage.parentWorktreeId) ?? []).filter((index) =>
-      isValidResolvedWorktreeLineageEdge(child, allWorktrees[index], lineage)
-    )
-    // A locator can exist on several hosts. An ambiguous parent must not be selected by row order.
-    if (parentIndices.length !== 1) {
-      return
-    }
-    validLineageByChildIndex.set(childIndex, lineage)
-    parentIndexByChildIndex.set(childIndex, parentIndices[0])
-  })
-
-  for (const index of getCyclicLineageChildKeys(parentIndexByChildIndex)) {
-    validLineageByChildIndex.delete(index)
-    parentIndexByChildIndex.delete(index)
+  const edgeOf = (row: Worktree): WorktreeLineage | null | undefined => {
+    const saved = lineageById[row.id]
+    return saved?.worktreeId === row.id && saved.worktreeInstanceId === row.instanceId
+      ? saved
+      : row.savedLineage
   }
-
-  for (const [childIndex, parentIndex] of parentIndexByChildIndex) {
-    const children = childIdsByParentIndex.get(parentIndex) ?? []
-    children.push(allWorktrees[childIndex].id)
-    childIdsByParentIndex.set(parentIndex, children)
+  const parents = resolveWorktreeLineageParents(allWorktrees, edgeOf)
+  const children = new Map<Worktree, string[]>()
+  for (const [child, parent] of parents) {
+    const ids = children.get(parent) ?? []
+    ids.push(child.id)
+    children.set(parent, ids)
   }
+  return worktrees.map((worktree) => ({
+    ...worktree,
+    savedLineage: edgeOf(worktree) ?? null,
+    parentWorktreeId: parents.get(worktree)?.id ?? null,
+    childWorktreeIds: children.get(worktree) ?? [],
+    lineage: parents.has(worktree) ? (edgeOf(worktree) ?? null) : null
+  }))
+}
 
-  return worktrees.map((worktree, index) => {
-    const lineage = validLineageByChildIndex.get(index) ?? null
-    return {
-      ...worktree,
-      parentWorktreeId: lineage?.parentWorktreeId ?? null,
-      childWorktreeIds: childIdsByParentIndex.get(index) ?? [],
-      lineage
-    }
-  })
+/** Workspace keys already identify standalone folders; legacy links keep their locator fallback. */
+export function worktreeLineageFromWorkspaceLineage(edge: WorkspaceLineage): WorktreeLineage {
+  const child = parseWorkspaceKey(edge.childWorkspaceKey)
+  const parent = parseWorkspaceKey(edge.parentWorkspaceKey)
+  return {
+    ...edge,
+    worktreeId: child?.type === 'worktree' ? child.worktreeId : edge.childWorkspaceKey,
+    worktreeInstanceId: edge.childInstanceId ?? '',
+    parentWorktreeId: parent?.type === 'worktree' ? parent.worktreeId : edge.parentWorkspaceKey,
+    parentWorktreeInstanceId: edge.parentInstanceId ?? ''
+  }
 }

@@ -1,3 +1,4 @@
+import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
 import type {
   ForgetRemovedWorktreesForExecutionHostArgs,
   ForgetRemovedWorktreesForExecutionHostResult,
@@ -131,6 +132,7 @@ export type WorktreeApi = {
   updateLineage: (args: {
     worktreeId: string
     parentWorktreeId?: string
+    parentWorktreeRef?: ParentWorktreeRef
     noParent?: boolean
   }) => Promise<WorktreeLineage | null>
   persistSortOrder: (args: { orderedIds: string[]; hostIds?: string[] }) => Promise<void>

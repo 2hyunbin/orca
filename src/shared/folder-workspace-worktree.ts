@@ -60,6 +60,7 @@ export function folderWorkspaceToWorktree(folderWorkspace: FolderWorkspace): Wor
   const parsedHost = parseExecutionHostId(hostId)
   return {
     id: folderWorkspaceKey(folderWorkspace.id),
+    instanceId: folderWorkspaceKey(folderWorkspace.id),
     repoId: folderWorkspaceRepoId(folderWorkspace.projectGroupId),
     ...(creatorProvenance ? { creatorProvenance } : {}),
     displayName: folderWorkspace.name,

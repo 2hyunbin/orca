@@ -1,3 +1,10 @@
+import { resolveWorktreeLineageParents } from './resolved-worktree-lineage'
+import { buildRuntimeWorktreePsSummaries } from '../main/runtime/runtime-worktree-ps-summaries'
+import {
+  normalizePairedServerRow,
+  PairedServerRowsSnapshotSchema
+} from './sidebar-list/paired-server-rows'
+import { readFeedPairedServerRow } from './sidebar-list/sidebar-feed-worktrees'
 import { describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import type { WorktreeLineage } from './worktree/lineage-types'
@@ -62,10 +69,8 @@ describe('sharesWorktreeLineageBoundary', () => {
     expect(sharesWorktreeLineageBoundary(child, parent)).toBe(true)
   })
 
-  it('rejects a different known host', () => {
-    expect(sharesWorktreeLineageBoundary(boundary(), boundary({ hostId: 'ssh:remote' }))).toBe(
-      false
-    )
+  it('accepts different hosts in one store', () => {
+    expect(sharesWorktreeLineageBoundary(boundary(), boundary({ hostId: 'ssh:remote' }))).toBe(true)
   })
 })
 
@@ -104,7 +109,7 @@ describe('projectResolvedWorktreeLineage', () => {
     ])
   })
 
-  it('rejects a known host mismatch', () => {
+  it('resolves across execution hosts in the same store', () => {
     const childOverrides = { hostId: 'local' as const }
     const parentOverrides = { hostId: 'ssh:remote' as const }
     const boundedChild = worktree('child', 'child-instance', childOverrides)
@@ -115,12 +120,12 @@ describe('projectResolvedWorktreeLineage', () => {
     })
 
     expect(projected).toMatchObject([
-      { id: 'child', parentWorktreeId: null, lineage: null },
-      { id: 'parent', childWorktreeIds: [] }
+      { id: 'child', parentWorktreeId: 'parent', lineage: lineage() },
+      { id: 'parent', childWorktreeIds: ['child'] }
     ])
   })
 
-  it('keeps colliding ids on different hosts separate', () => {
+  it('leaves identical copied locators ambiguous within a store', () => {
     const localParent = worktree('parent', 'parent-instance', { hostId: 'local' })
     const remoteParent = worktree('parent', 'parent-instance', { hostId: 'ssh:remote' })
     const localChild = worktree('child', 'child-instance', { hostId: 'local' })
@@ -129,9 +134,9 @@ describe('projectResolvedWorktreeLineage', () => {
         child: lineage()
       })
     ).toMatchObject([
-      { parentWorktreeId: 'parent' },
+      { parentWorktreeId: null },
       { childWorktreeIds: [] },
-      { childWorktreeIds: ['child'] }
+      { childWorktreeIds: [] }
     ])
   })
 
@@ -218,5 +223,85 @@ describe('projectResolvedWorktreeLineage', () => {
       { id: 'child', parentWorktreeId: 'parent', childWorktreeIds: [] },
       { id: 'parent', parentWorktreeId: null, childWorktreeIds: ['child'] }
     ])
+  })
+})
+
+describe('cross-store lineage contract', () => {
+  it('uses exact locators, unique rename identities, explicit external links, and removes cycles', () => {
+    const parent = { id: 'parent', instanceId: 'p', hostId: 'ssh:a' as const }
+    const copy = { id: 'copied', instanceId: 'p', hostId: 'local' as const }
+    const child = { id: 'child', instanceId: 'c', hostId: 'local' as const }
+    const remote = { id: 'renamed', instanceId: 'r', hostId: 'runtime:server' as const }
+    const edge = {
+      parentWorktreeId: 'parent',
+      parentWorktreeInstanceId: 'p',
+      worktreeInstanceId: 'c'
+    }
+    expect(
+      resolveWorktreeLineageParents([child, parent, copy], (row) =>
+        row === child ? edge : null
+      ).get(child)
+    ).toBe(parent)
+    expect(
+      resolveWorktreeLineageParents([child, copy], (row) => (row === child ? edge : null)).get(
+        child
+      )
+    ).toBe(copy)
+    const external = { ...edge, parentWorktreeInstanceId: 'r', parentStore: 'external' as const }
+    expect(
+      resolveWorktreeLineageParents([child, remote], (row) =>
+        row === child ? external : null
+      ).get(child)
+    ).toBe(remote)
+    expect(
+      resolveWorktreeLineageParents([child, remote], (row) =>
+        row === child ? { ...external, parentStore: undefined } : null
+      ).size
+    ).toBe(0)
+    expect(
+      resolveWorktreeLineageParents(
+        [child, remote, { ...remote, hostId: 'runtime:other' as const }],
+        (row) => (row === child ? external : null)
+      ).size
+    ).toBe(0)
+    expect(
+      resolveWorktreeLineageParents([child, parent], (row) =>
+        row === child ? { parentWorktreeId: 'parent' } : null
+      ).size
+    ).toBe(0)
+    expect(
+      resolveWorktreeLineageParents([child, parent], (row) =>
+        row === child ? edge : { parentWorktreeId: 'child', parentWorktreeInstanceId: 'c' }
+      ).size
+    ).toBe(0)
+  })
+
+  it('keeps an unresolved saved server edge through desktop adapters and the phone projection', () => {
+    const edge = lineage({ parentStore: 'external' })
+    const parent = worktree('parent', 'parent-instance', { hostId: 'local' })
+    const child = worktree('child', 'child-instance', { hostId: 'local' })
+    const projected = projectResolvedWorktreeLineage([child], { child: edge })[0]
+    const summaries = buildRuntimeWorktreePsSummaries({
+      store: null,
+      resolvedWorktrees: [{ ...projected, git: child }],
+      platformByRepoId: new Map()
+    })
+    const summary = summaries.get('child')!
+    expect(summary.parentWorktreeId).toBeNull()
+    expect(summary.savedLineage).toEqual(edge)
+    const row = normalizePairedServerRow('runtime:server', summary)!
+    const snapshot = PairedServerRowsSnapshotSchema.parse({
+      revision: 1,
+      servers: [{ hostId: 'runtime:server', freshness: 'live', host: null, rows: [row] }]
+    })
+    const desktop = readFeedPairedServerRow(snapshot.servers[0].rows[0])!.worktree
+    expect(
+      resolveWorktreeLineageParents([parent, desktop], (item) => item.lineage).get(desktop)
+    ).toBe(parent)
+    const phoneChild = readFeedPairedServerRow(snapshot.servers[0].rows[0])!.worktree
+    expect(
+      resolveWorktreeLineageParents([parent, phoneChild], (item) => item.lineage).get(phoneChild)
+    ).toBe(parent)
+    expect(resolveWorktreeLineageParents([phoneChild], (item) => item.lineage).size).toBe(0)
   })
 })

@@ -1,3 +1,7 @@
+import {
+  resolveWorktreeLineageParents,
+  worktreeLineageFromWorkspaceLineage
+} from '../../shared/resolved-worktree-lineage'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 import type { Worktree } from '../../shared/worktree/types'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../../shared/workspace-statuses'
@@ -56,6 +60,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
       ...(lineage?.parentWorktreeInstanceId !== undefined
         ? { parentWorktreeInstanceId: lineage.parentWorktreeInstanceId }
         : {}),
+      savedLineage: worktree.savedLineage ?? args.store?.getWorktreeLineage?.(worktree.id) ?? null,
       parentWorktreeId: worktree.parentWorktreeId,
       childWorktreeIds: worktree.childWorktreeIds,
       displayName: worktree.displayName,
@@ -106,6 +111,9 @@ export function buildRuntimeWorktreePsSummaries(args: {
       hasHostSidebarActivity: false,
       ...getWorkspaceRowKindFacts(worktree, undefined),
       ...(worktree.instanceId !== undefined ? { worktreeInstanceId: worktree.instanceId } : {}),
+      savedLineage: args.store?.getAllWorkspaceLineage?.()[worktree.id]
+        ? worktreeLineageFromWorkspaceLineage(args.store.getAllWorkspaceLineage()[worktree.id])
+        : null,
       parentWorktreeId: null,
       childWorktreeIds: [],
       displayName: worktree.displayName,
@@ -134,6 +142,22 @@ export function buildRuntimeWorktreePsSummaries(args: {
       status: 'inactive',
       agents: []
     })
+  }
+  const rows = [...summaries.values()].map((row) => ({
+    ...row,
+    id: row.worktreeId,
+    instanceId: row.worktreeInstanceId
+  }))
+  const parents = resolveWorktreeLineageParents(rows, (row) => row.savedLineage)
+  for (const row of rows) {
+    const summary = summaries.get(row.id)
+    if (summary) {
+      summary.parentWorktreeId = parents.get(row)?.id ?? null
+      summary.childWorktreeIds = []
+    }
+  }
+  for (const [child, parent] of parents) {
+    summaries.get(parent.id)?.childWorktreeIds.push(child.id)
   }
   return summaries
 }

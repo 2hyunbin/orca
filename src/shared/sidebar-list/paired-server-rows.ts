@@ -41,6 +41,7 @@ const PairedServerWorkspaceRowSchema = z
       isUnread: true,
       instanceId: true,
       lineage: true,
+      savedLineage: true,
       workspaceStatus: true,
       sortOrder: true,
       manualOrder: true,
@@ -110,11 +111,13 @@ export function pairedServerRowOfWorktree(
     isMainWorktree: worktree.isMainWorktree,
     isUnread: worktree.isUnread,
     instanceId: worktree.instanceId,
+    savedLineage: worktree.savedLineage ?? lineage ?? null,
     lineage: lineage
       ? {
           parentWorktreeId: lineage.parentWorktreeId,
           worktreeInstanceId: lineage.worktreeInstanceId,
-          parentWorktreeInstanceId: lineage.parentWorktreeInstanceId
+          parentWorktreeInstanceId: lineage.parentWorktreeInstanceId,
+          parentStore: lineage.parentStore
         }
       : null,
     workspaceStatus: worktree.workspaceStatus ?? DEFAULT_WORKSPACE_STATUS_ID,
@@ -168,6 +171,7 @@ const ServerWorktreePsRowSchema = z.object({
   parentWorktreeId: z.string().nullable().optional().catch(undefined),
   lineageWorktreeInstanceId: z.string().optional().catch(undefined),
   parentWorktreeInstanceId: z.string().optional().catch(undefined),
+  savedLineage: WorkspaceRowSchema.shape.lineage.optional(),
   workspaceStatus: z.string().catch(DEFAULT_WORKSPACE_STATUS_ID),
   sortOrder: z.number().optional().catch(undefined),
   manualOrder: z.number().optional().catch(undefined),
@@ -216,6 +220,7 @@ export function normalizePairedServerRow(
     parentWorktreeId,
     lineageWorktreeInstanceId,
     parentWorktreeInstanceId,
+    savedLineage,
     liveTerminalCount: _liveTerminalCount,
     unverifiableTerminalCount: _unverifiableTerminalCount,
     status: _status,
@@ -228,6 +233,7 @@ export function normalizePairedServerRow(
     ...fields,
     ...(unread !== undefined ? { isUnread: unread } : {}),
     ...(worktreeInstanceId !== undefined ? { instanceId: worktreeInstanceId } : {}),
+    savedLineage,
     lineage:
       parentWorktreeId && lineageWorktreeInstanceId && parentWorktreeInstanceId
         ? {

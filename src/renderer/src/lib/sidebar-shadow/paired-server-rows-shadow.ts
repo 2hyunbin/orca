@@ -30,7 +30,10 @@ export function readWindowPairedServerRows(
       hostWorktrees,
       state.worktreeLineageById
     )) {
-      checkedLineageByKey.set(getWorktreeHostIdentity(worktree), worktree.lineage)
+      checkedLineageByKey.set(
+        getWorktreeHostIdentity(worktree),
+        worktree.savedLineage ?? worktree.lineage
+      )
     }
   }
   const add = (worktree: Worktree, kind: PairedServerWorkspaceRow['kind']): void => {

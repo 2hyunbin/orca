@@ -1,3 +1,4 @@
+import { resolveWorktreeLineageParents } from '../../shared/resolved-worktree-lineage'
 // The host's read of "Notify About Hidden Workspaces": with it off, news from a workspace the
 // desktop's sidebar Filters switches hide sends no phone push from the host. The shared unread dot
 // ignores it: clients' Filters differ.
@@ -74,7 +75,29 @@ export function isWorkspaceHiddenBySidebarFilters(
       isWorkspaceOwnedBySomeoneElse(folder, EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT)
     )
   }
-  const lineage = Object.values(deps.store.getAllWorktreeLineage?.() ?? {})
+  const lineage = deps.store.getAllWorktreeLineage?.() ?? {}
+  const children = new Map<string, string[]>()
+  const listedRows = deps.resolvedWorktrees ?? []
+  const rows = new Map(
+    listedRows.map((row) => [
+      row.id,
+      { id: row.id, instanceId: row.instanceId, hostId: row.hostId }
+    ])
+  )
+  for (const edge of Object.values(lineage)) {
+    for (const id of [edge.worktreeId, edge.parentWorktreeId]) {
+      const meta = deps.store.getWorktreeMeta(id)
+      if (!rows.has(id) && meta) {
+        rows.set(id, { id, instanceId: meta.instanceId, hostId: meta.hostId })
+      }
+    }
+  }
+  for (const [child, parent] of resolveWorktreeLineageParents(
+    [...rows.values()],
+    (row) => lineage[row.id]
+  )) {
+    children.set(parent.id, [...(children.get(parent.id) ?? []), child.id])
+  }
   const isRowHidden = (id: string): boolean => {
     const listed = deps.resolvedWorktrees?.find((worktree) => worktree.id === id)
     const meta = deps.store.getWorktreeMeta(id)
@@ -110,10 +133,7 @@ export function isWorkspaceHiddenBySidebarFilters(
       return false
     }
     seen.add(id)
-    return (
-      !isRowHidden(id) ||
-      lineage.some((entry) => entry.parentWorktreeId === id && isShown(entry.worktreeId))
-    )
+    return !isRowHidden(id) || (children.get(id) ?? []).some(isShown)
   }
   return !isShown(workspaceId)
 }

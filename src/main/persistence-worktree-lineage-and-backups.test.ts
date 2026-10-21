@@ -75,6 +75,43 @@ describe('Store', () => {
     await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
+  it('retains both saved external lineage records through a real store reload', async () => {
+    const store = createStore()
+    const repo = makeRepo({ id: 'cml-v3-child', path: '/tmp/cml-v3-child' })
+    store.addRepo(repo)
+    const childId = `${repo.id}::/tmp/cml-v3-child/worker`
+    const parentId = 'desktop-only-repo::/desktop/parent'
+    store.setWorktreeMeta(hostWorktreeTarget({ id: childId, hostId: 'local' }), {
+      instanceId: 'child-instance'
+    })
+    store.setWorktreeLineage(
+      hostWorktreeTarget({ id: childId, hostId: 'local' }),
+      makeWorktreeLineage({
+        worktreeId: childId,
+        parentWorktreeId: parentId,
+        parentStore: 'external'
+      })
+    )
+    store.setWorkspaceLineage(
+      makeWorkspaceLineage({
+        childWorkspaceKey: worktreeWorkspaceKey(childId),
+        parentWorkspaceKey: worktreeWorkspaceKey(parentId),
+        parentStore: 'external'
+      })
+    )
+    await store.flushPendingOrThrowAsync()
+    await closeTestStores()
+    const reloaded = createStore()
+    expect(reloaded.getWorktreeLineage(childId)).toMatchObject({
+      parentWorktreeId: parentId,
+      parentStore: 'external'
+    })
+    expect(reloaded.getWorkspaceLineage(worktreeWorkspaceKey(childId))).toMatchObject({
+      parentWorkspaceKey: worktreeWorkspaceKey(parentId),
+      parentStore: 'external'
+    })
+  })
+
   // ── getAllWorktreeMeta ─────────────────────────────────────────────
 
   it('getAllWorktreeMeta returns all entries', async () => {

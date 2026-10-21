@@ -26,7 +26,10 @@ type LineageParent =
 export type WorktreeLineageRecordingResolution =
   | {
       kind: 'lineage'
-      parent: LineageParent
+      parent:
+        | LineageParent
+        | { type: 'reference'; workspaceKey: WorkspaceKey; instanceId: string; worktreeId: string }
+      parentStore?: 'external'
       origin: WorktreeLineage['origin']
       capture: WorktreeLineage['capture']
       orchestrationRunId?: string
@@ -56,18 +59,18 @@ export function recordCreatedWorktreeLineage(
   const parentInstanceId = resolution.parent.instanceId
   const createdAt = Date.now()
   const target = store ? worktreeRowTarget(store, worktree) : undefined
-  if (
-    resolution.parent.type === 'worktree' &&
-    childInstanceId &&
-    parentInstanceId &&
-    target &&
-    store?.setWorktreeLineage
-  ) {
+  if (childInstanceId && parentInstanceId && target && store?.setWorktreeLineage) {
     lineage =
       store.setWorktreeLineage(target, {
         worktreeId: worktree.id,
         worktreeInstanceId: childInstanceId,
-        parentWorktreeId: resolution.parent.worktree.id,
+        parentWorktreeId:
+          resolution.parent.type === 'worktree'
+            ? resolution.parent.worktree.id
+            : resolution.parent.type === 'reference'
+              ? resolution.parent.worktreeId
+              : resolution.parent.workspaceKey,
+        ...(resolution.parentStore ? { parentStore: resolution.parentStore } : {}),
         parentWorktreeInstanceId: parentInstanceId,
         origin: resolution.origin,
         capture: resolution.capture,
@@ -110,6 +113,7 @@ export function recordCreatedWorktreeLineage(
       childInstanceId,
       parentWorkspaceKey: resolution.parent.workspaceKey,
       parentInstanceId,
+      ...(resolution.parentStore ? { parentStore: resolution.parentStore } : {}),
       origin: resolution.origin,
       capture: resolution.capture,
       ...(resolution.taskId ? { taskId: resolution.taskId } : {}),

@@ -1,3 +1,6 @@
+import { lineageStoreKeyForRow } from '../../../../../../shared/resolved-worktree-lineage'
+import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { parseExecutionHostId } from '../../../../../../shared/execution-host'
@@ -9,6 +12,35 @@ import {
   setWorktreeLineageForRuntime
 } from './worktree-lineage-refresh'
 import { hostRouteForWorktreeOwner } from '../listing/worktree-owner-target'
+
+function withParentReference(
+  get: WorktreeSliceGet,
+  worktreeId: string,
+  args: { parentWorktreeId?: string; noParent?: boolean }
+): typeof args & { parentWorktreeRef?: ParentWorktreeRef } {
+  if (!args.parentWorktreeId || args.noParent) {
+    return args
+  }
+  const rows = getIndexedAllWorktrees(get().worktreesByRepo)
+  const child = rows.find((row) => row.id === worktreeId)
+  const parent = rows.find((row) => row.id === args.parentWorktreeId)
+  if (
+    !child ||
+    !parent?.instanceId ||
+    (child.hostId === parent.hostId &&
+      lineageStoreKeyForRow(child) === lineageStoreKeyForRow(parent))
+  ) {
+    return args
+  }
+  return {
+    ...args,
+    parentWorktreeRef: {
+      worktreeId: parent.id,
+      instanceId: parent.instanceId,
+      external: lineageStoreKeyForRow(child) !== lineageStoreKeyForRow(parent)
+    }
+  }
+}
 
 // Why: this runs inside a catch, so letting the refresh reject would replace the failure it recovers from.
 async function refreshWorktreeLineageBestEffort(
@@ -66,7 +98,11 @@ export function createUpdateWorktreeLineage(
       applyWorktreeLineageUpdate(
         set,
         worktreeId,
-        await setWorktreeLineageForRuntime(ownerRoute, worktreeId, args)
+        await setWorktreeLineageForRuntime(
+          ownerRoute,
+          worktreeId,
+          withParentReference(get, worktreeId, args)
+        )
       )
     } catch (err) {
       console.error('Failed to update worktree lineage:', err)
@@ -86,7 +122,11 @@ export function createAssignWorktreeParent(
       applyWorktreeLineageUpdate(
         set,
         worktreeId,
-        await setWorktreeLineageForRuntime(ownerRoute, worktreeId, args)
+        await setWorktreeLineageForRuntime(
+          ownerRoute,
+          worktreeId,
+          withParentReference(get, worktreeId, args)
+        )
       )
     } catch (err) {
       console.error('Failed to assign worktree parent:', err)

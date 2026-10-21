@@ -118,6 +118,7 @@ export function pruneLineageForMissingRepoWorktrees(
       store.removeWorktreeLineage(hostWorktreeTarget({ id: childId, hostId: expectedHostId }))
     }
     if (
+      lineage.parentStore !== 'external' &&
       worktreeIdBelongsToRepo(lineage.parentWorktreeId, repoPrefix) &&
       canMutateWorktree(lineage.parentWorktreeId) &&
       !isLive(lineage.parentWorktreeId)

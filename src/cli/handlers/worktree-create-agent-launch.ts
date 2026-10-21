@@ -1,3 +1,4 @@
+import { assertCrossMachineLineageSupported } from '../../shared/worktree-runtime-capabilities'
 /**
  * `worktree create --agent`: the worktree and its agent in one `agent.launch`, so the agent follows
  * `--surface`, else the user's Chat UI setting, like every other launch. A host older than
@@ -44,6 +45,17 @@ export async function createWorktreeWithAgent(args: {
 }): Promise<void> {
   const { client, flags, create, launch, json, rawArgs } = args
   const capabilities = await getAgentLaunchCapabilities(client)
+  if (
+    create.parentWorktreeRef &&
+    typeof create.parentWorktreeRef === 'object' &&
+    'external' in create.parentWorktreeRef &&
+    create.parentWorktreeRef.external === true
+  ) {
+    assertCrossMachineLineageSupported(
+      capabilities,
+      client.environmentSelector ?? 'the connected server'
+    )
+  }
   if (
     !capabilities?.includes(AGENT_LAUNCH_LOCAL_PRESENTATION_RUNTIME_CAPABILITY) ||
     (launch.prompt && !capabilities.includes(AGENT_LAUNCH_PROMPT_CARRY_RUNTIME_CAPABILITY))

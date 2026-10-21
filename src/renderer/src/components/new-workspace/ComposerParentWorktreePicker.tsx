@@ -30,18 +30,10 @@ import {
   getLineageChildWorktree
 } from '@/components/right-sidebar/folder-workspace-attached-worktrees'
 import { COMBOBOX_POPOVER_SURFACE } from './type-ahead-combobox-styles'
-import {
-  sharesWorktreeLineageBoundary,
-  type WorktreeLineageBoundary
-} from '../../../../shared/resolved-worktree-lineage'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import {
-  getRepoExecutionHostId,
-  getWorktreeExecutionHostId,
-  type ExecutionHostId
-} from '../../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { useRepoMap } from '@/store/selectors'
 
 /** Single-line row: text-sm leading (20px) over py-2. Set as the row's explicit height. */
@@ -50,7 +42,7 @@ const NO_PARENT_ROW_KEY = 'no-parent'
 
 type ComposerParentWorktreePickerProps = {
   repoId: string
-  /** Parent must belong to the same execution host that will create the child. */
+  /** Execution host that will create the child. */
   executionHostId?: ExecutionHostId | null
   projectId?: string | null
   value: string | null
@@ -208,8 +200,6 @@ function getFolderWorkspaceSubtreeIds(
 }
 
 function ParentWorktreeCandidateList({
-  repoId,
-  executionHostId,
   value,
   activeFolderWorkspaceId,
   onSelect
@@ -226,10 +216,6 @@ function ParentWorktreeCandidateList({
 
   const candidates = useMemo(() => {
     // Legacy rows inherit their real repo host, including candidates from another project.
-    const childRepo = repoMap.get(repoId)
-    const childBoundary: WorktreeLineageBoundary = {
-      hostId: executionHostId ?? (childRepo ? getRepoExecutionHostId(childRepo) : undefined)
-    }
     const worktreeMap = getIndexedWorktreeMap(worktreesByRepo)
     const cyclicLineageIds = getCyclicProjectedWorktreeLineageIds(worktreeLineageById, worktreeMap)
     const folderSubtreeIds = activeFolderWorkspaceId
@@ -244,23 +230,11 @@ function ParentWorktreeCandidateList({
       .filter(
         (candidate) =>
           !candidate.isArchived &&
-          sharesWorktreeLineageBoundary(childBoundary, {
-            ...candidate,
-            hostId: getWorktreeExecutionHostId(candidate, repoMap.get(candidate.repoId))
-          }) &&
           !cyclicLineageIds.has(candidate.id) &&
           (folderSubtreeIds === null || folderSubtreeIds.has(candidate.id))
       )
       .sort(compareWorktreeDisplayName)
-  }, [
-    activeFolderWorkspaceId,
-    executionHostId,
-    repoId,
-    repoMap,
-    workspaceLineageByChildKey,
-    worktreeLineageById,
-    worktreesByRepo
-  ])
+  }, [activeFolderWorkspaceId, workspaceLineageByChildKey, worktreeLineageById, worktreesByRepo])
 
   const filtered = useMemo(
     () => filterWorktreeParentCandidates(candidates, search, repoMap),

@@ -253,7 +253,11 @@ export class MetadataLineageOperations {
       return
     }
     delete state.worktreeLineageById[target.id]
-    delete state.workspaceLineageByChildKey[worktreeWorkspaceKey(target.id)]
+    delete state.workspaceLineageByChildKey[
+      target.id.startsWith('folder:')
+        ? `folder:${target.id.slice(7)}`
+        : worktreeWorkspaceKey(target.id)
+    ]
     scheduleSave(this[metadataLineageOperationsContext].scheduling)
   }
 

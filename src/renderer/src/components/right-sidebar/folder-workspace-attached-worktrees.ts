@@ -1,3 +1,8 @@
+import {
+  resolveWorktreeLineageParents,
+  worktreeLineageFromWorkspaceLineage
+} from '../../../../shared/resolved-worktree-lineage'
+import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -49,12 +54,22 @@ export function getAttachedWorktreesForFolderWorkspace({
     }
   }
 
-  const folderKey = folderWorkspaceKey(folderWorkspace.id)
   const worktreeById = getWorktreeById(worktreesByRepo)
-  const childWorktrees = Object.values(workspaceLineageByChildKey)
-    .filter((lineage) => lineage.parentWorkspaceKey === folderKey)
-    .map((lineage) => getLineageChildWorktree(lineage, worktreeById))
-    .filter((worktree): worktree is Worktree => worktree !== null)
+  const folderRows = folderWorkspaces.map(folderWorkspaceToWorktree)
+  const parentRow = folderRows.find((row) => row.id === folderWorkspaceKey(folderWorkspace.id))
+  const edges = new Map(
+    Object.values(workspaceLineageByChildKey).map((edge) => {
+      const lineage = worktreeLineageFromWorkspaceLineage(edge)
+      return [lineage.worktreeId, lineage] as const
+    })
+  )
+  const parents = resolveWorktreeLineageParents(
+    [...worktreeById.values(), ...folderRows],
+    (row) => row.savedLineage ?? edges.get(row.id) ?? worktreeLineageById[row.id]
+  )
+  const childWorktrees = [...parents]
+    .filter(([child, parent]) => parent === parentRow && !child.isArchived)
+    .map(([child]) => child)
     .sort(sortWorktreesByRecentActivity)
 
   const childWorktreeIds = new Set(childWorktrees.map((worktree) => worktree.id))

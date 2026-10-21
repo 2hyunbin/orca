@@ -218,7 +218,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
     expect(result.lineageChildrenByParentId.size).toBe(0)
   })
 
-  it('includes another project while rejecting another execution host', () => {
+  it('includes another project and another execution host in the same store', () => {
     const parent = makeWorktree({
       id: 'repo-1::/parent',
       instanceId: 'parent',
@@ -249,7 +249,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
       worktreesByRepo: { 'repo-1': [parent, hostChild, projectChild] }
     })
 
-    expect(result.lineageChildrenByParentId.get(parent.id)).toEqual([projectChild])
+    expect(result.lineageChildrenByParentId.get(parent.id)).toEqual([hostChild, projectChild])
   })
 
   it('does not attach cyclic legacy descendants', () => {

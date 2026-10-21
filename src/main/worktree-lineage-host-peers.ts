@@ -7,7 +7,7 @@ import {
   getConnectedWorktreeLineageIds,
   projectResolvedWorktreeLineage
 } from '../shared/resolved-worktree-lineage'
-import { readAllWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
+import { readWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
 import { areWorktreePathsEqual } from './git/worktree-path-comparison'
 import { mergeWorktree } from './ipc/worktree-metadata-merge'
 import { resolveRepoOwnershipEvidence } from './ipc/worktrees/listing/worktree-host-ownership'
@@ -21,7 +21,7 @@ import type { RuntimeStore } from './runtime/runtime-store-contract'
 
 type HostPeerStore = Pick<
   RuntimeStore,
-  'getRepos' | 'getAllWorktreeMeta' | 'getAllWorktreeMetaForHost' | 'getAllWorktreeLineage'
+  'getRepos' | 'getAllWorktreeMeta' | 'getWorktreeMetaForHost' | 'getAllWorktreeLineage'
 >
 
 /** Project a per-repo publication against persisted peers on its execution host. */
@@ -42,7 +42,6 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   if ([...relatedIds].every((id) => ownIds.has(id) || getRepoIdFromWorktreeId(id) === repo.id)) {
     return projectResolvedWorktreeLineage(rows, lineageById)
   }
-  const hostId = getRepoExecutionHostId(repo)
   const repos = store.getRepos()
   const reposById = new Map<string, Repo[]>()
   for (const candidate of repos) {
@@ -50,7 +49,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     owners.push(candidate)
     reposById.set(candidate.id, owners)
   }
-  const metaById = readAllWorktreeMetaForHost(store, hostId)
+  const legacyMeta = store.getAllWorktreeMeta()
   const peers: Worktree[] = []
   for (const id of relatedIds) {
     if (ownIds.has(id) || getRepoIdFromWorktreeId(id) === repo.id) {
@@ -60,9 +59,12 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     const evidence = owners.map(resolveRepoOwnershipEvidence)
     const hostOwners = owners.filter((_, index) => {
       const owner = evidence[index]
-      return owner?.status === 'owned' && owner.hostId === hostId
+      return owner?.status === 'owned'
     })
-    const meta = metaById[id]
+    const ownerHostId = hostOwners[0] ? getRepoExecutionHostId(hostOwners[0]) : undefined
+    const meta = ownerHostId
+      ? (readWorktreeMetaForHost(store, id, ownerHostId) ?? legacyMeta[id])
+      : undefined
     if (
       evidence.some((owner) => owner.status !== 'owned') ||
       hostOwners.length !== 1 ||

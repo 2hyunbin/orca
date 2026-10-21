@@ -157,17 +157,19 @@ describe('recordWorkspaceLineageForCreatedWorktree', () => {
     expect(store.getWorktreeMetaForHost).toHaveBeenCalledWith(foreignParentId, 'local')
   })
 
-  it('skips both lineage records when the parent is on another host', () => {
+  it('records lineage across hosts in the same store', () => {
     const store = createStore({
       metaById: { [PARENT_ID]: parentMeta({ hostId: 'ssh:other-host' }) }
     })
 
     const result = record(store, { parentWorkspace: worktreeWorkspaceKey(PARENT_ID) })
 
-    expect(store.setWorktreeLineage).not.toHaveBeenCalled()
-    expect(result.lineage).toBeNull()
-    expect(store.setWorkspaceLineage).not.toHaveBeenCalled()
-    expect(result.workspaceLineage).toBeNull()
+    expect(store.setWorktreeLineage).toHaveBeenCalledOnce()
+    expect(result.lineage).toMatchObject({ parentWorktreeId: PARENT_ID })
+    expect(store.setWorkspaceLineage).toHaveBeenCalledOnce()
+    expect(result.workspaceLineage).toMatchObject({
+      parentWorkspaceKey: worktreeWorkspaceKey(PARENT_ID)
+    })
   })
 
   it('skips worktree lineage when the parent has no instance identity', () => {

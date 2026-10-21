@@ -20,6 +20,7 @@ import type { Repo } from '../../../shared/repo-types'
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
 import { areWorktreePathsEqual } from '../../git/worktree-path-comparison'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { mergeWorktree } from '../../ipc/worktree-metadata-merge'
 
 export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree {
@@ -36,6 +37,16 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
   ): ReturnType<RuntimeWorkspaceCatalog['listResolvedWorktrees']>
 
   protected async resolveWorktreeSelector(selector: string): Promise<ResolvedWorktree> {
+    const scope = parseWorkspaceKey(selector.startsWith('id:') ? selector.slice(3) : selector)
+    if (scope?.type === 'folder') {
+      const folder = this.store
+        ?.getFolderWorkspaces?.()
+        .find((row) => row.id === scope.folderWorkspaceId)
+      if (!folder) {
+        throw new Error('selector_not_found')
+      }
+      return this.folderWorkspaceToResolvedWorktree(folder)
+    }
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(selector)
     // Why only `id:`: every other selector kind is matched across the whole fleet, and their
     // `selector_ambiguous` contract is defined over all repos. Scoping those would silently pick a
@@ -123,7 +134,6 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     throw new Error('selector_not_found')
   }
 
-  /** `childRepo` scopes the parent to the new worktree's execution host (#12757). */
   protected resolveLineageForWorktreeCreate(
     input?: WorktreeLineageInput,
     childRepo?: Repo
@@ -224,6 +234,7 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
     return {
       ...merged,
       id: worktreeId,
+      savedLineage: this.store?.getWorktreeLineage?.(worktreeId) ?? null,
       parentWorktreeId: null,
       childWorktreeIds: [],
       lineage: null,

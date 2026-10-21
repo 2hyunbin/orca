@@ -1,3 +1,4 @@
+import { getOptionalStartupAgent, getOptionalSetupDecision } from './worktree-create-options'
 import type {
   RuntimeWorktreeListResult,
   RuntimeWorktreePsResult,
@@ -26,8 +27,7 @@ import {
   resolveCurrentWorktreeSelector
 } from '../selectors'
 import type { HostScopedWorktreeSelection } from '../caller-host-worktree-selection'
-import type { TuiAgent } from '../../shared/tui-agent'
-import { parseCliAgent, readCliAgentLaunch } from '../agent-launch-request'
+import { readCliAgentLaunch } from '../agent-launch-request'
 import { createWorktreeWithAgent } from './worktree-create-agent-launch'
 import { printLineageSummary } from './worktree-lineage-summary'
 import { projectWorktreePsTerminalVerdict } from '../worktree-ps-terminal-verdict'
@@ -39,6 +39,8 @@ import {
 import {
   assertWorktreeParentFlagsCompatible,
   getEnvParentWorkspace,
+  localParentClient,
+  resolveCallerParentRef,
   resolveCreateParentSelector
 } from './worktree-create-parent-selector'
 import { getOptionalLinearIssueLinkFlag } from './worktree-linear-issue-link'
@@ -51,54 +53,6 @@ import {
   getCreateReferenceInputs,
   resolveReferenceInputs
 } from '../reference-input'
-
-function getPresentStringFlag(
-  flags: Map<string, string | boolean>,
-  name: string,
-  options: { allowEmpty?: boolean } = {}
-): string | undefined {
-  if (!flags.has(name)) {
-    return undefined
-  }
-  const value = flags.get(name)
-  if (typeof value === 'string' && (options.allowEmpty || value.length > 0)) {
-    return value
-  }
-  throw new RuntimeClientError('invalid_argument', `Missing value for --${name}`)
-}
-
-function getOptionalStartupAgent(flags: Map<string, string | boolean>): TuiAgent | undefined {
-  const agent = getPresentStringFlag(flags, 'agent')
-  if (agent === undefined) {
-    const needsAgent = ['prompt', 'model', 'effort', 'surface', 'retry-launch'].find((name) =>
-      flags.has(name)
-    )
-    if (needsAgent) {
-      throw new RuntimeClientError('invalid_argument', `--${needsAgent} requires --agent`)
-    }
-    return undefined
-  }
-  return parseCliAgent(agent)
-}
-
-function getOptionalSetupDecision(
-  flags: Map<string, string | boolean>
-): 'run' | 'skip' | 'inherit' | undefined {
-  const setup = getPresentStringFlag(flags, 'setup')
-  if (setup !== undefined && setup !== 'run' && setup !== 'skip' && setup !== 'inherit') {
-    throw new RuntimeClientError('invalid_argument', '--setup must be one of: run, skip, inherit')
-  }
-  if (flags.get('run-hooks') === true) {
-    if (setup !== undefined && setup !== 'run') {
-      throw new RuntimeClientError(
-        'invalid_argument',
-        'Choose either --run-hooks or --setup run, not contradictory setup flags.'
-      )
-    }
-    return setup
-  }
-  return setup
-}
 
 export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
   'worktree ps': async ({ flags, client, json }) => {
@@ -146,11 +100,10 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       process.env.ORCA_TERMINAL_HANDLE.length > 0
         ? process.env.ORCA_TERMINAL_HANDLE
         : undefined
-    const explicitParent = await resolveCreateParentSelector(flags, cwd, client)
+    const explicitParent = await resolveCreateParentSelector(flags, cwd, localParentClient(client))
     const explicitParentWorktree = explicitParent.parentWorktree
     const explicitParentWorkspace = explicitParent.parentWorkspace
     const startupAgent = getOptionalStartupAgent(flags)
-    // Read before any request, so a bad prompt, model or effort creates nothing.
     const agentLaunch = startupAgent
       ? readCliAgentLaunch(flags, startupAgent, { createsWorktree: true })
       : undefined
@@ -167,10 +120,8 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       needsCwdRepoInference
     ) {
       try {
-        // Why: agent shells can lose ORCA_TERMINAL_HANDLE while still running
-        // inside an Orca worktree. Cwd keeps CLI-created children nestable and
-        // lets create infer the repo for the common current-workspace case.
-        cwdParentWorktree = await resolveCurrentWorktreeSelection(cwd, client)
+        // Cwd preserves parent context when an agent shell loses its injected handle.
+        cwdParentWorktree = await resolveCurrentWorktreeSelection(cwd, localParentClient(client))
       } catch {
         cwdParentWorktree = undefined
       }
@@ -186,8 +137,15 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     if (linkedItems) {
       await assertReferenceWritesSupported(client)
     }
+    const explicitParentSelector = explicitParentWorktree ?? explicitParentWorkspace
+    const parentWorktreeRef = !noParent
+      ? await resolveCallerParentRef(
+          client,
+          explicitParentSelector ?? envParentWorkspace ?? cwdParentWorktree?.selector,
+          Boolean(explicitParentSelector)
+        )
+      : undefined
     const create = {
-      // Older hosts drop `repoHostId` and keep refusing an id on several hosts, as before.
       ...repoTarget,
       name,
       displayName: name,
@@ -202,14 +160,25 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       // CLI activation targets its runtime's desktop, never unrelated paired viewers.
       ...(activate ? { navigation: 'host' as const } : {}),
       ...(setupDecision ? { setupDecision } : {}),
-      parentWorktree: explicitParentWorktree,
-      ...(explicitParentWorkspace ? { parentWorkspace: explicitParentWorkspace } : {}),
-      ...(envParentWorkspace ? { envParentWorkspace } : {}),
-      ...(cwdParentWorktree ? { cwdParentWorktree: cwdParentWorktree.selector } : {}),
+      parentWorktreeRef:
+        parentWorktreeRef?.external || !client.isRemote ? parentWorktreeRef : undefined,
+      parentWorktree:
+        parentWorktreeRef && !parentWorktreeRef.external && client.isRemote
+          ? `id:${parentWorktreeRef.worktreeId}`
+          : parentWorktreeRef
+            ? undefined
+            : explicitParentWorktree,
+      ...(!parentWorktreeRef && !client.isRemote && explicitParentWorkspace
+        ? { parentWorkspace: explicitParentWorkspace }
+        : {}),
+      ...(!parentWorktreeRef && !client.isRemote && envParentWorkspace
+        ? { envParentWorkspace }
+        : {}),
+      ...(!parentWorktreeRef && !client.isRemote && cwdParentWorktree
+        ? { cwdParentWorktree: cwdParentWorktree.selector }
+        : {}),
       noParent,
-      callerTerminalHandle,
-      // Why: marks the workspace as CLI-created so the sidebar can badge and
-      // filter it. Sent on every `worktree create` — hand-typed or agent-run.
+      callerTerminalHandle: client.isRemote ? undefined : callerTerminalHandle,
       cliProvenanceRequest: callerTerminalHandle ? { callerTerminalHandle } : {}
     }
     if (agentLaunch) {
@@ -235,6 +204,13 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     })
     const worktree = await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
     await assertGitLabLinkFlagProjectsMatch(flags, client, { worktree })
+    const parentSelector = await getOptionalWorktreeSelector(
+      flags,
+      'parent-worktree',
+      cwd,
+      localParentClient(client)
+    )
+    const parentWorktreeRef = await resolveCallerParentRef(client, parentSelector, true)
     const result = await client.call<RuntimeWorktreeSetResult>('worktree.set', {
       worktree,
       displayName: getOptionalStringFlag(flags, 'display-name'),
@@ -243,7 +219,14 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       comment: getOptionalStringFlag(flags, 'comment'),
       workspaceStatus: getOptionalStringFlag(flags, 'workspace-status'),
       isUnread,
-      parentWorktree: await getOptionalWorktreeSelector(flags, 'parent-worktree', cwd, client),
+      parentWorktreeRef:
+        parentWorktreeRef?.external || !client.isRemote ? parentWorktreeRef : undefined,
+      parentWorktree:
+        parentWorktreeRef && !parentWorktreeRef.external && client.isRemote
+          ? `id:${parentWorktreeRef.worktreeId}`
+          : parentWorktreeRef
+            ? undefined
+            : parentSelector,
       noParent: flags.get('no-parent') === true
     })
     if (!json) {

@@ -1,3 +1,6 @@
+import { WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY } from '../../../../../../shared/worktree-runtime-capabilities'
+import { assertRuntimeEnvironmentCapability } from '../../../../runtime/runtime-rpc-client'
+import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type {
@@ -91,7 +94,10 @@ export function projectWorktreeLineageToWorkspaceLineage(
   next[childWorkspaceKey] = {
     childWorkspaceKey,
     childInstanceId: lineage.worktreeInstanceId,
-    parentWorkspaceKey: worktreeWorkspaceKey(lineage.parentWorktreeId),
+    parentStore: lineage.parentStore,
+    parentWorkspaceKey: lineage.parentWorktreeId.startsWith('folder:')
+      ? `folder:${lineage.parentWorktreeId.slice(7)}`
+      : worktreeWorkspaceKey(lineage.parentWorktreeId),
     parentInstanceId: lineage.parentWorktreeInstanceId,
     origin: lineage.origin,
     capture: lineage.capture,
@@ -109,7 +115,7 @@ export function projectWorktreeLineageToWorkspaceLineage(
 export async function setWorktreeLineageForRuntime(
   route: HostRoute,
   worktreeId: string,
-  args: { parentWorktreeId?: string; noParent?: boolean }
+  args: { parentWorktreeId?: string; parentWorktreeRef?: ParentWorktreeRef; noParent?: boolean }
 ): Promise<WorktreeLineageUpdateResult> {
   const { target } = route
   if (target.kind === 'local') {
@@ -119,11 +125,19 @@ export async function setWorktreeLineageForRuntime(
       lineage: await window.api.worktrees.updateLineage({ worktreeId, ...args })
     }
   }
+  if (args.parentWorktreeRef) {
+    await assertRuntimeEnvironmentCapability(
+      target.environmentId,
+      WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY,
+      `Update Orca on ${target.environmentId} to nest workspaces across machines`
+    )
+  }
   const result = await callRuntimeRpc<{ worktree: WorktreeWithLineage }>(
     target,
     'worktree.set',
     {
       worktree: toRuntimeWorktreeSelector(worktreeId),
+      parentWorktreeRef: args.parentWorktreeRef,
       ...(args.parentWorktreeId
         ? { parentWorktree: toRuntimeWorktreeSelector(args.parentWorktreeId) }
         : {}),
@@ -172,6 +186,7 @@ export function projectLocalWorktreeLineageUpdate(
         return {
           ...worktree,
           parentWorktreeId: lineage?.parentWorktreeId ?? null,
+          savedLineage: lineage,
           lineage
         }
       }
