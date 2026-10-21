@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { getWorktreeLineageCandidates } from '../../../worktree-lineage-candidates'
 import { withoutWslMovedRepos } from '../../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import {
@@ -21,10 +22,6 @@ import {
 } from './detected-worktree-scan-cache'
 import { loggedWorktreeListFailures, warnOnce } from './worktree-listing-diagnostics'
 import type { WorktreeIpcContext } from '../worktree-ipc-context'
-import {
-  readAllWorktreeMetaForHost,
-  readAllWorktreeMetaForRepo
-} from '../../../persistence/host-qualified-worktree-meta'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
@@ -70,20 +67,22 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
 
   ipcMain.handle('worktrees:listAll', async () => {
     // A repo the WSL host owns is listed by the host; this build must not scan its old path.
-    const repos = withoutWslMovedRepos(store.getRepos())
-    const legacyMetadata =
-      typeof store.getAllWorktreeMetaForHost === 'function' ? undefined : store.getAllWorktreeMeta()
+    let snapshot = getWorktreeLineageCandidates(store)
+    const repos = withoutWslMovedRepos(snapshot.repos)
     const metadataByHost = new Map<ExecutionHostId, Record<string, WorktreeMeta>>()
     const metadataForRepo = (repo: (typeof repos)[number]): Record<string, WorktreeMeta> => {
+      const current = getWorktreeLineageCandidates(store)
+      if (current !== snapshot) {
+        snapshot = current
+        metadataByHost.clear()
+        sshMetaIndexByHost.clear()
+      }
       const hostId = getRepoExecutionHostId(repo)
       const cached = metadataByHost.get(hostId)
       if (cached) {
         return cached
       }
-      const metadata =
-        typeof store.getAllWorktreeMetaForHost === 'function'
-          ? store.getAllWorktreeMetaForHost(hostId)
-          : readAllWorktreeMetaForHost({ getAllWorktreeMeta: () => legacyMetadata ?? {} }, hostId)
+      const metadata = snapshot.metadataForHost(hostId)
       metadataByHost.set(hostId, metadata)
       return metadata
     }
@@ -92,12 +91,13 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
       ReturnType<typeof createSshWorktreeMetaIndex>
     >()
     const sshMetaIndexForRepo = (repo: (typeof repos)[number]) => {
+      const metadata = metadataForRepo(repo)
       const hostId = getRepoExecutionHostId(repo)
       const cached = sshMetaIndexByHost.get(hostId)
       if (cached) {
         return cached
       }
-      const index = createSshWorktreeMetaIndex(Object.entries(metadataForRepo(repo)))
+      const index = createSshWorktreeMetaIndex(Object.entries(metadata))
       sshMetaIndexByHost.set(hostId, index)
       return index
     }
@@ -128,11 +128,11 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
           )
         }
         loggedWorktreeListFailures.delete(`${repo.id}:${repo.path}`)
-        const metadata = metadataForRepo(repo)
         const rows = await withUnregisteredRemovalCheckouts(
           repo.id,
           withoutInFlightWorktreeCreates(repo.id, scan.gitWorktrees)
         )
+        const metadata = metadataForRepo(repo)
         const worktrees = buildDetectedGitWorktrees(store, repo, rows, metadata)
           .filter((worktree) => worktree.visible)
           .map((worktree) => stampAndMergeVisibleDetectedWorktree(store, repo, worktree, metadata))
@@ -171,7 +171,9 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
       return []
     }
     const connectionId = getSshTargetIdForExecutionHost(getRepoExecutionHostId(repo))
-    const allMeta = connectionId ? readAllWorktreeMetaForRepo(store, repo) : undefined
+    const allMeta = connectionId
+      ? getWorktreeLineageCandidates(store).metadataForHost(getRepoExecutionHostId(repo))
+      : undefined
     const sshWorktreeMetaIndex = connectionId
       ? createSshWorktreeMetaIndex(Object.entries(allMeta ?? {}))
       : new Map()
@@ -199,10 +201,12 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
         )
       }
       loggedWorktreeListFailures.delete(`${repo.id}:${repo.path}`)
-      const metadata = allMeta ?? readAllWorktreeMetaForRepo(store, repo)
       const rows = await withUnregisteredRemovalCheckouts(
         repo.id,
         withoutInFlightWorktreeCreates(repo.id, scan.gitWorktrees)
+      )
+      const metadata = getWorktreeLineageCandidates(store).metadataForHost(
+        getRepoExecutionHostId(repo)
       )
       const worktrees = buildDetectedGitWorktrees(store, repo, rows, metadata)
         .filter((worktree) => worktree.visible)

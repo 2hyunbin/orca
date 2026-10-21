@@ -1,3 +1,4 @@
+import { getWorktreeLineageCandidates } from '../../../worktree-lineage-candidates'
 import { preserveFolderUpgradeWorktreePath } from '../../../folder-upgrade-worktree-path'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
 import { parseWorktreeId } from '../../worktree-logic'
@@ -101,7 +102,7 @@ export function listDisconnectedSshWorktrees(
 ): Worktree[] {
   const byWorktreeId = new Map<string, Worktree>()
   const expectedHostId = getRepoExecutionHostId(repo)
-  const repoOwners = store.getRepos().filter((candidate) => candidate.id === repo.id)
+  const repoOwners = getWorktreeLineageCandidates(store).reposById.get(repo.id) ?? []
   for (const candidate of metaIndex.get(repo.id) ?? []) {
     if (
       (candidate.meta.hostId && candidate.meta.hostId !== expectedHostId) ||
@@ -156,8 +157,11 @@ export function buildDetectedGitWorktrees(
     resolveCustomWorktreeVisibilitySources(repo, settings.worktreeVisibilityDefaults),
     resolveConfiguredWorktreeBasePaths(repo)
   )
-  const allMeta = allMetaOverride ?? store.getAllWorktreeMeta?.()
-  const repoOwnerCount = store.getRepos().filter((candidate) => candidate.id === repo.id).length
+  const snapshot = getWorktreeLineageCandidates(store)
+  const allMeta =
+    allMetaOverride ??
+    (store.getAllWorktreeMeta ? snapshot.metadataForHost(getRepoExecutionHostId(repo)) : undefined)
+  const repoOwnerCount = snapshot.reposById.get(repo.id)?.length ?? 0
   const detected = liveWorktrees.map((gitWorktree) => {
     const worktreeId = `${repo.id}::${gitWorktree.path}`
     // Why: the locator-keyed row is only a stand-in for a missing host snapshot, so don't read it when we have one.
@@ -210,6 +214,13 @@ export function stampAndMergeVisibleDetectedWorktree(
   detected: DetectedWorktree,
   allMetaOverride?: Record<string, WorktreeMeta>
 ) {
-  const meta = resolveWorktreeMetaWithDiscoveryBackfill(store, repo, detected.id, allMetaOverride)
+  const snapshot = getWorktreeLineageCandidates(store)
+  const meta = resolveWorktreeMetaWithDiscoveryBackfill(
+    store,
+    repo,
+    detected.id,
+    allMetaOverride ?? snapshot.metadataForHost(getRepoExecutionHostId(repo)),
+    snapshot.reposById.get(repo.id)?.length ?? 0
+  )
   return mergeWorktree(repo.id, detected, meta, repo.displayName)
 }

@@ -6,14 +6,7 @@ import {
   worktreeIdentityKey
 } from '../../shared/worktree/id'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
-import {
-  readAllWorktreeMetaForHost,
-  readWorktreeMetaForHost
-} from '../persistence/host-qualified-worktree-meta'
-import {
-  composeWorktreeHostIdentity,
-  hostWorktreeTarget
-} from '../../shared/worktree/host-qualified-identity'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import { isFolderRepo } from '../../shared/repo-kind'
 import { projectResolvedWorktreeLineage } from '../../shared/resolved-worktree-lineage'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
@@ -27,7 +20,11 @@ import type { RuntimeStore } from './runtime-store-contract'
 import { areWorktreePathsEqual } from '../git/worktree-path-comparison'
 import { mergeWorktree } from '../ipc/worktree-metadata-merge'
 import { pruneLineageForMissingRepoWorktrees } from '../worktree-lineage-pruning'
-import { getRepoOwnedWorktreeMeta } from '../worktree-metadata-ownership'
+import { isWorktreeMetaOwnedByRepo } from '../worktree-metadata-ownership'
+import {
+  readAllWorktreeMetaForHost,
+  readWorktreeMetaForHost
+} from '../persistence/host-qualified-worktree-meta'
 import { resolveLocalProjectRuntimesForRepos } from '../project-runtime-git-options'
 import type { RuntimeWorktreeScanResult } from './repo-worktree-resolution-scan'
 
@@ -89,13 +86,12 @@ export type RepoWorktreeRowDeps = {
 export function listStoredWorktreeRowsForRepo(
   store: RepoWorktreeRowStore,
   repo: Repo,
-  repoOwnerCount = store.getRepos().filter((candidate) => candidate.id === repo.id).length
+  repoOwnerCount = getWorktreeLineageCandidates(store).reposById.get(repo.id)?.length ?? 0,
+  allMeta = readAllWorktreeMetaForHost(store, getRepoExecutionHostId(repo))
 ): GitWorktreeInfo[] {
   const expectedHostId = getRepoExecutionHostId(repo)
   const byWorktreeId = new Map<string, GitWorktreeInfo>()
-  for (const [worktreeId, meta] of Object.entries(
-    readAllWorktreeMetaForHost(store, expectedHostId)
-  )) {
+  for (const [worktreeId, meta] of Object.entries(allMeta)) {
     const parsed = splitWorktreeId(worktreeId)
     if (!parsed || parsed.repoId !== repo.id) {
       continue
@@ -126,8 +122,7 @@ export async function resolveRepoWorktreeRows(
   repo: Repo,
   metaById: Record<string, WorktreeMeta>,
   projectRuntimeByRepoId: ReadonlyMap<string, ProjectExecutionRuntimeResolution>,
-  repoOwnerCount = deps.store.getRepos().filter((candidate) => candidate.id === repo.id).length,
-  snapshot?: ReturnType<typeof getWorktreeLineageCandidates>
+  repoOwnerCount = getWorktreeLineageCandidates(deps.store).reposById.get(repo.id)?.length ?? 0
 ): Promise<RepoWorktreeRow[]> {
   const { store } = deps
   if (isFolderRepo(repo)) {
@@ -167,13 +162,13 @@ export async function resolveRepoWorktreeRows(
   return gitWorktrees.map((gitWorktree) => {
     const worktreeId = `${repo.id}::${gitWorktree.path}`
     // Why: lineage validation needs a durable instance ID even when the runtime sees a workspace before renderer discovery-stamp.
-    const existingMeta = metaById[worktreeId]
+    const existingMeta = store.getWorktreeMeta
+      ? store.getWorktreeMeta(worktreeId)
+      : metaById[worktreeId]
     // A host-qualified row is exact; the locator-keyed one is only trustworthy when this repo owns it.
     const ownedExistingMeta =
-      (snapshot
-        ? snapshot.metadataByIdentity.get(composeWorktreeHostIdentity(expectedHostId, worktreeId))
-        : readWorktreeMetaForHost(store, worktreeId, expectedHostId)) ??
-      getRepoOwnedWorktreeMeta(repo, worktreeId, metaById, repoOwnerCount)
+      readWorktreeMetaForHost(store, worktreeId, expectedHostId) ??
+      (isWorktreeMetaOwnedByRepo(repo, existingMeta, repoOwnerCount) ? existingMeta : undefined)
     const meta = ownedExistingMeta?.instanceId
       ? ownedExistingMeta
       : ownedExistingMeta || (!existingMeta && repoOwnerCount === 1)
@@ -215,27 +210,24 @@ export async function resolveScopedWorktreeIdRow(
   if (!parsed?.repoId || !parsed.worktreePath) {
     return null
   }
-  const owners = store
-    .getRepos()
-    .filter(
-      (repo) =>
-        repo.id === parsed.repoId &&
-        (requiredHostId === undefined || getRepoExecutionHostId(repo) === requiredHostId)
-    )
+  let snapshot = getWorktreeLineageCandidates(store)
+  const owners = snapshot.repos.filter(
+    (repo) =>
+      repo.id === parsed.repoId &&
+      (requiredHostId === undefined || getRepoExecutionHostId(repo) === requiredHostId)
+  )
   // Why: one repo id can be registered on several execution hosts, and only the fleet scan decides
   // between unqualified rows. A host qualifier narrows the same-id set without scanning other owners.
   if (owners.length !== 1) {
     return null
   }
   const repo = owners[0]
-  const snapshot = getWorktreeLineageCandidates(store)
   const ownerRows = await resolveRepoWorktreeRows(
     deps,
     repo,
     snapshot.rawMetadata,
     resolveLocalProjectRuntimesForRepos(store, [repo]),
-    snapshot.reposById.get(repo.id)?.length,
-    snapshot
+    snapshot.reposById.get(repo.id)?.length
   )
   // Why (#16243): the scan can spell this id's path differently — the divergence `path:` absorbs.
   // One equivalent row may stand in; two is an ambiguity a scoped lookup must refuse, not guess.
@@ -248,7 +240,7 @@ export async function resolveScopedWorktreeIdRow(
   if (!target) {
     return null
   }
-  const { lineageById } = snapshot
+  snapshot = getWorktreeLineageCandidates(store)
   const relatedRepos = snapshot
     .relatedRepos([target.id])
     .filter(
@@ -265,16 +257,16 @@ export async function resolveScopedWorktreeIdRow(
         relatedRepo,
         metaById,
         projectRuntimeByRepoId,
-        snapshot.reposById.get(relatedRepo.id)?.length,
-        snapshot
+        snapshot.reposById.get(relatedRepo.id)?.length
       )
     )
   )
+  snapshot = getWorktreeLineageCandidates(store)
   const projected = projectResolvedWorktreeLineage(
     [...ownerRows, ...otherRows.flat()],
-    lineageById,
+    snapshot.lineageById,
     snapshot.rows,
-    metaById
+    snapshot.rawMetadata
   )
   return projected[ownerRows.indexOf(target)] ?? null
 }

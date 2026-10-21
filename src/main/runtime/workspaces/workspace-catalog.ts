@@ -104,7 +104,7 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     }
     const snapshot = getWorktreeLineageCandidates(this.store)
     const metaById = snapshot.rawMetadata
-    const repos = this.store.getRepos()
+    const repos = snapshot.repos
     const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
     const platformByRepoId = new Map(
       repos.map((repo) => [
@@ -121,16 +121,16 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
             repo,
             metaById,
             projectRuntimeByRepoId,
-            snapshot.reposById.get(repo.id)?.length,
-            snapshot
+            snapshot.reposById.get(repo.id)?.length
           )
       )
     )
+    const current = getWorktreeLineageCandidates(this.store)
     const worktrees = projectResolvedWorktreeLineage(
       perRepoWorktrees.flat(),
-      snapshot.lineageById,
-      snapshot.rows,
-      snapshot.rawMetadata
+      current.lineageById,
+      current.rows,
+      current.rawMetadata
     )
     return { worktrees, platformByRepoId }
   }

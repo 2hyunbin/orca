@@ -14,7 +14,7 @@ function row(id: string): ResolvedWorktree {
     ...mergeWorktree(
       'repo',
       git,
-      mergeWorktreeMetaForWrite(undefined, { instanceId: id, hostId: 'local' })
+      mergeWorktreeMetaForWrite(undefined, { instanceId: id, hostId: 'local', sortOrder: 0 })
     ),
     id,
     git,

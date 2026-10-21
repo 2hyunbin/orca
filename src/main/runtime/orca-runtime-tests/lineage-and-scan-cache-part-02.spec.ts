@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService, join, listWorktrees, tmpdir } from '../orca-runtime-test-mocks.spec'
-import type { WorktreeLineage, WorktreeMeta } from '../orca-runtime-test-mocks.spec'
+import type {
+  WorkspaceLineage,
+  WorktreeLineage,
+  WorktreeMeta
+} from '../orca-runtime-test-mocks.spec'
 import {
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
@@ -56,6 +60,17 @@ describe('OrcaRuntimeService', () => {
       [parentId]: makeWorktreeMeta({ instanceId: 'new-parent-instance' }),
       [childId]: makeWorktreeMeta({ instanceId: 'child-instance' })
     }
+    const lineageById: Record<string, WorktreeLineage> = {
+      [parentId]: {
+        worktreeId: parentId,
+        worktreeInstanceId: 'old-parent-instance',
+        parentWorktreeId: childId,
+        parentWorktreeInstanceId: 'child-instance',
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' },
+        createdAt: 1
+      }
+    }
     const setWorktreeLineage = vi.fn((_target: HostWorktreeTarget, lineage) => lineage)
     const runtimeStore = {
       ...store,
@@ -65,18 +80,9 @@ describe('OrcaRuntimeService', () => {
         metaById[worktreeId] = { ...metaById[worktreeId], ...meta }
         return metaById[worktreeId]
       },
-      getWorktreeLineage: (worktreeId: string) =>
-        worktreeId === parentId
-          ? {
-              worktreeId: parentId,
-              worktreeInstanceId: 'old-parent-instance',
-              parentWorktreeId: childId,
-              parentWorktreeInstanceId: 'child-instance',
-              origin: 'manual' as const,
-              capture: { source: 'manual-action' as const, confidence: 'explicit' as const },
-              createdAt: 1
-            }
-          : undefined,
+      getWorktreeLineage: (worktreeId: string) => lineageById[worktreeId],
+      getAllWorktreeLineage: () => lineageById,
+      setWorkspaceLineage: (lineage: WorkspaceLineage) => lineage,
       setWorktreeLineage
     }
     vi.mocked(listWorktrees).mockResolvedValue([
@@ -140,7 +146,7 @@ describe('OrcaRuntimeService', () => {
       // d <-> e is a loop saved by an older build.
       [dId]: edge(dId, eId),
       [eId]: edge(eId, dId),
-      // Cross-host links an older create could save; readers never follow them.
+      // Same-install SSH links remain part of the saved chain.
       [fId]: edge(fId, gId),
       [gId]: edge(gId, hId)
     }
@@ -154,6 +160,8 @@ describe('OrcaRuntimeService', () => {
       getAllWorktreeMeta: () => metaById,
       getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
       getWorktreeLineage: (worktreeId: string) => lineageById[worktreeId],
+      getAllWorktreeLineage: () => lineageById,
+      setWorkspaceLineage: (lineage: WorkspaceLineage) => lineage,
       setWorktreeLineage
     }
     vi.mocked(listWorktrees).mockResolvedValue(
@@ -167,18 +175,20 @@ describe('OrcaRuntimeService', () => {
     ).rejects.toThrow('lineage cycle')
     expect(setWorktreeLineage).not.toHaveBeenCalled()
 
-    for (const [childId, parentId] of [
-      [cId, dId],
-      [hId, fId]
-    ]) {
-      await runtime.updateManagedWorktreeMeta(`id:${childId}`, {
-        lineage: { parentWorktree: `id:${parentId}` }
+    await runtime.updateManagedWorktreeMeta(`id:${cId}`, {
+      lineage: { parentWorktree: `id:${dId}` }
+    })
+    expect(setWorktreeLineage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: cId }),
+      expect.objectContaining({ parentWorktreeId: dId })
+    )
+    setWorktreeLineage.mockClear()
+    await expect(
+      runtime.updateManagedWorktreeMeta(`id:${hId}`, {
+        lineage: { parentWorktree: `id:${fId}` }
       })
-      expect(setWorktreeLineage).toHaveBeenLastCalledWith(
-        expect.objectContaining({ id: childId }),
-        expect.objectContaining({ parentWorktreeId: parentId })
-      )
-    }
+    ).rejects.toThrow('lineage cycle')
+    expect(setWorktreeLineage).not.toHaveBeenCalled()
     expect(metaById[gId].hostId).toBeUndefined()
   })
 
@@ -263,6 +273,7 @@ describe('OrcaRuntimeService', () => {
       removeWorktreeLineage: vi.fn(({ id: worktreeId }: HostWorktreeTarget) => {
         delete lineageById[worktreeId]
       }),
+      setWorkspaceLineage: (lineage: WorkspaceLineage) => lineage,
       setWorktreeLineage
     }
     vi.mocked(listWorktrees)

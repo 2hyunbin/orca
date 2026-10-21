@@ -84,7 +84,16 @@ function capture(store: CandidateStore) {
     lineageById,
     rawMetadata,
     metadataByIdentity,
+    repos,
     reposById,
+    metadataForHost(hostId: string): typeof rawMetadata {
+      return Object.fromEntries([
+        ...Object.entries(rawMetadata).filter(([, meta]) => !meta.hostId || meta.hostId === hostId),
+        ...metadata
+          .filter(({ meta }) => meta.hostId === hostId)
+          .map(({ id, meta }) => [id, meta] as const)
+      ])
+    },
     folders,
     rows: [
       ...new Map(

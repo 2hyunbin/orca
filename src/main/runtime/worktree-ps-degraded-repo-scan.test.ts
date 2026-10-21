@@ -86,7 +86,14 @@ function makeStore(options: StoreOptions = {}) {
     [MAIN_WORKTREE_ID]: makeMeta({ displayName: 'main', instanceId: 'parent-instance' })
   }
   const lineageById = makeLineage()
+  const listeners = new Set<(domains?: readonly string[]) => void>()
   const store = {
+    onStateWritten: (listener: (domains?: readonly string[]) => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
     getRepo: (id: string) => store.getRepos().find((repo) => repo.id === id),
     getRepos: () => [
       {
@@ -108,11 +115,12 @@ function makeStore(options: StoreOptions = {}) {
     getWorktreeMeta: (id: string) => metaById[id],
     setWorktreeMeta: ({ id }: HostWorktreeTarget, meta: Record<string, unknown>) => {
       metaById[id] = { ...(metaById[id] ?? makeMeta()), ...meta } as never
+      listeners.forEach((listener) => listener())
       return metaById[id]
     },
     removeWorktreeMeta: () => {},
     getAllWorktreeLineage: () => lineageById,
-    getAllWorkspaceLineage: () => ({ [`worktree:${WORKTREE_ID}`]: { parentWorkspaceKey: null } }),
+    getAllWorkspaceLineage: () => ({}),
     removeWorktreeLineage: options.removeWorktreeLineage ?? vi.fn(),
     getGitHubCache: () => undefined as never,
     getSettings: () => ({

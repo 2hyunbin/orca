@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listWorktreesMock } from './worktrees-test-module-mocks'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
 import { makeWorktreeMeta } from './worktrees-test-fixtures'
@@ -86,9 +86,25 @@ vi.mock('./pty/provider/state-cleanup', async () =>
   (await import('./worktrees-test-module-mocks')).ptyStateCleanupModuleMock()
 )
 
+// These setters are spies: they do not change persisted state. Fixture resets do.
+const listeners = new Set<(domains?: readonly string[]) => void>()
+const observableStore = Object.assign(store, {
+  onStateWritten(listener: (domains?: readonly string[]) => void) {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }
+})
+afterAll(() => {
+  Reflect.deleteProperty(observableStore, 'onStateWritten')
+})
+
 describe('registerWorktreeHandlers', () => {
   beforeEach(() => {
+    Reflect.deleteProperty(observableStore, 'getWorktreeLineageMetadata')
     setupWorktreeHandlers()
+    listeners.forEach((listener) => listener())
   })
 
   it('lists a synthetic worktree for folder-mode repos', async () => {
@@ -253,11 +269,9 @@ describe('registerWorktreeHandlers', () => {
     store.getAllWorktreeMeta.mockReturnValue({
       [worktreeId]: makeWorktreeMeta({ displayName: 'Legacy local', hostId: 'local' })
     })
-    ;(
-      store as typeof store & {
-        getAllWorktreeMetaForHost: ReturnType<typeof vi.fn>
-      }
-    ).getAllWorktreeMetaForHost = vi.fn(() => ({ [worktreeId]: canonicalRemote }))
+    Object.assign(store, {
+      getWorktreeLineageMetadata: () => [{ id: worktreeId, meta: canonicalRemote }]
+    })
 
     const listed = await handlers['worktrees:list'](null, { repoId: repo.id })
 
