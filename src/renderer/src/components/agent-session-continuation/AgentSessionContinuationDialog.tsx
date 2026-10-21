@@ -32,7 +32,10 @@ import {
 import { useAppStore } from '@/store'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import { chooseInitialContinuationAgent } from './agent-session-continuation-selection'
+import {
+  chooseInitialContinuationAgent,
+  isContinuationAgentAllowed
+} from './agent-session-continuation-selection'
 
 type AgentSessionContinuationDialogProps = {
   open: boolean
@@ -66,7 +69,11 @@ export function AgentSessionContinuationDialog({
         (agent) =>
           detectedAgents.includes(agent.id) &&
           isTuiAgentEnabled(agent.id, disabledAgents) &&
-          (!request?.avoidSourceAgent || agent.id !== request.source.sourceAgent)
+          isContinuationAgentAllowed(
+            agent.id,
+            request?.source.sourceAgent,
+            request?.avoidSourceAgent
+          )
       ),
     [detectedAgents, disabledAgents, request]
   )
@@ -91,9 +98,13 @@ export function AgentSessionContinuationDialog({
         setDetectedAgents(enabled)
         setSelectedAgent(
           chooseInitialContinuationAgent({
-            availableAgents: request.avoidSourceAgent
-              ? enabled.filter((agent) => agent !== request.source.sourceAgent)
-              : enabled,
+            availableAgents: enabled.filter((agent) =>
+              isContinuationAgentAllowed(
+                agent,
+                request.source.sourceAgent,
+                request.avoidSourceAgent
+              )
+            ),
             sourceAgent: request.avoidSourceAgent ? null : request.source.sourceAgent,
             defaultAgent: settings?.defaultTuiAgent
           })
