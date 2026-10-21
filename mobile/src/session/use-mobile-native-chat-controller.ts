@@ -219,7 +219,7 @@ export function useMobileNativeChatController(args: {
     onSendError
   })
 
-  const structuredNativeChatSend = useMobileStructuredNativeChatSendBridge({
+  const structuredSend = useMobileStructuredNativeChatSendBridge({
     agent: activeChatResolution?.agent,
     sendStructured: structuredNativeChat.sendWithOutcome,
     captureSendOrigin,
@@ -328,11 +328,9 @@ export function useMobileNativeChatController(args: {
     nativeChatQueued: structuredNativeChat.queued,
     nativeChatBackgroundTasks: activeChatStructured ? structuredNativeChat.backgroundTasks : null,
     ...nativeChatFiles,
-    handleNativeChatSend: activeChatStructured
-      ? structuredNativeChatSend.send
-      : handleNativeChatSend,
+    handleNativeChatSend: activeChatStructured ? structuredSend.send : handleNativeChatSend,
     handleNativeChatSendWithOutcome: activeChatStructured
-      ? structuredNativeChatSend.sendWithOutcome
+      ? structuredSend.sendWithOutcome
       : handleNativeChatSendWithOutcome,
     readSeededLaunchDraft,
     nativeChatSessionOptions,
