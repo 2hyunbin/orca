@@ -21,7 +21,10 @@ import {
 import { FolderWorkspaceUpdateCoordinator } from '../slices/folder-workspace-update-coordinator'
 import type { FolderWorkspaceUpdates, RepoSlice } from '../repos/repo-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
-import { holdCreatedSidebarWorkspace } from '@/lib/sidebar-pending-layer'
+import {
+  holdCreatedSidebarWorkspace,
+  holdRemovedSidebarWorkspace
+} from '@/lib/sidebar-pending-layer'
 import {
   folderWorkspaceOwnerTarget,
   folderWorkspaceUpdateInvalidatesPathStatus,
@@ -282,6 +285,7 @@ export function createFolderWorkspaceMutationActions(
         if (!deleted) {
           return false
         }
+        holdRemovedSidebarWorkspace({ worktreeId: workspaceKey, hostId: ownerHostId })
         set((s) => ({
           folderWorkspaces: s.folderWorkspaces.filter(
             (workspace) =>

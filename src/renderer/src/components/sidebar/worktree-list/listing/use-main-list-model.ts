@@ -1,11 +1,8 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
-import {
-  overlaySidebarPendingLayer,
-  readSidebarPendingLayer,
-  subscribeSidebarPendingLayer
-} from '@/lib/sidebar-pending-layer'
+import { readSidebarPendingLayer, subscribeSidebarPendingLayer } from '@/lib/sidebar-pending-layer'
+import { overlaySidebarPendingLayer } from '@/lib/sidebar-pending-overlay'
 import { useSidebarListSession } from '@/lib/sidebar-list-session'
 import { readEndedCreations, subscribeEndedCreations } from '@/lib/sidebar-ended-creations'
 import { getFolderWorkspaceHostId } from '../../../../../../shared/folder-workspace-execution-host'
