@@ -128,10 +128,15 @@ export function AgentLaunchSettingsCatalog({
     const lifted = liftAgentPermissionArgs(agent, value)
     await mutate({ type: 'user-arguments', agent, value })
     if (lifted.choice) {
+      const chatSupported = nativeChatPermissionsSupported && agentChatPermissionModes(agent)
       toast.success(
         translate(
-          'settings.agents.permissionFromArgs',
-          '{{agent}} set to {{mode}} in terminals and new chats.',
+          chatSupported
+            ? 'settings.agents.permissionFromArgs'
+            : 'settings.agents.permissionFromArgsTerminals',
+          chatSupported
+            ? '{{agent}} set to {{mode}} in terminals and new chats.'
+            : '{{agent}} set to {{mode}} in terminals.',
           { agent: label, mode: agentPermissionChoiceLabel(lifted.choice, label) }
         )
       )

@@ -75,7 +75,9 @@ function LocalAgentLaunchSettings({
       .then(async () => {
         const current = useAppStore.getState().settings ?? settings
         const platform = window.api.platform.get().platform
-        await updateSettings(agentLaunchSettingsMutationUpdates(current, mutation, platform))
+        await useAppStore
+          .getState()
+          .updateSettingsOrThrow(agentLaunchSettingsMutationUpdates(current, mutation, platform))
       })
     tail.current = write
     return write

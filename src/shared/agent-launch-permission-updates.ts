@@ -4,6 +4,7 @@ import type {
   AgentLaunchSettingsSource
 } from './agent-launch-settings'
 import {
+  composeAgentLaunchProfile,
   normalizeTuiAgentArgsRecord,
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
@@ -120,49 +121,53 @@ export function legacyLaunchTextUpdates(
   if (!hasTypedAgentPermission(settings)) {
     return updates
   }
-  let next: AgentLaunchSettingsSource = { ...settings }
-  for (const [agent, value] of Object.entries(updates.agentDefaultArgs ?? {})) {
-    if (isTuiAgent(agent) && typeof value === 'string') {
-      const change = legacyArgumentsUpdates(settings, agent, value)
-      next = {
-        ...next,
-        ...change,
-        agentDefaultArgs: {
-          ...next.agentDefaultArgs,
-          [agent]: change.agentDefaultArgs?.[agent] ?? next.agentDefaultArgs?.[agent] ?? ''
-        },
-        agentPermissionOverrides: {
-          ...next.agentPermissionOverrides,
-          ...(change.agentPermissionOverrides?.[agent]
-            ? { [agent]: change.agentPermissionOverrides[agent] }
-            : {})
-        }
+  const published = composeAgentLaunchProfile(settings, platform)
+  const args: Partial<Record<TuiAgent, string>> = {}
+  const envs: Partial<Record<TuiAgent, Record<string, string>>> = {}
+  let overrides = settings.agentPermissionOverrides
+  if (updates.agentDefaultArgs !== undefined) {
+    for (const agent of new Set([
+      ...Object.keys(published.agentDefaultArgs),
+      ...Object.keys(updates.agentDefaultArgs)
+    ])) {
+      if (!isTuiAgent(agent)) {
+        continue
+      }
+      const change = legacyArgumentsUpdates(settings, agent, updates.agentDefaultArgs[agent] ?? '')
+      if (Object.hasOwn(updates.agentDefaultArgs, agent)) {
+        args[agent] = change.agentDefaultArgs?.[agent] ?? settings.agentDefaultArgs?.[agent] ?? ''
+      }
+      if (change.agentPermissionOverrides?.[agent]) {
+        overrides = { ...overrides, [agent]: change.agentPermissionOverrides[agent] }
       }
     }
   }
-  for (const [agent, env] of Object.entries(updates.agentDefaultEnv ?? {})) {
-    if (isTuiAgent(agent) && env) {
-      const change = legacyEnvUpdates(settings, agent, env, platform)
-      next = {
-        ...next,
-        ...change,
-        agentDefaultEnv: {
-          ...next.agentDefaultEnv,
-          [agent]: change.agentDefaultEnv?.[agent] ?? next.agentDefaultEnv?.[agent] ?? {}
-        },
-        agentPermissionOverrides: {
-          ...next.agentPermissionOverrides,
-          ...(change.agentPermissionOverrides?.[agent]
-            ? { [agent]: change.agentPermissionOverrides[agent] }
-            : {})
-        }
+  if (updates.agentDefaultEnv !== undefined) {
+    for (const agent of new Set([
+      ...Object.keys(published.agentDefaultEnv),
+      ...Object.keys(updates.agentDefaultEnv)
+    ])) {
+      if (!isTuiAgent(agent)) {
+        continue
+      }
+      const change = legacyEnvUpdates(
+        settings,
+        agent,
+        updates.agentDefaultEnv[agent] ?? {},
+        platform
+      )
+      if (Object.hasOwn(updates.agentDefaultEnv, agent)) {
+        envs[agent] = change.agentDefaultEnv?.[agent] ?? settings.agentDefaultEnv?.[agent] ?? {}
+      }
+      if (change.agentPermissionOverrides?.[agent]) {
+        overrides = { ...overrides, [agent]: change.agentPermissionOverrides[agent] }
       }
     }
   }
   return {
-    ...(updates.agentDefaultArgs ? { agentDefaultArgs: next.agentDefaultArgs } : {}),
-    ...(updates.agentDefaultEnv ? { agentDefaultEnv: next.agentDefaultEnv } : {}),
-    agentPermissionOverrides: next.agentPermissionOverrides
+    ...(updates.agentDefaultArgs !== undefined ? { agentDefaultArgs: args } : {}),
+    ...(updates.agentDefaultEnv !== undefined ? { agentDefaultEnv: envs } : {}),
+    agentPermissionOverrides: overrides
   }
 }
 

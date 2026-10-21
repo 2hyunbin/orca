@@ -79,6 +79,50 @@ describe('durable execution-host launch settings', () => {
     }
   })
 
+  it('replaces legacy maps, preserving absent carriers and clearing omitted user values', async () => {
+    const { store, readState } = await fixture()
+    store.updateSettings({
+      agentPermissionDefault: 'own',
+      agentPermissionOverrides: { claude: 'full-access', goose: 'full-access', opencode: 'ask' },
+      agentDefaultArgs: { claude: '--model opus', codex: '--model old' },
+      agentDefaultEnv: {
+        claude: { ANTHROPIC_BASE_URL: 'http://old-proxy' },
+        goose: { KEEP: 'custom' }
+      }
+    })
+    const controller = new RuntimeClientSettingsController(store)
+    await controller.update({ agentDefaultArgs: { codex: '--model new' } })
+    expect(store.getSettings()).toMatchObject({
+      agentDefaultArgs: { codex: '--model new' },
+      agentDefaultEnv: {
+        claude: { ANTHROPIC_BASE_URL: 'http://old-proxy' },
+        goose: { KEEP: 'custom' }
+      },
+      agentPermissionOverrides: { claude: 'own', goose: 'full-access', opencode: 'ask' }
+    })
+    expect(store.getSettings().agentDefaultArgs).not.toHaveProperty('claude')
+    await controller.update({ agentDefaultEnv: { goose: { GOOSE_MODE: 'auto', KEEP: 'new' } } })
+    expect(store.getSettings().agentDefaultEnv).toEqual({ goose: { KEEP: 'new' } })
+    expect(store.getSettings().agentDefaultArgs).toEqual({ codex: '--model new' })
+    expect(resolveTuiAgentLaunchEnv('goose', store.getSettings())).toEqual({
+      GOOSE_MODE: 'auto',
+      KEEP: 'new'
+    })
+    await controller.update({ agentDefaultArgs: {}, agentDefaultEnv: {} })
+    await store.flushPendingOrThrowAsync()
+    const saved = readState().settings
+    expect(saved.agentDefaultArgs).toEqual({})
+    expect(saved.agentDefaultEnv).toEqual({})
+    expect(saved.agentPermissionOverrides).toMatchObject({
+      claude: 'own',
+      goose: 'own',
+      opencode: 'ask'
+    })
+    expect(controller.get().agentDefaultArgs?.claude).toBe('')
+    expect(controller.get().agentDefaultEnv?.goose).toEqual({})
+    expect(newChatPermissionModeForSettings('opencode', store.getSettings())).toBe('ask')
+  })
+
   it('withdraws cached plugin skills when saved launch arguments disable plugins', async () => {
     const { store } = await fixture()
     const controller = new RuntimeClientSettingsController(store)
