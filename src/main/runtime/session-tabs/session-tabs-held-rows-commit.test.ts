@@ -82,6 +82,27 @@ describe('held session.tabs rows across layout commits (switch on)', () => {
     expect(pushes).toBe(0)
   })
 
+  it("another workspace's commits push nothing for a workspace with a kept row", async () => {
+    const { runtime } = await closedFirstTab()
+    let pushes = 0
+    runtime.onMobileSessionTabsChanged((snapshot) => {
+      if (snapshot.worktree === TEST_WORKTREE_ID) {
+        pushes += 1
+      }
+    })
+
+    for (let commit = 0; commit < 3; commit += 1) {
+      await runtime.applyLayoutCommand({
+        type: 'createTerminalTab',
+        workspace: 'repo-1::/tmp/worktree-b',
+        tabId: `b-tab-${commit}`
+      })
+      await vi.runAllTimersAsync()
+    }
+
+    expect(pushes).toBe(0)
+  })
+
   it("stores a write that names a new occupant or proof, though main's order undoes its order", async () => {
     const { runtime } = threeTabSurfaceRuntime()
     await windowlessRows(runtime)

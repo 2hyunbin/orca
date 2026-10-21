@@ -172,14 +172,20 @@ describe('session.tabs on a windowless server (switch on)', () => {
         seen.push(snapshot)
       })
 
-      // What an editor change does: rebuild the rows from the saved session, then push.
-      runtime.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(TEST_WORKTREE_ID, {
-        force: true
-      })
-      runtime.notifyMobileSessionTabsChanged(TEST_WORKTREE_ID)
-      await vi.runAllTimersAsync()
+      // What an editor change does: rebuild the rows from the saved session, then push. Each
+      // rebuild mints a new publication stamp from the clock, so time moves between them.
+      for (let rebuild = 0; rebuild < 3; rebuild += 1) {
+        vi.advanceTimersByTime(1_000)
+        runtime.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(TEST_WORKTREE_ID, {
+          force: true
+        })
+        runtime.notifyMobileSessionTabsChanged(TEST_WORKTREE_ID)
+        await vi.runAllTimersAsync()
+      }
 
       expect(seen.map((pushed) => pushed.tabGroups?.map((group) => group.id))).toEqual([
+        [SAVED_GROUP_ID],
+        [SAVED_GROUP_ID],
         [SAVED_GROUP_ID]
       ])
       expect(tabStrip(seen.at(-1))).toEqual(SAVED_STRIP)

@@ -60,14 +60,14 @@ export function mobileSnapshotValueEqual(a: unknown, b: unknown): boolean {
   return false
 }
 
-/** Whether a write keeps the stored occupant, publication and retirement proofs. */
+/** Whether a write keeps the stored occupant and retirement proofs; an absent one keeps them. */
 export function mobileSnapshotIdentityUnchanged(
   existing: RuntimeMobileSessionTabsSnapshot,
   next: RuntimeMobileSessionTabsSnapshot
 ): boolean {
   return (
-    existing.worktreeInstanceId === next.worktreeInstanceId &&
-    existing.publicationEpoch === next.publicationEpoch &&
+    (next.worktreeInstanceId === undefined ||
+      next.worktreeInstanceId === existing.worktreeInstanceId) &&
     (next.retiredTerminalSurfaces === undefined ||
       mobileSnapshotValueEqual(next.retiredTerminalSurfaces, existing.retiredTerminalSurfaces))
   )
