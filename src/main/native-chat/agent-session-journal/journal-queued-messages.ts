@@ -30,6 +30,7 @@ import {
 import { QueuedMessageNotConsumableError } from './queued-message-consume-error'
 import { QueuedMessageEditLeases } from './queued-message-edit-leases'
 import { queuedMessageUpdateDecision, type QueuedMessageUpdate } from './queued-message-update'
+import type { JournalReducerState } from './journal-reducer'
 
 /** Card rows to write in one transaction, with what must commit beside them. */
 export type JournalQueuePlan = {
@@ -54,6 +55,10 @@ export class JournalQueuedMessages {
 
   get sessionId(): string {
     return this.deps.sessionId
+  }
+
+  displayState(): JournalReducerState {
+    return this.legacy.displayState()
   }
 
   /** Moves with every card change, so publication memos recompute only when they must. */

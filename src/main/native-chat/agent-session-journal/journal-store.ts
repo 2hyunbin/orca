@@ -192,7 +192,7 @@ export class AgentSessionJournal {
     sequence: this.state.lastSequence
   })
 
-  snapshot = (): AgentJournalSnapshot => renderJournalState(this.state)
+  snapshot = (): AgentJournalSnapshot => renderJournalState(this.queuedMessages.displayState())
 
   /** Visits reduced items without allocating and sorting a full snapshot. */
   visitItems = (

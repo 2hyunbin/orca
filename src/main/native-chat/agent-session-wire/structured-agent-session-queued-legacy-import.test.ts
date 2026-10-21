@@ -201,6 +201,21 @@ it("moves an earlier build's cards into the journal, each action its own card, t
     { messageId: 'held', state: 'waiting', paused: true }
   ]
   expect(await rig.drafts()).toEqual(published)
+  const stopped = async () => {
+    const { items, submissions } = await rig.host.journalSnapshot(SESSION)
+    return projectStructuredAgentSessionMessages(items, [], submissions).find(
+      (entry) => entry.id === agentJournalSubmissionKey('att-stopped')
+    )
+  }
+  const live = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const rawStopped = structuredClone(live.submission('att-stopped'))
+  const displayedStopped = await stopped()
+  expect(displayedStopped).toMatchObject({
+    stoppedBeforeStart: true,
+    blocks: [{ type: 'text', text: 'stopped, unchanged' }]
+  })
+  expect(live.submission('att-stopped')).toEqual(rawStopped)
+  await nothingSentTo('stopped-same')
   db().exec('DROP TRIGGER fail_import')
   expect(warned).toHaveBeenCalledWith(
     '[journal-open] queued-message import skipped:',
@@ -241,17 +256,11 @@ it("moves an earlier build's cards into the journal, each action its own card, t
     'held:queued'
   ])
   // Unchanged, it is spent on that hand-off: drawn as the person's send its Stop took back.
-  const stopped = async () => {
-    const { items, submissions } = await rig.host.journalSnapshot(SESSION)
-    const drawn = projectStructuredAgentSessionMessages(items, [], submissions)
-    return drawn.find((entry) => entry.id === agentJournalSubmissionKey('att-stopped'))
-      ?.stoppedBeforeStart
-  }
-  expect(await stopped()).toBe(true)
+  expect(await stopped()).toEqual(displayedStopped)
 
   // The command card's own turn reports its refusal later: it is spent, not left holding the queue.
-  const live = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
-  await live.appendItem(
+  const adopted = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  await adopted.appendItem(
     structuredAgentSessionCommandTurnIdentity('att-cmd'),
     { kind: 'status', text: 'Compact failed' },
     {
@@ -276,7 +285,7 @@ it("moves an earlier build's cards into the journal, each action its own card, t
   await rig.restartHostProcess()
   await rig.drafts()
   expect(queueRows()).toEqual(rows)
-  expect(await stopped()).toBe(true)
+  expect(await stopped()).toEqual(displayedStopped)
   expect(legacyIds()).toEqual(['broken'])
   expect(await rig.deleteQueued('ret-present', deletion)).toMatchObject({
     replayed: true,

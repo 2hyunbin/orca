@@ -12,6 +12,7 @@ import { queuedChangeOf } from './journal-queue-retention'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalOperationReceipt } from './journal-row-writer'
 import type { JournalQueuedMessagesDeps } from './journal-store-contracts'
+import { foldQueuedHandOffInDoubt } from './journal-submission-fold'
 import {
   QUEUED_MESSAGE_HELD_DELIVERY_UNCONFIRMED,
   type QueuedMessageRow
@@ -132,6 +133,29 @@ export class LegacyQueuedCards {
       this.viewed = { key, cards }
     }
     return this.viewed.cards
+  }
+
+  /** Failed adoption must not hide a spent message; derive its adopted display on copies only. */
+  displayState(): JournalReducerState {
+    const state = this.deps.state()
+    const handedOff = this.cards().flatMap((card) => {
+      const submission =
+        card.consumedAs === null ? undefined : state.submissions.get(card.consumedAs)
+      return submission && handOffInDoubt(submission) ? [{ ...submission }] : []
+    })
+    if (handedOff.length === 0) {
+      return state
+    }
+    const display = {
+      ...state,
+      items: new Map(state.items),
+      submissions: new Map(state.submissions)
+    }
+    for (const submission of handedOff) {
+      display.submissions.set(submission.clientMessageId, submission)
+      foldQueuedHandOffInDoubt(display, submission)
+    }
+    return display
   }
 
   /** On the journal's lane: the change that moves this card into the journal, read from disk now;
