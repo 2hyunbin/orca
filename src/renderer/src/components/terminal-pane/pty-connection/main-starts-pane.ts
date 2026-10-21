@@ -7,10 +7,13 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 export function mainStartsPane(session: {
   deps: ConnectPanePtySession['deps']
   runtimeEnvironmentId?: string | null
+  mainPaneStartHandedBack?: boolean
 }): boolean {
   return (
     ORCA_LAYOUT_OWNER_IS_MAIN &&
     !session.runtimeEnvironmentId &&
+    // Main handed a twin's start back: the window starts it as today from then on.
+    !session.mainPaneStartHandedBack &&
     !runtimeEnvironmentIdUnlessTwin(useAppStore.getState(), session.deps.worktreeId)
   )
 }

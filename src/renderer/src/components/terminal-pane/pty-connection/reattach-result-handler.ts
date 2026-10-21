@@ -49,7 +49,6 @@ type ReattachResultSession = ReattachPayloadSession &
     | 'scheduleReattachIdleAgentCursorReset'
     | 'serializeHiddenOutputSnapshot'
     | 'settlePaneAttachAttempt'
-    | 'mainStartAttachPending'
     | 'setPanePtyFitBinding'
     | 'startFreshColdRestoreAgentResume'
     | 'structuralReplayCoordinator'
@@ -163,7 +162,6 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     // Those branches fall through to startFreshColdRestoreAgentResume and leave
     // the attempt pending, which the ledger's bound then ages out.
     session.settlePaneAttachAttempt?.('success')
-    session.mainStartAttachPending = false
     // Strict precedence snapshot > replay > coldRestore: paint exactly one, else overlapping tails duplicate TUI output on worktree switch.
     const hasStructuralReplay = Boolean(
       connectResult?.snapshot || connectResult?.replay || connectResult?.coldRestore

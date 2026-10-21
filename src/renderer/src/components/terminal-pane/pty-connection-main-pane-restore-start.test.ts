@@ -210,4 +210,55 @@ describe('a restored pane main starts (layout-owner build)', () => {
       'The terminal could not start: pty_exited'
     )
   })
+
+  it('a hidden pane whose terminal is gone asks main only once it is shown', async () => {
+    const transport = createMockTransport()
+    let answerGone = (): void => {}
+    transport.connect.mockImplementationOnce(
+      (options: { callbacks?: { onError?: (message: string) => void } }) =>
+        new Promise<undefined>((resolve) => {
+          answerGone = () => {
+            options.callbacks?.onError?.(PANE_NOT_LIVE_ERROR)
+            resolve(undefined)
+          }
+        })
+    )
+    const { deps, connection } = await connectBound(undefined, true, transport)
+    // The pane is hidden by the time its attach finds the terminal gone.
+    deps.isVisibleRef.current = false
+    answerGone()
+    await flushAsyncTicks()
+    expect(startPaneCommands()).toEqual([])
+
+    deps.isVisibleRef.current = true
+    connection.noteVisibilityResume?.()
+    await flushAsyncTicks()
+
+    expect(startPaneCommands()).toHaveLength(1)
+  })
+
+  it('asks main again on the next view after a refused start', async () => {
+    const { deps, connection } = await connectBound({ status: 'sleeping' })
+    expect(startPaneCommands()).toHaveLength(1)
+
+    sent.at(-1)?.handlers.refused?.('call_failed')
+    expect(deps.onPtyErrorRef.current).toHaveBeenCalledWith(
+      1,
+      'The terminal could not start: call_failed'
+    )
+    connection.noteVisibilityResume?.()
+    await flushAsyncTicks()
+
+    expect(startPaneCommands()).toHaveLength(2)
+  })
+
+  it('a twin main hands back starts as today from then on', async () => {
+    const { transport } = await connectBound({ status: 'sleeping' })
+    sent.at(-1)?.handlers.asToday()
+    await flushAsyncTicks()
+
+    expect(startPaneCommands()).toHaveLength(1)
+    expect(transport.connect).toHaveBeenCalledTimes(1)
+    expect(transport.connect.mock.calls[0][0]).not.toHaveProperty('attachOnlyView')
+  })
 })

@@ -8,16 +8,22 @@ import type { PaneStartStatus } from '../../../../../shared/workspace-layout/wor
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { resolveTerminalTabId } from './terminal-tab-id'
 
-const waiting = new WeakSet<ConnectPanePtySession>()
+type PaneStartWait = { connects: Set<() => void>; failed: Set<() => void> }
+
+const waiting = new WeakMap<ConnectPanePtySession, PaneStartWait>()
 
 /** The starts this gate waits on; a sleeping or held pane starts on its first view (C1c). */
 const gated = (status: PaneStartStatus | undefined): boolean =>
   status === 'starting' || status === 'resuming' || status === 'failed'
 
-/** Whether the pane waits on main's start; `connect` runs once main's start for it ends. */
+/**
+ * Whether the pane waits on main's start; every waiter's `connect` runs once main's start for it
+ * ends, and `onFailed` runs when main shows the start failed.
+ */
 export function waitsForMainPaneStart(
   session: ConnectPanePtySession,
-  connect: () => void
+  connect: () => void,
+  onFailed?: () => void
 ): boolean {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return false
@@ -26,10 +32,22 @@ export function waitsForMainPaneStart(
   if (!start || !gated(start.status)) {
     return false
   }
-  if (waiting.has(session)) {
+  const joined = waiting.get(session)
+  if (joined) {
+    joined.connects.add(connect)
+    if (onFailed) {
+      joined.failed.add(onFailed)
+      if (start.status === 'failed') {
+        onFailed()
+      }
+    }
     return true
   }
-  waiting.add(session)
+  const wait: PaneStartWait = { connects: new Set([connect]), failed: new Set() }
+  if (onFailed) {
+    wait.failed.add(onFailed)
+  }
+  waiting.set(session, wait)
   recordPtyConnectDiagnostic(`pane=${session.pane.id} -> WAIT FOR MAIN START (${start.status})`)
   let shown = start
   const showFailure = (): void => {
@@ -38,6 +56,9 @@ export function waitsForMainPaneStart(
         session.pane.id,
         `The terminal could not start: ${shown.reason ?? 'unknown error'}`
       )
+      for (const failed of wait.failed) {
+        failed()
+      }
     }
   }
   showFailure()
@@ -61,7 +82,9 @@ export function waitsForMainPaneStart(
       session.waitTeardowns.splice(index, 1)
     }
     if (!session.disposed) {
-      connect()
+      for (const waiter of wait.connects) {
+        waiter()
+      }
     }
   })
   session.waitTeardowns.push(unsubscribe)

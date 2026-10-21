@@ -15,6 +15,7 @@ type MainPaneStartHandlers = {
   attach: () => void
   /** Main handed a twin's start back: start it as today. */
   today?: () => void
+  /** Main refused the start, or showed it failed. */
   refused?: () => void
 }
 
@@ -42,7 +43,7 @@ export function startPaneThroughMain(
     {
       // Main's reply lands after the frame that shows the pane starting, or bound when it was live.
       apply: () => {
-        if (session.disposed || waitsForMainPaneStart(session, handlers.attach)) {
+        if (session.disposed || waitsForMainPaneStart(session, handlers.attach, handlers.refused)) {
           return
         }
         adoptMainBinding(session, useAppStore.getState())
@@ -72,10 +73,9 @@ export function startPaneThroughMainThenAttach(
   if (!mainStartsPane(session)) {
     return today()
   }
-  if (session.mainStartAttachPending) {
+  if (session.mainStartAttach) {
     // Why: the attach to main's own start found no terminal; asking again would loop on a pane
     // whose terminal ends at once.
-    session.mainStartAttachPending = false
     showStartRefusal(session, 'pty_exited')
     return Promise.resolve(null)
   }
@@ -86,14 +86,16 @@ export function startPaneThroughMainThenAttach(
       attach: () => {
         const ptyId = session.deps.restoredPtyIdByLeafId?.[session.pane.leafId] ?? null
         if (ptyId) {
-          session.mainStartAttachPending = true
           // Main started a fresh terminal: follow its output, as a window start does.
           session.resetFreshSpawnFollowOutput()
-          startDeferredSessionReattach(session, ptyId)
+          startDeferredSessionReattach(session, ptyId, { afterMainStart: true })
         }
         resolve(ptyId)
       },
-      today: () => resolve(today()),
+      today: () => {
+        session.mainPaneStartHandedBack = true
+        resolve(today())
+      },
       refused: settleNull
     })
     if (!sent) {
@@ -114,7 +116,7 @@ export function defersToMainPaneStart(
   if (waitsForMainPaneStart(session, connect)) {
     return true
   }
-  if (!mainStartsPane(session) || session.mainPaneStartHandedBack) {
+  if (!mainStartsPane(session)) {
     return false
   }
   if (useAppStore.getState().terminalPaneStartsByPaneKey[session.cacheKey]?.status !== 'sleeping') {
@@ -126,7 +128,11 @@ export function defersToMainPaneStart(
       session.mainPaneStartHandedBack = true
       connect()
     }
-    if (!startPaneThroughMain(session, { attach: connect, today })) {
+    // Why re-armed on a refusal: a failed call is retried by the pane's next view.
+    const refused = (): void => {
+      session.mainPaneStartOnReveal = startOnView
+    }
+    if (!startPaneThroughMain(session, { attach: connect, today, refused })) {
       today()
     }
   }

@@ -18,11 +18,17 @@ import {
 
 const PANE_OWNER_UNVERIFIED_ERROR = 'terminal_pane_owner_unverified'
 
+type ReattachOptions = {
+  /** Layout-owner build: this attaches to the terminal main just started for the pane. */
+  afterMainStart?: true
+}
+
 export function startDeferredSessionReattach(
   session: ConnectPanePtySession,
-  deferredReattachSessionId: string
+  deferredReattachSessionId: string,
+  options: ReattachOptions = {}
 ): void {
-  void prepareDeferredSessionReattach(session, deferredReattachSessionId).catch(
+  void prepareDeferredSessionReattach(session, deferredReattachSessionId, options).catch(
     (error: unknown) => {
       if (!session.disposed) {
         session.reportError(error instanceof Error ? error.message : String(error))
@@ -33,7 +39,8 @@ export function startDeferredSessionReattach(
 
 async function prepareDeferredSessionReattach(
   session: ConnectPanePtySession,
-  deferredReattachSessionId: string
+  deferredReattachSessionId: string,
+  options: ReattachOptions
 ): Promise<void> {
   const generation = session.transportStreamGeneration
   let waitedForSnapshot = false
@@ -53,7 +60,7 @@ async function prepareDeferredSessionReattach(
   ) {
     return
   }
-  void connectDeferredSessionReattach(session, deferredReattachSessionId)
+  void connectDeferredSessionReattach(session, deferredReattachSessionId, options)
 }
 
 const NOT_REOPENED: HeldPaneReopenOutcome = { reopened: false, agentResumed: false }
@@ -61,8 +68,12 @@ const NOT_REOPENED: HeldPaneReopenOutcome = { reopened: false, agentResumed: fal
 /** Resolves to what the reattach did, which a held pane's release reports. */
 function connectDeferredSessionReattach(
   session: ConnectPanePtySession,
-  deferredReattachSessionId: string
+  deferredReattachSessionId: string,
+  options: ReattachOptions = {}
 ): Promise<HeldPaneReopenOutcome> {
+  // Why: while this attach runs, a fallback that would ask main to start again is refused instead.
+  const mainStartAttach = options.afterMainStart ? {} : null
+  session.mainStartAttach = mainStartAttach
   session.allowInitialIdleCacheSeed = true
   recordPtyConnectDiagnostic(`pane=${session.pane.id} -> REATTACH ${deferredReattachSessionId}`)
 
@@ -183,8 +194,19 @@ function connectDeferredSessionReattach(
         if (typeof gen === 'number') {
           void window.api.pty.clearPendingPaneSerializer(session.cacheKey, gen).catch(() => {})
         }
+        if (!isCurrentReattach()) {
+          return NOT_REOPENED
+        }
+        if (!session.deps.isVisibleRef.current) {
+          // Why: a hidden pane's start waits for its first view, as a hidden agent resume does (#29459).
+          session.mainPaneStartOnReveal = () => {
+            session.mainPaneStartOnReveal = null
+            void startFreshInstead()
+          }
+          return NOT_REOPENED
+        }
         // Why the binding stays: main's start reuses its id, which carries the terminal's history.
-        return isCurrentReattach() ? startFreshInstead() : NOT_REOPENED
+        return startFreshInstead()
       }
       if (!result && expiredReattachError) {
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
@@ -260,6 +282,11 @@ function connectDeferredSessionReattach(
       session.deps.clearTabPtyId(session.deps.tabId, deferredReattachSessionId)
       return startFreshInstead()
     })
+  void outcome.finally(() => {
+    if (session.mainStartAttach === mainStartAttach) {
+      session.mainStartAttach = null
+    }
+  })
   // Switch point: main clears the gone terminal's binding before this reattach's fresh start.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
     holdInPlaceResumeUntilSettled(() => !session.disposed, coldRestoreStartup, outcome)

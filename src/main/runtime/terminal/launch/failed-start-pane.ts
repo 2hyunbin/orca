@@ -48,8 +48,11 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     const { workspace } = command
     return {
       live: {
+        // Why unverifiable counts as live: lost contact is never evidence the terminal ended.
         isBindingLive: (paneKey: string, ptyId: string) =>
-          this.ptysById.get(ptyId)?.connected === true && !this.paneStartStatuses?.peek(paneKey)
+          (this.ptysById.get(ptyId)?.connected === true ||
+            this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict.status === 'unverifiable') &&
+          !this.paneStartStatuses?.peek(paneKey)
       },
       onEffects: (effects) =>
         runLayoutPaneStarts({ type: command.type, workspace }, effects, {

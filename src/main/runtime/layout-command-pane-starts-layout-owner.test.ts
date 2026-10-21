@@ -28,6 +28,13 @@ class StatusRuntime extends OrcaRuntimeService {
   startStatusOf(paneKey: string) {
     return this.paneStartStatuses?.peek(paneKey) ?? null
   }
+  loseContactWith(ptyId: string): void {
+    const pty = this.ptysById.get(ptyId)
+    if (pty) {
+      pty.connected = false
+    }
+    this.markPtyLivenessUnverifiable(ptyId, 'host out of contact')
+  }
 }
 
 // A running agent's workspace sleep, which the window's wake relaunched before C1c.
@@ -114,6 +121,20 @@ describe('a client’s startPane in the layout-owner build', () => {
     await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
     await vi.waitFor(() => expect(runtime.startStatusOf(PANE_KEY)).toBeNull())
 
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('leaves a pane alone while its terminal is out of contact', async () => {
+    const { runtime, spawn, started } = await desktopRuntime()
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    started.resolve({ id: 'persisted-pty' })
+    await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
+    await vi.waitFor(() => expect(runtime.startStatusOf(PANE_KEY)).toBeNull())
+
+    // Lost contact is never evidence the terminal ended.
+    runtime.loseContactWith('persisted-pty')
     await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(spawn).toHaveBeenCalledOnce()
