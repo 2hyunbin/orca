@@ -19,10 +19,7 @@ import {
   ClaudeSignInLinkMenu,
   withCopiedClaudeLink
 } from './claude-sign-in-link-menu'
-import {
-  addClaudeAccountOnHost,
-  runningHostAccountSignInOwner
-} from '@/runtime/runtime-host-account-sign-in-client'
+import { addClaudeAccountOnHost } from '@/runtime/runtime-host-account-sign-in-client'
 import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
 
 export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
@@ -138,9 +135,7 @@ export function renderClaudeAccountsSection(model: AccountsPaneSectionModel): Re
               ) : null}
             </ButtonGroup>
             {/* Why: this desktop's own login only; a server sign-in has Cancel in its prompt. */}
-            {claudeAction === 'adding' &&
-            !isRemoteAccountScope &&
-            !runningHostAccountSignInOwner('claude') ? (
+            {claudeAction === 'adding' && !isRemoteAccountScope ? (
               <Button
                 variant="ghost"
                 size="xs"
