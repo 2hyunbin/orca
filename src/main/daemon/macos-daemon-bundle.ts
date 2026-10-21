@@ -37,7 +37,7 @@ function describeCopy(directory: string): MacDaemonBundle {
   }
 }
 
-function appBundleForMainExecutable(executable: string): string {
+export function appBundleForMainExecutable(executable: string): string {
   const bundle = resolve(dirname(executable), '..', '..')
   if (
     !isAbsolute(executable) ||
@@ -50,7 +50,7 @@ function appBundleForMainExecutable(executable: string): string {
 }
 
 /** One `codesign` display line, e.g. `CDHash=` or `designated => `; codesign prints to stderr. */
-async function readCodesignField(
+export async function readCodesignField(
   args: string[],
   prefix: string,
   signal: AbortSignal
