@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
-import { getWorktreeOnHostFromState } from '@/store/selectors'
+import { getRegisteredWorktreeDeleteTarget } from './worktree-delete-request'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
   isPathInsideOrEqual,
   normalizeRuntimePathForComparison
@@ -123,7 +124,7 @@ export async function runWorktreeDeletesInParallel(
             // Why by host (STA-4343): the id-keyed map keeps ONE row per `repoId::path`,
             // so on a two-host collision it can hand back the other host's row — whose
             // instanceId never matches, silently dropping a delete the user confirmed.
-            const currentTarget = getWorktreeOnHostFromState(
+            const currentTarget = getRegisteredWorktreeDeleteTarget(
               useAppStore.getState(),
               target.id,
               target.hostId
@@ -137,19 +138,45 @@ export async function runWorktreeDeletesInParallel(
               clearWorktreeDeleteTargetState(target)
               return
             }
-            const deleted = await runWorktreeDeleteWithToast(
-              toWorktreeRemovalTarget(target),
-              target.displayName,
-              {
-                ...options,
-                suppressPreservedBranchToast: aggregatePreservedBranches,
-                ...(snapshotPruneBatch ? { snapshotPruneBatchId: snapshotPruneBatch.batchId } : {}),
-                onPreservedBranch: (branch) => {
-                  preservedBranches.push(branch)
-                  options.onPreservedBranch?.(branch)
-                }
-              }
-            )
+            const folder = parseWorkspaceKey(target.id)
+            const deleted =
+              folder?.type === 'folder'
+                ? await (async () => {
+                    try {
+                      const removed = await useAppStore
+                        .getState()
+                        .deleteFolderWorkspace(folder.folderWorkspaceId, {
+                          executionHostId: currentTarget.hostId
+                        })
+                      const state = useAppStore.getState()
+                      if (
+                        removed &&
+                        state.activeWorktreeId === target.id &&
+                        (!currentTarget.hostId ||
+                          state.activeWorkspaceExecutionHostId === currentTarget.hostId)
+                      ) {
+                        state.setActiveWorktree(null)
+                      }
+                      return removed
+                    } finally {
+                      clearWorktreeDeleteTargetState(target)
+                    }
+                  })()
+                : await runWorktreeDeleteWithToast(
+                    toWorktreeRemovalTarget(target),
+                    target.displayName,
+                    {
+                      ...options,
+                      suppressPreservedBranchToast: aggregatePreservedBranches,
+                      ...(snapshotPruneBatch
+                        ? { snapshotPruneBatchId: snapshotPruneBatch.batchId }
+                        : {}),
+                      onPreservedBranch: (branch) => {
+                        preservedBranches.push(branch)
+                        options.onPreservedBranch?.(branch)
+                      }
+                    }
+                  )
             if (deleted) {
               deletedInGroup.push(toWorktreeRemovalTarget(target))
             } else {

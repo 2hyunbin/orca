@@ -46,6 +46,14 @@ function buildFixture(childCount: number): {
   return { lineageById, worktreeMap }
 }
 
+function requiredRow(rows: ReadonlyMap<string, Worktree>, id: string): Worktree {
+  const row = rows.get(id)
+  if (!row) {
+    throw new Error(`Missing fixture ${id}`)
+  }
+  return row
+}
+
 describe('worktree lineage projection cache', () => {
   it('reuses the cyclic-id scan for an unchanged input pair', () => {
     const { lineageById, worktreeMap } = buildFixture(8)
@@ -59,7 +67,7 @@ describe('worktree lineage projection cache', () => {
     const first = getWorktreeLineageProjection(lineageById, worktreeMap).children
     const second = getWorktreeLineageProjection(lineageById, worktreeMap).children
     expect(second).toBe(first)
-    expect(first.get(worktreeMap.get('root') as Worktree)?.map((worktree) => worktree.id)).toEqual([
+    expect(first.get(requiredRow(worktreeMap, 'root'))?.map((worktree) => worktree.id)).toEqual([
       'child-0',
       'child-1',
       'child-2',
@@ -86,7 +94,7 @@ describe('worktree lineage projection cache', () => {
     const { lineageById, worktreeMap } = buildFixture(2)
     expect(
       getWorktreeLineageProjection(lineageById, worktreeMap).children.get(
-        worktreeMap.get('root') as Worktree
+        requiredRow(worktreeMap, 'root')
       )
     ).toHaveLength(2)
 
@@ -94,10 +102,10 @@ describe('worktree lineage projection cache', () => {
     delete withoutFirstChild['child-0']
     const reprojected = getWorktreeLineageProjection(withoutFirstChild, worktreeMap).children
     expect(
-      reprojected.get(worktreeMap.get('root') as Worktree)?.map((worktree) => worktree.id)
+      reprojected.get(requiredRow(worktreeMap, 'root'))?.map((worktree) => worktree.id)
     ).toEqual(['child-1'])
     expect(
-      getLineageRenderInfo(worktreeMap.get('child-0') as Worktree, withoutFirstChild, worktreeMap)
+      getLineageRenderInfo(requiredRow(worktreeMap, 'child-0'), withoutFirstChild, worktreeMap)
         .state
     ).toBe('none')
   })

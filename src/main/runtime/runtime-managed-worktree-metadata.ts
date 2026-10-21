@@ -1,7 +1,7 @@
+import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
 import {
   isSameSavedWorktreeParent,
-  sharesWorktreeLineageBoundary,
-  worktreeLineageFromWorkspaceLineage
+  sharesWorktreeLineageBoundary
 } from '../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
 import type { GitPushTarget, Worktree } from '../../shared/worktree/types'
@@ -33,7 +33,7 @@ type Updates = Omit<Partial<WorktreeMeta>, 'pushTarget'> & {
 }
 
 type Ports = {
-  resolveWorktree: (selector: string) => Promise<ResolvedWorktree>
+  resolveWorktree: (selector: string, instanceId?: string) => Promise<ResolvedWorktree>
   validateParent: (worktree: ResolvedWorktree, parent: ResolvedWorktree) => void
   invalidateResolved: () => void
   invalidateScan: (repoId: string) => void
@@ -52,12 +52,11 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   const childKey = worktree.id.startsWith('folder:')
     ? (`folder:${worktree.id.slice(7)}` as const)
     : worktreeWorkspaceKey(worktree.id)
-  const workspaceEdge = args.store.getAllWorkspaceLineage?.()[childKey]
-  const existingLineage =
-    args.store.getWorktreeLineage?.(worktree.id) ??
-    (workspaceEdge ? worktreeLineageFromWorkspaceLineage(workspaceEdge) : undefined)
+  const existingLineage = lineage
+    ? getWorktreeLineageCandidates(args.store).edgeOf(worktree)
+    : undefined
   const previousParentRepoId = lineage
-    ? splitWorktreeId(args.store.getWorktreeLineage?.(worktree.id)?.parentWorktreeId ?? '')?.repoId
+    ? splitWorktreeId(existingLineage?.parentWorktreeId ?? '')?.repoId
     : undefined
   let nextParentRepoId: string | undefined
   const executionHostId = worktree.identity?.executionHostId ?? worktree.hostId
@@ -110,7 +109,8 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
     }
     if (!identical) {
       const parent = await args.ports.resolveWorktree(
-        lineage.parentWorktree ?? `id:${ref?.worktreeId}`
+        lineage.parentWorktree ?? `id:${ref?.worktreeId}`,
+        ref?.instanceId
       )
       if (ref && parent.instanceId !== ref.instanceId) {
         throw new RuntimeLineageError(

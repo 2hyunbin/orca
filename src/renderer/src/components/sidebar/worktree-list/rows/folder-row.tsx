@@ -1,3 +1,5 @@
+import { getWorktreeLineageGroupKey } from '../../../../../../shared/sidebar-list/group-keys'
+import type { LineageToggleHandler } from '../../worktree-lineage-toggle-handler-cache'
 import React from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import type { AppState } from '@/store/types'
@@ -22,6 +24,7 @@ import type { FolderWorkspaceItemRow } from '../listing/renderable-rows'
 import { getWorktreeOptionId } from './option-dom'
 
 export type FolderWorkspaceRowContext = {
+  getLineageToggleHandler?: (key: string) => LineageToggleHandler
   groupBy: WorktreeGroupBy
   newCardStyle: boolean
   settings: AppState['settings']
@@ -61,6 +64,8 @@ export function renderFolderWorkspaceVirtualRow(args: {
 }): React.JSX.Element {
   const { ctx, row, vItem } = args
   const folderWorktree = folderWorkspaceToWorktree(row.folderWorkspace)
+  const lineageKey = getWorktreeLineageGroupKey(folderWorktree)
+  const rowKey = row.occurrence?.key ?? getWorktreeHostIdentity(folderWorktree)
   const folderWorktreeIdentity = getWorktreeHostIdentity(folderWorktree)
   const isActiveWorktree = isActiveSidebarWorkspace(folderWorktree, {
     worktreeId: ctx.activeWorktreeId,
@@ -100,7 +105,7 @@ export function renderFolderWorkspaceVirtualRow(args: {
       aria-current={isActiveWorktree ? 'page' : undefined}
       data-worktree-id={folderWorktree.id}
       data-worktree-host-identity={folderWorktreeIdentity}
-      data-worktree-row-key={folderWorktreeIdentity}
+      data-worktree-row-key={rowKey}
       data-worktree-virtual-row
       data-worktree-virtual-row-key={String(vItem.key)}
       data-worktree-virtual-row-start={vItem.start}
@@ -109,7 +114,7 @@ export function renderFolderWorkspaceVirtualRow(args: {
       className="absolute left-0 right-0 top-0"
       style={{ transform: getVirtualRowTransform(vItem.start) }}
       onClickCapture={ctx.onRowClickCapture}
-      onPointerDown={(event) => ctx.onRowPointerDown(event, folderWorktree, folderWorktreeIdentity)}
+      onPointerDown={(event) => ctx.onRowPointerDown(event, folderWorktree, rowKey)}
     >
       <div
         className="relative"
@@ -124,10 +129,17 @@ export function renderFolderWorkspaceVirtualRow(args: {
           flushSurface
           nativeDragEnabled={false}
           onImmediateActivate={activationDisabled ? undefined : ctx.onImmediateActivate}
-          activationRowKey={folderWorktreeIdentity}
+          activationRowKey={rowKey}
+          renameRowKey={rowKey}
+          inPinnedSection={row.occurrence?.placement === 'pinned'}
           onSelectionGesture={(event) => ctx.onSelectionGesture(event, folderWorktree)}
           onContextMenuSelect={ctx.onContextMenuSelect}
           statusPrDisplay={folderPrDisplay}
+          lineageChildCount={row.occurrence?.childCount}
+          lineageCollapsed={row.lineageCollapsed}
+          onLineageToggle={
+            row.occurrence?.childCount ? ctx.getLineageToggleHandler?.(lineageKey) : undefined
+          }
         />
         <div className="pointer-events-auto absolute right-3 top-1.5">
           <FolderPathStatusIndicator status={pathStatus} />

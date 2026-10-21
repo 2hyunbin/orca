@@ -1,3 +1,4 @@
+import { mergeWorktreeMetaForWrite } from '../persistence/loading-store/worktree-meta-write-normalization'
 import { describe, expect, it, vi } from 'vitest'
 import { mergeWorktree } from '../ipc/worktree-metadata-merge'
 import type { WorktreeLineage } from '../../shared/worktree/lineage-types'
@@ -10,7 +11,11 @@ import { recordCreatedWorktreeLineage } from './runtime-worktree-lineage-recordi
 function row(id: string): ResolvedWorktree {
   const git = { path: `/${id}`, head: '', branch: id, isBare: false, isMainWorktree: false }
   return {
-    ...mergeWorktree('repo', git, { instanceId: id, hostId: 'local' }),
+    ...mergeWorktree(
+      'repo',
+      git,
+      mergeWorktreeMetaForWrite(undefined, { instanceId: id, hostId: 'local' })
+    ),
     id,
     git,
     parentWorktreeId: null,
@@ -31,17 +36,37 @@ function edge(child: string, parent: string, external = false): WorktreeLineage 
   }
 }
 function setup(links: Record<string, WorktreeLineage>) {
-  // SAFETY: these tests exercise only the controller's saved lineage reads and the recorder's writes.
   const store = {
-    getWorktreeMeta: (id: string) => ({ instanceId: id, hostId: 'local' }),
+    getRepo: () => undefined,
+    addRepo: vi.fn<RuntimeStore['addRepo']>(),
+    updateRepo: vi.fn<RuntimeStore['updateRepo']>(),
+    removeWorktreeMeta: vi.fn<RuntimeStore['removeWorktreeMeta']>(),
+    getGitHubCache: vi.fn<RuntimeStore['getGitHubCache']>(),
+    getSettings: () => ({
+      workspaceDir: '',
+      nestWorkspaces: false,
+      refreshLocalBaseRefOnWorktreeCreate: false,
+      branchPrefix: 'none',
+      branchPrefixCustom: ''
+    }),
+    getAllWorktreeMeta: () =>
+      Object.fromEntries(
+        Object.values(links)
+          .flatMap((e) => [e.worktreeId, e.parentWorktreeId])
+          .map((id) => [id, row(id)])
+      ),
+    getAllWorktreeLineage: () => links,
+    getWorktreeMeta: (id: string) => row(id),
     getRepos: () => [],
     getWorktreeLineage: (id: string) => links[id],
     getAllWorkspaceLineage: () => ({}),
-    setWorktreeMeta: vi.fn(),
+    setWorktreeMeta: vi.fn<RuntimeStore['setWorktreeMeta']>(),
     removeWorktreeLineage: vi.fn(),
     setWorktreeLineage: vi.fn((_target, lineage: WorktreeLineage) => lineage),
-    setWorkspaceLineage: vi.fn((lineage) => lineage)
-  } as unknown as RuntimeStore
+    setWorkspaceLineage: vi.fn<NonNullable<RuntimeStore['setWorkspaceLineage']>>(
+      (lineage) => lineage
+    )
+  } satisfies RuntimeStore
   const controller = new RuntimeWorktreeLineageController({
     getStore: () => store,
     getDb: () => null,
@@ -89,7 +114,8 @@ describe('cross-machine lineage writes', () => {
       [{ C: edge('C', 'P', true) }, 'R', 'C', externalAncestry],
       [{ Q: edge('Q', 'R'), R: edge('R', 'C', true) }, 'P', 'Q', externalAncestry],
       [{ C: edge('C', 'P', true), P: edge('P', 'C') }, 'C', 'P', 'cycle'],
-      [{ Q: edge('Q', 'P') }, 'P', 'Q', 'cycle']
+      [{ Q: edge('Q', 'P') }, 'P', 'Q', 'cycle'],
+      [{ C: edge('C', 'P'), P: edge('P', 'Q'), Q: edge('Q', 'C') }, 'C', 'Q', 'cycle']
     ]
     for (const [links, child, parent, error] of cases) {
       expect(() => setup(links).controller.validateParent(row(child), row(parent))).toThrow(error)
@@ -114,6 +140,40 @@ describe('cross-machine lineage writes', () => {
       })
     })
     expect(() => controller.validateParent(row('P'), row('folder:F'))).toThrow(
+      'chain reaches another Orca install'
+    )
+  })
+  it('uses the selected parent saved-null authority instead of another host raw external edge', async () => {
+    const { store, controller } = setup({ P: edge('P', 'Q', true) })
+    Object.assign(store, {
+      getAllWorktreeMeta: () => ({ P: { ...row('P'), hostId: 'ssh:owner' } })
+    })
+    const parent = { ...row('P'), savedLineage: null }
+    const child = row('C')
+    const resolveWorktree = vi.fn(async (selector: string) =>
+      selector === 'id:P' ? parent : child
+    )
+    await updateRuntimeManagedWorktreeMetadata({
+      selector: 'id:C',
+      updates: {
+        lineage: { parentWorktreeRef: { worktreeId: 'P', instanceId: 'P', external: false } }
+      },
+      store,
+      ports: {
+        resolveWorktree,
+        validateParent: (c, p) => controller.validateParent(c, p),
+        invalidateResolved: vi.fn(),
+        invalidateScan: vi.fn(),
+        notifyChanged: vi.fn(),
+        showWorktree: async () => child
+      }
+    })
+    expect(resolveWorktree).toHaveBeenCalledWith('id:P', 'P')
+    expect(store.setWorktreeLineage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ parentWorktreeId: 'P' })
+    )
+    expect(() => controller.validateParent(child, { ...row('P'), hostId: 'ssh:owner' })).toThrow(
       'chain reaches another Orca install'
     )
   })

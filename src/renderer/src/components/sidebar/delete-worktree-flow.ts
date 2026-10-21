@@ -13,6 +13,7 @@ import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import {
+  getRegisteredWorktreeDeleteTarget,
   resolveWorktreeBatchDeleteTargets,
   toWorktreeDeleteIdentities,
   type WorktreeBatchDeleteOptions,
@@ -123,7 +124,7 @@ export function runWorktreeBatchDelete(
 ): boolean {
   const state = useAppStore.getState()
   const targets = resolveWorktreeBatchDeleteTargets(requestedWorktrees, (worktreeId, hostId) =>
-    getWorktreeOnHostFromState(state, worktreeId, hostId)
+    getRegisteredWorktreeDeleteTarget(state, worktreeId, hostId)
   )
   if (!targets) {
     showWorkspaceListChangedToast()

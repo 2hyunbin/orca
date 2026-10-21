@@ -157,6 +157,21 @@ describe('host-qualified scoped worktree resolution', () => {
       parentWorktreeId: parentId,
       lineage
     })
+    // A failed scan must not turn a copied instance into a unique rename fallback.
+    deps.store.getRepos().push(repo('copy', '/copy', { executionHostId: 'local' }))
+    deps.metaById['copy::/copy'] = { ...deps.metaById[parentId], hostId: 'local' }
+    lineage.parentWorktreeId = 'old::/missing'
+    deps.scanRepo.mockImplementation(async (owner) =>
+      owner.id === 'copy'
+        ? { ok: false, worktrees: [] }
+        : { ok: true, worktrees: [gitWorktree(owner === local ? '/child' : '/parent')] }
+    )
+    const ambiguous = await resolveScopedWorktreeIdRow(deps, childId, 'local')
+    expect(ambiguous?.parentWorktreeId).toBeNull()
+    expect(
+      ambiguous && projectWorktreeLineageWithHostPeers(deps.store, [ambiguous])[0].parentWorktreeId
+    ).toBeNull()
+    expect(deps.metaById['copy::/copy'].instanceId).toBe(deps.metaById[parentId].instanceId)
   })
 
   it('scans only the selected local or SSH owner when repo ids and paths collide', async () => {

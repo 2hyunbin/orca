@@ -273,7 +273,7 @@ export async function resolveScopedWorktreeIdRow(
   const projected = projectResolvedWorktreeLineage(
     [...ownerRows, ...otherRows.flat()],
     lineageById,
-    snapshot.folders,
+    snapshot.rows,
     metaById
   )
   return projected[ownerRows.indexOf(target)] ?? null

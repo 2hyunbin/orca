@@ -45,6 +45,7 @@ export type GroupHeaderRow = {
 
 export type WorktreeRow = {
   occurrence?: WorktreeOccurrence<Worktree>
+  lineageCollapsed?: boolean
   type: 'item'
   rowKey: string
   sectionKey: string
@@ -99,6 +100,8 @@ export type PendingCreationRow = {
 }
 
 export type FolderWorkspaceRow = {
+  occurrence?: WorktreeOccurrence<Worktree>
+  lineageCollapsed?: boolean
   type: 'folder-workspace'
   key: string
   folderWorkspace: FolderWorkspace

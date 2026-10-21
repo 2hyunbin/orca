@@ -129,7 +129,7 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     const worktrees = projectResolvedWorktreeLineage(
       perRepoWorktrees.flat(),
       snapshot.lineageById,
-      snapshot.folders,
+      snapshot.rows,
       snapshot.rawMetadata
     )
     return { worktrees, platformByRepoId }

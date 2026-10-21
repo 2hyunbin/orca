@@ -4,6 +4,18 @@ import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
 import { getLineagePlacementRows } from '../worktree-occurrence-plan'
 import { getSidebarLineageParentsByIdentity } from './worktree-lineage-projection'
 
+export function getSidebarLineageRowsByIdentity(
+  worktrees: readonly Worktree[],
+  worktreeMap: ReadonlyMap<string, Worktree>
+): Map<string, Worktree> {
+  return new Map(
+    [...worktreeMap.values(), ...worktrees].map((worktree) => [
+      getWorktreeHostIdentity(worktree),
+      worktree
+    ])
+  )
+}
+
 export function getSidebarLineageChildren(
   worktrees: readonly Worktree[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,

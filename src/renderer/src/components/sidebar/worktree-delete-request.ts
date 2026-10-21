@@ -1,3 +1,8 @@
+import type { AppState } from '@/store/types'
+import { getWorktreeOnHostFromState } from '@/store/selectors'
+import { findIndexedFolderWorkspaceOwner } from '@/lib/worktree-runtime-owner-index'
+import { getFolderWorkspaceWorktree } from '@/store/slices/worktrees/listing/detected-worktree-meta'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { PreservedBranchCleanup } from '@/lib/preserved-branch-cleanup'
 import { normalizeExecutionHostId } from '../../../../shared/execution-host'
@@ -39,6 +44,23 @@ export type WorktreeDeleteTargetLookup = (
   worktreeId: string,
   hostId: ExecutionHostId | undefined
 ) => Worktree | undefined
+
+export function getRegisteredWorktreeDeleteTarget(
+  state: Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces'>,
+  id: string,
+  hostId: ExecutionHostId | undefined
+): Worktree | undefined {
+  const scope = parseWorkspaceKey(id)
+  if (scope?.type !== 'folder') {
+    return getWorktreeOnHostFromState(state, id, hostId)
+  }
+  const folder = findIndexedFolderWorkspaceOwner(
+    state.folderWorkspaces,
+    scope.folderWorkspaceId,
+    hostId
+  )
+  return folder ? getFolderWorkspaceWorktree(folder) : undefined
+}
 
 export function resolveWorktreeBatchDeleteTargets(
   requestedWorktrees: readonly string[] | readonly WorktreeDeleteIdentity[],

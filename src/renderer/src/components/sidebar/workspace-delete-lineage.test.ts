@@ -221,10 +221,10 @@ describe('getWorkspaceDeleteLineage', () => {
       instanceId: 'ssh-child',
       hostId: SSH_HOST
     }
-    const sshChild = {
+    const sshChild: Worktree = {
       ...sshChildBase,
       savedLineage: makeLineage(sshChildBase, sshParent)
-    } as Worktree
+    }
 
     const lineage = getWorkspaceDeleteLineage(
       sshParent,

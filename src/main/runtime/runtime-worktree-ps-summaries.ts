@@ -1,3 +1,4 @@
+import { runtimeVisibleFolderWorkspaces } from './runtime-visible-catalog'
 import { projectResolvedWorktreeLineage } from '../../shared/resolved-worktree-lineage'
 import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
@@ -20,7 +21,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
   const projectGroupById = new Map(
     (args.store?.getProjectGroups?.() ?? []).map((group) => [group.id, group])
   )
-  const folders = (args.store?.getFolderWorkspaces?.() ?? []).filter(
+  const folders = (args.store ? runtimeVisibleFolderWorkspaces(args.store) : []).filter(
     (folder) => projectGroupById.get(folder.projectGroupId)?.parentPath
   )
   const projected = projectResolvedWorktreeLineage(

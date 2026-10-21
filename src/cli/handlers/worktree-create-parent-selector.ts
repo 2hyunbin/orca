@@ -1,7 +1,11 @@
 import type { RuntimeStatus, RuntimeWorktreeRecord } from '../../shared/runtime-types'
 import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
 import { assertCrossMachineLineageSupported } from '../../shared/worktree-runtime-capabilities'
-import { isWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
+import {
+  isWorkspaceKey,
+  parseWorkspaceKey,
+  worktreeWorkspaceKey
+} from '../../shared/workspace-scope'
 import { getOptionalStringFlag } from '../flags'
 import { RuntimeClientError, RuntimeClient } from '../runtime-client'
 import { getOptionalWorktreeSelector } from '../selectors'
@@ -98,10 +102,14 @@ export async function resolveCallerParentRef(
     return undefined
   }
   const local = localParentClient(client)
+  const workspace = parseWorkspaceKey(selector)
+  const parentSelector = workspace?.type === 'worktree' ? `id:${workspace.worktreeId}` : selector
   let parent: RuntimeWorktreeRecord
   try {
     parent = (
-      await local.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', { worktree: selector })
+      await local.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
+        worktree: parentSelector
+      })
     ).result.worktree
   } catch (error) {
     if (explicit) {
@@ -116,22 +124,20 @@ export async function resolveCallerParentRef(
     }
     return undefined
   }
-  if (client.isRemote) {
-    const status = (await client.call<RuntimeStatus>('status.get')).result
-    try {
-      assertCrossMachineLineageSupported(
-        status.capabilities,
-        client.environmentSelector ?? 'the connected server'
-      )
-    } catch (error) {
-      if (explicit) {
-        throw error
-      }
-      console.error(
-        `warning: ${error instanceof Error ? error.message : 'Update the connected server to nest across machines.'} Creating without a parent.`
-      )
-      return undefined
+  const status = (await client.call<RuntimeStatus>('status.get')).result
+  try {
+    assertCrossMachineLineageSupported(
+      status.capabilities,
+      client.environmentSelector ?? 'the connected server'
+    )
+  } catch (error) {
+    if (explicit) {
+      throw error
     }
+    console.error(
+      `warning: ${error instanceof Error ? error.message : 'Update the connected server to nest across machines.'} Creating without a parent.`
+    )
+    return undefined
   }
   return { worktreeId: parent.id, instanceId, external: true }
 }

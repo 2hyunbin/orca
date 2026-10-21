@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type * as RuntimeClientModule from '../runtime-client'
-import type { RuntimeClient } from '../runtime-client'
+import { RuntimeClient } from '../runtime-client'
 import { WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY } from '../../shared/worktree-runtime-capabilities'
 
 const { localCall, localConstructor } = vi.hoisted(() => ({
@@ -28,22 +28,24 @@ function context(capabilities: string[], explicit: boolean) {
     hostId: 'local',
     path: '/unmanaged'
   }
-  localCall.mockImplementation(async (method) => ({
-    result: method === 'worktree.list' ? { worktrees: [parent] } : { worktree: parent }
-  }))
+  localCall.mockImplementation(async (method, params) => {
+    if (method === 'worktree.show' && params.worktree !== `id:${parent.id}`) {
+      throw new Error('selector_not_found')
+    }
+    return { result: method === 'worktree.list' ? { worktrees: [parent] } : { worktree: parent } }
+  })
   const call = vi.fn(async (method: string) => ({
     result:
       method === 'status.get'
         ? { capabilities }
         : { worktree: { id: 'repo::/child' }, warnings: [] }
   }))
-  // SAFETY: the handler uses only these client fields and call; each response is scoped to that method.
-  const client = {
+  const client = Object.assign(new RuntimeClient('/tmp/cml-v3-cli', 60_000, null, null), {
     userDataPath: '/tmp/cml-v3-cli',
     isRemote: true,
     environmentSelector: 'Build server',
     call
-  } as unknown as RuntimeClient
+  })
   const flags = new Map<string, string | boolean>([
     ['repo', 'id:repo'],
     ['name', 'child']
@@ -101,17 +103,22 @@ describe('caller-side cross-machine create', () => {
 
   it('sends the caller parent identity to a capable server', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
-    const capable = context([WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY], true)
-    await WORKTREE_HANDLERS['worktree create'](capable.context)
-    expect(capable.call).toHaveBeenCalledWith(
-      'worktree.create',
-      expect.objectContaining({
-        parentWorktreeRef: {
-          worktreeId: 'repo::/parent',
-          instanceId: 'parent-instance',
-          external: true
-        }
-      })
-    )
+    for (const env of ['ORCA_WORKSPACE_ID', 'ORCA_WORKTREE_ID']) {
+      vi.stubEnv(env, env === 'ORCA_WORKSPACE_ID' ? 'worktree:repo::/parent' : 'repo::/parent')
+      const capable = context([WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY], false)
+      await WORKTREE_HANDLERS['worktree create'](capable.context)
+      expect(capable.call).toHaveBeenCalledWith(
+        'worktree.create',
+        expect.objectContaining({
+          parentWorktreeRef: {
+            worktreeId: 'repo::/parent',
+            instanceId: 'parent-instance',
+            external: true
+          }
+        })
+      )
+      expect(localCall).toHaveBeenCalledWith('worktree.show', { worktree: 'id:repo::/parent' })
+      vi.unstubAllEnvs()
+    }
   })
 })

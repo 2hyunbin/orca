@@ -1,7 +1,21 @@
+import { makeFolderWorkspace } from '../worktree-jump-palette-test-fixtures'
+import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
+import {
+  getRegisteredWorktreeDeleteTarget,
+  resolveWorktreeBatchDeleteTargets,
+  toWorktreeDeleteIdentities
+} from './worktree-delete-request'
+import { isFolderWorkspaceDelete } from './delete-worktree-dialog-copy'
+import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const state = {
+    folderWorkspaces: [] as FolderWorkspace[],
+    deleteFolderWorkspace: vi.fn().mockResolvedValue(true),
+    activeWorktreeId: null as string | null,
+    setActiveWorktree: vi.fn(),
+    worktreesByRepo: {},
     worktreeMap: new Map<string, unknown>(),
     worktreeRows: [] as unknown[],
     activeWorkspaceExecutionHostId: null as string | null,
@@ -86,6 +100,8 @@ function deferredDeleteResult(): {
 
 describe('runWorktreeDeletesInParallel', () => {
   beforeEach(() => {
+    mocks.state.folderWorkspaces = []
+    mocks.state.deleteFolderWorkspace.mockClear()
     mocks.state.removeWorktree.mockReset().mockResolvedValue({ ok: true })
     mocks.state.clearWorktreeDeleteState.mockClear()
     mocks.state.markWorktreesDeleting.mockClear()
@@ -100,6 +116,33 @@ describe('runWorktreeDeletesInParallel', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('confirms mixed registered folders and preserves their existing removal route and stale-owner refusal', async () => {
+    const folder = makeFolderWorkspace({ executionHostId: 'local' })
+    const row = folderWorkspaceToWorktree(folder)
+    mocks.state.folderWorkspaces = [folder]
+    const requested = toWorktreeDeleteIdentities([row])
+    expect(
+      resolveWorktreeBatchDeleteTargets(requested, (id, host) =>
+        getRegisteredWorktreeDeleteTarget(mocks.state, id, host)
+      )
+    ).toEqual([row])
+    expect(isFolderWorkspaceDelete(new Map(), row)).toBe(true)
+    const git = { id: 'git', instanceId: 'git', displayName: 'Git', repoId: 'repo', path: '/git' }
+    await expect(runDeletesForCurrentWorktrees([row, git])).resolves.toHaveLength(2)
+    expect(mocks.state.deleteFolderWorkspace).toHaveBeenCalledWith(folder.id, {
+      executionHostId: 'local'
+    })
+    expect(mocks.state.removeWorktree).toHaveBeenCalledTimes(1)
+    const pending = deferredDeleteResult()
+    mocks.state.removeWorktree.mockReturnValueOnce(pending.promise)
+    const queued = runDeletesForCurrentWorktrees([row, { ...git, path: `${row.path}/child` }])
+    await vi.waitFor(() => expect(mocks.state.removeWorktree).toHaveBeenCalledTimes(2))
+    mocks.state.folderWorkspaces = [{ ...folder, executionHostId: 'ssh:replacement' }]
+    pending.resolve({ ok: true })
+    await expect(queued).resolves.toEqual([{ id: git.id, executionHostId: null }])
+    expect(mocks.state.deleteFolderWorkspace).toHaveBeenCalledTimes(1)
   })
 
   it('uses one snapshot prune batch for a 100-workspace delete', async () => {

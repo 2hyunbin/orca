@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => {
     repos: [] as { id: string; displayName: string; connectionId?: string }[],
     worktreeLineageById: {},
     allWorktrees: () => Array.from(state.worktreeMap.values()),
+    get worktreesByRepo() {
+      return { 'repo-1': state.allWorktrees() }
+    },
     clearWorktreeDeleteState: vi.fn((worktreeId: string) => {
       delete state.deleteStateByWorktreeId[worktreeId]
     }),

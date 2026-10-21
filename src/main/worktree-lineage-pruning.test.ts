@@ -1,3 +1,4 @@
+import { mergeWorktreeMetaForWrite } from './persistence/loading-store/worktree-meta-write-normalization'
 import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../shared/repo-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../shared/worktree/lineage-types'
@@ -72,14 +73,13 @@ describe('pruneLineageForMissingRepoWorktrees', () => {
         ...lineage(child, parent),
         ...(external ? { parentStore: 'external' as const } : {})
       }
-      // SAFETY: pruning reads only the host and instance of these persisted metadata rows.
-      const metadata = {
-        [child]: { hostId: 'local' },
-        [parent]: {
+      const metadata: Record<string, WorktreeMeta> = {
+        [child]: mergeWorktreeMetaForWrite(undefined, { hostId: 'local' }),
+        [parent]: mergeWorktreeMetaForWrite(undefined, {
           hostId: external ? 'local' : 'ssh:other',
           instanceId: edge.parentWorktreeInstanceId
-        }
-      } as Record<string, WorktreeMeta>
+        })
+      }
       const store = createStore({ [child]: edge }, {}, metadata)
       pruneLineageForMissingRepoWorktrees(store, repo, [
         { path: '/repo/child', head: 'a', branch: 'child', isBare: false, isMainWorktree: false }

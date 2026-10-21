@@ -1,3 +1,4 @@
+import type { RenderableFolderWorkspace } from './folder-workspace-lanes'
 import type { Repo } from '../repo-types'
 import type { WorktreeOccurrencePlan } from '../worktree-occurrence-plan'
 import type { Worktree } from '../worktree/types'
@@ -25,7 +26,8 @@ export function emitPinnedGroup(
   result: Row[],
   occurrencePlan: WorktreeOccurrencePlan<Worktree>,
   noticeHostContextLabelByRepoId?: ReadonlyMap<string, NoticeHostContext>,
-  hostContextLabelByWorktreeIdentity?: ReadonlyMap<string, string>
+  hostContextLabelByWorktreeIdentity?: ReadonlyMap<string, string>,
+  folderByIdentity?: ReadonlyMap<string, RenderableFolderWorkspace>
 ): void {
   if (pinnedSectionWorktrees.length === 0) {
     return
@@ -73,6 +75,7 @@ export function emitPinnedGroup(
 
   const firstItemIndex = result.length
   appendWorktreeRows(result, repoMap, occurrencePlan, {
+    folderByIdentity,
     collapsedGroups,
     groupDepth: 0,
     sectionKey: PINNED_GROUP_KEY,
