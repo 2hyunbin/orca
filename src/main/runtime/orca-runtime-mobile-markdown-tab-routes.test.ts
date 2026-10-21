@@ -313,6 +313,64 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
   })
 })
 
+/** The workspace moves to `to` right after the save's first route lookup. */
+function moveWorkspaceAfterFirstLookup(runtime: Runtime, to: ExecutionHostId): void {
+  const resolve = vi.mocked(runtime.resolveRuntimeFileTarget)
+  const before = resolve.getMockImplementation()!
+  resolve.mockImplementation(async (selector) => {
+    const target = await before(selector)
+    return resolve.mock.calls.length > 1 ? { ...target, executionHostId: to } : target
+  })
+}
+
+describe("a phone's Markdown save whose workspace moves host mid-save", () => {
+  it('still writes on the server it started on, pinned, never on local disk', async () => {
+    const { desktop, call, serverCalls, pins } = await desktopOnServer()
+    const forward = call.getMockImplementation()!
+    // The server accepts the write without touching the shared temp disk, so any change there is local.
+    call.mockImplementation(async (environmentId, method, params, timeout, envelope, internal) => {
+      if (method !== FILE_WRITE_IF_UNCHANGED_METHOD) {
+        return forward(environmentId, method, params, timeout, envelope, internal)
+      }
+      serverCalls.push(method)
+      pins.push(internal?.expectedEnvironmentPairingRevision)
+      return { ok: true }
+    })
+    moveWorkspaceAfterFirstLookup(desktop, 'local')
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+    expect(serverCalls).toEqual(['files.read', 'status.get', FILE_WRITE_IF_UNCHANGED_METHOD])
+    expect(pins).toEqual([PAIRING_REVISION, PAIRING_REVISION, PAIRING_REVISION])
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
+  })
+
+  it('still writes on local disk when it started local, never on a server', async () => {
+    const runtime = await runtimeOnHost('local')
+    const forwards = vi
+      .spyOn(runtime, 'callOrchestrationWorkerServer')
+      .mockRejectedValue(new Error('no server'))
+    moveWorkspaceAfterFirstLookup(runtime, 'runtime:env-a')
+
+    await expect(
+      runtime.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+    expect(await readFile(readme, 'utf8')).toBe('# Phone\n')
+    expect(forwards).not.toHaveBeenCalled()
+  })
+})
+
 describe("a phone's Markdown tab on a raw ssh: host", () => {
   it('refuses it with the same error on read and save', async () => {
     const runtime = await runtimeOnHost('ssh:target-1')

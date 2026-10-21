@@ -50,8 +50,16 @@ export type MarkdownTabDiskRuntime = RuntimeLocalFileHost &
     environmentPairingRevision(environmentId: string): number | undefined
   }
 
+/** One workspace's file route; `pairingRevision` is the pairing a save captured, unset for a read. */
+type MarkdownFileRoute =
+  | { environmentId: string; pairingRevision: number | undefined }
+  | { environmentId: null; target: ResolvedRuntimeFileTarget }
+
 export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): MarkdownTabDiskHost {
-  const routeOf = async (worktreeId: string, file: MarkdownFileAddress) => {
+  const routeOf = async (
+    worktreeId: string,
+    file: MarkdownFileAddress
+  ): Promise<MarkdownFileRoute> => {
     // Why: a file outside the workspace on an SSH host is that host's; no process here serves it.
     if (file.externalSshTargetId) {
       throw new SshHostNotServedError(file.externalSshTargetId)
@@ -59,22 +67,23 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
     const target = await runtime.resolveRuntimeFileTarget(`id:${worktreeId}`)
     const host = parseExecutionHostId(target.executionHostId)
     if (host?.kind === 'runtime') {
-      return { environmentId: host.environmentId, target }
+      return { environmentId: host.environmentId, pairingRevision: undefined }
     }
     requireLocalRuntimeFileRoute(target)
     return { environmentId: null, target }
   }
-  // `pairingRevision` is the pairing a save captured before its first call; a phone read leaves it unset.
-  const fileIo = (pairingRevision: number | undefined): MarkdownFileIo => ({
+  const fileIo = (
+    routeFor: (worktreeId: string, file: MarkdownFileAddress) => Promise<MarkdownFileRoute>
+  ): MarkdownFileIo => ({
     readFile: async (worktreeId, file, maxBytes) => {
-      const { environmentId } = await routeOf(worktreeId, file)
-      if (environmentId) {
+      const route = await routeFor(worktreeId, file)
+      if (route.environmentId !== null) {
         return readFileOnEnvironment(
           runtime.callEnvironment,
-          environmentId,
+          route.environmentId,
           worktreeId,
           file,
-          pairingRevision
+          route.pairingRevision
         )
       }
       const { bytes, size } = await readLocalRuntimeFilePrefix(
@@ -88,19 +97,19 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
       return { content: bytes.toString('utf8'), byteLength: size }
     },
     writeFileIfUnchanged: async (worktreeId, file, content, precondition) => {
-      const { environmentId, target } = await routeOf(worktreeId, file)
-      if (environmentId) {
+      const route = await routeFor(worktreeId, file)
+      if (route.environmentId !== null) {
         return writeFileOnEnvironment(
           runtime.callEnvironment,
-          environmentId,
-          pairingRevision,
+          route.environmentId,
+          route.pairingRevision,
           worktreeId,
           file,
           content,
           precondition
         )
       }
-      return requireRuntimeFileProvider(target, runtime).writeFileWithDiskPrecondition(
+      return requireRuntimeFileProvider(route.target, runtime).writeFileWithDiskPrecondition(
         file.filePath,
         content,
         precondition
@@ -110,10 +119,15 @@ export function createMarkdownTabDiskHost(runtime: MarkdownTabDiskRuntime): Mark
   return {
     getWorkspaceSessionForWorktree: (worktreeId) =>
       runtime.getWorkspaceSessionForWorktree(worktreeId),
-    readFile: fileIo(undefined).readFile,
+    readFile: fileIo(routeOf).readFile,
     forSave: async (worktreeId, file) => {
-      const { environmentId } = await routeOf(worktreeId, file)
-      return fileIo(environmentId ? pairingRevisionOf(runtime, environmentId) : undefined)
+      const found = await routeOf(worktreeId, file)
+      // Why: a workspace that moves host mid-save must not take the write somewhere unpinned.
+      const route: MarkdownFileRoute =
+        found.environmentId !== null
+          ? { ...found, pairingRevision: pairingRevisionOf(runtime, found.environmentId) }
+          : found
+      return fileIo(async () => route)
     }
   }
 }
