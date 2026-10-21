@@ -22,6 +22,9 @@ import { updateTransform } from './viewport-transform'
 import { viewportPoint } from './viewport-cell'
 import { attachSurfaceWheelHandler } from './wheel-scroll'
 
+/** How long after the last touchmove its velocity still launches momentum, in milliseconds. */
+const RELEASE_VELOCITY_MAX_AGE_MS = 100
+
 /** A surface that has already been wired, so a re-mount does not stack handlers. */
 type TerminalGestureSurface = HTMLElement & { __orcaSurfaceHandlersAttached?: boolean }
 
@@ -106,6 +109,8 @@ export function attachSurfaceEventHandlers(
       if (scope.touchGesture.momentumId) {
         cancelAnimationFrame(scope.touchGesture.momentumId)
         scope.touchGesture.momentumId = null
+        // Why: this touch stopped a coast; lifting it must not also tap.
+        scope.tapCandidate = null
       }
       const touches = touchesInRoot(scope.root, e.touches)
       if (touches.length === 2) {
@@ -193,6 +198,8 @@ export function attachSurfaceEventHandlers(
           if (lines !== 0) {
             scope.touchGesture.accumDelta -= lines * effectiveCellH
             routeScrollLines(scope, lines, x, y)
+            // Why: a touch that scrolled a row is a scroll, even inside TAP_SLOP.
+            scope.tapCandidate = null
           }
         } else {
           if (enqueueNormalBufferScrollDelta(scope, deltaY)) {
@@ -247,7 +254,9 @@ export function attachSurfaceEventHandlers(
       }
 
       if (touches.length === 0) {
-        let vel = scope.touchGesture.velY
+        // Why: velY is the speed of the last move; a finger that then rested has none to launch.
+        const rested = Date.now() - scope.touchGesture.lastTime > RELEASE_VELOCITY_MAX_AGE_MS
+        let vel = rested ? 0 : scope.touchGesture.velY
         const FRICTION = 0.972
         const MIN_VEL = 0.012
         let lastMomentumTime = performance.now()
