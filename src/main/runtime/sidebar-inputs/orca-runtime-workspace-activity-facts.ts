@@ -1,4 +1,5 @@
-import { OrcaRuntimeWithAgentTransitions } from '../orca-runtime-agent-transitions'
+import type { OrcaRuntimeWithAgentTransitions } from '../orca-runtime-agent-transitions'
+import { OrcaRuntimeWithExternalConversations } from '../orca-runtime-external-conversations'
 import type { PtyLivenessVerdict } from '../../../shared/pty-liveness-verdict'
 import type {
   WorkspaceActivityFactsSnapshot,
@@ -19,7 +20,7 @@ type Runtime = OrcaRuntimeWithAgentTransitions
  * replaces the tabs agent rows are attributed through, and the PTY liveness writers no
  * publication follows: exits, verdicts and the inventory sweep.
  */
-export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeWithAgentTransitions {
+export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeWithExternalConversations {
   readonly sidebarClock = new SidebarClock()
   readonly workspaceActivityFacts = new WorkspaceActivityFactsProducer({
     readSurfaces: (worktreeId) => this.readWorkspaceSurfaceActivity(worktreeId),
