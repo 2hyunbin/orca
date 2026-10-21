@@ -1,9 +1,5 @@
-import { z } from 'zod'
-import { WorktreeSelector } from '../../../../shared/rpc-contract/worktree-params'
+import { WorktreeSleepParams } from '../../../../shared/rpc-contract/worktree-params'
 import { defineMethod } from '../core'
-
-// Why optional: an older host strips the unknown field and marks its chats asleep as before.
-const WorktreeSleepParams = WorktreeSelector.extend({ markChatsAsleep: z.boolean().optional() })
 
 export const WORKTREE_SLEEP_METHOD = defineMethod({
   name: 'worktree.sleep',

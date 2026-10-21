@@ -1,4 +1,3 @@
-import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import type { TerminalState } from './terminal-state'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TabSplitTarget } from '../slices/tabs/tabs-slice-contract'
@@ -7,7 +6,8 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import type {
   AgentProviderSessionMetadata,
-  SleepingAgentLaunchConfig
+  SleepingAgentLaunchConfig,
+  SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
 import type { StartupCommandDelivery } from '../../../../shared/codex-startup-delivery'
 import type { SessionOptionValue } from '../../../../shared/native-chat-session-options'
