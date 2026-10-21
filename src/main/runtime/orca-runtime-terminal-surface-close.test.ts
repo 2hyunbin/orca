@@ -17,6 +17,7 @@ import {
   WORKTREE_ID,
   WORKTREE_PATH,
   createHarness,
+  expectDesktopDropsPane,
   makeSession
 } from './__fixtures__/orca-runtime-terminal-close-continuity-fixtures'
 import {
@@ -200,8 +201,8 @@ describe('CLI close of one pane in a split tab', () => {
       root: { type: 'leaf', leafId: SIBLING_LEAF_ID },
       ptyIdsByLeafId: { [SIBLING_LEAF_ID]: SIBLING_PTY_ID }
     })
-    // No exit arrives to remove the pane, so the desktop renderer is told to drop that leaf.
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
+    // No exit arrives to remove the pane, so the desktop is told to drop that leaf.
+    expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
     expect(harness.closeTerminalTab).not.toHaveBeenCalled()
   })
 
@@ -224,7 +225,7 @@ describe('CLI close of one pane in a split tab', () => {
       type: 'leaf',
       leafId: SIBLING_LEAF_ID
     })
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
+    expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
     expect(harness.closeTerminalTab).not.toHaveBeenCalled()
   })
 
@@ -256,7 +257,7 @@ describe('CLI close of one pane in a split tab', () => {
         type: 'leaf',
         leafId: SIBLING_LEAF_ID
       })
-      expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
+      expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
       expect(harness.closeTerminalTab).not.toHaveBeenCalled()
       // The owed stop still goes out through the controller's kill, which records SSH pending kills.
       expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
