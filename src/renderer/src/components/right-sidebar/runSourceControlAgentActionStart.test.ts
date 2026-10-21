@@ -502,7 +502,13 @@ it.each(['--model gpt-5.6-luna', '--model gpt-5.6-sol'])(
       platform: 'linux',
       shell: 'posix',
       agentArgs,
-      ...terminalSessionOptionInputs({ agent: 'codex', agentArgs, shell: 'posix', ...nextOptions })
+      ...terminalSessionOptionInputs({
+        agent: 'codex',
+        agentArgs,
+        shell: 'posix',
+        sessionOptions: nextOptions.sessionOptions,
+        yieldToAgentArgs: nextOptions.sessionOptionsYieldToAgentArgs
+      })
     })
     expect(command).toMatchObject({ ok: true, appliedSessionOptions: { model: terra.model } })
     if (command.ok) {
