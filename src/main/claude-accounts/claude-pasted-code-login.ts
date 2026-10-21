@@ -66,7 +66,7 @@ export async function runClaudePastedCodeLogin(
   channel.signal.addEventListener('abort', abort, { once: true })
   let scanned = ''
   let prompted = false
-  let writeStdin: ((text: string) => void) | null = null
+  let sendToClaude: ((text: string) => void) | null = null
   let codeSent = false
   let browser: Awaited<ReturnType<typeof prepareClaudeSignInBrowser>> | null = null
   try {
@@ -76,8 +76,8 @@ export async function runClaudePastedCodeLogin(
       signal: controller.signal,
       keepStdinOpen: true,
       browser: browser.path,
-      onStdin: (write) => {
-        writeStdin = write
+      onStdin: (send) => {
+        sendToClaude = send
       },
       onStdout: (text) => {
         if (prompted) {
@@ -93,7 +93,7 @@ export async function runClaudePastedCodeLogin(
         void channel.nextCode().then(
           (code) => {
             codeSent = true
-            writeStdin?.(`${code}\n`)
+            sendToClaude?.(`${code}\n`)
           },
           () => {}
         )

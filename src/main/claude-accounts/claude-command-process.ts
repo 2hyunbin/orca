@@ -28,8 +28,8 @@ export type ClaudeCommandOptions = {
   browser?: string
   /** Every stdout chunk as Claude prints it. */
   onStdout?: (text: string) => void
-  /** Hands over a writer for Claude's stdin; needs `keepStdinOpen`. */
-  onStdin?: (write: (text: string) => void) => void
+  /** Hands over a sender for lines to Claude's stdin; needs `keepStdinOpen`. */
+  onStdin?: (send: (text: string) => void) => void
 }
 
 export function runClaudeCommandProcess(
