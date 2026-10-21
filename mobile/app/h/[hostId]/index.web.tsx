@@ -14,11 +14,7 @@ export default function HostWorktreeRoute() {
   return usePageOwnsHostArea() ? <WorkspaceDetailPlaceholder /> : <HostScreen />
 }
 
-/**
- * Erases the `action` the shell opened this page with (ruling 34). The list already read it from the
- * history the first `init` wrote; only the shell can stop a reload's `init` replaying it. Only a
- * shell that put `action` on the route hears this, so an older shell never receives the frame.
- */
+/** Spends the shell's `action` once read, so a reload's re-sent `init` cannot reopen the sheet (ruling 34). */
 function useSpendOpenedRouteAction(): void {
   const client = usePageBridgeClientIfPresent()
   useEffect(() => {
