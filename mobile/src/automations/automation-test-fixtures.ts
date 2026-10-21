@@ -66,7 +66,7 @@ export function automationTargets(): AutomationTargets {
           }
         ]
       })
-      .setups.map((setup) => ({ ...setup, label: 'Project' })),
+      .setups.map((setup) => ({ ...setup, label: 'Project', kind: setup.kind })),
     workspaces: [
       { worktreeId: 'workspace-1', repoId: 'repo-1', displayName: 'Main', path: '/repo' }
     ],

@@ -20,6 +20,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
   const readId = useRef(0)
   const locked = useRef(false)
   const mounted = useRef(false)
+  const streamReady = useRef(false)
 
   const refresh = useCallback(
     async (explicit = false) => {
@@ -62,30 +63,38 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
   )
 
   useEffect(() => {
+    if (!client || server) {
+      return
+    }
+    const stopEvents = client.subscribe(
+      'runtime.clientEvents.subscribe',
+      null,
+      (event: unknown) => {
+        if (!event || typeof event !== 'object' || !('type' in event)) {
+          return
+        }
+        if (event.type === 'end' || event.type === 'error') {
+          streamReady.current = false
+        }
+        if (event.type === 'ready' || event.type === 'automationsChanged') {
+          streamReady.current = true
+          void refresh()
+        }
+      }
+    )
+    return stopEvents
+  }, [client, server, refresh])
+
+  useEffect(() => {
     mounted.current = true
     setConnected(client?.getState() === 'connected')
-    let streamReady = false
     const stateChanged = () => {
       epoch.current++
-      streamReady = false
+      streamReady.current = false
       setConnected(client?.getState() === 'connected')
       void refresh()
     }
     const stopState = client?.onStateChange(stateChanged)
-    const stopEvents = !server
-      ? client?.subscribe('runtime.clientEvents.subscribe', null, (event: unknown) => {
-          if (!event || typeof event !== 'object' || !('type' in event)) {
-            return
-          }
-          if (event.type === 'end' || event.type === 'error') {
-            streamReady = false
-          }
-          if (event.type === 'ready' || event.type === 'automationsChanged') {
-            streamReady = true
-            void refresh()
-          }
-        })
-      : undefined
     const stopRevival = subscribeConnectionRevival(() => void refresh())
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
@@ -94,7 +103,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
     })
     // Server automation events are not relayed; visible reads also recover an interrupted stream.
     const poll = setInterval(() => {
-      if (AppState.currentState === 'active' && (server || !streamReady)) {
+      if (AppState.currentState === 'active' && (server || !streamReady.current)) {
         void refresh()
       }
     }, 15000)
@@ -102,7 +111,6 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
     return () => {
       mounted.current = false
       epoch.current++
-      stopEvents?.()
       stopState?.()
       stopRevival()
       appState.remove()

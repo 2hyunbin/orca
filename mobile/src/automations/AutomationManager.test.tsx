@@ -5,6 +5,7 @@ import { AutomationManager } from './AutomationManager'
 import { AutomationButton, AutomationChoice, AutomationField } from './AutomationControls'
 import { AutomationRunList } from './AutomationRunList'
 import { AutomationRunDetails } from './AutomationRunDetails'
+import type * as AutomationInventoryModule from './automation-target-inventory'
 import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
 import {
   automationClient,
@@ -31,7 +32,7 @@ vi.mock('../components/PickerModal', () => ({ PickerModal: 'PickerModal' }))
 vi.mock('../components/ConfirmModal', () => ({ ConfirmModal: 'ConfirmModal' }))
 vi.mock('../session/use-open-mobile-session', () => ({ useOpenMobileSession: () => () => {} }))
 vi.mock('./automation-target-inventory', async (original) => ({
-  ...(await original<typeof import('./automation-target-inventory')>()),
+  ...(await original<typeof AutomationInventoryModule>()),
   loadAutomationTargets: async () => automationTargets(),
   loadAutomationAgents: async () => [{ agent: 'codex', label: 'Codex' }]
 }))

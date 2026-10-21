@@ -11,7 +11,7 @@ import {
 } from '../session/mobile-session-read-operations'
 import { newTabSettingsRead } from '../transport/settings-read-operations'
 import { buildMobileNewTabAgentOptions } from '../session/mobile-new-tab-agent-options'
-import { loadMobileNewTabAgentOptions } from '../session/mobile-new-tab-agent-loader'
+import { loadMobileAgentLaunchContext } from '../session/mobile-new-tab-agent-loader'
 import type { RpcClient } from '../transport/rpc-client'
 import {
   automationProjectsRead,
@@ -110,11 +110,16 @@ export async function loadAutomationAgents(
   workspaceId?: string
 ) {
   if (workspaceId) {
-    return loadMobileNewTabAgentOptions({
+    const context = await loadMobileAgentLaunchContext({
       client,
       worktreeId: workspaceId,
       hostRefusesOtherRuntime: true
     })
+    const settings = agentSettingsSchema.safeParse(context.settings)
+    return buildMobileNewTabAgentOptions(
+      { disabledTuiAgents: settings.success ? settings.data.disabledTuiAgents : undefined },
+      context.detectedAgents
+    )
   }
   const host = parseExecutionHostId(setup.hostId)
   const detection =

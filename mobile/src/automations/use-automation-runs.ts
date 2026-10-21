@@ -112,13 +112,12 @@ export function useAutomationRuns(
       scope.current++
       lock.current = false
       refreshPending.current = false
-      setLoading(false)
     }
   }, [load, revision, connected])
   return {
     runs,
     cursor,
-    loading,
+    loading: connected && loading,
     error,
     loadMore: () => {
       if (cursor) {
