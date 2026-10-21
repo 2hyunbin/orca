@@ -12,6 +12,8 @@ import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 import { bindPaneFirst } from './bind-first-pane.test-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
+import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 
 const WORKTREE_ID = 'repo::/worktree'
 const REPO_ID = 'repo'
@@ -191,6 +193,19 @@ function coldRestoredRuntime(host: RestoreHost = LOCAL_HOST): {
       setWorkspaceSession: (next: WorkspaceSessionState, hostId?: ExecutionHostId) => {
         sessions.set(hostId ?? LOCAL_EXECUTION_HOST_ID, next)
       },
+      // A layout-owner build's own layout write, as the Store applies it to the routed partition.
+      applyLayoutCommand: async (command: LayoutCommand, hostIds: readonly ExecutionHostId[]) => {
+        const hostId = hostIds[0] ?? LOCAL_EXECUTION_HOST_ID
+        const change = applyCommandToSession(
+          hostId,
+          sessions.get(hostId) ?? getDefaultWorkspaceSession(),
+          command
+        )
+        if (change.session) {
+          sessions.set(hostId, change.session)
+        }
+        return change.value
+      },
       flushPendingOrThrowAsync: async () => {},
       // The production store commits asynchronously; a synchronous flush on these paths is a bug.
       flushOrThrow: () => {
@@ -317,7 +332,11 @@ describe('a restored terminal published before its PTY registers', () => {
 
     expect(await listedSurfaces(runtime)).toEqual([
       `tab::${LEFT}:ready`,
-      `tab::${RIGHT}:pending-handle`
+      `tab::${RIGHT}:pending-handle`,
+      // Main lists the other terminal's own tab from its layout, with or without the window's frame.
+      ...(ORCA_LAYOUT_OWNER_IS_MAIN
+        ? ['tab-other::44444444-4444-4444-8444-444444444444:ready']
+        : [])
     ])
   })
 })

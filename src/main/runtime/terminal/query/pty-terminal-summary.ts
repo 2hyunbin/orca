@@ -46,10 +46,8 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     const recorded = this.paneOfPty(pty)
     const pane = parsePaneKey(recorded.paneKey ?? '')
     const orphaned = !ptyHoldsRecordedSurface(pty.ptyId, recorded, this.ptySurfaceTopology())
-    // A restarted host's terminal has no title yet; until it has one, its tab's saved name stands in.
-    const title =
-      getLatestPtyTitle(this.getPtyDisplayRecord(pty)) ??
-      (orphaned ? null : this.getSavedTerminalTabCustomTitle(pty.worktreeId, recorded.tabId))
+    const processTitle = getLatestPtyTitle(this.getPtyDisplayRecord(pty))
+    const title = this.getPtyManualTitle(pty, orphaned) ?? processTitle
     const paneTitle =
       orphaned || !recorded.tabId || !pane
         ? null
@@ -87,20 +85,20 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
       ...this.resolvePaneAgentIdentityField(
         pty.launchAgent,
         pty.foregroundAgent,
-        title,
+        processTitle,
         recorded.paneKey
       )
     }
   }
 
-  protected getSavedTerminalTabCustomTitle(
-    worktreeId: string,
-    tabId: string | null
-  ): string | null {
-    const tab = this.getWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree[worktreeId]?.find(
-      (candidate) => candidate.id === tabId
-    )
-    return tab?.customTitle?.trim() || null
+  /** The terminal's manual name: its saved tab's, or the rename's while no saved tab holds it. */
+  protected getPtyManualTitle(pty: RuntimePtyWorktreeRecord, orphaned: boolean): string | null {
+    const tab = orphaned
+      ? undefined
+      : this.getWorkspaceSessionForWorktree(pty.worktreeId)?.tabsByWorktree[pty.worktreeId]?.find(
+          (candidate) => candidate.id === this.paneOfPty(pty).tabId
+        )
+    return tab ? tab.customTitle?.trim() || null : (pty.manualTitle ?? null)
   }
 
   protected getLiveLeafForHandle(handle: string): {

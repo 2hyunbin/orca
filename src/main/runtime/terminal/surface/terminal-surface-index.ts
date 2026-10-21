@@ -226,6 +226,14 @@ export class TerminalSurfaceIndex {
   /** A workspace main owns as today's `session.tabs` rows, from its owning partition's layout. */
   sessionTabsOf(worktreeId: string): ProjectedSessionTabs | null {
     this.surfaces()
+    return this.lastSessionTabsOf(worktreeId)
+  }
+
+  /** As sessionTabsOf, from the partitions last projected: reads no session. */
+  lastSessionTabsOf(worktreeId: string): ProjectedSessionTabs | null {
+    if (!this.current?.worktreeIds.has(worktreeId)) {
+      return null
+    }
     for (const [index, partition] of this.projectedFrom.entries()) {
       const hostId = this.projectedHostIds[index]
       for (const [key, workspace] of Object.entries(partition?.layout.workspaces ?? {})) {
