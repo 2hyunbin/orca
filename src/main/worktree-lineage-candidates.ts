@@ -38,6 +38,7 @@ function capture(store: CandidateStore) {
     Object.entries(rawMetadata).map(([id, meta]) => ({ id, meta }))
   ).map(({ id, meta }) => ({ id, meta: { ...meta } }))
   const repos = store.getRepos?.() ?? []
+  const repoHosts = new Map(repos.map((repo) => [repo, getRepoExecutionHostId(repo)]))
   const reposById = new Map<string, typeof repos>()
   for (const repo of repos) {
     reposById.set(repo.id, [...(reposById.get(repo.id) ?? []), repo])
@@ -80,6 +81,7 @@ function capture(store: CandidateStore) {
       connect(parent, edge.worktreeId)
     }
   }
+  let rows: Worktree[] | undefined
   return {
     lineageById,
     rawMetadata,
@@ -95,33 +97,34 @@ function capture(store: CandidateStore) {
       ])
     },
     folders,
-    rows: [
-      ...new Map(
-        [
-          ...metadata.map(({ id, meta }) => {
-            const owners = reposById.get(getRepoIdFromWorktreeId(id)) ?? []
-            const merged = mergeWorktree(
-              getRepoIdFromWorktreeId(id),
-              {
-                path: splitWorktreeId(id)?.worktreePath ?? '',
-                head: '',
-                branch: '',
-                isBare: false,
-                isMainWorktree: false
-              },
-              meta
-            )
-            return {
-              ...merged,
-              id,
-              hostId:
-                meta.hostId ?? (owners.length === 1 ? getRepoExecutionHostId(owners[0]) : undefined)
-            }
-          }),
-          ...folders
-        ].map((row) => [getWorktreeHostIdentity(row), row])
-      ).values()
-    ],
+    get rows() {
+      return (rows ??= [
+        ...new Map(
+          [
+            ...metadata.map(({ id, meta }) => {
+              const owners = reposById.get(getRepoIdFromWorktreeId(id)) ?? []
+              const merged = mergeWorktree(
+                getRepoIdFromWorktreeId(id),
+                {
+                  path: splitWorktreeId(id)?.worktreePath ?? '',
+                  head: '',
+                  branch: '',
+                  isBare: false,
+                  isMainWorktree: false
+                },
+                meta
+              )
+              return {
+                ...merged,
+                id,
+                hostId: meta.hostId ?? (owners.length === 1 ? repoHosts.get(owners[0]) : undefined)
+              }
+            }),
+            ...folders
+          ].map((row) => [getWorktreeHostIdentity(row), row])
+        ).values()
+      ])
+    },
     edgeOf: (
       row: Pick<
         Worktree,
