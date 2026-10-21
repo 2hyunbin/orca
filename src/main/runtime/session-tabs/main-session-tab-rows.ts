@@ -32,6 +32,11 @@ function isMainRow(row: Row): boolean {
   )
 }
 
+/** A terminal row with a manual name: its tab's custom title or its pane's own title. */
+function isNamed(row: Extract<Row, { type: 'terminal' }>): boolean {
+  return !!row.customTitle || !!row.parentLayout?.titlesByLeafId?.[row.leafId]?.trim()
+}
+
 /**
  * Main's row with the fields only the window knows, from the window's row of the same id. A
  * window terminal id names a pane main has not bound yet (an SSH restore before its terminal
@@ -40,16 +45,13 @@ function isMainRow(row: Row): boolean {
 function withWindowFacts(
   row: Row,
   windowRow: Row | undefined,
-  exited: (ptyId: string) => boolean,
-  windowTitles: boolean
+  exited: (ptyId: string) => boolean
 ): Row {
   if (row.type === 'terminal' && windowRow?.type === 'terminal') {
     return {
       ...row,
-      // The window's live title (shell or agent) unless either side has a manual name.
-      ...(windowTitles && !row.customTitle && !windowRow.customTitle
-        ? { title: windowRow.title }
-        : {}),
+      // The live title (shell or agent) unless either side has a manual name.
+      ...(!isNamed(row) && !isNamed(windowRow) ? { title: windowRow.title } : {}),
       ...(windowRow.terminalTheme ? { terminalTheme: windowRow.terminalTheme } : {}),
       ...(windowRow.agentStatus !== undefined ? { agentStatus: windowRow.agentStatus } : {}),
       ...(!row.ptyId && windowRow.ptyId && !exited(windowRow.ptyId)
@@ -130,8 +132,7 @@ function withWindowOnlyRows(
 export function withMainSessionTabRows(
   published: RuntimeMobileSessionTabsSnapshot,
   projected: MainSessionTabRows,
-  exited: (ptyId: string) => boolean,
-  opts: { windowTitles: boolean } = { windowTitles: true }
+  exited: (ptyId: string) => boolean
 ): RuntimeMobileSessionTabsSnapshot {
   const windowRows = new Map(published.tabs.map((row) => [row.id, row]))
   const projectedIds = new Set(projected.tabs.map((row) => row.id))
@@ -139,7 +140,7 @@ export function withMainSessionTabRows(
   // A main-held row is main's; a browser or chat row stays the window's while both list it.
   const rows = projected.tabs.map((row) =>
     isMainRow(row)
-      ? withWindowFacts(row, windowRows.get(row.id), exited, opts.windowTitles)
+      ? withWindowFacts(row, windowRows.get(row.id), exited)
       : (windowRows.get(row.id) ?? row)
   )
   const windowOnlyIds = new Set(windowOnly.map((row) => row.id))

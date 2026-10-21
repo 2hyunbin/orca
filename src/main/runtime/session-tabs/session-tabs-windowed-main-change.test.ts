@@ -14,13 +14,40 @@ import {
   SURFACE_TAB_ID,
   surfaceRuntime
 } from '../terminal/surface/terminal-surface-replies.test-fixture'
-import { SECOND_TAB_ID, threeTabSurfaceRuntime } from './session-tabs-layout-moves.test-fixture'
+import {
+  MOVED_STRIP,
+  SECOND_TAB_ID,
+  moveAndSplitTabs,
+  tabStrip,
+  threeTabSurfaceRuntime
+} from './session-tabs-layout-moves.test-fixture'
 
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
 type Runtime = ReturnType<typeof surfaceRuntime>['runtime']
 
 const rowOf = (leafId: string): string => `${SURFACE_TAB_ID}::${leafId}`
+
+/** A workspace on an SSH host whose layout main has not loaded: the window's rows stand. */
+const UNLOADED_SSH_ROWS: RuntimeMobileSessionTabsSnapshot = {
+  worktree: 'repo-ssh::/srv/remote',
+  publicationEpoch: 'renderer',
+  snapshotVersion: 1,
+  activeGroupId: 'ssh-group',
+  activeTabId: 'ssh-tab::ssh-leaf',
+  activeTabType: 'terminal',
+  tabGroups: [{ id: 'ssh-group', activeTabId: 'ssh-tab', tabOrder: ['ssh-tab'] }],
+  tabs: [
+    {
+      type: 'terminal',
+      id: 'ssh-tab::ssh-leaf',
+      title: 'remote shell',
+      parentTabId: 'ssh-tab',
+      leafId: 'ssh-leaf',
+      isActive: true
+    }
+  ]
+}
 
 /** The window's one publication: both panes of the saved split, under their saved title. */
 function windowPublication(): RuntimeMobileSessionTabsSnapshot {
@@ -45,7 +72,11 @@ function windowPublication(): RuntimeMobileSessionTabsSnapshot {
 /** Attaches a window that publishes once, then records every push a phone gets. */
 async function windowedPhone(runtime: Runtime): Promise<RuntimeMobileSessionTabsResult[]> {
   runtime.attachWindow(1)
-  runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [windowPublication()] })
+  runtime.syncWindowGraph(1, {
+    tabs: [],
+    leaves: [],
+    mobileSessionTabs: [windowPublication(), UNLOADED_SSH_ROWS]
+  })
   await vi.runAllTimersAsync()
   const seen: RuntimeMobileSessionTabsResult[] = []
   runtime.onMobileSessionTabsChanged((snapshot) => {
@@ -58,9 +89,7 @@ const listed = (runtime: Runtime) => runtime.listMobileSessionTabs(`id:${TEST_WO
 const parentTabsOf = (
   rows: Pick<RuntimeMobileSessionTabsResult | RuntimeMobileSessionTabsSnapshot, 'tabs'> | undefined
 ): string[] => [
-  ...new Set(
-    (rows?.tabs ?? []).map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))
-  )
+  ...new Set((rows?.tabs ?? []).map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id)))
 ]
 
 /** The terminal tabs main's layout holds for the workspace, in saved order. */
@@ -150,5 +179,42 @@ describe('session.tabs on a windowed server follow main without a window publish
     })
 
     expect(parentTabsOf(await listed(runtime))).not.toContain(SECOND_TAB_ID)
+  })
+
+  it('a workspace on an unloaded SSH host keeps the rows its window published', async () => {
+    const { runtime } = surfaceRuntime()
+    await windowedPhone(runtime)
+    const before = runtime.mobileSessionTabsByWorktree.get(UNLOADED_SSH_ROWS.worktree)
+
+    await runtime.applyLayoutCommand({
+      type: 'renameTab',
+      workspace: TEST_WORKTREE_ID,
+      tabId: SURFACE_TAB_ID,
+      kind: 'custom',
+      title: 'Build'
+    })
+    await vi.runAllTimersAsync()
+    runtime.storeMobileSessionSnapshot(UNLOADED_SSH_ROWS.worktree, {
+      ...UNLOADED_SSH_ROWS,
+      snapshotVersion: 2
+    })
+
+    expect(before?.tabs.map((tab) => tab.id)).toEqual(['ssh-tab::ssh-leaf'])
+    const after = runtime.mobileSessionTabsByWorktree.get(UNLOADED_SSH_ROWS.worktree)
+    expect(after?.tabs).toEqual(UNLOADED_SSH_ROWS.tabs)
+    expect(after?.tabGroups).toEqual(UNLOADED_SSH_ROWS.tabGroups)
+  })
+
+  it("after the window closes, main's later moves reach the phone, as no-window rows", async () => {
+    const { runtime } = threeTabSurfaceRuntime()
+    const seen = await windowedPhone(runtime)
+    runtime.markGraphUnavailable(1)
+    await vi.runAllTimersAsync()
+
+    await moveAndSplitTabs(runtime)
+    await vi.runAllTimersAsync()
+
+    expect(tabStrip(seen.at(-1))).toEqual(MOVED_STRIP)
+    expect(tabStrip(await listed(runtime))).toEqual(MOVED_STRIP)
   })
 })

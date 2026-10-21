@@ -6,10 +6,7 @@ import type { PaneStartFactOf } from '../../pane-start-statuses'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import {
-  HEADLESS_RUNTIME_WINDOW_ID,
-  type RuntimeSyncWindowGraph
-} from '../../../../shared/runtime-types'
+import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-session-contracts'
 import { withMainSessionTabRows } from '../../session-tabs/main-session-tab-rows'
 import { headlessMobileSnapshotContentUnchanged } from '../../mobile-session-snapshot-equality'
@@ -81,12 +78,7 @@ class MainSurfacePublisher {
     const projected = this.index.surfaces().worktreeIds.has(published.worktree)
       ? this.index.sessionTabsOf(published.worktree)
       : null
-    return projected
-      ? withMainSessionTabRows(published, projected, this.host.exited, {
-          // With no window, a pane's saved title is main's; live titles resolve from the terminal.
-          windowTitles: this.host.readyGraphPublisher() !== HEADLESS_RUNTIME_WINDOW_ID
-        })
-      : published
+    return projected ? withMainSessionTabRows(published, projected, this.host.exited) : published
   }
 
   /** After a layout commit: the rows held for each workspace main owns follow its layout. */
