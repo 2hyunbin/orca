@@ -132,14 +132,16 @@ async function typeIntoPane(page: Page, webTabId: string, text: string): Promise
 }
 
 const HOSTS = [
-  { label: 'a host that can image the pane', env: {} },
+  { label: 'a host that can image the pane', env: {}, programRepaints: false },
   {
     label: 'a host that cannot image the pane',
-    env: { ORCA_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE: '1' }
+    env: { ORCA_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE: '1' },
+    // Why asserted: proves the frame came from the program's own repaint, not a host image.
+    programRepaints: true
   }
 ] as const
 
-for (const { label, env } of HOSTS) {
+for (const { label, env, programRepaints } of HOSTS) {
   test(`an idle full-screen program shows its current frame after a reconnect, on ${label}`, async ({
     testRepoPath
   }, testInfo) => {
@@ -237,6 +239,9 @@ for (const { label, env } of HOSTS) {
         await expect
           .poll(() => readPane(page, webTabId), { timeout: 120_000, intervals: [2_000] })
           .toContain('FRAME:AFTER')
+        if (programRepaints) {
+          expect(readText(sinkPath)).toContain('resize:AFTER')
+        }
       } catch (error) {
         console.log(
           '[idle-frame] evidence',

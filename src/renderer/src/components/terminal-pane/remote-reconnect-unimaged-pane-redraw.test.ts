@@ -86,6 +86,7 @@ async function connectVisibleRemotePane(
 ): Promise<ReconnectedPane> {
   const { connectPanePty } = await import('./pty-connection')
   const transport = createMockTransport(REMOTE_PTY_ID)
+  Object.assign(transport, { isConnected: vi.fn(() => true) })
   transport.serializeBuffer = vi.fn()
   transport.serializeBufferOutcome = vi.fn(
     typeof outcome === 'function' ? outcome : async () => outcome
@@ -211,7 +212,7 @@ describe('a reconnected remote pane the host could not image', () => {
     drive.pane.terminal.buffer.active.type = 'alternate'
     vi.useFakeTimers()
     drive.reconnectWithoutImage()
-    await settle(2_000)
+    await settle(5_000)
 
     expect(drive.resizes()).toEqual(NUDGE)
     drive.dispose()
@@ -247,7 +248,7 @@ describe('a reconnected remote pane the host could not image', () => {
     setFitOverride(REMOTE_PTY_ID, 'mobile-fit', 50, 30)
     vi.useFakeTimers()
     drive.reconnectWithoutImage()
-    await settle(2_000)
+    await settle(5_000)
 
     expect(drive.banners()).toBe(1)
     expect(drive.resizes()).toEqual([])
@@ -262,13 +263,58 @@ describe('a reconnected remote pane the host could not image', () => {
     drive.pane.terminal.rows = 6
     vi.useFakeTimers()
     drive.reconnectWithoutImage()
-    await settle(2_000)
+    await settle(5_000)
 
     expect(drive.resizes()).toEqual([
       [120, 9, { claim: true }],
       [120, 6, { claim: true }]
     ])
     drive.dispose()
+  })
+
+  it('puts the row back once the host confirms the short grid, not when the client sent it', async () => {
+    const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
+    const drive = await connectVisibleRemotePane({
+      availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },
+      snapshot: null
+    })
+    vi.useFakeTimers()
+    drive.reconnectWithoutImage()
+    for (let tick = 0; tick < 5 && drive.resizes().length === 0; tick += 1) {
+      await vi.advanceTimersByTimeAsync(10)
+      await flushAsyncTicks(20)
+    }
+    expect(drive.resizes()).toEqual([NUDGE[0]])
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(drive.resizes()).toEqual([NUDGE[0]])
+
+    setFitOverride(REMOTE_PTY_ID, 'desktop-fit', 120, 39)
+    await vi.advanceTimersByTimeAsync(249)
+    expect(drive.resizes()).toEqual([NUDGE[0]])
+    await vi.advanceTimersByTimeAsync(1)
+    expect(drive.resizes()).toEqual(NUDGE)
+    drive.dispose()
+  })
+
+  it('does not take the size back from a viewer that claimed it mid-repaint', async () => {
+    const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
+    const drive = await connectVisibleRemotePane({
+      availability: { kind: 'permanently-unavailable', reason: 'exceeds-client-replay-limit' },
+      snapshot: null
+    })
+    vi.useFakeTimers()
+    drive.reconnectWithoutImage()
+    for (let tick = 0; tick < 5 && drive.resizes().length === 0; tick += 1) {
+      await vi.advanceTimersByTimeAsync(10)
+      await flushAsyncTicks(20)
+    }
+    setFitOverride(REMOTE_PTY_ID, 'desktop-fit', 120, 39)
+    setFitOverride(REMOTE_PTY_ID, 'remote-desktop-fit', 100, 30)
+    await settle(5_000)
+
+    expect(drive.resizes()).toEqual([NUDGE[0]])
+    drive.dispose()
+    expect(drive.resizes()).toEqual([NUDGE[0]])
   })
 
   it('puts the row back when the pane unmounts mid-repaint', async () => {

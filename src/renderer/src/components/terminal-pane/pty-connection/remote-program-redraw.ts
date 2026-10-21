@@ -3,15 +3,18 @@ import {
   TERMINAL_VIEWPORT_MIN_ROWS,
   clampTerminalViewport
 } from '../../../../../shared/terminal-viewport'
+import { onOverrideChange } from '@/lib/pane-manager/mobile-fit-overrides'
 import { recordTerminalFreezeBreadcrumb } from '../terminal-freeze-breadcrumbs'
 import { redactPtyIdForDiagnostics } from '../../../../../shared/pty-delivery-diagnostics'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
-// Why this long: both resizes must reach the program as separate SIGWINCHs. Node's tty (Claude
-// Code, Codex) re-reads the size on SIGWINCH and repaints only if it changed, so two resizes
-// that land before it reads would look like none.
+// Why: the two resizes must reach the program as separate SIGWINCHs. Node's tty (Claude Code,
+// Codex) re-reads the size on SIGWINCH and repaints only if it changed, so the put-back waits
+// this long after the host confirmed the short grid, not after the client sent it.
 export const REMOTE_PROGRAM_REDRAW_RESTORE_MS = 250
+// Why: hosts that predate desktop fit answers never confirm; put the row back anyway.
+export const REMOTE_PROGRAM_REDRAW_ACK_TIMEOUT_MS = 2_000
 
 /**
  * The one place a remote pane asks its program to repaint after the host could not give the
@@ -28,6 +31,9 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
       !ptyId ||
       !isRemoteRuntimePtyId(ptyId) ||
       session.remoteProgramRedrawRestore !== null ||
+      // Why: a claim sent while the stream is recovering is only deferred, and recovery replays
+      // just the last grid, so the short one would never reach the program.
+      !session.transport.isConnected() ||
       // Why: a hidden pane's grid is not authoritative, and a phone or another desktop that holds
       // the size must not have it taken; the repaint those viewers drive covers this pane too.
       !session.isRendererPtyResizeAuthoritative() ||
@@ -43,18 +49,19 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
     // host's clamped grid, or a pane at the minimum height would ask for two identical sizes.
     const hostRows = clampTerminalViewport(cols, rows).rows
     const nudgeRows = hostRows > TERMINAL_VIEWPORT_MIN_ROWS ? hostRows - 1 : hostRows + 1
-    if (!session.transport.resize(cols, nudgeRows, { claim: true })) {
-      return
-    }
-    recordTerminalFreezeBreadcrumb('remote-program-redraw', {
-      id: redactPtyIdForDiagnostics(ptyId),
-      reason
-    })
-    const restore = (): void => {
-      clearTimeout(timer)
+    let restoreTimer: ReturnType<typeof setTimeout> | null = null
+    const finish = (): void => {
+      unsubscribe()
+      clearTimeout(ackTimer)
+      if (restoreTimer !== null) {
+        clearTimeout(restoreTimer)
+      }
       session.remoteProgramRedrawRestore = null
-      // Why not forwardPtyResize: this moved the PTY by a row, so it must put it back even if
-      // the pane was hidden meanwhile; only a viewer that took the size since owns it now.
+    }
+    const restore = (): void => {
+      finish()
+      // Why not forwardPtyResize: this moved the PTY by a row, so it must put it back even if the
+      // pane was hidden meanwhile; only a viewer that took the size since owns it now.
       if (session.transport.getPtyId() !== ptyId || session.shouldSuppressDesktopPtyResize()) {
         return
       }
@@ -62,8 +69,33 @@ export function bindRemoteProgramRedraw(session: ConnectPanePtySession): void {
         claim: true
       })
     }
-    const timer = setTimeout(restore, REMOTE_PROGRAM_REDRAW_RESTORE_MS)
+    const scheduleRestore = (): void => {
+      if (restoreTimer === null) {
+        clearTimeout(ackTimer)
+        restoreTimer = setTimeout(restore, REMOTE_PROGRAM_REDRAW_RESTORE_MS)
+      }
+    }
+    const unsubscribe = onOverrideChange((event) => {
+      if (event.ptyId !== ptyId) {
+        return
+      }
+      if (event.mode !== 'desktop-fit') {
+        // Another viewer took the size after this claim; its layout repaints the program.
+        finish()
+      } else if (event.rows === nudgeRows) {
+        scheduleRestore()
+      }
+    })
+    const ackTimer = setTimeout(scheduleRestore, REMOTE_PROGRAM_REDRAW_ACK_TIMEOUT_MS)
     session.remoteProgramRedrawRestore = restore
+    if (!session.transport.resize(cols, nudgeRows, { claim: true })) {
+      finish()
+      return
+    }
+    recordTerminalFreezeBreadcrumb('remote-program-redraw', {
+      id: redactPtyIdForDiagnostics(ptyId),
+      reason
+    })
   }
 
   // Why flush rather than cancel: an unmount mid-nudge would otherwise strand the PTY a row off.
