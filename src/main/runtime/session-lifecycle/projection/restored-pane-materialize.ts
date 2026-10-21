@@ -1,13 +1,14 @@
 // Starting a saved pane that has no live terminal: a client's first view of a pending row, and,
 // in the layout-owner build, every trigger that is not a desktop window's own restore.
 
-import type { OrcaRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
+import type { OrcaRuntimeWithResumeAgentSessionInWorkspace as AgentSessionResume } from './resume-agent-session-in-workspace'
 import type {
   MobileTerminalCommand,
   MobileTerminalResumeCommand
 } from '../../terminal/launch/mobile-terminal-startup'
 import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -31,8 +32,8 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     agent: TuiAgent | undefined
   ): AgentLaunchRuntime
   protected abstract resolvePaneOwnedResumeStartup(
-    ...args: Parameters<MobileSessionNavigation['resolvePaneOwnedResumeStartup']>
-  ): ReturnType<MobileSessionNavigation['resolvePaneOwnedResumeStartup']>
+    ...args: Parameters<AgentSessionResume['resolvePaneOwnedResumeStartup']>
+  ): ReturnType<AgentSessionResume['resolvePaneOwnedResumeStartup']>
 
   abstract subscribeWorkspaceLayouts(
     listener: Parameters<WorkspaceLayoutStream['subscribe']>[0]
@@ -128,6 +129,8 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     // start a bare shell or a fresh agent (#27147, #27777).
     const resumeStartup = await this.resolvePaneOwnedResumeStartup(worktreeId, tab)
     let agentStartup: MobileTerminalCommand | MobileTerminalResumeCommand = resumeStartup ?? {}
+    const resumeClaim =
+      resumeStartup && 'resumeClaim' in resumeStartup ? resumeStartup.resumeClaim : null
     if (resumeStartup === undefined && tab.launchAgent) {
       let workspace
       try {
@@ -173,8 +176,13 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
           ...(automatic ? { refuseSleptWorktree: true } : {})
         }
       )
+      resumeClaim?.bind({
+        paneKey: makePaneKey(tab.parentTabId, tab.leafId),
+        ptyId: created.tab.ptyId ?? null
+      })
       return created
     } catch (err) {
+      resumeClaim?.release()
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&
         sessionId &&

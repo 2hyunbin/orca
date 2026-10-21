@@ -1,5 +1,6 @@
 import type { RuntimeWorkspaceSelectors as WorkspaceSelectors } from '../../workspaces/workspace-selectors'
 import type { OrcaRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
+import type { OrcaRuntimeWithResumeAgentSessionInWorkspace as AgentSessionResume } from './resume-agent-session-in-workspace'
 import type { OrcaRuntimeWithStopTerminalsForWorktree as WorktreeTerminalStop } from '../../terminal/stop/worktree-terminal-stop'
 import { OrcaRuntimeWithRestoredPaneStart } from './restored-pane-materialize'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -23,8 +24,8 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
     ...args: Parameters<WorkspaceSelectors['buildResolvedWorktreeFromId']>
   ): ReturnType<WorkspaceSelectors['buildResolvedWorktreeFromId']>
   protected abstract isDeliberatelyParkedPane(
-    ...args: Parameters<MobileSessionNavigation['isDeliberatelyParkedPane']>
-  ): ReturnType<MobileSessionNavigation['isDeliberatelyParkedPane']>
+    ...args: Parameters<AgentSessionResume['isDeliberatelyParkedPane']>
+  ): ReturnType<AgentSessionResume['isDeliberatelyParkedPane']>
   protected abstract isWorktreeTerminalSleepHeld(
     ...args: Parameters<WorktreeTerminalStop['isWorktreeTerminalSleepHeld']>
   ): ReturnType<WorktreeTerminalStop['isWorktreeTerminalSleepHeld']>
