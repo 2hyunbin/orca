@@ -95,7 +95,8 @@
         "korean": "한국어",
         "japanese": "日本語",
         "spanish": "Español",
-        "french": "Français"
+        "french": "Français",
+        "portuguese": "Português (Brasil)"
       },
       "statusBar": {
         "claudeToggleDescription": "활성 워크스페이스에 대한 Claude 토큰 및 비용 사용량을 표시합니다.",
@@ -3515,7 +3516,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "브라우저에서 열기",
-            "9dd880bd56": "오른쪽의 모든 탭 닫기",
             "1611a1324b": "닫기",
             "5d6e89891f": "탭 복제",
             "966feb9ad5": "오른쪽 분할",
@@ -3532,7 +3532,6 @@
             "52ce4f4605": "상대 경로 복사",
             "5b85754786": "경로 복사",
             "bfd5797ef4": "Markdown 미리보기 열기",
-            "e5ff31ccaf": "오른쪽의 모든 탭 닫기",
             "ba1369dd24": "모든 편집기 탭 닫기",
             "1ba8492c5b": "닫기",
             "68cc610e7f": "이름 바꾸기",
@@ -3565,7 +3564,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "탭 색상",
             "2f697b3c31": "제목 변경",
-            "c1ee099c7e": "오른쪽의 모든 탭 닫기",
             "8d16f9cd30": "다른 탭 닫기",
             "89359a36f7": "닫기",
             "21132389e9": "오른쪽 분할",
@@ -18871,6 +18869,8 @@
         "plan": "계획",
         "historyRepaired": "이 채팅 기록의 일부를 불러올 수 없습니다.",
         "historyItemTooLarge": "채팅의 이 부분은 너무 커서 표시할 수 없습니다.",
+        "continuedOutside": "이 채팅 밖에서 이어졌습니다.",
+        "continuedOutsideRewound": "이 채팅 밖에서 이어졌습니다. 위의 이전 답변은 더 이상 이 대화 기록에 없습니다.",
         "stoppedBeforeStart": "수동으로 중지됨",
         "dismiss": "닫기",
         "copyError": "오류 복사",
@@ -19117,16 +19117,13 @@
       "bar": {
         "SortableTabContextMenu": {
           "switchToTerminalView": "터미널 에이전트로 계속하기",
-          "switchToChatView": "채팅 UI에서 계속하기",
-          "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
+          "switchToChatView": "채팅 UI에서 계속하기"
         },
         "BrowserTab": {
-          "closeOthers": "다른 탭 닫기",
-          "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
+          "closeOthers": "다른 탭 닫기"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "다른 탭 닫기",
-          "closeTabsToLeft": "왼쪽의 모든 탭 닫기"
+          "closeOthers": "다른 탭 닫기"
         },
         "CopyTabIdMenuItem": {
           "copied": "탭 ID 복사됨",
