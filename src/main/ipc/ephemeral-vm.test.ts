@@ -684,6 +684,7 @@ describe('registerEphemeralVmHandlers', () => {
     expect(runningResume).toEqual(expect.objectContaining({ status: 'running' }))
     expect(existsSync(join(repoPath, 'resume-mode.txt'))).toBe(false)
 
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the suspend reads only getRepo and getRepos, which makeStore provides.
     await suspendEphemeralVmWorkspace(store as never, 'workspace-1')
     expect(listEphemeralVmRuntimes(userDataPath)).toEqual([
       expect.objectContaining({ status: 'suspended' })

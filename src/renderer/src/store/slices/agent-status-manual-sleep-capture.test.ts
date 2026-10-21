@@ -438,10 +438,8 @@ describe('manual sleep agent session capture', () => {
     const store = createTestStore()
     seedTabs(store)
     store.setState({
-      agentStatusByPaneKey: {
-        'tab-1:fresh': makeAgentEntry({ paneKey: 'tab-1:fresh' })
-      }
-    } as Partial<AppState>)
+      agentStatusByPaneKey: { 'tab-1:fresh': makeAgentEntry({ paneKey: 'tab-1:fresh' }) }
+    })
     const mains = makeSleepingRecord({ paneKey: 'tab-1:leaf-9', origin: 'worktree-sleep' })
 
     await store.getState().shutdownWorktreeTerminals('wt-1', {
