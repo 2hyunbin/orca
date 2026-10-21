@@ -42,7 +42,7 @@ import { ORCAD_ACTIVATION_POLICY_REFUSED_CODE } from './orcad-installed-activati
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
 import { rollbackOrcad } from '../managed-server/install/orcad-remote-rollback'
 import { collectManagedTerminalCensus } from './orcad-terminal-census-client'
-import { updateTerminalCounts } from './orcad-update-terminal-counts'
+import { updateTerminalCounts } from './orcad-fenced-stop'
 import { findIncompleteManagedOrcadMigration } from '../managed-server/lifecycle/orcad-managed-migration-status'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
 import { tunneledOrcadPairingCode } from './orcad-tunneled-pairing'
@@ -202,15 +202,14 @@ export function rollbackManagedOrcadEnvironment(
       if (crossing) {
         return crossing
       }
-      const census = await collectManagedTerminalCensus(
-        userDataPath,
-        environment,
-        record,
-        undefined,
-        {
-          releaseFinishedAutomationTerminals: true
-        }
+      const slot = managedOrcadSlot(context, deployment.remotePort, args.signal)
+      const targetDir = managedOrcadInstallDir(context, target)
+      const targetBuildHash = await readRemoteOrcadBuildHash(slot, targetDir)
+      const { countFirst, ...recount } = updateTerminalCounts((options) =>
+        collectManagedTerminalCensus(userDataPath, environment, record, undefined, options)
       )
+      // Unfenced: rollbackOrcad counts again under the host lock, closing admission, before the stop.
+      const census = await countFirst()
       // Why idle only: this client cannot read the older build's daemon protocol, so it cannot show
       // that build would reach terminals that are still running.
       if (census.liveSessions !== 0) {
@@ -226,13 +225,11 @@ export function rollbackManagedOrcadEnvironment(
               : 'Close the terminals running on this server before rolling it back.'
         }
       }
-      const slot = managedOrcadSlot(context, deployment.remotePort, args.signal)
-      const targetDir = managedOrcadInstallDir(context, target)
-      const targetBuildHash = await readRemoteOrcadBuildHash(slot, targetDir)
       const result = await rollbackOrcad({
         ...slot,
         record,
         census,
+        ...recount,
         targetBuildHash,
         targetDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL
       })

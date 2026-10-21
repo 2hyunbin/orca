@@ -25,7 +25,7 @@ import {
 } from '../../ssh/connection/ssh-connection-store'
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
 import { runTargetLifecycle } from './ssh-target-lifecycle-queue'
-import { fingerprintRuntimeSshTarget } from '../../ssh/runtime-ssh-access'
+import { fingerprintRuntimeSshTarget } from '../../ssh/runtime-ssh-target-fingerprint'
 import { removeRegisteredSshTarget } from './ssh-session-teardown'
 import { notifyReposChanged } from '../repos/repos-changed-notification'
 import { requestDesktopBrowserBridgeReconcile } from '../desktop-browser-bridge-reconcile'
