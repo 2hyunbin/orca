@@ -50,7 +50,9 @@ describe('agentSession.modelCatalog', () => {
       accountHome: { variable: 'CODEX_HOME', path: '/account/work' },
       launchDirectory: '/repo/work'
     }
-    const runSession = vi.fn<typeof runCodexAppServerSession>(async (invocation, body) => {
+    const listed = vi.fn()
+    const runSession: typeof runCodexAppServerSession = async (invocation, body) => {
+      listed(invocation)
       expect(invocation).toMatchObject({
         command: '/installed/codex',
         cwd: '/repo/work',
@@ -67,7 +69,7 @@ describe('agentSession.modelCatalog', () => {
               }
             : { config: {} }
       })
-    })
+    }
     const catalog = createAgentModelCatalogService({
       store: new AgentModelCatalogStore(),
       getRecord: () => record ?? undefined,
@@ -98,7 +100,7 @@ describe('agentSession.modelCatalog', () => {
         ok: true,
         result: { origin: 'probe', models: [{ id: 'work-model' }] }
       })
-      expect(runSession).toHaveBeenCalledTimes(1)
+      expect(listed).toHaveBeenCalledTimes(1)
     } finally {
       catalog.stop()
     }
