@@ -257,11 +257,7 @@ export async function readStructuredAgentSessionOptions(
       : options.current.defaulted?.includes(key) === true
   const defaulted = structuredAgentSessionNeverSent(record, session.journal)
     ? []
-    : (['model', 'effort'] as const).filter(
-        (key) =>
-          (key === 'model' && refusedModel && !options.current.model && model !== undefined) ||
-          (saved[key] === undefined && defaultedBy(key))
-      )
+    : (['model', 'effort'] as const).filter((key) => saved[key] === undefined && defaultedBy(key))
   const confirmed = options.current.confirmed?.filter((key) =>
     key === 'model' || key === 'effort' || key === 'fastMode' || key === 'serviceTier'
       ? current[key] === options.current[key]
