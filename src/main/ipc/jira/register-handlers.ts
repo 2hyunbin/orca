@@ -1,31 +1,24 @@
-import { JiraIssueListFiltersParam } from '../../shared/rpc-contract/jira-quick-filter-params'
-import { JiraFavouriteFilterParams } from '../../shared/rpc-contract/jira-favourite-filter-params'
+import { JiraIssueListFiltersParam } from '../../../shared/rpc-contract/jira-quick-filter-params'
+import { JiraFavouriteFilterParams } from '../../../shared/rpc-contract/jira-favourite-filter-params'
 import { ipcMain } from 'electron'
-import type { JiraMediaFormat } from '../../shared/jira-attachment-image'
-import { connect, disconnect, getStatus, selectSite, testConnection } from '../jira/client'
-import { listFavouriteFilters } from '../jira/favourite-filters'
-import { _resetPreflightCache } from '../preflight/agent-detection'
-import { JiraCancellableRequests } from './jira-cancellable-requests'
-import { registerJiraUserSearchHandlers } from './jira-user-search'
-import { registerJiraProjectMetadataHandlers } from './jira-project-metadata'
+import type { JiraMediaFormat } from '../../../shared/jira-attachment-image'
+import { connect, disconnect, getStatus, selectSite, testConnection } from '../../jira/client'
+import { listFavouriteFilters } from '../../jira/favourite-filters'
+import { _resetPreflightCache } from '../../preflight/agent-detection'
+import { JiraCancellableRequests } from './cancellable-requests'
+import { registerJiraUserSearchHandlers } from './user-search'
+import { registerJiraProjectMetadataHandlers } from './project-metadata'
 import {
   clampJiraIssueLimit,
   normalizeJiraIssueUpdate,
   normalizeJiraSiteId,
   normalizeJiraSiteSelection
-} from './jira-ipc-params'
-import {
-  addIssueComment,
-  createIssue,
-  getIssue,
-  getIssueSummary,
-  getIssueComments,
-  getProjectStatusOrder,
-  listIssues,
-  listTransitions,
-  searchIssues,
-  updateIssue
-} from '../jira/issues'
+} from './ipc-params'
+import { addIssueComment, createIssue, updateIssue } from '../../jira/jira-issue-mutations'
+import { getIssue, getIssueSummary } from '../../jira/jira-issue-read'
+import { getIssueComments } from '../../jira/jira-issue-comments'
+import { getProjectStatusOrder, listTransitions } from '../../jira/jira-transition-queries'
+import { listIssues, searchIssues } from '../../jira/jira-issue-search'
 import type {
   JiraConnectArgs,
   JiraCreateIssueArgs,
@@ -33,7 +26,7 @@ import type {
   JiraIssueListFilters,
   JiraIssueUpdate,
   JiraSiteSelection
-} from '../../shared/jira-types'
+} from '../../../shared/jira-types'
 
 const VALID_FILTERS = new Set<JiraIssueFilter>(['assigned', 'reported', 'all', 'done'])
 const issueSummaryRequests = new JiraCancellableRequests()

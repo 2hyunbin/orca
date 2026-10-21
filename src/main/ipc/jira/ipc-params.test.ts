@@ -4,7 +4,7 @@ import {
   normalizeJiraIssueUpdate,
   normalizeJiraSiteId,
   normalizeJiraSiteSelection
-} from './jira-ipc-params'
+} from './ipc-params'
 
 describe('Jira IPC parameters', () => {
   it('preserves normalized sites and all-sites selection', () => {

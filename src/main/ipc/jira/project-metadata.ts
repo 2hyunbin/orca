@@ -1,6 +1,11 @@
 import { ipcMain } from 'electron'
-import { listCreateFields, listIssueTypes, listPriorities, listProjects } from '../jira/issues'
-import type { JiraSiteSelection } from '../../shared/jira-types'
+import {
+  listCreateFields,
+  listIssueTypes,
+  listPriorities
+} from '../../jira/jira-issue-create-metadata'
+import { listProjects } from '../../jira/jira-project-queries'
+import type { JiraSiteSelection } from '../../../shared/jira-types'
 
 export function registerJiraProjectMetadataHandlers(
   normalizeSiteId: (value: unknown) => string | undefined

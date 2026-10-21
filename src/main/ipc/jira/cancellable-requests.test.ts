@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { JiraCancellableRequests } from './jira-cancellable-requests'
+import { JiraCancellableRequests } from './cancellable-requests'
 
 describe('JiraCancellableRequests', () => {
   it('aborts a late run when cancel arrived before registration', async () => {
