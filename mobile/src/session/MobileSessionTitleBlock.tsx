@@ -1,4 +1,4 @@
-import { Pressable, Text } from 'react-native'
+import { Platform, Pressable, Text } from 'react-native'
 import type { SessionTitleCard } from './use-session-title-card'
 import { StatusDot } from '../components/StatusDot'
 import type { ConnectionState } from '../transport/types'
@@ -34,6 +34,7 @@ export function MobileSessionTitleBlock({
       <Text
         ref={details.titleRef}
         onLayout={details.onAnchorLayout}
+        onPress={Platform.OS === 'web' ? details.toggle : undefined}
         style={styles.sessionTitle}
         numberOfLines={1}
       >

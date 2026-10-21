@@ -46,7 +46,7 @@ vi.mock('react-native', () => {
         }
       }
     },
-    Platform: { OS: 'ios', select: (choices: { ios?: string }) => choices.ios },
+    Platform: { OS: 'web', select: (choices: { ios?: string }) => choices.ios },
     StyleSheet: { create: (styles: unknown) => styles, absoluteFill: {} },
     useWindowDimensions: () => ({ width: overlay.width, height: overlay.height }),
     Easing: { out: () => () => 0, cubic: () => 0 },
@@ -122,8 +122,10 @@ it('preserves title identity and current request across queued results and Back'
   assert(renderer)
   const root = renderer.root
   const opener = root.findByProps({ accessibilityRole: 'button' })
+  const title = opener.findByProps({ children: 'workspace' })
+  expect(title.props.onPress).toBe(opener.props.onPress)
   const card = () => root.findByType(AnchoredDetailCard)
-  const tap = () => act(() => opener.props.onPress())
+  const tap = () => act(() => title.props.onPress())
   const measure = () => act(() => overlay.measure?.())
   const close = () => act(() => root.findAllByProps({ accessible: false })[0]?.props.onPress())
   const finish = () => act(() => overlay.motions.at(-1)?.()())
@@ -200,5 +202,6 @@ it('preserves title identity and current request across queued results and Back'
   finish()
   check(false, false)
   expect(root.findByProps({ accessibilityRole: 'button' })).toBe(opener)
+  expect(opener.findByProps({ children: 'workspace' })).toBe(title)
   act(() => renderer.unmount())
 })
