@@ -62,7 +62,7 @@ describe('createGitHubSlice.evictGitHubRepoCaches', () => {
     expect(state.workItemsInvalidationNonce).toBe(5)
   })
 
-  it('preserves runtime and explicit-source-prefixed entries during repo eviction', () => {
+  it('evicts runtime and explicit-source-prefixed entries of a repo no row still owns', () => {
     const store = createTestStore()
     const sourceContext = githubSourceContext('runtime:source-env', 'source-repo')
     const runtimeKey = workItemsCacheKey('repo-1', 20, '', 'runtime:owner-env')
@@ -77,14 +77,11 @@ describe('createGitHubSlice.evictGitHubRepoCaches', () => {
 
     store.getState().evictGitHubRepoCaches('repo-1', '/repo/one')
 
-    expect(store.getState().workItemsCache).toEqual({
-      [runtimeKey]: { data: [], fetchedAt: 1 },
-      [sourceKey]: { data: [], fetchedAt: 1 }
-    })
-    expect(store.getState().workItemsInvalidationNonce).toBe(4)
+    expect(store.getState().workItemsCache).toEqual({})
+    expect(store.getState().workItemsInvalidationNonce).toBe(5)
   })
 
-  it('preference invalidation removes local keys but preserves prefixed host/source keys', async () => {
+  it('preference invalidation removes every host bucket of a repo with one row', async () => {
     const store = createTestStore()
     const updateRepo = vi.fn().mockResolvedValue(true)
     const sourceContext = githubSourceContext('runtime:source-env', 'source-repo')
@@ -105,10 +102,7 @@ describe('createGitHubSlice.evictGitHubRepoCaches', () => {
     })
     await store.getState().setIssueSourcePreference('repo-1', '/repo/one', 'origin', 'local')
 
-    expect(store.getState().workItemsCache).toEqual({
-      [runtimeKey]: { data: [], fetchedAt: 1 },
-      [sourceKey]: { data: [], fetchedAt: 1 }
-    })
+    expect(store.getState().workItemsCache).toEqual({})
     expect(store.getState().workItemsInvalidationNonce).toBe(5)
     expect(updateRepo).toHaveBeenCalledWith(
       'repo-1',

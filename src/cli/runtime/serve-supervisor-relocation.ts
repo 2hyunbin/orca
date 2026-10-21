@@ -5,7 +5,7 @@
  * starts from the app, so it updates as before.
  */
 import { createHash } from 'node:crypto'
-import { constants, readFileSync, statSync } from 'node:fs'
+import { constants, readFileSync, rmSync, statSync } from 'node:fs'
 import { cp, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { cloneMacTree } from '../../main/macos-tree-clone'
@@ -203,6 +203,19 @@ export async function relocateServeSupervisor(
   return 'relocated'
 }
 
+/** Releases `pid`'s claim on the copy it runs `cliEntry` from, so cleanup can remove that copy. */
+export function releaseServeSupervisorSnapshot(cliEntry: string, pid: number): void {
+  const snapshotDir = resolve(cliEntry, '..', '..', '..', '..')
+  rmSync(join(usersDir(dirname(snapshotDir), basename(snapshotDir)), String(pid)), { force: true })
+}
+
+export function execveThisProcess(file: string, args: string[], env: NodeJS.ProcessEnv): void {
+  if (!process.execve) {
+    throw new Error('this runtime cannot replace its own process')
+  }
+  process.execve(file, args, env)
+}
+
 export function relocateThisServeSupervisor(
   appRoot: string,
   userDataPath: string
@@ -215,12 +228,7 @@ export function relocateThisServeSupervisor(
     userDataPath,
     pid: process.pid,
     isProcessAlive,
-    execve: (file, args, env) => {
-      if (!process.execve) {
-        throw new Error('this runtime cannot replace its own process')
-      }
-      process.execve(file, args, env)
-    },
+    execve: execveThisProcess,
     log: (line) => process.stderr.write(`${line}\n`)
   })
 }
