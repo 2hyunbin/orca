@@ -102,7 +102,8 @@ describe('runtime environment browser client host handler', () => {
     )
     expect(startHostMock).toHaveBeenCalledWith({
       environment: expect.objectContaining({ id: 'environment-a', pairingRevision: 7 }),
-      authorityRuntimeId: 'runtime-a'
+      authorityRuntimeId: 'runtime-a',
+      userDataPath: '/profile'
     })
   })
 

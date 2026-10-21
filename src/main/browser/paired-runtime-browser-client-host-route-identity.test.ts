@@ -40,6 +40,19 @@ vi.mock('./paired-runtime-browser-client-host-composition', () => ({
   }
 }))
 
+const startedEnvironments = vi.hoisted(() => new Map<string, unknown>())
+
+vi.mock('../../shared/runtime-environment-store', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  resolveEnvironment: (_userDataPath: string, id: string) => startedEnvironments.get(id)
+}))
+
+// Why: these cases model a connection whose registry read confirmed the recorded GUID.
+vi.mock('../wsl/wsl-host-connection-record', async () => {
+  const fixture = await import('./paired-runtime-browser-host-environment-fixture')
+  return { awaitWslHostRegistration: async () => fixture.WSL_DISTRO_ID_A }
+})
+
 import {
   configurePairedRuntimeBrowserClientHostsForOrcaProfile,
   getPairedRuntimeBrowserClientRouteIdentity,
@@ -78,7 +91,12 @@ async function connectionIdentity(
   environment: KnownRuntimeEnvironment,
   authorityRuntimeId: string
 ): Promise<{ current: string; legacy: string | null }> {
-  await startPairedRuntimeBrowserClientHost({ environment, authorityRuntimeId })
+  startedEnvironments.set(environment.id, environment)
+  await startPairedRuntimeBrowserClientHost({
+    environment,
+    authorityRuntimeId,
+    userDataPath: 'user-data'
+  })
   const identity = getPairedRuntimeBrowserClientRouteIdentity(environment.id)
   if (!identity) {
     throw new Error('missing route identity')
@@ -153,7 +171,8 @@ describe('client host route identity lifetime', () => {
     const environment = pairedEnvironment('environment-retired')
     await startPairedRuntimeBrowserClientHost({
       environment,
-      authorityRuntimeId: 'runtime-a'
+      authorityRuntimeId: 'runtime-a',
+      userDataPath: 'user-data'
     })
     expect(getPairedRuntimeBrowserClientRouteIdentity(environment.id)).not.toBeNull()
 

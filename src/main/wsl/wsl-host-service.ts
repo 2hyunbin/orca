@@ -100,7 +100,7 @@ export class WslHostService {
     if (!record) {
       return
     }
-    if (connection && persistWslHostConnection(this.deps.userDataPath(), record, connection)) {
+    if (persistWslHostConnection(this.deps.userDataPath(), record, connection)) {
       this.deps.pairingChanged(record.environmentId)
     }
     this.setStatus(record, status, connection)

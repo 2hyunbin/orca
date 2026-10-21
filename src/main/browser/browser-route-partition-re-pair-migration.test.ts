@@ -166,7 +166,8 @@ describe('browser logins across a managed host re-pair', () => {
       orcaProfileId,
       environment,
       connection,
-      authorityRuntimeId: 'runtime-old'
+      authorityRuntimeId: 'runtime-old',
+      liveWslDistroId: null
     }).legacyAuthorityConnectionIdentity
     if (runtimeScoped === null) {
       throw new Error('managed SSH always keeps its runtimeId-era identity')

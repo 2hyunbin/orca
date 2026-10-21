@@ -20,7 +20,10 @@ import { supersededBrowserRoutePartitionIdentities } from './browser-route-parti
 import { BrowserRouteSessionRegistry } from './browser-route-session-registry'
 import type { BrowserRouteElectronSession } from './browser-route-session-policy'
 import { derivePairedRuntimeBrowserAuthorityIdentities } from './paired-runtime-browser-authority-identity'
-import { preW1AuthorityConnectionIdentity } from './paired-runtime-browser-host-environment-fixture'
+import {
+  preW1AuthorityConnectionIdentity,
+  registryReadOf
+} from './paired-runtime-browser-host-environment-fixture'
 
 export const orcaProfileId = 'orca-profile-a'
 const browserProfileId = 'default'
@@ -70,14 +73,17 @@ function bindingStoreAdapter(store: BrowserRoutePartitionBindingStore) {
 export async function openPage(
   desktop: Desktop,
   environment: KnownRuntimeEnvironment,
-  authorityRuntimeId: string
+  authorityRuntimeId: string,
+  // Why default: a WSL connection's registry read normally confirms the record's GUID.
+  liveWslDistroId: string | null = registryReadOf(environment)
 ): Promise<OpenedPage> {
   const storageScope = storageScopeOf(environment)
   const authority = derivePairedRuntimeBrowserAuthorityIdentities({
     orcaProfileId,
     environment,
     connection: getPreferredPairedRuntimeConnection(environment),
-    authorityRuntimeId
+    authorityRuntimeId,
+    liveWslDistroId
   })
   const executionHostIdentity = browserAuthorityExecutionHostStorageIdentity(storageScope)
   const store = new BrowserRoutePartitionBindingStore({ filePath: desktop.bindingsPath })

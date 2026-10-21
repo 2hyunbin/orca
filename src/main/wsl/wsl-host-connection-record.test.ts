@@ -8,7 +8,12 @@ import {
   findWslHostDeployment
 } from '../../shared/runtime-environment-wsl-host-store'
 import type { WslHostDeploymentRecord } from '../../shared/wsl-host-deployment-store'
-import { observeWslHostRegistration } from './wsl-host-connection-record'
+import {
+  awaitWslHostRegistration,
+  observeWslHostRegistration,
+  persistWslHostConnection,
+  resetWslHostRegistrationReadsForTests
+} from './wsl-host-connection-record'
 
 const distroId = '0e3a7f2c-1b4d-4c5e-9f60-7a8b9c0d1e2f'
 
@@ -19,6 +24,7 @@ describe('WSL host registration observation', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
   afterEach(() => {
+    resetWslHostRegistrationReadsForTests()
     vi.restoreAllMocks()
     rmSync(userDataPath, { recursive: true, force: true })
   })
@@ -98,5 +104,39 @@ describe('WSL host registration observation', () => {
       distroId,
       observedDistroId: reImportedId
     })
+  })
+
+  it('hands a browser start the latest read instead of reading again', async () => {
+    const record = addHost(distroId)
+    await observeWslHostRegistration(userDataPath, record, async () => distroId)
+    const read = vi.fn(async (_distro: string) => null)
+
+    expect(await awaitWslHostRegistration(userDataPath, record, { readRegistryId: read })).toBe(
+      distroId
+    )
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('reads afresh once the connection that read it dropped', async () => {
+    const record = addHost(distroId)
+    await observeWslHostRegistration(userDataPath, record, async () => distroId)
+    expect(persistWslHostConnection(userDataPath, record, null)).toBe(false)
+    const read = vi.fn(async (_distro: string) => null)
+
+    expect(await awaitWslHostRegistration(userDataPath, record, { readRegistryId: read })).toBe(
+      null
+    )
+    expect(read).toHaveBeenCalledWith('Ubuntu')
+  })
+
+  it('reports no GUID when the latest read failed, though an earlier one recorded it', async () => {
+    const record = addHost()
+    await observeWslHostRegistration(userDataPath, record, async () => distroId)
+    await observeWslHostRegistration(userDataPath, record, async () => {
+      throw new Error('reg.exe failed')
+    })
+
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.observedDistroId).toBe(distroId)
+    expect(await awaitWslHostRegistration(userDataPath, record)).toBeNull()
   })
 })

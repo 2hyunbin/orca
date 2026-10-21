@@ -86,7 +86,8 @@ async function hostingIdentity(): Promise<string> {
   runtime.configurePairedRuntimeBrowserClientHostsForOrcaProfile({ orcaProfileId: 'profile-a' })
   await runtime.startPairedRuntimeBrowserClientHost({
     environment: pairedEnvironment('environment-a'),
-    authorityRuntimeId: 'runtime-a'
+    authorityRuntimeId: 'runtime-a',
+    userDataPath: 'unread-by-non-wsl-hosts'
   })
   const createHost = createHostCallbacks[0]
   if (!createHost) {

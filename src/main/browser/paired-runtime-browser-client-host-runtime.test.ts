@@ -29,7 +29,8 @@ describe('paired runtime browser client host runtime', () => {
 
     const starting = startPairedRuntimeBrowserClientHost({
       environment,
-      authorityRuntimeId: 'runtime-a'
+      authorityRuntimeId: 'runtime-a',
+      userDataPath: 'unread-by-non-wsl-hosts'
     })
 
     expect(starting).toBeInstanceOf(Promise)

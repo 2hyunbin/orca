@@ -106,7 +106,8 @@ async function startHost() {
   runtime.configurePairedRuntimeBrowserClientHostsForOrcaProfile({ orcaProfileId: 'profile-a' })
   await runtime.startPairedRuntimeBrowserClientHost({
     environment: pairedEnvironment(),
-    authorityRuntimeId: 'runtime-a'
+    authorityRuntimeId: 'runtime-a',
+    userDataPath: 'unread-by-non-wsl-hosts'
   })
   const options = compositionOptions[0]
   if (!options) {

@@ -13,9 +13,14 @@ import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 export function persistWslHostConnection(
   userDataPath: string,
   record: WslHostDeploymentRecord,
-  connection: WslOrcadConnection
+  connection: WslOrcadConnection | null
 ): boolean {
-  // Why fire-and-forget: a reg.exe read must not delay saving the pairing.
+  if (!connection) {
+    // Why: a dropped connection may precede an unregister and re-import, so its read stops vouching.
+    latestRegistrationReads.delete(record.environmentId)
+    return false
+  }
+  // Why fire-and-forget: a reg.exe read must not delay saving the pairing; browser starts await it.
   void observeWslHostRegistration(userDataPath, record)
   try {
     return refreshWslHostPairing(userDataPath, record.environmentId, {
@@ -29,28 +34,87 @@ export function persistWslHostConnection(
   }
 }
 
-/**
- * Records the distro's live registration GUID when the record lacks it or names an older one
- * (a re-import under the same name), so browser logins follow the registration actually running.
- * An unreadable registry changes nothing, so identity fails closed.
- */
+type WslHostRegistrationTarget = Pick<WslHostDeploymentRecord, 'environmentId' | 'distro'>
+type WslHostRegistrationRead = { distroId: string | null; recorded: boolean }
+
+/** Bounds a browser start's wait on reg.exe, whose own timeout is 5s. */
+export const WSL_HOST_REGISTRATION_WAIT_MS = 6_000
+
+// Why per process: only a read this process ran vouches for the registration running now.
+const latestRegistrationReads = new Map<
+  string,
+  { distro: string; read: Promise<WslHostRegistrationRead> }
+>()
+
+/** Records the live registration GUID when the record lacks it or names an older one (a re-import). */
 export async function observeWslHostRegistration(
   userDataPath: string,
-  record: WslHostDeploymentRecord,
+  record: WslHostRegistrationTarget,
   readRegistryId: (distro: string) => Promise<string | null> = readWslDistroRegistryIdShared
 ): Promise<boolean> {
+  return (await startRegistrationRead(userDataPath, record, readRegistryId)).recorded
+}
+
+/**
+ * The GUID the registry reported for the host's distro, awaiting the latest read or starting one.
+ * Null when it failed or outlasted `timeoutMs`: the browser then fails closed instead of waiting.
+ */
+export async function awaitWslHostRegistration(
+  userDataPath: string,
+  target: WslHostRegistrationTarget,
+  options: {
+    timeoutMs?: number
+    readRegistryId?: (distro: string) => Promise<string | null>
+  } = {}
+): Promise<string | null> {
+  const latest = latestRegistrationReads.get(target.environmentId)
+  const read =
+    latest?.distro === target.distro
+      ? latest.read
+      : startRegistrationRead(userDataPath, target, options.readRegistryId)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), options.timeoutMs ?? WSL_HOST_REGISTRATION_WAIT_MS)
+  })
   try {
-    const distroId = await readRegistryId(record.distro)
-    return (
-      distroId !== null &&
-      observeWslHostDistroId(userDataPath, record.environmentId, {
-        distro: record.distro,
-        distroId
-      })
-    )
+    return await Promise.race([read.then((outcome) => outcome.distroId), timedOut])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export function resetWslHostRegistrationReadsForTests(): void {
+  latestRegistrationReads.clear()
+}
+
+function startRegistrationRead(
+  userDataPath: string,
+  target: WslHostRegistrationTarget,
+  readRegistryId: (distro: string) => Promise<string | null> = readWslDistroRegistryIdShared
+): Promise<WslHostRegistrationRead> {
+  const read = readAndRecordRegistration(userDataPath, target, readRegistryId)
+  latestRegistrationReads.set(target.environmentId, { distro: target.distro, read })
+  return read
+}
+
+async function readAndRecordRegistration(
+  userDataPath: string,
+  target: WslHostRegistrationTarget,
+  readRegistryId: (distro: string) => Promise<string | null>
+): Promise<WslHostRegistrationRead> {
+  try {
+    const distroId = await readRegistryId(target.distro)
+    if (distroId === null) {
+      return { distroId: null, recorded: false }
+    }
+    const recorded = observeWslHostDistroId(userDataPath, target.environmentId, {
+      distro: target.distro,
+      distroId
+    })
+    return { distroId, recorded }
   } catch (error) {
-    console.warn(`[wsl-hosts] Could not record the registration of ${record.distro}:`, error)
-    return false
+    console.warn(`[wsl-hosts] Could not record the registration of ${target.distro}:`, error)
+    return { distroId: null, recorded: false }
   }
 }
 

@@ -28,6 +28,11 @@ export type PairedRuntimeBrowserAuthorityIdentityInput = {
   environment: KnownRuntimeEnvironment
   connection: PairedRuntimeConnection
   authorityRuntimeId: string
+  /**
+   * WSL only: the GUID this process read from the registry for the host's distro; null when the
+   * read failed, timed out, or never ran.
+   */
+  liveWslDistroId: string | null
 }
 
 type PairingRecord = {
@@ -81,9 +86,9 @@ export function derivePairedRuntimeBrowserAuthorityIdentities(
     case 'wsl': {
       const registration = wslHostRegistration(host.deployment)
       const distroId = registration.current
-      // Why: without the registration GUID a re-imported distro is indistinguishable, so fail
-      // closed to the revision-scoped identity rather than risk sharing a partition across hosts.
-      if (!distroId) {
+      // Why: a recorded GUID the registry did not just confirm may name a since-re-imported
+      // distro, so fail closed to the revision-scoped identity rather than share its jar.
+      if (!distroId || input.liveWslDistroId !== distroId) {
         return {
           authorityConnectionIdentity: revisionScoped,
           adoptableAuthorityConnectionIdentities: [],

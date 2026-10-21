@@ -7,17 +7,24 @@ import { derivePairedRuntimeBrowserAuthorityIdentities } from './paired-runtime-
 import {
   pairedRuntimeHostEnvironment,
   preW1AuthorityConnectionIdentity,
+  registryReadOf,
+  WSL_DISTRO_ID_A,
   WSL_DISTRO_ID_B
 } from './paired-runtime-browser-host-environment-fixture'
 
 const orcaProfileId = 'orca-profile-a'
 
-function identitiesFor(environment: KnownRuntimeEnvironment, authorityRuntimeId = 'runtime-a') {
+function identitiesFor(
+  environment: KnownRuntimeEnvironment,
+  authorityRuntimeId = 'runtime-a',
+  liveWslDistroId = registryReadOf(environment)
+) {
   return derivePairedRuntimeBrowserAuthorityIdentities({
     orcaProfileId,
     environment,
     connection: getPreferredPairedRuntimeConnection(environment),
-    authorityRuntimeId
+    authorityRuntimeId,
+    liveWslDistroId
   })
 }
 
@@ -79,6 +86,24 @@ describe('paired runtime browser authority identity', () => {
     expect(identities.authorityConnectionIdentity).toBe(preW1Identity(environment))
     expect(identities.adoptableAuthorityConnectionIdentities).toEqual([])
   })
+
+  // Why: a recorded GUID may name a since-re-imported distro, so only a live read vouches for it.
+  it.each([
+    { case: 'failed', liveWslDistroId: null },
+    { case: 'reported another registration', liveWslDistroId: WSL_DISTRO_ID_B }
+  ])(
+    'fails closed when the registry read $case, despite a recorded GUID',
+    ({ liveWslDistroId }) => {
+      const environment = pairedRuntimeHostEnvironment({ kind: 'wsl', pairedDeviceId: 'device-a' })
+      const confirmed = identitiesFor(environment, 'runtime-a', WSL_DISTRO_ID_A)
+
+      const identities = identitiesFor(environment, 'runtime-a', liveWslDistroId)
+
+      expect(identities.authorityConnectionIdentity).toBe(preW1Identity(environment))
+      expect(identities.authorityConnectionIdentity).not.toBe(confirmed.authorityConnectionIdentity)
+      expect(identities.adoptableAuthorityConnectionIdentities).toEqual([])
+    }
+  )
 
   // Why: each names a different machine or registration, so sharing would leak one's cookies to another.
   it('separates environments, server keys, host kinds, and re-imported distros', () => {

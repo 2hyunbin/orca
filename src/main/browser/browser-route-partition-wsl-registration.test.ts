@@ -162,7 +162,8 @@ describe('WSL browser jar adoption across registrations', () => {
       orcaProfileId,
       environment: pairedRuntimeHostEnvironment({ kind: 'wsl', pairedDeviceId: 'device-a' }),
       connection: getPreferredPairedRuntimeConnection(environment),
-      authorityRuntimeId: 'runtime-old'
+      authorityRuntimeId: 'runtime-old',
+      liveWslDistroId: WSL_DISTRO_ID_A
     }).legacyAuthorityConnectionIdentity
     if (runtimeScoped === null) {
       throw new Error('expected a runtimeId-era identity for a host added with its GUID')
@@ -178,5 +179,71 @@ describe('WSL browser jar adoption across registrations', () => {
 
     expect(opened.partition).not.toBe(runtimeEraPartition)
     expect(opened.readCookies()).toEqual([])
+  })
+})
+
+// Why: a recorded GUID may name a since-re-imported distro, so an unreadable registry must not
+// lend it to the browser; the jar follows only what the registry confirms now.
+describe('WSL browser jar when the registry read fails and recovers', () => {
+  const host = pairedRuntimeHostEnvironment({
+    kind: 'wsl',
+    pairingRevision: 1_000,
+    pairedDeviceId: 'device-a'
+  })
+
+  it('fails closed without adopting the confirmed jar', async () => {
+    const desktop = createDesktop()
+    const confirmed = await openPage(desktop, host, 'runtime-a', WSL_DISTRO_ID_A)
+    confirmed.setCookie('session=signed-in')
+
+    const unread = await openPage(desktop, host, 'runtime-a', null)
+
+    expect(unread.partition).not.toBe(confirmed.partition)
+    expect(unread.readCookies()).toEqual([])
+    const reopened = await openPage(desktop, host, 'runtime-a', WSL_DISTRO_ID_A)
+    expect(reopened.partition).toBe(confirmed.partition)
+    expect(reopened.readCookies()).toEqual(['session=signed-in'])
+  })
+
+  it('returns to the confirmed jar once a read succeeds, leaving the fail-closed jar apart', async () => {
+    const desktop = createDesktop()
+    const confirmed = await openPage(desktop, host, 'runtime-a', WSL_DISTRO_ID_A)
+    confirmed.setCookie('session=signed-in')
+    const unread = await openPage(desktop, host, 'runtime-a', null)
+    unread.setCookie('session=during-outage')
+
+    const recovered = await openPage(desktop, host, 'runtime-a', WSL_DISTRO_ID_A)
+
+    expect(recovered.partition).toBe(confirmed.partition)
+    expect(recovered.readCookies()).toEqual(['session=signed-in'])
+  })
+
+  // Why adopt: the fail-closed jar is this pairing's, and the read now confirms the pairing's GUID.
+  it('adopts the fail-closed jar when the first confirmed read comes after it', async () => {
+    const desktop = createDesktop()
+    const unread = await openPage(desktop, host, 'runtime-a', null)
+    unread.setCookie('session=during-outage')
+
+    const recovered = await openPage(desktop, host, 'runtime-a', WSL_DISTRO_ID_A)
+
+    expect(recovered.partition).toBe(unread.partition)
+    expect(recovered.readCookies()).toEqual(['session=during-outage'])
+  })
+
+  it('never adopts the fail-closed jar when the recovered read names another registration', async () => {
+    const desktop = createDesktop()
+    const unread = await openPage(desktop, host, 'runtime-a', null)
+    unread.setCookie('session=during-outage')
+    const reImported = pairedRuntimeHostEnvironment({
+      kind: 'wsl',
+      observedDistroId: WSL_DISTRO_ID_B,
+      pairingRevision: 1_000,
+      pairedDeviceId: 'device-a'
+    })
+
+    const recovered = await openPage(desktop, reImported, 'runtime-a', WSL_DISTRO_ID_B)
+
+    expect(recovered.partition).not.toBe(unread.partition)
+    expect(recovered.readCookies()).toEqual([])
   })
 })

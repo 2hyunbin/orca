@@ -6,10 +6,13 @@ import { BROWSER_CLIENT_AUTOMATION_HOST_CAPABILITY } from '../../shared/browser-
 import { BROWSER_CLIENT_FILE_CHANNEL_HOST_CAPABILITY } from '../../shared/browser-client-file-channel-protocol'
 import type { BrowserClientHostLeaseAuthority } from '../../shared/browser-client-host-protocol'
 import type { PairedRuntimeConnection } from '../../shared/paired-runtime-connection'
+import { classifyRuntimeEnvironmentHost } from '../../shared/runtime-environment-host-kind'
+import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import {
   getPreferredPairedRuntimeConnection,
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
+import { awaitWslHostRegistration } from '../wsl/wsl-host-connection-record'
 import { BrowserClientNetworkRouteRegistry } from './browser-client-network-route-registry'
 import {
   browserAuthorityExecutionHostStorageIdentity,
@@ -154,22 +157,25 @@ export function configurePairedRuntimeBrowserClientHostsForOrcaProfile(options: 
 export async function startPairedRuntimeBrowserClientHost(options: {
   environment: KnownRuntimeEnvironment
   authorityRuntimeId: string
+  userDataPath: string
 }): Promise<BrowserClientHostLeaseAuthority> {
   const orcaProfileId = activeOrcaProfileId
   if (!orcaProfileId) {
     throw new Error('paired_runtime_browser_client_host_profile_unavailable')
   }
-  const pairingRevision = options.environment.pairingRevision ?? options.environment.createdAt
-  const connection = getPreferredPairedRuntimeConnection(options.environment)
+  const { environment, liveWslDistroId } = await observeWslRegistrationBeforeStart(options)
+  const pairingRevision = environment.pairingRevision ?? environment.createdAt
+  const connection = getPreferredPairedRuntimeConnection(environment)
   const storageScope = deriveBrowserRoutePartitionStorageScope({
     orcaProfileId,
-    environmentId: options.environment.id
+    environmentId: environment.id
   })
   const authorityIdentities = derivePairedRuntimeBrowserAuthorityIdentities({
     orcaProfileId,
-    environment: options.environment,
+    environment,
     connection,
-    authorityRuntimeId: options.authorityRuntimeId
+    authorityRuntimeId: options.authorityRuntimeId,
+    liveWslDistroId
   })
   const routeIdentity: ClientHostRouteIdentity = {
     orcaProfileId,
@@ -182,17 +188,42 @@ export async function startPairedRuntimeBrowserClientHost(options: {
     )
   }
   const authority = await browserClientHosts.start({
-    environmentId: options.environment.id,
+    environmentId: environment.id,
     pairingRevision,
     authorityRuntimeId: options.authorityRuntimeId,
     connection,
     orcaProfileId,
     storageScope: routeIdentity.storageScope,
-    environmentLabel: options.environment.name,
+    environmentLabel: environment.name,
     ...authorityIdentities
   })
-  clientHostRouteIdentities.set(options.environment.id, routeIdentity)
+  clientHostRouteIdentities.set(environment.id, routeIdentity)
   return authority
+}
+
+/**
+ * A WSL host's partition is named by its distro's registration, so wait (bounded) for the
+ * registry read its connection started, then re-read the record that read may have updated.
+ */
+async function observeWslRegistrationBeforeStart(options: {
+  environment: KnownRuntimeEnvironment
+  userDataPath: string
+}): Promise<{ environment: KnownRuntimeEnvironment; liveWslDistroId: string | null }> {
+  const host = classifyRuntimeEnvironmentHost(options.environment)
+  if (host.kind !== 'wsl') {
+    return { environment: options.environment, liveWslDistroId: null }
+  }
+  const liveWslDistroId = await awaitWslHostRegistration(options.userDataPath, {
+    environmentId: options.environment.id,
+    distro: host.deployment.distro
+  })
+  const environment = resolveEnvironment(options.userDataPath, options.environment.id)
+  const revisionOf = (entry: KnownRuntimeEnvironment): number =>
+    entry.pairingRevision ?? entry.createdAt
+  if (revisionOf(environment) !== revisionOf(options.environment)) {
+    throw new Error('browser_client_host_pairing_changed')
+  }
+  return { environment, liveWslDistroId }
 }
 
 /**

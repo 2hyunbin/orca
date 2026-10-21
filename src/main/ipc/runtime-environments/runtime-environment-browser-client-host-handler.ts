@@ -38,7 +38,7 @@ export function registerRuntimeEnvironmentBrowserClientHostHandler(options: {
           requireConnected(environmentId)
           return status
         },
-        startHost: startPairedRuntimeBrowserClientHost,
+        startHost: (start) => startPairedRuntimeBrowserClientHost({ ...start, userDataPath }),
         closeHost: closePairedRuntimeBrowserClientHostEnvironment
       })
       if (placement.kind === 'client') {
