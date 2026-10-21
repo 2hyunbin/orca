@@ -94,4 +94,16 @@ describe('skill install provider table drives discovery', () => {
       ).toBe(true)
     }
   })
+
+  it('keeps scanning Qoder folders it still reads after installs moved to the canonical root', () => {
+    const qoderPaths = discover()
+      .filter((source) => source.owner === 'qoder')
+      .map((source) => source.path)
+    expect(qoderPaths).toEqual(
+      expect.arrayContaining([
+        posix.join(HOME, '.qoder', 'skills'),
+        posix.join(WORKSPACE, '.qoder', 'skills')
+      ])
+    )
+  })
 })
