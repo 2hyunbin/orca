@@ -345,10 +345,9 @@ export function ClientHostedBrowserPagePane({
       {/* IPC-driven context menu in a Portal so position:fixed escapes ancestor transform/backdrop-filter containing blocks. */}
       <BrowserPageContextMenu
         browserPageId={browserTab.id}
-        worktreeId={worktreeId}
+        {...{ worktreeId, webviewRef }}
         canGoBack={browserTab.canGoBack}
         canGoForward={browserTab.canGoForward}
-        webviewRef={webviewRef}
         onReload={() => reload.reloadWebviewOrRecoverGuest(false)}
       />
       <div data-contextual-tour-target="client-hosted-browser-controls">
@@ -375,8 +374,7 @@ export function ClientHostedBrowserPagePane({
               editSession={addressBarEditSession}
               leadingIcon={
                 <RemoteRuntimeEgressIndicator
-                  runtimeEnvironmentId={runtimeEnvironmentId}
-                  presentation="client-hosted"
+                  {...{ runtimeEnvironmentId, presentation: 'client-hosted' }}
                 />
               }
               loading={loading}
@@ -398,8 +396,7 @@ export function ClientHostedBrowserPagePane({
         <BrowserFind
           isOpen={findOpen}
           onClose={() => setFindOpen(false)}
-          webviewRef={webviewRef}
-          guestGeneration={pageHostGeneration}
+          {...{ webviewRef, guestGeneration: pageHostGeneration }}
         />
         {showFailureOverlay && browserTab.loadError ? (
           <BrowserLoadFailureOverlay
@@ -425,8 +422,7 @@ export function ClientHostedBrowserPagePane({
         ) : null}
         {attachmentError || restoredPageUnrecovered ? (
           <ClientHostedBrowserUnavailableNotice
-            runtimeEnvironmentId={runtimeEnvironmentId}
-            worktreeId={worktreeId}
+            {...{ runtimeEnvironmentId, worktreeId }}
             lastCommittedUrl={browserTab.url}
             placementHostClientId={browserHostClientId}
           />
