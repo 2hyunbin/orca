@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { committingSpawn } from '../bind-first-pane.test-fixture'
+import { committingSpawn, registerLivePty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import type { WorkspaceSessionState } from '../orca-runtime-test-mocks.spec'
 import {
@@ -373,6 +373,12 @@ describe('OrcaRuntimeService', () => {
           }
         ]
       })
+      for (const [leafId, ptyId] of [
+        [HEADLESS_LEAF_ID, 'serve-left'],
+        [HEADLESS_SECOND_LEAF_ID, 'serve-right']
+      ]) {
+        registerLivePty(runtime, ptyId, TEST_WORKTREE_ID, null, { tabId: 'host-tab', leafId })
+      }
       return { runtime, getSession, kill, closeTerminal }
     }
 

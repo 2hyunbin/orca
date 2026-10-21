@@ -570,7 +570,12 @@ describe('OrcaRuntimeService', () => {
     expect(resolveLegacyWorkerTerminalRecovery).toHaveBeenCalledWith(workerPaneKey, 'adopted')
     expect(write).not.toHaveBeenCalled()
     expect(kill).not.toHaveBeenCalled()
-    const [terminal] = (await runtime.listTerminals()).terminals
+    const terminal = (await runtime.listTerminals()).terminals.find(
+      (candidate) => candidate.ptyId === 'pty-legacy'
+    )
+    if (!terminal) {
+      throw new Error('expected the legacy worker terminal')
+    }
     await expect(runtime.readTerminal(terminal.handle)).resolves.toMatchObject({
       tail: [' >_ OpenAI Codex (v0.131.0)', ' model:       gpt-5.5 high', ' directory:   /repo']
     })

@@ -6,6 +6,7 @@ import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { getConnectionExecutionHostId } from '../../shared/execution-host'
+import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
 
 export type BoundPane = { worktreeId: string; tabId: string; leafId: string; ptyId: string }
 
@@ -178,6 +179,22 @@ export function registerBoundPty(
   runtime.registerPty(ptyId, worktreeId, connectionId, binding)
 }
 
+/**
+ * A live terminal in a layout-owner build: bound and registered, as the spawn commit or a daemon
+ * reattach leaves it. Window-owned suites prove liveness through the window graph, so this is a no-op.
+ */
+export function registerLivePty(
+  runtime: Parameters<typeof registerBoundPty>[0],
+  ptyId: string,
+  worktreeId: string,
+  connectionId: string | null,
+  binding: { tabId: string; leafId: string } & Record<string, unknown>
+): void {
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    registerBoundPty(runtime, ptyId, worktreeId, connectionId, binding)
+  }
+}
+
 /** A fake PTY host spawn that commits as the real one does: it binds the pane, then answers. */
 export function committingSpawn<
   Args extends { worktreeId?: string; tabId?: string; leafId?: string },
@@ -279,5 +296,44 @@ export function commitFakeSpawnsInRuntimeTests(prototype: PtyControllerRuntimePr
         }
       })
     )
+  }
+}
+
+/**
+ * A recoverable pane's terminal as production loses it: the host's inventory answers without it
+ * and reports no exit, so the record disconnects and main keeps the pane. Window-owned builds keep
+ * the exit (code 0) these suites drove before.
+ */
+export async function dropFromHostInventory(
+  runtime: { onPtyExit: (ptyId: string, exitCode: number) => unknown },
+  ptyId: string
+): Promise<void> {
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    runtime.onPtyExit(ptyId, 0)
+    return
+  }
+  const encoded = getPtyExecutionHost(ptyId)
+  const hostId = encoded && encoded !== 'foreign' ? encoded : 'local'
+  const controller: unknown = Reflect.get(runtime, 'ptyController')
+  const inventory = Object.assign(
+    Object.create(controller && typeof controller === 'object' ? controller : null),
+    {
+      listProcesses: async () => [],
+      listProcessesWithHostScope: async () => ({ processes: [], hostIds: ['local', hostId] }),
+      hasPty: () => false
+    }
+  )
+  Reflect.set(runtime, 'ptyController', inventory)
+  try {
+    const refresh: unknown = Reflect.get(
+      runtime,
+      'refreshPtyWorktreeRecordsWithControllerInventory'
+    )
+    if (typeof refresh !== 'function') {
+      throw new Error('dropFromHostInventory needs the runtime inventory refresh')
+    }
+    await Reflect.apply(refresh, runtime, [[]])
+  } finally {
+    Reflect.set(runtime, 'ptyController', controller)
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { bindPaneFirst } from '../bind-first-pane.test-fixture'
+import { registerLivePty } from '../bind-first-pane.test-fixture'
 import {
   OrcaRuntimeService,
   electronMocks,
@@ -270,7 +270,7 @@ describe('OrcaRuntimeService', () => {
       [leftLeafId, 'pty-left'],
       [rightLeafId, 'pty-right']
     ]) {
-      bindPaneFirst(runtime, { worktreeId: TEST_WORKTREE_ID, tabId: 'tab-1', leafId, ptyId })
+      registerLivePty(runtime, ptyId, TEST_WORKTREE_ID, null, { tabId: 'tab-1', leafId })
     }
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {

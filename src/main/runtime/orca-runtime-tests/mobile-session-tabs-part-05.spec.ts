@@ -1,6 +1,6 @@
 import { withDurableRuntimeStore } from '../runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import { committingSpawn } from '../bind-first-pane.test-fixture'
+import { committingSpawn, registerLivePty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
 import type { RuntimeMobileSessionTabsResult } from '../orca-runtime-test-mocks.spec'
 import {
@@ -325,6 +325,10 @@ describe('OrcaRuntimeService', () => {
           ptyId: 'persisted-pty'
         }
       ]
+    })
+    registerLivePty(runtime, 'persisted-pty', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_LEAF_ID
     })
     const [terminal] = (await runtime.listTerminals()).terminals
     const pending = runtime.closeTerminalTab(terminal.handle)

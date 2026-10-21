@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { registerLivePty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
@@ -102,6 +103,12 @@ describe('OrcaRuntimeService', () => {
       ]
     })
 
+    for (const [leafId, ptyId] of [
+      [HEADLESS_LEAF_ID, 'pty-a'],
+      [HEADLESS_SECOND_LEAF_ID, 'pty-b']
+    ]) {
+      registerLivePty(runtime, ptyId, TEST_WORKTREE_ID, null, { tabId: 'host-tab', leafId })
+    }
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
 
     expect(kill).toHaveBeenCalledWith('pty-a')
@@ -185,6 +192,10 @@ describe('OrcaRuntimeService', () => {
       ]
     })
 
+    registerLivePty(runtime, servePtyId, TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_LEAF_ID
+    })
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
 
     expect(kill).toHaveBeenCalledWith(servePtyId)
@@ -518,6 +529,12 @@ describe('OrcaRuntimeService', () => {
       ]
     })
 
+    for (const [leafId, ptyId] of [
+      [HEADLESS_LEAF_ID, 'serve-left'],
+      [HEADLESS_SECOND_LEAF_ID, 'serve-right']
+    ]) {
+      registerLivePty(runtime, ptyId, TEST_WORKTREE_ID, null, { tabId: 'host-tab', leafId })
+    }
     await runtime.closeMobileSessionTab(
       `id:${TEST_WORKTREE_ID}`,
       `host-tab::${HEADLESS_SECOND_LEAF_ID}`

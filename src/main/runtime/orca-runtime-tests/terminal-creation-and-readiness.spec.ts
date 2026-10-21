@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { committingSpawn } from '../bind-first-pane.test-fixture'
+import { committingSpawn, registerLivePty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, electronMocks, makePaneKey } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
@@ -407,6 +407,11 @@ describe('OrcaRuntimeService', () => {
           ptyId: 'persisted-pty'
         }
       ]
+    })
+    registerLivePty(runtime, 'persisted-pty', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_LEAF_ID,
+      incarnationId
     })
     const syntheticHandle = runtime.getAgentStatusTerminalHandleForPaneKey(paneKey)
     expect(syntheticHandle).toMatch(/^term_/)

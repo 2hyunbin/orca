@@ -1,5 +1,6 @@
 import { withDurableRuntimeStore } from '../runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
+import { registerBoundPty } from '../bind-first-pane.test-fixture'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
 import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
 import {
@@ -283,8 +284,13 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('does not mark persisted PTY id collisions ready without matching pane identity', async () => {
+    // The saved pane carries the incarnation of the terminal it ran before the restart.
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal()
+      makeWorkspaceSessionWithHeadlessTerminal({
+        terminalPtyIncarnationsByPaneKey: {
+          [`host-tab:${HEADLESS_LEAF_ID}`]: 'inc-before-restart'
+        }
+      })
     )
     let rows: AgentStatusIpcPayload[] = []
     const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
@@ -299,9 +305,11 @@ describe('OrcaRuntimeService', () => {
         { id: 'persisted-pty', cwd: TEST_WORKTREE_PATH, title: 'Unrelated PTY' }
       ]
     })
-    runtime.registerPty('persisted-pty', TEST_WORKTREE_ID, null, {
+    // The colliding live terminal's own spawn commit bound other-tab, under its own incarnation.
+    registerBoundPty(runtime, 'persisted-pty', TEST_WORKTREE_ID, null, {
       tabId: 'other-tab',
-      leafId: '99999999-9999-4999-8999-999999999999'
+      leafId: '99999999-9999-4999-8999-999999999999',
+      incarnationId: 'inc-now'
     })
     runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     const unrelatedPty = runtime['ptysById'].get('persisted-pty')!

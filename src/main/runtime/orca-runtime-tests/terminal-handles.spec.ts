@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { registerBoundPty } from '../bind-first-pane.test-fixture'
+import {
+  dropFromHostInventory,
+  registerBoundPty,
+  registerLivePty
+} from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, makePaneKey } from '../orca-runtime-test-mocks.spec'
 import type {
   RuntimeClientEvent,
@@ -156,6 +160,10 @@ describe('OrcaRuntimeService', () => {
         }
       ]
     }
+    registerLivePty(runtime, 'pty-1', 'repo-1::/tmp/worktree-a', null, {
+      tabId: 'tab-1',
+      leafId: 'pane:1'
+    })
     runtime.syncWindowGraph(1, graph)
     const listed = await runtime.listMobileSessionTabs('branch:feature/foo')
     const mobileTab = listed.tabs.find((tab) => tab.type === 'terminal')
@@ -366,7 +374,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const expiredHandle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit('pty-expired', 0)
+    await dropFromHostInventory(runtime, 'pty-expired')
     const createTerminal = vi.spyOn(runtime, 'createTerminal').mockResolvedValue({
       handle: 'term-replacement',
       tabId,
@@ -443,7 +451,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const oldHandle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit('pty-old', 0)
+    await dropFromHostInventory(runtime, 'pty-old')
     registerBoundPty(runtime, 'pty-new', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
@@ -466,7 +474,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const expiredHandle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit('pty-expired', 0)
+    await dropFromHostInventory(runtime, 'pty-expired')
     let finishCreate!: (result: RuntimeTerminalCreate) => void
     const pendingCreate = new Promise<RuntimeTerminalCreate>((resolve) => {
       finishCreate = resolve
@@ -499,7 +507,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const expiredHandle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit('pty-expired', 0)
+    await dropFromHostInventory(runtime, 'pty-expired')
     const createTerminal = vi
       .spyOn(runtime, 'createTerminal')
       .mockRejectedValueOnce(new Error('relay_reconnecting'))
@@ -534,7 +542,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit(appPtyId, 0)
+    await dropFromHostInventory(runtime, appPtyId)
     const createTerminal = vi.spyOn(runtime, 'createTerminal')
 
     await expect(runtime.recoverTerminalPane(paneKey, TEST_WORKTREE_ID, handle)).rejects.toThrow(
@@ -557,7 +565,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit(appPtyId, 0)
+    await dropFromHostInventory(runtime, appPtyId)
     const createTerminal = vi.spyOn(runtime, 'createTerminal').mockResolvedValue({
       handle: 'term-replacement',
       tabId,
@@ -595,7 +603,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit(appPtyId, 0)
+    await dropFromHostInventory(runtime, appPtyId)
     const createTerminal = vi.spyOn(runtime, 'createTerminal')
 
     await expect(runtime.recoverTerminalPane(paneKey, TEST_WORKTREE_ID, handle)).rejects.toThrow(
@@ -616,7 +624,7 @@ describe('OrcaRuntimeService', () => {
       leafId: HEADLESS_LEAF_ID
     })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit(appPtyId, 0)
+    await dropFromHostInventory(runtime, appPtyId)
     const createTerminal = vi.spyOn(runtime, 'createTerminal')
 
     await expect(runtime.recoverTerminalPane(paneKey, TEST_WORKTREE_ID, handle)).rejects.toThrow(
