@@ -12,6 +12,10 @@ import {
 } from '../mobile-session-tab-merge'
 import { terminalLayoutContainsLeaf } from '../../../shared/workspace-session-pane-ownership'
 import { getHeadlessMobileSessionGroupId } from '../mobile-session-layout-projection'
+import {
+  appendBrowserTabOrder,
+  collectBrowserGroupAssignment
+} from '../mobile-session-browser-group-projection'
 
 export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends OrcaRuntimeWithSyncMobileSessionTabs {
   protected abstract collectPreservedHeadlessMobileSessionTabs(
@@ -54,11 +58,19 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
       tabs.find((tab) => tab.isActive) ??
       tabs[0] ??
       null
-    const tabGroups = mergeMobileSessionTabGroups(
-      snapshot.worktree,
-      snapshot.tabGroups ?? existing.tabGroups ?? [],
-      tabs,
-      activeTab?.type === 'terminal' ? activeTab : null
+    const browserTabIds = normalizedPreservedTabs
+      .filter((tab) => tab.type === 'browser')
+      .map((tab) => tab.id)
+    const tabGroups = appendBrowserTabOrder(
+      mergeMobileSessionTabGroups(
+        snapshot.worktree,
+        snapshot.tabGroups ?? existing.tabGroups ?? [],
+        tabs,
+        activeTab?.type === 'terminal' ? activeTab : null
+      ),
+      browserTabIds,
+      undefined,
+      collectBrowserGroupAssignment(existing.tabGroups, browserTabIds)
     )
     return {
       ...snapshot,
