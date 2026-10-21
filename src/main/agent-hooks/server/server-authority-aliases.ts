@@ -194,7 +194,7 @@ export abstract class AgentHookServerAuthorityAliases extends AgentHookServerAut
     const pending = this.pendingLaunchAuthority.get(previousOwnerPaneKey)
     this.pendingLaunchAuthority.delete(previousOwnerPaneKey)
     this.pendingLaunchAuthority.delete(toPaneKey)
-    if (pending?.row === previousStatus && transferredStatus) {
+    if (pending && pending.row === previousStatus && transferredStatus) {
       const owner = parsePaneKey(toPaneKey)
       this.pendingLaunchAuthority.set(toPaneKey, {
         ...pending,

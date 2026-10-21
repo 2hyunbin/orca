@@ -122,7 +122,7 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
     }
   }
 
-  protected writeLegacyStatusRow(entry: EnrichedAgentHookEventPayload): boolean {
+  protected writeLegacyStatusRow(entry: AgentHookEventPayload): boolean {
     const row = entry.launchToken ? { ...entry, launchToken: undefined } : entry
     const accepted = admitLegacyAgentStatus(
       this.state,

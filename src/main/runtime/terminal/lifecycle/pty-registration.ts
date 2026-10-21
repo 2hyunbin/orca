@@ -10,6 +10,8 @@ import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
 
 export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
+  protected abstract notifyAgentLaunchAuthority(paneKey: string | null | undefined): void
+
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
     worktreeId: string,
     tabId: string

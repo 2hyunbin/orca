@@ -47,7 +47,7 @@ describe('AgentHookServer authority evidence', () => {
       }
     ])
     // Independently registered execution-host secrets, separate from incoming hook bodies.
-    const admitted = new Map([
+    const admitted = new Map<string, Set<string>>([
       [
         PANE_KEY,
         new Set(
