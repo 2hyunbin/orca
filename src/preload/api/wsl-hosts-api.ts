@@ -3,10 +3,10 @@
  * else undefined.
  */
 import { ipcRenderer } from 'electron'
-import type { WslHostConnectIntent } from '../../shared/wsl-host-types'
 import {
   WSL_HOST_STATUS_CHANNEL,
   type WslHostAddResult,
+  type WslHostConnectIntent,
   type WslHostCapability,
   type WslHostDistro,
   type WslHostServerStop,

@@ -9,9 +9,9 @@ import {
   readWslHostDeployments,
   type WslHostDeploymentRecord
 } from '../../shared/wsl-host-deployment-store'
-import type { WslHostConnectIntent } from '../../shared/wsl-host-types'
 import type {
   WslHostAddResult,
+  WslHostConnectIntent,
   WslHostDistro,
   WslHostServerStop,
   WslHostStatus
