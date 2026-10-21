@@ -82,15 +82,66 @@ describe('host-initiated terminal creation under an attached window', () => {
   })
 })
 
-it.each(['refused', 'adopted', 'fresh-unavailable'] as const)(
+it.each(['refused', 'adopted', 'stable-adopted', 'ensure-adopted', 'fresh-unavailable'] as const)(
   'publishes the effective %s terminal rather than the requested saved recipe',
   async (kind) => {
     const { runtime, spawn } = createRuntimeWithAttachedWindow()
     const config = { agentCommand: 'codex', agentArgs: '', agentEnv: {} }
+    const adopted = kind === 'adopted' || kind === 'stable-adopted' || kind === 'ensure-adopted'
+    const ownerSurface = {
+      worktreeId: 'repo-1::/tmp/wt-cli',
+      terminalHandle: 'owner-handle',
+      tabId: 'owner-tab',
+      leafId: '11111111-1111-4111-8111-111111111111'
+    }
+    const coldRestore = { scrollback: 'checkpoint A', cwd: '/tmp/wt-cli', cols: 80, rows: 24 }
     spawn.mockResolvedValue({
       id: 'effective-pty',
-      ...(kind === 'adopted'
-        ? { isReattach: true, launchAgent: 'codex', launchConfig: config }
+      pid: 42,
+      incarnationId: 'physical-i1',
+      coldRestore,
+      snapshot: 'current image B',
+      snapshotCols: 80,
+      snapshotRows: 24,
+      snapshotSeq: 7,
+      providerSequence: { value: 7, generation: 'continued' },
+      attachedGrid: { cols: 80, rows: 24 },
+      isAlternateScreen: false,
+      replay: 'provider backlog',
+      shellReadyArmed: true,
+      openCodeCapabilities: { version: '2.0.16', pluginApi: 'v2', promptMode: 'prefill' },
+      ...(adopted
+        ? { launchAgent: 'codex', launchConfig: config, launchToken: 'owner-token' }
+        : {}),
+      ...(kind === 'adopted' ? { isReattach: true } : {}),
+      ...(kind === 'stable-adopted'
+        ? {
+            stablePaneOwner: {
+              handle: ownerSurface.terminalHandle,
+              tabId: ownerSurface.tabId,
+              leafId: ownerSurface.leafId
+            }
+          }
+        : {}),
+      ...(kind === 'ensure-adopted'
+        ? {
+            agentSessionEnsure: {
+              disposition: 'adopted',
+              owner: {
+                claim: {
+                  digestVersion: 1,
+                  keyId: 'key',
+                  identityDigest: 'C',
+                  worktreeScopeDigest: 'wt',
+                  agent: 'codex'
+                },
+                generation: 'owner-generation',
+                phase: 'live',
+                ptyId: 'effective-pty',
+                surface: ownerSurface
+              }
+            }
+          }
         : {}),
       ...(kind === 'refused'
         ? {
@@ -118,6 +169,36 @@ it.each(['refused', 'adopted', 'fresh-unavailable'] as const)(
       resumeOrigin: 'saved',
       resumeProviderSession: { key: 'session_id', id: 'C' },
       launchConfig: { agentCommand: 'claude', agentArgs: '', agentEnv: {} }
+    })
+    expect(result).toEqual({
+      handle: expect.any(String),
+      tabId: expect.any(String),
+      paneKey: expect.any(String),
+      ptyId: 'effective-pty',
+      worktreeId: 'repo-1::/tmp/wt-cli',
+      title: kind === 'fresh-unavailable' ? 'Rejected C' : null,
+      launchConfig: kind === 'refused' ? undefined : config,
+      launchAgent: kind === 'refused' ? undefined : 'codex',
+      launchToken: kind === 'refused' ? undefined : adopted ? 'owner-token' : 'actual-fresh-token',
+      executionHostId: 'local',
+      hostPlatform: process.platform,
+      incarnationId: 'physical-i1',
+      surface: 'background',
+      processId: 42,
+      ...(adopted ? { isReattach: true } : { coldRestore }),
+      ...(kind === 'ensure-adopted' ? { agentSessionDisposition: 'adopted' } : {}),
+      ...(!adopted ? { agentResumeUnavailable: true } : {}),
+      ...(kind === 'refused'
+        ? {
+            agentResumeRefused: 'chat-home',
+            savedResumeDecision: {
+              agent: 'claude',
+              providerSession: { key: 'session_id', id: 'C' },
+              verdict: 'chat-home'
+            }
+          }
+        : {}),
+      warning: expect.any(String)
     })
     expect(result.agentResumeRefused).toBe(kind === 'refused' ? 'chat-home' : undefined)
     expect(result.launchAgent).toBe(kind === 'refused' ? undefined : 'codex')

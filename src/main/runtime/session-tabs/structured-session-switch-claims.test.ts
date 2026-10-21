@@ -9,10 +9,9 @@ import { switchStartProcessVerdict } from './structured-session-switch-observati
 import { codexChatHolding } from '../../ai-vault/structured-session-ownership.test-support'
 import {
   TERMINAL_SWITCH_GENERATION_ENV,
-  type TerminalSwitchDescriptor,
-  type TerminalSwitchWrite
+  type TerminalSwitchDescriptor
 } from '../../../shared/terminal-switch'
-import { setAgentSessionRecordTerminalSwitch } from '../agent-session-record-terminal-switch'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { routedTerminalSwitchOwners } from '../../providers/terminal-switch-owners'
 import { seedResumeLaunchIdentity } from '../../ipc/pty/pane/resume-launch-identity'
 import { isLaterSwitchHostBoot, readSwitchHostBoot } from './structured-session-switch-boot'
@@ -101,14 +100,17 @@ beforeEach(() => {
     {
       listRecords: () =>
         [...saved].map(([sessionId, terminalSwitch]) => ({ sessionId, terminalSwitch })),
-      setTerminalSwitch: async (sessionId: string, write: TerminalSwitchWrite) => {
+      transitionHandoff: async (
+        sessionId: string,
+        transition: (record: AgentSessionRecord) => AgentSessionRecord
+      ) => {
         const current = saved.get(sessionId)
         const record = {
           ...codexChatHolding(sessionId, [C]),
           ...(current ? { terminalSwitch: current } : {})
         }
         // The journal store freezes what it commits.
-        const next = Object.freeze(setAgentSessionRecordTerminalSwitch(record, write, 0))
+        const next = Object.freeze(transition(record))
         Object.freeze(next.terminalSwitch?.processes)
         if (next.terminalSwitch) {
           saved.set(sessionId, next.terminalSwitch)

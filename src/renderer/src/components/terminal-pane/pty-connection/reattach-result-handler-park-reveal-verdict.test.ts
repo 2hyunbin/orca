@@ -356,6 +356,7 @@ describe('handleReattachResult empty reattach under a hibernation note', () => {
   const startup: ColdRestoreAgentResumeStartup = {
     command: 'codex resume conv-1',
     agent: 'codex',
+    resumeOrigin: 'saved',
     resumeProviderSession: record.providerSession,
     launchConfig: { agentArgs: '', agentEnv: {} },
     launchToken: 'token-1',

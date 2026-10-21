@@ -5,7 +5,8 @@ import {
   makePaneSpawnReservationKey,
   reservePaneSpawn,
   paneSpawnReservationsByOwnerKey,
-  pendingRuntimePaneCreatesByOwnerKey
+  pendingRuntimePaneCreatesByOwnerKey,
+  type PaneSpawnReservationResult
 } from '../pane/spawn-reservation'
 import {
   assemblePtySpawnEnvDeletions,
@@ -18,7 +19,7 @@ import type { PtyIpcSpawnState } from './spawn-state'
 /** Window lane: the shared spawn options plus this lane's pane reservation. */
 export async function buildPtyIpcSpawnOptions(
   ctx: PtyIpcSpawnState
-): Promise<{ isReattach: true } | null> {
+): Promise<PaneSpawnReservationResult | null> {
   const args = ctx.args
   const settings = ctx.deps.getSettings?.()
   const deletions = assemblePtySpawnEnvDeletions({

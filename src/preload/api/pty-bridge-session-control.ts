@@ -1,4 +1,3 @@
-import type { SavedResumeDecision, TerminalLaunchResult } from '../../shared/agent-session-resume'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 import { ipcRenderer } from 'electron'
 import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
@@ -9,6 +8,8 @@ import type {
   TerminalLeafMoveResult
 } from '../../shared/terminal-leaf-move'
 import type {
+  SavedResumeDecision,
+  TerminalLaunchResult,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../shared/agent-session-resume'

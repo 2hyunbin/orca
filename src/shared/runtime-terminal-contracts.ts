@@ -1,5 +1,5 @@
-import type { TerminalLaunchResult } from './agent-session-resume'
 import type {
+  TerminalLaunchResult,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from './agent-session-resume'
@@ -271,25 +271,7 @@ export type RuntimeTerminalCreateRequestPayload =
   | (RuntimeTerminalCreateBaseRequestPayload & { source?: undefined })
   | (RuntimeTerminalCreateBaseRequestPayload & { worktreeId: string; source: 'runtime-session' })
 
-export type RuntimeTerminalCreate = TerminalLaunchResult & {
-  coldRestore?: { scrollback: string; cwd: string; cols?: number; rows?: number }
-  handle: string
-  /** Host-owned PTY incarnation used to fence remote identity observations. */
-  incarnationId?: string | null
-  tabId?: string
-  paneKey?: string | null
-  ptyId?: string | null
-  worktreeId: string
-  title: string | null
-  executionHostId?: ExecutionHostId
-  hostPlatform?: NodeJS.Platform
-  surface?: 'background' | 'visible'
-  warning?: string
-  agentSessionDisposition?: 'created' | 'adopted'
-  isReattach?: true
-  /** Spawn process identity for host-internal ownership proof. */
-  processId?: number
-}
+export type { RuntimeTerminalCreate } from './runtime-terminal-create-contract'
 
 export type RuntimeTerminalSplit = {
   handle: string

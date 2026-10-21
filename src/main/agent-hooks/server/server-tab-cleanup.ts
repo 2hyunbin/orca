@@ -16,6 +16,10 @@ export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
     const clear = { paneKey: ownerKey, refusedResume: refused }
     if (
       row &&
+      'receivedAt' in row &&
+      typeof row.receivedAt === 'number' &&
+      'stateStartedAt' in row &&
+      typeof row.stateStartedAt === 'number' &&
       refused.expectedStatus &&
       row.receivedAt <= refused.expectedStatus.receivedAt &&
       row.stateStartedAt === refused.expectedStatus.stateStartedAt &&

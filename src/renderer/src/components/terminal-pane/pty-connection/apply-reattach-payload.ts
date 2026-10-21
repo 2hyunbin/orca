@@ -267,10 +267,12 @@ export function createReattachPayloadHandlers(
       session.writeReplayData(
         `${RESET_GRAPHIC_RENDITION}${ctx.connectResult.coldRestore.scrollback}`
       )
-      // Why not rebuilt when refused: main started a plain shell instead of that plan.
+      // An existing owner permits history replay, not another saved continuation.
       let resumeUnavailable = Boolean(ctx.connectResult.agentResumeUnavailable)
       let preparedStartup =
-        ctx.connectResult.agentResumeRefused || resumeUnavailable
+        ctx.connectResult.isReattach === true ||
+        ctx.connectResult.agentResumeRefused ||
+        resumeUnavailable
           ? null
           : (ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup())
       if (preparedStartup && !ctx.coldRestoreStartup) {
@@ -285,7 +287,9 @@ export function createReattachPayloadHandlers(
           preparedStartup = null
         }
       }
-      const didPrepareResume = session.applyColdRestoreAgentResumeStartup(preparedStartup)
+      const didPrepareResume =
+        ctx.connectResult.isReattach !== true &&
+        session.applyColdRestoreAgentResumeStartup(preparedStartup)
       if (resumeUnavailable) {
         // Why: main dropped the resume argv, so this pane is a NEW session —
         // the plain restored banner would claim the old one came back.

@@ -271,7 +271,7 @@ describe('SortableTabContextMenu', () => {
   it('hides switching a terminal-view tab into chat view', () => {
     const { container } = renderMenu({ canToggleViewMode: true, onToggleViewMode: vi.fn() })
 
-    expect(container.textContent).not.toContain('Switch to Chat')
+    expect(container.textContent).not.toContain('Show as chat')
   })
 
   it('keeps the way back for a tab already in chat view, in the chat/CLI move section', () => {

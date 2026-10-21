@@ -65,6 +65,8 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/browser/*cookie*.test.ts',
   // Playwright's CDP transport needs Node's WebSocket implementation.
   'src/main/browser/browser-popup-adapter-compatibility.electron.test.ts',
+  'src/main/browser/popup-origin-chrome.electron.test.ts',
+  'src/main/browser/browser-link-materialization.electron.test.ts',
   'src/main/browser/browser-popup-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-native-compatibility.electron.test.ts',
   'src/main/browser/browser-popup-background-compatibility.electron.test.ts',
@@ -86,6 +88,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/renderer/src/components/right-sidebar/parent-pr-checks-projection-selector.test.ts',
   'src/renderer/src/store/github/cache-persistence.test.ts',
   'src/main/native-chat/agent-session-journal/**/*.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-terminal-writer-acquire.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-feed.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-feed-conversation-name.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-first-input-identity.test.ts',

@@ -2,7 +2,6 @@ import { parseTerminalAttachmentLaunchResult } from '../../../../shared/terminal
 import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import { isRuntimeCompatBlockError } from '@/runtime/runtime-protocol-compat'
 import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
-import { SAVED_RESUME_ORIGIN_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { readTerminalSpawnDeferral } from '../../../../shared/host-spawn-admission'
 import { remoteRestoreSpawnIntentParams } from '../../runtime/remote-restore-spawn-intent'
 import { createAgentSessionKeyboardOptions } from '@/runtime/agent-session-keyboard-capability'
@@ -38,7 +37,10 @@ import type {
   RuntimeTerminalResolvePane,
   RuntimeTerminalSend
 } from '../../../../shared/runtime-types'
-import { TERMINAL_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
+import {
+  SAVED_RESUME_ORIGIN_RUNTIME_CAPABILITY,
+  TERMINAL_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY
+} from '../../../../shared/protocol-version'
 import { agentResumeHostAuthorityCapability } from '../../runtime/agent-resume-host-authority-capability'
 import {
   isTerminalInputTooLargeWithDeferredMeasurement,
@@ -3347,7 +3349,9 @@ export function createRemoteRuntimePtyTransport(
 
       return {
         ...terminalLaunchFacts(createdTerminal),
-        ...(createdTerminal.coldRestore ? { coldRestore: createdTerminal.coldRestore } : {}),
+        ...(createdTerminal.isReattach !== true && createdTerminal.coldRestore
+          ? { coldRestore: createdTerminal.coldRestore }
+          : {}),
         id: remotePtyId,
         replay: '',
         ...(authoritativePtyIncarnationId ? { incarnationId: authoritativePtyIncarnationId } : {}),

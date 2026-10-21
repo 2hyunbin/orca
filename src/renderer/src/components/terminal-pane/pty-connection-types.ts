@@ -1,4 +1,3 @@
-import type { SavedResumeStartupSource } from '../../../../shared/agent-session-resume'
 import type { WorkspaceAttentionSlice } from '@/store/slices/workspace-attention/workspace-attention-contract'
 import type { NotificationWorkspaceOwner } from '../../../../shared/notification-source'
 import type { PtyTransport, PtyTransportRecoveryState } from './pty-transport-types'
@@ -12,6 +11,7 @@ import type { StartupCommandDelivery } from '../../../../shared/codex-startup-de
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { TerminalPanePlacement } from '../../../../shared/terminal-pane-placement'
 import type {
+  SavedResumeStartupSource,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../../../shared/agent-session-resume'

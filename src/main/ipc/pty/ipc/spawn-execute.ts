@@ -7,11 +7,12 @@ import {
 import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
 import { resolveStablePaneOwner, spawnForStablePane } from '../pane/stable-owner'
-import { excludeReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import { excludeReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
 import { clearProviderPtyState } from '../provider/state-cleanup'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { PtyIpcSpawnState } from './spawn-state'
+import { keepAbsentBindingForSwap } from './spawn-absent-binding-swap'
 
 export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
@@ -94,7 +95,8 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           worktreeId: args.worktreeId,
           connectionId: args.connectionId,
           resolveOwner,
-          beforeFreshSpawn: chooseFresh
+          beforeFreshSpawn: chooseFresh,
+          keepAbsentBinding: keepAbsentBindingForSwap(ctx)
         })
     ctx.result = stablePaneSpawn.result
     if (ctx.result.isReattach) {

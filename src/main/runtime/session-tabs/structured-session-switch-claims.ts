@@ -8,8 +8,11 @@ import { agentSessionRefusalError } from '../../../shared/agent-session-wire-ref
 import {
   isTerminalSwitchDescriptor,
   type TerminalSwitchDescriptor,
-  type TerminalSwitchObservation
+  type TerminalSwitchObservation,
+  type TerminalSwitchWrite
 } from '../../../shared/terminal-switch'
+import type { AgentSessionRecordStore } from '../agent-session-record-store'
+import { setAgentSessionRecordTerminalSwitch } from '../agent-session-record-terminal-switch'
 import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
 import { isLaterSwitchHostBoot, readSwitchHostBoot } from './structured-session-switch-boot'
 import { seedResumeLaunchIdentity } from '../../ipc/pty/pane/resume-launch-identity'
@@ -19,6 +22,16 @@ import {
   readSwitchShellProcess,
   switchStartProcessVerdict
 } from './structured-session-switch-observation'
+
+/** Unfenced: the descriptor is the switch owner's obligation, not the writer lease. */
+const writeTerminalSwitch = (
+  store: Pick<AgentSessionRecordStore, 'transitionHandoff'>,
+  sessionId: string,
+  write: TerminalSwitchWrite
+) =>
+  store.transitionHandoff(sessionId, (record) =>
+    setAgentSessionRecordTerminalSwitch(record, write, Date.now())
+  )
 
 /** A recipe no terminal took may lapse; once taken, only its owner ends it. */
 const UNACCEPTED_SWITCH_CLAIM_MS = 60_000
@@ -207,9 +220,11 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     const store = await this.openAgentSessionRecordStore()
     // A copy: the store freezes what it commits, and this claim keeps collecting evidence.
     const snapshot = { ...descriptor, processes: [...descriptor.processes] }
-    const next = await store
-      .setTerminalSwitch(chatSessionId, saved ? { update: snapshot } : { accept: snapshot })
-      .catch(() => null)
+    const next = await writeTerminalSwitch(
+      store,
+      chatSessionId,
+      saved ? { update: snapshot } : { accept: snapshot }
+    ).catch(() => null)
     const ok = next?.terminalSwitch?.generation === claim.generation
     Object.assign(claim, { saved: saved || ok, unsaved: !ok })
     return ok
@@ -278,11 +293,9 @@ export abstract class OrcaRuntimeWithStructuredSessionSwitchClaims extends OrcaR
     }
     this.switchClaims.delete(claim.generation)
     const store = await this.openAgentSessionRecordStore()
-    await store
-      .setTerminalSwitch(claim.chatSessionId, { clear: claim.generation })
-      .catch((error: unknown) =>
-        console.warn('[agent-session] could not clear a finished switch', error)
-      )
+    await writeTerminalSwitch(store, claim.chatSessionId, { clear: claim.generation }).catch(
+      (error: unknown) => console.warn('[agent-session] could not clear a finished switch', error)
+    )
   }
 
   /** An authentic hook's process joins the evidence; identity-only rows carry none. */

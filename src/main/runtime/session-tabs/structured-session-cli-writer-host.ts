@@ -1,3 +1,4 @@
+import { hostSleepKey } from '../terminal/stop/worktree-terminal-sleep-key'
 import {
   terminalLaunchFacts,
   type TerminalLaunchResult
@@ -168,12 +169,8 @@ export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends Orca
             }))
           }),
         sleeping: (workspaceId) =>
-          [...this.terminalSleepStateByWorktreeId.values()].some(
-            (state) =>
-              state.worktreeId === workspaceId &&
-              (state.phase === 'sleeping' ||
-                state.phase === 'partial' ||
-                state.phase === 'stopping')
+          this.terminalSleepStateByHostWorktree.has(
+            hostSleepKey(LOCAL_EXECUTION_HOST_ID, workspaceId)
           ),
         shellAlone: (pane) => this.cliWriterShellAlone(pane)
       },

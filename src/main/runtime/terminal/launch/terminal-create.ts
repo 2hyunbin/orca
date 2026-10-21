@@ -1,4 +1,8 @@
-import { recordTerminalLaunchMetadata, resolveTerminalLaunchResult } from './terminal-launch-result'
+import {
+  recordTerminalLaunchMetadata,
+  resolveTerminalLaunchResult,
+  terminalLaunchPublicFacts
+} from './terminal-launch-result'
 import { OrcaRuntimeWithTerminalCreateDeduplication } from './terminal-create-deduplication'
 import * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { createDesktopTerminal } from '../../orca-runtime-create-terminal-desktop'
@@ -7,9 +11,11 @@ import { createIdempotentCallback } from '../../orca-runtime-report-pty-spawn-co
 import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
 import { agentLaunchTokenFor } from '../../../agent-launch/agent-launch-token'
 import { migratedPaneRestoreHint } from '../../migrated-pane-restore-cwd'
-import { resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
+import { paneSize, resolvePtyFirstSize } from '../../../ipc/pty/pty-first-size'
 
 export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
+  protected abstract paneStartStatusArgs: dependencies.PaneStartArgsOf
+
   async createTerminal(
     worktreeSelector?: string,
     opts: dependencies.TerminalCreateOptions = {},
@@ -47,7 +53,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           ? this.singleGroupWorkspaceGridSize
           : undefined
       const group = groupId ? this.terminalGroupGridSizes?.[groupId] : undefined
-      const initialSize = resolvePtyFirstSize({ pane: opts.initialSize, group, singleGroup })
+      const initialSize = resolvePtyFirstSize({ pane: paneSize(session, opts), group, singleGroup })
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
@@ -186,7 +192,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
             ...(launchOpts.afterTabId ? { afterTabId: launchOpts.afterTabId } : {}),
             ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
             ...(!adoptedBeforeLaunch && launchOpts.isNewSession ? { isNewSession: true } : {}),
-            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS
+            ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS,
+            ...this.paneStartStatusArgs(launchOpts)
           })
         } finally {
           releaseStablePaneCreate?.()
@@ -282,23 +289,15 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           warning = dependencies.createTerminalRevealWarning(handle)
         }
         return {
-          ...result,
+          ...terminalLaunchPublicFacts(result, launch.adoptedStablePane, pty),
           handle,
           tabId,
           paneKey,
           ptyId: result.id,
           worktreeId: workspace.id,
           title: pty?.title ?? launch.effectiveTitle ?? null,
-          launchConfig: pty?.launchConfig ?? undefined,
-          launchAgent: pty?.launchAgent ?? undefined,
-          launchToken: pty?.launchToken ?? undefined,
           ...this.getPtyExecutionHostMetadata(result.id),
           surface,
-          ...(result.pid ? { processId: result.pid } : {}),
-          ...(result.agentSessionEnsure
-            ? { agentSessionDisposition: result.agentSessionEnsure.disposition }
-            : {}),
-          ...(launch.adoptedStablePane ? { isReattach: true as const } : {}),
           ...(warning ? { warning } : {})
         }
       } finally {
