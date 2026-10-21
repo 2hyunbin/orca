@@ -7,6 +7,7 @@ import { getAppEnvironment } from '../../shared/app-environment'
 import { refreshManagedOrcadPairing } from '../../shared/runtime-environment-managed-orcad-store'
 import { assertRuntimeEnvironmentNotReconciling } from '../../shared/runtime-environment-reconciliation-record'
 import {
+  getPreferredPairingOffer,
   redactRuntimeEnvironment,
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
@@ -74,7 +75,9 @@ function refreshPairing(
   return refreshManagedOrcadPairing(
     userDataPath,
     environment.id,
-    tunneledOrcadPairingCode(readiness, localPort)
+    // Why the enrolled grant: a restarted orcad offers a new device once this one has paired, and
+    // taking it would change who this desktop is to the host (as WSL's #29042 found).
+    tunneledOrcadPairingCode(readiness, localPort, getPreferredPairingOffer(environment))
   )
 }
 
