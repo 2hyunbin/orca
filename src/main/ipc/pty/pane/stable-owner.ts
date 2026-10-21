@@ -18,6 +18,8 @@ import {
   TerminalSessionOwnerUnverifiedError
 } from '../../../daemon/daemon-errors'
 import { ptyIncarnationById } from '../provider/ownership-state'
+import { PANE_NOT_LIVE_ERROR } from '../../../../shared/pane-attach-only-view'
+import { attachViewWithoutOwner } from './attach-only-view'
 import { keepAbsentPaneBindingForSwap, releaseAbsentPaneOwner } from './absent-pane-owner'
 import { excludeReplacedPaneOwner, type ReplacedPaneOwner } from './replaced-pane-owner'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
@@ -182,6 +184,8 @@ export type StablePaneSpawnContext = {
   onFreshSpawn?: (result: PtySpawnResult) => void
   /** Only a spawn holding the pane's reservation: it binds next, so its bind swaps the dead id. */
   keepAbsentBinding?: (dead: ReplacedPaneOwner) => void
+  /** Layout-owner build: a window's view, which attaches or starts nothing (attach-only-view.ts). */
+  attachOnlyView?: true
 }
 
 export function stablePanePersistenceFence(
@@ -266,6 +270,10 @@ export async function attachStablePaneOwner(
     ) {
       throw new Error('terminal_pane_owner_changed')
     }
+    if (args.attachOnlyView) {
+      // Why the binding stays: main's start reuses its id, which carries the terminal's history.
+      throw new Error(PANE_NOT_LIVE_ERROR)
+    }
     const kept = args.keepAbsentBinding ? keepAbsentPaneBindingForSwap(args, owner) : null
     if (kept) {
       args.keepAbsentBinding?.(kept)
@@ -297,6 +305,9 @@ export async function spawnForStablePane(
     if (attached) {
       return attached
     }
+  }
+  if (args.attachOnlyView) {
+    return { result: await attachViewWithoutOwner(args), owner: null }
   }
   const result = await args.provider.spawn(args.spawnOptions)
   args.onFreshSpawn?.(result)

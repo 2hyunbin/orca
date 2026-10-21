@@ -133,6 +133,7 @@ export async function spawnIpcPty(
     ...(connectionId ? { connectionId } : {}),
     ...(admittedSessionId ? { sessionId: admittedSessionId } : {}),
     ...(connectOptions.initiallyHidden ? { initiallyHidden: true } : {}),
+    ...(connectOptions.attachOnlyView ? { attachOnlyView: true } : {}),
     worktreeId,
     ...(tabId ? { tabId } : {}),
     ...(leafId ? { leafId } : {}),

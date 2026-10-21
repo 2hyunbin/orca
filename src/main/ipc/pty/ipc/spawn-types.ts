@@ -39,6 +39,8 @@ export type PtySpawnIpcArgs = {
   connectionId?: string | null
   worktreeId?: string
   sessionId?: string
+  // Layout-owner build: a view of a pane main starts; it attaches to `sessionId` or starts nothing.
+  attachOnlyView?: boolean
   shellOverride?: string
   projectRuntime?: ProjectExecutionRuntimeResolution
   terminalKittyKeyboardProtocol?: boolean
@@ -79,6 +81,7 @@ export type AdoptStablePaneArgs = {
   ownsPaneSpawnReservation?: true
   /** See StablePaneSpawnContext; only with `ownsPaneSpawnReservation`. */
   keepAbsentBinding?: (dead: ReplacedPaneOwner) => void
+  attachOnlyView?: true
 }
 
 export type AdoptStablePaneResult = {

@@ -76,7 +76,8 @@ export async function adoptStablePane(
     connectionId: args.connectionId,
     resolveOwner: () =>
       resolveStablePaneOwner(runtime, store, paneKey, args.worktreeId, args.connectionId),
-    keepAbsentBinding: args.ownsPaneSpawnReservation ? args.keepAbsentBinding : undefined
+    keepAbsentBinding: args.ownsPaneSpawnReservation ? args.keepAbsentBinding : undefined,
+    attachOnlyView: args.attachOnlyView
   })
   if (!ownerKey) {
     return await adoption

@@ -7,6 +7,7 @@ import { clearProviderPtyState } from '../provider/state-cleanup'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
 import type { PtyIpcSpawnState } from './spawn-state'
 import { keepAbsentBindingForSwap } from './spawn-absent-binding-swap'
+import { attachOnlyViewOf } from '../pane/attach-only-view'
 
 export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
@@ -58,7 +59,8 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
           worktreeId: args.worktreeId,
           connectionId: args.connectionId,
           resolveOwner,
-          keepAbsentBinding: keepAbsentBindingForSwap(ctx)
+          keepAbsentBinding: keepAbsentBindingForSwap(ctx),
+          attachOnlyView: attachOnlyViewOf(args)
         })
     ctx.result = stablePaneSpawn.result
     ctx.stablePaneOwner = stablePaneSpawn.owner
