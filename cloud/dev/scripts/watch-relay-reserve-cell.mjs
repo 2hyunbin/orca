@@ -45,7 +45,8 @@ import {
   measuredPhoneBackground,
   phoneSinceOf,
   PHONE_WATCH_RULES,
-  RESERVE_WATCH_RULES
+  RESERVE_WATCH_RULES,
+  UNATTRIBUTED_503S
 } from './relay-reserve-watch-rules.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -176,6 +177,8 @@ export async function readDirector503Minutes(reader, { projectId, directorServic
   if (read.failed) return failed503Read('director 503 metric read failed')
   // The sample's combined log read passes these in; a background read takes its own.
   const metrics = logged ?? (await readDirectorDrainReturn(reader, { config, window: directorMetricsWindow(endedAt, minutes) }))
+  const failedPart = metrics.find((part) => part.failed && part.error)
+  if (failedPart) return failed503Read(`director runtime metrics read failed: ${failedPart.error}`)
   const lineTimes = metrics.flatMap((part) => part.samples.map((sample) => Date.parse(sample.timestamp)))
   if (lineTimes.some((at) => !Number.isFinite(at))) return failed503Read('director runtime metrics line with an unparseable timestamp')
   const scheduled = drainReturnByMinute(metrics, DIRECTOR_METRICS_LIMIT)
@@ -200,10 +203,6 @@ const directorMetricsWindow = (endedAt, minutes) => ({
   endedAt: new Date(endedAt + DIRECTOR_METRICS_INTERVAL_MS)
 })
 
-// Fleet 503s no instance's own lines account for (Cloud Run's own, or a route the director does
-// not count), as one instance of their own. None held over 6 for 3 minutes in 10-20/21.
-const UNATTRIBUTED = 'unattributed'
-
 // The same non-drain measure per director instance, from each instance's own runtime-metrics
 // counts of the /v1/assign 503s it answered, less its own scheduled ones. 10-21 07:55Z read 40,
 // 169, 5 on the stalled instance this way, against 54, 155, 5 in Cloud Run's request log.
@@ -216,11 +215,10 @@ function director503ByInstance(metrics, keys, fleet) {
     const { series } = withoutDrainDeferrals({ perMinute: own.assign503sPerMinute }, own, keys)
     perInstance[instance] = Object.fromEntries(keys.map((minute, index) => [minute, series[index]]))
   }
-  perInstance[UNATTRIBUTED] = Object.fromEntries(
-    keys.map((minute, index) => [
-      minute,
-      Math.max(0, fleet[index] - Object.values(perInstance).reduce((sum, byMinute) => sum + (byMinute[minute] ?? 0), 0))
-    ])
+  // Cloud Run's own 503s, or a route the director does not count; an instance that stopped logging
+  // lands here too.
+  perInstance[UNATTRIBUTED_503S] = Object.fromEntries(
+    keys.map((minute, index) => [minute, fleet[index] - Object.values(perInstance).reduce((sum, byMinute) => sum + (byMinute[minute] ?? 0), 0)])
   )
   const logged = new Map(keys.map((minute) => [minute, new Set()]))
   for (const sample of samples) {
@@ -402,6 +400,14 @@ function directorMetricsQuery({ directorService, endedAt, minutes }) {
   }
 }
 
+// The queries one sample sends; `phoneRequest` is false while the phone path is not watched.
+export const sampleLogQueries = ({ phoneRequest, director, seatRequest }) => ({
+  phone: phoneRequest && cellPhoneQuery(phoneRequest),
+  directorMetrics: directorMetricsQuery(director),
+  ledger: ledgerQuery({ directorService: director.directorService, at: seatRequest.at }),
+  seatBehindRow: seatBehindRowQuery(seatRequest)
+})
+
 // Every Cloud Logging query a sample needs, as one read: the project allows 60 reads a minute
 // across every watch and tool, and on 10-21 18:39Z twelve watches at five reads a sample drew 429s
 // until c21 and c22 tripped unverifiable. Each query keeps its own filter and takes back the lines
@@ -573,16 +579,13 @@ export async function watchSegment(config, dependencies) {
     const phoneRequest = { cellId: request.cellId, endedAt, minutes: PHONE_WATCH_RULES.readMinutes }
     const director = { directorService, endedAt, minutes: RESERVE_WATCH_RULES.director503.readMinutes }
     const seatRequest = { directorService, cellId: request.cellId, at }
-    const logs = await readSampleLogs(reader, {
-      phone: phoneWatched && cellPhoneQuery(phoneRequest),
-      directorMetrics: directorMetricsQuery(director),
-      ledger: ledgerQuery({ directorService, at }),
-      seatBehindRow: seatBehindRowQuery(seatRequest)
-    })
+    const queries = sampleLogQueries({ phoneRequest: phoneWatched && phoneRequest, director, seatRequest })
+    const logs = await readSampleLogs(reader, queries)
     const directorMetrics = {
       failed: logs.directorMetrics.failed,
+      error: logs.directorMetrics.error,
       samples: logs.directorMetrics.entries.map(directorMetricsSample),
-      minSamples: directorMetricsQuery(director).minSamples
+      minSamples: queries.directorMetrics.minSamples
     }
     const sample = {
       at,

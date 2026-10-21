@@ -848,8 +848,10 @@ log under-subtracts its re-dials, which can only push toward a trip, never hide 
 split counts each instance's own `/v1/assign` 503s from its runtime-metrics lines
 (`assign503sByCauseDelta`, by `labels.instanceId`; the metric names no instance), less that
 instance's own scheduled 503s. The fleet's non-drain 503s no instance's lines account for (Cloud
-Run's own, or a route the director does not count) count as one instance of their own,
-`unattributed`, which can be one of the 2. On the recorded 10-21 07:55Z stall this reads 40, 169, 5
+Run's own, a route the director does not count, or an instance that stopped logging) are
+`unattributed`: summed over the 3 judged minutes, since an instance's 30 s lines skew against the
+fleet's minutes, and over the whole fleet line by themselves they trip (no one instance's stall
+explains them; the largest such sum in the 24 hours to 10-21 was 38, against 90). On the recorded 10-21 07:55Z stall this reads 40, 169, 5
 on the stalled instance, where Cloud Run's request log read 54, 155, 5. With a single director the
 share is half the line, so that one instance alone never trips between the lines. A judged minute
 with no instance count is unverifiable. A single instance id must hold its share for all 3

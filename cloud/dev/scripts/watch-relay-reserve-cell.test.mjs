@@ -25,7 +25,9 @@ import {
   raiseAlarm,
   readCellPhoneMinutes,
   readDirector503Minutes,
+  readSampleLogs,
   readSeatBehindRowSample,
+  sampleLogQueries,
   recordOutcome,
   rolloutLeaseRefusal,
   watchSegment
@@ -198,9 +200,14 @@ test('one stalled director instance does not trip the 503 rule; two instances or
   assert.equal(blind.rules.director503.status, 'unverifiable')
   assert.match(blind.rules.director503.reason, /truncated/)
   assert.equal(blind.state.unverifiableStreak, 1)
-  // Platform 503s no instance answered count as an instance of their own.
-  const platform = judge(read([37, 37, 37], { 'no-instance': [16, 16, 16], d2: [16, 16, 16] }))
+  // 503s no director logged, over the whole fleet line by themselves, are no one instance's stall.
+  const platform = judge(read([37, 37, 37], { unattributed: [31, 31, 31], d2: [6, 6, 6] }))
   assert.equal(platform.state.state, 'tripped')
+  assert.match(platform.state.verdict, /93 of them no director instance logged$/)
+  // A stalled instance's 30 s lines skew against the fleet's minutes; that remainder is not a second instance.
+  const skewed = judge(read([60, 170, 60], { sick: [52, 162, 52], unattributed: [8, 8, 8], d2: [0, 0, 0] }))
+  assert.equal(skewed.state.state, 'watching')
+  assert.equal(skewed.rules.director503.unattributed, 24)
   // The share follows the directors that logged: eight make it 30/8, so an even 45 trips.
   const eight = read([45, 45, 45], Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`d${index}`, [5.6, 5.6, 5.6]])))
   eight.instances.directors = byMinute([8, 8, 8])
@@ -1026,6 +1033,46 @@ test('503s the director could not serve trip after three minutes over the line, 
   assert.match(state.verdict, /director503: director 503s above 30\/min for 3 min \(50, 50, 50\), 2 instances each above 15\/min$/)
 })
 
+test('the combined read hands each query only its own lines', async () => {
+  const at = START
+  const endedAt = START - 3 * MINUTE
+  const queries = sampleLogQueries({
+    phoneRequest: { cellId: CELL, endedAt, minutes: 10 },
+    director: { directorService: 'orca-cloud-relay', endedAt, minutes: 10 },
+    seatRequest: { directorService: 'orca-cloud-relay', cellId: CELL, at }
+  })
+  const director = (ago, jsonPayload) => ({ timestamp: new Date(at - ago).toISOString(), resource: { type: 'cloud_run_revision' }, labels: { instanceId: 'a' }, jsonPayload })
+  const entries = {
+    metrics: director(5 * MINUTE, { event: METRICS_EVENT }),
+    phone: { timestamp: new Date(at - 5 * MINUTE).toISOString(), resource: { type: 'gce_instance' }, jsonPayload: { event: METRICS_EVENT, cellId: CELL } },
+    freshSummary: director(60_000, { event: SUMMARY_EVENT, pending: 0, dropped: 0 }),
+    staleSummary: director(10 * MINUTE, { event: SUMMARY_EVENT, pending: 0, dropped: 0 }),
+    ownSeat: director(2 * MINUTE, { event: SEAT_EVENT, cellId: CELL, epoch: 1, rowEpoch: 2 }),
+    otherSeat: director(2 * MINUTE, { event: SEAT_EVENT, cellId: 'production-gce-c99', epoch: 1, rowEpoch: 2 })
+  }
+  let filter
+  const logs = await readSampleLogs(
+    fakeReader({ runGcloud: async (args) => ((filter = args[2]), { stdout: JSON.stringify(Object.values(entries)) }) }),
+    queries
+  )
+  const names = (read) => read.entries.map((entry) => Object.keys(entries).find((name) => JSON.stringify(entries[name]) === JSON.stringify(entry)))
+  assert.equal(filter.split(') OR (').length, 4)
+  assert.deepEqual(names(logs.directorMetrics), ['metrics'])
+  assert.deepEqual(names(logs.phone), ['phone'])
+  // The ledger rule wants a summary from the last 150 s; the seat read's positive control, 15 min.
+  assert.deepEqual(names(logs.ledger), ['freshSummary'])
+  assert.deepEqual(names(logs.seatBehindRow), ['freshSummary', 'staleSummary', 'ownSeat'])
+  // Without the phone path its query is not sent.
+  const unwatched = sampleLogQueries({ phoneRequest: false, director: { directorService: 'orca-cloud-relay', endedAt, minutes: 10 }, seatRequest: { directorService: 'orca-cloud-relay', cellId: CELL, at } })
+  const sent = await readSampleLogs(fakeReader({ runGcloud: async (args) => ((filter = args[2]), { stdout: '[]' }) }), unwatched)
+  assert.equal(filter.split(') OR (').length, 3)
+  assert.doesNotMatch(filter, /gce_instance/)
+  assert.equal('phone' in sent, false)
+  // A full read is truncated for every query; a failed one names its error.
+  const full = await readSampleLogs(fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify(Array.from({ length: 1_000 }, () => entries.metrics)) }) }), unwatched)
+  assert.ok(Object.values(full).every((read) => read.failed && read.error === 'sample log read truncated'))
+})
+
 // 10-21 18:39Z: twelve watches at ~5 Cloud Logging reads a sample hit the project's 60 a minute.
 test('a sample makes one Cloud Logging read, and a 429 retried inside its budget stays verifiable', async () => {
   const memory = { flagsApplied: { generation: 4, flags: { admitMode: 'reserve', readinessLocal: true, phonePath: 'memory' } } }
@@ -1060,6 +1107,7 @@ test('a sample makes one Cloud Logging read, and a 429 retried inside its budget
   assert.ok(Object.values(lines[5].rules).every((rule) => rule.status !== 'unverifiable'))
   assert.equal(lines[7].unverifiableStreak, 1)
   assert.match(lines[7].rules.duplicateSeat.reason, /RESOURCE_EXHAUSTED/)
+  assert.match(lines[7].rules.director503.reason, /director runtime metrics read failed: RESOURCE_EXHAUSTED/)
   assert.equal(lines[8].unverifiableStreak, 0)
 })
 
