@@ -1,4 +1,5 @@
 import { workItemsCacheKey } from '@/store/github/cache-identity'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type {
   CacheEntry,
   WorkItemsCacheError,
@@ -22,6 +23,7 @@ export type TaskPageRepoCacheInput = {
   id: string
   path: string
   executionHostId?: string | null
+  connectionId?: string | null
   sourceCacheScope?: string | null
 }
 
@@ -35,6 +37,8 @@ export type TaskPageDialogWorkItemKey = {
 export type TaskPageRepoSourceState = {
   repoId: string
   repoPath: string
+  /** The row's host: a twin's two rows share repoId and can share repoPath. */
+  hostId: ExecutionHostId
   sourceKey: string
   sources: WorkItemsCacheSources | null
   error: WorkItemsCacheError | null
@@ -81,6 +85,7 @@ export function buildTaskPageRepoSourceState(
     return {
       repoId: repo.id,
       repoPath: repo.path,
+      hostId: getRepoExecutionHostId(repo),
       sourceKey: `${repo.id}::${repo.sourceCacheScope ?? repo.executionHostId ?? 'local'}`,
       sources: entry?.sources ?? null,
       error: entry?.error ?? null
