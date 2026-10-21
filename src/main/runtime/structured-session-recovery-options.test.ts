@@ -103,8 +103,7 @@ it('offers direct Pi history only while its admitted native file exists, retryin
     record.providerHandleChain[0].handle = {
       transport: 'pi-rpc',
       agent: 'pi',
-      nativeId: transcript,
-      resumeCursor: null
+      nativeId: transcript
     }
     const cache: RecoveryContextCache = {}
     const read = () => structuredSessionRecoveryOptions(record, {}, { cache })
